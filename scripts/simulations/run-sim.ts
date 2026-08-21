@@ -10304,6 +10304,48 @@ check('SmartFinder: a double-tap magnifies the aim point without stealing reticl
   })(),
   'double-tapping the scene steps the camera zoom for a tight read and resets at the ceiling, detected inside the existing pan release so ordinary reticle aiming is never stolen by a gesture arbiter');
 
+check('LOCK: the intelligence loop CLOSES — the caddie learns whether its own advice was right',
+  (() => {
+    const dispatch = read('services/voice/conversationalToolDispatch.ts');
+    const tracking = read('services/shotTracking.ts');
+    const learn = read('services/adviceOutcome.ts');
+    const ctx = read('services/pipecatContext.ts');
+    const brain = read('api/pipecat-turn.ts');
+    /**
+     * 2026-08-21. THE defect this whole codebase existed to avoid, found by tracing the loop end to
+     * end instead of testing its parts.
+     *
+     * Every hop was built and tested. Advice was recorded (pendingKevinRec), stamped onto the shot
+     * (kevin_rec_club / kevin_adhered), and paired. And then the ONLY consumer in the entire app was
+     * recapGenerator, computing an adherence RATE for a post-round summary — a measure of whether
+     * the PLAYER OBEYED, not of whether the CALL WAS RIGHT. Nothing fed back. The caddie had been
+     * giving advice for months with no path to discover it was wrong.
+     *
+     * So the player model learned the player while the caddie never learned itself, and the product
+     * PERFORMED intelligence rather than accumulating it. Every individual piece passed its tests;
+     * the chain was never asserted. That is what this guard is for — it fails if any hop is
+     * disconnected, which no per-part test can detect.
+     */
+    // 1. DECIDE — a spoken club call is captured as advice.
+    const recorded = /setPendingKevinRec\(\{ club: a\.club\.trim\(\)/.test(dispatch) && /kind: 'spoken'/.test(dispatch);
+    // 2. OBSERVE RESULT — the advice is paired with what was actually played.
+    const paired = /kevin_rec_club: resolved\.recClub/.test(tracking) && /kevin_adhered: resolved\.adhered/.test(tracking);
+    // 3. LEARN — and ONLY from shots that tested the DECISION. A mis-hit judges the swing, not the
+    //    club call; counting it would train the caddie to flatter bad strikes.
+    const judgesDecisionNotResult = /const CLEAN_CONTACT = new Set\(\['flush', 'solid', 'pure'\]\)/.test(learn)
+      && /if \(!s\.feel \|\| !CLEAN_CONTACT\.has\(s\.feel\)\) continue;/.test(learn)
+      && /if \(s\.kevin_adhered !== true\) continue;/.test(learn);
+    // 4. UPDATE — the finding is assembled into context.
+    const feedsContext = /adviceCalibration: \(\(\) => \{/.test(ctx) && /ao\.describeAdviceCalibration/.test(ctx);
+    // 5. NEXT DECISION — and actually REACHES the brain. Presence in the context object is not
+    //    enough: the prompt renders named fields, so an unrendered field is a silent dead end. This
+    //    is the hop that turns a built feature into a connected one.
+    const reachesBrain = /const calibration = Array\.isArray\(bag\.adviceCalibration\)/.test(brain)
+      && /\$\{calibrationLine\}/.test(brain);
+    return recorded && paired && judgesDecisionNotResult && feedsContext && reachesBrain;
+  })(),
+  'a club the caddie called is recorded, paired with what was played, judged ONLY on clean strikes, turned into a calibration finding, and delivered into the next prompt — the full loop, asserted as a chain rather than as parts');
+
 check('LOCK: every path that uploads audio gets a SECOND attempt before it gives up',
   (() => {
     const vc = read('hooks/useVoiceCaddie.ts');

@@ -187,6 +187,35 @@ export function buildPipecatContext() {
           return ct.describeBagTendencies(ct.clubTendencies(all, carryFor, cn.normalizeClub));
         } catch { return []; }
       })(),
+      /**
+       * 2026-08-21 — THE STEP THAT CLOSES THE LOOP.
+       *
+       * `tendencies` above teaches the caddie about the PLAYER. This teaches the caddie about
+       * ITSELF: of the clubs it actually called, which ones has it been calling wrong for this
+       * golfer? Until now that question had no answer anywhere in the app — advice and outcome were
+       * paired onto the shot and the only consumer was a post-round adherence percentage, which
+       * measures whether the player OBEYED rather than whether the call was RIGHT.
+       *
+       * Same evidence discipline and same source data as tendencies (round + history), so the two
+       * cannot disagree about what a club is. Silent until the sample supports a sentence.
+       */
+      adviceCalibration: (() => {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const ao = require('./adviceOutcome') as typeof import('./adviceOutcome');
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const cn = require('./clubNormalize') as typeof import('./clubNormalize');
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const cs = require('../store/clubStatsStore').useClubStatsStore.getState();
+          const history = (round.roundHistory ?? []).flatMap((r) => r.shots ?? []);
+          const all = [...history, ...(round.shots ?? [])].slice(-300);
+          // Compared against TOTAL, because a measured shot distance is where the ball finished.
+          const expectedFor = (c: string) => {
+            try { return cs.hasDistance(c) ? cs.totalFor(c) : null; } catch { return null; }
+          };
+          return ao.describeAdviceCalibration(ao.adviceOutcomes(all, expectedFor, cn.normalizeClub));
+        } catch { return []; }
+      })(),
     },
     // Every brain-bound setting flows through the pure brainSettings() map (tested). trustLevel is
     // computed from its own store so it stays separate.

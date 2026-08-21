@@ -149,6 +149,26 @@ function buildSystem(context: Record<string, unknown>, history: HistoryMsg[]): s
     ? `How his clubs actually behave (learned from his own shots — factor this into the club call; don't recite it): ${tendencies.join('; ')}.`
     : '';
 
+  /**
+   * 2026-08-21 — WHERE THE LOOP CLOSES.
+   *
+   * The line above teaches the caddie about the PLAYER. This one teaches it about ITSELF: of the
+   * clubs it actually called, which has it been calling WRONG for this golfer? That question had no
+   * answer anywhere in the app — advice and outcome were paired onto every shot and the only
+   * consumer computed a post-round adherence percentage, which measures whether the player OBEYED,
+   * not whether the call was right.
+   *
+   * Device-side this is built ONLY from clean strikes on a club the caddie called and the player
+   * took, because a chunked 7-iron says nothing about whether 7-iron was correct. So anything
+   * arriving here is decision evidence, not swing evidence — which is exactly why the caddie is
+   * told to ADJUST THE CALL rather than to tell the player they came up short. Correcting your own
+   * club selection is the job; narrating a golfer's misses back at them is not.
+   */
+  const calibration = Array.isArray(bag.adviceCalibration) ? (bag.adviceCalibration as string[]) : [];
+  const calibrationLine = calibration.length > 0
+    ? `YOUR OWN CALLING, measured on his CLEAN strikes when he took your club — silently correct for this in the club you recommend, and never read it back to him as something he did wrong: ${calibration.join('; ')}.`
+    : '';
+
   // 2026-07-01 (whole-app audit — pipecat parity with kevin) — live shot context so the default
   // brain answers "how far / what's my score / what did I note here / what have I hit" with real data.
   const rYards = round.yardage as { front: number | null; middle: number | null; back: number | null } | undefined;
@@ -247,6 +267,7 @@ ${cecilyBlock}${intensityBlock}${hcp} ${miss}
 ${bagLine}
 ${registeredBagLine}
 ${tendencyLine}
+${calibrationLine}
 
 ${roundSection}
 
