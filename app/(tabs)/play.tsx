@@ -972,6 +972,30 @@ export default function PlayTab() {
           autoDownloadFiredRef.current.add(nearest.name);
           void (async () => {
             try {
+              /**
+               * 2026-08-21 (Tim — "if you're on Wi-Fi you can pull the course ahead of time… we
+               * should be able to OTA a wifi bridge and gate").
+               *
+               * This is the ONE download that runs unattended — the player has arrived at a course
+               * and never asked for anything. On a weak cellular link it can burn a real data
+               * allowance and a chunk of battery on a multi-megabyte pull that may not even finish,
+               * on the exact morning they are about to play.
+               *
+               * The gate measures throughput rather than reading a radio label: a Wi-Fi flag needs a
+               * native module (breaks OTA for the frozen TestFlight build) AND would lie, because
+               * weak hotel Wi-Fi is worse than good 5G. UNKNOWN deliberately does not pass — if we
+               * could not measure, that is precisely when we should not spend someone's data.
+               *
+               * Selecting a course by hand is unaffected: that is the player asking, and asking is
+               * consent.
+               */
+              const gate = await import('../../services/connectionClass');
+              const { ok, reading } = await gate.mayPullCourseNow();
+              if (!ok) {
+                console.log('[play] arrival download held —', reading.reason);
+                autoDownloadFiredRef.current.delete(nearest.name); // let a better connection retry
+                return;
+              }
               const eng = await import('../../services/courseDownloadEngine');
               const r = await eng.downloadCourse({ name: nearest.name, lat: nearest.lat, lng: nearest.lng });
               // 2026-08-09 (stores audit P2) — toast ONLY on a genuinely fresh download (r.fresh),

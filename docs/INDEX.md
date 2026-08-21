@@ -66,3 +66,4 @@ Navigation hub for the `docs/` tree. Updated as part of Phase 100 / Component 8.
 
 - [privacy-policy.md](privacy-policy.md)
 - [simulation-3-rounds-palms.md](simulation-3-rounds-palms.md) — Phase BH 3-round Palms code-walk simulation
+- [V2 — Predictive Tendency Engine](V2-PREDICTIVE-TENDENCY-ENGINE.md) — post-launch. PREDICT→COMPARE before intervening; the substrate that already exists, and three engineering risks (data-starved, needs pre-shot intent, asymmetric failure cost).
