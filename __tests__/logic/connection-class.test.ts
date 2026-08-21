@@ -14,7 +14,15 @@
 import { measureConnection, mayPullCourseNow, lastConnectionReading } from '../../services/connectionClass';
 
 const realFetch = global.fetch;
-/** A body big enough to time, delivered after `ms`. */
+/**
+ * A body big enough to time, delivered after `ms`.
+ *
+ * 2026-08-21 — payloads made LARGE on purpose. The first version used 8KB after 5ms (~1.6MB/s),
+ * which passed alone and FAILED in a full parallel run: under load the real wall clock stretches,
+ * measured throughput drops under the 400 KB/s threshold, and 'fast' becomes 'usable'. The code was
+ * right; the test was timing-flaky. Sizes now clear their thresholds by such a margin that scheduler
+ * noise cannot flip the classification.
+ */
 const respondIn = (ms: number, bytes = 4096) => jest.fn(async () => {
   await new Promise(r => setTimeout(r, ms));
   return { ok: true, text: async () => 'x'.repeat(bytes) } as unknown as Response;
@@ -24,7 +32,7 @@ afterEach(() => { global.fetch = realFetch; jest.useRealTimers(); });
 
 describe('a fast link is allowed to pull a course', () => {
   it('classifies a quick, fat response as fast and opens the gate', async () => {
-    global.fetch = respondIn(5, 8192) as never;           // ~1.6 MB/s
+    global.fetch = respondIn(5, 2_000_000) as never;      // ~400 MB/s — unflippable by load
     const r = await measureConnection({ force: true });
     expect(r.klass).toBe('fast');
     expect(r.goodForBulk).toBe(true);
@@ -41,7 +49,7 @@ describe('anything less does NOT get to spend the player\'s data', () => {
   });
 
   it('a middling link is usable but still not unattended-download material', async () => {
-    global.fetch = respondIn(20, 4096) as never;           // ~200 KB/s
+    global.fetch = respondIn(40, 8_000) as never;         // ~200 KB/s — mid-band, both sides clear
     const r = await measureConnection({ force: true });
     expect(r.klass).toBe('usable');
     expect(r.goodForBulk).toBe(false);
@@ -70,7 +78,7 @@ describe('anything less does NOT get to spend the player\'s data', () => {
 
 describe('it does not re-measure on every call', () => {
   it('caches, because measuring costs a request', async () => {
-    const f = respondIn(5, 8192);
+    const f = respondIn(5, 2_000_000);
     global.fetch = f as never;
     await measureConnection({ force: true });
     const callsAfterFirst = f.mock.calls.length;

@@ -22,4 +22,20 @@ if git diff --cached --name-only | grep -qE '\.(ts|tsx)$'; then
     echo 'Commit blocked: fix the type errors above, or --no-verify if this is a genuine emergency.'
     exit 1
   fi
+
+  # 2026-08-21 — JEST JOINS THE GATE. This hook was typecheck-only, and on 08-21 a genuinely
+  # failing test was committed and pushed because tsc was clean: a flaky throughput assertion that
+  # passed alone and failed in a full parallel run. The whole reason this hook exists is that
+  # discipline is not a gate, and "I'll run the tests after" is discipline.
+  #
+  # Measured at ~7s for the full suite, which is cheap enough to pay on every commit. The
+  # simulation suites stay manual — they are slower, and this must never become worth bypassing.
+  printf 'pre-commit: running tests... '
+  if OUT=$(npx jest --silent 2>&1); then
+    printf 'clean\n'
+  else
+    printf 'FAILED\n\n%s\n\n' "$(echo "$OUT" | tail -40)"
+    echo 'Commit blocked: fix the failing tests above, or --no-verify if this is a genuine emergency.'
+    exit 1
+  fi
 fi
