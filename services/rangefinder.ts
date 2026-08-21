@@ -84,16 +84,40 @@ export function computeDistance(input: DistanceComputeInput): DistanceComputeOut
   const clampedM = Math.max(MIN_YARDS * 0.9144, Math.min(MAX_YARDS * 0.9144, distanceM));
   const distYards = clampedM / 0.9144;
 
-  // Confidence classification
+  /**
+   * CONFIDENCE — 2026-08-21 (SmartFinder sweep). The previous bands were UNREACHABLE and BACKWARDS.
+   *
+   * They required `distYards >= 50 && angleDeg >= -30 && angleDeg <= -5`. But this is
+   * d = eyeHeight / tan(angle), so an angle between -30° and -5° yields 3 to 20 yards — never 50.
+   * The two conditions could not both hold, so computeDistance could NEVER return 'high'. Every
+   * tilt reading has been medium or low since the bands were written, and the SmartFinder CONF
+   * column could not show High from this path at all.
+   *
+   * They were also the wrong way round. Differentiating d = h/tan(θ) gives a relative error of
+   * roughly 2·Δθ / sin(2θ): accuracy is BEST at steep angles and degrades sharply as the phone
+   * approaches level. Measured against a realistic half-degree of sensor noise:
+   *
+   *      -2°  ≈ 50 yd  →  20.0% error        -8°  ≈ 12 yd  →  6.0% error
+   *      -3°  ≈ 33 yd  →  14.3% error       -12°  ≈  8 yd  →  4.1% error
+   *      -5°  ≈ 20 yd  →   9.1% error       -20°  ≈  5 yd  →  2.7% error
+   *
+   * So the old band promised its HIGHEST confidence exactly where this method is least reliable.
+   *
+   * The bands now follow the error envelope, and the honest consequence is that tilt ranging is a
+   * SHORT-RANGE tool: it tops out near 50 yards by construction. Real yardages come from
+   * computeHeightRangedDistance (known-height) below. A rangefinder that says "High" on a number it
+   * derived from a 20% error is worse than one that admits it is estimating — this is the number
+   * players trust most, and [[illustration-data-points]] applies to confidence as much as to data.
+   */
   let confidence: 'high' | 'medium' | 'low';
   if (unmeasurable) {
     confidence = 'low';
-  } else if (distYards >= 50 && distYards <= 250 && angleDeg >= -30 && angleDeg <= -5) {
-    confidence = 'high';
-  } else if (distYards >= 10 && distYards <= 400) {
-    confidence = 'medium';
+  } else if (angleDeg <= -8 && distYards >= MIN_YARDS) {
+    confidence = 'high';    // ≲12 yd, under ~6% sensor-driven error
+  } else if (angleDeg <= -3) {
+    confidence = 'medium';  // ≲33 yd, ~14% and climbing
   } else {
-    confidence = 'low';
+    confidence = 'low';     // shallower than -3° — the error dominates the reading
   }
 
   // Horizontal reticle displacement offsets the bearing.
