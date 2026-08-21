@@ -131,6 +131,13 @@ const COLD_TRANSCRIBE_TIMEOUT_MS = 22000;
  * ever second-guessing a request that might still be about to succeed.
  */
 const VOICE_TOTAL_BUDGET_MS = 35000;
+/**
+ * 2026-08-21 — how long to wait before opening a SECOND connection alongside the first.
+ * A healthy warm turn answers in ~1.2s, so 2.5s never fires on a good link; a hung socket is
+ * discovered in 2.5s instead of a full timeout. This is the number that turns "thought for twenty
+ * seconds" into an answer.
+ */
+const HEDGE_AFTER_MS = 2_500;
 // 2026-07-25 (Tim — "first ask errors EVERY time; warmup still broken at the start") — the transcribe
 // step is cold-aware (22s) but the BRAIN step used a fixed 30s. The FIRST turn after launch is cold on
 // BOTH the Lambda (10-15s) AND the provider SDK init (8-12s) AND then runs tool rounds — that can exceed
@@ -2050,21 +2057,50 @@ export const useVoiceCaddie = ({
          *
          * A warm connection is unaffected: it answers in ~1.2s and never reaches attempt two.
          */
-        const attemptBudgets = coldFirstTurn ? [8_000, 12_000, 15_000] : [6_000, 10_000, 12_000];
+        /**
+         * 2026-08-21 — HEDGE, don't wait. Tim after the previous fix: "I am tapping the first time
+         * and stuck on thinking… it must have thought for like twenty seconds."
+         *
+         * Twenty seconds is 8 + 12: the first attempt burning its whole budget on a hung socket,
+         * then a fresh connection answering immediately. The retry ladder turned a FAILURE into a
+         * slow success, which is progress and is still not acceptable — nobody waits twenty seconds
+         * to be told good morning.
+         *
+         * The flaw is that a hung socket and a slow-but-working one look identical while you wait,
+         * so any fixed timeout is a bet on which you have. Stop betting: after a short delay, open a
+         * SECOND connection and let them race. Whichever answers first wins.
+         *
+         *   • warm/healthy  — attempt 1 answers in ~1.2s, the hedge never fires, nothing changes.
+         *   • hung socket   — the hedge opens a fresh one at 2.5s and answers around 4s, not 20.
+         *
+         * The cost is one duplicate upload on a slow turn only. The audio is a few hundred KB and
+         * the hung socket is, by definition, transferring nothing — so this spends bandwidth exactly
+         * where there is bandwidth going unused. Whisper is idempotent; a duplicate transcribe of the
+         * same clip is wasted work server-side, never a wrong answer.
+         */
+        const attemptBudgets = coldFirstTurn ? [12_000, 15_000] : [10_000, 12_000];
         let lastErr: unknown = null;
         for (let i = 0; i < attemptBudgets.length; i += 1) {
+          const budget = attemptBudgets[i];
           try {
-            transcribeRes = await doTranscribeFetch(attemptBudgets[i]);
-            if (i > 0) console.log('[voice] transcribe recovered on attempt', i + 1, '— the first connection was hung, not slow');
+            const primary = doTranscribeFetch(budget);
+            // Suppress unhandled rejections on whichever branch loses the race.
+            primary.catch(() => {});
+            const hedged = (async () => {
+              await new Promise(r => setTimeout(r, HEDGE_AFTER_MS));
+              const alt = doTranscribeFetch(Math.max(6_000, budget - HEDGE_AFTER_MS));
+              alt.catch(() => {});
+              return alt;
+            })();
+            transcribeRes = await Promise.any([primary, hedged]);
+            if (i > 0) console.log('[voice] transcribe recovered on attempt', i + 1);
             break;
           } catch (e) {
             lastErr = e;
             transcribeRes = undefined;
             const spent = Date.now() - txStart;
             if (i === attemptBudgets.length - 1 || spent >= VOICE_TOTAL_BUDGET_MS) break;
-            // No delay between attempts. The point is a NEW socket, and waiting only spends the
-            // budget that buys the next try.
-            console.log('[voice] transcribe attempt', i + 1, 'timed out after', attemptBudgets[i], 'ms — retrying on a fresh connection');
+            console.log('[voice] transcribe attempt', i + 1, 'and its hedge both failed — retrying on fresh connections');
           }
         }
         if (!transcribeRes) throw lastErr ?? new Error('transcribe_failed');
@@ -3074,22 +3110,26 @@ export const useVoiceCaddie = ({
       let micHasSpoken = false;
       micHasSpokenRef.current = false; // fresh capture — nothing heard yet
       /**
-       * 2026-08-20 — RE-ARM THE WARM, because the old design could pin a session cold forever.
+       * 2026-08-21 — REMOVED: the warm fired here, on the mic tap. Tim found this.
        *
-       * warmBackendConnection runs ONCE, at boot, over a fixed ~50s window. Miss that window — launch
-       * on a weak link, background the app, or simply exhaust the six attempts — and connectionWarmed
-       * stays false for the ENTIRE session. And the only other thing that can set it is a SUCCESSFUL
-       * transcribe, which is precisely what the cold path was aborting. Cold blocks the success that
-       * would clear cold: Tim's log shows `first_turn: true` on turn 1 AND turn 2, a minute apart,
-       * which is that loop closing.
+       * "The first connection is not dead. There's something we're doing. Are we pinging Vercel
+       * first?" We were. Tapping the mic fired warmBackendConnection() — a CDN prime plus host
+       * pings — and then the player spoke for three to five seconds while those sat in flight.
+       * Their audio upload left afterwards and queued behind our own housekeeping, on a host with
+       * five connection slots.
        *
-       * The mic tap is the right moment to break it: the user is about to speak, so there are seconds
-       * of recording time to spend warming, and it costs the user nothing. It no-ops instantly when
-       * already warm or already in flight, so a warm session pays literally nothing.
+       * The justification I wrote for putting it here was backwards: "the user is about to speak, so
+       * there are seconds of recording time to spend warming, and it costs the user nothing." Those
+       * seconds are precisely when we should be doing NOTHING, because the very next thing to leave
+       * the device is the request that matters. It cost the user their first turn.
+       *
+       * The problem it solved — a session pinned cold forever — does not need network to fix. Warmth
+       * is now tracked per endpoint and a SUCCESSFUL transcribe marks it, so the real request warms
+       * the path by succeeding. Nothing needs to race it to get there first.
+       *
+       * DO NOT re-add a warm on this path. If a future session looks cold, let the real request be
+       * the thing that proves otherwise.
        */
-      try {
-        void (require('../services/apiBase') as typeof import('../services/apiBase')).warmBackendConnection();
-      } catch { /* advisory */ }
       // 2026-08-19 — Tim's log showed `turn: null` on every entry from this path: the turn counter
       // was only being incremented on the pipecat entry, so "always the first turn" vs "the 1st and
       // the 9th" was unanswerable for the tap path — the exact question the stamp exists to answer.

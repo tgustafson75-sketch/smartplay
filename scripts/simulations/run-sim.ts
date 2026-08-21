@@ -10517,8 +10517,18 @@ check('LOCK: nothing but the real request may decide the real request failed',
      * bet on a single socket became THREE escalating attempts on FRESH sockets. A hung connection
      * has to cost seconds to discover, not the whole budget.
      */
-    const uncancellable = /transcribeRes = await doTranscribeFetch\(attemptBudgets\[i\]\);/.test(vc)
-      && /const attemptBudgets = coldFirstTurn \? \[8_000, 12_000, 15_000\]/.test(vc)
+    /**
+     * 2026-08-21 — now asserts the HEDGE, which is what turned "thought for twenty seconds" into an
+     * answer. A hung socket and a slow-but-working one are indistinguishable while you wait, so any
+     * fixed timeout is a bet on which you have. Racing a second connection after a short delay stops
+     * betting: a healthy turn answers before the hedge ever fires, and a hung one is bypassed in
+     * seconds instead of costing a whole attempt budget.
+     *
+     * Still no signal parameter anywhere — nothing outside the request may cancel it.
+     */
+    const uncancellable = /const primary = doTranscribeFetch\(budget\);/.test(vc)
+      && /transcribeRes = await Promise\.any\(\[primary, hedged\]\);/.test(vc)
+      && /const HEDGE_AFTER_MS = 2_500;/.test(vc)
       && !/doTranscribeFetch\([^)]*signal/.test(vc);
     // 2. ORDER, not presence: the diagnostic probes must appear AFTER the real attempt, inside its
     //    catch. If they ever migrate back above it, they are racing the upload again.
@@ -10538,13 +10548,28 @@ check('LOCK: nothing but the real request may decide the real request failed',
         return iPrime > -1 && iPing > -1 && iPrime < iPing;
       })();
     // 4. The tap re-arms a session that missed the boot window.
-    const rearms = /warmBackendConnection\(\)/.test(vc);
+    /**
+     * 2026-08-21 — INVERTED, because this assertion was pinning the defect.
+     *
+     * It required the mic tap to call warmBackendConnection() — "re-arm a cold-pinned session". Tim
+     * found what that actually did: tapping the mic fired a CDN prime plus host pings, the player
+     * spoke for three to five seconds while those sat in flight, and their upload then queued behind
+     * our own housekeeping. The guard was protecting the thing making his first turn slow.
+     *
+     * The real property is the opposite: NOTHING may be fired at the host on the tap path. Warmth is
+     * earned by the real request succeeding (markEndpointWarmed), so nothing needs to race it there.
+     */
+    // Match the CALL form (`).warmBackendConnection()` — how it was actually invoked), never the
+    // word in the prose that records its removal. A bare match hits its own tombstone; that has now
+    // caught me three times this week (externalSignal, getOpenerAssetForPersona, and this).
+    const noWarmOnTap = !/\)\.warmBackendConnection\(\)/.test(vc)
+      && /markEndpointWarmed\('\/api\/transcribe'\)/.test(vc);
     // And the CDN verdict still reaches the log, where it discriminates "our functions were cold"
     // from "this device cannot reach the host" — advising us, deciding nothing.
     const decisiveLog = /cdnOk/.test(vc) && /cdnMs/.test(vc) && /const staticReachable = async/.test(vc);
-    return noProbeAbort && takesNoSignal && uncancellable && probesAfterFailureOnly && transportFirst && rearms && decisiveLog;
+    return noProbeAbort && takesNoSignal && uncancellable && probesAfterFailureOnly && transportFirst && noWarmOnTap && decisiveLog;
   })(),
-  'no probe can cancel the real upload, diagnostics run only after it genuinely fails, transport is warmed before the function, the mic tap re-arms a cold-pinned session, and the CDN verdict informs the log without holding authority');
+  'no probe can cancel the real upload, diagnostics run only after it genuinely fails, transport is warmed before the function, the mic tap fires NOTHING at the host (warmth is earned by the real request succeeding), and the CDN verdict informs the log without holding authority');
 
 check('LOCK: the Fit Profile and the bag recommendation cannot disagree about what a gap IS',
   (() => {
