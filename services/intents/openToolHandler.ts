@@ -376,9 +376,26 @@ export const openToolHandler: IntentHandler = {
         'coach_mode', 'coachmode', 'cage_mode', 'cagemode',
         'add_course', 'addcourse', 'import_round', 'importround',
         'scene_read', 'look', 'what_you_see', 'play',
-        'issue_log', 'issuelog', 'issues_log', 'bug_log', 'buglog', 'owner_logs',
       ]);
-      if (toolName && !EXEMPT_ACTION_TOOLS.has(toolName) && !EXPLICIT_OPEN.test(raw)) {
+      /**
+       * 2026-08-21 (Tim) — "if you say the words 'issue log' it's a trigger and it says 'taking you
+       * to the issue log'. It should be triggered on 'SEND issue log' to go there directly.
+       * Otherwise I'm telling it to send an issue THERE."
+       *
+       * The issue-log aliases sat in EXEMPT_ACTION_TOOLS, which skips the explicit-verb gate
+       * entirely — so ANY utterance the classifier mapped to issue_log navigated. "Log an issue that
+       * the yardage on 3 was wrong" is a REPORT, and it was yanking him onto the log screen instead
+       * of writing his report into it.
+       *
+       * Both readings are legitimate, so the verb decides: SEND/EMAIL/EXPORT (or a normal open verb)
+       * means take me there; anything else is a report and stays conversational, where log_issue
+       * handles it. Exempt only for the phrasings that genuinely ask to go.
+       */
+      const ISSUE_LOG_TOOLS = new Set(['issue_log', 'issuelog', 'issues_log', 'bug_log', 'buglog', 'owner_logs']);
+      const ASKS_TO_SEND_LOG = /\b(send|email|export|attach|share)\b/;
+      const isIssueLogNav = ISSUE_LOG_TOOLS.has(toolName)
+        && (ASKS_TO_SEND_LOG.test(raw) || EXPLICIT_OPEN.test(raw));
+      if (toolName && !isIssueLogNav && !EXEMPT_ACTION_TOOLS.has(toolName) && !EXPLICIT_OPEN.test(raw)) {
         return {
           success: false,
           voice_response: null,

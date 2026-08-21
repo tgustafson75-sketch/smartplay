@@ -6498,9 +6498,10 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /COLD_INTENT_FETCH_TIMEOUT_MS = 22_000/.test(lsSrc) && /isConnectionWarmed\(\)/.test(lsSrc),
     'the earbud/hands-free intent classify uses a 22s cold budget so the first hands-free ask lands too');
   const vsSrc = fs.readFileSync(path.resolve(__dirname, '../../services/voiceService.ts'), 'utf-8');
-  check('LOCK voice: earbud transcribe budget is cold-safe (25s first try)',
-    /doFetch\(25_000\)/.test(vsSrc),
-    'captureUtterance gives the transcribe a 25s first attempt — enough for a cold Lambda on the first hands-free turn');
+  check('LOCK voice: the earbud transcribe races a hedge instead of waiting out a hung socket',
+    /const raceOnce = async \(budgetMs: number\)/.test(vsSrc) && /Promise\.any\(\[primary, hedged\]\)/.test(vsSrc)
+      && !/doFetch\(25_000\)/.test(vsSrc),
+    'captureUtterance opens a second connection after 2.5s and takes the first answer — the 25s single-shot it replaced made the earbud the SLOWEST entry point, not the safest');
 
   // 4) TRIGGER HAPTIC — every talk trigger (earbud/glasses tap, mic badge) buzzes on open (feel it's on).
   // 2026-08-11 — the trigger edge moved. 'listening' is now reached ~1s after the tap (we hold
@@ -10424,6 +10425,42 @@ check('LOCK: the intelligence loop CLOSES — the caddie learns whether its own 
   })(),
   'a club the caddie called is recorded, paired with what was played, judged ONLY on clean strikes, turned into a calibration finding, and delivered into the next prompt — the full loop, asserted as a chain rather than as parts');
 
+check('LOCK: every mic entry point fails the same way — tap, earbud and text box',
+  (() => {
+    const vc = read('hooks/useVoiceCaddie.ts');
+    const vs = read('services/voiceService.ts');
+    const ls = read('services/listeningSession.ts');
+    const bar = read('components/caddie/CaddieBottomBar.tsx');
+    /**
+     * 2026-08-21 (Tim) — "we need to triple check that tapping the caddie, or the caddie mic, or the
+     * earbud, or the text box with the mic below works. It needs to all be unified."
+     *
+     * It was not. There are TWO mic owners: the Caddie tab goes through useVoiceCaddie.handleMicPress,
+     * while the EARBUD and the TEXT-BOX MIC both route through listeningSession.toggle() into
+     * voiceService.captureUtterance. Today's first-turn work — hedging a second connection instead of
+     * waiting out a hung socket — landed on the tap path only. The earbud path was WORSE than the one
+     * being fixed: a 25-second first attempt before any retry.
+     *
+     * So an identical failure produced 4 seconds of delay on one entry point and 25 on another. That
+     * is how "it works when I tap but not from my earbuds" gets reported, and no per-path test can
+     * see it, because each path passes on its own terms.
+     *
+     * This asserts the entry points still CONVERGE, and that both owners hedge.
+     */
+    // The earbud and the text-box mic must keep routing to the shared session, not grow their own.
+    const convergent = /subscribeEarbudTap\(\(\) => \{ void toggle\(\); \}\)/.test(ls)
+      && /toggleListening\(\)/.test(bar);
+    // Both owners race a second connection rather than waiting out the first.
+    const tapHedges = /const primary = doTranscribeFetch\(budget\);/.test(vc)
+      && /Promise\.any\(\[primary, hedged\]\)/.test(vc);
+    const earbudHedges = /const raceOnce = async \(budgetMs: number\)/.test(vs)
+      && /Promise\.any\(\[primary, hedged\]\)/.test(vs);
+    // And the 25s single-shot that made the earbud the worst path is gone.
+    const noLongSingleShot = !/res = await doFetch\(25_000\);/.test(vs);
+    return convergent && tapHedges && earbudHedges && noLongSingleShot;
+  })(),
+  'the earbud and text-box mic still converge on the shared listening session, and both mic owners race a hedged second connection instead of waiting out a hung socket — the same failure now costs the same anywhere');
+
 check('LOCK: every path that uploads audio gets a SECOND attempt before it gives up',
   (() => {
     const vc = read('hooks/useVoiceCaddie.ts');
@@ -10446,7 +10483,9 @@ check('LOCK: every path that uploads audio gets a SECOND attempt before it gives
      * so it is asserted across all three, and a new uploader has to satisfy it too.
      */
     const tapRetries = /transcribeRes = await doTranscribeFetch\(probeSaysDown \? retryBudgetMs/.test(vc);
-    const earbudRetries = /res = await doFetch\(25_000\);/.test(vs) && /res = await doFetch\(15_000\);/.test(vs);
+    // 2026-08-21 — the earbud path no longer waits 25s to discover a hung socket; it races a hedged
+    // second connection and retries the race. Same property (a genuine second attempt), better shape.
+    const earbudRetries = /res = await raceOnce\(15_000\);/.test(vs) && /res = await raceOnce\(12_000\);/.test(vs);
     const pipecatRetries = /transcribeRes = await doPipecatFetch\(12_000\);/.test(pc)
       && /first transcribe attempt failed — retrying once before degrading/.test(pc);
     // ...and none of them may be cancelled by anything other than their own budget.

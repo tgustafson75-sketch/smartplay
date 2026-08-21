@@ -584,12 +584,41 @@ export const captureUtteranceDetailed = async (
         signal: controller.signal,
       }).finally(() => clearTimeout(cancelTimer));
     };
+    /**
+     * 2026-08-21 — SAME HEDGE AS THE TAP PATH. Tim: "we need to triple check that tapping the caddie,
+     * or the caddie mic, or the earbud, or the text box with the mic below works. It needs to all be
+     * unified."
+     *
+     * It was not. There are two mic owners: the Caddie tab goes through useVoiceCaddie, while the
+     * EARBUD and the text-box mic both come here via listeningSession. Today's first-turn work landed
+     * on the tap path only — and this path was worse to begin with: 25 seconds on the first attempt
+     * before any retry. On a hung socket, an earbud tap cost him 25 seconds of silence.
+     *
+     * A hung socket and a slow one are indistinguishable while you wait, so racing beats waiting: a
+     * second connection opens after 2.5s and the first answer wins. A healthy turn answers in ~1.2s
+     * and never hedges; a hung one is bypassed in seconds rather than half a minute.
+     *
+     * Kept deliberately identical in shape to the tap path. Two entry points that behave differently
+     * on the same failure is how "it works when I tap but not on the earbud" gets reported, and it is
+     * the exact drift this codebase keeps paying for.
+     */
+    const HEDGE_MS = 2_500;
+    const raceOnce = async (budgetMs: number): Promise<Response> => {
+      const primary = doFetch(budgetMs);
+      primary.catch(() => {});
+      const hedged = (async () => {
+        await new Promise(r => setTimeout(r, HEDGE_MS));
+        const alt = doFetch(Math.max(6_000, budgetMs - HEDGE_MS));
+        alt.catch(() => {});
+        return alt;
+      })();
+      return Promise.any([primary, hedged]);
+    };
     let res: Response;
     try {
-      res = await doFetch(25_000);
+      res = await raceOnce(15_000);
     } catch {
-      await new Promise(r => setTimeout(r, 600));
-      res = await doFetch(15_000);
+      res = await raceOnce(12_000);
     }
 
     if (!res.ok) {
