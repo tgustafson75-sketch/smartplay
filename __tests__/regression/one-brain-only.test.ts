@@ -38,7 +38,32 @@ describe('there is a fixed, shrinking set of answering brains', () => {
           && /persona/i.test(src)
           && /history/.test(src);
       });
-    expect(brains.sort()).toEqual([...ALLOWED_BRAINS].sort());
+    /**
+     * 2026-08-21 — _brainShim.ts is an ADAPTER, not a brain, and this test correctly flagged it: it
+     * mentions personas, history and response_text because it TRANSLATES them. What makes it not a
+     * brain is that it never asks a model anything.
+     *
+     * So it is not allow-listed on my say-so — it is excluded only while it PROVES it cannot answer
+     * a turn. The moment anyone adds a model call to it, it stops qualifying for this exclusion and
+     * this test fails, which is the property that matters. An allow-list entry would have been a
+     * place to hide a third brain.
+     */
+    const adapters = brains.filter(f => {
+      const src = fs.readFileSync(path.join(API, f), 'utf8');
+      const invokesAModel = /runAgenticLoop\(|completeText\(|\.chat\.completions|generateContent/.test(src);
+      return f === '_brainShim.ts' && !invokesAModel;
+    });
+    expect(brains.filter(f => !adapters.includes(f)).sort()).toEqual([...ALLOWED_BRAINS].sort());
+  });
+
+  it('the shim stays an adapter — it may never grow a model call of its own', () => {
+    // The consolidation only works if there is ONE implementation. A shim that starts answering
+    // turns itself would recreate the divergence it exists to remove, and would do it somewhere
+    // nobody is looking.
+    const shim = read('api/_brainShim.ts');
+    expect(shim).not.toMatch(/runAgenticLoop\(|completeText\(|\.chat\.completions|generateContent/);
+    // It delegates, and the thing it delegates to is the surviving brain.
+    expect(shim).toMatch(/kevinHandler/);
   });
 
   it('the count only ever goes DOWN — this is the whole point', () => {

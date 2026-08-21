@@ -350,6 +350,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // so a narrated practice round answered correctly on turn 1 and lost its framing on the
       // follow-up turn. Ported so the two brains behave identically BEFORE either is retired.
       sim_round = false,
+      // 2026-08-21 (consolidation phase 2) — PER-CLUB tendencies, which pipecat has rendered since
+      // the clubTendency work and kevin had no field for at all. Without this the shim would hand
+      // kevin a context that knows the player's distances but not what each club DOES, and the
+      // follow-up turn would quietly give worse advice than turn 1.
+      club_tendencies = [],
       // Persona — preferred 'kevin'|'serena'|'harry'|'tank'. Legacy clients
       // send only voiceGender ('male'|'female'); supported as fallback.
       voiceGender = 'male',
@@ -1002,7 +1007,8 @@ PACE CHECK (sim-202 follow-up):
 - Match the user's energy. If they're terse, you're terse. If they ask a long question, you can give a longer read — but never longer than the response-length cap.
 - The pace bar is "what would feel like too much chatter from a real caddie walking next to you?" — when in doubt, say less.
 
-${sim_round ? `SIM ROUND ACTIVE: the player is narrating a practice round from memory (not on the course). Their narrated shot DISTANCES move their simulated position down the hole — so when they describe a shot WITHOUT a distance, include "about how far did it go?" in your reply so the sim can move them. Log shots/scores normally.
+${Array.isArray(club_tendencies) && club_tendencies.length > 0 ? `How his clubs actually behave (learned from his own shots — factor this into the club call; don't recite it): ${(club_tendencies as string[]).join('; ')}.
+` : ''}${sim_round ? `SIM ROUND ACTIVE: the player is narrating a practice round from memory (not on the course). Their narrated shot DISTANCES move their simulated position down the hole — so when they describe a shot WITHOUT a distance, include "about how far did it go?" in your reply so the sim can move them. Log shots/scores normally.
 ` : ''}RESPONSE LENGTH: ${responseMode === 'short' ? 'Maximum 15 words.' : responseMode === 'detailed' ? 'Up to 4 sentences if genuinely needed.' : 'Maximum 2 sentences.'}
 
 RESPONSE STRUCTURE (Phase V.6):

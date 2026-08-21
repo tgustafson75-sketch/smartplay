@@ -346,6 +346,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (!text?.trim()) return res.status(400).json({ error: 'text is required' });
 
+  /**
+   * 2026-08-21 — THE SHIM. One brain behind two contracts.
+   *
+   * OFF by default. Routes through kevin only when explicitly asked: `?via=kevin` on the request, or
+   * BRAIN_SHIM=1 in the environment. That is deliberate — this is the most load-bearing code in the
+   * app, testers play at the weekend, and a broken week costs a whole testing cycle with real
+   * golfers. So the shim ships live, gets probed on the SAME deployment as the path it replaces, and
+   * only becomes the default once `npm run probe-tools` is 19/19 through it.
+   *
+   * When it does become the default, pipecat-turn's own implementation below is deleted, and with it
+   * the reason _brainTools.ts, _brain.ts, the parity test and ~15 parity guards exist.
+   */
+  const viaKevin = String((req.query?.via ?? '')) === 'kevin' || process.env.BRAIN_SHIM === '1';
+  if (viaKevin) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const shim = require('./_brainShim') as typeof import('./_brainShim');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const kevinHandler = (require('./kevin') as { default: never }).default as never;
+      const kevinBody = shim.pipecatRequestToKevinBody(req.body as Record<string, unknown>);
+      const out = await shim.callKevin(kevinHandler, req, kevinBody);
+      // A non-200 from kevin is NOT forwarded as an error: this path's clients treat a non-200 as a
+      // dead network and trip the voice circuit breaker. Degrade in the shape they already handle.
+      if (out.status !== 200) {
+        return res.status(200).json({
+          response_text: 'Give me one sec and ask me again.',
+          tool_actions: [], updated_history: history, degraded: true, error: `kevin_${out.status}`,
+        });
+      }
+      return res.status(200).json(shim.kevinResponseToPipecat(out.json, text, history));
+    } catch (e) {
+      // The shim must never be able to take the turn down — fall THROUGH to the original
+      // implementation below, which is still fully intact.
+      console.error('[pipecat-turn] shim failed, falling through to native path:', e instanceof Error ? e.message : String(e));
+    }
+  }
+
   // Collect tool_actions returned to the client
   const toolActions: Array<Record<string, unknown>> = [];
 
