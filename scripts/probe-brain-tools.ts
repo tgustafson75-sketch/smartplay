@@ -39,7 +39,19 @@ const useKevin = process.argv.includes('--kevin');
 const useShim = process.argv.includes('--shim');
 
 /** Each case is a sentence a golfer would actually say, and the tool that MUST result from it. */
-const CASES: Array<{ expect: string | null; say: string }> = [
+/**
+ * 2026-08-21 — some asks are only legitimate ON a course, and the caddie is RIGHT to refuse them
+ * otherwise. "mark the green here" with no round context got 'You need to be standing at or near the
+ * green to mark it' — which is honest, and better than firing blindly at a green you are not at.
+ * The probe was asserting the less careful behaviour, so it gets a realistic round context instead
+ * of a weaker assertion.
+ */
+const ON_COURSE = {
+  player: { name: 'Tim', handicap: 14 },
+  round: { active: true, currentHole: 7, courseName: 'Wachusett', holePar: 4, holeYardage: 150 },
+};
+
+const CASES: Array<{ expect: string | null; say: string; ctx?: Record<string, unknown> }> = [
   { expect: 'recommend_club',      say: "I'm 150 yards out, what should I hit" },
   { expect: 'recommend_club',      say: "I've got 165 to the pin into a little wind, what do you like" },
   { expect: 'log_emotional_state', say: 'I am so damn frustrated, I have topped three in a row' },
@@ -50,7 +62,7 @@ const CASES: Array<{ expect: string | null; say: string }> = [
   { expect: 'plan_shot',           say: "I'm going to lay up with my 7 iron to about 100" },
   { expect: 'set_reminder',        say: 'remind me to work on my putting Thursday' },
   { expect: 'log_issue',           say: 'log an issue, the yardage on hole 3 looked wrong' },
-  { expect: 'mark_green',          say: 'mark the green here' },
+  { expect: 'mark_green',          say: 'mark the green here', ctx: ON_COURSE },
   { expect: 'switch_caddie',       say: 'switch to Tank' },
   { expect: 'switch_caddie',       say: 'switch me to Harry' },
   { expect: 'zoom_target',         say: 'zoom in on the pin' },
@@ -63,9 +75,17 @@ const CASES: Array<{ expect: string | null; say: string }> = [
   { expect: null,                  say: 'the wind is really picking up out here' },
 ];
 
-async function ask(say: string): Promise<{ tools: string[]; said: string; stalled: boolean }> {
+async function ask(say: string, ctx?: Record<string, unknown>): Promise<{ tools: string[]; said: string; stalled: boolean }> {
   const url = useKevin ? `${BASE}/api/kevin` : `${BASE}/api/pipecat-turn${useShim ? '?via=kevin' : ''}`;
-  const body = useKevin ? { message: say, history: [] } : { text: say, history: [] };
+  // kevin takes a flat body; pipecat takes a nested context. Send each what it understands, so the
+  // same scenario is genuinely the same scenario on both.
+  const round = (ctx?.round ?? {}) as Record<string, unknown>;
+  const body = useKevin
+    ? {
+        message: say, history: [],
+        ...(ctx ? { isRoundActive: round.active, currentHole: round.currentHole, activeCourse: round.courseName, currentPar: round.holePar, currentYardage: round.holeYardage } : {}),
+      }
+    : { text: say, history: [], ...(ctx ? { context: ctx } : {}) };
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -86,9 +106,9 @@ async function ask(say: string): Promise<{ tools: string[]; said: string; stalle
   console.log(`\nProbing ${label} at ${BASE}\n`);
   let missed = 0, stalls = 0;
   for (const c of CASES) {
-    let r = await ask(c.say);
+    let r = await ask(c.say, c.ctx);
     // A provider stall is not a tool defect — give it exactly one more go before judging.
-    if (r.stalled || (c.expect && !r.tools.includes(c.expect))) r = await ask(c.say);
+    if (r.stalled || (c.expect && !r.tools.includes(c.expect))) r = await ask(c.say, c.ctx);
 
     const pass = c.expect === null ? r.tools.length === 0 : r.tools.includes(c.expect);
     const tag = pass ? 'PASS' : r.stalled ? 'STALL' : c.expect === null ? 'OVER' : 'MISS';
