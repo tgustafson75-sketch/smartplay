@@ -10335,14 +10335,24 @@ check('LOCK: the intelligence loop CLOSES — the caddie learns whether its own 
     const judgesDecisionNotResult = /const CLEAN_CONTACT = new Set\(\['flush', 'solid', 'pure'\]\)/.test(learn)
       && /if \(!s\.feel \|\| !CLEAN_CONTACT\.has\(s\.feel\)\) continue;/.test(learn)
       && /if \(s\.kevin_adhered !== true\) continue;/.test(learn);
-    // 4. UPDATE — the finding is assembled into context.
-    const feedsContext = /adviceCalibration: \(\(\) => \{/.test(ctx) && /ao\.describeAdviceCalibration/.test(ctx);
-    // 5. NEXT DECISION — and actually REACHES the brain. Presence in the context object is not
-    //    enough: the prompt renders named fields, so an unrendered field is a silent dead end. This
-    //    is the hop that turns a built feature into a connected one.
-    const reachesBrain = /const calibration = Array\.isArray\(bag\.adviceCalibration\)/.test(brain)
-      && /\$\{calibrationLine\}/.test(brain);
-    return recorded && paired && judgesDecisionNotResult && feedsContext && reachesBrain;
+    // 4. UPDATE — the finding is assembled into the ONE context block that both brains read.
+    //    It deliberately does NOT live in a structured pipecat field: that would teach turn 1 and
+    //    leave turn 2 ignorant, which is precisely how recommend_club went missing on the follow-up
+    //    brain. One builder, both brains.
+    const cns = read('services/caddieMemoryRetrieval.ts');
+    const feedsContext = /ao\.describeAdviceCalibration\(ao\.adviceOutcomes\(/.test(cns)
+      && /YOUR OWN CALLING/.test(cns);
+    // 5. NEXT DECISION — and actually REACHES BOTH brains. Presence in a payload is not enough:
+    //    a field the prompt never renders is a silent dead end, so assert the RENDER on each side.
+    const kevinRenders = /\$\{_unifiedContextBlock \? `\\n\$\{_unifiedContextBlock\}` : ''\}/.test(read('api/kevin.ts'));
+    // pipecat receives the SAME block under a different field name (`context.memory` → memoryBlock,
+    // appended to the system prompt); kevin calls it unified_context_block. Two names for one thing
+    // is its own small trap — assert the RENDER on each side rather than a shared spelling.
+    const pipecatRenders = /const memoryRaw = context\.memory;/.test(brain)
+      && /const memoryBlock =/.test(brain)
+      && /systemBase\}`? ?: ?systemBase\) \+ memoryBlock|\+ memoryBlock/.test(brain);
+    const reachesBothBrains = kevinRenders && pipecatRenders;
+    return recorded && paired && judgesDecisionNotResult && feedsContext && reachesBothBrains;
   })(),
   'a club the caddie called is recorded, paired with what was played, judged ONLY on clean strikes, turned into a calibration finding, and delivered into the next prompt — the full loop, asserted as a chain rather than as parts');
 

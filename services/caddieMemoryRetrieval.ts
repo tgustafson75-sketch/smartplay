@@ -146,6 +146,47 @@ export function getCaddieContext(input: {
         lines.push(`Learned bag: ${entries.slice(0, 6).map(([c, y]) => `${c} ~${Math.round(y)}y`).join(', ')}.`);
       }
     }
+    /**
+     * 2026-08-21 — THE CADDIE'S OWN CALLING, and the hop that closes the intelligence loop.
+     *
+     * Everything above teaches the caddie about the PLAYER. This teaches it about ITSELF: of the
+     * clubs it actually called, which is it calling wrong for THIS golfer? Until now nothing in the
+     * app asked that — advice and outcome were paired onto every shot and the only consumer computed
+     * a post-round adherence percentage, which measures whether the player OBEYED, not whether the
+     * call was RIGHT.
+     *
+     * It lives HERE, in the CNS block, rather than in a structured pipecat field, because this block
+     * has one builder and BOTH brains render it (pipecat-turn and kevin, the follow-up turn). A
+     * structured field would have taught turn 1 and left turn 2 ignorant — the drift that has bitten
+     * this codebase repeatedly. One owner, both brains, no duplication.
+     *
+     * Capped at three lines: kevin caps the whole block at 2000 chars, so an unbounded list here
+     * would silently push out the learned bag and course memory.
+     */
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const ao = require('./adviceOutcome') as typeof import('./adviceOutcome');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const cn = require('./clubNormalize') as typeof import('./clubNormalize');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const rs = require('../store/roundStore').useRoundStore.getState();
+      const history = (rs.roundHistory ?? []).flatMap((r: { shots?: unknown[] }) => r.shots ?? []);
+      const all = [...history, ...(rs.shots ?? [])].slice(-300);
+      const expectedFor = (c: string) => {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const cs = require('../store/clubStatsStore').useClubStatsStore.getState();
+          return cs.hasDistance(c) ? cs.totalFor(c) : null;
+        } catch { return null; }
+      };
+      const calib = ao.describeAdviceCalibration(ao.adviceOutcomes(all as never, expectedFor, cn.normalizeClub), 3);
+      if (calib.length > 0) {
+        // The framing matters as much as the data: this is measured ONLY on clean strikes of clubs
+        // you called, so it is evidence about YOUR selection, not about his swing. Told to correct
+        // the call silently — narrating a golfer's misses back at him is not the job.
+        lines.push(`YOUR OWN CALLING — measured on his CLEAN strikes when he took your club. Silently correct for this in what you recommend; never read it back to him as something he did wrong: ${calib.join('; ')}.`);
+      }
+    } catch { /* calibration is additive — no learning yet just means no line */ }
     if (course) {
       const parts: string[] = [];
       if (course.name) parts.push(course.name);
