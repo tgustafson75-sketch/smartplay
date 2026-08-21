@@ -346,6 +346,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // (services/screenContext). Lets the caddie answer a question asked from
       // inside a drill ABOUT that drill ("if I'm on Tempo, tempo is the topic").
       screen_context = null,
+      // 2026-08-21 (brain consolidation, phase 1) — kevin lacked this entirely while pipecat had it,
+      // so a narrated practice round answered correctly on turn 1 and lost its framing on the
+      // follow-up turn. Ported so the two brains behave identically BEFORE either is retired.
+      sim_round = false,
       // Persona — preferred 'kevin'|'serena'|'harry'|'tank'. Legacy clients
       // send only voiceGender ('male'|'female'); supported as fallback.
       voiceGender = 'male',
@@ -421,7 +425,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const _persistentPatterns: string | null = capOrNull(persistentPatterns, 2000);
     const _practiceContext: string | null = capOrNull(practice_context, 2000);
-    const _screenContext: string | null = capOrNull(screen_context, 600);
+    let _screenContext: string | null = capOrNull(screen_context, 600);
+    /**
+     * 2026-08-21 (brain consolidation, phase 1) — ported from api/pipecat-turn.
+     *
+     * Tim, 2026-07-30: "in the tell-your-caddie mode the caddie keeps opening SwingLab while I'm
+     * telling it my faults; the conversation is to gather info and build the profile by voice."
+     * That fix landed on the DEFAULT brain only. kevin parsed screen_context and never applied the
+     * mute — so the same interview, answered on a follow-up turn, would still open a drill when the
+     * player named a swing fault. A behaviour that exists on one brain and not the other is not a
+     * behaviour; it is a coin flip on which turn you are in.
+     */
+    if (_screenContext && /getting to know the golfer/i.test(_screenContext)) {
+      _screenContext +=
+        '\n\nGET-TO-KNOW INTERVIEW MODE — LISTEN & GATHER, DO NOT OPEN ANYTHING. This is a pure ' +
+        'profile-building conversation to learn the golfer. When the player describes a swing ' +
+        'fault, a weakness, a club they struggle with, or something they want to work on ("I come ' +
+        'over the top", "I slice my driver", "my chipping is bad"), that is INFORMATION to absorb ' +
+        'and ask about — NEVER a command to open SwingLab, a drill, Smart Motion, record, or ' +
+        'navigate anywhere. Do NOT call navigate / open_swinglab / record_swing / configure_drill / ' +
+        'set_angle, and do NOT say you are opening or pulling up anything. Just keep the ' +
+        'conversation going: reflect back what you heard and ask ONE natural follow-up question ' +
+        '(end with a question mark so the mic stays open). Only exception: the player EXPLICITLY ' +
+        'says to stop the interview and open something ("okay, take me to the tempo drill now").' +
+        '\nEXCEPTION — register_bag stays ON: when they tell you the clubs they carry or their ' +
+        'yardages, CALL register_bag with everything they said (it records silently — no navigation). ' +
+        'At a natural point in the interview, ASK about their bag: what clubs they carry and their ' +
+        'go-to yardages (7-iron and driver at minimum).';
+    }
     // Prompt-injection caps for short identity fields (200 chars) and long context blobs (2000 chars).
     const _dominantMiss: string | null = capOrNull(dominantMiss, 200);
     const _physicalLimitation: string | null = capOrNull(physicalLimitation, 200);
@@ -971,7 +1002,8 @@ PACE CHECK (sim-202 follow-up):
 - Match the user's energy. If they're terse, you're terse. If they ask a long question, you can give a longer read — but never longer than the response-length cap.
 - The pace bar is "what would feel like too much chatter from a real caddie walking next to you?" — when in doubt, say less.
 
-RESPONSE LENGTH: ${responseMode === 'short' ? 'Maximum 15 words.' : responseMode === 'detailed' ? 'Up to 4 sentences if genuinely needed.' : 'Maximum 2 sentences.'}
+${sim_round ? `SIM ROUND ACTIVE: the player is narrating a practice round from memory (not on the course). Their narrated shot DISTANCES move their simulated position down the hole — so when they describe a shot WITHOUT a distance, include "about how far did it go?" in your reply so the sim can move them. Log shots/scores normally.
+` : ''}RESPONSE LENGTH: ${responseMode === 'short' ? 'Maximum 15 words.' : responseMode === 'detailed' ? 'Up to 4 sentences if genuinely needed.' : 'Maximum 2 sentences.'}
 
 RESPONSE STRUCTURE (Phase V.6):
 - Lead with the answer. The player asked a question; deliver the answer in the first clause, not after preamble.

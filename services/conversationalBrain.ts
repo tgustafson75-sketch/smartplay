@@ -101,6 +101,10 @@ async function tryKevin(utterance: string, timeoutMs: number): Promise<BrainRepl
       body: JSON.stringify({
         message: utterance,
         language: settings.language,
+        // 2026-08-21 (brain consolidation, phase 1) — kevin now understands a narrated practice
+        // round, so it must be TOLD about one. Without this the field exists on the server and is
+        // never true, which looks identical to the bug it was ported to fix.
+        sim_round: round.isSimRound || false,
         currentHole: round.isRoundActive ? round.currentHole : null,
         currentYardage: round.currentYardage ?? null,
         activeCourse: round.activeCourse,

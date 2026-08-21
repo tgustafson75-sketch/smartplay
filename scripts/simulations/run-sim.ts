@@ -10304,6 +10304,44 @@ check('SmartFinder: a double-tap magnifies the aim point without stealing reticl
   })(),
   'double-tapping the scene steps the camera zoom for a tight read and resets at the ceiling, detected inside the existing pan release so ordinary reticle aiming is never stolen by a gesture arbiter');
 
+check('MIGRATION (temporary): kevin has every behaviour pipecat has, ahead of the shim',
+  (() => {
+    const kevin = read('api/kevin.ts');
+    const pipe = read('api/pipecat-turn.ts');
+    /**
+     * 2026-08-21. Tim: "we're creating a bunch of guards, gates and such… because we're trying to
+     * clean pathways between two different brains." He is right, and this guard is the exception
+     * that proves it: IT IS SCAFFOLDING, AND IT GETS DELETED.
+     *
+     * Two brains exist for one reason — kevin is the original and pipecat (the v15 default) never
+     * replaced it. The cost is measurable: _brainTools.ts and _brain.ts (640 lines) exist ONLY to
+     * stop them drifting, and both files document drift that already happened. kevin.ts even carries
+     * the line "Mirrors api/pipecat-turn.ts exactly" over hand-copied distress logic.
+     *
+     * The plan is to make pipecat-turn a thin adapter over kevin, so there is ONE implementation and
+     * the drift surface goes to zero. Phase 1 is getting kevin to behavioural parity FIRST, while
+     * pipecat stays untouched and live. This guard protects that port for exactly as long as the
+     * migration takes. When the shim lands, DELETE THIS CHECK — a parity guard over a single
+     * implementation is precisely the band-aid Tim is objecting to.
+     *
+     * A rigorous diff (capability, not variable name — my first pass matched names and overstated
+     * the gap) found kevin already had trust/proactivity, brevity, spiral reset and localization.
+     * Only two things were genuinely missing, and both are asserted here.
+     */
+    // 1. A narrated practice round must be framed the same on either brain.
+    const simRound = /SIM ROUND ACTIVE/.test(kevin) && /SIM ROUND ACTIVE/.test(pipe)
+      && /sim_round = false,/.test(kevin);
+    // 2. The get-to-know interview must mute navigation on BOTH. This is Tim's 07-30 complaint —
+    //    the caddie opening SwingLab while he describes a fault — and the fix had only ever landed
+    //    on the default brain, so the same interview behaved differently on a follow-up turn.
+    const interviewMute = /GET-TO-KNOW INTERVIEW MODE/.test(kevin) && /GET-TO-KNOW INTERVIEW MODE/.test(pipe);
+    // 3. And the client actually SENDS it — a server field nothing sets looks exactly like the bug.
+    const clientSends = /sim_round: round\.isSimRound/.test(read('services/conversationalBrain.ts'))
+      && /sim_round: useRoundStore\.getState\(\)\.isSimRound/.test(read('hooks/useVoiceCaddie.ts'));
+    return simRound && interviewMute && clientSends;
+  })(),
+  'kevin now carries every behaviour pipecat has (sim round, interview-mode mute) and the clients send it — the parity step before pipecat becomes a shim over one implementation. DELETE THIS GUARD WHEN THE SHIM LANDS.');
+
 check('LOCK: the intelligence loop CLOSES — the caddie learns whether its own advice was right',
   (() => {
     const dispatch = read('services/voice/conversationalToolDispatch.ts');

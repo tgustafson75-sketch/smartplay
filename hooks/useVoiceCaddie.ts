@@ -1066,6 +1066,10 @@ export const useVoiceCaddie = ({
         body: JSON.stringify({
           message,
           language,
+          // 2026-08-21 (brain consolidation, phase 1) — parity with the pipecat path, which has
+          // always framed a narrated practice round. A server field nothing ever sets is
+          // indistinguishable from the bug it was added to fix.
+          sim_round: useRoundStore.getState().isSimRound || false,
           playerName: name,
           firstName,
           handicap,
