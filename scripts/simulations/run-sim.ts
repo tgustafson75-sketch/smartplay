@@ -10342,6 +10342,36 @@ check('MIGRATION (temporary): kevin has every behaviour pipecat has, ahead of th
   })(),
   'kevin now carries every behaviour pipecat has (sim round, interview-mode mute) and the clients send it — the parity step before pipecat becomes a shim over one implementation. DELETE THIS GUARD WHEN THE SHIM LANDS.');
 
+check('LOCK: every unprompted voice shares ONE interruption clock',
+  (() => {
+    const caddie = read('app/(tabs)/caddie.tsx');
+    const pk = read('services/proactiveKevin.ts');
+    /**
+     * 2026-08-21 (silence audit). The caddie has FOUR unprompted voices: the score-streak trigger,
+     * the hole-transition trigger, the GPS stop-detection read, and the tee-box auto-brief. The first
+     * two go through shouldFireProactive and share its global debounce. The other two never consulted
+     * it — they had their own once-per-hole and SETTLE gates and were individually well behaved.
+     *
+     * That is why it was invisible: every trigger was correct BY ITS OWN RULE, and nothing owned the
+     * sum of them. A tee brief could land moments after a streak line, each one defensible, the pair
+     * of them exactly the "caddie won't stop talking" experience.
+     *
+     * The player does not experience four triggers. They experience a caddie that talks. Interruption
+     * has a cost, that cost is shared, and it belongs on ONE clock.
+     *
+     * This is also the substrate the intervention threshold needs: once a single place decides
+     * whether to speak, "was that worth interrupting for?" finally has somewhere to live.
+     */
+    const clockExists = /export function mayInterject/.test(pk) && /export function noteInterjection/.test(pk);
+    // Both stragglers must CONSULT it...
+    const consults = (caddie.match(/if \(!mayInterject\(trustLevel\)\) return;/g) ?? []).length >= 2;
+    // ...and CLAIM it. Consulting without claiming makes a trigger permanently polite — always
+    // yielding, never counted — so the next unprompted voice still lands on top of it.
+    const claims = (caddie.match(/noteInterjection\(\);/g) ?? []).length >= 2;
+    return clockExists && consults && claims;
+  })(),
+  'the tee brief and the stop-detection read consult AND occupy the same debounce as the named proactive triggers, so four independently-correct voices cannot stack into one talkative caddie');
+
 check('LOCK: the intelligence loop CLOSES — the caddie learns whether its own advice was right',
   (() => {
     const dispatch = read('services/voice/conversationalToolDispatch.ts');

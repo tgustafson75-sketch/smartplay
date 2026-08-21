@@ -150,6 +150,8 @@ import { noteAudioActivity } from '../../services/audioLifecycle';
 import {
   shouldFireProactive,
   markProactiveFired,
+  mayInterject,
+  noteInterjection,
   resetProactiveState,
 } from '../../services/proactiveKevin';
 import { useMovementModeStore } from '../../services/movementModeDetector';
@@ -1356,6 +1358,15 @@ export default function CaddieTab() {
         if (isSpeaking()) return;
         if (voiceState !== 'idle') return;
         if (stopTriggeredRef.current) return;
+        /**
+         * 2026-08-21 — join the SHARED interjection clock.
+         *
+         * This read had its own once-per-hole and SETTLE gates and never consulted the global
+         * proactive debounce, so it could land moments after a score-streak or hole-transition line.
+         * Each trigger was correct by its own rule; nothing owned the sum. The player does not
+         * experience four triggers, they experience a caddie that talks.
+         */
+        if (!mayInterject(trustLevel)) return;
         // 2026-08-07 (Tim) — SETTLE gate: never fire the shot read within 25s of a hole CHANGE. Right after a
         // transition you're walking up to the tee, not confirmed at it — firing here is the "new hole info
         // before I'm at the tee" he called out. Requiring a stationary settle AFTER the change means we only
@@ -1375,6 +1386,10 @@ export default function CaddieTab() {
             setVoiceState('proactive');
             const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
             if (ve) {
+              // Occupy the shared clock. Consulting it without claiming it would make this trigger
+              // permanently polite — always yielding, never counted — and the next unprompted voice
+              // would still land straight on top of it.
+              noteInterjection();
               speak(text, vg, lang, apiUrl)
                 .catch(() => {})
                 .finally(() => setVoiceState('idle'));
@@ -1402,6 +1417,9 @@ export default function CaddieTab() {
     if (!isRoundActive || !_proactive_kevin_enabled || localMode || currentHole < 1) return;
     if (movementMode !== 'stationary') return;
     if (teeBriefedHoleRef.current === currentHole) return;
+    // 2026-08-21 — the tee brief is the fourth unprompted voice and the second that never consulted
+    // the shared clock. Same reasoning as the stop read above.
+    if (!mayInterject(trustLevel)) return;
     const tee = courseHoles.find(h => h.hole === currentHole);
     if (!tee || !tee.teeLat || !tee.teeLng) return; // no geometry → pull-only, no auto tee brief
     let cancelled = false;
@@ -1444,6 +1462,7 @@ export default function CaddieTab() {
           setVoiceState('proactive');
           const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
           if (ve) {
+            noteInterjection(); // same shared clock as every other unprompted voice
             speak(text, vg, lang, apiUrl).catch(() => {}).finally(() => setVoiceState('idle'));
           } else {
             setTimeout(() => setVoiceState('idle'), 3000);

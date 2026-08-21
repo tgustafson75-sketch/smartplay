@@ -143,6 +143,32 @@ export function shouldFireProactive(ctx: TriggerContext): ProactiveTrigger | nul
   return null;
 }
 
+/**
+ * 2026-08-21 — ONE CLOCK FOR EVERY UNPROMPTED WORD.
+ *
+ * shouldFireProactive has always enforced a global debounce, so the score-streak and
+ * hole-transition triggers space themselves. But two OTHER proactive voices — the GPS
+ * stop-detection read and the tee-box auto-brief — never consulted it. They had their own
+ * once-per-hole gates and were individually well behaved, which is exactly why this was invisible:
+ * every trigger was correct by its own rule, and nothing owned the sum of them.
+ *
+ * The player does not experience four triggers. They experience a caddie that talks. Interruption
+ * has a cost, that cost is shared across every source, and it belongs on one clock.
+ *
+ * These two functions are also the substrate the intervention threshold needs: the moment there is a
+ * single place that decides whether to speak, "was this worth interrupting for?" becomes a question
+ * with somewhere to live.
+ */
+export function mayInterject(trustLevel?: number): boolean {
+  const debounce = trustLevel === 2 ? L2_DEBOUNCE_MS : GLOBAL_DEBOUNCE_MS;
+  return Date.now() - lastAnyFiredAt >= debounce;
+}
+
+/** Record an unprompted utterance that did NOT come from a named trigger (tee brief, stop read). */
+export function noteInterjection(): void {
+  lastAnyFiredAt = Date.now();
+}
+
 export function markProactiveFired(triggerId: ProactiveTriggerType): void {
   lastFiredAt[triggerId] = Date.now();
   lastAnyFiredAt = Date.now();
