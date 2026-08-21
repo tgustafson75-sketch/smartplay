@@ -1,4 +1,13 @@
-# TODO (maybe-launch) — emotional-state art per caddie
+# PRE-LAUNCH — a clean 22 emotional states per caddie
+
+**Status raised to PRE-LAUNCH by Tim, 2026-08-21:** *"it needs to be on prelaunch that we need the
+clean twenty two emotional states at least for each Caddy. Serena and Kevin."*
+
+Not a nice-to-have and not partial coverage. **Serena and Kevin each need all 22 slots filled with
+distinct, purpose-made art** — the eight-image patch below is a floor, not the goal.
+
+Why both, not just Serena: Kevin looks well-supplied by file count, but his map still routes **15 of
+his mood slots to a single image**. On the two caddies testers actually use, the avatar barely moves.
 
 **Asked by Tim 2026-08-21:** "add a few more images for each caddy for their emotional states."
 
@@ -26,10 +35,14 @@ which undercuts the thing the product is for.
 
 ## Priority order
 
-1. **Serena** — biggest win by far. The 8 highest-frequency slots first: `idle`, `listening`,
-   `happy`, `supportive`, `wincing`, `celebrating`, `focused`, `explaining`.
-2. **Tank** — fill the 3-way reuses.
-3. Kevin/Harry — already adequate; leave alone.
+1. **Serena — all 22.** Worst offender: 4 distinct images, one portrait covering 15 slots.
+2. **Kevin — all 22.** Looks fine by file count, but 15 slots still resolve to one image.
+3. Tank — fill the 3-way reuses (post-launch acceptable).
+4. Harry — 18 distinct already; leave alone.
+
+If the full 22 cannot be produced in time for either, these 8 carry the most weight and should be
+made first: `idle`, `listening`, `happy`, `supportive`, `wincing`, `celebrating`, `focused`,
+`explaining`.
 
 ## Notes for whoever generates these
 - Match the existing naming so the map is a one-line change per slot:
