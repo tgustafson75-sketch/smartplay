@@ -37,6 +37,9 @@ import { initWatchSwingBridge, stopWatchSwingBridge, isWatchSwingBridgeAvailable
 // so app-wide consumers (the root StatusBar binding) read the same flag.
 import { useScreenshotModeStore } from '../store/screenshotModeStore';
 import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
+import { useCageStore, resolvePlayerName } from '../store/cageStore';
+import { useWorkoutStore } from '../store/workoutStore';
+import { computeWorkoutSwingImpact } from '../services/practice/workoutSwingImpact';
 import { useToastStore } from '../store/toastStore';
 import { useTrustLevelStore, TRUST_LEVEL_META, TRUST_LEVEL_SLIDER_ORDER } from '../store/trustLevelStore';
 import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
@@ -2094,6 +2097,9 @@ export default function Settings() {
                       production users. Review tuples at /cage-debug. */}
                   <FeelCaptureRow colors={colors} />
                   <VoiceHitRateRow colors={colors} />
+                  {/* 2026-08-22 (Tim) — does the SmartPump work show up in the strike? Owner-only:
+                      nobody else has workouts to correlate yet. */}
+                  <WorkoutSwingImpactRow colors={colors} />
 
                   {/* 2026-08-06 (Tim) — Tank persona is opt-in. OFF by default (personas clean up to
                       Serena + Kevin); flip ON to bring Tank back as a choice in the caddie pickers above.
@@ -2649,6 +2655,71 @@ function GlassesModeRow({ colors }: { colors: ThemeColors }) {
 // 2026-06-16 (Tim — self-growing agent metric) — the local-first health metric:
 // what share of spoken asks the caddie answered ON-DEVICE (instant/offline/0-token)
 // vs escalated to the cloud. Should trend UP as the CNS brain grows. Tap to reset.
+/**
+ * 2026-08-22 (Tim — "put that workout rail just in my owner setting just for me so that I can see it
+ * as I work out because I'm the only one with SmartPump").
+ *
+ * Does the gym work show up in the STRIKE? The dashboard's training rail asks whether it shows up in
+ * SCORING, which is slow and noisy — putting, course and weather all sit between a deadlift and a
+ * number on a card, and it needs four rounds before it says anything. Contact moves faster and is
+ * closer to what the fault-driven exercises actually target.
+ *
+ * Owner-gated because SmartPump is Tim's: nobody else has workouts to correlate, and a card that can
+ * only ever say "no data" is worse than no card. It lives inside the Owner Tools section, so the
+ * gating is the section's, not a second copy of it.
+ */
+function WorkoutSwingImpactRow({ colors }: { colors: ThemeColors }) {
+  const workoutHistory = useWorkoutStore((s) => s.history);
+  const sessionHistory = useCageStore((s) => s.sessionHistory);
+
+  const impact = React.useMemo(() => {
+    // Only the account holder's own swings. In Family/Coach mode a student's swings land in the same
+    // sessionHistory, and counting them here would credit Tim's gym work with someone else's strike.
+    const sessions = (sessionHistory ?? [])
+      .filter((sess) => resolvePlayerName(sess.player_id, '__self__') === '__self__')
+      .map((sess) => {
+        let clean = 0, graded = 0;
+        for (const shot of sess.shots ?? []) {
+          const c = shot.perShotAnalysis?.contact_read;
+          if (!c || c === 'unknown') continue;   // ungraded lowers neither side
+          graded += 1;
+          if (c === 'clean') clean += 1;
+        }
+        return { date: sess.date, clean, graded };
+      })
+      .filter((x) => x.graded > 0);
+    return computeWorkoutSwingImpact({
+      workouts: (workoutHistory ?? []).map((w) => ({ date: w.date, durationMin: w.durationMin })),
+      sessions,
+      nowMs: Date.now(),
+    });
+  }, [workoutHistory, sessionHistory]);
+
+  const unit = impact.metric === 'minutes' ? 'min' : 'sessions';
+  const weeks = impact.workoutSeries.map((v, i) =>
+    `${v > 0 ? Math.round(v) : '–'}${impact.strikeWeekHasData[i] ? `/${impact.strikeSeries[i]}%` : ''}`,
+  ).join('  ');
+
+  return (
+    <View style={styles.resetRow}>
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Training → Strike</Text>
+        <Text style={[styles.rowSub, { color: colors.text_muted }]}>{impact.headline}</Text>
+        {impact.totalWorkouts > 0 && (
+          <Text
+            style={[styles.rowSub, { color: colors.text_muted, fontVariant: ['tabular-nums'], marginTop: 4 }]}
+          >
+            {`6wk (${unit}/strike):  ${weeks}`}
+          </Text>
+        )}
+        <Text style={[styles.rowSub, { color: colors.text_muted, marginTop: 4 }]}>
+          {`${impact.totalWorkouts} workouts · ${impact.totalGradedSwings} graded swings · ${impact.weeksWithBoth} week${impact.weeksWithBoth === 1 ? '' : 's'} with both. Association, not proof.`}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 function VoiceHitRateRow({ colors }: { colors: ThemeColors }) {
   const local = useVoiceHitRateStore((s) => s.local);
   const cloud = useVoiceHitRateStore((s) => s.cloud);

@@ -20,32 +20,35 @@ Until Tim taps the mic once and it feels right, I will not delete:
 That deletion is the actual payoff of the consolidation — it is what stops every future fix needing
 two homes. Revert if wrong: `BRAIN_SHIM=0` in Vercel + redeploy (~9 min).
 
-## 1b. POST-LAUNCH — does the gym work show up in the SWING? (Tim's call, 2026-08-22: not now)
+## 1b. BUILT, OWNER-ONLY — does the gym work show up in the SWING? (2026-08-22)
 
-Tim, 08-22: *"we wanna have a data point to see if working out towards that swing is also touching
-or helping."*
+Tim, 08-22: *"put that workout rail just in my owner setting just for me so that I can see it as I
+work out because I'm the only one with SmartPump."* Owner-gating is what let this ship during the
+freeze: no tester-facing surface changes, and a card that could only ever say "no data" for everyone
+else never appears for them.
 
-What exists today, and what it actually answers:
+**Settings → Owner Tools → Training → Strike.** `services/practice/workoutSwingImpact.ts`, pure/sync/
+never-throws, mirroring `workoutPerformance.ts`.
 
-    workout minutes / week  ──vs──  score vs par        services/practice/workoutPerformance.ts
-    gated: 3+ workouts AND 4+ rounds, association never causation
+    workout volume / week  ──vs──  STRIKE RATE / week
+    strike rate = clean contact_read / graded contact_read   (unknown reads excluded from BOTH)
 
-That answers *"is training showing up in my SCORING"*. Tim's question is one layer in: **is training
-showing up in the SWING** — tempo, path, face, the metrics SmartMotion already produces per swing.
-Scoring is noisy and slow (4 rounds minimum); swing metrics move faster and are closer to the thing
-the workout is actually targeting, since the exercises are selected FOR the dominant fault.
+Why strike rather than score: scoring is slow and noisy — putting, course and weather all sit between
+a deadlift and a number on a card, and the scoring rail needs 4 rounds before it says anything.
+Contact moves faster, needs only range time, and is closer to what the fault-driven exercises target.
 
-Shape when it gets built — mirrors the existing rail rather than inventing a second pattern:
+Honesty rules it enforces, each with a test:
+- quiet until **3 workouts AND 20 graded swings AND 3 weeks carrying BOTH** — the same-week gate is
+  the one the scoring rail structurally cannot enforce, since rounds are indexed by round not week
+- pooled per week, so a 3-swing session cannot outweigh a 60-swing one
+- a week with <5 graded swings is marked no-data, never plotted as a 0% strike rate
+- self-only (`resolvePlayerName`), so a student's swings in Family/Coach mode are never credited
+- association, never causation — a drop under heavier training reads as fatigue, not a broken swing
+- when it can't speak it says exactly what is missing, in counts
 
-    services/practice/workoutSwingImpact.ts   pure/sync/never-throws, same honesty bar
-    workout volume / week  ──vs──  swing quality / week
-    + a fourth source on the dashboard progress graph
-    + quiet until enough on BOTH sides
-
-Deferred under the feature freeze, with the Friday 08-28 deadline six days out. Importing works today
-(dashboard TRAIN YOUR SWING → download arrow, or Settings), so the data is accumulating in
-`workout-store-v1` the whole time — nothing is lost by waiting, and the rail has real history to
-draw on the day it ships. [[feature-freeze-refinement-month]] [[close-the-loop-strategy]]
+**Still open:** it is a text row, not a plotted line. If the numbers turn out to be worth watching,
+the next step is a fourth source on the dashboard progress graph — which would be the point to decide
+whether it is still owner-only. [[close-the-loop-strategy]]
 
 ## 2. PRE-LAUNCH — caddie emotional art (I cannot produce this)
 `docs/TODO-CADDIE-EMOTIONAL-ART.md`. 22 mood slots exist. Serena has **4 distinct images**, one
