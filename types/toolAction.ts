@@ -28,6 +28,13 @@ export type ToolAction =
   // UI tools ever silently dropped were the two that lacked a ToolAction member.
   | { type: 'set_session_focus'; goal?: string; note?: string; clear?: boolean }
   | { type: 'set_playing_condition'; stated: string; kind?: 'ball_flight' | 'physical' | 'feel'; compensate?: 'left' | 'right' | 'shorter' | 'longer'; clear?: boolean }
+  // 2026-08-21 — the JUNE narrative brain (f4e0b31e) plus the rest of the state the brain could not
+  // write. All four have worked on the CLASSIFIER path for months and were unreachable in
+  // conversation, so "I'm 150 out with my 7-iron on twelve, downhill lie" recorded nothing.
+  | { type: 'set_hole_note'; note: string; hole?: number }
+  | { type: 'state_yardage'; yards: number }
+  | { type: 'club_change'; club: string }
+  | { type: 'declare_hole'; hole: number }
   | { type: 'open_swinglab' }
   | { type: 'log_score'; hole?: number; score: number }
   | { type: 'record_swing' }

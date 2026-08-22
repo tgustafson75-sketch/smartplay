@@ -87,6 +87,24 @@ export const UI_TOOLS = new Set([
    */
   'set_session_focus',
   'set_playing_condition',
+  /**
+   * 2026-08-21 — THE JUNE "NARRATIVE BRAIN", and the rest of the state the brain could not write.
+   *
+   * Tim remembered a focus/narrative wire "from very early on, like June" that had been built down.
+   * He was right, and it is bigger than one wire: comparing the classifier's 43 intents against the
+   * brain's tools shows the CLASSIFIER can record things the BRAIN cannot. Hands-free, "I'm 150 out
+   * with my 7-iron on twelve, downhill lie" lands four pieces of state. Said in CONVERSATION — the
+   * way most people talk to it — the caddie answers and records none of it.
+   *
+   * f4e0b31e (2026-07-01) built set_hole_note precisely so a bare lie/condition note would be
+   * REMEMBERED and factored into advice. It has worked on one path ever since.
+   *
+   * These four are the ones that change what the caddie knows about the shot in front of him.
+   */
+  'set_hole_note',
+  'state_yardage',
+  'club_change',
+  'declare_hole',
 ]);
 
 export const BRAIN_TOOLS: AiToolDef[] = [
@@ -207,6 +225,45 @@ export const BRAIN_TOOLS: AiToolDef[] = [
         clear: { type: 'boolean', description: 'True when they say it has settled down or stopped.' },
       },
       required: ['stated'],
+    },
+  },
+  {
+    name: 'set_hole_note',
+    description: 'The player describes their LIE, POSITION or the situation in front of them — "I\'m off to the right, pin high, downhill lie", "ball\'s below my feet", "I\'m in the rough sitting down", "hole 7 is a dogleg left". REMEMBER it against the hole so you can factor it into this shot and the rest of the hole. Omit hole when they did not say one — it applies to the hole they are on. This is NOT opening the lie camera tool; you are just remembering what they told you.',
+    parameters: {
+      type: 'object',
+      properties: {
+        note: { type: 'string', description: "What they said about the lie/position, in their words." },
+        hole: { type: 'integer', description: 'Only when they named a hole. Otherwise omit.' },
+      },
+      required: ['note'],
+    },
+  },
+  {
+    name: 'state_yardage',
+    description: 'The player tells you the distance they have — "I\'m 150 out", "about 172 to the pin", "we\'ve got 90 in". Record it as the working number for this shot: it is measured or paced by them and BEATS the GPS estimate. Call it as well as answering.',
+    parameters: {
+      type: 'object',
+      properties: { yards: { type: 'integer', description: 'The distance they stated, in yards.' } },
+      required: ['yards'],
+    },
+  },
+  {
+    name: 'club_change',
+    description: 'The player says which club they are using or switching to — "I\'m hitting my 7", "going with the 52 wedge", "switched to hybrid". Record it so the shot is attributed to the right club. Call it as well as answering.',
+    parameters: {
+      type: 'object',
+      properties: { club: { type: 'string', description: 'The club they named, in their words ("7 iron", "52 wedge", "hybrid").' } },
+      required: ['club'],
+    },
+  },
+  {
+    name: 'declare_hole',
+    description: 'The player states which hole they are on — "we\'re on 12", "moving to the 4th", "starting hole 1". Set the current hole. Only when they DECLARE it, not when they ask about one.',
+    parameters: {
+      type: 'object',
+      properties: { hole: { type: 'integer', description: 'Hole number, 1-18.' } },
+      required: ['hole'],
     },
   },
   {

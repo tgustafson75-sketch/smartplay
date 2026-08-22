@@ -112,6 +112,7 @@ type AnyAction = {
   // set_session_focus / set_playing_condition (2026-08-21)
   goal?: string;
   stated?: string;
+  yards?: number;
   kind?: string;
   compensate?: string;
   clear?: boolean;
@@ -171,6 +172,55 @@ function dispatchOne(a: AnyAction): void {
     case 'open_swinglab':
       router.push('/(tabs)/swinglab' as never);
       break;
+    /**
+     * 2026-08-21 — THE NARRATIVE BRAIN, finally reachable in conversation.
+     *
+     * Tim: "How the fuck do we get this far? As many times as I've asked, I can give that and it
+     * doesn't record? What happened to a growing brain? Not being able to wire that in makes it
+     * fake."
+     *
+     * He is right. f4e0b31e (2026-07-01) built set_hole_note so a bare lie note would be REMEMBERED
+     * and factored into advice — on the CLASSIFIER path. The brain-tool architecture arrived later,
+     * each tool was added deliberately one at a time, and NOBODY EVER COMPARED THE TWO LISTS. So
+     * every audit asked "is this tool wired correctly" and none asked "what can the other path do
+     * that this one cannot".
+     *
+     * The result: hands-free, "I'm 150 out with my 7-iron on twelve, downhill lie" records four
+     * things. Said in conversation — how most people talk to it — the caddie answered warmly and
+     * remembered nothing. A caddie that cannot retain what you just told it is not growing, whatever
+     * the learning pipeline behind it does.
+     *
+     * These write the same stores the intent handlers write, so both paths land in one place.
+     */
+    case 'set_hole_note': {
+      const note = typeof a.note === 'string' ? a.note.trim() : '';
+      if (!note) break;
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const r = (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState();
+      // No hole stated = the hole he is on. Asking "which hole?" is what made this feel robotic.
+      const hole = typeof a.hole === 'number' && a.hole >= 1 && a.hole <= 18 ? a.hole : r.currentHole;
+      if (hole != null) r.setHoleNote(hole, note);
+      break;
+    }
+    case 'state_yardage': {
+      const y = typeof a.yards === 'number' ? Math.round(a.yards) : NaN;
+      // He paced or measured it. It beats our GPS estimate, which is why the store marks the source.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      if (Number.isFinite(y) && y > 0 && y < 900) (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState().setUserStatedYardage(y, 'user');
+      break;
+    }
+    case 'club_change': {
+      const club = typeof a.club === 'string' ? a.club.trim() : '';
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      if (club) (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState().setClub(club);
+      break;
+    }
+    case 'declare_hole': {
+      const h = typeof a.hole === 'number' ? Math.round(a.hole) : NaN;
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      if (Number.isFinite(h) && h >= 1 && h <= 18) (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState().setCurrentHole(h);
+      break;
+    }
     case 'set_session_focus': {
       /**
        * 2026-08-21 — completes a wire that existed on the CLASSIFIER path since early on and never
