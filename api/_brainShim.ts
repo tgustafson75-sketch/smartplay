@@ -91,11 +91,30 @@ export function pipecatRequestToKevinBody(body: Record<string, unknown>): Record
      * number the player just measured never reached the default conversational brain. Building the
      * sentence HERE (rather than on the device) keeps one wording for both routes.
      */
+    /**
+     * 2026-08-21 — the rangefinder lock AND the measured trouble, in ONE block.
+     *
+     * They belong together: the number he took and what that number runs into are the same
+     * decision. Hazards come from computer vision (api/hole-scan finds bunkers and water) through
+     * geometry, so these are real yardages — where each starts and the carry needed to CLEAR it.
+     *
+     * Rendered as plain speakable facts rather than JSON, because the caddie should be able to say
+     * "clears the bunker" without doing arithmetic mid-sentence. This is what turns "158 yards" into
+     * an answer.
+     */
     smartFinderContext: (() => {
+      const parts: string[] = [];
       const lock = context.smartFinderLock as { distance_yards?: number; compass_heading?: number; confidence?: string | null } | undefined;
-      if (!lock || typeof lock.distance_yards !== 'number') return null;
-      const conf = lock.confidence ? ` Confidence: ${lock.confidence}.` : '';
-      return `SMARTFINDER ACTIVE: the player has LOCKED a measured distance of ${lock.distance_yards} yards at compass heading ${lock.compass_heading ?? 0}°.${conf} Treat the locked distance as the working number — they measured it themselves and it beats the GPS green-middle.`;
+      if (lock && typeof lock.distance_yards === 'number') {
+        const conf = lock.confidence ? ` Confidence: ${lock.confidence}.` : '';
+        parts.push(`SMARTFINDER ACTIVE: the player has LOCKED a measured distance of ${lock.distance_yards} yards at compass heading ${lock.compass_heading ?? 0}°.${conf} Treat the locked distance as the working number — they measured it themselves and it beats the GPS green-middle.`);
+      }
+      const hz = context.hazards as Array<{ what?: string; kind?: string; side?: string; startsAt?: number; carryToClear?: number }> | undefined;
+      if (Array.isArray(hz) && hz.length > 0) {
+        const lines = hz.map(h => `${h.what ?? h.kind} ${h.side} — starts ${h.startsAt}y, needs ${h.carryToClear}y to carry`);
+        parts.push(`MEASURED TROUBLE ON THIS SHOT (satellite vision + hole geometry, real yardages — anchor the target on these, never just quote the distance to the pin): ${lines.join('; ')}.`);
+      }
+      return parts.length > 0 ? parts.join(' ') : null;
     })(),
 
     /**
@@ -104,6 +123,7 @@ export function pipecatRequestToKevinBody(body: Record<string, unknown>): Record
      * lets the primary brain say "past the bunker" instead of "158 yards".
      */
     courseIntelligence: context.courseIntelligence ?? null,
+
 
     // The CNS block. pipecat calls it context.memory, kevin calls it unified_context_block — two
     // names for one thing, which is its own small argument for having one brain.

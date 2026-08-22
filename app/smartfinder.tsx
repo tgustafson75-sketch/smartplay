@@ -52,6 +52,7 @@ import {
 import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../services/courseGeometryService';
 import { refreshGpsAndReconcile } from '../services/refreshGpsAction';
 import { bearingDegrees, haversineYards, projectToAxis, unprojectFromAxis } from '../utils/geoDistance';
+import { computeHazardIntelligence, type HazardIntelligence } from '../services/hazardIntelligence';
 import { computeDistance, computeHeightRangedDistance } from '../services/rangefinder';
 import * as Haptics from 'expo-haptics';
 import { subscribeSmartFinderCommand, setSmartFinderActive } from '../services/smartFinderCommandBus';
@@ -1119,108 +1120,14 @@ function stepDownClub(club: string | null): string | null {
   return ladder[idx + 1];
 }
 
-type HazardIntelligence = {
-  label: string;
-  kind: 'water' | 'bunker' | 'hazard';
-  side: 'left' | 'right' | 'center';
-  front: number;
-  center: number;
-  back: number;
-  carryToClear: number;
-  runoutDistance: number;
-  source: 'polygon' | 'point';
-};
-
-function computeHazardIntelligence(
-  player: { lat: number; lng: number } | null,
-  geometry: HoleGeometry | null,
-  landingTotal: number | null,
-  shotBearingDeg: number | null,
-): HazardIntelligence | null {
-  if (!player || !geometry) return null;
-
-  type Candidate = {
-    label: string;
-    kind: 'water' | 'bunker' | 'hazard';
-    sideHint: 'left' | 'right' | 'center' | null;
-    centroid: { lat: number; lng: number } | null;
-    distances: number[];
-    source: 'polygon' | 'point';
-  };
-  const candidates: Candidate[] = [];
-
-  for (const h of geometry.hazards ?? []) {
-    if (!h.location) continue;
-    const lower = h.label.toLowerCase();
-    const kind: 'water' | 'bunker' | 'hazard' =
-      lower.includes('water') || lower.includes('pond') || lower.includes('lake') ? 'water'
-      : lower.includes('bunker') || lower.includes('sand') ? 'bunker'
-      : 'hazard';
-    candidates.push({
-      label: h.label,
-      kind,
-      sideHint: null,
-      centroid: h.location,
-      distances: [Math.round(haversineYards(player, h.location))],
-      source: 'point',
-    });
-  }
-
-  const polygonFeatures = [...(geometry.bunkers ?? []), ...(geometry.water_hazards ?? [])];
-  for (const f of polygonFeatures) {
-    const dists: number[] = [];
-    if (f.polygon && f.polygon.length > 0) {
-      for (const p of f.polygon) dists.push(Math.round(haversineYards(player, p)));
-    }
-    if (dists.length === 0 && f.centroid) {
-      dists.push(Math.round(haversineYards(player, f.centroid)));
-    }
-    if (dists.length === 0) continue;
-    candidates.push({
-      label: f.name ?? (f.side === 'greenside' ? 'Greenside hazard' : 'Hazard'),
-      kind: geometry.water_hazards?.includes(f) ? 'water' : 'bunker',
-      sideHint: f.side === 'left' || f.side === 'right' ? f.side : null,
-      centroid: f.centroid ?? null,
-      distances: dists,
-      source: f.polygon && f.polygon.length > 0 ? 'polygon' : 'point',
-    });
-  }
-
-  if (candidates.length === 0) return null;
-
-  const scored = candidates.map((c) => {
-    const sorted = [...c.distances].sort((a, b) => a - b);
-    const front = sorted[0];
-    const back = sorted[sorted.length - 1];
-    const center = Math.round((front + back) / 2);
-    const sideFromBearing = (() => {
-      if (!shotBearingDeg || !c.centroid) return null;
-      const hazardBearing = bearingDegrees(player, c.centroid);
-      let rel = ((hazardBearing - shotBearingDeg) % 360 + 360) % 360;
-      if (rel > 180) rel -= 360;
-      if (Math.abs(rel) <= 12) return 'center' as const;
-      return rel < 0 ? 'left' as const : 'right' as const;
-    })();
-    const side = c.sideHint ?? sideFromBearing ?? 'center';
-    return { c, front, back, center, side };
-  }).sort((a, b) => a.center - b.center);
-
-  const best = scored[0];
-  const carryToClear = best.back + 1;
-  const runoutDistance = landingTotal != null ? Math.max(0, landingTotal - carryToClear) : 0;
-
-  return {
-    label: best.c.label,
-    kind: best.c.kind,
-    side: best.side,
-    front: best.front,
-    center: best.center,
-    back: best.back,
-    carryToClear,
-    runoutDistance,
-    source: best.c.source,
-  };
-}
+/**
+ * 2026-08-21 — HazardIntelligence + computeHazardIntelligence moved to
+ * services/hazardIntelligence.ts, UNCHANGED. They were never really screen code: computer vision
+ * (api/hole-scan) finds the bunkers and water, geometry turns them into distances, and the caddie
+ * needs that as badly as this screen does. Living here meant the brain could answer "158 yards"
+ * while the app already knew the bunker starts at 141 and needs 152 to carry.
+ * One computation, two consumers — this screen renders it, pipecatContext feeds it to the CNS.
+ */
 
 function riskBandFromHazards(nearestHazardYards: number | null, carryYards: number | null): 'Low' | 'Moderate' | 'High' {
   if (nearestHazardYards == null || carryYards == null) return 'Moderate';

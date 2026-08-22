@@ -249,6 +249,39 @@ export function buildPipecatContext() {
         return ci.getCachedCourseIntelligenceSync(id) ?? undefined;
       } catch { return undefined; }
     })(),
+    /**
+     * 2026-08-21 (Tim) — "fuck plays-like… what is my shot gonna do in relation to water or a bunker
+     * or fescue?" and "we need to use calculation in computer vision to find those hazards" and
+     * "SmartFinder and SmartVision are supposed to be unified as part of the central nervous system."
+     *
+     * They are now. Computer vision (api/hole-scan) finds the bunkers and water; geometry turns them
+     * into real distances — where each one starts, the carry needed to CLEAR it, which side it sits.
+     * Until today that arrived on the rangefinder screen and nowhere else, so the caddie answered
+     * with a yardage while the app already knew the bunker starts at 141 and needs 152 to carry.
+     *
+     * Sent COMPACT and pre-digested: the three that matter, as facts the caddie can speak. A raw
+     * hazard list would be a data dump the model has to interpret mid-turn, and the whole point is
+     * that it should be able to say "clears the bunker" without doing arithmetic.
+     */
+    hazards: (() => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const hz = require('./hazardIntelligence') as typeof import('./hazardIntelligence');
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const geo = require('./courseGeometryService') as typeof import('./courseGeometryService');
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const fix = require('./gpsManager').getLastFix?.();
+        if (!fix || !round.isRoundActive || round.currentHole == null) return undefined;
+        const g = geo.getHoleGeometry?.(round.activeCourseId ?? '', round.currentHole);
+        if (!g) return undefined;
+        const list = hz.computeHazardIntelligence({ lat: fix.lat, lng: fix.lng }, g, null, null);
+        if (!list || !Array.isArray(list) || list.length === 0) return undefined;
+        return list.slice(0, 3).map((h: { label: string; kind: string; side: string; front: number; carryToClear: number }) => ({
+          what: h.label, kind: h.kind, side: h.side,
+          startsAt: Math.round(h.front), carryToClear: Math.round(h.carryToClear),
+        }));
+      } catch { return undefined; }
+    })(),
     gps: {
       lat: getLastFix()?.lat ?? undefined,
       lng: getLastFix()?.lng ?? undefined,

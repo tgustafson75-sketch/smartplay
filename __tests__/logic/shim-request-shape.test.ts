@@ -84,3 +84,42 @@ describe('the number the player just measured reaches the brain', () => {
     expect(body.smartFinderContext).toBeNull();
   });
 });
+
+describe('the measured trouble reaches the caddie', () => {
+  const { pipecatRequestToKevinBody } = require('../../api/_brainShim');
+
+  it('renders vision-derived hazards as speakable facts, with the carry number', () => {
+    // 2026-08-21 (Tim): "fuck plays-like — what is my shot gonna do in relation to water or a bunker
+    // or fescue?" Computer vision (api/hole-scan) finds them, geometry measures them, and until now
+    // that stopped at the rangefinder screen while the caddie answered with a bare yardage.
+    const body = pipecatRequestToKevinBody({
+      text: 'what should I hit', history: [],
+      context: { hazards: [{ what: 'fairway bunker', kind: 'bunker', side: 'right', startsAt: 141, carryToClear: 152 }] },
+    });
+    const ctx = String(body.smartFinderContext);
+    expect(ctx).toMatch(/fairway bunker right/);
+    expect(ctx).toMatch(/141y/);
+    // The carry-to-clear is the number that turns a distance into a decision.
+    expect(ctx).toMatch(/152y to carry/);
+    // And it must tell the brain to ANCHOR on these, or it will still just read out the pin number.
+    expect(ctx).toMatch(/anchor the target/i);
+  });
+
+  it('carries the lock and the trouble together — they are one decision', () => {
+    const body = pipecatRequestToKevinBody({
+      text: 'what should I hit', history: [],
+      context: {
+        smartFinderLock: { distance_yards: 158, compass_heading: 90, confidence: 'high' },
+        hazards: [{ what: 'water', kind: 'water', side: 'left', startsAt: 120, carryToClear: 138 }],
+      },
+    });
+    const ctx = String(body.smartFinderContext);
+    expect(ctx).toMatch(/158 yards/);
+    expect(ctx).toMatch(/water left/);
+  });
+
+  it('sends nothing when there is neither — never a phantom hazard', () => {
+    const body = pipecatRequestToKevinBody({ text: 'hi', history: [], context: {} });
+    expect(body.smartFinderContext).toBeNull();
+  });
+});
