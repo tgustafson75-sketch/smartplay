@@ -226,6 +226,29 @@ export function buildPipecatContext() {
         };
       } catch { return undefined; }
     })(),
+    /**
+     * 2026-08-21 (Tim) — "we know the course. If there's hazards, and what the club distance puts
+     * you in relation to the hazard if you swing pure — and if you swing your tendency, where it
+     * could end up. In a brief, useful way."
+     *
+     * That answer was IMPOSSIBLE on this path. kevin carries detailed hazard-aware targeting
+     * instructions ("the bunker right is at 145, so anything short and right is trouble"), and they
+     * run on `courseIntelligence` — which the on-screen kevin path sends and THIS path never did.
+     * So the primary conversational brain had the instructions and nothing to apply them to, and
+     * answered with a bare number.
+     *
+     * Cached client-side and read synchronously, so it costs the turn nothing. The hazards were
+     * already fetched for the round briefing; they simply never reached the brain that answers.
+     */
+    courseIntelligence: (() => {
+      try {
+        const id = round.activeCourseId;
+        if (!id) return undefined;
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const ci = require('./courseIntelligenceService') as typeof import('./courseIntelligenceService');
+        return ci.getCachedCourseIntelligenceSync(id) ?? undefined;
+      } catch { return undefined; }
+    })(),
     gps: {
       lat: getLastFix()?.lat ?? undefined,
       lng: getLastFix()?.lng ?? undefined,

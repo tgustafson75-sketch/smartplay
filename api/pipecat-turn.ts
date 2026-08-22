@@ -19,7 +19,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 import { runAgenticLoop, completeText } from './_aiProvider';
 import { BRAIN_TOOLS, UI_TOOLS } from './_brainTools';
-import { selfReferenceBlock, perspectiveBlock, mentalGameBlock, clubAdviceBlock, caddieRosterBlock, extractAdvisedClub, detectEmotionalState, extractShotReport } from './_brain';
+import { selfReferenceBlock, perspectiveBlock, mentalGameBlock, clubAdviceBlock, caddieRosterBlock, shotAnswerShapeBlock, extractAdvisedClub, detectEmotionalState, extractShotReport } from './_brain';
 // 2026-07-28 (audit — BRAIN-F1/F3, CONFIRMED HIGH) — pipecat-turn is the DEFAULT brain since v15, but
 // it carried persona only as a NAME while the kevin fallback injected the full character voice
 // (getCharacterSpec). So Serena/Tank sounded generic on the primary path and only got their real voice
@@ -269,6 +269,8 @@ ${mentalGameBlock()}
 - Never bring up a mistake unless the player mentions it first.
 
 ${clubAdviceBlock()}
+
+${shotAnswerShapeBlock()}
 
 ${caddieRosterBlock(caddieName)}
 

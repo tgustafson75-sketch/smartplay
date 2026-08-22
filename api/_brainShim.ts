@@ -98,6 +98,13 @@ export function pipecatRequestToKevinBody(body: Record<string, unknown>): Record
       return `SMARTFINDER ACTIVE: the player has LOCKED a measured distance of ${lock.distance_yards} yards at compass heading ${lock.compass_heading ?? 0}°.${conf} Treat the locked distance as the working number — they measured it themselves and it beats the GPS green-middle.`;
     })(),
 
+    /**
+     * 2026-08-21 — the hazards. kevin's targeting instructions are useless without this, and the
+     * shim was dropping it because pipecat had never had a field for it. Translating it here is what
+     * lets the primary brain say "past the bunker" instead of "158 yards".
+     */
+    courseIntelligence: context.courseIntelligence ?? null,
+
     // The CNS block. pipecat calls it context.memory, kevin calls it unified_context_block — two
     // names for one thing, which is its own small argument for having one brain.
     unified_context_block: context.memory ?? null,

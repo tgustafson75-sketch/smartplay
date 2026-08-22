@@ -88,6 +88,50 @@ export function clubAdviceBlock(): string {
   when you are asking for more information rather than advising ("what's the distance?").`;
 }
 
+/**
+ * 2026-08-21 (Tim, defining the answer he actually wants) — "about a twelve to fifteen word
+ * response, or if it's about the club it could be LESS than twelve. What you need is not only club,
+ * but we know the course — so if there's hazards, and what the club distance will put you in
+ * relation to the hazard if you swing pure, and if you swing your TENDENCY where it could end up.
+ * But in a brief, useful kind of way."
+ *
+ * This is not "be brief". It is BRIEF BECAUSE IT IS DENSE. A club on its own is a number the player
+ * could have looked up; a club plus what a pure strike does versus what their own miss does is a
+ * DECISION, and it fits in the same breath.
+ *
+ * It is also the ethos §6 rule made concrete: the intelligence gets deeper while the sentence gets
+ * shorter. Every input already exists — learned distances, per-club tendency and miss side, the
+ * caddie's own calibration, and (as of today, on this path) the hole's hazards.
+ *
+ * Deliberately NOT a template. A caddie reciting the same three-clause sentence every shot is a
+ * different kind of robotic. This describes what must be CARRIED, and lets the caddie say it like a
+ * person who has been on the bag for years.
+ */
+export function shotAnswerShapeBlock(): string {
+  return `HOW TO ANSWER A SHOT QUESTION — short because it is dense, never short because it is thin.
+- Club calls: UNDER 12 WORDS. Anything else: 12-15. One breath. No preamble, no restating the question.
+- A bare number is a failure. "It's 158" is something he could read off a screen — you are on the bag
+  to convert it into a decision.
+- CARRY THREE THINGS when you have them, in whatever order sounds natural:
+    1. the club,
+    2. what a PURE strike does relative to the trouble ("clears the bunker", "past it, pin high"),
+    3. where his OWN tendency would leave it ("your fade holds the right edge", "a thin one is short-right").
+- Use his real miss and real distances, not generic ones. If you do not have a tendency for that club,
+  leave it out rather than inventing one — two honest clauses beat three with a guess in them.
+- Never LIST hazards. Use them to anchor the target: "past the bunker" tells him more than "bunker at 145".
+- PLAYS-LIKE IS AN INPUT, NEVER THE ANSWER. Every rangefinder on the market brags about a wind- and
+  elevation-adjusted number, and it is still a NUMBER. He does not want to know it plays 158; he wants
+  to know what his shot does in relation to the water, the bunker, the fescue. Use plays-like to pick
+  the club, then spend the sentence on the trouble.
+- Name the trouble in his terms — water, bunker, fescue, OB, the wall — not "hazard".
+- No hedging stacks ("maybe try possibly"). Commit to a club. He can overrule you.
+
+Good: "Seven iron. Pure clears the bunker; your fade holds the right edge."          (11 words)
+Good: "Smooth eight. Anything thin is short-right in the sand — favour left centre." (12 words)
+Bad:  "It's 158 yards to the pin."                                                    (a number, not a call)
+Bad:  "There's a bunker right at 145 and water long and the wind is into you and…"   (a list, not a decision)`;
+}
+
 export function mentalGameBlock(): string {
   return `MENTAL GAME — You are also a sports psychologist and emotional coach. This is as important as club selection.
 - ALWAYS-ON, on the course AND off it (practice, get-to-know, casual chat): every time the player speaks,
