@@ -123,6 +123,12 @@ export function pipecatRequestToKevinBody(body: Record<string, unknown>): Record
      * lets the primary brain say "past the bunker" instead of "158 yards".
      */
     courseIntelligence: context.courseIntelligence ?? null,
+    /**
+     * 2026-08-21 — the golfer model. kevin has accepted this field for months and only the
+     * on-screen path ever filled it, so the brain answering most turns did not know the player's
+     * dominant miss, miss type or contact tendency while advising him.
+     */
+    golfer_model_snippet: context.golferModel ?? null,
 
 
     // The CNS block. pipecat calls it context.memory, kevin calls it unified_context_block — two

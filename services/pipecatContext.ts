@@ -282,6 +282,33 @@ export function buildPipecatContext() {
         }));
       } catch { return undefined; }
     })(),
+    /**
+     * 2026-08-21 (whole-app wiring audit) — THE PLAYER MODEL ITSELF, which the primary brain had
+     * never seen.
+     *
+     * services/golferModel.ts exists to answer "who is this golfer": dominant miss DIRECTION and
+     * TYPE, most-common contact feel with its share, average vs par, putting. It even ships
+     * describeForPrompt() — a function written for no purpose other than feeding a prompt.
+     *
+     * The ON-SCREEN kevin path sends it as golfer_model_snippet. This path never did, and the shim
+     * did not map it. So the brain answering most turns was reasoning without the model of the man
+     * it was advising, while a function called describeForPrompt sat unused on the device.
+     *
+     * That is the ethos's core promise — "it should know YOU hit your 7-iron 142, your miss is
+     * generally right" — and the answer was going out without it. Same unconnected-halves shape as
+     * the hazards and the SmartFinder lock, found the same way: by asking which computed
+     * intelligence never reaches the CNS.
+     */
+    golferModel: (() => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const gm = require('./golferModel') as typeof import('./golferModel');
+        const model = gm.buildGolferModel();
+        if (!model) return undefined;
+        const text = gm.describeForPrompt(model);
+        return text && text.trim() ? text.slice(0, 700) : undefined;
+      } catch { return undefined; }
+    })(),
     gps: {
       lat: getLastFix()?.lat ?? undefined,
       lng: getLastFix()?.lng ?? undefined,
