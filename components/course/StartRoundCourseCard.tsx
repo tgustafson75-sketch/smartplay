@@ -8,6 +8,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { playerTee } from '../../services/teeSelection';
 import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator, type ImageSourcePropType } from 'react-native';
 import AppIcon from '../AppIcon';
 import CourseDetailModal, { type ModalHole } from './CourseDetailModal';
@@ -62,7 +63,15 @@ export default function StartRoundCourseCard({ courseId, courseName }: Props) {
           : null;
       try { await fetchCourseGeometry(courseId, { courseLocation }); } catch {}
       try {
-        const tee = c?.tees[0];
+        /**
+         * 2026-08-22 — the FOURTH surface reading the card's first tee. Found sweeping for the shape
+         * after fixing courseToHoles + courseSummaryForContext: this card renders YARDS / PAR /
+         * RATING / SLOPE straight off tees[0], and feeds the same numbers into fetchCourseContent, so
+         * the generated course content was written against a card the player may not play. At Sharp
+         * Park tees[0] is the women's Blue: 6416 yards at 77.5/135 shown to someone playing the 5087y
+         * Gold. [[no-half-fixes-enforce-every-surface]]
+         */
+        const tee = playerTee(c) ?? c?.tees[0];
         if (c && tee) {
           await fetchCourseContent({
             courseId, courseName: c.club_name,
@@ -73,7 +82,7 @@ export default function StartRoundCourseCard({ courseId, courseName }: Props) {
           });
         }
       } catch {}
-      const tee = c?.tees[0];
+      const tee = playerTee(c) ?? c?.tees[0];
       if (cancelled) return;
       if (!tee) { setHeroResolved(true); return; } // no tee → no imagery; stop the spinner
       const holes: ModalHole[] = tee.holes.map(h => {
@@ -96,7 +105,7 @@ export default function StartRoundCourseCard({ courseId, courseName }: Props) {
     return () => { cancelled = true; };
   }, [courseId, isPalms]);
 
-  const tee = course?.tees[0] ?? null;
+  const tee = playerTee(course) ?? course?.tees[0] ?? null;
   const location = course
     ? [course.location.city, course.location.state].filter(Boolean).join(', ')
     : '';

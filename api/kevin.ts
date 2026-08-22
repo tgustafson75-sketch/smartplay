@@ -127,6 +127,14 @@ async function executeLookupHole(
       }
     }
 
+    /**
+     * 2026-08-22 — the `tees[0]` fallback here is DELIBERATE, unlike the client-side ones fixed the
+     * same day. This lookup only ever runs for a course the player is NOT on: the prompt says
+     * "COURSE LOADED (use this — do not call lookup_hole for current course)", and that context is
+     * built by courseSummaryForContext, which resolves the player's own tee. There is no profile
+     * server-side, and the card's default set is the right answer for "tell me about hole 3 at
+     * <somewhere else>". Left as-is on purpose — do not "fix" it to match the client.
+     */
     const tee = teeName
       ? (tees.find(t => (t.tee_name ?? t.name ?? '').toLowerCase() === teeName.toLowerCase()) ?? tees[0])
       : tees[0];

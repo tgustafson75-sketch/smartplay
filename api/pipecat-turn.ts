@@ -537,6 +537,14 @@ A single statement can need MULTIPLE tools — call each one (e.g. "log that and
               }
             }
             const tee = typeof toolInput.tee_name === 'string'
+    /**
+     * 2026-08-22 — the `tees[0]` fallback here is DELIBERATE, unlike the client-side ones fixed the
+     * same day. This lookup only ever runs for a course the player is NOT on: the prompt says
+     * "COURSE LOADED (use this — do not call lookup_hole for current course)", and that context is
+     * built by courseSummaryForContext, which resolves the player's own tee. There is no profile
+     * server-side, and the card's default set is the right answer for "tell me about hole 3 at
+     * <somewhere else>". Left as-is on purpose — do not "fix" it to match the client.
+     */
               ? (tees.find(t => (t.tee_name ?? t.name ?? '').toLowerCase() === (toolInput.tee_name as string).toLowerCase()) ?? tees[0])
               : tees[0];
             if (!tee?.holes?.length) return `No tee data found.`;

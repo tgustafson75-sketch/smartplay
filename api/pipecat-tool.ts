@@ -87,6 +87,14 @@ async function routeTool(
       if (!course) return `Course ${course_id} not found.`;
 
       const tee = tee_name
+    /**
+     * 2026-08-22 — the `tees[0]` fallback here is DELIBERATE, unlike the client-side ones fixed the
+     * same day. This lookup only ever runs for a course the player is NOT on: the prompt says
+     * "COURSE LOADED (use this — do not call lookup_hole for current course)", and that context is
+     * built by courseSummaryForContext, which resolves the player's own tee. There is no profile
+     * server-side, and the card's default set is the right answer for "tell me about hole 3 at
+     * <somewhere else>". Left as-is on purpose — do not "fix" it to match the client.
+     */
         ? (course.tees.find(t => t.tee_name.toLowerCase() === tee_name.toLowerCase()) ?? course.tees[0])
         : course.tees[0];
 
