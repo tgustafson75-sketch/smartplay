@@ -5475,7 +5475,17 @@ check('Course book: Places lookup anchors website/phone; booking prefers the rea
       /\/api\/course-places/.test(cp) &&
       /getApiBaseUrl\(\)/.test(cp) &&
       /saveCourseBook\(\{/.test(cp) &&
-      /if \(existing && \(existing\.website \|\| existing\.phone\)\)/.test(cp) &&
+      // 2026-08-22 — was pinned to this line's exact source text and went red when the cache-hit
+      // condition gained `&& existing.lat != null`. The PROPERTY is that a known course is not
+      // re-queried; the literal spelling of the condition is not the property. Asserted as a shape,
+      // plus the coordinate behaviour that motivated the change: Places knows where the course is,
+      // and dropping that left a course added on Wi-Fi with no geometry anchor until arrival.
+      /if \(existing &&[^)]*existing\.website[^)]*existing\.phone/.test(cp) &&
+      /existing\.lat != null/.test(cp) &&              // a book saved before coords existed re-queries once
+      /lat,\s*\n\s*lng,/.test(cp) &&                   // and the coords are anchored into the book
+      /fields=website,formatted_phone_number,geometry/.test(cph) &&  // asked for server-side
+      /\blat: found\.lat\b/.test(cph) &&               // and returned to the client
+      /getCourseBook\(courseId\)/.test(read('services/courseGeometryService.ts')) &&
       !/AIzaSy/.test(cp) &&                          // no hardcoded key in the client
       // server proxy holds the key + makes the Google Places calls, degrading cleanly
       /findplacefromtext\/json/.test(cph) &&
