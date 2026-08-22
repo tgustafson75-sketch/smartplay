@@ -931,6 +931,33 @@ async function fetchCourseGeometryInner(
     if (!centroid) {
       centroid = deriveCentroidFromActiveCourseLocation(courseId);
     }
+    /**
+     * 2026-08-22 — the COURSE BOOK's coordinates, ahead of the live-GPS fallback below.
+     *
+     * Found building Sharp Park (Pacifica) end to end. No course record from the scorecard API
+     * carries coordinates — Sharp Park's says "1 Sharp Park Rd, Pacifica, CA 94044" and nothing
+     * numeric — so before this the ONLY anchor was the player physically standing on the course.
+     * Add a course at home on Wi-Fi and it built no geometry at all: no greens, no aim lines, right
+     * up until you arrived. Google Places knew where it was the whole time; api/course-places asked
+     * for the place and threw the location away.
+     *
+     * It sits BEFORE the GPS fix deliberately. The book holds where the COURSE is; a GPS fix holds
+     * where the PLAYER is, which is the same thing only when they have already arrived.
+     */
+    if (!centroid) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const book = (require('../store/caddieMemoryStore') as typeof import('../store/caddieMemoryStore'))
+          .useCaddieMemoryStore.getState().getCourseBook(courseId);
+        const bLat = book?.lat, bLng = book?.lng;
+        if (typeof bLat === 'number' && typeof bLng === 'number'
+            && Number.isFinite(bLat) && Number.isFinite(bLng)
+            && Math.abs(bLat) <= 90 && Math.abs(bLng) <= 180
+            && !(Math.abs(bLat) < 0.001 && Math.abs(bLng) < 0.001)) {
+          centroid = { lat: bLat, lng: bLng };
+        }
+      } catch { /* no book yet — fall through to the live fix */ }
+    }
     // 2026-08-10 (Tim — "the course builder like Arccos HAS to work"). Finding #1: the player is
     // STANDING on an unbundled course with a live GPS fix, but we were throwing it away — so a course
     // whose API record lacks coords got frozen scorecard yardages, no live distance-to-green. Use the

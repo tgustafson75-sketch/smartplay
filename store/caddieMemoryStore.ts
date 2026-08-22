@@ -173,6 +173,13 @@ export interface CourseBookEntry {
   website: string | null;
   phone: string | null;
   bookingUrl: string | null;
+  /**
+   * 2026-08-22 — where the course IS. The course API returns a street address and no coordinates for
+   * any course, so this is the only anchor available before the player arrives, and the geometry
+   * build needs one to have a bounding box at all.
+   */
+  lat: number | null;
+  lng: number | null;
   savedAt: number;
 }
 
@@ -236,6 +243,8 @@ interface CaddieMemoryState {
     website?: string | null;
     phone?: string | null;
     bookingUrl?: string | null;
+    lat?: number | null;
+    lng?: number | null;
     nowMs: number;
   }) => void;
 
@@ -312,12 +321,12 @@ export const useCaddieMemoryStore = create<CaddieMemoryState>()(
         return direct ?? null;
       },
 
-      saveCourseBook: ({ course_id, name, holes, tips, about, website, phone, bookingUrl, nowMs }) => {
+      saveCourseBook: ({ course_id, name, holes, tips, about, website, phone, bookingUrl, lat, lng, nowMs }) => {
         if (!course_id) return;
         set((s) => {
           const prev: CourseBookEntry = s.courseBook?.[course_id] ?? {
             course_id, name: name ?? null, holes: {}, tips: [], about: null,
-            website: null, phone: null, bookingUrl: null, savedAt: 0,
+            website: null, phone: null, bookingUrl: null, lat: null, lng: null, savedAt: 0,
           };
           // Merge holes: only overwrite a field when the incoming value is present,
           // so a hazards-only or note-only source can't wipe an existing description.
@@ -350,6 +359,12 @@ export const useCaddieMemoryStore = create<CaddieMemoryState>()(
             website: (website && website.trim()) ? website.trim() : prev.website,
             phone: (phone && phone.trim()) ? phone.trim() : prev.phone,
             bookingUrl: (bookingUrl && bookingUrl.trim()) ? bookingUrl.trim() : prev.bookingUrl,
+            // Additive like every other field here: a later source without coordinates must not wipe
+            // the ones we already have. Null Island and out-of-range values never get written.
+            lat: (typeof lat === 'number' && Number.isFinite(lat) && Math.abs(lat) <= 90
+                  && !(Math.abs(lat) < 0.001 && Math.abs(lng ?? 0) < 0.001)) ? lat : prev.lat,
+            lng: (typeof lng === 'number' && Number.isFinite(lng) && Math.abs(lng) <= 180
+                  && !(Math.abs(lat ?? 0) < 0.001 && Math.abs(lng) < 0.001)) ? lng : prev.lng,
             savedAt: nowMs,
           };
           // 2026-08-08 (server audit #3 — the ONLY unbounded persisted map in the app; writers fire per

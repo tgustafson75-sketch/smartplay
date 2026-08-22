@@ -40,7 +40,9 @@ export async function lookupCoursePlaces(input: {
 
   // Already known → don't re-query (the book is the cache).
   const existing = useCaddieMemoryStore.getState().getCourseBook(input.courseId);
-  if (existing && (existing.website || existing.phone)) {
+  // Only a book that already has the COORDINATES is complete enough to skip the lookup — an entry
+  // saved before 2026-08-22 has a website and no location, and that is the case we are here for.
+  if (existing && (existing.website || existing.phone) && existing.lat != null) {
     return { website: existing.website, phone: existing.phone };
   }
 
@@ -59,10 +61,15 @@ export async function lookupCoursePlaces(input: {
       signal: AbortSignal.timeout(PLACES_TIMEOUT_MS),
     });
     if (!res.ok) return null;
-    const data = (await res.json()) as { website?: string | null; phone?: string | null };
+    const data = (await res.json()) as { website?: string | null; phone?: string | null; lat?: number | null; lng?: number | null };
     const website = data.website?.trim() || null;
     const phone = data.phone?.trim() || null;
-    if (!website && !phone) return null;
+    const lat = typeof data.lat === 'number' ? data.lat : null;
+    const lng = typeof data.lng === 'number' ? data.lng : null;
+    // 2026-08-22 — coordinates alone are worth saving. The course API has none for ANY course, so
+    // this is often the only anchor the geometry build will get before the player arrives, and
+    // bailing here because a course has no website threw it away.
+    if (!website && !phone && lat == null) return null;
 
     // Anchor into the course book — persisted, offline-available.
     useCaddieMemoryStore.getState().saveCourseBook({
@@ -73,6 +80,8 @@ export async function lookupCoursePlaces(input: {
       // The official site is where the course's own booking widget lives; use it
       // as the booking target until/unless a course-specific deep link is known.
       bookingUrl: website,
+      lat,
+      lng,
       nowMs: Date.now(),
     });
     return { website, phone };

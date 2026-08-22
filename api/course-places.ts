@@ -36,7 +36,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // find + details run under ONE key: if a project lacks Places, the whole lookup moves to the
     // next project rather than half-completing against two different Cloud projects.
-    type Found = { website: string | null; phone: string | null; diag: unknown };
+    /**
+     * 2026-08-22 — `lat`/`lng` ride along because the course API has NO coordinates for any course:
+     * Sharp Park's record carries "1 Sharp Park Rd, Pacifica, CA 94044" and nothing numeric. Without
+     * an anchor the geometry build has no bounding box to query, so a course added from home on
+     * Wi-Fi got no greens and no aim lines until the player physically stood on it and the live GPS
+     * fix filled in. Places already knows where the course is; we were asking and discarding it.
+     * `geometry` is Basic Data on the legacy Details call -- same request, same tier.
+     */
+    type Found = { website: string | null; phone: string | null; lat: number | null; lng: number | null; diag: unknown };
     const found = await withGoogleKeys<Found>('places-legacy:findplace+details', async (KEY) => {
       const findUrl =
         `https://maps.googleapis.com/maps/api/place/findplacefromtext/json` +
@@ -51,31 +59,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (isCapabilityMiss({ status: findData.status, message: findData.error_message })) {
           return { ok: false, capabilityMiss: true };
         }
-        return { ok: true, value: { website: null, phone: null, diag: { status: findData.status, error_message: findData.error_message || null } } };
+        return { ok: true, value: { website: null, phone: null, lat: null, lng: null, diag: { status: findData.status, error_message: findData.error_message || null } } };
       }
       const placeId = findData.candidates?.[0]?.place_id;
-      if (!placeId) return { ok: true, value: { website: null, phone: null, diag: 'OK but no candidates' } };
+      if (!placeId) return { ok: true, value: { website: null, phone: null, lat: null, lng: null, diag: 'OK but no candidates' } };
 
       const detUrl =
         `https://maps.googleapis.com/maps/api/place/details/json` +
-        `?place_id=${encodeURIComponent(placeId)}&fields=website,formatted_phone_number&key=${KEY}`;
+        `?place_id=${encodeURIComponent(placeId)}&fields=website,formatted_phone_number,geometry&key=${KEY}`;
       const detRes = await fetch(detUrl, { signal: AbortSignal.timeout(TIMEOUT_MS) });
       if (!detRes.ok) return { ok: false, capabilityMiss: isCapabilityMiss({ httpStatus: detRes.status }) };
-      const detData = (await detRes.json()) as { result?: { website?: string; formatted_phone_number?: string } };
+      const detData = (await detRes.json()) as {
+        result?: {
+          website?: string;
+          formatted_phone_number?: string;
+          geometry?: { location?: { lat?: number; lng?: number } };
+        };
+      };
+      const loc = detData.result?.geometry?.location;
+      // Null Island and out-of-range readings are treated as absent, never passed on as a location.
+      const okCoord = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+      const hasLoc = loc && okCoord(loc.lat) && okCoord(loc.lng)
+        && Math.abs(loc.lat) <= 90 && Math.abs(loc.lng) <= 180
+        && !(Math.abs(loc.lat) < 0.001 && Math.abs(loc.lng) < 0.001);
       return {
         ok: true,
         value: {
           website: detData.result?.website?.trim() || null,
           phone: detData.result?.formatted_phone_number?.trim() || null,
+          lat: hasLoc ? (loc.lat as number) : null,
+          lng: hasLoc ? (loc.lng as number) : null,
           diag: null,
         },
       };
     });
 
-    if (!found) return res.status(200).json({ website: null, phone: null, ...(debug ? { _diag: 'no configured project has Places enabled' } : {}) });
+    if (!found) return res.status(200).json({ website: null, phone: null, lat: null, lng: null, ...(debug ? { _diag: 'no configured project has Places enabled' } : {}) });
     return res.status(200).json({
       website: found.website,
       phone: found.phone,
+      lat: found.lat,
+      lng: found.lng,
       ...(debug && found.diag ? { _diag: found.diag } : {}),
     });
   } catch (e) {
