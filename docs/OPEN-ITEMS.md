@@ -20,6 +20,33 @@ Until Tim taps the mic once and it feels right, I will not delete:
 That deletion is the actual payoff of the consolidation — it is what stops every future fix needing
 two homes. Revert if wrong: `BRAIN_SHIM=0` in Vercel + redeploy (~9 min).
 
+## 1b. POST-LAUNCH — does the gym work show up in the SWING? (Tim's call, 2026-08-22: not now)
+
+Tim, 08-22: *"we wanna have a data point to see if working out towards that swing is also touching
+or helping."*
+
+What exists today, and what it actually answers:
+
+    workout minutes / week  ──vs──  score vs par        services/practice/workoutPerformance.ts
+    gated: 3+ workouts AND 4+ rounds, association never causation
+
+That answers *"is training showing up in my SCORING"*. Tim's question is one layer in: **is training
+showing up in the SWING** — tempo, path, face, the metrics SmartMotion already produces per swing.
+Scoring is noisy and slow (4 rounds minimum); swing metrics move faster and are closer to the thing
+the workout is actually targeting, since the exercises are selected FOR the dominant fault.
+
+Shape when it gets built — mirrors the existing rail rather than inventing a second pattern:
+
+    services/practice/workoutSwingImpact.ts   pure/sync/never-throws, same honesty bar
+    workout volume / week  ──vs──  swing quality / week
+    + a fourth source on the dashboard progress graph
+    + quiet until enough on BOTH sides
+
+Deferred under the feature freeze, with the Friday 08-28 deadline six days out. Importing works today
+(dashboard TRAIN YOUR SWING → download arrow, or Settings), so the data is accumulating in
+`workout-store-v1` the whole time — nothing is lost by waiting, and the rail has real history to
+draw on the day it ships. [[feature-freeze-refinement-month]] [[close-the-loop-strategy]]
+
 ## 2. PRE-LAUNCH — caddie emotional art (I cannot produce this)
 `docs/TODO-CADDIE-EMOTIONAL-ART.md`. 22 mood slots exist. Serena has **4 distinct images**, one
 portrait covering 15 slots; Kevin routes 15 slots to a single image. On the two caddies testers
