@@ -54,6 +54,7 @@ import { useCageStore, resolvePlayerName } from '../../store/cageStore';
 import { exercisesForFault } from '../../services/swing/faultWorkouts';
 import { usePointsBaselineStore } from '../../store/pointsBaselineStore';
 import { useWorkoutStore } from '../../store/workoutStore';
+import { computeWorkoutSwingImpact } from '../../services/practice/workoutSwingImpact';
 import { useWatchStore } from '../../store/watchStore';
 import { roundTempoBaseline, holeTempoFlag } from '../../services/round/roundSwingRead';
 import { useToastStore } from '../../store/toastStore';
@@ -62,7 +63,7 @@ import { getDrillEntry } from '../../data/drillCatalog';
 import { loadRecap } from '../../services/planStorage';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import ShotTimeline from '../../components/caddie/ShotTimeline';
-import { usePlayerProfileStore } from '../../store/playerProfileStore';
+import { usePlayerProfileStore, isOwnerEmail } from '../../store/playerProfileStore';
 import { useFamilyStore } from '../../store/familyStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { getCaddieName } from '../../lib/persona';
@@ -323,24 +324,85 @@ export default function Dashboard() {
     [workoutHistory, realRounds],
   );
 
+  /**
+   * 2026-08-22 (Tim — "owner only is me seeing it graphically... graphically, it needs to pop").
+   *
+   * The same training volume against STRIKE RATE instead of score-vs-par. Scoring is slow and noisy;
+   * contact is closer to what the fault-driven exercises target and moves in weeks, not rounds.
+   * Owner-gated below: SmartPump is Tim's, so nobody else has a training side to plot.
+   */
+  const ownerEmail = usePlayerProfileStore((s) => s.email);
+  const isOwner = useMemo(() => isOwnerEmail(ownerEmail), [ownerEmail]);
+  const workoutSwing = useMemo(
+    () => computeWorkoutSwingImpact({
+      workouts: (workoutHistory ?? []).map((w) => ({ date: w.date, durationMin: w.durationMin })),
+      // Self only: a student's swings land in the same history in Family/Coach mode, and crediting
+      // Tim's gym work with someone else's contact would be worse than showing nothing.
+      sessions: (libraryHistory ?? [])
+        .filter((sess) => resolvePlayerName(sess.player_id, '__self__') === '__self__')
+        .map((sess) => {
+          let clean = 0, graded = 0;
+          for (const shot of sess.shots ?? []) {
+            const c = shot.perShotAnalysis?.contact_read;
+            if (!c || c === 'unknown') continue; // ungraded lowers neither the rate nor the confidence
+            graded += 1;
+            if (c === 'clean') clean += 1;
+          }
+          return { date: sess.date, clean, graded };
+        })
+        .filter((x) => x.graded > 0),
+      nowMs: Date.now(),
+    }),
+    [workoutHistory, libraryHistory],
+  );
+
   // 2026-08-06 (Tim — "there should be ONE graph not multiple"). Collapse the three correlation cards
   // (practice / points / training, each two stacked sparklines) into a SINGLE progress graph: score-vs-par
   // (the outcome) with the chosen EFFORT line overlaid, a source toggle, and warm-ups marked on the practice
   // line. Each source keeps its own honest gating; only sources with data are offered.
   const progressSources = useMemo(() => {
-    type Src = { key: 'practice' | 'points' | 'training'; tab: string; effort: number[]; effortLabel: string; deltaUnit: string; score: number[]; hasEnough: boolean; headline: string; markers: number[] };
+    // 2026-08-22 — the OUTCOME axis is per-source now. It was hardcoded to score-vs-par in the JSX,
+    // which silently assumed every source is judged the same way; strike rate is a percentage where
+    // HIGHER is better, so a hardcoded axis would have drawn improvement as decline.
+    type Src = { key: 'practice' | 'points' | 'training' | 'strike'; tab: string; effort: number[]; effortLabel: string; deltaUnit: string; score: number[]; hasEnough: boolean; headline: string; markers: number[]; scoreLabel: string; scoreDeltaUnit: string; scoreHigherIsBetter: boolean };
     const list: Src[] = [];
     if (practiceHistory.length > 0 && roundHistory.length > 0) {
-      list.push({ key: 'practice', tab: 'Practice', effort: practiceImpact.practiceSeries, effortLabel: 'PRACTICE / WK', deltaUnit: 'balls', score: practiceImpact.scoreSeries, hasEnough: practiceImpact.hasEnough, headline: practiceImpact.headline, markers: practiceImpact.warmupWeekIndices });
+      list.push({ key: 'practice', tab: 'Practice', effort: practiceImpact.practiceSeries, effortLabel: 'PRACTICE / WK', deltaUnit: 'balls', score: practiceImpact.scoreSeries, hasEnough: practiceImpact.hasEnough, headline: practiceImpact.headline, markers: practiceImpact.warmupWeekIndices, scoreLabel: 'SCORE VS PAR', scoreDeltaUnit: 'vs par', scoreHigherIsBetter: false });
     }
     if (libraryHistory.length > 0) {
-      list.push({ key: 'points', tab: 'Points', effort: pointsPerf.pointsSeries, effortLabel: 'POINTS / WK', deltaUnit: 'pts', score: pointsPerf.scoreSeries, hasEnough: pointsPerf.hasEnough, headline: pointsPerf.headline, markers: [] });
+      list.push({ key: 'points', tab: 'Points', effort: pointsPerf.pointsSeries, effortLabel: 'POINTS / WK', deltaUnit: 'pts', score: pointsPerf.scoreSeries, hasEnough: pointsPerf.hasEnough, headline: pointsPerf.headline, markers: [], scoreLabel: 'SCORE VS PAR', scoreDeltaUnit: 'vs par', scoreHigherIsBetter: false });
     }
     if (workoutHistory.length > 0) {
-      list.push({ key: 'training', tab: 'Training', effort: workoutPerf.workoutSeries, effortLabel: workoutPerf.metric === 'minutes' ? 'TRAIN MIN / WK' : 'WORKOUTS / WK', deltaUnit: workoutPerf.metric === 'minutes' ? 'min' : '', score: workoutPerf.scoreSeries, hasEnough: workoutPerf.hasEnough, headline: workoutPerf.headline, markers: [] });
+      list.push({ key: 'training', tab: 'Training', effort: workoutPerf.workoutSeries, effortLabel: workoutPerf.metric === 'minutes' ? 'TRAIN MIN / WK' : 'WORKOUTS / WK', deltaUnit: workoutPerf.metric === 'minutes' ? 'min' : '', score: workoutPerf.scoreSeries, hasEnough: workoutPerf.hasEnough, headline: workoutPerf.headline, markers: [], scoreLabel: 'SCORE VS PAR', scoreDeltaUnit: 'vs par', scoreHigherIsBetter: false });
+    }
+    /**
+     * 2026-08-22 — TRAINING vs STRIKE, owner-only. Plotted on the same graph as everything else so it
+     * is read the way a player would read it, not as a separate text readout.
+     *
+     * Only the weeks that carry a strike rate are plotted, and the training line is filtered to the
+     * SAME weeks so the two stay index-aligned. A week with no range time is not a 0% strike week,
+     * and drawing it as one would invent a collapse that never happened.
+     */
+    if (isOwner && workoutHistory.length > 0) {
+      const keep = workoutSwing.strikeWeekHasData;
+      const strike = workoutSwing.strikeSeries.filter((_, i) => keep[i]);
+      const train = workoutSwing.workoutSeries.filter((_, i) => keep[i]);
+      list.push({
+        key: 'strike', tab: 'Strike',
+        effort: train,
+        effortLabel: workoutSwing.metric === 'minutes' ? 'TRAIN MIN / WK' : 'WORKOUTS / WK',
+        deltaUnit: workoutSwing.metric === 'minutes' ? 'min' : '',
+        score: strike,
+        hasEnough: workoutSwing.hasEnough,
+        headline: workoutSwing.headline,
+        markers: [],
+        scoreLabel: 'STRIKE RATE',
+        scoreDeltaUnit: '%',
+        scoreHigherIsBetter: true,
+      });
     }
     return list;
-  }, [practiceHistory, roundHistory, libraryHistory, workoutHistory, practiceImpact, pointsPerf, workoutPerf]);
+  }, [practiceHistory, roundHistory, libraryHistory, workoutHistory, practiceImpact, pointsPerf, workoutPerf, workoutSwing, isOwner]);
   /**
    * 2026-08-12 (Tim) — WARM-UP vs SCORE, the question the trend tabs above structurally can't answer.
    *
@@ -373,7 +435,7 @@ export default function Dashboard() {
     return holeTempoFlag(watchSwings, rs.currentHole, baseline);
   }, [isRoundActive, watchSwings]);
 
-  const [progressSourceKey, setProgressSourceKey] = useState<'practice' | 'points' | 'training'>('practice');
+  const [progressSourceKey, setProgressSourceKey] = useState<'practice' | 'points' | 'training' | 'strike'>('practice');
   const activeProgress = progressSources.find((s) => s.key === progressSourceKey) ?? progressSources[0] ?? null;
 
   // 2026-06-13 (Tim) — one-time backfill of a deterministic caddie summary onto past
@@ -1069,10 +1131,10 @@ export default function Dashboard() {
                 height={112}
                 color="#a3e635"
                 legendDotColor="#a3e635"
-                label="SCORE VS PAR"
+                label={activeProgress.scoreLabel}
                 showTrend
-                deltaUnit="vs par"
-                higherIsBetter={false}
+                deltaUnit={activeProgress.scoreDeltaUnit}
+                higherIsBetter={activeProgress.scoreHigherIsBetter}
                 emptyText="—"
               />
             )}

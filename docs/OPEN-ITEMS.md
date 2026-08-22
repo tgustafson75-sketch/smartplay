@@ -46,9 +46,23 @@ Honesty rules it enforces, each with a test:
 - association, never causation — a drop under heavier training reads as fatigue, not a broken swing
 - when it can't speak it says exactly what is missing, in counts
 
-**Still open:** it is a text row, not a plotted line. If the numbers turn out to be worth watching,
-the next step is a fourth source on the dashboard progress graph — which would be the point to decide
-whether it is still owner-only. [[close-the-loop-strategy]]
+**Shipped as a GRAPH, same day.** Tim: *"owner only is me seeing it graphically and seeing it how they
+would see it, not a text line. That's not gonna let me compare anything."* He was right — a text strip
+cannot answer whether two lines move together, which is the entire question. It is now a fourth source
+("Strike") on the dashboard PROGRESS graph, owner-gated, read exactly the way a player reads the other
+three.
+
+That forced a real fix underneath: the graph's OUTCOME axis was hardcoded to score-vs-par in the JSX,
+silently assuming every source is judged the same way. Strike rate is a percentage where HIGHER is
+better, so the hardcoded axis would have drawn improvement as decline. `scoreLabel` /
+`scoreDeltaUnit` / `scoreHigherIsBetter` are per-source now; the three existing sources keep exactly
+what they had.
+
+Only weeks carrying a strike rate are plotted, with the training line filtered to the SAME weeks so
+the two stay index-aligned — a week with no range time is not a 0% strike week.
+
+**Still open:** decide whether it goes public once there is enough of Tim's own data to know the
+signal is real. [[close-the-loop-strategy]]
 
 ## 2. PRE-LAUNCH — caddie emotional art (I cannot produce this)
 `docs/TODO-CADDIE-EMOTIONAL-ART.md`. 22 mood slots exist. Serena has **4 distinct images**, one

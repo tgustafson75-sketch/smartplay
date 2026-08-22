@@ -5385,7 +5385,13 @@ check('Practice→performance: honest connection card (association, gated, no fa
       // one chart: score-vs-par primary (lower better) + the selected effort as an OVERLAY
       /data=\{activeProgress\.score\}/.test(dash) &&
       /overlay=\{\{ data: activeProgress\.effort/.test(dash) &&
-      /higherIsBetter=\{false\}/.test(dash) &&
+      // 2026-08-22 — the outcome axis is per-SOURCE now (an owner-only Strike source plots strike
+      // rate, where HIGHER is better). Pinning the literal `higherIsBetter={false}` asserted that
+      // every source is judged like score-vs-par, which was never the property. What matters is that
+      // the practice→score card still treats a LOWER score-vs-par as better, and that the chart binds
+      // the per-source value rather than hardcoding one.
+      /higherIsBetter=\{activeProgress\.scoreHigherIsBetter\}/.test(dash) &&
+      /scoreLabel: 'SCORE VS PAR', scoreDeltaUnit: 'vs par', scoreHigherIsBetter: false/.test(dash) &&
       // source toggle across only the sources with data
       /progressSources\.map\(/.test(dash) && /setProgressSourceKey/.test(dash);
     // The graph self-labels (distinct legend colors + trend) and marks warm-up weeks on the practice line.

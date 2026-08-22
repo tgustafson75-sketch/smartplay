@@ -123,32 +123,54 @@ describe('does the gym work show up in the strike', () => {
   });
 });
 
-describe('the rail is owner-only and actually rendered', () => {
+describe('it is a GRAPH, owner-only, read the way a player reads it', () => {
   const fs = require('fs') as typeof import('fs');
   const path = require('path') as typeof import('path');
-  const settings = fs.readFileSync(path.resolve(__dirname, '../../app/settings.tsx'), 'utf-8');
+  const read = (rel: string) => fs.readFileSync(path.resolve(__dirname, '../../', rel), 'utf-8');
+  const dash = read('app/(tabs)/dashboard.tsx');
 
-  it('renders inside Owner Tools, not on a tester-facing surface', () => {
-    expect(settings).toMatch(/<WorkoutSwingImpactRow colors=\{colors\} \/>/);
-    // It must sit AFTER the isOwnerEmail gate that opens the Owner Tools section, so testers --
-    // none of whom have SmartPump -- never see a card that can only say "no data".
-    const gate = settings.indexOf('const showOwner = isOwnerEmail(profile.email)');
-    expect(gate).toBeGreaterThan(-1);
-    expect(settings.indexOf('<WorkoutSwingImpactRow')).toBeGreaterThan(gate);
+  /**
+   * 2026-08-22 (Tim) — "owner only is me seeing it graphically and seeing it how they would see it,
+   * not a text line. That's not gonna let me compare anything." A text strip cannot answer whether
+   * two lines move together, which is the entire question.
+   */
+  it('is a source on the PROGRESS graph, not a text readout in Settings', () => {
+    expect(dash).toMatch(/computeWorkoutSwingImpact/);
+    expect(dash).toMatch(/key: 'strike', tab: 'Strike'/);
+    expect(read('app/settings.tsx')).not.toMatch(/WorkoutSwingImpactRow/);
+  });
+
+  it('is owner-gated, so testers without SmartPump never see the tab', () => {
+    expect(dash).toMatch(/if \(isOwner && workoutHistory\.length > 0\)/);
+  });
+
+  it('plots strike rate with HIGHER as better — the axis is per-source now', () => {
+    // It was hardcoded to score-vs-par (lower is better) in the JSX. On a percentage that would have
+    // drawn a rising strike rate as a decline.
+    expect(dash).toMatch(/scoreLabel: 'STRIKE RATE'/);
+    expect(dash).toMatch(/scoreHigherIsBetter: true/);
+    expect(dash).toMatch(/higherIsBetter=\{activeProgress\.scoreHigherIsBetter\}/);
+    expect(dash).toMatch(/label=\{activeProgress\.scoreLabel\}/);
+  });
+
+  it('leaves the three existing sources judged the way they always were', () => {
+    const vsPar = dash.match(/scoreLabel: 'SCORE VS PAR'/g) ?? [];
+    expect(vsPar.length).toBe(3);
+    expect(dash).not.toMatch(/scoreHigherIsBetter: false,\s*\n\s*\}\);\s*\n\s*\}\s*\n\s*return list/);
+  });
+
+  it('plots only weeks that carry a strike rate, and aligns training to the SAME weeks', () => {
+    // A week with no range time is not a 0% strike week; drawing it as one invents a collapse.
+    expect(dash).toMatch(/const keep = workoutSwing\.strikeWeekHasData;/);
+    expect(dash).toMatch(/strikeSeries\.filter\(\(_, i\) => keep\[i\]\)/);
+    expect(dash).toMatch(/workoutSeries\.filter\(\(_, i\) => keep\[i\]\)/);
   });
 
   it('counts only the account holder’s own swings', () => {
-    // A student's swings land in the same sessionHistory in Family/Coach mode; crediting Tim's gym
-    // work with someone else's strike rate would be worse than showing nothing.
-    expect(settings).toMatch(/resolvePlayerName\(sess\.player_id, '__self__'\) === '__self__'/);
+    expect(dash).toMatch(/resolvePlayerName\(sess\.player_id, '__self__'\) === '__self__'/);
   });
 
   it('excludes ungraded swings rather than scoring them as misses', () => {
-    expect(settings).toMatch(/c === 'unknown'/);
-  });
-
-  it('does not appear on the dashboard, which every tester sees', () => {
-    const dash = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/dashboard.tsx'), 'utf-8');
-    expect(dash).not.toMatch(/computeWorkoutSwingImpact/);
+    expect(dash).toMatch(/c === 'unknown'/);
   });
 });
