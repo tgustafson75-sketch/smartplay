@@ -72,6 +72,21 @@ export const UI_TOOLS = new Set([
   // UI_TOOLS, in ToolAction and in the dispatcher in the SAME change — the parity guard checks all
   // three, and the two tools ever dropped were dropped because one of those was missed.
   'zoom_target',
+  /**
+   * 2026-08-21 — TWO WIRES COMPLETED, and Tim remembered the first one existed.
+   *
+   * set_session_focus has been fully built on the CLASSIFIER path since early on — the voice-intent
+   * enum knows it, sessionFocusHandler writes the store, and the CNS block reads it into every
+   * prompt. It just never became a BRAIN TOOL. So "I want to work on my tempo today" set a focus if
+   * you said it hands-free, and did nothing at all if you said it to the caddie in conversation —
+   * which is how most people talk to it. Half a feature, quietly, for months.
+   *
+   * set_playing_condition is the one he has failed to get across live on a course: "I'm hitting
+   * everything left today" is NOT a request for a diagnosis, it is the truth about today, and the
+   * caddie should move the aim rather than explain the golf swing on the seventh tee.
+   */
+  'set_session_focus',
+  'set_playing_condition',
 ]);
 
 export const BRAIN_TOOLS: AiToolDef[] = [
@@ -165,6 +180,33 @@ export const BRAIN_TOOLS: AiToolDef[] = [
         shape: { type: 'string', description: 'Shot shape you advised IF any (e.g. "draw", "fade", "punch"). Omit if none.' },
       },
       required: ['club'],
+    },
+  },
+  {
+    name: 'set_session_focus',
+    description: 'The player declares what they want to WORK ON this session — a theme that should colour the rest of it ("let\'s work on tempo today", "I want to fix my slice at the range", "today is all about the short game"). Capture the goal in their own words. Use clear:true when they say to drop it. NOT for a one-off question ("how do I fix my slice?" is just conversation) and NOT for what the ball is doing today — that is set_playing_condition.',
+    parameters: {
+      type: 'object',
+      properties: {
+        goal: { type: 'string', description: "What they want to work on, in their own words." },
+        note: { type: 'string', description: 'Any extra detail they gave. Omit if none.' },
+        clear: { type: 'boolean', description: 'True when they are dropping the focus.' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'set_playing_condition',
+    description: 'The player tells you WHAT THE BALL IS DOING TODAY, or how their body feels — "I\'m hitting everything left today", "everything is coming up short", "my back is tight", "I\'ve got no turn today". This is NOT a request to diagnose it. Record it and then AIM AROUND IT for the rest of the session; it outranks their learned tendency because it is what is happening right now. Set compensate to the side you should favour to allow for it ("hitting it left" → compensate right). Call this ALONGSIDE your spoken answer — it never replaces the club call.',
+    parameters: {
+      type: 'object',
+      properties: {
+        stated: { type: 'string', description: "What they said, in their own words." },
+        kind: { type: 'string', enum: ['ball_flight', 'physical', 'feel'], description: 'ball_flight for where it is going, physical for the body, feel for tempo/rhythm.' },
+        compensate: { type: 'string', enum: ['left', 'right', 'shorter', 'longer'], description: 'Which way to favour to allow for it. Omit when it does not imply a direction.' },
+        clear: { type: 'boolean', description: 'True when they say it has settled down or stopped.' },
+      },
+      required: ['stated'],
     },
   },
   {

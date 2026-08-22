@@ -119,6 +119,18 @@ export function getCaddieContext(input: {
       const focusLine = sf.sessionFocusPromptLine();
       if (focusLine) lines.push(focusLine);
     } catch { /* session focus optional */ }
+    /**
+     * 2026-08-21 — TODAY'S CONDITION, immediately after the focus and before everything learned.
+     * Order is the point: what the ball is doing right now must be read BEFORE the long-run model,
+     * because it overrides it. A caddie told "I'm pulling everything today" who then leads with a
+     * learned right-miss is not listening.
+     */
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pc = require('../store/playingConditionStore') as typeof import('../store/playingConditionStore');
+      const line = pc.playingConditionPromptLine();
+      if (line) lines.push(line);
+    } catch { /* condition is additive */ }
     if (input.club) {
       const cm = bag.find((c) => c.club === input.club);
       if (cm?.avgCarryYds != null) {

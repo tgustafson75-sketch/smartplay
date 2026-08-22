@@ -22,6 +22,12 @@ export type ToolAction =
   // rangefinder scene by voice. Typed here from the start: the ONLY two UI tools ever silently
   // dropped were the two that lacked a ToolAction member, so an untyped payload is the drop class.
   | { type: 'zoom_target'; level?: 'in' | 'out' | 'reset' }
+  // 2026-08-21 — set_session_focus completes a wire that has existed on the CLASSIFIER path since
+  // early on and never became a brain tool; set_playing_condition is what the ball is doing TODAY,
+  // which the caddie must aim around rather than diagnose. Typed here from the start — the only two
+  // UI tools ever silently dropped were the two that lacked a ToolAction member.
+  | { type: 'set_session_focus'; goal?: string; note?: string; clear?: boolean }
+  | { type: 'set_playing_condition'; stated: string; kind?: 'ball_flight' | 'physical' | 'feel'; compensate?: 'left' | 'right' | 'shorter' | 'longer'; clear?: boolean }
   | { type: 'open_swinglab' }
   | { type: 'log_score'; hole?: number; score: number }
   | { type: 'record_swing' }

@@ -109,6 +109,12 @@ type AnyAction = {
   angle?: string;
   // zoom_target (2026-08-20 — voice magnification of the rangefinder scene)
   level?: 'in' | 'out' | 'reset';
+  // set_session_focus / set_playing_condition (2026-08-21)
+  goal?: string;
+  stated?: string;
+  kind?: string;
+  compensate?: string;
+  clear?: boolean;
 };
 
 function toast(msg: string): void {
@@ -165,6 +171,40 @@ function dispatchOne(a: AnyAction): void {
     case 'open_swinglab':
       router.push('/(tabs)/swinglab' as never);
       break;
+    case 'set_session_focus': {
+      /**
+       * 2026-08-21 — completes a wire that existed on the CLASSIFIER path since early on and never
+       * became a brain tool. Saying "let's work on tempo today" hands-free set a focus; saying it to
+       * the caddie in conversation did nothing, which is how most people talk to it.
+       */
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const sf = require('../../store/sessionFocusStore') as typeof import('../../store/sessionFocusStore');
+      if (a.clear) sf.useSessionFocusStore.getState().clearFocus();
+      else if (typeof a.goal === 'string' && a.goal.trim()) {
+        sf.useSessionFocusStore.getState().setFocus(a.goal.trim(), { note: typeof a.note === 'string' ? a.note : null });
+      }
+      break;
+    }
+    case 'set_playing_condition': {
+      /**
+       * 2026-08-21 (Tim) — "I'm hitting everything left today… that's where I'm gonna hit. We gotta
+       * say okay, we're gonna aim a little the other direction now."
+       *
+       * Recorded as the operating truth for the session, NOT as something to coach. The store keeps
+       * the arc so an overcorrection later reads as an overcorrection rather than a fresh fault.
+       */
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pc = require('../../store/playingConditionStore') as typeof import('../../store/playingConditionStore');
+      if (a.clear) pc.usePlayingConditionStore.getState().clearCondition();
+      else if (typeof a.stated === 'string' && a.stated.trim()) {
+        pc.usePlayingConditionStore.getState().setCondition({
+          stated: a.stated.trim(),
+          kind: (a.kind as 'ball_flight' | 'physical' | 'feel') ?? 'ball_flight',
+          compensate: (a.compensate as 'left' | 'right' | 'shorter' | 'longer' | undefined) ?? null,
+        });
+      }
+      break;
+    }
     case 'zoom_target': {
       /**
        * 2026-08-20 (Tim — "tap OR ASK to zoom the pin flag and get a tight read").
