@@ -4821,7 +4821,16 @@ check('SmartPump third rail: workout import → TRAINING → PERFORMANCE dashboa
       /TRAINING → PERFORMANCE/.test(dash) &&
       // Ingest service + settings entry point + server route all present.
       /ingestSmartPumpExport/.test(read('services/smartPumpIngest.ts')) &&
-      /ingestSmartPumpExport/.test(read('app/settings.tsx')) &&
+      // 2026-08-22 — asserts the ENTRY POINTS, not the name of the inner call. Settings now goes
+      // through the shared importSmartPumpWithFeedback, and the dashboard's TRAIN YOUR SWING card
+      // does too: Tim went looking for the import on the card the training is about and it only
+      // ever existed in Settings. Both must stay reachable, and neither may fork the messaging.
+      /importSmartPumpWithFeedback/.test(read('services/smartPumpIngest.ts')) &&
+      /importSmartPumpWithFeedback/.test(read('app/settings.tsx')) &&
+      /importSmartPumpWithFeedback/.test(dash) &&
+      /Import workouts from SmartPump/.test(dash) &&
+      !/no_workouts_found/.test(dash) &&
+      !/no_workouts_found/.test(read('app/settings.tsx')) &&
       /\/api\/workout-import/.test(read('services/smartPumpIngest.ts')) &&
       /"\/api\/workout-import"/.test(read('vercel.json'))
     );

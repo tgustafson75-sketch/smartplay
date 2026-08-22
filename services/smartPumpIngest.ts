@@ -176,3 +176,44 @@ export async function ingestSmartPumpExport(): Promise<SmartPumpImportResult> {
     return { ok: false, reason: msg };
   }
 }
+
+/**
+ * 2026-08-22 (Tim — "I have the report I exported from the app, but I can't find the import").
+ *
+ * The import lived in ONE place, Settings, while everything it produces shows up on the dashboard —
+ * so the natural move, looking for it on the card that is about training your swing, found nothing.
+ * This is the whole import interaction including what the player is told, so a second entry point
+ * costs one call and cannot drift into a second, differently-worded version of the same flow.
+ */
+export async function importSmartPumpWithFeedback(source: string): Promise<SmartPumpImportResult> {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const toast = () => (require('../store/toastStore') as typeof import('../store/toastStore')).useToastStore.getState();
+  try {
+    toast().show('Reading your workout export…');
+    const result = await ingestSmartPumpExport();
+    if (!result.ok) {
+      if (result.reason === 'canceled') return result;
+      const msg = result.reason === 'no_workouts_found' || result.reason === 'no_workouts_in_json'
+        ? 'Couldn’t find any dated workouts in that file.'
+        : result.reason === 'no_network'
+          ? 'Couldn’t reach the server — check your connection and try again.'
+          : result.reason === 'too_large'
+            ? 'That file is too large — try a single-page export or a JSON/CSV.'
+            : result.reason.startsWith('http_') || /pdf/i.test(result.reason)
+              ? 'Couldn’t read that export. Try an image or a JSON/CSV export.'
+              : 'That file couldn’t be read as a SmartPump export.';
+      toast().show(msg);
+      return result;
+    }
+    if (result.imported === 0) {
+      toast().show(`Already up to date — no new workouts in that export (${result.parsed} read).`);
+      return result;
+    }
+    toast().show(`Imported ${result.imported} workout${result.imported === 1 ? '' : 's'}. See TRAINING on your dashboard progress graph.`);
+    return result;
+  } catch (e) {
+    console.log(`[smartPumpIngest] import failed (${source}):`, e);
+    toast().show('That workout export couldn’t be read.');
+    return { ok: false, reason: 'unreadable' } as SmartPumpImportResult;
+  }
+}

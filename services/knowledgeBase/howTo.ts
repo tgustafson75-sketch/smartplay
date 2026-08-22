@@ -36,8 +36,8 @@ export const HOW_TO: HowTo[] = [
   },
   {
     id: 'import-workout',
-    asks: ['import my workout', 'import SmartPump', 'add my gym data'],
-    steps: 'Settings → Import a SmartPump workout (PDF, CSV, or JSON); it correlates your training with your on-course performance on the Dashboard.',
+    asks: ['import my workout', 'import SmartPump', 'add my gym data', 'where do I import my workouts', 'add my workout report', 'bring in my gym data'],
+    steps: 'Two places: the Dashboard\u2019s TRAIN YOUR SWING card (the download arrow, next to the share icon), or Settings \u2192 Import SmartPump golf workouts. PDF, image, CSV or JSON. Your training then shows up as the TRAINING line on the Dashboard progress graph, against your scoring.',
   },
   {
     id: 'backup-restore',

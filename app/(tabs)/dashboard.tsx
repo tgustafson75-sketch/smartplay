@@ -297,6 +297,19 @@ export default function Dashboard() {
     }
   }, [swingFault, faultWorkouts, faultLabel, logCompletedWorkout]);
 
+  /**
+   * 2026-08-22 (Tim — "I have the report I exported from the app, but I can't find the import now
+   * for the train my swing card"). The importer only ever existed in Settings, while everything it
+   * feeds shows up here — so looking for it on the card about training your swing found nothing.
+   * Same call the Settings row makes; the flow and its wording live in the service.
+   */
+  const onImportSmartPump = useCallback(() => {
+    void (async () => {
+      const { importSmartPumpWithFeedback } = await import('../../services/smartPumpIngest');
+      await importSmartPumpWithFeedback('dashboard');
+    })();
+  }, []);
+
   // 2026-07-07 (Tim — SmartPump third rail) — imported golf-workout volume per week
   // vs. score-vs-par per round. Third correlation rail alongside practice + points.
   // Honest: association, never causation; quiet until enough on both sides.
@@ -1106,6 +1119,12 @@ export default function Dashboard() {
                 </TouchableOpacity>
                 <TouchableOpacity onPress={onExportWorkouts} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel="Export these exercises">
                   <Ionicons name="share-outline" size={18} color={colors.accent} />
+                </TouchableOpacity>
+                {/* 2026-08-22 — bring a SmartPump export IN from the card the work is about, not
+                    only from Settings. Pairs with the share icon: send exercises out, bring the
+                    completed sessions back. */}
+                <TouchableOpacity onPress={onImportSmartPump} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel="Import workouts from SmartPump">
+                  <Ionicons name="download-outline" size={18} color={colors.accent} />
                 </TouchableOpacity>
               </View>
             </View>

@@ -394,34 +394,11 @@ export default function Settings() {
   // (PDF/image AI-parsed server-side, or JSON/CSV parsed on-device). Dated workouts
   // feed the dashboard's TRAINING → PERFORMANCE correlation card.
   const onImportSmartPump = useCallback(() => {
+    // 2026-08-22 — the flow itself (and every message the player sees) lives in the service, so the
+    // dashboard's TRAIN YOUR SWING card runs the SAME import rather than a second copy of it.
     void (async () => {
-      try {
-        useToastStore.getState().show('Reading your workout export…');
-        const { ingestSmartPumpExport } = await import('../services/smartPumpIngest');
-        const result = await ingestSmartPumpExport();
-        if (!result.ok) {
-          if (result.reason === 'canceled') return;
-          const msg = result.reason === 'no_workouts_found' || result.reason === 'no_workouts_in_json'
-            ? 'Couldn’t find any dated workouts in that file.'
-            : result.reason === 'no_network'
-              ? 'Couldn’t reach the server — check your connection and try again.'
-              : result.reason === 'too_large'
-                ? 'That file is too large — try a single-page export or a JSON/CSV.'
-                : result.reason.startsWith('http_') || /pdf/i.test(result.reason)
-                  ? 'Couldn’t read that export. Try an image or a JSON/CSV export.'
-                  : 'That file couldn’t be read as a SmartPump export.';
-          useToastStore.getState().show(msg);
-          return;
-        }
-        if (result.imported === 0) {
-          useToastStore.getState().show(`Already up to date — no new workouts in that export (${result.parsed} read).`);
-          return;
-        }
-        useToastStore.getState().show(`Imported ${result.imported} workout${result.imported === 1 ? '' : 's'}. See TRAINING → PERFORMANCE on your dashboard.`);
-      } catch (e) {
-        console.log('[settings] SmartPump import failed:', e);
-        useToastStore.getState().show('That workout export couldn’t be read.');
-      }
+      const { importSmartPumpWithFeedback } = await import('../services/smartPumpIngest');
+      await importSmartPumpWithFeedback('settings');
     })();
   }, []);
 

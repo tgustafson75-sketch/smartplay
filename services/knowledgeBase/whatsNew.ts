@@ -29,6 +29,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
   // 2026-08-21/22 — written for the PLAYER, not the changelog. Each says what changed for them.
   {
     when: 'Aug 2026',
+    note: 'You can bring your gym work in from the card it belongs to. Import your SmartPump export straight from TRAIN YOUR SWING on the dashboard — it was buried in Settings, which is not where you were looking.',
+    howTo: 'Dashboard → TRAIN YOUR SWING → the download arrow next to the share icon. PDF, photo, CSV or JSON all work, and re-importing skips anything already in.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'Every yardage I quote now comes off the tees you actually play. If you\'re on the forward tees I was reading you the back card — on some holes that was 70 yards out, and I was picking your club off it.',
     howTo: 'Settings → your profile → Preferred Tee. It was already there; now it reaches the hole yardages, the course layout and me.',
   },
