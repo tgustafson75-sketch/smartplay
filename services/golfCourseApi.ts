@@ -355,11 +355,22 @@ export function relaxedQueries(query: string): string[] {
   const meaty = toks.filter(t => !GOLF_NOISE.has(t));
   if (meaty.length) push(meaty.join(' '));
 
-  // Then shorten from the right, because English puts the distinctive name first and the place last
-  // ("Sharp Park Pacifica CA"). Stop at two tokens — one token is too broad to be useful and returns
-  // a wall of unrelated courses.
-  for (let n = meaty.length - 1; n >= 2; n--) push(meaty.slice(0, n).join(' '));
-  if (meaty.length === 2) push(meaty[0]);
+  /**
+   * Then straight to the HEAD of the name, rather than peeling one token at a time off the end.
+   *
+   * English puts the distinctive part of a course name first and the place last, and that head is
+   * usually one or two words: Sharp Park, Torrey Pines, Wachusett. Peeling one token at a time spent
+   * the whole ladder on forms that still carried the town -- "sharp park pacifica", matching nothing
+   * -- and never reached "sharp park", the form that finds it. So: two tokens, then one.
+   *
+   * The single word goes last because it is genuinely broad; the words we dropped to get there then
+   * rank whatever comes back, so the course in the town you named still lands on top. A broad list
+   * you can pick from beats the empty one you were getting -- "Wachusett CC Boylston MA" returned
+   * nothing at all until this, because the record reads "Wachusett Country Club" and no form
+   * carrying a place word is a substring of it.
+   */
+  if (meaty.length > 2) push(meaty.slice(0, 2).join(' '));
+  if (meaty.length > 1) push(meaty[0]);
 
   return out.slice(0, 4); // hard cap: worst case stays a bounded number of requests
 }

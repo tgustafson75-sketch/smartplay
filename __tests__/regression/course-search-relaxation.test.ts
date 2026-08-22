@@ -28,10 +28,28 @@ describe('over-specified queries still find the course', () => {
     }
   });
 
-  it('never relaxes into a one-word query that returns a wall of courses', () => {
-    // "Pines" would match dozens. Two tokens is the floor for a multi-word name.
+  it('falls back to the distinctive first word only as a LAST resort', () => {
+    // 2026-08-22, from Wachusett CC (West Boylston, MA). The record is "Wachusett Country Club", so
+    // every form carrying a place word misses, and stopping at two tokens stopped one step short of
+    // the one form that finds it.
+    const qs = relaxedQueries('Wachusett CC Boylston MA');
+    expect(qs).toContain('wachusett');
+    expect(qs.indexOf('wachusett')).toBe(qs.length - 1); // last, never first
+  });
+
+  it('still prefers the more specific forms before the broad one', () => {
     const qs = relaxedQueries('Torrey Pines South Course San Diego California');
-    for (const q of qs) expect(q.split(/\s+/).length).toBeGreaterThanOrEqual(2);
+    expect(qs[0]).toBe('Torrey Pines South Course San Diego California');
+    expect(qs[qs.length - 1].split(/\s+/).length).toBe(1);
+    expect(qs.slice(0, -1).every(q => q.split(/\s+/).length >= 2)).toBe(true);
+  });
+
+  it('reaches the two-word head even on a long query — the form that actually matches', () => {
+    // The ladder used to peel one token at a time and spend every slot on forms that still carried
+    // the town, never reaching the head of the name.
+    expect(relaxedQueries('Torrey Pines South Course San Diego California')).toContain('torrey pines');
+    expect(relaxedQueries('Sharp Park, Pacifica, CA')).toContain('sharp park');
+    expect(relaxedQueries('Wachusett Country Club West Boylston MA')).toContain('wachusett');
   });
 
   it('is bounded — a long query cannot fan out into unlimited requests', () => {
