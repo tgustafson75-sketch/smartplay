@@ -59,6 +59,14 @@ export default function CourseDetailScreen() {
   // 2026-08-12 — the player's Preferred Tee (Settings → Profile). Drives which tee set's yardages
   // this course renders and, downstream, the numbers the caddie clubs off.
   const preferredTee = usePlayerProfileStore((st) => st.preferredTee);
+  /**
+   * 2026-08-21 — WHOSE course rating to use. Found building Sharp Park (Pacifica) end to end:
+   * golfcourseapi returns male and female tee sets separately and they SHARE yardages (Blue is
+   * 6416y at 77.5/135 for women and 71.2/125 for men), so ordering by length alone tied and handed
+   * out whichever the API listed first. Course handicap is (Index × Slope/113) + (Rating − Par),
+   * so the wrong set is a wrong handicap on a correct-looking scorecard.
+   */
+  const handicapGender = usePlayerProfileStore(s => s.handicap_gender);
   const { course_id } = useLocalSearchParams<{ course_id: string }>();
   const router = useRouter();
   // useWindowDimensions subscribes to device-config changes — Galaxy Z Fold
@@ -293,7 +301,7 @@ export default function CourseDetailScreen() {
     // 2026-08-12 — honour the player's Preferred Tee instead of always taking tees[0]. See
     // services/teeSelection: the setting existed and nothing read it, so front-tee players were
     // quoted back-tee yardages and the caddie clubbed them off those numbers.
-    const tee = pickTeeSet(course.tees, preferredTee);
+    const tee = pickTeeSet(course.tees, preferredTee, handicapGender);
     if (!tee) {
       setContentLoading(false);
       return;
@@ -345,7 +353,7 @@ export default function CourseDetailScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [course]);
 
-  const tee = pickTeeSet(course?.tees, preferredTee);
+  const tee = pickTeeSet(course?.tees, preferredTee, handicapGender);
   // Local-curated branding: when the user picked a `local:*` slug we
   // honor that intent for display + bundled-image lookup, even though
   // the API returns the same parent club for both Menifee Lakes layouts.

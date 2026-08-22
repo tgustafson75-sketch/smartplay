@@ -70,3 +70,48 @@ describe('unknown gender does not guess', () => {
     expect(pickTeeSet(plain, 'front')!.total_yards).toBe(5400);
   });
 });
+
+describe('the fix is actually USED, not just available', () => {
+  const fs = require('fs') as typeof import('fs');
+  const path = require('path') as typeof import('path');
+  const read = (rel: string) => fs.readFileSync(path.resolve(__dirname, '../../', rel), 'utf-8');
+
+  /**
+   * 2026-08-21 — the half-fix check. Making pickTeeSet gender-aware changes nothing if every caller
+   * omits the argument, and that is the shape that has bitten this codebase all week: a capability
+   * built, typed, tested, and never actually reached.
+   */
+  it.each(['app/(tabs)/play.tsx', 'app/course/[course_id].tsx'])('%s passes the player gender to every pickTeeSet call', (file) => {
+    const src = read(file);
+    const calls = src.match(/pickTeeSet\([^)]*\)/g) ?? [];
+    expect(calls.length).toBeGreaterThan(0);
+    for (const c of calls) expect(c).toMatch(/handicapGender/);
+  });
+
+  it('reads gender from the profile rather than assuming one', () => {
+    for (const f of ['app/(tabs)/play.tsx', 'app/course/[course_id].tsx']) {
+      expect(read(f)).toMatch(/handicap_gender/);
+    }
+  });
+});
+
+describe('the player can actually set it', () => {
+  const fs = require('fs') as typeof import('fs');
+  const path = require('path') as typeof import('path');
+
+  /**
+   * 2026-08-21 — the store had handicap_gender AND setHandicapGender from the start and no screen
+   * ever called the setter, so every player sat on 'x' and the gender-aware picker could never do
+   * anything. A capability nothing can reach is not a feature; this fails if the control is removed.
+   */
+  it('a settings screen calls setHandicapGender', () => {
+    const src = fs.readFileSync(path.resolve(__dirname, '../../app/settings.tsx'), 'utf-8');
+    expect(src).toMatch(/setHandicapGender\(/);
+    expect(src).toMatch(/handicap_gender/);
+  });
+
+  it('offers both rating sets and a way back to unset', () => {
+    const src = fs.readFileSync(path.resolve(__dirname, '../../app/settings.tsx'), 'utf-8');
+    for (const v of ["'m'", "'f'", "'x'"]) expect(src).toContain(`value: ${v}`);
+  });
+});

@@ -696,6 +696,14 @@ export default function PlayTab() {
   const rememberRecentCourseMeta = useRoundStore(s => s.rememberRecentCourseMeta);
   // The player's Preferred Tee — recents should quote the same tee set the course screen will.
   const preferredTee = usePlayerProfileStore(s => s.preferredTee);
+  /**
+   * 2026-08-21 — WHOSE course rating to use. Found building Sharp Park (Pacifica) end to end:
+   * golfcourseapi returns male and female tee sets separately and they SHARE yardages (Blue is
+   * 6416y at 77.5/135 for women and 71.2/125 for men), so ordering by length alone tied and handed
+   * out whichever the API listed first. Course handicap is (Index × Slope/113) + (Rating − Par),
+   * so the wrong set is a wrong handicap on a correct-looking scorecard.
+   */
+  const handicapGender = usePlayerProfileStore(s => s.handicap_gender);
   const [selected, setSelected] = useState<Course | null>(null);
   const [selectedLoading, setSelectedLoading] = useState(false);
   // 2026-07-27 (tester UX) — opening a searched/API course can fail (network) or return null. The
@@ -847,7 +855,7 @@ export default function PlayTab() {
         const c = await getCourse(id);
         if (cancelled) return;
         if (c) {
-          const tee = pickTeeSet(c.tees, preferredTee);
+          const tee = pickTeeSet(c.tees, preferredTee, handicapGender);
           const location = [c.location.city, c.location.state].filter(Boolean).join(', ');
           out.push({
             id: c.id,
@@ -1464,7 +1472,7 @@ export default function PlayTab() {
           // 2026-08-12 — the player's Preferred Tee, not just the first set. This is the tee whose
           // HOLES become the round, so taking tees[0] here quoted back-tee yardages to a player who
           // had chosen front. Same fix as the course screen; this surface was missed.
-          const teeHoles = pickTeeSet(c.tees, preferredTee)?.holes ?? [];
+          const teeHoles = pickTeeSet(c.tees, preferredTee, handicapGender)?.holes ?? [];
           if (teeHoles.length > 0) {
             void prefetchCourseImagery({
               courseId: c.id,
@@ -1473,7 +1481,7 @@ export default function PlayTab() {
               holes: teeHoles.map((h, i) => ({ hole: h.hole_number ?? i + 1, par: h.par ?? 4, distance: h.yardage ?? 0 })),
             });
           }
-          const tee = pickTeeSet(c.tees, preferredTee);
+          const tee = pickTeeSet(c.tees, preferredTee, handicapGender);
           if (tee) {
             const url = getCourseImageryUrl({
               courseId: c.id,
@@ -2121,13 +2129,13 @@ export default function PlayTab() {
                   <Text style={styles.selectedSub} numberOfLines={1}>
                     {[selected.location.city, selected.location.state].filter(Boolean).join(', ')}
                   </Text>
-                  {pickTeeSet(selected.tees, preferredTee) && (
+                  {pickTeeSet(selected.tees, preferredTee, handicapGender) && (
                     <Text style={styles.selectedStats} numberOfLines={1}>
                       {/* 2026-07-26 (deep audit S3) — don't fabricate "18 holes" when a searched tee returns
                           an empty hole list (could be a 9-hole course); show the count only when real. */}
-                      {pickTeeSet(selected.tees, preferredTee)!.holes.length ? `${pickTeeSet(selected.tees, preferredTee)!.holes.length} holes · ` : ''}Par {pickTeeSet(selected.tees, preferredTee)!.par_total}
-                      {pickTeeSet(selected.tees, preferredTee)!.course_rating != null && ` · Rating ${pickTeeSet(selected.tees, preferredTee)!.course_rating!.toFixed(1)}`}
-                      {pickTeeSet(selected.tees, preferredTee)!.slope_rating != null && ` · Slope ${pickTeeSet(selected.tees, preferredTee)!.slope_rating}`}
+                      {pickTeeSet(selected.tees, preferredTee, handicapGender)!.holes.length ? `${pickTeeSet(selected.tees, preferredTee, handicapGender)!.holes.length} holes · ` : ''}Par {pickTeeSet(selected.tees, preferredTee, handicapGender)!.par_total}
+                      {pickTeeSet(selected.tees, preferredTee, handicapGender)!.course_rating != null && ` · Rating ${pickTeeSet(selected.tees, preferredTee, handicapGender)!.course_rating!.toFixed(1)}`}
+                      {pickTeeSet(selected.tees, preferredTee, handicapGender)!.slope_rating != null && ` · Slope ${pickTeeSet(selected.tees, preferredTee, handicapGender)!.slope_rating}`}
                     </Text>
                   )}
                 </View>

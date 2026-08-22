@@ -29,6 +29,20 @@ export const WHATS_NEW: WhatsNewEntry[] = [
   // 2026-08-21/22 — written for the PLAYER, not the changelog. Each says what changed for them.
   {
     when: 'Aug 2026',
+    note: 'Every yardage I quote now comes off the tees you actually play. If you\'re on the forward tees I was reading you the back card — on some holes that was 70 yards out, and I was picking your club off it.',
+    howTo: 'Settings → your profile → Preferred Tee. It was already there; now it reaches the hole yardages, the course layout and me.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'Course search finds the course now when you add the town — "Sharp Park Pacifica" used to come back empty. Results show the city and state too, so two courses with the same name are finally telling apart.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'Your course handicap now uses the right rating. Courses are rated twice — men\'s and women\'s — and the two often sit on identical yardages, so the wrong one could slip in and quietly give you the wrong strokes.',
+    howTo: 'Settings → your profile → Course Rating Set. Pick Men\'s or Women\'s once and every course you play uses it. Left unset, nothing is guessed.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'Tell me what you\'ve got and I\'ll remember it. "I\'m 150 out, downhill lie, hitting my 7" now sticks — the yardage, the lie, the club and the hole all land, and I factor them into the next thing I tell you instead of asking again.',
   },
   {

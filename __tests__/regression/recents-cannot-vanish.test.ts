@@ -56,7 +56,10 @@ describe('a recent course survives a failed lookup', () => {
 
   it('recents honour Preferred Tee like every other surface', () => {
     // Otherwise the recents row quotes a different tee set than the course screen it opens.
-    expect(play).toContain('const tee = pickTeeSet(c.tees, preferredTee);');
+    // 2026-08-21 — property, not literal: recents must honour the preferred tee. The picker gaining
+    // a gender argument is not a regression in that, but pinning the exact call text made it read
+    // as one.
+    expect(play).toMatch(/const tee = pickTeeSet\(c\.tees,\s*preferredTee/);
     expect(play).not.toContain('const tee = c.tees[0];');
   });
 

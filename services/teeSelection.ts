@@ -85,3 +85,39 @@ export function pickTeeSet<T extends TeeLike>(
   // is the kinder default — a player who hasn't thought about it shouldn't be handed the longer card.
   return sorted[Math.floor((sorted.length - 1) / 2)];
 }
+
+/**
+ * 2026-08-22 — THE TEE THE PLAYER ACTUALLY PLAYS, resolved in exactly one place.
+ *
+ * Found building Sharp Park (Pacifica) through the real user path. `courseToHoles(course, teeName?)`
+ * has taken a tee name since 08-19, and its "that tee isn't on this card" fallback was carefully
+ * written and logged — but ALL FOUR call sites pass nothing:
+ *
+ *     app/course-layout.tsx · app/(tabs)/caddie.tsx (x2) · services/courseDownloadEngine.ts
+ *
+ * So every one of them fell through to `course.tees[0]`, which is the longest set on the card and,
+ * on a course rated for both, the women's copy of it. At Sharp Park that hands a Gold-tee player the
+ * BLUE card everywhere: 6416 yards instead of 5087, and hole 5 quoted as 195 when they are hitting
+ * 145. The caddie then recommends a club off that number. The parameter was right, the fallback was
+ * right, and nothing ever asked — the same shape as "Preferred Tee did nothing" on 08-12, one layer
+ * down. [[no-deferred-wiring-placeholders]] [[no-half-fixes-enforce-every-surface]]
+ *
+ * Reads the profile itself rather than making every caller remember two settings, and is applied
+ * INSIDE courseToHoles/courseSummaryForContext so no call site has to opt in -- opting in is the
+ * step that never happened last time.
+ *
+ * Returns the tee OBJECT, never its name. Sharp Park lists "Blue" twice -- once in each rating set,
+ * same 6416 yards, 77.5/135 against 71.2/125 -- so a name is not enough to say which one, and
+ * resolving to "Blue" would quietly undo the gender fix one line later.
+ */
+export function playerTee<T extends TeeLike>(course: { tees?: T[] | null } | null | undefined): T | null {
+  if (!course?.tees?.length) return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const store = require('../store/playerProfileStore').usePlayerProfileStore.getState();
+    return pickTeeSet(course.tees, store.preferredTee ?? 'middle', store.handicap_gender ?? 'x');
+  } catch {
+    // A profile that won't load must not take the course down with it.
+    return null;
+  }
+}

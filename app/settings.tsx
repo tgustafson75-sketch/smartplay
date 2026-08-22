@@ -282,6 +282,8 @@ export default function Settings() {
   }, []);
   const handicapIndex = usePlayerProfileStore(s => s.handicap_index);
   const setHandicapIndex = usePlayerProfileStore(s => s.setHandicapIndex);
+  const handicapGender = usePlayerProfileStore(s => s.handicap_gender);
+  const setHandicapGender = usePlayerProfileStore(s => s.setHandicapGender);
   const [editIndex, setEditIndex] = useState(handicapIndex != null ? String(handicapIndex) : '');
   // 2026-05-26 — Fix AB Phase 1: GHIN # local edit mirror.
   const ghinNumber = usePlayerProfileStore(s => s.ghin_number);
@@ -983,6 +985,24 @@ export default function Settings() {
             ]}
             value={preferredTee}
             onSelect={(v) => setPreferredTee(v as 'front' | 'middle' | 'back')}
+          />
+
+          {/*
+            2026-08-21 — WHICH rating set your course handicap comes from. Courses are rated twice
+            and the two sets share yardages: Sharp Park's Blue tees are 6416y at 77.5/135 women's
+            and 71.2/125 men's. Course handicap is (Index x Slope/113) + (Rating - Par), so reading
+            the wrong set quietly hands out a wrong stroke allowance on a scorecard that looks
+            perfectly right. Left unset we don't guess -- we hold to one internally consistent set.
+          */}
+          <PillRow
+            label="Course Rating Set"
+            options={[
+              { label: "Men's", value: 'm' },
+              { label: "Women's", value: 'f' },
+              { label: 'Not set', value: 'x' },
+            ]}
+            value={handicapGender}
+            onSelect={(v) => setHandicapGender(v as 'm' | 'f' | 'x')}
           />
 
           <View style={{ flexDirection: 'row', gap: 8 }}>

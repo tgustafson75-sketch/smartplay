@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import type { Course, TeeBox, Hole } from '../types/course';
 import type { CourseHole } from '../store/roundStore';
+import { playerTee } from './teeSelection';
 import { getApiBaseUrl } from './apiBase';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -239,18 +240,47 @@ type RawSearchResult = {
   club_name?: string;
   course_name?: string;
   name?: string;
+  /**
+   * 2026-08-22 — the search endpoint NESTS these, the way the detail endpoint does not:
+   *   "location": { "address": "1 Sharp Park Rd, Pacifica, CA 94044", "city": "Pacifica", "state": "CA" }
+   * We only ever read the flat fields, so every online result joined to an EMPTY location string and
+   * shipped to the Play tab with no place on it at all. Searching "Sharp Park" showed two entries
+   * that looked identical -- one in Pacifica, one in Jackson, Michigan -- and nothing on screen told
+   * them apart. Both shapes are accepted now; neither is assumed.
+   */
+  location?: {
+    address?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+  } | string;
   city?: string;
   state_code?: string;
   state?: string;
   country?: string;
 };
 
+/** Reads the place off either shape, preferring the nested object the search endpoint actually sends. */
+function locationOf(raw: RawSearchResult): string {
+  const nested = typeof raw.location === 'object' && raw.location ? raw.location : null;
+  if (typeof raw.location === 'string' && raw.location.trim()) return raw.location.trim();
+  const city = nested?.city ?? raw.city;
+  const state = nested?.state ?? raw.state_code ?? raw.state;
+  const country = nested?.country ?? raw.country;
+  const parts = [city, state].filter(Boolean);
+  // The country only earns its space when it is NOT the common case -- "Pacifica, CA" reads better
+  // than "Pacifica, CA, United States" on a narrow row.
+  if (!parts.length && country) return String(country);
+  if (country && !/united states|usa/i.test(String(country))) parts.push(String(country));
+  return parts.join(', ');
+}
+
 function normalizeSearchResult(raw: RawSearchResult): { id: string; club_name: string; course_name: string; location: string } {
   return {
     id: String(raw.id ?? ''),
     club_name: raw.club_name ?? raw.name ?? 'Unknown',
     course_name: raw.course_name ?? raw.name ?? 'Unknown',
-    location: [raw.city, raw.state_code ?? raw.state, raw.country].filter(Boolean).join(', '),
+    location: locationOf(raw),
   };
 }
 
@@ -275,6 +305,110 @@ function normalizeSearchResult(raw: RawSearchResult): { id: string; club_name: s
  * the server giving a real answer and is not retried. Every failure is logged with its reason, since
  * a failure the UI is designed to hide had better be visible somewhere.
  */
+
+/**
+ * 2026-08-22 — WHY A SEARCH THAT WORKS CAN STILL FIND NOTHING.
+ *
+ * Found building Sharp Park (Pacifica) the way a player would. The upstream API substring-matches
+ * the course NAME and nothing else, so the most natural thing a person types is the one thing that
+ * fails:
+ *
+ *     "Sharp Park"              -> 2 hits
+ *     "Sharp Park Pacifica"     -> 0     (the town is not in the name)
+ *     "Sharp Park Golf Course"  -> 0     (the record says "Sharp Park Gc")
+ *     "Pacifica"                -> 0     (a town alone matches no name)
+ *
+ * A clean HTTP 200 carrying an empty list was being treated as a real answer — "no such course" —
+ * when it usually means the query was over-specified. The course was there the whole time, with all
+ * 18 holes of geometry, one word away.
+ *
+ * So we relax rather than give up, and the tokens we drop are not thrown away: they are exactly the
+ * location words that tell Pacifica's Sharp Park from Jackson, Michigan's Ella Sharp Park. Dropping
+ * them to FIND and reusing them to RANK is the whole trick.
+ */
+
+/** Words that carry no identifying signal — every other course has them too. */
+const GOLF_NOISE = new Set([
+  'golf', 'course', 'club', 'links', 'country', 'the', 'at', 'of', 'gc', 'cc', 'gcc',
+  'ccc', 'g', 'c', 'resort', 'and',
+]);
+
+const tokenize = (q: string): string[] =>
+  q.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+
+/**
+ * Progressively less specific forms of the query, most specific FIRST. We only ever walk down this
+ * list when a clean response came back empty, so the common case still costs exactly one request.
+ */
+export function relaxedQueries(query: string): string[] {
+  const raw = query.trim();
+  const out: string[] = [];
+  const push = (q: string) => {
+    const t = q.trim();
+    if (t.length >= 3 && !out.some(e => e.toLowerCase() === t.toLowerCase())) out.push(t);
+  };
+
+  push(raw);
+
+  const toks = tokenize(raw);
+  // Drop the generic golf words: "Sharp Park Golf Course" -> "sharp park", which DOES match "Sharp Park Gc".
+  const meaty = toks.filter(t => !GOLF_NOISE.has(t));
+  if (meaty.length) push(meaty.join(' '));
+
+  // Then shorten from the right, because English puts the distinctive name first and the place last
+  // ("Sharp Park Pacifica CA"). Stop at two tokens — one token is too broad to be useful and returns
+  // a wall of unrelated courses.
+  for (let n = meaty.length - 1; n >= 2; n--) push(meaty.slice(0, n).join(' '));
+  if (meaty.length === 2) push(meaty[0]);
+
+  return out.slice(0, 4); // hard cap: worst case stays a bounded number of requests
+}
+
+/**
+ * People type "Michigan"; the records say "MI". Without this the state a player names is the one
+ * token guaranteed NOT to match, which defeats the whole point of ranking on it.
+ */
+const STATE_CODES: Record<string, string> = {
+  alabama: 'al', alaska: 'ak', arizona: 'az', arkansas: 'ar', california: 'ca', colorado: 'co',
+  connecticut: 'ct', delaware: 'de', florida: 'fl', georgia: 'ga', hawaii: 'hi', idaho: 'id',
+  illinois: 'il', indiana: 'in', iowa: 'ia', kansas: 'ks', kentucky: 'ky', louisiana: 'la',
+  maine: 'me', maryland: 'md', massachusetts: 'ma', michigan: 'mi', minnesota: 'mn',
+  mississippi: 'ms', missouri: 'mo', montana: 'mt', nebraska: 'ne', nevada: 'nv',
+  ohio: 'oh', oklahoma: 'ok', oregon: 'or', pennsylvania: 'pa', tennessee: 'tn', texas: 'tx',
+  utah: 'ut', vermont: 'vt', virginia: 'va', washington: 'wa', wisconsin: 'wi', wyoming: 'wy',
+};
+
+/**
+ * Rank by the words the relaxed query had to DROP. If someone typed "Pacifica" and one result is in
+ * Pacifica, that is the one they meant — and this is the only thing standing between them and a
+ * course 2,000 miles away with a similar name.
+ */
+export function rankByDroppedTokens(
+  results: { id: string; club_name: string; course_name: string; location: string }[],
+  originalQuery: string,
+  usedQuery: string,
+): { id: string; club_name: string; course_name: string; location: string }[] {
+  const used = new Set(tokenize(usedQuery));
+  const dropped = tokenize(originalQuery).filter(t => !used.has(t) && !GOLF_NOISE.has(t));
+  if (!dropped.length) return results;
+
+  const score = (r: { course_name: string; club_name: string; location: string }): number => {
+    const hay = `${r.location} ${r.club_name} ${r.course_name}`.toLowerCase();
+    const hayTokens = new Set(tokenize(hay));
+    return dropped.reduce((n, t) => {
+      // A state matches whether the player spelled it out or used the code.
+      const alt = STATE_CODES[t];
+      const hit = hay.includes(t) || (alt != null && hayTokens.has(alt));
+      return n + (hit ? 1 : 0);
+    }, 0);
+  };
+  // Stable: equal scores keep the API's own ordering, which is its relevance opinion.
+  return results
+    .map((r, i) => ({ r, i, s: score(r) }))
+    .sort((a, b) => (b.s - a.s) || (a.i - b.i))
+    .map(x => x.r);
+}
+
 export async function searchCourses(
   query: string,
 ): Promise<{ id: string; club_name: string; course_name: string; location: string; _error?: string }[]> {
@@ -297,7 +431,7 @@ export async function searchCourses(
   // on screen since the first keystroke.
   const attempt = async (timeoutMs: number): Promise<Attempt> => {
     try {
-      const res = await fetch(proxyUrl({ action: 'search', q: query }), {
+      const res = await fetch(proxyUrl({ action: 'search', q: activeQuery }), {
         signal: AbortSignal.timeout(timeoutMs),
       });
       if (!res.ok) {
@@ -327,13 +461,30 @@ export async function searchCourses(
 
   // Written without relying on narrowing across a reassigned `let` — that compiles under the app's
   // tsconfig and NOT under the test project's looser one, which is a difference worth never depending on.
-  let final = await attempt(12_000);
-  if (!final.ok && final.transient) {
-    logSearch('course_search_retry', { query: query.slice(0, 60) }, 'diag');
-    final = await attempt(6_000);
+  const candidates = relaxedQueries(query);
+  let final: Attempt = { ok: false, list: [], transient: false, message: 'Search unavailable' };
+  let activeQuery = candidates[0] ?? query;
+
+  for (const candidate of candidates) {
+    activeQuery = candidate;
+    final = await attempt(12_000);
+    if (!final.ok && final.transient) {
+      logSearch('course_search_retry', { query: activeQuery.slice(0, 60) }, 'diag');
+      final = await attempt(6_000);
+    }
+    // A hard failure is NOT a reason to relax — re-asking a broken API a looser question just spends
+    // the player's time. Only an honest, empty answer earns another try.
+    if (!final.ok) break;
+    if (final.list.length) break;
+    if (candidate !== candidates[candidates.length - 1]) {
+      logSearch('course_search_relaxed', { from: query.slice(0, 60), to: candidate.slice(0, 60) }, 'diag');
+    }
   }
 
-  if (final.ok) return final.list.slice(0, 10).map(normalizeSearchResult);
+  if (final.ok) {
+    const mapped = final.list.slice(0, 10).map(normalizeSearchResult);
+    return rankByDroppedTokens(mapped, query, activeQuery);
+  }
   logSearch('course_search_failed', { query: query.slice(0, 60), reason: final.message.slice(0, 120) });
   return [{ id: '', club_name: '', course_name: '', location: '', _error: final.message }];
 }
@@ -471,7 +622,9 @@ export function courseToHoles(course: Course, teeName?: string): CourseHole[] {
   const matched = requested
     ? course.tees.find((t) => t.tee_name?.trim().toLowerCase() === requested.toLowerCase())
     : null;
-  const tee = matched ?? course.tees[0];
+  // 2026-08-22 — with no explicit name, use the tee the PLAYER plays rather than the card's first
+  // entry. Every caller reaches this branch: none of the four has ever passed a name.
+  const tee = matched ?? playerTee(course) ?? course.tees[0];
   if (!tee) return [];
   if (requested && !matched) {
     console.log(`[golfCourseApi] tee "${requested}" not found on ${course.club_name || 'course'} — using "${tee.tee_name || 'first tee'}" instead (available: ${course.tees.map((t) => t.tee_name).filter(Boolean).join(', ') || 'unnamed'})`);
@@ -511,7 +664,10 @@ export function courseToHoles(course: Course, teeName?: string): CourseHole[] {
 }
 
 export function courseSummaryForContext(course: Course): string {
-  const tee = course.tees[0];
+  // 2026-08-22 — the caddie reasons about THESE yardages, so they have to be the player's tee. This
+  // read `course.tees[0]`, which at Sharp Park briefed the caddie on the 6416y Blue card (and the
+  // women's 77.5/135 rating) even for someone playing the 5087y Gold.
+  const tee = playerTee(course) ?? course.tees[0];
   if (!tee) return `${course.club_name} — no tee data available`;
   const holeList = tee.holes
     .map((h) => {

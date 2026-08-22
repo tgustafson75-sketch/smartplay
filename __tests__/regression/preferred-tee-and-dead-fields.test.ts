@@ -72,8 +72,12 @@ describe('Preferred Tee finally selects a tee', () => {
   it('the course screen actually reads the setting now', () => {
     const src = read('app/course/[course_id].tsx');
     expect(src).toContain('const preferredTee = usePlayerProfileStore((st) => st.preferredTee);');
-    expect(src).toContain('pickTeeSet(course.tees, preferredTee)');
-    expect(src).toContain('pickTeeSet(course?.tees, preferredTee)');
+    // 2026-08-21 — was pinned to the exact call text and broke when pickTeeSet gained a gender
+    // argument, which did not touch this property at all. The property is that the screen PASSES
+    // the player's preferred tee; how many other arguments the picker takes is not this test's
+    // business.
+    expect(src).toMatch(/pickTeeSet\(course\.tees,\s*preferredTee/);
+    expect(src).toMatch(/pickTeeSet\(course\?\.tees,\s*preferredTee/);
     // The bug, verbatim: always the first tee set.
     expect(src).not.toContain('course.tees[0]');
     expect(src).not.toContain('course?.tees[0]');
