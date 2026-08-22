@@ -14,9 +14,50 @@ export interface WhatsNewEntry {
   when: string;
   /** One user-facing sentence — what it does FOR the player. */
   note: string;
+  /**
+   * 2026-08-21 (Tim) — "if there's something they need to know HOW TO USE, if it's been simplified,
+   * the highlighted tutorial shows them the new method."
+   *
+   * Set this ONLY when the way you do something has changed. A better answer needs no instruction;
+   * a moved control, a removed setting, or a new gesture does — and a player who cannot find the new
+   * method experiences an improvement as a regression.
+   */
+  howTo?: string;
 }
 
 export const WHATS_NEW: WhatsNewEntry[] = [
+  // 2026-08-21/22 — written for the PLAYER, not the changelog. Each says what changed for them.
+  {
+    when: 'Aug 2026',
+    note: 'Tell me what you\'ve got and I\'ll remember it. "I\'m 150 out, downhill lie, hitting my 7" now sticks — the yardage, the lie, the club and the hole all land, and I factor them into the next thing I tell you instead of asking again.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'Having one of those days? Say "I\'m hitting everything left today" and I\'ll aim around it for the rest of the round instead of giving you a swing lesson on the tee. If you overcorrect later, I\'ll notice that too and settle you down rather than chasing it.',
+    howTo: 'Just say it out loud, any time — "I\'m pulling everything", "everything\'s coming up short", "my back\'s tight". No menu, no setting.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'I now know where the trouble actually is. Instead of "158 yards", you\'ll hear what clears the bunker and what your own miss would do — measured from the hole\'s real layout, not guessed.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'The first thing you say after opening the app is much faster. It used to sit and think — sometimes long enough that you gave up and tried again. That wait is gone.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'Tap the mic, tap your earbud, or use the mic by the text box — all three now behave the same. The earbud used to be the slowest by a long way.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'SmartMotion no longer asks whether you filmed down-the-line or face-on — it works it out from the video itself, so there\'s one less thing to get wrong.',
+    howTo: 'Nothing to set. Just film and hit Analyze. If you walk into frame after hitting record, it now finds you instead of coming back empty.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'SmartFinder: the drop-down is gone — the tools sit right on the camera. Move the reticle and the yardage moves with it.',
+    howTo: 'Double-tap anywhere in the view to zoom in on the flag for a tighter look, or just ask: "zoom in on the pin". Double-tap again to come back out.',
+  },
   { when: 'Aug 2026', note: 'Your swing read now names the faults you can see plainly — a bent lead arm, a chicken wing through impact, swaying off the ball, an incomplete finish, excess head movement — measured from your real motion, not guessed. If it can\'t measure something cleanly, it stays quiet instead of making it up.' },
   { when: 'Aug 2026', note: 'Ask me about a course and I can now look it up on the web — course details, local knowledge, rules, conditions — and give you real, current facts instead of guessing.' },
   { when: 'Aug 2026', note: 'Voice scoring is sharper: say your score walking off the green and it lands on the RIGHT hole every time, even when GPS has already moved you to the next tee. Putts follow the hole you just scored.' },

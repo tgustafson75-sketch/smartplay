@@ -46,7 +46,23 @@ export default function WhatsNewHeroCard() {
       {shown.map((e, i) => (
         <View key={i} style={styles.itemRow}>
           <View style={[styles.dot, { backgroundColor: colors.accent }]} />
-          <Text style={[styles.itemText, { color: colors.text_primary }]}>{e.note}</Text>
+          <View style={styles.itemBody}>
+            <Text style={[styles.itemText, { color: colors.text_primary }]}>{e.note}</Text>
+            {/**
+              * 2026-08-21 (Tim) — "if there's something they need to know HOW TO USE, if it's been
+              * simplified, the highlighted tutorial shows them the new method."
+              *
+              * Only appears when the WAY you do something changed. A better answer needs no
+              * instruction; a new gesture or a removed setting does — and a player who cannot find
+              * the new method experiences an improvement as a regression.
+              */}
+            {e.howTo ? (
+              <View style={[styles.howToRow, { borderLeftColor: colors.accent }]}>
+                <Ionicons name="bulb-outline" size={13} color={colors.accent} style={styles.howToIcon} />
+                <Text style={[styles.howToText, { color: colors.text_muted }]}>{e.howTo}</Text>
+              </View>
+            ) : null}
+          </View>
         </View>
       ))}
       {extra > 0 ? (
@@ -70,6 +86,11 @@ const styles = StyleSheet.create({
   itemRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 8 },
   dot: { width: 6, height: 6, borderRadius: 3, marginTop: 6 },
   itemText: { flex: 1, fontSize: 13, lineHeight: 18 },
+  itemBody: { flex: 1 },
+  // A quiet, indented note under the change it explains — a hint, not a banner.
+  howToRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 6, paddingLeft: 8, borderLeftWidth: 2, gap: 6 },
+  howToIcon: { marginTop: 1 },
+  howToText: { flex: 1, fontSize: 12, lineHeight: 17, fontStyle: 'italic' },
   more: { fontSize: 12, marginTop: 2, marginBottom: 4 },
   gotIt: { alignSelf: 'flex-start', marginTop: 8, paddingVertical: 6, paddingHorizontal: 16, borderRadius: 999, borderWidth: 1 },
   gotItText: { fontSize: 13, fontWeight: '700' },

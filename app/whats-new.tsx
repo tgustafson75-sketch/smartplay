@@ -58,6 +58,7 @@ export default function WhatsNewScreen() {
     },
     newTagText: { fontSize: 9, fontWeight: '900', color: colors.background, letterSpacing: 0.6 },
     note: { fontSize: 14, lineHeight: 20, color: colors.text_primary },
+  howTo: { marginTop: 6, paddingLeft: 10, borderLeftWidth: 2, borderLeftColor: '#88F700', fontSize: 13, lineHeight: 18, fontStyle: 'italic', opacity: 0.85, color: '#9BA1A6' },
     empty: { color: colors.text_muted, fontSize: 14, textAlign: 'center', marginTop: 40 },
   }), [colors]);
 
@@ -86,6 +87,9 @@ export default function WhatsNewScreen() {
                   ) : null}
                 </View>
                 <Text style={s.note}>{e.note}</Text>
+                {/* 2026-08-21 — same how-to hint as the hero card. A player who opens the full list
+                    to work out how to use something must not find LESS than the card showed them. */}
+                {e.howTo ? <Text style={s.howTo}>{e.howTo}</Text> : null}
               </View>
             </View>
           ))
