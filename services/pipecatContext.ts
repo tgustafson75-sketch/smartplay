@@ -43,6 +43,28 @@ export function buildPipecatContext() {
       // selection sets all pillars to the same persona, so the common case is unchanged.
       caddiePersonality: getActiveCaddie(),
       trustLevel,
+      /**
+       * 2026-08-21 (Tim) — "handicap? No. Doesn't play an overall swing with physical limitation.
+       * Absolutely does. And it plays into: if I say I'm tight, then that's gonna play."
+       *
+       * He is right and I had dismissed it. A 5-handicap can have a bad back and a 25 can be
+       * athletic — deriving how to advise someone from their HANDICAP conflates skill with what
+       * their body can actually do. And these were the same unconnected-halves shape as the hazards:
+       * kevin has accepted every one of these fields for months, and the on-screen path filled them,
+       * while THIS path — the brain answering most turns — sent none of them.
+       *
+       * What the primary brain was advising without:
+       *   physicalLimitation — a bad back changes the club, not just the encouragement
+       *   missType           — slice vs hook vs pull: WHICH way it goes wrong, not just which side
+       *   handedness         — "aim left" means the opposite for a lefty. It reached NO brain at all.
+       *   persistentPatterns — the long-run reads earned across rounds
+       *   personalBest       — what he has actually shot
+       */
+      physicalLimitation: profile.physicalLimitation ?? undefined,
+      missType: profile.missType ?? undefined,
+      handedness: profile.handedness ?? undefined,
+      persistentPatterns: profile.persistentPatterns ?? undefined,
+      personalBest: profile.personalBest ?? undefined,
     },
     round: {
       active: round.isRoundActive,

@@ -50,7 +50,18 @@ export function pipecatRequestToKevinBody(body: Record<string, unknown>): Record
   return {
     message: body.text,
     conversationTurns: toConversationTurns((body.history ?? []) as HistoryMsg[]),
-    screen_context: body.screen_context ?? null,
+    /**
+     * 2026-08-21 — HANDEDNESS rides here because kevin has no field for it, and it cannot wait for
+     * one: every directional word the caddie says — aim left, miss right, favour the left edge — is
+     * INVERTED for a left-handed player. Advice that is precisely wrong is worse than advice that is
+     * vague, and this reached NO brain at all before today.
+     */
+    screen_context: (() => {
+      const base = (body.screen_context as string | null) ?? null;
+      if (player.handedness !== 'left') return base;
+      const note = 'PLAYER IS LEFT-HANDED: every directional call is mirrored. Their miss side, any "aim left/right", and hazard sides must be stated from a LEFT-handed setup.';
+      return base ? `${base}\n\n${note}` : note;
+    })(),
 
     language: settings.language ?? 'en',
     responseMode: settings.responseMode ?? 'neutral',
@@ -63,6 +74,15 @@ export function pipecatRequestToKevinBody(body: Record<string, unknown>): Record
     firstName: player.name ?? null,
     handicap: player.handicap ?? null,
     dominantMiss: player.dominantMiss ?? null,
+    /**
+     * 2026-08-21 — the signals kevin has always accepted and this path never sent. A physical
+     * limitation changes the CLUB, not just the tone; missType says which way it goes wrong, not
+     * merely which side; and handedness inverts every directional word in the answer.
+     */
+    physicalLimitation: player.physicalLimitation ?? null,
+    missType: player.missType ?? null,
+    persistentPatterns: player.persistentPatterns ?? null,
+    personalBest: player.personalBest ?? null,
 
     isRoundActive: round.active ?? false,
     currentHole: round.currentHole ?? null,
@@ -134,6 +154,7 @@ export function pipecatRequestToKevinBody(body: Record<string, unknown>): Record
     // The CNS block. pipecat calls it context.memory, kevin calls it unified_context_block — two
     // names for one thing, which is its own small argument for having one brain.
     unified_context_block: context.memory ?? null,
+
 
     /**
      * 2026-08-21 — DO NOT SYNTHESISE AUDIO FOR THIS CALLER.

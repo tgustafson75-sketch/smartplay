@@ -54,6 +54,26 @@ const MUST_REACH: Array<{ what: string; why: string; inContext: RegExp; inShim?:
     inContext: /courseIntelligence/, inShim: /courseIntelligence/,
   },
   {
+    what: 'physical limitation',
+    why: 'Tim: "handicap does not play an overall swing with physical limitation — absolutely does". A bad back changes the CLUB, not just the encouragement, and handicap is skill not capability',
+    inContext: /physicalLimitation/, inShim: /physicalLimitation/,
+  },
+  {
+    what: 'miss TYPE',
+    why: 'slice vs hook vs pull — which way it goes wrong, not merely which side',
+    inContext: /missType/, inShim: /missType/,
+  },
+  {
+    what: 'handedness',
+    why: 'every directional word is inverted for a lefty; "aim left" is precisely wrong, which is worse than vague. It reached NO brain at all before 2026-08-21',
+    inContext: /handedness/, inShim: /LEFT-HANDED/,
+  },
+  {
+    what: 'persistent patterns',
+    why: 'the long-run reads earned across rounds',
+    inContext: /persistentPatterns/, inShim: /persistentPatterns/,
+  },
+  {
     what: 'per-club tendencies',
     why: 'what each club DOES for this player, not just how far it goes',
     inContext: /describeBagTendencies/,
