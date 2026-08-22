@@ -194,7 +194,11 @@ function extractTees(raw: RawCourse): TeeBox[] {
   const allTees: TeeBox[] = [];
   for (const [key, arr] of Object.entries(teesObj)) {
     if (Array.isArray(arr)) {
-      arr.forEach(t => allTees.push(normalizeTee({ ...t, tee_name: t.tee_name ?? key })));
+      // 2026-08-21 — KEEP the group key as gender. It was only ever used as a fallback tee NAME and
+      // then thrown away, which is why a men's Blue and a women's Blue became indistinguishable and
+      // a tie on yardage silently handed out the wrong course rating. See TeeBox.gender.
+      const g = /female/i.test(key) ? 'female' : /male/i.test(key) ? 'male' : null;
+      arr.forEach(t => allTees.push({ ...normalizeTee({ ...t, tee_name: t.tee_name ?? key }), gender: g }));
     }
   }
   return allTees;

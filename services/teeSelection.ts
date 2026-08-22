@@ -31,8 +31,46 @@ interface TeeLike {
  * to the first entry whenever there's nothing to choose between — a course with one tee set, or
  * yardages the upstream didn't provide. Never returns undefined for a non-empty list.
  */
-export function pickTeeSet<T extends TeeLike>(tees: T[] | null | undefined, preference: TeePreference): T | null {
+export function pickTeeSet<T extends TeeLike>(
+  tees: T[] | null | undefined,
+  preference: TeePreference,
+  gender?: 'm' | 'f' | 'x' | null,
+): T | null {
   if (!tees || tees.length === 0) return null;
+  if (tees.length === 1) return tees[0];
+
+  /**
+   * 2026-08-21 — PICK THE RIGHT PLAYER'S RATING FIRST, then the right length.
+   *
+   * Found building Sharp Park (Pacifica) end to end. golfcourseapi returns male and female tee sets
+   * separately, and they share yardages: Blue is 6416y at 77.5/135 for women and 71.2/125 for men.
+   * Ordering by yardage alone makes those a TIE, and a tie resolves to whichever the API listed
+   * first — the women's set. The holes were right and the course rating belonged to someone else.
+   *
+   * Course handicap is (Index × Slope/113) + (Rating − Par), so that is wrong net scoring and a
+   * wrong posting, silently, on a real course.
+   *
+   * When the player's gender is UNKNOWN we do NOT guess: mixing two rating sets is what caused
+   * this, so we collapse to a single consistent group rather than pick a gender. Deduping by
+   * yardage keeps one entry per physical tee, so "back/middle/front" still means what it says.
+   */
+  const want = gender === 'm' ? 'male' : gender === 'f' ? 'female' : null;
+  let pool = tees;
+  if (want) {
+    const matching = tees.filter(t => (t as { gender?: string | null }).gender === want);
+    if (matching.length > 0) pool = matching;
+  } else if (tees.some(t => (t as { gender?: string | null }).gender)) {
+    // Unknown player, gendered data: keep ONE set per distinct yardage so the ratings stay internally
+    // consistent instead of silently interleaving two scorecards.
+    const seen = new Set<number>();
+    pool = tees.filter(t => {
+      const y = typeof t.total_yards === 'number' ? t.total_yards : -1;
+      if (seen.has(y)) return false;
+      seen.add(y);
+      return true;
+    });
+  }
+  tees = pool;
   if (tees.length === 1) return tees[0];
 
   // Only sets with a real total can be ordered. If fewer than two qualify there is no meaningful
