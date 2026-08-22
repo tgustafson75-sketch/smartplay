@@ -23,7 +23,18 @@ import { completeVision, type StructuredSchema } from './_aiProvider';
  * the prompt is told to be conservative (never fabricate a date or a workout).
  */
 
-const SYSTEM_PROMPT = `You are reading a document that a golfer exported from a workout-tracking app called SmartPump. It lists their GOLF-specific workouts / exercise sessions, each stamped with a DATE. The layout could be anything: a table, a bulleted list, per-day cards, or a summary page.
+const SYSTEM_PROMPT = `You are reading a document that a golfer exported from a workout-tracking app called SmartPump. It describes their GOLF-specific workouts / exercise sessions. The layout could be anything: a table, a bulleted list, per-day cards, or -- and this is common -- a PROSE SUMMARY of a training block rather than a per-session list.
+
+A real example of the prose shape:
+
+    SmartPump Golf Performance block - Foundation phase, 22% complete (2/9 sessions logged, 10 sets).
+    Top loads logged: Box Jump 215x10, 90/90 Hip Mobility 15x8, Thoracic Rotation 15x1.
+    Early in the block - the foundation is being laid.
+
+Read whichever shape you are given. From a prose summary, emit one entry per session you can DATE; if
+the summary states a count of sessions but dates none of them, emit NO entries -- an undated session
+cannot be placed on a timeline, and inventing dates to fill a count would corrupt the very trend this
+feeds. Name the exercises you can see (the "top loads" list is exercises) on the entries you do emit.
 
 Your job: extract EVERY dated workout you can read into the SCHEMA below. Be CONSERVATIVE and literal — read what's on the page, never invent a date or a session. The user confirms before anything is saved, so a missed workout is recoverable; a fabricated one is not.
 
@@ -45,8 +56,9 @@ SCHEMA — output ONLY this JSON, no preamble, no code fences:
 }
 
 Rules:
-- Every workout MUST have a readable date. If you cannot determine the date for an entry, DROP it (do not guess).
-- date must be YYYY-MM-DD. If the year is not on the page but is obvious from context, use it; otherwise drop the entry.
+- Every workout MUST have a readable day+month. TODAY'S DATE IS GIVEN TO YOU in the user message — use it to resolve the YEAR whenever the page omits one, which most workout apps do ("Thu, Aug 21", "8/21", "Wed 21 Aug"). Resolve to the most recent such date that is NOT in the future.
+- date must be YYYY-MM-DD. If the page shows only a day and month, still emit a full YYYY-MM-DD using the reference date above. Only drop an entry when you cannot read a day and month at all.
+- Relative dates ("Yesterday", "2 days ago", "Monday") resolve against the reference date too.
 - Do NOT fabricate durations, intensities, or exercises — use null / [] when not shown.
 - confidence reflects YOUR overall read quality: high = clean page, every field read; medium = dates solid, some detail iffy; low = the parse was a struggle.
 - If the document is NOT a workout export at all (something else entirely), return: { "workouts": [], "confidence": "low", "warnings": ["This doesn't look like a SmartPump workout export."] }
@@ -141,7 +153,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const isPdf = /pdf/i.test(mediaType);
     const images = [{ b64: fileB64, mimeType: mediaType }];
-    const userText = 'Extract every dated golf workout from this SmartPump export. Return JSON per the schema in your instructions.';
+    /**
+     * 2026-08-22 (Tim — "adding the PDF from SmartPump, but the dashboard says it can't find any
+     * dated workouts"). The model was never told what day it is, while the prompt ordered it to DROP
+     * any entry whose year it could not determine — and workout apps overwhelmingly print "Thu,
+     * Aug 21" with no year. So a perfectly readable export came back with every row dropped, a clean
+     * 200 carrying an empty list, and the client said "couldn't find any dated workouts". The file
+     * was fine; we had made the year unknowable.
+     */
+    const today = new Date();
+    const refDate = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
+    const userText =
+      `Extract every dated golf workout from this SmartPump export. Return JSON per the schema in your instructions.\n` +
+      `REFERENCE DATE (today, UTC): ${refDate}. Use it to resolve any date the page writes without a year, ` +
+      `and to resolve relative dates. Never emit a date in the future.`;
     const visionOpts = { maxTokens: 4000, temperature: 0.1, forceJSON: true, schema: WORKOUT_SCHEMA };
 
     let raw = '';
@@ -188,17 +213,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(502).json({ error: 'Model returned non-JSON', provider: providerUsed, raw: raw.slice(0, 400) });
     }
 
-    // Normalize: keep only entries with a parseable YYYY-MM-DD date; coerce the rest.
-    const cleaned = (parsed.workouts ?? [])
+    /**
+     * Belt and braces on the year: even told the reference date, a model sometimes emits "08-21".
+     * Rather than drop the row -- the exact failure this endpoint just had -- resolve it here to the
+     * most recent occurrence that is not in the future.
+     */
+    const resolveDate = (raw: string): { ms: number; iso: string } | null => {
+      const t = raw.trim();
+      if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(t)) {
+        const ms = new Date(`${t}T00:00:00Z`).getTime();
+        return Number.isFinite(ms) ? { ms, iso: t } : null;
+      }
+      const md = t.match(/^(\d{1,2})-(\d{1,2})$/);
+      if (md) {
+        const mm = Number(md[1]), dd = Number(md[2]);
+        if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
+          const now = new Date();
+          let y = now.getUTCFullYear();
+          let ms = Date.UTC(y, mm - 1, dd);
+          if (ms > now.getTime()) ms = Date.UTC(--y, mm - 1, dd); // never the future
+          return { ms, iso: `${y}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}` };
+        }
+      }
+      return null;
+    };
+
+    const rawRows = parsed.workouts ?? [];
+    let undatable = 0;
+    // Normalize: keep only entries we can resolve to a real date; coerce the rest.
+    const cleaned = rawRows
       .map((w) => {
         const dateStr = typeof w.date === 'string' ? w.date.trim() : '';
-        const ms = /^\d{4}-\d{1,2}-\d{1,2}$/.test(dateStr) ? new Date(`${dateStr}T00:00:00`).getTime() : NaN;
-        if (!Number.isFinite(ms)) return null;
+        const resolved = resolveDate(dateStr);
+        if (!resolved) { undatable += 1; return null; }
+        const { ms } = resolved;
         const durN = typeof w.duration_min === 'number' && Number.isFinite(w.duration_min) ? Math.round(w.duration_min) : null;
         const intensity = w.intensity === 'light' || w.intensity === 'moderate' || w.intensity === 'hard' ? w.intensity : null;
         return {
           date_ms: ms,
-          date: dateStr,
+          date: resolved.iso,
           title: typeof w.title === 'string' && w.title.trim() ? w.title.trim().slice(0, 120) : 'Workout',
           duration_min: durN != null && durN > 0 && durN <= 600 ? durN : null,
           focus: typeof w.focus === 'string' && w.focus.trim() ? w.focus.trim().slice(0, 40) : null,
@@ -208,11 +261,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
       .filter((w): w is NonNullable<typeof w> => w != null);
 
+    // 2026-08-22 — "the model read nothing" and "the model read 12 sessions and we threw them all
+    // away" are completely different problems, and both used to reach the player as the same
+    // sentence. read_count/undatable_count let the client say which one actually happened.
     return res.status(200).json({
       workouts: cleaned,
       confidence: parsed.confidence ?? 'low',
       warnings: Array.isArray(parsed.warnings) ? parsed.warnings.slice(0, 8) : [],
-      _debug: { provider: providerUsed },
+      read_count: rawRows.length,
+      undatable_count: undatable,
+      _debug: { provider: providerUsed, refDate },
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'unknown';

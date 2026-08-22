@@ -18,7 +18,13 @@ type NewWorkout = Omit<WorkoutRecord, 'id'>;
 
 export type SmartPumpImportResult =
   | { ok: true; imported: number; parsed: number; confidence?: string; warnings?: string[] }
-  | { ok: false; reason: string };
+  /**
+   * 2026-08-22 — `readCount` / `undatableCount` exist so a failure can say WHICH failure it was.
+   * "I couldn't read the file", "I read nothing in it" and "I read 12 sessions and none of them
+   * carry a date" are three different problems with three different fixes, and all three used to
+   * reach the player as the same sentence.
+   */
+  | { ok: false; reason: string; readCount?: number; undatableCount?: number };
 
 interface ParsedWorkoutRow {
   date_ms?: number;
@@ -163,10 +169,22 @@ export async function ingestSmartPumpExport(): Promise<SmartPumpImportResult> {
       body: JSON.stringify({ file_b64: fileB64, file_media_type: media }),
       signal: AbortSignal.timeout(60_000),
     });
-    const json = (await res.json().catch(() => ({}))) as { workouts?: ParsedWorkoutRow[]; error?: string; confidence?: string; warnings?: string[] };
+    const json = (await res.json().catch(() => ({}))) as { workouts?: ParsedWorkoutRow[]; error?: string; confidence?: string; warnings?: string[]; read_count?: number; undatable_count?: number };
     if (!res.ok) return { ok: false, reason: json.error ?? `http_${res.status}` };
     const rows = json.workouts ?? [];
-    if (rows.length === 0) return { ok: false, reason: 'no_workouts_found' };
+    if (rows.length === 0) {
+      // Tim, 08-22: SmartPump's export carried no timestamps at all. The file was perfectly
+      // readable — the sessions were all there — and telling him "couldn't find any dated workouts"
+      // named the symptom while hiding the cause and the fix.
+      const readCount = typeof json.read_count === 'number' ? json.read_count : 0;
+      const undatableCount = typeof json.undatable_count === 'number' ? json.undatable_count : 0;
+      return {
+        ok: false,
+        reason: readCount > 0 ? 'workouts_without_dates' : 'no_workouts_found',
+        readCount,
+        undatableCount,
+      };
+    }
     const imported = useWorkoutStore.getState().addWorkouts(rowsToRecords(rows));
     return { ok: true, imported, parsed: rows.length, confidence: json.confidence, warnings: json.warnings };
   } catch (e) {
@@ -193,8 +211,10 @@ export async function importSmartPumpWithFeedback(source: string): Promise<Smart
     const result = await ingestSmartPumpExport();
     if (!result.ok) {
       if (result.reason === 'canceled') return result;
-      const msg = result.reason === 'no_workouts_found' || result.reason === 'no_workouts_in_json'
-        ? 'Couldn’t find any dated workouts in that file.'
+      const msg = result.reason === 'workouts_without_dates'
+        ? `Read ${result.readCount} session${result.readCount === 1 ? '' : 's'} in that export, but none of them carry a date — so there's nothing to line them up against. Add dates to the export and try again.`
+        : result.reason === 'no_workouts_found' || result.reason === 'no_workouts_in_json'
+        ? 'Couldn’t find any workouts in that file.'
         : result.reason === 'no_network'
           ? 'Couldn’t reach the server — check your connection and try again.'
           : result.reason === 'too_large'
