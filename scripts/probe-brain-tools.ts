@@ -64,17 +64,42 @@ async function probeIntents(): Promise<void> {
   let bad = 0;
   for (const c of INTENT_CASES) {
     const started = Date.now();
+    /**
+     * 2026-08-21 — A NETWORK BLIP IS NOT A DEFECT.
+     *
+     * This once reported "0/4 classified correctly" because my own probing had briefly exhausted
+     * local sockets and every fetch threw ETIMEDOUT. Both endpoints were answering 200 seconds
+     * later. A harness that reports total failure for a transient error is a false-alarm generator —
+     * the mirror of the false PASS that made a fall-through look like a working shim — and it sends
+     * the next person chasing a bug that does not exist.
+     *
+     * So a transport error is retried once and, if it persists, reported as ERROR rather than
+     * counted as a misclassification. "We could not reach it" and "it answered wrongly" are
+     * different findings with different fixes.
+     */
     let got = '(error)';
     let params: Record<string, unknown> = {};
-    try {
-      const res = await fetch(`${BASE}/api/voice-intent`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: c.say }),
-      });
-      const d = await res.json() as { intent_type?: string; parameters?: Record<string, unknown> };
-      got = String(d.intent_type ?? '(none)');
-      params = d.parameters ?? {};
-    } catch { /* counted as a miss below */ }
+    let transportFailed = false;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const res = await fetch(`${BASE}/api/voice-intent`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: c.say }),
+        });
+        const d = await res.json() as { intent_type?: string; parameters?: Record<string, unknown> };
+        got = String(d.intent_type ?? '(none)');
+        params = d.parameters ?? {};
+        transportFailed = false;
+        break;
+      } catch {
+        transportFailed = true;
+        if (attempt === 0) await new Promise(r => setTimeout(r, 1500));
+      }
+    }
+    if (transportFailed) {
+      console.log(`[ERROR]        ${c.expect.padEnd(12)} "${c.say}" — could not reach the classifier (transport, not a misclassification)`);
+      continue;
+    }
     const ms = Date.now() - started;
     const paramOk = !c.param || String(params[c.param[0]] ?? '').includes(c.param[1]);
     const ok = got === c.expect && paramOk;
@@ -116,6 +141,14 @@ const CASES: Array<{ expect: string | null; say: string; ctx?: Record<string, un
   { expect: 'zoom_target',         say: 'zoom in on the pin' },
   { expect: 'open_smartfinder',    say: 'open the rangefinder' },
   { expect: 'record_swing',        say: 'record my swing' },
+  // 2026-08-21 — the narrative-brain tools. These are the ones the CLASSIFIER could record for
+  // months while the brain could not, so they are exactly the ones to prove fire, not assume.
+  { expect: 'set_hole_note',       say: "I'm off to the right, pin high, downhill lie", ctx: ON_COURSE },
+  { expect: 'state_yardage',       say: "I'm 150 out", ctx: ON_COURSE },
+  { expect: 'club_change',         say: "I'm hitting my 7 iron", ctx: ON_COURSE },
+  { expect: 'declare_hole',        say: "we're on hole 12 now", ctx: ON_COURSE },
+  { expect: 'set_playing_condition', say: "I'm hitting everything left today", ctx: ON_COURSE },
+  { expect: 'set_session_focus',   say: "let's work on my tempo today" },
   // NEGATIVES — over-firing is its own defect. Recording advice that was never given, or a shot
   // never hit, poisons the very data the caddie recommends from.
   { expect: null,                  say: 'how far does my 7 iron normally go' },
