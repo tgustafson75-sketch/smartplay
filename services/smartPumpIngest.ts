@@ -180,7 +180,7 @@ export async function ingestSmartPumpExport(): Promise<SmartPumpImportResult> {
       const undatableCount = typeof json.undatable_count === 'number' ? json.undatable_count : 0;
       return {
         ok: false,
-        reason: readCount > 0 ? 'workouts_without_dates' : 'no_workouts_found',
+        reason: readCount > 0 || undatableCount > 0 ? 'workouts_without_dates' : 'no_workouts_found',
         readCount,
         undatableCount,
       };
@@ -211,8 +211,9 @@ export async function importSmartPumpWithFeedback(source: string): Promise<Smart
     const result = await ingestSmartPumpExport();
     if (!result.ok) {
       if (result.reason === 'canceled') return result;
+      const seen = Math.max(result.readCount ?? 0, result.undatableCount ?? 0);
       const msg = result.reason === 'workouts_without_dates'
-        ? `Read ${result.readCount} session${result.readCount === 1 ? '' : 's'} in that export, but none of them carry a date — so there's nothing to line them up against. Add dates to the export and try again.`
+        ? `Found ${seen} session${seen === 1 ? '' : 's'} in that export, but no dates on them — so there's nothing to line them up against. Add dates to the export and re-import.`
         : result.reason === 'no_workouts_found' || result.reason === 'no_workouts_in_json'
         ? 'Couldn’t find any workouts in that file.'
         : result.reason === 'no_network'

@@ -51,6 +51,7 @@ SCHEMA — output ONLY this JSON, no preamble, no code fences:
       "exercises": ["<named exercise>", "..."]
     }
   ],
+  "sessions_seen_without_dates": <integer — how many workout sessions you could SEE in the document but had to leave out because they carry no readable date. 0 if none. This is how we tell "this file has no workouts" apart from "this file has workouts but no dates", which are different problems for the user.>,
   "confidence": "<one of: high, medium, low>",
   "warnings": ["<short string per issue, e.g. 'two entries share a date', 'durations not listed'. Empty array if none.>"
 }
@@ -90,7 +91,7 @@ const WORKOUT_SCHEMA: StructuredSchema = {
   openai: {
     type: 'object',
     properties: WORKOUT_PROPS,
-    required: ['workouts', 'confidence', 'warnings'],
+    required: ['workouts', 'confidence', 'warnings', 'sessions_seen_without_dates'],
     additionalProperties: false,
   },
   gemini: {
@@ -111,6 +112,7 @@ const WORKOUT_SCHEMA: StructuredSchema = {
           required: ['date', 'title'],
         },
       },
+      sessions_seen_without_dates: { type: 'integer' },
       confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
       warnings: { type: 'array', items: { type: 'string' } },
     },
@@ -127,7 +129,7 @@ type ParsedWorkout = {
   exercises?: unknown;
 };
 
-function safeParse(raw: string): { workouts?: ParsedWorkout[]; confidence?: string; warnings?: string[] } | null {
+function safeParse(raw: string): { workouts?: ParsedWorkout[]; confidence?: string; warnings?: string[]; sessions_seen_without_dates?: unknown } | null {
   try {
     const m = raw.match(/\{[\s\S]*\}/);
     return JSON.parse(m ? m[0] : raw);
@@ -269,7 +271,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       confidence: parsed.confidence ?? 'low',
       warnings: Array.isArray(parsed.warnings) ? parsed.warnings.slice(0, 8) : [],
       read_count: rawRows.length,
-      undatable_count: undatable,
+      // Sessions the model could SEE but had to leave out for want of a date. It drops them before
+      // emitting, so rawRows cannot count them -- which is exactly why this is asked for explicitly
+      // rather than inferred. Tim's export was 100% this case.
+      undatable_count:
+        undatable +
+        (typeof parsed.sessions_seen_without_dates === 'number' && parsed.sessions_seen_without_dates > 0
+          ? Math.round(parsed.sessions_seen_without_dates)
+          : 0),
       _debug: { provider: providerUsed, refDate },
     });
   } catch (e) {
