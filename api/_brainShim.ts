@@ -101,6 +101,19 @@ export function pipecatRequestToKevinBody(body: Record<string, unknown>): Record
     holeNotes: round.holeNote ?? null,
     scores: score ?? {},
     sim_round: round.simRound ?? false,
+    /**
+     * 2026-08-23 — the seven fields added to kevin on 08-22/23 that never reached THIS route.
+     * Without them the turn-1 brain answered from the thinner half: no stroke number (so it briefed
+     * the tee shot on your second), no putts or greens, no idea whether you were riding, standing on
+     * the green, or playing a nine. Mapped by name because kevin already destructures every one.
+     */
+    currentStroke: round.currentStroke ?? null,
+    roundStats: round.roundStats ?? null,
+    transportMode: round.transportMode ?? null,
+    currentLocationType: round.currentLocationType ?? null,
+    riskMode: round.riskMode ?? null,
+    currentTeeBox: round.currentTeeBox ?? null,
+    nineHoleMode: round.nineHoleMode ?? false,
 
     clubDistances: bag.club_distances ?? {},
     club_tendencies: bag.tendencies ?? [],

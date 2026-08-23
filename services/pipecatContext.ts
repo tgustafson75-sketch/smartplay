@@ -119,6 +119,46 @@ export function buildPipecatContext() {
         return { total, holesPlayed, vsPar: parPlayed ? total - parPlayed : undefined };
       })(),
       mode: round.mode ?? undefined,
+      /**
+       * 2026-08-23 — everything added to the kevin path on 08-22/23 and NOT here. Tim caught it:
+       * "I'm betting dollars to donuts that fifty percent of the work is fifty percent done."
+       * He was right — seven fields went to one brain and not the other, which is the SAME
+       * two-payload split that made the caddie change character mid-round. This is the turn-1 brain;
+       * a player asking the first question of the round was getting the thinner half.
+       */
+      currentStroke: (() => {
+        const hole = round.currentHole;
+        if (hole == null) return 1;
+        const shots = (round.shots ?? []).filter((sh: { hole: number }) => sh.hole === hole);
+        if (!shots.length) return 1;
+        return shots.length + 1 + shots.reduce((a: number, sh: { penalty_strokes?: number }) => a + (sh.penalty_strokes ?? 0), 0);
+      })(),
+      transportMode: round.transportMode ?? 'walking',
+      currentLocationType: round.currentLocationType ?? 'unknown',
+      riskMode: round.riskMode ?? 'normal',
+      currentTeeBox: round.currentTeeBox ?? undefined,
+      nineHoleMode: !!round.nineHoleMode,
+      roundStats: (() => {
+        try {
+          const stats = typeof round.getHoleStats === 'function' ? (round.getHoleStats() ?? []) : [];
+          if (!stats.length) return undefined;
+          const played = stats.length;
+          const putts = stats.reduce((a: number, h: { putts?: number }) => a + (h.putts ?? 0), 0);
+          const girKnown = stats.filter((h: { girHit?: boolean | null }) => h.girHit != null).length;
+          const fwKnown = stats.filter((h: { fairwayHit?: boolean | null }) => h.fairwayHit != null).length;
+          return {
+            holesPlayed: played,
+            putts,
+            puttsPerHole: Math.round((putts / played) * 10) / 10,
+            threePutts: stats.filter((h: { putts?: number }) => (h.putts ?? 0) >= 3).length,
+            gir: girKnown ? `${stats.filter((h: { girHit?: boolean | null }) => h.girHit === true).length}/${girKnown}` : null,
+            fairways: fwKnown ? `${stats.filter((h: { fairwayHit?: boolean | null }) => h.fairwayHit === true).length}/${fwKnown}` : null,
+            penalties: stats.reduce((a: number, h: { penalties?: number }) => a + (h.penalties ?? 0), 0),
+            lastThreeHoles: stats.slice(-3).map((h: { hole: number; score: number; putts?: number }) =>
+              ({ hole: h.hole, score: h.score, putts: h.putts ?? null })),
+          };
+        } catch { return undefined; }
+      })(),
       // 2026-08-07 (Tim — "if I end a round the FIRST time I play it, it says 'that's your best score yet'.
       // It's the first time — of course it is. Set a BASELINE, not make-believe congratulations"). How many
       // rounds the player has FINISHED at this course before today. 0 = first time → the caddie frames it as
