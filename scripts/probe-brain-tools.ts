@@ -135,7 +135,12 @@ const CASES: Array<{ expect: string | null; say: string; ctx?: Record<string, un
    * Given a real round it fires both state_yardage and recommend_club.
    */
   { expect: 'recommend_club',      say: "I'm 150 yards out, what should I hit", ctx: ON_COURSE },
-  { expect: 'recommend_club',      say: "I've got 165 to the pin into a little wind, what do you like" },
+  // 2026-08-23 — This case carried NO ctx, so it asked for a club recommendation from a caddie with
+  // no bag and no round. "What's your carry with a 6 or 7?" is the CORRECT answer to that, and the
+  // comment directly above already says so: "given a real round it fires both". The case contradicted
+  // its own documentation and scored the right behaviour as a defect — the third time this probe has
+  // asserted a contract the app deliberately does not have. Give it the round a real player has.
+  { expect: 'recommend_club',      say: "I've got 165 to the pin into a little wind, what do you like", ctx: ON_COURSE },
   { expect: 'log_emotional_state', say: 'I am so damn frustrated, I have topped three in a row' },
   { expect: 'log_emotional_state', say: 'honestly I feel great today, everything is clicking' },
   { expect: 'log_shot',            say: 'I striped my drive right down the middle' },

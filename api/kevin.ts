@@ -1229,7 +1229,7 @@ PATTERN AWARENESS (Phase BJ):
 The body may include \`holeShots\` (this hole) and \`recentShots\` (last shots across the round). When 3+ shots show a clear directional pattern (three pushes right, two pulled left), reference it briefly the next time the player asks for a tactical read and adjust the suggestion accordingly ("you've been right today — favor left center"). Use this once or twice a round, not every shot.
 
 CLUB & STRATEGY — USE REAL DISTANCES:
-When a [TIM'S BAG — real distances] block is present, base every club/strategy answer on THOSE numbers, not generic assumptions. Core rule: if the distance to the target is beyond his LONGEST club, it's a two-shot decision — don't tell him to "go for it." Recommend a lay-up to a comfortable wedge number (~90) or short of the first hazard, and say what it leaves ("lay up to ~90, leaves a full gap wedge"). When it's reachable, name the club that matches the number from his bag. Always factor known hazards and doglegs (lay back / take the gap / favor the safe side). Keep it to a club + a one-line why + a confirm.
+When a [TIM'S BAG — real distances] block is present, base every club/strategy answer on THOSE numbers, not generic assumptions. Core rule: if the distance to the target is beyond his LONGEST club, it's a two-shot decision — don't tell him to "go for it." Recommend a lay-up to a comfortable wedge number (~90) or short of the first hazard, and say what it leaves ("lay up to ~90, leaves a full gap wedge"). When it's reachable, name the club that matches the number from his bag. MATCH IT ARITHMETICALLY, and do that before any adjustment: the club to start from is the one whose carry is NEAREST his number, at or just above it — with 7i 135, 6i 143, 5i 151, 4i 160 in the bag, 150 yards is the 5 iron, never the 4. Only then let conditions and lie move you up or down, and say why if the move would look odd to him. Two things you must never do, because both are confidently wrong and he cannot check you: naming a club that carries well past the number when a nearer one is sitting in the bag, and telling him a club "won't reach" or is "beyond" a number its carry already covers — compare the number to the bag before you say that, every time. Always factor known hazards and doglegs (lay back / take the gap / favor the safe side). Keep it to a club + a one-line why + a confirm.
 
 FEEL & MOOD — ADAPT, DON'T JUST ACKNOWLEDGE:
 Shots carry a \`feel\` field (how the swing felt: "rushed", "smooth", "fat") and the body may include a [HOW TIM SAYS HE FEELS] block (emotional self-reports + valence). These are the player telling you, in his own words, what's going on — your job is to let it CHANGE your coaching, not just mirror it back:
@@ -1424,7 +1424,15 @@ ${emoArr.slice(-5).map(e => `  - ${e.state ?? '?'}` + (e.valence ? ` (${e.valenc
       ? Object.entries(clubDistances as Record<string, number>).filter(([, y]) => typeof y === 'number' && y > 0)
       : [];
     const bagBlock = bagEntries.length > 0
-      ? `[TIM'S BAG — real distances, yds]\n${bagEntries.map(([c, y]) => `  ${c}: ${y}`).join('\n')}\n[/BAG]\n`
+      /**
+       * 2026-08-23 — Label these as CARRY, because that is what they are. bagDistances() returns
+       * honest carry (its own comment: "not the tee→rest TOTAL"), and every safety-critical reader
+       * depends on that — "can I carry it", the lay-up gate, the go/no-go over water. The block said
+       * only "real distances", so the model could not tell carry from total and had to guess on the
+       * one question where guessing is expensive. Probed: with a 235-yard 3-wood in the bag it told
+       * a player 210 over water was "beyond your 3-wood".
+       */
+      ? `[TIM'S BAG — real CARRY distances in yards: what the ball FLIES, roll not included]\n${bagEntries.map(([c, y]) => `  ${c}: ${y}`).join('\n')}\n[/BAG]\n`
       : '';
     const onCourseContextBlock = onCourseHoleBlock || onCourseRecentBlock || emotionalBlock || bagBlock
       ? `${onCourseHoleBlock}${onCourseRecentBlock}${emotionalBlock}${bagBlock}\n`
