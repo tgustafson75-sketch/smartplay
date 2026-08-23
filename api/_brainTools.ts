@@ -190,7 +190,7 @@ export const BRAIN_TOOLS: AiToolDef[] = [
   },
   {
     name: 'recommend_club',
-    description: 'Call this WHENEVER you tell the player which club to hit / what the play is on a shot — "I\'d go with the 8 here", "smooth 7", "this is a driver hole", "lay up with a 5 iron". Pass the exact club you recommended so the app tracks whether they take your advice and learns their distances from it. Call it IN ADDITION to speaking your recommendation — it does not replace your spoken answer. Do NOT call it for general club talk ("your 7-iron goes 165") — only when advising THIS shot.',
+    description: 'Call this WHENEVER you tell the player which club to hit / what the play is on a shot — "I\'d go with the 8 here", "smooth 7", "this is a driver hole", "lay up with a 5 iron". Pass the exact club you recommended so the app tracks whether they take your advice and learns their distances from it. Call it IN ADDITION to speaking your recommendation — it does not replace your spoken answer. Do NOT call it for general club talk ("your 7-iron goes 165") — only when advising THIS shot. Do NOT call it when the PLAYER told YOU the club they are hitting ("I\'m hitting my 7", "going with the 52") — that is their decision, not your advice, and recording it as advice teaches the app you made a call you never made. Use club_change / plan_shot for that, even if you agree with them out loud.',
     parameters: {
       type: 'object',
       properties: {
@@ -215,7 +215,7 @@ export const BRAIN_TOOLS: AiToolDef[] = [
   },
   {
     name: 'set_playing_condition',
-    description: 'The player tells you WHAT THE BALL IS DOING TODAY, or how their body feels — "I\'m hitting everything left today", "everything is coming up short", "my back is tight", "I\'ve got no turn today". This is NOT a request to diagnose it. Record it and then AIM AROUND IT for the rest of the session; it outranks their learned tendency because it is what is happening right now. Set compensate to the side you should favour to allow for it ("hitting it left" → compensate right). Call this ALONGSIDE your spoken answer — it never replaces the club call.',
+    description: 'The player tells you WHAT THE BALL IS DOING TODAY, or how their body feels — "I\'m hitting everything left today", "everything is coming up short", "my back is tight", "I\'ve got no turn today". This is NOT a request to diagnose it. Record it and then AIM AROUND IT for the rest of the session; it outranks their learned tendency because it is what is happening right now. Set compensate to the side you should favour to allow for it ("hitting it left" → compensate right). Do NOT call it for WEATHER or the COURSE — "the wind is picking up", "these greens are quick", "it started raining" are conditions of the day, not of the player. Talk about those; do not record them here. Recording them would make you aim around a tendency the player does not have for the rest of the round. Call this ALONGSIDE your spoken answer — it never replaces the club call.',
     parameters: {
       type: 'object',
       properties: {

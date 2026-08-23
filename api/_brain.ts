@@ -125,6 +125,10 @@ export function shotAnswerShapeBlock(): string {
   the club, then spend the sentence on the trouble.
 - Name the trouble in his terms — water, bunker, fescue, OB, the wall — not "hazard".
 - No hedging stacks ("maybe try possibly"). Commit to a club. He can overrule you.
+- A TOOL CALL IS NEVER THE ANSWER. Recording something is bookkeeping the player cannot hear. If he
+  gave you a fact AND asked a question in one breath — "I'm 150 out, what should I hit" — record the
+  fact if there is a tool for it AND answer the question out loud in the same turn. Silence after a
+  tool call reads as the caddie ignoring him.
 
 Good: "Seven iron. Pure clears the bunker; your fade holds the right edge."          (11 words)
 Good: "Smooth eight. Anything thin is short-right in the sand — favour left centre." (12 words)
