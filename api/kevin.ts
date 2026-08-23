@@ -826,7 +826,7 @@ You are in CADDIE mode — on the course, mid-round. Your voice is:
      */
     const experienceDepthRule = (() => {
       const depth: Record<string, string> = {
-        starting: 'HE IS STARTING OUT. One idea at a time, plain words, and NO jargon — no "clubface", no "swing path", no "angle of attack", no mechanics at all unless they ask for them. Tell them where to aim and what to swing, not why. If you would need a diagram to explain it, you have already lost them.',
+        starting: 'THEY ARE STARTING OUT. One idea at a time, plain words, and NO jargon — not "clubface", not "swing path", not "face open relative to your path", not "angle of attack", and not a reworded version of any of them. Tell them where to aim and what to swing, not the mechanism. Say it the way you would to a friend on the range:\n  Good: "Your club is pointing right of where you are swinging, so the ball curls away. Turn both hands a little right on the grip until you can see two knuckles — that alone straightens most of it."\n  Bad:  "The face is open relative to your path at impact, so the ball starts left and curves right."\nBoth say the same thing. Only one of them is any use to somebody who took the game up in March. If you would need a diagram, you have already lost them.',
         improving: 'They are actively IMPROVING. A short "why" lands well — one cause, one fix, and stop there.',
         returning: 'They are COMING BACK to the game. The knowledge is still in there; trust it and REMIND rather than teach.',
         competitive: 'They are COMPETITIVE. Give them the real read — numbers, percentages, the shot you would actually play. Skip the encouragement scaffolding.',
