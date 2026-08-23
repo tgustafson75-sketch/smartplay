@@ -2275,6 +2275,11 @@ export default function SwingDetail() {
                     } else if (result.kind === 'error') {
                       useToastStore.getState().show('Send failed — try again.');
                       console.log('[swing-detail] send-to-tank error:', result.message);
+                    } else if (result.kind === 'no_attachment') {
+                      // 2026-08-22 (Tim — "an email was sent, but there's no video attached").
+                      // This OS path is text-only; saying "sharing" here is what made a video-less
+                      // email look like a successful export.
+                      useToastStore.getState().show('Your phone couldn\u2019t attach the video — the note went without it.');
                     } else if (result.kind === 'ok') {
                       useToastStore.getState().show(`Sharing to ${TANK_REVIEW_EMAIL}…`);
                     }

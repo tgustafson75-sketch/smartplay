@@ -39,7 +39,9 @@ import { usePlayerProfileStore } from '../store/playerProfileStore';
 export const TANK_REVIEW_EMAIL = 'marc@smartplaycaddie.com';
 
 export type SendToTankResult =
-  | { kind: 'ok'; via: 'share_sheet' | 'fallback_share' }
+  | { kind: 'ok'; via: 'share_sheet' }
+  /** Shared, but the OS path could not carry the file — the recipient gets text only. */
+  | { kind: 'no_attachment' }
   | { kind: 'paywall' }
   | { kind: 'no_file' }
   | { kind: 'cancelled' }
@@ -92,7 +94,7 @@ export async function sendSwingToTank(opts: {
     `Hi Tank,\n\n` +
     `${playerLine}\n` +
     (ctx ? `\n${ctx}\n` : '') +
-    `\nReview the attached swing video when you have a moment. ` +
+    `\nReview the swing video when you have a moment. ` +
     `Replying to this email reaches the sender.\n\n` +
     `— Sent from SmartPlay Caddie\n`;
 
@@ -100,6 +102,25 @@ export async function sendSwingToTank(opts: {
   // handles attachments correctly across Mail / Drive / Messenger).
   // Fall back to React Native's Share API only if Sharing isn't
   // available (rare on real devices, possible on web).
+  /**
+   * 2026-08-22 (Tim — "I did export them from the swing library. An email was sent, but there's no
+   * video attached.") — PROVE THE FILE IS THERE BEFORE CLAIMING TO SEND IT.
+   *
+   * Nothing checked that videoUri pointed at a real, non-empty file, so a swing whose clip had been
+   * evicted, or was still being written, produced a perfectly cheerful email carrying nothing. The
+   * body even said "Review the attached swing video" — on a path that cannot attach one.
+   */
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const FS = require('expo-file-system') as typeof import('expo-file-system');
+    const info = await FS.getInfoAsync(opts.videoUri).catch(() => null);
+    const size = info && info.exists ? ((info as { size?: number }).size ?? 0) : 0;
+    if (!info?.exists || size < 1024) {
+      console.log('[tankReview] refusing to send: video missing or empty', { uri: opts.videoUri, exists: !!info?.exists, size });
+      return { kind: 'no_file' };
+    }
+  } catch { /* if we cannot check, fall through and let the share sheet decide */ }
+
   try {
     const can = await Sharing.isAvailableAsync().catch(() => false);
     if (can) {
@@ -134,7 +155,12 @@ export async function sendSwingToTank(opts: {
       message: `${TANK_REVIEW_EMAIL}\n\n${body}\n\nVideo file: ${opts.videoUri}`,
       ...(Platform.OS === 'ios' ? { url: opts.videoUri } : {}),
     });
-    return { kind: 'ok', via: 'fallback_share' };
+    /**
+     * This path CANNOT carry the file — React Native's Share is text/url only. Reporting it as `ok`
+     * is what let a video-less email look like a successful export. It is its own outcome now, so
+     * the caller can say the video did not go with it.
+     */
+    return { kind: 'no_attachment' };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (/cancel/i.test(msg)) return { kind: 'cancelled' };
