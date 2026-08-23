@@ -27,7 +27,20 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const read = (rel: string) => fs.readFileSync(path.resolve(__dirname, '../../', rel), 'utf-8');
-const ctx = read('services/pipecatContext.ts');
+/**
+ * 2026-08-23 — was services/pipecatContext.ts. That file was the SECOND client payload builder,
+ * feeding the second brain; it has been deleted and every surface now assembles its request in
+ * services/caddieRequestBody.ts. Same property, one file: what the app knows must reach the caddie.
+ *
+ * Two entries below moved rather than vanished, and both moved somewhere better — checked against
+ * source before this test was re-aimed, not assumed:
+ *   • the SmartFinder lock is sent as `smartFinderContext`, the string form kevin actually reads,
+ *     instead of an object kevin had no field for.
+ *   • measured hazards are no longer a `hazards:` payload field at all. They are composed by
+ *     caddieMemoryRetrieval.liveTroubleLine into the ONE context block every brain path pastes —
+ *     which is why the marker for them is asserted against the CNS below.
+ */
+const ctx = read('services/caddieRequestBody.ts');
 const shim = read('api/_brainShim.ts');
 const cns = read('services/caddieMemoryRetrieval.ts');
 
@@ -36,12 +49,13 @@ const MUST_REACH: Array<{ what: string; why: string; inContext: RegExp; inShim?:
   {
     what: 'the SmartFinder lock',
     why: 'the number the player measured themselves outranks the GPS green-middle',
-    inContext: /smartFinderLock/, inShim: /SMARTFINDER ACTIVE/,
+    inContext: /smartFinderContext/, inShim: /SMARTFINDER ACTIVE/,
   },
   {
     what: 'measured hazards',
     why: 'computer vision found them and geometry measured the carry — "clears the bunker" beats "158 yards"',
-    inContext: /hazards:/, inShim: /MEASURED TROUBLE ON THIS SHOT/,
+    // Composed into the shared context block, so the CNS is where it must appear.
+    inContext: /getCaddieContext/, inShim: /MEASURED TROUBLE ON THIS SHOT/,
   },
   {
     what: 'the golfer model',

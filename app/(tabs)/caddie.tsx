@@ -2125,10 +2125,9 @@ export default function CaddieTab() {
 
   // ── Pipecat voice orchestrator (Phase 2) ─
   const pipecatVoice = usePipecatVoice({
-    onUIEvent: (event) => {
-      // UI tool events from Claude → dispatch through existing handleToolAction
-      handleToolAction({ type: event } as Parameters<typeof handleToolAction>[0]);
-    },
+    // 2026-08-23 — onUIEvent removed. It only ever fired from the Phase-3 WebSocket handler, and
+    // that socket could never open (no server URL is settable anywhere in the app), so this
+    // callback has been unreachable since it was written. Tool actions arrive on onToolAction.
     onKevinSpoke: (text) => {
       setCaddieResponse(text);
     },

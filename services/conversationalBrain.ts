@@ -1,186 +1,64 @@
 /**
- * 2026-07-01 (whole-app audit — mic convergence). ONE conversational brain for every mic.
+ * EVERY MIC, ONE CADDIE.
  *
- * The caddie-tab mic already routed conversational turns to the pipecat brain, but the universal
- * badge / earbud / hands-free path (services/listeningSession) still hit legacy /api/kevin directly,
- * so "the one way to talk to the unified caddie" reached a DIFFERENT brain. This routes those turns
- * to the SAME pipecat brain (with the SAME rich context via buildPipecatContext) — and, critically,
- * falls back to the legacy kevin call on ANY pipecat failure, so the earbud path can never break
- * worse than it does today. Default orchestrator is pipecat; an explicit 'kevin' setting still works.
+ * 2026-07-01 (mic convergence) — the universal badge / earbud / hands-free path
+ * (services/listeningSession) reached a different brain from the caddie-tab mic. This file was
+ * written to join them.
+ *
+ * 2026-08-23 (Tim, sprint finish — "a single source of truth, a single path, a total present
+ * caddie… getting all the generics out, no robots, no built-for-failure paths") — it had not
+ * finished the job. It joined the ROUTE and kept FOUR hand-built payloads alive behind it:
+ *
+ *   tryPipecat             → /api/pipecat-turn with the nested buildPipecatContext object
+ *   tryKevin               → /api/kevin with ~25 hand-listed fields
+ *   generateProactiveOpener→ /api/kevin with ~16 hand-listed fields
+ *   (plus useKevin + useVoiceCaddie, already unified on 08-22)
+ *
+ * Read what that meant on the course. `tryKevin` is the EARBUD path: no course intelligence, no
+ * hazards, no round stats, no bag, no handedness. And `generateProactiveOpener` is the caddie's
+ * FIRST WORDS when the app opens — the moment that sets whether he sounds like your caddie or like
+ * an app — assembled from sixteen fields. That is where "generic" came from. Not the model, not the
+ * prompt: the payload.
+ *
+ * Both now go through services/caddieBrain.askCaddie → buildCaddieRequestBody → /api/kevin. One
+ * payload, one brain, one conversation history.
+ *
+ * AND THE LADDER IS GONE. This used to try pipecat, then kevin, then hand back whatever it got, so
+ * the player could receive any of three different caddies and had no way to tell which. A phone has
+ * signal essentially all the time; the ladder was not buying reliability, it was buying an
+ * inconsistent caddie. One real attempt, honestly reported.
  */
 
-import { getApiBaseUrl } from './apiBase';
+import { askCaddie } from './caddieBrain';
+import { setPipecatHistory, clearPipecatHistory } from './voice/pipecatHistory';
 import { useSettingsStore } from '../store/settingsStore';
-import { getActiveCaddie } from './caddieResolver';
-import { useRoundStore } from '../store/roundStore';
-import { buildPipecatContext } from './pipecatContext';
-import { getCaddieContext, mergeMemoryIntoContext } from './caddieMemoryRetrieval';
-import { screenContextForPrompt } from './screenContext';
 
 export interface BrainReply {
   text: string | null;
   audioBase64: string | null;
-  /** Normalized tool actions to dispatch (may be empty). Both brains map into this shape. */
+  /** Normalized tool actions to dispatch (may be empty). */
   toolActions: unknown[];
-  /** Which brain answered — telemetry / debugging. */
-  source: 'pipecat' | 'kevin' | 'none';
+  /** Which brain answered — telemetry / debugging. There is only one now. */
+  source: 'kevin' | 'none';
 }
 
-// 2026-07-01 (audit — MIC CONVERGENCE) — was a private `pipecatHistory` disjoint
-// from usePipecatVoice's, and never cleared. Now shares the ONE history module so
-// the caddie keeps context across mics + resets on round boundaries.
-import { getPipecatHistory, setPipecatHistory, appendPipecatTurn, clearPipecatHistory } from './voice/pipecatHistory';
+const NO_ANSWER: BrainReply = { text: null, audioBase64: null, toolActions: [], source: 'none' };
+
 export function clearConversationalHistory(): void { clearPipecatHistory(); }
 
-async function tryPipecat(utterance: string, timeoutMs: number): Promise<BrainReply | null> {
-  try {
-    const apiBase = getApiBaseUrl().replace(/\/+$/, '');
-    const secret = process.env.EXPO_PUBLIC_PIPECAT_SECRET ?? '';
-    const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), timeoutMs);
-    const resp = await fetch(`${apiBase}/api/pipecat-turn`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
-      body: JSON.stringify({
-        secret,
-        text: utterance,
-        history: getPipecatHistory(),
-        context: buildPipecatContext(),
-        screen_context: screenContextForPrompt(),
-      }),
-    }).finally(() => clearTimeout(t));
-    if (!resp.ok) return null;
-    const j = (await resp.json()) as { response_text?: string; tool_actions?: unknown[]; updated_history?: { role: string; content: string }[]; degraded?: boolean };
-    // 2026-07-23 (V1 fix) — the server returns 200 with degraded:true when all providers failed /
-    // it threw. Treat it as a miss so this path falls through to tryKevin instead of returning the
-    // canned "ask me again" as a legitimate source:'pipecat' answer.
-    if (j.degraded === true) return null;
-    let text = typeof j.response_text === 'string' && j.response_text.trim() ? j.response_text : null;
-    const hasTools = Array.isArray(j.tool_actions) && j.tool_actions.length > 0;
-    // 2026-07-06 (voice-lifecycle audit #11) — a TOOL-ONLY reply (empty text, real
-    // actions) was thrown away and the turn RE-RUN through legacy kevin: second
-    // brain call, different answer, original actions lost. Keep the actions and
-    // speak a minimal ack instead.
-    if (!text && hasTools) text = 'Done.';
-    if (!text) return null;
-    if (Array.isArray(j.updated_history)) setPipecatHistory(j.updated_history);
-    else appendPipecatTurn(utterance, text);
-    return { text, audioBase64: null, toolActions: Array.isArray(j.tool_actions) ? j.tool_actions : [], source: 'pipecat' };
-  } catch {
-    return null;
-  }
-}
-
-async function tryKevin(utterance: string, timeoutMs: number): Promise<BrainReply | null> {
-  try {
-    const apiBase = getApiBaseUrl().replace(/\/+$/, '');
-    const settings = useSettingsStore.getState();
-    const round = useRoundStore.getState();
-    // 2026-07-01 (audit — MIC CONVERGENCE) — the kevin FALLBACK used to ship a
-    // starved payload, so when pipecat was down the earbud/watch reply came from a
-    // stranger (no name, handicap, or miss tendency). Fold in the same core
-    // personalization the main kevin path sends so the fallback still sounds like
-    // the player's caddie. Best-effort read; /api/kevin tolerates missing fields.
-    const profile = (() => {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        return require('../store/playerProfileStore').usePlayerProfileStore.getState() as {
-          name?: string; firstName?: string; handicap?: number; dominantMiss?: string | null;
-          missType?: string | null; kevinContext?: unknown; persistentPatterns?: unknown;
-          customCaddieBasePersona?: string; customCaddieName?: string | null;
-        };
-      } catch { return {} as Record<string, never>; }
-    })();
-    const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), timeoutMs);
-    const resp = await fetch(`${apiBase}/api/kevin`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settings.aiProvider ?? 'gemini' },
-      signal: controller.signal,
-      body: JSON.stringify({
-        message: utterance,
-        language: settings.language,
-        // 2026-08-21 (brain consolidation, phase 1) — kevin now understands a narrated practice
-        // round, so it must be TOLD about one. Without this the field exists on the server and is
-        // never true, which looks identical to the bug it was ported to fix.
-        sim_round: round.isSimRound || false,
-        currentHole: round.isRoundActive ? round.currentHole : null,
-        currentYardage: round.currentYardage ?? null,
-        activeCourse: round.activeCourse,
-        holeNotes: round.holeNotes,
-        isRoundActive: round.isRoundActive,
-        voiceGender: settings.voiceGender ?? 'male',
-        persona: getActiveCaddie(), // audit C1 — per-pillar active caddie (falls back to global; see pipecatContext)
-        // 2026-07-30 (voice audit #1) — a CUSTOM caddie must carry its chosen base persona + name on the
-        // kevin FALLBACK too, else it reverts to Kevin's name + onyx voice whenever pipecat degrades.
-        customCaddieBasePersona: profile.customCaddieBasePersona ?? 'kevin',
-        customCaddieName: profile.customCaddieName ?? null,
-        // 2026-07-24 (full-app audit) — the earbud→kevin FALLBACK was dropping the brain-steering
-        // toggles, so Kids Mode / Response Style / intensity / Tank soft-intro silently defaulted the
-        // moment pipecat degraded. Send them so the fallback caddie honors the SAME settings the
-        // primary brain does (matches services/voice/brainSettings + pipecat-turn).
-        responseMode: settings.responseMode ?? 'neutral',
-        cecilyMode: settings.cecilyMode ?? false,
-        // 2026-08-09 (deferred-minor fix) — key the intensity dial off the persona actually SENT
-        // (per-pillar getActiveCaddie), not the global pick: with pillar overrides active, Serena was
-        // being scaled by Kevin's dial.
-        personaIntensity: settings.personaIntensity?.[getActiveCaddie()] ?? 100,
-        tankSoftIntro: settings.tankSoftIntro ?? false,
-        // Personalization parity with the main kevin path.
-        playerName: profile.name ?? '',
-        firstName: profile.firstName ?? '',
-        handicap: profile.handicap ?? 18,
-        dominantMiss: profile.dominantMiss ?? null,
-        missType: profile.missType ?? null,
-        kevinContext: profile.kevinContext ?? null,
-        persistentPatterns: profile.persistentPatterns ?? null,
-        recentShots: (round.shots ?? []).slice(-5),
-        // 2026-08-10 (connected audit D1 — Tim: "caddie brain universal, ties to the whole CNS"). The
-        // pipecat-DOWN fallback used to drop the learned block, so an earbud "what's the play / is this
-        // my usual miss?" lost bag + tendencies the moment pipecat degraded. Send the SAME CNS block the
-        // primary path + the on-screen kevin path send, so the degraded caddie still knows the player.
-        unified_context_block: mergeMemoryIntoContext(
-          null,
-          getCaddieContext({
-            courseId: round.activeCourseId,
-            hole: round.isRoundActive ? round.currentHole : null,
-            club: round.club,
-          }).promptBlock,
-        ),
-      }),
-    }).finally(() => clearTimeout(t));
-    if (!resp.ok) return null;
-    const j = (await resp.json()) as { text?: string; audioBase64?: string | null; toolAction?: unknown; toolActions?: unknown };
-    // 2026-07-30 (audit #1 — SILENT DATA LOSS) — kevin.ts returns BOTH a single `toolAction` (the last
-    // action) and the full `toolActions` array. Reading only `toolAction` dropped every action but the
-    // last on a multi-action turn ("log my 5 and record my next swing" → the score write was lost).
-    // Prefer the array; fall back to the single field for older server responses.
-    const acts = Array.isArray(j.toolActions) && j.toolActions.length ? j.toolActions : (j.toolAction ? [j.toolAction] : []);
-    return {
-      text: typeof j.text === 'string' ? j.text : null,
-      audioBase64: typeof j.audioBase64 === 'string' ? j.audioBase64 : null,
-      toolActions: acts,
-      source: 'kevin',
-    };
-  } catch {
-    return null;
-  }
-}
-
 /**
- * Route a conversational utterance to the unified brain. pipecat first (default), kevin as the
- * always-there fallback so the earbud/badge path never regresses. An explicit 'kevin' orchestrator
- * skips pipecat.
+ * Route a conversational utterance to the caddie.
+ *
+ * The one chokepoint every hands-free utterance passes through, which is why the stuck-player
+ * check lives here.
  */
 export async function conversationalBrainTurn(utterance: string, opts?: { timeoutMs?: number }): Promise<BrainReply> {
   const timeoutMs = opts?.timeoutMs ?? 15_000;
-  // 2026-08-09 (dead-trigger audit) — the user_explicit_stuck team-intel trigger was built +
-  // thresholded + had a full suggestion UI and was never called ("intent surfaced via voice" — the
-  // wiring never happened). This is the single chokepoint every conversational utterance passes.
-  // Conservative phrase gate; the store's per-session cap + pending guard bound it further.
+  // 2026-08-09 (dead-trigger audit) — the user_explicit_stuck team-intel trigger was built,
+  // thresholded, given a full suggestion UI, and never called. Conservative phrase gate; the
+  // store's per-session cap + pending guard bound it further.
   try {
-    if (/(i'?m (so |really )?(stuck|frustrated)|not getting (any )?better|keep (doing|hitting) the same|what am i doing wrong)/i.test(utterance)) {
+    if (/(i'?m (so |really )?(stuck|frustrated)|not getting (any )?better|keep (doing|hitting) the same|what am i doing wrong)/i.test(utterance)) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const ti = require('./teamIntelligence') as typeof import('./teamIntelligence');
       // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -194,82 +72,45 @@ export async function conversationalBrainTurn(utterance: string, opts?: { timeou
       ti.evaluateUserExplicitStuck(pillar);
     }
   } catch { /* suggestion is best-effort — never blocks the turn */ }
-  const orchestrator = useSettingsStore.getState().voiceOrchestrator ?? 'pipecat';
-  if (orchestrator === 'pipecat') {
-    const p = await tryPipecat(utterance, timeoutMs);
-    if (p) return p;
-  }
-  const k = await tryKevin(utterance, timeoutMs);
-  return k ?? { text: null, audioBase64: null, toolActions: [], source: 'none' };
+
+  const turn = await askCaddie({
+    message: utterance,
+    language: useSettingsStore.getState().language ?? 'en',
+    timeoutMs,
+  });
+  if (!turn) return NO_ANSWER;
+  return { text: turn.text, audioBase64: turn.audioBase64, toolActions: turn.toolActions, source: 'kevin' };
 }
 
 /**
- * 2026-07-25 (Tim — KILL the canned opener) — generate the caddie's post-splash OPENER from the
+ * 2026-07-25 (Tim — KILL the canned opener) — the caddie's post-splash OPENER, generated by the
  * BRAIN instead of a bundled mp3. The mp3 had no text anywhere in the app, so the player's reply
  * ("yes") hit the brain with EMPTY history and got a generic "what do you want to work on?" — the
- * "simpleton, not AI" bug. This makes the opener a real, personalized brain line AND — critically —
- * SEEDS the shared conversation history with it (assistant turn), so the very next reply is answered
- * in context. Returns text + TTS audio in one call (kevin TTS's by default). Best-effort: text:null
- * on any failure and the caller simply stays silent (no canned fallback — that was the whole problem).
+ * "simpleton, not AI" bug. This makes the opener a real, personalized line AND seeds the shared
+ * conversation history with it, so the very next reply is answered in context.
+ *
+ * 2026-08-23 — and it now knows who it is greeting. It was built from sixteen hand-listed fields
+ * while the full picture sat one function call away: this is the first thing the player hears, and
+ * it was the thinnest payload in the app.
+ *
+ * Best-effort: text:null on any failure and the caller stays silent. There is no canned fallback —
+ * a canned opener was the whole problem.
  */
 export async function generateProactiveOpener(opts?: { timeoutMs?: number }): Promise<BrainReply> {
-  const timeoutMs = opts?.timeoutMs ?? 12_000;
-  try {
-    const apiBase = getApiBaseUrl().replace(/\/+$/, '');
-    const settings = useSettingsStore.getState();
-    const profile = (() => {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        return require('../store/playerProfileStore').usePlayerProfileStore.getState() as {
-          name?: string; firstName?: string; handicap?: number; dominantMiss?: string | null;
-          missType?: string | null; kevinContext?: unknown; persistentPatterns?: unknown;
-          customCaddieBasePersona?: string; customCaddieName?: string | null;
-        };
-      } catch { return {} as Record<string, never>; }
-    })();
-    const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), timeoutMs);
-    const resp = await fetch(`${apiBase}/api/kevin`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settings.aiProvider ?? 'gemini' },
-      signal: controller.signal,
-      body: JSON.stringify({
-        // A directive, NOT a player utterance — is_proactive tells the brain the player didn't ask.
-        message: 'The player just opened the app and is on the caddie home screen (not in a round). Greet them as their caddie and open the conversation — warm, natural, one or two sentences, by name if you know it. If you know their game, you may nod to it. Never read a script.',
-        is_proactive: true,
-        language: settings.language,
-        isRoundActive: false,
-        voiceGender: settings.voiceGender ?? 'male',
-        persona: getActiveCaddie(), // audit C1 — per-pillar active caddie (falls back to global; see pipecatContext)
-        // 2026-07-30 (voice audit #1) — a CUSTOM caddie must carry its chosen base persona + name on the
-        // kevin FALLBACK too, else it reverts to Kevin's name + onyx voice whenever pipecat degrades.
-        customCaddieBasePersona: profile.customCaddieBasePersona ?? 'kevin',
-        customCaddieName: profile.customCaddieName ?? null,
-        // 2026-08-09 (deferred-minor fix) — key the intensity dial off the persona actually SENT
-        // (per-pillar getActiveCaddie), not the global pick: with pillar overrides active, Serena was
-        // being scaled by Kevin's dial.
-        personaIntensity: settings.personaIntensity?.[getActiveCaddie()] ?? 100,
-        tankSoftIntro: settings.tankSoftIntro ?? false,
-        responseMode: settings.responseMode ?? 'neutral',
-        cecilyMode: settings.cecilyMode ?? false,
-        playerName: profile.name ?? '',
-        firstName: profile.firstName ?? '',
-        handicap: profile.handicap ?? 18,
-        dominantMiss: profile.dominantMiss ?? null,
-        missType: profile.missType ?? null,
-        kevinContext: profile.kevinContext ?? null,
-        persistentPatterns: profile.persistentPatterns ?? null,
-      }),
-    }).finally(() => clearTimeout(t));
-    if (!resp.ok) return { text: null, audioBase64: null, toolActions: [], source: 'none' };
-    const j = (await resp.json()) as { text?: string; audioBase64?: string | null };
-    const text = typeof j.text === 'string' && j.text.trim() ? j.text.trim() : null;
-    if (!text) return { text: null, audioBase64: null, toolActions: [], source: 'none' };
-    // Seed the shared history with ONLY the caddie's opener (assistant turn). The directive above is
-    // deliberately NOT recorded, so the player's next reply is answered against the greeting.
-    setPipecatHistory([{ role: 'assistant', content: text }]);
-    return { text, audioBase64: typeof j.audioBase64 === 'string' ? j.audioBase64 : null, toolActions: [], source: 'kevin' };
-  } catch {
-    return { text: null, audioBase64: null, toolActions: [], source: 'none' };
-  }
+  const turn = await askCaddie({
+    // A directive, NOT a player utterance — is_proactive tells the brain the player didn't ask.
+    message: 'The player just opened the app and is on the caddie home screen (not in a round). Greet them as their caddie and open the conversation — warm, natural, one or two sentences, by name if you know it. If you know their game, you may nod to it. Never read a script.',
+    language: useSettingsStore.getState().language ?? 'en',
+    timeoutMs: opts?.timeoutMs ?? 12_000,
+    overrides: { is_proactive: true, isRoundActive: false },
+  });
+  if (!turn?.text) return NO_ANSWER;
+  /**
+   * Seed the shared history with ONLY the caddie's opener (assistant turn). askCaddie appended the
+   * DIRECTIVE as a user turn — replacing the history here drops it, which is deliberate: the player
+   * never said that sentence, and leaving it in makes the caddie answer the instruction instead of
+   * the person.
+   */
+  setPipecatHistory([{ role: 'assistant', content: turn.text }]);
+  return { text: turn.text, audioBase64: turn.audioBase64, toolActions: turn.toolActions, source: 'kevin' };
 }

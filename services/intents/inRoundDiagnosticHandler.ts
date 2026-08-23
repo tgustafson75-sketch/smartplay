@@ -25,9 +25,14 @@
  */
 
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
-import { getApiBaseUrl } from '../apiBase';
+import { askCaddie } from '../caddieBrain';
 
-const apiUrl = getApiBaseUrl();
+/**
+ * 2026-08-23 — the module-level `const apiUrl = getApiBaseUrl()` that used to live here is gone with
+ * the hand-built fetch. It was frozen at module load, so after a mid-session dual-host failover this
+ * handler would have kept calling the dead host forever — the identical bug that was found and fixed
+ * in useKevin on 07-07 and never looked for here. askCaddie reads the live host at call time.
+ */
 
 /**
  * 2026-07-25 — Evidence-order gate (Tank doctrine, folded into the caddie brain KB as
@@ -118,93 +123,53 @@ export const inRoundDiagnosticHandler: IntentHandler = {
     }
 
     try {
-      // Keep this call path persona-safe: if we omit persona, /api/kevin
-      // falls back to legacy gender defaults and can drift to Kevin's voice.
-      let persona: 'kevin' | 'serena' | 'harry' | 'tank' | 'custom' = 'kevin';
-      let voiceGender: 'male' | 'female' = 'male';
-      let personaIntensity = 100;
-      let tankSoftIntro = false;
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const settings = require('../../store/settingsStore') as typeof import('../../store/settingsStore');
-        const s = settings.useSettingsStore.getState();
-        // 2026-08-09 (pass-2 C1) — the round-pillar ACTIVE caddie, not the global pick, for this
-        // on-course brain diagnostic (persona + its intensity dial). Matches every other brain path.
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const activePersona = (require('../caddieResolver') as typeof import('../caddieResolver')).getActiveCaddieForPillar('round');
-        persona = activePersona;
-        voiceGender = s.voiceGender;
-        personaIntensity = s.personaIntensity?.[activePersona] ?? 100;
-        tankSoftIntro = s.tankSoftIntro;
-      } catch {
-        // Non-fatal: defaults keep behavior stable if store is unavailable.
-      }
+      /**
+       * 2026-08-23 (Tim, sprint finish — "a single source of truth, a single path") — this was the
+       * FIFTH hand-built payload to /api/kevin, and its own comment admitted the problem: "we can't
+       * import sendToBrain here without dragging React deps, so this handler sends a minimal
+       * envelope." So the one turn where the player asks WHY — "why am I slicing this" — went to the
+       * brain thinner than any other, and every field added elsewhere since had to be remembered
+       * here separately (persona, the intensity dial, the custom caddie's name, the CNS block: four
+       * separate later fixes, each one catching up to a payload that had already fallen behind).
+       *
+       * services/caddieBrain has no React dependency, which is what makes it usable from a service
+       * like this one. Same payload as every other surface; this path's two distinguishing flags
+       * ride as overrides.
+       */
+      const live = await (async () => {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const uv = require('../unifiedVisionContext') as typeof import('../unifiedVisionContext');
+          return (await uv.getUnifiedVisionContext()).promptBlock;
+        } catch { return null; }
+      })();
 
-      // 2026-05-26 — Brain call shape: pull the SAME envelope shape
-      // hooks/useVoiceCaddie.ts:sendToBrain assembles (context blocks +
-      // persona) BUT with the in-round-diagnostic flags set. We can't
-      // import sendToBrain here without dragging React deps, so this
-      // handler sends a minimal envelope that lets api/kevin compose
-      // the prompt; richer per-shot context comes from later turns.
-      // The brain's stateful conversation buffer (Phase AR) carries
-      // recent shot context across turns so the diagnostic call has
-      // grounding from the prior caddie chatter.
-      // 2026-06-13 (audit G5) — the diagnostic ("why am I slicing") is exactly where
-      // learned tendencies + bag + live geometry help, yet it sent NO context. Compose
-      // the SAME merged live+CNS block the chat/voice paths send. Best-effort.
-      let unified_context_block: string | null = null;
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const retr = require('../caddieMemoryRetrieval') as typeof import('../caddieMemoryRetrieval');
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const uv = require('../unifiedVisionContext') as typeof import('../unifiedVisionContext');
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const rs = require('../../store/roundStore') as typeof import('../../store/roundStore');
-        const round = rs.useRoundStore.getState();
-        const live = (await uv.getUnifiedVisionContext()).promptBlock;
-        unified_context_block = retr.mergeMemoryIntoContext(
-          live,
-          retr.getCaddieContext({ courseId: round.activeCourseId, hole: round.currentHole, club: round.club }).promptBlock,
-        );
-      } catch { /* context optional — diagnostic still answers without it */ }
-      // Thread the evidence-order doctrine so the cloud read reasons in the same order the
-      // offline gate does (lie → flight → strike → grass → setup → motion; one cause + one fix).
-      unified_context_block = `${unified_context_block ? unified_context_block + '\n\n' : ''}${EVIDENCE_ORDER_HINT}`;
-
-      const payload = {
+      const turn = await askCaddie({
         message: patternText,
         language: ctx.language ?? 'en',
-        register: 'coach',
-        inRoundDiagnostic: true,
-        // is_proactive false because the user explicitly asked
-        is_proactive: false,
-        voiceGender,
-        persona,
-        // 2026-07-30 (audit A4) — carry the custom caddie's base persona + name, or a custom caddie's
-        // in-round "why am I slicing" answer is composed in Kevin's character/phrasing.
-        customCaddieBasePersona: (() => { try { return require('../../store/playerProfileStore').usePlayerProfileStore.getState().customCaddieBasePersona ?? 'kevin'; } catch { return 'kevin'; } })(),
-        customCaddieName: (() => { try { return require('../../store/playerProfileStore').usePlayerProfileStore.getState().customCaddieName ?? null; } catch { return null; } })(),
-        personaIntensity,
-        tankSoftIntro,
-        unified_context_block,
-      };
-      const res = await fetch(`${apiUrl}/api/kevin`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        // 2026-07-30 (audit A4) — bound the wait so a stalled server can't hang the diagnostic turn forever.
-        signal: AbortSignal.timeout(15000),
+        liveBlock: live,
+        // The evidence-order doctrine, so the cloud read reasons in the SAME order the offline gate
+        // does (lie → flight → strike → grass → setup → motion; one cause + one fix).
+        contextSuffix: EVIDENCE_ORDER_HINT,
+        timeoutMs: 15_000,
+        // The caller speaks this reply through the voice layer, so the server need not render audio.
+        skipTts: true,
+        overrides: {
+          register: 'coach',
+          inRoundDiagnostic: true,
+          // The player explicitly asked — this is not the caddie speaking first.
+          is_proactive: false,
+        },
       });
-      if (!res.ok) {
+      if (!turn) {
         return {
           success: false,
           voice_response: 'I tried to dig into that and hit a snag — try once more?',
-          side_effects: [`in_round_diagnostic:http_${res.status}`],
+          side_effects: ['in_round_diagnostic:no_answer'],
           follow_up_needed: false,
         };
       }
-      const data = await res.json() as { text?: string };
-      const reply = (data.text ?? '').trim();
+      const reply = turn.text.trim();
       if (!reply) {
         return {
           success: false,

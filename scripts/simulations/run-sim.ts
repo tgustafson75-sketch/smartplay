@@ -1339,16 +1339,19 @@ check('Caddie keeps talking across tab switches (total presence); only deep-tool
 // 2026-08-07 (Tim — "if I ask remaining yardage, confirm my drive: 'you just hit 275, you've got 135
 // remaining, here's the play'"). LOCK: the caddie context carries a LIVE tee→player distance (the drive
 // estimate) and the on-course prompt tells the caddie to confirm that shot, then give the remaining, then
-// the play. Client field (pipecatContext, OTA) + server prompt (pipecat-turn, deploys on push).
+// the play. 2026-08-23 — RE-AIMED off services/pipecatContext + api/pipecat-turn (the second payload
+// builder and the second brain, both retired) onto the ONE builder and the ONE brain. The order
+// instruction was pipecat-only, so this guard was green while the live path had the number and not
+// the shape of the answer; it is now carried on kevin. [[grep-guards-cant-see-dead-code]]
 check('Caddie confirms the just-hit drive + remaining + play (live tee-to-player distance in context)',
   (() => {
-    const ctx = read('services/pipecatContext.ts');
-    const turn = read('api/pipecat-turn.ts');
+    const ctx = read('services/caddieRequestBody.ts');
+    const brain = read('api/kevin.ts');
     return (
       /distanceFromTeeYds:/.test(ctx) &&
       /haversineYards\(\{ lat: fix\.lat, lng: fix\.lng \}, \{ lat: tee\.teeLat, lng: tee\.teeLng \}\)/.test(ctx) &&
-      /round\.distanceFromTeeYds != null/.test(turn) &&
-      /CONFIRM that shot naturally first/.test(turn)
+      /distanceFromTeeYds === 'number'/.test(brain) &&
+      /CONFIRM that shot naturally first/.test(brain)
     );
   })(),
   'the caddie has the drive distance and confirms it → remaining → play, one flowing sentence');
@@ -1426,16 +1429,19 @@ check('Custom caddie inherits a chosen base persona voice (Kevin/Serena/Harry/Ta
   'the custom caddie ties to a real persona under the hood — inherits that persona\'s voice + gender (photo-matched voice still wins), selectable in the My Caddie setup, so it is never a voiceless name-only shell');
 
 check('Custom caddie inherits the base persona\'s BRAIN character (not hardcoded Kevin)',
-  // 2026-07-30 (Tim). lib/persona hardcodes custom → Kevin's character spec. Now the chosen base persona
-  // flows through buildPipecatContext → pipecat-turn, which builds the character spec from it (keeping the
-  // custom NAME). So a custom caddie tied to Tank actually TALKS like Tank.
+  // 2026-07-30 (Tim). lib/persona hardcodes custom → Kevin's character spec. The chosen base persona
+  // flows through the payload builder to the brain, which builds the character spec from it (keeping
+  // the custom NAME). So a custom caddie tied to Tank actually TALKS like Tank.
+  // 2026-08-23 — RE-AIMED onto the one builder + api/kevin. Verified against source rather than
+  // assumed: kevin resolves `personaInput = rawPersona === 'custom' ? customBase : rawPersona` and
+  // feeds THAT to getCharacterSpec, while caddieName keeps the custom name. Property intact.
   (() => {
-    const ctx = read('services/pipecatContext.ts');
-    const brain = read('api/pipecat-turn.ts');
+    const ctx = read('services/caddieRequestBody.ts');
+    const brain = read('api/kevin.ts');
     return (
-      /customCaddieBasePersona: profile\.customCaddieBasePersona/.test(ctx) &&
-      /const specPersona = caddie === 'custom' \? customBase : caddie/.test(brain) &&
-      /getCharacterSpec\(specPersona\)/.test(brain)
+      /customCaddieBasePersona: safe\(\) => p\.customCaddieBasePersona/.test(ctx.replace(/\(\(\) =>/g, '() =>')) &&
+      /const personaInput = rawPersona === 'custom' \? customBase : rawPersona/.test(brain) &&
+      /getCharacterSpec\(personaInput\)/.test(brain)
     );
   })(),
   'the custom caddie\'s brain personality is the CHOSEN base persona (Tank/Serena/Harry/Kevin), not always Kevin — name stays custom, character is inherited');
@@ -2494,11 +2500,20 @@ check('CNS re-audit fixes: course-less reflection (G1 bug) + real approach/troub
     // G5: voice path fetches the live block and MERGES it with the CNS block; the
     // reasoning-heavy diagnostic handler (was sending NO context) now sends it too.
     const diag = read('services/intents/inRoundDiagnosticHandler.ts');
-    const g5 = /import \{ getCaddieContext, mergeMemoryIntoContext \}/.test(voice) &&
+    /**
+     * 2026-08-23 — RE-AIMED. G5 asserted that the voice path and the diagnostic handler each CALL
+     * mergeMemoryIntoContext themselves. Both now reach the same merged block through the one
+     * payload builder (services/caddieRequestBody composes live + CNS in a single place), so the
+     * spelling changed while the property did not. Asserting the property: each path supplies the
+     * LIVE half, and the builder merges it with the CNS half.
+     */
+    const builder = read('services/caddieRequestBody.ts');
+    const g5 = /mergeMemoryIntoContext\(/.test(builder) &&
+      /getCaddieContext\(/.test(builder) &&
       /getUnifiedVisionContext\(\)\)\.promptBlock/.test(voice) &&
       /unified_context_block: mergeMemoryIntoContext\(\s*\n\s*liveBlock,/.test(voice) &&
-      /unified_context_block = retr\.mergeMemoryIntoContext\(/.test(diag) &&
-      /unified_context_block,/.test(diag); // added to the diagnostic payload
+      /getUnifiedVisionContext\(\)\)\.promptBlock/.test(diag) &&
+      /liveBlock: live,/.test(diag);
     return g1 && g3 && g5;
   })(),
   'reflection learns course-less rounds; course memory gets real approach/trouble; voice brain sends merged live+CNS context');
@@ -4498,7 +4513,10 @@ check('Round data-loss + GPS-resume + per-pillar persona (audit)',
       // #2 — a resumed real round restarts the GPS watch at boot (not tied to autoShotDetection).
       /resumed active round — restarted GPS watch/.test(layout) &&
       // C1 — the brain uses the ACTIVE (per-pillar) caddie, not the raw global.
-      /caddiePersonality: getActiveCaddie\(\)/.test(read('services/pipecatContext.ts')) &&
+      // 2026-08-23 — RE-AIMED: the per-pillar resolution moved from the retired pipecat context to
+      // the ONE payload builder, where `persona` is getActiveCaddie() and the intensity dial is
+      // resolved for that same caddie through brainSettings.
+      /getActiveCaddie\(\);?\n?\s*\}, safe/.test(read('services/caddieRequestBody.ts')) &&
       // C2 — the live round's shots are excluded from the golfer model when it's a sim round.
       /round\.isSimRound \? \[\] : round\.shots/.test(read('services/golferModel.ts'))
     );
@@ -8108,14 +8126,29 @@ console.log('\n=== Beta-wrap deep-audit LOCK ===');
     'H3: a conversational course MENTION (medium confidence) offers instead of yanking the user to the Play tab');
 
   // VOICE follow-up audit (2026-07-30 final pass)
-  check('Custom caddie base persona carried on ALL kevin fallback/follow-up sites (voice #1)',
-    /customCaddieBasePersona/.test(read('services/conversationalBrain.ts')) &&
+  /**
+   * 2026-08-23 — RE-AIMED, and the reason it needed re-aiming is the fix itself.
+   *
+   * This asserted that THREE separate files each remember to send the custom caddie's base persona,
+   * which is a guard shaped like the bug: it verifies that every hand-built payload got patched,
+   * and it can only ever verify the ones it happens to name. The three payloads it named are gone;
+   * every surface now sends the union from ONE builder, which reads the field itself.
+   *
+   * So the property is asserted where it can no longer be forgotten — in the builder — plus the two
+   * surfaces that still merge their own literal over the union.
+   */
+  check('Custom caddie base persona reaches the brain from every surface (voice #1)',
+    /customCaddieBasePersona: safe/.test(read('services/caddieRequestBody.ts')) &&
+      /customCaddieName: safe/.test(read('services/caddieRequestBody.ts')) &&
       /customCaddieBasePersona/.test(read('hooks/useVoiceCaddie.ts')) &&
-      /customCaddieFields/.test(listenSrc),
-    'voice#1: conversationalBrain (pipecat-down fallback), useVoiceCaddie (follow-up loop) + listeningSession (speculative/diagnostic/small-talk) all send the custom base persona — no revert to Kevin/onyx off the primary path');
-  check('pipecat tool-only turn is never a silent dead turn (voice #2)',
-    /Array\.isArray\(data\.tool_actions\)[\s\S]{0,40}text = 'Done\.'/.test(read('hooks/usePipecatVoice.ts')),
-    'voice#2: an empty-response_text 200 with tool actions acknowledges instead of going silent on the primary mic surface');
+      /buildCaddieRequestBody/.test(listenSrc),
+    'voice#1: the one payload builder resolves the custom caddie base persona + name for EVERY surface, so no path can revert to Kevin/onyx');
+  // 2026-08-23 — RE-AIMED onto services/caddieBrain, where the acknowledgement now lives for EVERY
+  // surface rather than being re-implemented per mic (it was duplicated in three places, and the
+  // earbud copy is how the drop was found in the first place).
+  check('a tool-only turn is never a silent dead turn (voice #2)',
+    /if \(!text && toolActions\.length\) text = 'Done\.'/.test(read('services/caddieBrain.ts')),
+    'voice#2: a turn that produced actions but no words acknowledges instead of going silent, on every mic');
   check('watch/typed path gates disruptive-open on HIGH confidence (voice #3)',
     (listenSrc.match(/DISRUPTIVE_OPEN_INTENTS/g) ?? []).length >= 2,
     'voice#3: handleTranscribedUtterance offers instead of yanking a tool open on a medium-confidence watch-STT misread (mirrors the mic + earbud gates)');
@@ -9926,20 +9959,29 @@ check('LOCK: an app-inferred club is attribution, never "advice the player follo
 check('LOCK: per-club tendencies are DERIVED, sent, and actually read by the brain',
   (() => {
     const ct = read('services/clubTendency.ts');
-    const ctx = read('services/pipecatContext.ts');
-    const turn = read('api/pipecat-turn.ts');
+    /**
+     * 2026-08-23 — RE-AIMED, and this one was proving the chain on a path nobody walks.
+     *
+     * The "consumed" half asserted against api/pipecat-turn.ts. That brain no longer answers a
+     * single turn — every surface posts to api/kevin now — so the guard was green while saying
+     * nothing about whether the caddie the player talks to has ever seen a club tendency.
+     * [[grep-guards-cant-see-dead-code]]: a string-presence check passes on unreachable code.
+     */
+    const ctx = read('services/caddieRequestBody.ts');
+    const brain = read('api/kevin.ts');
     // Producer: per-club, not bag-wide. patternDetection pools miss across every club, which is why
     // no individual club ever had a character.
     const derives = /export function clubTendencies/.test(ct) &&
       /export const MIN_SHAPE_SHOTS/.test(ct) && /export const DOMINANT_SHARE/.test(ct);
     // Club identity must go through the normalizer or one club splits into several rows.
     const normalized = /normalize\(s\?\.club \?\? null\)/.test(ct) && /cn\.normalizeClub/.test(ctx);
-    // Sent on the context...
-    const sent = /tendencies: \(\(\) => \{/.test(ctx) && /describeBagTendencies/.test(ctx);
-    // ...and READ on the server. A producer with no consumer is the exact shape the learning-layer
-    // audit found in the Learning Golfer Model: a perfect chain nobody's turn reached.
-    const consumed = /const tendencies = Array\.isArray\(bag\.tendencies\)/.test(turn) &&
-      /\$\{tendencyLine\}/.test(turn);
+    // Sent on the ONE payload every surface builds...
+    const sent = /club_tendencies: safe/.test(ctx) && /describeBagTendencies/.test(ctx);
+    // ...and READ by the brain that actually answers. A producer with no consumer is the exact
+    // shape the learning-layer audit found in the Learning Golfer Model: a perfect chain nobody's
+    // turn reached.
+    const consumed = /club_tendencies = \[\],/.test(brain) &&
+      /How his clubs actually behave/.test(brain);
     // The SCREEN must read the same pure module as the brain. Two derivations of "what this club
     // does" would eventually disagree, and the player would be shown one thing while the caddie
     // reasoned from another — the exact drift this codebase keeps paying for.
@@ -10368,8 +10410,20 @@ check('MIGRATION (temporary): kevin has every behaviour pipecat has, ahead of th
     //    the caddie opening SwingLab while he describes a fault — and the fix had only ever landed
     //    on the default brain, so the same interview behaved differently on a follow-up turn.
     const interviewMute = /GET-TO-KNOW INTERVIEW MODE/.test(kevin) && /GET-TO-KNOW INTERVIEW MODE/.test(pipe);
-    // 3. And the client actually SENDS it — a server field nothing sets looks exactly like the bug.
-    const clientSends = /sim_round: round\.isSimRound/.test(read('services/conversationalBrain.ts'))
+    /**
+     * 3. And the client actually SENDS it — a server field nothing sets looks exactly like the bug.
+     *
+     * 2026-08-23 — RE-AIMED off services/conversationalBrain, which no longer hand-lists any field:
+     * it (and every other surface) now sends the union from services/caddieRequestBody. Asserting
+     * the builder is strictly stronger than asserting one caller, because it covers all of them.
+     *
+     * WHY THIS GUARD IS STILL HERE, given its own instruction to delete it when the shim lands: no
+     * CLIENT reaches api/pipecat-turn any more, but the ROUTE is still deployed and still answers
+     * builds in the field that have not taken the OTA. Until that route is deleted, the two
+     * implementations can still drift underneath those players, so the parity it protects is real.
+     * Delete this the moment api/pipecat-turn.ts goes.
+     */
+    const clientSends = /sim_round: safe\(\(\) => !!r\.isSimRound/.test(read('services/caddieRequestBody.ts'))
       && /sim_round: useRoundStore\.getState\(\)\.isSimRound/.test(read('hooks/useVoiceCaddie.ts'));
     return simRound && interviewMute && clientSends;
   })(),
@@ -10410,7 +10464,13 @@ check('LOCK: the intelligence loop CLOSES — the caddie learns whether its own 
     const dispatch = read('services/voice/conversationalToolDispatch.ts');
     const tracking = read('services/shotTracking.ts');
     const learn = read('services/adviceOutcome.ts');
-    const ctx = read('services/pipecatContext.ts');
+    /**
+     * 2026-08-23 — this read services/pipecatContext.ts into `ctx` AND NEVER USED IT. A dead read
+     * inside a guard: it cost nothing to keep, proved nothing, and made the chain look one hop
+     * longer than it was actually asserting. Replaced with the assertion it should have been — that
+     * the ONE payload builder every surface uses actually carries the block.
+     */
+    const builder = read('services/caddieRequestBody.ts');
     const brain = read('api/pipecat-turn.ts');
     /**
      * 2026-08-21. THE defect this whole codebase existed to avoid, found by tracing the loop end to
@@ -10452,8 +10512,12 @@ check('LOCK: the intelligence loop CLOSES — the caddie learns whether its own 
     const pipecatRenders = /const memoryRaw = context\.memory;/.test(brain)
       && /const memoryBlock =/.test(brain)
       && /systemBase\}`? ?: ?systemBase\) \+ memoryBlock|\+ memoryBlock/.test(brain);
+    // The client half of hop 5: the block has to be BUILT into the request before any prompt can
+    // render it. One builder, so this cannot be true on one surface and false on another.
+    const builderCarries = /unified_context_block,/.test(builder)
+      && /mergeMemoryIntoContext\(/.test(builder);
     const reachesBothBrains = kevinRenders && pipecatRenders;
-    return recorded && paired && judgesDecisionNotResult && feedsContext && reachesBothBrains;
+    return recorded && paired && judgesDecisionNotResult && feedsContext && builderCarries && reachesBothBrains;
   })(),
   'a club the caddie called is recorded, paired with what was played, judged ONLY on clean strikes, turned into a calibration finding, and delivered into the next prompt — the full loop, asserted as a chain rather than as parts');
 

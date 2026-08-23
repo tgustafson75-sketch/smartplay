@@ -72,15 +72,105 @@ describe('it reaches the brain through the ONE shared block', () => {
     expect(retrieval).not.toMatch(/smartFinderStore/);
   });
 
-  it('every brain path already reads this block, so no route needs plumbing again', () => {
+  /**
+   * 2026-08-23 — RE-AIMED. This asserted that each brain path calls `getCaddieContext(` itself,
+   * which pinned the SPELLING of a call rather than the property that matters. When the five
+   * hand-built payloads were collapsed onto services/caddieRequestBody, the paths stopped calling
+   * it directly — because the ONE builder now does, once — and this guard went red on the fix.
+   *
+   * That is the failure mode the 08-22 handoff called out: five separate times a guard asserted the
+   * exact behaviour that had to change. The property is "every brain path reaches the block", and a
+   * path satisfies it either by composing the block itself or by going through the builder that
+   * does. Written that way it still fails for the thing it was built to catch — a NEW brain path
+   * that reaches neither.
+   */
+  it('every brain path reaches this block — directly, or through the one payload builder', () => {
+    const builder = read('services/caddieRequestBody.ts');
+    expect(builder).toMatch(/getCaddieContext\(/);
+    expect(builder).toMatch(/mergeMemoryIntoContext\(/);
+
     for (const f of [
       'hooks/useVoiceCaddie.ts',
       'hooks/useKevin.ts',
-      'services/pipecatContext.ts',
       'services/conversationalBrain.ts',
       'services/intents/inRoundDiagnosticHandler.ts',
+      'hooks/usePipecatVoice.ts',
     ]) {
-      expect(read(f)).toMatch(/getCaddieContext\(/);
+      const src = read(f);
+      const composesItself = /getCaddieContext\(/.test(src);
+      const usesTheBuilder = /buildCaddieRequestBody\(|askCaddie\(/.test(src);
+      expect(composesItself || usesTheBuilder).toBe(true);
     }
+  });
+
+  /**
+   * THE SHAPE, NOT A FILE LIST.
+   *
+   * 2026-08-23 — the split Tim kept hearing ("I can feel it going back and forth… it's generic, and
+   * then the tone of the voice changes a little bit") was never a flaky model. It was TEN
+   * hand-assembled payloads to one brain, each one a different subset of what the app knows, so
+   * which caddie he got depended on which surface he asked from. The two hands-free ones — the
+   * earbud and the caddie tab — were among the thinnest, and the app's OPENING LINE was the
+   * thinnest of all.
+   *
+   * A file allowlist would not have caught any of them; every one of those files was already
+   * "known". So this guards the SHAPE: if a file POSTs a JSON body to /api/kevin, that body must be
+   * assembled by the ONE builder. It goes red for a new payload written in a file that already
+   * exists — which is exactly how all ten got there. [[no-half-fixes-enforce-every-surface]]
+   */
+  it('every payload to the brain is assembled by the ONE builder', () => {
+    const walk = (dir: string): string[] => fs.readdirSync(path.resolve(__dirname, '../../', dir), { withFileTypes: true })
+      .flatMap((e) => e.isDirectory()
+        ? (e.name === 'node_modules' ? [] : walk(`${dir}/${e.name}`))
+        : /\.tsx?$/.test(e.name) ? [`${dir}/${e.name}`] : []);
+
+    /**
+     * ONE reasoned exception, stated rather than hidden. services/sceneReadService sends a 60-second
+     * MULTIMODAL read: an image plus a large system prompt. Its own comment explains that injecting
+     * only the current hole "halves the effective prompt size", which is a deliberate trade for that
+     * request shape, not an oversight — and unlike the presence path it reads the reply correctly
+     * and genuinely works today. If a second exception ever wants to be added, that is the moment to
+     * ask whether the rule or the code is wrong.
+     */
+    const REASONED_EXCEPTIONS = ['services/sceneReadService.ts'];
+
+    /** The span of a `fetch(...)` call: from the paren to its match, so a 200-line body is inside it. */
+    const fetchCall = (src: string, from: number): string => {
+      let depth = 0;
+      for (let i = from; i < src.length; i++) {
+        if (src[i] === '(') depth++;
+        else if (src[i] === ')') { depth--; if (depth === 0) return src.slice(from, i + 1); }
+      }
+      return src.slice(from, from + 4000);
+    };
+
+    const offenders: string[] = [];
+    for (const f of ['services', 'hooks', 'app', 'components'].flatMap(walk)) {
+      if (REASONED_EXCEPTIONS.includes(f)) continue;
+      const src = read(f);
+
+      /**
+       * Look at the actual CALL SITE, not the file. A file that mentions /api/kevin in a comment
+       * while JSON.stringify-ing a body for some other endpoint is not a brain payload — matching
+       * at file granularity flagged six innocent files on the first run.
+       */
+      for (const m of src.matchAll(/fetch\(/g)) {
+        const at = m.index ?? 0;
+        const call = fetchCall(src, at + 'fetch'.length);
+        // `/api/kevin-read` is a different endpoint with its own contract — require a boundary.
+        if (!/\/api\/kevin(?![\w-])/.test(call)) continue;
+        if (!/JSON\.stringify/.test(call)) continue;
+        // A literal {message:'__ping__'} probe proves the Lambda is awake; it is not a turn.
+        if (/__ping__/.test(call)) continue;
+        // Owner-only debug screens exist to fire deliberately hand-shaped bodies at the API.
+        if (/^app\/(api-debug|ghost-debug)\.tsx$/.test(f)) continue;
+        // The body may be built into a variable just above the fetch rather than inline, so look
+        // back as well as in. Bounded, so it cannot borrow proof from an unrelated call far above.
+        const context = src.slice(Math.max(0, at - 1200), at) + call;
+        if (/buildCaddieRequestBody|askCaddie/.test(context)) continue;
+        offenders.push(`${f} :: ${call.slice(0, 60).replace(/\s+/g, ' ')}`);
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });

@@ -26,7 +26,6 @@ const FACTS = [
 describe('both brain routes carry the same facts', () => {
   const kevin = R('api/kevin.ts');
   const shim = R('api/_brainShim.ts');
-  const ctx = R('services/pipecatContext.ts');
   const body = R('services/caddieRequestBody.ts');
 
   it.each(FACTS)('kevin destructures %s', (f) => {
@@ -37,9 +36,16 @@ describe('both brain routes carry the same facts', () => {
     expect(body).toMatch(new RegExp(`\\b${f}\\b`));
   });
 
-  it.each(FACTS)('the pipecat context builds %s', (f) => {
-    expect(ctx).toMatch(new RegExp(`\\b${f}\\b`));
-  });
+  /**
+   * 2026-08-23 — the "pipecat context builds it" case is gone, because services/pipecatContext.ts
+   * is gone. That file WAS the second route: a second client payload builder feeding a second brain,
+   * and the reason this test needed a per-route case at all.
+   *
+   * The property it protected is now enforced by construction rather than by assertion — there is
+   * one builder, so a fact cannot reach one route and miss another. What replaces it is the check
+   * below that no NEW hand-built payload appears (see live-trouble-reaches-the-caddie.test.ts),
+   * which is the only way the split could come back.
+   */
 
   it.each(FACTS)('the shim forwards %s to kevin', (f) => {
     expect(shim).toMatch(new RegExp(`\\b${f}\\s*:`));

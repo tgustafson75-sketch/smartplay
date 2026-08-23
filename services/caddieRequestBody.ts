@@ -48,9 +48,28 @@ export interface CaddieRequestExtras {
   image_caption?: string | null;
   responseMode?: string | null;
   pendingLieAnalysis?: unknown;
+  /**
+   * Appended to the END of the composed context block. For a caller that needs the brain to reason
+   * in a specific ORDER (the in-round diagnostic threads its evidence-order doctrine this way) —
+   * a directive, not data, so it must land after the facts rather than among them.
+   */
+  contextSuffix?: string | null;
   /** Overrides for anything a caller has already computed and does not want recomputed. */
   overrides?: Record<string, unknown>;
 }
+
+/** The subset of a logged shot the brain prompt reads. Local so this file stays store-agnostic. */
+type ShotRow = {
+  hole: number;
+  shot_in_hole_index?: number;
+  club?: string | null;
+  shape?: string | null;
+  direction?: string | null;
+  outcome?: string | null;
+  outcome_text?: string | null;
+  swing_feel?: string | null;
+  distance_yards?: number | null;
+};
 
 const safe = <T,>(fn: () => T, fallback: T): T => {
   try {
@@ -74,10 +93,18 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
   const rel = safe(() => relationshipStore(), {} as ReturnType<typeof relationshipStore>);
   const st = safe(() => settingsStore(), {} as ReturnType<typeof settingsStore>);
 
+  const isRoundActive = safe(() => !!r.isRoundActive, false);
+  /**
+   * NOT gated on isRoundActive, deliberately (checked 2026-08-23). Three of the hand-built payloads
+   * wrote `round.isRoundActive ? round.currentHole : null` and three did not, so it looked like a
+   * split worth closing — but both endRound() and discardRound() reset currentHole to 1 alongside
+   * the flag, so there is no stale hole to guard against, and `isRoundActive` is sent right beside
+   * it either way. Gating here only breaks the stroke count for any caller that sets up a hole
+   * without the flag. Left as the store reports it. [[run-the-second-pass-yourself]]
+   */
   const currentHole = safe(() => r.currentHole ?? null, null);
   const activeCourseId = safe(() => r.activeCourseId ?? null, null);
   const club = safe(() => r.club ?? null, null);
-  const isRoundActive = safe(() => !!r.isRoundActive, false);
 
   /**
    * The learned-memory slice merged with the caller's live block. This is also where the measured
@@ -87,10 +114,13 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
   const unified_context_block = safe(() => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const m = require('./caddieMemoryRetrieval') as typeof import('./caddieMemoryRetrieval');
-    return m.mergeMemoryIntoContext(
+    const merged = m.mergeMemoryIntoContext(
       extras.liveBlock ?? null,
       m.getCaddieContext({ courseId: activeCourseId, hole: currentHole, club }).promptBlock,
     );
+    const suffix = extras.contextSuffix?.trim();
+    if (!suffix) return merged;
+    return merged ? `${merged}\n\n${suffix}` : suffix;
   }, extras.liveBlock ?? null);
 
   const patternInsights = safe(() => {
@@ -119,6 +149,16 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     ghinNumber: safe(() => p.ghin_number ?? null, null),
     dominantMiss: safe(() => p.dominantMiss ?? null, null),
     physicalLimitation: safe(() => p.physicalLimitation ?? null, null),
+    /**
+     * 2026-08-23 — WHERE THEY ARE IN THEIR GOLF (starting / improving / returning / competitive).
+     *
+     * One payload sent this and the brain destructured nothing by that name, so it was sent and
+     * ignored — while services/coachingAdaptation uses the same field to decide whether an
+     * explanation should be simple or advanced. A player just starting and a competitive player
+     * were getting the same answer at the same depth. That is a generic, and it is fixable with a
+     * field the app already collects.
+     */
+    experienceContext: safe(() => p.experienceContext ?? null, null),
     goal: safe(() => p.goal ?? null, null),
     personalBest: safe(() => p.personalBest ?? null, null),
     kevinContext: safe(() => p.kevinContext ?? null, null),
@@ -137,12 +177,48 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     isSpiralRisk: safe(() => (typeof rel.isSpiralRisk === 'function' ? rel.isSpiralRisk() : false), false),
 
     // ─── the caddie's own voice (the mic never sent ANY of this) ────────────
-    persona: safe(() => st.caddiePersonality ?? null, null),
-    personaIntensity: safe(() => st.personaIntensity ?? null, null),
-    // Not on settingsStore — the text box resolves these from the custom-caddie profile, so they
-    // arrive as overrides. The KEY is always present either way, which is the parity that matters.
-    customCaddieName: null,
-    customCaddieBasePersona: null,
+    /**
+     * 2026-08-23 — the ACTIVE per-pillar caddie, not the raw global setting.
+     *
+     * A player can set the Round pillar to Serena while the global pick is Kevin. Sending the global
+     * made the brain speak and sound as Kevin while the whole app attributed it to Serena — the same
+     * per-pillar bleed that was fixed on the two hand-built payloads in August and never fixed here,
+     * because this builder read the store field directly.
+     */
+    persona: safe(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getActiveCaddie } = require('./caddieResolver') as typeof import('./caddieResolver');
+      return getActiveCaddie();
+    }, safe(() => st.caddiePersonality ?? null, null)),
+    /**
+     * 2026-08-23 — RESOLVED to the active persona's 0-100 number.
+     *
+     * `settingsStore.personaIntensity` is a MAP ({ kevin: 100, tank: 70 }). kevin.ts destructures
+     * `personaIntensity = 100` and scales cadence off it as a NUMBER, so shipping the map put an
+     * object where a number belongs — every comparison against it is false and the dial silently
+     * does nothing. The two hand-built payloads each resolved it inline; this builder inherited
+     * neither. brainSettings() is the tested owner of that resolution, so it does it here too
+     * rather than a third copy of the lookup.
+     */
+    ...safe(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { brainSettings } = require('./voice/brainSettings') as typeof import('./voice/brainSettings');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getActiveCaddie } = require('./caddieResolver') as typeof import('./caddieResolver');
+      const bs = brainSettings({ ...st, caddiePersonality: getActiveCaddie() });
+      return { personaIntensity: bs.personaIntensity, continuousConversationMode: bs.continuousConversationMode };
+    }, { personaIntensity: 100, continuousConversationMode: false }),
+    /**
+     * 2026-08-23 — READ HERE, not left for a caller to override.
+     *
+     * These were `null` with a note that the text box supplies them as overrides. That was true of
+     * the two callers that existed at the time and false the moment a third arrived: the hands-free
+     * paths pass no overrides, so a player with a custom caddie would have had it answer under
+     * Kevin's name in Kevin's voice on the earbud — the exact revert this pair was added to stop.
+     * A field only one caller remembers to fill is the bug this file exists to make impossible.
+     */
+    customCaddieName: safe(() => p.customCaddieName ?? null, null),
+    customCaddieBasePersona: safe(() => p.customCaddieBasePersona ?? 'kevin', 'kevin'),
     cecilyMode: safe(() => st.cecilyMode ?? false, false),
     tankSoftIntro: safe(() => st.tankSoftIntro ?? false, false),
 
@@ -218,7 +294,13 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       const intel = require('./courseIntelligenceService') as typeof import('./courseIntelligenceService');
       return intel.getCachedCourseIntelligenceSync(activeCourseId);
     }, null),
-    holeNotes: null,
+    /**
+     * 2026-08-23 — read here rather than left to the caller. Every hand-built payload remembered
+     * `round.holeNotes` and this builder shipped null, so the two paths that relied on it (and had
+     * no literal of their own to fall back on) lost the player's own notes on the hole they were
+     * standing on.
+     */
+    holeNotes: safe(() => r.holeNotes ?? {}, {}),
     yardageInsight: safe(() => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { buildYardageInsight } = require('./yardageResolver') as typeof import('./yardageResolver');
@@ -311,8 +393,206 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       };
     }, null),
 
+    /**
+     * ─── THE PIPECAT HALF (2026-08-23) ──────────────────────────────────────
+     *
+     * Tim, mid-sprint: "we need a single source of truth, a single path, a total present caddie…
+     * getting all the generics out."
+     *
+     * The 08-22 unification joined the mic (useVoiceCaddie) and the text box (useKevin). It did NOT
+     * join the other two: the caddie-tab voice hook (usePipecatVoice) and the earbud/watch path
+     * (listeningSession → conversationalBrain) both built a SECOND payload — services/pipecatContext
+     * — and posted it to a SECOND brain. So the split he could hear was still live on the two
+     * surfaces he actually uses hands-free.
+     *
+     * Everything below is a field one of those four paths sent and the others did not. Emitting the
+     * union HERE is what makes the four paths one path: whichever way he asks, the caddie knows the
+     * same things.
+     */
+    // ── shot context (useVoiceCaddie sent these; useKevin never did) ────────
+    holeShots: safe(() => {
+      const all = r.shots ?? [];
+      if (currentHole == null) return [];
+      return all
+        .filter((s: { hole: number }) => s.hole === currentHole)
+        .map((s: ShotRow) => ({
+          hole: s.hole,
+          shotIndex: s.shot_in_hole_index ?? null,
+          direction: s.direction ?? null,
+          outcome: s.outcome ?? null,
+          outcomeText: s.outcome_text ?? null,
+          feel: s.swing_feel ?? null,
+        }));
+    }, []),
+    recentShots: safe(() => (r.shots ?? []).slice(-5).map((s: ShotRow) => ({
+      hole: s.hole,
+      shotIndex: s.shot_in_hole_index ?? null,
+      club: s.club ?? null,
+      shape: s.shape ?? null,
+      direction: s.direction ?? null,
+      outcome: s.outcome ?? null,
+      outcomeText: s.outcome_text ?? null,
+      feel: s.swing_feel ?? null,
+      distance_yards: s.distance_yards ?? null,
+    })), []),
+    /** Subjective self-reports, so the caddie reads the room instead of only the scorecard. */
+    emotionalLog: safe(() => (r.emotionalLog ?? []).slice(-5).map(
+      (e: { state: string; valence?: string; hole?: number }) => ({ state: e.state, valence: e.valence, hole: e.hole }),
+    ), []),
+    /** The player's REAL bag numbers — club answers grounded in what they actually carry. */
+    clubDistances: safe(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { bagDistances } = require('./shotStrategy') as typeof import('./shotStrategy');
+      return bagDistances();
+    }, {}),
+    /** Per-club character (shape + miss + carry), evidence-barred by clubTendency itself. */
+    club_tendencies: safe(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const ct = require('./clubTendency') as typeof import('./clubTendency');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const cn = require('./clubNormalize') as typeof import('./clubNormalize');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const cs = require('../store/clubStatsStore').useClubStatsStore.getState();
+      const history = (r.roundHistory ?? []).flatMap((h: { shots?: unknown[] }) => h.shots ?? []);
+      const all = [...history, ...(r.shots ?? [])].slice(-300);
+      const carryFor = (c: string) => {
+        try { return cs.hasDistance(c) ? cs.carryFor(c) : null; } catch { return null; }
+      };
+      return ct.describeBagTendencies(ct.clubTendencies(all as never, carryFor, cn.normalizeClub));
+    }, []),
+    /** Phrases this player actually uses — the difference between his caddie and a generic one. */
+    playerVocabulary: safe(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const v = require('../store/vocabularyProfileStore').useVocabularyProfileStore.getState();
+      const top = v.getTopPhrases?.(20);
+      return Array.isArray(top) && top.length > 0 ? top : null;
+    }, null),
+    recentCageInsights: safe(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      return (require('../store/cageStore').useCageStore.getState().recentInsights ?? []).slice(-3);
+    }, []),
+    recentRoundInsights: safe(() => (r.recentInsights ?? []).slice(-3), []),
+
+    // ── who is speaking, and in what role ───────────────────────────────────
+    /** Legacy voice fallback kevin still reads when `persona` is absent. */
+    voiceGender: safe(() => st.voiceGender ?? 'male', 'male'),
+    /**
+     * Which ROLE the caddie is in — on-course tactical (caddie), swing review (coach), or
+     * between-shots/recap (psychologist). useKevin derived this and no other path did, so the same
+     * question asked by voice in the cage got the on-course voice.
+     */
+    register: safe(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getActiveSurface } = require('./activeSurfaceRegistry') as { getActiveSurface: () => string };
+      const s = getActiveSurface();
+      if (s === 'cage' || s === 'swing_library' || s === 'swing_detail') return 'coach';
+      if (s === 'arena' || s === 'recap') return 'psychologist';
+      return 'caddie';
+    }, 'caddie'),
+    /** The screen/drill he is looking at right now, so a question asked inside a drill is about it. */
+    screen_context: safe(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { screenContextForPrompt } = require('./screenContext') as typeof import('./screenContext');
+      return screenContextForPrompt();
+    }, null),
+    /**
+     * ONE conversation, whichever mic. Every path already writes to services/voice/pipecatHistory;
+     * only the pipecat paths ever READ it back into a request, so a turn taken on the earbud was
+     * invisible to the next turn typed — the caddie forgot mid-conversation when he changed surface.
+     */
+    conversationTurns: safe(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getPipecatHistory } = require('./voice/pipecatHistory') as typeof import('./voice/pipecatHistory');
+      return (getPipecatHistory() ?? []).slice(-12).map(
+        (m: { role: string; content: string }) => ({ role: m.role === 'assistant' ? 'kevin' : 'user', text: m.content }),
+      );
+    }, []),
+
+    // ── the facts that reached NO brain at all ──────────────────────────────
+    /**
+     * 2026-08-23 — HANDEDNESS. Every directional word the caddie says — aim left, miss right, favour
+     * the left edge, the bunker is short right — is INVERTED for a left-handed player. It is set in
+     * Settings, threaded through the whole swing-analysis stack since June, and reached NO brain:
+     * zero references in api/kevin.ts, and on the pipecat path only as a string smuggled inside
+     * screen_context by a shim that is OFF by default. So a lefty has been getting advice that is
+     * precisely wrong, which is worse than advice that is vague.
+     */
+    handedness: safe(() => p.handedness ?? 'right', 'right'),
+    /** WHICH WAY it goes wrong (slice/hook/pull), not merely which side. */
+    missType: safe(() => p.missType ?? null, null),
+    /** How much the player has earned the caddie's directness. */
+    trustLevel: safe(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      return require('../store/trustLevelStore').useTrustLevelStore.getState().level ?? null;
+    }, null),
+    /**
+     * A green read the player SAVED on a PRIOR visit to this hole — honest recall of a real read,
+     * never a same-round replay dressed up as memory.
+     */
+    priorGreenRead: safe(() => {
+      if (!isRoundActive || currentHole == null) return null;
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const store = require('../store/greenReadStore').useGreenReadStore.getState();
+      type GR = { at: number; feetEst: number | null; slopePct: number | null; text: string } | null;
+      const startMs = r.roundStartTime ?? 0;
+      const isPriorRound = (g: GR) => !!g && !(startMs > 0 && g.at >= startMs);
+      const direct = store.lastForHole(activeCourseId, currentHole) as GR;
+      const twin = r.twiceAround === true && currentHole >= 10
+        ? (store.lastForHole(activeCourseId, currentHole - 9) as GR)
+        : null;
+      const gr = isPriorRound(direct) ? direct : twin;
+      if (!gr || (gr.feetEst == null && gr.slopePct == null && !gr.text)) return null;
+      return { feet: gr.feetEst ?? null, slopePct: gr.slopePct ?? null, note: gr.text || null };
+    }, null),
+    /** 0 = first time here → frame it as a baseline, never "your best score yet". */
+    priorRoundsAtCourse: safe(() => {
+      if (!activeCourseId) return 0;
+      return (r.roundHistory ?? []).filter(
+        (h: { courseId?: string; simulated?: boolean }) => h.courseId === activeCourseId && !h.simulated,
+      ).length;
+    }, 0),
+    /** Say "I'm reacquiring GPS" rather than asking the golfer for the number — the backwards ask. */
+    gpsLost: safe(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getGreenYardagesSync } = require('./smartFinderService') as typeof import('./smartFinderService');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getLastFix } = require('./gpsManager') as typeof import('./gpsManager');
+      return getGreenYardagesSync(currentHole).middle == null && getLastFix() == null;
+    }, false),
+    /** How far he just hit it — so the caddie can confirm the drive before it is even logged. */
+    distanceFromTeeYds: safe(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getLastFix } = require('./gpsManager') as typeof import('./gpsManager');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { haversineYards } = require('../utils/geoDistance') as typeof import('../utils/geoDistance');
+      const fix = getLastFix();
+      const tee = (r.courseHoles ?? []).find((x: { hole: number }) => x.hole === currentHole) as
+        { teeLat?: number; teeLng?: number } | undefined;
+      if (!fix || fix.lat == null || fix.lng == null || !tee?.teeLat || !tee?.teeLng) return null;
+      const d = haversineYards({ lat: fix.lat, lng: fix.lng }, { lat: tee.teeLat, lng: tee.teeLng });
+      return d >= 20 && d <= 700 ? Math.round(d) : null;
+    }, null),
+    /** Front / middle / back to the green, the three numbers a caddie is actually asked for. */
+    greenYardages: safe(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getGreenYardagesSync } = require('./smartFinderService') as typeof import('./smartFinderService');
+      const y = getGreenYardagesSync(currentHole);
+      return y.middle != null ? { front: y.front ?? null, middle: y.middle, back: y.back ?? null } : null;
+    }, null),
+
     // ─── the merged brain context ───────────────────────────────────────────
     unified_context_block,
+
+    /**
+     * 2026-08-23 — a PROACTIVE turn: the caddie is speaking first, the player did not ask. The
+     * opener path passes this as an override, and an override can only REPLACE a key this builder
+     * already emits — so without the key here it would have been silently dropped and the caddie's
+     * first words would have been generated as if the player had said that directive out loud.
+     * Exactly the half-fix shape this file exists to make impossible.
+     */
+    is_proactive: false,
+    /** Coach's in-round diagnostic mode — a longer, multi-shot read. Caller-selected. */
+    inRoundDiagnostic: false,
 
     // ─── caller-only ────────────────────────────────────────────────────────
     smartVisionContext: extras.smartVisionContext ?? null,

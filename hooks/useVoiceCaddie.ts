@@ -988,6 +988,14 @@ export const useVoiceCaddie = ({
       const pl = require('../services/plainSpeak') as typeof import('../services/plainSpeak');
       if (pl.detectPlainSpeakRequest(message)) message = pl.buildPlainSpeakPrefix() + message;
     } catch { /* non-fatal */ }
+
+    /**
+     * Declared out here, not inside the try, so the RETRY below can send the same context the first
+     * attempt did. Scoped inside, it was invisible to the retry — which is half of why the retry
+     * ended up hand-building a thinner body of its own.
+     */
+    let liveBlock: string | null = null;
+
     try {
       const topObs = getTopObservations();
       // 2026-05-17 — record the use AFTER we read, so the bump
@@ -1094,7 +1102,6 @@ export const useVoiceCaddie = ({
       // the LIVE context block (GPS/geometry/hazards/recent shots) the chat path sends
       // was missing. Fetch it and MERGE (same as hooks/useKevin) so the in-round voice
       // brain sees everything. Best-effort; null on failure → unchanged behavior.
-      let liveBlock: string | null = null;
       try {
         const uv = await import('../services/unifiedVisionContext');
         liveBlock = (await uv.getUnifiedVisionContext()).promptBlock;
@@ -1385,9 +1392,22 @@ export const useVoiceCaddie = ({
       // 2026-06-10 — FAIL-SAFE retry. The big context-building block above can
       // throw (a malformed store entry, a service hiccup) and that would wall
       // the caddie with "Hit a snag" even though the brain endpoint is healthy.
-      // Retry ONCE with a MINIMAL body that can't throw — just the message +
-      // identity. The endpoint answers fine without the extra context. This is
-      // why the caddie now works on the FIRST ask instead of needing retries.
+      /**
+       * Retry ONCE.
+       *
+       * 2026-08-23 — this used to retry with a deliberately MINIMAL body: message, name, handicap
+       * and persona. Seven fields. Its comment gave the reason — "a MINIMAL body that can't throw" —
+       * and that reason is no longer true. services/caddieRequestBody wraps every single store read
+       * in its own guard precisely so a brain turn can never die over a missing optional; there is
+       * nothing left in the payload that can throw.
+       *
+       * What was left was a silent downgrade. A retry fires on a blip the player never sees, and the
+       * answer that came back was from a caddie that did not know the course, the hole, the bag, the
+       * round, or them — while the first attempt's answer would have. Tim, on the course: "it's
+       * generic, and then the tone of the voice changes a little bit, and the information's more
+       * accurate." A retry is a second attempt at the SAME question; it is not a reason to ask a
+       * lesser caddie. [[no-half-fixes-enforce-every-surface]]
+       */
       try {
         const rc = new AbortController();
         const rt = setTimeout(() => rc.abort(), brainTimeoutMs());
@@ -1398,18 +1418,8 @@ export const useVoiceCaddie = ({
             'X-AI-Provider': useSettingsStore.getState().aiProvider ?? 'gemini',
           },
           signal: rc.signal,
-          body: JSON.stringify({
-            message,
-            language,
-            playerName: name,
-            firstName,
-            handicap,
-            persona: getActiveCaddie(),
-          // 2026-07-30 (voice audit #1) — carry the custom caddie's base persona + name on the brain
-          // FALLBACK/follow-up too, or it reverts to Kevin's name + onyx voice off the primary path.
-          customCaddieBasePersona: usePlayerProfileStore.getState().customCaddieBasePersona ?? 'kevin',
-          customCaddieName: usePlayerProfileStore.getState().customCaddieName ?? null,
-          }),
+          // The SAME payload the first attempt sent. One question, one caddie.
+          body: JSON.stringify(buildCaddieRequestBody({ message, language, liveBlock })),
         }).finally(() => clearTimeout(rt));
         if (retryRes.ok) {
           recordVoiceEndpointSuccess('kevin');

@@ -1,11 +1,12 @@
 import { Vibration } from 'react-native';
 import { BRAIN_FETCH_TIMEOUT_MS as KEVIN_FETCH_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { endsAsQuestion } from './voice/endsAsQuestion';
-import { speak, speakFromBase64, stopSpeaking, isSpeaking, captureUtteranceDetailed, releaseExternalMic, playLocalFile, stopCapture, endCaptureEarly, flashCaption, getLastSpokenLine, type CaptureBail, type CaptureResult } from './voiceService';
+import { speak, speakFromBase64, stopSpeaking, captureUtteranceDetailed, releaseExternalMic, playLocalFile, stopCapture, endCaptureEarly, flashCaption, getLastSpokenLine, type CaptureBail, type CaptureResult } from './voiceService';
 import { logVoiceSilentFail } from './voiceErrorLog';
 import { responseForCaptureBail, shouldRetryCapture } from './voice/captureBail';
 import { conversationalBrainTurn } from './conversationalBrain';
-import { prewarmVoice, abortVoiceWarmup } from './voiceWarmup';
+import { buildCaddieRequestBody } from './caddieRequestBody';
+import { abortVoiceWarmup } from './voiceWarmup';
 import { getDialog } from './dialogEngine';
 import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_ON_US, LISTEN_CUES, GOTIT_CUES } from './caddieAckLines';
 import { getTrustLevel } from './trustLevelService';
@@ -43,8 +44,6 @@ import { resolvePendingCourseUtterance } from './pendingDisambiguation';
 import { tryLocalReply } from './localStatusResponder';
 import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 import type { AppContext, VoiceIntent } from '../types/voiceIntent';
-import { buildFullPracticeContext } from './tutorialContext';
-import { screenContextForPrompt } from './screenContext';
 import { getApiBaseUrl, isConnectionWarmed, getConnectionEvidence } from './apiBase';
 import { isAwaitingPutts, awaitingPuttsHole, parsePuttAnswer, clearAwaitingPutts } from './pendingPuttAsk';
 
@@ -510,30 +509,12 @@ export async function toggle(): Promise<void> {
     closeSession();
   }
 }
-
 /**
- * Pick an opener based on the current role (Caddie if active round, Coach if
- * Practice surface, Psychologist for between-shot walks) and trust level.
- * Returns the spoken opener text.
+ * 2026-08-23 — pickOpener() deleted. Declared, fully written (role inference, trust-level branching)
+ * and called from NOWHERE. The openers the session actually speaks come from LISTEN_CUES in
+ * caddieAckLines, so this was a second, divergent opinion about how the caddie greets you that could
+ * never be reached — and would have quietly disagreed with the live one the moment either changed.
  */
-function pickOpener(): string {
-  const round = useRoundStore.getState();
-  const trustLevel = getTrustLevel();
-  const surface = getActiveSurface();
-
-  // Phase R — Role inference now reads activeSurfaceRegistry for richer
-  // routing. Arena → Psychologist (between-shot conversation register).
-  // Active round → Caddie. Otherwise Coach.
-  const role: 'caddie' | 'coach' | 'psychologist' =
-    surface === 'arena' ? 'psychologist' :
-    round.isRoundActive ? 'caddie' : 'coach';
-
-  // Trust-level-aware opener selection. L1 stays silent (gated below);
-  // L2 = terse "Yeah?"; L3 = engaged.
-  if (trustLevel === 1) return 'Yeah?';
-
-  return getDialog(role, 'earbud_open');
-}
 
 // 2026-05-21 — Fix I: localized fallback message spoken when the caddie
 // response path silently fails (non-2xx, empty body, network throw,
@@ -581,34 +562,15 @@ function failureFallbackFor(lang: string | null | undefined): string {
  * the speak() call already serializes with stopSpeaking().
  */
 /**
- * 2026-07-30 (voice audit #1) — a CUSTOM caddie must ship its chosen base persona + name on EVERY
- * /api/kevin body (this file's speculative, in-round-diagnostic, and small-talk fallbacks), or the
- * server defaults custom → Kevin's spec + onyx voice. Spread this into each kevin body. Best-effort.
+ * 2026-08-23 — kevinSteering() deleted. It existed to spread persona + the four brain-steering
+ * settings into this file's three hand-built /api/kevin bodies. There are no hand-built bodies here
+ * any more: services/caddieRequestBody emits all five, resolved the same way, for every surface.
+ * A helper whose whole job was "remember to include these" is exactly the shape that becomes stale
+ * the moment a sixth setting is added and only some callers are updated.
+ *
+ * customCaddieFields() survives below — /api/voice-intent is a different endpoint with its own
+ * contract, and it still needs the caddie's name to style a clarifying question.
  */
-// 2026-08-09 (voice audit P1) — the small-talk kevin fallback (speculative + fresh) dropped every
-// brain-steering setting (Kids Mode / response length / persona-intensity dial / Tank soft-intro) and
-// keyed persona off the GLOBAL pick, so on the rare triple-failure / legacy path the fallback caddie
-// behaved wrong + bled personas. This forwards the SAME steering the primary brain sends, with persona
-// resolved to the ACTIVE per-pillar caddie. kevin ignores fields it doesn't use, so it's safe to spread.
-function kevinSteering(): Record<string, unknown> {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const s = require('../store/settingsStore').useSettingsStore.getState();
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const active = (require('./caddieResolver') as typeof import('./caddieResolver')).getActiveCaddie();
-    const dial = s.personaIntensity?.[active];
-    return {
-      persona: active,
-      responseMode: s.responseMode ?? 'neutral',
-      cecilyMode: s.cecilyMode ?? false,
-      personaIntensity: typeof dial === 'number' && Number.isFinite(dial) ? dial : 100,
-      tankSoftIntro: s.tankSoftIntro ?? false,
-      ...customCaddieFields(),
-    };
-  } catch {
-    return { ...customCaddieFields() };
-  }
-}
 
 function customCaddieFields(): { customCaddieBasePersona: string; customCaddieName: string | null } {
   try {
@@ -1021,18 +983,18 @@ async function openSession() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settings.aiProvider ?? 'gemini' },
         signal: speculativeController.signal,
-        body: JSON.stringify({
-          message: utterance,
-          language: settings.language,
-          currentHole: round.isRoundActive ? round.currentHole : null,
-          currentYardage: round.currentYardage ?? null,
-          activeCourse: round.activeCourse,
-          holeNotes: round.holeNotes,
-          isRoundActive: round.isRoundActive,
-          voiceGender: settings.voiceGender ?? 'male',
-          // 2026-08-09 (voice audit P1) — full steering + ACTIVE persona (was global + no steering).
-          ...kevinSteering(),
-        }),
+        /**
+         * 2026-08-23 (Tim, sprint finish) — was eight hand-listed fields plus steering.
+         *
+         * This is the EARBUD path's speculative brain call — fired in parallel with the classifier,
+         * and on a small-talk or conversational turn its answer is the one the player actually
+         * hears. It knew the hole number and nothing else: no course intelligence, no hazards, no
+         * bag, no round stats, no learned memory block, no handedness. The player asking his caddie
+         * a question through his earbuds was reaching the thinnest payload in the app.
+         *
+         * Now the same union every other surface sends. [[unconnected-halves-not-broken-code]]
+         */
+        body: JSON.stringify(buildCaddieRequestBody({ message: utterance, language: settings.language })),
       }, kevinTimeout()).catch(() => null);
 
       const parseRes = await fetchWithTimeout(`${apiUrl}/api/voice-intent`, {
@@ -1180,38 +1142,22 @@ async function openSession() {
       const patternText = (intent.parameters?.pattern_text as string | undefined) ?? utterance;
       const wantsCard = intent.parameters?.wants_card === true;
       try {
-        const profile = require('../store/playerProfileStore').usePlayerProfileStore.getState();
         const settingsStore = require('../store/settingsStore').useSettingsStore.getState();
-        const apiUrlBody = {
+        /**
+         * 2026-08-23 (Tim, sprint finish) — was twenty-three hand-listed fields, the largest of the
+         * ten hand-built payloads in the app and still short of the union: no course intelligence,
+         * no hazards, no bag, no round stats, no learned-memory block, no handedness. It also sent
+         * `experienceContext`, which the brain read under no name at all — sent and ignored (now
+         * wired, see api/kevin.ts).
+         *
+         * This is the "why am I slicing this" turn. The one question where the player wants the
+         * caddie to actually KNOW him.
+         */
+        const apiUrlBody = buildCaddieRequestBody({
           message: patternText,
           language: settingsStore.language ?? 'en',
-          playerName: profile.name ?? '',
-          firstName: profile.firstName ?? '',
-          handicap: profile.handicap ?? 18,
-          dominantMiss: profile.dominantMiss ?? null,
-          missType: profile.missType ?? null,
-          experienceContext: profile.experienceContext ?? null,
-          isRoundActive: true,
-          currentHole: round.currentHole,
-          activeCourse: round.activeCourse,
-          courseHoles: round.courseHoles,
-          holeNotes: round.holeNotes,
-          recentShots: round.shots.slice(-10),
-          kevinContext: profile.kevinContext ?? null,
-          persistentPatterns: profile.persistentPatterns ?? null,
-          practice_context: buildFullPracticeContext(),
-          screen_context: screenContextForPrompt(),
-          register: 'coach',
-          inRoundDiagnostic: true,
-          voiceGender: settingsStore.voiceGender ?? 'male',
-          // PGA HOPE follow-up — persona, intensity dial, Tank soft-intro.
-          // 2026-08-09 (pass-2 C1) — persona + intensity off the ACTIVE per-pillar caddie, not the global
-          // pick (this in-round diagnostic is a brain-answer; global bled the wrong persona/dial).
-          persona: (require('./caddieResolver') as typeof import('./caddieResolver')).getActiveCaddie(),
-          ...customCaddieFields(),
-          personaIntensity: settingsStore.personaIntensity?.[(require('./caddieResolver') as typeof import('./caddieResolver')).getActiveCaddie()] ?? 100,
-          tankSoftIntro: settingsStore.tankSoftIntro,
-        };
+          overrides: { register: 'coach', inRoundDiagnostic: true },
+        });
         await fillerP;
         // 2026-05-21 — Fix I shape A: track whether anything was spoken
         // and fall back to the honest failure line otherwise.
@@ -1326,24 +1272,9 @@ async function openSession() {
             const chatRes = (speculativeBrainP && await speculativeBrainP) || await fetchWithTimeout(`${apiUrl}/api/kevin`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settings.aiProvider ?? 'gemini' },
-              body: JSON.stringify({
-                message: utterance,
-                language: settings.language,
-                currentHole: round.isRoundActive ? round.currentHole : null,
-                currentYardage: round.currentYardage ?? null,
-                activeCourse: round.activeCourse,
-                holeNotes: round.holeNotes,
-                isRoundActive: round.isRoundActive,
-                // 2026-05-21 — Fix Q: pass active persona + voiceGender
-                // so the small-talk reply uses the user's selected caddie
-                // instead of falling through to the server's Kevin default
-                // (lib/persona.ts resolvePersona → 'kevin' fallback). This
-                // was the #1 cross-persona bleed channel — voice replies
-                // to "hey Tank, how are you" were coming back as Kevin.
-                voiceGender: settings.voiceGender ?? 'male',
-                // 2026-08-09 (voice audit P1) — full steering + ACTIVE persona (was global + no steering).
-                ...kevinSteering(),
-              }),
+              // 2026-08-23 — the same union as the speculative call above. The comment on the
+              // fetch says "Same body either way", and that only stays true if there is ONE body.
+              body: JSON.stringify(buildCaddieRequestBody({ message: utterance, language: settings.language })),
             }, kevinTimeout());
             if (chatRes.ok) {
               const chatJson = await chatRes.json() as { text?: string; audioBase64?: string | null };

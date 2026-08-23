@@ -18,6 +18,7 @@
  */
 
 import { getApiBaseUrl } from './apiBase';
+import { getActiveCaddie } from './caddieResolver';
 import { useSettingsStore } from '../store/settingsStore';
 import { useRoundStore } from '../store/roundStore';
 import { buildSceneSensorContext } from './sceneReadContext';
@@ -60,7 +61,19 @@ export async function readScene(input: {
       body: JSON.stringify({
         message: SCENE_INSTRUCTION,
         language: settings.language ?? 'en',
-        persona: settings.caddiePersonality,
+        /**
+         * 2026-08-23 — the ACTIVE per-pillar caddie, not the global pick. Every other brain path
+         * resolves this through getActiveCaddie(); this one read the raw setting, so a player with
+         * the Round pillar set to Serena got her scene reads narrated in Kevin's character.
+         *
+         * NOTE — this call deliberately does NOT use buildCaddieRequestBody, and that is not an
+         * oversight. It is a 60-second multimodal read whose own comment explains the narrow
+         * payload: injecting only the current hole "halves the effective prompt size" for a request
+         * that already carries an image plus a large system prompt. The union would work against
+         * the reason this payload is shaped the way it is. It reads `raw.text` correctly, so it
+         * genuinely works today — unlike the presence path.
+         */
+        persona: getActiveCaddie(),
         voiceGender: settings.voiceGender,
         image_base64: input.imageBase64,
         image_media_type: input.mediaType ?? 'image/jpeg',

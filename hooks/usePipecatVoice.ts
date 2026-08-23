@@ -11,38 +11,28 @@
  */
 
 import { useRef, useCallback } from 'react';
-import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { answerOffline } from '../services/offlineCaddie';
-import { buildPipecatContext } from '../services/pipecatContext';
+import { askCaddie } from '../services/caddieBrain';
 import { recordKevinTurn } from '../services/conversationState';
 import { endsAsQuestion, isCloseIntent } from './useVoiceCaddie';
 import { speak } from '../services/voiceService';
 import { getApiBaseUrl, markEndpointWarmed, isEndpointWarmed } from '../services/apiBase';
-import { screenContextForPrompt } from '../services/screenContext';
 import { devLog } from '../services/devLog';
 // 2026-07-01 (audit — MIC CONVERGENCE) — the ONE shared pipecat history, so this
 // mic and the earbud/badge path keep the same conversation + reset together.
-import { getPipecatHistory, setPipecatHistory, clearPipecatHistory } from '../services/voice/pipecatHistory';
+import { clearPipecatHistory } from '../services/voice/pipecatHistory';
 import { useConversationLog } from '../store/conversationLogStore';
 import type { ToolAction } from '../types/toolAction';
 
 // Simplified history entry — persisted in a ref, sent to /turn each call
-export interface ConversationMessage {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
-// Tool actions from the Pipecat server — same shape as Kevin's ToolAction
-export type PipecatToolAction = ToolAction;
-
-export type PipecatUIEvent =
-  | 'open_smartvision'
-  | 'open_smartfinder'
-  | 'open_swinglab'
-  | 'record_swing';
-
-export type PipecatSessionState = 'idle' | 'connecting' | 'connected' | 'error' | 'closed';
+/**
+ * 2026-08-23 — ConversationMessage / PipecatToolAction / PipecatUIEvent / PipecatSessionState are
+ * gone. Every one described the Phase-3 WebSocket session that was deleted above, every one had
+ * ZERO importers anywhere in the app, and `state` was returned from this hook permanently reading
+ * 'idle' because the only function that ever advanced it was unreachable. A type nobody imports and
+ * a field that cannot change are not API surface — they are the residue that makes a dead path look
+ * live to the next audit.
+ */
 
 // 2026-06-23 (audit) — was 20s but the server turn budget is 30s, so a
 // healthy-but-slow turn got aborted client-side on good signal. Match 30s.
@@ -54,8 +44,10 @@ const TURN_TIMEOUT_MS = 35_000;
 // History cap now lives in services/voice/pipecatHistory.ts (the shared history).
 
 interface UsePipecatVoiceOpts {
-  onUIEvent?: (event: PipecatUIEvent, data: Record<string, unknown>) => void;
-  onStateChange?: (state: PipecatSessionState) => void;
+  // 2026-08-23 — onUIEvent / onStateChange are gone with the Phase-3 WebSocket scaffold. Both were
+  // fired ONLY from the WS message handler, so a caddie.tsx that passed onUIEvent was wiring a
+  // callback to a socket that never opened. Removing the props is what makes that visible; leaving
+  // them accepted-and-ignored is how a dead wire survives an audit.
   onKevinSpoke?: (text: string) => void;
   onToolAction?: (action: ToolAction) => void;
   onVoiceStateChange?: (state: 'idle' | 'listening' | 'thinking' | 'speaking') => void;
@@ -63,159 +55,32 @@ interface UsePipecatVoiceOpts {
 }
 
 export function usePipecatVoice({
-  onUIEvent,
-  onStateChange,
   onKevinSpoke,
   onToolAction,
   onVoiceStateChange,
   onReadyToListen,
 }: UsePipecatVoiceOpts = {}) {
-  const wsRef = useRef<WebSocket | null>(null);
-  const sessionIdRef = useRef<string | null>(null);
-  const stateRef = useRef<PipecatSessionState>('idle');
   // 2026-07-06 (voice-parity F2) — one brain turn at a time. A mic tap while the
   // caddie is still 'thinking' releases isProcessingRef in the consumer BEFORE
   // this await resolves, so a second processTurn could start and race the ONE
   // shared pipecat history (last-writer-wins), double-award points, and log two
   // turns. This ref makes processTurn re-entrancy-safe at the true chokepoint.
   const turnInFlightRef = useRef(false);
-  const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const setSessionState = useCallback((s: PipecatSessionState) => {
-    stateRef.current = s;
-    onStateChange?.(s);
-  }, [onStateChange]);
+  /**
+   * 2026-08-23 — the Phase-3 WebSocket scaffold is GONE (openSession / closeSession / pushMessage /
+   * pushGpsUpdate / pushHoleTransition / buildContext).
+   *
+   * It streamed audio to a Railway-hosted Python pipecat server. That server was never deployed:
+   * `pipecatServerUrl` defaults to '' and no screen in the app can set it, so openSession's very
+   * first act was to log "orchestrator inactive" and set state 'error'. Nothing called it either —
+   * the caddie tab only ever used processTurn. Six exported functions, a WebSocket lifecycle and a
+   * keep-alive ping, none of it reachable.
+   *
+   * It was also the last consumer of buildPipecatContext in this hook: dead code holding a second
+   * payload builder alive. [[unconnected-halves-not-broken-code]]
+   */
 
-  /** Build the full context snapshot to push on connect. */
-  // 2026-07-01 (audit — MIC CONVERGENCE) — was a full duplicate of
-  // services/pipecatContext.buildPipecatContext(). Both were getState()-based and
-  // identical, so they silently drifted risk. Now this delegates to the ONE shared
-  // builder, so the caddie-tab mic and the earbud/badge/watch path send IDENTICAL
-  // context and any future field is added in exactly one place.
-  const buildContext = useCallback(() => buildPipecatContext(), []);
-
-  /** Push a delta message to an open session. */
-  const pushMessage = useCallback((msg: Record<string, unknown>) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    try {
-      ws.send(JSON.stringify(msg));
-    } catch (e) {
-      devLog('[pipecat] push failed:', e);
-    }
-  }, []);
-
-  /** Push updated GPS coordinates to the open session. */
-  const pushGpsUpdate = useCallback((lat: number, lng: number) => {
-    pushMessage({ type: 'gps_update', gps: { lat, lng } });
-  }, [pushMessage]);
-
-  /** Push a hole transition (fired by roundStore.setCurrentHole). */
-  const pushHoleTransition = useCallback((hole: number, par?: number, yardage?: number) => {
-    pushMessage({ type: 'hole_transition', hole, par, yardage });
-  }, [pushMessage]);
-
-  /** Open a Pipecat session and WebSocket connection. */
-  const openSession = useCallback(async () => {
-    const serverUrl = useSettingsStore.getState().pipecatServerUrl;
-    if (!serverUrl) {
-      devLog('[pipecat] pipecatServerUrl not set — voice orchestrator inactive');
-      setSessionState('error');
-      return;
-    }
-
-    setSessionState('connecting');
-
-    // Swap ws:// for http:// to create the session
-    const httpBase = serverUrl.replace(/^wss?:\/\//, 'https://').replace(/\/+$/, '');
-    const secret = process.env.EXPO_PUBLIC_PIPECAT_SECRET ?? '';
-
-    let sessionId: string;
-    let wsUrl: string;
-
-    try {
-      const resp = await fetch(`${httpBase}/session`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ secret, ...buildContext() }),
-      });
-      if (!resp.ok) throw new Error(`session create failed: ${resp.status}`);
-      const data = await resp.json() as { sessionId: string; wsUrl: string };
-      sessionId = data.sessionId;
-      wsUrl = data.wsUrl;
-    } catch (e) {
-      devLog('[pipecat] session create error:', e);
-      setSessionState('error');
-      return;
-    }
-
-    sessionIdRef.current = sessionId;
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      devLog('[pipecat] WS connected:', sessionId);
-      // Push full context — server already has it from /session, this covers
-      // any state that changed in the gap.
-      ws.send(JSON.stringify({ type: 'context', ...buildContext() }));
-      setSessionState('connected');
-      // Keep-alive ping every 25s (Railway drops idle WebSockets after 30s)
-      pingIntervalRef.current = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping' }));
-      }, 25_000);
-    };
-
-    ws.onmessage = (evt) => {
-      try {
-        const msg = JSON.parse(evt.data as string) as {
-          type: string;
-          tool?: string;
-          data?: Record<string, unknown>;
-          text?: string;
-        };
-
-        if (msg.type === 'ui_event' && msg.tool) {
-          devLog('[pipecat] ui_event:', msg.tool);
-          onUIEvent?.(msg.tool as PipecatUIEvent, msg.data ?? {});
-        }
-
-        if (msg.type === 'transcript' && msg.text) {
-          onKevinSpoke?.(msg.text);
-        }
-      } catch {
-        // binary audio frame — handled by the audio pipeline, not JSON
-      }
-    };
-
-    ws.onerror = (e) => {
-      devLog('[pipecat] WS error:', e);
-      setSessionState('error');
-    };
-
-    ws.onclose = () => {
-      devLog('[pipecat] WS closed');
-      if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
-      wsRef.current = null;
-      sessionIdRef.current = null;
-      setSessionState('closed');
-    };
-  }, [buildContext, onUIEvent, onKevinSpoke, setSessionState]);
-
-  /** Close the active session. */
-  const closeSession = useCallback(() => {
-    if (pingIntervalRef.current) {
-      clearInterval(pingIntervalRef.current);
-      pingIntervalRef.current = null;
-    }
-    const ws = wsRef.current;
-    if (ws) {
-      try { ws.send(JSON.stringify({ type: 'end_session' })); } catch {}
-      ws.close();
-      wsRef.current = null;
-    }
-    sessionIdRef.current = null;
-    setSessionState('closed');
-  }, [setSessionState]);
 
   /** Clear conversation history (call on round end or new session). */
   const clearHistory = useCallback(() => {
@@ -223,9 +88,7 @@ export function usePipecatVoice({
   }, []);
 
   /**
-   * Phase 2 brain — POST to Vercel /api/pipecat-turn, get Claude's
-   * response + tool actions back, speak the response, dispatch tool actions.
-   * No Railway or Python server needed for Phase 2.
+   * One turn with the caddie: transcript in → the caddie's answer spoken, his tools dispatched.
    */
   const processTurn = useCallback(async (transcript: string): Promise<void> => {
     // 2026-07-06 (voice-parity F2) — block a re-entrant turn. If one is already in
@@ -244,159 +107,104 @@ export function usePipecatVoice({
     // even when NO tool fires. Best-effort; never blocks the turn.
     try { if (transcript.trim()) useConversationLog.getState().logUser(transcript.trim(), Date.now()); } catch { /* CNS capture is best-effort */ }
 
-    const apiBase = getApiBaseUrl().replace(/\/+$/, '');
-    const secret = process.env.EXPO_PUBLIC_PIPECAT_SECRET ?? '';
-
     onVoiceStateChange?.('thinking');
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), TURN_TIMEOUT_MS);
-    // Once we've spoken a real response, a later throw (e.g. auto-listen) must
-    // NOT trigger the consumer's sendToBrain fallback — that would double-answer.
+    // Once we've spoken a real response, a later throw (e.g. from auto-listen) must NOT be treated
+    // as a failed turn — that would double-answer the player.
     let spokeResponse = false;
 
-    // 2026-07-23 (V1 root-cause fix) — ONE degrade handler for BOTH a non-ok response AND a
-    // graceful-200 degrade (the server returns 200 with `degraded:true` on all-providers-failed /
-    // exception to avoid tripping the voice circuit breaker). Without honoring the flag, the client
-    // spoke + SCORED + LOGGED the canned "ask me again" as a real answer. Fall to the offline caddie
-    // (round state + golf KB, device-TTS) or capture the utterance for later — never score a degrade.
-    const speakOfflineOrCapture = async () => {
-      const settings = useSettingsStore.getState();
-      const lang = (['en', 'es', 'zh'] as const).includes(settings.language as never) ? (settings.language as 'en' | 'es' | 'zh') : 'en';
-      onVoiceStateChange?.('speaking');
-      let spokeOffline = false;
-      try {
-        const off = answerOffline(transcript, lang);
-        if (off?.text) {
-          onKevinSpoke?.(off.text);
-          await speak(off.text, settings.voiceGender, settings.language, getApiBaseUrl(), { userInitiated: true }).catch(() => {});
-          spokeOffline = true;
-        }
-      } catch { /* offline best-effort */ }
-      if (!spokeOffline) {
+    /**
+     * 2026-08-23 (Tim, sprint finish) — ONE BRAIN, ONE PAYLOAD, ONE VOICE.
+     *
+     * This hook is the caddie-tab mic — one of the two hands-free surfaces Tim actually plays with.
+     * It used to POST a second, differently-shaped payload (buildPipecatContext) to a second brain
+     * (/api/pipecat-turn), while the text box and the follow-up mic posted the unified payload to
+     * /api/kevin. Same question, two caddies, and which one you got depended on how you asked. That
+     * is the "going back and forth" he kept describing, and it was live on the surface he uses most.
+     *
+     * askCaddie is now the only way any surface reaches the caddie. The reply also arrives with the
+     * persona's REAL voice already rendered (kevin TTS's server-side), so the turn no longer waits
+     * on a second round-trip to start speaking.
+     */
+    try {
+      const turn = await askCaddie({
+        message: transcript,
+        language: useSettingsStore.getState().language ?? 'en',
+        timeoutMs: TURN_TIMEOUT_MS,
+      });
+
+      /**
+       * No answer. NOT a cue to hand the player a lesser caddie — that ladder (offline responder →
+       * canned line → device robot voice) is what made the app sound generic when the network
+       * hiccuped, and it fired far more often than a real outage. Keep what he said so nothing is
+       * lost, tell him the truth in one line, and stop.
+       */
+      if (!turn) {
+        const settings = useSettingsStore.getState();
+        const lang = (['en', 'es', 'zh'] as const).includes(settings.language as never) ? (settings.language as 'en' | 'es' | 'zh') : 'en';
+        onVoiceStateChange?.('speaking');
         let captured = false;
         try {
           const { captureOfflineStatement } = await import('../services/voiceLogService');
           captured = captureOfflineStatement(transcript);
-        } catch { /* best-effort */ }
+        } catch { /* capture is best-effort */ }
+        const line = captured
+          ? "I didn't get that through just now, but I saved what you said. I'll pick it back up in a second."
+          : "I lost you for a second there — say that again.";
+        onKevinSpoke?.(line);
         const { speakDeviceNotice } = await import('../services/voiceService');
-        if (captured) {
-          await speakDeviceNotice("No signal right now, but I saved that. I'll bring it back up when we reconnect.", lang, settings.voiceGender).catch(() => {});
-        } else {
-          await speakDeviceNotice('Give me one sec and ask me again.', lang, settings.voiceGender).catch(() => {});
-        }
-      }
-      onVoiceStateChange?.('idle');
-    };
-
-    try {
-      const resp = await fetch(`${apiBase}/api/pipecat-turn`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify({
-          secret,
-          text: transcript,
-          history: getPipecatHistory(),
-          context: buildContext(),
-          // 2026-06-26 — parity with the kevin path: send the ephemeral current
-          // screen/drill so the live brain answers drill-aware too.
-          screen_context: screenContextForPrompt(),
-          sessionId: sessionIdRef.current,
-        }),
-      });
-
-      clearTimeout(timeout);
-
-      if (!resp.ok) {
-        // Pipecat OWNS the turn. The local-first precheck already ran in
-        // useVoiceCaddie BEFORE this override, so offline/status queries are
-        // covered. On a non-ok, speak a graceful retry prompt and STOP — do NOT
-        // throw to a legacy fallback. (2026-06-23 regression: throwing here made
-        // the consumer double-process every flaky turn — pipecat attempt THEN a
-        // second full legacy brain call — doubling latency and letting both paths
-        // display/speak. Single path, single voice, graceful degrade.)
-        // 2026-06-29 (Tim — audit) — before the canned dead-end, try the OFFLINE caddie
-        // (round state + golf KB, device-TTS-capable). It was wired into the legacy path
-        // but NOT this default pipecat failure branch, so a dead-network turn got a
-        // useless "ask me again" even though a real offline answer existed.
-        devLog('[pipecat] /turn error:', resp.status);
-        await speakOfflineOrCapture();
+        await speakDeviceNotice(line, lang, settings.voiceGender).catch(() => {});
+        onVoiceStateChange?.('idle');
         return;
       }
 
-      const data = await resp.json() as {
-        response_text: string;
-        tool_actions: Array<Record<string, unknown>>;
-        updated_history: ConversationMessage[];
-        degraded?: boolean;
-        error?: string;
-      };
+      const text = turn.text;
 
-      // 2026-07-23 (V1 fix) — a graceful-200 degrade (all providers failed / server threw). Treat it
-      // exactly like a non-ok: fall to the offline caddie and DO NOT update history / score / log it
-      // as a real turn. Return before setPipecatHistory so the canned line never enters the history.
-      if (data.degraded === true) {
-        devLog('[pipecat] degraded 200:', data.error);
-        await speakOfflineOrCapture();
-        return;
-      }
+      // Dispatch tool actions to the RN UI (the same dispatcher every surface uses).
+      for (const a of turn.toolActions) onToolAction?.(a as ToolAction);
 
-      // Update the shared history, capped to avoid unbounded growth
-      setPipecatHistory(data.updated_history ?? []);
-
-      // Dispatch tool actions to the RN UI (same handler as Kevin's tools)
-      if (data.tool_actions?.length) {
-        for (const raw of data.tool_actions) {
-          onToolAction?.(raw as ToolAction);
-        }
-      }
-
-      let text = data.response_text ?? '';
-      // 2026-07-30 (voice audit #2) — a tool-only turn (HTTP 200, not degraded, empty response_text)
-      // left the caddie-tab mic silent with no caption → a dead turn on the 96%-iOS primary surface.
-      // Mirror conversationalBrain.tryPipecat: acknowledge the action so the turn is never silent.
-      if (!text.trim() && Array.isArray(data.tool_actions) && data.tool_actions.length > 0) text = 'Done.';
-
-      // 2026-06-30 (Tim — "a log for the WHOLE voice") — record this turn (his words → the
-      // caddie's reply, or null) + which tool(s) fired, in the owner issue log. Lets him SEE
-      // when the brain jumped to a tool vs answered conversationally — the exact "too
-      // predictive" signal. Owner-gated + best-effort inside addVoiceTurn.
+      // 2026-06-30 (Tim — "a log for the WHOLE voice") — his words → the caddie's reply → which
+      // tool(s) fired, in the owner issue log. Lets him SEE when the brain jumped to a tool instead
+      // of answering conversationally: the "too predictive" signal. Owner-gated, best-effort.
       try {
-        const ta = (data as { tool_actions?: Array<{ type?: string }> }).tool_actions;
-        const tool = Array.isArray(ta) && ta.length ? ta.map(a => a?.type).filter(Boolean).join(',') : null;
-        require('../store/issueLogStore').useIssueLogStore.getState().addVoiceTurn(transcript, text || null, { path: 'brain', tool });
+        const tool = turn.toolActions.length
+          ? turn.toolActions.map((a) => (a as { type?: string })?.type).filter(Boolean).join(',')
+          : null;
+        require('../store/issueLogStore').useIssueLogStore.getState().addVoiceTurn(transcript, text, { path: 'brain', tool });
       } catch { /* best-effort */ }
 
-      if (text.trim()) { try { require('../store/pointsStore').usePointsStore.getState().addPoints(3, 'caddie_interaction'); } catch {} }
+      try { require('../store/pointsStore').usePointsStore.getState().addPoints(3, 'caddie_interaction'); } catch { /* best-effort */ }
 
-      // TTS via existing speak() path
-      if (text) {
-        spokeResponse = true;
-        onVoiceStateChange?.('speaking');
-        onKevinSpoke?.(text);
-        recordKevinTurn(text);
-        try {
-          const settings = useSettingsStore.getState();
+      spokeResponse = true;
+      onVoiceStateChange?.('speaking');
+      onKevinSpoke?.(text);
+      recordKevinTurn(text);
+      try {
+        const settings = useSettingsStore.getState();
+        /**
+         * The persona voice the server already rendered. Playing it directly is what closes the gap
+         * between the caption appearing and the caddie speaking — the second TTS round-trip this
+         * path used to make was most of that wait.
+         */
+        if (turn.audioBase64) {
+          const { speakFromBase64 } = await import('../services/voiceService');
+          await speakFromBase64(turn.audioBase64, { userInitiated: true, caption: text });
+        } else {
           await speak(text, settings.voiceGender, settings.language, getApiBaseUrl(), { userInitiated: true });
-        } catch (e) {
-          devLog('[pipecat] tts error:', e);
         }
+      } catch (e) {
+        devLog('[caddie] tts error:', e);
       }
 
       onVoiceStateChange?.('idle');
 
       // Auto-listen: always in continuous mode; on any question otherwise.
-      // Mirrors the legacy continuousConversationMode behavior for the pipecat path.
       if (text.trim() && onReadyToListen) {
         const { continuousConversationMode } = useSettingsStore.getState();
         const isQuestion = endsAsQuestion(text);
-        // 2026-06-30 (Tim) — a sign-off ("I'm good, thanks" / "that's all" / "I'm done")
-        // must END the conversation, not re-open the mic. The legacy loop already had
-        // isCloseIntent for exactly this ("trapped in continuous mode"), but the DEFAULT
-        // pipecat path never checked it — so continuous mode kept re-arming after a
-        // farewell. Honor the same proven matcher here. The brain still spoke its sign-off
-        // (e.g. "I'm here if you need me"); we simply don't listen again.
+        // 2026-06-30 (Tim) — a sign-off ("I'm good, thanks" / "that's all") must END the
+        // conversation, not re-open the mic. The caddie still speaks its sign-off; we simply
+        // don't listen again.
         const userSignedOff = isCloseIntent(transcript);
         if (!userSignedOff && (continuousConversationMode || isQuestion)) {
           await new Promise<void>((r) => setTimeout(r, 500));
@@ -404,49 +212,13 @@ export function usePipecatVoice({
         }
       }
     } catch (e) {
-      clearTimeout(timeout);
-      devLog('[pipecat] /turn fetch error:', e);
-      // Single-path graceful degrade (NO legacy double-processing). If we already
-      // spoke a real response, a late auto-listen throw is swallowed silently.
-      if (!spokeResponse) {
-        onVoiceStateChange?.('speaking');
-        const settings = useSettingsStore.getState();
-        const lang = (['en', 'es', 'zh'] as const).includes(settings.language as never) ? (settings.language as 'en' | 'es' | 'zh') : 'en';
-        let spokeOffline = false;
-        try {
-          const off = answerOffline(transcript, lang);
-          if (off?.text) {
-            onKevinSpoke?.(off.text);
-            await speak(off.text, settings.voiceGender, settings.language, getApiBaseUrl(), { userInitiated: true }).catch(() => {});
-            spokeOffline = true;
-          }
-        } catch { /* offline best-effort */ }
-        if (!spokeOffline) {
-          // 2026-07-06 (voice-lifecycle audit #1) — a DEAD network THROWS the fetch,
-          // so it lands HERE — but the offline-statement capture only lived in the
-          // !resp.ok branch (server reachable-but-erroring). That inverted the whole
-          // feature: the exact scenario it was built for (no signal on-course) never
-          // captured. Mirror the capture + DEVICE-voice confirm here; cloud TTS can't
-          // work on a dead network anyway.
-          let captured = false;
-          try {
-            const { captureOfflineStatement } = await import('../services/voiceLogService');
-            captured = captureOfflineStatement(transcript);
-          } catch { /* best-effort */ }
-          const { speakDeviceNotice } = await import('../services/voiceService');
-          if (captured) {
-            await speakDeviceNotice("No signal right now, but I saved that. I'll bring it back up when we reconnect.", lang, settings.voiceGender).catch(() => {});
-          } else {
-            await speakDeviceNotice('Give me one sec and ask me again.', lang, settings.voiceGender).catch(() => {});
-          }
-        }
-      }
-      onVoiceStateChange?.('idle');
+      devLog('[caddie] turn error:', e);
+      if (!spokeResponse) onVoiceStateChange?.('idle');
     } finally {
       // 2026-07-06 (voice-parity F2) — always release so the NEXT tap/turn works.
       turnInFlightRef.current = false;
     }
-  }, [buildContext, onKevinSpoke, onReadyToListen, onToolAction, onVoiceStateChange]);
+  }, [onKevinSpoke, onReadyToListen, onToolAction, onVoiceStateChange]);
 
   /**
    * Phase 2 full pipeline: audio URI → Whisper STT → processTurn → speak.
@@ -627,18 +399,5 @@ export function usePipecatVoice({
     }
   }, [processTurn, onVoiceStateChange, speakDeadEnd]);
 
-  return {
-    // Phase 2 — text brain
-    processTurn,
-    processAudioUri,
-    clearHistory,
-    // Phase 3 — audio streaming (scaffold)
-    openSession,
-    closeSession,
-    pushGpsUpdate,
-    pushHoleTransition,
-    pushMessage,
-    sessionId: sessionIdRef.current,
-    state: stateRef.current,
-  };
+  return { processTurn, processAudioUri, clearHistory };
 }

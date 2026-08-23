@@ -23,11 +23,11 @@ const WARMUP_PATHS = [
   '/api/voice',
   '/api/transcribe',
   '/api/voice-intent',
+  // 2026-08-23 — /api/pipecat-turn removed from the warm list. It has no client callers left:
+  // every surface now posts the one payload to /api/kevin. Warming it spent a request and a cold
+  // start on a Lambda nothing was about to call — and [[warm-the-lambda-you-are-about-to-call]]
+  // is the exact bug that cost the first turn of every round in August, in the other direction.
   '/api/kevin',
-  // 2026-06-24 — pipecat-turn is the DEFAULT brain since the v15 migration; it was
-  // missing here, so the default conversational path hit a cold Lambda every first
-  // turn (the "takes longer to think" lag). Warm it too.
-  '/api/pipecat-turn',
 ] as const;
 
 /**
