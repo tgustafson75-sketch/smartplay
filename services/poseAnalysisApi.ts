@@ -899,6 +899,44 @@ export async function extractPoseFramesFromVideo(
   // it on the review surface → native SIGSEGV/hang that cleared only on a retry. Everything native now
   // reads workUri (the copy); copy failure → skeleton-only degrade, never a crash. Deleted on every exit.
   let workUri = videoUri;
+
+  /**
+   * 2026-08-23 (Tim — "you're almost always gonna get a first failure… cannot read, cannot analyze,
+   * but you'll get some kind of data").
+   *
+   * WAIT FOR THE FILE TO EXIST BEFORE READING IT.
+   *
+   * Nothing checked the clip was on disk and finished before the private copy and the frame
+   * extraction ran. `recordAsync` resolving does not guarantee the container is flushed — on Android
+   * the moov atom is written last, so a clip read microseconds after stop can be present, non-empty,
+   * and still undecodable. Every frame then comes back empty and the read reports
+   * `no_pose_in_frame` — indistinguishable from "the golfer was not in shot", which is why the
+   * first attempt failed and a later retry on the same clip worked.
+   *
+   * Bounded: ~1.5s of patience at most, and only while the file is actually growing or absent. A
+   * ready clip pays one stat call. The wait is RECORDED so the next report can prove whether this
+   * was the cause rather than leaving it a theory.
+   */
+  let fileWaitMs = 0;
+  let fileBytes: number | null = null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const FS = require('expo-file-system') as typeof import('expo-file-system');
+    let lastSize = -1;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const info = await FS.getInfoAsync(videoUri).catch(() => null);
+      const size = info?.exists ? ((info as { size?: number }).size ?? 0) : 0;
+      fileBytes = size;
+      // Settled = present, plausibly a video, and no longer growing between checks.
+      if (size > 50_000 && size === lastSize) break;
+      lastSize = size;
+      if (attempt === 5) break;
+      await new Promise((r) => setTimeout(r, 250));
+      fileWaitMs += 250;
+    }
+    if (fileWaitMs > 0) console.log(`[pose] waited ${fileWaitMs}ms for the clip to settle (${fileBytes} bytes)`);
+  } catch { /* cannot stat — proceed exactly as before */ }
+
   /**
    * 2026-08-19 (Tim — "in analysis, I wanna see what fails silently so we can adjust").
    *
@@ -1143,6 +1181,10 @@ export async function extractPoseFramesFromVideo(
       durationMs: Math.round(durationMs),
       reason: lastFrameFailure ?? 'unknown',
       nativePose,
+      // 2026-08-23 — these two separate "the file was not ready" from "the golfer was not in shot",
+      // which reported identically before and sent every investigation down the wrong path.
+      fileBytes,
+      fileWaitMs,
     });
     lastFrameFailure = null;
     return null;

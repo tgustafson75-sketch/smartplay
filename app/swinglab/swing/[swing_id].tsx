@@ -984,6 +984,8 @@ export default function SwingDetail() {
     const key = `${swing_id}:${selShot.id}`;
     if (shotBackfillRef.current === key) return;
     shotBackfillRef.current = key;
+    // 2026-08-23 — lifecycle abort, so the run stops when the user LEAVES, not when the clip plays.
+    let cancelled = false;
     void (async () => {
       try {
         const poseMod = await import('../../../services/poseAnalysisApi');
@@ -998,11 +1000,22 @@ export default function SwingDetail() {
         useCageStore.getState().setShotBiomechanics(swing_id, selShot.id, biomech);
         try {
           const { detectClubPath } = await import('../../../services/swing/clubPath');
-          // 2026-07-30 (regression audit #3) — abort if the ExoPlayer is decoding the same mp4: a
-          // MediaMetadataRetriever + active playback on one file SIGSEGVs (the documented replay crash).
-          // Matches every other extraction site here. (Whole effect is gated off via LIBRARY_AUTO_PROCESS,
-          // but keep the guard correct so flipping that flag can't re-introduce the crash.)
-          const arc = await detectClubPath({ videoUri: analyzeUri, startMs: wStart, endMs: wEnd, shouldAbort: () => isPlayingRef.current });
+          /**
+           * 2026-08-23 (Tim — "when you open a file in swing library, sometimes it auto plays. And if
+           * you hit analysis, that might stop the playing. So I feel like there's a connection.")
+           *
+           * There was. This aborted extraction whenever the clip was PLAYING, and the library
+           * auto-plays on open — so opening a swing and asking for analysis killed the run before it
+           * produced anything, which is the "cannot read / cannot analyze on the first try, then some
+           * data later" he keeps hitting.
+           *
+           * The guard cited the MediaMetadataRetriever + ExoPlayer SIGSEGV, but that condition was
+           * removed on 07-30: detectClubPath extracts from its OWN private copy and clubPath.ts hard
+           * REFUSES to run without one, so it can never share a handle with the player. The sibling
+           * call site at the top of this file had this same stale guard removed on 08-08; this one
+           * was missed. Playback is not a reason to stop analysing — leaving the screen is.
+           */
+          const arc = await detectClubPath({ videoUri: analyzeUri, startMs: wStart, endMs: wEnd, shouldAbort: () => cancelled });
           // 2026-08-06 (audit) — >= 3 to match the loosened MIN_ARC_POINTS everywhere else; the old >= 4 here
           // would drop a valid 3-point arc and persist []. (Dead today under LIBRARY_AUTO_PROCESS=false, but
           // keep it consistent so flipping that flag can't silently lose 3-point arcs.)
@@ -1017,6 +1030,9 @@ export default function SwingDetail() {
         try { useCageStore.getState().setShotBiomechanics(swing_id, selShot.id, null); } catch { /* non-fatal */ }
       }
     })();
+    // Without this the `cancelled` flag above never flips and the abort is inert — which would have
+    // made the fix itself a half-fix.
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedShotIdx, swing_id, session?.shots, session?.biomechanics, session?.upload?.angleOverride]);
 
