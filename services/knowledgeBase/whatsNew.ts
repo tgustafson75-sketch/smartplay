@@ -29,6 +29,10 @@ export const WHATS_NEW: WhatsNewEntry[] = [
   // 2026-08-23 — the one-caddie pass. Written for the PLAYER, not the changelog.
   {
     when: 'Aug 2026',
+    note: 'I keep the thread now when you switch how you\'re talking to me. Ask me something on the caddie screen, then follow up through your earbuds, and I still know what we were on about — before, each way in had its own memory and the other half of the conversation was gone.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'I\'m the same caddie now no matter how you reach me. Typing, tapping the mic, your earbuds, your watch — they used to reach me with different amounts of what I know about you, which is why my tone and my answers kept shifting mid-round. One of me now, and I carry everything to every one of them.',
   },
   {
