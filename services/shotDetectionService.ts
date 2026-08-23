@@ -36,8 +36,27 @@ interface DetectorConfig {
   pollIntervalMs: number;
 }
 
+/**
+ * 2026-08-23 (Tim, from a real round — "when I hit the drive and I go to the next spot, it detects
+ * that stroke, but then we don't pick up the other strokes after").
+ *
+ * WHY ONLY THE DRIVE COUNTED. A shot needs `stationaryWindowMs` of stillness BEFORE the displacement
+ * that marks it. On a tee you are trivially still for that long: waiting on the group ahead, teeing
+ * the ball, a practice swing. At your ball in the fairway you walk up, look at it, and hit — often in
+ * well under 20 seconds. So the tee shot registered every time and the approach almost never did,
+ * which is exactly the pattern he describes, and it is why the stroke count drifted.
+ *
+ * 20s was never needed to prove stillness. The discriminator is the RADIUS: at walking pace (~1.4
+ * m/s) you leave an 8m circle in about six seconds, so ten seconds inside it is already inconsistent
+ * with walking. Cart mode has run at 8s/12m since it was written, for the same reason.
+ *
+ * 10s keeps the tighter 8m walking radius and still clears GPS jitter, while fitting how a golfer
+ * actually plays an approach.
+ */
+const WALK_STATIONARY_MS = 10_000;
+
 const DEFAULT_CONFIG: DetectorConfig = {
-  stationaryWindowMs: 20_000,
+  stationaryWindowMs: WALK_STATIONARY_MS,
   stationaryRadiusMeters: 8,
   minDisplacementYards: 30,
   maxCartSpeedMs: 4.0,            // ~9 mph — anything sustained above this is cart, not walk-after-shot
@@ -57,7 +76,7 @@ const CART_OVERRIDES: Partial<DetectorConfig> = {
 /** Tuning applied when configure({ cartMode: false }) is called (the walking
  *  default). Mirrors DEFAULT_CONFIG so toggling resets cleanly. */
 const WALK_OVERRIDES: Partial<DetectorConfig> = {
-  stationaryWindowMs: 20_000,
+  stationaryWindowMs: WALK_STATIONARY_MS,
   stationaryRadiusMeters: 8,
   cartMode: false,
 };
@@ -210,6 +229,7 @@ class ShotDetector {
       return;
     }
     this.samples.push(sample);
+    this.senseTransport(sample);
     // PGA HOPE follow-up (B1): adaptive players (wheelchair transfers,
     // prosthetic adjustment, longer pre-shot routine) routinely take 90s+
     // between sample-down and swing. The prior 60s buffer dropped the
@@ -322,6 +342,54 @@ class ShotDetector {
       start_location: anchor,
       estimated_distance_yards: Math.round(displacementYards),
     });
+  }
+
+  /**
+   * 2026-08-23 (Tim — "I wasn't walking yesterday. I was in a cart. I just forgot to do the settings…
+   * I'm pretty sure other apps, I don't always have to tell if I'm a cart or walking").
+   *
+   * STOP ASKING. SENSE IT.
+   *
+   * Cart and walking need different tuning, and the app made the player declare which — a setting
+   * that is trivially forgotten on the first tee and then silently wrong for eighteen holes. Yesterday
+   * that mismatch ran the WALKING detector (10s of required stillness, 8m radius) while he rode, so
+   * his approach shots never registered and the stroke count drifted.
+   *
+   * We already have what we need on every sample: speed. Nothing walks a golf course at 4 m/s
+   * (~9 mph) — that is a cart, full stop. One reading could be GPS noise, so it takes SUSTAINED
+   * evidence, and it decays: park the cart and walk a few holes and it reverts on its own.
+   *
+   * This never fights the player. An explicit choice in Settings still wins (`transportMode` on the
+   * round); this only fills the gap when they never made one, which is the common case.
+   */
+  private cartEvidence = 0;
+  private lastSensedCart: boolean | null = null;
+  private senseTransport(sample: GPSSample): void {
+    const speed = sample.speed;
+    if (typeof speed !== 'number' || !Number.isFinite(speed) || speed < 0) return;
+    // Well clear of a fast walk (~2 m/s) so a brisk stride can never bank evidence.
+    if (speed > 4.0) this.cartEvidence = Math.min(6, this.cartEvidence + 1);
+    else if (speed < 1.8) this.cartEvidence = Math.max(0, this.cartEvidence - 1);
+    // Hysteresis: 4 up to switch INTO cart, 1 down to fall back, so it does not flap at the boundary.
+    const sensed = this.cartEvidence >= 4 ? true : this.cartEvidence <= 1 ? false : this.lastSensedCart;
+    if (sensed == null || sensed === this.lastSensedCart) return;
+    this.lastSensedCart = sensed;
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const round = require('../store/roundStore') as typeof import('../store/roundStore');
+      // An explicit player choice is never overridden — we only fill an unset one.
+      const declared = round.useRoundStore.getState().transportMode;
+      if (declared === 'cart' || declared === 'walking') {
+        // They told us. Honour it, and stop re-deciding.
+        if ((declared === 'cart') !== this.config.cartMode) this.configure({ cartMode: declared === 'cart' });
+        return;
+      }
+    } catch { /* store unavailable — fall through and use what we sensed */ }
+
+    if (sensed === this.config.cartMode) return;
+    console.log(`[shotDetection] transport sensed as ${sensed ? 'CART' : 'WALKING'} from speed — retuning`);
+    this.configure({ cartMode: sensed });
   }
 
   private emit(event: ShotEvent): void {
