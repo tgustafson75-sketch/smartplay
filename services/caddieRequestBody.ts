@@ -206,6 +206,42 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       return `SMARTFINDER ACTIVE: User has locked distance of ${lock.distance_yards} yards at compass heading ${Math.round(lock.compass_heading)}°. Treat the locked distance as the working number.`;
     }, null),
 
+    /**
+     * 2026-08-22 (Tim — "your information is still generic related to the user. Bogey is good for me,
+     * but you keep telling me to move on" / "caddy has no context when you're doing a putt read").
+     *
+     * HOW THIS ROUND IS ACTUALLY GOING. The round store computes putts, penalties, fairways and GIR
+     * per hole and keeps them — and none of it was ever sent to the brain. Not one reference in
+     * either old payload. So the caddie could see the SCORE and nothing about how it happened: no way
+     * to know he three-putted the last two, no way to know he is hitting greens and losing it on the
+     * putting surface, and nothing to ground a putt read in. "Everything is everything" -- this is
+     * the half that never joined.
+     */
+    roundStats: safe(() => {
+      const stats = typeof r.getHoleStats === 'function' ? (r.getHoleStats() ?? []) : [];
+      if (!stats.length) return null;
+      const played = stats.length;
+      const putts = stats.reduce((a: number, h: { putts?: number }) => a + (h.putts ?? 0), 0);
+      const threePutts = stats.filter((h: { putts?: number }) => (h.putts ?? 0) >= 3).length;
+      const girs = stats.filter((h: { girHit?: boolean | null }) => h.girHit === true).length;
+      const girKnown = stats.filter((h: { girHit?: boolean | null }) => h.girHit != null).length;
+      const fairways = stats.filter((h: { fairwayHit?: boolean | null }) => h.fairwayHit === true).length;
+      const fwKnown = stats.filter((h: { fairwayHit?: boolean | null }) => h.fairwayHit != null).length;
+      const penalties = stats.reduce((a: number, h: { penalties?: number }) => a + (h.penalties ?? 0), 0);
+      return {
+        holesPlayed: played,
+        putts,
+        puttsPerHole: Math.round((putts / played) * 10) / 10,
+        threePutts,
+        // Only reported when we actually know — a null GIR is not a missed green.
+        gir: girKnown ? `${girs}/${girKnown}` : null,
+        fairways: fwKnown ? `${fairways}/${fwKnown}` : null,
+        penalties,
+        lastThreeHoles: stats.slice(-3).map((h: { hole: number; score: number; putts?: number }) =>
+          ({ hole: h.hole, score: h.score, putts: h.putts ?? null })),
+      };
+    }, null),
+
     // ─── how they've been playing ───────────────────────────────────────────
     patternInsights,
     penaltyContext: safe(() => extras.overrides?.penaltyContext ?? null, null),

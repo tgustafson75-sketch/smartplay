@@ -241,6 +241,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       currentPar = null,
       currentYardage = null,
       currentStroke = null,
+      roundStats = null,
       holeNotes = {},
       activeCourse = null,
       isRoundActive = false,
@@ -783,7 +784,21 @@ CURRENT ROUND:
 Course: ${activeCourse || 'unknown'}
 Hole: ${currentHole} | Par: ${currentPar}
 PLAYING THEIR STROKE ${currentStroke ?? 1}${(currentStroke ?? 1) > 1 ? ' — they have ALREADY TEED OFF. Do NOT brief the tee shot or suggest a driver off the tee.' : ' — they are on the tee.'}
-DISTANCE REMAINING RIGHT NOW: ${currentYardage} yards. This is the shot in front of them, measured live. It is NOT the hole's card length, and the card length is NOT the shot — never quote a scorecard yardage as the distance they are hitting.
+${(() => {
+  const rs = roundStats as { holesPlayed?: number; puttsPerHole?: number; threePutts?: number; gir?: string | null; fairways?: string | null; penalties?: number; lastThreeHoles?: { hole: number; score: number; putts: number | null }[] } | null;
+  if (!rs || !rs.holesPlayed) return '';
+  const bits = [
+    `${rs.holesPlayed} holes in`,
+    rs.puttsPerHole != null ? `${rs.puttsPerHole} putts/hole` : null,
+    rs.threePutts ? `${rs.threePutts} three-putt${rs.threePutts === 1 ? '' : 's'}` : null,
+    rs.gir ? `${rs.gir} greens` : null,
+    rs.fairways ? `${rs.fairways} fairways` : null,
+    rs.penalties ? `${rs.penalties} penalt${rs.penalties === 1 ? 'y' : 'ies'}` : null,
+  ].filter(Boolean).join(' · ');
+  const last = (rs.lastThreeHoles ?? []).map(h => `H${h.hole}: ${h.score}${h.putts != null ? ` (${h.putts} putts)` : ''}`).join(', ');
+  // How the round is ACTUALLY going, not just the total. Ground advice in this rather than guessing.
+  return `HOW THIS ROUND IS GOING: ${bits}${last ? `\nLast three: ${last}` : ''}\n`;
+})()}DISTANCE REMAINING RIGHT NOW: ${currentYardage} yards. This is the shot in front of them, measured live. It is NOT the hole's card length, and the card length is NOT the shot — never quote a scorecard yardage as the distance they are hitting.
 ${currentHoleNote ? `Hole note: ${currentHoleNote}` : ''}
 Club: ${_club || 'not selected'}
 Score: ${totalScore > 0 ? totalScore : 'no holes yet'} | Vs par: ${scoreVsPar === 0 ? 'even' : scoreVsPar > 0 ? '+' + scoreVsPar : String(scoreVsPar)} | Holes: ${holesPlayed}
