@@ -26,6 +26,28 @@ export interface WhatsNewEntry {
 }
 
 export const WHATS_NEW: WhatsNewEntry[] = [
+  // 2026-08-23 — the club-call pass. Written for the PLAYER, not the changelog.
+  {
+    when: 'Aug 2026',
+    note: 'The weather actually changes the club I give you now. Into the wind, cold air, wet turf — the ball flies shorter, so I work out what the shot really plays and give you the club for THAT number, not the one on the screen. 150 into a stiff breeze on a cold wet day isn\'t a smooth 7; I\'ll hand you the 4 and tell you why in three words.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'When you ask me go or lay up, I do the sums before I answer. What you need to carry, what your longest club that reaches actually carries, and the gap between them — that gap is the whole answer. If you clear it comfortably I\'ll tell you to take it on instead of talking you out of a shot you had all along.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'Your routine is back where it belongs. Say "save that routine" after I\'ve talked you through a warm-up and I\'ll keep it, then ask for it any time and I\'ll run you through it in my own words rather than reading it back at you. It works off the course too — that\'s rather the point of a warm-up.',
+    howTo: 'After I give you a warm-up, say "save that routine". To hear it again, ask for "my routine" — say "my", because "give me a good warm-up routine" means you want a NEW one and I\'ll go and think of one.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'If you\'ve told me you\'re new to the game, I\'ll stop talking like a coaching manual. No clubface, no swing path, no angle of attack — just where to aim and what to swing. Ask me why and I\'ll happily go deeper, but you shouldn\'t need a diagram to use your own caddie.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'Tap in through your earbuds and you get the right one of us. On the range that\'s your coach, between shots it\'s the head game, and out on the course it\'s me on the bag — instead of the same greeting whoever you actually needed.',
+  },
   // 2026-08-23 — the one-caddie pass. Written for the PLAYER, not the changelog.
   {
     when: 'Aug 2026',
