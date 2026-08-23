@@ -8,7 +8,7 @@ import { conversationalBrainTurn } from './conversationalBrain';
 import { buildCaddieRequestBody } from './caddieRequestBody';
 import { abortVoiceWarmup } from './voiceWarmup';
 import { getDialog } from './dialogEngine';
-import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_ON_US, LISTEN_CUES, GOTIT_CUES } from './caddieAckLines';
+import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_ON_US, LISTEN_CUES, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
 import { getTrustLevel } from './trustLevelService';
 import { useRoundStore, voicePuttsHole } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -268,10 +268,17 @@ function pickCue(pool: string[]): string {
 }
 async function playVerbalCue(kind: 'listen' | 'gotit', fallbackEarcon: number, fallbackMs: number): Promise<void> {
   try {
-    const pool = kind === 'gotit'
-      ? GOTIT_CUES
-      : (useRoundStore.getState().isRoundActive ? LISTEN_CUES.round : LISTEN_CUES.idle);
-    const text = pickCue(pool);
+    /**
+     * 2026-08-23 — the LISTEN opener now comes from pickOpener() (role + trust aware, via the
+     * dialog templates) instead of the two flat LISTEN_CUES pools, which knew only round vs idle.
+     *
+     * Both halves matter: the text source AND the audio. These lines are pre-rendered in the
+     * persona's voice by services/offlineVoiceCache; a line missing from OFFLINE_LINES resolves to
+     * no clip and this function falls through to an EARCON — the caddie replaced by a beep. The
+     * three roles' earbud_open templates were added there in the same change for exactly that
+     * reason.
+     */
+    const text = kind === 'gotit' ? pickCue(GOTIT_CUES) : pickOpener();
     const s = useSettingsStore.getState();
     const gender: 'male' | 'female' = s.voiceGender === 'female' ? 'female' : 'male';
     const persona = (s.caddiePersonality ?? 'kevin') as string;
@@ -507,11 +514,35 @@ export async function toggle(): Promise<void> {
   }
 }
 /**
- * 2026-08-23 — pickOpener() deleted. Declared, fully written (role inference, trust-level branching)
- * and called from NOWHERE. The openers the session actually speaks come from LISTEN_CUES in
- * caddieAckLines, so this was a second, divergent opinion about how the caddie greets you that could
- * never be reached — and would have quietly disagreed with the live one the moment either changed.
+ * RESTORED 2026-08-23, and connected this time.
+ *
+ * I deleted this earlier the same day for having no callers. That was the wrong call and Tim named
+ * it: *"there's almost nothing in this app that's arbitrary… they're just not all connected how and
+ * where they should be. Don't just go willy-nilly deleting. Say: where SHOULD this be?"*
+ *
+ * It was never dead — it was a complete capability with one missing wire. Role inference (arena →
+ * psychologist, in-round → caddie, otherwise coach) and trust-level gating (L1 gets a terse "Yeah?"
+ * rather than chat), routed to getDialog(role, 'earbud_open') whose templates exist for ALL THREE
+ * roles in constants/dialogTemplates. Everything built; nothing calling it.
+ *
+ * The earbud opener now comes from here instead of the flat LISTEN_CUES pools, so tapping in on the
+ * range greets you as the coach, between shots as the psychologist, and in a round as the caddie —
+ * which is what the templates were written for.
  */
+function pickOpener(): string {
+  const round = useRoundStore.getState();
+  const trustLevel = getTrustLevel();
+  const surface = getActiveSurface();
+
+  const role: 'caddie' | 'coach' | 'psychologist' =
+    surface === 'arena' ? 'psychologist' :
+    round.isRoundActive ? 'caddie' : 'coach';
+
+  // L1 has not earned conversation yet — acknowledge and listen, do not chat.
+  if (trustLevel === 1) return TRUST_L1_OPENER;
+
+  return getDialog(role, 'earbud_open');
+}
 
 // 2026-05-21 — Fix I: localized fallback message spoken when the caddie
 // response path silently fails (non-2xx, empty body, network throw,

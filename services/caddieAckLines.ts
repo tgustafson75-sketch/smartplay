@@ -72,4 +72,12 @@ export const LISTEN_CUES: { idle: string[]; round: string[] } = {
   round: ['Go ahead.', 'Talk to me.', 'What are we looking at?', "I'm with you."],
 };
 /** Tap-again endpoint cue — the caddie confirms it HEARD you and is working. */
+/**
+ * 2026-08-23 — trust level 1 opener. At L1 the caddie has not earned conversation yet, so an earbud
+ * tap gets an acknowledgement rather than an invitation to talk. Lives here with the other SPOKEN
+ * lines so services/offlineVoiceCache pre-renders it in the persona's voice — a line the cache does
+ * not know resolves to no clip and falls through to an earcon, which is the caddie replaced by a beep.
+ */
+export const TRUST_L1_OPENER = 'Yeah?';
+
 export const GOTIT_CUES: string[] = ['Got it.', 'On it.', 'Okay.', 'Heard you.'];

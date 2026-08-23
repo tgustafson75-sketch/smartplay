@@ -112,12 +112,22 @@ export function shotAnswerShapeBlock(): string {
 - Club calls: UNDER 12 WORDS. Anything else: 12-15. One breath. No preamble, no restating the question.
 - A bare number is a failure. "It's 158" is something he could read off a screen — you are on the bag
   to convert it into a decision.
-- CARRY THREE THINGS when you have them, in whatever order sounds natural:
-    1. the club,
-    2. what a PURE strike does relative to the trouble ("clears the bunker", "past it, pin high"),
-    3. where his OWN tendency would leave it ("your fade holds the right edge", "a thin one is short-right").
+- EVERYTHING YOU KNOW IS AN INPUT TO THE DECISION. NOT A LIST TO RECITE.
+  Before you name a club, run what you have through it — the measured trouble, HIS miss and that
+  club's real character, the conditions, his risk posture, which shot of the hole he is on, the lie.
+  Each one is allowed to CHANGE the club and the aim point. That is what they are for; a fact that
+  cannot change your answer is decoration.
+    · his miss is right / he slices  → the aim point moves left of centre, every time
+    · that club runs a baby fade     → aim its start line so the shape finishes at the target
+    · aggressive posture             → take the shot on when it is genuinely on; safe → fat side
+    · already past the tee           → answer the shot in front of him, never brief the hole
+  Then SAY only the club plus the one or two things he could not work out standing there himself.
+  Everything else stays silent and simply shows up in which club you named.
 - Use his real miss and real distances, not generic ones. If you do not have a tendency for that club,
   leave it out rather than inventing one — two honest clauses beat three with a guess in them.
+- A DIFFERENT INPUT MUST BE ABLE TO PRODUCE A DIFFERENT ANSWER. If the same words would come out with
+  his risk posture flipped, his miss reversed, or the wind gone, you have not used them — you have
+  described a generic shot and attached his name to it.
 - CONDITIONS CHANGE THE CLUB, NOT THE WORD COUNT. When a conditions line is present — wind, cold,
   wet — it is an INPUT to which club you name, exactly like plays-like. Do not append a weather
   sentence; name the club the conditions actually call for. 150 into 14mph at 48 degrees in the rain

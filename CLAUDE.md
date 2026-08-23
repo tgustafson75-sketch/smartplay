@@ -40,6 +40,40 @@ External beta-readiness requires all four paths verified working end-to-end
 on a real device within the last 7 days, on a real round (not just simulated).
 Until that's true: internal personal beta only.
 
+## THE LENS — nothing here is arbitrary (Tim, 2026-08-23)
+
+> *"There's almost nothing in this app anymore that's arbitrary in terms of a tool or a function or
+> a call or an index. They're just not all connected how and where they should be. That's the issue.
+> So don't just go willy-nilly deleting. Say: hey, where does this — where SHOULD this be?"*
+>
+> *"Everything I want is in the app right now that I can possibly humanly think of. And if it's not,
+> it's because it's already parked — that's v2. For now, you know what the app is. Make it right."*
+
+**There is nothing left to BUILD. The work is check, quality-control, function-check, engineering
+test, fail test.** Read every finding through that lens:
+
+- **"No callers" means UNCONNECTED, not dead.** The default action is to find where it belongs and
+  wire it — not to delete it. Deleting a capability is the expensive mistake, because rebuilding it
+  costs far more than connecting it, and the intent behind it is lost with the code.
+- **Ask "where SHOULD this be?" before "is this used?"** If you cannot answer where it belongs,
+  you do not yet understand it well enough to remove it. Say so and leave it.
+- Delete only what is genuinely *duplicate* (a second implementation of something that already
+  exists) or *unreachable by construction* — and say plainly which of the two, with the evidence.
+- Anything deliberately not wanted is **already parked** for v2. Absence of a caller is not
+  evidence of absence of intent.
+
+**Worked example, the same day this was written.** `pickOpener()` in `services/listeningSession.ts`
+had zero callers and was deleted as dead code. It was not dead — it was role-aware (arena →
+psychologist, in-round → caddie, else coach) and trust-aware (L1 → a terse "Yeah?"), routing to
+`getDialog(role, 'earbud_open')`, whose templates exist for **all three roles** in
+`constants/dialogTemplates/`. A complete, built capability with one missing wire. The right question
+was never "is it called?" but "where should the earbud opener come from?"
+
+**And connecting is not one step.** Wiring `pickOpener` into `playVerbalCue` alone would have made
+the cue fall through to an earcon *beep*, because `OFFLINE_LINES` pre-renders `LISTEN_CUES` in the
+persona's voice and not the dialog templates. A connection is finished when the whole path works,
+not when the call compiles.
+
 ## Phase report format
 
 When shipping a phase, include in the response:

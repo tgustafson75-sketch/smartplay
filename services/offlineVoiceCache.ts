@@ -36,7 +36,10 @@
 import { File, Paths } from 'expo-file-system';
 import { getApiBaseUrl } from './apiBase';
 import { DEAD_END_PRACTICE } from './localStatusResponder';
-import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, LISTEN_CUES, GOTIT_CUES } from './caddieAckLines';
+import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, LISTEN_CUES, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
+import { _allCaddieTemplates } from '../constants/dialogTemplates/caddieTemplates';
+import { _allCoachTemplates } from '../constants/dialogTemplates/coachTemplates';
+import { _allPsychologistTemplates } from '../constants/dialogTemplates/psychologistTemplates';
 
 type Lang = 'en' | 'es' | 'zh';
 type Gender = 'male' | 'female';
@@ -84,6 +87,19 @@ export const OFFLINE_LINES: { slug: string; language: Lang; text: string }[] = [
   ...LISTEN_CUES.round.filter(t => !LISTEN_CUES.idle.includes(t)).map((text, i) => ({ slug: `listen_round_${i}`, language: 'en' as const, text })),
   ...GOTIT_CUES.filter(t => !ACK_PHRASES.en.includes(t)).map((text, i) => ({ slug: `gotit_${i}`, language: 'en' as const, text })),
   // Off-course practice nudge — the one FIXED deadEndLine branch (the others are dynamic reads).
+  /**
+   * 2026-08-23 — the EARBUD OPENERS, in every role.
+   *
+   * The earbud tap now speaks pickOpener() — role-aware (arena → psychologist, in-round → caddie,
+   * else coach) and trust-aware — instead of the two flat LISTEN_CUES pools. These lines have to be
+   * here or the connection is only half made: resolveCachedOfflineClipUri returns null for a line
+   * the cache does not know, and playVerbalCue falls through to an EARCON. The caddie greeting you
+   * would become a beep, which is exactly the kind of quiet degrade this app keeps paying for.
+   */
+  { slug: 'trust_l1_open', language: 'en', text: TRUST_L1_OPENER },
+  ..._allCaddieTemplates().earbud_open.map((text: string, i: number) => ({ slug: `open_caddie_${i}`, language: 'en' as const, text })),
+  ..._allCoachTemplates().earbud_open.map((text: string, i: number) => ({ slug: `open_coach_${i}`, language: 'en' as const, text })),
+  ..._allPsychologistTemplates().earbud_open.map((text: string, i: number) => ({ slug: `open_psych_${i}`, language: 'en' as const, text })),
   { slug: 'off_course_en', language: 'en', text: DEAD_END_PRACTICE.en },
   { slug: 'off_course_es', language: 'es', text: DEAD_END_PRACTICE.es },
   { slug: 'off_course_zh', language: 'zh', text: DEAD_END_PRACTICE.zh },

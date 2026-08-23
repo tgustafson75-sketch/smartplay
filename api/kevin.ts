@@ -1347,6 +1347,25 @@ ${langRule ? `LANGUAGE — FINAL REMINDER: ${langRule}` : ''}
 
     const baseMessage = _message;
 
+    /**
+     * Did the player ASK for something, as opposed to telling the caddie a fact? Drives whether a
+     * silent tool turn is allowed to stand on a terse acknowledgement (see terseAckTools below).
+     * Deliberately generous: a false positive costs one extra model round; a false negative answers
+     * a real question with "Noted."
+     */
+    const askedSomething = (() => {
+      const t = String(baseMessage ?? '').trim();
+      if (!t) return false;
+      if (/\?/.test(t)) return true;
+      // Interrogative or advice-seeking opener, even without a question mark — speech-to-text
+      // routinely drops it, and "what should I hit" arrives as a bare clause.
+      if (/^(what|how|where|which|who|why|when|should|shall|can|could|do|does|did|is|are|am|was|were|will|would|any)\b/i.test(t)) return true;
+      // Asking for the play in the middle of a sentence: "I'm 150 out, what do you like".
+      if (/\b(what|which|how)\s+(should|do|would|are|is|club|way|far)\b/i.test(t)) return true;
+      if (/\b(go or lay ?up|lay ?up or go|talk me through|help me|give me a read|read this|what'?s the play|whats the play)\b/i.test(t)) return true;
+      return false;
+    })();
+
     // Phase BH — when in-round diagnostic, prepend recent shots so Coach
     // can reason about actual observed shots (clubs, outcomes), not just
     // the user's verbal pattern description.
@@ -1487,7 +1506,23 @@ ${onCourseContextBlock}${baseMessage}`
        * ack above IS the answer — so it must not buy an extra model round. Anything outside this
        * list going silent would fall through to a bare "On it.", and that is worth one more round.
        */
-      terseAckTools: Object.keys(TERSE_ACKS),
+      /**
+       * 2026-08-23 — WHETHER WORDS ARE NEEDED IS A PROPERTY OF THE TURN, NOT THE TOOL.
+       *
+       * The ack map alone was the wrong test, and the signal-influence probe caught it: asked
+       * "my ball is short right of the green, how do I play it?", the caddie fired set_hole_note
+       * and answered "Noted." — a terse ack is a fine reply to a STATEMENT ("I'm off to the right,
+       * pin high") and a non-answer to a QUESTION. Same tool, same ack, opposite correctness.
+       *
+       * So the ack list only short-circuits the extra round when the player did NOT ask anything.
+       * If they asked, every silent tool turn earns its round, because "Noted." to a question is
+       * the caddie ignoring him.
+       *
+       * Detected here rather than in the prompt, deterministically: the model cannot be relied on
+       * to notice it did not answer, and this must never depend on the model's own judgement of
+       * whether it was helpful.
+       */
+      terseAckTools: askedSomething ? [] : Object.keys(TERSE_ACKS),
       /**
        * 2026-07-08 (Tim — "let ONE agent figure it out"). 14s/round is a HANG GUARD, not a budget:
        * a one-round answer, which is the common case, lands far inside it. A turn that cannot
