@@ -1559,11 +1559,22 @@ ${onCourseContextBlock}${baseMessage}`
     const personaKey =
       typeof personaInput === 'string' ? personaInput.toLowerCase() : '';
     const ttsVoice = VOICE_BY_PERSONA[personaKey] ?? VOICE_BY_PERSONA.kevin;
-    // 2026-06-21 — Wrap TTS separately so a cold/slow TTS call doesn't
-    // discard Kevin's successful brain answer. Previously a TTS failure
-    // here would throw into the outer catch, returning error fallback
-    // text and losing the real response. Now: TTS failure → audioBase64
-    // null → client speaks via device TTS. Real answer preserved.
+    /**
+     * 2026-06-21 — Wrap TTS separately so a cold/slow TTS call doesn't discard the brain answer. A
+     * TTS failure used to throw into the outer catch and return error text, losing the real response.
+     *
+     * 2026-08-22 — the tail of that comment said "client speaks via device TTS", which is no longer
+     * true and must not be relied on: the device voice was removed today (Tim: "I don't wanna ever
+     * hear it again"). audioBase64 null now means the caddie stays SILENT with the answer on screen.
+     *
+     * KNOWN, NOT YET FIXED — this is the ~5s gap Tim reports between the text appearing and the voice
+     * starting. The whole response is blocked on TTS finishing: we await the full speech synthesis and
+     * the entire arrayBuffer before returning, so the client cannot render text until the audio is
+     * also built, and then still has to decode, write and load it before playback. The fix is to stop
+     * shipping text and audio in one blocking response — return text immediately and stream or fetch
+     * the audio alongside it. That is a contract change across both brains and the client, so it is
+     * written down here rather than half-done. [[voice-path-change-freeze]]
+     */
     let audioBase64: string | null = null;
     try {
       // A caller that will not play the audio must not pay to generate it.

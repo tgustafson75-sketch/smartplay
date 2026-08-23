@@ -1,4 +1,16 @@
 /**
+ * ⚠️ 2026-08-22 — THE DEVICE-TTS FALLBACK THIS FILE KEEPS REFERRING TO NO LONGER EXISTS.
+ *
+ * Tim, after a round: "I don't wanna fucking hear a robot voice anymore. Rip it out. I don't wanna
+ * ever hear it again." deviceSpeakFallback no longer speaks and the voice-selection machinery is
+ * deleted. Read every "falls back to device TTS" line below as "stays SILENT with the answer on
+ * screen" — that is now the real behaviour.
+ *
+ * This RAISES the value of this cache rather than lowering it: a pre-rendered line in the persona's
+ * own voice is now the ONLY way a fixed line gets spoken when the network is gone. A cache miss used
+ * to mean a robot; it now means silence. [[feels-like-a-real-caddie]]
+ */
+/**
  * 2026-07-23 (Tim — "the app + Caddie must always feel like a real person… if we know what the local
  * fallback says every time, why don't we have it in Kevin's voice so we never hear the robot voice?").
  *
