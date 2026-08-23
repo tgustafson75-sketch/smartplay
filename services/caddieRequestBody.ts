@@ -174,6 +174,13 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       if (!shots.length) return 1;
       return shots.length + 1 + shots.reduce((a: number, sh: { penalty_strokes?: number }) => a + (sh.penalty_strokes ?? 0), 0);
     }, 1),
+    /**
+     * 2026-08-22 — walking or riding. Set on the Play tab, persisted on the round since 2026-06-13,
+     * and read by NOTHING on the caddie side: zero matches in either old payload. The store's own
+     * comment says it exists for "walking fatigue/pace awareness", which is exactly the thing that
+     * never got wired. Late in a walked round it should temper club choice; in a cart it should not.
+     */
+    transportMode: safe(() => r.transportMode ?? 'walking', 'walking'),
     scores: safe(() => r.scores ?? {}, {}),
     // Current hole +/- 1 only: the full 18 added 5-15KB to every call.
     courseHoles: safe(() => {

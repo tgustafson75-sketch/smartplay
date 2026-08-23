@@ -56,3 +56,30 @@ describe('the caddie knows how the round is actually going', () => {
     expect(kevin).toMatch(/Last three:/);
   });
 });
+
+describe('walking versus riding reaches the caddie', () => {
+  const kevin = read('api/kevin.ts');
+
+  /**
+   * 2026-08-22 — transportMode has been set on the Play tab and persisted on the round since
+   * 2026-06-13, and reached the caddie ZERO times. The store's own comment says it exists for
+   * "walking fatigue/pace awareness" — the exact thing that was never wired.
+   */
+  it('is sent, and defaults to walking rather than nothing', () => {
+    useRoundStore.setState({ transportMode: 'cart' } as never);
+    expect(buildCaddieRequestBody({ message: 'x', language: 'en' }).transportMode).toBe('cart');
+    useRoundStore.setState({ transportMode: undefined } as never);
+    expect(buildCaddieRequestBody({ message: 'x', language: 'en' }).transportMode).toBe('walking');
+  });
+
+  it('the server reads it and says which one', () => {
+    expect(kevin).toMatch(/transportMode = null,/);
+    expect(kevin).toMatch(/Getting around:/);
+    expect(kevin).toMatch(/riding a cart/);
+  });
+
+  it('only mentions fatigue for a WALKED round, and only late in it', () => {
+    // Riding 15 holes is not tiring in the way walking 15 is; saying so would be noise.
+    expect(kevin).toMatch(/transportMode !== 'cart' && holesPlayed >= 13/);
+  });
+});

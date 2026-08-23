@@ -242,6 +242,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       currentYardage = null,
       currentStroke = null,
       roundStats = null,
+      transportMode = null,
       holeNotes = {},
       activeCourse = null,
       isRoundActive = false,
@@ -801,6 +802,7 @@ ${(() => {
 })()}DISTANCE REMAINING RIGHT NOW: ${currentYardage} yards. This is the shot in front of them, measured live. It is NOT the hole's card length, and the card length is NOT the shot — never quote a scorecard yardage as the distance they are hitting.
 ${currentHoleNote ? `Hole note: ${currentHoleNote}` : ''}
 Club: ${_club || 'not selected'}
+Getting around: ${transportMode === 'cart' ? 'riding a cart' : 'walking'}${transportMode !== 'cart' && holesPlayed >= 13 ? ' \u2014 deep into a walked round, so factor fatigue into club choice rather than assuming full-strength swings' : ''}
 Score: ${totalScore > 0 ? totalScore : 'no holes yet'} | Vs par: ${scoreVsPar === 0 ? 'even' : scoreVsPar > 0 ? '+' + scoreVsPar : String(scoreVsPar)} | Holes: ${holesPlayed}
 Competition: ${isCompetition ? 'yes — be conservative' : 'no'}`
   : `DIALOGUE MODE: OFF-COURSE (no live round).
