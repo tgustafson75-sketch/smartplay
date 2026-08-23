@@ -51,6 +51,71 @@ const EMPTY: CaddieContext = {
   promptBlock: '', bag: [], course: null, tendencies: null, recentReflection: null,
 };
 
+
+/**
+ * 2026-08-22 (Tim, after a full round at Greenhill — "generic advice because we're also not reading
+ * and using the vision to see what the hole is. It says 'watch out for hazards', not WHERE the
+ * hazards are, which is what we spent all last night building.")
+ *
+ * WHERE THE TROUBLE IS, on every shot of every round.
+ *
+ * `computeHazardIntelligence` is a pure function over live GPS + hole geometry, and it already
+ * returns exactly what a caddie says out loud: which side the trouble is on, how far to reach it,
+ * and how far to CARRY it. It was extracted from the SmartFinder screen the night before so that
+ * anything could use it -- and then only SmartFinder ever called it. Tim was playing a round with
+ * SmartFinder closed, so the caddie had no idea a bunker sat right at 205, and fell back to
+ * "watch out for hazards" and "hit it straight" on a dogleg.
+ *
+ * That is the trinket-patching he called out: the hole picture belonged to a screen instead of to
+ * the player. It belongs HERE, in the one block every brain path already pastes -- voice, typed
+ * chat, pipecat, the conversational brain and the in-round diagnostic all call getCaddieContext, so
+ * putting it here reaches all of them at once instead of being plumbed into one route again.
+ *
+ * Pure, sync and never-throwing like everything else in this file: geometry and the GPS fix are both
+ * synchronous reads, and any failure returns null rather than taking the turn down.
+ */
+function liveTroubleLine(courseId: string | null | undefined, hole: number | null | undefined): string | null {
+  if (!courseId || hole == null) return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const geo = require('./courseGeometryService') as typeof import('./courseGeometryService');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const gps = require('./gpsManager') as typeof import('./gpsManager');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const hz = require('./hazardIntelligence') as typeof import('./hazardIntelligence');
+
+    const geometry = geo.getHoleGeometry(courseId, hole);
+    if (!geometry) return null;
+    const fix = gps.getLastFix();
+    if (!fix || !Number.isFinite(fix.lat) || !Number.isFinite(fix.lng)) return null;
+
+    // Bearing player -> green is the shot line when the player has not aimed at something else.
+    let bearing: number | null = null;
+    const green = geometry.green ?? null;
+    if (green) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const gd = require('../utils/geoDistance') as typeof import('../utils/geoDistance');
+      bearing = gd.bearingDegrees({ lat: fix.lat, lng: fix.lng }, green);
+    }
+
+    const intel = hz.computeHazardIntelligence({ lat: fix.lat, lng: fix.lng }, geometry, null, bearing);
+    if (!intel) return null;
+
+    const side = intel.side === 'center' ? 'straight ahead' : `on the ${intel.side}`;
+    // Reach vs CARRY is the whole point: 205 to reach a bunker and 218 to clear it are different
+    // clubs, and "watch out for the bunker" is neither.
+    const carry = Number.isFinite(intel.carryToClear) && intel.carryToClear > 0
+      ? `, ${Math.round(intel.carryToClear)}y to carry it`
+      : '';
+    const safe = intel.side === 'left' ? ' Safe miss: right-center.'
+      : intel.side === 'right' ? ' Safe miss: left-center.'
+      : '';
+    return `TROUBLE ON THIS SHOT (measured live from GPS + this hole's mapped geometry — say WHERE it is, never just "watch out for hazards"): ${intel.label} ${side}, ${Math.round(intel.front)}y to reach${carry}.${safe}`;
+  } catch {
+    return null;
+  }
+}
+
 export function getCaddieContext(input: {
   playerId?: string;
   courseId?: string | null;
@@ -288,6 +353,14 @@ export function getCaddieContext(input: {
      * caddie's own club bias. So it goes last: if something has to be cut, cut this.
      */
     if (calibrationLine) lines.push(calibrationLine);
+
+    /**
+     * Live trouble goes FIRST in the block, not last. Everything above it is a learned prior; this
+     * is a measured fact about the shot the player is standing over, and it is the one thing that
+     * stops the answer being generic. If anything gets truncated, it must not be this.
+     */
+    const trouble = liveTroubleLine(input.courseId, input.hole);
+    if (trouble) lines.unshift(trouble);
 
     const promptBlock = lines.length > 0
       ? `CADDIE MEMORY (learned over time — treat as strong priors; live GPS still wins on the working distance):\n${lines.join('\n')}`

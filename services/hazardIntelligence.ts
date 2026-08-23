@@ -102,7 +102,13 @@ export function computeHazardIntelligence(
     const back = sorted[sorted.length - 1];
     const center = Math.round((front + back) / 2);
     const sideFromBearing = (() => {
-      if (!shotBearingDeg || !c.centroid) return null;
+      /**
+       * 2026-08-22 — `!shotBearingDeg` is a FALSY check on a number, so a shot playing due north
+       * (bearing 0) took this branch and lost side detection entirely: the hazard fell back to
+       * 'center' and the caddie could not say "bunker right" on any hole that plays due north.
+       * Zero is a heading, not a missing value. Same shape as the NaN-SVG white screen.
+       */
+      if (shotBearingDeg == null || !Number.isFinite(shotBearingDeg) || !c.centroid) return null;
       const hazardBearing = bearingDegrees(player, c.centroid);
       let rel = ((hazardBearing - shotBearingDeg) % 360 + 360) % 360;
       if (rel > 180) rel -= 360;
