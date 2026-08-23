@@ -80,8 +80,32 @@ export function computeDistance(input: DistanceComputeInput): DistanceComputeOut
     distanceM = EYE_HEIGHT_M / Math.tan(angleRad);
   }
 
-  // Clamp to golf-realistic range
-  const clampedM = Math.max(MIN_YARDS * 0.9144, Math.min(MAX_YARDS * 0.9144, distanceM));
+  /**
+   * 2026-08-22 (Tim — "as soon as you go to move the reticle, it says ten yards instead of the
+   * yardage. The math is not working.")
+   *
+   * STOP ENCODING FAILURE AS A DISTANCE. The unmeasurable branch set distanceM = 0 and let the clamp
+   * push it to MIN_YARDS, on the reasoning that 10 is "clearly not a real reading". It is not clearly
+   * anything — 10 yards is a perfectly plausible golf number, so the screen rendered the failure
+   * sentinel as a measurement. That is the same foot-gun as the 250 sentinel it replaced: one magic
+   * number swapped for another.
+   *
+   * An unmeasurable read now reports ZERO. Zero is not a distance anyone aims at, every consumer
+   * already treats it as falsy, and `unmeasurable` remains the real signal.
+   */
+  /**
+   * AND a read that falls BELOW the golf-realistic floor is a failed read, not a 10-yard target.
+   *
+   * Eye-height/tan(angle) is short-range by nature: past about -9 degrees of tilt the geometry yields
+   * under 10 yards for anything, and the clamp quietly lifted every one of those to exactly
+   * MIN_YARDS. So the phantom "10" Tim kept seeing did not only come from the near-level branch —
+   * most of the tilt range produced it, and the clamp is what made a failure look like an answer.
+   * Clamping DOWN from an over-range read is fine (400 is a real cap); clamping UP from a collapsed
+   * one invents a target.
+   */
+  const belowFloor = !unmeasurable && distanceM < MIN_YARDS * 0.9144;
+  const noRead = unmeasurable || belowFloor;
+  const clampedM = noRead ? 0 : Math.min(MAX_YARDS * 0.9144, distanceM);
   const distYards = clampedM / 0.9144;
 
   /**
@@ -136,7 +160,7 @@ export function computeDistance(input: DistanceComputeInput): DistanceComputeOut
     target_lat: target.lat,
     target_lng: target.lng,
     confidence,
-    unmeasurable,
+    unmeasurable: noRead,
   };
 }
 

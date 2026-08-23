@@ -1426,7 +1426,10 @@ function TargetCameraOverlay({
        * the reticle. Beyond that envelope it is the old garbage signature, and we keep the GPS
        * distance and drop to Low exactly as before.
        */
-      const MIN_PLAUSIBLE_YDS = 5;
+      // 2026-08-22 — the floor sat BELOW the rangefinder's own collapse point (MIN_YARDS = 10), so a
+      // collapsed read landed on exactly 10 and sailed straight through as a measurement. A tilt read
+      // at the clamp floor is the near-horizon failure signature, never an aim point.
+      const MIN_PLAUSIBLE_YDS = 12;
       // Past the green is legitimate (over-the-green bailout, the next tee, a range target), but not
       // by a fairway's worth — beyond this it is the projected-to-infinity failure, not an aim point.
       const maxPlausible = Math.max(gpsMiddleYards + 120, gpsMiddleYards * 1.6, 60);
@@ -1443,6 +1446,16 @@ function TargetCameraOverlay({
       // green to gate against; the camera-tilt read is the only signal. Accept it as the measured
       // distance so SmartFinder works as a standalone range-measuring tool (point → yards). Cap
       // confidence at Med — the tilt method is approximate, never truth-grade (esp. near horizon).
+      //
+      // 2026-08-22 — this branch had NO plausibility check at all, so off-course (exactly where Tim
+      // was testing) a collapsed near-horizon read was accepted outright and shown as 10 yards. The
+      // absence of a GPS baseline removes our ability to compare, not our ability to recognise the
+      // failure signature.
+      if (geodesicYards < 12) {
+        setReticleConfidence('low');
+        setTargetYards(null);
+        return;
+      }
       setReticleConfidence(result.confidence === 'high' ? 'medium' : result.confidence);
     }
     if (lastYardsRef.current !== geodesicYards) {
