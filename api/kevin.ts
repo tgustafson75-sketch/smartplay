@@ -1408,12 +1408,20 @@ ${onCourseContextBlock}${baseMessage}`
       maxTokens: 400,
       maxRounds: 3,
       continuationTools: ['lookup_course', 'lookup_hole'],
-      // 2026-07-08 (Tim — "let ONE agent figure it out"; audit-corrected). No provider cascade
-      // anymore (OpenAI only), so the old 12s cap (sized to fit a 3-provider chain) can relax a
-      // bit — BUT the real ceiling is the CLIENT's voice abort, which is 20s
-      // (constants/voiceTimeouts.ts BRAIN_FETCH_TIMEOUT_MS), NOT the 30s an earlier note assumed.
-      // 14s/round keeps a 1-round answer (the common case) comfortably under 20s; the cap is just
-      // a hang guard. A turn that can't finish in the client window hands off to the local responder.
+      /**
+       * 2026-07-08 (Tim — "let ONE agent figure it out"). 14s/round is a HANG GUARD, not a budget:
+       * a one-round answer, which is the common case, lands far inside it. A turn that cannot
+       * finish in the client's window hands off to the on-device responder rather than stalling.
+       *
+       * 2026-08-23 — corrected a stale number in this very comment. It asserted the client abort
+       * "is 20s ... NOT the 30s an earlier note assumed", and stated the file it was quoting.
+       * constants/voiceTimeouts.ts has read 30_000 since 2026-07-20, twelve days BEFORE this note
+       * was written to correct someone else about it. Budget arithmetic done against a wrong
+       * ceiling is how a healthy turn gets cancelled client-side, which is the exact bug the 07-20
+       * change fixed — so a comment carrying the old number is not cosmetic here.
+       *
+       * Real ceiling: client 30s (BRAIN_FETCH_TIMEOUT_MS) > server total budget 19s > 14s/round.
+       */
       timeoutMs: 14_000,
     };
     const toolDispatch = async (name: string, input: Record<string, unknown>): Promise<string> => {

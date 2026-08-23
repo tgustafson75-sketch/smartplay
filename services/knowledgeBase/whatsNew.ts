@@ -26,6 +26,28 @@ export interface WhatsNewEntry {
 }
 
 export const WHATS_NEW: WhatsNewEntry[] = [
+  // 2026-08-23 — the one-caddie pass. Written for the PLAYER, not the changelog.
+  {
+    when: 'Aug 2026',
+    note: 'I\'m the same caddie now no matter how you reach me. Typing, tapping the mic, your earbuds, your watch — they used to reach me with different amounts of what I know about you, which is why my tone and my answers kept shifting mid-round. One of me now, and I carry everything to every one of them.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'If you play left-handed, I finally know it. Every "aim left", every "your miss is right", every bunker I place for you was mirrored — I was telling lefties the exact opposite of the right thing. It reaches me now and I call every direction from your side of the ball.',
+    howTo: 'Settings → your profile → Handedness. It was already there for swing analysis; now it reaches me too.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'I\'ll tell you when a number is soft. If GPS drops and I fall back to the scorecard yardage, I say so instead of handing you a card number as though I\'d just measured it. And when you\'ve told me your own number, I use yours.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'I think harder before I answer. The reasoning behind my club calls got a real upgrade — the hazard carries, your own tendencies with that club, how the round is actually going. Same two sentences; a lot more behind them.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'When GPS is still finding you or a swing won\'t read, that\'s me talking, not a stock message. Those moments were falling back to a canned line every single time — you were never actually hearing from me.',
+  },
   // 2026-08-21/22 — written for the PLAYER, not the changelog. Each says what changed for them.
   {
     when: 'Aug 2026',
