@@ -2582,6 +2582,31 @@ export const useRoundStore = create<RoundState>()(
             if (autoAdvance && st.isRoundActive && hole === st.currentHole && hole < holesN) {
               get().setCurrentHole(hole + 1);
               console.log(`[roundStore] auto-advanced ${hole} → ${hole + 1} on first score (autoHoleAdvance)`);
+            } else {
+              /**
+               * 2026-08-23 (Tim — "I'll log the score for this hole, and then I'm sitting next to the
+               * next hole, but it hasn't detected").
+               *
+               * This branch was silent. Four separate conditions can hold the advance and they have
+               * four different fixes -- the setting is off, the round is not active, the score was
+               * logged for a hole that is not the current one (voice naming a hole, or a scorecard
+               * edit), or we are already on the last hole. Without knowing WHICH, the next report is
+               * another round of guessing. Recorded as `diag`: on-device, never mailed.
+               */
+              try {
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                (require('./issueLogStore') as typeof import('./issueLogStore')).useIssueLogStore
+                  .getState().addAppEvent('hole_advance_skipped', {
+                    reason: !autoAdvance ? 'setting_off'
+                      : !st.isRoundActive ? 'round_not_active'
+                      : hole !== st.currentHole ? 'scored_a_different_hole'
+                      : 'already_last_hole',
+                    scoredHole: hole,
+                    currentHole: st.currentHole,
+                    lastHole: holesN,
+                  }, 'diag');
+              } catch { /* best-effort */ }
+              console.log(`[roundStore] auto-advance SKIPPED for hole ${hole} (current ${st.currentHole}, last ${holesN}, setting ${autoAdvance})`);
             }
           }
         } catch { /* non-fatal */ }
