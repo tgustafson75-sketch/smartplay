@@ -55,6 +55,19 @@ export interface HoleMemory {
   played: number;
   scoringAvg: number | null;
   trouble: string[];
+  /**
+   * 2026-08-23 — HOW the score happened, not just what it was.
+   *
+   * recordRoundEnd learned score, tee club, approach club and trouble, and threw away putts, greens
+   * and fairways -- which roundStore had already computed for every hole. So the model could tell
+   * you that you average 5.2 here and never that you three-putt this green half the time,
+   * permanently, across every round ever played. The LEARN step was dropping the most coachable
+   * half of the data. Null until a round actually reports them.
+   */
+  puttsAvg: number | null;
+  threePuttRate: number | null;
+  girRate: number | null;
+  fairwayRate: number | null;
   lastPlayed: number;
 }
 
@@ -212,7 +225,9 @@ function emptyHole(hole: number): HoleMemory {
   return {
     hole, par: null, typicalTeeClub: null, typicalApproachClub: null,
     bestLine: null, greenBehavior: null,
-    played: 0, scoringAvg: null, trouble: [], lastPlayed: 0,
+    played: 0, scoringAvg: null, trouble: [],
+    puttsAvg: null, threePuttRate: null, girRate: null, fairwayRate: null,
+    lastPlayed: 0,
   };
 }
 
@@ -256,7 +271,7 @@ interface CaddieMemoryState {
     course_id: string;
     course_name?: string | null;
     nowMs: number;
-    holes: { hole: number; par?: number | null; score?: number | null; teeClub?: string | null; approachClub?: string | null; trouble?: string[] }[];
+    holes: { hole: number; par?: number | null; score?: number | null; teeClub?: string | null; approachClub?: string | null; trouble?: string[]; putts?: number | null; girHit?: boolean | null; fairwayHit?: boolean | null }[];
     playerId?: string;
   }) => void;
   recordReflection: (input: { round_id: string; course_id?: string | null; summary: string; keyTakeaways?: string[]; nowMs: number; playerId?: string }) => void;
@@ -459,12 +474,32 @@ export const useCaddieMemoryStore = create<CaddieMemoryState>()(
             const trouble = h.trouble && h.trouble.length > 0
               ? Array.from(new Set([...h.trouble, ...ph.trouble])).slice(0, MAX_TROUBLE)
               : ph.trouble;
+            /**
+             * Rolling averages over the rounds that actually REPORTED each signal. A hole played
+             * before these existed, or a round where the green was never surveyed, leaves the prior
+             * untouched rather than being averaged in as a zero -- an unknown is not a miss. Same
+             * honesty rule the live round summary uses.
+             */
+            const roll = (prev: number | null, value: number | null): number | null => {
+              if (value == null) return prev;
+              if (prev == null) return Math.round(value * 100) / 100;
+              return Math.round(((prev * ph.played + value) / played) * 100) / 100;
+            };
+            const hasPutts = typeof h.putts === 'number' && h.putts >= 0;
+            const puttsAvg = roll(ph.puttsAvg, hasPutts ? (h.putts as number) : null);
+            const threePuttRate = roll(ph.threePuttRate, hasPutts ? ((h.putts as number) >= 3 ? 1 : 0) : null);
+            const girRate = roll(ph.girRate, h.girHit == null ? null : (h.girHit ? 1 : 0));
+            const fairwayRate = roll(ph.fairwayRate, h.fairwayHit == null ? null : (h.fairwayHit ? 1 : 0));
             holesMap[h.hole] = {
               ...ph,
               par: h.par ?? ph.par,
               typicalTeeClub: h.teeClub ?? ph.typicalTeeClub,
               typicalApproachClub: h.approachClub ?? ph.typicalApproachClub,
-              played, scoringAvg, trouble, lastPlayed: nowMs,
+              played, scoringAvg, trouble,
+              // AFTER the spread — placed before it, `...ph` silently overwrote every one of them
+              // with the previous round's value and nothing would ever have been learned.
+              puttsAvg, threePuttRate, girRate, fairwayRate,
+              lastPlayed: nowMs,
             };
           }
           const nextCourse: CourseMemory = {

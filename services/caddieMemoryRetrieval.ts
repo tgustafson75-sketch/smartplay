@@ -42,6 +42,10 @@ export interface CaddieContext {
     greenBehavior: string | null;
     typicalClub: string | null;
     roundsPlayed: number;
+    /** 2026-08-23 — learned putting/greens for THIS hole. Null until the honesty floor is met. */
+    puttsAvg: number | null;
+    threePuttRate: number | null;
+    girRate: number | null;
   } | null;
   tendencies: string | null;
   recentReflection: string | null;
@@ -144,6 +148,11 @@ export function getCaddieContext(input: {
       // "one round isn't a pattern" — but this promptBlock (sent to the brain) skipped it. Gate the
       // same way; par + rounds-played are factual counts and stay.
       const patternReady = hm != null && hm.played >= MIN_HOLE_PLAYS_FOR_GUIDANCE;
+      // Learned putting/greens ride along ONLY once the same honesty floor is met — a three-putt rate
+      // off a single visit is noise asserted as fact.
+      const puttsAvg = patternReady ? hm!.puttsAvg ?? null : null;
+      const threePuttRate = patternReady ? hm!.threePuttRate ?? null : null;
+      const girRate = patternReady ? hm!.girRate ?? null : null;
       course = {
         name: cm.name,
         hole,
@@ -152,6 +161,7 @@ export function getCaddieContext(input: {
         greenBehavior: patternReady ? (hm?.greenBehavior ?? null) : null,
         typicalClub: patternReady ? (hm?.typicalTeeClub ?? null) : null,
         roundsPlayed: cm.rounds_played,
+        puttsAvg, threePuttRate, girRate,
       };
     }
 
@@ -273,6 +283,17 @@ export function getCaddieContext(input: {
       if (course.typicalClub) parts.push(`you usually tee ${course.typicalClub} here`);
       if (course.bestLine) parts.push(course.bestLine);
       if (course.greenBehavior) parts.push(`green: ${course.greenBehavior}`);
+      /**
+       * 2026-08-23 — what he does on THIS hole, learned over rounds. Gated behind the same
+       * MIN_HOLE_PLAYS_FOR_GUIDANCE honesty floor as the rest: one round is not a pattern, and a
+       * three-putt rate off a single visit would be noise asserted as fact.
+       */
+      if (course.threePuttRate != null && course.threePuttRate >= 0.34) {
+        parts.push(`you three-putt this green ${Math.round(course.threePuttRate * 100)}% of the time`);
+      } else if (course.puttsAvg != null) {
+        parts.push(`you average ${course.puttsAvg} putts here`);
+      }
+      if (course.girRate != null && course.girRate <= 0.34) parts.push('you rarely hit this green in regulation');
       if (parts.length > 0) lines.push(`Course memory — ${parts.join('; ')}.`);
     }
     // 2026-06-14 (Tim — course book) — STATIC course knowledge anchored offline

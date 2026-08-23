@@ -1820,6 +1820,9 @@ export const useRoundStore = create<RoundState>()(
           // Build per-hole data ONCE (course-independent). 2026-06-13 (audit G3):
           // feed REAL approachClub (last clubbed shot that isn't the tee shot) +
           // trouble (hole played 2+ over par) into memory instead of null/[].
+          // Indexed once — getHoleStats() walks the whole round, and this map is read per hole below.
+          const holeStatsByHole: Record<number, { putts: number; girHit: boolean | null; fairwayHit: boolean | null }> =
+            Object.fromEntries((get().getHoleStats() ?? []).map(h => [h.hole, h]));
           const holesData = Object.entries(s.scores)
             .filter(([, sc]) => typeof sc === 'number' && sc > 0)
             .map(([holeStr, sc]) => {
@@ -1831,7 +1834,22 @@ export const useRoundStore = create<RoundState>()(
               const approachClub = approachShot?.club ?? null;
               const score = sc as number;
               const trouble = par != null && score - par >= 2 ? ['played 2+ over'] : [];
-              return { hole, par, score, teeClub, approachClub, trouble };
+              /**
+               * 2026-08-23 — teach the model HOW the score happened, not just what it was.
+               *
+               * putts, GIR and fairways were already computed per hole by getHoleStats and were
+               * dropped on the floor at round end, so the caddie could learn that you average 5.2 on
+               * this hole and never that you three-putt its green half the time. `girHit` and
+               * `fairwayHit` are deliberately passed through as null when unknown -- an unsurveyed
+               * green must not be learned as a missed one.
+               */
+              const stat = holeStatsByHole[hole];
+              return {
+                hole, par, score, teeClub, approachClub, trouble,
+                putts: stat?.putts ?? null,
+                girHit: stat?.girHit ?? null,
+                fairwayHit: stat?.fairwayHit ?? null,
+              };
             });
 
           // Per-COURSE memory — only when we know the course.
