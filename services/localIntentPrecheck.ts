@@ -268,7 +268,12 @@ const PATTERNS: Pattern[] = [
   // "what's the read" on the green doesn't grab the hole briefing; "what's the play" already routed to
   // shot_strategy above, and "smart play" (SmartFinder) has no read/briefing/rundown words.
   {
-    rx: /^(?!.*\b(?:putts?|green)\b)(?=.*\b(?:what(?:'s|s)?\s+the\s+read|give\s+me\s+the\s+read|read\s+(?:me\s+)?(?:this|the)\s+hole|briefing|brief\s+me|hole\s+info|(?:the\s+)?rundown|break\s+down\s+(?:this|the)\s+hole|(?:tell\s+me\s+about|walk\s+me\s+through)\s+(?:this|the)\s+hole)\b)/i,
+    // 2026-08-23 — also excludes a MOVE. "Next hole, give me the briefing" matched here (line 272)
+    // long before the next_hole pattern (line 343), so the player advanced nowhere and was briefed
+    // on the hole they had just walked off — accurate, and about the wrong hole, which is the worst
+    // kind of wrong. A compound "move me AND brief me" is two acts, and neither precheck pattern can
+    // do both; it now falls through to the caddie, who calls declare_hole and briefs in one turn.
+    rx: /^(?!.*\b(?:putts?|green)\b)(?!.*\b(?:next\s+hole|next\s+tee|on\s+to\s+the\s+next|previous\s+hole)\b)(?=.*\b(?:what(?:'s|s)?\s+the\s+read|give\s+me\s+the\s+read|read\s+(?:me\s+)?(?:this|the)\s+hole|briefing|brief\s+me|hole\s+info|(?:the\s+)?rundown|break\s+down\s+(?:this|the)\s+hole|(?:tell\s+me\s+about|walk\s+me\s+through)\s+(?:this|the)\s+hole)\b)/i,
     build: (raw) => intent(raw, 'query_status', { query_topic: 'hole_read' }),
   },
 
@@ -339,7 +344,10 @@ const PATTERNS: Pattern[] = [
   },
   // "next hole" / "next tee" → advance. Deterministic so it never rides the cloud (offline dead-end).
   {
-    rx: /\b(next\s+hole|next\s+tee|on\s+to\s+the\s+next(?:\s+hole)?|done\s+here,?\s*next)\b/i,
+    // The mirror of the hole_read exclusion above: a bare move is deterministic and stays local and
+    // instant, but "next hole, what's the read?" is a move AND a question. Handing that to navigate
+    // advances the hole and silently drops the question, which is the same half-answer in reverse.
+    rx: /^(?!.*\b(?:briefing|brief\s+me|the\s+read|rundown|hole\s+info|walk\s+me\s+through|tell\s+me\s+about)\b)(?=.*\b(?:next\s+hole|next\s+tee|on\s+to\s+the\s+next(?:\s+hole)?|done\s+here,?\s*next)\b)/i,
     build: (raw) => intent(raw, 'navigate', { direction: 'next_hole' }),
   },
   {
