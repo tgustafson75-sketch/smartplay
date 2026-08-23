@@ -605,6 +605,45 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       const d = haversineYards({ lat: fix.lat, lng: fix.lng }, { lat: tee.teeLat, lng: tee.teeLng });
       return d >= 20 && d <= 700 ? Math.round(d) : null;
     }, null),
+    /**
+     * 2026-08-23 (Tim) — "When I'm on the course, it needs to be real. It was raining yesterday. We
+     * have a weather API. That plays into the round, especially for a mid to high handicapper."
+     *
+     * WEATHER REACHED NO BRAIN. Not one key in this payload, and nothing kevin destructured.
+     * services/weatherService feeds the offline responder, SmartFinder's scene read, TightLie, the
+     * dashboard and the direct "what's the wind" query — every surface EXCEPT the caddie the player
+     * actually talks to. `getCachedWeatherEvenIfStale` even documents itself as being for
+     * "brain/prompt builders", and no brain builder called it.
+     *
+     * Worse than absent: the prompt already carries an honesty rule about it — "if wind data is
+     * null or weather hasn't loaded, say 'no wind on me right now'". Written to stop the caddie
+     * inventing wind, it instead guaranteed the caddie reported none, in every round, in every
+     * condition. The same shape as the presence caddie: a prompt reasoning about context the
+     * request never carried.
+     *
+     * Stale-tolerant on purpose — 30-minute-old weather beats no weather, and conditions do not
+     * turn over in a hole. [[unconnected-halves-not-broken-code]]
+     */
+    weather: safe(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getCachedWeatherEvenIfStale } = require('./weatherService') as typeof import('./weatherService');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getLastFix } = require('./gpsManager') as typeof import('./gpsManager');
+      const fix = getLastFix();
+      if (!fix || fix.lat == null || fix.lng == null) return null;
+      const w = getCachedWeatherEvenIfStale({ lat: fix.lat, lng: fix.lng });
+      if (!w) return null;
+      return {
+        tempF: w.temp_f,
+        windMph: w.wind_speed_mph,
+        windFromDeg: w.wind_direction_deg,
+        gustMph: w.wind_gust_mph,
+        conditions: w.conditions,
+        description: w.description,
+        ageMin: Math.round((Date.now() - w.timestamp) / 60000),
+      };
+    }, null),
+
     /** Front / middle / back to the green, the three numbers a caddie is actually asked for. */
     greenYardages: safe(() => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports

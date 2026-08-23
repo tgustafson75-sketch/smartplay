@@ -498,6 +498,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       distanceFromTeeYds = null,
       greenYardages = null,
       /**
+       * 2026-08-23 — THE CONDITIONS HE IS ACTUALLY STANDING IN. See the note in
+       * services/caddieRequestBody: every other surface had this and the caddie did not.
+       */
+      weather = null,
+      /**
        * 2026-08-23 — WHERE THE YARDAGE CAME FROM, and how much to trust it.
        *
        * services/yardageResolver has been the "single source of truth" for the number since
@@ -829,6 +834,39 @@ You are in CADDIE mode — on the course, mid-round. Your voice is:
          * only on the retired brain: this path had the number but never the shape of the answer.
          */
         lines.push(`- They are about ${distanceFromTeeYds} yards from THIS hole's tee — that is roughly the drive they just hit, and you know it before it is ever logged. When they ask what they have left ("what's left", "what do I have"), CONFIRM that shot naturally first ("you hit that about ${distanceFromTeeYds}"), THEN the remaining number, THEN the play — one flowing sentence, never robotic.`);
+      }
+      const wx = weather as {
+        tempF: number | null; windMph: number; windFromDeg: number | null; gustMph: number | null;
+        conditions: string | null; description: string | null; ageMin: number;
+      } | null;
+      if (wx) {
+        /**
+         * 2026-08-23 (Tim) — "It was raining yesterday. That plays into the round, especially for a
+         * mid to high handicapper."
+         *
+         * Stated as what the conditions DO to the shot, not as a forecast. A bare "12mph wind, 54°F"
+         * is a readout — the same failure the answer-shape block calls out for yardages. What a
+         * mid-to-high handicapper needs is the consequence: club up, expect no roll, swing easier.
+         */
+        const bits: string[] = [];
+        if (wx.windMph >= 8) {
+          bits.push(`wind ${Math.round(wx.windMph)}mph${wx.gustMph && wx.gustMph > wx.windMph + 5 ? ` gusting ${Math.round(wx.gustMph)}` : ''}${wx.windFromDeg != null ? ` from ${Math.round(wx.windFromDeg)}°` : ''}`);
+        } else if (wx.windMph < 4) {
+          bits.push('dead calm');
+        }
+        if (typeof wx.tempF === 'number') bits.push(`${Math.round(wx.tempF)}°F`);
+        if (wx.description) bits.push(wx.description);
+        const wet = /rain|drizzle|shower|thunder|snow|sleet/i.test(`${wx.conditions ?? ''} ${wx.description ?? ''}`);
+        const cold = typeof wx.tempF === 'number' && wx.tempF < 50;
+
+        const consequences: string[] = [];
+        if (wet) consequences.push('BALL GOES SHORTER AND STOPS — a wet ball and wet turf kill carry and roll, so club up and do not expect release. Greens hold, so you can be aggressive at the flag. Grips are slick; a smoother swing beats a harder one.');
+        if (cold) consequences.push('COLD AIR: roughly a club shorter than the same swing in summer. Take more club and swing easier, not harder.');
+        if (wx.windMph >= 12) consequences.push('WIND IS A REAL FACTOR: into it, take more club and swing EASIER — swinging harder adds spin and balloons the ball. Downwind the ball will run; allow for it. Across, aim into the wind rather than trying to hold the ball against it.');
+        else if (wx.windMph >= 8) consequences.push('Enough wind to matter on a mid-iron; factor it into the club, do not make a speech about it.');
+
+        lines.push(`- CONDITIONS RIGHT NOW: ${bits.join(', ')}${wx.ageMin > 20 ? ` (read ${wx.ageMin} min ago)` : ''}.`);
+        for (const c of consequences) lines.push(`  ${c}`);
       }
       if (gpsLost === true) {
         // 2026-07-08 (Tim, Green Hill — the caddie asked HIM the yardage). Own it; never hand the
@@ -1219,7 +1257,7 @@ USER STATE AWARENESS:
 CRITICAL HONESTY RULES (Phase BC):
 - If you don't know something, say so directly. Do not fabricate.
 - If GPS distance is unavailable in the context above, say "I don't have a clean GPS read right now" rather than guessing a yardage.
-- If wind data is null or weather hasn't loaded, say "no wind on me right now" — never invent a wind direction or speed.
+- If NO conditions block appears above, weather genuinely has not loaded: say "no wind on me right now" and never invent a direction or speed. If a conditions block IS there, that is measured — use it and speak with confidence. (2026-08-23: this rule used to fire on every round, because weather was never sent to this brain at all.)
 - If course geometry is incomplete (no front/middle/back), say "the course doesn't have green coords mapped here, so I can't give you front/back" rather than asserting a number.
 - If you're unsure about a yardage you DO have, you can hedge: "reading 162, but my fix is a little soft" — better to flag uncertainty than to oversell.
 - It is ALWAYS better to admit uncertainty than to guess. A real caddie says "I'm not sure" when they don't know — so should you.
