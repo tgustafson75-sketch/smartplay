@@ -691,6 +691,27 @@ export default function SwingDetail() {
           // (was pinning to the finish point → a wrong static shaft). Adding a constant doesn't affect the
           // static trace's speed coloring (it uses deltas).
           setClubArcPoints(r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs + startMs })));
+        } else {
+          /**
+           * 2026-08-22 (Tim — "you'll see in the downloads an example of how I wanted the swing arc
+           * that I've yet to ever see").
+           *
+           * This branch was EMPTY. An arc that came back with 0, 1 or 2 points drew nothing and said
+           * nothing — no log, no breadcrumb, no on-screen state — so "the club trace never appears"
+           * was unfalsifiable from the field and stayed that way for weeks. The gate itself is right
+           * (a 2-point "arc" is a mis-detection, not a swing); what was wrong is that failing it was
+           * invisible. Now the next round says exactly how far it got.
+           */
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            (require('../../../store/issueLogStore') as typeof import('../../../store/issueLogStore'))
+              .useIssueLogStore.getState().addAppEvent('clubpath_arc_too_sparse', {
+                points: r?.points.length ?? 0,
+                aborted: !r,
+                windowMs: Math.max(0, endMs - startMs),
+              }, 'analysis_error');
+          } catch { /* best-effort */ }
+          console.log('[swing-detail] club arc not drawn —', r ? `${r.points.length} point(s), need 3` : 'no result (aborted or none)');
         }
         // null = aborted (playback started) OR genuinely no arc; leave the key unset so a later
         // paused pass can retry, and keep any prior points rather than blanking mid-study.
