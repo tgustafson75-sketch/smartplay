@@ -719,6 +719,26 @@ async function _anthropicAgenticLoop(
     input_schema: t.parameters as Anthropic.Tool['input_schema'],
   }));
 
+  /**
+   * 2026-08-23 — PROMPT CACHING on the system prompt.
+   *
+   * The caddie's system prompt is the expensive part of every turn by a wide margin: persona spec,
+   * the app catalog, the course book, the register block, and now the full context union — while
+   * the player's actual question is a dozen words. It is also almost entirely IDENTICAL from one
+   * turn to the next within a round.
+   *
+   * Marking it as a cache breakpoint means the repeat turns of a round read it from cache at ~10%
+   * of the input price, which is what makes running the good model affordable per round rather than
+   * per turn. It also cuts time-to-first-token, which the player feels directly as the caddie
+   * answering quicker.
+   *
+   * Cached as a single trailing breakpoint: everything before it is stable, and the volatile part
+   * (the question, the images) lives in `messages`, after the cache boundary, where it belongs.
+   */
+  const cachedSystem: Anthropic.TextBlockParam[] = [
+    { type: 'text', text: system, cache_control: { type: 'ephemeral' } },
+  ];
+
   // Build initial user content — images first, then text.
   const initialContent: Anthropic.ContentBlockParam[] = [
     ...images.map(img => ({
@@ -745,7 +765,7 @@ async function _anthropicAgenticLoop(
       model,
       max_tokens: maxTokens,
       temperature,
-      system,
+      system: cachedSystem,
       tools: antTools,
       messages: msgs,
     });

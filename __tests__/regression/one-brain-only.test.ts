@@ -30,10 +30,38 @@ describe('there is a fixed, shrinking set of answering brains', () => {
      *
      * Verified to select exactly kevin.ts + pipecat-turn.ts today.
      */
+    /**
+     * 2026-08-23 — two corrections, both found by this guard going red on a change that was not a
+     * new brain.
+     *
+     * 1. CLASSIFY ON CODE, NOT PROSE. The heuristic ran over the raw file, so a COMMENT containing
+     *    the word "persona" was enough to make a file look like a brain. It flagged _aiProvider.ts
+     *    the moment a comment there mentioned the persona spec. This codebase has now been bitten
+     *    by comment-matching guards four separate times — three on 08-22 alone, where guards
+     *    matched the author's own note describing the bug they were guarding. Strip comments and
+     *    string literals FIRST, always. [[grep-guards-cant-see-dead-code]]
+     *
+     * 2. A BRAIN IS AN ENDPOINT. _aiProvider.ts is the provider library — it DEFINES
+     *    runAgenticLoop; it cannot answer a turn because nothing can call it over HTTP. What makes
+     *    a file capable of answering a player is a Vercel handler, so require one. This is a
+     *    property, not an allow-list entry: a genuine new brain endpoint necessarily has one.
+     */
+    /**
+     * Comments only. An earlier version of this also stripped string literals, which on a TypeScript
+     * file full of template literals and regex literals swallowed enormous spans and made EVERY file
+     * look like a non-brain — a guard that had stopped being able to fail. Comment-stripping plus
+     * the handler requirement below is sufficient and cannot misfire that way.
+     */
+    const stripped = (src: string) => src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/[^\n]*/g, '');
+
     const brains = fs.readdirSync(API)
       .filter(f => f.endsWith('.ts'))
       .filter(f => {
-        const src = fs.readFileSync(path.join(API, f), 'utf8');
+        const src = stripped(fs.readFileSync(path.join(API, f), 'utf8'));
+        // Only something reachable over HTTP can answer a player.
+        if (!/export default async function handler/.test(src)) return false;
         return /runAgenticLoop|response_text/.test(src)
           && /persona/i.test(src)
           && /history/.test(src);
@@ -49,7 +77,7 @@ describe('there is a fixed, shrinking set of answering brains', () => {
      * place to hide a third brain.
      */
     const adapters = brains.filter(f => {
-      const src = fs.readFileSync(path.join(API, f), 'utf8');
+      const src = stripped(fs.readFileSync(path.join(API, f), 'utf8'));
       const invokesAModel = /runAgenticLoop\(|completeText\(|\.chat\.completions|generateContent/.test(src);
       return f === '_brainShim.ts' && !invokesAModel;
     });

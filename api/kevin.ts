@@ -183,9 +183,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // keeps Gemini via its OWN endpoints, which still read the X-AI-Provider header
   // independently — only the brain is pinned here. requestedProvider is retained
   // for telemetry. Fallback order becomes openai → anthropic → gemini.
+  /**
+   * 2026-08-23 (Tim's call, sprint finish) — THE BRAIN IS CLAUDE SONNET.
+   *
+   * It had been pinned to openai/fast — gpt-4o-mini — for EVERY non-vision turn, with the
+   * justification that "caddie gives 2-sentence answers that gpt-4o-mini handles equally well."
+   * That was true of the prompt it was written against. It stopped being true as the prompt
+   * accumulated real reasoning work: measured hazard geometry with carry distances, left-handed
+   * mirroring of every directional call, hedging a yardage whose source is the scorecard rather
+   * than GPS, per-club tendencies, round stats, experience-depth calibration.
+   *
+   * This is the answer to the complaint that started the sprint — "it's generic". The caddie was
+   * not short of context; the model reading the context could not use it. This codebase already
+   * knew the shape of that: [[fast-tier-wont-call-tools-alongside-answers]] records gpt-4o-mini
+   * failing to emit content and a tool call in one message, and concluded outright that no prompt
+   * wording fixes a non-compliant cheap tier. Three prompt rewrites had already been spent on
+   * recommend_club before that landed.
+   *
+   * The anthropic path was fully built — agentic loop, tool calls, multimodal, failover — and had
+   * simply never been selected for the brain. Cost is handled where it actually lives: the system
+   * prompt is now cached (see _aiProvider), so the repeat turns of a round pay ~10% on the large,
+   * stable half.
+   *
+   * The 2026-06-26 pin to openai was about GEMINI hanging the voice turn as PRIMARY; that reasoning
+   * never applied to Anthropic. The failover below is unchanged in shape — two attempts on the
+   * primary, then a budget-gated cross-provider shot, then the on-device responder — so a provider
+   * outage still cannot take a turn down.
+   */
   const requestedProvider = providerFromHeader(req.headers as Record<string, string | string[] | undefined>);
-  const provider: AiProvider = 'openai';
-  if (requestedProvider !== 'openai') console.log(`[kevin] brain pinned to openai (toggle requested ${requestedProvider})`);
+  const provider: AiProvider = 'anthropic';
+  if (requestedProvider !== provider) console.log(`[kevin] brain pinned to ${provider} (toggle requested ${requestedProvider})`);
 
   if (req.body?.mode === 'warmup' || req.query?.mode === 'warmup') {
     await Promise.allSettled([
@@ -1332,11 +1359,19 @@ ${onCourseContextBlock}${baseMessage}`
       ? image_caption.trim()
       : null;
 
-    // Always use 'fast' tier (gpt-4o-mini / gemini-2.5-flash) except for
-    // vision. Removing classifyQuestion() eliminates one full AI round-trip
-    // (2-8s) on every request — caddie gives 2-sentence answers that
-    // gpt-4o-mini handles equally well. Vision needs multimodal quality.
-    const aiTier: AiTier = visionBase64 ? 'quality' : 'fast';
+    /**
+     * 2026-08-23 — 'quality' on every turn (claude-sonnet-4-6), not just vision.
+     *
+     * The old rule was `visionBase64 ? 'quality' : 'fast'`, which is the same judgement as the
+     * provider pin above and wrong for the same reason: it treated a club recommendation as an
+     * easier problem than looking at a photo. Deciding what to hit, from this lie, at this
+     * distance, past a bunker whose carry we have measured, for a player who hooks it and swings
+     * left-handed, IS the hard problem in this app.
+     *
+     * There is still no classifyQuestion() round-trip — that was removed for good reason and stays
+     * removed. One model, every turn, no routing decision to get wrong.
+     */
+    const aiTier: AiTier = 'quality';
 
     console.log(`[kevin] provider=${provider} tier=${aiTier} vision=${visionBase64 ? 'yes' : 'no'} q="${userMessage.slice(0, 60)}"`);
     console.log(`[kevin] smartVisionContext:`, JSON.stringify(sv));
@@ -1366,7 +1401,11 @@ ${onCourseContextBlock}${baseMessage}`
     // (that's the "local brain backup"). Vision/swing analysis is a separate path and is
     // intentionally left on its own provider for now.
     const loopOpts = {
-      maxTokens: aiTier === 'fast' ? 300 : 400,
+      // 400 — what the 'quality' tier already used. Deliberately NOT raised now that the model is
+      // better: the caddie's brevity is a design rule ("maximum 2 sentences unless asked"), not a
+      // budget compromise, and the in-round Coach's longest permitted answer is ~110 words. A
+      // bigger cap would only buy the rambling this app is careful not to do.
+      maxTokens: 400,
       maxRounds: 3,
       continuationTools: ['lookup_course', 'lookup_hole'],
       // 2026-07-08 (Tim — "let ONE agent figure it out"; audit-corrected). No provider cascade
@@ -1570,13 +1609,13 @@ ${onCourseContextBlock}${baseMessage}`
           const remainMs = 19_000 - (Date.now() - startedLoop);
           const attemptOpts = attempt === 1 ? loopOpts : { ...loopOpts, timeoutMs: Math.max(3_000, Math.min(loopOpts.timeoutMs, remainMs - 1_000)) };
           loopResult = await runAgenticLoop(provider, aiTier, systemPromptWithKB, effectiveUserMessage, images, AI_TOOLS, toolDispatch, attemptOpts);
-          if (attempt > 1) console.log('[kevin] openai succeeded on retry');
+          if (attempt > 1) console.log(`[kevin] ${provider} succeeded on retry`);
           break;
         } catch (err) {
           lastErr = err;
           capture.action = null; capture.actions = []; capture.dataToolCalls = 0; // reset partial tool state
           const attemptMs = Date.now() - attemptStart;
-          console.warn(`[kevin] openai attempt ${attempt} failed in ${attemptMs}ms: ${err instanceof Error ? err.message : String(err)}`);
+          console.warn(`[kevin] ${provider} attempt ${attempt} failed in ${attemptMs}ms: ${err instanceof Error ? err.message : String(err)}`);
           // Ceiling is the client's 20s voice abort — only retry if attempt-2 can plausibly
           // finish before then (leave ~10s for it), so we never run past the user's patience.
           const budgetLeft = 19_000 - (Date.now() - startedLoop);
@@ -1603,7 +1642,7 @@ ${onCourseContextBlock}${baseMessage}`
         if (budgetLeft > 9_000) {
           const geminiStart = Date.now();
           try {
-            console.log(`[kevin] openai exhausted; trying gemini fallback (${budgetLeft}ms left)`);
+            console.log(`[kevin] ${provider} exhausted; trying gemini fallback (${budgetLeft}ms left)`);
             capture.action = null; capture.actions = []; capture.dataToolCalls = 0; // clean slate for the fallback
             loopResult = await runAgenticLoop(
               'gemini', aiTier, systemPromptWithKB, effectiveUserMessage, images, AI_TOOLS, toolDispatch,
@@ -1615,7 +1654,7 @@ ${onCourseContextBlock}${baseMessage}`
             console.warn(`[kevin] gemini fallback failed in ${Date.now() - geminiStart}ms: ${gErr instanceof Error ? gErr.message : String(gErr)}`);
           }
         } else {
-          console.log(`[kevin] openai exhausted; skipping gemini (only ${budgetLeft}ms left) → local brain`);
+          console.log(`[kevin] ${provider} exhausted; skipping gemini (only ${budgetLeft}ms left) → local brain`);
         }
       }
       if (!loopResult) throw lastErr ?? new Error('brain failed after retries');
