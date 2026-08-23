@@ -240,6 +240,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       currentHole = null,
       currentPar = null,
       currentYardage = null,
+      currentStroke = null,
       holeNotes = {},
       activeCourse = null,
       isRoundActive = false,
@@ -780,7 +781,9 @@ walking next to them.
 
 CURRENT ROUND:
 Course: ${activeCourse || 'unknown'}
-Hole: ${currentHole} | Par: ${currentPar} | Yards: ${currentYardage}
+Hole: ${currentHole} | Par: ${currentPar}
+PLAYING THEIR STROKE ${currentStroke ?? 1}${(currentStroke ?? 1) > 1 ? ' — they have ALREADY TEED OFF. Do NOT brief the tee shot or suggest a driver off the tee.' : ' — they are on the tee.'}
+DISTANCE REMAINING RIGHT NOW: ${currentYardage} yards. This is the shot in front of them, measured live. It is NOT the hole's card length, and the card length is NOT the shot — never quote a scorecard yardage as the distance they are hitting.
 ${currentHoleNote ? `Hole note: ${currentHoleNote}` : ''}
 Club: ${_club || 'not selected'}
 Score: ${totalScore > 0 ? totalScore : 'no holes yet'} | Vs par: ${scoreVsPar === 0 ? 'even' : scoreVsPar > 0 ? '+' + scoreVsPar : String(scoreVsPar)} | Holes: ${holesPlayed}

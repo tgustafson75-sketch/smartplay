@@ -159,6 +159,21 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     activeCourse: safe(() => r.activeCourse ?? null, null),
     activeCourseId,
     club,
+    /**
+     * 2026-08-22 (from Tim's screenshot, Greenhill hole 9) — WHICH SHOT HE IS ON.
+     *
+     * The brain was never told. On stroke 2 from 422 yards it answered "for hole 9, a par 5 at 450
+     * yards, I'd suggest starting with your driver" — a TEE briefing, off the scorecard, to a man
+     * standing in the fairway. Without this the model cannot know he has already hit, so it defaults
+     * to the start of the hole every time.
+     *
+     * Same definition the on-screen strip uses: the stroke he is ABOUT to play (shots + penalties + 1).
+     */
+    currentStroke: safe(() => {
+      const shots = (r.shots ?? []).filter((sh: { hole: number }) => sh.hole === currentHole);
+      if (!shots.length) return 1;
+      return shots.length + 1 + shots.reduce((a: number, sh: { penalty_strokes?: number }) => a + (sh.penalty_strokes ?? 0), 0);
+    }, 1),
     scores: safe(() => r.scores ?? {}, {}),
     // Current hole +/- 1 only: the full 18 added 5-15KB to every call.
     courseHoles: safe(() => {
