@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { buildCaddieRequestBody } from '../services/caddieRequestBody';
 import { useShallow } from 'zustand/react/shallow';
 import { speakFromBase64, stopSpeaking } from '../services/voiceService';
 import { getActiveCaddie } from '../services/caddieResolver';
@@ -165,6 +166,18 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
         body: JSON.stringify({
+          // 2026-08-22 — the shared union first, this path's own values second. See
+          // services/caddieRequestBody: the mic and the text box hand-built different bodies for the
+          // SAME endpoint, which is why the caddie's tone and accuracy changed depending on how you
+          // asked. The literal below still wins wherever this hook already computed something.
+          ...buildCaddieRequestBody({
+            message,
+            language,
+            liveBlock: unifiedPromptBlock,
+            image_base64: visionImage?.base64 ?? null,
+            image_media_type: visionImage?.media_type ?? null,
+            image_caption: visionImage?.caption ?? null,
+          }),
           message,
           language,
           playerName: name,

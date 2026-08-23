@@ -27,6 +27,7 @@ import {
 import { initFillerLibrary } from '../services/fillerLibrary';
 import { bagDistances } from '../services/shotStrategy';
 import { getCaddieContext, mergeMemoryIntoContext } from '../services/caddieMemoryRetrieval';
+import { buildCaddieRequestBody } from '../services/caddieRequestBody';
 import { checkContent } from '../services/contentGuardrail';
 import { resolveGreetingClip } from '../services/quickGreetingClips';
 import { recordFailure as recordVoiceEndpointFailure, recordSuccess as recordVoiceEndpointSuccess } from '../services/voiceCircuitBreaker';
@@ -1107,6 +1108,20 @@ export const useVoiceCaddie = ({
         },
         signal: controller.signal,
         body: JSON.stringify({
+          /**
+           * 2026-08-22 — THE UNION FIRST, this path's own values second.
+           *
+           * The mic and the text box both POST here and each hand-built its own body: 45 fields vs
+           * 34, only 20 shared. The mic never sent `persona`/`personaIntensity`, so the server fell
+           * back to a default voice; the text box never sent `courseIntelligence`/`yardageInsight`.
+           * Tim felt exactly that: "it's generic, and then the tone of the voice changes a little
+           * bit, and the information's more accurate." Same brain, different inputs.
+           *
+           * Spreading the shared builder first guarantees EVERY key is present on EVERY path, while
+           * the literal below still wins wherever this hook already computed something. Neither path
+           * can silently omit a field again.
+           */
+          ...buildCaddieRequestBody({ message, language, liveBlock, responseMode }),
           message,
           language,
           // 2026-08-21 (brain consolidation, phase 1) — parity with the pipecat path, which has
