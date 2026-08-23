@@ -2392,19 +2392,16 @@ check('CNS ingestion: conversation distilled into durable memory notes (honest, 
   })(),
   'distillConversation mines only stated high-confidence signals (miss/focus/carry) → memory notes; empty-safe, capped, no fabrication');
 
-check('Self-growing agent: local hit-rate counts memory-backed local answers (G4)',
-  // 2026-06-13 — audit G4: the metric only counted the static regex precheck; a
-  // memory-backed tryLocalReply answer (which gets richer as the CNS grows) was
-  // miscounted as cloud. reclassifyCloudToLocal moves it cloud→local at the router.
-  (() => {
-    const stats = read('store/agentBrainStats.ts');
-    const router = read('services/voiceCommandRouter.ts');
-    return /reclassifyCloudToLocal:/.test(stats) &&
-      /cloudEscalated: Math\.max\(0, s\.cloudEscalated - 1\)/.test(stats) &&
-      /localAnswered: s\.localAnswered \+ 1/.test(stats) &&
-      /reclassifyCloudToLocal\(\)/.test(router); // called in the tryLocalReply success branch
-  })(),
-  'memory-backed local answers reclassify cloud→local so localHitRate reflects CNS growth, not just the regex precheck');
+/**
+ * 2026-08-23 — REMOVED with the thing it measured. This asserted that a memory-backed
+ * tryLocalReply answer in voiceCommandRouter reclassified cloud→local, so the hit-rate reflected
+ * CNS growth. That local answer is gone (Tim: every spoken question reaches the caddie), so there
+ * is no cloud→local reclassification left to assert — and a guard whose subject no longer exists
+ * cannot fail, which is worse than no guard.
+ *
+ * The CNS growth it was proxying for is now visible where it actually belongs: the learned layer
+ * reaches the caddie as context, asserted by "No local path answers before the caddie is asked".
+ */
 
 check('Smart Finder Scene Read: meta scene + measured wind → caddie brain (OTA-safe, honest)',
   // 2026-06-13 — Tim's "mind-blown" moment: snap the view, the multimodal brain reads
@@ -3477,35 +3474,48 @@ check('Voice: stale speech cleared on navigation (no carry-over), with speak-the
   })(),
   'route change stops stale prior-step speech; 2s grace protects speak-then-navigate');
 
-check('Voice local-first: FACTUAL asks answer on-device; JUDGMENT asks lead with the AI',
-  // 2026-06-16 (Tim — local-first, "on course no wifi" + speed) — the local responder
-  // is tried BEFORE the cloud classify+brain on a precheck miss (offline + fast).
-  // 2026-07-03 (Tim — "the AI needs to be front and center and the highlight") — the
-  // JUDGMENT reads (club_recommend / plays_like / reach) were REMOVED from the instant
-  // local-primary set so they lead with the caddie brain; they remain the OFFLINE
-  // safety net via answerOffline→tryLocalReply. Pure FACTS (yardage/score/hole/par/…)
-  // still answer instantly + local.
+/**
+ * 2026-08-23 (Tim's call) — INVERTED. This used to assert that FACTUAL asks answered on-device
+ * without calling the brain, and it was the guard protecting the thing that had to go.
+ *
+ * The local-primary set included yardage and wind — the two questions a caddie exists to answer —
+ * and answered them from services/localStatusResponder as a bare number, in no persona (2 persona
+ * references across its 960 lines; offlineCaddie has zero). The caddie's own answer doctrine calls
+ * that a failure: "It's 158 is something he could read off a screen; you are on the bag to convert
+ * it into a decision." Hazard carries, learned tendencies, conditions and the club call were all
+ * bypassed at the moment they mattered most.
+ *
+ * Tim: "everything is everything… the caddie is the person that knows everything, the brain, the
+ * central nervous system. There should have been no way we went off reservation and started
+ * creating separate paths."
+ *
+ * So the property is now the opposite: NO local path answers a question before the brain is asked.
+ * The learned layer still reaches the caddie — as CONTEXT it reasons over, accumulated in the
+ * background (services/caddieMemoryRetrieval → the one payload builder), which is where a learning
+ * layer belongs. tryLocalReply survives only where the brain has already FAILED.
+ */
+check('No local path answers before the caddie is asked',
   (() => {
-    const ls = read('services/listeningSession.ts');
-    const setBlock = (ls.match(/LOCAL_PRIMARY_TYPES: ReadonlySet<string> = new Set\(\[([\s\S]*?)\]\)/) || [])[1] || '';
-    const lsr = read('services/localStatusResponder.ts');
+    const ls  = read('services/listeningSession.ts');
     const uvc = read('hooks/useVoiceCaddie.ts');
-    return (
-      /import \{ tryLocalReply \} from '\.\/localStatusResponder';/.test(ls) &&
-      /localPrimary = tryLocalReply\(utterance, localLang\)/.test(ls) &&
-      /LOCAL_PRIMARY_TYPES\.has\(localPrimary\.queryType\)/.test(ls) &&
-      /local_primary type=/.test(ls) &&
-      // FACTS stay local; JUDGMENT types are OUT of the instant set (→ brain).
-      /score_round/.test(setBlock) && /yardage_middle/.test(setBlock) &&
-      !/club_recommend/.test(setBlock) && !/plays_like/.test(setBlock) && !/\breach\b/.test(setBlock) &&
-      !/hole_info/.test(setBlock) && !/no_round/.test(setBlock) &&
-      // The AI-led set is declared + the caddie-tab path defers those to the brain.
-      /export const AI_LED_QUERY_TYPES/.test(lsr) &&
-      /club_recommend'.*'plays_like'.*'reach'/s.test(lsr) &&
-      /!responder\.AI_LED_QUERY_TYPES\.has\(local\.queryType\)/.test(uvc)
-    );
+    const rtr = read('services/voiceCommandRouter.ts');
+    // Strip comments — the notes above deliberately NAME the removed symbols, and matching prose
+    // instead of code is how four guards in this repo went wrong. [[grep-guards-cant-see-dead-code]]
+    const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const noPreBrainAnswer =
+      !/tryLocalReply\(/.test(code(ls)) &&
+      !/tryLocalReply\(/.test(code(uvc)) &&
+      !/tryLocalReply\(/.test(code(rtr)) &&
+      !/LOCAL_PRIMARY_TYPES/.test(code(ls));
+    // The learned layer must still reach the brain, or this trade was a loss.
+    const learnedStillReachesTheBrain =
+      /getCaddieContext\(/.test(read('services/caddieRequestBody.ts')) &&
+      /CNS_RETRIEVAL_ENABLED = true/.test(read('services/caddieMemoryRetrieval.ts'));
+    // Commands may still route locally — routing a command is not answering a question.
+    const commandRoutingKept = /precheckLocalIntent\(/.test(code(rtr));
+    return noPreBrainAnswer && learnedStillReachesTheBrain && commandRoutingKept;
   })(),
-  'factual asks answer instantly + offline; judgment asks (club/plays-like/reach) lead with the AI brain');
+  'every spoken QUESTION reaches the caddie; the learned layer arrives as context, not as an interceptor; command routing stays local');
 
 check('Voice local-first hit-rate metric: recorded at decision points + shown in Owner Tools',
   // 2026-06-16 (Tim — "I care about that stuff") — the self-growing-agent health metric:
@@ -3520,7 +3530,10 @@ check('Voice local-first hit-rate metric: recorded at decision points + shown in
       /export const useVoiceHitRateStore/.test(store) &&
       /recordLocal:/.test(store) && /recordCloud:/.test(store) &&
       /recordLocal\(`precheck:/.test(ls) &&
-      /recordLocal\(`local_primary:/.test(ls) &&
+      // 2026-08-23 — the local_primary decision point is GONE with the local-first intercept, so
+      // there is no longer a "answered on-device instead of asking the caddie" event to count. What
+      // the metric now measures is narrower and truer: a COMMAND matched by the regex precheck
+      // (no classifier round-trip) versus one that needed the cloud classifier.
       /recordCloud\(`cloud:/.test(ls) &&
       /function VoiceHitRateRow/.test(settings) && /<VoiceHitRateRow colors=\{colors\} \/>/.test(settings)
     );

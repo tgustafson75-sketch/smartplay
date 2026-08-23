@@ -41,7 +41,6 @@ const GOTIT_EARCON_MS = 180;
 import { getActiveSurface } from './activeSurfaceRegistry';
 import { precheckLocalIntent } from './localIntentPrecheck';
 import { resolvePendingCourseUtterance } from './pendingDisambiguation';
-import { tryLocalReply } from './localStatusResponder';
 import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 import type { AppContext, VoiceIntent } from '../types/voiceIntent';
 import { getApiBaseUrl, isConnectionWarmed, getConnectionEvidence } from './apiBase';
@@ -99,14 +98,12 @@ const intentTimeout = (): number => (isConnectionWarmed() ? INTENT_FETCH_TIMEOUT
 // (club_recommend / plays_like / reach) from the instant local-primary set so they
 // route to the caddie brain (the AI leads the read). They remain the OFFLINE safety
 // net via answerOffline→tryLocalReply. Pure facts still answer instantly + local.
-const LOCAL_PRIMARY_TYPES: ReadonlySet<string> = new Set([
-  'yardage_middle', 'yardage_front', 'yardage_back', 'course_memory',
-  'wind', 'last_shot',
-  'score_round', 'hole_current', 'par_current', 'holes_left',
-  'tee_box', 'course_name', 'club_current', 'handicap',
-  'routine_saved', 'routine_recall',
-]);
-const LOCAL_REPLY_LANGS = ['en', 'es', 'zh'] as const;
+/**
+ * 2026-08-23 — LOCAL_PRIMARY_TYPES deleted with the local-first intercept it drove. It listed the
+ * 16 query types answered without ever calling the brain, and it included the two a caddie exists
+ * for: yardage and wind. Kept nowhere, because a list of "questions the caddie does not get asked"
+ * is the shape of the problem, not a thing to preserve.
+ */
 
 let state: SessionState = 'idle';
 let cancelMic: (() => void) | null = null;
@@ -955,29 +952,30 @@ async function openSession() {
       // and works with no signal (TTS still voices it, with the device-TTS fallback
       // when /api/voice is unreachable). Strategic/coaching asks aren't in the set,
       // so they still get the richer brain online. Pure win, no downgrade.
-      const localLang = (LOCAL_REPLY_LANGS as readonly string[]).includes(settings.language)
-        ? (settings.language as 'en' | 'es' | 'zh')
-        : 'en';
-      let localPrimary: { text: string; queryType: string } | null = null;
-      try { localPrimary = tryLocalReply(utterance, localLang); } catch { localPrimary = null; }
-      if (localPrimary && localPrimary.text && LOCAL_PRIMARY_TYPES.has(localPrimary.queryType)) {
-        console.log(`[path4:voice] local_primary type=${localPrimary.queryType} (skipped classify+brain)`);
-        try { useVoiceHitRateStore.getState().recordLocal(`local_primary:${localPrimary.queryType}`, Date.now()); } catch { /* non-fatal */ }
-        const localAllowed =
-          settings.voiceEnabled &&
-          (route !== 'phone_speaker' || allowPhoneSpeaker);
-        if ((state as SessionState) === 'thinking') setSessionStateMirror('responding');
-        if (localAllowed && getSessionState() === 'responding') {
-          await stopSpeaking().catch(() => {});
-          if (getSessionState() === 'responding') {
-            await speak(localPrimary.text, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
-              .catch((e) => console.log('[listeningSession] local-primary speak failed', e));
-          }
-        }
-        setSessionStateMirror('idle');
-        return;
-      }
-
+      /**
+       * 2026-08-23 (Tim's call) — LOCAL-FIRST IS GONE. Every spoken question reaches the caddie.
+       *
+       * This block answered 16 query types — yardage_middle/front/back, wind, last_shot,
+       * course_memory, score, hole, par — WITHOUT calling the brain at all. Its own log line said
+       * so: "(skipped classify+brain)". It was added as a pure-win speed optimisation, and on the
+       * two questions a caddie exists to answer it was the opposite:
+       *
+       *   "how far to the green"  → "150 yards to the middle of the green."
+       *   "what's the wind doing" → a number, from services/localStatusResponder
+       *
+       * In NO persona (2 persona references across its 960 lines; offlineCaddie has zero), and as a
+       * bare number — which the caddie's own answer doctrine calls a failure: "It's 158 is something
+       * he could read off a screen; you are on the bag to convert it into a decision." So the
+       * hazard carries, the player's tendencies, the conditions and the club call were all bypassed
+       * at precisely the moment they mattered, including the weather wired in the same day.
+       *
+       * Tim: "everything is everything… the caddie is the person that knows everything, the brain,
+       * the central nervous system. There should have been no way we went off reservation and
+       * started creating separate paths."
+       *
+       * The local responder still exists as an OFFLINE answer when the brain genuinely cannot be
+       * reached — that is a failure being handled honestly, not a second caddie answering first.
+       */
       speculativeController = new AbortController();
       speculativeBrainP = fetchWithTimeout(`${apiUrl}/api/kevin`, {
         method: 'POST',

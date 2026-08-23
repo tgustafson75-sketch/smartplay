@@ -93,43 +93,22 @@ export class VoiceCommandRouter {
     }
     if (intent.intent_type === 'unknown' || intent.confidence === 'low') {
       // 2026-06-07 audit r6 — CRITICAL offline-resilience gap fix:
-      // before falling through to brain, try the local-status
-      // responder. The classifier returns 'unknown' / low-confidence
-      // for TWO different reasons:
-      //   (a) The transcript was genuinely free-form (real "ask the
-      //       brain" content) → fall through to brain (current).
-      //   (b) The /api/voice-intent fetch FAILED (no cell) →
-      //       voiceCommandParser.failure() returns {unknown, low}.
-      //       Previously this produced "I can't do that yet, but I
-      //       will soon." even when localStatusResponder would have
-      //       answered (yardage / score / hole / par / etc.). The
-      //       offline-resilience audit (Echo Hills 28-strike scenario)
-      //       called this out as user-hostile.
-      // Try local responder first; if it matches, return its templated
-      // answer. If null (no pattern match), preserve the existing
-      // brain-fallback path.
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const responder = require('./localStatusResponder') as typeof import('./localStatusResponder');
-        const langSafe = context.language && (['en', 'es', 'zh'] as const).includes(context.language as 'en' | 'es' | 'zh')
-          ? (context.language as 'en' | 'es' | 'zh')
-          : 'en';
-        const local = responder.tryLocalReply(intent.raw_text, langSafe);
-        if (local) {
-          // Self-growing metric: this query was first counted as cloud (precheck
-          // missed), but the memory-backed responder answered it locally — reclassify
-          // so localHitRate reflects CNS growth, not just the static precheck.
-          try { useAgentBrainStats.getState().reclassifyCloudToLocal(); } catch { /* best-effort */ }
-          return {
-            success: true,
-            voice_response: local.text,
-            side_effects: ['local_responder_classifier_fallback:' + local.queryType],
-            follow_up_needed: false,
-          };
-        }
-      } catch (e) {
-        console.log('[voiceCommandRouter] localStatusResponder threw (non-fatal):', e);
-      }
+      /**
+       * 2026-08-23 (Tim's call) — the local-status responder no longer answers here.
+       *
+       * This fired on classifier unknown/low-confidence, which happens for TWO reasons the code
+       * cannot tell apart at this point: the transcript was genuinely free-form (belongs to the
+       * brain), or the classifier fetch failed offline. It treated both as local, so free-form
+       * questions got a template answer in no persona instead of the caddie.
+       *
+       * Falling through returns unknown_or_low_confidence and the caller routes to the brain —
+       * the path this block's own comment called "the existing brain-fallback path". Offline, the
+       * brain call fails and the caller answers honestly; that is a failure handled once, not a
+       * second caddie answering first.
+       *
+       * precheckLocalIntent above STAYS: it matches COMMANDS ("open SmartFinder", "record my
+       * swing") and skips a classifier round-trip. Routing a command is not answering a question.
+       */
       // Conversational fallbacks are intentionally routed to Kevin's brain
       // and should not clutter the owner's miss log. Only log the case when
       // the classifier asked for clarification, because that is a real UX gap

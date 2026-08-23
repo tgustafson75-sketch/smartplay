@@ -251,7 +251,12 @@ continuation or close.
 - `[path4:voice] earcon_start` / `[path4:voice] earcon_end`
   *(corrected 2026-08-19 — documented as `filler_start`/`filler_end`, which the
   code has never emitted)*
-- `[path4:voice] local_primary` — answered on-device, no cloud turn
+<!-- 2026-08-23 — `local_primary` REMOVED. It marked the local-first intercept that answered 16
+query types on-device without ever calling the brain, including yardage and wind. Tim's call:
+"everything is everything… there should have been no way we went off reservation and started
+creating separate paths." Every spoken question now reaches the caddie, so there is no on-device
+answer to mark. Removed here as well as in code, because a documented marker nothing emits makes
+the MIN VERIFY grep return nothing whether the path is healthy or broken. -->
 - `[path4:voice] mic_handover` — a second owner took the mic
 - `[path4:voice] capture_retry` — mic was busy/errored; retried once
 - `[path4:voice] response_start ms_since_capture=X`

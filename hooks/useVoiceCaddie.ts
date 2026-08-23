@@ -2519,41 +2519,24 @@ export const useVoiceCaddie = ({
       // ZERO network, BEFORE any cloud path (pipecat OR brain). Simple questions
       // are then instant and work on weak/no signal; the cloud is pinged only on a
       // local MISS (the self-growing-agent rule — brain grows, tokens+network fall).
-      // tryLocalReply is conservative (matches only clear status patterns; returns
-      // null otherwise → falls through), and outside a round it no-ops, so it never
-      // short-circuits a real conversational query.
-      if (!skipIntentRouter) {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const responder = require('../services/localStatusResponder') as typeof import('../services/localStatusResponder');
-          const langSafe = (['en', 'es', 'zh'] as const).includes(language as 'en' | 'es' | 'zh')
-            ? (language as 'en' | 'es' | 'zh') : 'en';
-          const local = responder.tryLocalReply(transcript, langSafe);
-          // 2026-07-03 (Tim — "AI front and center") — a JUDGMENT read (what should I
-          // hit / plays-like / can I reach) leads with the AI caddie, not this local
-          // template. Only bare FACTS short-circuit to the instant local answer; the
-          // judgment types fall through to the brain (with tryLocalReply still the
-          // offline safety net via answerOffline when the brain can't be reached).
-          if (local && !responder.AI_LED_QUERY_TYPES.has(local.queryType)) {
-            devLog('[voice] LOCAL-FIRST hit:', local.queryType);
-            // Instrument the local hit-rate (self-growing-agent: brain grows →
-            // tokens+network fall, so we measure how often the local path answers).
-            try { useVoiceHitRateStore.getState().recordLocal(`tap_local:${local.queryType}`, Date.now()); } catch {}
-            onResponseReceived(local.text);
-            recordKevinTurn(local.text);
-            wrappedOnVoiceStateChange('speaking');
-            await speakResponse(local.text);
-            if (endsAsQuestion(local.text) && voiceEnabled && !userInterruptedRef.current) {
-              await runFollowUpListenLoop();
-            }
-            wrappedOnVoiceStateChange('idle');
-            isProcessingRef.current = false;
-            return;
-          }
-        } catch (e) {
-          console.log('[voice] local-first precheck threw (non-fatal):', e);
-        }
-      }
+      /**
+       * 2026-08-23 (Tim's call) — LOCAL-FIRST REMOVED HERE TOO.
+       *
+       * This answered "bare FACT" queries from device state and never called the brain. The split
+       * it used (AI_LED_QUERY_TYPES leads with the AI, everything else short-circuits) was an
+       * earlier attempt at the same problem, and it drew the line in the wrong place: a yardage IS
+       * a judgment ask. "150 to the middle" is a screen readout; what the player needs is the club,
+       * what a pure strike does relative to the trouble, and what his own miss would do — none of
+       * which the local template can produce, in a voice it does not have.
+       *
+       * Tim: "the caddie is the person that knows everything, the brain, the central nervous
+       * system. There should have been no way we went off reservation and started creating separate
+       * paths."
+       *
+       * The learned layer still reaches the caddie — it just arrives the way he intended, as
+       * CONTEXT the brain reasons over (services/caddieMemoryRetrieval → the one payload builder),
+       * accumulating in the background rather than intercepting the front end and answering first.
+       */
 
       // 2026-06-26 (Tim — systemic fix) — the pipecat override USED to early-return
       // HERE, before the intent router, which orphaned every router-only command
