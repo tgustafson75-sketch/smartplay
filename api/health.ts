@@ -125,12 +125,30 @@ async function probeGemini(): Promise<ProbeResult> {
 // app/api/voice+api.ts) so the health probe has no provider to report
 // on. Re-add if ElevenLabs is ever reintroduced as an active path.
 
+/**
+ * 2026-08-23 — WHICH COMMIT IS ACTUALLY ANSWERING.
+ *
+ * Vercel takes 6-11 minutes to deploy, and until it lands a probe of a just-shipped server fix
+ * looks EXACTLY like the fix not working — which has twice sent a session chasing a bug that was
+ * already fixed and merely not deployed yet (see the zoom_target pass, 2026-08-20). There was no
+ * way to tell the two apart from outside: nothing the API returns says what it was built from.
+ *
+ * Vercel injects the commit SHA into the runtime, so this costs nothing and settles the question.
+ * `git rev-parse HEAD` locally vs `/api/health?lite=1` remotely — if they differ, the deploy has
+ * not landed and there is nothing to diagnose yet. [[verification-claim-discipline]]
+ */
+const BUILD = {
+  commit: (process.env.VERCEL_GIT_COMMIT_SHA ?? 'local').slice(0, 8),
+  branch: process.env.VERCEL_GIT_COMMIT_REF ?? 'local',
+  env: process.env.VERCEL_ENV ?? 'local',
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Backwards-compat fast path: callers passing ?lite=1 get the legacy
   // { status, timestamp } shape with no probes (useful for cron checks
   // that just want to confirm the function is deployable and warm).
   if (req.query.lite === '1') {
-    return res.status(200).json({ status: 'ok', timestamp: Date.now() });
+    return res.status(200).json({ status: 'ok', timestamp: Date.now(), build: BUILD });
   }
 
   // 2026-07-27 (24h audit) — the full probe fires 3 BILLABLE provider calls (Anthropic+OpenAI+Gemini)
@@ -156,6 +174,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.status(200).json({
     status,
     timestamp: Date.now(),
+    build: BUILD,
     providers,
   });
 }
