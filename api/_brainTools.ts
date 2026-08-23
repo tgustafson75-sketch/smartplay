@@ -241,7 +241,7 @@ export const BRAIN_TOOLS: AiToolDef[] = [
   },
   {
     name: 'state_yardage',
-    description: 'The player tells you the distance they have — "I\'m 150 out", "about 172 to the pin", "we\'ve got 90 in". Record it as the working number for this shot: it is measured or paced by them and BEATS the GPS estimate. Call it as well as answering.',
+    description: 'The player tells you the distance they have — "I\'m 150 out", "about 172 to the pin", "we\'ve got 90 in". Record it as the working number for this shot: it is measured or paced by them and BEATS the GPS estimate. Call it as well as answering. If the SAME sentence also asks what to hit or what the play is ("I\'m 150 out, what should I hit"), that is a shot question too — give the club out loud AND call recommend_club. Logging their number is not an answer to their question, and a silent turn reads as being ignored.',
     parameters: {
       type: 'object',
       properties: { yards: { type: 'integer', description: 'The distance they stated, in yards.' } },

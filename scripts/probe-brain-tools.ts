@@ -155,7 +155,14 @@ const CASES: Array<{ expect: string | null; say: string; ctx?: Record<string, un
   { expect: 'mark_tee',            say: 'mark the tee box here', ctx: ON_COURSE },
   { expect: 'register_bag',        say: 'my bag is a driver, 3 wood, 5 hybrid, 6 through pitching wedge, 54 and 58' },
   { expect: 'set_angle',           say: "I'm filming down the line" },
-  { expect: 'configure_drill',     say: 'set the tempo drill to 10 reps' },
+  /**
+   * 2026-08-23 — this case originally said "10 reps" and was scored a MISS. The model was RIGHT and
+   * the probe was wrong: shot_count is `enum: [1, 3, 5]`, so it declined to invent an out-of-schema
+   * value and offered the real maximum instead ("maxes out at 5 reps — want me to set it to 5?").
+   * The description also requires SmartMotion to already be open, which the old sentence never
+   * established. Read the contract before calling the model's behaviour a defect.
+   */
+  { expect: 'configure_drill',     say: "I'm in SmartMotion, set it up for 7 iron, 5 swings" },
   { expect: 'set_golfer',          say: "I'm recording my daughter's swing, not mine" },
   // 2026-08-21 — the narrative-brain tools. These are the ones the CLASSIFIER could record for
   // months while the brain could not, so they are exactly the ones to prove fire, not assume.
