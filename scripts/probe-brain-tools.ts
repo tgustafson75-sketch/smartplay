@@ -125,7 +125,16 @@ const ON_COURSE = {
 };
 
 const CASES: Array<{ expect: string | null; say: string; ctx?: Record<string, unknown> }> = [
-  { expect: 'recommend_club',      say: "I'm 150 yards out, what should I hit" },
+  /**
+   * 2026-08-23 — this case originally sent NO context, and the caddie's refusal to log a
+   * recommend_club was scored a MISS. It was right twice over: a player saying this is BY
+   * DEFINITION mid-round, so no-round/no-bag was never a realistic payload; and with no distances
+   * to ground it in, logging "most players hit a 7-iron" as a personal recommendation is a GUESS
+   * SCORED AS ADVICE — the exact defect class fixed on 08-17, which poisons the adherence loop.
+   * It answered helpfully and declined to record it, which is the honesty this app is built on.
+   * Given a real round it fires both state_yardage and recommend_club.
+   */
+  { expect: 'recommend_club',      say: "I'm 150 yards out, what should I hit", ctx: ON_COURSE },
   { expect: 'recommend_club',      say: "I've got 165 to the pin into a little wind, what do you like" },
   { expect: 'log_emotional_state', say: 'I am so damn frustrated, I have topped three in a row' },
   { expect: 'log_emotional_state', say: 'honestly I feel great today, everything is clicking' },
