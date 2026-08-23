@@ -174,13 +174,30 @@ async function executeLookupHole(
  * only ones worth paying a second round for. See the silent-round retry in api/_aiProvider.
  */
 const TERSE_ACKS: Record<string, string> = {
-  open_smartvision:    'Pulling up the layout.',
-  open_smartfinder:    'Locking that distance.',
-  open_swinglab:       'Heading to SwingLab.',
-  log_score:           'Got it.',
-  log_shot:            'Logged.',
-  log_emotional_state: 'I hear you.',
-  record_swing:        "I'm watching.",
+  open_smartvision:      'Pulling up the layout.',
+  open_smartfinder:      'Locking that distance.',
+  open_swinglab:         'Heading to SwingLab.',
+  close_swinglab:        'Closing it down.',
+  log_score:             'Got it.',
+  log_shot:              'Logged.',
+  log_emotional_state:   'I hear you.',
+  log_issue:             'Logged it.',
+  record_swing:          "I'm watching.",
+  mark_green:            'Green marked.',
+  mark_tee:              'Tee marked.',
+  declare_hole:          'Got it.',
+  set_hole_note:         'Noted.',
+  set_reminder:          "I'll remind you.",
+  zoom_target:           'Zooming in.',
+  set_angle:             'Angle set.',
+  configure_drill:       'Drill set up.',
+  set_golfer:            'Switched over.',
+  register_bag:          'Bag saved.',
+  set_session_focus:     "That's the focus.",
+  set_playing_condition: "Noted — I'll aim around it.",
+  club_change:           'Got it.',
+  switch_caddie:         'Switching you over.',
+  navigate:              'On my way.',
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
