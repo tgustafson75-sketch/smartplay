@@ -125,12 +125,17 @@ const PATTERNS: Pattern[] = [
   // ── SCORE / ROUND STATUS ──────────────────────────────────
   // Routine is round-INDEPENDENT and deterministic — a command, not a question — so it belongs in
   // the precheck next to the other commands rather than depending on a brain round-trip.
+  // These regexes are the mirror's, but the mirror only ever ran AFTER the brain had failed, so a
+  // loose match cost nothing. Here they run BEFORE it, and a loose match INTERCEPTS. "Tell me a good
+  // warm-up routine" is a request FOR a warm-up and must reach the caddie; only a POSSESSIVE or
+  // demonstrative means the stored one. Same principle as NOT_ABOUT_TOOL above: naming the thing is
+  // not asking for it.
   {
-    rx: /\b(save|remember|keep)\b[^.?!]{0,28}\b(routine|stretches|warm.?up)\b/i,
+    rx: /\b(save|remember|keep)\b[^.?!]{0,20}\b(that|this|my)\s+(routine|stretches|warm.?up)\b/i,
     build: (raw) => intent(raw, 'query_status', { query_topic: 'routine_save' }),
   },
   {
-    rx: /\b(what(?:'s|s)?|tell\s+me|recall|show\s+me|give\s+me|read)\b[^.?!]{0,28}\b(routine|stretches|warm.?up)\b/i,
+    rx: /\b(what(?:'s|s)?|tell\s+me|recall|show\s+me|give\s+me|read|run\s+me\s+through)\b[^.?!]{0,20}\bmy\s+(routine|stretches|warm.?up)\b/i,
     build: (raw) => intent(raw, 'query_status', { query_topic: 'routine_recall' }),
   },
   {

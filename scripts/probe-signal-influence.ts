@@ -98,7 +98,9 @@ const CASES: Case[] = [
     signal: 'dominantMiss / missType', ask: 'what should I hit and where do I aim?',
     extra: { clubDistances: { '7 iron': 150 } },
     on: { dominantMiss: 'right', missType: 'slice' },
-    shows: /right|slice|left[- ]?cent|favou?r/i,
+    // Was /right|.../ and "you're RIGHT at your number" matched it — the no-signal answer scored as
+    // proof. Require the miss to be USED: an aim shift, or naming his shape.
+    shows: /left[- ]?cent|aim(?:ing)? left|start it left|favou?r(?:ing)? the left|your (slice|fade|miss)|that (slice|fade)/i,
     because: 'the aim point should allow for HIS miss, not a neutral target',
   },
   {
@@ -117,10 +119,13 @@ const CASES: Case[] = [
     because: 'on the green the answer is a putt read, not a club',
   },
   {
-    signal: 'currentStroke', ask: 'what is the play here?',
+    signal: 'currentStroke',
+    // Was "what is the play here?" — at 150 yards the honest answer is a club either way, so the
+    // stroke count could not show up and the case tested nothing. Ask the question that needs it.
+    ask: 'where do I stand on this hole?',
     on: { currentStroke: 3 },
-    shows: /third|3rd|already|lying|from here|next/i,
-    because: 'on stroke 3 he must not get a tee briefing off the card',
+    shows: /\bthird\b|\b3rd\b|lying (two|2|three|3)|playing your (third|3rd)|two shots? (in|already)/i,
+    because: 'he is about to play his third; a caddie who does not know that briefs the hole off the tee',
   },
   {
     signal: 'roundStats', ask: 'how am I doing today?',
@@ -148,12 +153,15 @@ const CASES: Case[] = [
     because: 'Tim asked for the drive confirmed first, then the remaining, then the play',
   },
   {
-    signal: 'priorRoundsAtCourse (first visit)', ask: 'I just finished, how did I do?',
+    signal: 'priorRoundsAtCourse (first visit)',
+    // Was "how did I do?", which is answered from the scorecard alone — the first-visit fact had no
+    // reason to appear. Ask the comparison question, which cannot be answered without it.
+    ask: 'is that a good score for me at this course?',
     // scores moved to `extra` — they were in `on`, so the two payloads differed by TWO things and
     // the verdict was unattributable. A differential probe is only valid if ONE thing changes.
     extra: { scores: { 1: 5, 2: 4, 3: 6, 4: 5, 5: 7, 6: 4, 7: 5, 8: 6, 9: 5 } },
     on: { priorRoundsAtCourse: 0 },
-    shows: /first time|baseline|first round|starting point|never played/i,
+    shows: /first time|baseline|first (round|look)|starting point|never played|no history|nothing to compare/i,
     because: 'a first round is a baseline, never "your best score yet"',
   },
   {
