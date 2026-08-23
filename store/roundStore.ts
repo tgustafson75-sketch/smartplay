@@ -2340,7 +2340,37 @@ export const useRoundStore = create<RoundState>()(
         // is roundStartHole+8 (18) — the old `nineHoleMode ? 9` floored/capped every navigation at 9 and
         // dragged the round back to the front nine. Front nine + full rounds are unchanged.
         const minHole = roundFirstHole(state);
-        const maxHole = roundLastHole(state);
+        let maxHole = roundLastHole(state);
+
+        /**
+         * 2026-08-23 (Tim — "it's easy to forget setting that, just like it's easy to forget when you
+         * start a round doing nine or eighteen holes").
+         *
+         * KEEP PLAYING = KEEP SCORING. Same class as the cart setting: a declaration made on the
+         * first tee and then silently wrong for the rest of the round.
+         *
+         * A player who said "nine" and then walks onto the 10th tee has told us, by playing it, that
+         * this is an eighteen. The clamp used to drag them back to 9 and every hole after that was
+         * unrecorded — the round quietly stopped counting while they kept playing. Walking to the
+         * next tee is a much stronger signal than a tap they made an hour ago.
+         *
+         * Only ever EXPANDS, and only onto holes the course actually has. It never shrinks a round:
+         * finishing at 9 stays a nine-hole round, because stopping is not evidence of anything.
+         */
+        if (state.nineHoleMode && hole > maxHole) {
+          const courseHoleCount = state.courseHoles?.length ?? 0;
+          if (courseHoleCount >= hole) {
+            console.log(`[roundStore] played past hole ${maxHole} onto ${hole} — expanding this round to the full ${courseHoleCount}`);
+            set({ nineHoleMode: false });
+            maxHole = roundLastHole({ ...state, nineHoleMode: false });
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              (require('./issueLogStore') as typeof import('./issueLogStore')).useIssueLogStore
+                .getState().addAppEvent('round_expanded_past_nine', { from: 9, onto: hole, courseHoles: courseHoleCount }, 'diag');
+            } catch { /* best-effort */ }
+          }
+        }
+
         const clamped = Math.max(minHole, Math.min(hole, maxHole));
         if (clamped !== hole) {
           devLog(`[roundStore] setCurrentHole(${hole}) clamped to ${clamped} (course max=${maxHole})`);

@@ -23,7 +23,13 @@
 declare const __DEV__: boolean;
 
 export function devLog(...args: unknown[]): void {
-  if (__DEV__) {
+  /**
+   * 2026-08-23 — `__DEV__` is injected by the React Native bundler and does NOT exist anywhere else.
+   * A bare reference THROWS a ReferenceError under jest's logic project and in plain node scripts, so
+   * any store path that logged through here crashed outside the app — found when a hole-clamp test
+   * hit it. `typeof` never throws on an undeclared identifier, which is the whole point of using it.
+   */
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
     // eslint-disable-next-line no-console
     console.log(...args);
   }
