@@ -241,6 +241,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       currentPar = null,
       currentYardage = null,
       currentStroke = null,
+      pendingLieAnalysis = null,
       roundStats = null,
       transportMode = null,
       currentLocationType = null,
@@ -806,7 +807,25 @@ ${(() => {
 })()}DISTANCE REMAINING RIGHT NOW: ${currentYardage} yards. This is the shot in front of them, measured live. It is NOT the hole's card length, and the card length is NOT the shot — never quote a scorecard yardage as the distance they are hitting.
 ${currentHoleNote ? `Hole note: ${currentHoleNote}` : ''}
 Club: ${_club || 'not selected'}
-${currentLocationType && currentLocationType !== 'unknown'
+${(() => {
+  /**
+   * 2026-08-23 — WHAT THE BALL IS ACTUALLY SITTING IN.
+   *
+   * The client has sent `pendingLieAnalysis` for months and this handler never destructured it --
+   * services/intents/askGolfFatherHandler.ts says so in a comment: "round.pendingLieAnalysis
+   * exists; not wired". So a player who photographed a buried lie got advice built as if the ball
+   * were sitting up in the fairway, which is a large part of "your advice is very generic".
+   */
+  const lie = pendingLieAnalysis as { situation_description?: string; tactical_advice?: string; recommended_club?: string | null; alternative_play?: string | null; confidence_level?: string } | null;
+  if (!lie || !lie.situation_description) return '';
+  const bits = [lie.situation_description];
+  if (lie.tactical_advice) bits.push(lie.tactical_advice);
+  if (lie.recommended_club) bits.push(`Play from here suggests: ${lie.recommended_club}.`);
+  if (lie.alternative_play) bits.push(`Alternative: ${lie.alternative_play}.`);
+  // Confidence is stated so a LOW read is not quoted back as certainty.
+  const conf = lie.confidence_level && lie.confidence_level !== 'high' ? ` (read confidence: ${lie.confidence_level})` : '';
+  return `THE LIE, LOOKED AT: ${bits.join(' ')}${conf}\n`;
+})()}${currentLocationType && currentLocationType !== 'unknown'
   ? `WHERE THEY ARE STANDING: ${currentLocationType === 'green' ? 'ON THE GREEN — this is a PUTT. Read the putt; do not recommend a club or a full swing.' : currentLocationType === 'tee' ? 'on the tee' : 'in the fairway'}\n`
   : ''}Getting around: ${transportMode === 'cart' ? 'riding a cart' : 'walking'}${currentTeeBox ? ` | Tee: ${currentTeeBox}` : ''}${nineHoleMode ? ' | NINE-HOLE round — pace the round to 9, never 18' : ''}
 Risk posture: ${riskMode === 'safe' ? 'SAFE — take the conservative line, favour the fat side' : riskMode === 'aggressive' ? 'AGGRESSIVE — he wants to take it on' : 'normal'}${transportMode !== 'cart' && holesPlayed >= 13 ? ' \u2014 deep into a walked round, so factor fatigue into club choice rather than assuming full-strength swings' : ''}

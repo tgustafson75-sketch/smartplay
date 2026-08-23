@@ -133,6 +133,7 @@ export function buildPipecatContext() {
         if (!shots.length) return 1;
         return shots.length + 1 + shots.reduce((a: number, sh: { penalty_strokes?: number }) => a + (sh.penalty_strokes ?? 0), 0);
       })(),
+      pendingLieAnalysis: round.pendingLieAnalysis ?? undefined,
       transportMode: round.transportMode ?? 'walking',
       currentLocationType: round.currentLocationType ?? 'unknown',
       riskMode: round.riskMode ?? 'normal',

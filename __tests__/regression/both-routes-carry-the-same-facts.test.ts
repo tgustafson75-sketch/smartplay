@@ -17,6 +17,10 @@ const R = (f: string) => fs.readFileSync(path.resolve(__dirname, '../../', f), '
 const FACTS = [
   'currentStroke', 'roundStats', 'transportMode',
   'currentLocationType', 'riskMode', 'currentTeeBox', 'nineHoleMode',
+  // 2026-08-23 — the client had sent this for MONTHS and kevin never destructured it;
+  // askGolfFatherHandler.ts even says "exists; not wired". A photographed buried lie produced advice
+  // built as if the ball were sitting up in the fairway.
+  'pendingLieAnalysis',
 ];
 
 describe('both brain routes carry the same facts', () => {
@@ -43,7 +47,8 @@ describe('both brain routes carry the same facts', () => {
 
   it('kevin RENDERS them, not just destructures — sent-and-ignored is the same bug', () => {
     for (const marker of ['HOW THIS ROUND IS GOING', 'PLAYING THEIR STROKE', 'Getting around:',
-                          'WHERE THEY ARE STANDING', 'Risk posture:', 'NINE-HOLE round']) {
+                          'WHERE THEY ARE STANDING', 'Risk posture:', 'NINE-HOLE round',
+                          'THE LIE, LOOKED AT']) {
       expect(kevin).toContain(marker);
     }
   });

@@ -316,7 +316,11 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
 
     // ─── caller-only ────────────────────────────────────────────────────────
     smartVisionContext: extras.smartVisionContext ?? null,
-    pendingLieAnalysis: extras.pendingLieAnalysis ?? null,
+    /**
+     * 2026-08-23 — sourced from the round store when the caller does not hand one over, so the MIC
+     * path gets it too. It was previously supplied only by the text box, and read by nobody.
+     */
+    pendingLieAnalysis: extras.pendingLieAnalysis ?? safe(() => r.pendingLieAnalysis ?? null, null),
     image_base64: extras.image_base64 ?? null,
     image_media_type: extras.image_media_type ?? null,
     image_caption: extras.image_caption ?? null,

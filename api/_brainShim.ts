@@ -108,6 +108,7 @@ export function pipecatRequestToKevinBody(body: Record<string, unknown>): Record
      * the green, or playing a nine. Mapped by name because kevin already destructures every one.
      */
     currentStroke: round.currentStroke ?? null,
+    pendingLieAnalysis: round.pendingLieAnalysis ?? null,
     roundStats: round.roundStats ?? null,
     transportMode: round.transportMode ?? null,
     currentLocationType: round.currentLocationType ?? null,
