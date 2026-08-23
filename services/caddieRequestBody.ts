@@ -504,11 +504,41 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * invisible to the next turn typed — the caddie forgot mid-conversation when he changed surface.
      */
     conversationTurns: safe(() => {
+      /**
+       * 2026-08-23 — THE UNION OF BOTH HISTORIES, because there are two.
+       *
+       * `services/voice/pipecatHistory` is written by every turn that goes through caddieBrain (the
+       * earbud, the caddie-tab mic, the diagnostic). `services/conversationState` is written by
+       * useVoiceCaddie — SIXTEEN call sites — and by nothing else. Neither can see the other's
+       * turns, so the caddie's memory of the conversation depended on which surface you last used:
+       * talk on the tab mic, then through the earbuds, and the first half was gone.
+       *
+       * That is the same split as the payloads, one layer down, and it is why this reads BOTH and
+       * merges by timestamp order. conversationState is deliberately left in place — it also drives
+       * follow-up detection (isAwaitingFollowUp) on a 3-minute decay window, which is a different
+       * job from feeding the prompt.
+       */
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { getPipecatHistory } = require('./voice/pipecatHistory') as typeof import('./voice/pipecatHistory');
-      return (getPipecatHistory() ?? []).slice(-12).map(
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getRecentTurns } = require('./conversationState') as typeof import('./conversationState');
+
+      const fromPipecat = (getPipecatHistory() ?? []).map(
         (m: { role: string; content: string }) => ({ role: m.role === 'assistant' ? 'kevin' : 'user', text: m.content }),
       );
+      const fromBuffer = (getRecentTurns() ?? []).map((t) => ({ role: t.role as 'user' | 'kevin', text: t.text }));
+
+      // Same turn can land in both (a mic turn writes conversationState AND caddieBrain writes
+      // pipecatHistory), so drop exact role+text repeats rather than telling the caddie twice.
+      const seen = new Set<string>();
+      const merged: { role: string; text: string }[] = [];
+      for (const t of [...fromPipecat, ...fromBuffer]) {
+        const key = `${t.role}:${t.text}`;
+        if (!t.text?.trim() || seen.has(key)) continue;
+        seen.add(key);
+        merged.push(t);
+      }
+      return merged.slice(-12);
     }, []),
 
     // ── the facts that reached NO brain at all ──────────────────────────────

@@ -54,7 +54,7 @@ import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useFamilyStore } from '../store/familyStore';
 import { useRelationshipStore } from '../store/relationshipStore';
 import { useCageStore } from '../store/cageStore';
-import { getRecentTurns, recordUserTurn, recordKevinTurn, isAwaitingFollowUp } from '../services/conversationState';
+import { recordUserTurn, recordKevinTurn, isAwaitingFollowUp } from '../services/conversationState';
 import { resolvePendingCourseUtterance } from '../services/pendingDisambiguation';
 import { useConversationLog } from '../store/conversationLogStore';
 import { buildFullPracticeContext } from '../services/tutorialContext';
@@ -1265,7 +1265,11 @@ export const useVoiceCaddie = ({
           // resolution ("and the wind?" → Kevin knows you mean wind for
           // the prior shot). Cleared after 60s of no activity OR on
           // round/hole change.
-          conversationTurns: getRecentTurns().map(t => ({ role: t.role, text: t.text })),
+          // 2026-08-23 — override REMOVED. This sent only conversationState's buffer, so the mic's
+          // brain saw a different conversation from every other surface's. The builder now merges
+          // BOTH histories, and letting its value stand is what makes them one conversation.
+          // (getRecentTurns had no other caller here, so its import goes too — follow-up detection
+          // uses isAwaitingFollowUp, which is separate.)
           // Phase BJ — on-course shot context. holeShots is current-hole
           // only (front-loaded for "this hole again" pattern); recentShots
           // is last 5 across the round (round-wide pattern detection).
