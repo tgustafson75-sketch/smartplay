@@ -585,6 +585,17 @@ export interface AgenticLoopResult {
   text: string;
   provider: AiProvider;
   rounds: number;
+  /**
+   * 2026-08-23 — WHAT THE TURN ACTUALLY COST.
+   *
+   * Without per-turn accounting, a model or caching change is a decision made blind: nobody can say
+   * whether the prompt cache is being read, or what a round costs, and every later tuning argument
+   * is opinion. `cacheRead` is the number that matters most — if it stays 0 across a round, some
+   * silent invalidator is changing the prompt prefix and the cache is buying nothing.
+   *
+   * Summed across rounds, since one turn can make several model calls.
+   */
+  usage?: { input: number; output: number; cacheRead: number; cacheWrite: number };
 }
 
 /**
@@ -788,6 +799,7 @@ async function _anthropicAgenticLoop(
    * its answer.
    */
   let textFromToolRound = '';
+  const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
   for (let round = 0; round < maxRounds; round++) {
     rounds = round + 1;
@@ -799,6 +811,11 @@ async function _anthropicAgenticLoop(
       tools: antTools,
       messages: msgs,
     });
+
+    usage.input += res.usage?.input_tokens ?? 0;
+    usage.output += res.usage?.output_tokens ?? 0;
+    usage.cacheRead += res.usage?.cache_read_input_tokens ?? 0;
+    usage.cacheWrite += res.usage?.cache_creation_input_tokens ?? 0;
 
     const textBlock = res.content.find(b => b.type === 'text');
     const toolUseBlocks = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
@@ -840,7 +857,7 @@ async function _anthropicAgenticLoop(
   // fall back to a bare acknowledgement.
   if (!text.trim() && textFromToolRound.trim()) text = textFromToolRound;
 
-  return { text: text.trim(), provider: 'anthropic', rounds };
+  return { text: text.trim(), provider: 'anthropic', rounds, usage };
 }
 
 async function _geminiAgenticLoop(

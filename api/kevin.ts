@@ -1782,7 +1782,17 @@ ${onCourseContextBlock}${baseMessage}`
     // access. Clients ignore unknown fields. Keep field names stable
     // so future dashboards can chart them.
     const latencyMs = Date.now() - startedAt;
-    console.log(`[kevin] done provider=${providerUsed} tier=${aiTier} rounds=${toolRounds} data=${dataToolCalls} ms=${latencyMs}`);
+    /**
+     * 2026-08-23 — the turn's token + CACHE numbers in the done line and on _debug.
+     *
+     * `cacheRead` is the one to watch: across the turns of a single round it should be large and
+     * `cacheWrite` should be near zero after the first turn. If cacheRead stays 0, something is
+     * changing the prompt prefix between turns and the 1-hour cache is buying nothing — which is
+     * invisible without this line, and is exactly how a caching change turns into folklore.
+     */
+    const u = loopResult.usage;
+    console.log(`[kevin] done provider=${providerUsed} tier=${aiTier} rounds=${toolRounds} data=${dataToolCalls} ms=${latencyMs}` +
+      (u ? ` in=${u.input} out=${u.output} cacheRead=${u.cacheRead} cacheWrite=${u.cacheWrite}` : ''));
     return res.status(200).json({
       text,
       audioBase64,
@@ -1798,6 +1808,7 @@ ${onCourseContextBlock}${baseMessage}`
         tool_rounds: toolRounds,
         data_tool_calls: dataToolCalls,
         latency_ms: latencyMs,
+        usage: loopResult.usage ?? null,
       },
     });
 
