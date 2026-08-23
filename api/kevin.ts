@@ -903,8 +903,30 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
         const consequences: string[] = [];
         if (wet) consequences.push('BALL GOES SHORTER AND STOPS — a wet ball and wet turf kill carry and roll, so club up and do not expect release. Greens hold, so you can be aggressive at the flag. Grips are slick; a smoother swing beats a harder one.');
         if (cold) consequences.push('COLD AIR: roughly a club shorter than the same swing in summer. Take more club and swing easier, not harder.');
-        if (wx.windMph >= 12) consequences.push('WIND IS A REAL FACTOR: into it, take more club and swing EASIER — swinging harder adds spin and balloons the ball. Downwind the ball will run; allow for it. Across, aim into the wind rather than trying to hold the ball against it.');
-        else if (wx.windMph >= 8) consequences.push('Enough wind to matter on a mid-iron; factor it into the club, do not make a speech about it.');
+        /**
+         * 2026-08-23 — WHICH WAY IT BLOWS FOR THIS SHOT, when the hole geometry lets us know.
+         *
+         * The generic into/downwind/across line below forced the model to PICK a direction it had
+         * no way to determine: it was given "from 270°" and no shot bearing. It either dropped the
+         * wind or asserted "into 16mph" as fact. `relative` is the decomposition the spoken wind
+         * answer has always used, so when it is present the direction is a FACT and the club follows
+         * from it; when it is absent the wind stays honestly directionless.
+         */
+        const rw = (wx as { relative?: { alongMph: number; crossMph: number; kind: string; phrase: string } | null }).relative;
+        if (rw && wx.windMph >= 8) {
+          const alongYds = Math.round(Math.abs(rw.alongMph) * 1.2);
+          consequences.push(
+            rw.kind === 'into'
+              ? `THE WIND IS IN THEIR FACE — ${rw.phrase}, measured against this hole's line, not guessed. Into it the shot plays roughly ${alongYds} yards LONGER: take the extra club and swing EASIER, because swinging harder adds spin and balloons it higher into the wind.`
+              : rw.kind === 'behind'
+                ? `THE WIND IS AT THEIR BACK — ${rw.phrase}, measured against this hole's line. The shot plays roughly ${alongYds} yards SHORTER and the ball will run on landing: take LESS club, and do not let it fly the green.`
+                : `CROSSWIND — ${rw.phrase}, measured against this hole's line. It moves the ball sideways, so start it into the wind and let it drift back rather than trying to hold it against the wind. Distance is barely affected; the AIM is what changes.`,
+          );
+        } else if (wx.windMph >= 12) {
+          consequences.push('WIND IS A REAL FACTOR, but you do NOT know which way it blows relative to this shot — this hole has no mapped line, so you have only a compass direction. Never assert "into the wind" or "downwind" as though you knew: say there is wind about and let them tell you which way it is on their face, or work from what they say. A confident wrong wind costs a club in the wrong direction.');
+        } else if (wx.windMph >= 8) {
+          consequences.push('Enough wind to matter on a mid-iron; factor it into the club, do not make a speech about it, and do not claim a direction you have not been given.');
+        }
 
         lines.push(`- CONDITIONS RIGHT NOW: ${bits.join(', ')}${wx.ageMin > 20 ? ` (read ${wx.ageMin} min ago)` : ''}.`);
         for (const c of consequences) lines.push(`  ${c}`);

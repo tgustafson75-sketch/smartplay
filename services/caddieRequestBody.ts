@@ -650,7 +650,21 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       if (!fix || fix.lat == null || fix.lng == null) return null;
       const w = getCachedWeatherEvenIfStale({ lat: fix.lat, lng: fix.lng });
       if (!w) return null;
+      /**
+       * 2026-08-23 — RELATIVE wind, not just a compass degree. "From 270°" is unusable without the
+       * shot bearing, and the brain was never sent one, so it could only ignore the wind or guess
+       * "into" and state the guess as fact. Three prompt rewrites tried to fix the club call in wind
+       * before anyone checked whether the brain could answer at all.
+       *
+       * Same module the spoken wind answer uses, so the number the player HEARS and the number the
+       * club is chosen FROM cannot drift apart. Null when the hole has no mapped geometry — an
+       * unknown wind must stay unknown rather than defaulting to "into".
+       */
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { decomposeWind, shotBearingDeg } = require('./windRelative') as typeof import('./windRelative');
+      const relative = safe(() => decomposeWind(w.wind_direction_deg, w.wind_speed_mph, shotBearingDeg(currentHole)), null);
       return {
+        relative,
         tempF: w.temp_f,
         windMph: w.wind_speed_mph,
         windFromDeg: w.wind_direction_deg,

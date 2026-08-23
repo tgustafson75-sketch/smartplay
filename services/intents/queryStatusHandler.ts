@@ -1,6 +1,7 @@
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import { useRoundStore } from '../../store/roundStore';
 import { useGhostStore } from '../../store/ghostStore';
+import { decomposeWind, shotBearingDeg } from '../windRelative';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useConversationLog } from '../../store/conversationLogStore';
 import { haversineYards, holeProgressYards, shotDistance, bearingDegrees } from '../../utils/geoDistance';
@@ -65,9 +66,8 @@ function currentShotBearingDeg(
   round: { courseHoles: { hole: number; teeLat: number; teeLng: number; middleLat: number; middleLng: number; frontLat: number; frontLng: number; backLat: number; backLng: number }[]; shots: { hole: number; start_location?: ShotLocation | null; gps_location?: ShotLocation | null }[] },
   currentHole: number,
 ): number | null {
-  const teeLoc = getTeeCentroid(currentHole);
-  const greenLoc = getGreenCentroid(currentHole);
-  if (teeLoc && greenLoc) return bearingDegrees(teeLoc, greenLoc);
+  const shared = shotBearingDeg(currentHole);
+  if (shared != null) return shared;
   // Fallback: last shot start → current player location is unavailable here without
   // an awaited GPS call. Return null and let the caller phrase accordingly.
   return null;
@@ -706,20 +706,21 @@ export const queryStatusHandler: IntentHandler = {
             follow_up_needed: false,
           };
         }
-        // Decompose
-        const windTo = (w.wind_direction_deg + 180) % 360;
-        let rel = windTo - bearing;
-        rel = ((rel + 540) % 360) - 180;
-        const along = Math.cos(rel * Math.PI / 180) * w.wind_speed_mph;
-        const cross = Math.sin(rel * Math.PI / 180) * w.wind_speed_mph;
-        const phrase =
-          Math.abs(along) > Math.abs(cross) * 1.5
-            ? (along < 0 ? `${Math.round(Math.abs(along))} into your face`
-                          : `${Math.round(along)} at your back`)
-            : `${Math.round(Math.abs(cross))} crosswind from the ${cross > 0 ? 'left' : 'right'}`;
+        // 2026-08-23 — the decomposition moved to services/windRelative so the caddie brain reasons
+        // from the SAME number the player hears here. It was inline, and the brain got a raw compass
+        // degree with no bearing, which is why it could only ignore the wind or guess at it.
+        const rw = decomposeWind(w.wind_direction_deg, w.wind_speed_mph, bearing);
+        if (!rw) {
+          return {
+            success: true,
+            voice_response: `${Math.round(w.wind_speed_mph)} miles per hour out of the ${compassDirFromDeg(w.wind_direction_deg)}.`,
+            side_effects: ['query:wind:no_bearing'],
+            follow_up_needed: false,
+          };
+        }
         return {
           success: true,
-          voice_response: phrase + '.',
+          voice_response: rw.phrase + '.',
           side_effects: ['query:wind'],
           follow_up_needed: false,
         };
