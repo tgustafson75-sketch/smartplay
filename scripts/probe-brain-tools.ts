@@ -141,6 +141,22 @@ const CASES: Array<{ expect: string | null; say: string; ctx?: Record<string, un
   { expect: 'zoom_target',         say: 'zoom in on the pin' },
   { expect: 'open_smartfinder',    say: 'open the rangefinder' },
   { expect: 'record_swing',        say: 'record my swing' },
+  /**
+   * 2026-08-23 — the EIGHT UI tools this probe never exercised.
+   *
+   * 18 of the 26 UI tools were covered, so for the other eight the question this whole file exists
+   * to answer — DOES IT FIRE? — was simply unasked. `register_bag` is on that list, and it is one of
+   * the two tools dropped for weeks in August precisely because nothing checked whether they fired.
+   * An unprobed tool is not a passing tool; it is an unmeasured one.
+   */
+  { expect: 'open_swinglab',       say: 'open swinglab' },
+  { expect: 'close_swinglab',      say: 'close swinglab' },
+  { expect: 'open_smartvision',    say: 'show me the hole layout', ctx: ON_COURSE },
+  { expect: 'mark_tee',            say: 'mark the tee box here', ctx: ON_COURSE },
+  { expect: 'register_bag',        say: 'my bag is a driver, 3 wood, 5 hybrid, 6 through pitching wedge, 54 and 58' },
+  { expect: 'set_angle',           say: "I'm filming down the line" },
+  { expect: 'configure_drill',     say: 'set the tempo drill to 10 reps' },
+  { expect: 'set_golfer',          say: "I'm recording my daughter's swing, not mine" },
   // 2026-08-21 — the narrative-brain tools. These are the ones the CLASSIFIER could record for
   // months while the brain could not, so they are exactly the ones to prove fire, not assume.
   { expect: 'set_hole_note',       say: "I'm off to the right, pin high, downhill lie", ctx: ON_COURSE },
