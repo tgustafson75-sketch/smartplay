@@ -100,7 +100,12 @@ const CASES: Case[] = [
     on: { dominantMiss: 'right', missType: 'slice' },
     // Was /right|.../ and "you're RIGHT at your number" matched it — the no-signal answer scored as
     // proof. Require the miss to be USED: an aim shift, or naming his shape.
-    shows: /left[- ]?cent|aim(?:ing)? left|start it left|favou?r(?:ing)? the left|your (slice|fade|miss)|that (slice|fade)/i,
+    // Third rewrite. It scored a textbook answer a failure: "aim at the left edge of the green —
+    // your natural miss runs right so give yourself room" moved the target AND named the miss, and
+    // matched nothing, because the pattern demanded "aim left" adjacent and "your miss" exactly.
+    // Match the SHAPE of a correct answer — the aim moved left, or the miss was named — not one
+    // phrasing of it. The no-signal answer ("150 carries you right to the flag") still fails it.
+    shows: /aim(?:ing)?[^.]{0,24}\bleft\b|left[- ](edge|side|half|cent)|favou?r[^.]{0,14}\bleft\b|your (natural )?(miss|slice|fade)\b/i,
     because: 'the aim point should allow for HIS miss, not a neutral target',
   },
   {
@@ -131,7 +136,10 @@ const CASES: Case[] = [
     // stroke count could not show up and the case tested nothing. Ask the question that needs it.
     ask: 'where do I stand on this hole?',
     on: { currentStroke: 3 },
-    shows: /\bthird\b|\b3rd\b|lying (two|2|three|3)|playing your (third|3rd)|two shots? (in|already)/i,
+    // Same failure: "Stroke 3, 150 yards out — smooth 8 iron" is precisely the awareness under test
+    // and matched nothing, because the pattern only knew the word "third". The no-signal answer
+    // ("150 yards out, par 4, hole 9 — you're on the tee") still fails it, which is the whole point.
+    shows: /\bthird\b|\b3rd\b|stroke\s*(3|three)\b|lying (two|2|three|3)|playing your (third|3rd)|two shots? (in|already)/i,
     because: 'he is about to play his third; a caddie who does not know that briefs the hole off the tee',
   },
   {
