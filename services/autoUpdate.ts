@@ -41,7 +41,9 @@ export function subscribeToUpdates(listener: Listener): () => void {
 }
 
 export async function checkAndFetchUpdate(): Promise<UpdateStatus> {
-  if (__DEV__ || Platform.OS === 'web' || !Updates.isEnabled) {
+  // 2026-08-23 — `typeof` guard: __DEV__ is bundler-injected and throws a ReferenceError anywhere
+  // else (see services/devLog.ts). Same latent crash class.
+  if ((typeof __DEV__ !== 'undefined' && __DEV__) || Platform.OS === 'web' || !Updates.isEnabled) {
     const status: UpdateStatus = { ready: false, reason: 'dev' };
     emit(status);
     return status;

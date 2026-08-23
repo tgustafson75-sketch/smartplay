@@ -22,7 +22,8 @@ import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore
 
 export function useDebugRouteGate(): boolean {
   const email = usePlayerProfileStore(s => s.email);
-  const allowed = __DEV__ || isOwnerEmail(email);
+  // 2026-08-23 — `typeof` guard, same latent ReferenceError class as services/devLog.ts.
+  const allowed = (typeof __DEV__ !== 'undefined' && __DEV__) || isOwnerEmail(email);
 
   useEffect(() => {
     if (allowed) return;
