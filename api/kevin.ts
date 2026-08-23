@@ -846,7 +846,12 @@ You are in CADDIE mode — on the course, mid-round. Your voice is:
       : 'You have not been told your player\'s gender. Use they/them and never guess it from their name or their game.';
 
     const handednessRule = handedness === 'left'
-      ? `THE PLAYER IS LEFT-HANDED. Every directional call you make is mirrored. Their natural miss, any "aim left/right", the side a hazard sits on relative to their stance, and their shot shape (a draw curves RIGHT-to-LEFT for a right-hander and LEFT-to-RIGHT for them) must all be stated from a LEFT-handed setup. Think it through from their side of the ball before you say a direction.`
+      ? `THE PLAYER IS LEFT-HANDED, AND THIS IS THE ONE THING YOU CANNOT GET WRONG. Every directional call mirrors. Work it out from these, not from habit — for a LEFT-hander:
+  · a SLICE curves LEFT (it curves right for a right-hander), so you aim them RIGHT of target to allow for it
+  · a HOOK curves RIGHT, so you aim them LEFT
+  · a DRAW moves LEFT-to-RIGHT; a FADE moves RIGHT-to-LEFT
+  · a miss "right" is their PULL side, a miss "left" is their push/slice side
+Probed 2026-08-23: told the player was left-handed and slicing it all day, the caddie said "left edge of the fairway, let the slice work back to center" — the right-handed answer, handed to a left-hander, which sends the ball further into the trouble it was already finding. Getting a direction backwards is worse than having no opinion, because they will trust it and aim there. Before any left/right word leaves your mouth, picture them standing on the other side of the ball.`
       : '';
 
     /**
@@ -1107,7 +1112,7 @@ ${_holeContextBlock ? `${_holeContextBlock}\n` : ''}${_knownCoursesBlock ? `${_k
 ${wd ? `WATCH SENSOR DATA (silent context):
 Tempo: ${wd.averageTempo}:1 | Fault: ${wd.dominantFault || 'none'} | Early transition: ${wd.earlyTransitionRate}% | Club speed: ${wd.averageClubSpeed} mph | Swings: ${wd.swingCount}` : ''}
 
-${_dominantMiss ? `DOMINANT MISS: ${_dominantMiss} — aim them away silently, never say it out loud.` : ''}
+${_dominantMiss ? `DOMINANT MISS: ${_dominantMiss} — move the aim point off it, every time. SILENTLY means do not diagnose them ("you always slice this"); it does NOT mean skip the aim. When they ask where to aim, the aim point IS the answer and you must give one — a target, in their terms ("left-centre", "the left edge of the green"), with the miss quietly built into it. Probed 2026-08-23: asked "what should I hit and where do I aim" with a known right miss, the caddie answered "smooth 7 iron, you're sitting right at your number" and named no target at all — the identical sentence they would have got with no miss on file. A miss that does not move the target has not been used.` : ''}
 ${_physicalLimitation ? `PHYSICAL NOTE: ${_physicalLimitation} — never suggest movements that aggravate this, AND treat it as an input to the CLUB, not only a caution. A bad back, a limited turn, a sore shoulder all mean less speed today than their stored carries assume, so on a full shot take one more club and let them swing easier; add three words of why only if the club would look odd to them ("six, swing easy"). Probed 2026-08-23: told their back was bad and their turn limited, the caddie named the same seven iron and changed nothing but their tone. A physical note that moves only your encouragement has not been used.` : ''}
 
 ${todBlock}

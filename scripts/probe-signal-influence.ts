@@ -149,8 +149,15 @@ const CASES: Case[] = [
   {
     signal: 'gpsLost', ask: 'how far am I?',
     on: { gpsLost: true, currentYardage: null },
-    shows: /reacquir|picking.*(up|back)|signal|getting.*back|one sec/i,
-    because: 'the caddie owns the number; it must never hand the question back to the player',
+    // Was /reacquir|signal|one sec/ with "the caddie owns the number; it must never hand the question
+    // back to the player" — which asserts the opposite of how a real caddie behaves, and of what Tim
+    // asked for: when he genuinely does not know, he ASKS for the one thing he needs. He answered
+    // "no GPS lock and I don't have Greenhill's card data loaded — if you have a marker, give me the
+    // number", which is exactly right, and the case scored it a defect. The only thing that actually
+    // matters here is that he does NOT invent a yardage, so that is what `absent` tests.
+    shows: /no (gps|lock|fix|signal|number|live)|gps (is )?(lost|out|down|soft|reacquir)|don'?t have (a |your )?(live |exact |good )?(number|distance|yardage|read)|picking.*(up|back)|one sec|give me the number/i,
+    absent: /\b\d{2,3}\s*(yards|yds)\b/i,
+    because: 'with no fix he must say so and may ask for a marker — what he must never do is state a number he does not have',
   },
   {
     signal: 'distanceFromTeeYds', ask: 'what have I got left?',
