@@ -1869,7 +1869,19 @@ ${onCourseContextBlock}${baseMessage}`
     }
 
     if (toolAction && !text) {
-      text = TERSE_ACKS[toolAction.type] ?? 'On it.';
+      /**
+       * 2026-08-23 — A hole change gets its NUMBER read back, not a nod.
+       *
+       * TERSE_ACKS is a flat name→string map, so declare_hole answered "Got it." however the hole
+       * was arrived at. Being on the wrong hole is the most expensive silent state in the app —
+       * every yardage, hazard and green read after it belongs somewhere else — and "Got it." gives
+       * the player nothing to catch it with. The voice path has always said "Hole 8." for the same
+       * move; this makes the caddie agree with it instead of contradicting it by being vaguer.
+       */
+      const hole = (toolAction as { type?: string; hole?: unknown }).hole;
+      text = toolAction.type === 'declare_hole' && typeof hole === 'number' && Number.isFinite(hole)
+        ? `On to ${hole}.`
+        : TERSE_ACKS[toolAction.type] ?? 'On it.';
     }
 
     if (!text && !toolAction) {
