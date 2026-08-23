@@ -164,6 +164,10 @@ const LISTEN_ENDPOINT_MIN_MS = 800;
  * misheard turn. The chain resets on any user-initiated tap.
  */
 const MAX_AUTO_REOPENS = 2;
+/** When the open tap landed — lets an echo be told from a real second press during 'opening'. */
+let sessionOpenTapAt = 0;
+/** A real tap arrived while the mic was still opening: honour it as "done" once listening starts. */
+let pendingEndpointTap = false;
 /** Hard ceiling on one listen. See the note at the capture call site — outdoors this is what stops it. */
 const MAX_UTTERANCE_MS = 8_000;
 let autoReopenChain = 0;
@@ -460,7 +464,28 @@ export async function toggle(): Promise<void> {
   }
   // 2026-06-04 — Ignore re-tap during in-flight processing window.
   // See sessionInFlight comment above for rationale.
-  if (sessionInFlight) { swallowedTap('session_in_flight'); return; }
+  /**
+   * 2026-08-22 (Tim's field log: guard session_in_flight, sessionState 'opening', on turns 1, 10 and
+   * 38) — a tap during the mic-OPENING window was discarded outright, echo or not.
+   *
+   * The echo needs discarding: one physical tap reaches toggle() twice, ~350ms apart. A tap a second
+   * later is a person, and dropping it silently is the defect — they pressed, nothing happened, and
+   * nothing told them why. Opening can take a moment on a cold mic, which is exactly when someone
+   * presses again.
+   *
+   * So: echoes still die; a genuine tap during 'opening' is REMEMBERED and applied the instant the
+   * mic is live, as "I'm done — submit". The intent survives the window instead of vanishing into it.
+   */
+  if (sessionInFlight) {
+    const isEcho = Date.now() - sessionOpenTapAt < TAP_ECHO_SWALLOW_MS;
+    if (!isEcho && state === 'opening') {
+      pendingEndpointTap = true;
+      swallowedTap('queued_during_opening');
+      return;
+    }
+    swallowedTap('session_in_flight');
+    return;
+  }
   // 2026-07-06 (voice-lifecycle audit #2) — same double-fire as the recording-stop
   // branch, on the CLOSE side: one physical tap reaches toggle() twice (legacy sub
   // immediately + pattern sub ~350ms later). During 'responding' sessionInFlight is
@@ -472,6 +497,8 @@ export async function toggle(): Promise<void> {
   if (Date.now() - sessionCloseTapAt < TAP_ECHO_SWALLOW_MS) { swallowedTap('close_tap_echo'); return; }
   if (state === 'idle') {
     sessionInFlight = true;
+    sessionOpenTapAt = Date.now();
+    pendingEndpointTap = false;
     // A deliberate tap starts a fresh conversation — clear any auto-reopen chain the caddie's own
     // questions had built up, so the cap only ever bounds ONE run of unanswered questions.
     autoReopenChain = 0;
@@ -707,6 +734,16 @@ async function openSession() {
   setSessionStateMirror('listening');
   listeningStartedAt = Date.now(); // 2026-08-07 — arms the tap-again endpoint (see toggle())
   console.log('[audit:voice] listening engaged');
+  /**
+   * A real tap arrived while we were still opening. Honour it now rather than losing it: the person
+   * pressed, and the only reason it could not act was that the mic was not up yet. Cleared first so
+   * a failure below cannot leave it armed for the next session.
+   */
+  if (pendingEndpointTap) {
+    pendingEndpointTap = false;
+    console.log('[audit:voice] applying tap queued during opening — ending capture immediately');
+    endCaptureEarly();
+  }
   const t_capture_start = Date.now();
   console.log('[path4:voice] capture_start');
   /**
