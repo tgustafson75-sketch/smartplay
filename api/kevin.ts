@@ -164,6 +164,25 @@ async function executeLookupHole(
   }
 }
 
+/**
+ * 2026-08-23 — tools whose action speaks for itself, and the exact line to say when the model
+ * called one without adding words of its own.
+ *
+ * This doubles as the list of tools that do NOT need an extra model round to answer: "Got it." is a
+ * complete reply to "put me down for a 6". A tool that is NOT here has no acceptable short ack — it
+ * would fall through to a bare "On it.", which is the wrong answer to a question — so those are the
+ * only ones worth paying a second round for. See the silent-round retry in api/_aiProvider.
+ */
+const TERSE_ACKS: Record<string, string> = {
+  open_smartvision:    'Pulling up the layout.',
+  open_smartfinder:    'Locking that distance.',
+  open_swinglab:       'Heading to SwingLab.',
+  log_score:           'Got it.',
+  log_shot:            'Logged.',
+  log_emotional_state: 'I hear you.',
+  record_swing:        "I'm watching.",
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return; // CORS + OPTIONS preflight for the web-lite
   if (req.method !== 'POST') {
@@ -1409,6 +1428,12 @@ ${onCourseContextBlock}${baseMessage}`
       maxRounds: 3,
       continuationTools: ['lookup_course', 'lookup_hole'],
       /**
+       * Tools that can stand alone without prose. A silent turn calling one of these is fine — the
+       * ack above IS the answer — so it must not buy an extra model round. Anything outside this
+       * list going silent would fall through to a bare "On it.", and that is worth one more round.
+       */
+      terseAckTools: Object.keys(TERSE_ACKS),
+      /**
        * 2026-07-08 (Tim — "let ONE agent figure it out"). 14s/round is a HANG GUARD, not a budget:
        * a one-round answer, which is the common case, lands far inside it. A turn that cannot
        * finish in the client's window hands off to the on-device responder rather than stalling.
@@ -1715,16 +1740,7 @@ ${onCourseContextBlock}${baseMessage}`
     }
 
     if (toolAction && !text) {
-      const defaults: Record<string, string> = {
-        open_smartvision:    'Pulling up the layout.',
-        open_smartfinder:    'Locking that distance.',
-        open_swinglab:       'Heading to SwingLab.',
-        log_score:           'Got it.',
-        log_shot:            'Logged.',
-        log_emotional_state: 'I hear you.',
-        record_swing:        "I'm watching.",
-      };
-      text = defaults[toolAction.type] ?? 'On it.';
+      text = TERSE_ACKS[toolAction.type] ?? 'On it.';
     }
 
     if (!text && !toolAction) {

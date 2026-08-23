@@ -718,9 +718,9 @@ async function _anthropicAgenticLoop(
   images: AiImageInput[],
   tools: AiToolDef[],
   onToolCall: (name: string, input: Record<string, unknown>) => Promise<string>,
-  opts: CompleteOpts & { maxRounds?: number; continuationTools?: string[] },
+  opts: CompleteOpts & { maxRounds?: number; continuationTools?: string[]; terseAckTools?: string[] },
 ): Promise<AgenticLoopResult> {
-  const { maxTokens = 1024, temperature = 0.7, maxRounds = 3, continuationTools, timeoutMs } = opts;
+  const { maxTokens = 1024, temperature = 0.7, maxRounds = 3, continuationTools, terseAckTools, timeoutMs } = opts;
   const model = MODELS['anthropic'][tier];
   const ant = getAnthropic(timeoutMs);
 
@@ -871,7 +871,15 @@ async function _anthropicAgenticLoop(
        * extra, and maxRounds still caps the whole loop.
        */
       const spokeThisRound = !!(textBlock?.type === 'text' && textBlock.text.trim());
-      if (spokeThisRound || silentRoundRetried) break;
+      /**
+       * Only pay for the extra round when silence is actually WRONG. A tool with a terse ack
+       * ("put me down for a 6" → "Got it.") is a complete turn already, and granting it a second
+       * model call doubled latency across the board on the first version of this fix — the probe
+       * median went 2.9s → ~5s, which the probe's own header calls a regression even at full marks.
+       * A caddie that answers correctly but slowly degrades to the offline voice on a cold turn.
+       */
+      const needsWords = toolUseBlocks.some(b => !(terseAckTools ?? []).includes(b.name));
+      if (spokeThisRound || silentRoundRetried || !needsWords) break;
       silentRoundRetried = true;
       continue;
     }
