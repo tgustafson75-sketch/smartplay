@@ -110,3 +110,40 @@ describe('the caddie knows where on the hole you are standing', () => {
     expect(kevin).toMatch(/currentLocationType !== 'unknown'/);
   });
 });
+
+describe('risk posture, tee box and nine-hole mode reach the cloud caddie too', () => {
+  const kevin = read('api/kevin.ts');
+
+  /**
+   * 2026-08-22 — riskMode was wired on 08-12 but only into the ON-DEVICE shot read (cnsShotRead,
+   * used by SmartFinder, SmartVision and the local responder). The cloud brain — the thing the
+   * player actually talks to — never received it, so safe/aggressive changed the phone's answer and
+   * not the caddie's.
+   */
+  it('sends all three, with honest defaults', () => {
+    useRoundStore.setState({ riskMode: 'aggressive', currentTeeBox: 'Blue', nineHoleMode: true } as never);
+    const b = buildCaddieRequestBody({ message: 'x', language: 'en' });
+    expect(b.riskMode).toBe('aggressive');
+    expect(b.currentTeeBox).toBe('Blue');
+    expect(b.nineHoleMode).toBe(true);
+
+    useRoundStore.setState({ riskMode: undefined, currentTeeBox: undefined, nineHoleMode: undefined } as never);
+    const d = buildCaddieRequestBody({ message: 'x', language: 'en' });
+    expect(d.riskMode).toBe('normal');
+    expect(d.currentTeeBox).toBeNull();
+    expect(d.nineHoleMode).toBe(false);
+  });
+
+  it('the server reads all three and acts on them', () => {
+    expect(kevin).toMatch(/riskMode = null,/);
+    expect(kevin).toMatch(/currentTeeBox = null,/);
+    expect(kevin).toMatch(/nineHoleMode = false,/);
+    expect(kevin).toMatch(/Risk posture:/);
+    expect(kevin).toMatch(/take the conservative line/);
+    expect(kevin).toMatch(/NINE-HOLE round — pace the round to 9, never 18/);
+  });
+
+  it('mentions the tee box only when one is known', () => {
+    expect(kevin).toMatch(/currentTeeBox \? ` \| Tee: \$\{currentTeeBox\}` : ''/);
+  });
+});

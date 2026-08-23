@@ -244,6 +244,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       roundStats = null,
       transportMode = null,
       currentLocationType = null,
+      riskMode = null,
+      currentTeeBox = null,
+      nineHoleMode = false,
       holeNotes = {},
       activeCourse = null,
       isRoundActive = false,
@@ -805,7 +808,8 @@ ${currentHoleNote ? `Hole note: ${currentHoleNote}` : ''}
 Club: ${_club || 'not selected'}
 ${currentLocationType && currentLocationType !== 'unknown'
   ? `WHERE THEY ARE STANDING: ${currentLocationType === 'green' ? 'ON THE GREEN — this is a PUTT. Read the putt; do not recommend a club or a full swing.' : currentLocationType === 'tee' ? 'on the tee' : 'in the fairway'}\n`
-  : ''}Getting around: ${transportMode === 'cart' ? 'riding a cart' : 'walking'}${transportMode !== 'cart' && holesPlayed >= 13 ? ' \u2014 deep into a walked round, so factor fatigue into club choice rather than assuming full-strength swings' : ''}
+  : ''}Getting around: ${transportMode === 'cart' ? 'riding a cart' : 'walking'}${currentTeeBox ? ` | Tee: ${currentTeeBox}` : ''}${nineHoleMode ? ' | NINE-HOLE round — pace the round to 9, never 18' : ''}
+Risk posture: ${riskMode === 'safe' ? 'SAFE — take the conservative line, favour the fat side' : riskMode === 'aggressive' ? 'AGGRESSIVE — he wants to take it on' : 'normal'}${transportMode !== 'cart' && holesPlayed >= 13 ? ' \u2014 deep into a walked round, so factor fatigue into club choice rather than assuming full-strength swings' : ''}
 Score: ${totalScore > 0 ? totalScore : 'no holes yet'} | Vs par: ${scoreVsPar === 0 ? 'even' : scoreVsPar > 0 ? '+' + scoreVsPar : String(scoreVsPar)} | Holes: ${holesPlayed}
 Competition: ${isCompetition ? 'yes — be conservative' : 'no'}`
   : `DIALOGUE MODE: OFF-COURSE (no live round).

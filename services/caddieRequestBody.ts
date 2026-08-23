@@ -188,6 +188,18 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * between briefing the hole and answering the shot.
      */
     currentLocationType: safe(() => r.currentLocationType ?? 'unknown', 'unknown'),
+    /**
+     * 2026-08-22 — the caddie's RISK POSTURE. It was wired on 08-12 ("don't delete what adds value
+     * wired") but only into the ON-DEVICE shot read (cnsShotRead, used by SmartFinder, SmartVision
+     * and the local responder). The cloud brain — the thing the player actually talks to — never got
+     * it. So safe/aggressive changed the phone's answer and not the caddie's: the same split-brain
+     * inconsistency in miniature.
+     */
+    riskMode: safe(() => r.riskMode ?? 'normal', 'normal'),
+    /** Which tee he is actually playing, so advice matches the card he is on. */
+    currentTeeBox: safe(() => r.currentTeeBox ?? null, null),
+    /** A 9-hole round is a different shape of round; "you're halfway" is wrong at hole 5 of 9. */
+    nineHoleMode: safe(() => !!r.nineHoleMode, false),
     scores: safe(() => r.scores ?? {}, {}),
     // Current hole +/- 1 only: the full 18 added 5-15KB to every call.
     courseHoles: safe(() => {
