@@ -69,12 +69,25 @@ type Case = {
 const CASES: Case[] = [
   {
     signal: 'weather', ask: 'what should I hit here?',
-    extra: { clubDistances: { '7 iron': 150, '6 iron': 162, '5 iron': 172 } },
-    on: { weather: { tempF: 46, windMph: 16, windFromDeg: 270, gustMph: 24, conditions: 'Rain', description: 'light rain', ageMin: 3 } },
+    extra: { clubDistances: { '7 iron': 150, '6 iron': 162, '5 iron': 172, '4 iron': 181 } },
+    // 2026-08-23 — this case sent no bearing and no plays-like, so the caddie could not know the wind
+    // was INTO him, and the case demanded a two-club change that only a headwind justifies. It was
+    // asking him to guess and then failing him for guessing wrong — which is why it read 0/3, 2/3,
+    // 0/3, 2/3 across four runs. On the course the hole IS mapped, so send what the client actually
+    // sends: the decomposed wind and the computed playing number.
+    on: { weather: {
+      tempF: 46, windMph: 16, windFromDeg: 270, gustMph: 24, conditions: 'Rain',
+      description: 'light rain', ageMin: 3,
+      relative: { alongMph: -16, crossMph: 0, kind: 'into', phrase: '16 into your face' },
+      playsLike: { actualYds: 150, playsLikeYds: 176, deltaYds: 26, fromWind: 24, fromTemp: 2, fromWet: 3 },
+    } },
     // Was satisfied by the WORD "wind" or "rain". The caddie passed by SAYING "you're into 16mph
     // and wet — smooth seven", which is an acknowledgement with no consequence and still the wrong
     // club. Conditions have to move the CLUB, so only a club change counts.
-    shows: /\b(6|six|5|five)[- ]?iron\b|club up|one more club|two more club|extra club/i,
+    // 150 playing 176 is the 4 iron in this bag (172 is the 5). Accept either long iron or explicit
+    // club-up language — what must NOT survive is "smooth 7", the club for a number that is not real.
+    shows: /\b(4|four|5|five|6|six)[- ]?iron\b|club up|one more club|two more club|extra club/i,
+    absent: /\b(7|seven)[- ]?iron\b|smooth (7|seven)\b/i,
     because: 'cold + wet + 16mph into is one to two clubs; naming the wind and still saying "smooth 7" is wrong advice',
   },
   {

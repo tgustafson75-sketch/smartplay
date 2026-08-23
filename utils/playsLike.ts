@@ -1,4 +1,5 @@
 import type { WeatherSnapshot } from '../services/weatherService';
+import { decomposeWind as sharedDecomposeWind } from './windMath';
 
 /**
  * Phase C — Plays-like distance calculation.
@@ -31,6 +32,8 @@ export type PlaysLikeBreakdown = {
   delta_yards: number;
   wind_component_yards: number;
   temp_component_yards: number;
+  /** Carry lost to rain/wet conditions. Roll loss is a separate consequence, not modelled here. */
+  wet_component_yards: number;
   elevation_component_yards: number;
   /** Wind component along shot direction (positive = tailwind, negative = headwind). null when bearing unknown. */
   along_wind_mph: number | null;
@@ -42,22 +45,19 @@ function toRad(deg: number): number {
   return (deg * Math.PI) / 180;
 }
 
+/**
+ * 2026-08-23 — delegates to services/windRelative, which is the single owner of this maths.
+ * This file had its own private copy, queryStatusHandler had a third, and the caddie brain had
+ * none at all. Three derivations of "which way is the wind" WILL eventually disagree, and the
+ * player would be told one number, shown another, and given a club chosen from a third.
+ */
 function decomposeWind(
   windFromDeg: number,
   windSpeedMph: number,
   shotBearingDeg: number,
 ): { along: number; cross: number } {
-  // OpenWeatherMap wind_direction_deg is meteorological — degrees the wind comes FROM.
-  // Wind blows TO (windFromDeg + 180). Shot bearing is the direction the player aims.
-  // Tailwind = wind blowing in the same direction as the shot.
-  const windToDeg = (windFromDeg + 180) % 360;
-  let rel = windToDeg - shotBearingDeg;
-  rel = ((rel + 540) % 360) - 180; // normalize to -180..180
-  const r = toRad(rel);
-  return {
-    along: Math.cos(r) * windSpeedMph,   // + tailwind, − headwind
-    cross: Math.sin(r) * windSpeedMph,   // + right cross, − left cross
-  };
+  const rw = sharedDecomposeWind(windFromDeg, windSpeedMph, shotBearingDeg);
+  return rw ? { along: rw.alongMph, cross: rw.crossMph } : { along: 0, cross: 0 };
 }
 
 export function playsLikeDistance(
@@ -100,10 +100,23 @@ export function playsLikeDistance(
     tempYards = (delta / 10) * 0.005 * actualYards;
   }
 
+  /**
+   * 2026-08-23 — WET. The model had no precipitation term at all, which is the condition Tim
+   * actually plays in and the one that started this whole thread ("it was raining yesterday; that
+   * plays into the round"). A wet ball and wet grooves lose carry, and wet turf kills the roll —
+   * the roll is handled in the caddie's prompt as a separate consequence, this is the CARRY loss.
+   * Deliberately conservative: 2% for rain or drizzle, 3.5% when it is heavy. On a 150-yard shot
+   * that is 3 and 5 yards. Under-correcting is recoverable; over-correcting flies the green.
+   */
+  let wetYards = 0;
+  const cond = `${weather.conditions ?? ''} ${weather.description ?? ''}`;
+  if (/thunder|heavy|downpour|snow|sleet/i.test(cond)) wetYards = actualYards * 0.035;
+  else if (/rain|drizzle|shower/i.test(cond)) wetYards = actualYards * 0.02;
+
   // Elevation: ~1 yard per 3 feet uphill
   const elevYards = elevationDeltaFeet / 3;
 
-  const playsLike = actualYards + windYards + tempYards + elevYards;
+  const playsLike = actualYards + windYards + tempYards + wetYards + elevYards;
 
   return {
     actual_yards: actualYards,
@@ -111,6 +124,7 @@ export function playsLikeDistance(
     delta_yards: Math.round(playsLike - actualYards),
     wind_component_yards: Math.round(windYards),
     temp_component_yards: Math.round(tempYards),
+    wet_component_yards: Math.round(wetYards),
     elevation_component_yards: Math.round(elevYards),
     along_wind_mph: along != null ? Math.round(along) : null,
     cross_wind_mph: cross != null ? Math.round(cross) : null,

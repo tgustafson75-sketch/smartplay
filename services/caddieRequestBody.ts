@@ -662,9 +662,58 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
        */
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { decomposeWind, shotBearingDeg } = require('./windRelative') as typeof import('./windRelative');
-      const relative = safe(() => decomposeWind(w.wind_direction_deg, w.wind_speed_mph, shotBearingDeg(currentHole)), null);
+      const bearing = safe(() => shotBearingDeg(currentHole), null);
+      const relative = safe(() => decomposeWind(w.wind_direction_deg, w.wind_speed_mph, bearing), null);
+      /**
+       * 2026-08-23 — THE PLAYING NUMBER, COMPUTED. Not left to the caddie to work out.
+       *
+       * utils/playsLike has modelled this properly for months — 1%/mph into the wind, 0.5% downwind,
+       * air density by temperature, elevation — and answered the local "what does it play?" query.
+       * The BRAIN was never given it, so the single most important adjustment in golf was model
+       * arithmetic done from a prose description of the weather. That is precisely the thing that
+       * comes out right two times in three, and two-in-three is not a caddie.
+       *
+       * Handed the number, there is nothing left to be flaky about: he matches a club to it.
+       */
+      const playsLike = safe(() => {
+        const yds = r.currentYardage;
+        if (typeof yds !== 'number' || !Number.isFinite(yds) || yds <= 0) return null;
+        /**
+         * 2026-08-23 (Tim, Greenhill hole 2) — "230 yards DOWNHILL considerably; if I'd taken the
+         * caddie's recommendation I'd have smoked it into the woods past the hole." Elevation is a
+         * PARAMETER of playsLikeDistance that nothing was passing, while /api/elevation, the cache,
+         * the UI hook and the plays-like query had all worked for months. Read from the cache (this
+         * builder is synchronous, and elevation is static per point so the play screen has usually
+         * already resolved these exact cells), and warm it for next turn when it has not.
+         */
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const el = require('./elevationService') as typeof import('./elevationService');
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { getGreenCentroid } = require('./shotLocationService') as typeof import('./shotLocationService');
+        const here = fix && fix.lat != null && fix.lng != null ? { lat: fix.lat, lng: fix.lng } : null;
+        const green = safe(() => getGreenCentroid(currentHole), null);
+        let elevFeet = 0;
+        if (here && green) {
+          const cached = el.getCachedPlaysLikeElevation(here, green);
+          if (cached) elevFeet = cached.deltaFeet;
+          else el.warmElevation([here, green]);
+        }
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { playsLikeDistance } = require('../utils/playsLike') as typeof import('../utils/playsLike');
+        const b = playsLikeDistance(yds, w, bearing, elevFeet);
+        return b.delta_yards === 0 ? null : {
+          actualYds: b.actual_yards,
+          playsLikeYds: b.plays_like_yards,
+          deltaYds: b.delta_yards,
+          fromWind: b.wind_component_yards,
+          fromTemp: b.temp_component_yards,
+          fromWet: b.wet_component_yards,
+          fromElevation: b.elevation_component_yards,
+        };
+      }, null);
       return {
         relative,
+        playsLike,
         tempF: w.temp_f,
         windMph: w.wind_speed_mph,
         windFromDeg: w.wind_direction_deg,

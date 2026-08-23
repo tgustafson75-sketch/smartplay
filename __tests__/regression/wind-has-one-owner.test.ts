@@ -9,7 +9,7 @@
  * One owner, because two derivations of "which way is the wind" would eventually disagree and the
  * player would be TOLD one thing while the club was chosen from another.
  */
-import { decomposeWind } from '../../services/windRelative';
+import { decomposeWind } from '../../utils/windMath';
 
 describe('relative wind', () => {
   it('reads a wind blowing straight back down the shot line as INTO the face', () => {

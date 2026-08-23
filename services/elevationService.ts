@@ -69,3 +69,45 @@ export async function getPlaysLikeElevation(
   if (p == null || t == null) return { deltaFeet: 0, hasData: false };
   return { deltaFeet: Math.round((t - p) * 10) / 10, hasData: true };
 }
+
+/** Cache-only read. Null when this point has not been looked up yet. */
+function cachedFeet(lat: number, lng: number): number | null {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const v = cache.get(key(lat, lng));
+  return v === undefined ? null : v;
+}
+
+/**
+ * SYNCHRONOUS, cache-only elevation delta — for callers that cannot await.
+ *
+ * 2026-08-23 (Tim, Greenhill hole 2) — "it's 230 yards DOWNHILL considerably, and if I took the
+ * caddie's recommendation I'd have smoked it into the woods past the hole." The whole elevation
+ * chain already existed and worked — /api/elevation, this cache, the plays-like query, the UI hook
+ * — and the caddie brain was the one consumer never wired to it. It was quoting raw yardage while
+ * the app beside it knew the shot was falling away.
+ *
+ * buildCaddieRequestBody is synchronous by design (it is called on render paths), so it reads the
+ * cache rather than awaiting a lookup. Elevation is STATIC per point and the play screen's hook
+ * plus the plays-like query warm these exact cells, so by the time the player is asking what to
+ * hit, the tee and green are almost always already resolved. When they are not, this returns null
+ * and the caddie is told nothing about elevation rather than being told "flat" — a fabricated flat
+ * is what sent a 230-yard downhill shot into the trees.
+ */
+export function getCachedPlaysLikeElevation(
+  player: { lat: number; lng: number },
+  target: { lat: number; lng: number },
+): PlaysLikeElevation | null {
+  const p = cachedFeet(player.lat, player.lng);
+  const t = cachedFeet(target.lat, target.lng);
+  if (p == null || t == null) return null;
+  return { deltaFeet: Math.round((t - p) * 10) / 10, hasData: true };
+}
+
+/** Fire-and-forget warm of a pair of points so the sync reader has them next turn. */
+export function warmElevation(points: Array<{ lat: number; lng: number }>): void {
+  for (const pt of points) {
+    if (!Number.isFinite(pt?.lat) || !Number.isFinite(pt?.lng)) continue;
+    if (cache.has(key(pt.lat, pt.lng))) continue;
+    void getElevationFeet(pt.lat, pt.lng).catch(() => null);
+  }
+}

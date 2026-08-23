@@ -928,6 +928,25 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
           consequences.push('Enough wind to matter on a mid-iron; factor it into the club, do not make a speech about it, and do not claim a direction you have not been given.');
         }
 
+        /**
+         * 2026-08-23 — THE PLAYING NUMBER, ALREADY WORKED OUT. utils/playsLike has modelled this
+         * for months and the brain was never handed it, so the most important adjustment in golf
+         * was arithmetic done from a prose weather description — right two times in three. A caddie
+         * is not allowed to be right two times in three. When this line is present it is the number
+         * to club to, full stop; there is no judgement left to make.
+         */
+        const pl = (wx as { playsLike?: { actualYds: number; playsLikeYds: number; deltaYds: number; fromWind: number; fromTemp: number; fromWet: number; fromElevation: number } | null }).playsLike;
+        if (pl && Math.abs(pl.deltaYds) >= 3) {
+          const why = [
+            pl.fromWind ? `${Math.abs(pl.fromWind)} from the wind` : null,
+            pl.fromTemp ? `${Math.abs(pl.fromTemp)} from the cold` : null,
+            pl.fromWet ? `${Math.abs(pl.fromWet)} from the wet` : null,
+            // Downhill is the one that embarrasses a caddie in front of his player: quoting the
+            // card number on a shot that is falling away flies it through the green.
+            pl.fromElevation ? `${Math.abs(pl.fromElevation)} ${pl.fromElevation < 0 ? 'DOWNHILL' : 'uphill'}` : null,
+          ].filter(Boolean).join(', ');
+          lines.push(`- IT PLAYS ${pl.playsLikeYds}, NOT ${pl.actualYds}${why ? ` (${why})` : ''}. This is measured, not estimated — CLUB TO ${pl.playsLikeYds}. Pick the club whose carry is nearest ${pl.playsLikeYds}, and do not talk about the number: he asked what to hit, so give him the club that covers ${pl.playsLikeYds} and at most three words of why ("six — it's into 16").`);
+        }
         lines.push(`- CONDITIONS RIGHT NOW: ${bits.join(', ')}${wx.ageMin > 20 ? ` (read ${wx.ageMin} min ago)` : ''}.`);
         for (const c of consequences) lines.push(`  ${c}`);
       }

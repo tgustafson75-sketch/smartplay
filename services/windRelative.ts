@@ -18,17 +18,9 @@
  */
 import { bearingDegrees } from '../utils/geoDistance';
 import { getGreenCentroid, getTeeCentroid } from './shotLocationService';
-
-export interface RelativeWind {
-  /** Along the shot line. NEGATIVE = into the player's face, POSITIVE = at their back. */
-  alongMph: number;
-  /** Across the shot line. POSITIVE = blowing from the left, NEGATIVE = from the right. */
-  crossMph: number;
-  /** Which component dominates — what the player actually needs to hear. */
-  kind: 'into' | 'behind' | 'cross';
-  /** The spoken phrase, e.g. "11 into your face". Kept here so voice and brain never drift apart. */
-  phrase: string;
-}
+// The MATHS lives in utils/ with no imports so the pure layer can reach it; this module owns the
+// GEO half. Re-exported so every caller keeps one import site.
+export { decomposeWind, type RelativeWind } from '../utils/windMath';
 
 /** Tee → green bearing for a hole, or null when the hole has no mapped geometry. */
 export function shotBearingDeg(hole: number): number | null {
@@ -36,35 +28,4 @@ export function shotBearingDeg(hole: number): number | null {
   const green = getGreenCentroid(hole);
   if (tee && green) return bearingDegrees(tee, green);
   return null;
-}
-
-/**
- * Decompose a meteorological wind (the direction it blows FROM) against the shot line.
- * Returns null when either input is missing — an unknown wind must stay unknown rather than
- * defaulting to "into", which is the assumption that makes a caddie sound certain and be wrong.
- */
-export function decomposeWind(
-  windFromDeg: number | null | undefined,
-  windMph: number | null | undefined,
-  bearingDeg: number | null | undefined,
-): RelativeWind | null {
-  if (windFromDeg == null || !Number.isFinite(windFromDeg)) return null;
-  if (windMph == null || !Number.isFinite(windMph)) return null;
-  if (bearingDeg == null || !Number.isFinite(bearingDeg)) return null;
-
-  const windTo = (windFromDeg + 180) % 360;
-  let rel = windTo - bearingDeg;
-  rel = ((rel + 540) % 360) - 180;
-  const alongMph = Math.cos((rel * Math.PI) / 180) * windMph;
-  const crossMph = Math.sin((rel * Math.PI) / 180) * windMph;
-
-  const alongDominates = Math.abs(alongMph) > Math.abs(crossMph) * 1.5;
-  const kind: RelativeWind['kind'] = alongDominates ? (alongMph < 0 ? 'into' : 'behind') : 'cross';
-  const phrase = alongDominates
-    ? alongMph < 0
-      ? `${Math.round(Math.abs(alongMph))} into your face`
-      : `${Math.round(alongMph)} at your back`
-    : `${Math.round(Math.abs(crossMph))} crosswind from the ${crossMph > 0 ? 'left' : 'right'}`;
-
-  return { alongMph, crossMph, kind, phrase };
 }
