@@ -1,6 +1,8 @@
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import { useRoundStore } from '../../store/roundStore';
 import { useGhostStore } from '../../store/ghostStore';
+import { usePlayerProfileStore } from '../../store/playerProfileStore';
+import { useConversationLog } from '../../store/conversationLogStore';
 import { haversineYards, holeProgressYards, shotDistance, bearingDegrees } from '../../utils/geoDistance';
 import { getCurrentLocation, getGreenCentroid, getTeeCentroid } from '../shotLocationService';
 import { fetchWeatherAt, getCachedWeather, type WeatherSnapshot } from '../weatherService';
@@ -142,6 +144,41 @@ export const queryStatusHandler: IntentHandler = {
       // OFFLINE-answerable topics ("how many holes left", "what's the par", "what course is this") but
       // this handler had no case for them → they fell to the generic "what about it?" re-prompt. These
       // are exactly the answers that should shine with no signal.
+      // 2026-08-23 — Pre-round routine lived ONLY in localStatusResponder, which documents itself
+      // as this handler's MIRROR. So the mirror carried a capability the primary never had, and
+      // when local-primary was demoted to a brain-FAILURE fallback the routine went with it:
+      // "save my routine" started working only when the caddie was already broken. Round-
+      // INDEPENDENT on purpose — you save and recall it off the course, so it sits above the
+      // round-active gate.
+      case 'routine_save': {
+        const last = useConversationLog.getState().lastCaddieText();
+        if (!last) {
+          return {
+            success: true,
+            voice_response: `I haven't said anything worth saving yet — ask me for a warm-up and then tell me to save it.`,
+            side_effects: ['query:routine_save'],
+            follow_up_needed: false,
+          };
+        }
+        usePlayerProfileStore.getState().setPreRoundRoutine(last);
+        return {
+          success: true,
+          voice_response: `Saved. That's your routine now — just ask and I'll run you through it.`,
+          side_effects: ['query:routine_save'],
+          follow_up_needed: false,
+        };
+      }
+
+      case 'routine_recall': {
+        const r = usePlayerProfileStore.getState().preRoundRoutine;
+        return {
+          success: true,
+          voice_response: r ?? `You haven't saved a routine yet. Ask me for a warm-up, then say "save that routine."`,
+          side_effects: ['query:routine_recall'],
+          follow_up_needed: false,
+        };
+      }
+
       case 'par': {
         const par = round.getCurrentPar();
         return {

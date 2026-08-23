@@ -123,6 +123,16 @@ const PATTERNS: Pattern[] = [
   },
 
   // ── SCORE / ROUND STATUS ──────────────────────────────────
+  // Routine is round-INDEPENDENT and deterministic — a command, not a question — so it belongs in
+  // the precheck next to the other commands rather than depending on a brain round-trip.
+  {
+    rx: /\b(save|remember|keep)\b[^.?!]{0,28}\b(routine|stretches|warm.?up)\b/i,
+    build: (raw) => intent(raw, 'query_status', { query_topic: 'routine_save' }),
+  },
+  {
+    rx: /\b(what(?:'s|s)?|tell\s+me|recall|show\s+me|give\s+me|read)\b[^.?!]{0,28}\b(routine|stretches|warm.?up)\b/i,
+    build: (raw) => intent(raw, 'query_status', { query_topic: 'routine_recall' }),
+  },
   {
     rx: /\b(what(?:'s|s)?\s+my\s+score|how\s+am\s+i\s+doing|my\s+score|score\s+(?:today|so\s+far)|vs\.?\s+par|under\s+par|over\s+par)\b/i,
     build: (raw) => intent(raw, 'query_status', { query_topic: 'score' }),

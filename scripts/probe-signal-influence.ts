@@ -34,6 +34,12 @@
  */
 const BASE = process.env.PROBE_API ?? 'https://api.smartplaycaddie.com';
 const only = (process.argv.find(a => a.startsWith('--only=')) ?? '').split('=')[1] ?? null;
+/**
+ * A single sample is not evidence. An LLM answer varies run to run, so one probe can score a
+ * working signal IGNORED or a broken one INFLUENCES, and either way the verdict gets acted on.
+ * --repeat=N runs each case N times and reports k/N, so a flake reads as a flake.
+ */
+const repeat = Math.max(1, Number((process.argv.find(a => a.startsWith('--repeat=')) ?? '').split('=')[1]) || 1);
 
 /** Shared on-course footing so every case differs ONLY by the signal under test. */
 const ON_COURSE: Record<string, unknown> = {
@@ -49,6 +55,12 @@ type Case = {
   on: Record<string, unknown>;
   /** What the answer must show when the signal is present. */
   shows: RegExp;
+  /**
+   * What must NOT appear once the signal is present. Some signals prove themselves by what they
+   * REMOVE — a beginner should stop hearing "clubface path" jargon — and a `shows` pattern cannot
+   * express that. Without this, the experienceContext case used /.+/ and could never fail.
+   */
+  absent?: RegExp;
   /** Why this signal is supposed to change the answer at all. */
   because: string;
   extra?: Record<string, unknown>;
@@ -59,8 +71,11 @@ const CASES: Case[] = [
     signal: 'weather', ask: 'what should I hit here?',
     extra: { clubDistances: { '7 iron': 150, '6 iron': 162, '5 iron': 172 } },
     on: { weather: { tempF: 46, windMph: 16, windFromDeg: 270, gustMph: 24, conditions: 'Rain', description: 'light rain', ageMin: 3 } },
-    shows: /\b(6|six|5|five)[- ]?(iron)?\b|wind|rain|wet|cold|extra club|more club/i,
-    because: 'cold + wet + 16mph is one to two clubs; a bare "smooth 7" there is wrong advice',
+    // Was satisfied by the WORD "wind" or "rain". The caddie passed by SAYING "you're into 16mph
+    // and wet — smooth seven", which is an acknowledgement with no consequence and still the wrong
+    // club. Conditions have to move the CLUB, so only a club change counts.
+    shows: /\b(6|six|5|five)[- ]?iron\b|club up|one more club|two more club|extra club/i,
+    because: 'cold + wet + 16mph into is one to two clubs; naming the wind and still saying "smooth 7" is wrong advice',
   },
   {
     signal: 'hazards (unified_context_block)', ask: 'what should I hit here?',
@@ -71,9 +86,13 @@ const CASES: Case[] = [
   },
   {
     signal: 'clubDistances', ask: 'what should I hit here?',
-    on: { clubDistances: { '7 iron': 150, '8 iron': 138, '6 iron': 163 } },
-    shows: /\b(7|seven)[- ]?iron\b/i,
-    because: 'his real bag, so the club named is HIS club and not a generic one',
+    // Deliberately NOT a standard bag: he only carries 135 in a 7 iron, so 150 is a 5. A generic
+    // "150 is a 7 iron" answer then proves the bag was ignored, which the old standard bag could
+    // not distinguish — it scored UNPROVEN because the generic answer and the right answer matched.
+    on: { clubDistances: { '7 iron': 135, '6 iron': 143, '5 iron': 151, '4 iron': 160 } },
+    shows: /\b(5|five)[- ]?iron\b/i,
+    absent: /\b(7|seven)[- ]?iron\b/i,
+    because: 'the club named must come from HIS carries; at 150 a 135-yard 7 iron is two clubs short',
   },
   {
     signal: 'dominantMiss / missType', ask: 'what should I hit and where do I aim?',
@@ -83,7 +102,10 @@ const CASES: Case[] = [
     because: 'the aim point should allow for HIS miss, not a neutral target',
   },
   {
-    signal: 'handedness (left)', ask: 'my ball is short right of the green, how do I play it?',
+    signal: 'handedness (left)',
+    // Was asked with no lie, so the caddie correctly asked "sitting up or in the rough?" instead of
+    // committing — a good caddie, a useless case. Supply the lie so a DIRECTION has to appear.
+    ask: 'my ball is short right of the green sitting up in light rough, how do I play it?',
     on: { handedness: 'left' },
     shows: /left|mirror|opposite|your side/i,
     because: 'every directional call inverts for a lefty; this reached NO brain before today',
@@ -127,21 +149,28 @@ const CASES: Case[] = [
   },
   {
     signal: 'priorRoundsAtCourse (first visit)', ask: 'I just finished, how did I do?',
-    on: { priorRoundsAtCourse: 0, scores: { 1: 5, 2: 4, 3: 6 } },
+    // scores moved to `extra` — they were in `on`, so the two payloads differed by TWO things and
+    // the verdict was unattributable. A differential probe is only valid if ONE thing changes.
+    extra: { scores: { 1: 5, 2: 4, 3: 6, 4: 5, 5: 7, 6: 4, 7: 5, 8: 6, 9: 5 } },
+    on: { priorRoundsAtCourse: 0 },
     shows: /first time|baseline|first round|starting point|never played/i,
     because: 'a first round is a baseline, never "your best score yet"',
   },
   {
     signal: 'experienceContext (starting)', ask: 'why am I slicing my driver?',
     on: { experienceContext: 'starting' },
-    shows: /.+/,
-    because: 'a beginner needs plain words and one idea, not mechanics',
+    // The old pattern was /.+/ — it matched any answer, so this case could never fail. A beginner
+    // proves itself by what is ABSENT: no path/face-angle vocabulary, no swing-plane mechanics.
+    shows: /\b(grip|aim|swing|ball|hands|shoulders|open|closed|left|right)\b/i,
+    absent: /clubface (is )?open to|swing path|face angle|attack angle|over[- ]the[- ]top|steep|shallow/i,
+    because: 'a beginner needs plain words and one idea, not path-and-face mechanics',
   },
   {
     signal: 'physicalLimitation', ask: 'what should I hit here?',
     extra: { clubDistances: { '7 iron': 150, '6 iron': 162 } },
     on: { physicalLimitation: 'bad lower back, limited turn today' },
-    shows: /back|easier|smooth|comfortable|turn|club up|more club/i,
+    // "smooth" alone used to pass this, and the answer never mentioned his back — a false PASS.
+    shows: /\bback\b|limited turn|club up|more club|\b(6|six)[- ]?iron\b|easier on|protect/i,
     because: 'a bad back changes the CLUB, not just the encouragement',
   },
   {
@@ -153,15 +182,21 @@ const CASES: Case[] = [
   },
   {
     signal: 'riskMode (aggressive)', ask: 'I have 210 over water to a back pin, go or lay up?',
-    extra: { clubDistances: { '3 wood': 215, '7 iron': 150 } },
+    // 235 of 3 wood to a 210 carry is a genuine choice. At 215 it was a stretch for ANY posture,
+    // so both answers said lay up and the case could not isolate the posture.
+    extra: { clubDistances: { '3 wood': 235, '5 iron': 185, '7 iron': 150 } },
     on: { riskMode: 'aggressive' },
     shows: /go|send|take it on|have a go|3 wood|three wood/i,
     because: 'risk posture must reach the cloud caddie, not just the on-device read',
   },
   {
-    signal: 'nineHoleMode', ask: 'how much have I got left?',
+    signal: 'nineHoleMode', ask: 'how many holes do I have left?',
+    // "how much have I got left" was read as YARDAGE. Ask the question actually under test.
     on: { nineHoleMode: true, currentHole: 5 },
-    shows: /four|4|nine|9|back nine|half/i,
+    // Was /four|4|nine[- ]?hole|.../ — "Nine holes left" is the WRONG answer and it MATCHED.
+    // A pattern the failure satisfies cannot test anything.
+    shows: /\bfour\b|\b4\b(?!\d)/i,
+    absent: /\b(nine|13|14|thirteen|fourteen)\s+holes?\s+(left|to go|remaining)/i,
     because: 'a nine-hole round is a different shape; "halfway" is wrong at hole 5 of 9',
   },
   {
@@ -172,14 +207,29 @@ const CASES: Case[] = [
   },
 ];
 
+/**
+ * One transient connect timeout used to abort the entire run and throw away every verdict already
+ * earned — a quality harness that a single network blip can silence is not a quality harness.
+ * Retry the sample; if it still will not answer, return a sentinel that no `shows` pattern matches
+ * so the case reads as unproven rather than silently passing.
+ */
 const say = async (body: Record<string, unknown>): Promise<string> => {
-  const res = await fetch(`${BASE}/api/kevin`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) return `__HTTP_${res.status}__`;
-  const j = await res.json() as { text?: string };
-  return (j.text ?? '').trim();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(`${BASE}/api/kevin`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(45_000),
+      });
+      if (!res.ok) return `__HTTP_${res.status}__`;
+      const j = await res.json() as { text?: string };
+      return (j.text ?? '').trim();
+    } catch (e) {
+      if (attempt === 2) return `__NETWORK_FAILED__ ${String((e as Error)?.message ?? e)}`;
+      await new Promise(r => setTimeout(r, 2_000 * (attempt + 1)));
+    }
+  }
+  return '__NETWORK_FAILED__';
 };
 
 async function main() {
@@ -190,18 +240,32 @@ async function main() {
   for (const c of cases) {
     const base = { ...ON_COURSE, ...(c.extra ?? {}), message: c.ask };
     const withSignal = { ...base, ...c.on };
-    const [off, on] = await Promise.all([say(base), say(withSignal)]);
 
-    const moved = c.shows.test(on);
-    const alsoWithout = c.shows.test(off);
-    const tag = !moved ? 'IGNORED' : alsoWithout ? 'UNPROVEN' : 'INFLUENCES';
+    let movedN = 0, alsoWithoutN = 0;
+    let lastOn = '', lastOff = '', firstMissOn = '', firstMissOff = '';
+    for (let i = 0; i < repeat; i++) {
+      const [off, on] = await Promise.all([say(base), say(withSignal)]);
+      lastOn = on; lastOff = off;
+      const m = c.shows.test(on) && (!c.absent || !c.absent.test(on));
+      const a = c.shows.test(off) && (!c.absent || !c.absent.test(off));
+      if (m) movedN++; else if (!firstMissOn) { firstMissOn = on; firstMissOff = off; }
+      if (a) alsoWithoutN++;
+    }
+
+    // Majority, not unanimity: a caddie who allows for the miss 2 times in 3 is using the signal.
+    // Anything that only lands sometimes is FLAKY — worth knowing, and different from IGNORED.
+    const moved = movedN * 2 > repeat;
+    const alsoWithout = alsoWithoutN * 2 > repeat;
+    const flaky = moved && movedN < repeat;
+    const tag = !moved ? 'IGNORED' : alsoWithout ? 'UNPROVEN' : flaky ? 'FLAKY' : 'INFLUENCES';
     if (!moved) ignored++;
 
-    console.log(`[${tag.padEnd(10)}] ${c.signal}`);
+    const rate = repeat > 1 ? ` ${movedN}/${repeat}` : '';
+    console.log(`[${tag.padEnd(10)}]${rate} ${c.signal}`);
     console.log(`             ask:  "${c.ask}"`);
-    console.log(`             with: ${on.slice(0, 150)}`);
-    if (!moved || alsoWithout) {
-      console.log(`             w/o:  ${off.slice(0, 150)}`);
+    console.log(`             with: ${(moved ? lastOn : firstMissOn || lastOn).slice(0, 150)}`);
+    if (!moved || alsoWithout || flaky) {
+      console.log(`             w/o:  ${(moved ? lastOff : firstMissOff || lastOff).slice(0, 150)}`);
       console.log(`             why it should matter: ${c.because}`);
     }
     console.log();

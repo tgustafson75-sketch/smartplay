@@ -261,6 +261,20 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      */
     transportMode: safe(() => r.transportMode ?? 'walking', 'walking'),
     /**
+     * 2026-08-23 — The club actually in his hands. The caddie has a `club_change` TOOL to RECORD
+     * this and has never once been TOLD it: zero matches for the club in either payload. He could
+     * write it and not read it back. A real caddie watching you pull a 7 does not ask what you are
+     * holding, and "am I okay with this club?" is unanswerable without it.
+     */
+    currentClub: safe(() => r.club ?? null, null),
+    /**
+     * 2026-08-23 — His saved pre-round routine (the warm-up he told the caddie to remember). Stored
+     * with a setter since June and read by exactly ONE place — localStatusResponder, the demoted
+     * fallback — so it reached no brain at all. Round-independent: he saves and recalls it off the
+     * course, and the caddie should be able to run him through it in his own voice.
+     */
+    preRoundRoutine: safe(() => p.preRoundRoutine ?? null, null),
+    /**
      * 2026-08-22 — WHERE ON THE HOLE HE IS STANDING. Derived from every GPS fix since 2026-05-24 and
      * never sent. On the green it is the difference between a club recommendation and a putt read —
      * Tim: "caddy has no context when you're doing a putt read." On the tee it is the difference

@@ -488,6 +488,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
        * exactly backwards. Precisely wrong is worse than vague.
        */
       handedness = 'right',
+      /** The club actually in his hands — he has a club_change TOOL to record it and was never told it. */
+      currentClub = null,
+      /** His saved pre-round routine, stored since June and read by no brain until today. */
+      preRoundRoutine = null,
       /** starting | improving | returning | competitive — how deep an explanation should go. */
       experienceContext = null,
       missType = null,
@@ -834,6 +838,17 @@ You are in CADDIE mode — on the course, mid-round. Your voice is:
          * only on the retired brain: this path had the number but never the shape of the answer.
          */
         lines.push(`- They are about ${distanceFromTeeYds} yards from THIS hole's tee — that is roughly the drive they just hit, and you know it before it is ever logged. When they ask what they have left ("what's left", "what do I have"), CONFIRM that shot naturally first ("you hit that about ${distanceFromTeeYds}"), THEN the remaining number, THEN the play — one flowing sentence, never robotic.`);
+      }
+      if (typeof currentClub === 'string' && currentClub.trim()) {
+        /**
+         * 2026-08-23 — He is standing there holding this. A real caddie SEES it, so never ask what
+         * he is hitting when it is right here, and if the club is wrong for the number say so
+         * plainly rather than validating it.
+         */
+        lines.push(`- The club in his hands right now is the ${String(currentClub).trim()}. You can see it — never ask what he is holding. If it does not fit the shot, say so directly instead of agreeing with it.`);
+      }
+      if (typeof preRoundRoutine === 'string' && preRoundRoutine.trim()) {
+        lines.push(`- His saved pre-round routine, in his words: "${String(preRoundRoutine).trim().slice(0, 400)}". Run him through it when he asks for it — your voice, not a recital.`);
       }
       const wx = weather as {
         tempF: number | null; windMph: number; windFromDeg: number | null; gustMph: number | null;
