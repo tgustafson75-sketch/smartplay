@@ -105,12 +105,19 @@ const CASES: Case[] = [
   },
   {
     signal: 'handedness (left)',
-    // Was asked with no lie, so the caddie correctly asked "sitting up or in the rough?" instead of
-    // committing — a good caddie, a useless case. Supply the lie so a DIRECTION has to appear.
-    ask: 'my ball is short right of the green sitting up in light rough, how do I play it?',
+    // Two earlier versions of this case never forced a DIRECTION out of him — a greenside chip is
+    // answered with a club and a landing spot, so handedness had nothing to invert and the case
+    // could not fail. A slice is the clean mirror: a right-hander's curves away to the RIGHT and he
+    // aims left to allow for it; a left-hander's curves to the LEFT, so he must aim RIGHT. Same
+    // sentence, opposite answer, and getting it backwards sends the ball further into trouble.
+    ask: "I've been slicing it all day — where should I aim off this tee?",
     on: { handedness: 'left' },
-    shows: /left|mirror|opposite|your side/i,
-    because: 'every directional call inverts for a lefty; this reached NO brain before today',
+    // A left-hander's slice curves to the LEFT, so he aims RIGHT of target. The right-handed
+    // default answer — "aim left" — is the exact wrong advice for him, which is why `absent` has to
+    // carry half this test: a mirrored call is only correct if the unmirrored one is gone.
+    shows: /aim(?:ing)? right|start it right|right (side|edge|half)|favou?r(?:ing)? the right|right of (the )?(target|centre|center|fairway)/i,
+    absent: /aim(?:ing)? left|start it left|left (side|edge|half)|favou?r(?:ing)? the left/i,
+    because: 'every directional call inverts for a lefty; aiming him left doubles his miss',
   },
   {
     signal: 'currentLocationType (green)', ask: 'what should I hit?',
@@ -244,16 +251,21 @@ async function main() {
   const cases = only ? CASES.filter(c => c.signal.toLowerCase().includes(only.toLowerCase())) : CASES;
   console.log(`\nDoes each signal CHANGE THE ANSWER? — ${BASE}\n`);
   let ignored = 0;
+  let inconclusive = 0;
 
   for (const c of cases) {
     const base = { ...ON_COURSE, ...(c.extra ?? {}), message: c.ask };
     const withSignal = { ...base, ...c.on };
 
-    let movedN = 0, alsoWithoutN = 0;
+    let movedN = 0, alsoWithoutN = 0, lostN = 0;
     let lastOn = '', lastOff = '', firstMissOn = '', firstMissOff = '';
     for (let i = 0; i < repeat; i++) {
       const [off, on] = await Promise.all([say(base), say(withSignal)]);
       lastOn = on; lastOff = off;
+      // A sample the network ate is not evidence about the caddie. Counting it as IGNORED reads as
+      // "the signal made no difference" and sends you looking for a defect that is not there —
+      // which is exactly what it did on its first run.
+      if (on.startsWith('__NETWORK_FAILED__') || off.startsWith('__NETWORK_FAILED__')) { lostN++; continue; }
       const m = c.shows.test(on) && (!c.absent || !c.absent.test(on));
       const a = c.shows.test(off) && (!c.absent || !c.absent.test(off));
       if (m) movedN++; else if (!firstMissOn) { firstMissOn = on; firstMissOff = off; }
@@ -262,13 +274,15 @@ async function main() {
 
     // Majority, not unanimity: a caddie who allows for the miss 2 times in 3 is using the signal.
     // Anything that only lands sometimes is FLAKY — worth knowing, and different from IGNORED.
-    const moved = movedN * 2 > repeat;
-    const alsoWithout = alsoWithoutN * 2 > repeat;
-    const flaky = moved && movedN < repeat;
-    const tag = !moved ? 'IGNORED' : alsoWithout ? 'UNPROVEN' : flaky ? 'FLAKY' : 'INFLUENCES';
-    if (!moved) ignored++;
+    const usable = repeat - lostN;
+    const moved = usable > 0 && movedN * 2 > usable;
+    const alsoWithout = usable > 0 && alsoWithoutN * 2 > usable;
+    const flaky = moved && movedN < usable;
+    const tag = usable === 0 ? 'NO SIGNAL' : !moved ? 'IGNORED' : alsoWithout ? 'UNPROVEN' : flaky ? 'FLAKY' : 'INFLUENCES';
+    if (usable > 0 && !moved) ignored++;
+    if (usable === 0) inconclusive++;
 
-    const rate = repeat > 1 ? ` ${movedN}/${repeat}` : '';
+    const rate = usable === 0 ? ` (${lostN} lost)` : repeat > 1 ? ` ${movedN}/${usable}${lostN ? ` +${lostN} lost` : ''}` : '';
     console.log(`[${tag.padEnd(10)}]${rate} ${c.signal}`);
     console.log(`             ask:  "${c.ask}"`);
     console.log(`             with: ${(moved ? lastOn : firstMissOn || lastOn).slice(0, 150)}`);
@@ -279,7 +293,8 @@ async function main() {
     console.log();
   }
 
-  console.log(`${cases.length - ignored}/${cases.length} signals changed the caddie's answer.`);
+  console.log(`${cases.length - ignored - inconclusive}/${cases.length - inconclusive} signals changed the caddie's answer.` +
+    (inconclusive ? `  (${inconclusive} could not be judged — the network ate every sample.)` : ''));
   console.log('IGNORED  = present, plumbed, and made no difference to what he said — the weather failure mode.');
   console.log('UNPROVEN = the answer matched even WITHOUT the signal, so this case does not prove influence.');
   if (ignored > 0) process.exit(1);
