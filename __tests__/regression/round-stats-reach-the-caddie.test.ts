@@ -83,3 +83,30 @@ describe('walking versus riding reaches the caddie', () => {
     expect(kevin).toMatch(/transportMode !== 'cart' && holesPlayed >= 13/);
   });
 });
+
+describe('the caddie knows where on the hole you are standing', () => {
+  const kevin = read('api/kevin.ts');
+
+  /**
+   * 2026-08-22 (Tim — "caddy has no context when you're doing a putt read"). currentLocationType has
+   * been derived from every GPS fix since 2026-05-24 and was never sent. On the green it is the
+   * difference between a club recommendation and a putt read.
+   */
+  it('sends it, defaulting to unknown rather than guessing', () => {
+    useRoundStore.setState({ currentLocationType: 'green' } as never);
+    expect(buildCaddieRequestBody({ message: 'x', language: 'en' }).currentLocationType).toBe('green');
+    useRoundStore.setState({ currentLocationType: undefined } as never);
+    expect(buildCaddieRequestBody({ message: 'x', language: 'en' }).currentLocationType).toBe('unknown');
+  });
+
+  it('on the green it says PUTT, not club', () => {
+    expect(kevin).toMatch(/currentLocationType = null,/);
+    expect(kevin).toMatch(/ON THE GREEN — this is a PUTT/);
+    expect(kevin).toMatch(/do not recommend a club or a full swing/);
+  });
+
+  it('says nothing at all when the position is unknown', () => {
+    // Inventing "you're in the fairway" would be worse than silence.
+    expect(kevin).toMatch(/currentLocationType !== 'unknown'/);
+  });
+});

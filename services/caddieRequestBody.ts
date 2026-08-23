@@ -181,6 +181,13 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * never got wired. Late in a walked round it should temper club choice; in a cart it should not.
      */
     transportMode: safe(() => r.transportMode ?? 'walking', 'walking'),
+    /**
+     * 2026-08-22 — WHERE ON THE HOLE HE IS STANDING. Derived from every GPS fix since 2026-05-24 and
+     * never sent. On the green it is the difference between a club recommendation and a putt read —
+     * Tim: "caddy has no context when you're doing a putt read." On the tee it is the difference
+     * between briefing the hole and answering the shot.
+     */
+    currentLocationType: safe(() => r.currentLocationType ?? 'unknown', 'unknown'),
     scores: safe(() => r.scores ?? {}, {}),
     // Current hole +/- 1 only: the full 18 added 5-15KB to every call.
     courseHoles: safe(() => {
