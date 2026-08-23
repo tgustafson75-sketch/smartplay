@@ -736,7 +736,19 @@ async function _anthropicAgenticLoop(
    * (the question, the images) lives in `messages`, after the cache boundary, where it belongs.
    */
   const cachedSystem: Anthropic.TextBlockParam[] = [
-    { type: 'text', text: system, cache_control: { type: 'ephemeral' } },
+    /**
+     * ONE-HOUR TTL, not the 5-minute default — because a round is not a chat session.
+     *
+     * The default cache entry expires after 5 minutes. Conversations have turns seconds apart; a
+     * ROUND has turns MINUTES apart — the player tees off, walks to the ball, plays it, walks to
+     * the green. On the 5-minute default, most of a round's turns would arrive after the entry had
+     * already expired and pay the full write price again, which is the opposite of the intent.
+     *
+     * A 1h write costs 2x instead of 1.25x, so it needs three reads to pay for itself. A round
+     * produces far more turns than that, and it spans about four hours — the entry survives the
+     * walk between shots, which is exactly the gap the default cannot cover.
+     */
+    { type: 'text', text: system, cache_control: { type: 'ephemeral', ttl: '1h' } },
   ];
 
   // Build initial user content — images first, then text.
@@ -758,6 +770,24 @@ async function _anthropicAgenticLoop(
 
   let text = '';
   let rounds = 0;
+  /**
+   * 2026-08-23 — THE ANSWER THAT CAME WITH THE TOOL CALL.
+   *
+   * The rule below — only accumulate text from rounds with no tool_use — is right for a lookup
+   * chain, where the text is throat-clearing ("let me pull that hole up") and the real answer comes
+   * in a later round. It was also SAFE on gpt-4o-mini for a reason that has now changed: that model
+   * cannot emit content and a tool call in the same message at all ([[fast-tier-wont-call-tools-
+   * alongside-answers]] — the finding that cost three prompt rewrites on recommend_club).
+   *
+   * Claude does emit both. Asked "what should I hit and where do I aim" it answers in prose AND
+   * calls recommend_club in one message — and this rule threw the prose away, leaving kevin.ts to
+   * fall back to a bare "On it." The caddie made the right call and said nothing about it.
+   *
+   * So the round's text is kept aside and used only if nothing better arrives. A lookup chain still
+   * ends on a text-only round and is unaffected; a turn that answers and acts in one breath keeps
+   * its answer.
+   */
+  let textFromToolRound = '';
 
   for (let round = 0; round < maxRounds; round++) {
     rounds = round + 1;
@@ -776,6 +806,8 @@ async function _anthropicAgenticLoop(
     // Only accumulate text from final-answer rounds (no tool_use in response).
     if (toolUseBlocks.length === 0) {
       text += textBlock?.type === 'text' ? textBlock.text : '';
+    } else if (textBlock?.type === 'text' && textBlock.text.trim()) {
+      textFromToolRound = textBlock.text;
     }
 
     if (res.stop_reason === 'max_tokens') {
@@ -803,6 +835,10 @@ async function _anthropicAgenticLoop(
 
     if (!hasContinuationTool) break;
   }
+
+  // Nothing but tool calls came back with words attached — use them rather than letting the caller
+  // fall back to a bare acknowledgement.
+  if (!text.trim() && textFromToolRound.trim()) text = textFromToolRound;
 
   return { text: text.trim(), provider: 'anthropic', rounds };
 }
