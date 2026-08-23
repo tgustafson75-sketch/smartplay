@@ -434,6 +434,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       gpsLost = false,
       distanceFromTeeYds = null,
       greenYardages = null,
+      /**
+       * 2026-08-23 — WHERE THE YARDAGE CAME FROM, and how much to trust it.
+       *
+       * services/yardageResolver has been the "single source of truth" for the number since
+       * 2026-05-25, written after a Palms round where the UI, the prompt and the voice readback all
+       * derived yardage differently and drifted apart. Its own header says it exists so that
+       * "Kevin's prompt can hedge correctly". The client has sent `yardageInsight` ever since.
+       *
+       * This brain never destructured it. Not once, in three months. So the prompt below stated
+       * `DISTANCE REMAINING RIGHT NOW: N yards ... measured live` unconditionally — including when
+       * the resolver had fallen back to the SCORECARD number because GPS went soft. The caddie was
+       * told a card yardage was a live measurement, which is the exact confusion the resolver was
+       * built to end, and a close cousin of the hole-9 bug fixed yesterday.
+       */
+      yardageInsight = null,
     } = body;
 
     const cap = (v: unknown, max: number): string =>
@@ -894,7 +909,19 @@ ${(() => {
   const last = (rs.lastThreeHoles ?? []).map(h => `H${h.hole}: ${h.score}${h.putts != null ? ` (${h.putts} putts)` : ''}`).join(', ');
   // How the round is ACTUALLY going, not just the total. Ground advice in this rather than guessing.
   return `HOW THIS ROUND IS GOING: ${bits}${last ? `\nLast three: ${last}` : ''}\n`;
-})()}DISTANCE REMAINING RIGHT NOW: ${currentYardage} yards. This is the shot in front of them, measured live. It is NOT the hole's card length, and the card length is NOT the shot — never quote a scorecard yardage as the distance they are hitting.
+})()}${(() => {
+  const yi = yardageInsight as { yardage: number | null; source?: string; confidence?: string; reason?: string } | null;
+  const base = `DISTANCE REMAINING RIGHT NOW: ${currentYardage} yards. This is the shot in front of them. It is NOT the hole's card length, and the card length is NOT the shot — never quote a scorecard yardage as the distance they are hitting.`;
+  if (!yi || typeof yi.source !== 'string') return base;
+  // Say where the number came from, so the caddie can be as confident as the number deserves.
+  const provenance =
+    yi.source === 'gps_live' ? ' Measured live off GPS — you can state it flatly.'
+    : yi.source === 'user_stated' ? ` This is THEIR number — they told you they were ${yi.yardage ?? currentYardage}. Use it and do not second-guess it.`
+    : yi.source === 'static_card' ? ' HEDGE: this is the scorecard yardage, not a live measurement — GPS is soft right now. Say it plays about this, do not state it as exact, and never present it as a measured distance.'
+    : ' NO RELIABLE NUMBER right now. Do not invent one and do not ask them for it — say you are getting the read back.';
+  const conf = yi.confidence === 'low' ? ' Confidence is LOW; speak accordingly.' : '';
+  return base + provenance + conf;
+})()}
 ${currentHoleNote ? `Hole note: ${currentHoleNote}` : ''}
 Club: ${_club || 'not selected'}
 ${(() => {

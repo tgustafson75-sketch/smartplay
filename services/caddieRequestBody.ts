@@ -206,8 +206,11 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { getActiveCaddie } = require('./caddieResolver') as typeof import('./caddieResolver');
       const bs = brainSettings({ ...st, caddiePersonality: getActiveCaddie() });
-      return { personaIntensity: bs.personaIntensity, continuousConversationMode: bs.continuousConversationMode };
-    }, { personaIntensity: 100, continuousConversationMode: false }),
+      // Only personaIntensity: the brain has no use for continuousConversationMode (it decides
+      // whether the CLIENT re-opens the mic), and a key the server never destructures is the
+      // sent-and-ignored shape this file exists to prevent.
+      return { personaIntensity: bs.personaIntensity };
+    }, { personaIntensity: 100 }),
     /**
      * 2026-08-23 — READ HERE, not left for a caller to override.
      *
