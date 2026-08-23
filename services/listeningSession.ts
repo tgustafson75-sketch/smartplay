@@ -164,6 +164,8 @@ const LISTEN_ENDPOINT_MIN_MS = 800;
  * misheard turn. The chain resets on any user-initiated tap.
  */
 const MAX_AUTO_REOPENS = 2;
+/** Hard ceiling on one listen. See the note at the capture call site — outdoors this is what stops it. */
+const MAX_UTTERANCE_MS = 8_000;
 let autoReopenChain = 0;
 /** The last line the caddie spoke before this turn opened — lets us tell "new question" from stale. */
 let spokenLineAtOpen: string | null = null;
@@ -717,7 +719,21 @@ async function openSession() {
       // full thought during casual conversation ("hey Kevin, how are you
       // doing today, I've been working on my driver"). 8s was clipping
       // mid-sentence on natural-pace speech.
-      const captureP = captureUtteranceDetailed(12_000, apiUrl, settings.language);
+      /**
+       * 2026-08-22 (Tim, on course) — "if you're on a course and you're speaking, the listening goes
+       * on too long, and that introduces more exterior noise." His log: durationMs 12151, i.e. the
+       * full old cap, every time.
+       *
+       * The adaptive noise floor normally ends the capture on silence long before this. Outdoors it
+       * often cannot: wind, a cart, and playing partners keep the level above the floor, so the VAD
+       * never sees silence and the recording runs to the cap — collecting exactly the ambient noise
+       * that then ruins the transcript. The cap is the only thing bounding it in that case.
+       *
+       * A golfer's question is short ("what should I hit from 150, into the wind" is ~3s). 8s still
+       * leaves generous headroom over any real ask while cutting a third of the noise the old cap
+       * let in. VAD still ends it earlier whenever it can.
+       */
+      const captureP = captureUtteranceDetailed(MAX_UTTERANCE_MS, apiUrl, settings.language);
       cancelMic = () => {
         // Phase V.7 — real cancel via stopCapture; the recording stops
         // immediately and captureUtterance resolves with null.

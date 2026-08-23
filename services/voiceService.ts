@@ -1062,74 +1062,35 @@ let usingDeviceFallback = false;
 // default voice lands closer to the persona instead of jarringly female.
 const MALE_VOICE_TOKENS = ['male', 'daniel', 'arthur', 'aaron', 'fred', 'rishi', 'gordon', 'oliver', 'alex', 'tom', 'reed', 'rocko', 'eddy', 'diego', 'jorge', 'juan', 'carlos'];
 const FEMALE_VOICE_TOKENS = ['female', 'samantha', 'karen', 'moira', 'tessa', 'victoria', 'susan', 'allison', 'ava', 'zoe', 'nicky', 'fiona', 'monica', 'paulina', 'marisol', 'tingting', 'sinji'];
-let cachedDeviceVoices: { identifier?: string; name?: string; language?: string }[] | null = null;
-let deviceVoicesLoading: Promise<void> | null = null;
-function ensureDeviceVoicesLoaded(): void {
-  if (cachedDeviceVoices !== null || deviceVoicesLoading) return;
-  deviceVoicesLoading = (async () => {
-    try {
-      const v = await Speech.getAvailableVoicesAsync();
-      cachedDeviceVoices = Array.isArray(v) ? v : [];
-    } catch { cachedDeviceVoices = []; }
-  })();
-}
 /** Best-effort: a voice identifier whose name matches `gender` for `language`, or undefined. */
-function pickDeviceVoice(gender: 'male' | 'female', language: 'en' | 'es' | 'zh'): string | undefined {
-  if (!cachedDeviceVoices || cachedDeviceVoices.length === 0) return undefined;
-  const langPrefix = language; // expo Voice.language is e.g. 'en-US' / 'es-ES' / 'zh-CN'
-  const wanted = gender === 'male' ? MALE_VOICE_TOKENS : FEMALE_VOICE_TOKENS;
-  const avoid = gender === 'male' ? FEMALE_VOICE_TOKENS : MALE_VOICE_TOKENS;
-  const inLang = cachedDeviceVoices.filter(v => (v.language ?? '').toLowerCase().startsWith(langPrefix));
-  const pool = inLang.length ? inLang : cachedDeviceVoices;
-  // Prefer a voice whose name/identifier clearly matches the wanted gender and
-  // doesn't contain an opposite-gender token.
-  const match = pool.find(v => {
-    const hay = `${v.name ?? ''} ${v.identifier ?? ''}`.toLowerCase();
-    return wanted.some(t => hay.includes(t)) && !avoid.some(t => hay.includes(t));
-  });
-  return match?.identifier;
-}
-
+/**
+ * 2026-08-22 (Tim, after a round at Greenhill) — "fuck local altogether. I don't wanna fucking hear
+ * a robot voice anymore. Rip it out. I don't wanna ever hear it again."
+ *
+ * THE CADDIE HAS ONE VOICE. Silence is a better failure than an impostor.
+ *
+ * This was the last rung of a degrade ladder: cloud TTS fails → speak the line with expo-speech.
+ * Nine call sites reached it. The intent was kindness — say SOMETHING rather than nothing — but what
+ * it actually produced was a stranger reading the caddie's lines mid-round, and it is the single
+ * loudest way the app breaks [[feels-like-a-real-caddie]]. A player does not experience it as
+ * "TTS degraded"; they experience it as the caddie being fake.
+ *
+ * Enforced HERE, in the one function every path already funnels through, rather than by deleting
+ * nine call sites — a tenth would just reintroduce it. The callers still call, the failure is still
+ * logged, and the answer is still on screen; the device simply never speaks. The persona's own
+ * cached clips (prewarmOfflineVoiceClips) are untouched: that is the REAL voice offline, which is
+ * the thing this was a poor imitation of.
+ */
 async function deviceSpeakFallback(text: string, language: 'en' | 'es' | 'zh', myId: number, gender: 'male' | 'female' = 'male'): Promise<void> {
   if (!text || myId !== currentSpeechId) return;
-  ensureDeviceVoicesLoaded();
-  // 2026-06-15 (audit) — ensure SPEAKER playback mode before device-TTS. If we fell
-  // back right after a captureUtterance, the audio session can still be in RECORD
-  // mode and the device voice would play into the mic (the caddie goes silent).
-  try { await configureAudioForSpeech(); } catch { /* best-effort; speak anyway */ }
-  if (myId !== currentSpeechId) return; // preempted during the audio-mode switch
-  // 2026-06-16 (Tim — "two voices racing") — stop any in-flight cloud/mp3 sound
-  // (a separate subsystem from expo-speech) before the device voice starts, so the
-  // robotic fallback can't overlap a cloud line / the opener. Mirrors the Speech.stop
-  // the cloud/mp3 paths now do, giving full mutual exclusion.
-  if (currentSound) {
-    try { await currentSound.stopAsync(); await currentSound.unloadAsync(); } catch {}
-    currentSound = null;
-  }
-  if (myId !== currentSpeechId) return; // re-check after the async stop, right before speaking
+  // Breadcrumb only, as `diag`: a silent turn stays explainable in the issue log without reading as
+  // a failure the player has to act on. [[silent-failure-audit-analysis-and-first-turn]]
   try {
-    Speech.stop(); // cancel any prior device utterance before starting a new one
-    usingDeviceFallback = true;
-    notifySpeaking(true);
-    notifyCaption(text);
-    const voiceId = pickDeviceVoice(gender, language);
-    // Deepen a wanted-male voice when we couldn't match an actual male voice, so a
-    // default female OS voice doesn't read a male caddie's line. Neutral otherwise.
-    const pitch = voiceId ? 1.0 : (gender === 'male' ? 0.85 : 1.0);
-    console.log('[voice] device-TTS fallback speaking (server unreachable) —', gender, voiceId ? `voice=${voiceId}` : `pitch=${pitch}`, '—', text.slice(0, 60));
-    Speech.speak(text, {
-      language: SPEECH_LANG[language] ?? 'en-US',
-      ...(voiceId ? { voice: voiceId } : {}),
-      pitch,
-      onDone: () => { usingDeviceFallback = false; if (myId === currentSpeechId) { notifySpeaking(false); notifyCaption(null); } },
-      onStopped: () => { usingDeviceFallback = false; },
-      onError: () => { usingDeviceFallback = false; if (myId === currentSpeechId) { notifySpeaking(false); notifyCaption(null); } },
-    });
-  } catch (e) {
-    usingDeviceFallback = false;
-    if (myId === currentSpeechId) { notifySpeaking(false); notifyCaption(null); }
-    console.log('[voice] device-TTS fallback failed:', e);
-  }
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('../store/issueLogStore') as typeof import('../store/issueLogStore')).useIssueLogStore
+      .getState().addAppEvent('voice_device_tts_suppressed', { chars: text.length, language, gender }, 'diag');
+  } catch { /* best-effort */ }
+  console.log('[voice] cloud voice unavailable — staying silent rather than speaking in a device voice');
 }
 
 // 2026-06-19 (Tim — dead-zone testing: "local mode does nothing, doesn't respond or

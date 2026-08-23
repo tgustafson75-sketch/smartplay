@@ -1818,51 +1818,41 @@ check('Drill engine: drill card → Smart Motion drill session (#5)',
   })(),
   'drill card → Smart Motion 3-5 shot drill session, tagged + badged "Drill"; Tank card removed, grid = filtered catalog');
 
-check('Offline voice: device-TTS fallback when /api/voice unreachable (OTA, not APK)',
-  // 2026-06-13 — Tim's Lakes round went MUTE (~18 speak_catch "Network request
-  // failed"). expo-speech is already in the binary, so the fallback ships OTA. The
-  // old crash was a dynamic require + a catch-path timer — both avoided here.
+check('Voice: the caddie NEVER speaks in a device voice',
+  /**
+   * 2026-08-22 (Tim, after a round at Greenhill) — "fuck local altogether. I don't wanna fucking
+   * hear a robot voice anymore. Rip it out. I don't wanna ever hear it again."
+   *
+   * REPLACES the 2026-06-13 guard that asserted the OPPOSITE ("a failed TTS fetch now speaks on the
+   * device instead of leaving the caddie silent"), and the 2026-06-14 one that made that robot
+   * gender-aware. Both were reasonable trades at the time — say SOMETHING rather than nothing — and
+   * in the field they produced a stranger reading the caddie's lines mid-round, which is the loudest
+   * way this app can break [[feels-like-a-real-caddie]].
+   *
+   * The rule now: the cloud voice, or the persona's own cached clip, or silence with the answer on
+   * screen. Enforced at the single choke point every path already funnels through, so a tenth call
+   * site cannot reintroduce it.
+   */
   (() => {
     const v = read('services/voiceService.ts');
-    const pkg = read('package.json');
+    const from = v.indexOf('async function deviceSpeakFallback(');
+    const fn = v.slice(from, v.indexOf('\n}', from) + 2);
     return (
-      /"expo-speech":/.test(pkg) &&                               // already bundled → OTA
-      /import \* as Speech from 'expo-speech'/.test(v) &&         // STATIC import (not require)
-      /function deviceSpeakFallback\(/.test(v) &&
-      /Speech\.speak\(text, \{/.test(v) &&
-      !/=\s*require\('expo-speech'\)/.test(v) &&                  // no crashy DYNAMIC require (static import only)
-      // wired into every failure path that used to go silent (now gender-aware):
-      (v.match(/deviceSpeakFallback\(text, language, myId, effectiveGender\)/g) || []).length >= 4 &&
-      // breaker-open (offline) path no longer just returns silent
-      /Breaker open = we're offline\. Don't go mute/.test(v) &&
-      // stopSpeaking cancels the device voice too
-      /if \(usingDeviceFallback\) \{\s*\n\s*try \{ Speech\.stop\(\); \}/.test(v)
+      from > -1 &&                                   // the choke point still exists; callers untouched
+      !/Speech\.speak\(/.test(fn) &&                  // it just never speaks
+      !/function pickDeviceVoice\(/.test(v) &&        // and the machinery is DELETED, not unreachable
+      !/Speech\.getAvailableVoicesAsync\(\)/.test(v) &&
+      /voice_device_tts_suppressed/.test(fn) &&      // a silent turn stays explainable
+      /resolveCachedOfflineClipUri/.test(v)          // the persona's REAL cached voice is untouched
     );
   })(),
-  'a failed/timed-out/offline TTS fetch now speaks on the device instead of leaving the caddie silent');
+  'a failed cloud voice leaves the caddie silent with the answer on screen — it never speaks in a device/OS voice; the persona own cached clips still play');
 
 // 2026-06-14 (Tim) — the device-TTS fallback used the OS DEFAULT voice (often female),
 // so a male caddie (Kevin/Harry/Tank) read a finding in a jarring "robotic female"
 // voice. The fallback is now GENDER-AWARE: it derives gender from the LIVE persona
 // (above the outer try so the catch agrees too), tries to pick a matching device voice,
 // and deepens the pitch when a male voice is wanted but unmatchable.
-check('Device-TTS fallback respects caddie gender (no more "robotic female" Kevin)',
-  (() => {
-    const v = read('services/voiceService.ts');
-    return (
-      // signature carries gender, defaulted male so an old caller can't go female-by-default
-      /function deviceSpeakFallback\(text: string, language: 'en' \| 'es' \| 'zh', myId: number, gender: 'male' \| 'female' = 'male'\)/.test(v) &&
-      // tries a gender+language-matched device voice, then falls back to pitch deepening
-      /function pickDeviceVoice\(gender:/.test(v) &&
-      /const voiceId = pickDeviceVoice\(gender, language\)/.test(v) &&
-      /gender === 'male' \? 0\.85 : 1\.0/.test(v) &&
-      /Speech\.getAvailableVoicesAsync\(\)/.test(v) &&
-      // persona-derived gender is computed ABOVE the outer try so the network-fail
-      // catch speaks the right gender, not the stale caller param.
-      /Declared\s*\n\s*\/\/ ABOVE the outer try so the catch's device-TTS fallback/.test(v)
-    );
-  })(),
-  'when the server voice fails, the device fallback matches the caddie persona\'s gender (voice match or pitch-deepen) instead of defaulting to a robotic female OS voice');
 
 check('Intent fix: "on the center of the green" marks it — offline + routed (Lakes log)',
   // 2026-06-13 — Tim's flow: "I'm on the center of the green on hole 6, Lakes" must
@@ -3412,20 +3402,16 @@ check('Voice: get-to-know interview never opens a tool (fault = info, not a comm
   })(),
   'the get-to-know voice interview builds the profile from what the golfer says — describing a fault is absorbed, never routed to a drill; navigation/open tools are suppressed on the client AND the brain is told not to open or claim it opened anything');
 
-check('Voice: one-voice-at-a-time across cloud + device subsystems (no racing)',
-  // 2026-06-16 (Tim — "two voices racing" + robotic backup at the same time) — the
-  // cloud/mp3 path (Audio.Sound) and the device-TTS fallback (expo-speech) are
-  // SEPARATE subsystems; neither cancelled the other, so the opener mp3 / a cloud
-  // line could play over an in-flight robotic fallback. Now each side stops the
-  // other on start, and the device fallback is awaited (not fire-and-forget).
+check('Voice: one voice at a time (no racing)',
+  // 2026-06-16 (Tim — "two voices racing"). 2026-08-22: the device side no longer speaks at all, so
+  // the surviving property is that the cloud/mp3 path stops anything in flight before it starts.
+  // The Speech.stop() calls stay as belt-and-braces against a regression.
   (() => {
     const vs = read('services/voiceService.ts');
-    const cloudStopsDevice = (vs.match(/try \{ Speech\.stop\(\); \} catch \{\}/g) || []).length >= 3;
-    const deviceStopsCloud = /re-check after the async stop, right before speaking/.test(vs);
-    const awaited = !/void deviceSpeakFallback\(/.test(vs) && /await deviceSpeakFallback\(/.test(vs);
-    return cloudStopsDevice && deviceStopsCloud && awaited;
+    const cloudStopsAnything = (vs.match(/try \{ Speech\.stop\(\); \} catch \{\}/g) || []).length >= 3;
+    return cloudStopsAnything && !/Speech\.speak\(/.test(vs);
   })(),
-  'cloud/mp3 cancels device-TTS, device fallback cancels cloud/mp3 + is awaited — no overlap');
+  'the cloud/mp3 path cancels anything in flight before speaking, and nothing can start a second, device voice');
 
 check('Voice: capture silences the caddie before opening the mic (no self-record)',
   // 2026-06-16 (Tim — "did the speech leak into its mouth") — captureUtterance must
