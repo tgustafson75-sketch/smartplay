@@ -81,7 +81,7 @@ export const UI_TOOLS = new Set([
    * you said it hands-free, and did nothing at all if you said it to the caddie in conversation —
    * which is how most people talk to it. Half a feature, quietly, for months.
    *
-   * set_playing_condition is the one he has failed to get across live on a course: "I'm hitting
+   * set_playing_condition is the one they have failed to get across live on a course: "I'm hitting
    * everything left today" is NOT a request for a diagnosis, it is the truth about today, and the
    * caddie should move the aim rather than explain the golf swing on the seventh tee.
    */
@@ -91,7 +91,7 @@ export const UI_TOOLS = new Set([
    * 2026-08-21 — THE JUNE "NARRATIVE BRAIN", and the rest of the state the brain could not write.
    *
    * Tim remembered a focus/narrative wire "from very early on, like June" that had been built down.
-   * He was right, and it is bigger than one wire: comparing the classifier's 43 intents against the
+   * They were right, and it is bigger than one wire: comparing the classifier's 43 intents against the
    * brain's tools shows the CLASSIFIER can record things the BRAIN cannot. Hands-free, "I'm 150 out
    * with my 7-iron on twelve, downhill lie" lands four pieces of state. Said in CONVERSATION — the
    * way most people talk to it — the caddie answers and records none of it.
@@ -99,7 +99,7 @@ export const UI_TOOLS = new Set([
    * f4e0b31e (2026-07-01) built set_hole_note precisely so a bare lie/condition note would be
    * REMEMBERED and factored into advice. It has worked on one path ever since.
    *
-   * These four are the ones that change what the caddie knows about the shot in front of him.
+   * These four are the ones that change what the caddie knows about the shot in front of them.
    */
   'set_hole_note',
   'state_yardage',
@@ -259,7 +259,7 @@ export const BRAIN_TOOLS: AiToolDef[] = [
   },
   {
     name: 'declare_hole',
-    description: 'The player states which hole they are on — "we\'re on 12", "moving to the 4th", "starting hole 1". Set the current hole. Only when they DECLARE it, not when they ask about one.',
+    description: 'Set the hole the player is on. Two ways they say it. ABSOLUTE — they name it: "we\'re on 12", "moving to the 4th", "starting hole 1". RELATIVE — they move on without naming it: "next hole", "let\'s move on", "on to the next one", "we\'re walking to the next tee", "done here", "that\'s that one finished". A relative move is still a hole change and you MUST call this for it: work out the number from the hole they are on now and pass the one they are moving TO — from hole 7, "next hole" is 8, never 7. Getting this wrong or skipping it is expensive and silent: every yardage, hazard and green read you give for the rest of the walk belongs to the hole they just left. Say the new number back so they know it took ("On to 8"). Only when they DECLARE or MOVE, never when they ask ABOUT a hole.',
     parameters: {
       type: 'object',
       properties: { hole: { type: 'integer', description: 'Hole number, 1-18.' } },

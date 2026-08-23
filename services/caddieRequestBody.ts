@@ -268,6 +268,16 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      */
     preRoundRoutine: safe(() => p.preRoundRoutine ?? null, null),
     /**
+     * 2026-08-23 (Tim) — "we should know the player's gender as well."
+     *
+     * The app already does. `handicap_gender` has been in the profile with a setter and a Settings
+     * control, and it drives tee and course-rating selection on both the play and course screens.
+     * The CADDIE was the only one not told, so the one part of the app that actually talks to the
+     * player was the part that could not address them correctly. Same field, not a new one — the
+     * rest of the app already treats it as the answer to this question. 'x' means unspecified.
+     */
+    handicap_gender: safe(() => p.handicap_gender ?? 'x', 'x'),
+    /**
      * 2026-08-22 — WHERE ON THE HOLE HE IS STANDING. Derived from every GPS fix since 2026-05-24 and
      * never sent. On the green it is the difference between a club recommendation and a putt read —
      * Tim: "caddy has no context when you're doing a putt read." On the tee it is the difference

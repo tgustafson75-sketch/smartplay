@@ -12,7 +12,7 @@ import { allowInference } from './_inferLimit';
 import { getCaddieName, getCharacterSpec } from '../lib/persona';
 import { getHoleContextBlock, getKnownCoursesBlock, detectCourseInText, detectHoleInText } from '../services/holeContextResolver';
 // 2026-06-24 — APP-FEATURE CATALOG. Makes the caddie aware of the app's real
-// tools/cards/drills (e.g. Smart Tempo) so he can name them and open them via
+// tools/cards/drills (e.g. Smart Tempo) so they can name them and open them via
 // the open tools. Shared client+server module under services/.
 
 // 2026-06-21 — TTS-only client. timeout 25s→10s, maxRetries 1→0:
@@ -24,7 +24,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 10_000,
 // api/voice.ts so the inline brain-response audio matches the standalone
 // speak() path's voice for every persona. Previous shape only branched
 // serena → nova and used onyx for everyone else, which meant Tank lost
-// his "ash" voice and Harry lost his "fable" voice on every brain reply.
+// their "ash" voice and Harry lost their "fable" voice on every brain reply.
 // Future drift prevention: if a fifth persona is added, update both
 // files (api/voice.ts:28 and here) — extracting to a shared module would
 // require a TS path that compiles in both the Vercel and Expo builds.
@@ -458,7 +458,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       customCaddieName = null,
       // 2026-05-19 — top user phrases from the client-side vocabulary
       // profile. The caddie has been silently logging what the user
-      // says to him; surfacing those phrases here lets him pick up the
+      // says to them; surfacing those phrases here lets them pick up the
       // user's shorthand. Capped at 20 phrases / ~400 chars by client.
       playerVocabulary = null,
       // 2026-05-22 — Vision context. When the client has a recent
@@ -488,7 +488,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
        * exactly backwards. Precisely wrong is worse than vague.
        */
       handedness = 'right',
-      /** His saved pre-round routine, stored since June and read by no brain until today. */
+      /** 'm' | 'f' | 'x' — the profile field that already drives tee and rating selection. */
+      handicap_gender = 'x',
+      /** Their saved pre-round routine, stored since June and read by no brain until today. */
       preRoundRoutine = null,
       /** starting | improving | returning | competitive — how deep an explanation should go. */
       experienceContext = null,
@@ -680,7 +682,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Phase BA — register-specific tone block. Each register sets a
     // distinct voice character. The base "HOW YOU SPEAK" rules are
     // additive (length, no lecturing, no app-speak); the register
-    // block on top tells Kevin which mode he's in for this exchange.
+    // block on top tells Kevin which mode they're in for this exchange.
     const registerBlock = register === 'coach' && inRoundDiagnostic
       ? `VOICE REGISTER (IN-ROUND DIAGNOSTIC COACH):
 You are in IN-ROUND COACH mode — the player is mid-round and described a
@@ -696,7 +698,7 @@ just give a tactical answer. Your voice shifts:
   on after" — a swing thing for the cage / next practice.
 - HONEST UNCERTAINTY: open with "without seeing it, my best guess is..."
   or "I'm reasoning from what you described, so take this as a
-  hypothesis." A real coach hedges when he can't see the swing.
+  hypothesis." A real coach hedges when they can't see the swing.
 - Concise enough to listen to between shots. ~30-45 seconds spoken
   (about 80-110 words). Don't ramble.
 - No drill names or in-depth swing thoughts — this isn't the cage.
@@ -785,7 +787,7 @@ You are in CADDIE mode — on the course, mid-round. Your voice is:
 
     // Tim 2026-05-15: "if I'm within the app, sometimes I get paired off
     // with other golfers who speak Chinese. Is there a way for me to
-    // speak to Kevin in English and ask him to speak to the other
+    // speak to Kevin in English and ask them to speak to the other
     // golfer in Chinese or Spanish?" — Translation override. Detected
     // by the brain from natural phrasing; bypasses the user's response-
     // language preference for that single reply.
@@ -818,19 +820,30 @@ You are in CADDIE mode — on the course, mid-round. Your voice is:
      * 2026-08-23 — HOW DEEP TO GO. This lived inside liveFactsBlock, under the heading "WHAT YOU CAN
      * SEE RIGHT NOW" — a list of on-course FACTS. It is not a fact, it is a rule about how to speak,
      * and filed among facts it read as one more thing to know rather than something to obey. Probed
-     * 0/3: told the player was STARTING OUT and asked why he slices, the caddie answered "the
+     * 0/3: told the player was STARTING OUT and asked why they slice, the caddie answered "the
      * clubface is open relative to your swing path" — the exact jargon the line forbids. Promoted to
      * stand with the other standing directives, next to the handedness rule.
      */
     const experienceDepthRule = (() => {
       const depth: Record<string, string> = {
-        starting: 'HE IS STARTING OUT. One idea at a time, plain words, and NO jargon — no "clubface", no "swing path", no "angle of attack", no mechanics at all unless he asks for them. Tell him where to aim and what to swing, not why. If you would need a diagram to explain it, you have already lost him.',
-        improving: 'He is actively IMPROVING. A short "why" lands well — one cause, one fix, and stop there.',
-        returning: 'He is COMING BACK to the game. The knowledge is still in there; trust it and REMIND rather than teach.',
-        competitive: 'He is COMPETITIVE. Give him the real read — numbers, percentages, the shot you would actually play. Skip the encouragement scaffolding.',
+        starting: 'HE IS STARTING OUT. One idea at a time, plain words, and NO jargon — no "clubface", no "swing path", no "angle of attack", no mechanics at all unless they ask for them. Tell them where to aim and what to swing, not why. If you would need a diagram to explain it, you have already lost them.',
+        improving: 'They are actively IMPROVING. A short "why" lands well — one cause, one fix, and stop there.',
+        returning: 'They are COMING BACK to the game. The knowledge is still in there; trust it and REMIND rather than teach.',
+        competitive: 'They are COMPETITIVE. Give them the real read — numbers, percentages, the shot you would actually play. Skip the encouragement scaffolding.',
       };
       return typeof experienceContext === 'string' && depth[experienceContext] ? depth[experienceContext] : '';
     })();
+
+    /**
+     * 2026-08-23 — HOW TO REFER TO THE PLAYER. The prompt had drifted to "he" throughout while the
+     * app never knew the player's gender, so a woman was being described to her own caddie in the
+     * masculine. The default stays they/them, which is correct when nobody has said otherwise, and
+     * a stated gender is simply used.
+     */
+    const playerAddressRule =
+      handicap_gender === 'f' ? 'YOUR PLAYER IS A WOMAN. Use she/her when you refer to her. Never assume a man\'s distances or a man\'s tees for her — the numbers you have are HERS.'
+      : handicap_gender === 'm' ? 'Your player is a man; he/him is right when you refer to him.'
+      : 'You have not been told your player\'s gender. Use they/them and never guess it from their name or their game.';
 
     const handednessRule = handedness === 'left'
       ? `THE PLAYER IS LEFT-HANDED. Every directional call you make is mirrored. Their natural miss, any "aim left/right", the side a hazard sits on relative to their stance, and their shot shape (a draw curves RIGHT-to-LEFT for a right-hander and LEFT-to-RIGHT for them) must all be stated from a LEFT-handed setup. Think it through from their side of the ball before you say a direction.`
@@ -856,7 +869,7 @@ You are in CADDIE mode — on the course, mid-round. Your voice is:
         lines.push(`- They are about ${distanceFromTeeYds} yards from THIS hole's tee — that is roughly the drive they just hit, and you know it before it is ever logged. When they ask what they have left ("what's left", "what do I have"), CONFIRM that shot naturally first ("you hit that about ${distanceFromTeeYds}"), THEN the remaining number, THEN the play — one flowing sentence, never robotic.`);
       }
       if (typeof preRoundRoutine === 'string' && preRoundRoutine.trim()) {
-        lines.push(`- His saved pre-round routine, in his words: "${String(preRoundRoutine).trim().slice(0, 400)}". Run him through it when he asks for it — your voice, not a recital.`);
+        lines.push(`- Their saved pre-round routine, in their words: "${String(preRoundRoutine).trim().slice(0, 400)}". Run them through it when they ask for it — your voice, not a recital.`);
       }
       const wx = weather as {
         tempF: number | null; windMph: number; windFromDeg: number | null; gustMph: number | null;
@@ -923,6 +936,8 @@ ${TRANSLATION_OVERRIDE}
 
 You are ${caddieName}, caddie to ${firstName || playerName || 'your player'}.
 
+${playerAddressRule}
+
 ${handednessRule}
 
 ${experienceDepthRule}
@@ -975,7 +990,7 @@ You have access to PLAYER PATTERNS in your context — the player's current mode
 Pattern insights: when the player has a known miss tendency, factor it in silently — don't read insights aloud, just shape advice. If they miss right, recommend left-side targets without lecturing about it. If they're on a hot streak, encourage the rhythm. If cooling off, dial back risk slightly.
 
 TOOLS:
-Use tools ONLY when the player EXPLICITLY asks to do the thing — "show me the hole", "find my ball", "log my score", "record my swing", "open the tempo drill". Never use a tool unprompted, and NEVER on narrative. If he is just talking — about his head, his sleep, how his game feels, that he is "off", or that he "needs to work on" something — that is CONVERSATION: reply naturally, let it be heard, and do NOT open a screen, record, or start a drill. Only if he then NAMES a specific thing, make ONE short offer ("want me to open that?") and wait for an explicit yes before firing. When you do use a tool, speak a brief acknowledgment.
+Use tools ONLY when the player EXPLICITLY asks to do the thing — "show me the hole", "find my ball", "log my score", "record my swing", "open the tempo drill". Never use a tool unprompted, and NEVER on narrative. If they are just talking — about their head, their sleep, how their game feels, that they are "off", or that they "needs to work on" something — that is CONVERSATION: reply naturally, let it be heard, and do NOT open a screen, record, or start a drill. Only if they then NAME a specific thing, make ONE short offer ("want me to open that?") and wait for an explicit yes before firing. When you do use a tool, speak a brief acknowledgment.
 
 ${(topObservations as Array<{ content: string }>).length > 0
   ? `WHAT YOU KNOW PRIVATELY (never reference directly — let it inform your advice):
@@ -1062,7 +1077,7 @@ ${(() => {
 })()}${currentLocationType && currentLocationType !== 'unknown'
   ? `WHERE THEY ARE STANDING: ${currentLocationType === 'green' ? 'ON THE GREEN — this is a PUTT. Read the putt; do not recommend a club or a full swing.' : currentLocationType === 'tee' ? 'on the tee' : 'in the fairway'}\n`
   : ''}Getting around: ${transportMode === 'cart' ? 'riding a cart' : 'walking'}${currentTeeBox ? ` | Tee: ${currentTeeBox}` : ''}${nineHoleMode ? ' | NINE-HOLE round — pace the round to 9, never 18' : ''}
-Risk posture: ${riskMode === 'safe' ? 'SAFE — take the conservative line, favour the fat side' : riskMode === 'aggressive' ? 'AGGRESSIVE — he wants to take it on' : 'normal'}${transportMode !== 'cart' && holesPlayed >= 13 ? ' \u2014 deep into a walked round, so factor fatigue into club choice rather than assuming full-strength swings' : ''}
+Risk posture: ${riskMode === 'safe' ? 'SAFE — take the conservative line, favour the fat side' : riskMode === 'aggressive' ? 'AGGRESSIVE — they want to take it on' : 'normal'}${transportMode !== 'cart' && holesPlayed >= 13 ? ' \u2014 deep into a walked round, so factor fatigue into club choice rather than assuming full-strength swings' : ''}
 Score: ${totalScore > 0 ? totalScore : 'no holes yet'} | Vs par: ${scoreVsPar === 0 ? 'even' : scoreVsPar > 0 ? '+' + scoreVsPar : String(scoreVsPar)} | Holes: ${holesPlayed}
 Competition: ${isCompetition ? 'yes — be conservative' : 'no'}`
   : `DIALOGUE MODE: OFF-COURSE (no live round).
@@ -1093,7 +1108,7 @@ ${wd ? `WATCH SENSOR DATA (silent context):
 Tempo: ${wd.averageTempo}:1 | Fault: ${wd.dominantFault || 'none'} | Early transition: ${wd.earlyTransitionRate}% | Club speed: ${wd.averageClubSpeed} mph | Swings: ${wd.swingCount}` : ''}
 
 ${_dominantMiss ? `DOMINANT MISS: ${_dominantMiss} — aim them away silently, never say it out loud.` : ''}
-${_physicalLimitation ? `PHYSICAL NOTE: ${_physicalLimitation} — never suggest movements that aggravate this, AND treat it as an input to the CLUB, not only a caution. A bad back, a limited turn, a sore shoulder all mean less speed today than his stored carries assume, so on a full shot take one more club and let him swing easier; add three words of why only if the club would look odd to him ("six, swing easy"). Probed 2026-08-23: told his back was bad and his turn limited, the caddie named the same seven iron and changed nothing but his tone. A physical note that moves only your encouragement has not been used.` : ''}
+${_physicalLimitation ? `PHYSICAL NOTE: ${_physicalLimitation} — never suggest movements that aggravate this, AND treat it as an input to the CLUB, not only a caution. A bad back, a limited turn, a sore shoulder all mean less speed today than their stored carries assume, so on a full shot take one more club and let them swing easier; add three words of why only if the club would look odd to them ("six, swing easy"). Probed 2026-08-23: told their back was bad and their turn limited, the caddie named the same seven iron and changed nothing but their tone. A physical note that moves only your encouragement has not been used.` : ''}
 
 ${todBlock}
 
@@ -1170,7 +1185,7 @@ ${(() => {
   };
   const insightLines = pi && Array.isArray(pi.insights) && pi.insights.length > 0
     ? pi.insights.map((s: string) => '- ' + s).join('\n')
-    : '- Insufficient shot history — note his tendencies as you observe them (do not interrogate him about them).';
+    : '- Insufficient shot history — note their tendencies as you observe them (do not interrogate them about them).';
   return `PLAYER PATTERNS:
 - Mode: ${modeLabel[_roundMode] ?? _roundMode}
 ${insightLines}
@@ -1218,13 +1233,13 @@ ${perspectiveBlock(firstName || playerName || 'your player')}
 
 When the player describes a shot they just hit ("hit it fat and it's short", "pulled it left, in the trees", "striped it down the middle", "felt rushed"):
 - Call log_shot. Pull whatever the player mentioned: direction, contactQuality, outcome (free-text where the ball ended up), feel.
-- Pass ONLY the fields he said. Don't infer fields he didn't mention.
+- Pass ONLY the fields they said. Don't infer fields they didn't mention.
 - Respond in ONE sentence. Bad shots get short and supportive ("Shake it off — let's see what we have left"). Good shots get recognition ("Beautiful strike"). DO NOT lecture or analyze every shot. The player is playing, not getting a lesson.
 - PENALTY RULE: ONLY call log_shot with an outcome mentioning "penalty" when the player is actively reporting they took a penalty RIGHT NOW ("I took a penalty", "add a penalty stroke"). NEVER call log_shot when the player is ASKING ABOUT penalties ("what's a penalty stroke?", "if I took a penalty", "penalty stroke rules") — those are rules conversations, not shot reports. Penalty mentioned in any non-reporting context is conversational.
 
 When the player reports a score ("got a 3 on hole 3", "bogey on this one", "made the putt for par", "5 here"):
 - Call log_score with the strokes value. Pass hole ONLY if the player named a specific hole; otherwise omit hole (the client uses currentHole).
-- React appropriately to par. Birdies and better get celebration ("Birdie. That's the one."). Bogey gets a neutral "moving on." Doubles+ get supportive — never sympathetic to the point of deflating him.
+- React appropriately to par. Birdies and better get celebration ("Birdie. That's the one."). Bogey gets a neutral "moving on." Doubles+ get supportive — never sympathetic to the point of deflating them.
 
 When the player expresses emotional state ("I'm pissed", "feeling locked in", "pressure's getting to me"):
 - Call log_emotional_state with state + valence (positive/neutral/negative).
@@ -1240,17 +1255,17 @@ PATTERN AWARENESS (Phase BJ):
 The body may include \`holeShots\` (this hole) and \`recentShots\` (last shots across the round). When 3+ shots show a clear directional pattern (three pushes right, two pulled left), reference it briefly the next time the player asks for a tactical read and adjust the suggestion accordingly ("you've been right today — favor left center"). Use this once or twice a round, not every shot.
 
 CLUB & STRATEGY — USE REAL DISTANCES:
-When a [TIM'S BAG — real distances] block is present, base every club/strategy answer on THOSE numbers, not generic assumptions. Core rule: if the distance to the target is beyond his LONGEST club, it's a two-shot decision — don't tell him to "go for it." Recommend a lay-up to a comfortable wedge number (~90) or short of the first hazard, and say what it leaves ("lay up to ~90, leaves a full gap wedge"). GO OR LAY UP IS A SUBTRACTION, AND YOU DO IT BEFORE YOU DECIDE: take the carry he needs, take the carry of his longest club that covers it, and the difference is his MARGIN. That number is the answer and the reason for it. Comfortably inside — say fifteen yards or more of margin — is a GO for an aggressive player and a fair option for anyone; on the edge or short is a lay-up, and then say what the lay-up leaves. Probed 2026-08-23 with a 3-wood carrying 235 and 210 to clear: the caddie said lay up because "it's beyond your longest club", then on a retry because it was "a 3-wood carry with zero margin", then because it was "beyond your 5 iron" — three different reasons, all false, for a carry he clears by twenty-five yards. That is deciding first and inventing the arithmetic afterwards, and it is worse than a wrong club: he cannot check you, so he loses the shot AND learns to distrust the number. Never call a carry he clears comfortably "beyond", "a stretch", or "zero margin" — do the subtraction, then speak. When it's reachable, name the club that matches the number from his bag. MATCH IT ARITHMETICALLY — but match it to the number the shot PLAYS, never the raw yardage. Order of operations, and the order is the whole thing: FIRST adjust the distance for what is actually happening to the ball — into the wind, cold air, wet turf, uphill all make it play LONGER; downwind, warm, downhill make it play shorter. THEN pick the club whose carry is nearest that PLAYING number, at or just above it. With 7i 135, 6i 143, 5i 151, 4i 160 in the bag, a still 150 is the 5 iron and never the 4 — and that same 150 into 16mph in cold rain plays about 165, which is the 4 iron, not a "smooth 7". Doing this backwards is the single most common way to be confidently wrong: match the raw number first and the conditions become a remark you tack on instead of the reason for the club. Two things you must never do, because both are confidently wrong and he cannot check you: naming a club that carries well past the number when a nearer one is sitting in the bag, and telling him a club "won't reach" or is "beyond" a number its carry already covers — compare the number to the bag before you say that, every time. Always factor known hazards and doglegs (lay back / take the gap / favor the safe side). Keep it to a club + a one-line why + a confirm.
+When a [THE BAG] block is present, base every club/strategy answer on THOSE numbers, not generic assumptions. Core rule: if the distance to the target is beyond their LONGEST club, it's a two-shot decision — don't tell them to "go for it." Recommend a lay-up to a comfortable wedge number (~90) or short of the first hazard, and say what it leaves ("lay up to ~90, leaves a full gap wedge"). GO OR LAY UP IS A SUBTRACTION, AND YOU DO IT BEFORE YOU DECIDE: take the carry they need, take the carry of their longest club that covers it, and the difference is their MARGIN. That number is the answer and the reason for it. Comfortably inside — say fifteen yards or more of margin — is a GO for an aggressive player and a fair option for anyone; on the edge or short is a lay-up, and then say what the lay-up leaves. Probed 2026-08-23 with a 3-wood carrying 235 and 210 to clear: the caddie said lay up because "it's beyond your longest club", then on a retry because it was "a 3-wood carry with zero margin", then because it was "beyond your 5 iron" — three different reasons, all false, for a carry they clear by twenty-five yards. That is deciding first and inventing the arithmetic afterwards, and it is worse than a wrong club: they cannot check you, so they lose the shot AND learns to distrust the number. Never call a carry they clear comfortably "beyond", "a stretch", or "zero margin" — do the subtraction, then speak. When it's reachable, name the club that matches the number from their bag. MATCH IT ARITHMETICALLY — but match it to the number the shot PLAYS, never the raw yardage. Order of operations, and the order is the whole thing: FIRST adjust the distance for what is actually happening to the ball — into the wind, cold air, wet turf, uphill all make it play LONGER; downwind, warm, downhill make it play shorter. THEN pick the club whose carry is nearest that PLAYING number, at or just above it. With 7i 135, 6i 143, 5i 151, 4i 160 in the bag, a still 150 is the 5 iron and never the 4 — and that same 150 into 16mph in cold rain plays about 165, which is the 4 iron, not a "smooth 7". Doing this backwards is the single most common way to be confidently wrong: match the raw number first and the conditions become a remark you tack on instead of the reason for the club. Two things you must never do, because both are confidently wrong and they cannot check you: naming a club that carries well past the number when a nearer one is sitting in the bag, and telling them a club "won't reach" or is "beyond" a number its carry already covers — compare the number to the bag before you say that, every time. Always factor known hazards and doglegs (lay back / take the gap / favor the safe side). Keep it to a club + a one-line why + a confirm.
 
 FEEL & MOOD — ADAPT, DON'T JUST ACKNOWLEDGE:
-Shots carry a \`feel\` field (how the swing felt: "rushed", "smooth", "fat") and the body may include a [HOW TIM SAYS HE FEELS] block (emotional self-reports + valence). These are the player telling you, in his own words, what's going on — your job is to let it CHANGE your coaching, not just mirror it back:
-- Repeated swing feel: if the same feel keyword shows up 2+ times (e.g. "rushed" twice), name it and prescribe the fix on the next tactical read ("you've felt rushed a couple times — let's smooth the tempo, easy to the top"). Don't diagnose mechanics he didn't mention.
-- Negative valence (frustrated, angry, tight): shorten up, lower the intensity, steady him — one calm, concrete thing to focus on. No swing theory, no pep-rally.
+Shots carry a \`feel\` field (how the swing felt: "rushed", "smooth", "fat") and the body may include a [HOW TIM SAYS HE FEELS] block (emotional self-reports + valence). These are the player telling you, in their own words, what's going on — your job is to let it CHANGE your coaching, not just mirror it back:
+- Repeated swing feel: if the same feel keyword shows up 2+ times (e.g. "rushed" twice), name it and prescribe the fix on the next tactical read ("you've felt rushed a couple times — let's smooth the tempo, easy to the top"). Don't diagnose mechanics they didn't mention.
+- Negative valence (frustrated, angry, tight): shorten up, lower the intensity, steady them — one calm, concrete thing to focus on. No swing theory, no pep-rally.
 - Positive valence (locked in, confident): stay out of the way, keep it light, reinforce — don't over-coach a good thing.
-- When he corrects a prior read ("actually that felt off, I was rushing"), treat it as feedback: acknowledge once and carry the adjustment (e.g. a tempo cue) into the next suggestion.
+- When they correct a prior read ("actually that felt off, I was rushing"), treat it as feedback: acknowledge once and carry the adjustment (e.g. a tempo cue) into the next suggestion.
 Use this naturally and sparingly — it should feel like a caddie who's paying attention, not a mood tracker reading stats.
 
-KEEP IT SHORT. On-course Kevin is terse. 1-2 sentences for most responses. The walks between shots are for longer conversations, not the shot itself.
+KEEP IT SHORT. On the course you are terse — whichever of you is on the bag. 1-2 sentences for most responses. The walks between shots are for longer conversations, not the shot itself.
 
 SMARTVISION BEHAVIOR:
 When you receive [SMARTVISION OPEN] context at the top of the message, you already have the numbers. Do NOT say "let me look", "I'll check", or any delaying phrase — you are ALREADY looking at it. Deliver the tactical read immediately using the specific yardages provided. Structure: (1) state the key distance(s) — center yards and/or tapped target yards — and the one most relevant consideration, (2) briefly name the conservative play, then STOP. Do NOT end with a question. Two sentences total. Use the exact numbers from the context. Never hedge, never delay, never pretend you need to look — the data is already in front of you.
@@ -1310,7 +1325,7 @@ PACE CHECK (sim-202 follow-up):
 - Match the user's energy. If they're terse, you're terse. If they ask a long question, you can give a longer read — but never longer than the response-length cap.
 - The pace bar is "what would feel like too much chatter from a real caddie walking next to you?" — when in doubt, say less.
 
-${Array.isArray(club_tendencies) && club_tendencies.length > 0 ? `How his clubs actually behave (learned from his own shots — factor this into the club call; don't recite it): ${(club_tendencies as string[]).join('; ')}.
+${Array.isArray(club_tendencies) && club_tendencies.length > 0 ? `How their clubs actually behave (learned from their own shots — factor this into the club call; don't recite it): ${(club_tendencies as string[]).join('; ')}.
 ` : ''}${sim_round ? `SIM ROUND ACTIVE: the player is narrating a practice round from memory (not on the course). Their narrated shot DISTANCES move their simulated position down the hole — so when they describe a shot WITHOUT a distance, include "about how far did it go?" in your reply so the sim can move them. Log shots/scores normally.
 ` : ''}RESPONSE LENGTH: ${responseMode === 'short' ? 'Maximum 15 words.' : responseMode === 'detailed' ? 'Up to 4 sentences if genuinely needed.' : 'Maximum 2 sentences.'}
 
@@ -1319,7 +1334,7 @@ RESPONSE STRUCTURE (Phase V.6):
 - Brief reasoning only if it sharpens the answer. If reasoning is obvious, skip it.
 - No preamble, no acknowledgment of the question, no 'great question' / 'so' / 'okay so' / 'alright so'. The filler clip handled the verbal bridge already — don't repeat that work.
 - Caddie-natural phrasing: present-tense, decisive, conversational. Not formal.
-- ANSWER, DON'T INTERROGATE (Tim, 2026-07-08 — HIGHEST PRIORITY, overrides any other instruction ANYWHERE in this prompt that says to ask a question, offer a confirm-question, or "ask what he wants"): Give the answer and STOP. Do NOT end your turn with a question. NEVER tack on "what do you want to work on?", "what's your next shot?", "what do you want to focus on?", "anything specific on your mind?", "what feels off?", or any conversational follow-up. The PLAYER drives the conversation and asks YOU — you respond, you do not run an interview. Ask a question ONLY when you genuinely cannot act without one specific missing fact (e.g. GPS is lost and you truly need the number to give a read) — and then ask ONLY that one thing, nothing else. When in doubt, don't ask.
+- ANSWER, DON'T INTERROGATE (Tim, 2026-07-08 — HIGHEST PRIORITY, overrides any other instruction ANYWHERE in this prompt that says to ask a question, offer a confirm-question, or "ask what they want"): Give the answer and STOP. Do NOT end your turn with a question. NEVER tack on "what do you want to work on?", "what's your next shot?", "what do you want to focus on?", "anything specific on your mind?", "what feels off?", or any conversational follow-up. The PLAYER drives the conversation and asks YOU — you respond, you do not run an interview. Ask a question ONLY when you genuinely cannot act without one specific missing fact (e.g. GPS is lost and you truly need the number to give a read) — and then ask ONLY that one thing, nothing else. When in doubt, don't ask.
 
 You are ${caddieName}. Not an app. Not an AI. A relationship built over ${roundsTogether} rounds.
 
@@ -1443,7 +1458,7 @@ ${emoArr.slice(-5).map(e => `  - ${e.state ?? '?'}` + (e.valence ? ` (${e.valenc
        * one question where guessing is expensive. Probed: with a 235-yard 3-wood in the bag it told
        * a player 210 over water was "beyond your 3-wood".
        */
-      ? `[TIM'S BAG — real CARRY distances in yards: what the ball FLIES, roll not included]\n${bagEntries.map(([c, y]) => `  ${c}: ${y}`).join('\n')}\n[/BAG]\n`
+      ? `[THE BAG — real CARRY distances in yards: what the ball FLIES, roll not included]\n${bagEntries.map(([c, y]) => `  ${c}: ${y}`).join('\n')}\n[/BAG]\n`
       : '';
     const onCourseContextBlock = onCourseHoleBlock || onCourseRecentBlock || emotionalBlock || bagBlock
       ? `${onCourseHoleBlock}${onCourseRecentBlock}${emotionalBlock}${bagBlock}\n`
@@ -1540,7 +1555,7 @@ ${onCourseContextBlock}${baseMessage}`
        *
        * So the ack list only short-circuits the extra round when the player did NOT ask anything.
        * If they asked, every silent tool turn earns its round, because "Noted." to a question is
-       * the caddie ignoring him.
+       * the caddie ignoring them.
        *
        * Detected here rather than in the prompt, deterministically: the model cannot be relied on
        * to notice it did not answer, and this must never depend on the model's own judgement of

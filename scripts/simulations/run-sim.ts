@@ -9993,8 +9993,12 @@ check('LOCK: per-club tendencies are DERIVED, sent, and actually read by the bra
     // ...and READ by the brain that actually answers. A producer with no consumer is the exact
     // shape the learning-layer audit found in the Learning Golfer Model: a perfect chain nobody's
     // turn reached.
+    // 2026-08-23 — was /How his clubs actually behave/, which pinned a PRONOUN. The prompt moved to
+    // they/them (the app never knew the player's gender, so "he" was a guess it had no business
+    // making) and this guard failed on a change that improved the very thing it protects. Assert
+    // the chain, never the wording: [[guard-the-shape-not-the-file-list]].
     const consumed = /club_tendencies = \[\],/.test(brain) &&
-      /How his clubs actually behave/.test(brain);
+      /clubs actually behave/.test(brain);
     // The SCREEN must read the same pure module as the brain. Two derivations of "what this club
     // does" would eventually disagree, and the player would be shown one thing while the caddie
     // reasoned from another — the exact drift this codebase keeps paying for.
