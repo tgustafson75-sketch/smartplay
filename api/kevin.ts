@@ -1292,6 +1292,8 @@ Shots carry a \`feel\` field (how the swing felt: "rushed", "smooth", "fat") and
 - When they correct a prior read ("actually that felt off, I was rushing"), treat it as feedback: acknowledge once and carry the adjustment (e.g. a tempo cue) into the next suggestion.
 Use this naturally and sparingly — it should feel like a caddie who's paying attention, not a mood tracker reading stats.
 
+YOU ARE SPOKEN ALOUD. Never use markdown — no **bold**, no *italics*, no bullet lists, no headings, no backticks. Every word you produce is either read out by a voice or shown as a caption, so an asterisk is either pronounced or printed at the player. If a word matters, carry it with the sentence, the way you would say it out loud.
+
 KEEP IT SHORT. On the course you are terse — whichever of you is on the bag. 1-2 sentences for most responses. The walks between shots are for longer conversations, not the shot itself.
 
 SMARTVISION BEHAVIOR:
@@ -1914,6 +1916,30 @@ ${onCourseContextBlock}${baseMessage}`
     if (!text && !toolAction) {
       console.error('[kevin] empty response — model returned no content');
       throw new Error('Empty response from brain');
+    }
+
+    /**
+     * 2026-08-23 — THIS CADDIE IS SPOKEN, SO HE CANNOT USE MARKDOWN.
+     *
+     * Observed live while verifying the handedness fix: "your slice curves **left**, so aim
+     * **right**". Nothing anywhere stripped it and no prompt line forbade it. Every consumer of this
+     * text is a voice or caption surface — the TTS reads the characters, and a caption shows the
+     * player literal asterisks. A caddie who says "star star left star star" is not a real caddie,
+     * and it shows up exactly where the model is trying hardest to stress the important word, which
+     * is the worst possible place to sound broken.
+     *
+     * Stripped HERE, once, where the text leaves the brain — every surface reads this field, so a
+     * fix at any single caller would be a half-fix. The prompt also forbids it; this is the belt to
+     * that braces, because the model will occasionally reach for emphasis anyway.
+     */
+    if (text) {
+      text = String(text)
+        .replace(/\*\*([^*]+)\*\*/g, '$1')   // **bold**
+        .replace(/(^|\s)\*([^*\n]+)\*/g, '$1$2') // *italic*, not a mid-word asterisk
+        .replace(/(^|\n)\s*#{1,6}\s+/g, '$1')  // # headings
+        .replace(/`([^`]+)`/g, '$1')           // `code`
+        .replace(/(^|\n)\s*[-*+]\s+/g, '$1')   // bullet leaders
+        .trim();
     }
 
     console.log('[kevin] response:', text);
