@@ -26,7 +26,20 @@ export interface WhatsNewEntry {
 }
 
 export const WHATS_NEW: WhatsNewEntry[] = [
-  // 2026-08-23 — the club-call pass. Written for the PLAYER, not the changelog.
+  // 2026-08-23 — the playing-number pass. Written for the PLAYER, not the changelog.
+  {
+    when: 'Aug 2026',
+    note: 'Downhill and uphill finally count. If you\'ve got 230 to a green that sits well below you, that is not a 230-yard shot and I will stop calling it one — I work out what it actually plays and give you the club for that. Same going up. The app has known the elevation for a while; I just wasn\'t using it, which is exactly how you end up long through the back.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'I know which way the wind is blowing across YOUR shot now, not just what the forecast says. Into your face, at your back or across it — measured against the line of the hole you\'re actually playing. And if the hole isn\'t mapped, I\'ll tell you I don\'t know rather than guessing "it\'s into you" and costing you a club.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'Rain shortens the shot and I account for it. A wet ball carries less and wet ground gives you nothing back, so I\'ll club you up and tell you not to expect the run.',
+  },
+  // 2026-08-23 — the club-call pass.
   {
     when: 'Aug 2026',
     note: 'The weather actually changes the club I give you now. Into the wind, cold air, wet turf — the ball flies shorter, so I work out what the shot really plays and give you the club for THAT number, not the one on the screen. 150 into a stiff breeze on a cold wet day isn\'t a smooth 7; I\'ll hand you the 4 and tell you why in three words.',
