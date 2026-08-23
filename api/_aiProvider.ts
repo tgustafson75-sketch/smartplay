@@ -799,6 +799,8 @@ async function _anthropicAgenticLoop(
    * its answer.
    */
   let textFromToolRound = '';
+  /** Guards the one extra round granted to a turn that recorded something without speaking. */
+  let silentRoundRetried = false;
   const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
   for (let round = 0; round < maxRounds; round++) {
@@ -850,7 +852,29 @@ async function _anthropicAgenticLoop(
     }
     msgs.push({ role: 'user', content: toolResults });
 
-    if (!hasContinuationTool) break;
+    if (!hasContinuationTool) {
+      /**
+       * 2026-08-23 — ONE MORE ROUND WHEN THE TURN RECORDED SOMETHING AND SAID NOTHING.
+       *
+       * The loop breaks after any non-continuation tool, so a turn that calls a RECORDING tool
+       * without also writing prose ends there — the model never gets a round in which to speak, and
+       * kevin falls back to a terse default. Asked "I'm 150 out, what should I hit", the caddie
+       * logged the 150 and answered "On it."
+       *
+       * Two attempts to fix that with wording — a rule in the answer-shape block, then an explicit
+       * instruction on the tool's own description — both failed, because it was never a wording
+       * problem: there was no turn left in which to comply.
+       *
+       * So: if a tool fired and produced no words, allow exactly ONE more round. The tool results
+       * are already on `msgs`, so the model simply gets to answer. Bounded to one retry and only on
+       * the silent path, which is precisely the failure — a turn that already spoke costs nothing
+       * extra, and maxRounds still caps the whole loop.
+       */
+      const spokeThisRound = !!(textBlock?.type === 'text' && textBlock.text.trim());
+      if (spokeThisRound || silentRoundRetried) break;
+      silentRoundRetried = true;
+      continue;
+    }
   }
 
   // Nothing but tool calls came back with words attached — use them rather than letting the caller
