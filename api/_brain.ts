@@ -118,6 +118,13 @@ export function shotAnswerShapeBlock(): string {
     3. where his OWN tendency would leave it ("your fade holds the right edge", "a thin one is short-right").
 - Use his real miss and real distances, not generic ones. If you do not have a tendency for that club,
   leave it out rather than inventing one — two honest clauses beat three with a guess in them.
+- CONDITIONS CHANGE THE CLUB, NOT THE WORD COUNT. When a conditions line is present — wind, cold,
+  wet — it is an INPUT to which club you name, exactly like plays-like. Do not append a weather
+  sentence; name the club the conditions actually call for. 150 into 14mph at 48 degrees in the rain
+  is not a smooth 7, it is a 6 or a 5, and saying "smooth 7" there is wrong advice delivered
+  confidently. Add three words of why only when the club would otherwise look odd to him
+  ("Six — it's into 14"). This matters most for a mid-to-high handicapper, who will not make the
+  adjustment himself and will come up short all day wondering why.
 - Never LIST hazards. Use them to anchor the target: "past the bunker" tells him more than "bunker at 145".
 - PLAYS-LIKE IS AN INPUT, NEVER THE ANSWER. Every rangefinder on the market brags about a wind- and
   elevation-adjusted number, and it is still a NUMBER. He does not want to know it plays 158; he wants
