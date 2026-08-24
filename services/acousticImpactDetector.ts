@@ -112,6 +112,33 @@ interface RunningRecorder {
 
 let active: RunningRecorder | null = null;
 
+/**
+ * 2026-08-24 (Tim, from a range session) — "when you stop recording in SmartMotion it asks about
+ * going another session but it's not listening."
+ *
+ * THIS RECORDER IS A MICROPHONE OWNER AND NEVER SAID SO. It holds a live Audio.Recording for the
+ * whole SmartMotion session, while services/voiceService kept a registry of mic owners whose entire
+ * membership was useVoiceCaddie's tap-path recording. So when the set finished and the caddie asked
+ * "want another round?" and opened the mic, expo-av threw "Only one Recording object can be prepared
+ * at a given time" — the exact collision that registry exists to prevent. The device log has it:
+ * voice_error capture_utterance on /swinglab/smartmotion.
+ *
+ * Registering here means a deliberate user turn can TAKE the mic back. The release returns 'none'
+ * because this recorder never holds a human utterance worth transcribing — it is listening for the
+ * sound of a golf ball, so there is nothing to submit, only something to stop.
+ */
+void (async () => {
+  try {
+    const vs = await import('./voiceService');
+    vs.registerExternalMicCheck(() => active !== null);
+    vs.registerExternalMicRelease(async () => {
+      if (!active) return 'none';
+      try { await abortImpactRecording(); } catch { /* best effort — the point is to free the device */ }
+      return 'none';
+    });
+  } catch { /* voiceService unavailable (test env) — the detector still works, it just cannot yield */ }
+})();
+
 // ─── Global strike event bus ─────────────────────────────────────────────
 // Every detection (single-shot real-time impact OR multi-shot validated
 // strike) is broadcast through this emitter. Lets passive surfaces

@@ -9969,6 +9969,41 @@ check('LOCK: an app-inferred club is attribution, never "advice the player follo
   })(),
   'spoken/engine recommendations score adherence; inferred stamps attribute the club only');
 
+check('LOCK: the microphone registry holds EVERY owner, not just the last one to register',
+  (() => {
+    /**
+     * 2026-08-24 (Tim, range session) — "when you stop recording in SmartMotion it asks about going
+     * another session but it's not listening."
+     *
+     * The registry was a single SLOT whose entire membership was useVoiceCaddie's tap-path
+     * recording. The acoustic impact detector holds a live Audio.Recording for the whole SmartMotion
+     * session and was never in it, so the caddie finished a set, asked a question, opened the mic,
+     * and hit "Only one Recording object can be prepared at a given time" — the exact collision the
+     * registry exists to prevent. Asking a question you cannot hear the answer to is the worst
+     * version of canned speech: it sounds like a caddie and behaves like a recording.
+     *
+     * A slot also FORGETS the previous owner on the next register(), which is how a second holder
+     * stayed invisible through two earlier passes at this same bug. Assert the SHAPE — a collection
+     * and a loop — not the membership, so a third owner cannot be added without joining it.
+     * [[guard-the-shape-not-the-file-list]]
+     */
+    const vs = read('services/voiceService.ts');
+    const ac = read('services/acousticImpactDetector.ts');
+    // A collection of owners, not a slot.
+    const isSet = /const externalMicChecks = new Set</.test(vs) &&
+      /const externalMicReleases = new Set</.test(vs);
+    // Busy if ANY owner says busy.
+    const anyHolds = /for \(const fn of externalMicChecks\)/.test(vs);
+    // A user turn releases EVERY owner, not the first.
+    const releasesAll = /for \(const release of externalMicReleases\)/.test(vs);
+    // ...and the recorder that caused this actually joins.
+    const acousticJoins = /registerExternalMicCheck/.test(ac) && /registerExternalMicRelease/.test(ac);
+    // The old single-slot assignment must be gone, or the set is decorative.
+    const slotGone = !/externalMicCheck = fn/.test(vs) && !/externalMicRelease = fn/.test(vs);
+    return isSet && anyHolds && releasesAll && acousticJoins && slotGone;
+  })(),
+  'every mic owner is registered and released; SmartMotion cannot deafen the question the caddie just asked');
+
 check('LOCK: per-club tendencies are DERIVED, sent, and actually read by the brain',
   (() => {
     const ct = read('services/clubTendency.ts');

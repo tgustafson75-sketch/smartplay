@@ -229,9 +229,36 @@ let currentCaptureHeardSpeech = false;
 // path's own recording (useVoiceCaddie recordingRef) was live, so a follow-up capture firing while a tap
 // recording was active raced the audio session and threw. useVoiceCaddie registers a live check here so
 // captureUtterance bails when the mic is already held by the tap path. Reads the ref live (no flag to sync).
-let externalMicCheck: (() => boolean) | null = null;
-export const registerExternalMicCheck = (fn: (() => boolean) | null): void => { externalMicCheck = fn; };
-export const isExternalMicActive = (): boolean => { try { return externalMicCheck?.() === true; } catch { return false; } };
+/**
+ * 2026-08-24 (Tim, from a range session) — "when you stop recording in SmartMotion it asks about
+ * going another session but it's not listening."
+ *
+ * THIRD pass on this registry, and the third time it turned out to hold fewer owners than the app
+ * actually has. It held ONE: useVoiceCaddie's tap-path recording. The ACOUSTIC IMPACT DETECTOR
+ * holds a live Recording for the entire SmartMotion session and was never in it — so the caddie
+ * finished a set, asked "want another round?", opened the mic, and hit the exact "Only one
+ * Recording object can be prepared at a given time" collision this registry exists to prevent.
+ * The device log shows it: voice_error capture_utterance on /swinglab/smartmotion.
+ *
+ * Asking a question you cannot hear the answer to is the worst version of the canned-speech
+ * problem — it sounds like a caddie and behaves like a recording.
+ *
+ * A SET, not a slot. Any number of subsystems may hold the microphone; the mic is busy if ANY of
+ * them says so. A single-slot registry silently forgets the previous owner on the next register(),
+ * which is how a second holder stayed invisible through two prior fixes.
+ */
+const externalMicChecks = new Set<() => boolean>();
+export const registerExternalMicCheck = (fn: (() => boolean) | null): (() => void) => {
+  if (!fn) { externalMicChecks.clear(); return () => {}; }
+  externalMicChecks.add(fn);
+  return () => { externalMicChecks.delete(fn); };
+};
+export const isExternalMicActive = (): boolean => {
+  for (const fn of externalMicChecks) {
+    try { if (fn() === true) return true; } catch { /* a throwing owner is not a holder */ }
+  }
+  return false;
+};
 
 /**
  * 2026-08-17 (Tim — "everything's supposed to be unified") — MIC HANDOVER.
@@ -260,8 +287,12 @@ export type MicReleaseVerdict =
    *  NOT open its own turn on top of it: the user's words are already being answered. */
   | 'submitted';
 
-let externalMicRelease: (() => Promise<MicReleaseVerdict>) | null = null;
-export const registerExternalMicRelease = (fn: (() => Promise<MicReleaseVerdict>) | null): void => { externalMicRelease = fn; };
+const externalMicReleases = new Set<() => Promise<MicReleaseVerdict>>();
+export const registerExternalMicRelease = (fn: (() => Promise<MicReleaseVerdict>) | null): (() => void) => {
+  if (!fn) { externalMicReleases.clear(); return () => {}; }
+  externalMicReleases.add(fn);
+  return () => { externalMicReleases.delete(fn); };
+};
 
 /**
  * Release whatever holds the mic so a user-initiated turn can own it.
@@ -298,13 +329,19 @@ export const releaseExternalMic = async (): Promise<MicReleaseVerdict> => {
     }
   }
 
-  // (b) The tap path's own recording (useVoiceCaddie recordingRef).
+  // (b) EVERY other registered owner — the tap path's recording (useVoiceCaddie recordingRef) and
+  // the acoustic impact detector's session recording. Release them all: a deliberate user turn
+  // outranks any of them, and releasing only the first is how a second holder stayed invisible.
   if (isExternalMicActive()) {
-    try {
-      const tapVerdict = (await externalMicRelease?.()) ?? 'none';
-      if (tapVerdict !== 'none') verdict = tapVerdict === 'submitted' ? 'submitted' : verdict === 'none' ? tapVerdict : verdict;
-    } catch (e) {
-      console.log('[voice] mic handover failed', e);
+    for (const release of externalMicReleases) {
+      try {
+        const ownerVerdict = await release();
+        if (ownerVerdict !== 'none') {
+          verdict = ownerVerdict === 'submitted' ? 'submitted' : verdict === 'none' ? ownerVerdict : verdict;
+        }
+      } catch (e) {
+        console.log('[voice] mic handover failed for one owner', e);
+      }
     }
   }
 
