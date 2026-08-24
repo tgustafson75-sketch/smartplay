@@ -2247,6 +2247,31 @@ export const useVoiceCaddie = ({
            */
           const spentMs = Date.now() - txStart;
           const retryBudgetMs = Math.max(8000, VOICE_TOTAL_BUDGET_MS - spentMs);
+          /**
+           * 2026-08-24 (Tim's device log, three entries, elapsedMs 35023 / 35019 / 35019) — WHEN THE
+           * CDN ALSO FAILS, DO NOT RETRY.
+           *
+           * The reasoning above — "we would rather be slow once than wrong on the course" — was
+           * written when the only evidence was ping+GET, and that pair is genuinely ambiguous: a
+           * cold Lambda looks exactly like a dead network. `cdnOk` was added on 08-20 precisely to
+           * break that tie, and the comment at failTranscribeOffline says what a false means: "the
+           * device cannot reach api.smartplaycaddie.com AT ALL — DNS, TLS or a filter — and no
+           * amount of backend patience will help."
+           *
+           * That evidence has now arrived. All three probes failed in ~3s, and the retry still ran
+           * for fifteen more seconds — 35 seconds total before the caddie said a single word. Tim:
+           * "I'm not going back on the course until you can guarantee I won't be frustrated fifteen
+           * minutes in." Thirty-five seconds of silence with a phone in your hand IS that.
+           *
+           * A retry after all three probes fail is not patience, it is a dead wait we already know
+           * the answer to. Ping-or-GET alone still earns the retry, because that case is ambiguous
+           * and being wrong there costs a real answer on a working connection.
+           */
+          if (cdn.ok === false && !ping.ok && !get.ok) {
+            console.log('[voice] host unreachable on all three probes — skipping the dead retry, degrading now');
+            await failTranscribeOffline('transcribe_host_unreachable', ping.ok, ping.ms, get.ok, get.ms, cdn.ok, cdn.ms);
+            return;
+          }
           transcribeRes = await doTranscribeFetch(probeSaysDown ? retryBudgetMs : Math.min(15000, retryBudgetMs));
           if (probeSaysDown) console.log('[voice] probe was WRONG — retry succeeded; the connection was fine');
         } catch (retryErr) {

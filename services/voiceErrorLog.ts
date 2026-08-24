@@ -115,13 +115,35 @@ function write(
   }
 }
 
+/**
+ * 2026-08-24 (Tim's device log) — "voice_error: capture_utterance — All promises were rejected".
+ *
+ * That is not a failure description, it is the shape of a Promise.any. The voice path races a
+ * primary request against a hedged one; when BOTH reject, Promise.any throws an AggregateError whose
+ * message is the literal string "All promises were rejected", and the actual causes sit unread in
+ * err.errors[]. So every hedged failure in the field reported the racing strategy instead of the
+ * reason — AbortError, Network request failed, a busy microphone — and three separate log entries
+ * told us nothing we could act on.
+ *
+ * Unwrap it: report what the attempts actually threw.
+ */
+export function describeError(error: unknown): string {
+  if (error instanceof AggregateError || (error != null && typeof error === 'object' && Array.isArray((error as { errors?: unknown }).errors))) {
+    const inner = ((error as { errors?: unknown[] }).errors ?? [])
+      .map((e) => (e instanceof Error ? (e.name === 'Error' ? e.message : `${e.name}: ${e.message}`) : String(e ?? '')))
+      .filter(Boolean);
+    const unique = [...new Set(inner)];
+    if (unique.length) return `all attempts failed — ${unique.join(' | ')}`.slice(0, 300);
+  }
+  return (error instanceof Error ? error.message : String(error ?? '')).slice(0, 300);
+}
+
 export function logVoiceError(
   stage: string,
   error: unknown,
   extra?: Record<string, unknown>,
 ): void {
-  const message = error instanceof Error ? error.message : String(error ?? '');
-  write('voice_error', stage, { error: message, ...extra });
+  write('voice_error', stage, { error: describeError(error), ...extra });
 }
 
 export function logVoiceSilentFail(
