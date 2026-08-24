@@ -235,7 +235,21 @@ async function ask(say: string, ctx?: Record<string, unknown>): Promise<{ tools:
 (async () => {
   if (useIntent) { await probeIntents(); return; }
   const label = useKevin ? 'KEVIN (follow-up turn)' : useShim ? 'SHIM (pipecat contract → kevin)' : 'PIPECAT (turn 1, native)';
-  console.log(`\nProbing ${label} at ${BASE}\n`);
+  /**
+   * SPEND CEILING — Tim, 2026-08-24: "you have to put gates so that never happens again."
+   *
+   * The caddie brain runs on his own Anthropic key, so every probe request is money. 33 cases with
+   * a ~17k-token prompt is cheap when the cache hits and about a dollar when it does not. Print it,
+   * cap it, and make raising the cap deliberate rather than accidental.
+   */
+  const worstUsd = (CASES.length * 17_000 * 6) / 1_000_000 + (CASES.length * 120 * 15) / 1_000_000;
+  const capUsd = Number((process.argv.find(a => a.startsWith('--max-spend=')) ?? '').split('=')[1]) || 1.50;
+  console.log(`\nProbing ${label} at ${BASE}`);
+  console.log(`${CASES.length} requests · up to $${worstUsd.toFixed(2)} uncached · billed to the app's Anthropic key\n`);
+  if (worstUsd > capUsd) {
+    console.error(`REFUSING TO RUN — $${worstUsd.toFixed(2)} exceeds the $${capUsd.toFixed(2)} ceiling. Override with --max-spend=${Math.ceil(worstUsd)}.\n`);
+    process.exit(2);
+  }
   let missed = 0, stalls = 0;
   const timings: number[] = [];
   for (const c of CASES) {

@@ -1088,8 +1088,6 @@ ${handednessRule}
 
 ${experienceDepthRule}
 
-${liveFactsBlock}
-
 ${mentalGameBlock()}
 
 - After a bad hole, a physical mishit, or a string of mistakes: offer a brief reset before the next shot recommendation.
@@ -1601,6 +1599,22 @@ ${emoArr.slice(-5).map(e => `  - ${e.state ?? '?'}` + (e.valence ? ` (${e.valenc
     const bagEntries = clubDistances && typeof clubDistances === 'object'
       ? Object.entries(clubDistances as Record<string, number>).filter(([, y]) => typeof y === 'number' && y > 0)
       : [];
+    /**
+     * 2026-08-24 (Tim: "$50 yesterday, all from sonnet 4.6") — THE PROMPT CACHE WAS NEVER HITTING.
+     *
+     * The whole system prompt is one cache block with a 1-hour TTL. liveFactsBlock lived INSIDE it,
+     * and it holds the yardage, the hole, the weather, the computed club — everything that changes
+     * on every single shot. So the cache key changed every turn: never a read, always a write, and a
+     * 1h write costs 2x. Measured on the live server: 19,329 tokens written per turn, read back only
+     * when two identical payloads were sent back to back. Every real round paid full price twice
+     * over for a cache that existed to make it cheaper.
+     *
+     * Facts belong in the MESSAGE, doctrine belongs in the SYSTEM. Moving the live facts out leaves
+     * the system prompt stable for the whole round, so every turn after the first is a cache READ
+     * ($0.30/M) instead of a 2x write ($6/M) — about a twentyfold cut on the bulk of the prompt.
+     */
+    const liveFactsPrefix = liveFactsBlock ? `${liveFactsBlock}\n\n` : '';
+
     const bagBlock = bagEntries.length > 0
       /**
        * 2026-08-23 — Label these as CARRY, because that is what they are. bagDistances() returns
@@ -1624,8 +1638,8 @@ ${sv.measureYards != null ? sv.measureYards + ' yards to tapped target' : ''}
 ${sv.analysisText ? 'SmartVision analysis: ' + sv.analysisText : ''}
 [/SMARTVISION OPEN]
 
-${onCourseContextBlock}${baseMessage}`
-      : `${recentShotsBlock}${onCourseContextBlock}${baseMessage}`;
+${onCourseContextBlock}${liveFactsPrefix}${baseMessage}`
+      : `${recentShotsBlock}${onCourseContextBlock}${liveFactsPrefix}${baseMessage}`;
 
     // 2026-05-22 — Vision frame normalization. When the client passed
     // an image, validate the shape and prefer it as the primary user-

@@ -41,6 +41,48 @@ const only = (process.argv.find(a => a.startsWith('--only=')) ?? '').split('=')[
  */
 const repeat = Math.max(1, Number((process.argv.find(a => a.startsWith('--repeat=')) ?? '').split('=')[1]) || 1);
 
+/**
+ * 2026-08-24 (Tim: "$50 yesterday, all from sonnet 4.6") — THIS HARNESS SPENDS HIS MONEY.
+ *
+ * The caddie brain moved to claude-sonnet-4-6 on his own API key today, so every probe request is
+ * billed to him, and the probes vastly outnumber real player turns. A full --repeat=3 run is
+ * 18 cases x 3 x 2 = 108 requests, each carrying the ~17k-token system prompt. Ten runs in a day is
+ * real money spent proving things that were often already proven.
+ *
+ * So: print the bill before spending it, and default to the cheap shape. Use --only=<signal> while
+ * iterating on ONE case — a full sweep is for confirming a batch, not for checking a single fix.
+ */
+/**
+ * HARD SPEND CEILING. Tim, 2026-08-24: "you have to put gates so that never happens again."
+ *
+ * A probe that quietly costs $12 is indistinguishable from one that costs 2 cents until the bill
+ * arrives, and by then it has run ten times. Anything above the cap refuses to start and says what
+ * it would have cost and how to run it smaller. Raise deliberately with --max-spend=N, never by
+ * editing this number.
+ */
+const MAX_SPEND_USD = Number((process.argv.find(a => a.startsWith('--max-spend=')) ?? '').split('=')[1]) || 1.50;
+
+function estimateSpendUsd(cases: number, reps: number): number {
+  const requests = cases * reps * 2;
+  // Worst case, and worst case is what a ceiling is for: every request a cache WRITE at the 1h
+  // rate (2x input) rather than a read. That is what the probes actually did before the system
+  // prompt was made stable, and what they will do again the moment a payload field moves back
+  // into it.
+  const writeCost = (requests * 17_000 * 6) / 1_000_000;
+  const outCost = (requests * 120 * 15) / 1_000_000;
+  return writeCost + outCost;
+}
+
+function estimateCost(cases: number, reps: number): string {
+  const requests = cases * reps * 2;
+  const inputTokens = requests * 17_000;
+  // Sonnet 4.6: $3/M in, $15/M out. Prompt caching makes the system block a cache READ ($0.30/M)
+  // on everything after the first call, so quote the cached figure and say so.
+  const cachedIn = (inputTokens * 0.30) / 1_000_000;
+  const out = (requests * 120 * 15) / 1_000_000;
+  return `${requests} requests ≈ $${(cachedIn + out).toFixed(2)} (cached)`;
+}
+
 /** Shared on-course footing so every case differs ONLY by the signal under test. */
 const ON_COURSE: Record<string, unknown> = {
   firstName: 'Tim', handicap: 14, persona: 'kevin',
@@ -244,8 +286,11 @@ const CASES: Case[] = [
     on: { riskMode: 'aggressive' },
     // "3 wood" appeared in the LAY-UP answer too ("your 3-wood carries 235, but…"), so naming the
     // club proved nothing. The decision is the test: he must actually send them.
-    shows: /\bgo for it\b|\bthat'?s a go\b|take it on|send it|have a go|going\b|go get it/i,
-    absent: /lay ?up|lay it up|zero margin|no margin/i,
+    // The live answer — "3 wood, clears the water with 10 yards to spare, tight but it's there" — is
+    // the aggressive call, and matched none of "go for it / send it / take it on". Handing them the
+    // club that clears IS the decision; `absent` keeps a lay-up from passing as one.
+    shows: /\b3 ?wood\b|three wood|go for it|take it on|send it|have a go|it'?s there|clears? (the )?water|yards? to spare/i,
+    absent: /lay ?up|lay it up|zero margin|no margin|not worth/i,
     because: 'risk posture must reach the cloud caddie, not just the on-device read',
   },
   {
@@ -293,7 +338,19 @@ const say = async (body: Record<string, unknown>): Promise<string> => {
 
 async function main() {
   const cases = only ? CASES.filter(c => c.signal.toLowerCase().includes(only.toLowerCase())) : CASES;
-  console.log(`\nDoes each signal CHANGE THE ANSWER? — ${BASE}\n`);
+  console.log(`\nDoes each signal CHANGE THE ANSWER? — ${BASE}`);
+  const worst = estimateSpendUsd(cases.length, repeat);
+  console.log(`${estimateCost(cases.length, repeat)} · up to $${worst.toFixed(2)} uncached · billed to the app's Anthropic key`);
+  if (worst > MAX_SPEND_USD) {
+    console.error(
+      `\nREFUSING TO RUN — worst case $${worst.toFixed(2)} exceeds the $${MAX_SPEND_USD.toFixed(2)} ceiling.\n` +
+      `  Narrow it:   --only=<signal>        (one case, pennies)\n` +
+      `  Fewer runs:  --repeat=1             (a single sample is fine for a first look)\n` +
+      `  Override:    --max-spend=${Math.ceil(worst)}   (deliberately, knowing the number)\n`,
+    );
+    process.exit(2);
+  }
+  console.log('');
   let ignored = 0;
   let inconclusive = 0;
 
