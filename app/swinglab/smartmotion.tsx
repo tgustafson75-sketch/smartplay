@@ -5453,7 +5453,16 @@ export default function SmartMotion() {
               >
                 <AcousticPickupCard
                   detected={phase === 'recording' && meteringActive ? liveDb != null && liveDb > -30 : segments.length > 0}
-                  swingCount={isReview ? segments.length : undefined}
+                  /**
+                   * 2026-08-24 — a SYNTHESIZED whole-clip segment is not a detected swing. When the
+                   * video locator aborts (Tim's log: swing_locate_fallback — Aborted, three times, on
+                   * a dead network) the code falls back to one made-up segment spanning the whole
+                   * clip, and the card counted it as "1 swing detected". That is a fabricated count
+                   * on a card whose entire job is reporting what was actually sensed — and it is
+                   * indistinguishable from genuinely hitting one ball, which is why "it only picks up
+                   * one swing" has been so hard to pin down. Count only real segments.
+                   */
+                  swingCount={isReview ? segments.filter((sg) => !sg.synthesized).length : undefined}
                   heardCount={isReview ? heardStrikeCount : null}
                   calibrated={calibrated}
                   levelDb={phase === 'recording' && meteringActive ? liveDb : null}
