@@ -102,3 +102,68 @@ describe('both paths actually USE the one builder', () => {
     }
   });
 });
+
+/**
+ * 2026-08-24 — ONE WORKING NUMBER: the words and the arithmetic must start from the same yardage.
+ *
+ * Reproduced live against production BEFORE the fix. Card/GPS 180, player's rangefinder 205, bag
+ * containing a 3 iron (198) and a 7 wood (205). The caddie answered:
+ *
+ *     "Three iron — you've got comfortable margin, smooth swing, trust the carry."
+ *
+ * Seven yards short, with the confidence attached to a number the player had explicitly corrected.
+ *
+ * Cause: roundStore.currentYardage is the CARD number (set from holeData.distance on every hole
+ * change) and it fed both api/kevin's computed club and the plays-like model, while
+ * services/yardageResolver — which ranks a user-stated number above live GPS and the card — reached
+ * the brain only as `yardageInsight` and shaped the PROSE. So the prompt said "This is THEIR number"
+ * beside a computed-club line, stated as settled arithmetic, that covered a different one. A
+ * computed fact stated forcefully flattens everything around it, so the wrong number won.
+ */
+describe('the club and the words start from the same yardage', () => {
+  const seedStated = (value: number, cardYards: number) => {
+    useRoundStore.setState({
+      isRoundActive: true, currentHole: 4, currentYardage: cardYards,
+      userStatedYardage: { value, holeAtCapture: 4, asOf: Date.now(), source: 'rangefinder' },
+    } as never);
+  };
+
+  it("sends the player's stated number, not the stale card number", () => {
+    seedStated(205, 180);
+    const body = buildCaddieRequestBody({ message: 'what should I hit', language: 'en' });
+    expect(body.currentYardage).toBe(205);
+  });
+
+  it('the distance the caddie quotes and the one it clubs from are the SAME field', () => {
+    seedStated(205, 180);
+    const body = buildCaddieRequestBody({ message: 'what should I hit', language: 'en' });
+    const insight = body.yardageInsight as { yardage?: number; source?: string } | null;
+    expect(insight?.source).toBe('user_stated');
+    // The whole defect was these two disagreeing.
+    expect(body.currentYardage).toBe(insight?.yardage);
+  });
+
+  it('falls back to the card when the player has stated nothing — a strict improvement, not a new source', () => {
+    useRoundStore.setState({
+      isRoundActive: true, currentHole: 4, currentYardage: 180, userStatedYardage: null,
+    } as never);
+    expect(buildCaddieRequestBody({ message: 'x', language: 'en' }).currentYardage).toBe(180);
+  });
+
+  it('ignores a stated number captured on a DIFFERENT hole', () => {
+    useRoundStore.setState({
+      isRoundActive: true, currentHole: 5, currentYardage: 180,
+      userStatedYardage: { value: 205, holeAtCapture: 4, asOf: Date.now(), source: 'rangefinder' },
+    } as never);
+    // A number spoken on hole 4 is meaningless on hole 5 — the resolver already enforces this.
+    expect(buildCaddieRequestBody({ message: 'x', language: 'en' }).currentYardage).toBe(180);
+  });
+
+  it('ignores a STALE stated number (older than the resolver TTL)', () => {
+    useRoundStore.setState({
+      isRoundActive: true, currentHole: 4, currentYardage: 180,
+      userStatedYardage: { value: 205, holeAtCapture: 4, asOf: Date.now() - 10 * 60 * 1000, source: 'rangefinder' },
+    } as never);
+    expect(buildCaddieRequestBody({ message: 'x', language: 'en' }).currentYardage).toBe(180);
+  });
+});

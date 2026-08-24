@@ -11174,6 +11174,39 @@ check('LOCK: the ClubName vocabulary is declared twice but can never DIVERGE',
   })(),
   'clubNormalize.CANONICAL matches clubStatsStore.CLUB_ORDER element-for-element and in order, every canonical club normalises to itself, and an unknown club is rejected');
 
+check('LOCK: ONE working number — the club is computed from the yardage the caddie quotes',
+  (() => {
+    /**
+     * 2026-08-24 — reproduced live against production before the fix. Card/GPS 180, the player's
+     * rangefinder 205, a 3 iron (198) and a 7 wood (205) in the bag. The caddie said:
+     * "Three iron — you've got comfortable margin, smooth swing, trust the carry." Seven yards
+     * short, with the confidence attached to a number the player had explicitly corrected.
+     *
+     * roundStore.currentYardage is the CARD number (set from holeData.distance on every hole change)
+     * and it fed BOTH api/kevin's computed club and the plays-like model. services/yardageResolver —
+     * "the single source of truth for the number" since 2026-05-25, written so "Kevin's prompt can
+     * hedge correctly" — ranks a user-stated number above live GPS and the card, and reached the
+     * brain only as `yardageInsight`, shaping the PROSE. So the prompt said "This is THEIR number"
+     * beside a computed-club line, stated as settled arithmetic not to be second-guessed, that
+     * covered a different one. [[arithmetic-belongs-in-code-not-the-model]] warns that a computed
+     * fact stated forcefully FLATTENS everything around it — so the wrong number won.
+     *
+     * Assert the CHAIN: one working number, resolver-first, feeding the payload AND the plays-like
+     * model, with the card as the fallback the resolver itself ends on.
+     */
+    const body = read('services/caddieRequestBody.ts');
+    const resolverFirst = /const workingYards: number \| null = safe\(\(\) => \{/.test(body) &&
+      /buildYardageInsight\(\)\?\.yardage/.test(body) &&
+      /return r\.currentYardage \?\? null;/.test(body);          // degrades to exactly the old value
+    const payloadUsesIt = /currentYardage: workingYards,/.test(body);
+    const playsLikeUsesIt = /const yds = workingYards;/.test(body);
+    // The card number must not sneak back into either consumer.
+    const noCardDirect = !/currentYardage: safe\(\(\) => r\.currentYardage \?\? null, null\),/.test(body) &&
+      !/const yds = r\.currentYardage;/.test(body);
+    return resolverFirst && payloadUsesIt && playsLikeUsesIt && noCardDirect;
+  })(),
+  'one resolver-first working number feeds the payload and the plays-like model, so a rangefinder read cannot be quoted while a card number picks the club');
+
 // ─── Orphaned exports — the half-build ratchet ─────────────────────────────────
 /**
  * 2026-08-24. Tim: *"an absolutely consistent theme of half built processes… I'm stuck in a 2-month

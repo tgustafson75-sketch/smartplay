@@ -94,6 +94,38 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
   const st = safe(() => settingsStore(), {} as ReturnType<typeof settingsStore>);
 
   const isRoundActive = safe(() => !!r.isRoundActive, false);
+
+  /**
+   * 2026-08-24 — THE WORKING NUMBER. One yardage drives both the words and the arithmetic.
+   *
+   * The bug, reproduced live against production before the fix: card/GPS 180, player's rangefinder
+   * 205. The caddie answered "Three iron — you've got comfortable margin, smooth swing, trust the
+   * carry." The 3 iron carries 198. It gave the club for 180 and the confidence for a number the
+   * player had explicitly corrected, seven yards short.
+   *
+   * Cause: `r.currentYardage` is the CARD/GPS number (roundStore sets it from holeData.distance on
+   * every hole change), and it fed BOTH the computed club in api/kevin and the plays-like model
+   * below. Meanwhile services/yardageResolver — "the single source of truth for the number" since
+   * 2026-05-25, whose header says it exists so "Kevin's prompt can hedge correctly" — ranks a
+   * user-stated number (rangefinder, Golfshot, spoken) ABOVE live GPS and the card. Its verdict rode
+   * along in `yardageInsight` and shaped only the PROSE: the prompt said "This is THEIR number" in
+   * one line while the computed-club line, stated as settled arithmetic that must not be
+   * second-guessed, covered a different one.
+   *
+   * That asymmetry is the 08-24 lesson pointed the wrong way: arithmetic belongs in code — but the
+   * code has to be given the number the player is actually hitting. And a computed fact stated
+   * forcefully FLATTENS everything around it, so the wrong one wins.
+   *
+   * The resolver degrades to exactly the old value (its own cascade ends at the card), so this is a
+   * strict improvement rather than a new source of truth. [[check-the-brain-has-the-information]]
+   */
+  const workingYards: number | null = safe(() => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { buildYardageInsight } = require('./yardageResolver') as typeof import('./yardageResolver');
+    const resolved = buildYardageInsight()?.yardage;
+    if (typeof resolved === 'number' && Number.isFinite(resolved) && resolved > 0) return resolved;
+    return r.currentYardage ?? null;
+  }, safe(() => r.currentYardage ?? null, null));
   /**
    * NOT gated on isRoundActive, deliberately (checked 2026-08-23). Three of the hand-built payloads
    * wrote `round.isRoundActive ? round.currentHole : null` and three did not, so it looked like a
@@ -234,7 +266,8 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     currentHole,
     // Derived by the round store's getter rather than stored as a field.
     currentPar: safe(() => (typeof r.getCurrentPar === 'function' ? r.getCurrentPar() : null), null),
-    currentYardage: safe(() => r.currentYardage ?? null, null),
+    /** The RESOLVED number the player is hitting — stated > live GPS > card. See workingYards. */
+    currentYardage: workingYards,
     activeCourse: safe(() => r.activeCourse ?? null, null),
     activeCourseId,
     club,
@@ -732,7 +765,9 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
        * Handed the number, there is nothing left to be flaky about: he matches a club to it.
        */
       const playsLike = safe(() => {
-        const yds = r.currentYardage;
+        // The working number, not the card — the club and the plays-like model must not start from
+        // different yardages (that split gave a 3 iron for a 205-yard rangefinder read).
+        const yds = workingYards;
         if (typeof yds !== 'number' || !Number.isFinite(yds) || yds <= 0) return null;
         /**
          * 2026-08-23 (Tim, Greenhill hole 2) — "230 yards DOWNHILL considerably; if I'd taken the

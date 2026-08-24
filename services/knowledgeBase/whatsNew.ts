@@ -28,6 +28,10 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'If you tell me a number, I club to YOUR number. Shoot it with a rangefinder or just say it, and that is the distance I work from \u2014 I was quoting your number back to you while quietly picking the club for the scorecard yardage, which on a hole playing longer than the card meant a club too little. Say the number and it is the number.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'I call your clubs by their right names. If you carry a 7 wood I was saying "5 wood", and a 3 iron came out as "4 iron" \u2014 and worse, the distance you\'d logged for that club was being filed against the neighbouring one, so your 5 wood quietly inherited your 7 wood\'s number. Fixed everywhere, including offline.',
   },
   {
