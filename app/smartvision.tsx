@@ -80,6 +80,11 @@ import { useTeeOverride } from '../services/courseTeeOverrides';
 import { useGreenOverride } from '../services/courseGreenOverrides';
 import { fetchCourseGeometry, getHoleGeometry, getCachedGeometry, getDerivedHoleGeometry, loadDerivedGeometry, type HoleGeometry } from '../services/courseGeometryService';
 import { deriveHoleGeometry } from '../services/holeGeometryDerivation';
+// 2026-08-24 (Tim's call — owner-only first) — the strategic overlay layer. Pure functions that have
+// existed since Phase S, described in their own header as "the long-term differentiator vs other
+// golf apps... Mapbox tiles are commodity; SmartPlay's strategic overlay is proprietary IP", and
+// drawn by nobody for three months. See the OWNER-ONLY block in the SVG below.
+import { computeYardageRings, computeLandingZone, computeLayupSuggestion, computeDangerCarries } from '../services/smartVisionOverlay';
 import { getLastFix, subscribeFixChange, resolveGreenCoords, resolveTeeCoords, setMarkedFix } from '../services/smartFinderService';
 import { bumpToActive } from '../services/gpsManager';
 import { verifyShotAtLocation, correctShotClub, confirmTrackedShot, type ShotTrackResult } from '../services/shotTracking';
@@ -1337,6 +1342,66 @@ export default function SmartVisionScreen() {
     return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
   }, [onCuratedPhoto, teeCoord, greenCoord, projection, imageW, imageH]);
 
+  /**
+   * 2026-08-24 — THE STRATEGIC OVERLAY, OWNER-ONLY.
+   *
+   * services/smartVisionOverlay has computed yardage rings, a landing zone, a lay-up target and
+   * danger carries since Phase S. Its header calls the layer "the actual differentiator" and
+   * "proprietary IP". Five pure functions, zero callers, never once drawn — found by the orphan
+   * sweep on 08-24.
+   *
+   * Owner-gated deliberately. app/smartvision.tsx is under Tim's 07-26 LAYOUT FREEZE ("looks
+   * perfect"), and this adds marks to it. The precedent is the workout rail (docs/OPEN-ITEMS.md
+   * §1b): owner-gating is what let that ship mid-freeze, because a surface no tester can reach
+   * cannot regress their experience. Tim judges the moat on a real hole, then decides if it goes
+   * public. Remove `strategyOwner` to promote it.
+   *
+   * Everything below degrades to null rather than guessing — this file's whole crash history is
+   * non-finite numbers reaching react-native-svg (see the polygon guard), so every derived pixel is
+   * finite-checked before it can become an attribute.
+   */
+  const strategyOwner = useMemo(() => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const prof = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
+      return prof.isOwnerEmail(prof.usePlayerProfileStore.getState().email);
+    } catch { return false; }
+  }, []);
+
+  const strategy = useMemo(() => {
+    if (!strategyOwner || !geometry) return null;
+    // The player's real driver CARRY, via the one owner of the carry bag. null when untracked —
+    // computeLandingZone falls back to its own 230 default rather than inventing a number for them.
+    let driverYards: number | null = null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const cs = require('../store/clubStatsStore').useClubStatsStore.getState();
+      driverYards = cs.hasDistance('Driver') ? Math.round(cs.carryFor('Driver')) : null;
+    } catch { /* the chart default is a fine fallback */ }
+
+    // Pixels per yard, derived from the two points already projected on this canvas, so the rings
+    // share the tee/pin projection instead of introducing a second one.
+    const holeYards = teeCoord && greenCoord
+      ? haversineYards(teeCoord.lat, teeCoord.lng, greenCoord.lat, greenCoord.lng)
+      : NaN;
+    const pxSpan = teeCanvas && pinCanvas
+      ? Math.hypot(pinCanvas.x - teeCanvas.x, pinCanvas.y - teeCanvas.y)
+      : NaN;
+    const pxPerYard = Number.isFinite(holeYards) && holeYards > 0 && Number.isFinite(pxSpan) && pxSpan > 0
+      ? pxSpan / holeYards
+      : null;
+
+    const carries = computeDangerCarries(geometry, driverYards);
+    return {
+      driverYards,
+      pxPerYard,
+      rings: pxPerYard != null ? computeYardageRings(Number.isFinite(holeYards) ? holeYards : 0) : [],
+      landing: computeLandingZone(geometry, driverYards),
+      layup: computeLayupSuggestion(geometry, carries),
+      carries: carries.filter(c => c.in_range).slice(0, 3),
+    };
+  }, [strategyOwner, geometry, teeCoord, greenCoord, teeCanvas, pinCanvas]);
+
   // Prior rounds' shots ON THIS HOLE, grouped per round, most-recent first, color-coded — the raw
   // material for the shot map. Only rounds with GPS-located shots on this hole; capped at 4 so the
   // canvas stays readable. Each shot persists start/end lat-lng (roundStore ShotResult).
@@ -2323,6 +2388,77 @@ export default function SmartVisionScreen() {
               </SvgG>
             );
           })()}
+          {/*
+            2026-08-24 — THE STRATEGIC OVERLAY (OWNER-ONLY, Tim's call).
+            Five pure functions that have existed since Phase S and were drawn by nobody. Gated to
+            the owner because this screen is under the 07-26 layout freeze; the workout rail set the
+            precedent for shipping an owner-gated surface mid-freeze.
+            Every number is finite-checked before it becomes an SVG attribute — a single NaN here is
+            the white-screen crash this file has been bitten by twice.
+          */}
+          {strategy && (
+            <SvgG opacity={0.9}>
+              {(() => {
+                const c = playerCanvas ?? teeCanvas;
+                const ppy = strategy.pxPerYard;
+                if (!c || ppy == null || !Number.isFinite(c.x) || !Number.isFinite(c.y)) return null;
+                return strategy.rings.map((ring) => {
+                  const r = ring.distance_yards * ppy;
+                  if (!Number.isFinite(r) || r <= 0 || r > imageW * 2) return null;
+                  const labelY = c.y - r;
+                  if (!Number.isFinite(labelY)) return null;
+                  return (
+                    <SvgG key={'ring-' + ring.distance_yards}>
+                      <SvgCircle
+                        cx={c.x} cy={c.y} r={r}
+                        stroke="rgba(250,204,21,0.45)" strokeWidth={1} strokeDasharray="4,6" fill="none"
+                      />
+                      <SvgText
+                        x={c.x} y={labelY - 3} fill="rgba(250,204,21,0.9)"
+                        fontSize={10} fontWeight="600" textAnchor="middle"
+                      >
+                        {ring.label}
+                      </SvgText>
+                    </SvgG>
+                  );
+                });
+              })()}
+              {[strategy.landing, strategy.layup].map((ann) => {
+                if (!ann) return null;
+                const px = projectLoc(ann.position);
+                if (!px || !Number.isFinite(px.x) || !Number.isFinite(px.y)) return null;
+                const isLayup = ann.kind === 'layup_suggestion';
+                return (
+                  <SvgG key={ann.id}>
+                    <SvgCircle
+                      cx={px.x} cy={px.y} r={9}
+                      fill={isLayup ? 'rgba(248,113,113,0.28)' : 'rgba(56,189,248,0.28)'}
+                      stroke={isLayup ? 'rgba(248,113,113,0.95)' : 'rgba(56,189,248,0.95)'}
+                      strokeWidth={1.5}
+                    />
+                    <SvgText
+                      x={px.x} y={px.y + 3.5} fill="#ffffff"
+                      fontSize={9} fontWeight="700" textAnchor="middle"
+                    >
+                      {ann.label}
+                    </SvgText>
+                  </SvgG>
+                );
+              })}
+              {strategy.carries.map((carry, i) => {
+                const y = 14 + i * 12;
+                if (!Number.isFinite(y)) return null;
+                return (
+                  <SvgText
+                    key={'carry-' + i} x={8} y={y}
+                    fill="rgba(248,113,113,0.95)" fontSize={9} fontWeight="600"
+                  >
+                    {`${carry.distance_yards}y carry \u2014 ${carry.hazard_label}`}
+                  </SvgText>
+                );
+              })}
+            </SvgG>
+          )}
           <SvgLine
             x1={teeCanvas.x}
             y1={teeCanvas.y}

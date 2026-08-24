@@ -11246,6 +11246,41 @@ check('LOCK: the watch pipe has something going down it — owner-gated, and it 
   })(),
   'all four watch senders are consumed by one owner-gated subscriber, wired to the bridge lifecycle, the spoken line and the toast stream — and no push can block or throw into a caller');
 
+check('LOCK: the SmartVision strategy layer is DRAWN, owner-gated, and cannot emit a NaN',
+  (() => {
+    /**
+     * 2026-08-24 (Tim's call — "owner-only first"). services/smartVisionOverlay has computed yardage
+     * rings, a landing zone, a lay-up target and danger carries since Phase S. Its own header calls
+     * the layer "the long-term differentiator vs other golf apps... Mapbox tiles are commodity;
+     * SmartPlay's strategic overlay is proprietary IP". Five pure functions. Zero callers. Never
+     * drawn once in three months — the single biggest built-and-never-connected item in the app.
+     *
+     * OWNER-GATED because app/smartvision.tsx is under the 07-26 layout freeze. The precedent is the
+     * workout rail (docs/OPEN-ITEMS.md §1b): a surface no tester can reach cannot regress theirs.
+     *
+     * The NaN clause is not ceremony. This file's crash history is non-finite numbers reaching
+     * react-native-svg — a single "NaN,NaN" in a points string throws in the native parser and
+     * white-screens the hole view on Android. Rings are the new risk: a radius is derived from a
+     * division, and a degenerate tee≈green makes it infinite.
+     */
+    const sv = read('app/smartvision.tsx');
+    const drawn = /computeYardageRings, computeLandingZone, computeLayupSuggestion, computeDangerCarries/.test(sv) &&
+      /const strategy = useMemo\(/.test(sv) &&
+      /\{strategy && \(/.test(sv);
+    // Gated, and the gate is what the memo keys off — not a stray boolean.
+    const gated = /const strategyOwner = useMemo\(/.test(sv) &&
+      /prof\.isOwnerEmail\(prof\.usePlayerProfileStore\.getState\(\)\.email\)/.test(sv) &&
+      /if \(!strategyOwner \|\| !geometry\) return null;/.test(sv);
+    // Every derived pixel is finite-checked before it can become an SVG attribute.
+    const nanSafe = /if \(!Number\.isFinite\(r\) \|\| r <= 0/.test(sv) &&
+      /if \(!px \|\| !Number\.isFinite\(px\.x\) \|\| !Number\.isFinite\(px\.y\)\) return null;/.test(sv) &&
+      /pxSpan \/ holeYards/.test(sv) && /Number\.isFinite\(holeYards\) && holeYards > 0/.test(sv);
+    // It must reuse the ONE projection this screen already owns, not introduce a second.
+    const oneProjection = /const px = projectLoc\(ann\.position\);/.test(sv);
+    return drawn && gated && nanSafe && oneProjection;
+  })(),
+  'the four strategy layers are drawn through the screen\'s own projectLoc, gated to the owner, with every derived radius and pixel finite-checked before it reaches react-native-svg');
+
 // ─── Orphaned exports — the half-build ratchet ─────────────────────────────────
 /**
  * 2026-08-24. Tim: *"an absolutely consistent theme of half built processes… I'm stuck in a 2-month

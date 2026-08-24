@@ -165,12 +165,12 @@ export function findOrphanExports(): string[] {
  */
 export const ORPHAN_BASELINE: Record<string, string> = {
   // ── WIRE — built, computed, and consumed by nothing ───────────────────────────
-  'services/smartVisionOverlay.ts :: computeYardageRings':
-    'WIRE — the strategic overlay its own header calls "the actual differentiator" and "proprietary IP". unprojectTilePixel and canPlayerCarry from this module ARE used; the five strategy layers are not.',
-  'services/smartVisionOverlay.ts :: computeLandingZone': 'WIRE — see computeYardageRings.',
-  'services/smartVisionOverlay.ts :: computeDangerCarries': 'WIRE — see computeYardageRings.',
-  'services/smartVisionOverlay.ts :: computeLayupSuggestion': 'WIRE — see computeYardageRings.',
-  'services/smartVisionOverlay.ts :: distanceToTarget': 'WIRE — see computeYardageRings (tap-to-target).',
+  'services/smartVisionOverlay.ts :: distanceToTarget':
+    'DUPE — a three-line Math.round(haversineYards(from, target)) with a null guard. The other four ' +
+    'strategy layers in this module were wired on 08-24; this one was not, because SmartVision ' +
+    'already owns tap-to-target distance (app/smartvision.tsx measureYards, which also applies the ' +
+    'plays-like adjustment this helper does not). Wiring it would create a SECOND answer to "how far ' +
+    'to the point I tapped" — the exact defect class fixed five times today. Delete candidate.',
   'services/walkingDetector.ts :: cartModeSuggestion':
     'WIRE — detects that the cart-mode setting disagrees with measured activity and offers the flip. Computed, never offered.',
   'services/patternEngine.ts :: getKevinShotResponse':
