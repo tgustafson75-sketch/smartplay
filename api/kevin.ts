@@ -859,6 +859,11 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
      * is stated only when it is actually known: an unknown number says nothing rather than
      * inventing one, which is the honesty rule this codebase keeps having to re-learn.
      */
+    /** Carries as [club, yards], built once so the live facts and the bag block cannot disagree. */
+    const bagFor: [string, number][] = clubDistances && typeof clubDistances === 'object'
+      ? Object.entries(clubDistances as Record<string, number>).filter(([, y]) => typeof y === 'number' && y > 0)
+      : [];
+
     const liveFactsBlock = (() => {
       const lines: string[] = [];
       const gy = greenYardages as { front: number | null; middle: number | null; back: number | null } | null;
@@ -936,6 +941,35 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
          * to club to, full stop; there is no judgement left to make.
          */
         const pl = (wx as { playsLike?: { actualYds: number; playsLikeYds: number; deltaYds: number; fromWind: number; fromTemp: number; fromWet: number; fromElevation: number } | null }).playsLike;
+        /**
+         * 2026-08-24 — DO THE LOOKUP IN CODE. The model does not get to do this arithmetic.
+         *
+         * Told "it plays 176" with a 4 iron carrying 181 in the bag, it answered "six iron, right in
+         * the six's wheelhouse" one time in three — a club carrying 162, fourteen yards short. Two
+         * rewrites of the rule (nearest → first at-or-above, plus three worked examples) took it
+         * from 0/3 to 2/3, and 2/3 is not a caddie. This is the same lesson as plays-like itself:
+         * a deterministic calculation belongs in code, and the model's job is the words around it.
+         *
+         * "First club at or above the playing number" — and when nothing covers it, the longest club
+         * with that said plainly, because pretending otherwise is how a player ends up short of water.
+         */
+        const clubFor = (() => {
+          if (!pl || bagFor.length === 0) return null;
+          const target = pl.playsLikeYds;
+          const sorted = [...bagFor].sort((a, b) => a[1] - b[1]);
+          const covers = sorted.find(([, y]) => y >= target);
+          if (covers) {
+            const shorter = [...sorted].reverse().find(([, y]) => y < target);
+            return { name: covers[0], yds: covers[1], covers: true, shorter };
+          }
+          const longest = sorted[sorted.length - 1];
+          return { name: longest[0], yds: longest[1], covers: false, shorter: undefined };
+        })();
+        if (clubFor) {
+          lines.push(clubFor.covers
+            ? `- THE CLUB FOR THIS SHOT IS THE ${clubFor.name.toUpperCase()} (${clubFor.yds} carry — the first club in their bag that covers ${pl!.playsLikeYds})${clubFor.shorter ? `. The ${clubFor.shorter[0]} carries ${clubFor.shorter[1]} and does NOT cover it, so it is the wrong answer no matter how it sounds` : ''}. This is arithmetic, already done for you — do not second-guess it and do not substitute a club that "feels" right.`
+            : `- NOTHING IN THEIR BAG COVERS ${pl!.playsLikeYds}. The longest is the ${clubFor.name} at ${clubFor.yds}. Say so plainly — give them the ${clubFor.name} and tell them it is all of it, or lay up. Never imply a club reaches a number it cannot.`);
+        }
         if (pl && Math.abs(pl.deltaYds) >= 3) {
           const why = [
             pl.fromWind ? `${Math.abs(pl.fromWind)} from the wind` : null,
