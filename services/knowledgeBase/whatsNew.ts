@@ -26,6 +26,19 @@ export interface WhatsNewEntry {
 }
 
 export const WHATS_NEW: WhatsNewEntry[] = [
+  // 2026-08-24 — the SmartMotion honesty pass.
+  {
+    when: 'Aug 2026',
+    note: 'I can tell you HOW you struck it now, not just that you did. The mic grades every strike — flush, thin, fat, off the heel or toe — so the Contact card says something real instead of "not cross-checked". A pure one sounds different and I can hear it.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'The swing count stopped lying to you. If I could only analyse one swing out of five, I say "heard 5 · analysed 1" rather than "1 swing detected" — because the microphone did hear them, and you should know the difference between me missing a swing and me not being able to read it.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'Your body numbers arrive with everything else. Sway, tilt, posture and weight used to sit blank until you tapped the video — they were waiting on the player to load. They don\'t wait any more.',
+  },
   // 2026-08-23 — the playing-number pass. Written for the PLAYER, not the changelog.
   {
     when: 'Aug 2026',
