@@ -245,9 +245,17 @@ const CASES: Case[] = [
     // scores moved to `extra` — they were in `on`, so the two payloads differed by TWO things and
     // the verdict was unattributable. A differential probe is only valid if ONE thing changes.
     extra: { scores: { 1: 5, 2: 4, 3: 6, 4: 5, 5: 7, 6: 4, 7: 5, 8: 6, 9: 5 } },
-    on: { priorRoundsAtCourse: 6 },
-    shows: /\b(six|6)\b|played (here|it) before|rounds here|been here|your (rounds|history) here|last time here/i,
-    absent: /first time|never played|no history|nothing to compare/i,
+    on: {
+      priorRoundsAtCourse: 6,
+      priorRoundsHere: [
+        { score: 44, vsPar: 8, holes: 9, daysAgo: 6 },
+        { score: 49, vsPar: 13, holes: 9, daysAgo: 20 },
+        { score: 46, vsPar: 10, holes: 9, daysAgo: 41 },
+      ],
+    },
+    // He must USE the numbers, not promise to look them up: 47 sits between his 44 and his 49.
+    shows: /\b44\b|\b49\b|\b46\b|best (here|round here)|middle of|better than|worse than|around your (usual|average)|typical(ly)? (here|shoot)/i,
+    absent: /let me check|i'?ll (check|look)|first time|never played|no history|nothing to compare/i,
     because: 'he has played here six times; treating him as a first-timer throws away the only comparison that answers the question',
   },
   {

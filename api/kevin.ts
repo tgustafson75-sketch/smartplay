@@ -498,6 +498,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       trustLevel = null,
       priorGreenRead = null,
       priorRoundsAtCourse = 0,
+      /** Last five rounds AT THIS COURSE — score, vs par, holes. The comparison, not just a count. */
+      priorRoundsHere = [],
       gpsLost = false,
       distanceFromTeeYds = null,
       greenYardages = null,
@@ -1075,6 +1077,18 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
         lines.push(`- You have read this green with them before: ${[pg.feet != null ? `${pg.feet} feet` : null, pg.slopePct != null ? `${pg.slopePct}% slope` : null, pg.note || null].filter(Boolean).join(', ')}. That is a real prior read — recall it as memory, not as a guess.`);
       }
       if (isRoundActive && typeof priorRoundsAtCourse === 'number') {
+        const ph = (priorRoundsHere as Array<{ score: number | null; vsPar: number | null; holes: number | null; daysAgo: number | null }>) ?? [];
+        if (ph.length > 0) {
+          /**
+           * 2026-08-24 — the actual scores, so "is that good for me here?" is answerable.
+           *
+           * With only a COUNT the caddie said "let me check what you've typically shot here" — a
+           * promise it could not keep. Give it the rounds and it can simply answer. Nine and
+           * eighteen hole rounds are not comparable, hence the hole count on each.
+           */
+          const best = ph.reduce((a, b) => ((b.score ?? 1e9) < (a.score ?? 1e9) ? b : a));
+          lines.push(`- WHAT THEY HAVE SHOT HERE (most recent first): ${ph.map(h => `${h.score}${h.vsPar != null ? ` (${h.vsPar > 0 ? '+' : ''}${h.vsPar})` : ''} over ${h.holes ?? '?'} holes${h.daysAgo != null ? `, ${h.daysAgo}d ago` : ''}`).join(' · ')}. Their best here is ${best.score}. Compare LIKE WITH LIKE — a nine-hole score is not a round. Answer from these numbers; never say you will "check" or "look it up", because this is the checking, already done.`);
+        }
         lines.push(priorRoundsAtCourse === 0
           ? `- FIRST TIME AT THIS COURSE: today sets the baseline. Never call a score here their "best yet" — of course it is.`
           : `- They have finished ${priorRoundsAtCourse} round${priorRoundsAtCourse === 1 ? '' : 's'} here before today.`);

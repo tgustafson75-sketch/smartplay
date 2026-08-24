@@ -594,6 +594,32 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       if (!gr || (gr.feetEst == null && gr.slopePct == null && !gr.text)) return null;
       return { feet: gr.feetEst ?? null, slopePct: gr.slopePct ?? null, note: gr.text || null };
     }, null),
+    /**
+     * 2026-08-24 — WHAT HE ACTUALLY SHOT HERE, not just how many times he has been.
+     *
+     * priorRoundsAtCourse sent a COUNT and nothing else, so asked "is that a good score for me at
+     * this course?" the caddie answered "let me check what you've typically shot here" — promising
+     * an action it cannot take, which is the empty-pleasantry failure in a new costume. It had the
+     * number six and no way to use it. roundHistory has carried totalScore, scoreVsPar and
+     * holesPlayed the whole time; the comparison was one filter away.
+     *
+     * Last five rounds here, newest first. Nine-hole and eighteen-hole rounds are not comparable, so
+     * the hole count rides along and the brain is told to compare like with like.
+     */
+    priorRoundsHere: safe(() => {
+      if (!activeCourseId) return [];
+      type RH = { courseId?: string; simulated?: boolean; endedAt?: number; totalScore?: number | null; scoreVsPar?: number | null; holesPlayed?: number | null };
+      return (r.roundHistory ?? [])
+        .filter((h: RH) => h.courseId === activeCourseId && !h.simulated && typeof h.totalScore === 'number' && (h.totalScore ?? 0) > 0)
+        .sort((a: RH, b: RH) => (b.endedAt ?? 0) - (a.endedAt ?? 0))
+        .slice(0, 5)
+        .map((h: RH) => ({
+          score: h.totalScore ?? null,
+          vsPar: typeof h.scoreVsPar === 'number' ? h.scoreVsPar : null,
+          holes: h.holesPlayed ?? null,
+          daysAgo: h.endedAt ? Math.max(0, Math.round((Date.now() - h.endedAt) / 86_400_000)) : null,
+        }));
+    }, []),
     /** 0 = first time here → frame it as a baseline, never "your best score yet". */
     priorRoundsAtCourse: safe(() => {
       if (!activeCourseId) return 0;
