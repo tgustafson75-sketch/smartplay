@@ -28,6 +28,10 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'The clubs you haven\'t tracked yet get YOUR numbers, not a stock chart. Once you\'ve logged a couple of clubs I know roughly how far you hit it, so the rest of the bag is scaled to you instead of to an average golfer. If you hit it long, your untracked 5 iron stops being listed as a stranger\'s 5 iron. Clubs you HAVE logged always win \u2014 this only fills the gaps.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'When you Mark Green, it now counts for your shot distances too. It was already changing the yardage I read you, but the distance recorded against your last shot on that hole still used the map\'s guess \u2014 so the number you heard and the number in your history could disagree. One answer now. Bad course coordinates can also no longer sneak in and wreck a hole\'s distances.',
   },
   // 2026-08-24 — the orphan sweep: things that were built months ago and never connected.

@@ -25,6 +25,7 @@ import { useClubBagStore } from '../../store/clubBagStore';
 import { recommendClubFromEquipmentIntelligence } from '../../services/distance/equipment_distance_modifier';
 import { composeShotRead } from '../../services/cnsShotRead';
 import { bagDistances } from '../../services/shotStrategy';
+import { STANDARD_CARRY_YARDS } from '../../services/standardBag';
 import { getLearnedCarryDistances } from '../../store/clubStatsStore';
 
 /** The pathological state behind every instance: ONE logged club, a wedge. */
@@ -192,5 +193,105 @@ describe('PRODUCER 5 — the carry bag has exactly one owner', () => {
     } as never);
     expect(bagDistances()).not.toHaveProperty('Putter');
     expect(getLearnedCarryDistances()).not.toHaveProperty('Putter');
+  });
+});
+
+/**
+ * 2026-08-24 (club sweep, step 2 — ONE OWNER, second instance).
+ *
+ * clubStatsStore.carryFor returned the RAW chart for a club with no data, while cnsShotRead — the
+ * read the player actually HEARS — has multiplied the same chart by personalBagScale() since 08-12
+ * (Tim's Arccos bag: wedges 30 yards above our defaults, driver within 8). So the spoken number and
+ * the Fit Profile / sim-round ladders answered "what do you carry your untracked 5 iron" differently.
+ * services/standardBag.personalCarryFor already did this correctly and had zero callers.
+ *
+ * The blast radius is the point: only the CHART BRANCH changed, and every safety-critical consumer
+ * gates on hasDistance() so it never reaches that branch. The last case pins exactly that.
+ */
+describe('PRODUCER 6 — the chart is calibrated to the player, in one place', () => {
+  const clear = () => useClubStatsStore.setState({ carry: {}, manual: {}, reps: {}, total: {} } as never);
+
+  it('an EMPTY bag is byte-identical to the raw chart — a new player sees no change', () => {
+    clear();
+    const st = useClubStatsStore.getState();
+    for (const c of ['5I', '7I', 'PW', 'Driver'] as const) {
+      expect(st.carryFor(c)).toBe(STANDARD_CARRY_YARDS[c]);
+    }
+  });
+
+  it('ONE measured club is not enough to calibrate — still the raw chart', () => {
+    useClubStatsStore.setState({
+      carry: { Driver: { club: 'Driver', samples: 5, avgYards: 300, lastYards: 300, lastUsedAt: 1 } },
+      manual: {}, reps: {}, total: {},
+    } as never);
+    // Below MIN_CLUBS_TO_CALIBRATE (2): one club cannot prove a bag.
+    expect(useClubStatsStore.getState().carryFor('5I')).toBe(STANDARD_CARRY_YARDS['5I']);
+  });
+
+  it('a long hitter gets his untracked clubs scaled UP, not stock chart numbers', () => {
+    useClubStatsStore.setState({
+      carry: {
+        Driver: { club: 'Driver', samples: 5, avgYards: Math.round(STANDARD_CARRY_YARDS.Driver * 1.2), lastYards: 1, lastUsedAt: 1 },
+        '7I': { club: '7I', samples: 5, avgYards: Math.round(STANDARD_CARRY_YARDS['7I'] * 1.2), lastYards: 1, lastUsedAt: 1 },
+      },
+      manual: {}, reps: {}, total: {},
+    } as never);
+    const fiveIron = useClubStatsStore.getState().carryFor('5I');
+    expect(fiveIron).toBeGreaterThan(STANDARD_CARRY_YARDS['5I']);
+    // Clamped at SCALE_MAX 1.3 — a calibration can stretch the chart, never invent a different player.
+    expect(fiveIron).toBeLessThanOrEqual(Math.round(STANDARD_CARRY_YARDS['5I'] * 1.3));
+  });
+
+  it('a SHORT hitter is scaled down, and the clamp holds at 0.8', () => {
+    useClubStatsStore.setState({
+      carry: {
+        Driver: { club: 'Driver', samples: 5, avgYards: Math.round(STANDARD_CARRY_YARDS.Driver * 0.6), lastYards: 1, lastUsedAt: 1 },
+        '7I': { club: '7I', samples: 5, avgYards: Math.round(STANDARD_CARRY_YARDS['7I'] * 0.6), lastYards: 1, lastUsedAt: 1 },
+      },
+      manual: {}, reps: {}, total: {},
+    } as never);
+    const fiveIron = useClubStatsStore.getState().carryFor('5I');
+    expect(fiveIron).toBeLessThan(STANDARD_CARRY_YARDS['5I']);
+    expect(fiveIron).toBeGreaterThanOrEqual(Math.round(STANDARD_CARRY_YARDS['5I'] * 0.8) - 1);
+  });
+
+  it('real data always beats the calibrated chart — scaling never overrides a measured club', () => {
+    useClubStatsStore.setState({
+      carry: {
+        Driver: { club: 'Driver', samples: 5, avgYards: 300, lastYards: 1, lastUsedAt: 1 },
+        '7I': { club: '7I', samples: 5, avgYards: 190, lastYards: 1, lastUsedAt: 1 },
+        '5I': { club: '5I', samples: 5, avgYards: 205, lastYards: 1, lastUsedAt: 1 },
+      },
+      manual: {}, reps: {}, total: {},
+    } as never);
+    expect(useClubStatsStore.getState().carryFor('5I')).toBe(205);
+  });
+
+  it('BLAST RADIUS — the caddie\'s bag is untouched: it gates on hasDistance and never reaches the chart', () => {
+    useClubStatsStore.setState({
+      carry: {
+        Driver: { club: 'Driver', samples: 5, avgYards: 300, lastYards: 1, lastUsedAt: 1 },
+        '7I': { club: '7I', samples: 5, avgYards: 190, lastYards: 1, lastUsedAt: 1 },
+      },
+      manual: {}, reps: {}, total: {},
+    } as never);
+    // Only the two clubs with evidence. No calibrated chart numbers leak into what the brain is told
+    // are the player's "real distances".
+    expect(Object.keys(bagDistances()).sort()).toEqual(['7I', 'Driver']);
+  });
+
+  it('does not recurse — carryFor asking about the bag must not call itself', () => {
+    useClubStatsStore.setState({
+      carry: {
+        Driver: { club: 'Driver', samples: 5, avgYards: 300, lastYards: 1, lastUsedAt: 1 },
+        '7I': { club: '7I', samples: 5, avgYards: 190, lastYards: 1, lastUsedAt: 1 },
+      },
+      manual: {}, reps: {}, total: {},
+    } as never);
+    expect(() => {
+      for (const c of ['3W', '5W', '4H', '3I', '6I', '8I', '9I', 'PW', 'GW', 'SW', 'LW'] as const) {
+        useClubStatsStore.getState().carryFor(c);
+      }
+    }).not.toThrow();
   });
 });

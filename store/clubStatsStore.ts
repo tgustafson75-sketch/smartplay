@@ -14,7 +14,7 @@
  */
 
 import { create } from 'zustand';
-import { STANDARD_CARRY_YARDS, ROLL_YARDS as SHARED_ROLL_YARDS } from '../services/standardBag';
+import { STANDARD_CARRY_YARDS, ROLL_YARDS as SHARED_ROLL_YARDS, personalCarryFor } from '../services/standardBag';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
 
@@ -75,6 +75,38 @@ export interface ClubStat {
  * Deliberately conservative. (Reconcile with smartfinder.estimateCarryTotal's rollout if they drift.)
  */
 const ROLL_YARDS: Record<ClubName, number> = SHARED_ROLL_YARDS;
+
+/**
+ * 2026-08-24 — what the player has actually PROVED for a club, with no chart fallback: measured
+ * carry → stated carry (My Bag) → tracked total minus typical roll. `null` means "no evidence".
+ *
+ * Split out so carryFor's chart branch can ask "what do their OTHER clubs prove?" without calling
+ * carryFor and recursing forever.
+ */
+type CarryLadders = {
+  carry: Partial<Record<ClubName, ClubStat>>;
+  total: Partial<Record<ClubName, ClubStat>>;
+  manual: Partial<Record<ClubName, number>>;
+};
+function ownCarry(g: CarryLadders, club: ClubName): number | null {
+  const c = g.carry[club];
+  if (c && c.samples > 0) return c.avgYards;                    // measured carry
+  if (g.manual[club] != null) return g.manual[club]!;           // stated carry (My Bag)
+  const t = g.total[club];
+  if (t && t.samples > 0) return Math.max(1, Math.round(t.avgYards - ROLL_YARDS[club])); // total − roll
+  return null;
+}
+
+/** Every club the player has real evidence for, as {club: carry}. The input personalBagScale needs. */
+function ownCarryMap(g: CarryLadders): Partial<Record<string, number>> {
+  const out: Partial<Record<string, number>> = {};
+  for (const club of CLUB_ORDER) {
+    if (club === 'Putter') continue;
+    const y = ownCarry(g, club);
+    if (y != null && y > 0) out[club] = y;
+  }
+  return out;
+}
 
 /**
  * 2026-08-10 (Tim — "164-yard shot and the caddie defaults to gap wedge") — the PLAUSIBILITY BAND.
@@ -231,12 +263,30 @@ export const useClubStatsStore = create<ClubStatsState>()(
       record: (club, yards) => get().recordTotal(club, yards), // deprecated alias
       carryFor: (club) => {
         const g = get();
-        const c = g.carry[club];
-        if (c && c.samples > 0) return c.avgYards;              // measured carry
-        if (g.manual[club] != null) return g.manual[club]!;     // stated carry (My Bag)
-        const t = g.total[club];
-        if (t && t.samples > 0) return Math.max(1, Math.round(t.avgYards - ROLL_YARDS[club])); // total − roll (est)
-        return STANDARD_YARDS[club];                            // chart (a carry chart)
+        const own = ownCarry(g, club);
+        if (own != null) return own;
+        /**
+         * 2026-08-24 (club sweep, step 2 — ONE OWNER) — THE CHART, SCALED TO THIS PLAYER.
+         *
+         * This returned the RAW chart for a club with no data. services/cnsShotRead — the read the
+         * player actually HEARS — has multiplied the same chart by personalBagScale() since 08-12,
+         * after Tim's Arccos bag showed his wedges 30 yards above our defaults while his driver was
+         * within 8. So the caddie's spoken number and the Fit Profile / sim-round ladders answered
+         * "what do you carry your untracked 5 iron" differently, and only one of them was calibrated.
+         *
+         * services/standardBag.personalCarryFor is the shared function that does this correctly —
+         * real data wins, else the chart scaled by the ratio the player's OWN clubs prove — and it
+         * had zero callers. Same shape as the duplicate carry bag: the right implementation existed,
+         * unused, while consumers each did their own thing.
+         *
+         * SAFE BY CONSTRUCTION: personalBagScale needs MIN_CLUBS_TO_CALIBRATE (2) plausible clubs and
+         * returns null below that, so personalCarryFor falls through to the raw chart. A player with
+         * 0 or 1 measured clubs gets byte-identical behaviour to before. The scale is also clamped to
+         * [0.8, 1.3] and uses the median, so one mis-attributed shot cannot drag the bag.
+         *
+         * No recursion: ownCarryMap reads the persisted ladders directly and never calls carryFor.
+         */
+        return personalCarryFor(club, ownCarryMap(g)) ?? STANDARD_YARDS[club];
       },
       totalFor: (club) => {
         const g = get();

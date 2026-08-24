@@ -10998,6 +10998,44 @@ check('LOCK: one answer to "where is the green for this hole" — the closer can
   })(),
   'the hole closer delegates to getGreenCentroid, keeps no private cascade, and the rival closeHoleAtTransition entry point is gone — a marked green counts for recorded distance, and an out-of-range coordinate never becomes a green');
 
+check('LOCK: "the chart, scaled to this player" has ONE owner',
+  (() => {
+    /**
+     * 2026-08-24 (club sweep, step 2 — second instance of the same shape).
+     *
+     * clubStatsStore.carryFor returned the RAW chart for a club with no data, while cnsShotRead —
+     * the read the player actually HEARS — multiplied the same chart by personalBagScale(), added
+     * 08-12 after Tim's Arccos bag showed his wedges 30 yards above our defaults and his driver
+     * within 8. So the spoken number and the Fit Profile / sim-round ladders gave different answers
+     * to "what do you carry your untracked 5 iron", and only one of them was calibrated.
+     *
+     * services/standardBag owns the calibration: personalBagScale (the ratio) and personalCarryFor
+     * (the chart scaled by it). The latter had ZERO callers — the correct implementation sitting
+     * unused while consumers each did their own thing, exactly like the duplicate carry bag.
+     *
+     * Assert the SHAPE: the calibration math lives in standardBag, both consumers import from it,
+     * and nobody re-derives a ratio-of-medians locally.
+     */
+    const sb = read('services/standardBag.ts');
+    const cs = read('store/clubStatsStore.ts');
+    const cns = read('services/cnsShotRead.ts');
+    // The owner holds BOTH halves, with the guards that make a calibration safe.
+    const ownerHolds = /export function personalBagScale/.test(sb) &&
+      /export function personalCarryFor/.test(sb) &&
+      /const MIN_CLUBS_TO_CALIBRATE = 2;/.test(sb) &&           // one club cannot prove a bag
+      /Math\.max\(SCALE_MIN, Math\.min\(SCALE_MAX, mid\)\)/.test(sb);  // median, clamped
+    // Both consumers route through it rather than hand-rolling the scale.
+    const storeUsesOwner = /personalCarryFor\(club, ownCarryMap\(g\)\)/.test(cs);
+    const readUsesOwner = /personalBagScale\(bag as Partial<Record<string, number>>\)/.test(cns);
+    // ...and the store's chart branch is the ONLY place it applies (gated callers never reach it).
+    const noRawChartFallback = !/return STANDARD_YARDS\[club\];\s*\/\/ chart/.test(cs);
+    // No local re-derivation of the ratio math outside the owner.
+    const noLocalScale = [cs, cns, read('services/bagRecommendation.ts')]
+      .every(src => !/yards \/ std/.test(src));
+    return ownerHolds && storeUsesOwner && readUsesOwner && noRawChartFallback && noLocalScale;
+  })(),
+  'personalBagScale + personalCarryFor live in standardBag; carryFor and cnsShotRead both consume them and neither re-derives the ratio — one answer for an untracked club');
+
 // ─── Orphaned exports — the half-build ratchet ─────────────────────────────────
 /**
  * 2026-08-24. Tim: *"an absolutely consistent theme of half built processes… I'm stuck in a 2-month
