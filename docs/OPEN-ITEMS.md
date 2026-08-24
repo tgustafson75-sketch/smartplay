@@ -84,10 +84,43 @@ shipped.
 Practice/cage history ("how has my range work been going"), watch swing data, tee-box goals, points
 progress, tournament state. The one that DID change a club call — the SmartFinder lock — is fixed.
 
-## 6. COURSE PRELOAD — visibility, not engine
-Selecting a course already downloads it. There is no "ready offline" state, no queue, no confirmation
-before leaving the house. `services/connectionClass.ts` gates unattended pulls on measured throughput.
-Small surfacing job; arguably QC rather than building.
+## 6. COURSE PRELOAD — REFRAMED 2026-08-24: this is the RELEASE MODEL, not a nicety
+
+Tim, 08-24: *"before release, it'll only pull, like, three courses when the user opens the app menu.
+It'll pull three to five courses near them, or once they demand. So it's going to be much smaller
+going out."*
+
+That makes this a launch blocker rather than a surfacing job, because **459 course screenshots /
+71 MB are genuinely bundled** into the binary via `require()` in `data/localCourseImages.ts` — 34% of
+the whole 207 MB assets tree, against a 200 MB Google Play AAB base-module cap. Deleting them is the
+saving; the on-demand prefetch is what makes deleting them safe.
+
+**Built:** `locateNearbyCourses(lat, lng, {limit: 8})` is live at `play.tsx:938`. `downloadCourse` has
+three callers (arrival, explicit pick in Play, caddie.tsx).
+
+**Not built:** the multi-course prefetch. The only auto-download today is the **single nearest course
+within 1.5 km** (`play.tsx:978`) — the player has already arrived. Nothing pulls courses near them
+from home, which is the entire point of the release model.
+
+**Correction to this section's previous wording:** it said `connectionClass` "gates unattended pulls on
+measured throughput." It does not. `measureConnection` is called at `play.tsx:1016` and only LOGS the
+verdict before proceeding — deliberately, and correctly, because the round depends on that one
+download. `mayPullCourseNow`, the actual gate, has **zero callers** and sits in `ORPHAN_BASELINE` as
+PARKED. It is waiting for exactly this feature. So is `isCourseDownloaded`, the "ready offline" check.
+
+**ORDER OF OPERATIONS — this plan can itself ship half-built:**
+1. Build the 3–5 nearby prefetch (consumes `mayPullCourseNow`, deletes its baseline line)
+2. Surface the ready-offline state (consumes `isCourseDownloaded`, deletes its line)
+3. Prove both on a course actually played
+4. **Only then** delete the 459 images and the `*_HOLE_IMAGES` maps
+
+Reverse 3 and 4 and a user opens the app on the first tee with no imagery. Keep
+`LOCAL_COURSE_CENTROIDS` in every case — it is a pure lat/lng table read by `courseGeometryService`
+and `courseDataOrchestrator`, independent of the image maps.
+
+Done 08-24 (`3d278d0e`): the 27 files referenced by nothing at all (all of `rancho-california` and
+`webster-dudley`, whose maps are literally `{}`) were deleted. `assets/courses` is now 459 on disk /
+459 required — a clean 1:1. That was repo weight, not binary weight; those were never bundled.
 
 ## 7. UNSWEPT CODE
 `holeGeometryDerivation` and the download/orchestrator path — both network-bound, so device-only
