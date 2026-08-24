@@ -9969,6 +9969,31 @@ check('LOCK: an app-inferred club is attribution, never "advice the player follo
   })(),
   'spoken/engine recommendations score adherence; inferred stamps attribute the club only');
 
+check('LOCK: the cached system prompt holds nothing that changes shot to shot',
+  (() => {
+    /**
+     * 2026-08-24 (Tim: "$50 yesterday, all from sonnet 4.6") — THE CACHE NEVER HIT IN A REAL ROUND.
+     *
+     * api/_aiProvider caches the whole system prompt as one block with a 1-hour TTL. liveFactsBlock
+     * sat INSIDE it — yardage, hole, weather, the computed club — so the cache key changed on every
+     * shot: never a read, always a write, and a 1h write costs 2x. Measured live at 19,329 tokens
+     * per turn. Every round paid double for a cache built to make it cheaper.
+     *
+     * Facts belong in the MESSAGE, doctrine in the SYSTEM. Guard the boundary, because the cost of
+     * breaking it is invisible — nothing fails, the bill just quietly doubles.
+     */
+    const k = read('api/kevin.ts');
+    const sys = k.slice(k.indexOf('const systemPrompt = `'), k.indexOf('const systemPromptWithKB'));
+    // The per-shot facts must NOT be interpolated into the cached prompt...
+    const factsOutOfSystem = !/\$\{liveFactsBlock\}/.test(sys);
+    // ...and must still reach the model, on the message side.
+    const factsInMessage = /liveFactsPrefix/.test(k) && /\$\{liveFactsPrefix\}/.test(k);
+    // The bag was already on the message side; keep it there.
+    const bagInMessage = !/\$\{bagBlock\}/.test(sys);
+    return factsOutOfSystem && factsInMessage && bagInMessage;
+  })(),
+  'per-shot facts ride the message; the cached prompt stays stable for a whole round');
+
 check('LOCK: the body read does not wait for the video player to load',
   (() => {
     /**
