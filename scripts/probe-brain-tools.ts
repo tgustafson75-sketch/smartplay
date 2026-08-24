@@ -122,6 +122,17 @@ async function probeIntents(): Promise<void> {
 const ON_COURSE = {
   player: { name: 'Tim', handicap: 14 },
   round: { active: true, currentHole: 7, courseName: 'Wachusett', holePar: 4, holeYardage: 150 },
+  /**
+   * 2026-08-24 — A REAL ROUND INCLUDES A BAG.
+   *
+   * This context gave the caddie a round and a yardage and no clubs, so "I'm 150 out, what should I
+   * hit" correctly produced no recommend_club — the doctrine is to answer from THEIR carries, never
+   * generic assumptions, so with no carries the honest move is to ask. The case scored that right
+   * behaviour a defect, and the comment above it already said "given a real round it fires both".
+   * A round without a bag was never a real round. Fourth time this probe has failed correct
+   * behaviour. [[my-measurement-is-the-least-reliable-part]]
+   */
+  bag: { '7 iron': 150, '8 iron': 138, '6 iron': 162, '5 iron': 172, 'pitching wedge': 125 },
 };
 
 const CASES: Array<{ expect: string | null; say: string; ctx?: Record<string, unknown> }> = [
@@ -212,7 +223,7 @@ async function ask(say: string, ctx?: Record<string, unknown>): Promise<{ tools:
   const body = useKevin
     ? {
         message: say, history: [],
-        ...(ctx ? { isRoundActive: round.active, currentHole: round.currentHole, activeCourse: round.courseName, currentPar: round.holePar, currentYardage: round.holeYardage } : {}),
+        ...(ctx ? { isRoundActive: round.active, currentHole: round.currentHole, activeCourse: round.courseName, currentPar: round.holePar, currentYardage: round.holeYardage, clubDistances: ctx.bag ?? undefined } : {}),
       }
     : { text: say, history: [], ...(ctx ? { context: ctx } : {}) };
   const started = Date.now();
