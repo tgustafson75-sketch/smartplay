@@ -1002,7 +1002,7 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
         })();
         if (clubFor) {
           lines.push(clubFor.covers
-            ? `- THE CLUB FOR THIS SHOT IS THE ${clubFor.name.toUpperCase()} (${clubFor.yds} carry — the first club in their bag that covers ${pl!.playsLikeYds})${clubFor.shorter ? `. The ${clubFor.shorter[0]} carries ${clubFor.shorter[1]} and does NOT cover it, so it is the wrong answer no matter how it sounds` : ''}. This is arithmetic, already done for you — do not second-guess it and do not substitute a club that "feels" right.`
+            ? `- THE CLUB FOR THIS SHOT IS THE ${clubFor.name.toUpperCase()} (${clubFor.yds} carry — the first club in their bag that covers ${pl!.playsLikeYds})${clubFor.shorter ? `. The ${clubFor.shorter[0]} carries ${clubFor.shorter[1]} and does NOT cover it, so it is the wrong answer no matter how it sounds` : ''}. This is arithmetic, already done for you — do not second-guess it and do not substitute a club that "feels" right. THE CLUB IS SETTLED; EVERYTHING ELSE STILL SHAPES THE SHOT — their miss still moves the aim point, that club's known shape still decides the start line, and the lie and hazards still decide how safe the target is. A settled club is not a finished answer.`
             : `- NOTHING IN THEIR BAG COVERS ${pl!.playsLikeYds}. The longest is the ${clubFor.name} at ${clubFor.yds}. Say so plainly — give them the ${clubFor.name} and tell them it is all of it, or lay up. Never imply a club reaches a number it cannot.`);
         }
         if (pl && Math.abs(pl.deltaYds) >= 3) {
@@ -1058,7 +1058,7 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
                   : marginYds >= 5 && (posture === 'safe' || posture === 'conservative')
                     ? ` MARGIN: only ${marginYds} yards and they have asked you to play SAFE — lay up, and say what it leaves.`
                     : ` MARGIN: only ${marginYds} yards — that is the edge, and worth saying plainly if they ask whether to go.`;
-          lines.push(`- THE CLUB FOR THIS SHOT IS THE ${covers[0].toUpperCase()} (${covers[1]} carry, the first club that covers ${target})${why}. Arithmetic, already done — do not substitute a club that merely feels right, and never one carrying less than ${target} while a longer one is in the bag.${speedLossYds > 0 ? ' Give them the club and a short reason they will recognise; do not lecture them about their body.' : ''}${verdict}`);
+          lines.push(`- THE CLUB FOR THIS SHOT IS THE ${covers[0].toUpperCase()} (${covers[1]} carry, the first club that covers ${target})${why}. Arithmetic, already done — do not substitute a club that merely feels right, and never one carrying less than ${target} while a longer one is in the bag. THE CLUB IS SETTLED; EVERYTHING ELSE STILL SHAPES THE SHOT — their miss still moves the aim point, that club's known shape still decides the start line, and the lie and hazards still decide how safe the target is. A settled club is not a finished answer.${speedLossYds > 0 ? ' Give them the club and a short reason they will recognise; do not lecture them about their body.' : ''}${verdict}`);
         } else {
           const longest = sorted[sorted.length - 1]!;
           lines.push(`- NOTHING IN THEIR BAG COVERS ${target}${why}. The longest is the ${longest[0]} at ${longest[1]} — say so plainly rather than implying it reaches.`);
