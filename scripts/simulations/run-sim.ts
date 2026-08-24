@@ -10924,6 +10924,46 @@ check('LOCK: the carry bag has ONE owner — nothing rebuilds it from carryFor()
   })(),
   'getLearnedCarryDistances is the single owner of the carry bag; shotStrategy delegates to it and no other module reconstructs the bag from carryFor');
 
+check('LOCK: the caddie is told the player\'s own history — built 07-04, reached no brain until 08-24',
+  (() => {
+    /**
+     * 2026-08-24 (orphan sweep). services/caddieHistoryContext.historyPromptBlock composes the
+     * player's recent rounds, every course they have played, and their practice focuses. Built
+     * 07-04, given a sim-contamination fix 07-30, and called by NOTHING for seven weeks — so "how
+     * was my last round", "what courses have I played" and "what have I been working on" were
+     * unanswerable, while `priorRoundsHere` covered only the CURRENT course.
+     * store/practicePlanStore.practicePlanPromptBlock was the same, down to a docstring claiming it
+     * was already safe to call from kevin.
+     *
+     * Assert the CHAIN, not the presence of a function: composed → sent on the one payload →
+     * destructured by the brain → interpolated into the prompt. Any one link missing and the player
+     * hears "let me go and look that up" about their own golf.
+     * [[grep-guards-cant-see-dead-code]] [[the-app-usually-already-knows]]
+     */
+    const hist = read('services/caddieHistoryContext.ts');
+    const plan = read('store/practicePlanStore.ts');
+    const body = read('services/caddieRequestBody.ts');
+    const brain = read('api/kevin.ts');
+    const composes = /export function historyPromptBlock/.test(hist) &&
+      /export function practicePlanPromptBlock/.test(plan) &&
+      /filter\(\(r\) => !r\.simulated\)/.test(hist);   // a narrated demo round is never recited as real play
+    const sent = /playerHistoryBlock: safe\(/.test(body) && /h\.historyPromptBlock\(\)/.test(body) &&
+      /practicePlanBlock: safe\(/.test(body) && /pp\.practicePlanPromptBlock\(\)/.test(body);
+    const received = /playerHistoryBlock = null/.test(brain) && /practicePlanBlock = null/.test(brain) &&
+      /const _playerHistory: string \| null = capOrNull\(playerHistoryBlock/.test(brain) &&
+      /const _practicePlan: string \| null = capOrNull\(practicePlanBlock/.test(brain);
+    const spoken = /\$\{_playerHistory \?/.test(brain) && /\$\{_practicePlan \?/.test(brain);
+    /**
+     * And it must ride the CACHED side. Both change at most once a round, so on the message side
+     * they would be billed at full price on every single turn — the cousin of the 08-24 cache
+     * defect, and just as invisible: nothing fails, the bill quietly rises.
+     */
+    const sys = brain.slice(brain.indexOf('const systemPrompt = `'), brain.indexOf('const systemPromptWithKB'));
+    const cached = /\$\{_playerHistory \?/.test(sys) && /\$\{_practicePlan \?/.test(sys);
+    return composes && sent && received && spoken && cached;
+  })(),
+  'recent rounds, courses played, practice focus and the weekly plan are composed, sent on the one payload, destructured by the brain and interpolated into the CACHED prompt');
+
 // ─── Orphaned exports — the half-build ratchet ─────────────────────────────────
 /**
  * 2026-08-24. Tim: *"an absolutely consistent theme of half built processes… I'm stuck in a 2-month

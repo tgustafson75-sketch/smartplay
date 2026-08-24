@@ -480,6 +480,36 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       };
       return ct.describeBagTendencies(ct.clubTendencies(all as never, carryFor, cn.normalizeClub));
     }, []),
+    /**
+     * 2026-08-24 (orphan sweep) — THE PLAYER'S OWN HISTORY, which no brain had ever seen.
+     *
+     * services/caddieHistoryContext.historyPromptBlock() has existed since 07-04 — recent rounds
+     * with scores and courses, every course played, and the practice focuses by session count. It
+     * was even given a sim-contamination fix on 07-30 so a narrated demo round could never be
+     * recited as real play. It had ZERO callers. Meanwhile `priorRoundsHere` (below) filters to the
+     * CURRENT course only, so "how was my last round", "what courses have I played" and "what have I
+     * been working on" were unanswerable by a caddie whose whole premise is that it knows you.
+     *
+     * store/practicePlanStore.practicePlanPromptBlock() is the same story: written 07-04, its own
+     * docstring says it is "safe to call from services (buildPipecatContext, kevin)", and nothing
+     * called it. It self-gates to '' until the player has actually engaged the plan.
+     *
+     * COST NOTE — both belong on the SYSTEM side, and kevin puts them there. They change at most
+     * once a round (a round ending, a practice session logged), never shot to shot, so they ride the
+     * cached block for ~$0.30/M on every turn after the first rather than full price every turn.
+     * Putting them on the message side would have been the cousin of the 08-24 cache defect.
+     */
+    playerHistoryBlock: safe(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const h = require('./caddieHistoryContext') as typeof import('./caddieHistoryContext');
+      return h.historyPromptBlock() || null;
+    }, null),
+    /** The stated weekly plan — goals, challenges, open reminders. Empty until they engage it. */
+    practicePlanBlock: safe(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pp = require('../store/practicePlanStore') as typeof import('../store/practicePlanStore');
+      return pp.practicePlanPromptBlock() || null;
+    }, null),
     /** Phrases this player actually uses — the difference between his caddie and a generic one. */
     playerVocabulary: safe(() => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports

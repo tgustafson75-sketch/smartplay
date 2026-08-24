@@ -26,6 +26,15 @@ export interface WhatsNewEntry {
 }
 
 export const WHATS_NEW: WhatsNewEntry[] = [
+  // 2026-08-24 — the orphan sweep: things that were built months ago and never connected.
+  {
+    when: 'Aug 2026',
+    note: 'Ask me how your last round went. I know your recent scores, every course you\'ve played and what you\'ve been grinding on in practice — so "how did I do last time out?" gets an answer instead of me offering to go and look it up. I could only ever talk about the course you were standing on before.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'Your weekly practice plan steers my coaching now. If you\'ve written down what you\'re working on and what\'s giving you trouble, I weigh it when I suggest a drill or explain a miss, instead of coaching you as though I\'d never read it.',
+  },
   {
     when: 'Aug 2026',
     note: 'I know what you\'ve shot here before. Ask "is that a good score for me at this course?" and I answer from your actual rounds instead of offering to go and look something up.',

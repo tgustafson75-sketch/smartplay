@@ -165,8 +165,6 @@ export function findOrphanExports(): string[] {
  */
 export const ORPHAN_BASELINE: Record<string, string> = {
   // ── WIRE — built, computed, and consumed by nothing ───────────────────────────
-  'services/caddieHistoryContext.ts :: historyPromptBlock':
-    'WIRE — recent rounds + courses played + practice focus, built 07-04 and given a sim-contamination fix 07-30, wired to no brain. The payload carries priorRoundsHere, which is THIS COURSE only, so "how was my last round" / "what have I been working on" are unanswerable. docs/OPEN-ITEMS.md §5 lists this as an unbuilt gap; it is built.',
   'services/smartVisionOverlay.ts :: computeYardageRings':
     'WIRE — the strategic overlay its own header calls "the actual differentiator" and "proprietary IP". unprojectTilePixel and canPlayerCarry from this module ARE used; the five strategy layers are not.',
   'services/smartVisionOverlay.ts :: computeLandingZone': 'WIRE — see computeYardageRings.',
@@ -304,8 +302,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
   'store/guestProfileStore.ts :: findGuestByName': 'TRIAGE',
 
   // ── ADDED 2026-08-24 (second pass): surfaced once COMMENTS stopped counting as references ──
-  'store/practicePlanStore.ts :: practicePlanPromptBlock':
-    'WIRE — a second prompt block for the caddie, same shape as historyPromptBlock. Its own file says \"practicePlanPromptBlock (below) feeds this into the caddie\". It does not.',
   'services/watchBridge.ts :: sendLiveScore':
     'WIRE — Wear OS is RUNNING on Tim\u2019s Galaxy Watch, and four of the pushes to it are wired to nothing.',
   'services/watchBridge.ts :: sendNotification':

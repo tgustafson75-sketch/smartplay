@@ -523,6 +523,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
        * built to end, and a close cousin of the hole-9 bug fixed yesterday.
        */
       yardageInsight = null,
+      /**
+       * 2026-08-24 (orphan sweep) — the player's own history and weekly plan, both built 07-04 and
+       * read by NO brain until today. See the note in services/caddieRequestBody. Both are
+       * pre-composed, self-gating blocks: empty string when there is nothing to say.
+       *
+       * These are STABLE WITHIN A ROUND, so they belong in the cached system prompt beside the
+       * derived tendencies — not on the message side with the per-shot facts. Getting that backwards
+       * is what cost $50 in a day.
+       */
+      playerHistoryBlock = null,
+      practicePlanBlock = null,
     } = body;
 
     const cap = (v: unknown, max: number): string =>
@@ -551,6 +562,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const _cecilyMode: boolean = cecilyMode === true;
     const _golferModel: string | null = capOrNull(golfer_model_snippet, 2000);
     const _recentAnalyses: string | null = capOrNull(recent_analyses_snippet, 2000);
+    const _playerHistory: string | null = capOrNull(playerHistoryBlock, 1200);
+    const _practicePlan: string | null = capOrNull(practicePlanBlock, 1200);
     // 2026-05-23 — Persona Knowledge Layer. When persona='tank' AND the
     // user message matches a KB entry above the score threshold, inject
     // the top entries as a teaching-wisdom block. The brain riffs off
@@ -1301,6 +1314,8 @@ When Cecily Mode is on, you become a warm, playful, age-appropriate companion. B
 This mode is gated by an explicit user toggle in Settings. When OFF, normal golf-only behavior resumes.` : ''}
 ${_golferModel ? `\nDERIVED TENDENCIES (private; use to be SPECIFIC instead of generic — never recite these literally):\n${_golferModel}` : ''}
 ${_recentAnalyses ? `\nWHAT YOU JUST TOLD THEM (last few exchanges in this session — don't repeat verbatim, but stay coherent):\n${_recentAnalyses}` : ''}
+${_playerHistory ? `\n${_playerHistory}` : ''}
+${_practicePlan ? `\n${_practicePlan}` : ''}
 ${_personaKBBlock ? `\n${_personaKBBlock}` : ''}
 ${_unifiedContextBlock ? `\n${_unifiedContextBlock}` : ''}
 
