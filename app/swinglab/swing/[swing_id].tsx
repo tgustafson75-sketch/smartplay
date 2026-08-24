@@ -75,6 +75,7 @@ import type { SimilarMatch, ReferenceSwing } from '../../../services/swingDataba
 import type { PoseEstimate } from '../../../services/poseEstimator';
 import type { SwingComparison } from '../../../services/swingComparisonEngine';
 import { getApiBaseUrl } from '../../../services/apiBase';
+import { titleForUpload } from '../../../services/swing/swingTitle';
 
 // 2026-06-12 — shared Smart Motion control badges, so Library video controls match
 // the SmartMotion review badges (whole-app control consistency).
@@ -2192,7 +2193,7 @@ export default function SwingDetail() {
           </TouchableOpacity>
           <View style={{ flex: 1, minWidth: 0, alignItems: 'center', paddingHorizontal: 6 }}>
             <Text style={[styles.title, { color: colors.text_primary, flex: 0, maxWidth: '100%' }]} numberOfLines={1}>
-              {session.upload?.notes ?? `${session.club} swing`}
+              {titleForUpload(session.upload?.notes, session.upload?.angleOverride, `${session.club} swing`)}
             </Text>
             {/* Phase 2 — capture-kind badge: the entry identifies its own source. */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
@@ -2301,7 +2302,7 @@ export default function SwingDetail() {
                     const sendUri = (await resolveClipUri(clip)) ?? clip;
                     return sendSwingToTank({
                       videoUri: sendUri,
-                      swingTitle: session.upload?.notes ?? `${session.club} swing`,
+                      swingTitle: titleForUpload(session.upload?.notes, session.upload?.angleOverride, `${session.club} swing`),
                       contextLines: ctx,
                     });
                   })().then(result => {

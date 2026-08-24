@@ -11370,6 +11370,39 @@ check('LOCK: an aborted swing locate SAYS WHO ABORTED IT',
   })(),
   'both locate paths stamp dead_host vs ceiling at the abort site and log it with the probe verdict and elapsed time, so the next report says which failure it was');
 
+check('LOCK: the swing angle is a FIELD, never baked into a display string',
+  (() => {
+    /**
+     * 2026-08-24 (Tim's screenshot: title "Smart Motion down-the-line swing" directly above a chip
+     * reading "Face-on", on the same screen, for the same swing).
+     *
+     * The angle had two owners. The title was `upload.notes` — a string FROZEN at capture with the
+     * angle written into it — and the chip reads `upload.angleOverride`, which exists precisely to
+     * be corrected afterwards. Only one of them tracked the correction, so the screen contradicted
+     * itself. Same shape as the carry bag, the green resolver, the club catalog and the club label
+     * map, and the fifth time today one fact had two representations.
+     *
+     * The capture ternary carried a second bug: `angle === 'face_on' ? 'face-on' : 'down-the-line'`
+     * rendered ANY other value — null, a putt, glasses POV — as a confident "down-the-line". An
+     * unknown angle was displayed as a known one. [[angle-is-a-fact-not-a-question]]: it is a fact,
+     * so it lives in a field and is displayed from that field.
+     */
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const title = read('services/swing/swingTitle.ts');
+    const screen = read('app/swinglab/swing/[swing_id].tsx');
+    // The capture path must not embed the angle, and must not resurrect the false-confidence ternary.
+    const noBake = /notes: 'Smart Motion swing',/.test(sm) &&
+      !/notes: `Smart Motion \$\{angle === 'face_on' \? 'face-on' : 'down-the-line'\} swing`/.test(sm);
+    // One owner for the displayed title, and it is pure (the rule lives where it can be tested).
+    const oneOwner = /export function titleForUpload\(/.test(title) &&
+      !/^import /m.test(title) &&
+      /titleForUpload\(session\.upload\?\.notes, session\.upload\?\.angleOverride/.test(screen);
+    // An absent override is not an authority — it must not rewrite anything.
+    const overrideOnly = /if \(!angleOverride\) return raw;/.test(title);
+    return noBake && oneOwner && overrideOnly;
+  })(),
+  'the capture path stores no angle in the title, the displayed title is derived by one pure owner, and only an explicit override may heal a stale legacy title');
+
 // ─── Orphaned exports — the half-build ratchet ─────────────────────────────────
 /**
  * 2026-08-24. Tim: *"an absolutely consistent theme of half built processes… I'm stuck in a 2-month

@@ -28,6 +28,10 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'The swing title and the angle tag agree now. A swing could show "down-the-line" in its title and "Face-on" on the tag right underneath \u2014 the title was written once when you filmed and never updated when the angle was corrected. The angle lives in one place now, and swings already saved get fixed on screen.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'If you tell me a number, I club to YOUR number. Shoot it with a rangefinder or just say it, and that is the distance I work from \u2014 I was quoting your number back to you while quietly picking the club for the scorecard yardage, which on a hole playing longer than the card meant a club too little. Say the number and it is the number.',
   },
   {

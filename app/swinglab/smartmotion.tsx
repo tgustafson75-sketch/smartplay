@@ -2170,7 +2170,23 @@ export default function SmartMotion() {
         const perspective: 'pov_self' | 'watching_someone' = activeMember ? 'watching_someone' : 'pov_self';
         const uploadMeta = {
           uploaded_at: Date.now(),
-          notes: `Smart Motion ${angle === 'face_on' ? 'face-on' : 'down-the-line'} swing`,
+          /**
+           * 2026-08-24 (Tim's screenshot: title "Smart Motion down-the-line swing", chip "Face-on",
+           * on the same screen) — THE ANGLE DOES NOT BELONG IN THE TITLE.
+           *
+           * This baked the angle into a FROZEN display string at save time, while the chip below it
+           * reads `upload.angleOverride` — which can be set or corrected AFTERWARDS. Two owners of
+           * one fact, and only one of them tracks changes, so the screen contradicted itself.
+           *
+           * The ternary had a second bug: anything that is not 'face_on' — including null, a putt,
+           * or glasses POV — was confidently labelled "down-the-line". An unknown angle was rendered
+           * as a known one. [[angle-is-a-fact-not-a-question]] cuts both ways: it is a fact, so it
+           * must be stored as a field and displayed from that field, never embedded in prose.
+           *
+           * The angle now has exactly one place on this screen: the chip. Existing swings are healed
+           * at render (see titleForUpload in app/swinglab/swing/[swing_id].tsx).
+           */
+          notes: 'Smart Motion swing',
           duration_sec: null,
           has_audio: true,
           source_device: 'phone' as const,
