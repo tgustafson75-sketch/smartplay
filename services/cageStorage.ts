@@ -1,3 +1,4 @@
+import type { ReviewLabels } from '../store/cageStore';
 import * as FileSystem from 'expo-file-system/legacy';
 import type { CageSession, CageClip } from '../types/cage';
 import { cageLog } from './cageTelemetry';
@@ -65,9 +66,12 @@ function mutateIndex<T>(
 }
 
 // In-memory pending events per session — survives the session lifecycle, cleared on finalize
+/** The half of ReviewLabels the microphone can fill on its own. */
+type AcousticLabels = Pick<ReviewLabels, 'strike_location' | 'contact_quality'>;
+
 const _pendingEvents = new Map<
   string,
-  Array<{ offset: number; method: 'audio_transient' | 'manual' }>
+  Array<{ offset: number; method: 'audio_transient' | 'manual'; acoustic: AcousticLabels | null }>
 >();
 
 export async function createSession(): Promise<CageSession> {
@@ -122,9 +126,20 @@ export function addClipEvent(
   session_id: string,
   offset_seconds: number,
   method: 'audio_transient' | 'manual',
+  /**
+   * 2026-08-24 — what the microphone heard at this strike, already graded.
+   *
+   * The detector hands every cage shot its peak, decay and noise floor, and
+   * services/acousticsAnalyzer turns exactly those into flush/heel/toe/fat/thin and
+   * pure/good/okay/bad. Both existed; nothing carried one to the other, so toCageContact() — a
+   * function whose only purpose is converting that grade into these very labels — had zero callers
+   * while every cage clip was born with `labels: {}` waiting on the player to describe the shot out
+   * loud. The player's spoken review still WINS; this is what we knew before they said anything.
+   */
+  acoustic?: AcousticLabels | null,
 ): void {
   const events = _pendingEvents.get(session_id) ?? [];
-  events.push({ offset: offset_seconds, method });
+  events.push({ offset: offset_seconds, method, acoustic: acoustic ?? null });
   _pendingEvents.set(session_id, events);
   cageLog('storage-add-clip-event', 'ok', {
     session_id,
@@ -153,7 +168,9 @@ export async function finalizeClips(
       start_time_seconds: Math.max(0, ev.offset - 2),
       end_time_seconds: Math.min(duration_seconds, ev.offset + 3),
       speaker_id: 'primary',
-      labels: {},
+      // Pre-filled from the acoustics when the mic graded this strike; the spoken review overwrites
+      // it in cage-review/[review_session_id]. An ungraded strike still starts empty.
+      labels: ev.acoustic ? { ...ev.acoustic } : {},
       raw_transcript: null,
     }));
     return { sessions, result: true };

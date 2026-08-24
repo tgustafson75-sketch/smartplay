@@ -1,3 +1,5 @@
+import { analyzeStrike, toCageContact } from '../services/acousticsAnalyzer';
+import type { ReviewLabels } from '../store/cageStore';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import {
@@ -214,7 +216,27 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
     // rebuilt after the detector already captured it.
     if (!sessionRef.current || phaseRef.current !== 'recording') return;
     const offsetSec = d.offset_ms / 1000;
-    addClipEvent(sessionRef.current.id, offsetSec, 'audio_transient');
+    /**
+     * 2026-08-24 — grade the strike we just heard, and let it ride with the clip.
+     *
+     * Every field analyzeStrike wants is already on this detection — peak, decay, noise floor — and
+     * has been logged to telemetry and thrown away since the cage shipped. toCageContact() exists
+     * for exactly this conversion and had no callers. The player's spoken review still overwrites
+     * these labels; this is simply what we knew before they said a word.
+     */
+    let acoustic: { strike_location: ReviewLabels['strike_location']; contact_quality: ReviewLabels['contact_quality'] } | null = null;
+    try {
+      const a = analyzeStrike({
+        reading: { impact_ms: d.offset_ms, peak_db: d.peak_db, confidence: 0.7, audio_uri: null },
+        noise_floor_db: d.noise_floor_db,
+        decay_db: d.decay_db,
+      });
+      if (a.quality !== 'unknown' || a.strike_location !== 'unknown') {
+        const c = toCageContact(a);
+        acoustic = { strike_location: c.strike_location, contact_quality: c.contact_quality };
+      }
+    } catch { /* grading is additive — never let it drop a detected swing */ }
+    addClipEvent(sessionRef.current.id, offsetSec, 'audio_transient', acoustic);
     cageLog('swing-detected', 'ok', {
       method: 'audio_transient',
       offset_seconds: Number(offsetSec.toFixed(2)),
