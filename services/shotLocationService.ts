@@ -13,11 +13,15 @@ import { safeLatLng } from '../utils/coordGuard';
  *    start_location at the moment of detection. Used by the conversational logging
  *    orchestrator and any manual logging path.
  *
- * 2. `closeHoleAtTransition(holeNumber)` — called when the player advances past a hole.
- *    Sets the just-finished hole's last shot end_location to the green centroid (taken from
- *    the CourseHole record's middle-of-green coordinates). For the next hole's first shot,
- *    no special handling is needed: shotDetectionService already supplies start_location
- *    from the GPS anchor.
+ * 2. `getGreenCentroid(hole)` / `getTeeCentroid(hole)` — the one answer to "where is the green
+ *    (or tee) for this hole", via the canonical resolver cascade. Consumed by wind-relative, lie
+ *    analysis, shot tracking, the caddie payload, distance-to-green, AND — since 2026-08-24 —
+ *    roundStore's hole-transition end_location closure, which until then had its own weaker copy.
+ *
+ * 2026-08-24 — the `closeHoleAtTransition()` wrapper was REMOVED. It re-entered the roundStore
+ * mutation that setCurrentHole already performs, and had zero callers. A second entry point to the
+ * same mutation is how a codebase ends up with two owners; the fix was to give the LIVE path this
+ * file's green resolver, not to wire a rival caller to it.
  *
  * The end_location of intermediate shots is back-filled by the roundStore.logShot action
  * when the next shot lands.
@@ -131,16 +135,6 @@ export function getTeeCentroid(holeNumber: number): ShotLocation | null {
   return safeLatLng(h.teeLat, h.teeLng);
 }
 
-/**
- * Called when the player transitions away from `holeNumber`. Closes the last shot's
- * end_location to the green centroid of that hole. No-op if green centroid is unknown
- * or the last shot already has an end_location.
- */
-export function closeHoleAtTransition(holeNumber: number): void {
-  const green = getGreenCentroid(holeNumber);
-  if (!green) return;
-  useRoundStore.getState().closeHoleEndLocation(holeNumber, green);
-}
 
 /**
  * Test seam — pre-Day-1-fix-4 this set a local cache. Now that

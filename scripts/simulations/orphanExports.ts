@@ -189,8 +189,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
     'WIRE (club sweep) — a canonical club ordering that nothing reads, in a repo where 33 files touch club identity and nobody owns "a club".',
 
   // ── WIRE — the learn-loop seam ────────────────────────────────────────────────
-  'services/shotLocationService.ts :: closeHoleAtTransition':
-    'WIRE — sets the finished hole\'s last shot end_location to the green centroid. No caller, so every hole\'s final shot has no end location, and shot distance is the data the player model learns carries from.',
   'services/poseTelemetry.ts :: getLatestPoseTelemetry':
     'WIRE — recordPoseTelemetry IS called; nothing ever reads the bus it writes to.',
   'services/mediaCapture.ts :: getRecentCaptures':

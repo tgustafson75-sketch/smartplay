@@ -97,42 +97,43 @@ export type TeeColor = 'unspecified' | 'gold' | 'blue' | 'white' | 'red';
 export type TransportMode = 'walking' | 'cart';
 
 /**
- * Phase Q.5b Component 3 — single-source-of-truth green centroid lookup.
- * Reads courseGeometryService first (the authoritative paid-tier data
- * cached after fetchCourseGeometry warms it). Falls back to legacy
- * courseHoles records when the service has no data yet (which is the
- * typical case until the round-warmup geometry call resolves).
+ * WHERE IS THE GREEN FOR THIS HOLE — one owner, and it is not here.
  *
- * Lazy require avoids a circular import (courseGeometryService imports
- * from this file in some helpers).
+ * 2026-08-24 (orphan sweep, root cause). This used to carry its OWN cascade, and the version it
+ * duplicated was better in three separate ways. Its own comment admitted the split:
+ * "(Mirrors shotLocationService.getGreenCentroid, which does this right.)"
+ *
+ * What the local copy was missing:
+ *   1. THE CANONICAL RESOLVER. getGreenCentroid consults smartFinderService.resolveGreenCoords first
+ *      — surveyed truth → Mark Green override → golfbert → courseHoles → geometryCache — and maps a
+ *      front-nine marked green onto the back nine on a twice-around course. This copy went straight
+ *      to the geometry cache, so a green the player had MARKED was ignored when their hole was
+ *      closed out. Every surface the player HEARS (wind, lie analysis, shot tracking, the caddie
+ *      payload, distance-to-green) already used the canonical one. Only the coordinate written into
+ *      their shot HISTORY used this one. The data disagreed with the voice.
+ *   2. THE WGS84 GUARD. This used loose `!== 0` checks — the pre-"Fix GM" shape closed in
+ *      shotLocationService on 06-02. It accepts near-zero (0.0001°) and out-of-range values, which is
+ *      exactly the class where metres leak into degree slots. A poisoned coordinate became a hole's
+ *      green centroid and corrupted shot end-locations and recap distances.
+ *   3. Front/back averaging on the GEOMETRY path (this copy only did it on the legacy path).
+ *
+ * getGreenCentroid's own docstring already claimed it was the "single source of truth… used by
+ * SmartFinder distance queries, hole-transition end_location closure, and the distance_to_green
+ * voice query." The hole-transition closure was the one consumer that never called it. A file
+ * describing its own wiring is not evidence of that wiring.
+ *
+ * Lazy require: shotLocationService imports useRoundStore at module top, so a static import here
+ * would close a cycle. Same pattern the old body used for courseGeometryService.
  */
-function greenForHole(
-  courseId: string | null,
-  holeNumber: number,
-  courseHoles: CourseHole[],
-): ShotLocation | null {
-  // Try service first
-  if (courseId) {
-    try {
-      const { getHoleGeometry } = require('../services/courseGeometryService');
-      const g = getHoleGeometry(courseId, holeNumber);
-      if (g?.green) return g.green as ShotLocation;
-    } catch {}
+function greenForHole(holeNumber: number): ShotLocation | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getGreenCentroid } = require('../services/shotLocationService') as typeof import('../services/shotLocationService');
+    return getGreenCentroid(holeNumber);
+  } catch {
+    // Never let a green lookup take down a hole transition or a round save.
+    return null;
   }
-  // Legacy fallback — courseHoles records from golfcourseapi
-  const h = courseHoles.find(x => x.hole === holeNumber);
-  if (!h) return null;
-  if (h.middleLat !== 0 && h.middleLng !== 0) return { lat: h.middleLat, lng: h.middleLng };
-  // 2026-07-10 (audit OC3) — require BOTH front AND back before averaging. The old
-  // `(front||back)` let a front-only hole return front/2 — a bogus point near the equator
-  // — which then became the hole's green centroid and corrupted shot end-locations +
-  // recap distances. (Mirrors shotLocationService.getGreenCentroid, which does this right.)
-  if (h.frontLat && h.frontLng && h.backLat && h.backLng) {
-    return { lat: (h.frontLat + h.backLat) / 2, lng: (h.frontLng + h.backLng) / 2 };
-  }
-  if (h.frontLat && h.frontLng) return { lat: h.frontLat, lng: h.frontLng };
-  if (h.backLat && h.backLng) return { lat: h.backLat, lng: h.backLng };
-  return null;
 }
 
 export interface ShotResult {
@@ -1629,7 +1630,7 @@ export const useRoundStore = create<RoundState>()(
         if (finalHole != null) {
           const last = [...s.shots].reverse().find(x => x.hole === finalHole);
           if (last && !last.end_location) {
-            const green = greenForHole(s.activeCourseId, finalHole, s.courseHoles);
+            const green = greenForHole(finalHole);
             if (green) get().closeHoleEndLocation(finalHole, green);
           }
         }
@@ -2399,7 +2400,7 @@ export const useRoundStore = create<RoundState>()(
         // source of truth) with courseHoles records as legacy fallback.
         const prevHole = state.currentHole;
         if (prevHole !== clamped) {
-          const green = greenForHole(state.activeCourseId, prevHole, state.courseHoles);
+          const green = greenForHole(prevHole);
           if (green) get().closeHoleEndLocation(prevHole, green);
         }
         const holeData = state.courseHoles.find(h => h.hole === clamped);

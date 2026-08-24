@@ -26,6 +26,10 @@ export interface WhatsNewEntry {
 }
 
 export const WHATS_NEW: WhatsNewEntry[] = [
+  {
+    when: 'Aug 2026',
+    note: 'When you Mark Green, it now counts for your shot distances too. It was already changing the yardage I read you, but the distance recorded against your last shot on that hole still used the map\'s guess \u2014 so the number you heard and the number in your history could disagree. One answer now. Bad course coordinates can also no longer sneak in and wreck a hole\'s distances.',
+  },
   // 2026-08-24 — the orphan sweep: things that were built months ago and never connected.
   {
     when: 'Aug 2026',

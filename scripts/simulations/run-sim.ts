@@ -10964,6 +10964,40 @@ check('LOCK: the caddie is told the player\'s own history — built 07-04, reach
   })(),
   'recent rounds, courses played, practice focus and the weekly plan are composed, sent on the one payload, destructured by the brain and interpolated into the CACHED prompt');
 
+check('LOCK: one answer to "where is the green for this hole" — the closer cannot disagree with the caddie',
+  (() => {
+    /**
+     * 2026-08-24 (orphan sweep, root cause). roundStore held a PRIVATE green cascade used only when
+     * closing out a hole's last shot, and its own comment admitted the split: "(Mirrors
+     * shotLocationService.getGreenCentroid, which does this right.)" The copy it mirrored was better
+     * three ways — it consults the canonical resolver (surveyed truth → Mark Green override →
+     * golfbert → courseHoles → geometryCache, including the twice-around hole mapping), it applies
+     * the full WGS84 guard instead of loose `!== 0` checks, and it averages front/back on the
+     * geometry path too.
+     *
+     * So every surface the player HEARS used the canonical green while the coordinate written into
+     * their shot HISTORY used a weaker one — and that weaker one would accept lat 500 / lng 700 as a
+     * green. Proven: the regression test fails 2 of its 4 cases against the pre-fix store.
+     *
+     * Assert the SHAPE — the closer delegates, and no private cascade grows back. A second cascade
+     * is not a style problem; it is two different numbers for the same hole.
+     */
+    const rs = read('store/roundStore.ts');
+    const sl = read('services/shotLocationService.ts');
+    const ownerCanonical = /resolveGreenCoords/.test(sl) && /safeLatLng\(h\.middleLat, h\.middleLng\)/.test(sl);
+    const closerDelegates = /const \{ getGreenCentroid \} = require\('\.\.\/services\/shotLocationService'\)/.test(rs);
+    // The local copy's tells must not grow back.
+    const noPrivateCascade =
+      !/h\.middleLat !== 0 && h\.middleLng !== 0/.test(rs) &&
+      !/getHoleGeometry\(courseId, holeNumber\)/.test(rs);
+    // The rival entry point into the same mutation is gone. Compare against CODE, not prose: this
+    // file's own docstrings discuss the removal by name.
+    const slCode = sl.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+    const noRivalCloser = !/closeHoleAtTransition/.test(slCode);
+    return ownerCanonical && closerDelegates && noPrivateCascade && noRivalCloser;
+  })(),
+  'the hole closer delegates to getGreenCentroid, keeps no private cascade, and the rival closeHoleAtTransition entry point is gone — a marked green counts for recorded distance, and an out-of-range coordinate never becomes a green');
+
 // ─── Orphaned exports — the half-build ratchet ─────────────────────────────────
 /**
  * 2026-08-24. Tim: *"an absolutely consistent theme of half built processes… I'm stuck in a 2-month
