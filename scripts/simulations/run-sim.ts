@@ -10027,9 +10027,20 @@ check('LOCK: the microphone registry holds EVERY owner, not just the last one to
     const releasesAll = /for \(const release of externalMicReleases\)/.test(vs);
     // ...and the recorder that caused this actually joins.
     const acousticJoins = /registerExternalMicCheck/.test(ac) && /registerExternalMicRelease/.test(ac);
+    /**
+     * 2026-08-24, same day, second pass — I registered acousticImpactDetector for Tim's SmartMotion
+     * bug and SHIPPED it, then checked afterwards: app/swinglab/smartmotion.tsx has ZERO references
+     * to that module. The recorder it actually holds is services/swing/audioMetering, which was not
+     * in the registry either — so the "fix" hardened a real path (the cage overlay) and left the
+     * reported one untouched. Assert BOTH, because the registry's whole history is discovering one
+     * more owner than anyone remembered. [[my-measurement-is-the-least-reliable-part]]
+     */
+    const am = read('services/swing/audioMetering.ts');
+    const meteringJoins = /registerExternalMicCheck/.test(am) && /registerExternalMicRelease/.test(am) &&
+      /leaveOwnership\(\)/.test(am);   // ...and LEAVES on both stop() and cancel(), or it deadlocks the mic
     // The old single-slot assignment must be gone, or the set is decorative.
     const slotGone = !/externalMicCheck = fn/.test(vs) && !/externalMicRelease = fn/.test(vs);
-    return isSet && anyHolds && releasesAll && acousticJoins && slotGone;
+    return isSet && anyHolds && releasesAll && acousticJoins && meteringJoins && slotGone;
   })(),
   'every mic owner is registered and released; SmartMotion cannot deafen the question the caddie just asked');
 

@@ -1,5 +1,6 @@
 import { Audio } from 'expo-av';
 import type { MeterSample } from './strikeDetector';
+import { registerExternalMicCheck, registerExternalMicRelease } from '../voiceService';
 import { setAudioModeSerial } from '../voiceService';
 
 /**
@@ -54,6 +55,20 @@ export type MeteringHandle = {
   cancel: () => Promise<void>;
 };
 
+/**
+ * 2026-08-24 — THIS RECORDER IS A MICROPHONE OWNER TOO.
+ *
+ * I registered acousticImpactDetector for this and shipped it, then checked: SmartMotion has ZERO
+ * references to that module. THIS is the recorder SmartMotion actually holds — startMeteredRecording,
+ * running for the whole capture — and it was not in services/voiceService's owner registry either.
+ * So the registry still did not know about the microphone the SmartMotion screen was using.
+ *
+ * The lesson is the registry's own: it is a Set because the app keeps turning out to have one more
+ * mic owner than anyone remembered. Verify which recorder is actually running before claiming a
+ * contention bug is fixed. [[my-measurement-is-the-least-reliable-part]]
+ */
+let liveMeteringCount = 0;
+
 export async function startMeteredRecording(
   onSample?: (sample: MeterSample) => void,
 ): Promise<MeteringHandle> {
@@ -103,11 +118,40 @@ export async function startMeteredRecording(
   // stopAndUnloadAsync on the same Recording rejects. The `done` latch
   // makes the second call a no-op so dual-source teardown is safe.
   let done = false;
+
+  /**
+   * Join the microphone-owner registry for as long as this recording is live, so a user-initiated
+   * voice turn can see the mic is busy and take it back. Registered HERE rather than at the call
+   * site because the ownership is a property of the recording, not of whichever screen started it.
+   */
+  liveMeteringCount += 1;
+  const leaveRegistry = registerExternalMicCheck(() => liveMeteringCount > 0);
+  const releaseRegistry = registerExternalMicRelease(async () => {
+    if (done) return 'none';
+    try { await teardown(); } catch { /* best effort — the point is to free the device */ }
+    // 'none': this recorder never holds a human utterance worth transcribing. It is listening for
+    // the sound of a ball, so there is nothing to submit — only something to stop.
+    return 'none';
+  });
+  const leaveOwnership = () => {
+    liveMeteringCount = Math.max(0, liveMeteringCount - 1);
+    leaveRegistry();
+    releaseRegistry();
+  };
+
+  const teardown = async () => {
+    if (done) return;
+    done = true;
+    leaveOwnership();
+    try { await recording.stopAndUnloadAsync(); } catch { /* see stop() */ }
+  };
+
   return {
     async stop() {
       const uri = recording.getURI();
       if (done) return { samples, uri, durationMs: Date.now() - startedAt };
       done = true;
+      leaveOwnership();
       try {
         await recording.stopAndUnloadAsync();
       } catch {
@@ -123,6 +167,7 @@ export async function startMeteredRecording(
     async cancel() {
       if (done) return;
       done = true;
+      leaveOwnership();
       try {
         await recording.stopAndUnloadAsync();
       } catch {

@@ -2893,6 +2893,11 @@ export default function SmartMotion() {
     setVideoDurationMs(null);
     setBallSpeed(null);
     setBallDeparture(null);
+    // 2026-08-24 — clear the acoustic read WITH the rest. Set but never cleared, a second set that
+    // detected no strike would keep showing the FIRST set's "Flush" — a fabricated read on the one
+    // card whose entire job is honesty about contact.
+    setAcousticRead(null);
+    setHeardStrikeCount(null);
     setPuttAnalysis(null);
     // Putt mode is EXPLICIT + per-recording: clear it on every reset so it can
     // never stick across "Record again" / the hands-free voice loop and
@@ -3327,6 +3332,8 @@ export default function SmartMotion() {
     try { require('../../services/swingAnalysisWarmup').prewarmSwingAnalysis({ force: true }); } catch { /* non-fatal */ }
     setBallSpeed(null);
     setBallDeparture(null);
+    setAcousticRead(null);      // new recording → the previous set's strike grade is not this set's
+    setHeardStrikeCount(null);
     ballDepartureCacheRef.current = {}; // 2026-06-14 — new recording → drop per-swing trace cache
     ballPathCacheRef.current = {};
     clubPathCacheRef.current = {};
