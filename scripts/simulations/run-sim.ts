@@ -28,6 +28,7 @@
  * AND the static-walkthrough findings for the device-only paths.
  */
 
+import { findOrphanExports, ORPHAN_BASELINE } from './orphanExports';
 import {
   getCaddieName,
   getCharacterSpec,
@@ -10866,6 +10867,58 @@ check('LOCK: the Fit Profile and the bag recommendation cannot disagree about wh
     return oneOwner && imported && noLocalRefork;
   })(),
   'GAP_YARDS has a single owner that both the ladder and the bag recommendation read, so the two surfaces cannot answer "is this a gap?" differently');
+
+// ─── Orphaned exports — the half-build ratchet ─────────────────────────────────
+/**
+ * 2026-08-24. Tim: *"an absolutely consistent theme of half built processes… I'm stuck in a 2-month
+ * cycle of fixing loops that only partially work, and finding later that things were built and not
+ * connected."*
+ *
+ * The 08-23/08-24 sessions found nine half-builds by TRIPPING over them, at roughly a session each.
+ * A mechanical sweep the next morning found a hundred and forty-one. That asymmetry is the whole
+ * problem: a half-build is silent by construction — nothing fails, nothing logs, no screen goes
+ * blank — so it surfaces months later, on a golf course, as a caddie that does not know something
+ * the app has known since July.
+ *
+ * These two checks turn that from a discovery into a gate. See scripts/simulations/orphanExports.ts
+ * for the definition of "orphaned" and for the baseline with a reason per entry.
+ */
+console.log('\n=== Orphaned exports ===');
+{
+  const orphans = findOrphanExports();
+  const baseline = new Set(Object.keys(ORPHAN_BASELINE));
+
+  // 1. Nothing new. A half-build fails on the day it is written, by the person who wrote it, while
+  //    the intent is still in their head — which is the only moment wiring it is cheap.
+  const added = orphans.filter((o) => !baseline.has(o));
+  check(
+    'LOCK: no NEW orphaned export — anything built must be connected, or say why in the baseline',
+    added.length === 0,
+    added.length === 0
+      ? `${orphans.length} known orphans, all accounted for in ORPHAN_BASELINE`
+      : `UNCONNECTED and unexplained (wire it, or add it to ORPHAN_BASELINE with a reason):\n    ${added.join('\n    ')}`,
+  );
+
+  // 2. The baseline may not rot. Wiring something forces the deletion of its line, so the list can
+  //    only shrink — a ratchet, not a graveyard. Without this the allowlist silently becomes the
+  //    place half-builds go to be forgotten, which is the thing it was built to prevent.
+  //    [[grep-guards-cant-see-dead-code]]
+  const stale = [...baseline].filter((b) => !orphans.includes(b));
+  check(
+    'LOCK: the orphan baseline cannot rot — a wired export must lose its line',
+    stale.length === 0,
+    stale.length === 0
+      ? `all ${baseline.size} baseline entries are still genuinely orphaned`
+      : `NO LONGER ORPHANED — delete these lines from ORPHAN_BASELINE:\n    ${stale.join('\n    ')}`,
+  );
+
+  // Visible debt, so it can be watched going down rather than discovered going up.
+  const byTag = (tag: string) => Object.values(ORPHAN_BASELINE).filter((r) => r.startsWith(tag)).length;
+  console.log(
+    `[INFO] orphan debt: ${byTag('WIRE')} WIRE · ${byTag('PARKED')} PARKED · ` +
+    `${byTag('SURFACE')} SURFACE · ${byTag('DUPE')} DUPE · ${byTag('TRIAGE')} TRIAGE`,
+  );
+}
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
 

@@ -3,6 +3,22 @@
 **Status raised to PRE-LAUNCH by Tim, 2026-08-21:** *"it needs to be on prelaunch that we need the
 clean twenty two emotional states at least for each Caddy. Serena and Kevin."*
 
+> ## ⚠️ CORRECTED 2026-08-24 (backtrack audit) — THIS DOC OVERSTATES THE JOB
+>
+> Counted directly from the require() maps in `components/CaddieAvatar.tsx`:
+>
+> | Caddie | Slots | Distinct images | Worst |
+> |---|---|---|---|
+> | **Kevin** | 22 | **20** ✅ | 2× kevin-idle |
+> | **Harry** | 22 | 18 ✅ | 2× serious |
+> | **Tank** | 22 | 11 ⚠️ | 3× portrait |
+> | **Serena** | 22 | **4** ❌ | **15× serena-studio-portrait** |
+>
+> **Kevin does NOT route 15 slots to one image — his worst duplicate is 2×.** The claim below
+> (and the matching memory line) was wrong. The real job is **Serena only, ~16 images**, with
+> Tank a nice-to-have at ~8. Everything else in this doc — filenames, prompt spec, OTA-safety —
+> still stands. See `docs/BACKTRACK-2026-08-24.md` §4.
+
 Not a nice-to-have and not partial coverage. **Serena and Kevin each need all 22 slots filled with
 distinct, purpose-made art** — the eight-image patch below is a floor, not the goal.
 
