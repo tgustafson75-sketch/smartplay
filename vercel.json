@@ -339,6 +339,13 @@
       }
     },
     {
+      "src": "api/course-locate.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 15
+      }
+    },
+    {
       "src": "api/*.ts",
       "use": "@vercel/node"
     },

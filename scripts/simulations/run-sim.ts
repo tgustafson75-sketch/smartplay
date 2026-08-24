@@ -11281,6 +11281,57 @@ check('LOCK: the SmartVision strategy layer is DRAWN, owner-gated, and cannot em
   })(),
   'the four strategy layers are drawn through the screen\'s own projectLoc, gated to the owner, with every derived radius and pixel finite-checked before it reaches react-native-svg');
 
+check('LOCK: course discovery has ONE budget — the client waits longer than the server spends',
+  (() => {
+    /**
+     * 2026-08-24 (Tim's device log, Berlin MA, 4:40 PM). Three `course_locate_failed reason:timeout`
+     * in a row, arriving at a course to play. Not a network problem — an arithmetic one. THREE
+     * independent ceilings, and no request needing the fallback could satisfy all of them:
+     *
+     *   client  courseDownloadEngine  AbortSignal.timeout(9_000)      gives up at   9s
+     *   Vercel  no maxDuration entry  @vercel/node default            kills at     10s
+     *   server  8_000 primary + 8_000 legacy fallback, SEQUENTIAL     needs up to  16s
+     *
+     * So the legacy fallback — the thing that exists precisely for when the primary Places call
+     * misbehaves — could never complete. The player stood on the first tee while it failed twice
+     * (the client retries once), then got nothing.
+     *
+     * A per-call timeout cannot fix a failure that lives in the SUM, so the server now carries one
+     * deadline and hands each call what is left of it. This guard asserts the ORDERING, not the
+     * numbers, so any future retune stays coherent:
+     *
+     *     server budget  <  client timeout  <  function maxDuration
+     */
+    const server = read('api/course-locate.ts');
+    const client = read('services/courseDownloadEngine.ts');
+    const num = (src: string, re: RegExp): number | null => {
+      const m = re.exec(src);
+      return m ? Number(m[1].replace(/_/g, '')) : null;
+    };
+    const budget = num(server, /const BUDGET_MS = ([\d_]+);/);
+    const primaryCap = num(server, /const PRIMARY_CAP_MS = ([\d_]+);/);
+    const clientTimeout = num(client, /AbortSignal\.timeout\(([\d_]+)\)/);
+    let maxDuration: number | null = null;
+    try {
+      const vj = JSON.parse(read('vercel.json')) as { builds?: { src: string; config?: { maxDuration?: number } }[] };
+      maxDuration = vj.builds?.find(b => b.src === 'api/course-locate.ts')?.config?.maxDuration ?? null;
+    } catch { /* fall through to the null check */ }
+    if (budget == null || primaryCap == null || clientTimeout == null || maxDuration == null) return false;
+
+    // The whole point: the server must always be able to answer inside the client's patience,
+    // and the platform must not kill it before its own budget expires.
+    const ordered = budget < clientTimeout && clientTimeout < maxDuration * 1000;
+    // The primary may not eat the budget the fallback needs.
+    const fallbackCanRun = primaryCap < budget;
+    // And the deadline must actually be consulted, not just declared.
+    const deadlineUsed = /const deadlineAt = Date\.now\(\) \+ BUDGET_MS;/.test(server) &&
+      /Math\.min\(PRIMARY_CAP_MS, remainingMs\(deadlineAt\)\)/.test(server) &&
+      /if \(left >= MIN_FALLBACK_MS\)/.test(server) &&
+      !/AbortSignal\.timeout\(TIMEOUT_MS\)/.test(server);   // the old per-call constant is gone
+    return ordered && fallbackCanRun && deadlineUsed;
+  })(),
+  'course-locate spends less than the client waits and less than the platform allows, the primary cannot starve the fallback, and the deadline is consulted rather than declared');
+
 // ─── Orphaned exports — the half-build ratchet ─────────────────────────────────
 /**
  * 2026-08-24. Tim: *"an absolutely consistent theme of half built processes… I'm stuck in a 2-month

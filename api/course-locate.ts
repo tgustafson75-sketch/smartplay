@@ -37,7 +37,36 @@ import { googleKeys, withGoogleKeys, isCapabilityMiss } from './_googleKeys';
 // Keys are no longer pinned here; _googleKeys walks EVERY configured project and lands on whichever
 // one has the API in question enabled. That's what lets Places (New) start working the moment the
 // second project's key is present, with no code change and nobody having to work out which is which.
-const TIMEOUT_MS = 8_000;
+/**
+ * 2026-08-24 (Tim's device log, Berlin MA, 4:40 PM — three `course_locate_failed reason:timeout` in
+ * a row on arrival at a course) — ONE BUDGET, NOT THREE INCOMPATIBLE CEILINGS.
+ *
+ * The arithmetic could not be satisfied by any request that needed the fallback:
+ *
+ *   client  services/courseDownloadEngine  AbortSignal.timeout(9_000)   gives up at  9s
+ *   Vercel  no maxDuration in vercel.json  @vercel/node default         kills at    10s
+ *   server  8_000 primary + 8_000 fallback, run SEQUENTIALLY            needs up to 16s
+ *
+ * So whenever the Places (New) call was slow or errored — exactly the case the legacy fallback
+ * exists for — the function was killed, or the client had already abandoned it, before an answer
+ * could exist. The player stood on the first tee while it failed twice (the client retries), then
+ * got nothing. The fallback path could never complete even with no client attached.
+ *
+ * A per-call timeout cannot fix this, because the failure is in the SUM. So the request now carries
+ * a single deadline and each Places call gets whatever is left of it, and the fallback is skipped
+ * outright when there is not enough time to be worth starting. Budget sits under the client's 9s so
+ * the server always answers — with an honest empty result if it must — rather than being cut off.
+ */
+const BUDGET_MS = 7_000;
+/** Never spend the whole budget on the primary: the fallback exists for when the primary misbehaves. */
+const PRIMARY_CAP_MS = 4_500;
+/** Below this there is no point starting a second network call — return what we have. */
+const MIN_FALLBACK_MS = 1_200;
+
+/** Milliseconds left of this request's budget. */
+function remainingMs(deadlineAt: number): number {
+  return Math.max(0, deadlineAt - Date.now());
+}
 const DEFAULT_RADIUS_M = 8_000; // ~5 miles — a course you could be at / driving to
 const MAX_RADIUS_M = 40_000;
 const DEFAULT_LIMIT = 8;
@@ -97,7 +126,7 @@ function isGolfPlace(p: Located): boolean {
  * Returns null (not []) when the API is unavailable, so the caller can distinguish "not enabled →
  * try legacy" from "enabled, genuinely no courses here".
  */
-async function searchNearbyNew(lat: number, lng: number, radius: number): Promise<Located[] | null> {
+async function searchNearbyNew(lat: number, lng: number, radius: number, timeoutMs: number): Promise<Located[] | null> {
   return withGoogleKeys<Located[]>('places-new:searchNearby', async (KEY) => {
     const r = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
       method: 'POST',
@@ -122,7 +151,7 @@ async function searchNearbyNew(lat: number, lng: number, radius: number): Promis
         maxResultCount: 20,
         locationRestriction: { circle: { center: { latitude: lat, longitude: lng }, radius } },
       }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!r.ok) {
       // A 403/PERMISSION_DENIED here means THIS project doesn't have Places (New) enabled — a
@@ -168,12 +197,12 @@ async function searchNearbyNew(lat: number, lng: number, radius: number): Promis
 }
 
 /** Legacy Nearby Search, keyword-filtered (`keyword` IS honored by legacy; `type=golf_course` never was). */
-async function searchNearbyLegacy(lat: number, lng: number, radius: number): Promise<Located[] | null> {
+async function searchNearbyLegacy(lat: number, lng: number, radius: number, timeoutMs: number): Promise<Located[] | null> {
   return withGoogleKeys<Located[]>('places-legacy:nearbysearch', async (KEY) => {
     const url =
       `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
       `?location=${lat},${lng}&radius=${radius}&keyword=${encodeURIComponent('golf course')}&key=${KEY}`;
-    const r = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+    const r = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
     if (!r.ok) return { ok: false, capabilityMiss: isCapabilityMiss({ httpStatus: r.status }) };
     const data = (await r.json()) as { status?: string; error_message?: string; results?: PlaceResult[] };
     if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
@@ -223,15 +252,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const radius = isNum(body.radius_m) ? Math.min(MAX_RADIUS_M, Math.max(200, Math.round(body.radius_m))) : DEFAULT_RADIUS_M;
     const limit = isNum(body.limit) ? Math.min(20, Math.max(1, Math.round(body.limit))) : DEFAULT_LIMIT;
 
+    // One deadline for the whole request. See BUDGET_MS — three independent timeouts is what made
+    // arrival at a course fail three times in a row on Tim's device.
+    const deadlineAt = Date.now() + BUDGET_MS;
+
     // 1) PRIMARY — Places API (New). `golf_course` is a real type here, so the filter actually binds.
-    let located: Located[] | null = await searchNearbyNew(lat, lng, radius);
+    let located: Located[] | null =
+      await searchNearbyNew(lat, lng, radius, Math.min(PRIMARY_CAP_MS, remainingMs(deadlineAt)));
     let source = 'places_new';
 
     // 2) FALLBACK — New API not enabled on this key (or a transient error). Legacy Nearby Search with
     // `keyword=golf`, which legacy DOES honor, rather than the phantom type filter that started this.
+    // Only if there is genuinely time left: starting an 8-second call with 400ms of budget is how the
+    // function got killed mid-flight and the player got nothing at all.
     if (located == null) {
-      located = await searchNearbyLegacy(lat, lng, radius);
-      source = 'places_legacy';
+      const left = remainingMs(deadlineAt);
+      if (left >= MIN_FALLBACK_MS) {
+        located = await searchNearbyLegacy(lat, lng, radius, left);
+        source = 'places_legacy';
+      } else {
+        console.log(`[course-locate] skipping legacy fallback — only ${left}ms of budget left`);
+      }
     }
     if (located == null) return res.status(200).json({ courses: [], source: 'places', error: 'places_error' });
 
