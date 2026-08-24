@@ -18,14 +18,9 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { applyCors } from './_cors';
 import { allowInference } from './_inferLimit';
 import { completeVision, providerFromHeaderSafe, type StructuredSchema } from './_aiProvider';
+import { CLUB_SNAP_ORDER } from '../services/clubBagReconcile';
 
-const VALID_CLUB_IDS = [
-  'DR', '3W', '5W', '7W',
-  '2H', '3H', '4H', '5H',
-  '3I', '4I', '5I', '6I', '7I', '8I', '9I',
-  'PW', 'GW', 'AW', 'SW', 'LW',
-  'PT',
-] as const;
+const VALID_CLUB_IDS = CLUB_SNAP_ORDER; // one catalog — services/clubBagReconcile
 const VALID_CLUB_TYPES = ['iron', 'wedge', 'hybrid', 'wood', 'driver', 'putter', 'unknown'] as const;
 const CONFIDENCE_VALUES = ['high', 'medium', 'low'] as const;
 const MAX_FRAMES = 8;

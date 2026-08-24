@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getCaddieName, type VoiceGender, type Persona } from '../lib/persona';
 import { allowInference } from './_inferLimit';
 import { completeVision, providerFromHeaderSafe, type AiImageInput, type StructuredSchema } from './_aiProvider';
+import { CLUB_SNAP_ORDER } from '../services/clubBagReconcile';
 
 /**
  * Phase BR — Tutorial teaching-content extraction.
@@ -23,13 +24,7 @@ import { completeVision, providerFromHeaderSafe, type AiImageInput, type Structu
  * weight it as the primary signal over notes.
  */
 
-const VALID_CLUBS = [
-  'DR', '3W', '5W', '7W',
-  '2H', '3H', '4H', '5H',
-  '3I', '4I', '5I', '6I', '7I', '8I', '9I',
-  'PW', 'GW', 'AW', 'SW', 'LW',
-  'PT',
-] as const;
+const VALID_CLUBS = CLUB_SNAP_ORDER; // one catalog — services/clubBagReconcile
 
 type ClubId = typeof VALID_CLUBS[number];
 

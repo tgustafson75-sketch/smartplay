@@ -183,8 +183,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
     'WIRE — three lesson plans exist and nothing can select one by id.',
 
   // ── WIRE — the club seam, all of it feeding docs/NEXT-CLUB-LOGIC-SWEEP.md ──────
-  'services/clubBagReconcile.ts :: CLUB_SNAP_ORDER':
-    'WIRE (club sweep) — a canonical club ordering that nothing reads, in a repo where 33 files touch club identity and nobody owns "a club".',
 
   // ── WIRE — the learn-loop seam ────────────────────────────────────────────────
   'services/poseTelemetry.ts :: getLatestPoseTelemetry':

@@ -5,12 +5,41 @@
  * and importable from services/clubRecognition without pulling that module's native deps.
  */
 
-// Catalog (driver → putter). Kept here as strings so this module has zero imports.
+/**
+ * THE CLUB CATALOG — driver → putter, in canonical order. One owner.
+ *
+ * 2026-08-24 (club sweep, step 1 — inventory every representation). This list was declared SIX
+ * times: here, store/clubBagStore (whose own comment said "keep one canonical order everywhere"),
+ * api/tutorial-analysis, api/bag-scan, api/club-recognition and api/arccos-import. Five were
+ * byte-identical; the sixth differed on purpose. Nothing linked them, so the only thing keeping six
+ * copies in step was that nobody had edited one yet.
+ *
+ * This module is the right owner precisely because it has ZERO imports — it is reachable from the
+ * plain-node logic project, from React Native, and from the Vercel functions alike. Adding an import
+ * here would break all three at once, so it stays dependency-free.
+ *
+ * It sat exported and unread since 2026-07-23, and was listed in
+ * docs/dead-exports-inventory-2026-08-09.txt two weeks ago — an inventory with nothing to enforce it.
+ * The orphan LOCK in run-sim is why it could not be ignored a third time.
+ */
 export const CLUB_SNAP_ORDER = [
   'DR', '3W', '5W', '7W', '2H', '3H', '4H', '5H',
   '3I', '4I', '5I', '6I', '7I', '8I', '9I',
   'PW', 'GW', 'AW', 'SW', 'LW', 'PT',
 ] as const;
+
+/** A club id, from the one catalog. */
+export type CatalogClubId = typeof CLUB_SNAP_ORDER[number];
+
+/**
+ * The catalog minus the putter — for anything reading a FULL-SHOT distance.
+ *
+ * api/arccos-import deliberately excluded 'PT' ("Putter carries no full-shot distance — the model is
+ * told to skip it"). That exception is real and worth keeping; hand-maintaining a whole second list
+ * to express it is not. Derived, so the exception is stated once and cannot drift from the catalog.
+ */
+export const FULL_SWING_CLUB_IDS: readonly CatalogClubId[] =
+  CLUB_SNAP_ORDER.filter((id) => id !== 'PT');
 
 type Family = 'DR' | 'W' | 'H' | 'I' | 'WEDGE' | 'PT' | '?';
 // The interchangeable long-game slots: a "4" can be a 4-iron, 4-hybrid, or (rarely) 4-wood —

@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 import { completeVision, providerFromHeaderSafe, type StructuredSchema } from './_aiProvider';
+import { CLUB_SNAP_ORDER } from '../services/clubBagReconcile';
 
 /**
  * Phase BL — Club recognition endpoint.
@@ -24,14 +25,7 @@ import { completeVision, providerFromHeaderSafe, type StructuredSchema } from '.
 
 // Catalog matches the legacy CLUBS array in app/cage/index.tsx so values
 // passed back to the client align with what's already stored in cageStore.
-const VALID_CLUB_IDS = [
-  'DR', '3W', '5W', '7W',
-  '2H', '3H', '4H', '5H',
-  '3I', '4I', '5I', '6I', '7I', '8I', '9I',
-  'PW', 'GW', 'AW', 'SW', 'LW',
-  'PT',
-  'unknown',
-] as const;
+const VALID_CLUB_IDS = CLUB_SNAP_ORDER; // one catalog — services/clubBagReconcile
 
 type ClubId = typeof VALID_CLUB_IDS[number];
 

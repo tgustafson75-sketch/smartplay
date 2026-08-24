@@ -22,15 +22,13 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { applyCors } from './_cors';
 import { allowInference } from './_inferLimit';
 import { completeVision, providerFromHeaderSafe, type StructuredSchema } from './_aiProvider';
+import { FULL_SWING_CLUB_IDS } from '../services/clubBagReconcile';
 
 // Catalog ids the client's normalizeClub understands. Putter carries no full-shot distance — the
 // model is told to skip it, and the client drops it defensively too.
-const VALID_CLUB_IDS = [
-  'DR', '3W', '5W', '7W',
-  '2H', '3H', '4H', '5H',
-  '3I', '4I', '5I', '6I', '7I', '8I', '9I',
-  'PW', 'GW', 'AW', 'SW', 'LW',
-] as const;
+// Putter carries no full-shot distance, so this is the catalog MINUS 'PT' — derived from the one
+// catalog rather than hand-maintained, so the exception is stated once and cannot drift.
+const VALID_CLUB_IDS = FULL_SWING_CLUB_IDS;
 const CONFIDENCE_VALUES = ['high', 'medium', 'low'] as const;
 const DISTANCE_KINDS = ['carry', 'total', 'unknown'] as const;
 const MAX_FRAMES = 4;

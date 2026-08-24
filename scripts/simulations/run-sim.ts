@@ -11036,6 +11036,43 @@ check('LOCK: "the chart, scaled to this player" has ONE owner',
   })(),
   'personalBagScale + personalCarryFor live in standardBag; carryFor and cnsShotRead both consume them and neither re-derives the ratio — one answer for an untracked club');
 
+check('LOCK: the club catalog is declared ONCE — six copies, one owner',
+  (() => {
+    /**
+     * 2026-08-24 (club sweep, step 1 — inventory every representation of a club). The ordered
+     * driver→putter catalog was declared SIX times: services/clubBagReconcile, store/clubBagStore,
+     * api/tutorial-analysis, api/bag-scan, api/club-recognition and api/arccos-import. Five were
+     * byte-identical; arccos deliberately dropped 'PT' ("Putter carries no full-shot distance").
+     * clubBagStore's own comment read "keep one canonical order everywhere" — above its own copy.
+     *
+     * Nothing linked them. The only thing keeping six lists in step was that nobody had edited one
+     * yet, and the catalog is what the club-recognition and bag-scan MODEL ENUMS are built from — so
+     * a drift here silently changes what the vision model is allowed to return.
+     *
+     * services/clubBagReconcile owns it because it has ZERO imports: reachable from the plain-node
+     * logic project, React Native, and the Vercel functions alike.
+     *
+     * Assert the SHAPE — exactly one declaration repo-wide, everyone else imports it, and the ONE
+     * real exception is DERIVED rather than hand-typed. [[guard-the-shape-not-the-file-list]]
+     */
+    const owner = read('services/clubBagReconcile.ts');
+    const ownerDeclares = /export const CLUB_SNAP_ORDER = \[/.test(owner) &&
+      /export const FULL_SWING_CLUB_IDS/.test(owner) &&
+      /CLUB_SNAP_ORDER\.filter\(\(id\) => id !== 'PT'\)/.test(owner);   // derived, not retyped
+    // No rival copy anywhere. The literal head of the catalog is the fingerprint.
+    const rivals = ['store/clubBagStore.ts', 'api/tutorial-analysis.ts', 'api/bag-scan.ts',
+                    'api/club-recognition.ts', 'api/arccos-import.ts']
+      .filter(f => /'DR', '3W', '5W', '7W'/.test(read(f)));
+    // ...and each of them actually imports the owner.
+    const importers = ['store/clubBagStore.ts', 'api/tutorial-analysis.ts', 'api/bag-scan.ts',
+                       'api/club-recognition.ts', 'api/arccos-import.ts']
+      .every(f => /from '\.\.\/services\/clubBagReconcile'/.test(read(f)));
+    // The owner must stay import-free or it stops being usable from all three runtimes.
+    const ownerStaysPure = !/^import /m.test(owner);
+    return ownerDeclares && rivals.length === 0 && importers && ownerStaysPure;
+  })(),
+  'CLUB_SNAP_ORDER is the one club catalog; the store and all four vision/import routes consume it, the putter exception is derived, and the owner stays dependency-free');
+
 // ─── Orphaned exports — the half-build ratchet ─────────────────────────────────
 /**
  * 2026-08-24. Tim: *"an absolutely consistent theme of half built processes… I'm stuck in a 2-month

@@ -14,6 +14,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
 import type { ClubId } from '../services/clubRecognition';
+import { CLUB_SNAP_ORDER } from '../services/clubBagReconcile';
 
 export type ClubRegisterSource = 'camera' | 'voice' | 'manual';
 
@@ -31,13 +32,11 @@ export interface RegisteredClub {
 }
 
 // Canonical bag order (driver → putter) for display + brain context.
-const CLUB_ORDER: ClubId[] = [
-  'DR', '3W', '5W', '7W', '2H', '3H', '4H', '5H',
-  '3I', '4I', '5I', '6I', '7I', '8I', '9I',
-  // 2026-07-23 (QA) — GW before AW to match clubBagReconcile / api/bag-scan / the ClubId union
-  // (gap wedge ~50-52°, approach wedge ~50-54° overlap, but keep one canonical order everywhere).
-  'PW', 'GW', 'AW', 'SW', 'LW', 'PT',
-];
+// 2026-08-24 — this was the SIXTH copy of the catalog, and the comment it replaced said "keep one
+// canonical order everywhere" while declaring its own. It now reads the one owner. The ClubId
+// annotation is deliberate and uncast: if services/clubRecognition's ClubId union and the catalog
+// ever disagree, this line fails typecheck instead of drifting quietly.
+const CLUB_ORDER: ClubId[] = [...CLUB_SNAP_ORDER];
 
 interface ClubBagState {
   /** Registered clubs keyed by club_id. */
