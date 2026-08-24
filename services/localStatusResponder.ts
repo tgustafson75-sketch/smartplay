@@ -54,6 +54,7 @@ import { playsLikeDistance } from '../utils/playsLike';
 // hazards) anchored into the CNS, so "what's this hole / what do I watch for" answers
 // OFFLINE from the persisted book, not a network fetch. [[course-book-cns]]
 import { useCaddieMemoryStore } from '../store/caddieMemoryStore';
+import { STANDARD_LADDER, CLUB_LABEL } from './standardBag';
 
 /**
  * 2026-08-11 (adversarial audit) — ONE bag builder for every spoken reply in this file.
@@ -68,11 +69,11 @@ import { useCaddieMemoryStore } from '../store/caddieMemoryStore';
  * "your" carry.
  */
 function spokenBag(): { entries: [string, number][]; measured: Set<string> } {
-  const merged = new Map<string, number>(STANDARD_SPOKEN_LADDER);
+  const merged = new Map<string, number>(STANDARD_LADDER);
   const measured = new Set<string>();
   for (const [club, yds] of Object.entries(bagDistances())) {
     if (typeof yds === 'number' && yds > 0) {
-      const label = SPOKEN_LADDER_LABEL[club] ?? club;
+      const label = CLUB_LABEL[club as keyof typeof CLUB_LABEL] ?? club;
       merged.set(label, yds);
       measured.add(label);
     }
@@ -82,21 +83,23 @@ function spokenBag(): { entries: [string, number][]; measured: Set<string> } {
 
 /**
  * 2026-08-11 — the standard carry ladder this responder falls back on, and the ClubName→label map.
- * Deliberately mirrors services/cnsShotRead so the SPOKEN club and the on-screen club can't disagree
- * — two ladders in two files is how the same bug got fixed four times and stayed alive in a fifth.
+ *
+ * 2026-08-24 (club sweep — ONE OWNER). Both were LOCAL COPIES, under a comment saying they
+ * "deliberately mirror services/cnsShotRead so the SPOKEN club and the on-screen club can't
+ * disagree — two ladders in two files is how the same bug got fixed four times and stayed alive in
+ * a fifth." The diagnosis was exactly right and the remedy was a second copy, so they disagreed:
+ *
+ *   • the ladder had drifted by up to TWENTY yards (Hybrid 195 here vs 215 in standardBag; 5 Wood
+ *     210 vs 223; 8 Iron 145 vs 135) and was missing three rungs outright — 7 Wood, 3 Iron and AW;
+ *   • the label map carried the same three typos as cnsShotRead's ('7W'→'5 Wood', '3I'→'4 Iron',
+ *     'AW'→'GW'), so offline the caddie named the wrong club AND wrote a measured carry onto a
+ *     neighbouring rung.
+ *
+ * This is the OFFLINE reply path (services/offlineCaddie), which is the on-course, no-signal case
+ * the product is built around — so a drifted ladder here is not a cosmetic one.
+ *
+ * Both now read services/standardBag, which is where they were always described as coming from.
  */
-const STANDARD_SPOKEN_LADDER: readonly (readonly [string, number])[] = [
-  ['Driver', 250], ['3 Wood', 225], ['5 Wood', 210], ['Hybrid', 195],
-  ['4 Iron', 185], ['5 Iron', 175], ['6 Iron', 165], ['7 Iron', 155],
-  ['8 Iron', 145], ['9 Iron', 130], ['PW', 115], ['GW', 100], ['SW', 85], ['LW', 70],
-];
-const SPOKEN_LADDER_LABEL: Record<string, string> = {
-  Driver: 'Driver', '3W': '3 Wood', '5W': '5 Wood', '7W': '5 Wood',
-  '2H': 'Hybrid', '3H': 'Hybrid', '4H': 'Hybrid', '5H': 'Hybrid',
-  '3I': '4 Iron', '4I': '4 Iron', '5I': '5 Iron', '6I': '6 Iron',
-  '7I': '7 Iron', '8I': '8 Iron', '9I': '9 Iron',
-  PW: 'PW', AW: 'GW', GW: 'GW', SW: 'SW', LW: 'LW',
-};
 
 export type LocalReplyLanguage = 'en' | 'es' | 'zh';
 

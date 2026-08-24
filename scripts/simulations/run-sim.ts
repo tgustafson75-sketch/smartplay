@@ -9480,9 +9480,22 @@ check('LOCK: a built hole\'s par is MEASURED, never assumed — no path emits a 
 // store key at the player. A measured club must REPLACE its chart counterpart.
 check('LOCK: measured clubs map onto the ladder label — never a duplicate, never a store key spoken',
   (() => {
+    /**
+     * 2026-08-24 — RE-AIMED. This asserted the local declaration `const LADDER_LABEL: Record<...>`,
+     * which pinned cnsShotRead to owning its own copy of the map. That copy was WRONG in three
+     * places ('7W'→'5 Wood', '3I'→'4 Iron', 'AW'→'GW') while the file already imported the correct
+     * one and ignored it. The property was never "declare a map here" — it is "a measured club lands
+     * on its LADDER LABEL, replacing its chart twin rather than duplicating it".
+     */
     const c = read('services/cnsShotRead.ts');
+    const sb = read('services/standardBag.ts');
+    // The label map comes from the owner, not a local literal.
+    const usesOwner = /import \{ STANDARD_LADDER as SHARED_LADDER, CLUB_LABEL as SHARED_CLUB_LABEL/.test(c) &&
+      /const LADDER_LABEL = SHARED_CLUB_LABEL as Record<string, string>;/.test(c);
+    // The owner names each club correctly — these three were the typos the copies carried.
+    const ownerCorrect = /'7W': '7 Wood'/.test(sb) && /'3I': '3 Iron'/.test(sb) && /AW: 'AW'/.test(sb);
     return (
-      /const LADDER_LABEL: Record<string, string>/.test(c) &&
+      usesOwner && ownerCorrect &&
       /const label = LADDER_LABEL\[club\] \?\? club;/.test(c) &&
       /merged\.set\(label, d\);/.test(c) &&
       /measured\.add\(label\);/.test(c) &&
@@ -9617,7 +9630,18 @@ check('LOCK: adversarial-audit fixes — 5th club producer, mental-state overwri
     // The defect lived here TWICE (club reply + reach reply). One shared builder now, and the
     // sparse read must appear exactly ONCE — inside that builder — so a third reply can't
     // reintroduce it by copying the old line.
-    const fifth = /STANDARD_SPOKEN_LADDER/.test(lsr) && /SPOKEN_LADDER_LABEL/.test(lsr) &&
+    /**
+     * 2026-08-24 — RE-AIMED, and this one was PINNING THE DEFECT. It required
+     * STANDARD_SPOKEN_LADDER and SPOKEN_LADDER_LABEL to EXIST — the two local copies whose whole
+     * problem was existing. The ladder copy had drifted up to twenty yards from services/standardBag
+     * and was missing three rungs (7 Wood, 3 Iron, AW); the label copy carried three typos. Deleting
+     * them turned this guard red, on a fix. That is exactly the class docs/OPEN-ITEMS.md §8 flagged:
+     * a guard green BECAUSE a bug is present. The property is "ONE shared builder, seeded from the
+     * canonical ladder", not "these two local constants are here".
+     */
+    const fifth = /new Map<string, number>\(STANDARD_LADDER\)/.test(lsr) &&
+      /import \{ STANDARD_LADDER, CLUB_LABEL \} from '\.\/standardBag';/.test(lsr) &&
+      !/STANDARD_SPOKEN_LADDER\s*:/.test(lsr) &&   // the drifted copy may not come back
       /function spokenBag\(\)/.test(lsr) &&
       (lsr.match(/for \(const \[club, yds\] of Object\.entries\(bagDistances\(\)\)\)/g) ?? []).length === 1 &&
       !/const bag = Object\.entries\(bagDistances\(\)\) as \[string, number\]\[\];/.test(lsr) &&
@@ -11072,6 +11096,51 @@ check('LOCK: the club catalog is declared ONCE — six copies, one owner',
     return ownerDeclares && rivals.length === 0 && importers && ownerStaysPure;
   })(),
   'CLUB_SNAP_ORDER is the one club catalog; the store and all four vision/import routes consume it, the putter exception is derived, and the owner stays dependency-free');
+
+check('LOCK: ONE club-label map and ONE carry ladder — the name the player hears has a single owner',
+  (() => {
+    /**
+     * 2026-08-24 (club sweep — ONE OWNER, the instance the player could HEAR).
+     *
+     * The ClubName→spoken-label map existed three times and the carry ladder four. The two copies of
+     * the map carried identical typos — '7W'→'5 Wood', '3I'→'4 Iron', 'AW'→'GW' — and
+     * services/cnsShotRead was ALREADY importing the correct map (line 22) while declaring and using
+     * its own wrong one. Each typo is two defects: the wrong club NAME is spoken, and the measured
+     * carry lands on a NEIGHBOUR'S rung, so a player's 5-wood number silently becomes their 7-wood
+     * number. Proven by reverting: the old code answered "5 Wood", "4 Iron" and "Hybrid".
+     *
+     * services/localStatusResponder — the OFFLINE reply, i.e. the on-course no-signal case the
+     * product is built around — held a fourth ladder that had drifted up to TWENTY yards from the
+     * owner (Hybrid 195 vs 215) and was missing the 7 Wood, 3 Iron and AW rungs outright, under a
+     * comment saying it existed so the spoken and on-screen clubs could not disagree.
+     *
+     * Assert the SHAPE: standardBag owns both, both consumers import them, and no local rival is
+     * declared. Deliberate collapsing (every hybrid → 'Hybrid') stays the OWNER'S job.
+     */
+    /**
+     * Read the CODE, not the prose. Both files now carry doc comments QUOTING the old typos to
+     * explain what was wrong, and a naive scan reads those as the typos still being present — the
+     * same trap that hid closeHoleAtTransition behind its own docstring this morning, and the
+     * fourth time today an assertion matched my own writing instead of the program.
+     */
+    const strip = (src: string) =>
+      src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+    const sb = strip(read('services/standardBag.ts'));
+    const cns = strip(read('services/cnsShotRead.ts'));
+    const lsr = strip(read('services/localStatusResponder.ts'));
+    // The owner names every club correctly, and still collapses the hybrids on purpose.
+    const ownerCorrect = /'7W': '7 Wood'/.test(sb) && /'3I': '3 Iron'/.test(sb) && /AW: 'AW'/.test(sb) &&
+      /'2H': 'Hybrid', '3H': 'Hybrid', '4H': 'Hybrid', '5H': 'Hybrid'/.test(sb) &&
+      /export const STANDARD_LADDER/.test(sb);
+    // Both consumers take the owner's map/ladder.
+    const consumersImport = /CLUB_LABEL as SHARED_CLUB_LABEL/.test(cns) &&
+      /import \{ STANDARD_LADDER, CLUB_LABEL \} from '\.\/standardBag';/.test(lsr);
+    // No rival literal may grow back. The typo trio is the fingerprint of the old copies.
+    const noRival = ![cns, lsr].some(src => /'7W': '5 Wood'/.test(src) || /'3I': '4 Iron'/.test(src)) &&
+      !/STANDARD_SPOKEN_LADDER\s*:/.test(lsr);
+    return ownerCorrect && consumersImport && noRival;
+  })(),
+  'standardBag owns CLUB_LABEL + STANDARD_LADDER; cnsShotRead and the offline responder both consume them, and neither redeclares a rival map or ladder');
 
 // ─── Orphaned exports — the half-build ratchet ─────────────────────────────────
 /**

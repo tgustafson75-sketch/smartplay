@@ -25,7 +25,7 @@ import { useClubBagStore } from '../../store/clubBagStore';
 import { recommendClubFromEquipmentIntelligence } from '../../services/distance/equipment_distance_modifier';
 import { composeShotRead } from '../../services/cnsShotRead';
 import { bagDistances } from '../../services/shotStrategy';
-import { STANDARD_CARRY_YARDS } from '../../services/standardBag';
+import { STANDARD_CARRY_YARDS, CLUB_LABEL, STANDARD_LADDER } from '../../services/standardBag';
 import { getLearnedCarryDistances } from '../../store/clubStatsStore';
 
 /** The pathological state behind every instance: ONE logged club, a wedge. */
@@ -293,5 +293,61 @@ describe('PRODUCER 6 — the chart is calibrated to the player, in one place', (
         useClubStatsStore.getState().carryFor(c);
       }
     }).not.toThrow();
+  });
+});
+
+/**
+ * 2026-08-24 (club sweep — ONE OWNER, third instance, and this one the player HEARS).
+ *
+ * The ClubName→spoken-label map existed THREE times: services/standardBag.CLUB_LABEL (correct),
+ * services/cnsShotRead.LADDER_LABEL and services/localStatusResponder.SPOKEN_LADDER_LABEL. The two
+ * copies carried identical typos — and cnsShotRead was already IMPORTING the correct map on line 22
+ * and ignoring it.
+ *
+ *     '7W' → '5 Wood'    a 7-wood spoken as "5 wood"
+ *     '3I' → '4 Iron'    a 3-iron spoken as "4 iron"
+ *     'AW' → 'GW'        an approach wedge spoken as "GW"
+ *
+ * Each is two defects, not one: the wrong club NAME reaches the player, and the measured carry is
+ * written onto a NEIGHBOUR'S rung, so the player's 5-wood number silently becomes their 7-wood
+ * number. STANDARD_LADDER has genuine rungs for all three, so this was never a deliberate collapse.
+ */
+describe('PRODUCER 7 — the caddie says the club the player actually has', () => {
+  const readWith = (bag: Record<string, number>, yards: number) =>
+    composeShotRead({ rawYards: yards, playsLikeYards: yards, bag } as never);
+
+  it('a 7 wood is called a 7 wood, not a 5 wood', () => {
+    expect(CLUB_LABEL['7W']).toBe('7 Wood');
+    expect(readWith({ '7W': 205 }, 205)?.club).toBe('7 Wood');
+  });
+
+  it('a 3 iron is called a 3 iron, not a 4 iron', () => {
+    expect(CLUB_LABEL['3I']).toBe('3 Iron');
+    expect(readWith({ '3I': 200 }, 200)?.club).toBe('3 Iron');
+  });
+
+  it('an approach wedge is not renamed to GW', () => {
+    expect(CLUB_LABEL.AW).toBe('AW');
+  });
+
+  it('a measured 7W does NOT overwrite the 5 Wood rung', () => {
+    // The bug: '7W' mapped to '5 Wood', so a measured 7-wood replaced the 5-Wood chart number and
+    // the player's 5 wood inherited their 7 wood's distance.
+    const fiveWoodChart = STANDARD_LADDER.find(([l]) => l === '5 Wood')?.[1];
+    expect(fiveWoodChart).toBeGreaterThan(0);
+    // Ask at the chart 5-Wood distance with only a 7W measured — must still be answered as 5 Wood.
+    expect(readWith({ '7W': 150 }, fiveWoodChart as number)?.club).toBe('5 Wood');
+  });
+
+  it('the ladder still carries the three rungs the copies had dropped', () => {
+    for (const label of ['7 Wood', '3 Iron', 'AW']) {
+      expect(STANDARD_LADDER.map(([l]) => l)).toContain(label);
+    }
+  });
+
+  it('hybrids DO still collapse — deliberate collapsing belongs to the owner', () => {
+    // The owner maps every hybrid onto one 'Hybrid' rung so a player is never offered the same-
+    // sounding club twice. That is the real mechanism the typos were masquerading as.
+    for (const h of ['2H', '3H', '4H', '5H'] as const) expect(CLUB_LABEL[h]).toBe('Hybrid');
   });
 });

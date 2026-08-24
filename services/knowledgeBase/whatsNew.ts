@@ -28,6 +28,10 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'I call your clubs by their right names. If you carry a 7 wood I was saying "5 wood", and a 3 iron came out as "4 iron" \u2014 and worse, the distance you\'d logged for that club was being filed against the neighbouring one, so your 5 wood quietly inherited your 7 wood\'s number. Fixed everywhere, including offline.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'The clubs you haven\'t tracked yet get YOUR numbers, not a stock chart. Once you\'ve logged a couple of clubs I know roughly how far you hit it, so the rest of the bag is scaled to you instead of to an average golfer. If you hit it long, your untracked 5 iron stops being listed as a stranger\'s 5 iron. Clubs you HAVE logged always win \u2014 this only fills the gaps.',
   },
   {

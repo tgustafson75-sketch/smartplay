@@ -52,13 +52,24 @@ const STANDARD_LADDER = SHARED_LADDER;
  * 2026-08-11 — ClubName (the stores' vocabulary) → the STANDARD_LADDER's label. Without this the
  * merge produces duplicates ('7I' AND '7 Iron') and the caddie speaks a store key at the player.
  */
-const LADDER_LABEL: Record<string, string> = {
-  Driver: 'Driver', '3W': '3 Wood', '5W': '5 Wood', '7W': '5 Wood',
-  '2H': 'Hybrid', '3H': 'Hybrid', '4H': 'Hybrid', '5H': 'Hybrid',
-  '3I': '4 Iron', '4I': '4 Iron', '5I': '5 Iron', '6I': '6 Iron',
-  '7I': '7 Iron', '8I': '8 Iron', '9I': '9 Iron',
-  PW: 'PW', AW: 'GW', GW: 'GW', SW: 'SW', LW: 'LW',
-};
+/**
+ * 2026-08-24 (club sweep — ONE OWNER). This file declared its OWN ClubName→label map while ALREADY
+ * importing the canonical one on line 22 (`CLUB_LABEL as SHARED_CLUB_LABEL`) and never using it.
+ * The local copy was wrong in three places, and each error is a club the player hears by the wrong
+ * name AND a measured carry landing on a neighbour's rung:
+ *
+ *     '7W': '5 Wood'   a measured 7-wood was spoken as "5 wood" and overwrote the 5-Wood rung (223y)
+ *     '3I': '4 Iron'   a measured 3-iron was spoken as "4 iron" and overwrote the 4-Iron rung (190y)
+ *     'AW': 'GW'       an approach wedge was spoken as "GW" and overwrote the Gap-Wedge rung (98y)
+ *
+ * STANDARD_LADDER has real rungs for 7 Wood (213), 3 Iron (205) and AW (104), so this was not a
+ * deliberate collapse onto an existing rung — it was three typos, duplicated verbatim into
+ * services/localStatusResponder under a comment saying the copy existed so the two could not
+ * disagree. Deliberate collapsing DOES exist and is handled by the owner: CLUB_LABEL maps every
+ * hybrid to 'Hybrid', and STANDARD_LADDER keeps the longest per label.
+ */
+const LADDER_LABEL = SHARED_CLUB_LABEL as Record<string, string>;
+
 
 /** Closest club to the plays-like number — prefers the player's real bag, falls
  *  back to the standard ladder. Pushes a learned-carry "why" line when real. */

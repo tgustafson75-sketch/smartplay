@@ -264,9 +264,12 @@ export const ORPHAN_BASELINE: Record<string, string> = {
   'services/lieAnalysisService.ts :: subscribeVisionActive': 'TRIAGE',
   'services/listeningSession.ts :: isActiveListeningEnabled': 'TRIAGE',
   'services/mediaPipePoseService.ts :: setPreferredQuality': 'TRIAGE',
-  'services/personaKnowledgeBase.ts :: findPersonaKBEntriesByKeywords': 'TRIAGE',
-  'services/personaKnowledgeBase.ts :: getPersonaKBCategories': 'TRIAGE',
-  'services/personaKnowledgeBase.ts :: getPersonaKBSize': 'TRIAGE',
+  'services/personaKnowledgeBase.ts :: findPersonaKBEntriesByKeywords':
+    'SURFACE — keyword variant of the retrieval used by buildPersonaKBPromptBlock (which IS wired). Useful for a future context-aware match; not a missing feature.',
+  'services/personaKnowledgeBase.ts :: getPersonaKBCategories':
+    'SURFACE — KB category list, a diagnostic read.',
+  'services/personaKnowledgeBase.ts :: getPersonaKBSize':
+    'SURFACE — KB size, a diagnostic read for owner tools.',
   'services/planStorage.ts :: listArchivedRecaps': 'TRIAGE',
   'services/positionMarkBus.ts :: getLastMark': 'TRIAGE',
   'services/rangefinder.ts :: REFERENCE_HEIGHTS': 'TRIAGE — SmartFinder is the screen Tim flagged as never swept.',
@@ -307,7 +310,14 @@ export const ORPHAN_BASELINE: Record<string, string> = {
   'services/courseDataOrchestrator.ts :: getCourseHeroImagery':
     'WIRE — course hero imagery, computed and shown nowhere.',
   'services/personaKnowledgeBase.ts :: getPersonaAnswer':
-    'WIRE — the persona KB answer function. Its header describes adding entries and says \"getPersonaAnswer picks it up automatically\"; nothing calls it, so Tank\u2019s doctrine layer answers nobody.',
+    'DO NOT WIRE — superseded by design, and wiring it would be a regression. It returns a CANNED ' +
+    'stored answer (entry.tankAnswer / serenaAnswer / ...) for the app to speak directly. The ' +
+    'architecture deliberately moved the other way: api/kevin.ts:577 calls buildPersonaKBPromptBlock, ' +
+    'which injects the top entries into the prompt so the BRAIN riffs across them in its own voice. ' +
+    'A local responder answering instead of the brain is the exact defect class from 08-23 ' +
+    '(three surfaces answered the player without calling the brain) and from the canned-line audit. ' +
+    'Its header even reads "the brain riffs off the entry rather than freestyling". Keep it dead, or ' +
+    'delete it; do not connect it. [[learning-layer-must-not-intercept]] [[feels-like-a-real-caddie]]',
   'services/gpsManager.ts :: getGpsHealth':
     'WIRE/TRIAGE — GPS health read; gpsLost reaches the brain, this richer read does not.',
   'services/glassesVisionInput.ts :: registerGlassesTransport':
