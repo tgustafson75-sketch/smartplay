@@ -9969,6 +9969,28 @@ check('LOCK: an app-inferred club is attribution, never "advice the player follo
   })(),
   'spoken/engine recommendations score adherence; inferred stamps attribute the club only');
 
+check('LOCK: the body read does not wait for the video player to load',
+  (() => {
+    /**
+     * 2026-08-24 (Tim, range session) — "seems to happen in two stages where you get partial then I
+     * tap the screen and it populates more data."
+     *
+     * The pose/biomech pass is gated on videoDurationMs, and the ONLY writer was the review
+     * player's onLoad callback — so SWING BREAKDOWN and SPEED arrived from the server while BODY,
+     * sway, tilt and weight sat blank until the video element loaded. The tap was loading it. The
+     * duration is known at ANALYSIS time in every branch (metered free during recording, or probed
+     * once), so seeding it there starts the body read with everything else.
+     *
+     * Assert the SHAPE: onLoad is no longer the sole writer.
+     */
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const writers = (sm.match(/setVideoDurationMs\(/g) ?? []).length;
+    const seededAtAnalysis = /if \(durMs > 0\) setVideoDurationMs\(durMs\)/.test(sm);
+    // 2 clears + the onLoad writer + at least one analysis-time seed.
+    return seededAtAnalysis && writers >= 5;
+  })(),
+  'video duration is seeded when analysis knows it, so BODY fills without a tap');
+
 check('LOCK: the acoustic strike classifier actually reaches the CONTACT card',
   (() => {
     /**

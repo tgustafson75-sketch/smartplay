@@ -3657,6 +3657,18 @@ export default function SmartMotion() {
           // thumbnail call, and RANGE was paying it on every swing despite having the
           // number already (the cage branch below already reuses meteredDurationMs).
           const durMs = meteredDurationMs ?? await pose.probeDurationMs(recorded.uri).catch(() => RANGE_RECORDING_MAX_SECONDS * 1000);
+          /**
+           * 2026-08-24 (Tim — "seems to happen in two stages where you get partial then I tap the
+           * screen and it populates more data").
+           *
+           * That is exactly what it did. The pose/biomech pass is gated on videoDurationMs, and the
+           * ONLY thing that set it was the review player's onLoad — so BODY, sway, tilt and weight
+           * sat empty until the video element loaded, which is what the tap was doing. The duration
+           * is known right here, before the player is even mounted: metered free during recording,
+           * or probed once. Seed it now and the body read starts with everything else instead of
+           * waiting on a tap.
+           */
+          if (durMs > 0) setVideoDurationMs(durMs);
           let swings = await pose.locateSwings(recorded.uri, durMs);
           // 2026-08-01 (marquee-feature audit — Severity 1). A COLD locate-Lambda (502 / 30s abort)
           // returns [] on the first call, and with a quiet/muted mic (no acoustic fallback) RANGE then
@@ -3764,6 +3776,18 @@ export default function SmartMotion() {
           const pose = await import('../../services/poseDetection');
           // Use the metered duration (no re-probe); only probe as a last resort.
           const durMs = meteredDurationMs ?? await pose.probeDurationMs(recorded.uri).catch(() => RANGE_RECORDING_MAX_SECONDS * 1000);
+          /**
+           * 2026-08-24 (Tim — "seems to happen in two stages where you get partial then I tap the
+           * screen and it populates more data").
+           *
+           * That is exactly what it did. The pose/biomech pass is gated on videoDurationMs, and the
+           * ONLY thing that set it was the review player's onLoad — so BODY, sway, tilt and weight
+           * sat empty until the video element loaded, which is what the tap was doing. The duration
+           * is known right here, before the player is even mounted: metered free during recording,
+           * or probed once. Seed it now and the body read starts with everything else instead of
+           * waiting on a tap.
+           */
+          if (durMs > 0) setVideoDurationMs(durMs);
           // 2026-06-12 (analysis speed) — locateSwings is a cold-Lambda network call
           // (≤30s). It's only worth it on a LONG clip where the swing's position is
           // genuinely unknown. A SHORT cage clip basically IS the swing — skip the locate
@@ -3845,6 +3869,7 @@ export default function SmartMotion() {
       let firstSeg = segsForAnalysis[0];
       if (!firstSeg) {
         const durMs = meteredDurationMs ?? 0;
+        if (durMs > 0) setVideoDurationMs(durMs);   // see the two-stage note above — do not wait for onLoad
         // 2026-06-22 — removed `durMs <= 12_000` cap. The old cap meant any
         // clip >12 s where both acoustic AND vision locate failed received NO
         // segment, forcing the unbounded analysis path (70 s watchdog). For
