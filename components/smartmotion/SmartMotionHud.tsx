@@ -404,6 +404,7 @@ export function BodyAnalysisRow({ items, style }: { items: BodyItem[]; style?: S
 export function AcousticPickupCard({
   detected,
   swingCount,
+  heardCount = null,
   calibrated = true,
   levelDb = null,
   listening = false,
@@ -412,6 +413,16 @@ export function AcousticPickupCard({
   detected: boolean;
   /** Swings detected in the open window (multi-swing flow). */
   swingCount?: number;
+  /**
+   * 2026-08-24 (Tim) — what the MICROPHONE actually heard, which is not always what got analysed.
+   *
+   * `swingCount` comes from segments, and in range mode a segment only exists once VIDEO confirms
+   * the strike. So a five-swing set could hear five and show "1 swing detected", which reads as the
+   * pickup having missed them. It didn't — the analysis did. Saying "heard 5 · analysed 1" is the
+   * honest version and tells the player something true about their session, which is the whole
+   * point of having a microphone on the mat.
+   */
+  heardCount?: number | null;
   calibrated?: boolean;
   /** Live mic level in dBFS (~[-60,0]) while recording. When provided the
    *  meter shows the REAL signal; when null (idle/review) the meter sits at
@@ -452,7 +463,15 @@ export function AcousticPickupCard({
         {!calibrated
           ? 'Tap to calibrate (10 strikes)'
           : detected
-            ? (swingCount != null ? `${swingCount} swing${swingCount === 1 ? '' : 's'} detected` : 'Ball Smash Detected')
+            ? (swingCount != null
+                ? (heardCount != null && heardCount > swingCount
+                    // Heard more than we could analyse — say both, so a missing swing reads as an
+                    // analysis limit rather than a deaf microphone.
+                    ? `heard ${heardCount} · analysed ${swingCount}`
+                    : `${swingCount} swing${swingCount === 1 ? '' : 's'} detected`)
+                : heardCount != null && heardCount > 0
+                  ? `${heardCount} strike${heardCount === 1 ? '' : 's'} heard`
+                  : 'Ball Smash Detected')
             : listening
               ? 'Listening…'
               : 'Calibrated ✓ — Record to listen'}

@@ -1019,7 +1019,25 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
         const covers = sorted.find(([, y]) => y >= target);
         const why = speedLossYds > 0 ? ` — ${currentYardage} on the card, but with ${_physicalLimitation} they are not making their full speed today, so play it as ${target}` : '';
         if (covers) {
-          lines.push(`- THE CLUB FOR THIS SHOT IS THE ${covers[0].toUpperCase()} (${covers[1]} carry, the first club that covers ${target})${why}. Arithmetic, already done — do not substitute a club that merely feels right, and never one carrying less than ${target} while a longer one is in the bag.${speedLossYds > 0 ? ' Give them the club and a short reason they will recognise; do not lecture them about their body.' : ''}`);
+          /**
+           * 2026-08-24 — THE MARGIN, AND WHAT THE POSTURE MAKES OF IT.
+           *
+           * Probed with a 235-carry 3-wood and 210 to clear: the caddie finally did the arithmetic
+           * out loud ("your 3-wood carries 235") and STILL said lay up — the identical answer an
+           * aggressive player and a cautious one both got, 0/3. Naming the numbers is not the same
+           * as letting them decide anything. The doctrine already says fifteen yards of margin is a
+           * go for an aggressive player, so state the verdict rather than hoping it is applied.
+           */
+          const marginYds = covers[1] - target;
+          const posture = typeof riskMode === 'string' ? riskMode.toLowerCase() : null;
+          const verdict = marginYds >= 15 && posture === 'aggressive'
+            ? ` MARGIN: ${marginYds} yards. They have told you to play AGGRESSIVE and ${marginYds} yards is comfortably inside — this is a GO, and say so. Talking them out of a carry they clear by ${marginYds} yards is not caution, it is ignoring what they asked for.`
+            : marginYds >= 15 && (posture === 'safe' || posture === 'conservative')
+              ? ` MARGIN: ${marginYds} yards — enough, but they have asked you to play SAFE, so offer the shot and the safe alternative and let them pick.`
+              : marginYds >= 15
+                ? ` MARGIN: ${marginYds} yards — comfortably inside, so if they ask whether to take it on, the answer is yes.`
+                : ` MARGIN: only ${marginYds} yards — that is the edge, and worth saying plainly if they ask whether to go.`;
+          lines.push(`- THE CLUB FOR THIS SHOT IS THE ${covers[0].toUpperCase()} (${covers[1]} carry, the first club that covers ${target})${why}. Arithmetic, already done — do not substitute a club that merely feels right, and never one carrying less than ${target} while a longer one is in the bag.${speedLossYds > 0 ? ' Give them the club and a short reason they will recognise; do not lecture them about their body.' : ''}${verdict}`);
         } else {
           const longest = sorted[sorted.length - 1]!;
           lines.push(`- NOTHING IN THEIR BAG COVERS ${target}${why}. The longest is the ${longest[0]} at ${longest[1]} — say so plainly rather than implying it reaches.`);

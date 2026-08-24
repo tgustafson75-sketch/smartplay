@@ -5429,6 +5429,7 @@ export default function SmartMotion() {
                 <AcousticPickupCard
                   detected={phase === 'recording' && meteringActive ? liveDb != null && liveDb > -30 : segments.length > 0}
                   swingCount={isReview ? segments.length : undefined}
+                  heardCount={isReview ? heardStrikeCount : null}
                   calibrated={calibrated}
                   levelDb={phase === 'recording' && meteringActive ? liveDb : null}
                   listening={phase === 'recording' && meteringActive}

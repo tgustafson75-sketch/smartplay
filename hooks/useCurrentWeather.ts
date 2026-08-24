@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useRoundStore } from '../store/roundStore';
 import { fetchWeatherAt, getCachedWeather, type WeatherSnapshot } from '../services/weatherService';
-import { getCurrentLocation, getTeeCentroid, getGreenCentroid } from '../services/shotLocationService';
-import { bearingDegrees } from '../utils/geoDistance';
+import { getCurrentLocation } from '../services/shotLocationService';
+import { shotBearingDeg } from '../services/windRelative';
 
 const REFRESH_MS = 5 * 60 * 1000;
 
@@ -39,10 +39,11 @@ export function useCurrentWeather(): {
       const fresh = await fetchWeatherAt(here);
       if (!cancelled && fresh) setWeather(fresh);
 
-      const tee = getTeeCentroid(currentHole);
-      const green = getGreenCentroid(currentHole);
-      if (tee && green && !cancelled) setBearing(bearingDegrees(tee, green));
-      else if (!cancelled) setBearing(null);
+      // 2026-08-24 — was its own tee→green derivation, the FOURTH copy of this calculation in the
+      // app. services/windRelative owns it, and it now prefers the line actually being played
+      // (player→green) over the card's tee→green, so SmartFinder's plays-like and the caddie's club
+      // cannot disagree about which way the wind is blowing on the same shot.
+      if (!cancelled) setBearing(shotBearingDeg(currentHole));
     }
 
     refresh();

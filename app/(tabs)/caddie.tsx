@@ -36,6 +36,7 @@ import { PermissionBanner } from '../../components/PermissionBanner';
 import { useRoundStore, roundLastHole, roundFirstHole } from '../../store/roundStore';
 import type { ShotLocation, ShotResult } from '../../store/roundStore';
 import { useSettingsStore } from '../../store/settingsStore';
+import { getDialog } from '../../services/dialogEngine';
 // Phase Cockpit — alternate Caddie tab layout (v3-style). Gated by
 // useSettingsStore.cockpitMode; off by default. Voice/avatar code
 // below is byte-identical to pre-Cockpit when the toggle is off.
@@ -1091,7 +1092,12 @@ export default function CaddieTab() {
         // — after the per-swing reads, offer the NEXT ROUND explicitly. A "yes / run it
         // back" fires record_swing → beginNextRecording (auto-saves the finished set,
         // camera rolling). Naming a club/drill reconfigures first (SESSION_DONE_FOCUS).
-        const line = `${event.summary} Want another round? Say run it back and I'll start it — or name a club or drill and I'll set that up instead.`;
+        /**
+         * 2026-08-24 (Tim) — was ONE hardcoded sentence, identical every set. The dialog engine has
+         * existed for exactly this and every other spoken line goes through it; this one did not.
+         * The summary is his, the invitation now varies like a person's would.
+         */
+        const line = `${event.summary} ${getDialog('coach', 'session_done')}`;
         configureAudioForSpeech()
           .then(() => speak(line, vg, lang, apiUrl, { userInitiated: true }))
           .then(() => new Promise<void>((r) => setTimeout(r, 500)))

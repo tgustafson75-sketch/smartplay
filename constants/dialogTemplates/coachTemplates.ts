@@ -28,7 +28,8 @@ export type CoachSituation =
   | 'primary_issue_summary_terse'
   | 'primary_issue_summary_standard'
   | 'primary_issue_summary_engaged'
-  | 'earbud_open';
+  | 'earbud_open'
+  | 'session_done';
 
 const TEMPLATES: Record<CoachSituation, string[]> = {
   recap_intro: [
@@ -143,6 +144,23 @@ const TEMPLATES: Record<CoachSituation, string[]> = {
     "What are you working on?",
     "What's the focus?",
     "What do you want to dial in?",
+  ],
+
+  /**
+   * 2026-08-24 (Tim, range session) — "when you stop recording in SmartMotion it asks about going
+   * another session but it's not listening, so that's canned bullshit."
+   *
+   * It was canned in the literal sense: ONE hardcoded template string in app/(tabs)/caddie.tsx,
+   * word for word every set, for months. Five real ways a coach asks it, varied like every other
+   * line he speaks. The invitation follows the per-swing summary, so it stays short — he has
+   * already talked; this is the door held open.
+   */
+  session_done: [
+    "Want another set? Say run it back and I'll start it — or name a club and I'll set that up.",
+    "Go again? Tell me to run it back, or give me a club or a drill and it's ready.",
+    "Another one? Say run it back — or name what you want to work on and I'll line it up.",
+    "Want to keep going? Run it back and I'll roll, or call a club and we'll switch.",
+    "One more? Say run it back — or tell me a club or drill and I'll set it up instead.",
   ],
 };
 

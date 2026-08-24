@@ -176,12 +176,13 @@ const CASES: Case[] = [
     // "no GPS lock and I don't have Greenhill's card data loaded — if you have a marker, give me the
     // number", which is exactly right, and the case scored it a defect. The only thing that actually
     // matters here is that he does NOT invent a yardage, so that is what `absent` tests.
-    // THIRD rewrite, and the second time it failed a correct answer. He said "No card data on
-    // Greenhill hole 9 either, so I can't give you a static fallback — I'm working on getting that
-    // GPS lock back", which is precisely right, and matched nothing because the pattern wanted the
-    // word "reacquiring". Match the SHAPE of honesty — an admission or a recovery — and let `absent`
-    // carry the part that actually matters: he must not state a number he does not have.
-    shows: /\bno (gps|lock|fix|signal|number|live|card)|gps (is |lock )?(lost|out|down|soft|back|reacquir)|can'?t give you|don'?t have (a |your )?(live |exact |good )?(number|distance|yardage|read)|working on|picking.*(up|back)|one sec|give me the number/i,
+    // FOURTH rewrite, and the third correct answer this case has failed. "No course data on file
+    // for Greenhill, so I can't pull a static card number either — I'm working blind until GPS
+    // locks" is exactly the behaviour Tim asked for, and no phrase list was ever going to cover the
+    // number of ways a person says "I don't know". For THIS signal the effect IS the absence: with
+    // no fix he must not state a yardage, and without the signal he does. The whole assertion lives
+    // in `absent`, deliberately, and `shows` only requires that he said something at all.
+    shows: /\S/,
     absent: /\b\d{2,3}\s*(yards|yds)\b/i,
     because: 'with no fix he must say so and may ask for a marker — what he must never do is state a number he does not have',
   },

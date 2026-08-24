@@ -22,10 +22,30 @@ import { getGreenCentroid, getTeeCentroid } from './shotLocationService';
 // GEO half. Re-exported so every caller keeps one import site.
 export { decomposeWind, type RelativeWind } from '../utils/windMath';
 
-/** Tee → green bearing for a hole, or null when the hole has no mapped geometry. */
+/**
+ * The direction the player is ACTUALLY playing, in degrees.
+ *
+ * 2026-08-24 — was tee → green, always. That is right on the tee and wrong everywhere else: on a
+ * dogleg, the line from the tee to the green is not the line of the second shot, so a headwind
+ * could be reported as a crosswind for every shot after the drive. services/localStatusResponder
+ * already used PLAYER → green for exactly this reason, which meant the spoken wind and the caddie's
+ * wind could disagree on the same hole — the drift this module exists to prevent.
+ *
+ * Player → green whenever there is a live fix, tee → green as the fallback (no fix yet, or standing
+ * on the tee), and null when the hole has no mapped geometry — an unknown bearing must stay unknown.
+ */
 export function shotBearingDeg(hole: number): number | null {
-  const tee = getTeeCentroid(hole);
   const green = getGreenCentroid(hole);
-  if (tee && green) return bearingDegrees(tee, green);
+  if (!green) return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getLastFix } = require('./gpsManager') as typeof import('./gpsManager');
+    const fix = getLastFix();
+    if (fix && fix.lat != null && fix.lng != null) {
+      return bearingDegrees({ lat: fix.lat, lng: fix.lng }, green);
+    }
+  } catch { /* no GPS module in this context — fall back to the card geometry */ }
+  const tee = getTeeCentroid(hole);
+  if (tee) return bearingDegrees(tee, green);
   return null;
 }
