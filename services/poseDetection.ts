@@ -576,8 +576,27 @@ const LOCATE_TIMEOUT_MS = 35_000;
 // runs; both a fast refusal AND a black-hole (probe times out, one 6s retry also silent) abort the
 // doomed locate in ~3-9s so analysis degrades fast instead of burning 35s per swing. A slow-but-ALIVE
 // host answers the tiny GET and the locate is never aborted (cold-Lambda patience preserved).
-function armDeadHostGuard(apiUrl: string, controller: AbortController): { cancel: () => void } {
+/**
+ * 2026-08-24 (Tim's device log: swing_locate_fallback "Aborted" ×3 at 7:30/7:32/7:34 PM, live_cage).
+ *
+ * THE LOG COULD NOT SAY WHO ABORTED. Both the 35s ceiling and this guard called
+ * `controller.abort()` with no reason, and the catch reported the generic `error: "Aborted"`. So a
+ * network that was genuinely down and a server that was merely slow produced the SAME line — which
+ * is exactly why this entry has sat open since 08-08, with the 08-24 handoff noting the contention
+ * diagnosis "was never confirmed... equally consistent with the network being down at that moment."
+ *
+ * Sixteen days of ambiguity is a telemetry defect, not a swing defect. The guard now REPORTS: which
+ * probe answered, how long it took, and therefore whether the abort was this guard doing its job on
+ * a dead host, or the ceiling firing on a live-but-slow one. Same discipline as the `cdnOk` field
+ * that settled the 35-second voice silence.
+ */
+function armDeadHostGuard(
+  apiUrl: string,
+  controller: AbortController,
+  onFired: (probes: { probe1Ok: boolean; probe2Ok: boolean; firedAfterMs: number }) => void,
+): { cancel: () => void } {
   let cancelled = false;
+  const armedAt = Date.now();
   const probe = async (timeoutMs: number): Promise<boolean> => {
     try {
       const pc = new AbortController();
@@ -591,10 +610,15 @@ function armDeadHostGuard(apiUrl: string, controller: AbortController): { cancel
     } catch { return false; }
   };
   void (async () => {
-    if (await probe(3000)) return;
+    const probe1Ok = await probe(3000);
+    if (probe1Ok) return;
     if (cancelled) return;
-    if (await probe(6000)) return;
+    const probe2Ok = await probe(6000);
+    if (probe2Ok) return;
     if (cancelled) return;
+    // Both probes silent. Record the verdict BEFORE aborting, so the catch can name the cause
+    // rather than reporting a bare "Aborted" that proves nothing.
+    try { onFired({ probe1Ok, probe2Ok, firedAfterMs: Date.now() - armedAt }); } catch { /* no-op */ }
     try { controller.abort(); } catch { /* no-op */ }
   })();
   return { cancel: () => { cancelled = true; } };
@@ -686,12 +710,28 @@ export async function locateSwingWindow(
     logLocate('swing_locate_fallback', { reason: 'coarse_frames_failed', extracted: frames.length, wanted: count });
     return null;
   }
+  /**
+   * 2026-08-24 — WHO ABORTED. Two things can abort the locate fetch and they mean OPPOSITE things:
+   * the dead-host guard (the network is gone — degrading fast is CORRECT behaviour) and the 35s
+   * ceiling (the host answered our probe and then took too long — a real server problem). Until
+   * today both produced the same bare "Aborted", which is why this entry sat open for sixteen days.
+   * Declared outside the try so the catch can name the cause.
+   */
+  const startedAt = Date.now();
+  let abortCause: 'dead_host' | 'ceiling' | null = null;
+  let probeVerdict: { probe1Ok: boolean; probe2Ok: boolean; firedAfterMs: number } | null = null;
   try {
     // 2026-08-08 — dead-host guard (see armDeadHostGuard): a provably-dead network aborts in ~3-9s
     // instead of hanging the full 35s ceiling per swing.
     const locateCtl = new AbortController();
-    const locateTimer = setTimeout(() => { try { locateCtl.abort(); } catch { /* no-op */ } }, LOCATE_TIMEOUT_MS);
-    const guard = armDeadHostGuard(apiUrl, locateCtl);
+    const locateTimer = setTimeout(() => {
+      abortCause = abortCause ?? 'ceiling';
+      try { locateCtl.abort(); } catch { /* no-op */ }
+    }, LOCATE_TIMEOUT_MS);
+    const guard = armDeadHostGuard(apiUrl, locateCtl, (probes) => {
+      abortCause = abortCause ?? 'dead_host';
+      probeVerdict = probes;
+    });
     let res: Response;
     try {
       res = await fetch(`${apiUrl}/api/swing-analysis`, {
@@ -738,8 +778,30 @@ export async function locateSwingWindow(
     // correct one) run for uploads too.
     return { startSec, endSec, swingTimeSec: t };
   } catch (e) {
-    V6('LOCATE — failed (fallback to wide spread)', { error: e instanceof Error ? e.message : String(e) });
-    logLocate('swing_locate_fallback', { reason: 'exception', error: e instanceof Error ? e.message : String(e) });
+    const msg = e instanceof Error ? e.message : String(e);
+    const name = e instanceof Error ? e.name : '';
+    const aborted = name === 'AbortError' || /abort/i.test(msg);
+    /**
+     * 2026-08-24 — an abort is now reported as an ABORT with its cause and the evidence, not as a
+     * nameless exception. `dead_host` with both probes false means the network was gone and this
+     * degraded fast, which is the guard working; `ceiling` means the host answered our probe and
+     * then took longer than 35s, which is a server problem worth chasing. Those are different bugs
+     * and for sixteen days they produced the same log line.
+     */
+    if (aborted) {
+      const detail = {
+        reason: 'aborted',
+        cause: abortCause ?? 'unknown',
+        elapsed_ms: Date.now() - startedAt,
+        coarse_frames: frames.length,
+        ...(probeVerdict ?? {}),
+      };
+      V6('LOCATE — aborted (fallback to wide spread)', detail);
+      logLocate('swing_locate_fallback', detail);
+      return null;
+    }
+    V6('LOCATE — failed (fallback to wide spread)', { error: msg });
+    logLocate('swing_locate_fallback', { reason: 'exception', error: msg, elapsed_ms: Date.now() - startedAt });
     return null;
   }
 }
@@ -777,11 +839,22 @@ export async function locateSwings(
     logLocate('range_locate_fallback', { reason: 'coarse_frames_failed', extracted: frames.length, wanted: count });
     return [];
   }
+  // 2026-08-24 — same cause-naming as the single locate. This is the live_cage path, which is where
+  // Tim's 7:30-7:34 PM aborts came from, so the ambiguity mattered here too.
+  const rangeStartedAt = Date.now();
+  let rangeAbortCause: 'dead_host' | 'ceiling' | null = null;
+  let rangeProbeVerdict: { probe1Ok: boolean; probe2Ok: boolean; firedAfterMs: number } | null = null;
   try {
     // 2026-08-08 — same dead-host guard as the single locate: flaky network degrades in ~3-9s, not 30s+.
     const rangeCtl = new AbortController();
-    const rangeTimer = setTimeout(() => { try { rangeCtl.abort(); } catch { /* no-op */ } }, LOCATE_SWINGS_TIMEOUT_MS);
-    const rangeGuard = armDeadHostGuard(apiUrl, rangeCtl);
+    const rangeTimer = setTimeout(() => {
+      rangeAbortCause = rangeAbortCause ?? 'ceiling';
+      try { rangeCtl.abort(); } catch { /* no-op */ }
+    }, LOCATE_SWINGS_TIMEOUT_MS);
+    const rangeGuard = armDeadHostGuard(apiUrl, rangeCtl, (probes) => {
+      rangeAbortCause = rangeAbortCause ?? 'dead_host';
+      rangeProbeVerdict = probes;
+    });
     let res: Response;
     try {
       res = await fetch(`${apiUrl}/api/swing-analysis`, {
@@ -827,7 +900,24 @@ export async function locateSwings(
     logLocate('range_located', { count: out.length, raw_count: raw.length, coarse_frames: frames.length });
     return out;
   } catch (e) {
-    logLocate('range_locate_fallback', { reason: 'exception', error: e instanceof Error ? e.message : String(e) });
+    // 2026-08-24 — name the cause, same as the single locate. `dead_host` with both probes false is
+    // the guard working on a gone network; `ceiling` is a live host that took too long, which is a
+    // different bug entirely. They used to be indistinguishable.
+    {
+      const msg = e instanceof Error ? e.message : String(e);
+      const name = e instanceof Error ? e.name : '';
+      if (name === 'AbortError' || /abort/i.test(msg)) {
+        logLocate('range_locate_fallback', {
+          reason: 'aborted',
+          cause: rangeAbortCause ?? 'unknown',
+          elapsed_ms: Date.now() - rangeStartedAt,
+          coarse_frames: frames.length,
+          ...(rangeProbeVerdict ?? {}),
+        });
+        return [];
+      }
+      logLocate('range_locate_fallback', { reason: 'exception', error: msg, elapsed_ms: Date.now() - rangeStartedAt });
+    }
     return [];
   }
 }

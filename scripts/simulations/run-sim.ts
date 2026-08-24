@@ -11332,6 +11332,44 @@ check('LOCK: course discovery has ONE budget — the client waits longer than th
   })(),
   'course-locate spends less than the client waits and less than the platform allows, the primary cannot starve the fallback, and the deadline is consulted rather than declared');
 
+check('LOCK: an aborted swing locate SAYS WHO ABORTED IT',
+  (() => {
+    /**
+     * 2026-08-24 (Tim's device log: swing_locate_fallback "Aborted" ×3, 7:30/7:32/7:34 PM, live_cage).
+     *
+     * TWO things abort the locate fetch and they mean OPPOSITE things:
+     *   dead_host  the guard probed /api/health twice, got silence, and killed a doomed request in
+     *              3-9s instead of hanging 35s. That is the guard WORKING.
+     *   ceiling    the host answered the probe and then took longer than 35s. That is a real server
+     *              problem worth chasing.
+     *
+     * Both called controller.abort() with no reason, and the catch logged the bare message
+     * "Aborted". So sixteen days of reports could not distinguish "your wifi died" from "our Lambda
+     * is too slow" — which is exactly why docs/OPEN-ITEMS and the 08-24 handoff both list this as
+     * unresolved, with the handoff conceding the diagnosis "was never confirmed... equally
+     * consistent with the network being down at that moment."
+     *
+     * An unfixable-because-unreadable log is a defect in its own right. Same lesson as
+     * "All promises were rejected" and the cdnOk field that settled the 35-second voice silence:
+     * make the NEXT occurrence decisive rather than guessing at this one.
+     */
+    const pd = read('services/poseDetection.ts');
+    // The guard reports its probe verdict instead of silently aborting.
+    const guardReports = /onFired: \(probes: \{ probe1Ok: boolean; probe2Ok: boolean; firedAfterMs: number \}\) => void/.test(pd) &&
+      /onFired\(\{ probe1Ok, probe2Ok, firedAfterMs: Date\.now\(\) - armedAt \}\)/.test(pd);
+    // Both abort sites, on BOTH paths, stamp a cause.
+    const causes = (pd.match(/abortCause = abortCause \?\? 'ceiling';/g) ?? []).length >= 1 &&
+      (pd.match(/abortCause = abortCause \?\? 'dead_host';/g) ?? []).length >= 1 &&
+      /rangeAbortCause = rangeAbortCause \?\? 'ceiling';/.test(pd) &&
+      /rangeAbortCause = rangeAbortCause \?\? 'dead_host';/.test(pd);
+    // An abort is logged AS an abort, with the evidence — not as a nameless exception.
+    const reported = (pd.match(/reason: 'aborted',/g) ?? []).length === 2 &&
+      (pd.match(/cause: (rangeAbortCause|abortCause) \?\? 'unknown',/g) ?? []).length === 2 &&
+      (pd.match(/elapsed_ms: Date\.now\(\) - (rangeStartedAt|startedAt),/g) ?? []).length >= 2;
+    return guardReports && causes && reported;
+  })(),
+  'both locate paths stamp dead_host vs ceiling at the abort site and log it with the probe verdict and elapsed time, so the next report says which failure it was');
+
 // ─── Orphaned exports — the half-build ratchet ─────────────────────────────────
 /**
  * 2026-08-24. Tim: *"an absolutely consistent theme of half built processes… I'm stuck in a 2-month
