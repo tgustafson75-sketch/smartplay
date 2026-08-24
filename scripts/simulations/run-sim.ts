@@ -9969,6 +9969,35 @@ check('LOCK: an app-inferred club is attribution, never "advice the player follo
   })(),
   'spoken/engine recommendations score adherence; inferred stamps attribute the club only');
 
+check('LOCK: the acoustic strike classifier actually reaches the CONTACT card',
+  (() => {
+    /**
+     * 2026-08-24 (Tim, range session) — "since we have acoustic pickup it should know number of
+     * shots and be able over the course of a session to know a pure strike for contact and smash
+     * versus not."
+     *
+     * services/acousticsAnalyzer graded pure/good/okay/bad and flush/heel/toe/fat/thin for months.
+     * analyzeStrike() had ONE caller (lie analysis) and toCageContact() had NONE, while SmartMotion's
+     * CONTACT card printed "Strike not cross-checked on this swing" with ACOUSTIC PICKUP reading
+     * "Calibrated" directly beside it. A classifier with no consumer is the Learning-Golfer-Model
+     * shape all over again [[the-app-usually-already-knows]].
+     *
+     * Assert the CHAIN: the screen grades the strike from data it already has, and the card renders
+     * the result. Not the wording — the wiring.
+     */
+    const sm = read('app/swinglab/smartmotion.tsx');
+    const grades = /analyzeStrike\(\{/.test(sm) &&
+      /noise_floor_db: res\.floorDb/.test(sm) &&   // the floor the detector MEASURED, not a guess
+      /decay_db: decayDb/.test(sm);                // computed from the 50ms buffer already captured
+    const rendersOnContact = /key: 'contact'/.test(sm) && /acousticRead/.test(sm);
+    // The old dead-end string must not be the ONLY thing the card can say.
+    const notOnlyTheDeadEnd = /caddie_note/.test(sm);
+    // A low-confidence read must fall back rather than dress a guess as a measurement.
+    const honestUnknown = /quality !== 'unknown'/.test(sm);
+    return grades && rendersOnContact && notOnlyTheDeadEnd && honestUnknown;
+  })(),
+  'the microphone grades the strike and the CONTACT card shows it; an unconfident read falls back');
+
 check('LOCK: the microphone registry holds EVERY owner, not just the last one to register',
   (() => {
     /**

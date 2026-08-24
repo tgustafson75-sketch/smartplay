@@ -92,6 +92,7 @@ import {
 } from '../../services/poseAnalysisApi';
 import { startMeteredRecording, type MeteringHandle } from '../../services/swing/audioMetering';
 import { detectStrikes, type DetectedStrike } from '../../services/swing/strikeDetector';
+import { analyzeStrike, type AcousticAnalysis } from '../../services/acousticsAnalyzer';
 import { segmentsFromStrikes, segmentsFromVideoSwings, correlateStrikesWithVideo, filterReboundStrikes, type SwingSegment } from '../../services/swing/swingSegmentation';
 import { detectBallSpeed, type BallSpeedResult } from '../../services/acousticDetectApi';
 import { useCageStore, type PrimaryIssue } from '../../store/cageStore';
@@ -708,6 +709,20 @@ export default function SmartMotion() {
   const [ballSpeed, setBallSpeed] = useState<BallSpeedResult | null>(null);
   // Camera cross-check of the acoustic strike (ball there → gone at impact).
   const [ballDeparture, setBallDeparture] = useState<BallDepartureResult | null>(null);
+  /**
+   * 2026-08-24 (Tim, range session) — "since we have acoustic pickup it should know number of shots
+   * and be able over the course of a session to know a pure strike for contact and smash versus not."
+   *
+   * The whole classifier already existed — services/acousticsAnalyzer grades pure/good/okay/bad and
+   * flush/heel/toe/fat/thin from peak, noise floor and decay, and writes the one-line caddie note.
+   * It had ONE caller (lie analysis) and toCageContact() had NONE. Meanwhile the CONTACT card said
+   * "Strike not cross-checked on this swing" while ACOUSTIC PICKUP sat beside it reading "Calibrated".
+   * Every input it needs is already computed at the metering stop: res.floorDb is the noise floor,
+   * strike.peakDb the peak, and the 50ms sample buffer gives the decay. Nothing new to capture.
+   */
+  const [acousticRead, setAcousticRead] = useState<AcousticAnalysis | null>(null);
+  /** Strikes the microphone actually heard in this recording — the honest shot count. */
+  const [heardStrikeCount, setHeardStrikeCount] = useState<number | null>(null);
   // 2026-06-14 (Tim — per-swing trace) — cache the departure read PER swing index so
   // switching reel tabs shows THAT swing's trace. The old single-shot effect computed
   // departure once off the FIRST strike and never recomputed, so swings 2-5 showed
@@ -1905,21 +1920,53 @@ export default function SmartMotion() {
             : `${[...bad, ...warn].map((b) => b.label).join(' · ')} to look at.`,
         tone: measuredBody.length === 0 ? undefined : bad.length > 0 ? '#ef4444' : warn.length > 0 ? '#f59e0b' : '#88F700',
       },
-      {
-        key: 'contact',
-        title: 'CONTACT',
-        value: ballDeparture ? (ballDeparture.departed ? 'Struck' : ballDeparture.ball_present_before ? 'No launch' : null) : null,
-        note: ballDeparture
+      /**
+       * 2026-08-24 (Tim) — CONTACT is TWO senses, and only one of them was ever asked.
+       *
+       * The camera answers "did the ball leave?" The MICROPHONE answers "how was it struck?" —
+       * flush, fat, thin, heel, toe — and that classifier has existed for months in
+       * services/acousticsAnalyzer, complete with its own caddie one-liner, wired to nothing. So a
+       * player with ACOUSTIC PICKUP reading "Calibrated ✓" was shown "Strike not cross-checked on
+       * this swing", which is not a limitation, it is a disconnection. Quality leads when the
+       * microphone actually heard it, because "Flush" is what the player wants; the camera's
+       * confirmation rides alongside it. Anything the analyzer is not confident about stays
+       * 'unknown' and we fall back rather than dress a guess up as a read.
+       */
+      (() => {
+        const heard = acousticRead && acousticRead.quality !== 'unknown' ? acousticRead : null;
+        const qualityLabel = heard
+          ? heard.quality === 'pure' ? 'Pure' : heard.quality === 'good' ? 'Good' : heard.quality === 'okay' ? 'Okay' : 'Off-centre'
+          : null;
+        const locBit = heard && heard.strike_location !== 'unknown'
+          ? heard.strike_location === 'flush' ? '' : ` · ${heard.strike_location}`
+          : '';
+        const cameraBit = ballDeparture
           ? ballDeparture.departed
-            ? `Ball strike confirmed${ballDeparture.direction !== 'unknown' ? ` · launch ${ballDeparture.direction}` : ''}.`
-            : ballDeparture.ball_present_before
-              ? 'Sound only — the ball did not leave its spot.'
-              : 'Could not see the ball to confirm the strike.'
-          : 'Strike not cross-checked on this swing.',
-        tone: ballDeparture ? (ballDeparture.departed ? '#88F700' : '#f59e0b') : undefined,
-      },
+            ? ` Ball away${ballDeparture.direction !== 'unknown' ? ` ${ballDeparture.direction}` : ''}.`
+            : ballDeparture.ball_present_before ? ' The ball did not leave its spot.' : ''
+          : '';
+        return {
+          key: 'contact',
+          title: 'CONTACT',
+          value: qualityLabel
+            ? `${qualityLabel}${locBit}`
+            : ballDeparture ? (ballDeparture.departed ? 'Struck' : ballDeparture.ball_present_before ? 'No launch' : null) : null,
+          note: heard
+            ? `${heard.caddie_note}${cameraBit}`
+            : ballDeparture
+              ? ballDeparture.departed
+                ? `Ball strike confirmed${ballDeparture.direction !== 'unknown' ? ` · launch ${ballDeparture.direction}` : ''}.`
+                : ballDeparture.ball_present_before
+                  ? 'Sound only — the ball did not leave its spot.'
+                  : 'Could not see the ball to confirm the strike.'
+              : 'Strike not cross-checked on this swing.',
+          tone: heard
+            ? (heard.quality === 'pure' || heard.quality === 'good') ? '#88F700' : heard.quality === 'okay' ? '#f59e0b' : '#ef4444'
+            : ballDeparture ? (ballDeparture.departed ? '#88F700' : '#f59e0b') : undefined,
+        };
+      })(),
     ];
-  }, [poseRead, tempo, metrics, bodyItems, ballDeparture]);
+  }, [poseRead, tempo, metrics, bodyItems, ballDeparture, acousticRead]);
 
   // 2026-07-07 (Tim — chunk-shot honesty) — the CONTACT signals the motion read
   // can't see: the camera strike check (did the ball actually leave?) and the
@@ -3455,6 +3502,26 @@ export default function SmartMotion() {
         }
         if (res.kind === 'ok' && res.strikes.length > 0) {
           acousticStrikes = res.strikes;
+          /**
+           * GRADE THE STRIKE. Everything the classifier wants is in hand right here: the detector
+           * returned the noise floor it measured, each strike carries its peak, and the 50ms sample
+           * buffer gives the decay (how fast the transient dies — a fat strike is muffled and decays
+           * slowly, a pure one snaps). Passing the club matters: a wedge and a driver do not sound
+           * alike, and the heuristic adjusts for it.
+           */
+          try {
+            const loudest = [...res.strikes].sort((a, b) => b.peakDb - a.peakDb)[0]!;
+            const at = samples.findIndex((sm) => sm.timeMs >= loudest.timeMs);
+            const nextDb = at >= 0 && at + 1 < samples.length ? samples[at + 1]!.dB : null;
+            const decayDb = nextDb == null ? null : loudest.peakDb - nextDb;
+            setAcousticRead(analyzeStrike({
+              reading: { impact_ms: loudest.timeMs, peak_db: loudest.peakDb, confidence: loudest.confidence === 'high' ? 0.9 : loudest.confidence === 'medium' ? 0.6 : 0.3, audio_uri: uri },
+              noise_floor_db: res.floorDb,
+              decay_db: decayDb,
+              club: clubRef.current ?? null,
+            }));
+            setHeardStrikeCount(filterReboundStrikes(res.strikes).length);
+          } catch { /* grading is additive — never let it break segmentation */ }
           // CAGE: trust acoustics as the final segmentation here. RANGE waits for
           // video confirmation (correlateStrikesWithVideo) in the clip branch.
           if (meterMode === 'cage') {
