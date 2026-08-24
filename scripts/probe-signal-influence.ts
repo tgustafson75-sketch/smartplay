@@ -236,16 +236,19 @@ const CASES: Case[] = [
     because: 'Tim asked for the drive confirmed first, then the remaining, then the play',
   },
   {
-    signal: 'priorRoundsAtCourse (first visit)',
-    // Was "how did I do?", which is answered from the scorecard alone — the first-visit fact had no
-    // reason to appear. Ask the comparison question, which cannot be answered without it.
+    signal: 'priorRoundsAtCourse (has history here)',
+    // 2026-08-24 — was testing priorRoundsAtCourse:0, and ABSENCE of the field reads identically to
+    // a first visit, so both answers said "first time here, this is your baseline" and the case
+    // could never prove anything. Test the direction that REQUIRES the data: six rounds of history
+    // cannot be inferred from an empty payload.
     ask: 'is that a good score for me at this course?',
     // scores moved to `extra` — they were in `on`, so the two payloads differed by TWO things and
     // the verdict was unattributable. A differential probe is only valid if ONE thing changes.
     extra: { scores: { 1: 5, 2: 4, 3: 6, 4: 5, 5: 7, 6: 4, 7: 5, 8: 6, 9: 5 } },
-    on: { priorRoundsAtCourse: 0 },
-    shows: /first time|baseline|first (round|look)|starting point|never played|no history|nothing to compare/i,
-    because: 'a first round is a baseline, never "your best score yet"',
+    on: { priorRoundsAtCourse: 6 },
+    shows: /\b(six|6)\b|played (here|it) before|rounds here|been here|your (rounds|history) here|last time here/i,
+    absent: /first time|never played|no history|nothing to compare/i,
+    because: 'he has played here six times; treating him as a first-timer throws away the only comparison that answers the question',
   },
   {
     signal: 'experienceContext (starting)', ask: 'why am I slicing my driver?',

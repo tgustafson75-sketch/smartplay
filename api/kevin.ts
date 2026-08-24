@@ -667,13 +667,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return t.length > 0 ? t : null;
     })();
 
+    /**
+     * 2026-08-24 — VS PAR IS NULL WHEN WE DO NOT KNOW THE PARS, not zero.
+     *
+     * This summed par from courseHoles and subtracted. With no course loaded — which is every
+     * unmapped course, and every probe — par summed to ZERO and it returned the raw score, so the
+     * prompt said "Vs par: +47" for a 47. Nonsense on its face, and the model did what anyone would
+     * do with a nonsensical fact: ignored it and made one up, answering "47 through 9 holes, that's
+     * even par." 47 on a par-36 nine is ELEVEN OVER. A caddie who tells you you are level when you
+     * are +11 is finished — you cannot trust another number he says all day.
+     *
+     * Null when no hole we scored had a known par. Stated only when it is real.
+     */
     const scoreVsPar = (() => {
-      let par = 0; let score = 0;
+      let par = 0; let score = 0; let matched = 0;
       Object.entries(scores as Record<string, number>).forEach(([hole, s]) => {
         const h = (courseHoles as Array<{ hole: number; par: number }>).find(ch => ch.hole === Number(hole));
-        if (h) { par += h.par; score += s; }
+        if (h && typeof h.par === 'number' && h.par > 0) { par += h.par; score += s; matched += 1; }
       });
-      return score - par;
+      return matched > 0 ? score - par : null;
     })();
 
     type WatchData = { swingCount: number; averageTempo: string; dominantFault: string | null; earlyTransitionRate: number; averageClubSpeed: number };
@@ -1222,7 +1234,7 @@ ${(() => {
   ? `WHERE THEY ARE STANDING: ${currentLocationType === 'green' ? 'ON THE GREEN — this is a PUTT. Read the putt; do not recommend a club or a full swing.' : currentLocationType === 'tee' ? 'on the tee' : 'in the fairway'}\n`
   : ''}Getting around: ${transportMode === 'cart' ? 'riding a cart' : 'walking'}${currentTeeBox ? ` | Tee: ${currentTeeBox}` : ''}${nineHoleMode ? ' | NINE-HOLE round — pace the round to 9, never 18' : ''}
 Risk posture: ${riskMode === 'safe' ? 'SAFE — take the conservative line, favour the fat side' : riskMode === 'aggressive' ? 'AGGRESSIVE — they want to take it on' : 'normal'}${transportMode !== 'cart' && holesPlayed >= 13 ? ' \u2014 deep into a walked round, so factor fatigue into club choice rather than assuming full-strength swings' : ''}
-Score: ${totalScore > 0 ? totalScore : 'no holes yet'} | Vs par: ${scoreVsPar === 0 ? 'even' : scoreVsPar > 0 ? '+' + scoreVsPar : String(scoreVsPar)} | Holes: ${holesPlayed}
+Score: ${totalScore > 0 ? totalScore : 'no holes yet'} | Vs par: ${scoreVsPar === null ? 'UNKNOWN — no hole pars loaded for this course. Do NOT state a score to par, do not call it even, and do not work one out from the total; say the strokes and holes only' : scoreVsPar === 0 ? 'even' : scoreVsPar > 0 ? '+' + scoreVsPar : String(scoreVsPar)} | Holes: ${holesPlayed}
 Competition: ${isCompetition ? 'yes — be conservative' : 'no'}`
   : `DIALOGUE MODE: OFF-COURSE (no live round).
 No round is active. The player is at home, on the range, in the cage,
