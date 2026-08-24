@@ -1036,7 +1036,14 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
               ? ` MARGIN: ${marginYds} yards — enough, but they have asked you to play SAFE, so offer the shot and the safe alternative and let them pick.`
               : marginYds >= 15
                 ? ` MARGIN: ${marginYds} yards — comfortably inside, so if they ask whether to take it on, the answer is yes.`
-                : ` MARGIN: only ${marginYds} yards — that is the edge, and worth saying plainly if they ask whether to go.`;
+                // 5-15 yards is where the POSTURE earns its keep: the same shot is a fair gamble for
+                // a player who asked to be aggressive and a lay-up for one who asked to be safe.
+                // Above 15 the numbers decide it for everybody and posture should change nothing.
+                : marginYds >= 5 && posture === 'aggressive'
+                  ? ` MARGIN: ${marginYds} yards — tight, but they have asked you to play AGGRESSIVE and it does clear. Take it on, and tell them it is tight so they swing committed rather than steering it.`
+                  : marginYds >= 5 && (posture === 'safe' || posture === 'conservative')
+                    ? ` MARGIN: only ${marginYds} yards and they have asked you to play SAFE — lay up, and say what it leaves.`
+                    : ` MARGIN: only ${marginYds} yards — that is the edge, and worth saying plainly if they ask whether to go.`;
           lines.push(`- THE CLUB FOR THIS SHOT IS THE ${covers[0].toUpperCase()} (${covers[1]} carry, the first club that covers ${target})${why}. Arithmetic, already done — do not substitute a club that merely feels right, and never one carrying less than ${target} while a longer one is in the bag.${speedLossYds > 0 ? ' Give them the club and a short reason they will recognise; do not lecture them about their body.' : ''}${verdict}`);
         } else {
           const longest = sorted[sorted.length - 1]!;

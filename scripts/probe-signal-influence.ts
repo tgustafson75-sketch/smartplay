@@ -230,12 +230,22 @@ const CASES: Case[] = [
     because: 'the caddie should know a club has a character, not just a number',
   },
   {
-    signal: 'riskMode (aggressive)', ask: 'I have 210 over water to a back pin, go or lay up?',
+    // 2026-08-24, second fix — at 210 the margin was 25 yards, which is a GO for anybody, so the
+    // posture correctly changed nothing and the case proved nothing. Posture only earns its keep on
+    // a MARGINAL shot. 225 leaves 10 yards: a fair gamble if you asked to be aggressive, a lay-up
+    // if you asked to be safe.
+    signal: 'riskMode (aggressive)', ask: 'I have 225 over water to a back pin, go or lay up?',
     // 235 of 3 wood to a 210 carry is a genuine choice. At 215 it was a stretch for ANY posture,
     // so both answers said lay up and the case could not isolate the posture.
-    extra: { clubDistances: { '3 wood': 235, '5 iron': 185, '7 iron': 150 } },
+    // 2026-08-24 — currentYardage stayed at the base 150 while the question asked about a 210 carry,
+    // so every computed fact the caddie was handed (club, margin) described a DIFFERENT shot than
+    // the one being asked about. Of course the posture could not move the answer.
+    extra: { currentYardage: 225, clubDistances: { '3 wood': 235, '5 iron': 185, '7 iron': 150 } },
     on: { riskMode: 'aggressive' },
-    shows: /go|send|take it on|have a go|3 wood|three wood/i,
+    // "3 wood" appeared in the LAY-UP answer too ("your 3-wood carries 235, but…"), so naming the
+    // club proved nothing. The decision is the test: he must actually send them.
+    shows: /\bgo for it\b|\bthat'?s a go\b|take it on|send it|have a go|going\b|go get it/i,
+    absent: /lay ?up|lay it up|zero margin|no margin/i,
     because: 'risk posture must reach the cloud caddie, not just the on-device read',
   },
   {
