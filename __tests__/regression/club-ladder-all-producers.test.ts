@@ -24,6 +24,8 @@ import { useClubStatsStore } from '../../store/clubStatsStore';
 import { useClubBagStore } from '../../store/clubBagStore';
 import { recommendClubFromEquipmentIntelligence } from '../../services/distance/equipment_distance_modifier';
 import { composeShotRead } from '../../services/cnsShotRead';
+import { bagDistances } from '../../services/shotStrategy';
+import { getLearnedCarryDistances } from '../../store/clubStatsStore';
 
 /** The pathological state behind every instance: ONE logged club, a wedge. */
 const oneLoggedWedge = () => {
@@ -132,5 +134,63 @@ describe('the two club vocabularies must not duplicate a club', () => {
 
   it('still never puts a wedge on a long shot with the vocabulary mapping in play', () => {
     expect((readWith({ GW: 95 }, 324)?.club ?? '').toLowerCase()).not.toContain('gw');
+  });
+});
+
+/**
+ * 2026-08-24 (club sweep, step 2 — ONE OWNER FOR A CLUB).
+ *
+ * The carry bag existed TWICE: shotStrategy.bagDistances() iterated the club list calling carryFor()
+ * itself, and store/clubStatsStore.getLearnedCarryDistances() did the same thing — written the same
+ * day, 07-24, and never called by anything. The app used the copy living in a strategy module rather
+ * than the one in the data owner, and neither knew about the other.
+ *
+ * bagDistances() now delegates to the store. These cases exist so the delegation cannot silently be
+ * un-done: if a future edit re-implements the loop here, the two answers drift and the second case
+ * fails. Guarding the SHAPE (one owner) rather than a file list.
+ */
+describe('PRODUCER 5 — the carry bag has exactly one owner', () => {
+  /** A club with a tracked TOTAL only (tee→rest, includes roll) and no measured carry. */
+  const totalOnly7i = () => {
+    useClubStatsStore.setState({
+      carry: {}, manual: {}, reps: {},
+      total: { '7I': { club: '7I', samples: 5, avgYards: 165, lastYards: 165, lastUsedAt: 1 } },
+    } as never);
+    useClubBagStore.setState({ clubs: {} });
+  };
+
+  it('reports CARRY, not the roll-inclusive total — the property that stops a green-lit carry into water', () => {
+    totalOnly7i();
+    const carry = bagDistances()['7I'];
+    expect(carry).toBeGreaterThan(0);
+    // Roll has been subtracted: the caddie must never be told he flies it the full tracked total.
+    expect(carry).toBeLessThan(165);
+    expect(carry).toBe(useClubStatsStore.getState().carryFor('7I'));
+  });
+
+  it('agrees exactly with the store, so a re-implemented loop here would fail', () => {
+    totalOnly7i();
+    const owner = Object.fromEntries(
+      Object.entries(getLearnedCarryDistances()).filter(([, y]) => y > 0),
+    );
+    expect(bagDistances()).toEqual(owner);
+  });
+
+  it('still omits untracked clubs — the prompt calls this "real distances"', () => {
+    totalOnly7i();
+    expect(bagDistances()).not.toHaveProperty('Driver');
+    expect(Object.keys(bagDistances())).toEqual(['7I']);
+  });
+
+  it('never includes the putter', () => {
+    useClubStatsStore.setState({
+      carry: {}, manual: {}, reps: {},
+      total: {
+        '7I': { club: '7I', samples: 5, avgYards: 165, lastYards: 165, lastUsedAt: 1 },
+        Putter: { club: 'Putter', samples: 9, avgYards: 20, lastYards: 20, lastUsedAt: 1 },
+      },
+    } as never);
+    expect(bagDistances()).not.toHaveProperty('Putter');
+    expect(getLearnedCarryDistances()).not.toHaveProperty('Putter');
   });
 });

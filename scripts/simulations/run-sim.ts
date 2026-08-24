@@ -1572,11 +1572,30 @@ check('White-screen guard: SVG hole maps reject a non-finite axis (NaN-safe), cl
 
 // ─── 2026-06-09 audit fixes (honesty + wiring) ─────────────────────────────
 check('Caddie bag distances only include real (logged) clubs — as honest CARRY',
-  // 2026-07-24 (club-logic unification) — gates on hasDistance() (real data, not the chart) and emits
-  // carryFor() so the safety hub feeds the brain honest CARRY, never a roll-inclusive total-as-carry.
-  /if \(!stats\.hasDistance\(c\)\) continue/.test(read('services/shotStrategy.ts')) &&
-  /const y = stats\.carryFor\(c\)/.test(read('services/shotStrategy.ts')),
-  "bagDistances gates on hasDistance + emits carryFor — no chart leak, and no tee→rest total quoted as carry");
+  (() => {
+    /**
+     * 2026-07-24 (club-logic unification) — the property: the bag the brain receives contains ONLY
+     * clubs the player has real data on, quoted as honest CARRY, never a roll-inclusive total.
+     *
+     * 2026-08-24 (club sweep, step 2) — RE-AIMED, and it had to be. This asserted two literal lines
+     * INSIDE shotStrategy (`if (!stats.hasDistance(c)) continue` / `const y = stats.carryFor(c)`).
+     * When that loop moved into its rightful owner — clubStatsStore, ending a duplicate carry bag —
+     * the guard went red on a change that strictly improved the thing it protects. That is the
+     * docs/OPEN-ITEMS.md §8 class: a guard pinned to an IMPLEMENTATION fails on the fix and passes on
+     * the bug. It now follows the chain to wherever the logic lives.
+     */
+    const store = read('store/clubStatsStore.ts');
+    const strategy = read('services/shotStrategy.ts');
+    // The owner gates on real data (never the chart) and emits carry.
+    const ownerIsHonest =
+      /export function getLearnedCarryDistances/.test(store) &&
+      /s\.carry\[club\]\?\.samples \|\| s\.manual\[club\] != null \|\| s\.total\[club\]\?\.samples/.test(store) &&
+      /out\[club\] = s\.carryFor\(club\)/.test(store);
+    // The hub the brain reads delegates to it rather than deriving a second answer.
+    const hubDelegates = /getLearnedCarryDistances\(\)/.test(strategy);
+    return ownerIsHonest && hubDelegates;
+  })(),
+  "the carry bag gates on real data + emits carryFor at its single owner, and bagDistances delegates — no chart leak, and no tee→rest total quoted as carry");
 
 check('Caddie TARGET no longer a hardcoded CENTER',
   !/const targetDirection = 'CENTER'/.test(read('app/(tabs)/caddie.tsx')),
@@ -2010,8 +2029,10 @@ check('Club logic unified: one vocabulary (normalizeClub) + explicit carry vs to
       /useClubStatsStore\.getState\(\)\.recordTotal\(club, yards\)/.test(track) && // GPS total → total ladder
       /const normClub = \(\(\) => \{/.test(round) &&
       /\.recordCarry\(normClub, carry\)/.test(round) &&                            // real carry → carry ladder
-      // the safety hub emits carry.
-      /const y = stats\.carryFor\(c\)/.test(read('services/shotStrategy.ts'));
+      // the safety hub emits carry. 2026-08-24 — via its single owner now (see the ONE-owner LOCK);
+      // asserting the delegation rather than a loop that has since moved into the store.
+      /getLearnedCarryDistances\(\)/.test(read('services/shotStrategy.ts')) &&
+      /out\[club\] = s\.carryFor\(club\)/.test(cs);
     return okVocab && okStore && okWiring;
   })(),
   'a driver logged by voice/quick-log now registers in the bag (normalizeClub), the caddie quotes honest CARRY (not a tee→rest total), and one club no longer splits into multiple usage rows');
@@ -10867,6 +10888,41 @@ check('LOCK: the Fit Profile and the bag recommendation cannot disagree about wh
     return oneOwner && imported && noLocalRefork;
   })(),
   'GAP_YARDS has a single owner that both the ladder and the bag recommendation read, so the two surfaces cannot answer "is this a gap?" differently');
+
+check('LOCK: the carry bag has ONE owner — nothing rebuilds it from carryFor()',
+  (() => {
+    /**
+     * 2026-08-24 (club sweep, step 2). Tim: *"something I thought was going to be the simpler aspect
+     * of the app has turned out to be the most complicated missing part, and that's the clubs."*
+     *
+     * The honest CARRY bag existed twice — shotStrategy.bagDistances() looped the club list calling
+     * carryFor(), and store/clubStatsStore.getLearnedCarryDistances() did the identical thing, written
+     * the same day (07-24) and called by NOTHING. The app used the copy in a strategy module rather
+     * than the one in the data owner, and neither knew about the other. That is how two surfaces come
+     * to disagree about how far a player carries his seven.
+     *
+     * Asserts the SHAPE, not a file list: the store exports the bag, the strategy module DELEGATES to
+     * it, and no third module reconstructs the bag by looping carryFor over a club list.
+     * [[guard-the-shape-not-the-file-list]]
+     */
+    const store = read('store/clubStatsStore.ts');
+    const strategy = read('services/shotStrategy.ts');
+    // The owner exists and lives with the data.
+    const ownerExists = /export function getLearnedCarryDistances/.test(store);
+    // The consumer delegates rather than re-deriving.
+    const delegates = /getLearnedCarryDistances\(\)/.test(strategy) &&
+      !/for \(const c of FULL_CLUBS\)/.test(strategy) &&
+      !/stats\.carryFor\(/.test(strategy);
+    // Nobody else rebuilds a whole bag out of carryFor. Screens asking for ONE club are fine; a
+    // module that loops the club list is a second owner by definition.
+    const rebuilders = ['services/cnsShotRead.ts', 'services/bagRecommendation.ts', 'services/offlineCaddie.ts']
+      .filter(f => {
+        const src = read(f);
+        return /for \(const [a-z]+ of (CLUB_ORDER|FULL_CLUBS)\)/.test(src) && /carryFor\(/.test(src);
+      });
+    return ownerExists && delegates && rebuilders.length === 0;
+  })(),
+  'getLearnedCarryDistances is the single owner of the carry bag; shotStrategy delegates to it and no other module reconstructs the bag from carryFor');
 
 // ─── Orphaned exports — the half-build ratchet ─────────────────────────────────
 /**

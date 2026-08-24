@@ -304,8 +304,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
   'store/guestProfileStore.ts :: findGuestByName': 'TRIAGE',
 
   // ── ADDED 2026-08-24 (second pass): surfaced once COMMENTS stopped counting as references ──
-  'store/clubStatsStore.ts :: getLearnedCarryDistances':
-    'WIRE (club sweep, headline) — the LEARNED CARRY bag. Its only other mention in the repo is a comment one file up telling you to use it: \"For the honest CARRY bag use getLearnedCarryDistances()\". Nothing does. Step 4 of docs/NEXT-CLUB-LOGIC-SWEEP.md is carry-vs-total everywhere; the app has been learning real carries and no consumer reads them.',
   'store/practicePlanStore.ts :: practicePlanPromptBlock':
     'WIRE — a second prompt block for the caddie, same shape as historyPromptBlock. Its own file says \"practicePlanPromptBlock (below) feeds this into the caddie\". It does not.',
   'services/watchBridge.ts :: sendLiveScore':
