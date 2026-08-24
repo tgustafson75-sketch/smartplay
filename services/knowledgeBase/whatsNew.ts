@@ -26,6 +26,14 @@ export interface WhatsNewEntry {
 }
 
 export const WHATS_NEW: WhatsNewEntry[] = [
+  {
+    when: 'Aug 2026',
+    note: 'I know what you\'ve shot here before. Ask "is that a good score for me at this course?" and I answer from your actual rounds instead of offering to go and look something up.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'I stopped repeating myself in the swing lab. The framing cue, the time-up call, the club confirmation — they used to be the same sentence every single time. They vary now, like a person would.',
+  },
   // 2026-08-24 — the SmartMotion honesty pass.
   {
     when: 'Aug 2026',
