@@ -864,6 +864,27 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
       ? Object.entries(clubDistances as Record<string, number>).filter(([, y]) => typeof y === 'number' && y > 0)
       : [];
 
+    /**
+     * 2026-08-24 — A PHYSICAL LIMITATION IS YARDS, NOT ENCOURAGEMENT.
+     *
+     * "Bad lower back, limited turn today" swung 0/3 → 3/3 → 1/3 across the day's probes on prompt
+     * wording alone, ending with the SAME sentence given with and without it: "smooth 7 iron, 150
+     * carries it right to the pin." A rule the model follows a third of the time is not a rule.
+     *
+     * Less turn is less clubhead speed, and less speed is a shorter shot — so it belongs in the
+     * PLAYING NUMBER, exactly like wind and cold, where it becomes arithmetic instead of a judgement
+     * call. One club is the honest, conservative figure; measuring a player's actual loss needs shot
+     * data we do not have yet, and over-correcting flies the green.
+     *
+     * Deliberately narrow: only limitations that plausibly cost SPEED. A sore thumb or a blister
+     * hurts without shortening the shot, and quietly adding ten yards for one would be its own defect.
+     */
+    const speedLossYds = (() => {
+      const t = String(_physicalLimitation ?? '').toLowerCase();
+      if (!t) return 0;
+      return /back|shoulder|hip|knee|neck|rib|wrist|elbow|turn|rotat|stiff|sore|tight|injur|surger|arthrit|limited|pain/.test(t) ? 10 : 0;
+    })();
+
     const liveFactsBlock = (() => {
       const lines: string[] = [];
       const gy = greenYardages as { front: number | null; middle: number | null; back: number | null } | null;
@@ -955,7 +976,7 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
          */
         const clubFor = (() => {
           if (!pl || bagFor.length === 0) return null;
-          const target = pl.playsLikeYds;
+          const target = pl.playsLikeYds + speedLossYds;
           const sorted = [...bagFor].sort((a, b) => a[1] - b[1]);
           const covers = sorted.find(([, y]) => y >= target);
           if (covers) {
@@ -983,6 +1004,26 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
         }
         lines.push(`- CONDITIONS RIGHT NOW: ${bits.join(', ')}${wx.ageMin > 20 ? ` (read ${wx.ageMin} min ago)` : ''}.`);
         for (const c of consequences) lines.push(`  ${c}`);
+      }
+      /**
+       * 2026-08-24 — THE CLUB, COMPUTED, EVEN WITH NO WEATHER TO ADJUST FOR.
+       *
+       * The lookup above only ran inside the weather branch, so on a calm day the model was back to
+       * choosing the club by feel — which is exactly the arithmetic it gets wrong. It also meant a
+       * physical limitation could not reach the club at all unless it happened to be windy.
+       * Same rule, same helper: first club at or above the number they actually have to cover.
+       */
+      if (!(wx as { playsLike?: unknown } | null)?.playsLike && bagFor.length > 0 && typeof currentYardage === 'number' && currentYardage > 0) {
+        const target = currentYardage + speedLossYds;
+        const sorted = [...bagFor].sort((a, b) => a[1] - b[1]);
+        const covers = sorted.find(([, y]) => y >= target);
+        const why = speedLossYds > 0 ? ` — ${currentYardage} on the card, but with ${_physicalLimitation} they are not making their full speed today, so play it as ${target}` : '';
+        if (covers) {
+          lines.push(`- THE CLUB FOR THIS SHOT IS THE ${covers[0].toUpperCase()} (${covers[1]} carry, the first club that covers ${target})${why}. Arithmetic, already done — do not substitute a club that merely feels right, and never one carrying less than ${target} while a longer one is in the bag.${speedLossYds > 0 ? ' Give them the club and a short reason they will recognise; do not lecture them about their body.' : ''}`);
+        } else {
+          const longest = sorted[sorted.length - 1]!;
+          lines.push(`- NOTHING IN THEIR BAG COVERS ${target}${why}. The longest is the ${longest[0]} at ${longest[1]} — say so plainly rather than implying it reaches.`);
+        }
       }
       if (gpsLost === true) {
         // 2026-07-08 (Tim, Green Hill — the caddie asked HIM the yardage). Own it; never hand the
