@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 import { completeVision, providerFromHeaderSafe, type StructuredSchema } from './_aiProvider';
-import { CLUB_SNAP_ORDER } from '../services/clubBagReconcile';
+import { CLUB_SNAP_ORDER, CLUB_TYPES } from '../services/clubBagReconcile';
 
 /**
  * Phase BL — Club recognition endpoint.
@@ -29,7 +29,7 @@ const VALID_CLUB_IDS = CLUB_SNAP_ORDER; // one catalog — services/clubBagRecon
 
 type ClubId = typeof VALID_CLUB_IDS[number];
 
-const VALID_CLUB_TYPES = ['iron', 'wedge', 'hybrid', 'wood', 'driver', 'putter', 'unknown'] as const;
+const VALID_CLUB_TYPES = CLUB_TYPES; // one vocabulary — services/clubBagReconcile
 type ClubType = typeof VALID_CLUB_TYPES[number];
 
 type ClubRecognitionResponse = {

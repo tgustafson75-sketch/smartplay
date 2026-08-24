@@ -18,10 +18,10 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { applyCors } from './_cors';
 import { allowInference } from './_inferLimit';
 import { completeVision, providerFromHeaderSafe, type StructuredSchema } from './_aiProvider';
-import { CLUB_SNAP_ORDER } from '../services/clubBagReconcile';
+import { CLUB_SNAP_ORDER, CLUB_TYPES } from '../services/clubBagReconcile';
 
 const VALID_CLUB_IDS = CLUB_SNAP_ORDER; // one catalog — services/clubBagReconcile
-const VALID_CLUB_TYPES = ['iron', 'wedge', 'hybrid', 'wood', 'driver', 'putter', 'unknown'] as const;
+const VALID_CLUB_TYPES = CLUB_TYPES; // one vocabulary — services/clubBagReconcile
 const CONFIDENCE_VALUES = ['high', 'medium', 'low'] as const;
 const MAX_FRAMES = 8;
 

@@ -64,6 +64,7 @@ import { useRestModeStore } from '../../store/restModeStore';
 import { precheckLocalIntent } from '../../services/localIntentPrecheck';
 import { resolveSpokenCourse } from '../../services/courseNameResolver';
 import { normalizeClub } from '../../services/clubNormalize';
+import { CLUB_ORDER } from '../../store/clubStatsStore';
 import { composeShotRead } from '../../services/cnsShotRead';
 import { composeBallFit } from '../../services/cnsBallFitting';
 import { analyzePuttRoll } from '../../services/putting/puttRoll';
@@ -11141,6 +11142,37 @@ check('LOCK: ONE club-label map and ONE carry ladder — the name the player hea
     return ownerCorrect && consumersImport && noRival;
   })(),
   'standardBag owns CLUB_LABEL + STANDARD_LADDER; cnsShotRead and the offline responder both consume them, and neither redeclares a rival map or ladder');
+
+check('LOCK: the ClubName vocabulary is declared twice but can never DIVERGE',
+  (() => {
+    /**
+     * 2026-08-24 (club sweep). services/clubNormalize carried its own 21-member CANONICAL list of
+     * ClubNames, and said so: "The canonical list here MUST match clubStatsStore.CLUB_ORDER (a sim
+     * asserts it)." NO SUCH SIM EXISTED — `CANONICAL` appeared nowhere in this file. Two club
+     * vocabularies at every shot-write boundary, believed guarded, guarded by nothing. Fourth time
+     * today a file's description of itself turned out not to be evidence of anything.
+     *
+     * The copy is KEPT on purpose: clubNormalize must stay importable from the plain-node logic
+     * project without dragging in a zustand store. So the duplication is made SAFE rather than
+     * pretended away, and checked in both directions:
+     *
+     *   forwards  — every CLUB_ORDER member normalises to itself (CANONICAL covers the store)
+     *   backwards — the literal in clubNormalize is compared element-for-element to the store's,
+     *               so an extra or reordered entry there fails too
+     *
+     * Order matters as well as membership: CLUB_ORDER drives the scroll picker and every bag sort.
+     */
+    const forwards = CLUB_ORDER.every(c => normalizeClub(c) === c);
+    const src = read('services/clubNormalize.ts');
+    const m = /const CANONICAL: ClubName\[\] = \[([\s\S]*?)\];/.exec(src);
+    const canonical = m ? (m[1].match(/'([^']+)'/g) ?? []).map(x => x.replace(/'/g, '')) : [];
+    const backwards = canonical.length === CLUB_ORDER.length &&
+      canonical.every((c, i) => c === CLUB_ORDER[i]);
+    // A club the store does not know must not normalise to itself — that is how a junk key enters a bag.
+    const rejectsUnknown = normalizeClub('9W') === null && normalizeClub('banana') === null;
+    return forwards && backwards && rejectsUnknown;
+  })(),
+  'clubNormalize.CANONICAL matches clubStatsStore.CLUB_ORDER element-for-element and in order, every canonical club normalises to itself, and an unknown club is rejected');
 
 // ─── Orphaned exports — the half-build ratchet ─────────────────────────────────
 /**

@@ -229,7 +229,21 @@ The hole-shot-map UI lives at `components/recap/HoleShotMap.tsx` and the route a
 | `smartVisionOverlay.ts` | Pure-logic strategic overlay layers — yardage rings, danger-carry detection per player driver distance, lay-up suggestion, landing zone target, tap-to-target distance, carry feasibility check. `projectToTilePixels()` provides the inverse Web Mercator projection so SVG overlay markers land on the correct pixels of the rendered tile. Course-agnostic — works on any course where Phase Q (`courseGeometryService`) provides geometry. | Caddie + Coach |
 | `components/smartvision/HoleView.tsx` | The Mapbox + SVG composite component. Renders Mapbox tile as substrate, paints 5 SVG overlay layers (geometry, yardage rings, recent shots, target marker, Kevin annotations). `TouchableWithoutFeedback` over imagery converts taps to lat/lng via inverse projection; annotation taps open a strategic-detail modal. Reusable component — current `app/hole-view.tsx` keeps its existing surface and uses the same Mapbox URL builder. | Caddie + Coach |
 
-**Phase S migration.** Removed `data/palmsImages.ts` and the 18 `assets/courses/palms/hole-*.jpg` screenshots. Removed Palms-specific bundled fallback in `app/hole-view.tsx` and `components/caddie/L1HolePreview.tsx`. SmartVision is now course-agnostic globally — any course with valid GPS coordinates produces an aerial view via Mapbox.
+**Phase S migration.** Removed the Palms-specific bundled fallback in `app/hole-view.tsx` and
+`components/caddie/L1HolePreview.tsx`. SmartVision is course-agnostic — any course with valid GPS
+coordinates produces an aerial view via Mapbox.
+
+> ⚠️ **CORRECTED 2026-08-24.** This paragraph used to claim `data/palmsImages.ts` and the 18
+> `assets/courses/palms/hole-*.jpg` screenshots were removed. **Neither was.** The module has FOUR
+> live consumers — `app/(tabs)/play.tsx`, `app/landmark-curate.tsx`,
+> `components/course/StartRoundCourseCard.tsx` and `components/course/CourseDetailModal.tsx` — and
+> the images are still bundled. It also duplicates `PALMS_HOLE_IMAGES` in `data/localCourseImages.ts`
+> (the same 18 `require()`s in two modules), so four screens still special-case one course while this
+> file described the app as course-agnostic *globally*.
+>
+> **Follow-up, deliberately not done in the same pass:** point those four consumers at
+> `getLocalHoleImage()` and delete `data/palmsImages.ts`. It touches four screens under the layout
+> freeze and wants device verification, so it is written down rather than rushed.
 
 **Phase S provider strategy.** Mapbox is primary. If `EXPO_PUBLIC_MAPBOX_TOKEN` is unset (during Tim's account setup window), `app/hole-view.tsx` automatically falls through to the legacy Google Maps Static API (`EXPO_PUBLIC_GOOGLE_MAPS_KEY`). When neither is configured, the surface shows the "no imagery" graceful state. Once Tim sets the Mapbox token in Vercel env vars, every consumer transitions silently with no code change.
 

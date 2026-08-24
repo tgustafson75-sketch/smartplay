@@ -15,12 +15,23 @@
  *
  * normalizeClub() maps ANY of the four forms → the canonical ClubName (the clubStatsStore key), or null
  * when it genuinely can't tell (e.g. a bare "hybrid" with no number). Pure + dependency-light so it's
- * unit-testable and safe to call at every write boundary. The canonical list here MUST match
- * clubStatsStore.CLUB_ORDER (a sim asserts it).
+ * unit-testable and safe to call at every write boundary.
+ *
+ * 2026-08-24 — this said "The canonical list here MUST match clubStatsStore.CLUB_ORDER (a sim
+ * asserts it)". No such sim existed: `CANONICAL` appeared nowhere in run-sim.ts. Two 21-member club
+ * vocabularies, believed to be guarded, guarded by nothing — the same "a file's description of
+ * itself is not evidence" trap that hid three other defects today. The guard now genuinely exists
+ * (run-sim, "LOCK: the ClubName vocabulary is declared twice but can never DIVERGE"), and it checks
+ * both directions: every CLUB_ORDER member normalises to itself, and the literal here is compared
+ * element-for-element against the store's.
+ *
+ * The copy itself stays deliberate: this module must remain importable from the plain-node logic
+ * project without pulling in a zustand store.
  */
 import type { ClubName } from '../store/clubStatsStore';
 
-// Canonical ClubName members (mirror of clubStatsStore.CLUB_ORDER — kept in sync by a sim check).
+// Canonical ClubName members. A deliberate mirror of clubStatsStore.CLUB_ORDER, enforced
+// element-for-element by the sim LOCK named above — not by hope.
 const CANONICAL: ClubName[] = [
   'Driver', '3W', '5W', '7W', '2H', '3H', '4H', '5H',
   '3I', '4I', '5I', '6I', '7I', '8I', '9I',

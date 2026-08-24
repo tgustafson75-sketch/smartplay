@@ -38,6 +38,12 @@ export type CatalogClubId = typeof CLUB_SNAP_ORDER[number];
  * told to skip it"). That exception is real and worth keeping; hand-maintaining a whole second list
  * to express it is not. Derived, so the exception is stated once and cannot drift from the catalog.
  */
+/**
+ * The club TYPE vocabulary the vision routes accept. Declared twice (api/bag-scan and
+ * api/club-recognition) until 2026-08-24; same story as the catalog above.
+ */
+export const CLUB_TYPES = ['iron', 'wedge', 'hybrid', 'wood', 'driver', 'putter', 'unknown'] as const;
+
 export const FULL_SWING_CLUB_IDS: readonly CatalogClubId[] =
   CLUB_SNAP_ORDER.filter((id) => id !== 'PT');
 
