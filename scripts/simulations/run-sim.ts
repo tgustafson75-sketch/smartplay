@@ -11207,6 +11207,45 @@ check('LOCK: ONE working number — the club is computed from the yardage the ca
   })(),
   'one resolver-first working number feeds the payload and the plays-like model, so a rangefinder read cannot be quoted while a card number picks the club');
 
+check('LOCK: the watch pipe has something going down it — owner-gated, and it cannot block the phone',
+  (() => {
+    /**
+     * 2026-08-24 (Tim: "wire them owner-only"). services/watchCaddieBridge has registered the
+     * watchBridge sender since 07-06, and its header states that
+     * "sendNotification/sendLiveScore/sendVoicePrompt/sendRoundState from anywhere in the app now
+     * actually reach the watch". The TRANSPORT was true; the sentence was not. All four senders had
+     * ZERO callers — the pipe was built, connected, and nothing was ever put into it. A Galaxy Watch
+     * running the companion got swing feedback and pin yardage, and never the score, the hole, or a
+     * word the caddie said.
+     *
+     * ONE OWNER on purpose: services/watchRoundSync subscribes, rather than sprinkling four calls
+     * through roundStore and the voice path — the most load-bearing code in the app — during a
+     * feature freeze, for a watch only Tim owns.
+     *
+     * The two properties that make this safe to ship mid-freeze are the ones asserted here: it is
+     * OWNER-GATED at the entry, and it can never delay or break a caller.
+     */
+    const sync = read('services/watchRoundSync.ts');
+    const bridge = read('services/watchCaddieBridge.ts');
+    const voice = read('services/voiceService.ts');
+    // All four senders actually consumed.
+    const allFour = ['sendRoundState', 'sendLiveScore', 'sendVoicePrompt', 'sendNotification']
+      .every(fn => new RegExp(`${fn}\\(`).test(sync));
+    // Owner gate, and it is the gate every push goes through.
+    const gated = /function ownerOnly\(\): boolean/.test(sync) &&
+      /prof\.isOwnerEmail\(prof\.usePlayerProfileStore\.getState\(\)\.email\)/.test(sync) &&
+      /if \(!ownerOnly\(\)\) return;/.test(sync);
+    // Fire-and-forget: a sleeping watch must never delay a hole transition or a spoken line.
+    const cannotBlock = /void run\(\)\.catch\(/.test(sync) &&
+      /export function pushWatchVoicePrompt/.test(sync);
+    // Wired to a real lifecycle and to a real notification source, not invented ones.
+    const lifecycle = /startWatchRoundSync\(\)/.test(bridge) && /stopWatchRoundSync\(\)/.test(bridge);
+    const speechMirrored = /pushWatchVoicePrompt\(text\)/.test(voice);
+    const toastSourced = /useToastStore\.subscribe/.test(sync);
+    return allFour && gated && cannotBlock && lifecycle && speechMirrored && toastSourced;
+  })(),
+  'all four watch senders are consumed by one owner-gated subscriber, wired to the bridge lifecycle, the spoken line and the toast stream — and no push can block or throw into a caller');
+
 // ─── Orphaned exports — the half-build ratchet ─────────────────────────────────
 /**
  * 2026-08-24. Tim: *"an absolutely consistent theme of half built processes… I'm stuck in a 2-month

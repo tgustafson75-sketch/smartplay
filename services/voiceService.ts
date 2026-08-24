@@ -1491,6 +1491,19 @@ export const speak = async (
   apiUrl: string,
   opts?: SpeakOpts,
 ): Promise<void> => enqueueSpeak(async () => {
+  /**
+   * 2026-08-24 — mirror the caddie's line to the watch (owner-only, Beta 2 gate).
+   *
+   * Deliberately the FIRST thing and deliberately synchronous-void: it must not sit in the audio
+   * path. pushWatchVoicePrompt is owner-gated, wrapped, and no-ops without a registered watch
+   * sender, so on every phone that is not Tim's this is one function call that returns false.
+   * The voice path's behaviour is unchanged — this is a side-effect, not a step.
+   */
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('./watchRoundSync') as typeof import('./watchRoundSync')).pushWatchVoicePrompt(text);
+  } catch { /* the wrist never delays the voice */ }
+
   // Phase V.7 — shared guard (formerly inlined here).
   // 2026-07-27 (24h audit — always show the caddie's words even when muted) — the spoken line IS the
   // caption; flash it so a voice-off user still SEES the reply.

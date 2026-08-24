@@ -297,14 +297,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
   'store/guestProfileStore.ts :: findGuestByName': 'TRIAGE',
 
   // ── ADDED 2026-08-24 (second pass): surfaced once COMMENTS stopped counting as references ──
-  'services/watchBridge.ts :: sendLiveScore':
-    'WIRE — Wear OS is RUNNING on Tim\u2019s Galaxy Watch, and four of the pushes to it are wired to nothing.',
-  'services/watchBridge.ts :: sendNotification':
-    'WIRE — see sendLiveScore.',
-  'services/watchBridge.ts :: sendRoundState':
-    'WIRE — see sendLiveScore.',
-  'services/watchBridge.ts :: sendVoicePrompt':
-    'WIRE — see sendLiveScore.',
   'services/courseDataOrchestrator.ts :: getCourseHeroImagery':
     'WIRE — course hero imagery, computed and shown nowhere.',
   'services/personaKnowledgeBase.ts :: getPersonaAnswer':

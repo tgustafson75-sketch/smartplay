@@ -107,6 +107,17 @@ export async function initWatchCaddieBridge(): Promise<boolean> {
       await NativeMod!.sendToWatch(CADDIE_PATH, JSON.stringify(payload));
     });
 
+    /**
+     * 2026-08-24 — and now something actually goes DOWN the pipe. The header above has claimed since
+     * 07-06 that "sendNotification/sendLiveScore/sendVoicePrompt/sendRoundState from anywhere in the
+     * app now actually reach the watch". The transport was real; the callers never existed. Score,
+     * hole and spoken line now push through services/watchRoundSync (owner-gated, fire-and-forget).
+     */
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      (require('./watchRoundSync') as typeof import('./watchRoundSync')).startWatchRoundSync();
+    } catch (e) { devLog(`[watchCaddie] round sync failed to start: ${String(e)}`); }
+
     // Inbound: watch mic → the regular caddie pipeline (handsFreeOrchestrator
     // already subscribes to subscribeWatchVoice → handleTranscribedUtterance).
     voiceSub = emitter.addListener('onWatchVoice', (e: { text?: string }) => {
@@ -152,6 +163,10 @@ export async function initWatchCaddieBridge(): Promise<boolean> {
 
 /** Tear down. Idempotent. */
 export async function stopWatchCaddieBridge(): Promise<void> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('./watchRoundSync') as typeof import('./watchRoundSync')).stopWatchRoundSync();
+  } catch { /* non-fatal */ }
   try {
     voiceSub?.remove();
     tapSub?.remove();
