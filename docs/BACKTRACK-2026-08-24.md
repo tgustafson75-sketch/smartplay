@@ -76,14 +76,18 @@ only**. So:
 `docs/OPEN-ITEMS.md` §5 lists practice history as a *context gap* — as if unbuilt. It is built. This is
 a one-line wire into `caddieRequestBody.ts` plus a destructure in `api/kevin.ts`.
 
-### B. `services/getCaddieClip.ts` — the whole module, and 10 MB of video
+### B. `services/getCaddieClip.ts` — ten of twelve slots  ⚠️ CORRECTED
 
-Self-describes as *"a standalone draft you can wire into useCaddieVoice / round-flow triggers when
-ready."* Written 2026-05-25. Never wired. `getCaddieClip`, `getCaddieClipPath`, `hasCaddieClip`,
-`ALL_CADDIE_SLOTS` — all zero external callers. Meanwhile `assets/caddie/kevin/` is **10 MB of D-ID
-clips shipping in every binary and never played.**
+**This entry originally claimed the whole module had zero callers. That was wrong**, and I repeated
+it when presenting the decision. `getCaddieClip` is LIVE: `app/greeting.tsx:587` plays `'intro'` and
+`app/(tabs)/caddie.tsx:2370` plays `'bestround'`. Only the siblings — `getCaddieClipPath`,
+`hasCaddieClip`, `ALL_CADDIE_SLOTS` — were ever orphaned, and the sweep only ever flagged those. I
+generalised from three helpers to the module. Deleting it would have broken the greeting screen.
 
-Decision needed: wire the 11 round-arc slots, or delete the module and the assets before store submission.
+The real finding, once measured: **2 of 12 clips play (1.7 MB); the other 10 never do (8.3 MB)** of
+D-ID placeholder video. **Resolved 2026-08-24** — the ten unplayed slots and their files are gone,
+the module keeps the two that play, and the three orphaned helpers went with them. The slot contract
+survives in `docs/TODO-CADDIE-EMOTIONAL-ART.md`.
 
 ### C. `closeHoleAtTransition()` — shot end-locations never closed
 

@@ -199,8 +199,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
   'services/glassesVisionInput.ts :: getGlassesTransport': 'PARKED — see attachUtteranceToFrame.',
   'services/connectionClass.ts :: mayPullCourseNow':
     'PARKED — the throughput gate for SPECULATIVE pre-downloads. measureConnection IS used (play.tsx:1016, log-only and deliberately non-gating for arrival downloads). This gate has no caller because the pre-download queue does not exist yet (docs/OPEN-ITEMS.md §6). NOTE: §6 states the gate is active — it is not.',
-  'services/getCaddieClip.ts :: hasCaddieClip':
-    'PARKED/DELETE — the module calls itself "a standalone draft you can wire… when ready" (2026-05-25) and ships 10 MB of D-ID clips that never play. Decide before submission: wire the 11 round-arc slots, or delete module + assets.',
   'store/tournamentStore.ts :: getPlayerScore': 'PARKED — tournament scoring selectors ahead of the tournament surface.',
   'store/tournamentStore.ts :: getTeamScore': 'PARKED — see getPlayerScore.',
 

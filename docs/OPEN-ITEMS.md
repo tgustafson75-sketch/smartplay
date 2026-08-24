@@ -84,7 +84,19 @@ shipped.
 Practice/cage history ("how has my range work been going"), watch swing data, tee-box goals, points
 progress, tournament state. The one that DID change a club call — the SmartFinder lock — is fixed.
 
-## 6. COURSE PRELOAD — REFRAMED 2026-08-24: this is the RELEASE MODEL, not a nicety
+## 6. COURSE PRELOAD — the release model. **TIM'S CALL 2026-08-24: not the bottleneck, leave it.**
+
+> **DECIDED.** Presented with the measured production APK at **430 MB** (of which 71 MB is the 459
+> bundled course screenshots), Tim's call was **leave it — not the bottleneck.** Nothing is being
+> deleted and the prefetch is not being built for launch. The section below stays as the written-up
+> plan for when it IS the bottleneck.
+>
+> Honest caveat on that 430 MB: it is a UNIVERSAL APK carrying every native ABI. Google Play ships an
+> AAB whose per-device download is materially smaller, and nobody has measured that number. If store
+> review or install conversion ever pushes back, **measure the real AAB and IPA first** — the 71 MB
+> may be a rounding error next to MediaPipe (14 MB) and the native libraries.
+
+
 
 Tim, 08-24: *"before release, it'll only pull, like, three courses when the user opens the app menu.
 It'll pull three to five courses near them, or once they demand. So it's going to be much smaller

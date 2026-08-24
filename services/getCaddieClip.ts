@@ -1,5 +1,22 @@
 /**
- * 2026-05-25 — Caddie clip lookup (11-slot canonical set).
+ * 2026-05-25 — Caddie clip lookup.
+ *
+ * 2026-08-24 (Tim's call, orphan sweep) — TRIMMED FROM 12 SLOTS TO THE 2 THAT PLAY.
+ *
+ * The module shipped a 12-slot round-arc set (tee, fairway, yardage, wind, club, hazard, chip,
+ * putt_read, putt_line, celebrate) and described itself as "a standalone draft you can wire into
+ * useCaddieVoice / round-flow triggers when ready". Three months on, exactly TWO call sites existed
+ * and both pass a literal slot: app/greeting.tsx plays 'intro', app/(tabs)/caddie.tsx plays
+ * 'bestround'. The other ten bundled 8.3 MB of D-ID PLACEHOLDER video that never played once.
+ *
+ * The placeholder note below is why they went rather than got wired: the clip set was always
+ * temporary content for beta, only Kevin has any, and wiring ten placeholder clips would have made
+ * the feature look broken for the three caddies that have none.
+ *
+ * The slot names and directory layout remain the durable contract and are written up in
+ * docs/TODO-CADDIE-EMOTIONAL-ART.md, so a real clip set is a fresh start rather than a resurrection
+ * of placeholder footage. getCaddieClipPath() / hasCaddieClip() / ALL_CADDIE_SLOTS went with them —
+ * all three had zero callers.
  *
  * Self-contained slot → bundled-asset helper for the D-ID Kevin video
  * clips under assets/caddie/kevin/. No imports from app services yet —
@@ -51,27 +68,12 @@ export type Caddie = 'kevin';
 
 export type CaddieSlot =
   | 'intro'
-  | 'tee'
-  | 'fairway'
-  | 'yardage'
-  | 'wind'
-  | 'club'
-  | 'hazard'
-  | 'chip'
-  | 'putt_read'
-  | 'putt_line'
-  | 'celebrate'
-  // 2026-05-25 — Personal-best moment. Distinct from celebrate (made
-  // a putt) — bestround fires when the user just posted their best
-  // round score ever. Trigger logic lives outside this helper; the
-  // helper just makes the asset available.
+  // 2026-05-25 — Personal-best moment. Fires when the user just posted their best round score ever.
+  // Trigger logic lives outside this helper; the helper just makes the asset available.
   | 'bestround';
 
-/** All known slots in canonical round-arc order. */
-export const ALL_CADDIE_SLOTS: readonly CaddieSlot[] = [
-  'intro', 'tee', 'fairway', 'yardage', 'wind', 'club',
-  'hazard', 'chip', 'putt_read', 'putt_line', 'celebrate', 'bestround',
-] as const;
+/** The slots that are actually played. */
+const ALL_CADDIE_SLOTS: readonly CaddieSlot[] = ['intro', 'bestround'] as const;
 
 const SLOT_SET: ReadonlySet<string> = new Set(ALL_CADDIE_SLOTS);
 
@@ -85,16 +87,6 @@ const SLOT_SET: ReadonlySet<string> = new Set(ALL_CADDIE_SLOTS);
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const KEVIN_CLIPS: Record<CaddieSlot, number | null> = {
   intro:     require('../assets/caddie/kevin/intro.mp4'),
-  tee:       require('../assets/caddie/kevin/tee.mp4'),
-  fairway:   require('../assets/caddie/kevin/fairway.mp4'),
-  yardage:   require('../assets/caddie/kevin/yardage.mp4'),
-  wind:      require('../assets/caddie/kevin/wind.mp4'),
-  club:      require('../assets/caddie/kevin/club.mp4'),
-  hazard:    require('../assets/caddie/kevin/hazard.mp4'),
-  chip:      require('../assets/caddie/kevin/chip.mp4'),
-  putt_read: require('../assets/caddie/kevin/putt_read.mp4'),
-  putt_line: require('../assets/caddie/kevin/putt_line.mp4'),
-  celebrate: require('../assets/caddie/kevin/celebrate.mp4'),
   bestround: require('../assets/caddie/kevin/bestround.mp4'),
 };
 
@@ -132,36 +124,4 @@ export function getCaddieClip(caddie: Caddie, slot: CaddieSlot): number | null {
   return set[slot];
 }
 
-/**
- * Relative string path for a (caddie, slot) pair — bundler-agnostic.
- * Use for logging, telemetry, or future non-RN consumers. NOT loadable
- * by <Video source={...}/> on device — use getCaddieClip() for that.
- *
- * Same error semantics as getCaddieClip.
- */
-export function getCaddieClipPath(caddie: Caddie, slot: CaddieSlot): string {
-  if (!(caddie in ALL_CLIP_MAPS)) {
-    throw new Error(
-      `getCaddieClipPath: unknown caddie "${String(caddie)}". ` +
-      `Allowed: ${Object.keys(ALL_CLIP_MAPS).join(', ')}.`,
-    );
-  }
-  if (!SLOT_SET.has(slot as string)) {
-    throw new Error(
-      `getCaddieClipPath: unknown slot "${String(slot)}" for caddie "${caddie}". ` +
-      `Allowed: ${ALL_CADDIE_SLOTS.join(', ')}.`,
-    );
-  }
-  return `assets/caddie/${caddie}/${slot}.mp4`;
-}
 
-/**
- * True if the slot has a bundled clip ready to play. Cheaper than calling
- * getCaddieClip and checking for null — useful in render paths that want
- * to gate a Play button without invoking the lookup machinery.
- */
-export function hasCaddieClip(caddie: Caddie, slot: CaddieSlot): boolean {
-  const set = ALL_CLIP_MAPS[caddie];
-  if (!set) return false;
-  return set[slot] != null;
-}
