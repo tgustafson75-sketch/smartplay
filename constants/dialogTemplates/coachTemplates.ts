@@ -29,7 +29,11 @@ export type CoachSituation =
   | 'primary_issue_summary_standard'
   | 'primary_issue_summary_engaged'
   | 'earbud_open'
-  | 'session_done';
+  | 'session_done'
+  | 'framed_up'
+  | 'window_closing'
+  | 'club_recognised'
+  | 'club_added';
 
 const TEMPLATES: Record<CoachSituation, string[]> = {
   recap_intro: [
@@ -161,6 +165,44 @@ const TEMPLATES: Record<CoachSituation, string[]> = {
     "Another one? Say run it back — or name what you want to work on and I'll line it up.",
     "Want to keep going? Run it back and I'll roll, or call a club and we'll switch.",
     "One more? Say run it back — or tell me a club or drill and I'll set it up instead.",
+  ],
+
+  /**
+   * 2026-08-24 (Tim: "canned speech still exists in SmartMotion") — the four lines the swing lab
+   * said word-for-word, every single time. A caddie who greets you identically on the hundredth
+   * swing is a recording with a voice, which is the exact opposite of the north star.
+   * [[feels-like-a-real-caddie]]
+   */
+  framed_up: [
+    "You're framed up — swing when you're ready.",
+    "That's the frame. Go when you're ready.",
+    "Good framing — take your time, I'm watching.",
+    "I've got you in frame. Away you go.",
+    "Framed and ready — swing when you are.",
+  ],
+
+  window_closing: [
+    "That's your {duration} — analyzing now.",
+    "{duration} is up. Let me look at these.",
+    "Time's up on that one — working through it now.",
+    "That's the {duration} done. Give me a second with it.",
+    "Right, {duration} gone — analyzing.",
+  ],
+
+  club_recognised: [
+    "Got it — {club}.",
+    "{club}, got it.",
+    "Right, {club}.",
+    "{club} it is.",
+    "Okay — {club}.",
+  ],
+
+  club_added: [
+    "Got it — {club}. Added it to your bag.",
+    "{club} — that's new, it's in your bag now.",
+    "Right, {club}. I've put it in the bag.",
+    "{club}, got it — added to your bag.",
+    "New one — {club}. It's in the bag.",
   ],
 };
 

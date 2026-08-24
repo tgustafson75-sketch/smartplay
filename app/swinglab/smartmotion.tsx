@@ -20,6 +20,7 @@
  * acoustic-10-strike-calibration.
  */
 
+import { getDialog } from '../../services/dialogEngine';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
@@ -1060,7 +1061,7 @@ export default function SmartMotion() {
                       void (async () => {
                         try {
                           await configureAudioForSpeech();
-                          await speak("You're framed up — start swinging when you're ready.", s.voiceGender, s.language, getApiBaseUrl(), { userInitiated: true });
+                          await speak(getDialog('coach', 'framed_up'), s.voiceGender, s.language, getApiBaseUrl(), { userInitiated: true });
                         } catch { /* advisory only */ }
                       })();
                     }
@@ -3575,7 +3576,7 @@ export default function SmartMotion() {
           try {
             await configureAudioForSpeech();
             await speak(
-              `That's your ${windowSec >= 120 ? 'two minutes' : 'minute'} — analyzing now.`,
+              getDialog('coach', 'window_closing', { duration: windowSec >= 120 ? 'two minutes' : 'minute' }),
               sset.voiceGender,
               sset.language,
               getApiBaseUrl(),
@@ -3991,7 +3992,7 @@ export default function SmartMotion() {
         try {
           const s = useSettingsStore.getState();
           await configureAudioForSpeech();
-          const ack = newlyRegistered ? `Got it — ${clubLabel(res.club_id)}. Added it to your bag.` : `Got it — ${clubLabel(res.club_id)}.`;
+          const ack = getDialog('coach', newlyRegistered ? 'club_added' : 'club_recognised', { club: clubLabel(res.club_id) });
           await speak(ack, s.voiceGender, s.language, apiUrl, { userInitiated: true });
         } catch { /* speech non-fatal */ }
       } else if (!auto) {
@@ -4039,9 +4040,7 @@ export default function SmartMotion() {
         try {
           const s = useSettingsStore.getState();
           await configureAudioForSpeech();
-          const ack = alreadyInBag
-            ? `Got it — ${clubLabel(res.club_id)}.`
-            : `Got it — ${clubLabel(res.club_id)}. Added it to your bag.`;
+          const ack = getDialog('coach', alreadyInBag ? 'club_recognised' : 'club_added', { club: clubLabel(res.club_id) });
           await speak(ack, s.voiceGender, s.language, apiUrl, { userInitiated: true });
         } catch { /* speech non-fatal */ }
       } else {
