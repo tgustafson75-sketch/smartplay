@@ -281,3 +281,20 @@ making the switch behave as documented on the day it is thrown — not about lau
 **Guard note:** the first version of that ratchet passed with the real `canAccess` call deleted,
 because the key was still named in the `triggerPaywall` line beside it. It now requires the key to
 reach an actual gate function (`canAccess` / `navOrPaywall` / `gatedOpen`), and was break-tested red.
+
+## 13. TPC SAWGRASS IS INVISIBLE TO COURSE DISCOVERY (found 2026-08-25)
+
+Checking marquee courses for bundling turned up a defect that affects real players, not just the
+bundle: **`api/course-locate` does not return TPC Sawgrass.** Two seeds placed directly on the
+Stadium Course returned only *Sawgrass Country Club* — a DIFFERENT club 2.4-2.5km away — plus Marsh
+Landing and Windsor Parke.
+
+So a player standing on the most famous golf property in Florida is offered the wrong club, and
+would play a round with another course's card and yardages. The course API knows it perfectly well
+(`mkdn7b4e`, Stadium Course, par 72, 18 holes) — it is the Places lookup that misses it.
+
+Not chased yet. Likely candidates: the Places type filter excluding it, or the name not matching
+what we query. Worth a look because whatever hides TPC Sawgrass hides other courses too, and the
+failure mode is the worst kind — not "no course found", but *a confidently wrong one*.
+
+Bundling Torrey Pines / Pebble / Streamsong does not depend on this.

@@ -58,6 +58,26 @@ reviewer does not have either way. A player actually standing on it gets geometr
 6. Re-run the sim. Guards referencing deleted packs will fail loudly — that is intended, not a
    surprise, and is why deletion comes last.
 
+## Marquee set — all verified through our own licensed pipeline, 2026-08-25
+
+Bundling is now CHEAP: imagery is Mapbox at runtime, so a course costs a centroid, a course id and
+18 pars — bytes, not megabytes. That is what makes a small marquee set possible at all.
+
+| course | id | centroid | holes | verified |
+|---|---|---|---|---|
+| Torrey Pines **South** | `e9qqevf6` | 32.9024628, -117.2462734 | par 72 · 18 | ✅ |
+| **Pebble Beach** Golf Links | `3j4b4ar8` | 36.5696553, -121.9497555 (117m) | par 72 · 18 | ✅ |
+| **Streamsong Black** | `pfpwjgan` | 27.6699522, -81.9277421 (7m) | par 73 · 18 | ✅ |
+| Streamsong Red (optional) | `4ad33747` | 27.6777052, -81.9325060 | par 72 · 18 | ✅ |
+
+Streamsong is the Florida pick over the obvious ones for a concrete reason, not taste: **TPC
+Sawgrass is not returned by Places at all** (see OPEN-ITEMS §13), and my seeds for Innisbrook, PGA
+National and Bay Hill found only neighbouring clubs. Streamsong resolved to 7m even from a seed 7km
+off, so it is solidly indexed — and it is a genuine golf-media favourite, which is the audience Tim
+named.
+
+North Torrey Pines is `wzyyesjy` if ever wanted; South is the US Open course.
+
 ## Order is not negotiable
 
 Bundle Torrey Pines and prove it opens BEFORE deleting the 459. Deleting first means every bundled
