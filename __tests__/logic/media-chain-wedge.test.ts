@@ -33,6 +33,29 @@ describe('the media chain survives a wedged native read', () => {
     expect(wedgedDecodeCount()).toBe(before + 1);
   });
 
+  it('the clock starts when a link RUNS, not when it is queued', async () => {
+    /**
+     * The load-bearing subtlety of the whole design. Frame extraction enqueues many decodes at once
+     * and they run one at a time, so a later link can sit in the queue far longer than the timeout
+     * before its turn arrives. The bound must apply to a link's own EXECUTION.
+     *
+     * Written as `bounded(chain.then(fn))` instead of `chain.then(() => bounded(fn))`, this test
+     * fails: every queued decode past the first would be abandoned as "wedged" while perfectly
+     * healthy, and long extractions would break on exactly the devices that need them most.
+     */
+    const before = wedgedDecodeCount();
+    const slowButHealthy = () => new Promise<string>((r) => setTimeout(() => r('slow'), 15_000));
+
+    const first = serializeMediaRead(slowButHealthy);
+    const second = serializeMediaRead(slowButHealthy);   // waits 15s in the queue, then runs 15s
+
+    await jest.advanceTimersByTimeAsync(40_000);
+
+    await expect(first).resolves.toBe('slow');
+    await expect(second).resolves.toBe('slow');          // total age 30s > the 20s per-link bound
+    expect(wedgedDecodeCount()).toBe(before);
+  });
+
   it('a healthy read is never abandoned and never counted as wedged', async () => {
     const before = wedgedDecodeCount();
     const p = serializeMediaRead(async () => 'fast');

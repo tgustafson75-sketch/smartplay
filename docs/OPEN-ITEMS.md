@@ -158,3 +158,40 @@ deliberately, because the pattern is now established rather than anecdotal.
 
 ## 9. COGNITIVE-LOAD AUDIT — agreed, not started
 Ethos §6: count what a golfer must read and tap to get ONE decision. The rule AI most easily violates.
+
+## 10. ANALYSIS LATENCY — the remaining lever (found 2026-08-25, NOT yet fixed)
+
+**Pose/biomech extraction does not overlap the vision call. It waits for all of it.**
+
+I told Tim these ran concurrently, reasoning from the fact that they live in separate effects.
+That was wrong, and re-checking is what caught it:
+
+- `app/swinglab/smartmotion.tsx` — the biomech effect returns early unless `phase === 'review'`.
+- `runAnalysis` sets `setVideoDurationMs(null)` at its very start, and that effect also requires
+  `videoDurationMs != null`. So it is doubly blocked for the whole analysing phase.
+- `phase` only becomes `'review'` in the `finally` AFTER `await analysisP` — the vision round-trip.
+
+So the order is strictly: extract vision frames -> POST /api/swing-analysis (the long pole) ->
+flip to review -> ONLY THEN decode frames again for pose. The entire network wait is dead time
+during which the decoder sits idle and the body read has not started.
+
+**Why this was not fixed in the same pass:** it moves the analysis state machine, and the request
+was to work surgically with a release next week. It is a deliberate, testable change, not a
+one-line tweak, and it deserves its own pass.
+
+**The shape of the fix (additive, low risk):** do NOT re-gate the effect. Warm the same cache
+instead — `poseExtractCacheRef` is already keyed by the real extraction inputs (clip / window /
+selected swing / handedness, deliberately NOT angle), which is exactly why an angle-only re-run
+reuses frames today. Kick off the identical extraction right after the POST is in flight so it
+consumes idle decoder time; the review-phase effect then finds frames ready and computes biomech
+immediately. Nothing changes state, so a failure degrades to today's behaviour.
+
+**The one thing to verify first:** the warm needs a duration, and `runAnalysis` has just nulled it.
+Source it from `probeDurationMs` (already serialized through the media chain) rather than
+re-introducing a wait on the review player's `onLoad` — that dependency was itself a shipped
+latency defect ("the tap was loading the video").
+
+**Expected win:** the pose decode set, currently serial after the network, moves inside it.
+
+A related consequence, already fixed: the analysing screen briefly advertised a "body ✓" tick that
+is structurally impossible in that phase, because biomech cannot populate until review.

@@ -5692,18 +5692,19 @@ export default function SmartMotion() {
         <>
           {/*
             2026-08-25 — the same line, doing work. Idle it still says what to do; mid-analysis it
-            reports elapsed seconds and TICKS OFF THE PARTS THAT HAVE LANDED, so the wait is visibly
-            progressing rather than a spinner over dashes. Each tick is a real signal arriving — the
-            strike read, the body read, the coach's read — never a fake progress bar.
+            reports the elapsed seconds so the wait is sizeable rather than a spinner over dashes.
+
+            ONLY SIGNALS THAT CAN ACTUALLY ARRIVE IN THIS PHASE ARE SHOWN. The first version of this
+            line also ticked "body ✓" — which can never fire here: biomech is computed by the pose
+            effect below, which returns early unless phase === 'review', and runAnalysis clears
+            videoDurationMs at its start so that effect cannot run until the vision call has landed
+            and the phase has flipped. Advertising a tick that is structurally impossible is the same
+            defect class this file keeps getting caught by. See OPEN-ITEMS: the sequencing itself is
+            the real latency item — pose extraction waits on the whole network round-trip.
           */}
           <Text style={[styles.muted, { color: colors.text_muted }]}>
             {phase === 'analyzing'
-              ? `Reading your swing… ${analysisElapsedSec}s${
-                  [acousticRead ? 'strike ✓' : null, biomech ? 'body ✓' : null, analysis ? 'coach ✓' : null]
-                    .filter(Boolean).length > 0
-                    ? `  ·  ${[acousticRead ? 'strike ✓' : null, biomech ? 'body ✓' : null, analysis ? 'coach ✓' : null].filter(Boolean).join('  ·  ')}`
-                    : ''
-                }`
+              ? `Reading your swing… ${analysisElapsedSec}s${acousticRead ? '  ·  strike ✓' : ''}`
               : 'Record a swing to fill in your breakdown.'}
           </Text>
           {!isPutt ? <BodyAnalysisRow items={bodyItems} style={{ opacity: 0.7 }} /> : null}
