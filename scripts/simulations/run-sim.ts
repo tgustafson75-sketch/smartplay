@@ -10281,6 +10281,35 @@ check('LOCK: we ask for no permission we cannot use, and every purpose string co
   })(),
   'no permission is requested that the app cannot exercise, and the microphone and camera purpose strings name every use the code actually makes');
 
+check('LOCK: no course hole imagery is bundled — it comes from licensed Mapbox at runtime',
+  (() => {
+    /**
+     * 2026-08-25 — 459 bundled hole images (71MB) were screenshots taken from 18Birdies and
+     * Golfshot. The registry admitted it in its own comments and asked for an "IP-clean replacement
+     * pass before public release"; two packs had already been deleted for that reason in June.
+     * Cropping the chrome hides the evidence, not the infringement.
+     *
+     * They are gone. The registry EXPORTS survive so no importer breaks — the maps are simply
+     * empty, callers get null and fall through to licensed Mapbox satellite, which is the designed
+     * fallback and was already the behaviour for the June removals.
+     *
+     * This guard exists because the tempting fix, when a course looks plain, is to drop a
+     * screenshot back in. Bundled hole art must be produced by us or licensed; never a screenshot
+     * of another app.
+     */
+    const reg = readCode('data/localCourseImages.ts');
+    const palms = readCode('data/palmsImages.ts');
+    // Plain string containment, not a regex: a pattern ending in an escaped slash before its
+    // delimiter is ambiguous to parse, and the prose-assertion detector mis-split it into a bogus
+    // sub-pattern. includes() says exactly what it means and cannot be misread.
+    const noRequires = !reg.includes('assets/courses') && !palms.includes('assets/courses');
+    // The resolver must still EXIST (callers depend on it) and still be able to return null.
+    const resolverIntact = /export function getLocalHoleImage/.test(reg)
+      && /export const LOCAL_COURSE_CENTROIDS/.test(reg);
+    return noRequires && resolverIntact;
+  })(),
+  'no hole image is bundled from assets/courses; the registry and centroids survive so callers fall through to licensed Mapbox satellite');
+
 check('LOCK: the marquee courses are fully registered, and carry no bundled imagery',
   (() => {
     /**

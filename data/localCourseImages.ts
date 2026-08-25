@@ -23,138 +23,33 @@ import type { ImageSourcePropType } from 'react-native';
 // as a yellow-dot calibration reference. File registration
 // (hole-01.jpg through hole-18.jpg) is unchanged — same paths,
 // same keys; the JPGs themselves were swapped at the bytes level.
-export const PALMS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1:  require('../assets/courses/palms/hole-01.jpg'),
-  2:  require('../assets/courses/palms/hole-02.jpg'),
-  3:  require('../assets/courses/palms/hole-03.jpg'),
-  4:  require('../assets/courses/palms/hole-04.jpg'),
-  5:  require('../assets/courses/palms/hole-05.jpg'),
-  6:  require('../assets/courses/palms/hole-06.jpg'),
-  7:  require('../assets/courses/palms/hole-07.jpg'),
-  8:  require('../assets/courses/palms/hole-08.jpg'),
-  9:  require('../assets/courses/palms/hole-09.jpg'),
-  10: require('../assets/courses/palms/hole-10.jpg'),
-  11: require('../assets/courses/palms/hole-11.jpg'),
-  12: require('../assets/courses/palms/hole-12.jpg'),
-  13: require('../assets/courses/palms/hole-13.jpg'),
-  14: require('../assets/courses/palms/hole-14.jpg'),
-  15: require('../assets/courses/palms/hole-15.jpg'),
-  16: require('../assets/courses/palms/hole-16.jpg'),
-  17: require('../assets/courses/palms/hole-17.jpg'),
-  18: require('../assets/courses/palms/hole-18.jpg'),
-};
+export const PALMS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
 // Menifee Lakes — Lakes course (Tim's home club's sister course to Palms).
 // Imported from V3's menifee-lakes set, renamed lakes-h{n}.jpg → hole-{nn}.jpg.
-export const LAKES_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1:  require('../assets/courses/lakes/hole-01.jpg'),
-  2:  require('../assets/courses/lakes/hole-02.jpg'),
-  3:  require('../assets/courses/lakes/hole-03.jpg'),
-  4:  require('../assets/courses/lakes/hole-04.jpg'),
-  5:  require('../assets/courses/lakes/hole-05.jpg'),
-  6:  require('../assets/courses/lakes/hole-06.jpg'),
-  7:  require('../assets/courses/lakes/hole-07.jpg'),
-  8:  require('../assets/courses/lakes/hole-08.jpg'),
-  9:  require('../assets/courses/lakes/hole-09.jpg'),
-  10: require('../assets/courses/lakes/hole-10.jpg'),
-  11: require('../assets/courses/lakes/hole-11.jpg'),
-  12: require('../assets/courses/lakes/hole-12.jpg'),
-  13: require('../assets/courses/lakes/hole-13.jpg'),
-  14: require('../assets/courses/lakes/hole-14.jpg'),
-  15: require('../assets/courses/lakes/hole-15.jpg'),
-  16: require('../assets/courses/lakes/hole-16.jpg'),
-  17: require('../assets/courses/lakes/hole-17.jpg'),
-  18: require('../assets/courses/lakes/hole-18.jpg'),
-};
+export const LAKES_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
 // Rancho California — imported from V3, renamed rancho-h{n}.jpg → hole-{nn}.jpg.
 // THIRD-PARTY (Golfshot-derived) — intentionally empty; see the note above.
 export const RANCHO_CALIFORNIA_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
 // Phase BL — Crystal Springs Golf Course, Burlingame CA (18 holes).
-export const CRYSTAL_SPRINGS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1:  require('../assets/courses/crystal-springs/hole-01.jpg'),
-  2:  require('../assets/courses/crystal-springs/hole-02.jpg'),
-  3:  require('../assets/courses/crystal-springs/hole-03.jpg'),
-  4:  require('../assets/courses/crystal-springs/hole-04.jpg'),
-  5:  require('../assets/courses/crystal-springs/hole-05.jpg'),
-  6:  require('../assets/courses/crystal-springs/hole-06.jpg'),
-  7:  require('../assets/courses/crystal-springs/hole-07.jpg'),
-  8:  require('../assets/courses/crystal-springs/hole-08.jpg'),
-  9:  require('../assets/courses/crystal-springs/hole-09.jpg'),
-  10: require('../assets/courses/crystal-springs/hole-10.jpg'),
-  11: require('../assets/courses/crystal-springs/hole-11.jpg'),
-  12: require('../assets/courses/crystal-springs/hole-12.jpg'),
-  13: require('../assets/courses/crystal-springs/hole-13.jpg'),
-  14: require('../assets/courses/crystal-springs/hole-14.jpg'),
-  15: require('../assets/courses/crystal-springs/hole-15.jpg'),
-  16: require('../assets/courses/crystal-springs/hole-16.jpg'),
-  17: require('../assets/courses/crystal-springs/hole-17.jpg'),
-  18: require('../assets/courses/crystal-springs/hole-18.jpg'),
-};
+export const CRYSTAL_SPRINGS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
 // San Jose Municipal Golf Course (Bay Area, CA — Tim's home area while
 // he's there over the next 3-6 months). All 18 holes bundled
 // 2026-05-14 from Tim's IMG_6426–IMG_6443 photo set, sequentially
 // mapped (6426→hole 1, 6443→hole 18).
-export const SAN_JOSE_MUNI_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1:  require('../assets/courses/san-jose-muni/hole-01.jpg'),
-  2:  require('../assets/courses/san-jose-muni/hole-02.jpg'),
-  3:  require('../assets/courses/san-jose-muni/hole-03.jpg'),
-  4:  require('../assets/courses/san-jose-muni/hole-04.jpg'),
-  5:  require('../assets/courses/san-jose-muni/hole-05.jpg'),
-  6:  require('../assets/courses/san-jose-muni/hole-06.jpg'),
-  7:  require('../assets/courses/san-jose-muni/hole-07.jpg'),
-  8:  require('../assets/courses/san-jose-muni/hole-08.jpg'),
-  9:  require('../assets/courses/san-jose-muni/hole-09.jpg'),
-  10: require('../assets/courses/san-jose-muni/hole-10.jpg'),
-  11: require('../assets/courses/san-jose-muni/hole-11.jpg'),
-  12: require('../assets/courses/san-jose-muni/hole-12.jpg'),
-  13: require('../assets/courses/san-jose-muni/hole-13.jpg'),
-  14: require('../assets/courses/san-jose-muni/hole-14.jpg'),
-  15: require('../assets/courses/san-jose-muni/hole-15.jpg'),
-  16: require('../assets/courses/san-jose-muni/hole-16.jpg'),
-  17: require('../assets/courses/san-jose-muni/hole-17.jpg'),
-  18: require('../assets/courses/san-jose-muni/hole-18.jpg'),
-};
+export const SAN_JOSE_MUNI_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
 // Sunnyvale Golf Course (Bay Area, CA — added 2026-05-16 because Tim
 // is playing it tomorrow). All 18 holes bundled from Golfshot-app
 // screenshots Tim captured: sequential filename timestamps
 // (172038–172307 on 2026-04-18) mapped 1:1 to holes 1–18.
-export const SUNNYVALE_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1:  require('../assets/courses/sunnyvale/hole-01.jpg'),
-  2:  require('../assets/courses/sunnyvale/hole-02.jpg'),
-  3:  require('../assets/courses/sunnyvale/hole-03.jpg'),
-  4:  require('../assets/courses/sunnyvale/hole-04.jpg'),
-  5:  require('../assets/courses/sunnyvale/hole-05.jpg'),
-  6:  require('../assets/courses/sunnyvale/hole-06.jpg'),
-  7:  require('../assets/courses/sunnyvale/hole-07.jpg'),
-  8:  require('../assets/courses/sunnyvale/hole-08.jpg'),
-  9:  require('../assets/courses/sunnyvale/hole-09.jpg'),
-  10: require('../assets/courses/sunnyvale/hole-10.jpg'),
-  11: require('../assets/courses/sunnyvale/hole-11.jpg'),
-  12: require('../assets/courses/sunnyvale/hole-12.jpg'),
-  13: require('../assets/courses/sunnyvale/hole-13.jpg'),
-  14: require('../assets/courses/sunnyvale/hole-14.jpg'),
-  15: require('../assets/courses/sunnyvale/hole-15.jpg'),
-  16: require('../assets/courses/sunnyvale/hole-16.jpg'),
-  17: require('../assets/courses/sunnyvale/hole-17.jpg'),
-  18: require('../assets/courses/sunnyvale/hole-18.jpg'),
-};
+export const SUNNYVALE_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
 // Phase BL — Mariners Point Golf Center, Burlingame CA (9 holes par 3).
-export const MARINERS_POINT_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1: require('../assets/courses/mariners-point/hole-01.jpg'),
-  2: require('../assets/courses/mariners-point/hole-02.jpg'),
-  3: require('../assets/courses/mariners-point/hole-03.jpg'),
-  4: require('../assets/courses/mariners-point/hole-04.jpg'),
-  5: require('../assets/courses/mariners-point/hole-05.jpg'),
-  6: require('../assets/courses/mariners-point/hole-06.jpg'),
-  7: require('../assets/courses/mariners-point/hole-07.jpg'),
-  8: require('../assets/courses/mariners-point/hole-08.jpg'),
-  9: require('../assets/courses/mariners-point/hole-09.jpg'),
-};
+export const MARINERS_POINT_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
 // 2026-06-04 — Maplewood + Pembroke Pines bundles removed. Both had
 // raw Golfshot/18Birdies UI chrome that needs an IP-clean replacement
@@ -171,17 +66,7 @@ export const MARINERS_POINT_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
 // bottom-right corner) — acceptable for beta. Baked-in tee→green
 // line + Green Center yardage bubble intentionally kept as
 // SmartVision visual reference.
-export const ECHO_HILLS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1: require('../assets/courses/echo-hills/hole-01.jpg'),
-  2: require('../assets/courses/echo-hills/hole-02.jpg'),
-  3: require('../assets/courses/echo-hills/hole-03.jpg'),
-  4: require('../assets/courses/echo-hills/hole-04.jpg'),
-  5: require('../assets/courses/echo-hills/hole-05.jpg'),
-  6: require('../assets/courses/echo-hills/hole-06.jpg'),
-  7: require('../assets/courses/echo-hills/hole-07.jpg'),
-  8: require('../assets/courses/echo-hills/hole-08.jpg'),
-  9: require('../assets/courses/echo-hills/hole-09.jpg'),
-};
+export const ECHO_HILLS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
 // 2026-05-28 — Westlake Country Club, Jackson NJ. Full 18-hole bundle
 // from Tim's Green Maps Android screenshots (IMG 7502-7519 + 7527-7529,
@@ -198,47 +83,9 @@ export const ECHO_HILLS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
 //   13 par 3 198y    14 par 5 500y    15 par 4 379y
 //   16 par 4 378y    17 par 3 144y    18 par 4 288y
 // Total: par 71, ~6253y from this tee box.
-export const GREENHILL_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1:  require('../assets/courses/greenhill/hole-01.jpg'),
-  2:  require('../assets/courses/greenhill/hole-02.jpg'),
-  3:  require('../assets/courses/greenhill/hole-03.jpg'),
-  4:  require('../assets/courses/greenhill/hole-04.jpg'),
-  5:  require('../assets/courses/greenhill/hole-05.jpg'),
-  6:  require('../assets/courses/greenhill/hole-06.jpg'),
-  7:  require('../assets/courses/greenhill/hole-07.jpg'),
-  8:  require('../assets/courses/greenhill/hole-08.jpg'),
-  9:  require('../assets/courses/greenhill/hole-09.jpg'),
-  10: require('../assets/courses/greenhill/hole-10.jpg'),
-  11: require('../assets/courses/greenhill/hole-11.jpg'),
-  12: require('../assets/courses/greenhill/hole-12.jpg'),
-  13: require('../assets/courses/greenhill/hole-13.jpg'),
-  14: require('../assets/courses/greenhill/hole-14.jpg'),
-  15: require('../assets/courses/greenhill/hole-15.jpg'),
-  16: require('../assets/courses/greenhill/hole-16.jpg'),
-  17: require('../assets/courses/greenhill/hole-17.jpg'),
-  18: require('../assets/courses/greenhill/hole-18.jpg'),
-};
+export const GREENHILL_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
-export const WESTLAKE_CC_NJ_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1:  require('../assets/courses/westlake-cc-nj/hole-01.jpg'),
-  2:  require('../assets/courses/westlake-cc-nj/hole-02.jpg'),
-  3:  require('../assets/courses/westlake-cc-nj/hole-03.jpg'),
-  4:  require('../assets/courses/westlake-cc-nj/hole-04.jpg'),
-  5:  require('../assets/courses/westlake-cc-nj/hole-05.jpg'),
-  6:  require('../assets/courses/westlake-cc-nj/hole-06.jpg'),
-  7:  require('../assets/courses/westlake-cc-nj/hole-07.jpg'),
-  8:  require('../assets/courses/westlake-cc-nj/hole-08.jpg'),
-  9:  require('../assets/courses/westlake-cc-nj/hole-09.jpg'),
-  10: require('../assets/courses/westlake-cc-nj/hole-10.jpg'),
-  11: require('../assets/courses/westlake-cc-nj/hole-11.jpg'),
-  12: require('../assets/courses/westlake-cc-nj/hole-12.jpg'),
-  13: require('../assets/courses/westlake-cc-nj/hole-13.jpg'),
-  14: require('../assets/courses/westlake-cc-nj/hole-14.jpg'),
-  15: require('../assets/courses/westlake-cc-nj/hole-15.jpg'),
-  16: require('../assets/courses/westlake-cc-nj/hole-16.jpg'),
-  17: require('../assets/courses/westlake-cc-nj/hole-17.jpg'),
-  18: require('../assets/courses/westlake-cc-nj/hole-18.jpg'),
-};
+export const WESTLAKE_CC_NJ_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
 export type LocalCourseSlug =
   // 2026-08-25 — MARQUEE SET. Bundled with NO image pack on purpose: hole imagery comes from Mapbox
@@ -291,26 +138,7 @@ export type LocalCourseSlug =
 
 // 2026-07-06 — Spessard Holland GC, Melbourne Beach FL. Tim's Florida testing
 // course. 18 cleaned aerials (cropped + inpainted from his hole-view captures).
-export const SPESSARD_HOLLAND_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1: require('../assets/courses/spessard-holland/hole-01.jpg'),
-  2: require('../assets/courses/spessard-holland/hole-02.jpg'),
-  3: require('../assets/courses/spessard-holland/hole-03.jpg'),
-  4: require('../assets/courses/spessard-holland/hole-04.jpg'),
-  5: require('../assets/courses/spessard-holland/hole-05.jpg'),
-  6: require('../assets/courses/spessard-holland/hole-06.jpg'),
-  7: require('../assets/courses/spessard-holland/hole-07.jpg'),
-  8: require('../assets/courses/spessard-holland/hole-08.jpg'),
-  9: require('../assets/courses/spessard-holland/hole-09.jpg'),
-  10: require('../assets/courses/spessard-holland/hole-10.jpg'),
-  11: require('../assets/courses/spessard-holland/hole-11.jpg'),
-  12: require('../assets/courses/spessard-holland/hole-12.jpg'),
-  13: require('../assets/courses/spessard-holland/hole-13.jpg'),
-  14: require('../assets/courses/spessard-holland/hole-14.jpg'),
-  15: require('../assets/courses/spessard-holland/hole-15.jpg'),
-  16: require('../assets/courses/spessard-holland/hole-16.jpg'),
-  17: require('../assets/courses/spessard-holland/hole-17.jpg'),
-  18: require('../assets/courses/spessard-holland/hole-18.jpg'),
-};
+export const SPESSARD_HOLLAND_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
 // 2026-07-06 — Webster/Dudley (MA). Cropped aerials from Tim's Golf Pad hole-view
 // screenshots (2216-2224 → holes 1-9). 2026-07-07 — reprocessed (tighter crop +
@@ -328,356 +156,42 @@ export const WEBSTER_DUDLEY_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
 // Golf Pad hole-view captures (aerial + flight line + green distance).
 
 // 2026-07-18 — Pembroke Lakes Country Club (Pembroke Pines FL). 18 holes, same capture source.
-export const PEMBROKE_PINES_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1:  require('../assets/courses/pembroke-pines/hole-01.jpg'),
-  2:  require('../assets/courses/pembroke-pines/hole-02.jpg'),
-  3:  require('../assets/courses/pembroke-pines/hole-03.jpg'),
-  4:  require('../assets/courses/pembroke-pines/hole-04.jpg'),
-  5:  require('../assets/courses/pembroke-pines/hole-05.jpg'),
-  6:  require('../assets/courses/pembroke-pines/hole-06.jpg'),
-  7:  require('../assets/courses/pembroke-pines/hole-07.jpg'),
-  8:  require('../assets/courses/pembroke-pines/hole-08.jpg'),
-  9:  require('../assets/courses/pembroke-pines/hole-09.jpg'),
-  10: require('../assets/courses/pembroke-pines/hole-10.jpg'),
-  11: require('../assets/courses/pembroke-pines/hole-11.jpg'),
-  12: require('../assets/courses/pembroke-pines/hole-12.jpg'),
-  13: require('../assets/courses/pembroke-pines/hole-13.jpg'),
-  14: require('../assets/courses/pembroke-pines/hole-14.jpg'),
-  15: require('../assets/courses/pembroke-pines/hole-15.jpg'),
-  16: require('../assets/courses/pembroke-pines/hole-16.jpg'),
-  17: require('../assets/courses/pembroke-pines/hole-17.jpg'),
-  18: require('../assets/courses/pembroke-pines/hole-18.jpg'),
-};
+export const PEMBROKE_PINES_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
 // 2026-07-23 — Highland / Miccosukee / Killian / Redlands: 18 cropped aerials each (chrome-free,
 // from the GPS-app hole-view screenshots). Bundled as the seamless backup so SmartVision always
 // has an image even when the Mapbox satellite tile fails.
-export const HIGHLAND_LINKS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1: require('../assets/courses/highland-links/hole-01.jpg'),
-  2: require('../assets/courses/highland-links/hole-02.jpg'),
-  3: require('../assets/courses/highland-links/hole-03.jpg'),
-  4: require('../assets/courses/highland-links/hole-04.jpg'),
-  5: require('../assets/courses/highland-links/hole-05.jpg'),
-  6: require('../assets/courses/highland-links/hole-06.jpg'),
-  7: require('../assets/courses/highland-links/hole-07.jpg'),
-  8: require('../assets/courses/highland-links/hole-08.jpg'),
-  9: require('../assets/courses/highland-links/hole-09.jpg'),
-  10: require('../assets/courses/highland-links/hole-10.jpg'),
-  11: require('../assets/courses/highland-links/hole-11.jpg'),
-  12: require('../assets/courses/highland-links/hole-12.jpg'),
-  13: require('../assets/courses/highland-links/hole-13.jpg'),
-  14: require('../assets/courses/highland-links/hole-14.jpg'),
-  15: require('../assets/courses/highland-links/hole-15.jpg'),
-  16: require('../assets/courses/highland-links/hole-16.jpg'),
-  17: require('../assets/courses/highland-links/hole-17.jpg'),
-  18: require('../assets/courses/highland-links/hole-18.jpg'),
-};
-export const MICCOSUKEE_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1: require('../assets/courses/miccosukee/hole-01.jpg'),
-  2: require('../assets/courses/miccosukee/hole-02.jpg'),
-  3: require('../assets/courses/miccosukee/hole-03.jpg'),
-  4: require('../assets/courses/miccosukee/hole-04.jpg'),
-  5: require('../assets/courses/miccosukee/hole-05.jpg'),
-  6: require('../assets/courses/miccosukee/hole-06.jpg'),
-  7: require('../assets/courses/miccosukee/hole-07.jpg'),
-  8: require('../assets/courses/miccosukee/hole-08.jpg'),
-  9: require('../assets/courses/miccosukee/hole-09.jpg'),
-  10: require('../assets/courses/miccosukee/hole-10.jpg'),
-  11: require('../assets/courses/miccosukee/hole-11.jpg'),
-  12: require('../assets/courses/miccosukee/hole-12.jpg'),
-  13: require('../assets/courses/miccosukee/hole-13.jpg'),
-  14: require('../assets/courses/miccosukee/hole-14.jpg'),
-  15: require('../assets/courses/miccosukee/hole-15.jpg'),
-  16: require('../assets/courses/miccosukee/hole-16.jpg'),
-  17: require('../assets/courses/miccosukee/hole-17.jpg'),
-  18: require('../assets/courses/miccosukee/hole-18.jpg'),
-};
-export const KILLIAN_GREENS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1: require('../assets/courses/killian-greens/hole-01.jpg'),
-  2: require('../assets/courses/killian-greens/hole-02.jpg'),
-  3: require('../assets/courses/killian-greens/hole-03.jpg'),
-  4: require('../assets/courses/killian-greens/hole-04.jpg'),
-  5: require('../assets/courses/killian-greens/hole-05.jpg'),
-  6: require('../assets/courses/killian-greens/hole-06.jpg'),
-  7: require('../assets/courses/killian-greens/hole-07.jpg'),
-  8: require('../assets/courses/killian-greens/hole-08.jpg'),
-  9: require('../assets/courses/killian-greens/hole-09.jpg'),
-  10: require('../assets/courses/killian-greens/hole-10.jpg'),
-  11: require('../assets/courses/killian-greens/hole-11.jpg'),
-  12: require('../assets/courses/killian-greens/hole-12.jpg'),
-  13: require('../assets/courses/killian-greens/hole-13.jpg'),
-  14: require('../assets/courses/killian-greens/hole-14.jpg'),
-  15: require('../assets/courses/killian-greens/hole-15.jpg'),
-  16: require('../assets/courses/killian-greens/hole-16.jpg'),
-  17: require('../assets/courses/killian-greens/hole-17.jpg'),
-  18: require('../assets/courses/killian-greens/hole-18.jpg'),
-};
-export const REDLANDS_CC_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1: require('../assets/courses/redlands-cc/hole-01.jpg'),
-  2: require('../assets/courses/redlands-cc/hole-02.jpg'),
-  3: require('../assets/courses/redlands-cc/hole-03.jpg'),
-  4: require('../assets/courses/redlands-cc/hole-04.jpg'),
-  5: require('../assets/courses/redlands-cc/hole-05.jpg'),
-  6: require('../assets/courses/redlands-cc/hole-06.jpg'),
-  7: require('../assets/courses/redlands-cc/hole-07.jpg'),
-  8: require('../assets/courses/redlands-cc/hole-08.jpg'),
-  9: require('../assets/courses/redlands-cc/hole-09.jpg'),
-  10: require('../assets/courses/redlands-cc/hole-10.jpg'),
-  11: require('../assets/courses/redlands-cc/hole-11.jpg'),
-  12: require('../assets/courses/redlands-cc/hole-12.jpg'),
-  13: require('../assets/courses/redlands-cc/hole-13.jpg'),
-  14: require('../assets/courses/redlands-cc/hole-14.jpg'),
-  15: require('../assets/courses/redlands-cc/hole-15.jpg'),
-  16: require('../assets/courses/redlands-cc/hole-16.jpg'),
-  17: require('../assets/courses/redlands-cc/hole-17.jpg'),
-  18: require('../assets/courses/redlands-cc/hole-18.jpg'),
-};
+export const HIGHLAND_LINKS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
+export const MICCOSUKEE_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
+export const KILLIAN_GREENS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
+export const REDLANDS_CC_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
 // 2026-07-28 — courses that HAD geometry but no bundled hole art (green-screened to the SVG sketch).
 // Regenerated as clean satellite aerials via services/mapboxImagery (same runtime engine) from their
 // tee/green coords — no baked-in markers; the app draws its own overlays.
-export const MINES_GC_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1: require('../assets/courses/mines-gc/hole-01.jpg'),
-  2: require('../assets/courses/mines-gc/hole-02.jpg'),
-  3: require('../assets/courses/mines-gc/hole-03.jpg'),
-  4: require('../assets/courses/mines-gc/hole-04.jpg'),
-  5: require('../assets/courses/mines-gc/hole-05.jpg'),
-  6: require('../assets/courses/mines-gc/hole-06.jpg'),
-  7: require('../assets/courses/mines-gc/hole-07.jpg'),
-  8: require('../assets/courses/mines-gc/hole-08.jpg'),
-  9: require('../assets/courses/mines-gc/hole-09.jpg'),
-  10: require('../assets/courses/mines-gc/hole-10.jpg'),
-  11: require('../assets/courses/mines-gc/hole-11.jpg'),
-  12: require('../assets/courses/mines-gc/hole-12.jpg'),
-  13: require('../assets/courses/mines-gc/hole-13.jpg'),
-  14: require('../assets/courses/mines-gc/hole-14.jpg'),
-  15: require('../assets/courses/mines-gc/hole-15.jpg'),
-  16: require('../assets/courses/mines-gc/hole-16.jpg'),
-  17: require('../assets/courses/mines-gc/hole-17.jpg'),
-  18: require('../assets/courses/mines-gc/hole-18.jpg'),
-};
+export const MINES_GC_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
-export const DALE_HOLLOW_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1: require('../assets/courses/dale-hollow/hole-01.jpg'),
-  2: require('../assets/courses/dale-hollow/hole-02.jpg'),
-  3: require('../assets/courses/dale-hollow/hole-03.jpg'),
-  4: require('../assets/courses/dale-hollow/hole-04.jpg'),
-  5: require('../assets/courses/dale-hollow/hole-05.jpg'),
-  6: require('../assets/courses/dale-hollow/hole-06.jpg'),
-  7: require('../assets/courses/dale-hollow/hole-07.jpg'),
-  8: require('../assets/courses/dale-hollow/hole-08.jpg'),
-  9: require('../assets/courses/dale-hollow/hole-09.jpg'),
-  10: require('../assets/courses/dale-hollow/hole-10.jpg'),
-  11: require('../assets/courses/dale-hollow/hole-11.jpg'),
-  12: require('../assets/courses/dale-hollow/hole-12.jpg'),
-  13: require('../assets/courses/dale-hollow/hole-13.jpg'),
-  14: require('../assets/courses/dale-hollow/hole-14.jpg'),
-  15: require('../assets/courses/dale-hollow/hole-15.jpg'),
-  16: require('../assets/courses/dale-hollow/hole-16.jpg'),
-  17: require('../assets/courses/dale-hollow/hole-17.jpg'),
-  18: require('../assets/courses/dale-hollow/hole-18.jpg'),
-};
+export const DALE_HOLLOW_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
-export const OLD_FORT_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1: require('../assets/courses/old-fort/hole-01.jpg'),
-  2: require('../assets/courses/old-fort/hole-02.jpg'),
-  3: require('../assets/courses/old-fort/hole-03.jpg'),
-  4: require('../assets/courses/old-fort/hole-04.jpg'),
-  5: require('../assets/courses/old-fort/hole-05.jpg'),
-  6: require('../assets/courses/old-fort/hole-06.jpg'),
-  7: require('../assets/courses/old-fort/hole-07.jpg'),
-  8: require('../assets/courses/old-fort/hole-08.jpg'),
-  9: require('../assets/courses/old-fort/hole-09.jpg'),
-  10: require('../assets/courses/old-fort/hole-10.jpg'),
-  11: require('../assets/courses/old-fort/hole-11.jpg'),
-  12: require('../assets/courses/old-fort/hole-12.jpg'),
-  13: require('../assets/courses/old-fort/hole-13.jpg'),
-  14: require('../assets/courses/old-fort/hole-14.jpg'),
-  15: require('../assets/courses/old-fort/hole-15.jpg'),
-  16: require('../assets/courses/old-fort/hole-16.jpg'),
-  17: require('../assets/courses/old-fort/hole-17.jpg'),
-  18: require('../assets/courses/old-fort/hole-18.jpg'),
-};
+export const OLD_FORT_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
-export const NASHBORO_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1: require('../assets/courses/nashboro/hole-01.jpg'),
-  2: require('../assets/courses/nashboro/hole-02.jpg'),
-  3: require('../assets/courses/nashboro/hole-03.jpg'),
-  4: require('../assets/courses/nashboro/hole-04.jpg'),
-  5: require('../assets/courses/nashboro/hole-05.jpg'),
-  6: require('../assets/courses/nashboro/hole-06.jpg'),
-  7: require('../assets/courses/nashboro/hole-07.jpg'),
-  8: require('../assets/courses/nashboro/hole-08.jpg'),
-  9: require('../assets/courses/nashboro/hole-09.jpg'),
-  10: require('../assets/courses/nashboro/hole-10.jpg'),
-  11: require('../assets/courses/nashboro/hole-11.jpg'),
-  12: require('../assets/courses/nashboro/hole-12.jpg'),
-  13: require('../assets/courses/nashboro/hole-13.jpg'),
-  14: require('../assets/courses/nashboro/hole-14.jpg'),
-  15: require('../assets/courses/nashboro/hole-15.jpg'),
-  16: require('../assets/courses/nashboro/hole-16.jpg'),
-  17: require('../assets/courses/nashboro/hole-17.jpg'),
-  18: require('../assets/courses/nashboro/hole-18.jpg'),
-};
+export const NASHBORO_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
-export const HERMITAGE_PR_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1: require('../assets/courses/hermitage-pr/hole-01.jpg'),
-  2: require('../assets/courses/hermitage-pr/hole-02.jpg'),
-  3: require('../assets/courses/hermitage-pr/hole-03.jpg'),
-  4: require('../assets/courses/hermitage-pr/hole-04.jpg'),
-  5: require('../assets/courses/hermitage-pr/hole-05.jpg'),
-  6: require('../assets/courses/hermitage-pr/hole-06.jpg'),
-  7: require('../assets/courses/hermitage-pr/hole-07.jpg'),
-  8: require('../assets/courses/hermitage-pr/hole-08.jpg'),
-  9: require('../assets/courses/hermitage-pr/hole-09.jpg'),
-  10: require('../assets/courses/hermitage-pr/hole-10.jpg'),
-  11: require('../assets/courses/hermitage-pr/hole-11.jpg'),
-  12: require('../assets/courses/hermitage-pr/hole-12.jpg'),
-  13: require('../assets/courses/hermitage-pr/hole-13.jpg'),
-  14: require('../assets/courses/hermitage-pr/hole-14.jpg'),
-  15: require('../assets/courses/hermitage-pr/hole-15.jpg'),
-  16: require('../assets/courses/hermitage-pr/hole-16.jpg'),
-  17: require('../assets/courses/hermitage-pr/hole-17.jpg'),
-  18: require('../assets/courses/hermitage-pr/hole-18.jpg'),
-};
+export const HERMITAGE_PR_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
-export const COYOTE_CREEK_TOURNAMENT_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1: require('../assets/courses/coyote-creek-tournament/hole-01.jpg'),
-  2: require('../assets/courses/coyote-creek-tournament/hole-02.jpg'),
-  3: require('../assets/courses/coyote-creek-tournament/hole-03.jpg'),
-  4: require('../assets/courses/coyote-creek-tournament/hole-04.jpg'),
-  5: require('../assets/courses/coyote-creek-tournament/hole-05.jpg'),
-  6: require('../assets/courses/coyote-creek-tournament/hole-06.jpg'),
-  7: require('../assets/courses/coyote-creek-tournament/hole-07.jpg'),
-  8: require('../assets/courses/coyote-creek-tournament/hole-08.jpg'),
-  9: require('../assets/courses/coyote-creek-tournament/hole-09.jpg'),
-  10: require('../assets/courses/coyote-creek-tournament/hole-10.jpg'),
-  11: require('../assets/courses/coyote-creek-tournament/hole-11.jpg'),
-  12: require('../assets/courses/coyote-creek-tournament/hole-12.jpg'),
-  13: require('../assets/courses/coyote-creek-tournament/hole-13.jpg'),
-  14: require('../assets/courses/coyote-creek-tournament/hole-14.jpg'),
-  15: require('../assets/courses/coyote-creek-tournament/hole-15.jpg'),
-  16: require('../assets/courses/coyote-creek-tournament/hole-16.jpg'),
-  17: require('../assets/courses/coyote-creek-tournament/hole-17.jpg'),
-  18: require('../assets/courses/coyote-creek-tournament/hole-18.jpg'),
-};
+export const COYOTE_CREEK_TOURNAMENT_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
-export const COYOTE_CREEK_VALLEY_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1: require('../assets/courses/coyote-creek-valley/hole-01.jpg'),
-  2: require('../assets/courses/coyote-creek-valley/hole-02.jpg'),
-  3: require('../assets/courses/coyote-creek-valley/hole-03.jpg'),
-  4: require('../assets/courses/coyote-creek-valley/hole-04.jpg'),
-  5: require('../assets/courses/coyote-creek-valley/hole-05.jpg'),
-  6: require('../assets/courses/coyote-creek-valley/hole-06.jpg'),
-  7: require('../assets/courses/coyote-creek-valley/hole-07.jpg'),
-  8: require('../assets/courses/coyote-creek-valley/hole-08.jpg'),
-  9: require('../assets/courses/coyote-creek-valley/hole-09.jpg'),
-  10: require('../assets/courses/coyote-creek-valley/hole-10.jpg'),
-  11: require('../assets/courses/coyote-creek-valley/hole-11.jpg'),
-  12: require('../assets/courses/coyote-creek-valley/hole-12.jpg'),
-  13: require('../assets/courses/coyote-creek-valley/hole-13.jpg'),
-  14: require('../assets/courses/coyote-creek-valley/hole-14.jpg'),
-  15: require('../assets/courses/coyote-creek-valley/hole-15.jpg'),
-  16: require('../assets/courses/coyote-creek-valley/hole-16.jpg'),
-  17: require('../assets/courses/coyote-creek-valley/hole-17.jpg'),
-  18: require('../assets/courses/coyote-creek-valley/hole-18.jpg'),
-};
+export const COYOTE_CREEK_VALLEY_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
-export const PRUNERIDGE_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1: require('../assets/courses/pruneridge/hole-01.jpg'),
-  2: require('../assets/courses/pruneridge/hole-02.jpg'),
-  3: require('../assets/courses/pruneridge/hole-03.jpg'),
-  4: require('../assets/courses/pruneridge/hole-04.jpg'),
-  5: require('../assets/courses/pruneridge/hole-05.jpg'),
-  6: require('../assets/courses/pruneridge/hole-06.jpg'),
-  7: require('../assets/courses/pruneridge/hole-07.jpg'),
-  8: require('../assets/courses/pruneridge/hole-08.jpg'),
-  9: require('../assets/courses/pruneridge/hole-09.jpg'),
-};
+export const PRUNERIDGE_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
-export const WENTE_VINEYARDS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1: require('../assets/courses/wente-vineyards/hole-01.jpg'),
-  2: require('../assets/courses/wente-vineyards/hole-02.jpg'),
-  3: require('../assets/courses/wente-vineyards/hole-03.jpg'),
-  4: require('../assets/courses/wente-vineyards/hole-04.jpg'),
-  5: require('../assets/courses/wente-vineyards/hole-05.jpg'),
-  6: require('../assets/courses/wente-vineyards/hole-06.jpg'),
-  7: require('../assets/courses/wente-vineyards/hole-07.jpg'),
-  8: require('../assets/courses/wente-vineyards/hole-08.jpg'),
-  9: require('../assets/courses/wente-vineyards/hole-09.jpg'),
-  10: require('../assets/courses/wente-vineyards/hole-10.jpg'),
-  11: require('../assets/courses/wente-vineyards/hole-11.jpg'),
-  12: require('../assets/courses/wente-vineyards/hole-12.jpg'),
-  13: require('../assets/courses/wente-vineyards/hole-13.jpg'),
-  14: require('../assets/courses/wente-vineyards/hole-14.jpg'),
-  15: require('../assets/courses/wente-vineyards/hole-15.jpg'),
-  16: require('../assets/courses/wente-vineyards/hole-16.jpg'),
-  17: require('../assets/courses/wente-vineyards/hole-17.jpg'),
-  18: require('../assets/courses/wente-vineyards/hole-18.jpg'),
-};
+export const WENTE_VINEYARDS_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
-export const YOCHA_DEHE_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1: require('../assets/courses/yocha-dehe/hole-01.jpg'),
-  2: require('../assets/courses/yocha-dehe/hole-02.jpg'),
-  3: require('../assets/courses/yocha-dehe/hole-03.jpg'),
-  4: require('../assets/courses/yocha-dehe/hole-04.jpg'),
-  5: require('../assets/courses/yocha-dehe/hole-05.jpg'),
-  6: require('../assets/courses/yocha-dehe/hole-06.jpg'),
-  7: require('../assets/courses/yocha-dehe/hole-07.jpg'),
-  8: require('../assets/courses/yocha-dehe/hole-08.jpg'),
-  9: require('../assets/courses/yocha-dehe/hole-09.jpg'),
-  10: require('../assets/courses/yocha-dehe/hole-10.jpg'),
-  11: require('../assets/courses/yocha-dehe/hole-11.jpg'),
-  12: require('../assets/courses/yocha-dehe/hole-12.jpg'),
-  13: require('../assets/courses/yocha-dehe/hole-13.jpg'),
-  14: require('../assets/courses/yocha-dehe/hole-14.jpg'),
-  15: require('../assets/courses/yocha-dehe/hole-15.jpg'),
-  16: require('../assets/courses/yocha-dehe/hole-16.jpg'),
-  17: require('../assets/courses/yocha-dehe/hole-17.jpg'),
-  18: require('../assets/courses/yocha-dehe/hole-18.jpg'),
-};
+export const YOCHA_DEHE_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
-export const CRANE_CREEK_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1: require('../assets/courses/crane-creek/hole-01.jpg'),
-  2: require('../assets/courses/crane-creek/hole-02.jpg'),
-  3: require('../assets/courses/crane-creek/hole-03.jpg'),
-  4: require('../assets/courses/crane-creek/hole-04.jpg'),
-  5: require('../assets/courses/crane-creek/hole-05.jpg'),
-  6: require('../assets/courses/crane-creek/hole-06.jpg'),
-  7: require('../assets/courses/crane-creek/hole-07.jpg'),
-  8: require('../assets/courses/crane-creek/hole-08.jpg'),
-  9: require('../assets/courses/crane-creek/hole-09.jpg'),
-  10: require('../assets/courses/crane-creek/hole-10.jpg'),
-  11: require('../assets/courses/crane-creek/hole-11.jpg'),
-  12: require('../assets/courses/crane-creek/hole-12.jpg'),
-  13: require('../assets/courses/crane-creek/hole-13.jpg'),
-  14: require('../assets/courses/crane-creek/hole-14.jpg'),
-  15: require('../assets/courses/crane-creek/hole-15.jpg'),
-  16: require('../assets/courses/crane-creek/hole-16.jpg'),
-  17: require('../assets/courses/crane-creek/hole-17.jpg'),
-  18: require('../assets/courses/crane-creek/hole-18.jpg'),
-};
+export const CRANE_CREEK_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
-export const MANATEE_COVE_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
-  1: require('../assets/courses/manatee-cove/hole-01.jpg'),
-  2: require('../assets/courses/manatee-cove/hole-02.jpg'),
-  3: require('../assets/courses/manatee-cove/hole-03.jpg'),
-  4: require('../assets/courses/manatee-cove/hole-04.jpg'),
-  5: require('../assets/courses/manatee-cove/hole-05.jpg'),
-  6: require('../assets/courses/manatee-cove/hole-06.jpg'),
-  7: require('../assets/courses/manatee-cove/hole-07.jpg'),
-  8: require('../assets/courses/manatee-cove/hole-08.jpg'),
-  9: require('../assets/courses/manatee-cove/hole-09.jpg'),
-  10: require('../assets/courses/manatee-cove/hole-10.jpg'),
-  11: require('../assets/courses/manatee-cove/hole-11.jpg'),
-  12: require('../assets/courses/manatee-cove/hole-12.jpg'),
-  13: require('../assets/courses/manatee-cove/hole-13.jpg'),
-  14: require('../assets/courses/manatee-cove/hole-14.jpg'),
-  15: require('../assets/courses/manatee-cove/hole-15.jpg'),
-  16: require('../assets/courses/manatee-cove/hole-16.jpg'),
-  17: require('../assets/courses/manatee-cove/hole-17.jpg'),
-  18: require('../assets/courses/manatee-cove/hole-18.jpg'),
-};
+export const MANATEE_COVE_HOLE_IMAGES: Record<number, ImageSourcePropType> = {};
 
 export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number, ImageSourcePropType>>> = {
   'crane-creek': CRANE_CREEK_HOLE_IMAGES,
