@@ -11741,6 +11741,39 @@ check('LOCK: a biomech number the body cannot produce never reaches the player',
   })(),
   'every biomech metric is checked against what a body can physically do, out-of-band reads are rejected rather than clamped, and the gate runs before any verdict sentence is written');
 
+check('LOCK: a video frame is decoded once, and the cache never hands out the file it keeps',
+  (() => {
+    /**
+     * 2026-08-25 (Tim — "I've actually never waited for the analysis… everything needs to be as
+     * streamlined as possible"). Seven analysis paths pull frames from the same clip and several ask
+     * for the same instant, all anchored on the same impact. Every one was a fresh native decode,
+     * and the queue in this file serializes decodes app-wide to avoid the MediaMetadataRetriever
+     * crash — so each redundant decode is wall-clock the player waits through.
+     *
+     * THE DANGEROUS PART is not the caching, it is the ownership. Callers DELETE the frames they are
+     * handed: ballDeparture removes its before/after, clubPath removes its whole set. A shared URI
+     * would be pulled out from under the next consumer, or from under one still reading it. So every
+     * hit returns a COPY and the cache keeps its original — a few milliseconds for a small JPEG
+     * against hundreds for a 4K decode, with the existing delete semantics untouched.
+     *
+     * Assert both halves: that the cache exists, and that it can never leak the file it owns.
+     */
+    const t = readCode('utils/videoThumbnail.ts');
+    const cached = /const frameCache = new Map<string, CacheEntry>\(\);/.test(t) &&
+      /export function thumbnailCacheKey/.test(t) &&
+      /Math\.round\(options\.time \/ FRAME_BUCKET_MS\)/.test(t);   // one decode per physical frame
+    // A hit must copy, and a miss must ALSO copy before returning — otherwise the very first caller
+    // owns (and deletes) the cache's original.
+    const copies = (t.match(/await copyOf\(/g) ?? []).length >= 2 &&
+      /FileSystem\.copyAsync\(\{ from: entry\.uri, to \}\)/.test(t);
+    // A vanished file must decode again rather than returning a dead URI.
+    const survivesDeletion = /if \(!info\.exists\) return null;/.test(t);
+    // Bounded, or a long session grows it forever.
+    const bounded = /while \(frameCache\.size > CACHE_MAX\)/.test(t);
+    return cached && copies && survivesDeletion && bounded;
+  })(),
+  'frames are decoded once per physical frame and reused as copies, so a consumer deleting its frame can never empty the cache or strand another reader');
+
 // ─── Guards that read prose — the harness auditing itself ─────────────────────
 /**
  * 2026-08-24 (Tim: "check all our work, triple check"). Break-testing every guard written that day

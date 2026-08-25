@@ -1080,6 +1080,19 @@ export async function analyzeSwing(
   // Pass the already-probed duration so extractKeyFrames' unbounded branch
   // doesn't probe the same clip a second time (no-op when boundaries are set).
   const frames = await extractKeyFrames(clipUri, effectiveBoundaries, quickTier, probedDurMs || undefined);
+  /**
+   * 2026-08-25 (Tim — "I've actually never waited for the analysis") — report what the frame cache
+   * saved on this analysis. Decodes are serialized app-wide, so a decode avoided is wall-clock the
+   * player did not wait through. This turns the next "it takes a while" into a number instead of a
+   * guess.
+   */
+  try {
+    const { thumbnailCacheStats } = await import('../utils/videoThumbnail');
+    const st = thumbnailCacheStats();
+    if (st.hits + st.misses > 0) {
+      V6('FRAME CACHE', { decodes: st.misses, reused: st.hits, saved_pct: Math.round((st.hits / (st.hits + st.misses)) * 100) });
+    }
+  } catch { /* telemetry never blocks an analysis */ }
   if (frames.length === 0) {
     V6('STAGE 3 SKIP — no_frames (no usable frames extracted)');
     return { kind: 'no_frames' };
