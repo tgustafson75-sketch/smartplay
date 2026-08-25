@@ -1607,7 +1607,25 @@ ${langRule ? `LANGUAGE — FINAL REMINDER: ${langRule}` : ''}
           ? `\n\nRELEVANT COACHING KNOWLEDGE (curated principles for what the player is asking — speak them in your own voice; do NOT read tags aloud):\n${kbBlock}\nHonesty: items tagged [coaching_only] are general instruction — share as coaching, never imply the app measured them. Items tagged [directional] are hinted by the player's data/signals but not precisely measured — hedge accordingly ("looks like", "tends to"). NEVER fabricate a number.`
           : '');
     } catch { /* KB is best-effort — never break the turn */ }
-    const systemPromptWithKB = kbAddendum ? systemPrompt + kbAddendum : systemPrompt;
+    /**
+     * 2026-08-25 — THE KB ADDENDUM WAS THE LAST THING BUSTING THE CACHE, AND THE BIGGEST.
+     *
+     * Measured on the live API: three in-round turns with the SAME question all read the cache
+     * (19559 read / 0 write) even when the yardage and stroke moved — but three turns with
+     * DIFFERENT questions all wrote in full (19559 / 19179 / 19082, a different size each time).
+     * The difference is this addendum: `retrieveKB(_message, ...)` picks entries FOR THE QUESTION,
+     * and the result was concatenated onto the system prompt, which is the cached block. In a real
+     * round every question differs, so the cache could never read — the 1h TTL was pure 2x cost.
+     *
+     * The comment where kbAddendum is built says it is "Kept OUT of the static systemPrompt". The
+     * code concatenated it on one line later. A file's description of itself is not its behaviour.
+     *
+     * All of it is reference material for THIS question — the feature catalog, the capability and
+     * how-to text (themselves gated on `appHelp`, which is derived from the message), and the
+     * retrieved coaching entries. So all of it rides the message. The model reads the same text.
+     */
+    const systemPromptWithKB = systemPrompt;
+    const kbPrefix = kbAddendum ? `${kbAddendum.trim()}\n\n` : '';
 
     const baseMessage = _message;
 
@@ -1725,8 +1743,8 @@ ${sv.measureYards != null ? sv.measureYards + ' yards to tapped target' : ''}
 ${sv.analysisText ? 'SmartVision analysis: ' + sv.analysisText : ''}
 [/SMARTVISION OPEN]
 
-${onCourseContextBlock}${roundFactsPrefix}${turnStatePrefix}${liveFactsPrefix}${baseMessage}`
-      : `${recentShotsBlock}${onCourseContextBlock}${roundFactsPrefix}${turnStatePrefix}${liveFactsPrefix}${baseMessage}`;
+${kbPrefix}${onCourseContextBlock}${roundFactsPrefix}${turnStatePrefix}${liveFactsPrefix}${baseMessage}`
+      : `${kbPrefix}${recentShotsBlock}${onCourseContextBlock}${roundFactsPrefix}${turnStatePrefix}${liveFactsPrefix}${baseMessage}`;
 
     // 2026-05-22 — Vision frame normalization. When the client passed
     // an image, validate the shape and prefer it as the primary user-
