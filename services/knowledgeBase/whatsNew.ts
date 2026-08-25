@@ -28,6 +28,11 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'Move the SmartFinder reticle and the yardage moves with it. On a mapped hole it works out what you\'re pointing at \u2014 the green, the front edge, a bunker, the water \u2014 and gives you the real GPS distance to it. Point somewhere it doesn\'t know and it says nothing rather than guessing.',
+    howTo: 'Drag the reticle onto whatever you want the number for. The distance updates as you move.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'SmartFinder learns how YOU hold the phone. The close-range read worked off an assumed height for everybody, and that assumption is a straight multiplier on the number \u2014 hold it a bit lower than average and every reading came back long. Now, whenever you aim near the green and I already know that distance from GPS, I work out your real phone height and use it from then on. Nothing to set up.',
   },
   {

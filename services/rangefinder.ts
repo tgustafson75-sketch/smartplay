@@ -29,6 +29,13 @@ export interface DistanceComputeOutput {
    * owner of it.
    */
   angle_degrees: number;
+  /**
+   * 2026-08-24 — the projected COMPASS BEARING of the aim point: compass heading plus the reticle's
+   * horizontal offset. Unlike the distance, this is valid even when the read is `unmeasurable`,
+   * because it does not depend on the down-angle at all — which is what lets SmartFinder answer
+   * "what am I aiming at" from the map at distances the tilt method cannot resolve.
+   */
+  heading_degrees: number;
   distance_meters: number;
   target_lat: number;
   target_lng: number;
@@ -176,6 +183,7 @@ export function computeDistance(input: DistanceComputeInput): DistanceComputeOut
     distance_yards: Math.round(distYards),
     // The effective angle this read used — see the field's note. Calibration consumes it.
     angle_degrees: angleDeg,
+    heading_degrees: projectedHeading,
     distance_meters: Math.round(clampedM),
     target_lat: target.lat,
     target_lng: target.lng,

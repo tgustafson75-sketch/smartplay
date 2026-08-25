@@ -11618,6 +11618,41 @@ console.log('\n=== Orphaned exports ===');
   );
 }
 
+check('LOCK: the reticle answers from the MAP before it gives up on the tilt read',
+  (() => {
+    /**
+     * 2026-08-24 (Tim's call, after reporting the reticle three times). SmartFinder ranged by camera
+     * tilt only: distance = eyeHeight / tan(angle). At ~1.6 m a 150-yard target sits at 0.67 DEGREES
+     * of down-angle, under the 2-degree floor where services/rangefinder correctly returns
+     * `unmeasurable`. Its own header has said since 07-22 that the method "physically caps at ~50
+     * yds". So at every real golf distance the reticle COULD NOT move the number — it bailed out and
+     * the screen held the GPS green-middle baseline. Two earlier passes widened a plausibility gate;
+     * a gate cannot fix a method with no resolution.
+     *
+     * The aim BEARING has no such limit — compass plus the reticle's horizontal offset, no
+     * down-angle involved — so a mapped hole can be answered from geometry at any distance.
+     *
+     * The ORDER is the whole fix, so it is what this asserts: the map is consulted BEFORE the
+     * unmeasurable bail-out. Behind it, and it would never be reached.
+     */
+    const sf = readCode('app/smartfinder.tsx');
+    const rf = readCode('services/rangefinder.ts');
+    const mod = readCode('services/aimedFeature.ts');
+    // The bearing is published by the one owner of the projection, not re-derived from the HFOV.
+    const bearingOwned = /heading_degrees: projectedHeading,/.test(rf) &&
+      /featureOnAimLine\(fix\.location, result\.heading_degrees, aimCandidates\)/.test(sf);
+    // ...and consulted BEFORE the tilt read gives up.
+    const iMap = sf.indexOf('featureOnAimLine(fix.location');
+    const iBail = sf.indexOf('if (result.unmeasurable)');
+    const orderedFirst = iMap > 0 && iBail > 0 && iMap < iBail;
+    // Aiming at nothing known must stay an honest null, never an invented target.
+    const honest = /if \(!best\) return null;/.test(mod) &&
+      /if \(Math\.abs\(delta\) >= 90\) continue;/.test(mod) &&   // never something behind you
+      /if \(offset > tolerance\) continue;/.test(mod);
+    return bearingOwned && orderedFirst && honest;
+  })(),
+  'the reticle names and measures the known feature on its bearing before the tilt read bails out, from the one projection owner, and returns null rather than inventing a target');
+
 // ─── Guards that read prose — the harness auditing itself ─────────────────────
 /**
  * 2026-08-24 (Tim: "check all our work, triple check"). Break-testing every guard written that day

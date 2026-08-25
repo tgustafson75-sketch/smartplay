@@ -78,6 +78,7 @@ import { useToastStore } from '../store/toastStore';
 import { getApiBaseUrl } from '../services/apiBase';
 import { ingestCapture } from '../services/courseCaptureIngest';
 import { effectiveEyeHeightM, observeCalibration } from '../services/rangefinderCalibration';
+import { featureOnAimLine, type AimCandidate } from '../services/aimedFeature';
 
 const REFRESH_MS = 3_000;
 const CANVAS_W_FRACTION = 0.92;
@@ -1335,6 +1336,32 @@ function TargetCameraOverlay({
    * when the vision model actually found a reference AND the resulting angular size is big enough
    * to trust. Anything less and we keep what we had. The manual two-tap path is untouched.
    */
+  /**
+   * 2026-08-24 (Tim's call) — WHAT THE RETICLE IS POINTING AT, from the map.
+   *
+   * The known things on this hole, each with a real coordinate. Swinging the reticle changes a
+   * BEARING, and a bearing is enough to say which of these lies along it and exactly how far away it
+   * is — GPS-accurate, no scan round-trip, and it moves the instant the reticle does. See
+   * services/aimedFeature for why the tilt read cannot answer this at golf distances.
+   *
+   * Tolerances are the honest part: a green is a big target and a bunker is not, so a pot bunker
+   * needs a much squarer aim before it may claim the reticle.
+   */
+  const aimCandidates = useMemo(() => {
+    const out: AimCandidate[] = [];
+    const g = geometry;
+    if (g?.green) out.push({ label: 'green', location: g.green, toleranceYards: 24 });
+    if (g?.green_front) out.push({ label: 'front of green', location: g.green_front, toleranceYards: 18 });
+    if (g?.green_back) out.push({ label: 'back of green', location: g.green_back, toleranceYards: 18 });
+    for (const h of g?.hazards ?? []) {
+      if (h?.location) out.push({ label: h.label, location: h.location, toleranceYards: 14 });
+    }
+    return out;
+  }, [geometry]);
+  /** What the reticle is currently on, when it is on something we know. Null = nothing mapped there. */
+  const [aimedLabel, setAimedLabel] = useState<string | null>(null);
+  void aimedLabel; // held for the read-out; no new UI while the layout freeze stands
+
   const heightScanRef = useRef(0);
   const runHeightRangeScan = useCallback(async () => {
     if (!captureFrameBase64) return;
@@ -1394,6 +1421,36 @@ function TargetCameraOverlay({
        */
       eye_height_m: effectiveEyeHeightM(),
     });
+    /**
+     * 2026-08-24 — THE MAP ANSWERS FIRST, and deliberately ABOVE the `unmeasurable` bail-out below.
+     *
+     * That bail-out is precisely why the reticle never moved the number: at ~1.6 m phone height a
+     * 150-yard target sits at 0.67 degrees of down-angle, under the 2-degree floor, so every real
+     * golf distance returned `unmeasurable` and the screen held the GPS green-middle baseline. The
+     * aim BEARING has no such limit — it comes from the compass plus the reticle's horizontal
+     * offset and does not involve the down-angle at all — so when the hole is mapped we can answer
+     * from geometry at any distance. Falls through to the tilt path untouched when the aim line hits
+     * nothing we know, which is the honest answer rather than a guess.
+     */
+    const aimed = featureOnAimLine(fix.location, result.heading_degrees, aimCandidates);
+    if (aimed) {
+      setAimedLabel(aimed.label);
+      // Squarely on it reads high; grazing the edge of the tolerance is honestly a softer claim.
+      setReticleConfidence(aimed.offsetYards <= 8 ? 'high' : 'medium');
+      if (lastYardsRef.current !== aimed.yards) {
+        lastYardsRef.current = aimed.yards;
+        setTargetYards(aimed.yards);
+        setTargetLoc(aimed.location);   // the real point, so elevation resolves off it too
+      }
+      const aimedBearing = bearingDegrees(fix.location, aimed.location);
+      if (lastBearingRef.current !== aimedBearing) {
+        lastBearingRef.current = aimedBearing;
+        setTargetBearing(aimedBearing);
+      }
+      return;
+    }
+    setAimedLabel(null);
+
     if (result.unmeasurable) {
       // Near-level hold: no usable tilt input. Keep the GPS green-middle
       // baseline and flag the read as soft rather than blanking.
