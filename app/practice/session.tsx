@@ -21,7 +21,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { usePracticeSessionStore } from '../../store/practiceSessionStore';
 import { summarizeOpenRange } from '../../services/practice/openRangeStats';
-import { PRACTICE_FOCUSES, getFocus, buildInterleavedPlan } from '../../services/practice/sessionPlan';
+import { PRACTICE_FOCUSES, getFocus, buildInterleavedPlan, focusClubsForBag } from '../../services/practice/sessionPlan';
+import { useClubBagStore } from '../../store/clubBagStore';
 
 const DEFAULT_REPS = 12;
 
@@ -37,7 +38,22 @@ export default function SessionRunnerScreen() {
   const focus = focusSession?.focus ? getFocus(focusSession.focus) : null;
   const total = focusSession?.targetReps ?? DEFAULT_REPS;
 
-  const plan = useMemo(() => (focus ? buildInterleavedPlan(focus, total) : []), [focus, total]);
+  /**
+   * 2026-08-25 — ROTATE THE CLUBS THIS PLAYER ACTUALLY CARRIES.
+   *
+   * The focuses hardcode club lists and this screen rendered them verbatim — "Rotates 7I · 9I · 5I ·
+   * 8I" and, mid-session, "↻ Switch clubs — 5I". A player carrying a 5 hybrid instead of a 5 iron,
+   * or no gap wedge, was being told to hit a club they do not own. Reconciled ONCE here so the
+   * picker text, the plan and the switch cue can never disagree with each other.
+   */
+  const bagClubs = useClubBagStore((st) => st.clubs);
+  const ownedIds = useMemo(() => Object.keys(bagClubs ?? {}), [bagClubs]);
+  const bagFocus = useMemo(
+    () => (focus ? { ...focus, clubs: focusClubsForBag(focus.clubs, ownedIds) } : null),
+    [focus, ownedIds],
+  );
+
+  const plan = useMemo(() => (bagFocus ? buildInterleavedPlan(bagFocus, total) : []), [bagFocus, total]);
   const done = focusSession?.swings.length ?? 0;
   const complete = focusSession != null && done >= total;
   const currentRep = !complete && done < plan.length ? plan[done] : null;
@@ -72,7 +88,11 @@ export default function SessionRunnerScreen() {
                   <Text style={[styles.focusLabel, { color: colors.text_primary }]}>{f.label}</Text>
                   <Text style={[styles.focusIntent, { color: colors.text_muted }]}>{f.intent}</Text>
                   <Text style={[styles.focusMeta, { color: colors.text_muted }]}>
-                    {f.clubs.length > 1 ? `Rotates ${f.clubs.join(' · ')}` : `${f.clubs[0]} · vary targets`}
+                    {(() => {
+                      // Same reconciliation as the running session — one answer, shown in both places.
+                      const cs = focusClubsForBag(f.clubs, ownedIds);
+                      return cs.length > 1 ? `Rotates ${cs.join(' · ')}` : `${cs[0]} · vary targets`;
+                    })()}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color={colors.text_muted} />

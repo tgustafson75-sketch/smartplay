@@ -4814,7 +4814,11 @@ check('Structured Session Runner UI — focus picker + auto-advancing interleave
     const caddie = read('app/(tabs)/caddie.tsx');
     const store = read('store/practiceSessionStore.ts');
     return (
-      /buildInterleavedPlan\(focus, total\)/.test(screen) &&        // builds the interleaved plan
+      // 2026-08-25 — now buildInterleavedPlan(bagFocus, total): the focus's hardcoded club list is
+      // reconciled to the clubs the player actually carries before the plan is built, so the runner
+      // can never cue a club that is not in the bag. Assert the RECONCILED focus is what is planned.
+      /buildInterleavedPlan\(bagFocus, total\)/.test(screen) &&
+      /focusClubsForBag\(/.test(screen) &&
       /plan\[done\]/.test(screen) &&                                // current rep = swings recorded (auto-advance)
       /startSession\('focus'/.test(screen) &&                       // focus session
       /targetReps/.test(store) && /targetReps/.test(screen) &&      // plan length carried on the session

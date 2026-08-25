@@ -28,6 +28,11 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'Practice sessions now rotate the clubs you actually carry. If you play a hybrid instead of a long iron, that is what I ask for — no more being told to hit a club that is not in your bag.',
+    howTo: 'Swing Lab, Focus Session. Register your bag first and the rotations match it.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'Drills now opens on your fault, not a generic list. The issue your swings actually come back with is first, with how often I have seen it. Until I have read enough swings I stay quiet rather than guess.',
     howTo: 'Swing Lab, Drills. It fills in once SmartMotion has analysed a few swings.',
   },

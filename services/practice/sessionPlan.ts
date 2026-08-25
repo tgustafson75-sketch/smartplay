@@ -169,3 +169,35 @@ export function isInterleaved(plan: PracticeRep[], focus: PracticeFocus): boolea
   const distinctCues = new Set(plan.map((r) => r.targetCue)).size;
   return plan.length <= focus.blockSize || distinctCues > 1;
 }
+
+/**
+ * 2026-08-25 (pre-submission Swing Lab audit) — PRACTICE THE CLUBS YOU ACTUALLY CARRY.
+ *
+ * The focuses above hardcode club lists (`['7I','9I','5I','8I']`, `['PW','GW','SW']`). Focus Session
+ * renders them verbatim — "Rotates 7I · 9I · 5I · 8I" and "↻ Switch clubs — 5I" — with no reference
+ * to the bag. A player carrying a hybrid instead of a 5 iron, or no gap wedge, was being told to hit
+ * a club they do not own. That is the club-identity class Tim has called the worst part of the app.
+ *
+ * Deliberately NOT new logic: `reconcileClubWithBag` already owns "nearest club this player actually
+ * carries" (4I → 4H, then 4I → 5I) and is used by the swing-capture path. This routes the template
+ * through that same owner rather than growing a second answer.
+ *
+ * Confidence is 'low' on purpose. A template club is a suggestion, not a read of a real swing —
+ * 'high' would tell reconcileClubWithBag to trust the input and skip snapping entirely.
+ *
+ * An empty bag returns the template unchanged: a player who has not registered clubs still gets a
+ * usable plan, and we do not pretend to know better.
+ */
+export function focusClubsForBag(clubs: readonly string[], ownedIds: readonly string[]): string[] {
+  if (ownedIds.length === 0) return [...clubs];
+  const out: string[] = [];
+  for (const c of clubs) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { reconcileClubWithBag } = require('../clubBagReconcile') as typeof import('../clubBagReconcile');
+    const snapped = reconcileClubWithBag(c, 'low', ownedIds);
+    // Two template clubs can snap to the SAME owned club (7I and 8I both → 7I in a sparse bag).
+    // Rotating a club against itself is not practice, so collapse the duplicate.
+    if (!out.includes(snapped)) out.push(snapped);
+  }
+  return out.length > 0 ? out : [...clubs];
+}
