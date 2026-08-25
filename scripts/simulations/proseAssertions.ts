@@ -56,20 +56,42 @@ export function findProseAssertions(): string[] {
   for (let b = 0; b < starts.length; b++) {
     const body = lines.slice(starts[b], b + 1 < starts.length ? starts[b + 1] : lines.length).join('\n');
     const label = (/^check\('([^']+)'/.exec(body)?.[1] ?? '?').slice(0, 60);
-    const files = [...new Set([...body.matchAll(/read(?:Code)?\('([^']+)'\)/g)].map((m) => m[1]))];
+    /**
+     * 2026-08-24 (found immediately, by this sweep flagging a guard that was fine) — PAIR EACH
+     * PATTERN WITH THE FILE IT IS ACTUALLY TESTED AGAINST.
+     *
+     * The first version took every pattern in a block and checked it against every file the block
+     * read. That cross-product produced a false alarm the same day: a guard asserting
+     * `mirror={false}` in smartmotion was flagged because the string also appears in a COMMENT in
+     * SwingVisionCamera — a file the guard reads for a different assertion entirely. A meta-guard
+     * that cries wolf gets ignored, which would be worse than not having one.
+     *
+     * So bind `const x = read('f')` to its variable, and only judge `/re/.test(x)` against `f`.
+     * Patterns tested against something we cannot resolve to a file are skipped rather than guessed.
+     */
+    const binding = new Map<string, string>();
+    for (const m of body.matchAll(/const\s+([A-Za-z_$][\w$]*)\s*=\s*read(?:Code)?\('([^']+)'\)/g)) {
+      binding.set(m[1], m[2]);
+    }
     // Positive assertions only — a NEGATIVE assertion matching a comment is the opposite problem
     // (a false failure), and it announces itself immediately by going red.
-    const patterns = [...body.matchAll(/(?<![!\w])\/((?:[^/\\\n]|\\.){8,}?)\/\.test\(/g)].map((m) => m[1]);
-    if (!files.length || !patterns.length) continue;
+    const assertions = [...body.matchAll(/(?<![!\w])\/((?:[^/\\\n]|\\.){8,}?)\/\.test\(\s*([A-Za-z_$][\w$]*)\s*\)/g)]
+      .map((m) => ({ pattern: m[1], target: m[2] }));
+    // ...plus the inline form `/re/.test(read('f'))`, which names its file directly.
+    for (const m of body.matchAll(/(?<![!\w])\/((?:[^/\\\n]|\\.){8,}?)\/\.test\(\s*read(?:Code)?\('([^']+)'\)\s*\)/g)) {
+      assertions.push({ pattern: m[1], target: `__inline__${m[2]}` });
+      binding.set(`__inline__${m[2]}`, m[2]);
+    }
+    if (!assertions.length) continue;
 
-    for (const f of files) {
+    for (const { pattern, target } of assertions) {
+      const f = binding.get(target);
+      if (!f) continue;                       // cannot resolve the source — do not guess
       const e = load(f);
       if (!e) continue;
-      for (const p of patterns) {
-        let re: RegExp;
-        try { re = new RegExp(p); } catch { continue; }
-        if (re.test(e.raw) && !re.test(e.code)) out.push(`${label} :: ${f} :: /${p}/`);
-      }
+      let re: RegExp;
+      try { re = new RegExp(pattern); } catch { continue; }
+      if (re.test(e.raw) && !re.test(e.code)) out.push(`${label} :: ${f} :: /${pattern}/`);
     }
   }
   return [...new Set(out)].sort();
@@ -78,6 +100,11 @@ export function findProseAssertions(): string[] {
 
 /**
  * THE BASELINE — every prose-reading assertion as of 2026-08-24, frozen.
+ *
+ * CORRECTED the same day: the first sweep reported 64 by testing every pattern against every file a
+ * guard read. Pairing each pattern with the file it is ACTUALLY tested against gives 32 — half of
+ * the original list were cross-product false positives, including one flagged against a comment in
+ * a file the guard only reads for a different assertion.
  *
  * Some of these are LEGITIMATE: a handful of guards deliberately assert that a comment is present —
  * a recorded decision, or a line that must stay commented out (see the voiceCommandRouter entry).
@@ -94,28 +121,9 @@ export function findProseAssertions(): string[] {
  */
 export const PROSE_ASSERTION_BASELINE: readonly string[] = [
   "Analysis honesty: kids\\ :: services/juniorSwingAnalyzer.ts :: /\\/\\/ Fallback score is a placeholder, so never claim a progress delta[\\s\\S]{0,40}vs_previous: null/",
-  "Analysis speed: pre-warm the lambda on record entry (kills c :: app/swinglab/smartmotion.tsx :: /\\/api\\/swing-analysis/",
-  "Analyzer gets handedness + CNS-learned tendencies pretext :: api/swing-analysis.ts :: /\\.tsx?\\b|api\\/|services\\/|store\\/|useState|zustand/",
-  "Analyzer gets handedness + CNS-learned tendencies pretext :: app/(tabs)/caddie.tsx :: /just inside the upper-right corner/",
-  "Analyzer gets handedness + CNS-learned tendencies pretext :: app/(tabs)/caddie.tsx :: /startGpsManager/",
-  "Analyzer gets handedness + CNS-learned tendencies pretext :: app/_layout.tsx :: /_migratedFromProfile/",
-  "Analyzer gets handedness + CNS-learned tendencies pretext :: app/_layout.tsx :: /roundHistory/",
-  "Analyzer gets handedness + CNS-learned tendencies pretext :: app/practice/fit-profile.tsx :: /carryFor:/",
-  "Analyzer gets handedness + CNS-learned tendencies pretext :: app/swinglab/smartmotion.tsx :: /ball speed\\/departure are intentionally NOT cleared here/",
-  "Analyzer gets handedness + CNS-learned tendencies pretext :: app/swinglab/smartmotion.tsx :: /warm the fault-read Lambda the MOMENT recording starts/",
   "Analyzer gets handedness + CNS-learned tendencies pretext :: app/swinglab/swing/[swing_id].tsx :: /PRIVATE COPY \\(distinct file handle\\)/",
-  "Analyzer gets handedness + CNS-learned tendencies pretext :: hooks/useVoiceCaddie.ts :: /tick\\.mp3/",
-  "Analyzer gets handedness + CNS-learned tendencies pretext :: services/cloudSync/snapshot.ts :: /\\.tsx?\\b|api\\/|services\\/|store\\/|useState|zustand/",
-  "Analyzer gets handedness + CNS-learned tendencies pretext :: services/intents/findMyDataHandler.ts :: /\\.tsx?\\b|api\\/|services\\/|store\\/|useState|zustand/",
-  "Analyzer gets handedness + CNS-learned tendencies pretext :: services/intents/openToolHandler.ts :: /SIM ROUND/",
-  "Analyzer gets handedness + CNS-learned tendencies pretext :: services/kevinGreetingManifest.ts :: /\\.tsx?\\b|api\\/|services\\/|store\\/|useState|zustand/",
   "Analyzer gets handedness + CNS-learned tendencies pretext :: services/localIntentPrecheck.ts :: /SIM ROUND/",
-  "Analyzer gets handedness + CNS-learned tendencies pretext :: services/simRound.ts :: /SIM ROUND/",
-  "Analyzer gets handedness + CNS-learned tendencies pretext :: services/simRound.ts :: /discardRound\\(\\)/",
   "Analyzer gets handedness + CNS-learned tendencies pretext :: services/simRound.ts :: /startGpsManager/",
-  "Analyzer gets handedness + CNS-learned tendencies pretext :: store/playerProfileStore.ts :: /migrateFromProfile/",
-  "Analyzer gets handedness + CNS-learned tendencies pretext :: store/playerProfileStore.ts :: /migrateFromProfile\\(\\)/",
-  "Analyzer gets handedness + CNS-learned tendencies pretext :: store/roundStore.ts :: /startVoiceSimRound\\(/",
   "CNS G2: brain bag falls back to the shot-tracking bag when C :: services/caddieMemoryRetrieval.ts :: /CNS carry always WINS where it exists/",
   "CNS G2: brain bag falls back to the shot-tracking bag when C :: services/caddieMemoryRetrieval.ts :: /} else \\{[\\s\\S]*?CNS bag empty[\\s\\S]*?Learned bag:/",
   "CNS re-audit fixes: course-less reflection (G1 bug) + real a :: store/roundStore.ts :: /Player-level REFLECTION/",
@@ -124,33 +132,20 @@ export const PROSE_ASSERTION_BASELINE: readonly string[] = [
   "Caddie CNS Phase 4: signal-independence (answer from course  :: services/localStatusResponder.ts :: /CNS Phase 4 — signal-independence/",
   "Caddie tab: the L4 green-chevron shortcut bar is removed :: app/(tabs)/caddie.tsx :: /shortcut bar was REMOVED/",
   "Calibration auto-applies after a clean read :: app/swinglab/calibrate.tsx :: /Auto-apply: the user shouldn't have to tap/",
-  "Captured clips persisted to documents (survive OS cache evic :: app/swinglab/swing/[swing_id].tsx :: /swing_clips\\//",
   "Close a tool → HOME (no white screen), deterministic + local :: services/localIntentPrecheck.ts :: /CLOSE \\/ EXIT A TOOL/",
   "Club usage is COMPLETE — clubless shots inferred from distan :: app/(tabs)/scorecard.tsx :: /else return; \\/\\/ no club \\+ no distance/",
   "Coach Mode: selected-player hero + real day-streak metric (m :: app/swinglab/coach-mode.tsx :: /streak broken if no session today\\/yesterday/",
-  "Course book: Places lookup anchors website/phone; booking pr :: api/course-places.ts :: /\\bGOOGLE_API_KEY\\b/",
-  "First-run tour: auto on the first few opens, skippable, repl :: hooks/useTourTarget.ts :: /useTourTarget\\('caddie\\.mic'\\)/",
-  "First-run tour: auto on the first few opens, skippable, repl :: store/onboardingTourStore.ts :: /relaunchTour\\(\\)/",
-  "First-run tour: auto on the first few opens, skippable, repl :: store/tourTargets.ts :: /measureInWindow/",
   "LOCK: L1HolePreview falls back to the same Mapbox hole tile  :: components/caddie/L1HolePreview.tsx :: /PRE-ROUND geometry warm/",
-  "LOCK: ONE club-label map and ONE carry ladder — the name the :: services/cnsShotRead.ts :: /'3I': '4 Iron'/",
-  "LOCK: ONE club-label map and ONE carry ladder — the name the :: services/cnsShotRead.ts :: /'7W': '5 Wood'/",
   "LOCK: a coach note can never be silently dropped — setter re :: app/swinglab/swing/[swing_id].tsx :: /return; \\/\\/ stay in edit mode/",
   "LOCK: a measured on-device read clears the transient cloud e :: app/swinglab/smartmotion.tsx :: /no fault to name — the measured read stands on its own/",
   "LOCK: geometry fetch outlives a slow server, and a raw cours :: app/smartvision.tsx :: /return ''; \\/\\/ never the raw id/",
-  "LOCK: one answer to \"where is the green for this hole\" — the :: store/roundStore.ts :: /resolveGreenCoords/",
-  "LOCK: the carry bag has ONE owner — nothing rebuilds it from :: services/shotStrategy.ts :: /carryFor\\(/",
   "LOCK: the smarter ball box can only ever improve on the feet :: services/swing/ballDeparture.ts :: /catch \\{\\s*\\n\\s*return null; \\/\\/ offline \\/ blocked host — the feet proxy stands/",
   "Perf: setLocationContext only persists on a real location tr :: store/roundStore.ts :: /s\\.currentTeeBox\\?\\.hole === hole\\.hole\\s*\\n\\s*\\) return; \\/\\/ no change/",
-  "Real clubhead arc: detected-only, honestly gated, wired end- :: services/swing/clubPath.ts :: /CLUBHEAD/",
   "Round history surfaces on the dashboard (Tim: \"it doesn\\ :: app/(tabs)/dashboard.tsx :: /Recent Rounds/",
   "Segmentation: rebounds filtered, sessions can\\ :: services/swing/strikeDetector.ts :: /same strike group — the earlier peak \\(impact\\) already kept/",
   "SmartFinder: a double-tap magnifies the aim point without st :: app/smartfinder.tsx :: /baseZoomRef\\.current = next; \\/\\/ keep pinch continuing/",
   "SmartMotion review opens PAUSED (no autoplay-vs-analysis cra :: app/swinglab/smartmotion.tsx :: /useState\\(true\\); \\/\\/ review play\\/pause — starts PAUSED/",
   "SmartPump third rail: workout import → TRAINING → PERFORMANC :: app/(tabs)/dashboard.tsx :: /TRAINING → PERFORMANCE/",
-  "SmartTrace capture seam — vision-camera staged behind a defa :: services/capture/captureFlags.ts :: /useCameraFormat/",
-  "Swing detail: stops voice on swing CHANGE, not just unmount  :: store/cageStore.ts :: /lastReadFailed/",
-  "Swing report PDF: WHITE professional coaching report with pr :: app/swinglab/swing/[swing_id].tsx :: /What's Working/",
   "Swing review: controls stay persistently visible (functional :: app/swinglab/swing/[swing_id].tsx :: /Clean-grab fade dropped — functional controls win/",
   "Tempo: accel+gyro fusion refines the through-swing but safel :: app/swinglab/indoor.tsx :: /\\/\\* accel is a bonus — gyro tempo works without it \\*\\//",
   "TightLie: analysis failure shows a human caddie line, never  :: app/lie-analysis.tsx :: /Never surface a raw JS error/",

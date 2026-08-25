@@ -123,6 +123,25 @@ export const SwingVisionCamera = forwardRef<SwingCameraHandle, Props>(function S
       video={true}
       audio={false}
       photo={false}
+      /**
+       * 2026-08-24 (Tim: "check the selfie mode analysis") — NEVER MIRROR THE RECORDING.
+       *
+       * react-native-vision-camera's `isMirrored` defaults to TRUE for the front camera, and this
+       * component never set it. So on this engine a SELFIE face-on recording would have come back
+       * mirrored, and a mirrored clip flips EVERY direction read: handedness, in-to-out vs
+       * out-to-in, ball start direction, aim, which way a miss went. The numbers would all look
+       * plausible and all be backwards.
+       *
+       * The expo-camera path has always set `mirror={false}` with a comment saying exactly why —
+       * "a mirrored selfie preview would feel natural but flip every direction read, so we
+       * deliberately don't". That guarantee simply never crossed to the second capture engine. Two
+       * paths, one guarantee, which is the shape this whole week has been about.
+       *
+       * Latent rather than live today (DEFAULT_USE_VISION_CAMERA is false, so this engine is behind
+       * an owner toggle) — which is precisely why it would have shipped unnoticed the day the engine
+       * was promoted.
+       */
+      isMirrored={false}
       onInitialized={onCameraReady}
     />
   );

@@ -11653,6 +11653,32 @@ check('LOCK: the reticle answers from the MAP before it gives up on the tilt rea
   })(),
   'the reticle names and measures the known feature on its bearing before the tilt read bails out, from the one projection owner, and returns null rather than inventing a target');
 
+check('LOCK: no capture engine may mirror a selfie recording',
+  (() => {
+    /**
+     * 2026-08-24 (Tim: "check the selfie mode analysis"). Selfie mode exists so a player can
+     * self-frame a FACE-ON recording — the angle that produces the richest body mechanics. A
+     * mirrored clip flips every direction read in the analysis: handedness, in-to-out vs
+     * out-to-in, ball start direction, aim, which way a miss went. Every number stays plausible and
+     * every one is backwards.
+     *
+     * expo-camera has always set `mirror={false}`, with a comment saying exactly why. The SECOND
+     * capture engine, components/capture/SwingVisionCamera, never got that guarantee — and
+     * react-native-vision-camera's `isMirrored` DEFAULTS TO TRUE for the front camera. Latent today
+     * (DEFAULT_USE_VISION_CAMERA is false, so it is behind an owner toggle), which is exactly why it
+     * would have shipped unnoticed the day that engine was promoted. Two paths, one guarantee.
+     */
+    const expo = readCode('app/swinglab/smartmotion.tsx');
+    const vision = readCode('components/capture/SwingVisionCamera.tsx');
+    // Both engines take a front/back facing, so both must refuse to mirror what they record.
+    const expoSafe = /mirror=\{false\}/.test(expo);
+    const visionSafe = /isMirrored=\{false\}/.test(vision);
+    // And neither may be handed a truthy mirror by accident.
+    const noMirrorTrue = !/mirror=\{true\}/.test(expo) && !/isMirrored=\{true\}/.test(vision);
+    return expoSafe && visionSafe && noMirrorTrue;
+  })(),
+  'both capture engines record un-mirrored, so a front-camera face-on swing is geometrically identical to a rear one and every direction read stays true');
+
 // ─── Guards that read prose — the harness auditing itself ─────────────────────
 /**
  * 2026-08-24 (Tim: "check all our work, triple check"). Break-testing every guard written that day

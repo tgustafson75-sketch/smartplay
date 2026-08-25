@@ -1360,7 +1360,6 @@ function TargetCameraOverlay({
   }, [geometry]);
   /** What the reticle is currently on, when it is on something we know. Null = nothing mapped there. */
   const [aimedLabel, setAimedLabel] = useState<string | null>(null);
-  void aimedLabel; // held for the read-out; no new UI while the layout freeze stands
 
   const heightScanRef = useRef(0);
   const runHeightRangeScan = useCallback(async () => {
@@ -1707,7 +1706,15 @@ function TargetCameraOverlay({
       >
         {targetYards != null && (
           <Text style={styles.targetToLabel}>
-            <Text style={styles.targetToLabelMuted}>⊕ TO TARGET </Text>
+            {/*
+              2026-08-24 — NAME WHAT IT IS, in place. When the reticle is on something the hole
+              actually has, the strip says WHICH thing rather than the generic "TO TARGET": a number
+              you can attribute is worth more than a number you have to trust. Deliberately the same
+              element, same style, same position — the label replaces two words, it does not add a
+              row. Falls back to "TO TARGET" the moment the aim line hits nothing mapped, which is
+              also exactly when the distance stops being a GPS answer.
+            */}
+            <Text style={styles.targetToLabelMuted}>⊕ {(aimedLabel ?? 'to target').toUpperCase()} </Text>
             <Text style={styles.targetToYards}>{targetYards}</Text>
             <Text style={styles.targetToLabelMuted}> yds</Text>
           </Text>
