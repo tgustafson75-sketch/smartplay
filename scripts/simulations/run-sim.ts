@@ -2570,13 +2570,33 @@ check('CNS G2: brain bag falls back to the shot-tracking bag when CNS is thin (c
   // clubStatsStore. getCaddieContext now falls back to getLearnedClubDistances where
   // the CNS bag lacks a club / is empty, so the brain isn't blind / divergent. CNS
   // carry always wins where it exists (conservative — no override of real CNS data).
+  /**
+   * 2026-08-25 — REWRITTEN TO READ CODE, NOT THE COMMENT.
+   *
+   * Two of this guard's four clauses matched PROSE: "CNS carry always WINS where it exists" and the
+   * "CNS bag empty" note. A guard that asserts a comment passes happily while the behaviour it
+   * describes is gone — which is how a club defect would ship silently, in the one area Tim has
+   * called the most defect-prone in the app.
+   *
+   * The precedence is expressible in code: the CNS branch must come BEFORE the statsBag branch, so
+   * a real CNS carry is taken first and statsBag only fills the gap.
+   *
+   * And the honesty half is the part that actually costs strokes. clubStats is a GPS tee-to-rest
+   * TOTAL (includes roll); the CNS bag is real airtime carry. Quoting a roll-inclusive total as a
+   * measured carry over-clubs by 10-20 yards. So assert the WORDING difference too: the CNS line
+   * says "carry", the fallback line says "includes roll".
+   */
   (() => {
-    const r = read('services/caddieMemoryRetrieval.ts');
+    const r = readCode('services/caddieMemoryRetrieval.ts');
+    const cnsBranch = r.indexOf('cm?.avgCarryYds != null');
+    const fallbackBranch = r.indexOf('statsBag[input.club]');
     return (
       /getLearnedClubDistances\(\)/.test(r) &&
-      /statsBag\[input\.club\]/.test(r) &&                    // per-club fallback
-      /CNS carry always WINS where it exists/.test(r) &&      // conservative intent documented
-      /} else \{[\s\S]*?CNS bag empty[\s\S]*?Learned bag:/.test(r) // bag-line fallback only when CNS empty
+      cnsBranch > -1 && fallbackBranch > -1 &&
+      cnsBranch < fallbackBranch &&                          // CNS carry is taken FIRST
+      /learned \$\{cm\.club\} carry/.test(r) &&              // CNS quoted as carry
+      /includes roll/.test(r) &&                             // fallback quoted as a roll-inclusive total
+      /bag\.length > 0/.test(r)                               // bag line prefers CNS, falls back only when empty
     );
   })(),
   'brain bag fills from clubStatsStore only where the CNS bag is thin/empty; CNS wins where present (conservative reconcile)');
@@ -9629,14 +9649,25 @@ check('LOCK: no third-party (Golfshot / Golf Pad) hole imagery is bundled',
 // FAULT. i.e. on a GOOD swing. The better the swing, the more likely it showed a failure banner.
 check('LOCK: a measured on-device read clears the transient cloud error, fault or no fault',
   (() => {
-    const sm = read('app/swinglab/smartmotion.tsx');
+    const sm = readCode('app/swinglab/smartmotion.tsx');
     // the clear must happen BEFORE any fault-shaped early return
     const clearIdx = sm.indexOf('if (biomech) setAnalysisError(null);');
     const piIdx = sm.indexOf('const pi = poseReadToPrimaryIssue(buildPoseSwingRead(biomech, tempo));');
     const clearsFirst = clearIdx > 0 && piIdx > 0 && clearIdx < piIdx;
-    // and a clean swing must not be RECORDED as a failed analysis
-    const statusFixed = /no fault to name — the measured read stands on its own/.test(sm) &&
-      /if \(biomech\) \{[\s\S]{0,220}?setSessionAnalysisStatus\(sessionId, 'ok'\);/.test(sm);
+    /**
+     * 2026-08-25 — the second clause used to match the COMMENT "no fault to name — the measured read
+     * stands on its own". A comment cannot tell you the code still does it; deleting the early
+     * return while leaving the sentence would have passed. Assert the STRUCTURE instead: in the
+     * no-fault path, the session is marked ok and the function returns BEFORE the fault-recording
+     * path below can run.
+     */
+    const okIdx = sm.indexOf("setSessionAnalysisStatus(sessionId, 'ok');");
+    const returnIdx = sm.indexOf('return;', okIdx > 0 ? okIdx : 0);
+    const recordsFaultIdx = sm.indexOf('store.setSessionAnalysis(sessionId, pi, null);');
+    const statusFixed =
+      /if \(biomech\) \{[\s\S]{0,220}?setSessionAnalysisStatus\(sessionId, 'ok'\);/.test(sm) &&
+      okIdx > 0 && returnIdx > okIdx &&
+      recordsFaultIdx > returnIdx;          // the no-fault path exits before the fault path
     return clearsFirst && statusFixed;
   })(),
   'transient cold-cloud error cleared by any measured read; a no-fault swing is recorded ok, not failed');
