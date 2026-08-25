@@ -3,6 +3,8 @@
 **Effective date:** [TO BE FILLED — date the policy is published at the public URL]
 **Last updated:** 2026-05-04
 
+> **SUPERSEDED 2026-08-25.** The publish-ready version of this policy is `docs/privacy-policy.html` — it corrects the backend-storage section (cloud backup now writes to Supabase `smartplay.device_backups`), adds Supabase / Sentry / Google Maps to the sub-processor table, sets SmartPlay AI LLC as the operating entity, and drops the draft banner. Only `[REGISTERED ADDRESS]` remains to fill. Keep this file only as the drafting history.
+
 > **Status: DRAFT for internal beta.** This policy is template-adapted to SmartPlay Caddie's actual data flow (audited 2026-05-04). It is sufficient for internal beta + a TestFlight/Play internal-track listing. **Before external beta or public launch, a privacy attorney must review and finalize.** Square brackets `[…]` mark fields that need to be filled before publication.
 
 ---

@@ -10136,14 +10136,14 @@ check('RATCHET: nothing new may be interpolated into the cached system prompt',
       'currentLocationType', 'currentTeeBox', '_club', 'totalScore', 'scoreVsPar', 'holesPlayed',
       'consecutiveBadHoles', 'riskMode', 'roundStats', 'yardageInsight', 'pendingLieAnalysis',
       'activeCourse', 'transportMode', 'isCompetition', 'nineHoleMode', 'isSpiralRisk', 'mentalState',
-      '_conversationTurns', 'voicedDistress', 'liveFactsBlock', 'bagBlock'];
+      '_conversationTurns', 'voicedDistress', 'liveFactsBlock', 'bagBlock', '_personaKBBlock', 'kbAddendum'];
     if (DENY.some((d) => names.has(d))) return false;
 
     // Frozen 2026-08-25 at 57. Shrinking is always fine; growing needs a deliberate line here.
     const ALLOWED = new Set(['Array', 'TRANSLATION_OVERRIDE', '_cecilyMode', '_coachKnowledgeContext',
       '_courseContext', '_courseIntelligence', '_dominantMiss', '_ghinNumber', '_ghostContext', '_goal',
       '_golferModel', '_holeContextBlock', '_kevinContext', '_knownCoursesBlock', '_penaltyContext',
-      '_persistentPatterns', '_personaKBBlock', '_personalBest', '_physicalLimitation', '_playerHistory',
+      '_persistentPatterns', '_personalBest', '_physicalLimitation', '_playerHistory',
       '_practiceContext', '_practicePlan', '_recentAnalyses', '_recentCageInsights', '_recentRoundInsights',
       '_routineImpact', '_screenContext', '_smartFinderContext', '_unifiedContextBlock', 'c', 'caddieName',
       'caddieRosterBlock', 'characterSpec', 'clubAdviceBlock', 'experienceDepthRule', 'firstName',

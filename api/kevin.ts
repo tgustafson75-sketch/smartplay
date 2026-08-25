@@ -1362,7 +1362,6 @@ ${_recentAnalyses ? `\nWHAT YOU JUST TOLD THEM (last few exchanges in this sessi
 ${_playerHistory ? `\n${_playerHistory}` : ''}
 ${_practicePlan ? `\n${_practicePlan}` : ''}
 ${_routineImpact ? `\n${_routineImpact}` : ''}
-${_personaKBBlock ? `\n${_personaKBBlock}` : ''}
 ${_unifiedContextBlock ? `\n${_unifiedContextBlock}` : ''}
 
 ${Array.isArray(playerVocabulary) && playerVocabulary.length > 0 ? `PHRASES THIS PLAYER USES (private; mirror their vocabulary, do not list these out loud):\n${(playerVocabulary as unknown[]).filter(p => typeof p === 'string').slice(0, 20).join(', ')}` : ''}
@@ -1625,7 +1624,12 @@ ${langRule ? `LANGUAGE — FINAL REMINDER: ${langRule}` : ''}
      * retrieved coaching entries. So all of it rides the message. The model reads the same text.
      */
     const systemPromptWithKB = systemPrompt;
-    const kbPrefix = kbAddendum ? `${kbAddendum.trim()}\n\n` : '';
+    // 2026-08-25 — the PERSONA KB is chosen by the question too (buildPersonaKBPromptBlock takes the
+    // message), so it was busting the cache for exactly the same reason as the coaching KB. Located
+    // by the per-chunk fingerprints: chunks 0-10 matched between two questions and everything from
+    // chunk 11 on differed, which put the first divergence at ~char 22k — this block.
+    const kbPrefix = [kbAddendum ? kbAddendum.trim() : '', _personaKBBlock ?? '']
+      .filter(Boolean).join('\n\n');
 
     const baseMessage = _message;
 
@@ -1743,8 +1747,8 @@ ${sv.measureYards != null ? sv.measureYards + ' yards to tapped target' : ''}
 ${sv.analysisText ? 'SmartVision analysis: ' + sv.analysisText : ''}
 [/SMARTVISION OPEN]
 
-${kbPrefix}${onCourseContextBlock}${roundFactsPrefix}${turnStatePrefix}${liveFactsPrefix}${baseMessage}`
-      : `${kbPrefix}${recentShotsBlock}${onCourseContextBlock}${roundFactsPrefix}${turnStatePrefix}${liveFactsPrefix}${baseMessage}`;
+${kbPrefix ? `${kbPrefix}\n\n` : ''}${onCourseContextBlock}${roundFactsPrefix}${turnStatePrefix}${liveFactsPrefix}${baseMessage}`
+      : `${kbPrefix ? `${kbPrefix}\n\n` : ''}${recentShotsBlock}${onCourseContextBlock}${roundFactsPrefix}${turnStatePrefix}${liveFactsPrefix}${baseMessage}`;
 
     // 2026-05-22 — Vision frame normalization. When the client passed
     // an image, validate the shape and prefer it as the primary user-

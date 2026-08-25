@@ -22,7 +22,7 @@ export const PRICING = {
     stripeProductId: 'TBD',
     savingsPct: 34,
   },
-  trialDays: 7,
+  trialDays: 14,
 } as const;
 
 export const PAYWALL_HEADLINE = 'Full Kevin. $9.99/month.';

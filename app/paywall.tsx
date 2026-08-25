@@ -55,7 +55,7 @@ export default function PaywallScreen() {
       const delay = setTimeout(async () => {
         await configureAudioForSpeech();
         await speak(
-          `Full ${caddieName} for nine ninety-nine a month, or seventy-nine a year. Seven days on me — no card required.`,
+          `Full ${caddieName} for ${PRICING.monthly.displayPrice} a month, or ${PRICING.annual.displayPrice} a year. ${PRICING.trialDays} days on me.`,
           voiceGender, language, apiUrl,
           { userInitiated: true },
         );
