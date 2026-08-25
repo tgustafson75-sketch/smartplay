@@ -126,6 +126,9 @@ function isGolfPlace(p: Located): boolean {
  * Returns null (not []) when the API is unavailable, so the caller can distinguish "not enabled →
  * try legacy" from "enabled, genuinely no courses here".
  */
+/** Why the Places API (New) call last failed. Echoed on the response so the fallback stops being invisible. */
+let lastPrimaryFailure: string | null = null;
+
 async function searchNearbyNew(lat: number, lng: number, radius: number, timeoutMs: number): Promise<Located[] | null> {
   return withGoogleKeys<Located[]>('places-new:searchNearby', async (KEY) => {
     const r = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
@@ -161,6 +164,20 @@ async function searchNearbyNew(lat: number, lng: number, radius: number, timeout
         const err = (await r.json()) as { error?: { message?: string; status?: string } };
         message = err.error?.message ?? null;
       } catch { /* body not JSON — status code alone decides */ }
+      /**
+       * 2026-08-25 — REMEMBER WHY THE PRIMARY PATH FAILED.
+       *
+       * Every live query is currently answered by the LEGACY fallback (`source: places_legacy`),
+       * which means the New API has been failing continuously and silently. That is not cosmetic:
+       * legacy filters by the keyword "golf course", so a course whose NAME lacks the word is
+       * invisible to discovery — TPC Sawgrass returns "Sawgrass Country Club", a different club
+       * 2.4km away. A player is handed the wrong course's card, which is worse than finding none.
+       *
+       * The reason is logged server-side but nowhere a caller can see it, so nobody knew. Recorded
+       * here and echoed on the response; the fix (enable Places API New, or correct the key) is a
+       * console change, and this is how we tell which.
+       */
+      lastPrimaryFailure = `http_${r.status}${message ? `: ${message.slice(0, 120)}` : ''}`;
       return { ok: false, capabilityMiss: isCapabilityMiss({ httpStatus: r.status, message }) };
     }
     type NewPlace = {
@@ -295,7 +312,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .sort((a, b) => a.distance_m - b.distance_m)
       .slice(0, limit);
 
-    return res.status(200).json({ courses, source });
+    // 2026-08-25 — when we served from the fallback, say WHY the primary failed. Silent permanent
+    // degradation is how discovery ended up keyword-matching and hiding TPC Sawgrass.
+    return res.status(200).json({
+      courses,
+      source,
+      ...(source === 'places_legacy' && lastPrimaryFailure ? { primary_failure: lastPrimaryFailure } : {}),
+    });
   } catch (e) {
     console.error('[course-locate] failed:', e instanceof Error ? e.message : e);
     return res.status(200).json({ courses: [], source: 'places', error: 'exception' });
