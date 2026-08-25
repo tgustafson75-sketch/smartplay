@@ -28,6 +28,11 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'Torrey Pines South, Pebble Beach and Streamsong Black are now in your course list. Open one and I will pull the holes, pars and yardages, with satellite imagery for every hole.',
+    howTo: 'Play tab, scroll the course list.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'I now tell you when a swing read is rough. If I lose connection mid-analysis I cannot pin the swing inside the clip, so the numbers are softer than usual. You will see that on the card instead of me passing it off as a clean read.',
     howTo: 'Re-analyse the same swing once you have signal for a sharper read.',
   },

@@ -74,9 +74,31 @@ type LocalCourseHint = {
    *  `location` field to disambiguate when the top match is wrong
    *  (e.g. another "Sunnyvale GC" elsewhere). Lowercase. */
   expectedCity?: string;
+  /**
+   * 2026-08-25 — THE UPSTREAM ID, WHEN WE ACTUALLY KNOW IT.
+   *
+   * The search-and-pick path below disambiguates on `club_name` ONLY. That is fine for a one-course
+   * club, and silently wrong for a multi-course one: Torrey Pines South and North share the club
+   * name "Torrey Pines Municipal Golf Course", and Streamsong's Red, Blue and Black all share
+   * "Streamsong Resort". With no way to tell them apart the picker falls through to `real[0]`, and
+   * a wrong id means the WRONG COURSE's geometry, hazards and yardages cached for every future
+   * lookup — the confidently-wrong failure, not a visible one.
+   *
+   * The header above says we cannot ship ids because Tim added Sunnyvale and San Jose Muni
+   * empirically without knowing them. That is true of those. For the marquee courses the id was
+   * verified against the live API before bundling, so shipping it is strictly better than searching:
+   * no ambiguity, no network round-trip, no chance of resolving to a sibling layout.
+   */
+  apiId?: string;
 };
 
 const LOCAL_COURSE_API_HINTS: Record<string, LocalCourseHint> = {
+  // 2026-08-25 — MARQUEE SET. ids verified against the live API before bundling, so these take the
+  // apiId short-circuit and never touch the club_name picker (which cannot tell South from North,
+  // or Black from Red).
+  'torrey-pines-south': { search: 'Torrey Pines Municipal Golf Course', expectedCity: 'san diego', apiId: 'e9qqevf6' },
+  'pebble-beach':       { search: 'Pebble Beach Golf Links', expectedCity: 'pebble beach', apiId: '3j4b4ar8' },
+  'streamsong-black':   { search: 'Streamsong Resort', expectedCity: 'bowling green', apiId: 'pfpwjgan' },
   sunnyvale: { search: 'Sunnyvale Golf Course', expectedCity: 'sunnyvale' },
   'san-jose-muni': { search: 'San Jose Municipal Golf Course', expectedCity: 'san jose' },
   // 2026-08-12 — the course is The Golf Club at Rancho California in MURRIETA, not Temecula (its
@@ -142,6 +164,13 @@ async function resolveLocalCourseId(localSlug: string): Promise<string | null> {
   if (!hint) {
     console.log('[courseGeometry] no API hint for local slug:', localSlug);
     return null;
+  }
+
+  // A verified id beats searching. Skips the club_name picker entirely, which cannot separate
+  // sibling layouts at the same club (see apiId on LocalCourseHint).
+  if (hint.apiId) {
+    await writeResolvedId(localSlug, hint.apiId);
+    return hint.apiId;
   }
 
   try {

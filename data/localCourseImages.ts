@@ -241,6 +241,10 @@ export const WESTLAKE_CC_NJ_HOLE_IMAGES: Record<number, ImageSourcePropType> = {
 };
 
 export type LocalCourseSlug =
+  // 2026-08-25 — MARQUEE SET. Bundled with NO image pack on purpose: hole imagery comes from Mapbox
+  // satellite at runtime, which is licensed. That is what makes these cost bytes instead of
+  // megabytes, and it is the model replacing the 27 screenshot packs.
+  | 'torrey-pines-south' | 'pebble-beach' | 'streamsong-black'
   | 'palms' | 'lakes' | 'rancho-california' | 'crystal-springs'
   | 'mariners-point' | 'san-jose-muni' | 'sunnyvale'
   // 2026-07-24 (final QA) — 'journey-at-pechanga' REMOVED. It was a phantom: a name hook +
@@ -741,6 +745,11 @@ export const LOCAL_COURSE_IMAGES: Partial<Record<LocalCourseSlug, Record<number,
  * [[no-half-fixes-enforce-every-surface]]
  */
 const LOCAL_COURSE_CENTROIDS_RAW: Record<LocalCourseSlug, { lat: number; lng: number }> = {
+  // Verified via api/course-locate (Google Places) 2026-08-25 — distances are how far the returned
+  // place sat from the seed, i.e. how tightly it is indexed.
+  'torrey-pines-south': { lat: 32.9024628, lng: -117.2462734 },   // South (US Open) course
+  'pebble-beach':       { lat: 36.5696553, lng: -121.9497555 },   // 117m
+  'streamsong-black':   { lat: 27.6699522, lng: -81.9277421 },    // 7m
   'crane-creek':              { lat: 28.075233, lng: -80.630249 },
   'manatee-cove':             { lat: 28.219306, lng: -80.608414 },
   'wente-vineyards':          { lat: 37.630166, lng: -121.753313 },

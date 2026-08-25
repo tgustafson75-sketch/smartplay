@@ -168,6 +168,41 @@ const courseThumb = (c: { id?: string; thumbnail?: ImageSourcePropType | { uri: 
 };
 
 const LOCAL_COURSES_RAW: CourseSummary[] = [
+  /**
+   * 2026-08-25 — THE MARQUEE SET (Tim's picks: his bucket-list course, the most recognisable course
+   * in America, and the Florida course the golf creators actually play).
+   *
+   * NO IMAGE PACK ON PURPOSE. Hole imagery comes from Mapbox satellite at runtime, which is
+   * licensed — that is the whole point. The 27 bundled packs being replaced are screenshots taken
+   * from 18Birdies and Golfshot; see docs/TORREY-PINES-BUNDLE.md.
+   *
+   * Streamsong is the Florida pick over TPC Sawgrass for a measured reason, not taste: Places does
+   * not return Sawgrass at all (OPEN-ITEMS §13), while Streamsong resolves to 7m.
+   */
+  {
+    id: 'local:torrey-pines-south',
+    club_name: 'Torrey Pines (South)',
+    location: 'La Jolla, CA',
+    // men's Green tee, 6625y — real values from the course API, not estimates
+    rating: 73.3, slope: 134, isLocal: true, thumbnail: satelliteThumb(32.9024628, -117.2462734),
+    lat: 32.9024628, lng: -117.2462734,
+  },
+  {
+    id: 'local:pebble-beach',
+    club_name: 'Pebble Beach Golf Links',
+    location: 'Pebble Beach, CA',
+    // men's Gold tee, 6472y — real values from the course API, not estimates
+    rating: 73.4, slope: 137, isLocal: true, thumbnail: satelliteThumb(36.5696553, -121.9497555),
+    lat: 36.5696553, lng: -121.9497555,
+  },
+  {
+    id: 'local:streamsong-black',
+    club_name: 'Streamsong (Black)',
+    location: 'Bowling Green, FL',
+    // men's Black tee, 6759y — real values from the course API, not estimates
+    rating: 72.0, slope: 130, isLocal: true, thumbnail: satelliteThumb(27.6699522, -81.9277421),
+    lat: 27.6699522, lng: -81.9277421,
+  },
   // 2026-07-28 (Tim) — Coyote Creek G.C. (Morgan Hill, CA) two 18s + Pruneridge (Santa Clara, CA)
   // 9-hole par-30. OSM-built geometry (point-in-polygon split for Coyote's interleaved courses).
   // 2026-08-07 (Tim — playing it in an hour). Berlin Country Club (Berlin, MA) 9-hole par 33.

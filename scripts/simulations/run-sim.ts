@@ -10231,6 +10231,45 @@ check('LOCK: we ask for no permission we cannot use, and every purpose string co
   })(),
   'no permission is requested that the app cannot exercise, and the microphone and camera purpose strings name every use the code actually makes');
 
+check('LOCK: the marquee courses are fully registered, and carry no bundled imagery',
+  (() => {
+    /**
+     * 2026-08-25 — the marquee set (Torrey Pines South, Pebble Beach, Streamsong Black) exists to
+     * replace 27 packs of 18Birdies/Golfshot screenshots. Two ways that goes wrong quietly:
+     *
+     * 1. A HALF-REGISTERED COURSE. This file already learned that once: 'journey-at-pechanga' had a
+     *    centroid and voice aliases but no card and no hole data, so it "only half-responded" and
+     *    was removed. A marquee course must be registered at ALL FOUR points — slug, centroid,
+     *    Play card, and an API hint that resolves hole data.
+     * 2. AN IMAGE PACK CREEPING BACK IN. The entire point is that imagery comes from licensed
+     *    Mapbox at runtime. A bundled pack for one of these would reintroduce exactly the IP
+     *    problem they were added to solve.
+     *
+     * The apiId is asserted too: the club_name picker cannot separate Torrey South from North, or
+     * Streamsong Black from Red, so without a pinned id one sibling's geometry caches under the
+     * other's name — permanently, and invisibly.
+     */
+    const images = readCode('data/localCourseImages.ts');
+    const play = readCode('app/(tabs)/play.tsx');
+    const geo = readCode('services/courseGeometryService.ts');
+
+    const SLUGS = ['torrey-pines-south', 'pebble-beach', 'streamsong-black'];
+    const IDS: Record<string, string> = {
+      'torrey-pines-south': 'e9qqevf6', 'pebble-beach': '3j4b4ar8', 'streamsong-black': 'pfpwjgan',
+    };
+
+    return SLUGS.every((slug) => {
+      const inUnion = new RegExp(`'${slug}'`).test(images);
+      const hasCentroid = new RegExp(`'${slug}':\\s*\\{\\s*lat:`).test(images);
+      const hasCard = new RegExp(`id: 'local:${slug}'`).test(play);
+      const hasPinnedId = new RegExp(`'${slug}':[^}]*apiId: '${IDS[slug]}'`).test(geo);
+      // and NO bundled image pack — imagery must stay licensed Mapbox at runtime
+      const noPack = !new RegExp(`assets/courses/${slug}/`).test(images);
+      return inUnion && hasCentroid && hasCard && hasPinnedId && noPack;
+    });
+  })(),
+  'each marquee course is registered at all four points (slug, centroid, Play card, pinned upstream id) and ships no bundled image pack');
+
 check('LOCK: nearby courses are prefetched while there is still signal, on a measured connection',
   (() => {
     /**
