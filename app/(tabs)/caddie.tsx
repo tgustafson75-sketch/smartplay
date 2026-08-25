@@ -1003,18 +1003,23 @@ export default function CaddieTab() {
   // change (you've just transitioned — you're walking up, not confirmed at the tee), and (b) fires AT MOST
   // ONCE per hole (no double).
   const holeChangedAtRef = useRef(0);
-  const lastProactiveHoleRef = useRef<number | null>(null);
   const prevHoleRef = useRef<number | null>(null);
-  // 2026-08-07 (Tim) — fire the tee-box auto-brief AT MOST once per hole.
-  const teeBriefedHoleRef = useRef<number | null>(null);
-  // 2026-08-08 (2-week audit O6) — refs survive across ROUNDS (same app session), so round #2 got no
-  // tee brief / no proactive read on any hole number already hit in round #1. Reset on round start.
-  useEffect(() => {
-    if (isRoundActive) {
-      teeBriefedHoleRef.current = null;
-      lastProactiveHoleRef.current = null;
-    }
-  }, [isRoundActive]);
+  /**
+   * 2026-08-24 (Tim, after a real round — "I got a briefing on a hole twice") — THE DEDUPE MOVED
+   * INTO THE ROUND, because that is what it is a fact about.
+   *
+   * The tee brief and the proactive stop-read each remembered "already said this hole" in a
+   * component useRef. A ref does not survive a REMOUNT, and the reset effect that guarded it was
+   * keyed `[isRoundActive]` — effects run on MOUNT too, so every remount during an active round
+   * ACTIVELY CLEARED the memory. Switching to Play and back on the same hole re-armed the brief, and
+   * the player heard it twice. The 08-08 fix these lines replace was correct about the ROUND
+   * boundary and wrong about where the fact lives.
+   *
+   * roundStore.hasSpokenOnHole / markSpokenOnHole is now the one owner: round-scoped, reset on
+   * round start, and persisted — so even an app restart mid-round cannot repeat a line.
+   */
+  const hasSpokenOnHole = useRoundStore((st) => st.hasSpokenOnHole);
+  const markSpokenOnHole = useRoundStore((st) => st.markSpokenOnHole);
   useEffect(() => {
     if (prevHoleRef.current !== currentHole) {
       prevHoleRef.current = currentHole;
@@ -1379,8 +1384,8 @@ export default function CaddieTab() {
         // speak once you've actually arrived and stopped. (Leaves the debounce armed so a later stop fires.)
         if (Date.now() - holeChangedAtRef.current < 25_000) return;
         // Fire at most ONCE per hole (no double read on the same hole).
-        if (lastProactiveHoleRef.current === currentHole) return;
-        lastProactiveHoleRef.current = currentHole;
+        if (hasSpokenOnHole('proactive_read', currentHole)) return;
+        markSpokenOnHole('proactive_read', currentHole);
         stopTriggeredRef.current = true;
         void (async () => {
           try {
@@ -1422,7 +1427,7 @@ export default function CaddieTab() {
   useEffect(() => {
     if (!isRoundActive || !_proactive_kevin_enabled || localMode || currentHole < 1) return;
     if (movementMode !== 'stationary') return;
-    if (teeBriefedHoleRef.current === currentHole) return;
+    if (hasSpokenOnHole('tee_brief', currentHole)) return;
     // 2026-08-21 — the tee brief is the fourth unprompted voice and the second that never consulted
     // the shared clock. Same reasoning as the stop read above.
     if (!mayInterject(trustLevel)) return;
@@ -1449,8 +1454,8 @@ export default function CaddieTab() {
           // 2026-08-08 (O6) — LIVE voice state via ref, not the closure captured 6s ago when the timer
           // armed (a brief queued behind a finishing answer used to be silently skipped forever).
           if (isSpeaking() || voiceStateRef.current !== 'idle') return;
-          if (teeBriefedHoleRef.current === currentHole) return;
-          teeBriefedHoleRef.current = currentHole;
+          if (hasSpokenOnHole('tee_brief', currentHole)) return;   // re-check: 6s elapsed since the timer armed
+          markSpokenOnHole('tee_brief', currentHole);
           const engine = await import('../../services/smartAnalysisEngine');
           const env = await engine.analyze({ kind: 'shot_strategy' });
           let text = env.voice_summary;

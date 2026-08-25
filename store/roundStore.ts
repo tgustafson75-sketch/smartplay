@@ -773,6 +773,23 @@ interface RoundState {
    * player advances to the next hole; `endLoc` should be the green centroid of `hole`).
    */
   closeHoleEndLocation: (hole: number, endLoc: ShotLocation) => void;
+  /**
+   * 2026-08-24 (Tim, after a real round — "I got a briefing on a hole twice") — WHAT THE CADDIE HAS
+   * ALREADY SAID ON THIS HOLE. One owner, round-scoped, persisted with the round.
+   *
+   * The tee brief and the proactive stop-read each deduped with a `useRef` inside
+   * app/(tabs)/caddie.tsx. A ref does not survive a REMOUNT — and the reset effect guarding it was
+   * keyed `[isRoundActive]`, so it also ran on mount and ACTIVELY CLEARED the memory every time the
+   * tab remounted mid-round. Switch to Play and back on the same hole and the brief re-armed.
+   *
+   * "Has the caddie briefed hole 7 this round" is a fact about the ROUND, so it lives with the
+   * round. Persisting it means even an app restart mid-round will not repeat a line.
+   */
+  spokenHoleEvents: Record<string, true>;
+  /** True if `kind` has already been spoken on `hole` this round. */
+  hasSpokenOnHole: (kind: string, hole: number) => boolean;
+  /** Record that `kind` was spoken on `hole`. Idempotent. */
+  markSpokenOnHole: (kind: string, hole: number) => void;
   /** Phase C — attach a weather snapshot to a previously-logged shot. */
   updateShotWeather: (shotId: string, weather: Record<string, unknown>) => void;
   setRoundNotes: (notes: string) => void;
@@ -870,6 +887,7 @@ export const useRoundStore = create<RoundState>()(
       currentHole: 1,
       holeNotes: {},
       currentYardage: null,
+      spokenHoleEvents: {},
       userStatedYardage: null,
       club: null,
       mentalState: 'neutral',
@@ -1102,6 +1120,9 @@ export const useRoundStore = create<RoundState>()(
           roundStartHole: startHoleResolved,
           holeNotes: {},
           currentYardage: holes[startHoleResolved - 1]?.distance ?? null,
+          // 2026-08-24 — a new round starts with nothing said yet, or round 2 would inherit round 1's
+          // briefs on every hole number already played.
+          spokenHoleEvents: {},
           scores: {},
           putts: {},
           penalties: {},
@@ -1496,6 +1517,7 @@ export const useRoundStore = create<RoundState>()(
           isSimRound: false,
           currentHole: 1,
           currentYardage: null,
+          spokenHoleEvents: {},
           userStatedYardage: null,
           activeCourse: null,
           activeCourseId: null,
@@ -1916,6 +1938,7 @@ export const useRoundStore = create<RoundState>()(
           roundHistory: capHistory([...state.roundHistory, record]),
           currentHole: 1,
           currentYardage: null,
+          spokenHoleEvents: {},
           userStatedYardage: null,
           activeCourse: null,
           activeCourseId: null,
@@ -3010,7 +3033,12 @@ export const useRoundStore = create<RoundState>()(
           ),
         })),
 
-      closeHoleEndLocation: (hole, endLoc) =>
+      hasSpokenOnHole: (kind, hole) => get().spokenHoleEvents[`${kind}:${hole}`] === true,
+      markSpokenOnHole: (kind, hole) =>
+        set((st) => (st.spokenHoleEvents[`${kind}:${hole}`]
+          ? st                                   // idempotent — no needless re-render
+          : { spokenHoleEvents: { ...st.spokenHoleEvents, [`${kind}:${hole}`]: true as const } })),
+            closeHoleEndLocation: (hole, endLoc) =>
         set(s => {
           for (let i = s.shots.length - 1; i >= 0; i--) {
             if (s.shots[i].hole === hole) {
@@ -3137,6 +3165,8 @@ export const useRoundStore = create<RoundState>()(
         currentHole: s.currentHole,
         holeNotes: s.holeNotes,
         currentYardage: s.currentYardage,
+        // Round-scoped: persisted so an app restart mid-round cannot repeat a line already spoken.
+        spokenHoleEvents: s.spokenHoleEvents,
         club: s.club,
         // 2026-08-09 (stores audit C1) — clubSetAt MUST persist alongside club + pendingKevinRec.at.
         // resolveShotClub arbitrates declared-vs-advised by RECENCY; if clubSetAt is lost on a mid-round

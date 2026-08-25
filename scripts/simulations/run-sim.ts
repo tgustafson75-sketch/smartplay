@@ -1302,9 +1302,21 @@ check('Tool opens require an explicit open-verb; otherwise stay conversational',
 // current hole's tee, independent of interactiveRound, gated on real tee coords.
 check('Tee-box auto-brief fires once at the tee (GPS-confirmed), yardage/wind from live context',
   (() => {
+    /**
+     * 2026-08-24 — RE-AIMED, and it was PINNING THE DEFECT. This asserted `teeBriefedHoleRef`, the
+     * component useRef that WAS the bug: a ref does not survive a remount, and the reset effect
+     * guarding it ran on mount and cleared it, so Tim heard a brief twice on one hole. Deleting the
+     * ref turned this guard red on the fix — the fifth guard today green BECAUSE a bug was present
+     * (docs/OPEN-ITEMS.md §8).
+     *
+     * The property was never "a ref exists here". It is "the brief fires ONCE PER HOLE, at the tee,
+     * GPS-confirmed" — so it now asserts the round-scoped owner that actually delivers that.
+     */
     const c = read('app/(tabs)/caddie.tsx');
     return (
-      /teeBriefedHoleRef/.test(c) &&
+      /hasSpokenOnHole\('tee_brief', currentHole\)/.test(c) &&
+      /markSpokenOnHole\('tee_brief', currentHole\)/.test(c) &&
+      !/teeBriefedHoleRef/.test(c) &&   // the component-scoped rival may not return
       /haversineYards\(\{ lat: fix\.lat, lng: fix\.lng \}, \{ lat: tee\.teeLat, lng: tee\.teeLng \}\)/.test(c) &&
       /distYds > 40/.test(c) && // must be AT the tee
       /kind: 'shot_strategy'/.test(c)
@@ -11424,6 +11436,43 @@ check('LOCK: the swing angle is a FIELD, never baked into a display string',
     return noBake && oneOwner && overrideOnly;
   })(),
   'the capture path stores no angle in the title, the displayed title is derived by one pure owner, and only an explicit override may heal a stale legacy title');
+
+check('LOCK: an unprompted line is said ONCE per hole — the memory lives in the ROUND, not a component',
+  (() => {
+    /**
+     * 2026-08-24 (Tim, after a real round — "I got a briefing on a hole twice").
+     *
+     * The tee brief and the proactive stop-read each deduped with a `useRef` in
+     * app/(tabs)/caddie.tsx. Two faults compounded: a ref does not survive a REMOUNT, and the reset
+     * effect guarding it was keyed `[isRoundActive]` — effects run on MOUNT too, so every remount
+     * during an active round ACTIVELY CLEARED the memory. Play tab and back on the same hole
+     * re-armed the brief. The 08-08 note those lines carried was right about the round boundary and
+     * wrong about where the fact belongs.
+     *
+     * "Has hole 7 been briefed this round" is a fact about the ROUND. It lives with the round, is
+     * reset on round start, and is PERSISTED — so a mid-round restart cannot repeat a line either.
+     *
+     * Asserts the SHAPE: one owner, both voices on it, no rival ref, and the persistence that makes
+     * it survive what a ref could not.
+     */
+    const rs = read('store/roundStore.ts');
+    const cad = read('app/(tabs)/caddie.tsx');
+    const owner = /hasSpokenOnHole: \(kind: string, hole: number\) => boolean;/.test(rs) &&
+      /markSpokenOnHole: \(kind: string, hole: number\) => void;/.test(rs) &&
+      /spokenHoleEvents: s\.spokenHoleEvents,/.test(rs);            // persisted with the round
+    // Reset on round START, or round 2 inherits round 1 on every repeated hole number.
+    const resetOnStart = /spokenHoleEvents: \{\},/.test(rs) &&
+      (rs.match(/spokenHoleEvents: \{\},/g) ?? []).length >= 4;      // initial + start + end + discard
+    // Both unprompted voices consult it...
+    const bothVoices = /hasSpokenOnHole\('tee_brief', currentHole\)/.test(cad) &&
+      /markSpokenOnHole\('tee_brief', currentHole\)/.test(cad) &&
+      /hasSpokenOnHole\('proactive_read', currentHole\)/.test(cad) &&
+      /markSpokenOnHole\('proactive_read', currentHole\)/.test(cad);
+    // ...and no component-scoped rival may come back.
+    const noRivalRef = !/teeBriefedHoleRef/.test(cad) && !/lastProactiveHoleRef/.test(cad);
+    return owner && resetOnStart && bothVoices && noRivalRef;
+  })(),
+  'the tee brief and the proactive read both dedupe through one round-scoped, persisted owner; no component ref decides whether the caddie has already spoken on a hole');
 
 // ─── Orphaned exports — the half-build ratchet ─────────────────────────────────
 /**
