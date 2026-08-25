@@ -11679,6 +11679,39 @@ check('LOCK: no capture engine may mirror a selfie recording',
   })(),
   'both capture engines record un-mirrored, so a front-camera face-on swing is geometrically identical to a rear one and every direction read stays true');
 
+check('LOCK: a drill ANSWERS the focus its card promised, or says why it cannot',
+  (() => {
+    /**
+     * 2026-08-24 (Tim: "check all swing lab cards… drills that engage smartmotion and supposed to be
+     * focused on specific things. I see now it's probably made up or at best half built").
+     *
+     * app/drills/[issue].tsx renders the practice CTA under a comment reading "sub-text names what
+     * Smart Motion will look at" and passes `drillFocus` on the route. SmartMotion received it and
+     * routed it ONLY to setScreenContext — the caddie's conversational awareness. The ANALYSIS never
+     * saw it, so all 17 catalog drills produced the same generic read and the card's promise was
+     * decorative.
+     *
+     * No new measurement was needed: posture, tempo and contact are computed on every swing. The
+     * defect was that nothing singled out the one the drill was about.
+     *
+     * The honesty half matters as much: grip and connection are NOT pose-derivable at swing speed
+     * (hands small, occluded, 2D), so they must say so and point at Setup Check rather than fill the
+     * slot with a number. [[smartmotion-metrics-honesty]]
+     */
+    const mod = readCode('services/swing/drillFocusRead.ts');
+    const sm = readCode('app/swinglab/smartmotion.tsx');
+    // Real measurements back the focuses that have one.
+    const measured = /spineAngleDeltaDeg/.test(mod) && /input\.tempoRatio/.test(mod) &&
+      /input\.contactGrade/.test(mod) && /input\.pathVerdict/.test(mod);
+    // ...and the two that do not are refused rather than invented.
+    const refuses = /case 'grip':/.test(mod) && /measured: false/.test(mod) &&
+      /Setup Check/.test(mod);
+    // Wired into the review, keyed off the route's focus.
+    const wired = /drillFocusRead\(drillFocus, \{/.test(sm) && /isDrill && focusRead \?/.test(sm);
+    return measured && refuses && wired;
+  })(),
+  'the drill focus is answered from a real measurement where one exists, refused honestly where it does not, and rendered in the review instead of only reaching the caddie\'s screen context');
+
 // ─── Guards that read prose — the harness auditing itself ─────────────────────
 /**
  * 2026-08-24 (Tim: "check all our work, triple check"). Break-testing every guard written that day

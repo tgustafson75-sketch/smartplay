@@ -139,6 +139,7 @@ import { reconcileFeel, extractFramesB64 } from '../../services/swing/feelReconc
 import { analyzePutt, type PuttingAnalysis } from '../../services/puttingAnalysisService';
 import { ShotMapPage } from '../../components/smartmotion/ShotMapPage';
 import { getApiBaseUrl } from '../../services/apiBase';
+import { drillFocusRead } from '../../services/swing/drillFocusRead';
 
 const RECORDING_MAX_SECONDS = 60; // cage / course — open window, player swings freely
 const RANGE_RECORDING_MAX_SECONDS = 120; // range — longer window for a multi-swing session
@@ -1413,6 +1414,17 @@ export default function SmartMotion() {
   // the actual LAUNCH (origin → the one departure point) and compare it to the
   // intended shape. Honest: launch height + direction only; roll is never claimed.
   const shotShapeDef = useMemo(() => getShotShape(drillShotType), [drillShotType]);
+  /**
+   * 2026-08-24 — the drill's declared focus, answered from what this swing actually measured.
+   * Null for a focus we do not recognise, so the review falls back to the generic read rather than
+   * rendering an empty card.
+   */
+  const focusRead = useMemo(() => drillFocusRead(drillFocus, {
+    biomech,
+    contactGrade: acousticRead?.quality ?? null,
+    tempoRatio: tempo?.ratio ?? null,
+    pathVerdict: null,   // DTL club-path read is threaded separately; null keeps the honest fallback
+  }), [drillFocus, biomech, acousticRead?.quality, tempo?.ratio]);
   const shotShapeVerdict = useMemo(() => {
     if (!shotShapeDef || !ballArea) return null;
     const actual = ballDeparture?.departurePoint ? readActualLaunch(ballArea, cvToContainer(ballDeparture.departurePoint)) : null;
@@ -5146,6 +5158,29 @@ export default function SmartMotion() {
           </View>
         ) : null}
 
+        {/*
+          2026-08-24 (Tim: "drills that engage smartmotion and supposed to be focused on specific
+          things… probably made up or at best half built") — THE DRILL'S FOCUS, ANSWERED.
+
+          app/drills/[issue].tsx renders its practice CTA under a comment reading "sub-text names
+          what Smart Motion will look at", and passes `drillFocus` on the route. This screen received
+          it and routed it ONLY to setScreenContext — the caddie's conversational awareness — so the
+          ANALYSIS never saw it. All 17 catalog drills produced the same generic read: "we'll look at
+          your posture" and "we'll look at your path" did identical work.
+
+          The measurements already existed. This surfaces the one the drill promised. Where a focus
+          genuinely is not camera-readable (grip, connection) it says so and points at what can read
+          it, rather than filling the slot with a number.
+        */}
+        {isReview && showResults && isDrill && focusRead ? (
+          <View style={[styles.shotShapeCard, { bottom: insets.bottom + 150 }]} pointerEvents="none">
+            <Text style={styles.shotShapeTitle}>
+              {focusRead.measured ? '✓ ' : ''}{focusRead.label.toUpperCase()}
+            </Text>
+            <Text style={styles.shotShapeFeedback}>{focusRead.line}</Text>
+          </View>
+        ) : null}
+
         {/* SHOT-SHAPE drill verdict — intended vs the launch we actually read
             (origin → departure). Honest: launch height + direction, never roll. */}
         {isReview && showResults && shotShapeVerdict && shotShapeDef ? (
@@ -5159,6 +5194,29 @@ export default function SmartMotion() {
               <Text style={styles.shotShapeLeg}>READ <Text style={[styles.shotShapeVal, { color: shotShapeVerdict.match === 'on' ? '#3FB950' : shotShapeVerdict.match === 'close' ? '#f5a623' : '#ef4444' }]}>{shotShapeVerdict.actualHeight}</Text></Text>
             </View>
             <Text style={styles.shotShapeFeedback}>{shotShapeVerdict.feedback}</Text>
+          </View>
+        ) : isReview && showResults && shotShapeDef ? (
+          /**
+           * 2026-08-24 (Tim: "shot shapes and drills that engage smartmotion… probably made up or at
+           * best half built") — SAY WHY THERE IS NO VERDICT, rather than showing nothing.
+           *
+           * The intended-vs-actual read is real and wired: picker → drill → compareShotShape →
+           * verdict. But it needs a measured ball DEPARTURE, and that needs `ball_area_norm` — the
+           * ball position, which the player marks by tapping it in the capture overlay. Nothing in
+           * the shot-shape flow asks for that and nothing said it was missing, so choosing "high
+           * draw", hitting three balls and getting a blank screen looked exactly like a feature that
+           * was never built. It was built; it was silent about its one prerequisite.
+           *
+           * Silence is the defect here, not the maths. [[no-deferred-wiring-placeholders]] and
+           * [[illustration-data-points]] both say the same thing: degrade visibly, never blankly.
+           */
+          <View style={[styles.shotShapeCard, { bottom: insets.bottom + 150 }]} pointerEvents="none">
+            <Text style={styles.shotShapeTitle}>{shotShapeDef.name.toUpperCase()}</Text>
+            <Text style={styles.shotShapeFeedback}>
+              {ballArea
+                ? "Couldn't read the ball leaving on this one — the shape check needs a clean launch in frame."
+                : 'Mark the ball before you swing and I can compare what you went for with what actually launched.'}
+            </Text>
           </View>
         ) : null}
 

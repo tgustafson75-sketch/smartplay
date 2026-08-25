@@ -28,6 +28,15 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'A drill now answers the thing it said it would watch. Pick a posture drill and you get your posture read back, a tempo drill and you get your tempo. Before, every drill gave the same general swing report no matter what its card promised.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'Shot Shapes tells you when it cannot compare. It needs the ball marked before you swing to read what actually launched \u2014 it used to just show nothing, which looked broken. Now it says what it needs.',
+    howTo: 'Tap the ball in the camera before recording, then pick your shape. The review compares what you went for with what launched.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'Move the SmartFinder reticle and the yardage moves with it. On a mapped hole it works out what you\'re pointing at \u2014 the green, the front edge, a bunker, the water \u2014 and gives you the real GPS distance to it. Point somewhere it doesn\'t know and it says nothing rather than guessing.',
     howTo: 'Drag the reticle onto whatever you want the number for. The distance updates as you move.',
   },
