@@ -29,6 +29,7 @@
  */
 
 import { findOrphanExports, ORPHAN_BASELINE } from './orphanExports';
+import { findProseAssertions, PROSE_ASSERTION_BASELINE } from './proseAssertions';
 import {
   getCaddieName,
   getCharacterSpec,
@@ -644,6 +645,20 @@ const exists = (rel: string) => fs.existsSync(path.resolve(__dirname, '../../', 
  * returns '' so a single missing file cannot mask the rest of the results behind a thrown error —
  * we want the whole picture AND the alarm.
  */
+/**
+ * 2026-08-24 (triple-check, pass C) — READ THE CODE, NOT THE PROSE.
+ *
+ * A break test proved the carry-bag guard BLIND: deleting the delegation from services/shotStrategy
+ * left the guard green, because the doc comment above it still contained the string
+ * `getLearnedCarryDistances()` and the regex matched that. A guard that matches its own explanation
+ * cannot fail — the exact shape of the defect-pinning class, arrived at from the other direction.
+ *
+ * This is the SIXTH time today an assertion matched writing instead of the program. Any guard that
+ * asserts the presence of a call, a field or an identifier must read through this.
+ */
+const readCode = (rel: string): string =>
+  read(rel).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+
 const missingReads: string[] = [];
 const readPaths = new Set<string>();
 const read = (rel: string) => {
@@ -1597,8 +1612,8 @@ check('Caddie bag distances only include real (logged) clubs — as honest CARRY
      * docs/OPEN-ITEMS.md §8 class: a guard pinned to an IMPLEMENTATION fails on the fix and passes on
      * the bug. It now follows the chain to wherever the logic lives.
      */
-    const store = read('store/clubStatsStore.ts');
-    const strategy = read('services/shotStrategy.ts');
+    const store = readCode('store/clubStatsStore.ts');
+    const strategy = readCode('services/shotStrategy.ts');
     // The owner gates on real data (never the chart) and emits carry.
     const ownerIsHonest =
       /export function getLearnedCarryDistances/.test(store) &&
@@ -10942,8 +10957,15 @@ check('LOCK: the carry bag has ONE owner — nothing rebuilds it from carryFor()
      * it, and no third module reconstructs the bag by looping carryFor over a club list.
      * [[guard-the-shape-not-the-file-list]]
      */
-    const store = read('store/clubStatsStore.ts');
-    const strategy = read('services/shotStrategy.ts');
+    /**
+     * 2026-08-24 (triple-check pass C) — readCode, not read. A break test proved this guard BLIND:
+     * deleting the delegation from shotStrategy left it green, because the doc comment above the
+     * deleted line still contained the string `getLearnedCarryDistances()`. The negative clauses
+     * carried the mirror risk — a comment mentioning FULL_CLUBS would have failed the guard on
+     * correct code. Both directions are fixed by reading the program instead of the writing.
+     */
+    const store = readCode('store/clubStatsStore.ts');
+    const strategy = readCode('services/shotStrategy.ts');
     // The owner exists and lives with the data.
     const ownerExists = /export function getLearnedCarryDistances/.test(store);
     // The consumer delegates rather than re-deriving.
@@ -10954,7 +10976,7 @@ check('LOCK: the carry bag has ONE owner — nothing rebuilds it from carryFor()
     // module that loops the club list is a second owner by definition.
     const rebuilders = ['services/cnsShotRead.ts', 'services/bagRecommendation.ts', 'services/offlineCaddie.ts']
       .filter(f => {
-        const src = read(f);
+        const src = readCode(f);
         return /for \(const [a-z]+ of (CLUB_ORDER|FULL_CLUBS)\)/.test(src) && /carryFor\(/.test(src);
       });
     return ownerExists && delegates && rebuilders.length === 0;
@@ -11246,7 +11268,14 @@ check('LOCK: the watch pipe has something going down it — owner-gated, and it 
     // Owner gate, and it is the gate every push goes through.
     const gated = /function ownerOnly\(\): boolean/.test(sync) &&
       /prof\.isOwnerEmail\(prof\.usePlayerProfileStore\.getState\(\)\.email\)/.test(sync) &&
-      /if \(!ownerOnly\(\)\) return;/.test(sync);
+      /if \(!ownerOnly\(\)\) return;/.test(sync) &&
+      /**
+       * 2026-08-24 (triple-check pass C) — PIN THE GATE TO THE PUSH PATH. A break test removed the
+       * gate from `fire` — the function EVERY send goes through — and this stayed green, because the
+       * bare string still existed in two other places. "The gate appears somewhere in the file" is
+       * not the property; "no push happens without it" is.
+       */
+      /function fire\([^)]*\)[^{]*\{\s*if \(!ownerOnly\(\)\) return;/.test(sync);
     /**
      * 2026-08-24 (verification pass) — the gate must be evaluated PER PUSH, never decided once at
      * start. playerProfileStore is async-persisted and the watch bridge initialises off a DIFFERENT
@@ -11545,11 +11574,18 @@ check('LOCK: every bundled caddie clip slot is one a caller actually plays',
      * Nothing stopped that happening again — so assert the property that was violated: every slot in
      * the union is one some caller actually asks for.
      */
-    const mod = read('services/getCaddieClip.ts');
+    /**
+     * 2026-08-24 (triple-check pass C) — readCode. A break test added an unplayed slot and this
+     * guard stayed GREEN: the union extractor is non-greedy to the first `;`, and a doc comment
+     * INSIDE the union contains one ("...outside this helper; the helper just..."), so the capture
+     * truncated and the guard only ever parsed the first slot. Comments have now defeated an
+     * assertion seven times today — by matching prose, and here by cutting a parse short.
+     */
+    const mod = readCode('services/getCaddieClip.ts');
     const m = /export type CaddieSlot =([\s\S]*?);/.exec(mod);
     const slots = m ? (m[1].match(/'([a-z_]+)'/g) ?? []).map(s => s.replace(/'/g, '')) : [];
     if (slots.length === 0) return false;
-    const callers = ['app/greeting.tsx', 'app/(tabs)/caddie.tsx'].map(f => read(f)).join('\n');
+    const callers = ['app/greeting.tsx', 'app/(tabs)/caddie.tsx'].map(f => readCode(f)).join('\n');
     // Every declared slot is requested by name somewhere, and has a bundled require.
     return slots.every(s => new RegExp(`'${s}'`).test(callers)) &&
       slots.every(s => new RegExp(`${s}:\\s*require\\(`).test(mod));
@@ -11605,6 +11641,40 @@ console.log('\n=== Orphaned exports ===');
   console.log(
     `[INFO] orphan debt: ${byTag('WIRE')} WIRE · ${byTag('PARKED')} PARKED · ` +
     `${byTag('SURFACE')} SURFACE · ${byTag('DUPE')} DUPE · ${byTag('TRIAGE')} TRIAGE`,
+  );
+}
+
+// ─── Guards that read prose — the harness auditing itself ─────────────────────
+/**
+ * 2026-08-24 (Tim: "check all our work, triple check"). Break-testing every guard written that day
+ * found THREE that could not fail. Same cause each time: a regex asserting that a call or field
+ * EXISTS matched the doc comment above the code instead of the code. Delete the implementation,
+ * leave the paragraph, guard stays green. One was worse — a type union parsed with a non-greedy
+ * match to the first `;`, and a comment inside the union contained one, so it silently checked one
+ * slot instead of two.
+ *
+ * A guard that cannot fail is worse than no guard, because it counts as coverage. These two checks
+ * freeze the existing set and stop it growing.
+ */
+console.log('\n=== Guards that read prose ===');
+{
+  const found = findProseAssertions();
+  const baseline = new Set(PROSE_ASSERTION_BASELINE);
+  const added = found.filter((f) => !baseline.has(f));
+  check(
+    'LOCK: no NEW guard may assert something that exists only in a comment',
+    added.length === 0,
+    added.length === 0
+      ? `${found.length} known prose-reading assertions, all baselined`
+      : `THIS GUARD CANNOT FAIL — it matches only the comment, not the code. Read comment-stripped source (readCode):\n    ${added.join('\n    ')}`,
+  );
+  const stale = [...baseline].filter((b) => !found.includes(b));
+  check(
+    'LOCK: the prose-assertion baseline cannot rot',
+    stale.length === 0,
+    stale.length === 0
+      ? `all ${baseline.size} baseline entries still read prose`
+      : `FIXED — delete these from PROSE_ASSERTION_BASELINE:\n    ${stale.join('\n    ')}`,
   );
 }
 
