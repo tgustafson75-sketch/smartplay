@@ -10154,6 +10154,53 @@ check('LOCK: the Tempo Trainer trains against the player\'s own measured swing',
   })(),
   'SmartMotion persists backswing duration, the store averages it, and the trainer opens on the preset matching the player\'s own swing');
 
+check('LOCK: we ask for no permission we cannot use, and every purpose string covers every use',
+  (() => {
+    /**
+     * 2026-08-25 (pre-submission audit) — PERMISSIONS ARE A PROMISE TO THE PLAYER.
+     *
+     * Two real problems, both the kind that get an app rejected and neither of which fails anything
+     * at runtime:
+     *
+     * 1. POST_NOTIFICATIONS was declared while the app has NO notification code at all —
+     *    expo-notifications is not even a dependency. That is a prompt asking a player for
+     *    something we cannot do, and it directly contradicts Tim's standing "no push nagging,
+     *    ever". Removed.
+     *
+     * 2. The purpose strings were NARROWER THAN THE TRUTH. The microphone string said "voice
+     *    commands" while SmartMotion also records swing audio to grade the strike; the camera
+     *    string said "in the practice cage" while the camera also reads the lie, scans the bag and
+     *    looks down the hole. Apple requires the string to cover every use, and a player deserves
+     *    the same.
+     *
+     * Guarded because both are invisible at runtime — nothing breaks when a purpose string drifts
+     * away from what the code actually does.
+     */
+    const app = JSON.parse(readCode('app.json')) as {
+      expo: { android?: { permissions?: string[] }; ios?: { infoPlist?: Record<string, string> } };
+    };
+    const perms = app.expo.android?.permissions ?? [];
+    const info = app.expo.ios?.infoPlist ?? {};
+    if (perms.length === 0 || Object.keys(info).length === 0) return false;   // parse failed
+
+    // A permission we cannot possibly exercise must not be asked for.
+    const noNotifications = !perms.includes('android.permission.POST_NOTIFICATIONS');
+
+    // The mic string must name BOTH uses; the camera string must go beyond the cage.
+    const mic = info.NSMicrophoneUsageDescription ?? '';
+    const cam = info.NSCameraUsageDescription ?? '';
+    const micCoversBoth = /voice/i.test(mic) && /(impact|strike)/i.test(mic);
+    const camCoversMore = /swing/i.test(cam) && /(lie|bag|hole)/i.test(cam);
+
+    // And every declared usage string must be a real sentence, not a placeholder.
+    const allMeaningful = Object.entries(info)
+      .filter(([k]) => k.includes('UsageDescription'))
+      .every(([, v]) => typeof v === 'string' && v.trim().length > 40);
+
+    return noNotifications && micCoversBoth && camCoversMore && allMeaningful;
+  })(),
+  'no permission is requested that the app cannot exercise, and the microphone and camera purpose strings name every use the code actually makes');
+
 check('LOCK: nearby courses are prefetched while there is still signal, on a measured connection',
   (() => {
     /**

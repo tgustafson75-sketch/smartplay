@@ -12,8 +12,8 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.smartplaycaddie.app",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "SmartPlay Caddie uses the microphone to listen for your voice commands.",
-        "NSCameraUsageDescription": "SmartPlay Caddie uses the camera to record and analyze your swing in the practice cage.",
+        "NSMicrophoneUsageDescription": "SmartPlay Caddie uses the microphone two ways: to hear your voice so your caddie can answer you hands-free, and to listen to the sound of impact when you record a swing, which is how it grades your strike. Audio is processed for these purposes only.",
+        "NSCameraUsageDescription": "SmartPlay Caddie uses the camera to record and analyze your golf swing, to read the lie your ball is sitting in, to scan the clubs in your bag, and to look down the hole so your caddie can talk you through the shot in front of you.",
         "NSLocationWhenInUseUsageDescription": "SmartPlay Caddie uses your location to find nearby golf courses and track your round.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "SmartPlay Caddie tracks your round in the background so hole transitions, shot tracking, and yardages keep working when your phone is in your pocket.",
         "NSPhotoLibraryUsageDescription": "SmartPlay Caddie saves your hero moments to your photo library.",
@@ -46,7 +46,6 @@
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
         "android.permission.FOREGROUND_SERVICE_LOCATION",
-        "android.permission.POST_NOTIFICATIONS",
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_MEDIA_VIDEO",
         "android.permission.READ_EXTERNAL_STORAGE",
