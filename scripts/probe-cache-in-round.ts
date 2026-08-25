@@ -25,10 +25,10 @@ type Turn = { label: string; body: Record<string, unknown> };
 const turns: Turn[] = [
   // FRESH questions — never sent before. Reusing a question lets a turn match its OWN earlier cache
   // entry from a previous probe run inside the 1h TTL, which reads as a hit and proves nothing.
-  { label: 'turn 1 — fresh question (a WRITE is expected)', body: { ...ON_COURSE, message: 'is there trouble long here I should know about?' } },
-  { label: 'turn 2 — DIFFERENT fresh question', body: { ...ON_COURSE, message: 'talk me through the second shot' } },
-  { label: 'turn 3 — different fresh question AND the shot moved', body: { ...ON_COURSE, currentYardage: 118, currentStroke: 2, message: 'should I be worried about that bunker' } },
-  { label: 'turn 4 — different fresh question, later in the hole', body: { ...ON_COURSE, currentYardage: 42, currentStroke: 3, message: 'give me a feel for this little one' } },
+  { label: 'turn 1 — fresh question (a WRITE is expected)', body: { ...ON_COURSE, message: 'anything I should avoid off this tee' } },
+  { label: 'turn 2 — DIFFERENT fresh question', body: { ...ON_COURSE, message: 'where is the miss on this green' } },
+  { label: 'turn 3 — different fresh question AND the shot moved', body: { ...ON_COURSE, currentYardage: 118, currentStroke: 2, message: 'do I have enough club for that' } },
+  { label: 'turn 4 — different fresh question, later in the hole', body: { ...ON_COURSE, currentYardage: 42, currentStroke: 3, message: 'putt or chip from here' } },
 ];
 
 (async () => {

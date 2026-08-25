@@ -195,3 +195,45 @@ latency defect ("the tap was loading the video").
 
 A related consequence, already fixed: the analysing screen briefly advertised a "body ✓" tick that
 is structurally impossible in that phase, because biomech cannot populate until review.
+
+
+## 11. PROMPT CACHE — FIXED AND MEASURED 2026-08-25 (was silently costing ~8x)
+
+The 08-24 fix was **verified with a false positive**: it measured `cacheRead 19188 / cacheWrite 0`
+on a turn with NO ROUND ACTIVE, so the on-course branch rendered as nothing and changing the
+yardage changed no bytes. It proved the fix in the one situation where the defect cannot occur.
+
+Three things were still inside the 1-hour cached block, each alone enough to guarantee a miss:
+
+1. ~5.2KB of per-shot round text — hole, par, PLAYING THEIR STROKE, how the round is going,
+   DISTANCE REMAINING RIGHT NOW, the lie, where they are standing, risk posture, score, holes.
+   Also a SECOND OWNER of facts the message already carried, which is how it stayed invisible.
+2. The running CONVERSATION TRANSCRIPT, which changes every turn by definition.
+3. BOTH knowledge bases, selected BY THE QUESTION — `retrieveKB(_message)` and
+   `buildPersonaKBPromptBlock(persona, message)`. In a real round every question differs.
+
+All now ride the message. Doctrine is cached; state and question-selected reference travel with the
+turn. **The cache is all-or-nothing** — one moving value invalidates the whole block, so a partial
+fix buys nothing, and nothing FAILS when it breaks: the bill just doubles.
+
+**Measured on live production**, four FRESH different questions with the yardage and stroke moving:
+identical `systemFp`, turn 1 writes 17,585, turns 2-4 read 17,585 with ZERO writes.
+Behaviour re-verified after the move: yardageInsight, currentStroke, riskMode, roundStats, weather,
+clubDistances all still INFLUENCE the answer, 1/1 each.
+
+**Tools this left behind** (use these instead of reasoning about the cache):
+- `npx tsx scripts/probe-cache-in-round.ts` — measures in the state where the defect lives.
+  NEVER reuse a question: a repeat matches its own earlier entry inside the 1h TTL and reads as a
+  hit that proves nothing. That contaminated one of the runs today before it was caught.
+- `_debug.systemFp` (whole-prompt fingerprint) and `_debug.systemChunks` (per-2KB hashes) — two
+  turns with different questions must match. Chunk hashes localise a buster to one window; that is
+  how the persona KB was found at ~char 22,000 rather than by guessing.
+- Sim `RATCHET: nothing new may be interpolated into the cached system prompt` — freezes the
+  allowed set (57) with a DENY list of everything proven to move. The OLD guard was a name list
+  that could only see the two blocks it was written for, and it sliced ~450 lines past the
+  template's closing backtick, reasoning over code that is not in the prompt at all.
+
+**Still inside the cached block and worth a later pass** (they did not move in these probes, so they
+do not bust the cache today, but each is request-derived and could): `_screenContext`,
+`_smartFinderContext`, `_unifiedContextBlock`, `_holeContextBlock`, `clubAdviceBlock`,
+`is_proactive`, `responseMode`, `modeLabel`, `insightLines`.
