@@ -77,6 +77,39 @@ export async function locateNearbyCourses(
     return { courses: [], failure: 'bad_input' };
   }
 
+  /**
+   * 2026-08-25 (Tim, mid-round at Berlin, 11:52) — course_locate_failed · timeout, twice, at coords
+   * where the server answers in 0.9s. The server was fine; his PHONE could not reach it. That is
+   * the normal condition on a golf course, which is the one place this call has to work.
+   *
+   * REMEMBER WHAT WE ALREADY FOUND. There was no cache and no offline fallback, so a course the app
+   * had located successfully yesterday was unreachable today the moment the signal dropped — it
+   * asked the network the same question again and waited 9 seconds, twice, to be told nothing.
+   *
+   * Keyed by coarse position (~1km), because "which courses are near me" does not change between
+   * two points on the same property. Served ONLY when the live call fails, so a working network
+   * always wins and a stale list can never mask a real answer.
+   */
+  const cacheKey = `course_locate_v1:${lat.toFixed(2)}:${lng.toFixed(2)}`;
+  const readCache = async (): Promise<NearbyCourse[] | null> => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const AS = (require('@react-native-async-storage/async-storage') as { default: typeof import('@react-native-async-storage/async-storage').default }).default;
+      const raw = await AS.getItem(cacheKey);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { courses?: NearbyCourse[] };
+      return Array.isArray(parsed.courses) && parsed.courses.length > 0 ? parsed.courses : null;
+    } catch { return null; }
+  };
+  const writeCache = async (courses: NearbyCourse[]): Promise<void> => {
+    try {
+      if (courses.length === 0) return;
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const AS = (require('@react-native-async-storage/async-storage') as { default: typeof import('@react-native-async-storage/async-storage').default }).default;
+      await AS.setItem(cacheKey, JSON.stringify({ courses, at: Date.now() }));
+    } catch { /* caching never breaks a working lookup */ }
+  };
+
   const attempt = async (): Promise<LocateResult> => {
     try {
       const res = await fetch(`${base.replace(/\/+$/, '')}/api/course-locate`, {
@@ -100,9 +133,20 @@ export async function locateNearbyCourses(
     logLocate('course_locate_retry', { first_failure: out.failure });
     out = await attempt();
   }
-  if (out.failure) {
-    logLocate('course_locate_failed', { reason: out.failure, lat: Math.round(lat * 100) / 100, lng: Math.round(lng * 100) / 100 });
+  if (!out.failure) {
+    void writeCache(out.courses);
+    return out;
   }
+
+  // The network could not answer. Fall back to what this spot returned last time rather than
+  // handing the player nothing on the first tee.
+  const cached = await readCache();
+  if (cached) {
+    logLocate('course_locate_served_from_cache', { reason: out.failure, count: cached.length });
+    return { courses: cached, failure: null };
+  }
+
+  logLocate('course_locate_failed', { reason: out.failure, lat: Math.round(lat * 100) / 100, lng: Math.round(lng * 100) / 100 });
   return out;
 }
 
