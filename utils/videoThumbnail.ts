@@ -141,13 +141,18 @@ export function _clearThumbnailCache(): void {
   misses = 0;
 }
 
+let copySeq = 0;
+
 async function copyOf(entry: CacheEntry): Promise<VideoThumbnails.VideoThumbnailsResult | null> {
   try {
     const info = await FileSystem.getInfoAsync(entry.uri);
     if (!info.exists) return null;                       // a consumer deleted it — decode again
     const dot = entry.uri.lastIndexOf('.');
     const ext = dot > 0 ? entry.uri.slice(dot) : '.jpg';
-    const to = `${entry.uri.slice(0, dot > 0 ? dot : undefined)}_c${Math.round(performance.now() * 1000) % 1e9}${ext}`;
+    // 2026-08-25 — a monotonic counter, not performance.now(). The clock version could collide for
+    // two copies taken in the same microsecond, and if `performance` were ever unavailable it would
+    // THROW into the catch below, silently disabling every cache copy app-wide with no signal at all.
+    const to = `${entry.uri.slice(0, dot > 0 ? dot : undefined)}_c${++copySeq}${ext}`;
     await FileSystem.copyAsync({ from: entry.uri, to });
     return { uri: to, width: entry.width, height: entry.height };
   } catch {
