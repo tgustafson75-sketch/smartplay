@@ -80,6 +80,7 @@ import { useTeeOverride } from '../services/courseTeeOverrides';
 import { useGreenOverride } from '../services/courseGreenOverrides';
 import { fetchCourseGeometry, getHoleGeometry, getCachedGeometry, getDerivedHoleGeometry, loadDerivedGeometry, type HoleGeometry } from '../services/courseGeometryService';
 import { deriveHoleGeometry } from '../services/holeGeometryDerivation';
+import { courseDisplayName } from '../services/courseDisplayName';
 // 2026-08-24 (Tim's call — owner-only first) — the strategic overlay layer. Pure functions that have
 // existed since Phase S, described in their own header as "the long-term differentiator vs other
 // golf apps... Mapbox tiles are commodity; SmartPlay's strategic overlay is proprietary IP", and
@@ -480,7 +481,10 @@ export default function SmartVisionScreen() {
   // substring-matched Palms via the name-based getLocalHoleImage
   // path. Empty string when no real context exists — let downstream
   // render the explicit empty state.
-  const courseName = activeCourseName ?? derivedCourseLabel ?? '';
+  // 2026-08-25 — activeCourse holds whatever string started the round, which can be a spoken phrase
+  // ("open pebble beach"), so the header read "pebble beach" in Tim's screenshot. Normalised at the
+  // one place this screen derives the name; nothing stored or matched changes.
+  const courseName = courseDisplayName(activeCourseName ?? derivedCourseLabel ?? '');
   // 2026-05-17 — pre-round F/M/B yardages need real course data. The
   // live `courseHoles` slice from roundStore is empty until
   // startRound() fires; before that, the bundled holes for the
@@ -1050,10 +1054,30 @@ export default function SmartVisionScreen() {
           // 2026-07-24 (Tim — "never a green screen") — center on the BEST coord we have: this hole's own
           // green/tee (from resolved geometry) → the player's live GPS → the course centroid. Any single
           // coordinate is enough to render a real aerial; only a total absence of location falls through.
+          /**
+           * 2026-08-25 — THE PLAYER'S GPS ONLY COUNTS IF THEY ARE ACTUALLY AT THIS COURSE.
+           *
+           * The old order put playerPt ahead of the centroid unconditionally, so opening Pebble
+           * Beach from a couch in Massachusetts would have centred the aerial on MASSACHUSETTS and
+           * captioned it "PEBBLE BEACH · HOLE 1" — a confidently wrong image, which is worse than
+           * the empty state it was meant to prevent. It only looked harmless because the bundled
+           * courses were all courses Tim was standing on.
+           *
+           * A live fix is still the best centre when it is ON the property (tightest zoom, matches
+           * the F/M/B yardages). Away from it, the course centroid is the only honest answer.
+           */
+          const NEAR_COURSE_KM = 3;
+          const kmBetween = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+            const dLat = (a.lat - b.lat) * 111;
+            const dLng = (a.lng - b.lng) * 111 * Math.cos((a.lat * Math.PI) / 180);
+            return Math.sqrt(dLat * dLat + dLng * dLng);
+          };
+          const playerIsHere = !!playerPt && (!okc(centroid) || kmBetween(playerPt, centroid!) <= NEAR_COURSE_KM);
           const center = (okc(effectiveGreen) ? effectiveGreen! : null)
             ?? (okc(effectiveTee) ? effectiveTee! : null)
-            ?? playerPt
-            ?? (okc(centroid) ? centroid! : null);
+            ?? (playerIsHere ? playerPt : null)
+            ?? (okc(centroid) ? centroid! : null)
+            ?? playerPt;
           if (center) {
             const MAX = 1280;
             let reqW = imageW;

@@ -824,6 +824,19 @@ export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng:
 export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug | null {
   if (!courseName) return null;
   const c = courseName.toLowerCase();
+  /**
+   * 2026-08-25 — MARQUEE SET FIRST. These are the bundled famous courses; matching them early keeps
+   * them clear of the generic substring rules below (e.g. a bare 'lakes' or 'pines' match).
+   *
+   * This function is the FIFTH registration point for a bundled course, and it is the one that was
+   * missed: slug, centroid, Play card and API hint were all added, and Pebble Beach still showed
+   * "waiting on your location" forever because the slug is resolved from the course NAME here, so
+   * no name match meant no centroid meant no aerial. A course really is only registered when all
+   * five agree — which is now what the sim asserts.
+   */
+  if (c.includes('torrey')) return 'torrey-pines-south';
+  if (c.includes('pebble')) return 'pebble-beach';
+  if (c.includes('streamsong')) return 'streamsong-black';
   if (c.includes('crystal') && c.includes('spring')) return 'crystal-springs';
   if (c.includes('mariner')) return 'mariners-point';
   // Pembroke MUST precede the generic 'lakes' match below.

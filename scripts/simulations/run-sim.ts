@@ -10295,17 +10295,30 @@ check('LOCK: the marquee courses are fully registered, and carry no bundled imag
       'torrey-pines-south': 'e9qqevf6', 'pebble-beach': '3j4b4ar8', 'streamsong-black': 'pfpwjgan',
     };
 
+    /**
+     * 2026-08-25 — THIS GUARD SAID FOUR POINTS. THERE ARE FIVE, AND THE FIFTH IS THE ONE THAT BROKE.
+     *
+     * Pebble Beach was registered at all four and still showed "waiting on your location" forever,
+     * because the aerial resolves its centroid via getLocalCourseSlug(courseName) — a hardcoded
+     * NAME-match chain. No name match meant no slug, no centroid, no aerial. My own guard passed
+     * while the course was visibly broken, which is precisely the failure it exists to prevent.
+     *
+     * The name match is now part of what "registered" means.
+     */
     return SLUGS.every((slug) => {
       const inUnion = new RegExp(`'${slug}'`).test(images);
       const hasCentroid = new RegExp(`'${slug}':\\s*\\{\\s*lat:`).test(images);
       const hasCard = new RegExp(`id: 'local:${slug}'`).test(play);
       const hasPinnedId = new RegExp(`'${slug}':[^}]*apiId: '${IDS[slug]}'`).test(geo);
+      // 5th: getLocalCourseSlug must RETURN this slug for some name — otherwise the centroid,
+      // and therefore the satellite aerial, is unreachable.
+      const hasNameMatch = new RegExp(`return '${slug}';`).test(images);
       // and NO bundled image pack — imagery must stay licensed Mapbox at runtime
       const noPack = !new RegExp(`assets/courses/${slug}/`).test(images);
-      return inUnion && hasCentroid && hasCard && hasPinnedId && noPack;
+      return inUnion && hasCentroid && hasCard && hasPinnedId && hasNameMatch && noPack;
     });
   })(),
-  'each marquee course is registered at all four points (slug, centroid, Play card, pinned upstream id) and ships no bundled image pack');
+  'each marquee course is registered at all FIVE points (slug, centroid, Play card, pinned upstream id, and a getLocalCourseSlug name match) and ships no bundled image pack');
 
 check('LOCK: nearby courses are prefetched while there is still signal, on a measured connection',
   (() => {
