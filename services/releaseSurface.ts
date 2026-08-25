@@ -42,12 +42,49 @@ export const SHELVED_ROUTES: ReadonlySet<string> = new Set<string>([
   '/swinglab/coach-mode',   // coach-facing tool inside a consumer app, and carries v2 TODOs
 ]);
 
-/** True when a route must not be offered to the player in this release. */
+/**
+ * 2026-08-25 (Tim, same day) — "you weren't supposed to remove swing lab from my owners build, just
+ * label them as owner only."
+ *
+ * My error: I hid these from EVERY build, including his. He tests on the shipped app, so hiding a
+ * screen from himself removes the only way he exercises it. Shelved means **hidden from players and
+ * visible-but-labelled for the owner** — the same pattern already used for watch extras
+ * (watchRoundSync), feel capture and the boot trace, all gated on isOwnerEmail.
+ *
+ * Deliberately checked at CALL TIME rather than captured once: the owner email arrives with the
+ * profile, which hydrates after first paint, so a value read at module load would be wrong on the
+ * very first render — the same hydration trap that has bitten this project before.
+ */
+export function isOwnerBuild(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const prof = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
+    return prof.isOwnerEmail(prof.usePlayerProfileStore.getState().email);
+  } catch {
+    return false;   // never let an owner check crash a screen — a player build is the safe answer
+  }
+}
+
+/**
+ * True when a route must not be offered to THIS user in this release.
+ * Players: hidden. Owner: shown, and the caller marks it (see SHELVED_BADGE).
+ */
 export function isShelved(route: string | null | undefined): boolean {
   if (!route) return false;
   const clean = route.split('?')[0]!.replace(/\/+$/, '');
-  return SHELVED_ROUTES.has(clean);
+  if (!SHELVED_ROUTES.has(clean)) return false;
+  return !isOwnerBuild();
 }
+
+/** True when this route ships to nobody but the owner — used to badge it in the UI. */
+export function isOwnerOnly(route: string | null | undefined): boolean {
+  if (!route) return false;
+  const clean = route.split('?')[0]!.replace(/\/+$/, '');
+  return SHELVED_ROUTES.has(clean) && isOwnerBuild();
+}
+
+/** Badge text for an owner-only surface. One owner for the wording. */
+export const SHELVED_BADGE = 'OWNER · 2.0';
 
 /**
  * 2026-08-25 (Tim) — "Meta glasses don't have to go in 1.0, but the watch functionality does."
@@ -67,7 +104,10 @@ const SHELVED_FEATURES: ReadonlySet<ShelvedFeature> = new Set<ShelvedFeature>([
   'meta_glasses',
 ]);
 
-/** True when a named (non-route) feature must not be offered to the player in this release. */
+/**
+ * True when a named (non-route) feature must not be offered to THIS user in this release.
+ * Same rule as routes: hidden from players, still reachable for the owner so it can be tested.
+ */
 export function isFeatureShelved(feature: ShelvedFeature): boolean {
-  return SHELVED_FEATURES.has(feature);
+  return SHELVED_FEATURES.has(feature) && !isOwnerBuild();
 }

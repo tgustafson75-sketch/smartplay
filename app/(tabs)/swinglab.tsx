@@ -29,7 +29,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
-import { isShelved } from '../../services/releaseSurface';
+import { isShelved, isOwnerOnly, SHELVED_BADGE } from '../../services/releaseSurface';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
 import { SETUP_CHECK_ENABLED } from '../../services/swing/setupCheck';
@@ -469,7 +469,7 @@ function LauncherCard({ spec, accent, colors, onPress }: LauncherCardProps) {
           <Ionicons name={spec.icon} size={24} color={accent} />
         </View>
         <View style={[styles.tag, { backgroundColor: hexFade(accent, 0.16), borderColor: hexFade(accent, 0.5) }]}>
-          <Text style={[styles.tagText, { color: accent }]}>{spec.tag}</Text>
+          <Text style={[styles.tagText, { color: accent }]}>{isOwnerOnly(spec.route) ? SHELVED_BADGE : spec.tag}</Text>
         </View>
       </View>
       <View style={styles.cardText}>
@@ -517,7 +517,7 @@ function SectionHero({ spec, accent, colors, onPress }: LauncherCardProps) {
                 instead of Android-unreliable shrink-to-fit (see LauncherCard note). */}
             <Text style={[styles.heroTitle, { color: colors.text_primary }]} numberOfLines={2}>{title}</Text>
             <View style={[styles.tag, { backgroundColor: hexFade(accent, 0.16), borderColor: hexFade(accent, 0.5) }]}>
-              <Text style={[styles.tagText, { color: accent }]}>{spec.tag}</Text>
+              <Text style={[styles.tagText, { color: accent }]}>{isOwnerOnly(spec.route) ? SHELVED_BADGE : spec.tag}</Text>
             </View>
           </View>
           <Text style={[styles.heroSub, { color: colors.text_muted }]} numberOfLines={2}>{sub}</Text>
@@ -560,7 +560,7 @@ function SmartMotionHero({ spec, accent, colors, onPress }: LauncherCardProps) {
               mode. Hardcoded light values here on purpose. */}
           <Text style={[styles.heroTitle, { color: '#ffffff' }]}>{spec.title}</Text>
           <View style={[styles.tag, { alignSelf: 'flex-start', marginBottom: 4, backgroundColor: hexFade(accent, 0.16), borderColor: hexFade(accent, 0.5) }]}>
-            <Text style={[styles.tagText, { color: accent }]}>{spec.tag}</Text>
+            <Text style={[styles.tagText, { color: accent }]}>{isOwnerOnly(spec.route) ? SHELVED_BADGE : spec.tag}</Text>
           </View>
           <Text style={[styles.heroSub, { color: 'rgba(233,245,233,0.82)' }]} numberOfLines={2}>{spec.sub}</Text>
         </View>
