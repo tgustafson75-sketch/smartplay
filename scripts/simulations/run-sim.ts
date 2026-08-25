@@ -10091,6 +10091,70 @@ check('LOCK: the analysis hang guard is derived, and larger than the budgets it 
   })(),
   'the screen consumes ANALYSIS_WORST_CASE_MS instead of a literal, and that constant is summed from the locate + request ceilings it must exceed');
 
+check('RATCHET: nothing new may be interpolated into the cached system prompt',
+  (() => {
+    /**
+     * 2026-08-25 — THE CACHE IS ALL-OR-NOTHING, AND THE OLD GUARD WAS A NAME LIST.
+     *
+     * The existing guard below asserts that two specific blocks (liveFactsBlock, bagBlock) are not
+     * in the cached prompt. It cannot see a THIRD one arriving, which is exactly what had happened:
+     * with a round actually in progress the cached block carried ~5.2KB of per-shot text — hole,
+     * stroke, distance remaining, the lie, club, score — plus the running conversation transcript.
+     * Any one changing value invalidates the WHOLE block, so a partial fix buys nothing; this is
+     * all-or-nothing, and the cost of getting it wrong is invisible (nothing fails, the bill doubles).
+     *
+     * So: freeze the set. Adding any interpolation to the cached prompt now fails this guard until
+     * someone adds the name deliberately and states why it is stable for a whole round. The DENY
+     * list names the ones already proven to move, so they cannot come back by a different route.
+     *
+     * Parses the template by tracking ${} depth rather than slicing to the next declaration — the
+     * old slice ran ~450 lines past the closing backtick and reasoned over code that is not in the
+     * prompt at all.
+     */
+    const k = readCode('api/kevin.ts');
+    const open = k.indexOf('const systemPrompt = `');
+    if (open < 0) return false;
+    let i = open + 'const systemPrompt = `'.length;
+    let depth = 0;
+    const names = new Set<string>();
+    while (i < k.length) {
+      const c = k[i];
+      if (c === '\\') { i += 2; continue; }
+      if (depth === 0 && c === '`') break;
+      if (c === '$' && k[i + 1] === '{') {
+        const m = /^\$\{\s*([A-Za-z_][A-Za-z0-9_]*)/.exec(k.slice(i, i + 64));
+        if (m) names.add(m[1]!);
+        depth++; i += 2; continue;
+      }
+      if (depth > 0) { if (c === '{') depth++; else if (c === '}') depth--; }
+      i++;
+    }
+    if (names.size === 0) return false;                    // parse failed — never pass vacuously
+
+    // Proven to change within a round. These moved to the message; they must not return.
+    const DENY = ['currentYardage', 'currentStroke', 'currentHole', 'currentPar', 'currentHoleNote',
+      'currentLocationType', 'currentTeeBox', '_club', 'totalScore', 'scoreVsPar', 'holesPlayed',
+      'consecutiveBadHoles', 'riskMode', 'roundStats', 'yardageInsight', 'pendingLieAnalysis',
+      'activeCourse', 'transportMode', 'isCompetition', 'nineHoleMode', 'isSpiralRisk', 'mentalState',
+      '_conversationTurns', 'voicedDistress', 'liveFactsBlock', 'bagBlock'];
+    if (DENY.some((d) => names.has(d))) return false;
+
+    // Frozen 2026-08-25 at 57. Shrinking is always fine; growing needs a deliberate line here.
+    const ALLOWED = new Set(['Array', 'TRANSLATION_OVERRIDE', '_cecilyMode', '_coachKnowledgeContext',
+      '_courseContext', '_courseIntelligence', '_dominantMiss', '_ghinNumber', '_ghostContext', '_goal',
+      '_golferModel', '_holeContextBlock', '_kevinContext', '_knownCoursesBlock', '_penaltyContext',
+      '_persistentPatterns', '_personaKBBlock', '_personalBest', '_physicalLimitation', '_playerHistory',
+      '_practiceContext', '_practicePlan', '_recentAnalyses', '_recentCageInsights', '_recentRoundInsights',
+      '_routineImpact', '_screenContext', '_smartFinderContext', '_unifiedContextBlock', 'c', 'caddieName',
+      'caddieRosterBlock', 'characterSpec', 'clubAdviceBlock', 'experienceDepthRule', 'firstName',
+      'handednessRule', 'insightLines', 'isRoundActive', 'is_proactive', 'langRule', 'mentalGameBlock',
+      'modeLabel', 'personaIntensity', 'perspectiveBlock', 'pi', 'playerAddressRule', 'r', 'registerBlock',
+      'responseMode', 'roundsTogether', 'selfReferenceBlock', 'sessionsTogether', 'shotAnswerShapeBlock',
+      'sim_round', 'todBlock', 'wd']);
+    return [...names].every((n) => ALLOWED.has(n));
+  })(),
+  'the cached prompt interpolates only reviewed, round-stable values; per-shot state rides the message');
+
 check('LOCK: the cached system prompt holds nothing that changes shot to shot',
   (() => {
     /**
