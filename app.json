@@ -24,7 +24,8 @@
         ],
         "ITSAppUsesNonExemptEncryption": false
       },
-      "buildNumber": "12"
+      "buildNumber": "12",
+      "appleTeamId": "B6KTPCWF7A"
     },
     "android": {
       "package": "com.smartplaycaddie.app",
@@ -53,7 +54,8 @@
         "android.permission.health.READ_DISTANCE",
         "android.permission.health.READ_HEART_RATE",
         "android.permission.health.READ_ACTIVE_CALORIES_BURNED"
-      ]
+      ],
+      "versionCode": 1
     },
     "web": {
       "output": "server",
