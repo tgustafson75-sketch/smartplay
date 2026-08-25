@@ -11505,6 +11505,57 @@ check('LOCK: "where is the player, for this shot" has ONE owner',
   })(),
   'shotLocationService owns the shot-time position snapshot; both logging handlers delegate and neither keeps a private copy');
 
+check('LOCK: the learned phone height is actually USED and actually LEARNED',
+  (() => {
+    /**
+     * 2026-08-24 (triple-check pass B). The calibration shipped with unit tests proving the MATH and
+     * nothing proving the WIRING — a module that is correct and uncalled is the exact half-build
+     * shape this whole day has been about, and I nearly left a fresh one behind.
+     *
+     * Three links, all required: SmartFinder must PASS the learned height into the tilt math, must
+     * FEED observations back from GPS-anchored reads, and the cache must be HYDRATED at boot because
+     * the read path is synchronous and an unhydrated cache silently means "never learned".
+     */
+    const sf = read('app/smartfinder.tsx');
+    const rf = read('services/rangefinder.ts');
+    const cal = read('services/rangefinderCalibration.ts');
+    const layout = read('app/_layout.tsx');
+    // The math takes the height as input and no longer hardcodes it in the divide.
+    const parameterised = /eye_height_m\?: number;/.test(rf) &&
+      /distanceM = eyeHeightM \/ Math\.tan\(angleRad\);/.test(rf) &&
+      /angle_degrees: angleDeg,/.test(rf);          // and reports the angle calibration consumes
+    // SmartFinder uses it...
+    const used = /eye_height_m: effectiveEyeHeightM\(\),/.test(sf);
+    // ...and feeds it, from a GPS-anchored read only.
+    const learned = /observeCalibration\(gpsMiddleYards \* 0\.9144, result\.angle_degrees\)/.test(sf);
+    // Hydrated at boot, or the synchronous read never sees what was learned.
+    const hydrated = /hydrateRangefinderCalibration\(\)/.test(layout);
+    // Honesty: discard an implausible sample rather than clamping it into the average.
+    const honest = /if \(h < MIN_PLAUSIBLE_HEIGHT_M \|\| h > MAX_PLAUSIBLE_HEIGHT_M\) return null;/.test(cal) &&
+      /if \(samples\.length < MIN_SAMPLES\) return null;/.test(cal);
+    return parameterised && used && learned && hydrated && honest;
+  })(),
+  'the tilt math takes the learned height, SmartFinder passes it and feeds observations from GPS-anchored reads, boot hydrates the cache, and an implausible sample is discarded rather than clamped');
+
+check('LOCK: every bundled caddie clip slot is one a caller actually plays',
+  (() => {
+    /**
+     * 2026-08-24 (triple-check pass B). The clip trim shipped with no guard at all. Ten of twelve
+     * slots had bundled 8.3 MB of placeholder video that no caller ever passed, for three months.
+     * Nothing stopped that happening again — so assert the property that was violated: every slot in
+     * the union is one some caller actually asks for.
+     */
+    const mod = read('services/getCaddieClip.ts');
+    const m = /export type CaddieSlot =([\s\S]*?);/.exec(mod);
+    const slots = m ? (m[1].match(/'([a-z_]+)'/g) ?? []).map(s => s.replace(/'/g, '')) : [];
+    if (slots.length === 0) return false;
+    const callers = ['app/greeting.tsx', 'app/(tabs)/caddie.tsx'].map(f => read(f)).join('\n');
+    // Every declared slot is requested by name somewhere, and has a bundled require.
+    return slots.every(s => new RegExp(`'${s}'`).test(callers)) &&
+      slots.every(s => new RegExp(`${s}:\\s*require\\(`).test(mod));
+  })(),
+  'no caddie clip slot exists that nothing plays — the union, the require map and the call sites agree');
+
 // ─── Orphaned exports — the half-build ratchet ─────────────────────────────────
 /**
  * 2026-08-24. Tim: *"an absolutely consistent theme of half built processes… I'm stuck in a 2-month
