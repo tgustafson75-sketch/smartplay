@@ -10091,6 +10091,36 @@ check('LOCK: the analysis hang guard is derived, and larger than the budgets it 
   })(),
   'the screen consumes ANALYSIS_WORST_CASE_MS instead of a literal, and that constant is summed from the locate + request ceilings it must exceed');
 
+check('LOCK: the Tempo Trainer trains against the player\'s own measured swing',
+  (() => {
+    /**
+     * 2026-08-25 — the trainer was a BLIND METRONOME. It set a target and never told the player
+     * whether they matched it, while SmartMotion had been measuring backswing:downswing on every
+     * analysed swing and writing it to the player model the whole time. Both ends of the learn-loop
+     * existed and nothing joined them.
+     *
+     * Three things must hold together, or it silently reverts to a beat box:
+     *   1. SmartMotion must PERSIST backswing duration — the ratio alone cannot pick a preset,
+     *      because every preset in a mode is the same ratio and differs only in speed.
+     *   2. The store must accept and average it.
+     *   3. The screen must read the player model and open on the preset that read suggests.
+     */
+    const sm = readCode('app/swinglab/smartmotion.tsx');
+    const store = readCode('store/caddieMemoryStore.ts');
+    const screen = readCode('app/swinglab/tempo-trainer.tsx');
+
+    // Pinned to the CALL, not the file: an identical `backswingMs: tempo?.backswingMs` line exists
+    // at another call site, and matching that one let this guard pass with the real wiring deleted.
+    const persists = /recordSwingMetrics\(\{[\s\S]{0,400}?backswingMs:\s*tempo\?\.backswingMs/.test(sm);
+    const averaged = /backswingAvgMs/.test(store) && /backswingMs >= 400 && backswingMs <= 1600/.test(store);
+    const readsModel = /readOwnTempo\(/.test(screen) && /caddieMemoryStore/.test(screen);
+    const personalisesPreset = /setPresetKey\(\s*read\.suggestedPresetKey\s*\?\?\s*'standard'\s*\)/.test(screen);
+    // And it must never open on a hardcoded preset again.
+    const noFixedDefault = !/setPresetKey\('standard'\); setMode\(m\)/.test(screen);
+    return persists && averaged && readsModel && personalisesPreset && noFixedDefault;
+  })(),
+  'SmartMotion persists backswing duration, the store averages it, and the trainer opens on the preset matching the player\'s own swing');
+
 check('LOCK: a screen shelved for 2.0 has no door left open',
   (() => {
     /**

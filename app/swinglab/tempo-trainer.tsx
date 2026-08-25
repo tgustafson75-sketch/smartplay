@@ -26,6 +26,8 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useCaddieMemoryStore } from '../../store/caddieMemoryStore';
+import { readOwnTempo } from '../../services/practice/tempoSelfRead';
 
 // Canonical SmartPlay neon green — the brand accent (mirrors colors.accent, pinned
 // here for the ratio badges so they read the same in either theme).
@@ -92,6 +94,28 @@ export default function TempoTrainerScreen() {
   const [running, setRunning] = useState(false);
   const [beat, setBeat] = useState<Beat>(null);
   const [ready, setReady] = useState(false);
+
+  /**
+   * 2026-08-25 — THE DRILL NOW KNOWS THE PLAYER'S SWING.
+   *
+   * SmartMotion has been measuring backswing:downswing on every analysed swing and writing it to the
+   * player model; this screen set a target and never once compared the two. Reading it here is what
+   * turns a blind metronome into training against your own tempo. Honest when it has nothing yet —
+   * readOwnTempo refuses to show a number under MIN_SAMPLES rather than inventing one.
+   */
+  // Subscribe to the players map (a stable reference that changes when a swing is recorded), then
+  // resolve through the store's OWN getPlayer so player identity keeps one owner. Selecting
+  // getPlayer() directly would mint a fresh empty profile each render for a new player and churn.
+  const players = useCaddieMemoryStore((st) => st.players);
+  const swingMetrics = React.useMemo(
+    () => useCaddieMemoryStore.getState().getPlayer().swingMetrics ?? null,
+    [players],
+  );
+  const idealRatio = mode === 'short' ? 2 : 3;
+  const selfRead = React.useMemo(
+    () => readOwnTempo(swingMetrics, presets, idealRatio),
+    [swingMetrics, presets, idealRatio],
+  );
 
   const preset = presets.find((p) => p.key === presetKey) ?? presets[2];
 
@@ -179,7 +203,15 @@ export default function TempoTrainerScreen() {
   }, [presets, scheduleCycle]);
 
   // Enter a trainer from the menu; leaving a trainer stops it and returns to the menu.
-  const openMode = useCallback((m: TrainerMode) => { setPresetKey('standard'); setMode(m); }, []);
+  // 2026-08-25 — open on the preset that matches THEIR backswing speed, not a fixed 'standard'.
+  // Every preset in a mode is the same ratio, so speed is the only axis that can be personalised.
+  // Falls back to 'standard' whenever we have not measured enough to know.
+  const openMode = useCallback((m: TrainerMode) => {
+    const forMode = m === 'short' ? SHORT_PRESETS : FULL_PRESETS;
+    const read = readOwnTempo(swingMetrics, forMode, m === 'short' ? 2 : 3);
+    setPresetKey(read.suggestedPresetKey ?? 'standard');
+    setMode(m);
+  }, [swingMetrics]);
   const backToMenu = useCallback(() => { stop(); setMode('menu'); }, [stop]);
 
   const ratio = (preset.back / preset.down).toFixed(1);
@@ -203,8 +235,13 @@ export default function TempoTrainerScreen() {
 
         <ScrollView contentContainerStyle={styles.menuBody} showsVerticalScrollIndicator={false}>
           <Text style={[styles.h1, { color: colors.text_primary }]}>Choose your training mode</Text>
-          <Text style={[styles.h1sub, { color: colors.text_muted }]}>
-            Pick a tempo trainer to swing to the beat, or let your caddie read your real swing.
+          {/*
+            2026-08-25 — the drill's opening line is now about THEIR swing, not a generic invitation.
+            selfRead is honest by construction: under MIN_SAMPLES it asks for more swings instead of
+            printing a number it has not earned.
+          */}
+          <Text style={[styles.h1sub, { color: selfRead.known ? colors.text_secondary : colors.text_muted }]}>
+            {selfRead.line}
           </Text>
 
           {MODE_CARDS.map((card) => (
@@ -298,6 +335,13 @@ export default function TempoTrainerScreen() {
           />
           <Text style={[styles.ratioValue, { color: colors.accent }]}>{ratio}</Text>
           <Text style={[styles.ratioUnit, { color: colors.text_muted }]}>: 1</Text>
+          {/* 2026-08-25 — what they actually swing, beside what they are training to. The whole
+              point of the refinement: the target and the measurement finally in one view. */}
+          {selfRead.known && selfRead.ratio != null ? (
+            <Text style={[styles.ratioUnit, { color: colors.text_muted }]}>
+              {'   '}yours {selfRead.ratio.toFixed(1)} : 1
+            </Text>
+          ) : null}
         </View>
 
         {/* Beat guide */}

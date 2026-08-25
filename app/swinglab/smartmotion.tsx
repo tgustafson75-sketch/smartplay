@@ -1595,6 +1595,7 @@ export default function SmartMotion() {
       const cr = analysis?.contact_read;
       mem.useCaddieMemoryStore.getState().recordSwingMetrics({
         tempoRatio: tempo?.ratio ?? null,
+        backswingMs: tempo?.backswingMs ?? null,
         divergenceDeg: signedDiv,
         mishit: cr === 'fat' || cr === 'thin' || cr === 'topped' ? cr : null,
         nowMs: Date.now(),

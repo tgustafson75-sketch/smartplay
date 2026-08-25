@@ -96,6 +96,13 @@ export interface SwingMetricTendencies {
   /** EWMA of tempo ratio (backswing:downswing, ~3.0 ideal). Null until enough samples. */
   tempoAvg: number | null;
   tempoSamples: number;
+  /**
+   * 2026-08-25 — EWMA of BACKSWING DURATION in ms. The ratio alone cannot pick a Tempo Trainer
+   * preset: within a mode every preset is the SAME ratio (3:1) and differs only in speed
+   * (1000ms backswing down to 700ms). Ratio says which mode fits; this says where to start.
+   * Optional so older persisted profiles load unchanged.
+   */
+  backswingAvgMs?: number | null;
   /** EWMA of |divergence| off the aim line at launch (deg). Null until enough samples. */
   divergenceAvgDeg: number | null;
   /** Of the traced swings, how many started within 4° of the line (rolling counts). */
@@ -146,7 +153,7 @@ export interface PlayerMemory {
 }
 
 export function emptySwingMetrics(): SwingMetricTendencies {
-  return { tempoAvg: null, tempoSamples: 0, divergenceAvgDeg: null, onLineCount: 0, tracedCount: 0, mishits: {}, swingCount: 0, updated_at: 0 };
+  return { tempoAvg: null, tempoSamples: 0, backswingAvgMs: null, divergenceAvgDeg: null, onLineCount: 0, tracedCount: 0, mishits: {}, swingCount: 0, updated_at: 0 };
 }
 export function emptyNarrative(): GolferNarrative {
   return { experience: null, practiceFrequency: null, timeAvailable: null, likes: [], dislikes: [], workAreas: [], strengths: [], goals: [], story: [], updated_at: 0 };
@@ -279,7 +286,7 @@ interface CaddieMemoryState {
   /** 2026-07-07 — record a swing's MEASURED signals (tempo / divergence / mishit) into
    *  rolling tendencies so the brain can cite real numbers. All fields optional —
    *  record whatever was honestly measured for this swing. */
-  recordSwingMetrics: (input: { tempoRatio?: number | null; divergenceDeg?: number | null; mishit?: string | null; nowMs: number; playerId?: string }) => void;
+  recordSwingMetrics: (input: { tempoRatio?: number | null; backswingMs?: number | null; divergenceDeg?: number | null; mishit?: string | null; nowMs: number; playerId?: string }) => void;
   /** 2026-07-07 — merge narrative-profile facts (from the intake conversation or any
    *  chat via api/narrative-extract). Additive: scalars overwrite only when non-empty,
    *  lists dedupe + cap. Never wipes what's already known. */
@@ -550,7 +557,7 @@ export const useCaddieMemoryStore = create<CaddieMemoryState>()(
         });
       },
 
-      recordSwingMetrics: ({ tempoRatio, divergenceDeg, mishit, nowMs, playerId }) => {
+      recordSwingMetrics: ({ tempoRatio, backswingMs, divergenceDeg, mishit, nowMs, playerId }) => {
         const id = pid(playerId);
         set((s) => {
           const p = s.players[id] ?? emptyPlayer(id);
@@ -559,6 +566,12 @@ export const useCaddieMemoryStore = create<CaddieMemoryState>()(
           if (typeof tempoRatio === 'number' && tempoRatio > 0.5 && tempoRatio < 8) {
             m.tempoAvg = m.tempoAvg == null ? tempoRatio : m.tempoAvg + (tempoRatio - m.tempoAvg) * W;
             m.tempoSamples += 1;
+          }
+          // Same EWMA, same guard style. Bounds reject a nonsense read rather than smearing it in:
+          // a real backswing runs roughly 0.4s to 1.6s.
+          if (typeof backswingMs === 'number' && backswingMs >= 400 && backswingMs <= 1600) {
+            const prev = m.backswingAvgMs ?? null;
+            m.backswingAvgMs = prev == null ? backswingMs : prev + (backswingMs - prev) * W;
           }
           if (typeof divergenceDeg === 'number' && Number.isFinite(divergenceDeg)) {
             const abs = Math.abs(divergenceDeg);

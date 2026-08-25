@@ -28,6 +28,11 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'The Tempo Trainer now trains against your swing, not a generic beat. It opens on the tempo that matches your own backswing speed and shows what you actually swing beside what you are training to. If I have not measured enough swings yet, I say so instead of guessing.',
+    howTo: 'Swing Lab, Tempo Trainer. Record a few swings in SmartMotion first and the drill sets itself to you.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'Swing analysis now shows what it is doing. You get the seconds ticking and each part checking off — strike, body, coach — so you can see it working instead of guessing. It also stopped giving up on slow reads that were about to arrive.',
   },
   {
