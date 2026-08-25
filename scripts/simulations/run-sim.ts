@@ -10154,6 +10154,36 @@ check('LOCK: the Tempo Trainer trains against the player\'s own measured swing',
   })(),
   'SmartMotion persists backswing duration, the store averages it, and the trainer opens on the preset matching the player\'s own swing');
 
+check('LOCK: a read built on a failed locate is FLAGGED, never presented as a clean one',
+  (() => {
+    /**
+     * 2026-08-25 (Tim's device log, Aug 24 21:49 + 21:50 — swing_locate_fallback · cause dead_host).
+     *
+     * The dead-host guard worked exactly as designed: it abandoned a doomed locate in ~9s instead
+     * of burning the full 35s. But abandoning it means the frames are then sampled across the WHOLE
+     * clip rather than the swing, so tempo, biomech and the fault read are all built on a smear —
+     * and the player was shown that result looking exactly like a good one. Degrade AND FLAG is the
+     * house rule; this was degrading silently.
+     *
+     * Three links, and the chain is worthless if any one breaks:
+     *   1. locateSwingWindow reports WHY it gave up (optional callback, so the other caller is
+     *      untouched).
+     *   2. analyzeSwing carries that out on the result.
+     *   3. The review screen renders it, and clears it when a new analysis starts so a stale flag
+     *      can never sit on a fresh good read.
+     */
+    const pose = readCode('services/poseDetection.ts');
+    const screen = readCode('app/swinglab/smartmotion.tsx');
+
+    const reports = /onAbort\?\.\(abortCause \?\? 'unknown'\)/.test(pose);
+    const carries = /locate_degraded: locateDegraded/.test(pose);
+    const captured = /setLocateDegraded\(result\.locate_degraded \?\? null\)/.test(screen);
+    const rendered = /locateDegraded \?/.test(screen) && /Rough read/.test(screen);
+    const cleared = /setLocateDegraded\(null\)/.test(screen);
+    return reports && carries && captured && rendered && cleared;
+  })(),
+  'the locate reports why it gave up, the result carries it, and the review screen says the read is rough instead of showing a whole-clip smear as a clean measurement');
+
 check('LOCK: we ask for no permission we cannot use, and every purpose string covers every use',
   (() => {
     /**

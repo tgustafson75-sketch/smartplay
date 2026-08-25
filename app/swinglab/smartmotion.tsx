@@ -1151,6 +1151,16 @@ export default function SmartMotion() {
   const [swingAnalyzing, setSwingAnalyzing] = useState(false);
 
   /**
+   * 2026-08-25 (Tim's device log, Aug 24 21:49/21:50 — swing_locate_fallback · cause dead_host).
+   *
+   * When the locate pass is abandoned, frames are sampled across the WHOLE clip instead of the
+   * swing, so everything downstream is built on a smear — and the player was shown that read
+   * looking exactly like a good one. The house rule is degrade AND FLAG. Same honesty marker the
+   * putt card already uses for a partial capture.
+   */
+  const [locateDegraded, setLocateDegraded] = useState<string | null>(null);
+
+  /**
    * 2026-08-25 (pre-submission tier audit) — CAGE_MODE WAS A FEATURE KEY NOBODY CHECKED.
    *
    * services/featureAccess defines six gateable features and states the rule plainly: "Full is
@@ -2124,6 +2134,7 @@ export default function SmartMotion() {
       // Throttled + breaker-guarded inside warmVoice, so this is ~free.
       warmVoice(getApiBaseUrl());
       setAnalysis(null);
+      setLocateDegraded(null);
       setAnalysisError(null);
       setPoseFrames(null);
       setBiomech(null);
@@ -2394,6 +2405,7 @@ export default function SmartMotion() {
           // superseded — nothing to apply
         } else if (result.kind === 'ok') {
           setAnalysis(result.analysis);
+          setLocateDegraded(result.locate_degraded ?? null);
           analysisCacheRef.current[(segment?.index ?? 1) - 1] = result.analysis;
           const a = result.analysis;
           // 2026-07-07 (Tim — chunk honesty) — the contact this swing's MOTION read
@@ -5799,6 +5811,18 @@ export default function SmartMotion() {
               <Text style={[styles.insightLabel, { color: colors.text_muted }]}>TOP FOCUS</Text>
               <Text style={[styles.insightHeadline, { color: colors.text_primary }]}>{faultHeadline.toUpperCase()}</Text>
               <Text style={[styles.insightConf, { color: colors.text_muted }]}>Confidence: {analysis.confidence ?? '—'}</Text>
+              {/*
+                2026-08-25 — say it plainly when the read is rough. Reuses the existing confidence
+                line's slot rather than adding a row, and names the CAUSE in the player's terms: a
+                dead network is their problem to fix (move, reconnect), a slow server is ours.
+              */}
+              {locateDegraded ? (
+                <Text style={[styles.insightConf, { color: colors.accent_amber }]}>
+                  {locateDegraded === 'dead_host'
+                    ? 'Rough read — no connection while analysing, so I could not pin the swing in the clip. Re-analyse on signal for a sharper one.'
+                    : 'Rough read — I could not pin the swing in the clip this time. Re-analyse for a sharper one.'}
+                </Text>
+              ) : null}
             </View>
           ) : null}
 

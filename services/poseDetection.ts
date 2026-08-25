@@ -110,6 +110,18 @@ export type SwingAnalysisResult =
       kind: 'ok';
       analysis: SwingAnalysis;
       frame_timestamps_sec: number[];
+      /**
+       * 2026-08-25 (Tim's device log, Aug 24 21:49/21:50 — swing_locate_fallback, cause dead_host).
+       *
+       * WHEN WE COULD NOT FIND THE SWING, SAY SO. If the locate pass is abandoned the frames are
+       * sampled across the WHOLE clip instead of the swing, so every read downstream is built on a
+       * smear — and the player was shown that result looking exactly like a good one. The house rule
+       * is degrade AND FLAG, never degrade silently.
+       *
+       * null = the swing window was found (or was already known from the acoustic strike, the normal
+       * case) and the read is a normal one.
+       */
+      locate_degraded?: 'dead_host' | 'ceiling' | 'unknown' | null;
       // Phase 403b — local file URI for the persisted fault-frame JPEG.
       // Null when fault_frame_index was -1 or when persistence failed
       // (consumers tolerate missing image — text diagnostic still
@@ -729,6 +741,12 @@ function logLocate(stage: string, details: Record<string, unknown>): void {
 export async function locateSwingWindow(
   clipUri: string,
   durationMs: number,
+  /**
+   * 2026-08-25 — optional so the existing caller in swinglab/swing/[swing_id] is untouched.
+   * Reports WHY the locate was abandoned, which the analysis path needs in order to flag the read
+   * as rough rather than presenting a whole-clip smear as a clean measurement.
+   */
+  opts?: { onAbort?: (cause: 'dead_host' | 'ceiling' | 'unknown') => void },
 ): Promise<{ startSec: number; endSec: number; swingTimeSec: number } | null> {
   const apiUrl = getApiBaseUrl();
   if (!apiUrl || durationMs < LOCATE_MIN_CLIP_MS) {
@@ -834,6 +852,7 @@ export async function locateSwingWindow(
       };
       V6('LOCATE — aborted (fallback to wide spread)', detail);
       logLocate('swing_locate_fallback', detail);
+      try { opts?.onAbort?.(abortCause ?? 'unknown'); } catch { /* reporting never breaks the read */ }
       return null;
     }
     V6('LOCATE — failed (fallback to wide spread)', { error: msg });
@@ -1101,15 +1120,25 @@ export async function analyzeSwing(
   // clips (live SmartMotion windowed on the strike, or a user trim) and short
   // clips skip this — they're already targeted. Failure falls back silently to
   // the duration-scaled wide spread inside extractKeyFrames.
+  // 2026-08-25 — set only when the locate pass was abandoned; rides out on the result so the review
+  // screen can mark the read as rough instead of presenting a smear as a clean measurement.
+  let locateDegraded: 'dead_host' | 'ceiling' | 'unknown' | null = null;
   let effectiveBoundaries = boundaries;
   let probedDurMs = 0; // 2026-06-11 (audit) — reused by extractKeyFrames below
   if (!effectiveBoundaries) {
     probedDurMs = await probeDurationMs(clipUri).catch(() => 0);
     if (probedDurMs >= LOCATE_MIN_CLIP_MS) {
-      const located = await locateSwingWindow(clipUri, probedDurMs);
+      const located = await locateSwingWindow(clipUri, probedDurMs, {
+        onAbort: (cause) => { locateDegraded = cause; },
+      });
       if (located) {
         effectiveBoundaries = located;
         V6('STAGE 2 — using located swing window as boundaries', located);
+      } else {
+        // The locate pass gave up. Frames now come from the whole clip rather than the swing, so
+        // the read that follows is rough — carry the reason out so the player can be told.
+        locateDegraded = locateDegraded ?? 'unknown';
+        V6('STAGE 2 — locate failed; read will be flagged as rough', { cause: locateDegraded });
       }
     }
   }
@@ -1384,6 +1413,7 @@ export async function analyzeSwing(
     return {
       kind: 'ok',
       analysis: data,
+      locate_degraded: locateDegraded,
       frame_timestamps_sec: frames.map(f => f.time_sec),
       fault_frame_uri: faultFrameUri,
       fault_frame_display_uri: faultFrameDisplayUri,

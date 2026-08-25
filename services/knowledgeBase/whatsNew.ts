@@ -28,6 +28,11 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'I now tell you when a swing read is rough. If I lose connection mid-analysis I cannot pin the swing inside the clip, so the numbers are softer than usual. You will see that on the card instead of me passing it off as a clean read.',
+    howTo: 'Re-analyse the same swing once you have signal for a sharper read.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'You can remove reference swings you added. Before, a pro clip you saved was there for good. Long-press one in the compare picker to take it off your list. The built-in reference swings stay.',
     howTo: 'Compare a swing, then long-press any reference you added.',
   },
