@@ -28,6 +28,10 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'Swing analysis now shows what it is doing. You get the seconds ticking and each part checking off — strike, body, coach — so you can see it working instead of guessing. It also stopped giving up on slow reads that were about to arrive.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'Ask me whether your pre-shot routine actually helps. I compare the shots you took your time over against the ones you stepped up and hit, and tell you what your own strikes say \u2014 including "no difference yet" if that is the truth.',
   },
   {

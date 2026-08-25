@@ -570,6 +570,42 @@ const LOCATE_MIN_CLIP_MS = 6_000;
 // count now halved the common case is far faster, so this ceiling is only ever hit on a cold miss.
 const LOCATE_TIMEOUT_MS = 35_000;
 
+/**
+ * 2026-08-25 (release hardening) — THE OUTER GUARD MUST BE BIGGER THAN WHAT IT WRAPS.
+ *
+ * `smartmotion.tsx` raced `analyzeSwing` against a hardcoded 130s "hang guard" — a magic number in
+ * one file wrapping budgets defined in this one. It had drifted SMALLER than their sum, so the
+ * worst legitimate run (cold locate, then a first attempt that 502s just under the retry cap, then
+ * a full-length retry) was killed at 130s and shown as "Analysis timed out" while the server's
+ * answer was still on its way. The guard was manufacturing the failure it existed to catch.
+ *
+ * Derived here from the named parts instead, so the two can never disagree again. This is a
+ * LAST-RESORT hang guard, not a latency budget: its only job is to be larger than the slowest run
+ * that could still succeed. Typical runs are a small fraction of it, a dead network aborts in 3-9s
+ * via the dead-host guard, and a wedged decode is bounded in utils/videoThumbnail.
+ */
+const DURATION_PROBE_CEILING_MS = 8_000;   // probeDurationMs' own PROBE_TIMEOUT_MS
+const FRAME_EXTRACTION_CEILING_MS = 30_000; // serialized bounded decodes, generous allowance
+
+/**
+ * 2026-08-25 — tightened 30s → 12s to match its OWN stated intent. The comment at the retry site
+ * reads "Fast-fail (~5s) is the intended trigger; anything slow has already failed meaningfully and
+ * the retry won't help" — but the cap let a 29s first attempt earn a full second attempt, adding up
+ * to 64s of wall clock to a request that had already failed slowly. 12s still covers a genuine
+ * fast-fail with margin and takes 18s off the worst case.
+ */
+export const RETRY_ELIGIBILITY_CAP_MS = 12_000;
+const RETRY_BACKOFF_MS = 1_200;
+
+/** The slowest run that could still legitimately succeed. Consumed by the screen's hang guard. */
+export const ANALYSIS_WORST_CASE_MS =
+  DURATION_PROBE_CEILING_MS +
+  LOCATE_TIMEOUT_MS +
+  FRAME_EXTRACTION_CEILING_MS +
+  RETRY_ELIGIBILITY_CAP_MS +
+  RETRY_BACKOFF_MS +
+  REQUEST_TIMEOUT_MS;
+
 // 2026-08-08 (Tim's log: swing_locate_fallback "Aborted" ×6 in 10 min — each one a FULL 35s hang on a
 // flaky home network before the fallback smeared the analysis; "reads should be faster"). Concurrent
 // dead-host guard, same design as the transcribe path: probe /api/health (3s) while the locate fetch
@@ -1087,11 +1123,15 @@ export async function analyzeSwing(
    * guess.
    */
   try {
-    const { thumbnailCacheStats } = await import('../utils/videoThumbnail');
+    const { thumbnailCacheStats, wedgedDecodeCount } = await import('../utils/videoThumbnail');
     const st = thumbnailCacheStats();
     if (st.hits + st.misses > 0) {
       V6('FRAME CACHE', { decodes: st.misses, reused: st.hits, saved_pct: Math.round((st.hits / (st.hits + st.misses)) * 100) });
     }
+    // 2026-08-25 — a non-zero count means a native decode had to be abandoned so the app-wide chain
+    // could keep moving. Zero in a healthy session; if this ever climbs, the clip is the suspect.
+    const abandoned = wedgedDecodeCount();
+    if (abandoned > 0) V6('MEDIA CHAIN — abandoned wedged decodes', { count: abandoned });
   } catch { /* telemetry never blocks an analysis */ }
   if (frames.length === 0) {
     V6('STAGE 3 SKIP — no_frames (no usable frames extracted)');
@@ -1175,7 +1215,7 @@ export async function analyzeSwing(
     // means the retry hits a dead server anyway. Fast-fail (~5s) is
     // the intended trigger; anything slow has already failed
     // meaningfully and the retry won't help.
-    const RETRY_ELIGIBILITY_CAP_MS = 30_000;
+    // RETRY_ELIGIBILITY_CAP_MS is module-scope now (see ANALYSIS_WORST_CASE_MS) and is 12s.
     // Also retry 503 (Service Unavailable) — Vercel emits this on brief cold
     // restarts just as it emits 502 on Lambda timeouts; both resolve on the
     // second attempt once the instance is warm.
@@ -1183,7 +1223,7 @@ export async function analyzeSwing(
       V6('STAGE 4 — tier=quick 502 (fast-fail), auto-retry once after 1200ms', {
         first_attempt_elapsed_ms: elapsedMs,
       });
-      await new Promise(r => setTimeout(r, 1_200));
+      await new Promise(r => setTimeout(r, RETRY_BACKOFF_MS));
       const retryT0 = Date.now();
       try {
         res = await tryFetch(1);

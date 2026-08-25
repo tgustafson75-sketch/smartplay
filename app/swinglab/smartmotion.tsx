@@ -72,7 +72,7 @@ import * as VideoThumbnails from '../../utils/videoThumbnail';
 import * as Haptics from 'expo-haptics';
 import { CaddieMicBadge } from '../../components/caddie/CaddieMicBadge';
 import { useTheme } from '../../contexts/ThemeContext';
-import { analyzeSwing, probeDurationMs, type SwingAnalysis } from '../../services/poseDetection';
+import { analyzeSwing, probeDurationMs, ANALYSIS_WORST_CASE_MS, type SwingAnalysis } from '../../services/poseDetection';
 import { evaluateSwingValidity, reconcileSwingValidity, type MeasuredSwingEvidence } from '../../services/swingValidity';
 import { buildPoseSwingRead } from '../../services/swing/poseSwingRead';
 import { poseReadToPrimaryIssue } from '../../services/swing/poseReadVerdict';
@@ -1147,9 +1147,28 @@ export default function SmartMotion() {
   const [expandedCard, setExpandedCard] = useState<ReviewCardKey | null>(null);
   const [tempo, setTempo] = useState<SwingTempo | null>(null);
   const [swingAnalyzing, setSwingAnalyzing] = useState(false);
+
+  /**
+   * 2026-08-25 (Tim — "I've actually never waited for the analysis… I could sit there and watch it
+   * for like a minute") — SAY WHAT IS HAPPENING AND HOW LONG IT HAS TAKEN.
+   *
+   * While analysing, the screen showed a small spinner and a row of grey dashes. No elapsed time, no
+   * stage, no sense of whether this is five seconds away or sixty — so the honest response is to put
+   * the phone down, which is exactly what happened. A wait you cannot size feels broken even when it
+   * is working perfectly.
+   *
+   * Ticks only while an analysis is in flight, so an idle screen neither renders nor re-renders it.
+   */
+  const [analysisElapsedSec, setAnalysisElapsedSec] = useState(0);
   // Cage targeting (ball + movable target) — reactive mirror of the
   // ingested session id so the targeting card/overlay update live.
   const [sessionId, setSessionId] = useState<string | null>(null);
+  useEffect(() => {
+    if (phase !== 'analyzing') { setAnalysisElapsedSec(0); return; }
+    const startedAt = Date.now();
+    const id = setInterval(() => setAnalysisElapsedSec(Math.round((Date.now() - startedAt) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [phase]);
   const analysisCacheRef = useRef<Record<number, SwingAnalysis>>({});
   // 2026-07-08 (segmentation audit #1/#8) — session token + in-flight dedupe for the
   // per-swing analysis. Bumping the token on reset/new-recording makes any still-in-
@@ -2125,7 +2144,10 @@ export default function SmartMotion() {
       // only matters for later replay/re-analyze. Putts take the analyzePutt path below,
       // so only the swing path pre-starts. analyzeOpts reads live refs that are "absent
       // on first pass by design", so building it here (vs after the ingest) changes nothing.
-      const hangGuardMs = 130_000;
+      // 2026-08-25 — DERIVED, never a literal. A hardcoded 130s had drifted below the sum of the
+      // budgets inside analyzeSwing, so the slowest run that could still SUCCEED was being killed
+      // and reported as "Analysis timed out". See ANALYSIS_WORST_CASE_MS for the breakdown.
+      const hangGuardMs = ANALYSIS_WORST_CASE_MS;
       const analysisP: Promise<Awaited<ReturnType<typeof analyzeSwing>>> | null = isPutt ? null : Promise.race([
         analyzeSwing(rawUri, {
           club: clubRef.current ? clubIdToServerKey(clubRef.current) : 'unknown',
@@ -5668,7 +5690,22 @@ export default function SmartMotion() {
         // empty "—" boxes so page 2 reads as a results page waiting to fill, not a
         // blank black screen. The body-analysis badges + the insight cards, dimmed.
         <>
-          <Text style={[styles.muted, { color: colors.text_muted }]}>Record a swing to fill in your breakdown.</Text>
+          {/*
+            2026-08-25 — the same line, doing work. Idle it still says what to do; mid-analysis it
+            reports elapsed seconds and TICKS OFF THE PARTS THAT HAVE LANDED, so the wait is visibly
+            progressing rather than a spinner over dashes. Each tick is a real signal arriving — the
+            strike read, the body read, the coach's read — never a fake progress bar.
+          */}
+          <Text style={[styles.muted, { color: colors.text_muted }]}>
+            {phase === 'analyzing'
+              ? `Reading your swing… ${analysisElapsedSec}s${
+                  [acousticRead ? 'strike ✓' : null, biomech ? 'body ✓' : null, analysis ? 'coach ✓' : null]
+                    .filter(Boolean).length > 0
+                    ? `  ·  ${[acousticRead ? 'strike ✓' : null, biomech ? 'body ✓' : null, analysis ? 'coach ✓' : null].filter(Boolean).join('  ·  ')}`
+                    : ''
+                }`
+              : 'Record a swing to fill in your breakdown.'}
+          </Text>
           {!isPutt ? <BodyAnalysisRow items={bodyItems} style={{ opacity: 0.7 }} /> : null}
           {['TOP FOCUS', 'WHY IT HAPPENS', 'THE FIX', 'RECOMMENDED DRILL'].map((lbl) => (
             <View key={lbl} style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border, opacity: 0.5 }]}>

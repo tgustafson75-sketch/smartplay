@@ -7470,14 +7470,19 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /void detectBallSpeed\(\{[\s\S]{0,200}\}\)\.then\(\(speed\) => \{ if \(speed\) setBallSpeed/.test(smA),
     'short cage clips take the fast BOUNDED path (no cold locate), duration is reused (no re-probe), the Lambda is warmed at record-start, and ball speed runs in parallel — kills the 30-70s first-try NO READ');
 
-  check('Swing analysis: single awaited call + 130s hang guard (server runs its own tier-retry)',
+  check('Swing analysis: single awaited call + DERIVED hang guard (server runs its own tier-retry)',
     // 2026-06-27 — refreshed: the old bounded-15s + 2× client retry was SUPERSEDED. The
     // server now runs its own tier retry on a warm Lambda, so the client makes ONE awaited
-    // call guarded by a 130s hang timeout (watchdogMs/maxAttempts are now dead — void'd).
-    /const hangGuardMs = 130_000;/.test(smA) &&
+    // call guarded by a hang timeout (watchdogMs/maxAttempts are now dead — void'd).
+    // 2026-08-25 — THIS GUARD WAS PINNED TO THE DEFECT. It asserted the literal `130_000`, which
+    // had drifted BELOW the sum of the budgets inside analyzeSwing: the slowest run that could
+    // still succeed was killed and shown as "Analysis timed out". The guard was green *because*
+    // the bug was present, and went red the moment it was fixed. It now asserts the DERIVED
+    // constant, so the number can never again disagree with the budgets it wraps.
+    /const hangGuardMs = ANALYSIS_WORST_CASE_MS;/.test(smA) &&
       /resolve\(\{ kind: 'error', message: 'Analysis timed out' \}\), hangGuardMs\)/.test(smA) &&
       /if \(result\.kind === 'ok'\)/.test(smA),
-    'one awaited analysis call with a 130s hang guard; the server-side tier retry handles cold-start, so the client no longer double-waits');
+    'one awaited analysis call with a DERIVED hang guard (ANALYSIS_WORST_CASE_MS); the server-side tier retry handles cold-start, so the client no longer double-waits');
 
   check('Swing analysis: tempo derives for ALL swings (acoustic + video), honest impact source, degrades not fabricates',
     // 2026-07-19 (Tim — "we should be able to get tempo on ALL swings"). The old gate that
@@ -10046,6 +10051,45 @@ check('LOCK: an app-inferred club is attribution, never "advice the player follo
     return kindsTagged && inferredExcluded && recClubGated;
   })(),
   'spoken/engine recommendations score adherence; inferred stamps attribute the club only');
+
+check('LOCK: no link in the global media chain may run forever',
+  (() => {
+    /**
+     * 2026-08-25 — the app-wide serialization of native media reads exists to stop a SIGSEGV, but
+     * `chain.then(fn)` never settles if `fn` never settles: one wedged decode on one bad clip
+     * stopped frame extraction for the WHOLE SESSION, unrecoverable without killing the app.
+     * Both chain entry points must go through the bounded wrapper. Comments stripped — this guard
+     * asserts CODE, never a doc comment describing the intent.
+     */
+    const code = readCode('utils/videoThumbnail.ts');
+    const boundedSerialize = /chain\.then\(\(\)\s*=>\s*bounded\(fn/.test(code);
+    const boundedThumbnail = /chain\.then\(\(\)\s*=>\s*bounded\(async/.test(code);
+    const noBareLink = !/chain\.then\(fn\)/.test(code);
+    return boundedSerialize && boundedThumbnail && noBareLink;
+  })(),
+  'both chain entry points wrap their work in bounded(); no bare chain.then(fn) remains, so one wedged native decode can never stop frame extraction for the rest of the session');
+
+check('LOCK: the analysis hang guard is derived, and larger than the budgets it wraps',
+  (() => {
+    /**
+     * 2026-08-25 — smartmotion.tsx raced analyzeSwing against a hardcoded 130s guard while the
+     * budgets it wraps live in poseDetection.ts. It had drifted SMALLER than their sum, so the
+     * slowest run that could still SUCCEED was killed and reported as "Analysis timed out".
+     * The screen must consume the derived constant, and that constant must exceed the two ceilings
+     * that dominate it. Arithmetic in code, not a number copied between files.
+     */
+    const screen = readCode('app/swinglab/smartmotion.tsx');
+    const pose = readCode('services/poseDetection.ts');
+    const derived = /hangGuardMs\s*=\s*ANALYSIS_WORST_CASE_MS/.test(screen)
+      && !/hangGuardMs\s*=\s*\d/.test(screen);
+    const sums = /ANALYSIS_WORST_CASE_MS\s*=[\s\S]{0,320}?LOCATE_TIMEOUT_MS[\s\S]{0,320}?REQUEST_TIMEOUT_MS/.test(pose);
+    const num = (re: RegExp) => { const m = pose.match(re); return m ? Number(m[1].replace(/_/g, '')) : NaN; };
+    const request = num(/REQUEST_TIMEOUT_MS\s*=\s*([\d_]+)/);
+    const locate = num(/LOCATE_TIMEOUT_MS\s*=\s*([\d_]+)/);
+    const bigEnough = Number.isFinite(request) && Number.isFinite(locate) && request + locate < 149_200;
+    return derived && sums && bigEnough;
+  })(),
+  'the screen consumes ANALYSIS_WORST_CASE_MS instead of a literal, and that constant is summed from the locate + request ceilings it must exceed');
 
 check('LOCK: the cached system prompt holds nothing that changes shot to shot',
   (() => {

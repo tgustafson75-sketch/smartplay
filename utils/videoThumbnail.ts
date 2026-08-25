@@ -33,8 +33,51 @@ let chain: Promise<unknown> = Promise.resolve();
  * unserialized decoder could read it while a retriever does — the documented SIGSEGV class. At most
  * one native reader of any kind runs at a time app-wide.
  */
+/**
+ * 2026-08-25 (release hardening) — NO LINK IN THIS CHAIN MAY RUN FOREVER.
+ *
+ * The serialization above fixed a hard crash, but it made the chain a single shared resource with
+ * no escape hatch: `chain.then(fn)` never settles if `fn` never settles, and from that moment EVERY
+ * media read app-wide — this analysis and every one after it — waits behind a call that is never
+ * coming back. Nothing recovers it short of killing the app. A wedged MediaMetadataRetriever on one
+ * bad clip therefore took out frame extraction for the whole session.
+ *
+ * So each link is bounded. A single frame decode is normally well under a second; if one has not
+ * answered in LINK_TIMEOUT_MS it is not slow, it is gone. We reject that caller — who already has
+ * their own retry/fallback — and let the chain move on.
+ *
+ * THE TRADE-OFF, STATED HONESTLY: advancing the chain while a wedged native call may still be alive
+ * reintroduces, for that one call, the concurrency this module exists to prevent. That is accepted
+ * deliberately. The exposure is bounded to a decode already past every plausible healthy duration,
+ * against the alternative of a permanently dead app. The timeout sits far above any healthy decode
+ * precisely so it only ever fires on a genuine wedge, never on a slow-but-alive read.
+ */
+const LINK_TIMEOUT_MS = 20_000;
+
+let wedged = 0;
+
+/** How many chain links had to be abandoned. Surfaced in analysis telemetry; 0 in a healthy session. */
+export function wedgedDecodeCount(): number { return wedged; }
+
+function bounded<T>(fn: () => Promise<T>, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      wedged++;
+      reject(new Error(`media_read_wedged: ${label} did not answer in ${LINK_TIMEOUT_MS}ms`));
+    }, LINK_TIMEOUT_MS);
+    fn().then(
+      (v) => { if (!settled) { settled = true; clearTimeout(timer); resolve(v); } },
+      (e) => { if (!settled) { settled = true; clearTimeout(timer); reject(e); } },
+    );
+  });
+}
+
 export function serializeMediaRead<T>(fn: () => Promise<T>): Promise<T> {
-  const run = chain.then(fn);
+  // The chain waits on the BOUNDED link, so a wedge advances it instead of stopping it forever.
+  const run = chain.then(() => bounded(fn, 'serializeMediaRead'));
   chain = run.then(() => undefined, () => undefined);
   return run;
 }
@@ -118,7 +161,7 @@ export function getThumbnailAsync(
   options?: VideoThumbnails.VideoThumbnailsOptions,
 ): Promise<VideoThumbnails.VideoThumbnailsResult> {
   const key = thumbnailCacheKey(sourceFilename, options);
-  const run = chain.then(async () => {
+  const run = chain.then(() => bounded(async () => {
     const hit = frameCache.get(key);
     if (hit) {
       const copy = await copyOf(hit);
@@ -145,7 +188,7 @@ export function getThumbnailAsync(
       if (copy) return copy;
     } catch { /* caching is an optimisation; never fail a real read for it */ }
     return out;
-  });
+  }, 'getThumbnailAsync'));
   // Keep the chain alive whether this call resolves or rejects; never leak an unhandled rejection.
   chain = run.then(() => undefined, () => undefined);
   return run;
