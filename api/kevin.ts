@@ -2261,6 +2261,17 @@ ${kbPrefix}${onCourseContextBlock}${roundFactsPrefix}${turnStatePrefix}${liveFac
         data_tool_calls: dataToolCalls,
         latency_ms: latencyMs,
         usage: loopResult.usage ?? null,
+        /**
+         * 2026-08-25 — WHY THE CACHE MISSED, VISIBLE FROM OUTSIDE.
+         *
+         * A cache regression fails silently: nothing breaks, the bill doubles. It took a live
+         * three-turn measurement to notice at all, and then a second one to find which block was
+         * moving. This makes that a one-request question instead: the cached prompt's length, and
+         * a fingerprint of it. Two turns with different questions should show the SAME systemLen
+         * and systemFp. If they differ, something question-derived is back in the cached block.
+         */
+        systemLen: systemPromptWithKB.length,
+        systemFp: (() => { let h = 0; for (let n = 0; n < systemPromptWithKB.length; n++) { h = (h * 31 + systemPromptWithKB.charCodeAt(n)) | 0; } return h; })(),
       },
     });
 
