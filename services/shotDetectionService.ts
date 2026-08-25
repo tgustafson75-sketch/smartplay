@@ -16,6 +16,20 @@ export interface ShotEvent {
   timestamp: number;
   start_location: { lat: number; lng: number };
   estimated_distance_yards: number;
+  /**
+   * 2026-08-24 (Tim — "it would be great if the user knows if shots are verifiably better when doing
+   * their routine") — HOW LONG THEY STOOD OVER IT, in ms.
+   *
+   * A pre-shot routine takes time: walk in, look at the target, a waggle or a practice swing, then
+   * commit. The detector already knows precisely how long the player was stationary at the ball —
+   * it has to, because stillness is what tells it a shot happened at all. That number was computed
+   * and thrown away every time.
+   *
+   * Deliberately a LOWER BOUND: it measures from the earliest contiguous sample within the anchor
+   * radius up to the stillness cutoff, so a routine is never over-credited. Null when the buffer
+   * cannot support the measurement (a shot detected off the fallback path, or a truncated buffer).
+   */
+  pre_shot_dwell_ms?: number | null;
 }
 
 type Listener = (event: ShotEvent) => void;
@@ -336,11 +350,34 @@ class ShotDetector {
     const displacementYards = displacementMeters / METERS_PER_YARD;
     if (displacementYards < this.config.minDisplacementYards) return;
 
+    /**
+     * 2026-08-24 — HOW LONG THEY STOOD THERE. Walk back from the stillness cutoff while samples stay
+     * inside the anchor radius; the first one that leaves ends the dwell. Contiguity matters: a
+     * player who was at this spot, wandered off, and came back should be credited only with the
+     * visit they actually took, not the gap.
+     *
+     * A lower bound by construction — the buffer is 180s, so a very long routine saturates rather
+     * than over-reporting, and the move itself happens somewhere after the cutoff. Under-crediting a
+     * routine is the safe direction: it can only weaken a correlation, never manufacture one.
+     */
+    const dwellMs = (() => {
+      const inWindow = this.samples.filter(s => s.timestamp <= stationaryEndCutoff);
+      let earliest = stationaryEndCutoff;
+      for (let i = inWindow.length - 1; i >= 0; i--) {
+        const s = inWindow[i];
+        if (haversineMeters(anchor, s) > this.config.stationaryRadiusMeters) break;
+        earliest = s.timestamp;
+      }
+      const ms = stationaryEndCutoff - earliest;
+      return Number.isFinite(ms) && ms >= 0 ? Math.round(ms) : null;
+    })();
+
     this.lastShotEmitTime = now;
     this.emit({
       timestamp: now,
       start_location: anchor,
       estimated_distance_yards: Math.round(displacementYards),
+      pre_shot_dwell_ms: dwellMs,
     });
   }
 

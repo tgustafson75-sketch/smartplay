@@ -195,6 +195,16 @@ export interface ShotResult {
   // lie category. Optional + nullable for back-compat with legacy
   // shots logged before Phase 409 shipped.
   lie_analysis?: import('../services/lieAnalysisService').LieAnalysis | null;
+  /**
+   * 2026-08-24 (Tim — "it would be great if the user knows if shots are verifiably better when doing
+   * their routine") — how long the player stood over this shot, in ms, from the shot detector.
+   *
+   * A pre-shot routine takes time, and the detector already measured that stillness precisely (it
+   * has to, because stillness is what identifies a shot at all). It was computed and discarded on
+   * every shot. A LOWER BOUND by construction, so a routine is never over-credited. Null on any shot
+   * logged by a path that had no GPS stillness to measure — manual entry, the fallback emit.
+   */
+  pre_shot_dwell_ms?: number | null;
   shot_in_hole_index?: number; // 1, 2, 3 within a hole
   // Phase 110-followup — captured video clip from CaptureOverlay (voice
   // "record this shot"). Back-written by mediaCapture.commitCapture when

@@ -60,7 +60,12 @@ export type AdviceOutcome = {
 };
 
 /** A clean strike is the only one that tests the DECISION rather than the swing. */
-const CLEAN_CONTACT = new Set(['flush', 'solid', 'pure']);
+/**
+ * What counts as a CLEAN STRIKE, app-wide. Exported 2026-08-24 so
+ * services/practice/routineImpact consumes this set rather than declaring a second one — two
+ * definitions of "did he catch it" is how the club label map and the carry bag went wrong.
+ */
+export const CLEAN_CONTACT = new Set(['flush', 'solid', 'pure']);
 
 /**
  * Below this we say nothing at all. Three clean strikes on one club is a rumour, not a pattern, and

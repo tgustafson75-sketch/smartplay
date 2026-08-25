@@ -331,6 +331,9 @@ class ConversationalLoggingOrchestrator {
       hole_number: hole,
       shot_in_round_index: idx,
       weather_snapshot: startLoc ? getCachedWeather(startLoc) : null,
+      // 2026-08-24 — carry the measured pre-shot stillness onto the shot. The detector computed it
+      // and threw it away; nothing else in the app can recover it after the fact.
+      pre_shot_dwell_ms: event?.pre_shot_dwell_ms ?? null,
     };
     round.logShot(shot);
     // Phase C — fire-and-forget weather fetch; populates the shot's
