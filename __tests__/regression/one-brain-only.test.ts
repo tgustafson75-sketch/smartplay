@@ -17,8 +17,18 @@ const API = path.join(__dirname, '..', '..', 'api');
 const APP_API = path.join(__dirname, '..', '..', 'app', 'api');
 const read = (p: string) => fs.readFileSync(path.join(__dirname, '..', '..', p), 'utf8');
 
-/** Endpoints allowed to answer a caddie turn. Adding a name here is a deliberate act. */
-const ALLOWED_BRAINS = ['kevin.ts', 'pipecat-turn.ts'];
+/**
+ * Endpoints allowed to answer a caddie turn. Adding a name here is a deliberate act.
+ *
+ * 2026-08-24 — DOWN TO ONE. This guard was written on 08-13 to fail when the count goes UP, with the
+ * note that it "cannot be satisfied by making two brains agree — only by there being fewer of them."
+ * Today it went red for the right reason: api/pipecat-turn stopped classifying as a brain, because
+ * its 744-line implementation was replaced by a pass-through to kevin. It no longer runs the agentic
+ * loop, knows nothing about personas, and carries no history of its own.
+ *
+ * That is the whole point of the guard arriving, so the list shrinks. It may not grow again.
+ */
+const ALLOWED_BRAINS = ['kevin.ts'];
 
 describe('there is a fixed, shrinking set of answering brains', () => {
   it('no NEW answering endpoint appears without a decision', () => {

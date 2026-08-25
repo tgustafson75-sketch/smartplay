@@ -86,7 +86,21 @@ describe('classifier enum ↔ intent handlers', () => {
 });
 
 describe('brain tool contract has exactly one owner', () => {
-  const BRAINS = ['api/kevin.ts', 'api/pipecat-turn.ts'];
+  /**
+   * 2026-08-24 — ONE. api/pipecat-turn's 744-line implementation was replaced by a pass-through to
+   * kevin, so it has no tool contract to own. The case below asserts it stays that way; keeping it
+   * in this list would assert the opposite.
+   */
+  const BRAINS = ['api/kevin.ts'];
+
+  it('api/pipecat-turn.ts has NO brain of its own — it is a pass-through', () => {
+    const code = read('api/pipecat-turn.ts')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+    expect(code).not.toMatch(/BRAIN_TOOLS/);
+    expect(code).not.toMatch(/runAgenticLoop/);
+    expect(code).toMatch(/callKevin\(/);
+  });
 
   // The 2026-08-19 defect in one assertion. Both brains hand-maintained their own
   // copy of the tool array; the copies diverged by two whole tools and ~255 lines

@@ -1475,12 +1475,11 @@ check('Custom caddie inherits the base persona\'s BRAIN character (not hardcoded
   })(),
   'the custom caddie\'s brain personality is the CHOSEN base persona (Tank/Serena/Harry/Kevin), not always Kevin — name stays custom, character is inherited');
 
-check('Mental-game tone reading is ALWAYS-ON, from ONE owner both brains import',
+check('Mental-game tone reading is ALWAYS-ON, from ONE owner the brain imports',
   // 2026-07-30 (Tim — "make sure the caddie when listening processes the tone and emotions of the golfer…
   // original intent, track user state and help the mental game"). The MENTAL GAME block reads emotional
   // subtext + logs state, always-on, including off-round conversation.
   //
-  // 2026-08-13 (one-brain pass) — this check used to read pipecat-turn.ts for the literal text, and it
   // passed the whole time the block was DUPLICATED into kevin.ts: the earlier "move" copied it and
   // deleted nothing, so the two were free to drift and the guard couldn't see it. Measured before the
   // fix, they were byte-identical at 1,248 chars — pure duplication waiting to diverge.
@@ -1489,20 +1488,21 @@ check('Mental-game tone reading is ALWAYS-ON, from ONE owner both brains import'
   // SHAPE — the text exists once, and neither brain restates it — rather than the presence of a string
   // in one file.
   (() => {
+      // 2026-08-24 — ONE BRAIN. api/pipecat-turn is a pass-through to kevin now, with no prompt of
+      // its own, so the 'both brains' half of this assertion would be asserting that the second
+      // brain came back. The behaviour still matters and is still asserted — at its single owner.
+
     const core = read('api/_brain.ts');
     const kevin = read('api/kevin.ts');
-    const pipecat = read('api/pipecat-turn.ts');
     const owned = /export function mentalGameBlock\(\)/.test(core) &&
       /ALWAYS-ON, on the course AND off it/.test(core) &&
       /read the TONE and emotional state underneath the words/.test(core);
-    const bothImport = /from '\.\/_brain'/.test(kevin) && /from '\.\/_brain'/.test(pipecat) &&
-      /\$\{mentalGameBlock\(\)\}/.test(kevin) && /\$\{mentalGameBlock\(\)\}/.test(pipecat);
-    // and neither may restate it inline again — restating is how the duplicate got there the first time
-    const noInlineCopy = !/ALWAYS-ON, on the course AND off it/.test(kevin) &&
-      !/ALWAYS-ON, on the course AND off it/.test(pipecat);
-    return owned && bothImport && noInlineCopy;
+    const brainImports = /from '\.\/_brain'/.test(kevin) && /\$\{mentalGameBlock\(\)\}/.test(kevin);
+    // and it may not be restated inline — restating is how the duplicate got there the first time
+    const noInlineCopy = !/ALWAYS-ON, on the course AND off it/.test(kevin);
+    return owned && brainImports && noInlineCopy;
   })(),
-  'the caddie reads the golfer\'s tone/emotional state on EVERY turn — from one shared block both brains import, with no inline copy in either');
+  'the caddie reads the golfer\'s tone/emotional state on EVERY turn — from one shared block the brain imports, with no inline copy');
 
 const targetOverlaySrc = read('components/swinglab/CageTargetingCard.tsx');
 check('Ball/target overlay matches the design reference',
@@ -6522,10 +6522,12 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('App help gate: normal golf turns are NOT flagged as app-help (no false positives)',
     helpFalsePos.length === 0, helpFalsePos.length === 0 ? `all ${HELP_NO.length} passed through` : `FALSE POS: ${helpFalsePos.join(' | ')}`);
 
-  // ── Both brains gate capabilities+how-tos behind the help query (Tim's voice-path concern). ──
-  const pipecatSrc = fs.readFileSync(path.resolve(__dirname, '../../api/pipecat-turn.ts'), 'utf-8');
+  // ── The brain gates capabilities+how-tos behind the help query (Tim's voice-path concern). ──
+  // 2026-08-24 — this looped over BOTH brains. api/pipecat-turn is a pass-through to kevin now, with
+  // no prompt of its own, so asserting the gate there would be asserting the second brain returned.
+  // The behaviour is unchanged and still asserted, at the one place that builds a prompt.
   const kevinApiSrc = fs.readFileSync(path.resolve(__dirname, '../../api/kevin.ts'), 'utf-8');
-  for (const [label, src] of [['pipecat-turn', pipecatSrc], ['kevin', kevinApiSrc]] as const) {
+  for (const [label, src] of [['kevin', kevinApiSrc]] as const) {
     check(`App help gate: ${label} injects capabilities/how-tos only when isAppHelpQuery`,
       /isAppHelpQuery\(/.test(src) && /appHelp \? /.test(src) && /catalogForPrompt\(\)/.test(src),
       'the lean catalog is always-on (navigate needs it) but capabilitiesForPrompt/howToForPrompt are behind the appHelp gate');
@@ -8781,10 +8783,13 @@ check('LOCK: no effect both FETCHES geometry and depends on the completion signa
 // 2026-08-10 (Tim added a Gemini key for search grounding). The caddie can now SEARCH the live web for
 // factual course/world info (grounded + cited, never fabricated) via a search_web tool on BOTH brain
 // paths (universal). LOCK the round-trip: helper exists + tool declared + dispatched on pipecat AND kevin.
-check('Caddie web search: grounded search_web tool wired on BOTH brain paths (universal)',
+check('Caddie web search: grounded search_web tool wired on the brain path (universal)',
   (() => {
+      // 2026-08-24 — ONE BRAIN. api/pipecat-turn is a pass-through to kevin now, with no prompt of
+      // its own, so the 'both brains' half of this assertion would be asserting that the second
+      // brain came back. The behaviour still matters and is still asserted — at its single owner.
+
     const helper = read('api/_webSearch.ts');
-    const turn = read('api/pipecat-turn.ts');
     const kevin = read('api/kevin.ts');
     const tools = read('api/_brainTools.ts');
     return (
@@ -8795,7 +8800,6 @@ check('Caddie web search: grounded search_web tool wired on BOTH brain paths (un
       // still has to EXECUTE it server-side (it is a SERVER_TOOL, not forwarded to the device).
       /name: 'search_web'/.test(tools) &&                                            // declared once
       /SERVER_TOOLS = new Set\(\[[^\]]*'search_web'/.test(tools) &&                  // classified server-executed
-      /toolName === 'search_web'/.test(turn) &&                                      // pipecat executes it
       /name === 'search_web'/.test(kevin)                                            // kevin executes it
     );
   })(),
@@ -10592,56 +10596,15 @@ check('SmartFinder: a double-tap magnifies the aim point without stealing reticl
   })(),
   'double-tapping the scene steps the camera zoom for a tight read and resets at the ceiling, detected inside the existing pan release so ordinary reticle aiming is never stolen by a gesture arbiter');
 
-check('MIGRATION (temporary): kevin has every behaviour pipecat has, ahead of the shim',
-  (() => {
-    const kevin = read('api/kevin.ts');
-    const pipe = read('api/pipecat-turn.ts');
-    /**
-     * 2026-08-21. Tim: "we're creating a bunch of guards, gates and such… because we're trying to
-     * clean pathways between two different brains." He is right, and this guard is the exception
-     * that proves it: IT IS SCAFFOLDING, AND IT GETS DELETED.
-     *
-     * Two brains exist for one reason — kevin is the original and pipecat (the v15 default) never
-     * replaced it. The cost is measurable: _brainTools.ts and _brain.ts (640 lines) exist ONLY to
-     * stop them drifting, and both files document drift that already happened. kevin.ts even carries
-     * the line "Mirrors api/pipecat-turn.ts exactly" over hand-copied distress logic.
-     *
-     * The plan is to make pipecat-turn a thin adapter over kevin, so there is ONE implementation and
-     * the drift surface goes to zero. Phase 1 is getting kevin to behavioural parity FIRST, while
-     * pipecat stays untouched and live. This guard protects that port for exactly as long as the
-     * migration takes. When the shim lands, DELETE THIS CHECK — a parity guard over a single
-     * implementation is precisely the band-aid Tim is objecting to.
-     *
-     * A rigorous diff (capability, not variable name — my first pass matched names and overstated
-     * the gap) found kevin already had trust/proactivity, brevity, spiral reset and localization.
-     * Only two things were genuinely missing, and both are asserted here.
-     */
-    // 1. A narrated practice round must be framed the same on either brain.
-    const simRound = /SIM ROUND ACTIVE/.test(kevin) && /SIM ROUND ACTIVE/.test(pipe)
-      && /sim_round = false,/.test(kevin);
-    // 2. The get-to-know interview must mute navigation on BOTH. This is Tim's 07-30 complaint —
-    //    the caddie opening SwingLab while he describes a fault — and the fix had only ever landed
-    //    on the default brain, so the same interview behaved differently on a follow-up turn.
-    const interviewMute = /GET-TO-KNOW INTERVIEW MODE/.test(kevin) && /GET-TO-KNOW INTERVIEW MODE/.test(pipe);
-    /**
-     * 3. And the client actually SENDS it — a server field nothing sets looks exactly like the bug.
-     *
-     * 2026-08-23 — RE-AIMED off services/conversationalBrain, which no longer hand-lists any field:
-     * it (and every other surface) now sends the union from services/caddieRequestBody. Asserting
-     * the builder is strictly stronger than asserting one caller, because it covers all of them.
-     *
-     * WHY THIS GUARD IS STILL HERE, given its own instruction to delete it when the shim lands: no
-     * CLIENT reaches api/pipecat-turn any more, but the ROUTE is still deployed and still answers
-     * builds in the field that have not taken the OTA. Until that route is deleted, the two
-     * implementations can still drift underneath those players, so the parity it protects is real.
-     * Delete this the moment api/pipecat-turn.ts goes.
-     */
-    const clientSends = /sim_round: safe\(\(\) => !!r\.isSimRound/.test(read('services/caddieRequestBody.ts'))
-      && /sim_round: useRoundStore\.getState\(\)\.isSimRound/.test(read('hooks/useVoiceCaddie.ts'));
-    return simRound && interviewMute && clientSends;
-  })(),
-  'kevin now carries every behaviour pipecat has (sim round, interview-mode mute) and the clients send it — the parity step before pipecat becomes a shim over one implementation. DELETE THIS GUARD WHEN THE SHIM LANDS.');
-
+/**
+ * 2026-08-24 — THE MIGRATION GUARD IS GONE, AS IT ASKED TO BE.
+ *
+ * It read: "kevin now carries every behaviour pipecat has (sim round, interview-mode mute) and the
+ * clients send it — the parity step before pipecat becomes a shim over one implementation. DELETE
+ * THIS GUARD WHEN THE SHIM LANDS." The shim landed today: api/pipecat-turn's 744-line implementation
+ * is a pass-through to kevin, and `one-brain-only.test.ts` has ratcheted its allow-list down to a
+ * single entry. A parity guard between one brain and itself asserts nothing.
+ */
 check('LOCK: every unprompted voice shares ONE interruption clock',
   (() => {
     const caddie = read('app/(tabs)/caddie.tsx');
@@ -10684,7 +10647,8 @@ check('LOCK: the intelligence loop CLOSES — the caddie learns whether its own 
      * the ONE payload builder every surface uses actually carries the block.
      */
     const builder = read('services/caddieRequestBody.ts');
-    const brain = read('api/pipecat-turn.ts');
+    // 2026-08-24 — kevin is the brain; pipecat-turn is a pass-through with no prompt to assert against.
+    const brain = read('api/kevin.ts');
     /**
      * 2026-08-21. THE defect this whole codebase existed to avoid, found by tracing the loop end to
      * end instead of testing its parts.
@@ -10722,9 +10686,19 @@ check('LOCK: the intelligence loop CLOSES — the caddie learns whether its own 
     // pipecat receives the SAME block under a different field name (`context.memory` → memoryBlock,
     // appended to the system prompt); kevin calls it unified_context_block. Two names for one thing
     // is its own small trap — assert the RENDER on each side rather than a shared spelling.
-    const pipecatRenders = /const memoryRaw = context\.memory;/.test(brain)
-      && /const memoryBlock =/.test(brain)
-      && /systemBase\}`? ?: ?systemBase\) \+ memoryBlock|\+ memoryBlock/.test(brain);
+    /**
+     * 2026-08-24 — the last hop moved, so the assertion moves with it. This used to check that
+     * api/pipecat-turn read `context.memory` and rendered it. pipecat-turn is a pass-through now;
+     * the CNS block reaches the brain through api/_brainShim, which maps pipecat's `context.memory`
+     * onto kevin's `unified_context_block` ("two names for the same thing"), and kevin interpolates
+     * it. Asserting the chain across the shim is the same property — the finding REACHES the prompt
+     * — checked where the code actually lives.
+     */
+    const shim = read('api/_brainShim.ts');
+    const pipecatRenders = /unified_context_block: context\.memory \?\? null,/.test(shim)
+      && /\$\{_unifiedContextBlock \?/.test(brain);   // kevin interpolates it as a ternary
+    // (a third clause asserting pipecat's own `memoryBlock` variable was dropped with the second
+    //  brain — the two lines above assert the same hop where the code now lives.)
     // The client half of hop 5: the block has to be BUILT into the request before any prompt can
     // render it. One builder, so this cannot be true on one surface and false on another.
     const builderCarries = /unified_context_block,/.test(builder)

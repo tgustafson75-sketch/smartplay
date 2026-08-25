@@ -105,9 +105,12 @@ describe('the caddie is told to record the club it advises', () => {
     // kevin.ts and pipecat-turn.ts drifted by 2 tools and ~255 description lines while each
     // hand-maintained its own prompt copy — and the FOLLOW-UP turn is exactly where this tool went
     // missing before. Shared construction is what makes that drift impossible rather than unlikely.
-    for (const f of ['api/kevin.ts', 'api/pipecat-turn.ts']) {
-      expect(readApi(f)).toMatch(/\$\{clubAdviceBlock\(\)\}/);
-    }
+    //
+    // 2026-08-24 — there is now only ONE brain to check. pipecat-turn's implementation was replaced
+    // by a pass-through to kevin, so it has no prompt to hand-copy this into. The drift this case
+    // was written for is not merely guarded now, it is unreachable; asserting the block in a
+    // pass-through would be asserting that the second brain came back.
+    expect(readApi('api/kevin.ts')).toMatch(/\$\{clubAdviceBlock\(\)\}/);
   });
 
   it('the instruction says to call it IN ADDITION to answering, and names the tool', () => {
