@@ -1498,6 +1498,12 @@ export const speak = async (
    * path. pushWatchVoicePrompt is owner-gated, wrapped, and no-ops without a registered watch
    * sender, so on every phone that is not Tim's this is one function call that returns false.
    * The voice path's behaviour is unchanged — this is a side-effect, not a step.
+   *
+   * DELIBERATELY ABOVE the isVoiceAllowed gate below (checked 2026-08-24, verification pass). With
+   * voice off the line is not spoken but IS still shown, as a caption — "the spoken line IS the
+   * caption". The watch is another display, so it should get the words on exactly the same terms the
+   * screen does. Moving this below the gate would mean a muted owner's wrist goes silent while their
+   * screen does not, which is the inconsistency, not the fix.
    */
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports

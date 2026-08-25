@@ -11235,6 +11235,18 @@ check('LOCK: the watch pipe has something going down it — owner-gated, and it 
     const gated = /function ownerOnly\(\): boolean/.test(sync) &&
       /prof\.isOwnerEmail\(prof\.usePlayerProfileStore\.getState\(\)\.email\)/.test(sync) &&
       /if \(!ownerOnly\(\)\) return;/.test(sync);
+    /**
+     * 2026-08-24 (verification pass) — the gate must be evaluated PER PUSH, never decided once at
+     * start. playerProfileStore is async-persisted and the watch bridge initialises off a DIFFERENT
+     * store's hydration flag, so an early one-shot check could read a null email on a cold boot and
+     * silence the watch for the whole session with no retry.
+     *
+     * And the dedupe must not record a push it did not make: the seed ran while unhydrated, wrote
+     * lastState, sent nothing, and the state then looked already-delivered when the owner arrived.
+     */
+    const hydrationProof = /^  if \(unsubscribe\) return;$/m.test(sync) &&
+      /if \(!ownerOnly\(\)\) return;\n    let s;/.test(sync) &&      // bail BEFORE the keys are written
+      /usePlayerProfileStore\.subscribe\(\(\) => \{/.test(sync);     // and seed when hydration lands
     // Fire-and-forget: a sleeping watch must never delay a hole transition or a spoken line.
     const cannotBlock = /void run\(\)\.catch\(/.test(sync) &&
       /export function pushWatchVoicePrompt/.test(sync);
@@ -11242,7 +11254,7 @@ check('LOCK: the watch pipe has something going down it — owner-gated, and it 
     const lifecycle = /startWatchRoundSync\(\)/.test(bridge) && /stopWatchRoundSync\(\)/.test(bridge);
     const speechMirrored = /pushWatchVoicePrompt\(text\)/.test(voice);
     const toastSourced = /useToastStore\.subscribe/.test(sync);
-    return allFour && gated && cannotBlock && lifecycle && speechMirrored && toastSourced;
+    return allFour && gated && hydrationProof && cannotBlock && lifecycle && speechMirrored && toastSourced;
   })(),
   'all four watch senders are consumed by one owner-gated subscriber, wired to the bridge lifecycle, the spoken line and the toast stream — and no push can block or throw into a caller');
 
@@ -11266,7 +11278,7 @@ check('LOCK: the SmartVision strategy layer is DRAWN, owner-gated, and cannot em
     const sv = read('app/smartvision.tsx');
     const drawn = /computeYardageRings, computeLandingZone, computeLayupSuggestion, computeDangerCarries/.test(sv) &&
       /const strategy = useMemo\(/.test(sv) &&
-      /\{strategy && \(/.test(sv);
+      /&& strategy && \(/.test(sv);   // the render gate; its full condition is asserted below
     // Gated, and the gate is what the memo keys off — not a stray boolean.
     const gated = /const strategyOwner = useMemo\(/.test(sv) &&
       /prof\.isOwnerEmail\(prof\.usePlayerProfileStore\.getState\(\)\.email\)/.test(sv) &&
@@ -11277,7 +11289,17 @@ check('LOCK: the SmartVision strategy layer is DRAWN, owner-gated, and cannot em
       /pxSpan \/ holeYards/.test(sv) && /Number\.isFinite\(holeYards\) && holeYards > 0/.test(sv);
     // It must reuse the ONE projection this screen already owns, not introduce a second.
     const oneProjection = /const px = projectLoc\(ann\.position\);/.test(sv);
-    return drawn && gated && nanSafe && oneProjection;
+    /**
+     * 2026-08-24 (verification pass, found by re-reading my own JSX rather than by a failure) — the
+     * layer must be suppressed on a CURATED photo, exactly as the hazard/green polygons above it
+     * are. A curated hole photo has no bearing-aligned projection: projectLoc slides a marker along
+     * a VERTICAL TRACK instead, so a ring drawn there is a circle on an axis that does not exist and
+     * a landing zone is right in one dimension only. The polygons learned this on Tim's device
+     * ("opposite direction"); shipping strategy marks onto the same projection would have repeated
+     * it, and confidently.
+     */
+    const curatedSuppressed = /\{!preferCurated && projection && strategy && \(/.test(sv);
+    return drawn && gated && nanSafe && oneProjection && curatedSuppressed;
   })(),
   'the four strategy layers are drawn through the screen\'s own projectLoc, gated to the owner, with every derived radius and pixel finite-checked before it reaches react-native-svg');
 

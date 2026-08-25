@@ -22,6 +22,7 @@
  */
 import { useRoundStore } from '../store/roundStore';
 import { useToastStore } from '../store/toastStore';
+import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { sendLiveScore, sendNotification, sendRoundState, sendVoicePrompt } from './watchBridge';
 import { devLog } from './devLog';
 
@@ -74,9 +75,37 @@ let lastScore = '';
  * action, and a watch that receives an identical score forty times an hour is a battery complaint.
  */
 export function startWatchRoundSync(): void {
-  if (unsubscribe || !ownerOnly()) return;
+  /**
+   * 2026-08-24 (verification pass — found by re-reading my own code, not by a failure).
+   *
+   * This used to early-return when `ownerOnly()` was false, and never retry. But
+   * playerProfileStore is ASYNC-PERSISTED, and initWatchCaddieBridge runs off
+   * `settingsHydratedForBoot` — a DIFFERENT store's hydration. So on a cold boot the email could
+   * still be null here, the owner check would fail, and the watch would silently receive nothing for
+   * the entire session. Gating a feature on a value that has not loaded yet, with no re-check, is
+   * the same shape as the `dcHydrated` guard in play.tsx and precisely the kind of half-wiring this
+   * whole day has been about.
+   *
+   * So the subscription is now unconditional and the OWNER CHECK LIVES AT EVERY PUSH (see `fire`),
+   * which makes hydration order irrelevant. A non-owner pays one early-returning function call per
+   * round-store write and sends nothing — the boundary is unchanged, it is just no longer decided
+   * once, too early.
+   */
+  if (unsubscribe) return;
 
   const pushIfChanged = () => {
+    /**
+     * 2026-08-24 (verification pass, second bug in the same function) — DO NOT RECORD A PUSH THAT
+     * DID NOT HAPPEN.
+     *
+     * The dedupe keys below are set before `fire` decides whether to send. While the profile was
+     * unhydrated the seed ran, wrote lastState, and sent nothing — so when the owner's email
+     * finally arrived, the state looked ALREADY SENT and the watch stayed empty. A cache of
+     * "what we last delivered" that records non-deliveries is worse than no cache.
+     *
+     * Bailing here means the keys only ever reflect something genuinely put on the wire.
+     */
+    if (!ownerOnly()) return;
     let s;
     try { s = useRoundStore.getState(); } catch { return; }
 
@@ -126,7 +155,19 @@ export function startWatchRoundSync(): void {
       lastToastSeq = t.seq;
       pushWatchNotification(t.message);
     });
-    devLog('[watchSync] started (owner)');
+    /**
+     * And if the profile hydrates AFTER this ran, seed then. Without it, an owner whose email
+     * arrived late would get nothing until the round state next changed — which on a boot mid-round
+     * could be never.
+     */
+    if (!ownerOnly()) {
+      const unsubProfile = usePlayerProfileStore.subscribe(() => {
+        if (!ownerOnly()) return;
+        try { unsubProfile(); } catch { /* non-fatal */ }
+        pushIfChanged();
+      });
+    }
+    devLog('[watchSync] started');
   } catch (e) {
     devLog(`[watchSync] subscribe failed: ${String(e)}`);
     unsubscribe = null;

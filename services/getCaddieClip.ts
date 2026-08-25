@@ -41,21 +41,16 @@
  * play any clip on device. Returning the require() module is what
  * actually works for testing.
  *
- * Slot semantics (round-arc moments where the caddie speaks):
- *   intro       — opener at round start
- *   tee         — at the tee box
- *   fairway     — between tee and approach
- *   yardage     — yardage-to-pin readout
- *   wind        — wind read overlay
- *   club        — club selection / recommendation
- *   hazard      — hazard call / penalty-area awareness
- *   chip        — short-game chip read
- *   putt_read   — green read before the stroke
- *   putt_line   — line commit just before the putt
- *   celebrate   — hole complete / made-it celebration
+ * Slot semantics — the two moments the caddie actually appears on video:
+ *   intro     — the greeting screen opener (app/greeting.tsx)
+ *   bestround — the player just posted their best round ever (app/(tabs)/caddie.tsx)
  *
- * (2026-07-04 — every slot above, hazard + celebrate included, has a
- * bundled clip in the require() map below; no D-ID TODOs remain.)
+ * (2026-08-24 — the ten round-arc slots that used to be listed here — tee, fairway, yardage, wind,
+ * club, hazard, chip, putt_read, putt_line, celebrate — were removed with their files. They had no
+ * caller in three months and bundled 8.3 MB of placeholder video that never played. The paragraph
+ * this replaces claimed "every slot above... has a bundled clip; no D-ID TODOs remain", which was
+ * true when written and false the moment they went — a comment describing the file rather than the
+ * program. The full slot spec survives in docs/TODO-CADDIE-EMOTIONAL-ART.md.)
  *
  * Test scaffolding note (per Tim 2026-05-25): the current Kevin clip
  * set is placeholder content from D-ID for beta testing. Clean rebuilds
@@ -98,9 +93,9 @@ const ALL_CLIP_MAPS: Record<Caddie, Record<CaddieSlot, number | null>> = {
  * Resolve a (caddie, slot) pair to its bundled clip asset module.
  *
  * Returns the Metro-bundled require() module (typed as number — RN's
- * Image / Video source types accept this) when the slot is wired.
- * Returns null when the slot is a known TODO (clip not generated yet)
- * so callers can branch: render "clip coming soon" instead of playing.
+ * Image / Video source types accept this). Every remaining slot has a clip, so null is now
+ * unreachable in practice; the signature keeps it so a future caddie added without a full set
+ * degrades to "clip coming soon" rather than crashing.
  *
  * Throws on caddie or slot values that aren't in the type union —
  * defensive against JS callers, dynamic strings from voice-intent

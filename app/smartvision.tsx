@@ -2396,7 +2396,17 @@ export default function SmartVisionScreen() {
             Every number is finite-checked before it becomes an SVG attribute — a single NaN here is
             the white-screen crash this file has been bitten by twice.
           */}
-          {strategy && (
+          {/*
+            2026-08-24 (verification pass) — SUPPRESSED ON A CURATED PHOTO, for the same reason the
+            polygons above are. A curated hole photo has no bearing-aligned projection: projectLoc
+            falls back to sliding a marker along a VERTICAL TRACK, so a "ring" drawn there is a
+            circle on an axis that does not exist, and a landing-zone marker is only correct in one
+            dimension. The polygons learned this the hard way ("opposite direction" on Tim's view);
+            drawing strategy on top of a projection that cannot carry it would repeat it, and
+            confidently. Rings degrade to nothing without a projection anyway — this makes the
+            curated case explicit rather than accidental.
+          */}
+          {!preferCurated && projection && strategy && (
             <SvgG opacity={0.9}>
               {(() => {
                 const c = playerCanvas ?? teeCanvas;

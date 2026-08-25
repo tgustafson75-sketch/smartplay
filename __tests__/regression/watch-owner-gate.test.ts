@@ -81,4 +81,31 @@ describe('the watch stays owner-only', () => {
     (bridge.sendVoicePrompt as jest.Mock).mockImplementationOnce(async () => { throw new Error('no route'); });
     expect(() => pushWatchVoicePrompt('smooth seven')).not.toThrow();
   });
+
+  /**
+   * 2026-08-24 (verification pass) — HYDRATION ORDER MUST NOT DECIDE THE FEATURE.
+   *
+   * startWatchRoundSync used to early-return when the owner check failed, and never retry. But
+   * playerProfileStore is async-persisted and the watch bridge initialises off a DIFFERENT store's
+   * hydration flag, so on a cold boot the email could still be null — and the watch would then
+   * receive nothing for the whole session. The owner check now lives at every push instead of being
+   * decided once, too early.
+   */
+  it('an owner whose profile hydrates LATE still gets the watch, without a restart', () => {
+    setEmail(null);                       // profile not hydrated yet
+    useRoundStore.setState({ isRoundActive: true, currentHole: 7 } as never);
+    startWatchRoundSync();
+    expect(sends()).toBe(0);              // correctly silent while we do not know who this is
+
+    setEmail('t.gustafson75@gmail.com');  // hydration lands
+    expect(bridge.sendRoundState as jest.Mock).toHaveBeenCalledWith(true, 7);
+  });
+
+  it('a tester whose profile hydrates late still gets nothing', () => {
+    setEmail(null);
+    startWatchRoundSync();
+    setEmail('someone.else@example.com');
+    useRoundStore.setState({ isRoundActive: true, currentHole: 2 } as never);
+    expect(sends()).toBe(0);
+  });
 });
