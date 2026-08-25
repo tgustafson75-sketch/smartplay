@@ -6528,9 +6528,30 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   // The behaviour is unchanged and still asserted, at the one place that builds a prompt.
   const kevinApiSrc = fs.readFileSync(path.resolve(__dirname, '../../api/kevin.ts'), 'utf-8');
   for (const [label, src] of [['kevin', kevinApiSrc]] as const) {
-    check(`App help gate: ${label} injects capabilities/how-tos only when isAppHelpQuery`,
-      /isAppHelpQuery\(/.test(src) && /appHelp \? /.test(src) && /catalogForPrompt\(\)/.test(src),
-      'the lean catalog is always-on (navigate needs it) but capabilitiesForPrompt/howToForPrompt are behind the appHelp gate');
+    /**
+     * 2026-08-25 — THE GATE IS GONE ON PURPOSE, AND THIS GUARD NOW ASSERTS WHY.
+     *
+     * capabilitiesForPrompt/howToForPrompt used to be gated on isAppHelpQuery to keep the prompt
+     * lean. That gate is derived from the MESSAGE, which made the cached block change shape from
+     * turn to turn — the block is cached for an hour, so a volatile gate meant it was rewritten at
+     * 2x on every single turn and never once read. Always-on is strictly cheaper: stable bytes are
+     * read at 0.1x.
+     *
+     * The instruction half must also stay in the SYSTEM prompt. When the whole addendum was moved
+     * to the message for the cache, tool selection regressed (32/33 -> 28/33: set_angle and
+     * set_golfer both collapsed to record_swing) because an instruction demoted into the user's
+     * message reads as something the player said, not something the caddie must do.
+     *
+     * So: catalog + capabilities + how-tos are UNGATED and concatenated onto systemPrompt; only
+     * retrieveKB output, which is genuinely chosen by the question, rides the message.
+     */
+    check(`App help gate: ${label} keeps the feature catalog STABLE and in the system prompt`,
+      /catalogForPrompt\(\)/.test(src)
+        && /stableCatalogBlock/.test(src)
+        && /systemPrompt \+ stableCatalogBlock/.test(src)
+        // capabilities/how-tos must no longer be gated on the message-derived appHelp flag
+        && !/appHelp \? `/.test(src),
+      'catalog + capabilities + how-tos are ungated and ride the CACHED system prompt (stable bytes, read at 0.1x); only question-selected KB rides the message');
     // The changelog is UI-only — it must NOT be injected into the brain prompt (bloats every turn).
     check(`App help gate: ${label} does NOT inject the What's-New changelog into the prompt`,
       !/whatsNewForPrompt/.test(src),

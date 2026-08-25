@@ -1581,6 +1581,25 @@ ${langRule ? `LANGUAGE — FINAL REMINDER: ${langRule}` : ''}
     // non-empty; empty → base prompt unchanged. Kept OUT of the static systemPrompt
     // literal so that literal has no KB dependency. Var name kept (passed to runAgenticLoop).
     let kbAddendum = '';
+    /**
+     * 2026-08-25 (tool probe 32/33 -> 28/33 after the cache move) — INSTRUCTIONS BELONG IN THE
+     * SYSTEM PROMPT. THE CACHE FIX MUST NOT COST INSTRUCTION STRENGTH.
+     *
+     * Moving the whole KB addendum to the message fixed the cache but broke tool selection:
+     * `set_angle` ("I'm filming down the line") and `set_golfer` ("I'm recording my daughter's
+     * swing") both collapsed to record_swing. The feature catalog is not reference material — it
+     * TELLS the model to call `navigate`, and an instruction demoted into the user's own message
+     * reads as something the player said rather than something the caddie must do.
+     *
+     * The split is by VOLATILITY, not by topic:
+     *  - The catalog / capabilities / how-to are the SAME BYTES on every turn, so they can live in
+     *    the cached prompt without ever moving it. Note they are now included UNCONDITIONALLY —
+     *    the old `appHelp` gate was derived from the message, which is precisely what made this
+     *    block volatile. A stable larger prompt is read at 0.1x; a volatile smaller one is
+     *    rewritten at 2x, every turn.
+     *  - Only retrieveKB() output is chosen by the question, so only that rides the message.
+     */
+    let stableCatalogBlock = '';
     try {
       const { catalogForPrompt } = await import('../services/knowledgeBase/appCatalog');
       const { howToForPrompt } = await import('../services/knowledgeBase/howTo');
@@ -1598,11 +1617,13 @@ ${langRule ? `LANGUAGE — FINAL REMINDER: ${langRule}` : ''}
       if (_unifiedContextBlock) cnsSignals.tendencies = 'known';
       const cnsProfile = { signals: cnsSignals, liveSignals: [] as string[] };
       const kbBlock = kbForPrompt(retrieveKB(_message, { max: 3, cnsProfile }), cnsProfile);
-      kbAddendum =
+      stableCatalogBlock =
         `\n\nAPP FEATURES YOU KNOW — reference these by name, and when the player asks to open / go to / "take me to" any of them, call the \`navigate\` tool with the feature's name (e.g. navigate{feature:"Smart Tempo"} for "take me to the tempo drill"). Only use open_swinglab for the bare hub with no named destination:\n${catalogForPrompt()}`
-        + (appHelp ? `\n\n${capabilitiesForPrompt()}` : '')
-        + (appHelp ? `\n\n${howToForPrompt()}` : '')
-        + (kbBlock
+        + `\n\n${capabilitiesForPrompt()}`
+        + `\n\n${howToForPrompt()}`;
+      void appHelp;   // no longer gates anything — gating on it made the cached block volatile
+      kbAddendum =
+        (kbBlock
           ? `\n\nRELEVANT COACHING KNOWLEDGE (curated principles for what the player is asking — speak them in your own voice; do NOT read tags aloud):\n${kbBlock}\nHonesty: items tagged [coaching_only] are general instruction — share as coaching, never imply the app measured them. Items tagged [directional] are hinted by the player's data/signals but not precisely measured — hedge accordingly ("looks like", "tends to"). NEVER fabricate a number.`
           : '');
     } catch { /* KB is best-effort — never break the turn */ }
@@ -1623,7 +1644,7 @@ ${langRule ? `LANGUAGE — FINAL REMINDER: ${langRule}` : ''}
      * how-to text (themselves gated on `appHelp`, which is derived from the message), and the
      * retrieved coaching entries. So all of it rides the message. The model reads the same text.
      */
-    const systemPromptWithKB = systemPrompt;
+    const systemPromptWithKB = systemPrompt + stableCatalogBlock;
     // 2026-08-25 — the PERSONA KB is chosen by the question too (buildPersonaKBPromptBlock takes the
     // message), so it was busting the cache for exactly the same reason as the coaching KB. Located
     // by the per-chunk fingerprints: chunks 0-10 matched between two questions and everything from
