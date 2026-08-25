@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from './apiBase';
+import type { Persona } from '../lib/persona';
 import { mayTalkToCaddie } from './featureAccess';
 import { buildCaddieRequestBody } from './caddieRequestBody';
 /**
@@ -50,7 +51,8 @@ interface PresenceContext {
   lastScoreThisHole?: number | null;
   /** Player + persona context — same shape as other /api/kevin calls. */
   playerName?: string | null;
-  persona?: 'kevin' | 'serena' | 'tank' | 'harry' | 'custom' | null;
+  // 2026-08-25 — was a seventh inline copy of the persona union. Uses the canonical type.
+  persona?: Persona | null;
   /** 2026-05-28 — Fix FI: swing context for analysis_failed trigger.
    *  Lets the brain reference the club / user's note instead of just
    *  apologizing for a generic failure. */

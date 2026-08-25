@@ -53,7 +53,6 @@ type Gender = 'male' | 'female';
 export const PERSONA_HANDOFF_INTROS: Record<string, string> = {
   kevin:  "Hey, Kevin back on the bag. Let's go.",
   serena: "Hi, Serena here. Let's read this together.",
-  tank:   "Tank stepping in. We're locked in.",
   harry:  "Harry here. Show me what you've got.",
 };
 const PERSONA_HANDOFF_LINES = Object.values(PERSONA_HANDOFF_INTROS);

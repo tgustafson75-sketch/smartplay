@@ -38,13 +38,6 @@ export const GREETING_TEXTS: Record<string, string[]> = {
     "Talk to me.",
     "Go ahead.",
   ],
-  tank: [
-    "Yeah, what do you got?",
-    "Talk to me.",
-    "Go ahead, I'm listening.",
-    "What do you need?",
-    "Here. What's up?",
-  ],
   serena: [
     "I'm here. What are you thinking?",
     "Go ahead.",

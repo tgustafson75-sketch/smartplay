@@ -259,10 +259,6 @@ export function buildCaddieAck(kind: CaptureKind): string {
       shot: 'Recording. Take a breath, hit your shot.',
       swing: "Got the camera. Let's see the swing.",
     },
-    tank: {
-      shot: 'Locked in. Send it.',
-      swing: 'Camera up. Execute.',
-    },
   };
   return lines[persona]?.[kind] ?? 'Recording.';
 }

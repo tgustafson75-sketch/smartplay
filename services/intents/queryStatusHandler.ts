@@ -917,7 +917,9 @@ export const queryStatusHandler: IntentHandler = {
               teeYardage: holeMeta?.distance ?? null,
               lastScoreThisHole,
               playerName: player.firstName ?? null,
-              persona: (settings.caddiePersonality ?? null) as 'kevin' | 'serena' | 'tank' | 'harry' | null,
+              // 2026-08-25 — an eighth inline persona union lived here. The cast is now unnecessary:
+              // caddiePersonality is already a Persona, so the value passes through unchanged.
+              persona: settings.caddiePersonality ?? null,
             },
           });
           return {

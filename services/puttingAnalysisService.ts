@@ -233,28 +233,9 @@ async function enrichRecommendationWithPersonaKB(
   persona: string,
 ): Promise<PuttingAnalysis> {
   const p = (persona ?? '').toLowerCase();
-  if (p !== 'tank') return analysis;
-  try {
-    const kb = await import('./personaKnowledgeBase');
-    // Probe the KB with the analysis's situation — uses recommendation
-    // lines + slope direction as the input phrase.
-    const probe = `putt ${analysis.recommendation.line} ${analysis.greenSlope.direction} ${analysis.greenSlope.severity}`;
-    const matches = kb.findRelevantPersonaKBEntries(probe, 1);
-    if (matches.length === 0) return analysis;
-    const firstSentence = matches[0].entry.tankAnswer.split(/(?<=[.!?])\s/)[0].trim();
-    if (!firstSentence) return analysis;
-    devLog(`[putting] enriched recommendation with KB ${matches[0].entry.id}`);
-    return {
-      ...analysis,
-      recommendation: {
-        ...analysis.recommendation,
-        mentalCue: firstSentence,
-      },
-    };
-  } catch (e) {
-    devLog(`[putting] persona KB enrich failed (non-fatal): ${String(e)}`);
-    return analysis;
-  }
+  // 2026-08-25 — this enrichment only ever ran when the persona was Tank, which no longer exists.
+  // Removed rather than left as unreachable code; the putt read stands on its own measurement.
+  return analysis;
 }
 
 /**

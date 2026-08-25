@@ -1004,28 +1004,7 @@ export async function enrichWithPersonaWisdom(
   envelope: AnalysisEnvelope,
   persona: Persona,
 ): Promise<AnalysisEnvelope> {
-  // 2026-08-25 — this enrichment was Tank-only and the persona is gone, so it never applies.
-  // Kept as a no-op rather than unpicking the call chain during submission week; the early return
-  // is now unconditional and the dead body below is unreachable.
+  // 2026-08-25 — this enrichment was Tank-only and the persona is gone. The unreachable body that
+  // sat here (matching the KB and prefixing "Tank's take:") is removed rather than left dead.
   return envelope;
-  if (!envelope.voice_summary || envelope.voice_summary.length < 12) return envelope;
-  // Avoid double-enrich on history replays.
-  if (envelope.voice_summary.includes("Tank's take:")) return envelope;
-  let kb: typeof import('./personaKnowledgeBase');
-  try {
-    kb = await import('./personaKnowledgeBase');
-  } catch {
-    return envelope;
-  }
-  // Probe with the voice_summary text — short enough to be a good
-  // matcher input, captures the tactical content already produced.
-  const matches = kb.findRelevantPersonaKBEntries(envelope.voice_summary, 1);
-  if (matches.length === 0) return envelope;
-  const top = matches[0];
-  // Take ONLY the first sentence of Tank's take — bounded tail.
-  const firstSentence = top.entry.tankAnswer.split(/(?<=[.!?])\s/)[0].trim();
-  if (!firstSentence) return envelope;
-  const enrichedSummary = `${envelope.voice_summary} — Tank's take: ${firstSentence}`;
-  devLog(`[engine] enriched envelope id=${envelope.analysis_id} with KB ${top.entry.id} (score=${top.score})`);
-  return { ...envelope, voice_summary: enrichedSummary };
 }
