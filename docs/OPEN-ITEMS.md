@@ -293,8 +293,29 @@ So a player standing on the most famous golf property in Florida is offered the 
 would play a round with another course's card and yardages. The course API knows it perfectly well
 (`mkdn7b4e`, Stadium Course, par 72, 18 holes) — it is the Places lookup that misses it.
 
-Not chased yet. Likely candidates: the Places type filter excluding it, or the name not matching
-what we query. Worth a look because whatever hides TPC Sawgrass hides other courses too, and the
-failure mode is the worst kind — not "no course found", but *a confidently wrong one*.
+### ROOT CAUSE FOUND, and it is a console toggle — not a code fix
+
+Every live query returns `source: places_legacy`. The Places API (New) path — the documented
+PRIMARY, the only one where `includedTypes: ['golf_course']` actually binds — fails on **every**
+call, and has been silently falling back for as long as anyone can tell. Production now reports why:
+
+```
+http_403: Requests to this API places.googleapis.com method
+          google.maps.places.v1.Places.SearchNearby are blocked.
+```
+
+**➜ ACTION FOR TIM (Google Cloud Console, ~2 minutes):** enable **"Places API (New)"** on the
+project behind `GOOGLE_API_KEY`, and make sure the key is not restricted away from it. No deploy
+needed — the code already prefers the New API and will pick it up on the next request.
+
+**Why it matters more than one course.** Legacy Nearby Search filters by the KEYWORD "golf course",
+so any course whose *name* lacks the word is invisible to discovery. TPC Sawgrass is the example
+that surfaced it, but the class is "every course not named '… Golf Course'". The failure mode is
+the worst kind: not "no course found", but a confidently wrong one — the player is handed another
+club's card and yardages, and nothing looks broken.
+
+**How it stayed hidden.** The 403 WAS logged, server-side, where no caller could see it. The
+response now echoes `primary_failure` whenever it served from the fallback, so a permanently
+degraded path can never again look like a healthy one.
 
 Bundling Torrey Pines / Pebble / Streamsong does not depend on this.
