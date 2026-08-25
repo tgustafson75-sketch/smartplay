@@ -658,6 +658,9 @@ function AppNavigator() {
     // when present. Fire-and-forget; failures fall through to existing
     // API sources.
     void hydrateCourseTruthCache();
+    // 2026-08-24 — the learned phone height for SmartFinder's tilt ranging. Same boot-hydration
+    // pattern as the course-truth cache: the read path is synchronous, so the cache must be warm.
+    void import('../services/rangefinderCalibration').then(m => m.hydrateRangefinderCalibration()).catch(() => {});
     // 2026-08-08 (Tim — official Berlin card) — anchor BUNDLED course-book seeds (card-sourced local
     // rules / OB walls / official par+yardage) into the CNS so the caddie's hole briefs carry them
     // offline from hole 1. Additive-merge + idempotent; lazy import keeps boot lean.

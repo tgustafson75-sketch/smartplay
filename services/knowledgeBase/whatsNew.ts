@@ -28,6 +28,10 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'SmartFinder learns how YOU hold the phone. The close-range read worked off an assumed height for everybody, and that assumption is a straight multiplier on the number \u2014 hold it a bit lower than average and every reading came back long. Now, whenever you aim near the green and I already know that distance from GPS, I work out your real phone height and use it from then on. Nothing to set up.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'The swing title and the angle tag agree now. A swing could show "down-the-line" in its title and "Face-on" on the tag right underneath \u2014 the title was written once when you filmed and never updated when the angle was corrected. The angle lives in one place now, and swings already saved get fixed on screen.',
   },
   {

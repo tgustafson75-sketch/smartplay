@@ -77,6 +77,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useToastStore } from '../store/toastStore';
 import { getApiBaseUrl } from '../services/apiBase';
 import { ingestCapture } from '../services/courseCaptureIngest';
+import { effectiveEyeHeightM, observeCalibration } from '../services/rangefinderCalibration';
 
 const REFRESH_MS = 3_000;
 const CANVAS_W_FRACTION = 0.92;
@@ -1382,6 +1383,16 @@ function TargetCameraOverlay({
       tap_x_normalized: point.xNorm,
       tap_y_normalized: point.yNorm,
       device_pitch_degrees: pitchRef.current,
+      /**
+       * 2026-08-24 (Tim — "the moving around of the aperture to get yardage still isn't very
+       * reactive in terms of accuracy"). The tilt math is height / tan(angle), and the height was
+       * the constant 1.6 m for every player. Distance scales LINEARLY with it, so a player who holds
+       * the phone 10% lower than assumed reads 10% long on EVERY target — fifteen yards at 150. Two
+       * earlier passes at this complaint widened a plausibility gate; a gate cannot fix a scale
+       * error. This uses the height the app has LEARNED from GPS-anchored reads (below), and falls
+       * back to the same old constant until it has enough samples to know better.
+       */
+      eye_height_m: effectiveEyeHeightM(),
     });
     if (result.unmeasurable) {
       // Near-level hold: no usable tilt input. Keep the GPS green-middle
@@ -1441,6 +1452,20 @@ function TargetCameraOverlay({
       // honest about being a tilt estimate rather than a GPS-anchored one.
       const drift = Math.abs(geodesicYards - gpsMiddleYards);
       setReticleConfidence(drift < 60 ? result.confidence : (result.confidence === 'high' ? 'medium' : 'low'));
+      /**
+       * ...and LEARN from this read. When the player is aiming close to the green middle we
+       * independently know that distance, so the phone height that reconciles it with the measured
+       * tilt angle is solvable: h = d * tan(angle). Gated tight (near the green, high confidence)
+       * because the reference only holds when they are actually aiming AT the thing we know the
+       * distance to; a mis-aim yields an implausible height and observeCalibration discards it.
+       *
+       * The gate uses `drift`, which is itself computed with the current height and so is slightly
+       * contaminated — that is fine, it only has to answer "roughly aiming at the green". The SOLVE
+       * uses the GPS distance and the measured angle, both independent of the height being learned.
+       */
+      if (drift < 25 && result.confidence === 'high') {
+        observeCalibration(gpsMiddleYards * 0.9144, result.angle_degrees);
+      }
     } else {
       // 2026-07-14 (Tim — range / off-course POINT-FINDER) — not in a round, so there's no GPS
       // green to gate against; the camera-tilt read is the only signal. Accept it as the measured

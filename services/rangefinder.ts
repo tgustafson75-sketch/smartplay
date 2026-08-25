@@ -11,10 +11,24 @@ export interface DistanceComputeInput {
   tap_x_normalized?: number;
   tap_y_normalized: number;
   device_pitch_degrees: number;
+  /**
+   * 2026-08-24 — the phone height the tilt math divides by. Optional so every existing caller and
+   * test keeps the old constant; SmartFinder passes the LEARNED height (services/rangefinderCalibration),
+   * because distance scales linearly with this and one assumed value for every player is a straight
+   * multiplier on every read.
+   */
+  eye_height_m?: number;
 }
 
 export interface DistanceComputeOutput {
   distance_yards: number;
+  /**
+   * 2026-08-24 — the EFFECTIVE angle the math actually used (device pitch + the reticle's vertical
+   * offset), negative when looking down. Returned so a caller calibrating against a known distance
+   * uses the same number the math did, instead of re-deriving the tap offset and becoming a second
+   * owner of it.
+   */
+  angle_degrees: number;
   distance_meters: number;
   target_lat: number;
   target_lng: number;
@@ -52,7 +66,11 @@ export function computeDistance(input: DistanceComputeInput): DistanceComputeOut
     tap_x_normalized = 0.5,
     tap_y_normalized,
     device_pitch_degrees,
+    eye_height_m,
   } = input;
+  const eyeHeightM = typeof eye_height_m === 'number' && Number.isFinite(eye_height_m) && eye_height_m > 0
+    ? eye_height_m
+    : EYE_HEIGHT_M;
 
   // Angle from horizontal: negative = looking down at ground
   // device_pitch_degrees from DeviceMotion: negative when tilted forward/down
@@ -77,7 +95,7 @@ export function computeDistance(input: DistanceComputeInput): DistanceComputeOut
     distanceM = 0;
   } else {
     const angleRad = degToRad(Math.abs(angleDeg));
-    distanceM = EYE_HEIGHT_M / Math.tan(angleRad);
+    distanceM = eyeHeightM / Math.tan(angleRad);
   }
 
   /**
@@ -156,6 +174,8 @@ export function computeDistance(input: DistanceComputeInput): DistanceComputeOut
 
   return {
     distance_yards: Math.round(distYards),
+    // The effective angle this read used — see the field's note. Calibration consumes it.
+    angle_degrees: angleDeg,
     distance_meters: Math.round(clampedM),
     target_lat: target.lat,
     target_lng: target.lng,
