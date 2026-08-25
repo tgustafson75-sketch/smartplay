@@ -320,9 +320,24 @@ http_403: Requests to this API places.googleapis.com method
           google.maps.places.v1.Places.SearchNearby are blocked.
 ```
 
-**➜ ACTION FOR TIM (Google Cloud Console, ~2 minutes):** enable **"Places API (New)"** on the
-project behind `GOOGLE_API_KEY`, and make sure the key is not restricted away from it. No deploy
-needed — the code already prefers the New API and will pick it up on the next request.
+**CORRECTION 2026-08-25 — the API IS enabled. Tim confirmed it, and Google's wording agrees.**
+
+Two different 403s exist and they mean different things:
+- a *disabled* API returns "…has not been used in project X before or it is disabled"
+- **"Requests to this API … are blocked" is the API-KEY RESTRICTION message**
+
+Corroborating evidence: **legacy Places works on the same key.** Legacy is
+`places-backend.googleapis.com`; New is `places.googleapis.com`. Same key, one allowed, one not.
+
+**➜ ACTION: it is the KEY's API-restrictions list, not the project.** In Google Cloud Console →
+Credentials → the key behind `GOOGLE_API_KEY` → *API restrictions* → add **"Places API (New)"** to
+the allowed list (it is a separate entry from "Places API"). If the key is instead set to "Don't
+restrict key", check the *Application* restrictions — an HTTP-referrer restriction blocks
+server-side calls from Vercel outright.
+
+The response now names the offending key (`primary_failure` carries the key's name + short
+fingerprint, never the secret), so if more than one project is configured it says which one to fix.
+No deploy needed after the console change — the code already prefers the New API.
 
 **Why it matters more than one course.** Legacy Nearby Search filters by the KEYWORD "golf course",
 so any course whose *name* lacks the word is invisible to discovery. TPC Sawgrass is the example

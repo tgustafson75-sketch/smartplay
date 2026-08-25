@@ -130,7 +130,7 @@ function isGolfPlace(p: Located): boolean {
 let lastPrimaryFailure: string | null = null;
 
 async function searchNearbyNew(lat: number, lng: number, radius: number, timeoutMs: number): Promise<Located[] | null> {
-  return withGoogleKeys<Located[]>('places-new:searchNearby', async (KEY) => {
+  return withGoogleKeys<Located[]>('places-new:searchNearby', async (KEY, ref) => {
     const r = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
       method: 'POST',
       headers: {
@@ -177,7 +177,18 @@ async function searchNearbyNew(lat: number, lng: number, radius: number, timeout
        * here and echoed on the response; the fix (enable Places API New, or correct the key) is a
        * console change, and this is how we tell which.
        */
-      lastPrimaryFailure = `http_${r.status}${message ? `: ${message.slice(0, 120)}` : ''}`;
+      /**
+       * 2026-08-25 — NAME THE KEY. Tim: "places is enabled" — and he is right, which is exactly why
+       * this needs to be specific. Google returns two DIFFERENT 403s: a disabled API says "has not
+       * been used in project X before or it is disabled", while "Requests to this API ... are
+       * blocked" is the API-KEY RESTRICTION message. Corroborated by the fact that LEGACY Places
+       * works on the same key — that is places-backend.googleapis.com, a different API from
+       * places.googleapis.com (New). So the key is authorised for one and not the other.
+       *
+       * Reporting which key (name + short fingerprint, never the secret) turns "something is
+       * blocked" into "this env var's key is missing Places API (New) in its API restrictions".
+       */
+      lastPrimaryFailure = `http_${r.status} on key ${ref.name}(${ref.fp})${message ? `: ${message.slice(0, 140)}` : ''}`;
       return { ok: false, capabilityMiss: isCapabilityMiss({ httpStatus: r.status, message }) };
     }
     type NewPlace = {
