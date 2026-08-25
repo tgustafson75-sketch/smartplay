@@ -22,8 +22,9 @@ import type { IntentHandler, IntentResult } from '../../types/voiceIntent';
 import { useRoundStore, type ShotResult, type ShotLocation } from '../../store/roundStore';
 import { parseSpokenClub, clubLabel } from '../clubRecognition';
 import { normalizeClub } from '../clubNormalize';
-import { getLastFix as getSmartFinderLastFix } from '../smartFinderService';
-import { getLastFix as getGpsLastFix } from '../gpsManager';
+// 2026-08-24 — one owner for "where is the player for this shot" (this was duplicated here
+// byte-for-byte with logShotHandler/atBallHandler; see services/shotLocationService).
+import { snapshotShotLocation as snapshotLocation } from '../shotLocationService';
 import { track } from '../analytics';
 
 // Map outcome phrases to ShotResult.outcome where it's a direct match;
@@ -57,14 +58,6 @@ function parseOutcome(phrase: string | undefined): {
   else if (direction != null) outcome = 'clean';
 
   return { outcome, direction };
-}
-
-function snapshotLocation(): ShotLocation | null {
-  const sf = getSmartFinderLastFix();
-  if (sf) return sf.location;
-  const gps = getGpsLastFix();
-  if (gps) return { lat: gps.lat, lng: gps.lng };
-  return null;
 }
 
 function noActiveRound(): IntentResult {

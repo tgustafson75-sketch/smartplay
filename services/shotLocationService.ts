@@ -126,6 +126,33 @@ export function getGreenCentroid(holeNumber: number): ShotLocation | null {
   return null;
 }
 
+/**
+ * 2026-08-24 (unification audit, pass 3) — WHERE THE PLAYER IS, for logging a shot. One owner.
+ *
+ * This exact function existed TWICE, byte for byte: services/intents/atBallHandler and
+ * services/intents/logShotHandler — the two handlers that WRITE a shot's location. Two copies of
+ * "where is the player" in the two places that record where the player was is the same defect as
+ * the two green resolvers fixed this morning, just earlier in the pipeline: the moment one gained a
+ * fallback the other lacked, two shot-logging paths would persist different positions for the same
+ * standing spot, and the divergence would only ever show up as bad distances weeks later.
+ *
+ * SmartFinder's fix wins because it is the one the player just aimed with; GPS is the fallback.
+ * Synchronous by design — this reads caches and must never make a logging path wait.
+ *
+ * Lazy require for smartFinderService, matching getGreenCentroid above: that module imports
+ * roundStore, and so does this one.
+ */
+export function snapshotShotLocation(): ShotLocation | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const sf = (require('./smartFinderService') as typeof import('./smartFinderService')).getLastFix();
+    if (sf) return sf.location;
+  } catch { /* fall through to GPS */ }
+  const gps = getGpsLastFix();
+  if (gps) return { lat: gps.lat, lng: gps.lng };
+  return null;
+}
+
 /** Returns the tee centroid for a hole. */
 export function getTeeCentroid(holeNumber: number): ShotLocation | null {
   // 2026-06-02 — Fix GM: same WGS84 guard as getGreenCentroid above.

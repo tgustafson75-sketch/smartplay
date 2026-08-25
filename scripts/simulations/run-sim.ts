@@ -11474,6 +11474,37 @@ check('LOCK: an unprompted line is said ONCE per hole — the memory lives in th
   })(),
   'the tee brief and the proactive read both dedupe through one round-scoped, persisted owner; no component ref decides whether the caddie has already spoken on a hole');
 
+check('LOCK: "where is the player, for this shot" has ONE owner',
+  (() => {
+    /**
+     * 2026-08-24 (unification audit, pass 3 — Tim: "check that we have made everything unified…
+     * that we don't have paths"). Found by sweeping for structurally identical FUNCTION BODIES
+     * across files, which the constant sweep could not see.
+     *
+     * `snapshotLocation` existed twice, byte for byte, in services/intents/atBallHandler and
+     * services/intents/logShotHandler — the two handlers that WRITE a shot's location. Two copies
+     * of "where is the player" in the two places that record where the player was. The same defect
+     * as the two green resolvers fixed this morning, one step earlier in the pipeline: the moment
+     * one gained a fallback the other lacked, two logging paths would persist different positions
+     * for the same standing spot, and it would only surface as wrong distances weeks later.
+     *
+     * SmartFinder's fix wins (it is the one the player just aimed with), GPS is the fallback, and it
+     * stays synchronous so no logging path ever waits on it.
+     */
+    const owner = read('services/shotLocationService.ts');
+    const atBall = read('services/intents/atBallHandler.ts');
+    const logShot = read('services/intents/logShotHandler.ts');
+    const declared = /export function snapshotShotLocation\(\): ShotLocation \| null \{/.test(owner) &&
+      /getLastFix\(\);\n    if \(sf\) return sf\.location;/.test(owner);
+    const bothDelegate = [atBall, logShot].every(src =>
+      /import \{ snapshotShotLocation as snapshotLocation \} from '\.\.\/shotLocationService';/.test(src));
+    // Neither may keep a private copy.
+    const noRival = [atBall, logShot].every(src =>
+      !/function snapshotLocation\(\): ShotLocation \| null \{/.test(src));
+    return declared && bothDelegate && noRival;
+  })(),
+  'shotLocationService owns the shot-time position snapshot; both logging handlers delegate and neither keeps a private copy');
+
 // ─── Orphaned exports — the half-build ratchet ─────────────────────────────────
 /**
  * 2026-08-24. Tim: *"an absolutely consistent theme of half built processes… I'm stuck in a 2-month
