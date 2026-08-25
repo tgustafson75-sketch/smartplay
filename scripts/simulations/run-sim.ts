@@ -10150,6 +10150,57 @@ check('LOCK: the Tempo Trainer trains against the player\'s own measured swing',
   })(),
   'SmartMotion persists backswing duration, the store averages it, and the trainer opens on the preset matching the player\'s own swing');
 
+check('RATCHET: every gateable feature is actually enforced somewhere',
+  (() => {
+    /**
+     * 2026-08-25 (pre-submission tier audit) — A GATE THAT IS NEVER CALLED FAILS SILENTLY.
+     *
+     * services/featureAccess declares six FeatureKeys and states the rule: "Full is everything that
+     * spends inference on someone's behalf." Two of the six — `cage_mode` and `voice_advanced` —
+     * were enforced at ZERO call sites, and they are the two biggest inference spenders in the app.
+     * Throwing SUBSCRIPTIONS_ENABLED would have left SmartMotion analysis and the voice caddie free
+     * forever, with nothing failing to say so: the whole point of the paid tier, given away, quietly.
+     *
+     * So every declared key must be checked somewhere. KNOWN_UNENFORCED is a shrinking baseline,
+     * not a place to add things — a new key with no gate fails this outright.
+     */
+    const fa = readCode('services/featureAccess.ts');
+    const block = fa.slice(fa.indexOf('export type FeatureKey'), fa.indexOf(';', fa.indexOf('export type FeatureKey')));
+    const keys = [...block.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!);
+    if (keys.length < 5) return false;                  // parse failed — never pass vacuously
+
+    /**
+     * `voice_advanced` remains unenforced DELIBERATELY, and it is not a one-line fix: five separate
+     * modules build caddie payloads (caddieBrain, conversationalBrain, presenceCaddie,
+     * listeningSession, sceneReadService). Gating some but not all would let a Lite player reach the
+     * caddie through one mic and not another — worse than an honest gap. It needs the senders
+     * consolidated behind one call first. Recorded in docs/OPEN-ITEMS.md rather than half-done.
+     */
+    const KNOWN_UNENFORCED = new Set(['voice_advanced']);
+
+    const searched = [
+      'app/(tabs)/caddie.tsx', 'app/(tabs)/play.tsx', 'app/swinglab/smartmotion.tsx',
+      'components/tools/GlobalToolsMenu.tsx', 'services/tankReview.ts',
+      'services/voice/conversationalToolDispatch.ts',
+    ].map((f) => readCode(f)).join('\n');
+
+    /**
+     * Must reach an actual GATE, not merely appear. A first version of this matched the key anywhere
+     * in the file and passed with the real `canAccess` call deleted, because the key was still named
+     * in the triggerPaywall line beside it. These are the three functions that decide access;
+     * `navOrPaywall` and `gatedOpen` are thin wrappers that call canAccess with the key.
+     */
+    const GATES = ['canAccess', 'navOrPaywall', 'gatedOpen'];
+    const unenforced = keys.filter(
+      (k) => !GATES.some((g) => new RegExp(`${g}\\(\\s*'${k}'`).test(searched)),
+    );
+    // Every gap must be a KNOWN one, and every KNOWN one must still be a real gap (so the baseline
+    // cannot rot: fixing voice_advanced forces deleting its line here).
+    return unenforced.every((k) => KNOWN_UNENFORCED.has(k))
+      && [...KNOWN_UNENFORCED].every((k) => unenforced.includes(k));
+  })(),
+  'every FeatureKey is checked at a real call site; the only baselined gap is voice_advanced, which needs the five caddie senders consolidated first');
+
 check('LOCK: a screen shelved for 2.0 has no door left open',
   (() => {
     /**

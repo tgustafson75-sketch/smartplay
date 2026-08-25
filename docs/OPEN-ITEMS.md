@@ -237,3 +237,47 @@ clubDistances all still INFLUENCE the answer, 1/1 each.
 do not bust the cache today, but each is request-derived and could): `_screenContext`,
 `_smartFinderContext`, `_unifiedContextBlock`, `_holeContextBlock`, `clubAdviceBlock`,
 `is_proactive`, `responseMode`, `modeLabel`, `insightLines`.
+
+## 12. TIER GATING — audited 2026-08-25 pre-submission
+
+`services/featureAccess.ts` declares six gateable features and states the rule plainly: **"Full is
+everything that spends inference on someone's behalf."** The mechanism is real — `canAccess` is
+called at a dozen sites across the caddie tab, play, the tools menu, the cockpit, tank review and
+the voice dispatcher. It is not an orphan.
+
+**But two of the six keys were enforced at ZERO call sites, and they were the two biggest inference
+spenders in the app:**
+
+| key | before | now |
+|---|---|---|
+| `cage_mode` (SmartMotion / Cage analysis) | never checked | gated in `app/swinglab/smartmotion.tsx` |
+| `voice_advanced` (the voice caddie) | never checked | **still open — see below** |
+
+Throwing `SUBSCRIPTIONS_ENABLED` would have left both free forever. Nothing fails when a gate is
+merely absent, which is exactly why this survived: the paid tier's two most expensive features,
+given away silently.
+
+`cage_mode` is gated at the SCREEN, not at each entry point — the hub card, Drills, Shot Shapes, the
+`record_swing` voice tool and the cage all arrive there, and an allowlist of doors would have to be
+right five times. Inert today (`SUBSCRIPTIONS_ENABLED = false`).
+
+### `voice_advanced` is deliberately still open
+
+Not a one-line fix. **Five modules build caddie payloads** — `caddieBrain` ("ONE CALL TO THE
+CADDIE"), `conversationalBrain` ("EVERY MIC, ONE CADDIE"), `presenceCaddie`, `listeningSession`,
+`sceneReadService`. Gating some but not all would let a Lite player reach the caddie through one mic
+and not another, which is worse than an honest gap and impossible to explain to a user. The senders
+need consolidating behind one call first — the tail of the 08-23 "one caddie, one payload" work.
+
+Baselined in the sim (`RATCHET: every gateable feature is actually enforced somewhere`). The
+baseline cannot rot: fixing `voice_advanced` forces deleting its line from the guard.
+
+### None of this can ship as paid in 1.0 regardless
+
+No billing SDK exists. App Store guideline 3.1.1 requires Apple IAP for in-app digital
+subscriptions; Stripe in-app is a rejection. So 1.0 ships free either way, and this work is about
+making the switch behave as documented on the day it is thrown — not about launch revenue.
+
+**Guard note:** the first version of that ratchet passed with the real `canAccess` call deleted,
+because the key was still named in the `triggerPaywall` line beside it. It now requires the key to
+reach an actual gate function (`canAccess` / `navOrPaywall` / `gatedOpen`), and was break-tested red.

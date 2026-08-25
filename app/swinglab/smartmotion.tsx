@@ -102,6 +102,8 @@ import { useClubBagStore } from '../../store/clubBagStore';
 import { useFamilyStore } from '../../store/familyStore';
 import { useAcousticCalibrationStore } from '../../store/acousticCalibrationStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
+import { canAccess } from '../../services/featureAccess';
+import { triggerPaywall } from '../../services/paywallGuard';
 import { usePracticePointsStore } from '../../store/practicePointsStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
@@ -1147,6 +1149,27 @@ export default function SmartMotion() {
   const [expandedCard, setExpandedCard] = useState<ReviewCardKey | null>(null);
   const [tempo, setTempo] = useState<SwingTempo | null>(null);
   const [swingAnalyzing, setSwingAnalyzing] = useState(false);
+
+  /**
+   * 2026-08-25 (pre-submission tier audit) — CAGE_MODE WAS A FEATURE KEY NOBODY CHECKED.
+   *
+   * services/featureAccess defines six gateable features and states the rule plainly: "Full is
+   * everything that spends inference on someone's behalf." Two keys were enforced at ZERO call
+   * sites — `cage_mode` and `voice_advanced` — and those are the two biggest inference spenders in
+   * the app. Flipping SUBSCRIPTIONS_ENABLED on would have left SmartMotion analysis free forever,
+   * silently, because nothing fails when a gate is merely absent.
+   *
+   * Gated HERE rather than at each entry point on purpose: the hub card, Drills, Shot Shapes, the
+   * `record_swing` voice tool and the cage all arrive at this screen, and an allowlist of entry
+   * points would have to be right five times. One screen, every door.
+   *
+   * INERT TODAY. SUBSCRIPTIONS_ENABLED is false, so canAccess returns true and this never fires —
+   * it exists so the switch does what its own documentation promises when it is finally thrown.
+   */
+  useEffect(() => {
+    if (canAccess('cage_mode', profile.subscription_status)) return;
+    void triggerPaywall('cage_mode', () => router.replace('/paywall' as never));
+  }, [profile.subscription_status, router]);
 
   /**
    * 2026-08-25 (Tim — "I've actually never waited for the analysis… I could sit there and watch it
