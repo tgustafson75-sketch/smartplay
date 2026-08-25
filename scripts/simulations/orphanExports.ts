@@ -178,7 +178,7 @@ export const ORPHAN_BASELINE: Record<string, string> = {
   'services/patternEngine.ts :: getDominantMissLabel':
     'WIRE — dominantMiss reaches the brain as a raw value; this is the human label for it.',
   'services/puttingAnalysisService.ts :: speakPuttingAnalysis':
-    'WIRE — the analysis is rendered but never spoken, on a caddie whose whole premise is that it talks.',
+    'PARKED — the RENDERED-BUT-NEVER-SPOKEN defect is FIXED (2026-08-25): the camera putt path now calls the shared speakPuttRead, so the caddie says the read out loud. What remains orphaned is this SPOKEN-READ entry point — analyzePutt({ spoken_read }) for a player who says their own read aloud ("downhill, left to right"). That flow has no surface yet. Wire it when the green-side voice ask exists; do not delete, it is the other half of the same feature.',
   'services/coachLesson.ts :: planById':
     'WIRE — three lesson plans exist and nothing can select one by id.',
 

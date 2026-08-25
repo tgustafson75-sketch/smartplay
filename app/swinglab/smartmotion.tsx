@@ -2375,6 +2375,17 @@ export default function SmartMotion() {
           ]);
           if (putt) {
             setPuttAnalysis(putt);
+            /**
+             * 2026-08-25 — SAY IT. The read was rendered on a card and never spoken, on a caddie
+             * whose whole premise is that it talks. speakPuttingAnalysis had existed for months
+             * with no caller and could not be reused here because it only takes a SPOKEN read;
+             * its speaking half is now shared, so the camera path — the one that actually runs —
+             * uses the same voice, persona mapping and rules as everything else the caddie says.
+             * Fire-and-forget: a failure to speak must never lose the read already on screen.
+             */
+            void import('../../services/puttingAnalysisService')
+              .then((m) => m.speakPuttRead(putt))
+              .catch(() => { /* non-fatal — the card still stands */ });
             const sid = ingestedSessionIdRef.current;
             if (sid) { try { useCageStore.getState().addPuttingAnalysis(sid, putt); } catch { /* non-fatal */ } }
           } else {

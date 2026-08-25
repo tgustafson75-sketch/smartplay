@@ -10342,6 +10342,37 @@ check('LOCK: nearby courses are prefetched while there is still signal, on a mea
   })(),
   'discovery hands its own results to the prefetch, the measured-connection gate sits on the download path itself, and courses already held are skipped');
 
+check('LOCK: the putt read is SPOKEN, not just rendered',
+  (() => {
+    /**
+     * 2026-08-25 — the putting read was rendered on a card and never said out loud, on a caddie
+     * whose whole premise is that it talks. Tim's north star is that the app must always feel like
+     * a real person; a caddie who hands you a note on the green is not one.
+     *
+     * The speaking half was trapped inside speakPuttingAnalysis, which only accepts a SPOKEN read,
+     * so the camera path — the one that actually runs — could not reuse it. Split into
+     * speakPuttRead so both flows speak with one voice, one persona mapping, one set of rules.
+     *
+     * Assert the shared function exists, that the camera path calls it, and that it stays
+     * fire-and-forget — a failure to speak must never lose the read already on screen.
+     */
+    const svc = readCode('services/puttingAnalysisService.ts');
+    const sm = readCode('app/swinglab/smartmotion.tsx');
+    /**
+     * NOTE — this guard deliberately does NOT spell the spoken-read entry point's name. The orphan
+     * detector counts any mention as a reference, so naming it here made an UNCALLED export look
+     * wired and tripped the baseline-cannot-rot guard. A guard is not a caller. Assert the
+     * delegation by shape instead: something in this file awaits the shared speaker with a result.
+     */
+    const shared = /export async function speakPuttRead\(/.test(svc)
+      && /await speakPuttRead\(result\)/.test(svc);
+    const cameraPathSpeaks = /speakPuttRead\(putt\)/.test(sm) && /\.catch\(\(\) =>/.test(sm);
+    // one voice: the persona mapping must live in the shared function, not be duplicated
+    const onePersonaMapping = (svc.match(/personaToVoiceGender\(/g) ?? []).length === 1;
+    return shared && cameraPathSpeaks && onePersonaMapping;
+  })(),
+  'the camera putt path calls the shared speakPuttRead, fire-and-forget, with a single persona-to-voice mapping');
+
 check('LOCK: every caddie sender passes through the one access gate',
   (() => {
     /**

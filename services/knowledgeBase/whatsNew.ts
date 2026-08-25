@@ -28,6 +28,11 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'Your caddie now reads the putt out loud. The green read was on the card but never spoken — on a caddie whose whole point is that he talks. Record a putt and you will hear the line and the pace.',
+    howTo: 'Record a putt in SmartMotion. He speaks the read as the card fills in.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'Torrey Pines South, Pebble Beach and Streamsong Black are now in your course list. Open one and I will pull the holes, pars and yardages, with satellite imagery for every hole.',
     howTo: 'Play tab, scroll the course list.',
   },

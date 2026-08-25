@@ -261,13 +261,25 @@ async function enrichRecommendationWithPersonaKB(
  * Voice-intent convenience: pulls input, analyzes, speaks the persona-
  * aware caddieComment back through voiceService.
  */
-export async function speakPuttingAnalysis(spokenRead: string | null): Promise<PuttingAnalysis> {
-  const result = await analyzePutt({ spoken_read: spokenRead });
+/**
+ * 2026-08-25 — SAY THE PUTT READ OUT LOUD.
+ *
+ * The read was rendered on a card and never spoken, on a caddie whose whole premise is that it
+ * talks — Tim's north star is that it must always feel like a real person, and a caddie who hands
+ * you a note on the green is not one. speakPuttingAnalysis below has existed for months with no
+ * caller at all, and its speaking half was trapped inside it: it only accepts a SPOKEN read
+ * ("downhill, left to right"), so the camera path in SmartMotion — the one that actually runs —
+ * could not reuse it.
+ *
+ * Split out so both flows speak with one voice, one persona mapping, one set of rules. Never
+ * throws: a failure to speak must not lose the read that is already on screen.
+ */
+export async function speakPuttRead(result: PuttingAnalysis): Promise<void> {
   try {
     const settings = useSettingsStore.getState();
     const voiceMod = await import('./voiceService');
-    // Phase 100: pass caddiePersonality (not voiceGender) so Tank / Harry
-    // use their correct male voice, not Kevin's default.
+    // Phase 100: pass caddiePersonality (not voiceGender) so Tank / Harry use their correct male
+    // voice, not Kevin's default.
     const persona = (settings.caddiePersonality ?? 'kevin') as import('../lib/persona').Persona;
     void voiceMod.speak?.(
       result.caddieComment,
@@ -279,8 +291,14 @@ export async function speakPuttingAnalysis(spokenRead: string | null): Promise<P
   } catch (e) {
     devLog('[putting] caddieComment speak failed (non-fatal): ' + String(e));
   }
+}
+
+export async function speakPuttingAnalysis(spokenRead: string | null): Promise<PuttingAnalysis> {
+  const result = await analyzePutt({ spoken_read: spokenRead });
+  await speakPuttRead(result);
   return result;
 }
+
 
 // ─── Public synthesizer ──────────────────────────────────────────────────
 
