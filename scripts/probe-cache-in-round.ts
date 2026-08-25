@@ -23,12 +23,12 @@ const ON_COURSE = {
 type Turn = { label: string; body: Record<string, unknown> };
 
 const turns: Turn[] = [
-  // The REALISTIC round: a different question every turn, and the shot moving underneath it.
-  // This is the shape that always missed before the KB addendum came off the cached prompt.
-  { label: 'turn 1 — first turn of the round (a WRITE is expected here)', body: { ...ON_COURSE, message: 'what do you think here?' } },
-  { label: 'turn 2 — DIFFERENT question', body: { ...ON_COURSE, message: 'and how about the wind?' } },
-  { label: 'turn 3 — different question AND the shot moved', body: { ...ON_COURSE, currentYardage: 118, currentStroke: 2, message: 'what now?' } },
-  { label: 'turn 4 — different question again, later in the hole', body: { ...ON_COURSE, currentYardage: 42, currentStroke: 3, message: 'how should I play this one?' } },
+  // FRESH questions — never sent before. Reusing a question lets a turn match its OWN earlier cache
+  // entry from a previous probe run inside the 1h TTL, which reads as a hit and proves nothing.
+  { label: 'turn 1 — fresh question (a WRITE is expected)', body: { ...ON_COURSE, message: 'is there trouble long here I should know about?' } },
+  { label: 'turn 2 — DIFFERENT fresh question', body: { ...ON_COURSE, message: 'talk me through the second shot' } },
+  { label: 'turn 3 — different fresh question AND the shot moved', body: { ...ON_COURSE, currentYardage: 118, currentStroke: 2, message: 'should I be worried about that bunker' } },
+  { label: 'turn 4 — different fresh question, later in the hole', body: { ...ON_COURSE, currentYardage: 42, currentStroke: 3, message: 'give me a feel for this little one' } },
 ];
 
 (async () => {
@@ -38,11 +38,12 @@ const turns: Turn[] = [
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(t.body),
     });
-    const j = await res.json().catch(() => null) as { _debug?: { usage?: Record<string, number> } } | null;
+    const j = await res.json().catch(() => null) as { _debug?: { usage?: Record<string, number>; systemLen?: number; systemFp?: number } } | null;
     const u = j?._debug?.usage;
     if (!u) { console.log(`${t.label}\n  no usage returned (status ${res.status})\n`); continue; }
     console.log(`${t.label}`);
-    console.log(`  cacheRead=${u.cacheRead}  cacheWrite=${u.cacheWrite}  in=${u.input}  out=${u.output}\n`);
+    console.log(`  cacheRead=${u.cacheRead}  cacheWrite=${u.cacheWrite}  in=${u.input}  out=${u.output}`);
+    console.log(`  systemLen=${j?._debug?.systemLen}  systemFp=${j?._debug?.systemFp}\n`);
   }
   console.log('READ large + WRITE ~0 on turns 2 and 3 = the round is paying cached rates.');
   console.log('WRITE large every turn = the prefix still moves; a 1h write costs 2x.');

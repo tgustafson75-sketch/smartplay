@@ -2272,6 +2272,18 @@ ${kbPrefix}${onCourseContextBlock}${roundFactsPrefix}${turnStatePrefix}${liveFac
          */
         systemLen: systemPromptWithKB.length,
         systemFp: (() => { let h = 0; for (let n = 0; n < systemPromptWithKB.length; n++) { h = (h * 31 + systemPromptWithKB.charCodeAt(n)) | 0; } return h; })(),
+        // Per-2KB-chunk fingerprints. Comparing two turns localises a cache-busting change to one
+        // window of the prompt instead of leaving "something moved" as the whole answer. Hashes
+        // only — no prompt content leaves the server.
+        systemChunks: (() => {
+          const out: number[] = [];
+          for (let a = 0; a < systemPromptWithKB.length; a += 2000) {
+            const part = systemPromptWithKB.slice(a, a + 2000);
+            let h = 0; for (let n = 0; n < part.length; n++) { h = (h * 31 + part.charCodeAt(n)) | 0; }
+            out.push(h);
+          }
+          return out;
+        })(),
       },
     });
 
