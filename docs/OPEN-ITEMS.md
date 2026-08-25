@@ -139,9 +139,17 @@ Done 08-24 (`3d278d0e`): the 27 files referenced by nothing at all (all of `ranc
 verification. Everything else on the critical path has had an invariant sweep.
 
 ## 8. ⚠️ SYSTEMIC — guards that pin defects
-**Five guards this week were green BECAUSE a bug was present**, and would have gone red on the fix:
-the swing gate, the probe-abort, the persona handoff, "the mic tap re-arms", and "earbud 25s
-first try". Two of those were written specifically to PROTECT the thing they were keeping broken.
+**Six guards this week were green BECAUSE a bug was present**, and would have gone red on the fix:
+the swing gate, the probe-abort, the persona handoff, "the mic tap re-arms", "earbud 25s
+first try", and — 2026-08-25 — **the analysis hang guard**, which asserted the literal `130_000`
+while that number had drifted BELOW the sum of the budgets it wraps, so the slowest run that could
+still succeed was killed and shown as "Analysis timed out". Two of those were written specifically
+to PROTECT the thing they were keeping broken.
+
+The sixth is the clearest statement of the pattern yet: **a guard that asserts a magic number
+copied out of another file cannot tell a correct value from a stale one.** It is now re-pointed at
+a DERIVED constant (`ANALYSIS_WORST_CASE_MS`), which is the general fix — assert the relationship,
+never the literal.
 
 689 `check()` calls exist. The stale-guard sweep on 08-20 checked for *vacuous* guards (absence
 assertions over missing files) and found the harness clean — it did NOT look for this class: guards

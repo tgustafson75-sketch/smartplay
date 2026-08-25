@@ -2116,7 +2116,7 @@ export default function SmartMotion() {
       analysisInflightRef.current = {};
       // 2026-07-08 (pre-release sweep — cross-session poisoning, primary path) — the
       // multi-swing path (runWindowedAnalysis) already tokens each run and drops a stale
-      // resolve; this PRIMARY path had no such guard. analysisP has a 130s hang window, so
+      // resolve; this PRIMARY path had no such guard. analysisP has a bounded hang window, so
       // a slow read from THIS session could resolve AFTER the player has started a NEW
       // session (reset() / startRecording()), landing session A's verdict on session B's
       // clip + saved report + CNS. Capture the run token now; every apply below is gated on
@@ -2360,7 +2360,7 @@ export default function SmartMotion() {
         // recorder file above, in parallel with the durable-clip copy + ingest. Await
         // it here for the verdict. (Old order built analyzeOpts + fired analyzeSwing HERE,
         // strictly AFTER awaiting persistClipToDocuments — the byte-copy sat in front of
-        // every verdict.) The 130s outer hang-guard is folded into analysisP so a true
+        // every verdict.) The derived outer hang-guard is folded into analysisP so a true
         // hang still can't strand the screen, and a real-but-late read is never discarded.
         const result: Awaited<ReturnType<typeof analyzeSwing>> = await analysisP!;
         // A newer session started while this read was in flight — drop it entirely so it
