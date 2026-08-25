@@ -259,3 +259,66 @@ export async function downloadCourse(input: {
 export function isCourseDownloaded(courseId: string | null | undefined): boolean {
   return useDownloadedCoursesStore.getState().isDownloaded(courseId);
 }
+
+/**
+ * 2026-08-25 — PREFETCH THE FEW COURSES NEAR YOU, SO THE FIRST TEE NEVER NEEDS SIGNAL.
+ *
+ * Tim's release model: stop shipping 459 bundled images (71MB) and pull 3-5 nearby courses on
+ * demand. Discovery has been wired for months and downloadCourse has existed for months — nothing
+ * joined them, so a course was only fetched when the player explicitly picked it. That is what made
+ * `course_locate_failed · timeout` at Berlin cost a round: by the time the app needed the course,
+ * the phone could not reach the network.
+ *
+ * ORDER MATTERS AND THIS IS STEP ONE. The 459 bundled images stay until this is proven on a real
+ * played course. Building the prefetch and deleting the bundle in the same pass is how someone ends
+ * up on the first tee with no imagery and no way back.
+ *
+ * A locate-then-download wrapper was written here and DELETED before commit: the orphan guard
+ * caught it as an export with no caller. play.tsx has already discovered the courses, so a wrapper
+ * that located them again would have been a second owner of "what is near me" and a wasted call on
+ * exactly the weak connection this exists to survive. Built, unused, removed.
+ */
+/**
+ * The download half, split out so a caller that has ALREADY discovered nearby courses does not pay
+ * for a second locate. play.tsx runs discovery to build its course list; making it re-ask the
+ * network for the same answer would be a second owner of "what is near me" and a wasted call on
+ * exactly the weak connection this feature exists to survive.
+ */
+export async function prefetchFoundCourses(
+  courses: readonly NearbyCourse[],
+  limit: number,
+): Promise<{ attempted: number; downloaded: number; skipped: 'connection' | 'no_courses' | null }> {
+  if (courses.length === 0) return { attempted: 0, downloaded: 0, skipped: 'no_courses' };
+
+  /**
+   * THE GATE LIVES HERE, not in the caller. It was briefly in the wrapper above, which meant a
+   * caller that had already discovered courses — the common case, and the reason this function
+   * exists — would have downloaded without ever measuring the connection. A guard the caller can
+   * route around is not a guard. 'unknown' deliberately fails: an unmeasured connection is exactly
+   * when to ask rather than assume someone's data plan.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { mayPullCourseNow } = require('./connectionClass') as typeof import('./connectionClass');
+  const gate = await mayPullCourseNow().catch(() => ({ ok: false }));
+  if (!gate.ok) {
+    logLocate('course_prefetch_skipped', { reason: 'connection' });
+    return { attempted: 0, downloaded: 0, skipped: 'connection' };
+  }
+
+  const found = { courses };
+
+  let attempted = 0;
+  let downloaded = 0;
+  for (const c of found.courses) {
+    if (attempted >= limit) break;
+    const courseId = c.place_id ? `place:${c.place_id}` : null;
+    if (isCourseDownloaded(courseId)) continue;   // already ours — costs nothing, skip silently
+    attempted += 1;
+    const res = await downloadCourse({ name: c.name, courseId, lat: c.lat, lng: c.lng })
+      .catch(() => ({ ok: false, fresh: false } as { ok: boolean; fresh?: boolean }));
+    if (res.ok && res.fresh) downloaded += 1;
+  }
+
+  logLocate('course_prefetch_done', { attempted, downloaded, limit });
+  return { attempted, downloaded, skipped: null };
+}

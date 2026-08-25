@@ -10154,6 +10154,41 @@ check('LOCK: the Tempo Trainer trains against the player\'s own measured swing',
   })(),
   'SmartMotion persists backswing duration, the store averages it, and the trainer opens on the preset matching the player\'s own swing');
 
+check('LOCK: nearby courses are prefetched while there is still signal, on a measured connection',
+  (() => {
+    /**
+     * 2026-08-25 (Tim, mid-round at Berlin) — course_locate_failed · timeout, at coordinates where
+     * the server answers in under a second. The phone could not reach the network, which is the
+     * normal condition on a golf course.
+     *
+     * Discovery (locateNearbyCourses) and downloading (downloadCourse) had BOTH existed for months
+     * and nothing joined them, so a course was only fetched when the player explicitly picked it —
+     * by which time it is too late. This is release step one; the 459 bundled images stay until it
+     * is proven on a played course.
+     *
+     * Three things must hold or it quietly becomes a data-plan bill or a dead feature:
+     *   1. Discovery actually triggers the prefetch, reusing the list it just found (one owner for
+     *      "what is near me" — not a second locate on a weak connection).
+     *   2. The connection gate lives on the DOWNLOAD path, not in a wrapper a caller can route
+     *      around. It briefly did not, which would have downloaded without ever measuring.
+     *   3. A course already held is never re-pulled.
+     */
+    const engine = readCode('services/courseDownloadEngine.ts');
+    const play = readCode('app/(tabs)/play.tsx');
+
+    const wired = /prefetchFoundCourses\(near, \d\)/.test(play)
+      && /import \{[^}]*prefetchFoundCourses/.test(play);
+
+    // The gate must sit inside the function that performs downloads.
+    const body = engine.slice(engine.indexOf('export async function prefetchFoundCourses'));
+    const gatedAtDownload = /mayPullCourseNow\(\)/.test(body)
+      && body.indexOf('mayPullCourseNow()') < body.indexOf('downloadCourse(');
+    const skipsOwned = /isCourseDownloaded\(courseId\)/.test(body);
+
+    return wired && gatedAtDownload && skipsOwned;
+  })(),
+  'discovery hands its own results to the prefetch, the measured-connection gate sits on the download path itself, and courses already held are skipped');
+
 check('RATCHET: every gateable feature is actually enforced somewhere',
   (() => {
     /**

@@ -197,8 +197,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
   'services/glassesVisionInput.ts :: clearVisionContext': 'PARKED — see attachUtteranceToFrame.',
   'services/glassesVisionInput.ts :: getAggregateMode': 'PARKED — see attachUtteranceToFrame.',
   'services/glassesVisionInput.ts :: getGlassesTransport': 'PARKED — see attachUtteranceToFrame.',
-  'services/connectionClass.ts :: mayPullCourseNow':
-    'PARKED — the throughput gate for SPECULATIVE pre-downloads. measureConnection IS used (play.tsx:1016, log-only and deliberately non-gating for arrival downloads). This gate has no caller because the pre-download queue does not exist yet (docs/OPEN-ITEMS.md §6). NOTE: §6 states the gate is active — it is not.',
   'store/tournamentStore.ts :: getPlayerScore': 'PARKED — tournament scoring selectors ahead of the tournament surface.',
   'store/tournamentStore.ts :: getTeamScore': 'PARKED — see getPlayerScore.',
 
@@ -313,8 +311,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
     'PARKED — Meta glasses profile needs a native build.',
   'services/metaWearablesBridge.ts :: getMetaWearablesStatus':
     'PARKED — Meta glasses profile needs a native build.',
-  'services/courseDownloadEngine.ts :: isCourseDownloaded':
-    'PARKED — the offline-availability check behind the \"ready offline\" state (docs/OPEN-ITEMS.md \u00a76). run-sim.ts:8270 already notes it has zero callers and treats downloadCourse\u2019s idempotence as sufficient. Revisit when the visible ready-offline state is built.',
   'services/activeSurfaceRegistry.ts :: subscribeActiveSurface': 'TRIAGE',
   'services/analytics.ts :: captureError': 'TRIAGE',
   'services/cloudSync/snapshot.ts :: unionSnapshots': 'TRIAGE',

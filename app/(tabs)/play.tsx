@@ -46,7 +46,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 // /tournament with the course pre-filled (saves the free-text typing).
 import { type RoundMode, ROUND_MODE_CARDS } from '../../types/patterns';
 import { searchCourses, getCourse, aiSearchCourse, type AiCourseResult } from '../../services/golfCourseApi';
-import { locateNearbyCourses } from '../../services/courseDownloadEngine';
+import { prefetchFoundCourses, locateNearbyCourses } from '../../services/courseDownloadEngine';
 import { getBundledHoles, getBundledCourseCentroid } from '../../data/courses';
 import { useCustomCourseStore } from '../../store/customCourseStore';
 import { useGeometryStatusStore } from '../../store/geometryStatusStore';
@@ -949,6 +949,18 @@ export default function PlayTab() {
           return;
         }
         if (!near.length) return;
+
+        /**
+         * 2026-08-25 — PULL THE FEW COURSES NEAR YOU WHILE THERE IS STILL SIGNAL.
+         *
+         * Discovery and downloadCourse have both existed for months and nothing joined them, so a
+         * course was only ever fetched when the player explicitly picked it. That is what made
+         * Berlin cost a round: by the time the app needed the course, the phone could not reach the
+         * network. Reuses the list just discovered rather than re-asking — one owner for "what is
+         * near me". Fire-and-forget, gated on a MEASURED fast connection inside, so it can never
+         * compete with the round's own calls or spend someone's data plan.
+         */
+        void prefetchFoundCourses(near, 3);
         const bundledNames = new Set([
           ...LOCAL_COURSES.map(c => c.club_name.toLowerCase()),
           ...customSummaries.map(c => c.club_name.toLowerCase()),
