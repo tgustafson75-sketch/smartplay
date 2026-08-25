@@ -20,9 +20,22 @@ cycles.** Nothing here is OTA-safe. Nothing here is built until the packet is cl
   green geometry, and a watch doing its own maths would be a second owner of the one number the
   player trusts most.
 
-### 2. Headset-CONNECTED detection (pre-existing, parked)
-~10 lines of Kotlin + AVAudioSession. `AudioManager` is already imported and unused. Would retire the
-`voiceOnPhoneSpeaker` / caption toggles. See `docs/NEEDS-A-NATIVE-BUILD.md`.
+### 2. Headset-CONNECTED detection — DONE 2026-08-25, in the packet
+Parked since 08-21 as "highest daily value". `detectRoute()` configured audio and returned; nothing
+ever asked what the audio was coming out of, so the manual Settings toggle was the only writer of the
+route — a player with earbuds in had to tell the app so.
+
+- `android-native/BluetoothMediaButtonModule.kt` — `getAudioRoute()` via
+  `AudioManager.getDevices(GET_DEVICES_OUTPUTS)`. That import had sat unused since the file was
+  written.
+- `ios-native/BluetoothMediaButtonModule.swift` + `.m` — the same from `AVAudioSession.currentRoute`.
+- `services/audioRoutingService.detectRoute()` now asks, and feeds `setRouteForOverride` (which was
+  itself an orphan until now — retired from ORPHAN_BASELINE).
+
+Reports the ROUTE, not a bare boolean: wired can be spoken through freely, Bluetooth is the
+hands-free case, and the phone speaker is where talking out loud might embarrass someone on a quiet
+tee. Never rejects — an unknown route degrades to the manual toggle, so every build before this one
+behaves exactly as it does today.
 
 ## Verified locally BEFORE spending a build cycle
 

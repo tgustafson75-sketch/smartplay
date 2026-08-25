@@ -74,6 +74,37 @@ async function detectRoute() {
   } catch (e) {
     console.log('[audioRouting] setAudioMode failed:', e);
   }
+
+  /**
+   * 2026-08-25 — ACTUALLY DETECT THE ROUTE. Parked since 08-21 as "highest daily value".
+   *
+   * Everything above this point CONFIGURES audio and returns; nothing ever asked what the audio was
+   * coming out of. The only writer of currentRoute was the manual Settings toggle, so a player with
+   * earbuds in had to tell the app so. The native module now answers from AudioManager (Android) /
+   * AVAudioSession (iOS) — both have always known.
+   *
+   * Degrades silently to the manual toggle on any build without the native method, which is every
+   * build before this one. An unknown route is left alone rather than forced to 'phone_speaker':
+   * overriding a player's explicit choice with a guess would be worse than not knowing.
+   */
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { NativeModules } = require('react-native') as typeof import('react-native');
+    const mod = (NativeModules as Record<string, unknown>).BluetoothMediaButton as
+      | { getAudioRoute?: () => Promise<{ route?: string; headsetConnected?: boolean }> }
+      | undefined;
+    if (mod?.getAudioRoute) {
+      const r = await mod.getAudioRoute();
+      const mapped: AudioRoute =
+        r?.route === 'bluetooth' ? 'bluetooth'
+        : r?.route === 'wired' ? 'wired'
+        : r?.route === 'speaker' ? 'phone_speaker'
+        : 'unknown';
+      if (mapped !== 'unknown') setRouteForOverride(mapped);
+    }
+  } catch (e) {
+    console.log('[audioRouting] route detection unavailable (pre-build client):', e);
+  }
 }
 
 /**

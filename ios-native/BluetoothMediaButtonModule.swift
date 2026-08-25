@@ -145,6 +145,42 @@ class BluetoothMediaButton: RCTEventEmitter {
         resolve(["active": self.isActive, "sessionTag": self.isActive ? "SmartPlayBTButton" : ""])
     }
 
+    /**
+     * 2026-08-25 — IS A HEADSET ACTUALLY CONNECTED? (iOS half; mirrors the Android getAudioRoute.)
+     *
+     * Parked since 08-21. services/audioRoutingService.detectRoute() detects nothing — it
+     * configures the audio mode and returns, leaving the manual Settings toggle as the only writer
+     * of the route. AVAudioSession has always known the answer; nothing asked it.
+     *
+     * Reports the ROUTE rather than a bare boolean because the cases behave differently: wired can
+     * be spoken through freely, Bluetooth is the hands-free case, and the phone speaker is the one
+     * where talking out loud might embarrass someone on a quiet tee.
+     *
+     * Never rejects. An unknown route degrades to "speaker", which is the conservative answer —
+     * do not start talking out loud on an assumption.
+     */
+    @objc(getAudioRoute:rejecter:)
+    func getAudioRoute(_ resolve: @escaping RCTPromiseResolveBlock,
+                       rejecter reject: @escaping RCTPromiseRejectBlock) {
+        let outputs = AVAudioSession.sharedInstance().currentRoute.outputs
+        var bluetooth = false
+        var wired = false
+        for o in outputs {
+            switch o.portType {
+            case .bluetoothA2DP, .bluetoothHFP, .bluetoothLE:
+                bluetooth = true
+            case .headphones, .usbAudio:
+                wired = true
+            default:
+                break   // built-in speaker / receiver / HDMI — not a headset
+            }
+        }
+        resolve([
+            "route": bluetooth ? "bluetooth" : (wired ? "wired" : "speaker"),
+            "headsetConnected": bluetooth || wired,
+        ])
+    }
+
     private func emitTap(type: String) {
         // Guard against emit before JS subscribes — RCTEventEmitter
         // warns otherwise.

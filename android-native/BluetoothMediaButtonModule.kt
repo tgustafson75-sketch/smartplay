@@ -165,6 +165,58 @@ class BluetoothMediaButtonModule(reactContext: ReactApplicationContext) :
     }
 
     /**
+     * 2026-08-25 — IS A HEADSET ACTUALLY CONNECTED?
+     *
+     * Parked since 08-21 as "highest daily value, ~10 lines". This module has imported
+     * android.media.AudioManager since it was written and never once used it, while
+     * services/audioRoutingService.detectRoute() "detects" nothing — it configures the audio mode
+     * and returns, leaving the manual Settings toggle as the only writer of the route.
+     *
+     * With this, voiceOnPhoneSpeaker stops needing to be a switch the player thinks about, captions
+     * can auto-enable on Bluetooth (which the settings copy already promises), and the caddie can
+     * stop asking whether to talk out loud.
+     *
+     * Reports the ROUTE, not just a boolean, because the three cases behave differently: wired can
+     * be spoken through freely, Bluetooth is the hands-free case, and the phone speaker is the one
+     * where talking out loud might embarrass someone on a quiet tee.
+     */
+    @ReactMethod
+    fun getAudioRoute(promise: Promise) {
+        try {
+            val am = reactApplicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            var bluetooth = false
+            var wired = false
+            // getDevices is API 23+; this app's minSdk is well above that, but guard anyway rather
+            // than crash an audio query on an old device.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                for (d in am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
+                    when (d.type) {
+                        android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+                        android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+                        android.media.AudioDeviceInfo.TYPE_HEARING_AID -> bluetooth = true
+                        android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET,
+                        android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+                        android.media.AudioDeviceInfo.TYPE_USB_HEADSET -> wired = true
+                        else -> { /* speaker, earpiece, HDMI — not a headset */ }
+                    }
+                }
+            }
+            val map = Arguments.createMap()
+            map.putString("route", if (bluetooth) "bluetooth" else if (wired) "wired" else "speaker")
+            map.putBoolean("headsetConnected", bluetooth || wired)
+            promise.resolve(map)
+        } catch (t: Throwable) {
+            Log.e(tag, "getAudioRoute failed", t)
+            // Never reject an audio query — an unknown route must degrade to "assume speaker",
+            // which is the conservative answer (do not start talking out loud on an assumption).
+            val map = Arguments.createMap()
+            map.putString("route", "speaker")
+            map.putBoolean("headsetConnected", false)
+            promise.resolve(map)
+        }
+    }
+
+    /**
      * Required for NativeEventEmitter on the JS side. No-op bodies are
      * fine — the JS layer subscribes via DeviceEventEmitter directly,
      * so we only need these to silence the RN warning when callers use
