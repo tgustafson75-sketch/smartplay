@@ -28,6 +28,7 @@
  * attempts that quietly hand back a worse caddie.
  */
 import { getApiBaseUrl } from './apiBase';
+import { mayTalkToCaddie } from './featureAccess';
 import { buildCaddieRequestBody, type CaddieRequestExtras } from './caddieRequestBody';
 import { appendPipecatTurn } from './voice/pipecatHistory';
 import type { ToolAction } from '../types/toolAction';
@@ -55,6 +56,9 @@ export interface AskCaddieOptions extends CaddieRequestExtras {
  * habits that produced "generic" and "robot".
  */
 export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | null> {
+  // 2026-08-25 — the one caddie access gate (services/featureAccess.mayTalkToCaddie). Inert while
+  // subscriptions are off; when they are on, a blocked turn raises the paywall rather than going quiet.
+  if (!mayTalkToCaddie()) return null;
   const { timeoutMs, skipTts, signal, ...extras } = opts;
 
   const controller = new AbortController();

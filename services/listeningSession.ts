@@ -1,4 +1,5 @@
 import { Vibration } from 'react-native';
+import { mayTalkToCaddie } from './featureAccess';
 import { BRAIN_FETCH_TIMEOUT_MS as KEVIN_FETCH_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { endsAsQuestion } from './voice/endsAsQuestion';
 import { speak, speakFromBase64, stopSpeaking, captureUtteranceDetailed, releaseExternalMic, playLocalFile, stopCapture, endCaptureEarly, flashCaption, getLastSpokenLine, type CaptureBail, type CaptureResult } from './voiceService';
@@ -1008,7 +1009,10 @@ async function openSession() {
        * reached — that is a failure being handled honestly, not a second caddie answering first.
        */
       speculativeController = new AbortController();
-      speculativeBrainP = fetchWithTimeout(`${apiUrl}/api/kevin`, {
+      // 2026-08-25 — the one caddie access gate. This is the EARBUD path's speculative brain call;
+      // on a conversational turn its answer is the one the player actually hears, so it is a caddie
+      // turn like any other and gates with them. Leaving it null degrades to the classifier path.
+      speculativeBrainP = !mayTalkToCaddie() ? null : fetchWithTimeout(`${apiUrl}/api/kevin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settings.aiProvider ?? 'gemini' },
         signal: speculativeController.signal,

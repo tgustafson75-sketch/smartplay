@@ -3502,7 +3502,13 @@ check('Voice latency: brain fired in parallel with the classifier on precheck-mi
     const ls = read('services/listeningSession.ts');
     return (
       /let speculativeBrainP: Promise<Response \| null> \| null = null;/.test(ls) &&
-      /speculativeBrainP = fetchWithTimeout\(`\$\{apiUrl\}\/api\/kevin`/.test(ls) &&
+      // 2026-08-25 — the assignment now carries the caddie access gate in front of it
+      // (`!mayTalkToCaddie() ? null : fetchWithTimeout(...)`). PARALLELISM IS UNCHANGED when the
+      // turn is allowed, which is what this guard is really about — the call is still fired and
+      // awaited later, not stacked behind the classifier. When it is NOT allowed the speculative
+      // call is simply never made, and the existing `speculativeBrainP && await` consumer already
+      // handles null, degrading to the classifier path rather than breaking.
+      /speculativeBrainP = !mayTalkToCaddie\(\) \? null : fetchWithTimeout\(`\$\{apiUrl\}\/api\/kevin`/.test(ls) &&
       /const chatRes = \(speculativeBrainP && await speculativeBrainP\) \|\| await fetchWithTimeout/.test(ls)
     );
   })(),
@@ -10305,6 +10311,41 @@ check('LOCK: nearby courses are prefetched while there is still signal, on a mea
   })(),
   'discovery hands its own results to the prefetch, the measured-connection gate sits on the download path itself, and courses already held are skipped');
 
+check('LOCK: every caddie sender passes through the one access gate',
+  (() => {
+    /**
+     * 2026-08-25 — FIVE MODULES CAN REACH THE BRAIN. All five must gate, or none should.
+     *
+     * caddieBrain ("ONE CALL TO THE CADDIE"), conversationalBrain ("EVERY MIC, ONE CADDIE"),
+     * presenceCaddie, listeningSession (the earbud speculative call) and sceneReadService each
+     * build their own caddie payload. Gating some but not all is worse than gating none: a Lite
+     * player who reaches the caddie through one mic and not another has a bug, not a paywall, and
+     * it would be blamed on the caddie rather than on billing.
+     *
+     * Consolidating them behind a single sender is the right end state and remains open work. This
+     * guard is what makes the interim safe — one owner for the decision, and a mechanical check
+     * that no sender quietly stops asking.
+     */
+    const OWNER = readCode('services/featureAccess.ts');
+    if (!/export function mayTalkToCaddie/.test(OWNER)) return false;
+    // The owner must actually consult the feature, not just exist.
+    if (!/canAccess\('voice_advanced'/.test(OWNER)) return false;
+
+    const SENDERS = [
+      'services/caddieBrain.ts',
+      'services/conversationalBrain.ts',
+      'services/presenceCaddie.ts',
+      'services/listeningSession.ts',
+      'services/sceneReadService.ts',
+    ];
+    return SENDERS.every((f) => {
+      const src = readCode(f);
+      // Imports it AND calls it — an unused import is not a gate.
+      return /from '\.\/featureAccess'/.test(src) && /mayTalkToCaddie\(\)/.test(src);
+    });
+  })(),
+  'all five caddie payload senders consult mayTalkToCaddie(), the single owner of the voice_advanced decision');
+
 check('RATCHET: every gateable feature is actually enforced somewhere',
   (() => {
     /**
@@ -10331,7 +10372,9 @@ check('RATCHET: every gateable feature is actually enforced somewhere',
      * caddie through one mic and not another — worse than an honest gap. It needs the senders
      * consolidated behind one call first. Recorded in docs/OPEN-ITEMS.md rather than half-done.
      */
-    const KNOWN_UNENFORCED = new Set(['voice_advanced']);
+    // 2026-08-25 — EMPTY, and it stays empty. voice_advanced was the last baselined gap; all five
+    // caddie senders now pass through mayTalkToCaddie(). A new key with no gate fails outright.
+    const KNOWN_UNENFORCED = new Set<string>([]);
 
     const searched = [
       'app/(tabs)/caddie.tsx', 'app/(tabs)/play.tsx', 'app/swinglab/smartmotion.tsx',
@@ -10346,15 +10389,18 @@ check('RATCHET: every gateable feature is actually enforced somewhere',
      * `navOrPaywall` and `gatedOpen` are thin wrappers that call canAccess with the key.
      */
     const GATES = ['canAccess', 'navOrPaywall', 'gatedOpen'];
+    // mayTalkToCaddie is the single owner of the voice_advanced decision — it calls canAccess with
+    // that key internally, so featureAccess itself is where that gate lives.
+    const searchedPlusOwner = [readCode('services/featureAccess.ts')].join('\n');
     const unenforced = keys.filter(
-      (k) => !GATES.some((g) => new RegExp(`${g}\\(\\s*'${k}'`).test(searched)),
+      (k) => !GATES.some((g) => new RegExp(`${g}\\(\\s*'${k}'`).test(searched + '\n' + searchedPlusOwner)),
     );
     // Every gap must be a KNOWN one, and every KNOWN one must still be a real gap (so the baseline
     // cannot rot: fixing voice_advanced forces deleting its line here).
     return unenforced.every((k) => KNOWN_UNENFORCED.has(k))
       && [...KNOWN_UNENFORCED].every((k) => unenforced.includes(k));
   })(),
-  'every FeatureKey is checked at a real call site; the only baselined gap is voice_advanced, which needs the five caddie senders consolidated first');
+  'every FeatureKey is checked at a real call site, with NO baselined exceptions left — voice_advanced now gates all five caddie senders through mayTalkToCaddie()');
 
 check('LOCK: a screen shelved for 2.0 has no door left open',
   (() => {

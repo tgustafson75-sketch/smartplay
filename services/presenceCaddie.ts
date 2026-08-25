@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from './apiBase';
+import { mayTalkToCaddie } from './featureAccess';
 import { buildCaddieRequestBody } from './caddieRequestBody';
 /**
  * 2026-05-28 — Fix FE: "Keep the presence alive."
@@ -76,6 +77,7 @@ interface PresenceFillOpts {
  * re-asks during the same drought.
  */
 export async function presenceFill(opts: PresenceFillOpts): Promise<string | null> {
+  if (!mayTalkToCaddie()) return null;
   const { trigger, context } = opts;
   const now = Date.now();
   const cached = cache.get(trigger);

@@ -261,7 +261,23 @@ given away silently.
 `record_swing` voice tool and the cage all arrive there, and an allowlist of doors would have to be
 right five times. Inert today (`SUBSCRIPTIONS_ENABLED = false`).
 
-### `voice_advanced` is deliberately still open
+### `voice_advanced` — CLOSED 2026-08-25
+
+All five caddie payload senders now pass through one owner, `featureAccess.mayTalkToCaddie()`:
+`caddieBrain`, `conversationalBrain`, `presenceCaddie`, `listeningSession` (the earbud speculative
+call) and `sceneReadService`. The ratchet has **no baselined exceptions left**.
+
+Done as a shared gate rather than the full consolidation on purpose. Merging five senders into one
+is the right end state and is still open work — but it is a large change to the hottest path in the
+app during submission week, and gating SOME of them would have been worse than gating none: a Lite
+player who reaches the caddie through one mic and not another has a bug, not a paywall, and would
+blame the caddie rather than billing. A guard now fails if any sender stops asking.
+
+It degrades rather than going dark — a blocked turn raises the paywall instead of returning silence,
+because a caddie that simply stops answering reads as broken. Inert today
+(`SUBSCRIPTIONS_ENABLED = false`).
+
+### Original note, kept for the reasoning
 
 Not a one-line fix. **Five modules build caddie payloads** — `caddieBrain` ("ONE CALL TO THE
 CADDIE"), `conversationalBrain` ("EVERY MIC, ONE CADDIE"), `presenceCaddie`, `listeningSession`,

@@ -30,6 +30,7 @@
  */
 
 import { askCaddie } from './caddieBrain';
+import { mayTalkToCaddie } from './featureAccess';
 import { setPipecatHistory, clearPipecatHistory } from './voice/pipecatHistory';
 import { useSettingsStore } from '../store/settingsStore';
 
@@ -53,6 +54,9 @@ export function clearConversationalHistory(): void { clearPipecatHistory(); }
  * check lives here.
  */
 export async function conversationalBrainTurn(utterance: string, opts?: { timeoutMs?: number }): Promise<BrainReply> {
+  // 2026-08-25 — the one caddie access gate. NO_ANSWER is this module's own vocabulary for "the
+  // brain did not answer", so every existing caller already handles it correctly.
+  if (!mayTalkToCaddie()) return NO_ANSWER;
   const timeoutMs = opts?.timeoutMs ?? 15_000;
   // 2026-08-09 (dead-trigger audit) — the user_explicit_stuck team-intel trigger was built,
   // thresholded, given a full suggestion UI, and never called. Conservative phrase gate; the

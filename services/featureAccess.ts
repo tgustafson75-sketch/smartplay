@@ -136,3 +136,43 @@ export function featuresIn(edition: Edition): FeatureKey[] {
   return (Object.keys(FEATURE_EDITION) as FeatureKey[])
     .filter(f => FEATURE_EDITION[f] === 'lite' || edition === 'full');
 }
+
+/**
+ * 2026-08-25 (pre-submission tier audit) — THE ONE GATE FOR TALKING TO THE CADDIE.
+ *
+ * `voice_advanced` was declared as a paid feature and enforced at ZERO call sites, so throwing
+ * SUBSCRIPTIONS_ENABLED would have left the single most expensive thing in the app — the brain
+ * itself — free forever, silently. Nothing fails when a gate is merely absent.
+ *
+ * WHY THIS IS A SHARED HELPER AND NOT A REFACTOR. Five modules build caddie payloads: caddieBrain
+ * ("ONE CALL TO THE CADDIE"), conversationalBrain ("EVERY MIC, ONE CADDIE"), presenceCaddie,
+ * listeningSession and sceneReadService. Consolidating them behind a single sender is the right
+ * end state and is the tail of the "one caddie, one payload" work — but it is a large change to the
+ * hottest path in the app, and this is submission week. Gating SOME of them would be worse than
+ * none: a Lite player who reaches the caddie through one mic and not another has a bug, not a
+ * paywall. So: one owner for the decision, called by all five, with a sim guard that fails if any
+ * sender stops calling it.
+ *
+ * DEGRADES, NEVER GOES DARK. A blocked turn raises the paywall rather than returning silence — a
+ * caddie that simply stops answering reads as broken, which is the opposite of what a paywall is
+ * for. Inert today: SUBSCRIPTIONS_ENABLED is false, so this returns true for everyone.
+ */
+export function mayTalkToCaddie(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const prof = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
+    const status = prof.usePlayerProfileStore.getState().subscription_status;
+    if (canAccess('voice_advanced', status)) return true;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { triggerPaywall } = require('./paywallGuard') as typeof import('./paywallGuard');
+      // No navigate function here — the paywall guard defers to the round-aware path, and the
+      // screens that own navigation raise it themselves. This is the signal, not the UI.
+      void triggerPaywall('voice_advanced', () => { /* screens own navigation */ });
+    } catch { /* the gate's answer must not depend on the paywall rendering */ }
+    return false;
+  } catch {
+    // An access check must never be the reason the caddie goes quiet.
+    return true;
+  }
+}

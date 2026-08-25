@@ -18,6 +18,7 @@
  */
 
 import { getApiBaseUrl } from './apiBase';
+import { mayTalkToCaddie } from './featureAccess';
 import { getActiveCaddie } from './caddieResolver';
 import { useSettingsStore } from '../store/settingsStore';
 import { useRoundStore } from '../store/roundStore';
@@ -48,6 +49,8 @@ export async function readScene(input: {
   targetYards?: number | null;
 }): Promise<SceneReadResult | null> {
   if (!input.imageBase64) return null;
+  // 2026-08-25 — the one caddie access gate. A scene read is a brain turn with a picture attached.
+  if (!mayTalkToCaddie()) return null;
   const settings = useSettingsStore.getState();
   const round = useRoundStore.getState();
   const ctx = buildSceneSensorContext({ targetYards: input.targetYards ?? null });
