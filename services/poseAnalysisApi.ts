@@ -23,6 +23,7 @@ import * as VideoThumbnails from '../utils/videoThumbnail';
 import * as FileSystem from 'expo-file-system/legacy';
 import { getApiBaseUrl } from './apiBase';
 import { inferCameraAngle } from './cameraAngleInference';
+import { rejectImplausible } from './swing/biomechPlausibility';
 
 const apiUrl = (): string => getApiBaseUrl();
 
@@ -82,8 +83,14 @@ export interface SwingBiomechanics {
   weightShiftPct: number | null;
   /** Spine angle change from address to impact, in degrees. */
   spineAngleDeltaDeg: number | null;
-  /** Head-position drift from address to impact, in pixels (normalized
-   *  to image height — multiply by frame height for absolute). */
+  /**
+   * Head-position drift from address to impact, SIGNED, as a fraction of SHOULDER WIDTH.
+   *
+   * 2026-08-24 — this said "normalized to image height — multiply by frame height for absolute".
+   * It never was: the computation divides the nose's x-change by the address shoulder width. Anyone
+   * who followed the old note and multiplied by frame height got a meaningless number, and it did
+   * mislead the first version of the plausibility band written against it.
+   */
   headDriftPxNorm: number | null;
   /** Hip slide vs rotate ratio at top. >1 = sliding more than rotating. */
   hipSlideRatio: number | null;
@@ -494,10 +501,11 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
   };
   // Lead-arm angle at the TOP of the backswing: a straight lead arm keeps width + a wide arc; a bent
   // lead arm collapses the radius (power leak, inconsistent low point).
-  const leadArmTopDeg = armAngleAt(top);
+  // `let`, not const: the plausibility gate below rejects an out-of-band read (2026-08-24).
+  let leadArmTopDeg = armAngleAt(top);
   // Lead-arm angle through IMPACT/early follow-through: a bent/cupping lead arm here is the "chicken
   // wing" — loss of extension + face control.
-  const leadArmImpactDeg = armAngleAt(impact);
+  let leadArmImpactDeg = armAngleAt(impact);
 
   // ROBUST SWAY (Tim's named miss): lateral translation of the hip MIDPOINT from address→top,
   // normalized by shoulder width (scale-invariant). Replaces the old hipSlideRatio, which used a
@@ -721,6 +729,45 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
     sequencingScore = null;
     hipSlideRatio = null;
     shoulderTiltDeg = null;
+  }
+
+  /**
+   * 2026-08-24 (Tim's range screenshot) — REJECT WHAT A BODY CANNOT DO, BEFORE ANY VERDICT IS WRITTEN.
+   *
+   * The card read "Weight shift -116% — your weight is hanging back through impact" and "Lead arm
+   * bent to 42° at the top". Neither is a measurement. Weight shift is pelvis displacement as a
+   * percentage of STANCE WIDTH and a person standing on two feet cannot exceed one; leadArmTopDeg is
+   * an ELBOW angle where 180 is straight, so 42 is an arm folded nearly shut. Both were mis-tracked
+   * keypoints, and both were narrated to the player in red, with coaching attached.
+   *
+   * That is worse than reporting nothing — it sends someone to the range to fix a fault the camera
+   * invented. The app already applies this discipline to coordinates (utils/coordGuard) and to club
+   * distances (the plausibility band in clubStatsStore); the pose metrics never got it.
+   *
+   * Placed HERE, above the verdicts, on purpose: the raw number is not what the player sees. The
+   * verdict is. A gate below this line would leave the sentence intact.
+   */
+  {
+    const gated = rejectImplausible({
+      hipTurnDeg, shoulderTurnDeg, shoulderTiltDeg, weightShiftPct, spineAngleDeltaDeg,
+      headDriftPxNorm, hipSlideRatio, sequencingScore, leadArmTopDeg, leadArmImpactDeg,
+      swayNorm, finishWeightPct,
+    });
+    if (gated.rejected.length > 0) {
+      console.log(`[biomech] rejected implausible read(s): ${gated.rejected.join(', ')} — reported as not measured`);
+    }
+    hipTurnDeg = gated.metrics.hipTurnDeg;
+    shoulderTurnDeg = gated.metrics.shoulderTurnDeg;
+    shoulderTiltDeg = gated.metrics.shoulderTiltDeg;
+    weightShiftPct = gated.metrics.weightShiftPct;
+    spineAngleDeltaDeg = gated.metrics.spineAngleDeltaDeg;
+    headDriftPxNorm = gated.metrics.headDriftPxNorm;
+    hipSlideRatio = gated.metrics.hipSlideRatio;
+    sequencingScore = gated.metrics.sequencingScore;
+    leadArmTopDeg = gated.metrics.leadArmTopDeg;
+    leadArmImpactDeg = gated.metrics.leadArmImpactDeg;
+    swayNorm = gated.metrics.swayNorm;
+    finishWeightPct = gated.metrics.finishWeightPct;
   }
 
   // Verdicts — short coaching one-liners based on tour standards.

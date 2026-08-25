@@ -537,6 +537,30 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       const h = require('./caddieHistoryContext') as typeof import('./caddieHistoryContext');
       return h.historyPromptBlock() || null;
     }, null),
+    /**
+     * 2026-08-24 (Tim — "it would be great if the user knows if shots are verifiably better when
+     * doing their routine") — THE ANSWER, so the caddie can just say it.
+     *
+     * services/practice/routineImpact contrasts the player's own slowest third over the ball against
+     * their own quickest third, on clean-strike rate. Ask "does my routine actually help?" and the
+     * caddie answers from their shots instead of repeating the coaching cliché every app repeats.
+     *
+     * COMPUTED FROM COMPLETED ROUNDS ONLY, and that is a cache decision as much as an honesty one.
+     * Folding in the live round would change this string as shots accumulate, and it rides the
+     * CACHED system prompt — a block that moves shot to shot is exactly the defect that cost $50 in
+     * a day. From roundHistory alone it is constant for the whole round. It also happens to be the
+     * more honest window: a finding drawn from finished rounds, not from the four shots so far today.
+     */
+    routineImpactBlock: safe(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const ri = require('./practice/routineImpact') as typeof import('./practice/routineImpact');
+      const past = (r.roundHistory ?? []).flatMap((h: { shots?: unknown[] }) => h.shots ?? []);
+      const out = ri.routineImpact(past as never);
+      return out.status === 'ready'
+        ? `THEIR PRE-SHOT ROUTINE, measured from their own completed rounds (association, not cause — say it as an observation, never as a promise): ${out.line}`
+        : null;
+    }, null),
+
     /** The stated weekly plan — goals, challenges, open reminders. Empty until they engage it. */
     practicePlanBlock: safe(() => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports

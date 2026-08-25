@@ -11712,6 +11712,35 @@ check('LOCK: a drill ANSWERS the focus its card promised, or says why it cannot'
   })(),
   'the drill focus is answered from a real measurement where one exists, refused honestly where it does not, and rendered in the review instead of only reaching the caddie\'s screen context');
 
+check('LOCK: a biomech number the body cannot produce never reaches the player',
+  (() => {
+    /**
+     * 2026-08-24 (Tim's range screenshot). The Swing Breakdown card read, in red:
+     *   "Weight shift -116% — your weight is hanging back through impact"
+     *   "Lead arm bent to 42° at the top — losing width and arc radius"
+     * Weight shift is pelvis displacement as a percentage of STANCE WIDTH, and a person standing on
+     * two feet cannot exceed one. leadArmTopDeg is an ELBOW angle where 180 is straight, so 42 is an
+     * arm folded nearly shut. Both were mis-tracked keypoints narrated as faults with coaching
+     * attached — which sends a player to the range to fix something the camera invented.
+     *
+     * The gate must sit ABOVE the verdicts: the raw number is not what anyone acts on, the sentence
+     * is. And it must REJECT, not clamp — clamping -116 to -100 just narrates a confident extreme.
+     */
+    const gate = readCode('services/swing/biomechPlausibility.ts');
+    const api = readCode('services/poseAnalysisApi.ts');
+    const declared = /export const BIOMECH_BANDS/.test(gate) &&
+      /weightShiftPct: \[-100, 100\]/.test(gate) &&
+      /leadArmTopDeg: \[90, 180\]/.test(gate) &&
+      /\(out as Record<string, unknown>\)\[key\] = null;/.test(gate);   // reject, never clamp
+    const applied = /rejectImplausible\(\{/.test(api);
+    // ORDER is the property: the gate runs before the verdicts are composed.
+    const iGate = api.indexOf('rejectImplausible({');
+    const iVerdicts = api.indexOf('const verdicts = {');
+    const beforeVerdicts = iGate > 0 && iVerdicts > 0 && iGate < iVerdicts;
+    return declared && applied && beforeVerdicts;
+  })(),
+  'every biomech metric is checked against what a body can physically do, out-of-band reads are rejected rather than clamped, and the gate runs before any verdict sentence is written');
+
 // ─── Guards that read prose — the harness auditing itself ─────────────────────
 /**
  * 2026-08-24 (Tim: "check all our work, triple check"). Break-testing every guard written that day

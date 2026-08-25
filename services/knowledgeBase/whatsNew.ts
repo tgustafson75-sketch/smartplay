@@ -28,6 +28,14 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'Ask me whether your pre-shot routine actually helps. I compare the shots you took your time over against the ones you stepped up and hit, and tell you what your own strikes say \u2014 including "no difference yet" if that is the truth.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'No more impossible swing numbers. A missed camera read could show something like "weight shift -116%" and then coach you on it in red. If a number is not something a body can do, I now say I could not read it instead of inventing a fault.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'A drill now answers the thing it said it would watch. Pick a posture drill and you get your posture read back, a tempo drill and you get your tempo. Before, every drill gave the same general swing report no matter what its card promised.',
   },
   {

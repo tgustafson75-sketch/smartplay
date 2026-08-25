@@ -113,3 +113,39 @@ describe('SmartMotion metric coverage, per camera angle', () => {
     }
   });
 });
+
+/**
+ * 2026-08-24 (Tim's range screenshot) — the gate, end to end.
+ *
+ * The card showed "Weight shift -116% — your weight is hanging back through impact" in red. The
+ * number came from a mis-tracked hip; the SENTENCE is what the player saw and acted on. So the check
+ * that matters is not "is the number nulled" but "is the verdict gone".
+ */
+describe('an impossible read produces no verdict, not a red fault', () => {
+  /** Same swing, but the hips teleport miles off the ankles at impact — a classic keypoint jump. */
+  const brokenImpact = (): PoseFrame[] => {
+    const f = swing(0.11);
+    const impact = f.find(x => x.position === 'P6_impact')!;
+    for (const name of ['left_hip', 'right_hip']) {
+      const kp = impact.keypoints.find(k => k.name === name)!;
+      kp.x = -2.5;                      // pelvis flung far outside the stance
+    }
+    return f;
+  };
+
+  it('nulls the weight shift instead of reporting -116%', () => {
+    const b = computeBiomechanicsFromFrames(brokenImpact(), 'face_on', 'right');
+    expect(b.weightShiftPct).toBeNull();
+  });
+
+  it('and writes NO weight-shift verdict — the sentence is what the player acted on', () => {
+    const b = computeBiomechanicsFromFrames(brokenImpact(), 'face_on', 'right');
+    expect(b.verdicts.weightShift).toBeNull();
+  });
+
+  it('a normal swing still reports its weight shift — the gate rejects the impossible, not the real', () => {
+    const b = computeBiomechanicsFromFrames(frames, 'face_on', 'right');
+    expect(b.weightShiftPct).not.toBeNull();
+    expect(Math.abs(b.weightShiftPct as number)).toBeLessThanOrEqual(100);
+  });
+});

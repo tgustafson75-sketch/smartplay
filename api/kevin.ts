@@ -534,6 +534,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
        */
       playerHistoryBlock = null,
       practicePlanBlock = null,
+      /** 2026-08-24 — whether their routine shows up in the strike, from their own rounds. */
+      routineImpactBlock = null,
     } = body;
 
     const cap = (v: unknown, max: number): string =>
@@ -564,6 +566,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const _recentAnalyses: string | null = capOrNull(recent_analyses_snippet, 2000);
     const _playerHistory: string | null = capOrNull(playerHistoryBlock, 1200);
     const _practicePlan: string | null = capOrNull(practicePlanBlock, 1200);
+    const _routineImpact: string | null = capOrNull(routineImpactBlock, 600);
     // 2026-05-23 — Persona Knowledge Layer. When persona='tank' AND the
     // user message matches a KB entry above the score threshold, inject
     // the top entries as a teaching-wisdom block. The brain riffs off
@@ -1316,6 +1319,7 @@ ${_golferModel ? `\nDERIVED TENDENCIES (private; use to be SPECIFIC instead of g
 ${_recentAnalyses ? `\nWHAT YOU JUST TOLD THEM (last few exchanges in this session — don't repeat verbatim, but stay coherent):\n${_recentAnalyses}` : ''}
 ${_playerHistory ? `\n${_playerHistory}` : ''}
 ${_practicePlan ? `\n${_practicePlan}` : ''}
+${_routineImpact ? `\n${_routineImpact}` : ''}
 ${_personaKBBlock ? `\n${_personaKBBlock}` : ''}
 ${_unifiedContextBlock ? `\n${_unifiedContextBlock}` : ''}
 
