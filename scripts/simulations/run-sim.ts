@@ -10091,6 +10091,50 @@ check('LOCK: the analysis hang guard is derived, and larger than the budgets it 
   })(),
   'the screen consumes ANALYSIS_WORST_CASE_MS instead of a literal, and that constant is summed from the locate + request ceilings it must exceed');
 
+check('LOCK: a screen shelved for 2.0 has no door left open',
+  (() => {
+    /**
+     * 2026-08-25 (Tim, submission build) — "I only want things going forward that are elite and
+     * ready for prime time."
+     *
+     * Shelving is not deleting: the screens still exist. So the only thing keeping them off the 1.0
+     * surface is that NOTHING NAMES THEM. Hiding the hub card is the easy half — the caddie's
+     * catalog says which features exist, the voice routes open them deterministically, and the
+     * DASHBOARD had its own Coach Mode button that a hub-only fix would have missed entirely.
+     *
+     * So assert the SHAPE, not a file list: every consumer must filter from services/releaseSurface,
+     * and no shelved path may be pushed anywhere outside its own screen.
+     */
+    const surface = readCode('services/releaseSurface.ts');
+    const routes = [...surface.matchAll(/'(\/[a-z-]+\/[a-z-]+)'/g)].map((m) => m[1]!);
+    if (routes.length < 5) return false;                 // parse failed — never pass vacuously
+
+    // Each consumer filters from the one owner rather than hand-editing its own list.
+    const consumers = [
+      'app/(tabs)/swinglab.tsx',
+      'services/knowledgeBase/appCatalog.ts',
+      'services/intents/openToolHandler.ts',
+      'app/(tabs)/dashboard.tsx',
+    ];
+    const allFilter = consumers.every((f) => {
+      const c = readCode(f);
+      return /from '.*releaseSurface'/.test(c) && /isShelved\(/.test(c);
+    });
+    if (!allFilter) return false;
+
+    // And no shelved route may be pushed from a screen that still ships.
+    const pushers = ['app/(tabs)/dashboard.tsx', 'app/(tabs)/swinglab.tsx', 'app/(tabs)/caddie.tsx', 'app/(tabs)/play.tsx'];
+    const noRawPush = pushers.every((f) => {
+      const c = readCode(f);
+      return routes.every((r) => {
+        const pushed = new RegExp(`push\\(\\s*['\`]${r.replace(/\//g, '\\/')}`).test(c);
+        return !pushed || /isShelved\(/.test(c);       // present is fine only when gated
+      });
+    });
+    return noRawPush;
+  })(),
+  'the hub, the caddie catalog, the voice routes and the dashboard all filter shelved screens from services/releaseSurface — no ungated door remains');
+
 check('RATCHET: nothing new may be interpolated into the cached system prompt',
   (() => {
     /**

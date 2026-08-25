@@ -29,6 +29,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
+import { isShelved } from '../../services/releaseSurface';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
 import { SETUP_CHECK_ENABLED } from '../../services/swing/setupCheck';
@@ -276,11 +277,18 @@ interface HubSection {
   headerDefault: string;
   cards: LauncherCardSpec[];
 }
-const SECTIONS: HubSection[] = [
+const ALL_SECTIONS: HubSection[] = [
   { key: 'practice', headerKey: 'swinglab.sec_practice', headerDefault: 'PRACTICE BETTER', cards: PRACTICE_SECTION },
   { key: 'play',     headerKey: 'swinglab.sec_play',     headerDefault: 'PLAY SMARTER',    cards: PLAY_SECTION },
   { key: 'prepare',  headerKey: 'swinglab.sec_prepare',  headerDefault: 'PREPARE BETTER',  cards: PREPARE_SECTION },
 ];
+
+const SECTIONS: HubSection[] = ALL_SECTIONS
+  // 2026-08-25 — the 1.0 player surface. Filtered from the ONE list in services/releaseSurface, not
+  // by editing these arrays, so a shelved screen cannot survive here while the caddie's catalog and
+  // voice routes drop it (or vice versa). A section left with no cards renders nothing.
+  .map((sec): HubSection => ({ ...sec, cards: sec.cards.filter((c) => !isShelved(c.route)) }))
+  .filter((sec) => sec.cards.length > 0);
 
 /** Fade a hex color to an rgba string (for tinted icon boxes + tag chips). */
 function hexFade(hex: string, alpha: number): string {

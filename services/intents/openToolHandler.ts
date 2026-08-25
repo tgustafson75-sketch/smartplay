@@ -1,4 +1,5 @@
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
+import { isShelved } from '../releaseSurface';
 import type { ToolAction } from '../../types/toolAction';
 // 2026-06-24 — APP-FEATURE CATALOG as the routing source of truth. The explicit
 // classifier-name map below stays (existing tool routes), but any tool_name or
@@ -67,7 +68,7 @@ async function tryVoiceDirectMark(
   };
 }
 
-const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path: string }> = {
+const ALL_TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path: string }> = {
   smartvision: { type: 'open_smartvision' },
   smartfinder: { type: 'open_smartfinder' },
   swinglab:    { type: 'open_swinglab' },
@@ -232,6 +233,18 @@ const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path:
   swingsim: { type: 'navigate', path: '/swinglab/simround' },
   swing_sim: { type: 'navigate', path: '/swinglab/simround' },
 };
+
+/**
+ * 2026-08-25 — strip every route shelved for 2.0. Hiding the hub card is not enough: these are the
+ * deterministic voice routes, so "open coach mode" would still navigate straight to a screen the
+ * player can no longer see. One owner: services/releaseSurface.
+ */
+const TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; path: string }> =
+  Object.fromEntries(
+    Object.entries(ALL_TOOL_NAME_TO_ACTION).filter(
+      ([, a]) => !('path' in a && isShelved(a.path)),
+    ),
+  );
 
 const TOOL_LABEL: Record<string, string> = {
   smartvision: 'SmartVision',

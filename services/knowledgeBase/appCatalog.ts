@@ -21,8 +21,9 @@
  */
 
 import type { AppFeature } from './schema';
+import { isShelved } from '../releaseSurface';
 
-export const APP_FEATURES: AppFeature[] = [
+const ALL_APP_FEATURES: AppFeature[] = [
   // ── ANALYZE (the wow: capture + AI) ──────────────────────────────────────
   {
     id: 'smartmotion',
@@ -446,6 +447,13 @@ export function lookupFeature(transcript: string): AppFeature | null {
  * Kept tight (capped aliases) because this string is paid for on EVERY turn.
  * ~1.0–1.4k chars total across the catalog.
  */
+/**
+ * 2026-08-25 — the catalog is what the caddie is TOLD exists. A screen shelved for 2.0 must vanish
+ * from here too, or he will keep offering it ("want me to open Coach Mode?") and the navigate tool
+ * will happily take the player to a surface we removed from the hub. One owner: services/releaseSurface.
+ */
+export const APP_FEATURES: AppFeature[] = ALL_APP_FEATURES.filter((f) => !isShelved(f.route));
+
 export function catalogForPrompt(): string {
   const features = APP_FEATURES.map(f => {
     const says = f.aliases.slice(0, 3).join(', ');

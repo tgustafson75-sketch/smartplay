@@ -79,6 +79,7 @@ const GET_TO_KNOW_FOCUS =
 // alongside the Highlights Card rework. pointsStore import dropped.
 import { generateKevinRead } from '../../services/kevinReadService';
 import { useTheme } from '../../contexts/ThemeContext';
+import { isShelved } from '../../services/releaseSurface';
 import { detectPatternShift } from '../../services/patternDetection';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
@@ -771,14 +772,22 @@ export default function Dashboard() {
                   {activeFamilyMember ? `Active: ${activeFamilyMember.firstName}` : 'Tap a golfer to review swings'}
                 </Text>
               </View>
-              <TouchableOpacity
-                onPress={() => router.push('/swinglab/coach-mode' as never)}
-                style={[styles.sharedAction, { backgroundColor: colors.accent, borderColor: colors.accent }]}
-                accessibilityRole="button"
-                accessibilityLabel="Open Coach Mode"
-              >
-                <Text style={styles.sharedActionText}>Coach Mode</Text>
-              </TouchableOpacity>
+              {/*
+                2026-08-25 — a SECOND door into Coach Mode, on the most-seen screen in the app.
+                Hiding the Swing Lab card alone would have left it wide open here. Gated from the
+                same single owner, so a shelved screen has no way in. The roster below is unaffected
+                — tapping a golfer still opens their library.
+              */}
+              {!isShelved('/swinglab/coach-mode') ? (
+                <TouchableOpacity
+                  onPress={() => router.push('/swinglab/coach-mode' as never)}
+                  style={[styles.sharedAction, { backgroundColor: colors.accent, borderColor: colors.accent }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open Coach Mode"
+                >
+                  <Text style={styles.sharedActionText}>Coach Mode</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sharedChips}>
               {coachableRoster.map(member => {

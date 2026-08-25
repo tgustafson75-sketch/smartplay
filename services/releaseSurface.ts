@@ -1,0 +1,50 @@
+/**
+ * 2026-08-25 (Tim, App Store submission build) — WHAT THE PLAYER CAN SEE IN 1.0.
+ *
+ * "I only want things going forward that are elite and ready for prime time... I don't mean deleting
+ * the functions behind the curtain. I'm saying as a separate identifiable drill that users can see,
+ * then we pull it out as a refined function."
+ *
+ * So this is NOT a delete list. Every screen below still exists, still compiles, and its engine still
+ * runs wherever a shipping surface uses it — SmartMotion remains the primary writer of the tempo
+ * model, so shelving Hotel Mode and SwingSim costs no learning. What changes is that they stop being
+ * separately identifiable cards a first-time user has to understand, and stop being things an App
+ * Store reviewer can find half-finished (Coach Mode still carries "Coach Mode v2" TODOs in source).
+ *
+ * ONE OWNER, THREE CONSUMERS. A card hidden from the hub is not hidden: `appCatalog` tells the caddie
+ * which features exist, and `openToolHandler` gives it deterministic routes to open them. Hiding the
+ * card while leaving those two wired would mean the caddie still offers a shelved screen and
+ * navigates straight to it — the exact "connected but not used" trap, inverted. All three read this
+ * file, and a sim guard asserts none of them can name a shelved route.
+ *
+ * To bring one back for 2.0: delete its line here. Nothing else needs to change.
+ */
+
+/** Routes shelved for 2.0 — present in the codebase, absent from the 1.0 player surface. */
+export const SHELVED_ROUTES: ReadonlySet<string> = new Set<string>([
+  /**
+   * Open Range — NOT a quality cut. It is honest and working today (every number comes from
+   * summarizeOpenRange over real analyzed swings, no fabricated dispersion), and it overlaps Focus
+   * Session, so nothing is lost by holding it.
+   *
+   * Tim 2026-08-25 — it is WAITING ON A SENSOR, not on code: "Open Range is gonna be a really cool
+   * tool when we increase the vision. It's something I wanna check when I get the iPhone 17 Pro Max
+   * that has up to 120 FPS and see if that has better response in terms of ball tracing, ball
+   * tracking." Mashing balls is the one surface whose value scales directly with capture rate.
+   *
+   * BRING IT BACK when 120fps capture is tested and ball tracing measurably improves — not before,
+   * and not for any other reason. Related: the parked 240fps face/smash work.
+   */
+  '/practice/open-range',
+  '/swinglab/indoor',       // Hotel Mode — small-space practice; folds back in as a refined mode later
+  '/swinglab/simround',     // SwingSim
+  '/swinglab/coach-lesson', // Coach Caddie — explicitly 2.0 (its planById service export is already orphaned)
+  '/swinglab/coach-mode',   // coach-facing tool inside a consumer app, and carries v2 TODOs
+]);
+
+/** True when a route must not be offered to the player in this release. */
+export function isShelved(route: string | null | undefined): boolean {
+  if (!route) return false;
+  const clean = route.split('?')[0]!.replace(/\/+$/, '');
+  return SHELVED_ROUTES.has(clean);
+}
