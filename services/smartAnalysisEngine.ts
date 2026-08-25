@@ -1004,7 +1004,10 @@ export async function enrichWithPersonaWisdom(
   envelope: AnalysisEnvelope,
   persona: Persona,
 ): Promise<AnalysisEnvelope> {
-  if (persona !== 'tank') return envelope;
+  // 2026-08-25 — this enrichment was Tank-only and the persona is gone, so it never applies.
+  // Kept as a no-op rather than unpicking the call chain during submission week; the early return
+  // is now unconditional and the dead body below is unreachable.
+  return envelope;
   if (!envelope.voice_summary || envelope.voice_summary.length < 12) return envelope;
   // Avoid double-enrich on history replays.
   if (envelope.voice_summary.includes("Tank's take:")) return envelope;

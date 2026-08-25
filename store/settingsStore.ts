@@ -14,7 +14,7 @@ let personaHandoffTimer: ReturnType<typeof setTimeout> | null = null;
 // this duplicate type literal exists for back-compat with the
 // existing intent-handler imports that already pull Persona from
 // settingsStore.
-export type Persona = 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
+export type Persona = 'kevin' | 'serena' | 'harry' | 'custom';
 export type CaddiePillar = 'round' | 'cage' | 'drills' | 'play';
 
 // Per-pillar default assignments. The user can override any pillar in Settings.
@@ -480,7 +480,7 @@ export const useSettingsStore = create<SettingsState>()(
       // Note: Harry is soft-removed from active UI (see lib/persona.ts
       // ACTIVE_PERSONAS) but the intensity entry stays so flipping him
       // back active is a single-line edit.
-      personaIntensity: { kevin: 100, serena: 100, harry: 90, tank: 70, custom: 100 },
+      personaIntensity: { kevin: 100, serena: 100, harry: 90, custom: 100 },
       tankSoftIntro: true,
       // 2026-07-06 — hands-free is the #1 priority. Active Listening on by default so
       // "start a round → just talk" works without digging into Settings. The
@@ -579,15 +579,8 @@ export const useSettingsStore = create<SettingsState>()(
       },
       setResponseMode: (m) => set({ responseMode: m }),
       setCaddiePersonality: (p) => {
-        // 2026-08-06 (audit) — Tank is OWNER-GATED. The per-pillar pickers were gated, but the "Active
-        // Caddie" override picker, the tools-menu cycler, and the onboarding pickers still wrote 'tank'
-        // directly — and many voice/brain paths read `caddiePersonality` raw, bypassing caddieResolver's
-        // gate. Enforce the invariant at the SETTER: while Tank is disabled, a request to set 'tank' is
-        // redirected to the current (non-Tank) persona, so NO surface can ever run Tank unless enabled.
-        if (p === 'tank' && !get().tankEnabled) {
-          const cur = get().caddiePersonality;
-          p = cur !== 'tank' ? cur : 'kevin';
-        }
+        // 2026-08-25 — the Tank setter guard is gone with the persona. It exists no longer as a type,
+        // so no surface can name it; a persisted value is migrated to Kevin by v22.
         // 2026-05-21 — Fix Q (Path B): global persona is the single source
         // of truth. Setting it ALSO resets every per-pillar assignment to
         // the same persona so the per-pillar map can never silently
@@ -807,26 +800,11 @@ export const useSettingsStore = create<SettingsState>()(
       setGhostAutoActivate: (v) => set({ ghostAutoActivate: v }),
       // Phase 105 — per-pillar assignment.
       setCaddieForPillar: (pillar, p) => set((s) => ({
-        // 2026-08-07 (Tim — gate audit) — mirror the setCaddiePersonality Tank guard here: a per-pillar
-        // assignment can't set Tank while he's owner-disabled either.
-        caddieAssignments: { ...s.caddieAssignments, [pillar]: (p === 'tank' && !s.tankEnabled) ? (s.caddieAssignments?.[pillar] ?? 'kevin') : p },
+        caddieAssignments: { ...s.caddieAssignments, [pillar]: p },
       })),
-      setTankEnabled: (v) => set((s) => {
-        if (v) return { tankEnabled: true };
-        // Turning Tank OFF: scrub any 'tank' pillar assignment back to its pillar default so nothing keeps
-        // running Tank (also covers the single caddiePersonality that mirrors into all pillars).
-        const a = s.caddieAssignments;
-        return {
-          tankEnabled: false,
-          caddiePersonality: s.caddiePersonality === 'tank' ? 'kevin' : s.caddiePersonality,
-          caddieAssignments: {
-            round: a.round === 'tank' ? DEFAULT_CADDIE_ASSIGNMENTS.round : a.round,
-            cage: a.cage === 'tank' ? DEFAULT_CADDIE_ASSIGNMENTS.cage : a.cage,
-            drills: a.drills === 'tank' ? DEFAULT_CADDIE_ASSIGNMENTS.drills : a.drills,
-            play: a.play === 'tank' ? DEFAULT_CADDIE_ASSIGNMENTS.play : a.play,
-          },
-        };
-      }),
+      // 2026-08-25 — Tank is removed from the app. The setter is kept as a no-op so the several
+      // owner-tools call sites keep compiling; it can go when those are cleaned up.
+      setTankEnabled: (_v) => set(() => ({ tankEnabled: false })),
       resetCaddieAssignments: () => set({
         caddieAssignments: { ...DEFAULT_CADDIE_ASSIGNMENTS },
       }),
@@ -880,7 +858,7 @@ export const useSettingsStore = create<SettingsState>()(
           if (p.simpleBriefing == null) p.simpleBriefing = false;
           if (p.tankSoftIntro == null) p.tankSoftIntro = true;
           if (p.personaIntensity == null) {
-            p.personaIntensity = { kevin: 100, serena: 100, harry: 100, tank: 70, custom: 100 };
+            p.personaIntensity = { kevin: 100, serena: 100, harry: 100, custom: 100 };
           }
         }
         // Re-sim P0 #1 + P2 — auto-on simpleBriefing for new users
@@ -913,11 +891,14 @@ export const useSettingsStore = create<SettingsState>()(
         // stranded on a persona the UI no longer lists. The persona was built around a real person,
         // so this is a removal rather than a dormancy.
         if (version < 22) {
-          if (p.caddiePersonality === 'tank') p.caddiePersonality = 'kevin';
+          // Compared as a string on purpose: 'tank' is no longer a Persona in the type system, but
+          // it absolutely exists in data persisted by earlier builds — which is the entire reason this
+          // migration is here. A migration that could not name the old value could not migrate it.
+          if ((p.caddiePersonality as string) === 'tank') p.caddiePersonality = 'kevin';
           if (p.caddieAssignments) {
             const reassigned: CaddieAssignments = { ...p.caddieAssignments };
             (Object.keys(reassigned) as CaddiePillar[]).forEach((pillar) => {
-              if (reassigned[pillar] === 'tank') reassigned[pillar] = 'kevin';
+              if ((reassigned[pillar] as string) === 'tank') reassigned[pillar] = 'kevin';
             });
             p.caddieAssignments = reassigned;
           }
@@ -955,7 +936,7 @@ export const useSettingsStore = create<SettingsState>()(
           } else {
             // No personaIntensity persisted at all (very old payload that
             // somehow skipped v4 seeding). Seed to mid defaults.
-            p.personaIntensity = { kevin: 100, serena: 100, harry: 90, tank: 70, custom: 100 };
+            p.personaIntensity = { kevin: 100, serena: 100, harry: 90, custom: 100 };
           }
         }
         // v9 — added auto-club prompt persistence + generic auto-club
@@ -978,7 +959,7 @@ export const useSettingsStore = create<SettingsState>()(
           // migration left personaIntensity missing/non-object, seed the
           // full shape rather than spread-merging onto undefined.
           if (!p.personaIntensity || typeof p.personaIntensity !== 'object') {
-            p.personaIntensity = { kevin: 100, serena: 100, harry: 90, tank: 70, custom: 100 };
+            p.personaIntensity = { kevin: 100, serena: 100, harry: 90, custom: 100 };
           } else if ((p.personaIntensity as Record<string, number>).custom == null) {
             p.personaIntensity = { ...p.personaIntensity, custom: 100 };
           }

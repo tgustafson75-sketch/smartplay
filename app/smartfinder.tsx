@@ -71,7 +71,6 @@ import { speak } from '../services/voiceService';
 // 2026-05-27 — Fix EP: SmartFinder "Send to Tank" icon. Routes to
 // Library so the user picks the swing video to send (SmartFinder
 // itself has no video — the icon launches the share flow).
-import { isSendToTankAvailable } from '../services/tankReview';
 import { Ionicons } from '@expo/vector-icons';
 // 2026-05-27 — Fix EQ: toast feedback for capture results.
 import { useToastStore } from '../store/toastStore';
@@ -296,21 +295,6 @@ export default function SmartFinder() {
         </TouchableOpacity>
         <Text style={styles.title}>SmartFinder</Text>
         <View style={[styles.headerBtn, { flexDirection: 'row', alignItems: 'center', gap: 10 }]}>
-          {/* 2026-05-27 — Fix EP: Send-to-Tank entry point from
-              SmartFinder. SmartFinder doesn't OWN a video, so the
-              icon routes the user to Library where each swing has
-              its own paper-plane to send. During paywall-off beta,
-              isSendToTankAvailable() is always true. */}
-          {isSendToTankAvailable() && (
-            <TouchableOpacity
-              onPress={() => router.push('/swinglab/library' as never)}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              accessibilityRole="button"
-              accessibilityLabel="Pick a swing to send to Tank for review"
-            >
-              <Ionicons name="paper-plane-outline" size={18} color="#F0C030" />
-            </TouchableOpacity>
-          )}
           <GPSQuality reading={gps} showText />
         </View>
       </View>

@@ -1034,10 +1034,9 @@ export default function Settings() {
             options={personaChoices([
               { label: 'Kevin', value: 'kevin' },
               { label: 'Serena', value: 'serena' },
-              { label: 'Tank', value: 'tank' },
             ])}
             value={gatedPersona('round', caddieAssignments.round)}
-            onSelect={(v) => setCaddieForPillar('round', v as 'kevin' | 'serena' | 'harry' | 'tank')}
+            onSelect={(v) => setCaddieForPillar('round', v as 'kevin' | 'serena' | 'harry')}
           />
 
           <PillRow
@@ -1045,10 +1044,9 @@ export default function Settings() {
             options={personaChoices([
               { label: 'Serena', value: 'serena' },
               { label: 'Kevin', value: 'kevin' },
-              { label: 'Tank', value: 'tank' },
             ])}
             value={gatedPersona('cage', caddieAssignments.cage)}
-            onSelect={(v) => setCaddieForPillar('cage', v as 'kevin' | 'serena' | 'harry' | 'tank')}
+            onSelect={(v) => setCaddieForPillar('cage', v as 'kevin' | 'serena' | 'harry')}
           />
 
           <PillRow
@@ -1056,10 +1054,9 @@ export default function Settings() {
             options={personaChoices([
               { label: 'Serena', value: 'serena' },
               { label: 'Kevin', value: 'kevin' },
-              { label: 'Tank', value: 'tank' },
             ])}
             value={gatedPersona('drills', caddieAssignments.drills)}
-            onSelect={(v) => setCaddieForPillar('drills', v as 'kevin' | 'serena' | 'harry' | 'tank')}
+            onSelect={(v) => setCaddieForPillar('drills', v as 'kevin' | 'serena' | 'harry')}
           />
 
           <PillRow
@@ -1067,10 +1064,9 @@ export default function Settings() {
             options={personaChoices([
               { label: 'Kevin', value: 'kevin' },
               { label: 'Serena', value: 'serena' },
-              { label: 'Tank', value: 'tank' },
             ])}
             value={gatedPersona('play', caddieAssignments.play)}
-            onSelect={(v) => setCaddieForPillar('play', v as 'kevin' | 'serena' | 'harry' | 'tank')}
+            onSelect={(v) => setCaddieForPillar('play', v as 'kevin' | 'serena' | 'harry')}
           />
 
           <TouchableOpacity onPress={resetCaddieAssignments} style={styles.linkBtn}>
@@ -1124,7 +1120,6 @@ export default function Settings() {
             options={personaChoices([
               { label: 'Kevin', value: 'kevin' },
               { label: 'Serena', value: 'serena' },
-              { label: 'Tank', value: 'tank' },
               {
                 label: (() => {
                   try {
@@ -1137,7 +1132,7 @@ export default function Settings() {
             ])}
             value={caddiePersonality}
             onSelect={(v) => {
-              setCaddiePersonality(v as 'kevin' | 'serena' | 'tank' | 'custom');
+              setCaddiePersonality(v as 'kevin' | 'serena' | 'custom');
               try {
                 usePlayerProfileStore.getState().setUseCustomCaddie(v === 'custom');
               } catch (e) { console.log('[settings] custom-caddie sync failed (non-fatal):', e); }

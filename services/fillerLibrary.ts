@@ -26,7 +26,12 @@ const rrCounters: Partial<Record<FillerCategory, number>> = {};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-type Persona = 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
+/**
+ * 2026-08-25 — was a SIXTH local copy of this union. Six files each declared their own Persona
+ * type, so removing a persona had to be remembered six times — which is exactly why 'tank' kept
+ * surviving edits that thought they had removed it. One owner now.
+ */
+import type { Persona } from '../lib/persona';
 
 function voiceHash(persona: Persona, language: string): string {
   // v4 = persona-keyed (was gender-keyed in v3). All male personas

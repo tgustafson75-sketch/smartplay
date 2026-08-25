@@ -22,7 +22,7 @@ import { Linking } from 'react-native';
 import { useSettingsStore } from '../../store/settingsStore';
 import { getScreenContext } from '../screenContext';
 
-const PERSONAS = ['kevin', 'serena', 'harry', 'tank', 'custom'] as const;
+const PERSONAS = ['kevin', 'serena', 'harry', 'custom'] as const;
 
 // 2026-07-30 (Tim — "in the tell-your-caddie mode, caddie keeps opening SwingLab while I'm
 // telling it my faults; the conversation is meant to gather info and build the profile by

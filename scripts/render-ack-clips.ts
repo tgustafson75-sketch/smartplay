@@ -27,13 +27,17 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-type Persona = 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
+/**
+ * 2026-08-25 — was a SIXTH local copy of this union. Six files each declared their own Persona
+ * type, so removing a persona had to be remembered six times — which is exactly why 'tank' kept
+ * surviving edits that thought they had removed it. One owner now.
+ */
+import type { Persona } from '../lib/persona';
 type OpenAIVoice = 'alloy' | 'ash' | 'coral' | 'echo' | 'fable' | 'nova' | 'onyx' | 'sage' | 'shimmer' | 'verse';
 
 const VOICE_BY_PERSONA: Record<Persona, OpenAIVoice> = {
   kevin:  'onyx',
   serena: 'nova',
-  tank:   'ash',
   harry:  'fable',
   // Custom caddie: do not pre-render server clips (the user's own
   // recorded voice plays from local files). 'onyx' here is unused

@@ -112,32 +112,7 @@ const HARRY_GREETING_ASSETS: Record<GreetingFilename, AssetModule> = {
   'demo_mode.mp3':     require('../assets/audio/greetings/harry/demo_mode.mp3'),
 };
 
-const TANK_GREETING_ASSETS: Record<GreetingFilename, AssetModule> = {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  'universal_01.mp3':  require('../assets/audio/greetings/tank/universal_01.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  'universal_02.mp3':  require('../assets/audio/greetings/tank/universal_02.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  'universal_03.mp3':  require('../assets/audio/greetings/tank/universal_03.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  'morning_01.mp3':    require('../assets/audio/greetings/tank/morning_01.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  'morning_02.mp3':    require('../assets/audio/greetings/tank/morning_02.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  'evening_01.mp3':    require('../assets/audio/greetings/tank/evening_01.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  'evening_02.mp3':    require('../assets/audio/greetings/tank/evening_02.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  'weekend_01.mp3':    require('../assets/audio/greetings/tank/weekend_01.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  'weekend_02.mp3':    require('../assets/audio/greetings/tank/weekend_02.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  'first_launch.mp3':  require('../assets/audio/greetings/tank/first_launch.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  'returning.mp3':     require('../assets/audio/greetings/tank/returning.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  'demo_mode.mp3':     require('../assets/audio/greetings/tank/demo_mode.mp3'),
-};
+// 2026-08-25 (Tim) — TANK_GREETING_ASSETS removed with the persona; its audio was deleted.
 
 /**
  * Get the bundled greeting asset for the active persona. Returns Kevin's
@@ -151,7 +126,6 @@ export function getGreetingAssetForPersona(
   switch (persona) {
     case 'serena': return SERENA_GREETING_ASSETS[filename];
     case 'harry':  return HARRY_GREETING_ASSETS[filename];
-    case 'tank':   return TANK_GREETING_ASSETS[filename];
     case 'kevin':
     default:       return GREETING_ASSETS[filename];
   }

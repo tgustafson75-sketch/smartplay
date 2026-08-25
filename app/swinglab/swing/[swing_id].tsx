@@ -58,7 +58,6 @@ import VideoAnnotationOverlay from '../../../components/swinglab/VideoAnnotation
 // 2026-05-27 — Fix EO: cage targeting card + overlay.
 import CageTargetingCard, { CageTargetingOverlay } from '../../../components/swinglab/CageTargetingCard';
 // 2026-05-27 — Fix EP: send-to-Tank stub.
-import { sendSwingToTank, isSendToTankAvailable, TANK_REVIEW_EMAIL } from '../../../services/tankReview';
 import DrillCard from '../../../components/swinglab/DrillCard';
 import PuttingAnalysisCard from '../../../components/swinglab/PuttingAnalysisCard';
 import SwingActionSheet from '../../../components/swinglab/SwingActionSheet';
@@ -2240,96 +2239,6 @@ export default function SwingDetail() {
             </View>
           </View>
           <View style={{ flexShrink: 0, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 12 }}>
-            {/* 2026-05-27 — Fix EP: send-to-Tank icon. Sits next to
-                the existing share icon. Sends this swing's video to
-                Tank's review queue via system Share sheet. Pre-set
-                to TANK_REVIEW_EMAIL. Hidden entirely when
-                isSendToTankAvailable() returns false (paywall locked) —
-                during beta SUBSCRIPTIONS_ENABLED=false so it's always
-                shown. The button is disabled when there's no clip URI
-                to send (rare, but defensive). */}
-            {isSendToTankAvailable() && (
-              <TouchableOpacity
-                onPress={() => {
-                  const clip = session.shots[0]?.clipUri ?? null;
-                  if (!clip) {
-                    useToastStore.getState().show('No video on this swing yet.');
-                    return;
-                  }
-                  const dateStr = new Date(session.date).toLocaleDateString();
-                  // 2026-06-29 (Tim — "export only sent the video, not the analysis")
-                  // — send the FULL report in the message body so the coach gets the
-                  // read WITH the swing: AI focus + fix + drill, body mechanics, tempo,
-                  // and the shot-map metrics. (Sharing attaches one file — the video —
-                  // so the analysis rides in the body text.)
-                  const ctx: string[] = [
-                    `Club: ${session.club ?? 'unknown'}`,
-                    `Date: ${dateStr}`,
-                  ];
-                  const pi = session.primary_issue;
-                  if (pi?.name) {
-                    ctx.push('— ANALYSIS —');
-                    ctx.push(`Top focus: ${pi.name}${pi.confidence ? ` (confidence: ${pi.confidence})` : ''}`);
-                    if (pi.mechanical_breakdown) ctx.push(pi.mechanical_breakdown);
-                    if (pi.cause) ctx.push(`Why: ${pi.cause}`);
-                    if (pi.fix) ctx.push(`Fix: ${pi.fix}`);
-                    if (pi.drill) ctx.push(`Drill: ${pi.drill}`);
-                  }
-                  const bv = session.biomechanics?.verdicts;
-                  if (bv && (bv.hipTurn || bv.shoulderTurn || bv.weightShift || bv.posture)) {
-                    ctx.push('— BODY —');
-                    [bv.hipTurn, bv.shoulderTurn, bv.weightShift, bv.posture]
-                      .filter((v): v is string => !!v)
-                      .forEach((v) => ctx.push(`• ${v}`));
-                  }
-                  const sm = session.smart_motion_shot_map;
-                  if (sm) {
-                    const bits: string[] = [];
-                    if (sm.tempo?.ratio != null) bits.push(`Tempo ${sm.tempo.ratio.toFixed(1)}:1`);
-                    if (sm.effortPct != null) bits.push(`Effort ${sm.effortPct}%`);
-                    if (sm.estCarry != null) bits.push(`~${sm.estCarry}y carry`);
-                    if (sm.trace) bits.push(`Launch ${sm.trace.side === 'left' ? `${sm.trace.divergenceDeg}° L` : sm.trace.side === 'right' ? `${sm.trace.divergenceDeg}° R` : 'straight'}`);
-                    if (bits.length) ctx.push(`— METRICS — ${bits.join(' · ')}`);
-                  }
-                  if (session.coach_note) {
-                    ctx.push(`Player note: ${session.coach_note}`);
-                  }
-                  // 2026-06-23 (RP-3a) — re-anchor the clip before sending so a
-                  // stale post-reinstall absolute path doesn't "send" a
-                  // non-existent file (false success / dead path). iOS rotates the
-                  // app-container UUID on reinstall; resolveClipUri heals it.
-                  void (async () => {
-                    const sendUri = (await resolveClipUri(clip)) ?? clip;
-                    return sendSwingToTank({
-                      videoUri: sendUri,
-                      swingTitle: titleForUpload(session.upload?.notes, session.upload?.angleOverride, `${session.club} swing`),
-                      contextLines: ctx,
-                    });
-                  })().then(result => {
-                    if (result.kind === 'paywall') {
-                      useToastStore.getState().show('Send to Tank — premium review (coming soon).');
-                    } else if (result.kind === 'no_file') {
-                      useToastStore.getState().show('No video to send.');
-                    } else if (result.kind === 'error') {
-                      useToastStore.getState().show('Send failed — try again.');
-                      console.log('[swing-detail] send-to-tank error:', result.message);
-                    } else if (result.kind === 'no_attachment') {
-                      // 2026-08-22 (Tim — "an email was sent, but there's no video attached").
-                      // This OS path is text-only; saying "sharing" here is what made a video-less
-                      // email look like a successful export.
-                      useToastStore.getState().show('Your phone couldn\u2019t attach the video — the note went without it.');
-                    } else if (result.kind === 'ok') {
-                      useToastStore.getState().show(`Sharing to ${TANK_REVIEW_EMAIL}…`);
-                    }
-                  });
-                }}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                accessibilityRole="button"
-                accessibilityLabel="Send this swing to Tank for review"
-              >
-                <Ionicons name="paper-plane-outline" size={20} color="#F0C030" />
-              </TouchableOpacity>
-            )}
             {/* 2026-06-13 (Tim) — star a swing as a round highlight. When it was
                 captured on-course (carries a roundId), starring saves it to that
                 round's scorecard + recap. */}

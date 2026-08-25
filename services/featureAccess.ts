@@ -47,8 +47,7 @@ export type FeatureKey =
   | 'smartvision'
   | 'cage_mode'
   | 'voice_advanced'
-  | 'smartfinder'
-  | 'send_to_tank';
+  | 'smartfinder';
 
 /**
  * The two editions. `SubscriptionStatus` describes BILLING state ('trial',
@@ -87,7 +86,6 @@ export const FEATURE_EDITION: Record<FeatureKey, Edition> = {
   cage_mode: 'full',
   voice_advanced: 'full',
   // Human coaching time, not inference — the most expensive thing here.
-  send_to_tank: 'full',
 };
 
 /** Billing states that grant the Full edition once subscriptions are live. */

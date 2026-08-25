@@ -19,7 +19,12 @@
  * own recorded clips (customCaddieClips) carry their greetings.
  */
 
-type Persona = 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
+/**
+ * 2026-08-25 — was a SIXTH local copy of this union. Six files each declared their own Persona
+ * type, so removing a persona had to be remembered six times — which is exactly why 'tank' kept
+ * surviving edits that thought they had removed it. One owner now.
+ */
+import type { Persona } from '../lib/persona';
 
 // Slug → text. Slugs must match scripts/render-greeting-clips.ts.
 // Keep ALL entries from each persona's pool in services/intents/
@@ -88,13 +93,6 @@ const CLIPS: Record<Persona, ClipMap> = {
     greeting_2: require('../assets/audio/greetings_local/harry/greeting_2.mp3'),
     greeting_3: require('../assets/audio/greetings_local/harry/greeting_3.mp3'),
     greeting_4: require('../assets/audio/greetings_local/harry/greeting_4.mp3'),
-  },
-  tank: {
-    greeting_0: require('../assets/audio/greetings_local/tank/greeting_0.mp3'),
-    greeting_1: require('../assets/audio/greetings_local/tank/greeting_1.mp3'),
-    greeting_2: require('../assets/audio/greetings_local/tank/greeting_2.mp3'),
-    greeting_3: require('../assets/audio/greetings_local/tank/greeting_3.mp3'),
-    greeting_4: require('../assets/audio/greetings_local/tank/greeting_4.mp3'),
   },
   // Custom persona: no server-rendered greetings. The user's own
   // recorded voice clips (customCaddieClips) carry their greetings

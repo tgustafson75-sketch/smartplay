@@ -92,8 +92,9 @@ function objectOf(p: Persona): string {
 function pickTeammateForTrigger(trigger: SuggestionTrigger, currentPersona: Persona): Persona {
   switch (trigger) {
     case 'drill_plateau':
-      // Plateau on technique → Tank's intensity / speed-drill push.
-      return currentPersona === 'tank' ? 'serena' : 'tank';
+      // 2026-08-25 — was Tank's intensity push. With Tank removed, Serena takes the technique
+      // plateau (her coaching register is the closer fit than Kevin's on-course voice).
+      return currentPersona === 'serena' ? 'kevin' : 'serena';
     case 'cage_frustration':
       // Frustration in cage → Kevin's calm grounded reset.
       return currentPersona === 'kevin' ? 'serena' : 'kevin';
@@ -106,8 +107,8 @@ function pickTeammateForTrigger(trigger: SuggestionTrigger, currentPersona: Pers
     case 'user_explicit_stuck':
       // User asked for help → suggest the natural alternate for the
       // current pillar (Harry removed from the rotation).
-      return currentPersona === 'kevin' ? 'tank'
-           : currentPersona === 'tank'  ? 'serena'
+      // 2026-08-25 — Tank removed from the rotation; the alternate is now simply the other caddie.
+      return currentPersona === 'kevin' ? 'serena'
            : currentPersona === 'serena' ? 'kevin'
            : 'kevin';
   }
@@ -127,12 +128,8 @@ function canOffer(trigger: SuggestionTrigger): boolean {
 
 function offer(trigger: SuggestionTrigger, fromPersona: Persona, pillar: CaddiePillar): void {
   let toPersona = pickTeammateForTrigger(trigger, fromPersona);
-  // 2026-08-07 (Tim — "you can STILL toggle to Tank; how is that hidden?"). Tank is owner-gated: NEVER
-  // advertise a handoff to him when he's disabled (was popping a "Bring in Tank?" card to every tester and
-  // the accept dead-ended at the gated setter). Route to the non-Tank alternate instead.
-  if (toPersona === 'tank' && !useSettingsStore.getState().tankEnabled) {
-    toPersona = fromPersona === 'serena' ? 'kevin' : 'serena';
-  }
+  // 2026-08-25 — the Tank handoff guard that stood here is gone with the persona; there is no
+  // longer a gated caddie a suggestion could dead-end into.
   if (toPersona === fromPersona) return;
   const s = buildSuggestion(trigger, fromPersona, toPersona, pillar);
   useTeamIntelligenceStore.getState().offerSuggestion(s);

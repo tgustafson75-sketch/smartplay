@@ -19,13 +19,17 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-type Persona = 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
+/**
+ * 2026-08-25 — was a SIXTH local copy of this union. Six files each declared their own Persona
+ * type, so removing a persona had to be remembered six times — which is exactly why 'tank' kept
+ * surviving edits that thought they had removed it. One owner now.
+ */
+import type { Persona } from '../lib/persona';
 type OpenAIVoice = 'alloy' | 'ash' | 'coral' | 'echo' | 'fable' | 'nova' | 'onyx' | 'sage' | 'shimmer' | 'verse';
 
 const VOICE_BY_PERSONA: Record<Persona, OpenAIVoice> = {
   kevin:  'onyx',
   serena: 'nova',
-  tank:   'ash',
   harry:  'fable',
   // 'custom' skipped in the render loop — user's own recorded voice
   // carries their greetings. Placeholder value here satisfies the
@@ -42,13 +46,6 @@ const GREETINGS_BY_PERSONA: Record<Persona, string[]> = {
     "I'm with you. What are we working on?",
     "Talk to me.",
     "Go ahead.",
-  ],
-  tank: [
-    "Yeah, what do you got?",
-    "Talk to me.",
-    "Go ahead, I'm listening.",
-    "What do you need?",
-    "Here. What's up?",
   ],
   serena: [
     "I'm here. What are you thinking?",

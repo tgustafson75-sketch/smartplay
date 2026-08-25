@@ -32,7 +32,7 @@ describe('brainSettings — every brain-bound field is forwarded', () => {
   });
 
   it('resolves the ACTIVE persona intensity (not another persona)', () => {
-    expect(brainSettings({ caddiePersonality: 'tank', personaIntensity: { tank: 70, kevin: 100 } }).personaIntensity).toBe(70);
+    expect(brainSettings({ caddiePersonality: 'serena', personaIntensity: { serena: 70, kevin: 100 } }).personaIntensity).toBe(70);
     // missing / non-finite → default 100 (never NaN into the prompt)
     expect(brainSettings({ caddiePersonality: 'harry', personaIntensity: { kevin: 100 } }).personaIntensity).toBe(100);
   });

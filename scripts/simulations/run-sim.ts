@@ -279,7 +279,6 @@ const PERSONA_DISTINCTIVE_MARKERS: Record<Persona, string[]> = {
   kevin:  ['steady hand', 'friend in the cart'],
   serena: ['Trust your number', 'Smooth swing', 'composed'],
   harry:  ['Take a breath', 'partnership', 'Army medic'],
-  tank:   ['Lock it in', 'Send it', 'Marine'],
   // Custom inherits Kevin's spec — share its markers so the sim
   // passes without false negatives.
   custom: ['steady hand', 'friend in the cart'],
@@ -302,7 +301,6 @@ const CROSS_CHECK_NEGATIVE: Record<Persona, string[]> = {
   kevin:  ['Send it', 'Lock it in'],         // Tank's commands shouldn't be in Kevin's spec
   serena: ['Take a breath', 'Send it'],      // Harry's + Tank's
   harry:  ['Send it', 'Marine cadence'],     // Tank's
-  tank:   ['friend in the cart', 'partnership'],  // Kevin's + Harry's distinctive
   // Custom = Kevin's spec, so the same negative markers apply.
   custom: ['Send it', 'Lock it in'],
 };
@@ -330,7 +328,9 @@ console.log('\n=== Scenario 3: settings persist migration ===');
 // config; we replicate it here to exercise the same logic).
 type Assignments = Record<'round' | 'cage' | 'drills' | 'play', Persona>;
 const DEFAULT_CADDIE_ASSIGNMENTS: Assignments = {
-  round: 'kevin', cage: 'tank', drills: 'serena', play: 'kevin',
+  // 2026-08-25 — mirrors store/settingsStore DEFAULT_CADDIE_ASSIGNMENTS. This copy had DRIFTED:
+  // it still said cage: 'tank' after the real default moved to Serena on 08-06.
+  round: 'kevin', cage: 'serena', drills: 'serena', play: 'kevin',
 };
 
 type MigrateInput = { caddiePersonality?: Persona; caddieAssignments?: Assignments };
@@ -364,10 +364,12 @@ check(
 );
 
 // Case C: v3 user with assignments already set → no change
-const c = simulateMigrate({ caddiePersonality: 'kevin', caddieAssignments: { round: 'tank', cage: 'kevin', drills: 'harry', play: 'serena' } }, 3);
+// 'tank' as string: it is no longer a Persona, but old persisted data contains it — which is
+// exactly what a migration test must be able to express.
+const c = simulateMigrate({ caddiePersonality: 'kevin', caddieAssignments: { round: 'tank' as Persona, cage: 'kevin', drills: 'harry', play: 'serena' } }, 3);
 check(
   'migration is no-op when version >= 3',
-  c.caddieAssignments?.round === 'tank',
+  (c.caddieAssignments?.round as string) === 'tank',
   JSON.stringify(c.caddieAssignments),
 );
 
@@ -551,8 +553,9 @@ check('settingsStore migrates v4 -> v5 (Harry default + bluetooth prompt)',
   'v5 migrate present');
 
 check('settingsStore Harry default lowered to 90',
-  /personaIntensity:\s*\{\s*kevin:\s*100,\s*serena:\s*100,\s*harry:\s*90,\s*tank:\s*70/.test(settingsSrc),
-  'Harry default 90, Tank default 70');
+  // 2026-08-25 — Tank's default came out with the persona; Harry's 90 is what this actually guards.
+  /personaIntensity:\s*\{\s*kevin:\s*100,\s*serena:\s*100,\s*harry:\s*90/.test(settingsSrc),
+  'Harry default 90');
 
 check('settingsStore tracks simpleBriefingUserTouched',
   settingsSrc.includes('simpleBriefingUserTouched'),
@@ -10495,7 +10498,7 @@ check('RATCHET: every gateable feature is actually enforced somewhere',
 
     const searched = [
       'app/(tabs)/caddie.tsx', 'app/(tabs)/play.tsx', 'app/swinglab/smartmotion.tsx',
-      'components/tools/GlobalToolsMenu.tsx', 'services/tankReview.ts',
+      'components/tools/GlobalToolsMenu.tsx',
       'services/voice/conversationalToolDispatch.ts',
     ].map((f) => readCode(f)).join('\n');
 

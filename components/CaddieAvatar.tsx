@@ -116,56 +116,21 @@ const HARRY_AVATARS: Record<AvatarKey, ImageSourcePropType> = {
   kevin_self_critical: require('../assets/avatars/harry_moods_downcast.png'),
 };
 
-// Tank counterparts. 2026-05-16 — fully migrated to the clean tank_v2_*
-// set. The legacy tank_emotions_*/tank_expressive_* images had a text
-// label baked into the bottom of the image itself ("Relief", "Facepalm",
-// "Confusion" etc) — Tim reported them visible on Caddie tab while
-// testing with Tank as the active persona. The v2 set has no baked-in
-// labels, so this map exclusively uses v2 (the legacy files were deleted
-// in the 2026-07-04 orphaned-asset sweep). Some emotion
-// slots reuse the same v2 image because we have 22 emotion keys but
-// only ~11 v2 portraits; that's fine — the slot mapping is best-fit by
-// character feel, not 1:1 unique imagery.
-const TANK_AVATARS: Record<AvatarKey, ImageSourcePropType> = {
-  kevin_course:        require('../assets/avatars/tank_v2_portrait.png'),
-  kevin_dark:          require('../assets/avatars/tank_v2_lets_go_marine.png'),
-  kevin_nod:           require('../assets/avatars/tank_v2_here_we_go.png'),
-  kevin_idle:          require('../assets/avatars/tank_v2_here_we_go.png'),
-  // Listening / pensive both read as "attentive default" — the
-  // neutral portrait is the most honest Tank-listening pose.
-  kevin_listening:     require('../assets/avatars/tank_v2_portrait.png'),
-  kevin_explaining:    require('../assets/avatars/tank_v2_you_got_this.png'),
-  kevin_focused:       require('../assets/avatars/tank_v2_lets_go_marine.png'),
-  kevin_determined:    require('../assets/avatars/tank_v2_lets_go.png'),
-  kevin_pensive:       require('../assets/avatars/tank_v2_portrait.png'),
-  kevin_inquisitive:   require('../assets/avatars/tank_v2_questioning.png'),
-  kevin_mentorship:    require('../assets/avatars/tank_v2_you_got_this.png'),
-  // Humble — softer mentor moment. "You got this" carries it without
-  // any v1 fallback. Could also use encouraging; you-got-this is more
-  // post-good-shot acknowledgment, which fits humble's vibe.
-  kevin_humble:        require('../assets/avatars/tank_v2_you_got_this.png'),
-  kevin_supportive:    require('../assets/avatars/tank_v2_encouraging.png'),
-  kevin_happy:         require('../assets/avatars/tank_v2_happy.png'),
-  kevin_enthusiastic:  require('../assets/avatars/tank_v2_excited.png'),
-  kevin_surprised:     require('../assets/avatars/tank_v2_wtf.png'),
-  kevin_celebrating:   require('../assets/avatars/tank_v2_semper_fi.png'),
-  kevin_confident:     require('../assets/avatars/tank_v2_semper_fi.png'),
-  kevin_gameface:      require('../assets/avatars/tank_v2_lets_go.png'),
-  kevin_curious:       require('../assets/avatars/tank_v2_questioning.png'),
-  // Wincing + self-critical — "wtf" reads as the displeased reaction
-  // beat without a labeled bottom strip. Both share for now; if Tim
-  // wants a distinct self-critical pose later we can add a v2 image.
-  kevin_wincing:       require('../assets/avatars/tank_v2_wtf.png'),
-  kevin_self_critical: require('../assets/avatars/tank_v2_wtf.png'),
-};
+// 2026-08-25 (Tim) — TANK_AVATARS removed with the persona. The map was only reachable when Tank
+// was the active caddie, which is no longer selectable, and its portraits are a real person's
+// likeness. The 12 tank_v2_* assets were deleted with it.
 
-type Persona = 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
+/**
+ * 2026-08-25 — was a SIXTH local copy of this union. Six files each declared their own Persona
+ * type, so removing a persona had to be remembered six times — which is exactly why 'tank' kept
+ * surviving edits that thought they had removed it. One owner now.
+ */
+import type { Persona } from '../lib/persona';
 
 function getAvatarSet(persona: Persona): Record<AvatarKey, ImageSourcePropType> {
   switch (persona) {
     case 'serena': return SERENA_AVATARS;
     case 'harry':  return HARRY_AVATARS;
-    case 'tank':   return TANK_AVATARS;
     case 'kevin':
     default:       return AVATARS;
   }
@@ -319,7 +284,6 @@ function personaDisplayName(persona: Persona | undefined | null): string {
   switch (persona) {
     case 'kevin':  return 'Kevin';
     case 'serena': return 'Serena';
-    case 'tank':   return 'Tank';
     case 'harry':  return 'Harry';
     default:       return 'Kevin';
   }
@@ -364,7 +328,7 @@ interface CaddieAvatarProps {
    *  kevin/serena/harry/tank). When omitted, falls back to gender-based
    *  selection for back-compat with older call sites (gender 'male' →
    *  Kevin, 'female' → Serena). New call sites should pass persona. */
-  persona?: 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
+  persona?: Persona;
   isOnCourse: boolean;
   isCageMode: boolean;
   voiceState: VoiceState;
@@ -927,13 +891,13 @@ export default function CaddieAvatar({
         <Animated.Image
           source={backSource}
           style={[styles.avatarImage, { transform: backTransform, opacity: backOpacity }]}
-          resizeMode={resolvedPersona === 'tank' ? 'contain' : fill}
+          resizeMode={fill}
         />
 
         <Animated.Image
           source={frontSource}
           style={[styles.avatarImage, { transform: frontTransform, opacity: fadeAnim }]}
-          resizeMode={resolvedPersona === 'tank' ? 'contain' : fill}
+          resizeMode={fill}
         />
 
         {/* Layer 2 — Bottom gradient. 2026-07-25 (Tim — "the bottom looks home-made, hard cut-off

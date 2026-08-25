@@ -13,13 +13,12 @@ export type VoiceGender = 'male' | 'female';
 // NAME lives in playerProfileStore.customCaddieName; UI surfaces
 // that want to show it pull from there directly. getCaddieName
 // returns 'My Caddie' as the static fallback.
-export type Persona = 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
+export type Persona = 'kevin' | 'serena' | 'harry' | 'custom';
 
 const PERSONA_NAMES: Record<Persona, string> = {
   kevin: 'Kevin',
   serena: 'Serena',
   harry: 'Harry',
-  tank: 'Tank',
   custom: 'My Caddie',
 };
 
@@ -27,7 +26,6 @@ const PERSONA_SPECS: Record<Persona, string> = {
   kevin: KEVIN_CHARACTER_SPEC,
   serena: SERENA_CHARACTER_SPEC,
   harry: HARRY_CHARACTER_SPEC,
-  tank: TANK_CHARACTER_SPEC,
   // Custom caddie inherits Kevin's neutral spec — server-side TTS
   // and brain text fall back to Kevin's voice when the client
   // doesn't have a user-recorded clip for the response. Local
@@ -39,7 +37,6 @@ const PERSONA_GENDERS: Record<Persona, VoiceGender> = {
   kevin: 'male',
   serena: 'female',
   harry: 'male',
-  tank: 'male',
   // Default gender for server-TTS fallback only. The user's own
   // recorded voice plays from local clips when available.
   custom: 'male',
@@ -49,7 +46,6 @@ const PERSONA_PRONOUNS: Record<Persona, { subject: string; object: string; posse
   kevin:  { subject: 'he', object: 'him', possessive: 'his' },
   serena: { subject: 'she', object: 'her', possessive: 'her' },
   harry:  { subject: 'he', object: 'him', possessive: 'his' },
-  tank:   { subject: 'he', object: 'him', possessive: 'his' },
   // Gender-neutral pronouns for the user's custom caddie — works
   // for any user-chosen identity without forcing a male/female
   // assumption.
@@ -66,7 +62,9 @@ const PERSONA_PRONOUNS: Record<Persona, { subject: string; object: string; posse
 type PersonaInput = Persona | VoiceGender | string | undefined | null;
 
 function resolvePersona(input: PersonaInput): Persona {
-  if (input === 'kevin' || input === 'serena' || input === 'harry' || input === 'tank' || input === 'custom') return input;
+  if (input === 'kevin' || input === 'serena' || input === 'harry' || input === 'custom') return input;
+  // 2026-08-25 — a persisted or server-sent 'tank' now falls through to Kevin below, matching the
+  // settings v22 migration, so an old payload can never resolve to a persona that no longer exists.
   if (input === 'female') return 'serena';
   return 'kevin';
 }
@@ -95,7 +93,7 @@ export function getCaddiePossessive(input: PersonaInput): string {
   return PERSONA_PRONOUNS[resolvePersona(input)].possessive;
 }
 
-export const ALL_PERSONAS: readonly Persona[] = ['kevin', 'serena', 'harry', 'tank', 'custom'] as const;
+export const ALL_PERSONAS: readonly Persona[] = ['kevin', 'serena', 'harry', 'custom'] as const;
 
 /**
  * Personas exposed in the user-facing UI right now. Harry is currently
@@ -137,8 +135,12 @@ export function isActivePersona(p: Persona): boolean {
  * onboarding intro pickers) must drop Tank when it's disabled — not just the Settings pillar pickers. This
  * is the single gated list those surfaces should render instead of ACTIVE_PERSONAS directly.
  */
-export function selectablePersonas(tankEnabled: boolean): readonly Persona[] {
-  return tankEnabled ? ACTIVE_PERSONAS : ACTIVE_PERSONAS.filter((p) => p !== 'tank');
+export function selectablePersonas(_legacyFlag?: boolean): readonly Persona[] {
+  // 2026-08-25 — the persona this gated is gone, so the flag no longer selects anything. The
+  // parameter is kept (optional, ignored) purely so the several call sites that still pass a
+  // setting keep compiling; they can drop the argument at leisure. Returning ACTIVE_PERSONAS
+  // directly means there is now exactly ONE list of pickable caddies.
+  return ACTIVE_PERSONAS;
 }
 
 // Audit 101 / B4 — server-side request body persona resolver. Prefer the

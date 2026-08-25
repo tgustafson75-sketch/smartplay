@@ -202,9 +202,9 @@ export const changeSettingHandler: IntentHandler = {
       case 'caddie':
       case 'persona': {
         const v = String(rawValue ?? '').toLowerCase();
-        const valid: Persona[] = ['kevin', 'tank', 'serena', 'harry', 'custom'];
+        const valid: Persona[] = ['kevin', 'serena', 'harry', 'custom'];
         if (!valid.includes(v as Persona)) {
-          return clarify('Kevin, Tank, Serena, Harry, or your custom caddie?');
+          return clarify('Kevin, Serena, Harry, or your custom caddie?');
         }
         // 2026-07-30 (Tim — "if you name the caddie you should be able to call them by that name").
         // Activating the CUSTOM caddie must ALSO flip useCustomCaddie (that flag drives the portrait +

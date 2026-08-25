@@ -68,7 +68,7 @@ describe('the Lite/Full split is coherent (mechanism, dormant today)', () => {
   });
 
   it('every inference-spending feature is Full — the wall sits on marginal cost', () => {
-    for (const f of ['smartvision', 'smartfinder', 'cage_mode', 'voice_advanced', 'send_to_tank'] as FeatureKey[]) {
+    for (const f of ['smartvision', 'smartfinder', 'cage_mode', 'voice_advanced'] as FeatureKey[]) {
       expect(FEATURE_EDITION[f]).toBe('full');
     }
   });
