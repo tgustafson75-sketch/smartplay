@@ -352,10 +352,10 @@ export const BRAIN_TOOLS: AiToolDef[] = [
   },
   {
     name: 'set_golfer',
-    description: 'Set WHO is swinging for the SmartMotion captures, so the swing is attributed to the right person in the library. Use when the player says they are filming someone else, or themselves again: "this is Luis", "record my son", "I\'m filming Lily", "back to me", "this one\'s mine". name = the golfer\'s first name, or "me" for the user.',
+    description: 'Set WHO is swinging for the SmartMotion captures, so the swing is attributed to the right person in the library. Use when the player says they are filming someone else, or themselves again: "this is Luis", "record my son", "I\'m filming Lily", "back to me", "this one\'s mine". name = the golfer\'s first name, or "me" for the user. A RELATION IS A VALID NAME when no first name is given — pass "daughter", "son", "wife", "buddy" exactly as said. Do this EVEN WHEN the sentence also sounds like a request to record: "I\'m recording my daughter\'s swing, not mine" is set_golfer{name:"daughter"}, because who the swing belongs to is the thing that would otherwise be wrong — a swing filed under the wrong golfer corrupts their history and hers. Recording can start separately; attribution cannot be fixed afterwards.',
     parameters: {
       type: 'object',
-      properties: { name: { type: 'string', description: 'First name of the golfer being recorded, or "me" for the user themselves.' } },
+      properties: { name: { type: 'string', description: 'First name of the golfer being recorded, or a relation exactly as the player said it ("daughter", "son", "buddy"), or "me" for the user themselves.' } },
       required: ['name'],
     },
   },
