@@ -231,7 +231,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
   'services/acousticImpactDetector.ts :: clearLastImpactReading': 'SURFACE — lifecycle hatch.',
   'services/handsFreeOrchestrator.ts :: stopHandsFreeOrchestrator': 'SURFACE — lifecycle symmetry with start.',
   'services/spaceAssessment.ts :: deleteSpaceConfiguration': 'SURFACE — user-data deletion API.',
-  'services/swingDatabase.ts :: removeReferenceSwing': 'SURFACE — user-data deletion API.',
 
   // ── TRIAGE — the debt. Not yet assessed; each is WIRE, SURFACE or DELETE. ──────
   'components/smartmotion/SmartMotionHud.tsx :: MetricRail': 'TRIAGE',

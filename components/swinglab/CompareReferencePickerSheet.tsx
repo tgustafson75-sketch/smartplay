@@ -15,10 +15,9 @@
 
 import React, { useEffect, useState } from 'react';
 import {
-  Modal, View, Text, ScrollView, Pressable, ActivityIndicator, StyleSheet, Image,
-} from 'react-native';
+  Modal, View, Text, ScrollView, Pressable, ActivityIndicator, StyleSheet, Image, Alert } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
-import { searchSimilarSwings, type SimilarMatch } from '../../services/swingDatabase';
+import { searchSimilarSwings, removeReferenceSwing, type SimilarMatch } from '../../services/swingDatabase';
 import type { PoseEstimate } from '../../services/poseEstimator';
 import { useResolvedImageUri } from '../../hooks/useResolvedImageUri';
 
@@ -137,12 +136,47 @@ export default function CompareReferencePickerSheet({
             </View>
           ) : (
             <ScrollView contentContainerStyle={styles.scroll}>
+              <Text style={[styles.rowMeta, { color: colors.text_muted, paddingHorizontal: 4, paddingBottom: 6 }]}>
+                Long-press a reference you added to remove it.
+              </Text>
               {matches.map((m, i) => (
                 <Pressable
                   key={m.reference.id}
                   onPress={() => {
                     onSelect(m);
                     onClose();
+                  }}
+                  /**
+                   * 2026-08-25 (pre-submission audit) — YOU COULD ADD A REFERENCE AND NEVER REMOVE IT.
+                   *
+                   * addReferenceSwing had a caller (the YouTube modal); removeReferenceSwing and
+                   * listReferences had NONE. Players could add clips forever with no way to delete
+                   * one — a half-built feature, and user-created data with no removal path in a
+                   * submission build.
+                   *
+                   * Long-press rather than a new button: this sheet's layout is signed off, and the
+                   * hint below makes it discoverable, which a hidden gesture alone would not be.
+                   * Only the player's OWN references can go — archetypes ship with the app.
+                   */
+                  onLongPress={() => {
+                    if (m.reference.source === 'archetype') return;
+                    Alert.alert(
+                      'Remove this reference?',
+                      `"${m.reference.label}" will be removed from your comparisons. This does not affect your own swings.`,
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Remove',
+                          style: 'destructive',
+                          onPress: () => {
+                            void (async () => {
+                              const ok = await removeReferenceSwing(m.reference.id);
+                              if (ok) setMatches((prev) => (prev ?? []).filter((x) => x.reference.id !== m.reference.id));
+                            })();
+                          },
+                        },
+                      ],
+                    );
                   }}
                   style={({ pressed }) => [
                     styles.row,

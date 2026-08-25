@@ -28,6 +28,11 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'You can remove reference swings you added. Before, a pro clip you saved was there for good. Long-press one in the compare picker to take it off your list. The built-in reference swings stay.',
+    howTo: 'Compare a swing, then long-press any reference you added.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'Practice sessions now rotate the clubs you actually carry. If you play a hybrid instead of a long iron, that is what I ask for — no more being told to hit a club that is not in your bag.',
     howTo: 'Swing Lab, Focus Session. Register your bag first and the rotations match it.',
   },
