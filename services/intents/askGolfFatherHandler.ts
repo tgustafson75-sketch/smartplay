@@ -72,16 +72,16 @@ type TankRule = string | ((ctx: TankCtx) => string);
 // a single i18n key. The function rules read i18n.t() for the actual
 // strings so EN and ES variants ship without code change.
 const TANK_RULES: Record<string, TankRule> = {
-  rules_red_vs_yellow: () => i18n.t('tank.red_vs_yellow'),
+  rules_red_vs_yellow: () => i18n.t('golf_advice.red_vs_yellow'),
 
   course_management_driver_or_3wood: (ctx) => {
-    if (ctx.currentLocationType !== 'tee') return i18n.t('tank.driver_or_3wood_clean');
+    if (ctx.currentLocationType !== 'tee') return i18n.t('golf_advice.driver_or_3wood_clean');
     const dist = ctx.distance_to_pin;
     if (ctx.wind === 'into' && typeof dist === 'number' && dist > 240) {
-      return i18n.t('tank.par3_wind');
+      return i18n.t('golf_advice.par3_wind');
     }
     if (ctx.overTheTopCount > 3 && ctx.swingCount > 5) {
-      return i18n.t('tank.driver_or_3wood');
+      return i18n.t('golf_advice.driver_or_3wood');
     }
     if (ctx.avgCarryDriver > 0 && typeof dist === 'number' && dist > ctx.avgCarryDriver + 20) {
       // Number-bearing branch keeps a templated string; i18n's
@@ -89,28 +89,28 @@ const TANK_RULES: Record<string, TankRule> = {
       // different word order.
       return `It's ${dist}. Your gamer averages ${Math.round(ctx.avgCarryDriver)}. You don't have it. 3-wood.`;
     }
-    return i18n.t('tank.driver_or_3wood_clean');
+    return i18n.t('golf_advice.driver_or_3wood_clean');
   },
 
-  course_management_lay_up: () => i18n.t('tank.layup'),
+  course_management_lay_up: () => i18n.t('golf_advice.layup'),
 
-  rules_nearest_point_relief: () => i18n.t('tank.nearest_point_relief'),
+  rules_nearest_point_relief: () => i18n.t('golf_advice.nearest_point_relief'),
 
   rules_can_ground_club: (ctx) => {
     const lie = String(ctx.lie ?? 'unknown').toLowerCase();
     if (lie === 'hazard' || lie === 'bunker' || lie === 'penalty_area') {
-      return i18n.t('tank.can_ground_club_no');
+      return i18n.t('golf_advice.can_ground_club_no');
     }
-    return i18n.t('tank.can_ground_club_yes');
+    return i18n.t('golf_advice.can_ground_club_yes');
   },
 
   course_management_flag_or_center: (ctx) => {
     const hcp = ctx.user_handicap ?? 18;
-    if (hcp > 15) return i18n.t('tank.flag_or_center_safe');
+    if (hcp > 15) return i18n.t('golf_advice.flag_or_center_safe');
     if (typeof ctx.distance_to_pin === 'number' && ctx.distance_to_pin < 125) {
-      return i18n.t('tank.flag_or_center_attack');
+      return i18n.t('golf_advice.flag_or_center_attack');
     }
-    return i18n.t('tank.flag_or_center_balanced');
+    return i18n.t('golf_advice.flag_or_center_balanced');
   },
 
   // 2026-06-04 — Golf Father optical-illusion chapter. When the player

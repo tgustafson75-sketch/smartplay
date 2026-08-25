@@ -10284,6 +10284,29 @@ check('LOCK: we ask for no permission we cannot use, and every purpose string co
   })(),
   'no permission is requested that the app cannot exercise, and the microphone and camera purpose strings name every use the code actually makes');
 
+check('LOCK: every golf_advice translation key resolves in every locale',
+  (() => {
+    /**
+     * 2026-08-25 — this namespace was called `tank` and was renamed with the persona. A rename that
+     * misses one key does not fail a build or a test: the player is shown the RAW KEY STRING
+     * ("golf_advice.layup") in the middle of a rules answer, and only a human reading that screen
+     * would ever notice. So the invariant is checked mechanically instead — every key the code asks
+     * for must exist in EVERY locale, not just English.
+     */
+    const src = readCode('services/intents/askGolfFatherHandler.ts');
+    const used = [...src.matchAll(/i18n\.t\('golf_advice\.([a-z0-9_]+)'/g)].map((m) => m[1]!);
+    if (used.length === 0) return false;                       // the handler stopped asking — investigate
+    const locales = ['en', 'es', 'zh'];
+    return locales.every((loc) => {
+      const raw = readCode(`i18n/locales/${loc}.json`);
+      let parsed: { golf_advice?: Record<string, string> };
+      try { parsed = JSON.parse(raw) as typeof parsed; } catch { return false; }
+      const have = parsed.golf_advice ?? {};
+      return used.every((k) => typeof have[k] === 'string' && have[k]!.length > 0);
+    });
+  })(),
+  'every golf_advice key used by the rules/course-management handler resolves in en, es and zh — no player ever sees a raw key');
+
 check('LOCK: no course hole imagery is bundled — it comes from licensed Mapbox at runtime',
   (() => {
     /**
