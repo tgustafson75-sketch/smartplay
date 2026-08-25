@@ -7,9 +7,12 @@
  *
  * Routed from SwingLab tab's Drills card (LIVE). Replaces Pro's
  * previous SwingLab-embedded drill list as the primary drills surface.
- * Pro's prescriptive drills (Bullseye, Tempo, etc.) are still
- * accessible at /swinglab/drills (the previous SwingLab body that
- * step 1 moved into a dedicated sub-route).
+ *
+ * 2026-08-25 — corrected a stale claim. This header said Pro's prescriptive drills were
+ * "still accessible at /swinglab/drills". THAT ROUTE DOES NOT EXIST (no app/swinglab/drills.tsx
+ * and no directory). Nothing links to it, so no user ever hit a dead end — but a comment that
+ * describes a screen the app does not have is the same trap that cost this project weeks
+ * elsewhere. Read the tree, not the comment.
  */
 
 import React, { useMemo } from 'react';
@@ -20,6 +23,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useDeviceLayout } from '../../hooks/useDeviceLayout';
 import { DRILL_CATALOG, type DrillEntry } from '../../data/drillCatalog';
+import { useCaddieMemoryStore } from '../../store/caddieMemoryStore';
+import { yourFaultFirst } from '../../services/practice/yourFaultFirst';
 import { QuickTutorial } from '../../components/QuickTutorial';
 import { SCREEN_HELP } from '../../services/screenHelp';
 
@@ -45,9 +50,40 @@ export default function DrillsIndex() {
   const oneCol = width < 380;
 
   // 2026-08-06 (Tim) — the Drills grid in catalog order, with Tank's + Randy's cards filtered out.
+  /**
+   * 2026-08-25 — THE GRID NOW KNOWS WHO IS LOOKING AT IT.
+   *
+   * SmartMotion has recorded this player's faults after every analysed swing, and the store already
+   * held the most frequent one — while this screen rendered the identical "Common Faults" list for
+   * everybody. The app knew; the screen was never told.
+   *
+   * No mapping is invented: SmartMotion records CanonicalIssue ids, which is exactly the id space
+   * the catalog is keyed by, so the dominant fault IS a drill id. Under MIN_FAULTS this returns null
+   * and the grid renders exactly as before — it leads with a diagnosis only when it has earned one.
+   */
+  // Subscribe to the players map (stable reference; changes when a fault is recorded), then resolve
+  // through the store's OWN getPlayer so player identity keeps one owner. Picking the first key out
+  // of the map would have been a second, wrong answer to "who is this" the moment a family member
+  // was added — the exact two-owners shape this codebase keeps paying for.
+  const players = useCaddieMemoryStore((st) => st.players);
+  const tendencies = useMemo(
+    () => useCaddieMemoryStore.getState().getPlayer().tendencies ?? null,
+    [players],
+  );
+  const yours = useMemo(
+    () => yourFaultFirst(
+      tendencies,
+      DRILL_CATALOG.map((e) => e.id),
+      (id) => DRILL_CATALOG.find((e) => e.id === id)?.title ?? null,
+    ),
+    [tendencies],
+  );
+
   const gridEntries = useMemo(
-    () => DRILL_CATALOG.filter(e => !HIDDEN_DRILL_IDS.has(e.id)),
-    [],
+    // The player's own fault leads the grid; everything else keeps catalog order behind it.
+    () => DRILL_CATALOG.filter(e => !HIDDEN_DRILL_IDS.has(e.id))
+      .sort((a, b) => (a.id === yours?.id ? -1 : b.id === yours?.id ? 1 : 0)),
+    [yours],
   );
 
   return (
@@ -77,6 +113,9 @@ export default function DrillsIndex() {
       >
         <Text style={[styles.eyebrow, { color: colors.accent }]}>DRILLS</Text>
         <Text style={[styles.title, { color: colors.text_primary }]}>Common Faults</Text>
+        <Text style={[styles.subtitle, { color: yours ? colors.accent : colors.text_muted }]}>
+          {yours ? yours.line : null}
+        </Text>
         <Text style={[styles.subtitle, { color: colors.text_muted }]}>
           Each issue has a Primary Issue, Common Faults, 2-3 drills, and pro-instruction
           video links. Tap to dive in.

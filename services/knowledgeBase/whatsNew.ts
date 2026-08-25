@@ -28,6 +28,11 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'Drills now opens on your fault, not a generic list. The issue your swings actually come back with is first, with how often I have seen it. Until I have read enough swings I stay quiet rather than guess.',
+    howTo: 'Swing Lab, Drills. It fills in once SmartMotion has analysed a few swings.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'The Tempo Trainer now trains against your swing, not a generic beat. It opens on the tempo that matches your own backswing speed and shows what you actually swing beside what you are training to. If I have not measured enough swings yet, I say so instead of guessing.',
     howTo: 'Swing Lab, Tempo Trainer. Record a few swings in SmartMotion first and the drill sets itself to you.',
   },
