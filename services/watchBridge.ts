@@ -30,6 +30,21 @@
 
 import type { TapPattern } from './earbudControl';
 import { devLog } from './devLog';
+import { Platform } from 'react-native';
+
+/**
+ * 2026-08-25 — ONE OWNER FOR WHAT THE WATCH IS CALLED.
+ *
+ * "Galaxy Watch" was hardcoded at four call sites. With the Apple Watch target added, an iPhone
+ * user would be told their Apple Watch is a Galaxy Watch — in Settings, in the connected banner,
+ * everywhere. The native modules already report the real node name ("Apple Watch" from
+ * WCSession, the Wear node name from the Data Layer), so prefer that and fall back per platform.
+ */
+export function watchDeviceLabel(node?: string | null): string {
+  const n = (node ?? '').trim();
+  if (n && n.toLowerCase() !== 'unknown') return n;
+  return Platform.OS === 'ios' ? 'Apple Watch' : 'Galaxy Watch';
+}
 
 // ─── Inbound: taps + voice ───────────────────────────────────────────────
 

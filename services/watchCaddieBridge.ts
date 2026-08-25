@@ -15,15 +15,16 @@
  *     it through the full caddie pipeline and speaks the answer. Watch taps →
  *     onWatchTap → notifyWatchTap.
  *
- * Platform: Android only. NativeMod is null on iOS/web or any build without the
- * native module → every function is a graceful no-op (nothing throws).
+ * Platform: Android (Wear OS) AND iOS (Apple Watch) — the same module name on both, so this file
+ * has no platform branch beyond resolving the module. Null on web or any build without the native
+ * module → every function is a graceful no-op (nothing throws).
  *
  * All messages ride one path, "/smartplay/caddie", carrying JSON with a `kind`
  * the watch parses (yardage / notification / voice_prompt / score / state).
  */
 
 import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
-import { registerWatchSender, notifyWatchVoice, notifyWatchTap, notifyWatchCommand, type OutboundPayload } from './watchBridge';
+import { registerWatchSender, notifyWatchVoice, notifyWatchTap, notifyWatchCommand, type OutboundPayload, watchDeviceLabel } from './watchBridge';
 import { getGreenYardagesSync } from './smartFinderService';
 import { useRoundStore } from '../store/roundStore';
 import { useWatchStore } from '../store/watchStore';
@@ -37,7 +38,7 @@ import { devLog } from './devLog';
 // round-trips), refreshing the connected flag + heartbeat. (The fully-passive ideal is a native
 // CapabilityClient listener, but that needs a rebuild; this is the OTA-safe, message-driven signal.)
 function markWatchAlive(): void {
-  try { useWatchStore.getState().setConnected(true, 'Galaxy Watch'); } catch { /* non-fatal */ }
+  try { useWatchStore.getState().setConnected(true, watchDeviceLabel()); } catch { /* non-fatal */ }
 }
 
 const CADDIE_PATH = '/smartplay/caddie';
@@ -53,7 +54,11 @@ interface WearCaddieNativeModule {
 }
 
 const NativeMod: WearCaddieNativeModule | null =
-  Platform.OS === 'android'
+  // 2026-08-25 — iOS joins Android. The Apple Watch module is deliberately registered under the
+  // SAME name with the same methods and events (ios-native/WearSwingBridgeModule.swift), so this
+  // stays one owner for "the watch" and no caller learns which platform is attached. Absent module
+  // (web, or a build predating the watch target) still resolves to null and every call no-ops.
+  Platform.OS === 'android' || Platform.OS === 'ios'
     ? ((NativeModules as Record<string, unknown>).WearSwingBridge as WearCaddieNativeModule | undefined) ?? null
     : null;
 

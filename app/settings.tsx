@@ -31,6 +31,7 @@ import { useSettingsStore } from '../store/settingsStore';
 // reads from the dedicated watchStore so all three call sites
 // (cage-mode, cage/summary, settings) share one source of truth.
 import { useWatchStore } from '../store/watchStore';
+import { watchDeviceLabel } from '../services/watchBridge';
 import { initWatchSwingBridge, stopWatchSwingBridge, isWatchSwingBridgeAvailable } from '../services/watchSwingBridge';
 // 2026-05-27 — Fix EA: screenshot mode toggle (hides system chrome
 // for clean promo / store screenshots). Sourced from its own store
@@ -44,6 +45,7 @@ import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
+import { isFeatureShelved } from '../services/releaseSurface';
 import CloudBackupCard from '../components/settings/CloudBackupCard';
 import type { ThemeColors } from '../theme/tokens';
 import { getCaddieName, selectablePersonas } from '../lib/persona';
@@ -1491,7 +1493,7 @@ export default function Settings() {
           <View style={rowDivStyle}>
             <View style={styles.rowText}>
               <Text style={labelStyle}>
-                Galaxy Watch swing capture{watchBridgeAvailable ? '' : ' · needs latest build'}
+                {watchDeviceLabel()} swing capture{watchBridgeAvailable ? '' : ' · needs latest build'}
               </Text>
               <Text style={subStyle}>
                 {/* 2026-08-14 (Tim — "I could not find a spot to turn on catching swing metrics during a
@@ -1500,7 +1502,7 @@ export default function Settings() {
                     setting existed to find, because this one already covers it. It captures during
                     rounds too, tagged to the hole you were on; say so. */}
                 {watchBridgeAvailable
-                  ? `Captures every swing the watch sees — during a live round (tagged to the hole, shown in View hole and the round recap) and in Smart Motion, where a calibrated capture also reads club speed.${watchConnected ? ' Watch connected.' : ' Open the SmartPlay watch app on your Galaxy Watch to start sending.'}`
+                  ? `Captures every swing the watch sees — during a live round (tagged to the hole, shown in View hole and the round recap) and in Smart Motion, where a calibrated capture also reads club speed.${watchConnected ? ' Watch connected.' : ` Open the SmartPlay watch app on your ${watchDeviceLabel()} to start sending.`}`
                   : 'The watch swing-capture module ships in the latest native build — install it, then this turns on.'}
               </Text>
             </View>
@@ -1579,6 +1581,16 @@ export default function Settings() {
               thumbColor={colors.text_primary}
             />
           </View>
+          {/*
+            2026-08-25 (Tim) — "Meta glasses don't have to go in 1.0, but the watch functionality
+            does." All three glasses rows hide together: the temple-tap notice, the live POV stream
+            and the voice-log import. They depend on Meta developer mode, a paired Meta account and
+            an SDK that still does not expose temple-tap events — a reviewer who toggles this without
+            any of that sees a failure that reads as our bug. The code stays; the controls go.
+            One owner: services/releaseSurface.
+          */}
+          {!isFeatureShelved('meta_glasses') ? (
+            <>
           <View style={rowDivStyle}>
             <View style={styles.rowText}>
               <Text style={labelStyle}>Ray-Ban Meta temple tap · Blocked</Text>
@@ -1630,6 +1642,8 @@ export default function Settings() {
             </View>
             <Ionicons name="cloud-upload-outline" size={20} color={colors.accent} />
           </TouchableOpacity>
+            </>
+          ) : null}
           {/* 2026-07-07 (Tim — SmartPump third rail) — import a date-stamped golf-workout
               export from SmartPump. PDF/image is AI-parsed server-side; a JSON/CSV export
               is parsed on-device. Dated workouts feed the dashboard's TRAINING →
@@ -1988,6 +2002,11 @@ export default function Settings() {
             <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Built by</Text>
             <Text style={[styles.aboutValue, { color: colors.text_primary }]}>SmartPlay AI</Text>
           </View>
+          {/* 2026-08-25 — the fourth glasses surface: one-time Meta View setup instructions in
+              Help & About. Shelved with the rest, from the same owner, so the release does not
+              document a feature it no longer offers. */}
+          {!isFeatureShelved('meta_glasses') ? (
+            <>
           {/* 2026-05-24 v1.2.1 — Meta glasses media-ingest setup
               instructions. The capture path is automatic once the
               user has set up Meta View; this section documents the
@@ -2001,6 +2020,8 @@ export default function Settings() {
               {t('labels.meta_glasses_instructions')}
             </Text>
           </View>
+            </>
+          ) : null}
 
           {/* 2026-06-10 — Beta Feedback (Issue Log) merged into Help & About.
               Issue Log captures voice ("log this: ...") + Export mails the list

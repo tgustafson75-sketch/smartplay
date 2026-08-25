@@ -17,6 +17,7 @@
  */
 
 import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
+import { watchDeviceLabel } from './watchBridge';
 import { useWatchStore } from '../store/watchStore';
 import { useClubSelectionStore } from '../store/clubSelectionStore';
 import { useCageStore } from '../store/cageStore';
@@ -76,7 +77,11 @@ interface WatchConnectionEvent {
 }
 
 const NativeMod: WearSwingNativeModule | null =
-  Platform.OS === 'android'
+  // 2026-08-25 — iOS joins Android. The Apple Watch module is deliberately registered under the
+  // SAME name with the same methods and events (ios-native/WearSwingBridgeModule.swift), so this
+  // stays one owner for "the watch" and no caller learns which platform is attached. Absent module
+  // (web, or a build predating the watch target) still resolves to null and every call no-ops.
+  Platform.OS === 'android' || Platform.OS === 'ios'
     ? ((NativeModules as Record<string, unknown>).WearSwingBridge as WearSwingNativeModule | undefined) ?? null
     : null;
 
@@ -108,7 +113,7 @@ export async function initWatchSwingBridge(): Promise<boolean> {
     swingSub = emitter.addListener('onWatchSwing', (e: WatchSwingEvent) => {
       // 2026-07-29 — an inbound swing is live proof the watch is connected, even if the launch-time
       // `/smartplay/hello` (the only thing that fires onWatchConnection) was missed. Refresh the flag.
-      useWatchStore.getState().setConnected(true, 'Galaxy Watch');
+      useWatchStore.getState().setConnected(true, watchDeviceLabel());
       // Map 1:1 into the existing store, tagged with the app's currently-selected club (cage's live
       // club → last tagged club), normalized to the canonical name so watch speed/tempo lands on the
       // SAME per-club profile the bag + Arccos import build. 'unknown' only when nothing is selected.
@@ -202,7 +207,8 @@ export async function initWatchSwingBridge(): Promise<boolean> {
     });
 
     connSub = emitter.addListener('onWatchConnection', (e: WatchConnectionEvent) => {
-      useWatchStore.getState().setConnected(!!e.connected, 'Galaxy Watch');
+      // The native event carries the real node name; the helper only fills a gap.
+      useWatchStore.getState().setConnected(!!e.connected, watchDeviceLabel(e.node));
     });
 
     await NativeMod.start();

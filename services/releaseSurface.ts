@@ -48,3 +48,26 @@ export function isShelved(route: string | null | undefined): boolean {
   const clean = route.split('?')[0]!.replace(/\/+$/, '');
   return SHELVED_ROUTES.has(clean);
 }
+
+/**
+ * 2026-08-25 (Tim) — "Meta glasses don't have to go in 1.0, but the watch functionality does."
+ *
+ * Not everything shelved is a ROUTE. The glasses are three settings rows (live point-of-view
+ * stream, voice-log import, media-ingest setup), so the route list above cannot express them.
+ * Same rule, different key: the code stays, the player-facing control goes.
+ *
+ * The glasses are the clearest case for holding: they depend on Meta's developer mode, a paired
+ * account, and an SDK that still does not expose temple-tap events. A reviewer who toggles it
+ * without any of that sees a failure that looks like our bug. The WATCH is the opposite call and
+ * ships in 1.0 — it runs on-device today.
+ */
+export type ShelvedFeature = 'meta_glasses';
+
+const SHELVED_FEATURES: ReadonlySet<ShelvedFeature> = new Set<ShelvedFeature>([
+  'meta_glasses',
+]);
+
+/** True when a named (non-route) feature must not be offered to the player in this release. */
+export function isFeatureShelved(feature: ShelvedFeature): boolean {
+  return SHELVED_FEATURES.has(feature);
+}

@@ -6685,10 +6685,18 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
 
   // Connected indicator no longer depends solely on the watch's launch-time hello: ANY inbound
   // message (swing/voice/tap) refreshes the connected flag, so the Settings row reflects reality.
+  /**
+   * 2026-08-25 — was pinned to the literal 'Galaxy Watch'. With the Apple Watch target added, that
+   * string is no longer correct on iOS (an iPhone user would be told their Apple Watch is a Galaxy
+   * Watch), so the device name moved behind watchDeviceLabel(), which prefers the node name the
+   * native module actually reports. The BEHAVIOUR under test is unchanged — assert that, not the
+   * brand string, and additionally forbid the hardcoded name coming back.
+   */
   check('Watch: connected flag refreshes on any inbound message (not just launch hello)',
-    /setConnected\(true, 'Galaxy Watch'\)/.test(swingBr) &&
-      /markWatchAlive\(\)/.test(caddieBr) && /setConnected\(true, 'Galaxy Watch'\)/.test(caddieBr),
-    'onWatchSwing + onWatchVoice/onWatchTap all mark the watch connected — an already-running watch (missed hello) still shows connected once any message flows');
+    /setConnected\(true, watchDeviceLabel\(\)\)/.test(swingBr) &&
+      /markWatchAlive\(\)/.test(caddieBr) && /setConnected\(true, watchDeviceLabel\(\)\)/.test(caddieBr) &&
+      !/'Galaxy Watch'/.test(swingBr) && !/'Galaxy Watch'/.test(caddieBr),
+    'onWatchSwing + onWatchVoice/onWatchTap all mark the watch connected via the one device-label owner — an already-running watch (missed hello) still shows connected once any message flows, and neither bridge hardcodes a brand');
 
   // Swing CALIBRATION: the wrist IMU summary feeds real metrics at truth-grade 'watch'.
   check('Watch: swing IMU maps into recordSwing (tempo + club-head speed)',
@@ -10175,6 +10183,13 @@ check('LOCK: a screen shelved for 2.0 has no door left open',
 
     // And no shelved route may be pushed from a screen that still ships.
     const pushers = ['app/(tabs)/dashboard.tsx', 'app/(tabs)/swinglab.tsx', 'app/(tabs)/caddie.tsx', 'app/(tabs)/play.tsx'];
+    // Named (non-route) features shelve the same way. The glasses are FOUR settings rows, so the
+    // route list cannot express them — settings.tsx must gate them from the same owner.
+    const settings = readCode('app/settings.tsx');
+    const glassesGated = /isFeatureShelved\('meta_glasses'\)/.test(settings)
+      && /from '.*releaseSurface'/.test(settings);
+    if (!glassesGated) return false;
+
     const noRawPush = pushers.every((f) => {
       const c = readCode(f);
       return routes.every((r) => {
@@ -10184,7 +10199,7 @@ check('LOCK: a screen shelved for 2.0 has no door left open',
     });
     return noRawPush;
   })(),
-  'the hub, the caddie catalog, the voice routes and the dashboard all filter shelved screens from services/releaseSurface — no ungated door remains');
+  'the hub, the caddie catalog, the voice routes, the dashboard and the glasses settings rows all filter from services/releaseSurface — no ungated door remains');
 
 check('RATCHET: nothing new may be interpolated into the cached system prompt',
   (() => {
