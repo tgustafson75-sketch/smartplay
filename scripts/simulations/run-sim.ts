@@ -5316,11 +5316,18 @@ check('Analysis honesty: kids\' progress delta only when both scores are real',
   'a child only sees a "+N points" progress chip when both the current and prior swing had real graded scores — a defaulted/placeholder score never fabricates progress');
 
 check('One-time migration clears auto-trapped Local Mode (settings v12)',
-  // refreshed: store is at version 21 now (…v20 consent-split shareDiagnostics carry-forward, v21
-  // default dark + high-contrast theme migration); the one-time version<12 localMode clear is still
-  // present (migrations are cumulative), which is what this guards.
-  /version: 21/.test(read('store/settingsStore.ts')) &&
-    /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(read('store/settingsStore.ts')),
+  /**
+   * 2026-08-25 — was pinned to the LITERAL `version: 21`, so it broke the moment the store bumped
+   * to 22 for the Tank removal. The version number is not what this guards: migrations are
+   * cumulative, and the point is that the one-time version<12 localMode clear still EXISTS. Assert
+   * a floor instead, so a future migration cannot be blocked by a guard that only knew one number.
+   */
+  (() => {
+    const src = readCode('store/settingsStore.ts');
+    const m = /version:\s*(\d+)/.exec(src);
+    const v = m ? Number(m[1]) : 0;
+    return v >= 21 && /if \(version < 12\)[\s\S]{0,160}p\.localMode = false/.test(src);
+  })(),
   'users trapped in auto-engaged Local Mode by the old breaker boot clean once');
 
 check('Consent split: prior opt-out carries into shareDiagnostics (v20 privacy migration)',
@@ -6621,7 +6628,13 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /theme_preference:\s*'dark' as const/.test(settingsSrc) && /highContrast:\s*true/.test(settingsSrc),
     'settingsStore ships theme_preference=dark + highContrast=true as the default state');
   check('LOCK theme: v21 migrates existing "system" testers to dark + high contrast',
-    /version:\s*21/.test(settingsSrc) && /version < 21/.test(settingsSrc) && /p\.theme_preference = 'dark'/.test(settingsSrc),
+    // 2026-08-25 — version floor, not an exact match: the v21 theme migration must still be there
+    // after later bumps (v22 removed Tank), which is what actually matters to a tester on an old install.
+    (() => {
+      const m = /version:\s*(\d+)/.exec(settingsSrc);
+      const v = m ? Number(m[1]) : 0;
+      return v >= 21 && /version < 21/.test(settingsSrc) && /p\.theme_preference = 'dark'/.test(settingsSrc);
+    })(),
     'persist bumped to v21 and migrates a never-customized (system-default) install to dark + high contrast');
   const themeCtxSrc = fs.readFileSync(path.resolve(__dirname, '../../contexts/ThemeContext.tsx'), 'utf-8');
   check('LOCK theme: dark is the resolved fallback in ThemeContext',

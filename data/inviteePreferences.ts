@@ -41,7 +41,7 @@ const INVITEE_PREFERENCES: Record<string, InviteePreference> = {
     displayName: 'Uncle Tommy',
     notes: "Tim's uncle, weekend HOST. Default to 'Uncle Tommy' until he says otherwise. Android. 2026-05-25 weekend invitee.",
   },
-  // 2026-05-25 — Fix AF: coach refinement. Marc Ward (the real
+  // 2026-05-25 — Fix AF: coach refinement. The coaching persona (the real
   // instructor behind the Tank persona). coachMode unlocks the
   // "remember this" / "add to brain" voice trigger so Marc can refine
   // definitions ("what is Smash Factor") in his own words and have

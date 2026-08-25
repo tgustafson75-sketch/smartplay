@@ -19,7 +19,7 @@ export const OWNER_EMAILS: readonly string[] = [
   't.gustafson75@gmail.com',
   // 2026-06-09 — Tim's iOS test device email.
   't.gustafson@hotmail.com',
-  // 2026-08-06 (Tim) — Tank / Marc Ward REMOVED as an owner. He stays a beta tester (records + auto-sends
+  // 2026-08-06 (Tim) — the second owner was REMOVED. They stayed a beta tester (records + auto-sends
   // his issue log like everyone else) but no longer has Owner Tools / owner-gated debug surfaces.
 ];
 

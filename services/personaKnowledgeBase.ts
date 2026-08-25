@@ -13,7 +13,7 @@
  *   - The same question ("should I take more club?") should get the
  *     same opinion in Tank's voice every time, not a fresh LLM
  *     interpretation. Coaching is repetition; repetition is identity.
- *   - The KB is the seam where Marc Ward's actual teaching material
+ *   - The KB is the seam where a coach's actual teaching material
  *     can drop in — same schema, his answers replace the seeded ones
  *     when he hands us his content. Until then, the seeded entries
  *     are grounded in tour-standard coaching wisdom + Tank's voice
@@ -38,7 +38,7 @@
  *     to the entries you want to cover and update getPersonaAnswer's
  *     persona switch. Until then, those personas fall through to
  *     `genericAnswer`.
- *   - To bulk-import Marc Ward's material: this file's PERSONA_KB
+ *   - To bulk-import a coach's material: this file's PERSONA_KB
  *     array can be replaced by an `import KB from './personaKB.json'`
  *     without touching consumers. Schema stays the same.
  */
@@ -1198,7 +1198,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     styleNotes: "Harry's 'I'm noticing a pattern' is his observational signature; Tank's 'three of last five — that's a pattern, not luck' is a one-line diagnostic verdict.",
   },
 
-  // ─── 2026-05-23 — Marc Ward "Tank" expansion: 43 new entries ──────
+  // ─── 2026-05-23 — coaching expansion: 43 entries ─────────────────
   //
   // Real salty-wise-caddie material organized in 5 buckets:
   //   - Bunker Play (7)

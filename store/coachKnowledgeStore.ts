@@ -1,7 +1,7 @@
 /**
  * 2026-05-25 — Fix AF: coach-refinement knowledge store.
  *
- * The real Tank (Marc Ward) needs to refine the caddie's definitions
+ * A coach needs to be able to refine the caddie's definitions
  * in his own words during testing. Flow:
  *   1. User asks: "what is Smash Factor"
  *   2. Caddie answers

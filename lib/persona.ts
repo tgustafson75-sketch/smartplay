@@ -108,7 +108,24 @@ export const ALL_PERSONAS: readonly Persona[] = ['kevin', 'serena', 'harry', 'ta
  * intro picker, suggestion targets). Anything in ALL_PERSONAS but not in
  * ACTIVE_PERSONAS is dormant — type-valid, never shown.
  */
-export const ACTIVE_PERSONAS: readonly Persona[] = ['kevin', 'serena', 'tank', 'custom'] as const;
+/**
+ * 2026-08-25 (Tim) — TANK IS REMOVED FROM THE SHIPPING APP.
+ *
+ * The persona was modelled on a real person, and Tim has asked for every reference stripped before
+ * submission.
+ *
+ * TO BE ACCURATE ABOUT THE KNOWLEDGE BASE, because the opposite is easy to assume and I assumed it
+ * first: the coaching entries are ORIGINAL material. They were deliberately HEDGED against his
+ * input rather than transcribed from it — the register he brought was too "range rat" for this
+ * app's voice. So there is no third-party IP in the KB and nothing there needs removing; what goes
+ * is the persona and the name.
+ *
+ * Removed the same way Harry was: dropped from ACTIVE_PERSONAS, with a settings migration mapping
+ * any persisted 'tank' assignment to Kevin so no existing user is stranded on a hidden persona.
+ * The type and routing stay valid so nothing breaks mid-removal; the deeper scrub (KB entries,
+ * tankAnswer fields, assets) follows.
+ */
+export const ACTIVE_PERSONAS: readonly Persona[] = ['kevin', 'serena', 'custom'] as const;
 
 export function isActivePersona(p: Persona): boolean {
   return (ACTIVE_PERSONAS as readonly Persona[]).includes(p);

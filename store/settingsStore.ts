@@ -857,7 +857,7 @@ export const useSettingsStore = create<SettingsState>()(
       // four pillars to that prior single value so the user's preference
       // is preserved across the restructure. After migration the user
       // can customize per pillar in Settings.
-      version: 21,
+      version: 22,
       migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<SettingsState> & {
           caddiePersonality?: Persona;
@@ -904,6 +904,20 @@ export const useSettingsStore = create<SettingsState>()(
             const reassigned: CaddieAssignments = { ...p.caddieAssignments };
             (Object.keys(reassigned) as CaddiePillar[]).forEach((pillar) => {
               if (reassigned[pillar] === 'harry') reassigned[pillar] = 'kevin';
+            });
+            p.caddieAssignments = reassigned;
+          }
+        }
+        // v22 (2026-08-25, Tim) — Tank removed from the shipping app. Same treatment Harry got in
+        // v6: migrate any persisted Tank assignment to Kevin so a user who had selected Tank is not
+        // stranded on a persona the UI no longer lists. The persona was built around a real person,
+        // so this is a removal rather than a dormancy.
+        if (version < 22) {
+          if (p.caddiePersonality === 'tank') p.caddiePersonality = 'kevin';
+          if (p.caddieAssignments) {
+            const reassigned: CaddieAssignments = { ...p.caddieAssignments };
+            (Object.keys(reassigned) as CaddiePillar[]).forEach((pillar) => {
+              if (reassigned[pillar] === 'tank') reassigned[pillar] = 'kevin';
             });
             p.caddieAssignments = reassigned;
           }
