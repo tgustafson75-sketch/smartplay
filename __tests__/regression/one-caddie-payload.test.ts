@@ -58,6 +58,64 @@ describe('one payload, so the caddie cannot change character mid-round', () => {
     expect(body.clientHour).toBeGreaterThanOrEqual(0);
   });
 
+  /**
+   * 2026-08-26 — THE KEYS useVoiceCaddie USED TO OWN.
+   *
+   * When that hook's 58-key literal was collapsed into this builder, the risk was not a crash — it
+   * was a SILENT NULL: the builder emits every key always, so a derivation that quietly resolved to
+   * null would look identical to a field the player simply hasn't filled in. These are the values
+   * the mic path used to compute for itself, asserted against seeded stores so a regression shows
+   * up as a failing test rather than as a caddie that has stopped noticing things.
+   */
+  it('resolves the fields the mic path used to derive for itself', () => {
+    usePlayerProfileStore.setState({
+      dominantMiss: 'right', goal: 'Break 90', physicalLimitation: 'bad back', personalBest: 84,
+    } as never);
+    useRelationshipStore.setState({ currentMentalState: 'frustrated', sessionsTogether: 3 } as never);
+    useRoundStore.setState({
+      isCompetition: true, mode: 'break_90', scores: { 1: 5 },
+      holeNotes: { 3: 'wind swirls here' }, isSimRound: true,
+    } as never);
+
+    const body = buildCaddieRequestBody({ message: 'what club', language: 'en' }) as Record<string, unknown>;
+    expect(body.dominantMiss).toBe('right');
+    expect(body.goal).toBe('Break 90');
+    expect(body.physicalLimitation).toBe('bad back');
+    expect(body.personalBest).toBe(84);
+    expect(body.mentalState).toBe('frustrated');
+    expect(body.sessionsTogether).toBe(3);
+    expect(body.isCompetition).toBe(true);
+    expect(body.roundMode).toBe('break_90');
+    expect(body.scores).toEqual({ 1: 5 });
+    expect(body.holeNotes).toEqual({ 3: 'wind swirls here' });
+    expect(body.sim_round).toBe(true);
+    // derived by a call the builder makes itself, not by a caller handing it over
+    expect(typeof body.persona).toBe('string');
+    expect(typeof body.personaIntensity).toBe('number');
+    expect(typeof body.clientHour).toBe('number');
+  });
+
+  /**
+   * 2026-08-26 — an override of `undefined` is not a caller saying anything; it is a value that
+   * wasn't there. Assigning it clobbered a resolved value, which made `overrides: { x: maybeX }`
+   * quietly destructive exactly when maybeX was absent — the shape the collapsed mic path uses.
+   * An explicit null still wins: that IS a caller saying "none".
+   */
+  it('an undefined override does not clobber a resolved value; an explicit null does', () => {
+    useRoundStore.setState({ activeCourse: 'Greenhill' } as never);
+    const undef = buildCaddieRequestBody({
+      message: 'hi', language: 'en',
+      overrides: { activeCourse: undefined },
+    }) as Record<string, unknown>;
+    expect(undef.activeCourse).toBe('Greenhill');
+
+    const nulled = buildCaddieRequestBody({
+      message: 'hi', language: 'en',
+      overrides: { activeCourse: null },
+    }) as Record<string, unknown>;
+    expect(nulled.activeCourse).toBeNull();
+  });
+
   it('a caller with a better value wins, but cannot invent a key', () => {
     const body = buildCaddieRequestBody({
       message: 'hi', language: 'en',

@@ -35,7 +35,8 @@
  * Not in scope (call out for the next sprint):
  *   - Acoustics analysis (services/acousticsAnalyzer.ts — separate file)
  *   - Real-time frame queue from glasses (enhance glassesVisionInput)
- *   - Persistent learning model (golferModel.ts — feeds brain.ts)
+ *   - Persistent learning model (golferModel.ts — reaches the brain through
+ *     caddieRequestBody.golfer_model_snippet; api/brain.ts named here was deleted)
  *   - Shot trace reconstruction (gpsManager rolling buffer + vision)
  */
 
