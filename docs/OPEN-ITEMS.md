@@ -489,3 +489,17 @@ and his week-one idea ("how would I play Pebble Beach, from my tendencies") are 
 the four handicap functions that already do the hard arithmetic, in `docs/FUTURE-GHOST-MATCH.md`.
 
 Parked deliberately: post-freeze, post-launch.
+
+## §19 — PARKED: 3.0 immersion control (2026-08-26)
+
+*"Hey Caddie, show me my shoulder rotation"* → auto-zoom to the region, slow-mo it, step frames.
+Full write-up: `docs/FUTURE-3.0-IMMERSION-CONTROL.md`.
+
+Worth knowing before it is scheduled: **the computer vision is largely already there** — 33 pose
+landmarks per frame on-device, shoulder/hip turn already derived, playback rate and seek already
+built, and a voice command bus into the screen. The new work is a body-part→region map, a zoom that
+feels good, and a CONTINUOUS command grammar (every voice surface today is one-shot).
+
+Build §14 first (circle a region, re-read it — tap-driven): it forces the region map into existence
+against a UI that cannot mis-hear you. Depends on §17's 120fps build — "forward three steps" means
+nothing at 30fps.
