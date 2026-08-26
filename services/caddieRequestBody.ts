@@ -491,12 +491,39 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     emotionalLog: safe(() => (r.emotionalLog ?? []).slice(-5).map(
       (e: { state: string; valence?: string; hole?: number }) => ({ state: e.state, valence: e.valence, hole: e.hole }),
     ), []),
-    /** The player's REAL bag numbers — club answers grounded in what they actually carry. */
+    /**
+     * The player's MEASURED carry numbers — club answers grounded in real data.
+     *
+     * 2026-08-26 — the comment here used to say "what they actually carry", and that is not what
+     * this is. bagDistances() returns clubs we have a CARRY NUMBER for. Which clubs are in the bag
+     * is a different fact, and it lives in clubBagStore — see bagClubs below.
+     */
     clubDistances: safe(() => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { bagDistances } = require('./shotStrategy') as typeof import('./shotStrategy');
       return bagDistances();
     }, {}),
+    /**
+     * 2026-08-26 — WHAT IS ACTUALLY IN THE BAG, which the caddie could not see.
+     *
+     * clubBagStore is the registered bag. Smart Motion's club scan writes to it every time it
+     * recognises a club through the camera, Bag Vision writes the whole set, and the caddie's OWN
+     * `register_bag` tool writes it too — so the caddie was registering a bag it could never read
+     * back. Written, never read, at the brain layer.
+     *
+     * The store's own accessor is annotated "Bag as a driver→putter-sorted array (for display +
+     * brain context)". It reached the dashboard and two services. It never reached a brain.
+     *
+     * Why it matters separately from clubDistances: those are the clubs with MEASURED carries, so a
+     * club the player told us they carry but has not logged a shot with is invisible to the club
+     * lookup — the caddie reads down a list that silently omits it. And nothing stopped it naming a
+     * club they no longer carry but still have history for.
+     */
+    bagClubs: safe(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { useClubBagStore } = require('../store/clubBagStore') as typeof import('../store/clubBagStore');
+      return useClubBagStore.getState().bagList().map((c) => c.club_id);
+    }, []),
     /** Per-club character (shape + miss + carry), evidence-barred by clubTendency itself. */
     club_tendencies: safe(() => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports

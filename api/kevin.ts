@@ -412,6 +412,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Player's REAL bag distances { club: yards }. Strategy/club answers
       // must use these, not assumptions.
       clubDistances = {},
+      bagClubs = [],
       // Phase BR — active practice context. Pre-formatted by the client
       // (services/tutorialContext.ts buildFullPracticeContext). Multi-line
       // string when one or more tutorials are active, null otherwise.
@@ -1474,7 +1475,7 @@ PATTERN AWARENESS (Phase BJ):
 The body may include \`holeShots\` (this hole) and \`recentShots\` (last shots across the round). When 3+ shots show a clear directional pattern (three pushes right, two pulled left), reference it briefly the next time the player asks for a tactical read and adjust the suggestion accordingly ("you've been right today — favor left center"). Use this once or twice a round, not every shot.
 
 CLUB & STRATEGY — USE REAL DISTANCES:
-When a [THE BAG] block is present, base every club/strategy answer on THOSE numbers, not generic assumptions. Core rule: if the distance to the target is beyond their LONGEST club, it's a two-shot decision — don't tell them to "go for it." Recommend a lay-up to a comfortable wedge number (~90) or short of the first hazard, and say what it leaves ("lay up to ~90, leaves a full gap wedge"). GO OR LAY UP IS A SUBTRACTION, AND YOU DO IT BEFORE YOU DECIDE: take the carry they need, take the carry of their longest club that covers it, and the difference is their MARGIN. That number is the answer and the reason for it. Comfortably inside — say fifteen yards or more of margin — is a GO for an aggressive player and a fair option for anyone; on the edge or short is a lay-up, and then say what the lay-up leaves. Probed 2026-08-23 with a 3-wood carrying 235 and 210 to clear: the caddie said lay up because "it's beyond your longest club", then on a retry because it was "a 3-wood carry with zero margin", then because it was "beyond your 5 iron" — three different reasons, all false, for a carry they clear by twenty-five yards. That is deciding first and inventing the arithmetic afterwards, and it is worse than a wrong club: they cannot check you, so they lose the shot AND learn to distrust the number. Never call a carry they clear comfortably "beyond", "a stretch", or "zero margin" — do the subtraction, then speak. When it's reachable, name the club that matches the number from their bag. MATCH IT ARITHMETICALLY — but match it to the number the shot PLAYS, never the raw yardage. Order of operations, and the order is the whole thing: FIRST adjust the distance for what is actually happening to the ball — into the wind, cold air, wet turf, uphill all make it play LONGER; downwind, warm, downhill make it play shorter. THEN match a club to that PLAYING number, and the match is a LOOKUP, NOT A FEELING: read down their carries and take the FIRST club that is AT or ABOVE the playing number. Never a club whose carry sits below it while a longer one is in the bag — "one more club" is not a substitute for reading the list. Worked, with 7i 150, 6i 162, 5i 172, 4i 181, 5w 215:
+When a [CLUBS IN THE BAG] block is present it lists what they actually carry — recommend only from that list, and if a club there has no measured carry yet, you may name it but say you do not have their number for it and never invent one. When a [THE BAG] block is present, base every club/strategy answer on THOSE numbers, not generic assumptions. Core rule: if the distance to the target is beyond their LONGEST club, it's a two-shot decision — don't tell them to "go for it." Recommend a lay-up to a comfortable wedge number (~90) or short of the first hazard, and say what it leaves ("lay up to ~90, leaves a full gap wedge"). GO OR LAY UP IS A SUBTRACTION, AND YOU DO IT BEFORE YOU DECIDE: take the carry they need, take the carry of their longest club that covers it, and the difference is their MARGIN. That number is the answer and the reason for it. Comfortably inside — say fifteen yards or more of margin — is a GO for an aggressive player and a fair option for anyone; on the edge or short is a lay-up, and then say what the lay-up leaves. Probed 2026-08-23 with a 3-wood carrying 235 and 210 to clear: the caddie said lay up because "it's beyond your longest club", then on a retry because it was "a 3-wood carry with zero margin", then because it was "beyond your 5 iron" — three different reasons, all false, for a carry they clear by twenty-five yards. That is deciding first and inventing the arithmetic afterwards, and it is worse than a wrong club: they cannot check you, so they lose the shot AND learn to distrust the number. Never call a carry they clear comfortably "beyond", "a stretch", or "zero margin" — do the subtraction, then speak. When it's reachable, name the club that matches the number from their bag. MATCH IT ARITHMETICALLY — but match it to the number the shot PLAYS, never the raw yardage. Order of operations, and the order is the whole thing: FIRST adjust the distance for what is actually happening to the ball — into the wind, cold air, wet turf, uphill all make it play LONGER; downwind, warm, downhill make it play shorter. THEN match a club to that PLAYING number, and the match is a LOOKUP, NOT A FEELING: read down their carries and take the FIRST club that is AT or ABOVE the playing number. Never a club whose carry sits below it while a longer one is in the bag — "one more club" is not a substitute for reading the list. Worked, with 7i 150, 6i 162, 5i 172, 4i 181, 5w 215:
   · plays 150 → the 7 iron. 150 covers it.
   · plays 176 → NOT the 6 iron (162 is fourteen short) and not the 5 iron unless you say it is all of it. 181 covers 176, so the 4 iron.
   · plays 209 → NOT the 6 iron. 181 does not cover 209. The 5 wood does.
@@ -1745,8 +1746,30 @@ ${emoArr.slice(-5).map(e => `  - ${e.state ?? '?'}` + (e.valence ? ` (${e.valenc
        */
       ? `[THE BAG — real CARRY distances in yards: what the ball FLIES, roll not included]\n${bagEntries.map(([c, y]) => `  ${c}: ${y}`).join('\n')}\n[/BAG]\n`
       : '';
-    const onCourseContextBlock = onCourseHoleBlock || onCourseRecentBlock || emotionalBlock || bagBlock
-      ? `${onCourseHoleBlock}${onCourseRecentBlock}${emotionalBlock}${bagBlock}\n`
+    /**
+     * 2026-08-26 — WHICH CLUBS ARE ACTUALLY IN THE BAG, which is a different fact from which clubs
+     * have a measured carry. The client registers clubs from the Smart Motion camera scan, from Bag
+     * Vision, and from the caddie's own register_bag tool; none of it ever reached here, so the club
+     * lookup read a list that silently omitted anything the player carries but has not logged a shot
+     * with — and nothing stopped it naming a club they no longer carry but still have history for.
+     *
+     * Deliberately NOT given an estimated yardage. Inventing a carry for an unmeasured club is the
+     * one thing the bag doctrine above spends a paragraph forbidding.
+     */
+    const registered = Array.isArray(bagClubs)
+      ? (bagClubs as unknown[]).filter((c): c is string => typeof c === 'string' && c.length > 0)
+      : [];
+    const measured = new Set(bagEntries.map(([c]) => c));
+    const unmeasured = registered.filter((c) => !measured.has(c));
+    const bagClubsBlock = registered.length > 0
+      ? `[CLUBS IN THE BAG] ${registered.join(', ')}\n`
+        + (unmeasured.length > 0
+          ? `  No measured carry yet for: ${unmeasured.join(', ')}. You may name one of these, but say you do not have their number for it yet — never invent a yardage.\n`
+          : '')
+        + '[/CLUBS IN THE BAG]\n'
+      : '';
+    const onCourseContextBlock = onCourseHoleBlock || onCourseRecentBlock || emotionalBlock || bagBlock || bagClubsBlock
+      ? `${onCourseHoleBlock}${onCourseRecentBlock}${emotionalBlock}${bagBlock}${bagClubsBlock}\n`
       : '';
 
     const userMessage = sv

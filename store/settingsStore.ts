@@ -136,6 +136,15 @@ interface SettingsState {
 
   theme_preference: 'system' | 'light' | 'dark';
   highContrast: boolean;
+  /**
+   * 2026-08-26 (Tim — "make high contrast the default display setting"). It already WAS the default
+   * for new installs; the v21 migration only reached testers still on theme_preference 'system',
+   * so anyone who had explicitly picked light or dark before 07-29 never got it. v23 turns it on
+   * for everyone, once. This flag is what makes that safe to do exactly once: from here on, a
+   * player who deliberately switches it OFF is recorded as having chosen, and no future default
+   * change may quietly switch it back.
+   */
+  highContrastUserTouched: boolean;
   // PGA HOPE follow-up (A1) — when true, bumps text scale and forces
   // icon-button labels to render so low-vision users don't operate the
   // app from muscle memory alone.
@@ -451,6 +460,7 @@ export const useSettingsStore = create<SettingsState>()(
       // migrated to it in v21 below (only if they never picked a different appearance).
       theme_preference: 'dark' as const,
       highContrast: true,
+      highContrastUserTouched: false,
       largeText: false,
       ttsCaptions: true,
       ttsCaptionsBluetoothPrompt: 'unasked' as const,
@@ -707,7 +717,7 @@ export const useSettingsStore = create<SettingsState>()(
         }
       },
       setThemePreference: (p) => set({ theme_preference: p }),
-      setHighContrast: (v) => set({ highContrast: v }),
+      setHighContrast: (v) => set({ highContrast: v, highContrastUserTouched: true }),
       setLargeText: (v) => set({ largeText: v }),
       setTtsCaptions: (v) => set({ ttsCaptions: v }),
       setTtsCaptionsBluetoothPrompt: (v) => set({ ttsCaptionsBluetoothPrompt: v }),
@@ -813,7 +823,7 @@ export const useSettingsStore = create<SettingsState>()(
       // four pillars to that prior single value so the user's preference
       // is preserved across the restructure. After migration the user
       // can customize per pillar in Settings.
-      version: 22,
+      version: 23,
       migrate: (persisted, version) => {
         const p = (persisted ?? {}) as Partial<SettingsState> & {
           caddiePersonality?: Persona;
@@ -867,6 +877,15 @@ export const useSettingsStore = create<SettingsState>()(
         // v6: migrate any persisted Tank assignment to Kevin so a user who had selected Tank is not
         // stranded on a persona the UI no longer lists. The persona was built around a real person,
         // so this is a removal rather than a dormancy.
+        // v23 — 2026-08-26 (Tim) — high contrast is THE default display setting. v21 only reached
+        // testers whose theme_preference was still 'system'; a tester who had explicitly chosen
+        // light or dark kept whatever high-contrast value they had, which for most of them was
+        // false. One unconditional flip for anyone who has not deliberately set it themselves —
+        // and from now on highContrastUserTouched records that choice, so this cannot recur.
+        if (version < 23) {
+          if (p.highContrastUserTouched !== true) p.highContrast = true;
+          if (p.highContrastUserTouched == null) p.highContrastUserTouched = false;
+        }
         if (version < 22) {
           // Compared as a string on purpose: 'tank' is no longer a Persona in the type system, but
           // it absolutely exists in data persisted by earlier builds — which is the entire reason this
@@ -1030,6 +1049,7 @@ export const useSettingsStore = create<SettingsState>()(
         gpsQualityDebugOverlay: s.gpsQualityDebugOverlay,
         theme_preference: s.theme_preference,
         highContrast: s.highContrast,
+        highContrastUserTouched: s.highContrastUserTouched,
         largeText: s.largeText,
         ttsCaptions: s.ttsCaptions,
         ttsCaptionsBluetoothPrompt: s.ttsCaptionsBluetoothPrompt,
