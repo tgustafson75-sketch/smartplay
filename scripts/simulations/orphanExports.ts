@@ -239,7 +239,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
   'services/acousticImpactDetector.ts :: onStrike': 'TRIAGE',
   'services/caddieRequestBody.ts :: CADDIE_REQUEST_KEYS': 'TRIAGE',
   'services/cage/targetRig.ts :: moveTargetEnd': 'TRIAGE',
-  'services/capture/captureFlags.ts :: MIN_TRACE_FPS': 'TRIAGE',
   'services/cloudSync/snapshot.ts :: NOT_BACKED_UP_STORE_KEYS': 'TRIAGE',
   'services/conversationState.ts :: isInActiveConversation': 'TRIAGE',
   'services/dialogEngine.ts :: listSituations': 'TRIAGE',

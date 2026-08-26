@@ -17,7 +17,7 @@
  * path stays the default until this is proven on-device.
  */
 
-import React, { forwardRef, useImperativeHandle, useRef } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import {
   Camera,
@@ -26,6 +26,7 @@ import {
   type VideoFile,
 } from 'react-native-vision-camera';
 import { PREFERRED_CAPTURE_FPS } from '../../services/capture/captureFlags';
+import { useCaptureEngineStore } from '../../store/captureEngineStore';
 
 /** Mirrors the slice of expo-camera's CameraView ref API the swing path uses, so
  *  this component is a structural drop-in for it. */
@@ -62,6 +63,16 @@ export const SwingVisionCamera = forwardRef<SwingCameraHandle, Props>(function S
     { videoResolution: 'max' },
   ]);
   const fps = format ? Math.min(PREFERRED_CAPTURE_FPS, format.maxFps) : undefined;
+  /**
+   * 2026-08-26 — publish what we ACTUALLY got. useCameraFormat degrades to the device's best, so
+   * asking for 120 and receiving 30 produced a capture indistinguishable from a high-speed one
+   * downstream — and SmartTrace would draw a departure direction it could not have seen. See
+   * captureEngineStore.capturedFps and MIN_TRACE_FPS.
+   */
+  useEffect(() => {
+    useCaptureEngineStore.getState().setCapturedFps(fps ?? null);
+    return () => { useCaptureEngineStore.getState().setCapturedFps(null); };
+  }, [fps]);
 
   const camRef = useRef<Camera>(null);
   // Holds the resolver for the in-flight recordAsync promise; resolved when

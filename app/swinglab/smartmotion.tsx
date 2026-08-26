@@ -99,6 +99,7 @@ import { detectBallSpeed, type BallSpeedResult } from '../../services/acousticDe
 import { useCageStore, type PrimaryIssue } from '../../store/cageStore';
 import { deriveDrillVerdict } from '../../services/drillVerdict';
 import { useClubBagStore } from '../../store/clubBagStore';
+import { MIN_TRACE_FPS } from '../../services/capture/captureFlags';
 import { useFamilyStore } from '../../store/familyStore';
 import { useAcousticCalibrationStore } from '../../store/acousticCalibrationStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
@@ -1452,6 +1453,22 @@ export default function SmartMotion() {
   const ballTrace = useMemo(() => {
     if (angle !== 'down_the_line' || isPutt) return null;
     if (!ballDeparture?.departurePoint || !ballArea) return null;
+    /**
+     * 2026-08-26 (Tim — 120fps readiness) — MIN_TRACE_FPS FINALLY DOES SOMETHING.
+     *
+     * captureFlags has declared it since 06-13, with its own reason attached: "the floor we still
+     * consider high-speed enough to attempt a drawn departure trace. Below this, SmartTrace stays in
+     * its sound+tempo tier rather than claiming a flight direction it can't see cleanly." Nothing
+     * ever read it. The judgement was written down and never consulted, so the honest fallback it
+     * describes could not happen — a 30fps phone drew the same confident line a 120fps one did.
+     *
+     * Gated on a KNOWN fps only. capturedFps is null on the expo-camera path (today's default, no
+     * frame-rate control), and null is left alone deliberately: this must not change behaviour on
+     * the engine that currently ships. It takes effect exactly where it can be trusted — the
+     * vision-camera path, which is what the iPhone Pro Max build turns on.
+     */
+    const capturedFps = useCaptureEngineStore.getState().capturedFps;
+    if (capturedFps != null && capturedFps < MIN_TRACE_FPS) return null;
     return computeTraceDirection(ballArea, cvToContainer(ballDeparture.departurePoint), targetPoint);
   }, [angle, isPutt, ballDeparture, ballArea, targetPoint, cvToContainer]);
   // 2026-07-07 — ref mirrors so runAnalysis (a stable callback) reads the CURRENT
