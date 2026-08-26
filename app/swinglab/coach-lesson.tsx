@@ -94,7 +94,9 @@ export default function CoachLessonScreen() {
   // Diagnostic lesson mode (tap-to-swing on the live camera; per-swing diagnosis is a bigger moment).
   const [dxStage, setDxStage] = useState<DxStage>('intro');
   const [priority, setPriority] = useState<Diagnosis | null>(null);
-  const [dxText, setDxText] = useState('');
+  // 2026-08-26 — `dxText` removed: it was written seven times and read nowhere. Every write was
+  // paired with setCaption(...) and say(...), so the caption already rendered the text and the voice
+  // already spoke it — this was a parallel copy of state that no longer had a consumer.
   const [lastValue, setLastValue] = useState<number | null>(null);
   const [goodReps, setGoodReps] = useState(0);
   const [lastMetrics, setLastMetrics] = useState<SwingBiomechanics | null>(null);
@@ -308,7 +310,6 @@ export default function CoachLessonScreen() {
     setKind('diagnostic'); setDxStage('intro'); setPriority(null); setLastValue(null);
     setGoodReps(0); setLastMetrics(null); setAddressedIds([]); setError(null);
     const intro = introLine();
-    setDxText(intro);
     loopGenRef.current++;
     setSessionLive(true); sessionLiveRef.current = true; setPaused(false); pausedRef.current = false;
     setPhase('watching'); setCaption(intro);
@@ -326,7 +327,7 @@ export default function CoachLessonScreen() {
     const rx = prescriptionLine(dx.fault);
     const blocks = [mem, reveal, miss, rx].filter(Boolean) as string[];
     setPriority(dx); setLastValue(dx.value); setGoodReps(0); setDxStage('reps');
-    setDxText(blocks.join('\n\n')); setCaption(blocks[0] ?? reveal); say(blocks.join(' '));
+    setCaption(blocks[0] ?? reveal); say(blocks.join(' '));
   }, []);
 
   const recordDiagnostic = useCallback(async () => {
@@ -351,14 +352,14 @@ export default function CoachLessonScreen() {
         const dx = diagnoseBaseline(m);
         if (!dx) {
           const line = diagnosisReveal(null, m);
-          setDxText(line); setCaption(line); setDxStage('homework'); setPriority(null); say(line); return;
+          setCaption(line); setDxStage('homework'); setPriority(null); say(line); return;
         }
         setAddressedIds([dx.fault.id]); beginPriority(dx, m); return;
       }
 
       if (dxStage === 'reps' && priority) {
         const evalRep = evaluateRep(priority.fault, m, lastValue);
-        setLastValue(evalRep.value); setDxText(evalRep.line); setCaption(evalRep.line); say(evalRep.line);
+        setLastValue(evalRep.value); setCaption(evalRep.line); say(evalRep.line);
         if (evalRep.fixed) {
           const nextGood = goodReps + 1; setGoodReps(nextGood);
           if (nextGood >= 2) {
@@ -368,7 +369,7 @@ export default function CoachLessonScreen() {
             if (progressTimer.current) clearTimeout(progressTimer.current);
             progressTimer.current = setTimeout(() => {
               progressTimer.current = null; setPendingProgress(false);
-              setDxStage('progress'); setDxText(line); setCaption(line); say(line);
+              setDxStage('progress'); setCaption(line); say(line);
             }, 2200);
           }
         } else { setGoodReps(0); }
@@ -385,13 +386,13 @@ export default function CoachLessonScreen() {
     if (priority) recordLesson(priority.fault);
     if (!lastMetrics) { setDxStage('homework'); return; }
     const next = diagnose(lastMetrics).find((d) => !addressedIds.includes(d.fault.id)) ?? null;
-    if (!next) { setDxStage('homework'); const hw = priority ? homeworkLine(priority.fault) : ''; setDxText(hw); setCaption(hw); say(hw); return; }
+    if (!next) { setDxStage('homework'); const hw = priority ? homeworkLine(priority.fault) : ''; setCaption(hw); say(hw); return; }
     setAddressedIds((ids) => [...ids, next.fault.id]); beginPriority(next, lastMetrics);
   }, [lastMetrics, addressedIds, priority, beginPriority, recordLesson]);
   const finishToHomework = useCallback(() => {
     if (!priority) { endSession(); return; }
     recordLesson(priority.fault);
-    const hw = homeworkLine(priority.fault); setDxStage('homework'); setDxText(hw); setCaption(hw); say(hw);
+    const hw = homeworkLine(priority.fault); setDxStage('homework'); setCaption(hw); say(hw);
   }, [priority, recordLesson, endSession]);
 
   const s = makeStyles(colors);

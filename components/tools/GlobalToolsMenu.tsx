@@ -106,7 +106,7 @@ export function GlobalToolsMenu() {
   const cyclePersona = () => {
     // 2026-08-07 (Tim) — Tank is owner-gated: the cycler must SKIP him when disabled (was cycling through
     // ACTIVE_PERSONAS which always includes Tank).
-    const list = selectablePersonas(useSettingsStore.getState().tankEnabled);
+    const list = selectablePersonas();
     const idx = list.indexOf(caddiePersonality as Persona);
     const next = list[(Math.max(idx, -1) + 1) % list.length];
     setCaddiePersonality(next);

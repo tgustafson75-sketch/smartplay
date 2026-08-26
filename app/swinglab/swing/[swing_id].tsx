@@ -542,14 +542,11 @@ export default function SwingDetail() {
   // trace alone. Forces the skeleton on while active.
   const [motionOnly, setMotionOnly] = useState(false);
   // 2026-06-23 (RP-6) — autoplay-on-open is preserved (Tim: "videos all play"),
-  // but the auto-LOOP fights "scrub then analyze this moment" on a re-opened
-  // pending upload — the clip keeps restarting under the held frame. Once the
-  // user ACTIVELY scrubs/seeks, flip this true so isLooping goes false and the
-  // frame they pointed at HOLDS. Open-time playback is untouched (only a real
-  // scrub interaction trips it, not the initial autoplay).
-  const [userScrubbed, setUserScrubbed] = useState(false);
-  // Reset on swing change so a freshly-opened swing autoplays/loops again.
-  useEffect(() => { setUserScrubbed(false); }, [swing_id]);
+   // 2026-08-26 — `userScrubbed` state removed. It existed to flip isLooping off when the player
+  // scrubbed, so the frame they pointed at would hold instead of being yanked back by the next loop
+  // tick. The 08-07 change made a library open sit STATIC on the located frame and hardcoded
+  // isLooping={false}, which removed looping entirely — so the flag was written twice and read
+  // nowhere, and its comment described a mechanism the screen no longer has.
   // 2026-07-30 (regression audit #1) — this screen can receive a NEW swing_id WITHOUT remounting
   // (the file resets many pieces of state on [swing_id] for exactly that reason). selectedShotIdx was
   // left out, so opening a different session while a non-primary swing was selected kept the stale
@@ -1297,9 +1294,6 @@ export default function SwingDetail() {
     // 2026-06-15 (Tim) — seek + HOLD the frame (don't force play). Scrubbing to
     // a position on a swing is a "show me this frame" action; auto-playing from
     // there fights the static-by-default behavior. Tap the frame to play.
-    // 2026-06-23 (RP-6) — a real scrub is the signal to STOP the auto-loop, so
-    // the held frame doesn't get yanked back to the top on the next loop tick.
-    setUserScrubbed(true);
     await videoRef.current?.setPositionAsync(sec * 1000);
     await videoRef.current?.pauseAsync();
   };

@@ -763,7 +763,7 @@ export default function CustomCaddieScreen() {
               { id: 'kevin' as const, label: 'Kevin', sub: 'warm, steady' },
               { id: 'serena' as const, label: 'Serena', sub: 'calm, pro' },
               { id: 'tank' as const, label: 'Tank', sub: 'intense, direct' },
-            ]).filter(p => p.id !== 'tank' || useSettingsStore.getState().tankEnabled).map(p => {
+            ]).map(p => {
               const on = (customCaddieBasePersona ?? 'kevin') === p.id;
               return (
                 <TouchableOpacity

@@ -130,7 +130,6 @@ interface SettingsState {
   // but clean up to Serena and Kevin"). Tank is OFF by default: he's hidden from the persona pickers and a
   // 'tank' assignment resolves to the pillar's non-tank default (see services/caddieResolver). Owners flip
   // this on in Owner Tools to bring Tank back.
-  tankEnabled: boolean;
   // Phase 106 — caddie team handoff suggestions.
   // 'on'   = caddies offer suggestions verbally + visually (default)
   // 'soft' = visual card only, no voice interruption
@@ -365,7 +364,6 @@ interface SettingsState {
   // one pillar; resetCaddieAssignments restores defaults.
   setCaddieForPillar: (pillar: CaddiePillar, p: Persona) => void;
   resetCaddieAssignments: () => void;
-  setTankEnabled: (v: boolean) => void;
   setCaddieSuggestions: (mode: 'on' | 'soft' | 'off') => void;
   setGpsQualityDebugOverlay: (v: boolean) => void;
   setThemePreference: (p: 'system' | 'light' | 'dark') => void;
@@ -459,7 +457,6 @@ export const useSettingsStore = create<SettingsState>()(
       coachModeEnabled: false,
       caddiePersonality: 'kevin',
       caddieAssignments: { ...DEFAULT_CADDIE_ASSIGNMENTS },
-      tankEnabled: false, // Tank is opt-in via Owner Tools (Tim) — default Serena/Kevin
       caddieSuggestions: 'on' as const,
       gpsQualityDebugOverlay: false,
       // 2026-07-29 (Tim — "make default display theme dark, high contrast"). The app's signature look
@@ -802,9 +799,6 @@ export const useSettingsStore = create<SettingsState>()(
       setCaddieForPillar: (pillar, p) => set((s) => ({
         caddieAssignments: { ...s.caddieAssignments, [pillar]: p },
       })),
-      // 2026-08-25 — Tank is removed from the app. The setter is kept as a no-op so the several
-      // owner-tools call sites keep compiling; it can go when those are cleaned up.
-      setTankEnabled: (_v) => set(() => ({ tankEnabled: false })),
       resetCaddieAssignments: () => set({
         caddieAssignments: { ...DEFAULT_CADDIE_ASSIGNMENTS },
       }),
@@ -1049,7 +1043,6 @@ export const useSettingsStore = create<SettingsState>()(
         responseMode: s.responseMode,
         caddiePersonality: s.caddiePersonality,
         caddieAssignments: s.caddieAssignments,
-        tankEnabled: s.tankEnabled,
         caddieSuggestions: s.caddieSuggestions,
         gpsQualityDebugOverlay: s.gpsQualityDebugOverlay,
         theme_preference: s.theme_preference,

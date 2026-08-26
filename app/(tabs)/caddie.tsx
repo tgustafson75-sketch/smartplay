@@ -40,7 +40,6 @@ import { getDialog } from '../../services/dialogEngine';
 // Phase Cockpit — alternate Caddie tab layout (v3-style). Gated by
 // useSettingsStore.cockpitMode; off by default. Voice/avatar code
 // below is byte-identical to pre-Cockpit when the toggle is off.
-import CockpitCaddieScreen from '../../components/caddie/CockpitCaddieScreen';
 import { type FrontMiddleBack } from '../../components/caddie/cockpit/DistanceCard';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
@@ -3114,33 +3113,11 @@ export default function CaddieTab() {
 
   // ── RENDER ───────────────────────────────
 
-  // Phase Cockpit — opt-in alternate Caddie tab layout. Voice plumbing
-  // (useVoiceCaddie, useKevin, audio session, recording) initializes
-  // above this point — voiceState / caddieResponse / handleMicPress are
-  // stable. Passing them as props to CockpitCaddieScreen means the
-  // recording session is shared with Full Mode and flipping the toggle
-  // does NOT interrupt an in-flight reply. Default OFF; user opts in
-  // via Settings → "Cockpit Mode".
-  if (cockpitMode) {
-    return (
-      <CockpitCaddieScreen
-        voiceState={effectiveVoiceState}
-        caddieResponse={caddieResponse}
-        onMicPress={handleMicPress}
-        // 2026-06-23 — pass the SAME paywall-gated openers the standard
-        // layout uses so cockpit's Vision pill + DistanceCard tap-through
-        // can't bypass the canAccess/triggerPaywall gate.
-        onOpenSmartVision={openSmartVision}
-        onOpenSmartFinder={() => {
-          if (!canAccess('smartfinder', subscription_status)) {
-            void triggerPaywall('smartfinder', () => router.push('/paywall' as never));
-            return;
-          }
-          router.push('/smartfinder' as never);
-        }}
-      />
-    );
-  }
+  // 2026-08-26 — the unreachable Cockpit branch is removed. `cockpitMode` was hardcoded false above
+  // (Tim's call: collapse to ONE caddie layout), so this branch could never run — but it still
+  // imported and bundled a 666-line screen, and its own comment claimed the player could "opt in
+  // via Settings → Cockpit Mode", which was not true and would have sent the next reader hunting
+  // for a toggle that does nothing. The component file stays in the repo for 2.0.
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
