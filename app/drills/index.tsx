@@ -28,11 +28,14 @@ import { yourFaultFirst } from '../../services/practice/yourFaultFirst';
 import { QuickTutorial } from '../../components/QuickTutorial';
 import { SCREEN_HELP } from '../../services/screenHelp';
 
-// 2026-08-06 (Tim — "take out Tank's drill card"; "remove Randy from Chipping"). The Tank placeholder card
-// (tank_caddie_practice, no real content) is hidden from the Drills grid. The CHIPPING card STAYS — it's
-// just de-branded from Randy Chang into a Caddie chipping lesson (see data/drillCatalog.ts). Hidden, not
-// deleted: Tank keeps its knowledge-base/type entry; only the grid card is removed.
-const HIDDEN_DRILL_IDS: ReadonlySet<string> = new Set(['tank_caddie_practice']);
+// 2026-08-06 (Tim — "remove Randy from Chipping"). The CHIPPING card STAYS — it is de-branded from
+// Randy Chang into a Caddie chipping lesson (see data/drillCatalog.ts).
+//
+// 2026-08-25 — the hidden Tank card is now DELETED rather than hidden, along with the persona. Being
+// hidden was never enough: the entry still `require()`d two Tank images, and a hidden entry bundles
+// its assets exactly like a visible one. When those files were deleted the bundler would have failed
+// on a card no player could even see.
+const HIDDEN_DRILL_IDS: ReadonlySet<string> = new Set<string>([]);
 
 export default function DrillsIndex() {
   const router = useRouter();

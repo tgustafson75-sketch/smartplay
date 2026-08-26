@@ -29,6 +29,7 @@
  */
 
 import { findOrphanExports, ORPHAN_BASELINE } from './orphanExports';
+import { findMissingAssetRequires } from './assetRequires';
 import { findProseAssertions, PROSE_ASSERTION_BASELINE } from './proseAssertions';
 import {
   getCaddieName,
@@ -1869,11 +1870,16 @@ check('Drill engine: drill card → Smart Motion drill session (#5)',
       /const segs = isDrill && drillShotCount \? allSegs\.slice\(0, drillShotCount\) : allSegs/.test(sm) &&
       // library badge knows 'drill'; 2026-08-06 (Tim) Tank + Randy cards removed from the grid
       /drill:\s*\{ label: 'Drill'/.test(lib) &&
-      /HIDDEN_DRILL_IDS: ReadonlySet<string> = new Set\(\['tank_caddie_practice'\]\)/.test(idx) &&
+      // 2026-08-25 — the Tank card is DELETED now, not hidden, so the hidden-set is empty. What this
+      // guard is really about is that the grid renders a FILTERED catalog rather than the raw one —
+      // the mechanism has to survive even with nothing currently hidden, or the next card that needs
+      // hiding has nowhere to go.
+      /HIDDEN_DRILL_IDS: ReadonlySet<string>/.test(idx) &&
+      !/tank_caddie_practice/.test(readCode('data/drillCatalog.ts')) &&
       /DRILL_CATALOG\.filter\(e => !HIDDEN_DRILL_IDS\.has\(e\.id\)\)/.test(idx) // Tank hidden from the grid
     );
   })(),
-  'drill card → Smart Motion 3-5 shot drill session, tagged + badged "Drill"; Tank card removed, grid = filtered catalog');
+  'drill card → Smart Motion 3-5 shot drill session, tagged + badged "Drill"; the Tank card is gone from the catalog entirely and the grid still renders through the filter');
 
 check('Voice: the caddie NEVER speaks in a device voice',
   /**
@@ -10306,6 +10312,28 @@ check('LOCK: every golf_advice translation key resolves in every locale',
     });
   })(),
   'every golf_advice key used by the rules/course-management handler resolves in en, es and zh — no player ever sees a raw key');
+
+check('LOCK: every require()d asset exists on disk',
+  (() => {
+    /**
+     * 2026-08-25 — FOUND THE HARD WAY, and it would have failed the submission build.
+     *
+     * Deleting Tank's images left two require() calls behind in data/drillCatalog.ts, on a drill
+     * card that was already HIDDEN from the grid. Nothing caught it: TypeScript does not resolve
+     * asset requires and Jest mocks them, so tsc was clean, 1736 tests passed, and the first thing
+     * that would have noticed was the Metro bundler during the production build — days before an
+     * App Store deadline.
+     *
+     * A hidden card still bundles its assets. "Not visible" is not "not loaded".
+     */
+    const missing = findMissingAssetRequires();
+    if (missing.length > 0) {
+      console.log('  MISSING ASSETS:\n    ' + missing.join('\n    '));
+      return false;
+    }
+    return true;
+  })(),
+  'every require() of an image, audio or font file resolves to a real file — the bundler cannot fail on a deleted asset');
 
 check('LOCK: no course hole imagery is bundled — it comes from licensed Mapbox at runtime',
   (() => {

@@ -43,7 +43,6 @@ export type CanonicalIssue =
   // observation — six prior + chipping + tank_caddie = eight, two
   // clean rows of four).
   | 'chipping_inconsistent'
-  | 'tank_caddie_practice'
   // 2026-06-13 (#5) — Tempo isn't a fault, it's the flagship practice drill:
   // tie tempo to swing %. Lives on the Drills surface like the rest.
   | 'tempo_consistency'
@@ -408,36 +407,7 @@ export const DRILL_CATALOG: readonly DrillEntry[] = [
   // 2026-05-26 — Reserved 8th slot for Tank-narrated SmartPlay-branded
   // content. Drill entry exists so the slot appears on the Drills
   // surface; the linked InstructorVideoLink renders the SmartPlay
-  // placeholder thumbnail until Tank's recording lands (url === '').
-  {
-    id: 'tank_caddie_practice',
-    title: "Tank's Take — Practice with Standards",
-    primary: 'When you bring intensity to practice, the round takes care of itself.',
-    commonFaults: [
-      'Practice with no intent — beating balls instead of working a routine',
-      'Skipping the uncomfortable shots (the ones you actually need)',
-      'Stopping before fatigue sets in (where the bad habits show up)',
-    ],
-    missPattern: 'Performance plateau despite hours on the range',
-    drills: [
-      { name: '10-ball pressure block', steps: 'Pick one club, one target. Hit 10 in a row. Restart from zero on the first miss-direction. Builds focus under pressure.' },
-      { name: 'Worst-shot warm-up',     steps: 'Start each session with the shot you LEAST want to hit. Three solid reps before moving on. Removes avoidance from your range pattern.' },
-    ],
-    videoCategory: 'tank_caddie',
-    // 2026-05-27 — Fix EI: swapped from tank_v2_lets_go_marine.png
-    // (which is a 9-face COMPOSITE grid — bad for a drill card; reads
-    // as cluttered) to tank_v2_lets_go.png — a SINGLE Tank portrait
-    // with the SmartPlay Caddie polo and the fist-pump energy that
-    // matches "Practice with Standards." Tim's call:
-    // "we don't need tanks card to be fifteen tanks pictures."
-    cardImage: require('../assets/avatars/tank_v2_lets_go.png'),
-    // 2026-05-27 — Fix EF: Tank's Tips card for early extension.
-    // Full-page PGA-vs-Golf-Father infographic Tim authored. Rendered
-    // as a dedicated tap-to-zoom section on the drill detail screen
-    // (text is dense — the modal is the right place to read it).
-    tipsImage: require('../assets/tank-tips/early-extension.png'),
-  },
-  // 2026-06-13 (#5) — Flagship practice drill: Tempo × Swing %. Not a fault —
+   // 2026-06-13 (#5) — Flagship practice drill: Tempo × Swing %. Not a fault —
   // the first drill wired to the Smart Motion drill engine. Reuses the honest
   // tempo read + the effort% estimate already in the app; nothing fabricated.
   {
