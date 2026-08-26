@@ -427,3 +427,54 @@ other order drops real data on the primary mic surface.
 **Why it matters beyond tidiness:** every regression test for the payload exercises the BUILDER.
 While a call site can override, a green builder test proves nothing about what the caddie was
 actually sent — which is how the yardage defect survived its own fix for two days.
+
+## §16 — The shot map's lateral axis has exactly one source (2026-08-26)
+
+Tim: *"if we can find one point of direction for a shot and the acoustic signal and the club picked,
+we should be able to kind of almost populate that shot map."*
+
+Two of the three work. The third is the wrong axis.
+
+| Axis | Signal | State |
+|---|---|---|
+| **Downrange (Y)** | club → learned carry, scaled by effort | ✅ wired (`carryEstimate.fullCarryYards`) |
+| **Lateral (X)** | vision ball-trace (DTL) | ⚠️ the ONLY source; needs DTL + ball box + departure point |
+| **Lateral (X)** | acoustic strike | ❌ **cannot** — see below |
+| **Lateral (X)** | `CageShot.direction` | ⚠️ field exists, **never written** |
+
+**The acoustic read cannot tell left from right.** `acousticsAnalyzer` resolves `strike_location` to
+`flush` / `fat` / `thin` / `unknown` only. `heel` and `toe` are in the type and are never assigned —
+the code says why, in place: *"asymmetric / mid-range → unknown (better than guessing heel/toe
+without lateral mic data)."* One microphone gives the DEPTH axis (turf-first vs ball-first), not the
+lateral one. Using it for left/right would be exactly the fabrication the shot map's header comment
+forbids.
+
+**`CageShot.direction` is the real opportunity, and it is one wire from working.** The field is on
+the type, initialised `null` at both creation sites, and `cageStore.updateShotTags` — which sets it —
+**has zero callers.** Give it a writer and the map gets an honest second lateral source:
+
+1. voice — `logShotHandler` already parses direction phrases ("that one went right"); route it to the
+   active cage session's last shot, or
+2. a three-tap left / straight / right chip in the review bar.
+
+Label the dot by source (`measured` vs `stated`), the way the map already labels `est`.
+
+**And the trace itself gets better on the native build.** The lateral read comes from ball departure
+over the first frames after impact, so it is frame-rate bound — see §17. On the expo-camera path
+(~30fps, today's default) there are very few frames in that window, which is a large part of why the
+map is empty so often.
+
+## §17 — 120fps is built and blocked on the native build (2026-08-26)
+
+`react-native-vision-camera@4.7.3` is in package.json and registered in app.json plugins.
+`SwingVisionCamera` requests `PREFERRED_CAPTURE_FPS = 120` and takes max resolution at that rate; the
+owner toggle lives on native-modules-debug. **This needs the build packet, not new work** — the
+shipped TestFlight binary cannot load the native module, so no OTA can enable it.
+
+Done 2026-08-26: `capturedFps` records what the device actually resolved, and `MIN_TRACE_FPS` (an
+orphan since 06-13) now gates the drawn trace. Gated on a known fps only, so the currently-shipping
+expo path is untouched.
+
+**On arrival, in order:** flip the engine on the debug screen → confirm `capturedFps` reads 120 on
+the Pro Max → re-shoot a DTL swing and check the trace and the shot map populate → only then judge
+whether §16's `direction` wire is still needed.
