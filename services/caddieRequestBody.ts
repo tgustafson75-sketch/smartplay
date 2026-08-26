@@ -254,6 +254,17 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      */
     customCaddieName: safe(() => p.customCaddieName ?? null, null),
     customCaddieBasePersona: safe(() => p.customCaddieBasePersona ?? 'kevin', 'kevin'),
+    /**
+     * 2026-08-26 — THE CUSTOM CADDIE'S VOICE CHANGED DEPENDING ON WHICH PATH ANSWERED.
+     *
+     * caddieVoiceMatch picks an OpenAI voice from the portrait the player generated, and voiceService
+     * applies it — but only in speak(), the client TTS fallback. The primary path plays audio the
+     * SERVER rendered, and the server was never told the matched voice, so it fell back to the base
+     * persona's. Same custom caddie, two voices, switching on whether cloud TTS happened to be the
+     * one that answered. That is Tim's original complaint about this feature almost word for word:
+     * "the tone of the voice changes a little bit."
+     */
+    customCaddieVoice: safe(() => p.customCaddieVoice ?? null, null),
     cecilyMode: safe(() => st.cecilyMode ?? false, false),
 
     // ─── the round ──────────────────────────────────────────────────────────

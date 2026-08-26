@@ -413,6 +413,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // must use these, not assumptions.
       clubDistances = {},
       bagClubs = [],
+      customCaddieVoice = null,
       // Phase BR — active practice context. Pre-formatted by the client
       // (services/tutorialContext.ts buildFullPracticeContext). Multi-line
       // string when one or more tutorials are active, null otherwise.
@@ -554,7 +555,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const caddieName = (rawPersona === 'custom' && typeof customCaddieName === 'string' && customCaddieName.trim())
       ? customCaddieName.trim()
       : getCaddieName(personaInput);
-    const characterSpec = getCharacterSpec(personaInput);
+    /**
+     * 2026-08-26 (Tim — "double check my caddie setup… the twenty-somethings actually love that
+     * feature") — A CUSTOM CADDIE WAS BEING HANDED SOMEBODY ELSE'S NAME TAG.
+     *
+     * A custom caddie keeps its own name and INHERITS a base persona's character. The prompt said
+     * "You are ${caddieName}" and then pasted that base persona's spec verbatim underneath — and
+     * KEVIN_CHARACTER_SPEC names Kevin THIRTY-FIVE times ("Kevin is the steady hand", "Kevin's
+     * natural pillar is Round", …). So a player who built "Ace" got a system prompt that told the
+     * model it was Ace, described it at length as Kevin, and — in the roster block directly above —
+     * listed Kevin as a DIFFERENT caddie it could be switched to. Three identities, one turn.
+     *
+     * That is the kind of thing that makes a custom caddie feel not-quite-real without ever
+     * producing an obviously wrong sentence, which is the hardest kind of defect to report.
+     *
+     * The spec is written entirely in the third person about the persona, so renaming it is a
+     * straight substitution — every one of those 35 mentions is the character being described.
+     */
+    const baseName = getCaddieName(personaInput);
+    const rawSpec = getCharacterSpec(personaInput);
+    const characterSpec = caddieName !== baseName
+      ? rawSpec.split(baseName).join(caddieName)
+      : rawSpec;
 
     const _kevinContext: string | null = capOrNull(kevinContext, 2000);
     const _ghinNumber: string | null = capOrNull(ghinNumber, 200);
@@ -2230,7 +2252,20 @@ ${kbPrefix ? `${kbPrefix}\n\n` : ''}${onCourseContextBlock}${roundFactsPrefix}${
     // like they do on the standalone /api/voice path.
     const personaKey =
       typeof personaInput === 'string' ? personaInput.toLowerCase() : '';
-    const ttsVoice = VOICE_BY_PERSONA[personaKey] ?? VOICE_BY_PERSONA.kevin;
+    /**
+     * 2026-08-26 — a CUSTOM caddie's photo-matched voice wins here, exactly as it already did in
+     * voiceService.speak(). It was applied on the client fallback path only and never sent to the
+     * server, so the primary path — the one that renders the audio — used the base persona's voice
+     * instead and the custom caddie changed voice depending on which path answered.
+     *
+     * Allow-listed against the OpenAI voice set rather than passed through: this value originates
+     * on the client and picks a voice on a paid API.
+     */
+    const OPENAI_VOICES = ['alloy', 'ash', 'coral', 'echo', 'fable', 'nova', 'onyx', 'sage', 'shimmer', 'verse'] as const;
+    const matched = rawPersona === 'custom' && typeof customCaddieVoice === 'string'
+      ? (OPENAI_VOICES as readonly string[]).includes(customCaddieVoice) ? customCaddieVoice as typeof OPENAI_VOICES[number] : null
+      : null;
+    const ttsVoice = matched ?? VOICE_BY_PERSONA[personaKey] ?? VOICE_BY_PERSONA.kevin;
     /**
      * 2026-06-21 — Wrap TTS separately so a cold/slow TTS call doesn't discard the brain answer. A
      * TTS failure used to throw into the outer catch and return error text, losing the real response.
