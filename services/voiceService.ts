@@ -1288,7 +1288,47 @@ export const playLocalFile = async (
 
 // ─── SPEAK FROM BASE64 ────────────────────
 
+/**
+ * ONE place the caddie's spoken line enters the conversation log.
+ *
+ * 2026-08-26 — there were two speech entry points and only one of them logged, and it was the
+ * fallback (see speakFromBase64 below). Rather than add a second call site that can drift from the
+ * first, both now call this. It is deliberately tolerant: a null/blank line is a no-op, and an exact
+ * repeat of the turn already at the tail within DEDUPE_MS is dropped, so a path that both plays
+ * rendered audio AND falls through to speak() cannot record the same sentence twice. Chunked speech
+ * is unaffected — speakChunked sends DIFFERENT sentences, and lastCaddieText() rejoins the run.
+ */
+const CADDIE_LOG_DEDUPE_MS = 10_000;
+function logCaddieLine(text: string | null | undefined): void {
+  const t = (text ?? '').trim();
+  if (!t) return;
+  try {
+    const log = useConversationLog.getState();
+    const turns = log.turns;
+    const last = turns.length > 0 ? turns[turns.length - 1] : null;
+    if (last && last.role === 'caddie' && last.text === t && Date.now() - last.at < CADDIE_LOG_DEDUPE_MS) return;
+    log.logCaddie(t, Date.now());
+  } catch { /* the log never blocks the voice */ }
+}
+
 export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise<void> => enqueueSpeak(async () => {
+  /**
+   * 2026-08-26 — THE CONVERSATION LOG WAS READING ONLY THE DEGRADED HALF OF EVERY ROUND.
+   *
+   * logCaddie() had exactly one caller, inside speak(). But speak() is the FALLBACK: every path
+   * here plays the persona audio the brain already rendered, and only drops to speak() when the
+   * server returned no audio. So the persisted log — which feeds narrativeIngest's CNS distill,
+   * the round recap in roundStore, and lastCaddieText() behind "what did you just say" / "save
+   * those stretches as my routine" — collected caddie turns ONLY on turns where cloud TTS had
+   * failed. Not an empty sample. A biased one, which is worse: the record of the round was built
+   * from its worst moments.
+   *
+   * Every call site already passes the reply text as `caption` (it is what the muted player
+   * reads), so the words are right here. Logged above the voice gate for the same reason speak()
+   * now is: heard or read, the caddie said it.
+   */
+  logCaddieLine(opts?.caption ?? null);
+
   // Phase V.7 — guard for parity with speak() / playLocalFile.
   // 2026-07-27 (24h audit + Tim: "always see what the caddie says") — when the SPOKEN path is gated
   // (voice off), still SHOW the reply text so a muted user reads the answer. flashCaption auto-clears
@@ -1510,14 +1550,20 @@ export const speak = async (
     (require('./watchRoundSync') as typeof import('./watchRoundSync')).pushWatchVoicePrompt(text);
   } catch { /* the wrist never delays the voice */ }
 
+  // 2026-06-13 — ingest the caddie's line into the conversation log (learning input + the
+  // "save those stretches" recall target). speakChunked feeds full sentences through here;
+  // lastCaddieText() rejoins a chunked run. Best-effort.
+  //
+  // 2026-08-26 — MOVED ABOVE THE VOICE GATE. It used to sit below, so a muted turn — spoken
+  // nowhere, but READ by the player as a caption — never entered the log. The caddie said it;
+  // the log should hold it. Same reasoning as the watch mirror above: whether the words are
+  // heard or read is a delivery detail, and the record is of what was SAID.
+  logCaddieLine(text);
+
   // Phase V.7 — shared guard (formerly inlined here).
   // 2026-07-27 (24h audit — always show the caddie's words even when muted) — the spoken line IS the
   // caption; flash it so a voice-off user still SEES the reply.
   if (!isVoiceAllowed(opts)) { flashCaption(text, 6500); return; }
-  // 2026-06-13 — ingest the caddie's line into the conversation log (learning
-  // input + the "save those stretches" recall target). speakChunked feeds full
-  // sentences through here; lastCaddieText() rejoins a chunked run. Best-effort.
-  try { useConversationLog.getState().logCaddie(text, Date.now()); } catch { /* non-fatal */ }
 
   // Claim ownership: bump speechId and cancel anything in-flight.
   currentSpeechId++;

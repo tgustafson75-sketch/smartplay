@@ -4172,6 +4172,18 @@ check('Conversation ingestion → CNS foundation + save-routine unblocked',
   (() => {
     const log = read('store/conversationLogStore.ts');
     const voice = read('services/voiceService.ts');
+    const voiceCode = readCode('services/voiceService.ts');
+    const listenCode = readCode('services/listeningSession.ts');
+    /** True when `call` appears before the isVoiceAllowed gate INSIDE the named function's body. */
+    const logsAboveGate = (fnMarker: string, call: string): boolean => {
+      const start = voiceCode.indexOf(`export const ${fnMarker}`);
+      if (start < 0) return false;
+      const next = voiceCode.indexOf('\nexport ', start + 1);
+      const body = voiceCode.slice(start, next < 0 ? voiceCode.length : next);
+      const iCall = body.indexOf(call);
+      const iGate = body.indexOf('if (!isVoiceAllowed(opts))');
+      return iCall >= 0 && iGate >= 0 && iCall < iGate;
+    };
     const resp = read('services/localStatusResponder.ts');
     const prof = read('store/playerProfileStore.ts');
     return (
@@ -4179,8 +4191,29 @@ check('Conversation ingestion → CNS foundation + save-routine unblocked',
       /export const useConversationLog = create/.test(log) &&
       /logCaddie:/.test(log) && /logUser:/.test(log) && /lastCaddieText:/.test(log) &&
       /MAX_TURNS = 60/.test(log) && /run\.join\(' '\)/.test(log) &&
-      // both capture points hooked, best-effort
-      /useConversationLog\.getState\(\)\.logCaddie\(text, Date\.now\(\)\)/.test(voice) &&
+      /**
+       * 2026-08-26 — THIS PAIR USED TO BE THE WHOLE CLAIM, AND THE CLAIM WAS FALSE.
+       *
+       * The old assertion was that the string `logCaddie(text, Date.now())` appears somewhere in
+       * voiceService. It did — inside speak(), which is the FALLBACK. The primary path plays the
+       * persona audio the brain rendered (speakFromBase64) and never touched the log, so a guard
+       * reading "every caddie/user turn is logged" was green while the log held only turns where
+       * cloud TTS had failed. A presence check cannot see a bypass.
+       *
+       * What is asserted now is the SHAPE: one logging chokepoint, called from BOTH speech entry
+       * points, and in each one called ABOVE the isVoiceAllowed gate — because a muted turn is
+       * still a turn the player read.
+       */
+      /function logCaddieLine\(/.test(voiceCode) &&
+      // Order is compared by INDEX inside each function's own body, not by a `[\s\S]*?` span:
+      // the first attempt at this used one, and because `if (!isVoiceAllowed(opts))` appears in
+      // BOTH entry points the pattern matched across the function boundary and stayed green with
+      // the call moved below the gate. A non-greedy gap is not a proximity check.
+      logsAboveGate('speakFromBase64', 'logCaddieLine(opts?.caption ?? null)') &&
+      logsAboveGate('speak =', 'logCaddieLine(text)') &&
+      // and the TYPED / watch / hands-free surface records the player's side at its chokepoint
+      /logUser\(text, Date\.now\(\)\)/.test(listenCode) &&
+      /recordUserTurn\(text\)/.test(listenCode) &&
       /useConversationLog\.getState\(\)\.logUser\(text, Date\.now\(\)\)/.test(voice) &&
       // save/recall routine: round-INDEPENDENT (before the round gate), local+offline
       /if \(RX\.saveRoutine\.test\(t\)\)/.test(resp) &&
@@ -4193,7 +4226,7 @@ check('Conversation ingestion → CNS foundation + save-routine unblocked',
       /preRoundRoutine: string \| null/.test(prof) && /setPreRoundRoutine:/.test(prof)
     );
   })(),
-  'every caddie/user turn is logged (bounded); "save those stretches as my routine" stores the last caddie line + recalls it, on or off the course');
+  'ONE chokepoint logs the caddie line from BOTH speech entry points, above the voice gate, and the typed/watch path records the player turn; "save those stretches as my routine" stores the last caddie line + recalls it, on or off the course');
 
 check('Round history surfaces on the dashboard (Tim: "it doesn\'t go anywhere")',
   // 2026-06-13 — endRound already persisted a full RoundRecord to roundHistory,

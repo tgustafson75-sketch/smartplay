@@ -1599,6 +1599,25 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
     try { require('../store/listeningSessionStore').useListeningSessionStore.getState().setState(s); } catch { /* non-fatal */ }
   };
   setSharedState('thinking');
+  /**
+   * 2026-08-26 — RECORD THE PLAYER'S TURN. This function is what the global bottom bar sends a
+   * TYPED question to, what the watch sends a dictated one to, and what handsFreeOrchestrator
+   * routes through — i.e. every surface whose words did not come from the microphone here.
+   *
+   * The mic path gets both of these for free: captureUtteranceDetailed() logs the transcript, and
+   * useVoiceCaddie calls recordUserTurn() before it sends. Nothing did either for this path, so a
+   * question you TYPED was absent from the persisted conversation log (the CNS distill, the round
+   * recap, "what did you just say") and absent from the 3-minute continuity buffer — which is why
+   * a typed "how far to the green?" followed by a typed "and the wind?" had nothing to resolve
+   * "the wind" against, while the same two questions spoken aloud worked.
+   *
+   * Both writes are best-effort and mirror the mic path exactly, including its ordering: the turn
+   * is recorded BEFORE the brain call, so the request carries it. caddieRequestBody merges this
+   * buffer with pipecatHistory and drops exact role+text repeats, so a turn that lands in both
+   * is told to the caddie once.
+   */
+  try { require('../store/conversationLogStore').useConversationLog.getState().logUser(text, Date.now()); } catch { /* non-fatal */ }
+  try { (require('./conversationState') as typeof import('./conversationState')).recordUserTurn(text); } catch { /* non-fatal */ }
   try {
     const settings = useSettingsStore.getState();
     const round = useRoundStore.getState();
