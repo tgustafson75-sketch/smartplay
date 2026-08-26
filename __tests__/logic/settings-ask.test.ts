@@ -48,9 +48,12 @@ describe('other settings by voice (offline precheck)', () => {
   };
 
   it('switches caddie persona (known names + switch verb only)', () => {
-    expect(setting('switch to Tank')).toEqual({ name: 'caddie_persona', value: 'tank' });
+    expect(setting('switch to Kevin')).toEqual({ name: 'caddie_persona', value: 'kevin' });
     expect(setting('change my caddie to Serena')).toEqual({ name: 'caddie_persona', value: 'serena' });
     expect(setting('put Harry in charge')).toEqual({ name: 'caddie_persona', value: 'harry' });
+    // 2026-08-26 — a removed persona must no longer be reachable by voice. Naming it is not a
+    // persona switch any more; it falls through to the brain like any other sentence.
+    expect(setting('switch to Tank')).toBeNull();
   });
 
   it('flips theme / cart / ghost', () => {

@@ -25,7 +25,7 @@
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import { useSettingsStore } from '../../store/settingsStore';
 
-type Persona = 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
+type Persona = 'kevin' | 'serena' | 'harry' | 'custom';
 
 const GREETINGS: Record<Persona, string[]> = {
   kevin: [
@@ -34,13 +34,6 @@ const GREETINGS: Record<Persona, string[]> = {
     "I'm with you. What are we working on?",
     "Talk to me.",
     "Go ahead.",
-  ],
-  tank: [
-    "Yeah, what do you got?",
-    "Talk to me.",
-    "Go ahead, I'm listening.",
-    "What do you need?",
-    "Here. What's up?",
   ],
   serena: [
     "I'm here. What are you thinking?",
@@ -90,7 +83,6 @@ export const socialGreetingHandler: IntentHandler = {
     'hey kevin',
     "what's up",
     'you there',
-    'hi tank',
     'hey serena',
   ],
 

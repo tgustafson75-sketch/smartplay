@@ -110,9 +110,9 @@ export async function analyzeLie(
     const timeoutId = setTimeout(() => myController.abort(), REQUEST_TIMEOUT_MS);
     // 2026-05-22 — Fix Q follow-up audit. lieAnalysisService was sending
     // voiceGender only; backend resolvePersona(voiceGender) fell back to
-    // Kevin for non-Serena even when Serena/Tank was selected. Threading
+    // Kevin for non-Serena even when another persona was selected. Threading
     // persona now closes that silent bleed.
-    let _persona: 'kevin' | 'serena' | 'harry' | 'tank' | 'custom' | undefined;
+    let _persona: 'kevin' | 'serena' | 'harry' | 'custom' | undefined;
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const mod = require('../store/settingsStore') as typeof import('../store/settingsStore');

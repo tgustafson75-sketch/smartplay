@@ -1091,7 +1091,7 @@ let usingDeviceFallback = false;
 
 // 2026-06-14 (Tim — "robotic FEMALE voice that wasn't Kevin") — the device-TTS
 // fallback used the OS DEFAULT voice, which on many phones is female. So when the
-// server voice failed, a male caddie (Kevin/Harry/Tank) suddenly spoke in a
+// server voice failed, a male caddie suddenly spoke in a
 // wrong-gender robotic voice. expo-speech has no gender API, but it DOES accept a
 // specific `voice` identifier + a `pitch`. We (a) try to pick a voice whose
 // name/identifier matches the requested gender for the language, and (b) deepen
@@ -1644,15 +1644,15 @@ export const speak = async (
   try {
     persona = require('../store/settingsStore').useSettingsStore.getState().caddiePersonality ?? null;
     if (persona === 'serena') effectiveGender = 'female';
-    else if (persona === 'kevin' || persona === 'harry' || persona === 'tank') effectiveGender = 'male';
+    else if (persona === 'kevin' || persona === 'harry') effectiveGender = 'male';
     else if (persona === 'custom') {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const pp = require('../store/playerProfileStore').usePlayerProfileStore.getState();
-      // 2026-07-30 (Tim — "tie my custom persona to Tank/Kevin/Serena"). The custom caddie INHERITS its
+      // 2026-07-30 (Tim — "tie my custom persona to one of the caddies"). The custom caddie INHERITS its
       // base persona's voice + gender, so it always has a real, on-character voice instead of a generic
       // gender default. A photo-matched customCaddieVoice still wins when the user set one.
-      const base = (['kevin', 'serena', 'harry', 'tank'] as const).includes(pp.customCaddieBasePersona) ? pp.customCaddieBasePersona : 'kevin';
-      const BASE_VOICE: Record<string, string> = { kevin: 'onyx', serena: 'nova', tank: 'ash', harry: 'fable' };
+      const base = (['kevin', 'serena', 'harry'] as const).includes(pp.customCaddieBasePersona) ? pp.customCaddieBasePersona : 'kevin';
+      const BASE_VOICE: Record<string, string> = { kevin: 'onyx', serena: 'nova', harry: 'fable' };
       effectiveGender = base === 'serena' ? 'female' : 'male';
       if (typeof pp.customCaddieVoice === 'string' && pp.customCaddieVoice) customVoice = pp.customCaddieVoice;
       else customVoice = BASE_VOICE[base];

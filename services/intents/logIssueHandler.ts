@@ -43,7 +43,7 @@ export const logIssueHandler: IntentHandler = {
     'we have an issue with the recap screen',
     'remember this — SmartFinder white-screened at 10x zoom',
     'save this for me: Sunnyvale hole 7 yardage looks wrong',
-    'make a note that Tank cut me off mid-sentence',
+    'make a note that the caddie cut me off mid-sentence',
     'track this — the active listening pill covers the brand row',
     'I want you to know the GPS data bar is static',
     'this is broken: cockpit log shot button does nothing',

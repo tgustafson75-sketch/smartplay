@@ -1,12 +1,12 @@
 /**
  * 2026-05-24 — "Ask the Golf Father" intent handler (v1 — hardcoded rules).
  *
- * Triggered by phrases like "what would Tank do here", "what's the play",
- * "Tank's advice", "Golf Father help". Routes to a hardcoded decision
+ * Triggered by phrases like "ask the Golf Father" / "Golf Father help".
+ * Routes to a hardcoded decision
  * cascade that reads currentLocationType (tee / fairway / green) +
  * distance-to-pin from the existing geometry resolver. Per spec: NO
  * LLM call — instant <200ms response is the contract. The cascade
- * encodes Tank's archetypal voice and the user's stated tee-vs-approach
+ * encodes the Golf Father's archetypal voice and the user's stated tee-vs-approach
  * mental model so the response is context-aware without latency.
  *
  * Inputs (read at execute time, not from AppContext — saves a context-
@@ -30,9 +30,10 @@
  *                            on lie. Add when fairway/rough advice
  *                            diverges.
  *
- * Tank's "Tank: ..." prefix is preserved per spec even though the active
- * persona's voice already identifies the speaker. Drop the prefix later
- * if the user requests a non-redundant variant per persona.
+ * 2026-08-26 — the reply used to be prefixed "Tank: " unconditionally, so this
+ * handler announced a persona that no longer ships — and, before that, announced
+ * the WRONG one whenever another caddie was active. The active caddie's own voice
+ * already identifies the speaker, so the line now stands on its own.
  */
 
 import type { IntentHandler, IntentResult } from '../../types/voiceIntent';
@@ -43,14 +44,14 @@ import { haversineYards } from '../../utils/geoDistance';
 import { usePracticeStore } from '../../store/practiceStore';
 import i18n from '../../i18n';
 
-// 2026-05-24 — Tier-1 Tank rules. Keyed by `${topic}_${subtopic}` so the
+// 2026-05-24 — Tier-1 Golf Father rules. Keyed by `${topic}_${subtopic}` so the
 // classifier emits a rule pointer directly (e.g. topic=rules,
 // subtopic=red_vs_yellow → 'rules_red_vs_yellow'). Strings are static;
 // functions receive a `ctx` shape that merges AppContext + roundStore +
 // practiceStore signals and return a tailored line. When a rule isn't
 // matched, execute() falls through to the existing location × distance
 // cascade so the older subtopic='tank_advice' path keeps working.
-type TankCtx = {
+type GolfFatherCtx = {
   currentLocationType?: 'tee' | 'fairway' | 'green' | 'unknown';
   distance_to_pin?: number;
   wind?: 'into' | 'with' | 'cross' | null;
@@ -65,13 +66,13 @@ type TankCtx = {
   fatShotCount: number;
 };
 
-type TankRule = string | ((ctx: TankCtx) => string);
+type GolfFatherRule = string | ((ctx: GolfFatherCtx) => string);
 
 // 2026-05-24 v1.2 — Rule strings now come from i18n (en + es). Function
 // rules keep their TypeScript branching logic; static rules collapse to
 // a single i18n key. The function rules read i18n.t() for the actual
 // strings so EN and ES variants ship without code change.
-const TANK_RULES: Record<string, TankRule> = {
+const GOLF_FATHER_RULES: Record<string, GolfFatherRule> = {
   rules_red_vs_yellow: () => i18n.t('golf_advice.red_vs_yellow'),
 
   course_management_driver_or_3wood: (ctx) => {
@@ -115,18 +116,18 @@ const TANK_RULES: Record<string, TankRule> = {
 
   // 2026-06-04 — Golf Father optical-illusion chapter. When the player
   // asks "why did my fade leak?" / "I was sure I was aimed left enough"
-  // / similar, Tank checks alignment-trust BEFORE diagnosing swing
+  // / similar, check alignment-trust BEFORE diagnosing swing
   // mechanics. Static line keeps the <200ms contract; deeper signal-
   // weighted diagnosis lives in
   // services/knowledge/golfFather/opticalIllusionFadeAlignment.ts and
   // will plug into the brain path (cage-coach / kevin) on a follow-up.
   swing_alignment_check: () =>
-    'Tank: Before we touch your swing — many righties get a visual illusion when they aim left for a fade. The further left the start line, the harder it is to trust it from over the ball. Most of the time, the shape was fine; the line moved on you in setup. Pick the line behind the ball, walk in, commit to it, swing. If the miss keeps showing up with the same shape, it\'s alignment, not mechanics.',
+    'Before we touch your swing — many righties get a visual illusion when they aim left for a fade. The further left the start line, the harder it is to trust it from over the ball. Most of the time, the shape was fine; the line moved on you in setup. Pick the line behind the ball, walk in, commit to it, swing. If the miss keeps showing up with the same shape, it\'s alignment, not mechanics.',
 
   // 2026-06-04 — Companion entry for the inverse case (draw target line
   // looking too far right). Same principle, weaker illusion.
   swing_alignment_draw: () =>
-    'Tank: Draw setups look closer to natural — the illusion is smaller. If your draw is starting on target instead of right of it, that\'s usually mechanics or face control, not alignment. Worth checking alignment first anyway. Cheap to rule out.',
+    'Draw setups look closer to natural — the illusion is smaller. If your draw is starting on target instead of right of it, that\'s usually mechanics or face control, not alignment. Worth checking alignment first anyway. Cheap to rule out.',
 };
 
 export const askGolfFatherHandler: IntentHandler = {
@@ -140,15 +141,12 @@ export const askGolfFatherHandler: IntentHandler = {
 
   // 2026-07-31 (Tim — "no preprogrammed voice blocking; process everything through the AI"). REMOVED
   // the generic conversational strategy phrases ("what's the play here", "tell me what to do") — those
-  // are THE flagship AI-caddie question and must reach the brain, not this hardcoded (no-LLM) Tank rule
-  // cascade (which also spoke a "Tank:" line even when another persona was active). Only an EXPLICIT
-  // Golf-Father / Tank invocation should trigger the deterministic rule set.
+  // are THE flagship AI-caddie question and must reach the brain, not this hardcoded (no-LLM) rule
+  // cascade. Only an EXPLICIT Golf-Father invocation should trigger the deterministic rule set.
   examples: [
-    'what would Tank do here',
     'ask the golf father',
     'Golf Father help',
-    'Tank advice',
-    'Tank what do you think',
+    'what would the Golf Father do',
   ],
 
   async execute(intent, context): Promise<IntentResult> {
@@ -162,11 +160,11 @@ export const askGolfFatherHandler: IntentHandler = {
 
     // ── Tier-1 rule lookup (BEFORE the location cascade) ──────────
     // If the classifier emitted a rules- or course-management-keyed
-    // subtopic, return the Tank rule for that key directly.
+    // subtopic, return the Golf Father rule for that key directly.
     // Functions receive a merged context with practice signals so the
     // rule can branch on swing history (e.g. "you've been over the top").
     const ruleKey = `${topic}_${subtopic}`;
-    const rule = TANK_RULES[ruleKey];
+    const rule = GOLF_FATHER_RULES[ruleKey];
     if (rule) {
       // Best-effort distance for rule branches that read it. Cheap GPS
       // lookup; if it fails the rule's distance branches just don't fire.
@@ -181,7 +179,7 @@ export const askGolfFatherHandler: IntentHandler = {
         } catch { /* distance optional */ }
       }
       const practice = usePracticeStore.getState();
-      const ctxShape: TankCtx = {
+      const ctxShape: GolfFatherCtx = {
         currentLocationType: locType,
         distance_to_pin: distYds,
         wind: null,
@@ -196,7 +194,7 @@ export const askGolfFatherHandler: IntentHandler = {
       };
       void context;
       const answer = typeof rule === 'function' ? rule(ctxShape) : rule;
-      return tank(answer, ['tank_advice_given', ruleKey, `loc:${locType}`]);
+      return golfFather(answer, ['tank_advice_given', ruleKey, `loc:${locType}`]);
     }
 
     // Best-effort distance to pin. Cap at 3s freshness so the cascade
@@ -216,48 +214,48 @@ export const askGolfFatherHandler: IntentHandler = {
 
     // Branch on subtopic — only tank_advice today.
     if (subtopic !== 'tank_advice') {
-      return tank("Pick a topic and I'll get specific. Tee shot? Approach? Putt?", ['no_subtopic', `loc:${locType}`]);
+      return golfFather("Pick a topic and I'll get specific. Tee shot? Approach? Putt?", ['no_subtopic', `loc:${locType}`]);
     }
 
     // GPS-less fallback. Distance-conditional rules can't fire — return
     // the most useful location-only advice.
     if (distYds == null) {
-      if (locType === 'tee') return tank("On the tee. Get it in play. Don't try to be a hero with the driver if you've been spraying it.", ['no_dist', `loc:${locType}`]);
-      if (locType === 'green') return tank("Green read. First read is usually right — trust it. Pace over line.", ['no_dist', `loc:${locType}`]);
-      return tank("Walk a few steps so I can lock GPS. Then I'll tell you the play.", ['no_dist', `loc:${locType}`]);
+      if (locType === 'tee') return golfFather("On the tee. Get it in play. Don't try to be a hero with the driver if you've been spraying it.", ['no_dist', `loc:${locType}`]);
+      if (locType === 'green') return golfFather("Green read. First read is usually right — trust it. Pace over line.", ['no_dist', `loc:${locType}`]);
+      return golfFather("Walk a few steps so I can lock GPS. Then I'll tell you the play.", ['no_dist', `loc:${locType}`]);
     }
 
     // ── Tee box advice ──────────────────────────────────────────────
     if (locType === 'tee') {
-      if (distYds > 450) return tank("Big par 5. Tee shot in the fairway. You can't reach in two anyway — give yourself a clean second.", ['tee', `dist:${distYds}`]);
-      if (distYds > 280) return tank("Driver hole. Pick a target on the FAR side of the fairway and commit. Don't steer it.", ['tee', `dist:${distYds}`]);
-      if (distYds > 200) return tank("Short par 4. 3-wood or hybrid — take driver out of the bag. Position over distance.", ['tee', `dist:${distYds}`]);
+      if (distYds > 450) return golfFather("Big par 5. Tee shot in the fairway. You can't reach in two anyway — give yourself a clean second.", ['tee', `dist:${distYds}`]);
+      if (distYds > 280) return golfFather("Driver hole. Pick a target on the FAR side of the fairway and commit. Don't steer it.", ['tee', `dist:${distYds}`]);
+      if (distYds > 200) return golfFather("Short par 4. 3-wood or hybrid — take driver out of the bag. Position over distance.", ['tee', `dist:${distYds}`]);
       // Short par 3 / driveable
-      return tank("Short hole. Pick a club you can swing smooth at 80%. Pin-high is the win.", ['tee', `dist:${distYds}`]);
+      return golfFather("Short hole. Pick a club you can swing smooth at 80%. Pin-high is the win.", ['tee', `dist:${distYds}`]);
     }
 
     // ── Approach / fairway advice ───────────────────────────────────
     if (locType === 'fairway') {
-      if (distYds < 100) return tank("Wedge in hand. Attack the pin. Commit and finish balanced.", ['fairway', `dist:${distYds}`]);
-      if (distYds < 150) return tank("Scoring zone. Pick the number, swing smooth, hold the finish.", ['fairway', `dist:${distYds}`]);
-      if (distYds < 200) return tank("Mid iron. Aim center of the green — pin-hunting from here loses you strokes.", ['fairway', `dist:${distYds}`]);
-      return tank("Long way home. Lay up to a number you love. Don't force the hero shot.", ['fairway', `dist:${distYds}`]);
+      if (distYds < 100) return golfFather("Wedge in hand. Attack the pin. Commit and finish balanced.", ['fairway', `dist:${distYds}`]);
+      if (distYds < 150) return golfFather("Scoring zone. Pick the number, swing smooth, hold the finish.", ['fairway', `dist:${distYds}`]);
+      if (distYds < 200) return golfFather("Mid iron. Aim center of the green — pin-hunting from here loses you strokes.", ['fairway', `dist:${distYds}`]);
+      return golfFather("Long way home. Lay up to a number you love. Don't force the hero shot.", ['fairway', `dist:${distYds}`]);
     }
 
     // ── Green ───────────────────────────────────────────────────────
     if (locType === 'green') {
-      return tank("Putter time. Read it once, trust it. Speed first, line second.", ['green', `dist:${distYds}`]);
+      return golfFather("Putter time. Read it once, trust it. Speed first, line second.", ['green', `dist:${distYds}`]);
     }
 
     // ── Unknown location (GPS hasn't tagged yet) ────────────────────
-    return tank("Give me a second to figure out where you are. Walk a step or two.", ['unknown', `dist:${distYds}`]);
+    return golfFather("Give me a second to figure out where you are. Walk a step or two.", ['unknown', `dist:${distYds}`]);
   },
 };
 
-function tank(line: string, sideEffects: string[]): IntentResult {
+function golfFather(line: string, sideEffects: string[]): IntentResult {
   return {
     success: true,
-    voice_response: `Tank: ${line}`,
+    voice_response: line,
     side_effects: ['ask_golf_father', ...sideEffects],
     follow_up_needed: false,
   };

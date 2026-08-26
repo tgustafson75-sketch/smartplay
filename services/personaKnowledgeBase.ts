@@ -1,38 +1,34 @@
 /**
  * 2026-05-23 — Persona Knowledge Layer.
  *
- * The "Real Tank" pass: a structured Q&A library that gives Tank
- * (and over time the other personas) authentic teaching wisdom to
+ * A structured Q&A library that gives each caddie authentic teaching wisdom to
  * draw from when the player asks substantive golf questions.
  *
+ * 2026-08-26 — ORIGINAL MATERIAL. These entries are written for this app and
+ * grounded in tour-standard coaching. They were deliberately HEDGED AGAINST an
+ * early outside contributor's input rather than transcribed from it, so there is
+ * no third-party material here. The persona whose voice originally framed them
+ * has been removed from the app; the coaching stands on its own.
+ *
  * Why a knowledge base, not pure LLM:
- *   - Tank's voice is specific (Marine cadence, article-dropping,
- *     signature phrases). Letting the LLM freestyle every answer
- *     drifts to generic. Anchoring the answer to a vetted entry
- *     preserves the voice.
- *   - The same question ("should I take more club?") should get the
- *     same opinion in Tank's voice every time, not a fresh LLM
- *     interpretation. Coaching is repetition; repetition is identity.
- *   - The KB is the seam where a coach's actual teaching material
- *     can drop in — same schema, his answers replace the seeded ones
- *     when he hands us his content. Until then, the seeded entries
- *     are grounded in tour-standard coaching wisdom + Tank's voice
- *     spec at constants/tankCharacter.ts.
+ *   - A caddie's voice is specific. Letting the LLM freestyle every answer
+ *     drifts to generic. Anchoring the answer to a vetted entry preserves it.
+ *   - The same question ("should I take more club?") should get the same
+ *     opinion every time, not a fresh LLM interpretation. Coaching is
+ *     repetition; repetition is identity.
  *
  * Integration points (both wired):
- *   - hooks/useKevin → api/kevin: when persona='tank', the top
- *     matched entries inject into the system prompt as Tank's
- *     teaching wisdom block. The model riffs off them in Tank's
+ *   - api/kevin: the top matched entries inject into the system prompt as a
+ *     teaching-wisdom block. The model riffs off them in the active caddie's
  *     voice rather than inventing from scratch.
- *   - services/smartAnalysisEngine.enrichWithPersonaWisdom: when a
- *     swing-fault / drill envelope routes to Tank, the matching KB
- *     entry is folded into voice_summary as a "Tank's take" tail.
+ *   - services/smartAnalysisEngine.enrichWithPersonaWisdom: when a swing-fault
+ *     / drill envelope matches, the KB entry is folded into voice_summary.
  *
  * Easy expansion:
  *   - To add an entry: drop a new object into PERSONA_KB below with
  *     a unique id, category, 2-4 questionPatterns (lowercase, no
- *     punctuation), tankAnswer + genericAnswer + styleNotes. No code
- *     changes needed; getPersonaAnswer picks it up automatically.
+ *     punctuation), genericAnswer + styleNotes, plus any per-persona
+ *     answers. No code changes needed; getPersonaAnswer picks it up.
  *   - To add a new persona (Serena / Harry / Kevin entries): add the
  *     corresponding field (serenaAnswer / harryAnswer / kevinAnswer)
  *     to the entries you want to cover and update getPersonaAnswer's
@@ -63,12 +59,12 @@ export type PersonaKBCategory =
   // `rules_etiquette` covers USGA + R&A rule mechanics that come up
   // on every round (provisional, lost ball, OB, ball-mark repair,
   // pace of play, bunker rake, etc.) PLUS the social etiquette
-  // around them. Tank/Serena/Harry/Kevin each frame these
-  // differently — Tank is rules-literal, Harry is "respect the
+  // around them. Each caddie frames these differently — one is
+  // rules-literal, another is "respect the
   // game", Serena is procedural, Kevin is the explainer.
   // `improvement_mindset` is the meta-layer: how to PRACTICE, when
   // to take a lesson, what to track, when to swap clubs, when to
-  // accept a plateau. This is where Tank's wise-caddie voice shows
+  // accept a plateau. This is where the coach's wise-caddie voice shows
   // up most — he's seen players try every shortcut.
   | 'rules_etiquette'
   | 'improvement_mindset';
@@ -81,10 +77,6 @@ export interface PersonaKBEntry {
    *  against the user's question. 2-5 alternates per entry to keep
    *  recall high without over-matching. */
   questionPatterns: string[];
-  /** Authentic Tank voice — clipped, command-stacked, Marine cadence,
-   *  signature phrases used sparingly. Per constants/tankCharacter.ts:
-   *  standards apply to the work, never the person; no profanity; no
-   *  personal insults; demanding because he respects the player. */
   /** 2026-05-23 — Per-persona variants. Optional; when present, the
    *  matcher returns this answer for the corresponding persona
    *  instead of `genericAnswer`. When absent, the corresponding
@@ -94,9 +86,8 @@ export interface PersonaKBEntry {
   harryAnswer?: string;
   kevinAnswer?: string;
   /** Neutral, factual baseline — what any competent coach would say.
-   *  Used as the fallback when persona is not Tank (or the persona-
-   *  specific answer is absent), and as the reference text for
-   *  `styleNotes` to contrast against. */
+   *  Used as the fallback when the persona-specific answer is absent,
+   *  and as the reference text for `styleNotes` to contrast against. */
   genericAnswer: string;
   /** Annotation explaining the voice choices — what makes each
    *  persona's framing distinct. Not surfaced to the player; lives
@@ -123,28 +114,19 @@ export interface PersonaResponse {
   styleNotes: string | null;
 }
 
-export type Persona = 'tank' | 'kevin' | 'serena' | 'harry' | string;
+export type Persona = 'kevin' | 'serena' | 'harry' | string;
 
 // ─── Knowledge Base — seeded entries (60) ───────────────────────────────
 
 /**
- * Seed entries grounded in tour-standard coaching + Tank's voice spec.
- * Editable; the file order has no semantic meaning. Categories drive
- * future UI grouping (e.g. a "Browse Tank's playbook" view).
+ * Seed entries grounded in tour-standard coaching. Editable; the file order has
+ * no semantic meaning. Categories drive future UI grouping.
  *
- * VOICE INVARIANTS (re-state of tankCharacter.ts so contributors
- * editing entries don't drift):
- *   - Clipped sentences, military cadence.
- *   - Article-dropping in commands ("Take one club" not "Take one
- *     more club").
+ * VOICE INVARIANTS (so contributors editing entries don't drift):
  *   - No hedging — no "I think", no "maybe", no "might want to".
- *   - Signature phrases used sparingly: "Lock it in", "Trust your
- *     prep", "Send it", "Execute", "Roger that", "Reset and run it
- *     back", "No half-reps", "Standards are non-negotiable".
- *   - Never stack three signature phrases in one breath.
- *   - Critique paired with expectation of better next time.
+ *   - Critique paired with the expectation of better next time.
  *   - Standards apply to the work, never the person.
- *   - No profanity, no insults, no Marine parody.
+ *   - No profanity, no insults.
  */
 const PERSONA_KB: PersonaKBEntry[] = [
   // ── Fundamentals (8) ───────────────────────────────────────────────
@@ -153,56 +135,56 @@ const PERSONA_KB: PersonaKBEntry[] = [
     category: 'fundamentals',
     questionPatterns: ['how tight grip', 'grip pressure', 'hold club tight', 'squeeze the club'],
     genericAnswer: "Light grip pressure — around 4 or 5 out of 10. Tight grip kills wrist hinge and reduces clubhead speed. Hold the club firmly enough that it won't slip, no more.",
-    styleNotes: "Tank reframes the same fact as a standard ('four out of ten'). Article-drop on 'wrists lock'. Closes with the cadence pattern 'X. Y. That's the order.'",
+    styleNotes: "the coach reframes the same fact as a standard ('four out of ten'). Article-drop on 'wrists lock'. Closes with the cadence pattern 'X. Y. That's the order.'",
   },
   {
     id: 'fund_stance_width',
     category: 'fundamentals',
     questionPatterns: ['how wide stance', 'stance width', 'feet apart', 'stance for driver'],
     genericAnswer: "Stance narrows for shorter clubs and widens for longer ones. Wedges sit inside shoulder width; mid-irons match shoulder width; driver is slightly wider for stability on the bigger turn.",
-    styleNotes: "Tank gives the three-tier rule as a sequence of clipped commands. 'Pick the trade' makes the player own the choice — characteristic of his standards framing.",
+    styleNotes: "the coach gives the three-tier rule as a sequence of clipped commands. 'Pick the trade' makes the player own the choice — characteristic of his standards framing.",
   },
   {
     id: 'fund_ball_position',
     category: 'fundamentals',
     questionPatterns: ['where to put the ball', 'ball position', 'ball forward back', 'ball in stance'],
     genericAnswer: "Ball position moves forward for longer clubs (driver: lead heel) and back toward center for shorter clubs (wedge: center or just behind). It controls where the club bottoms out relative to the ball.",
-    styleNotes: "Each club gets one sentence, Marine briefing-card style. The chain ('position controls X. X controls Y') is Tank's reasoning style — short causal links, then the imperative.",
+    styleNotes: "Each club gets one sentence, briefing-card style. The chain ('position controls X. X controls Y') is the coach's reasoning style — short causal links, then the imperative.",
   },
   {
     id: 'fund_posture',
     category: 'fundamentals',
     questionPatterns: ['how to set up', 'address position', 'posture at address', 'set up over the ball'],
     genericAnswer: "Tilt from the hips with a straight back, knees slightly flexed, arms hanging naturally. The posture should feel athletic and balanced — ready to move.",
-    styleNotes: "Closing line is a Tank standards test ('ten seconds without fidgeting'). Specific, testable, no wiggle room.",
+    styleNotes: "Closing line is a the coach standards test ('ten seconds without fidgeting'). Specific, testable, no wiggle room.",
   },
   {
     id: 'fund_alignment',
     category: 'fundamentals',
     questionPatterns: ['how to aim', 'alignment', 'aim feet target', 'lining up the shot'],
     genericAnswer: "Use an intermediate target — pick a spot a few feet in front of the ball on the target line, then align feet and shoulders parallel to that line. It's easier than aiming at a distant flag.",
-    styleNotes: "Tank uses 'aim down the rail' — railroad-track image, common coaching shorthand. Closes with a signature 'Send it' — earned, not reflexive.",
+    styleNotes: "the coach uses 'aim down the rail' — railroad-track image, common coaching shorthand. Closes with a signature 'Send it' — earned, not reflexive.",
   },
   {
     id: 'fund_preshot_routine',
     category: 'fundamentals',
     questionPatterns: ['pre-shot routine', 'before every shot', 'routine on the tee', 'what to do before swinging'],
     genericAnswer: "Build a consistent pre-shot routine: pick a target, visualize the shot, take a practice swing or waggle, then commit. The exact steps matter less than doing the same steps every shot.",
-    styleNotes: "Sequence is six clipped beats — feels like a Marine cadence count. Anchors with 'Standards are non-negotiable' signature phrase. The 'inconsistent X, inconsistent Y' closer is a Tank syntactic pattern.",
+    styleNotes: "Sequence is six clipped beats — feels like a clipped cadence count. Anchors with 'Standards are non-negotiable' signature phrase. The 'inconsistent X, inconsistent Y' closer is a the coach syntactic pattern.",
   },
   {
     id: 'fund_tempo',
     category: 'fundamentals',
     questionPatterns: ['swing tempo', 'how slow back', 'rushing the swing', 'tempo too fast'],
     genericAnswer: "Good tempo is rhythmic, not slow. A 3:1 backswing-to-downswing ratio is a common target. The key is consistency — same tempo for wedge and driver.",
-    styleNotes: "Tank corrects the player's premise in line one ('Tempo's not slow. Tempo's even'). Classic Tank reframe. The 3:1 ratio appears as 'three counts back, one count down' — voice-friendly, not jargon.",
+    styleNotes: "the coach corrects the player's premise in line one ('Tempo's not slow. Tempo's even'). Classic the coach reframe. The 3:1 ratio appears as 'three counts back, one count down' — voice-friendly, not jargon.",
   },
   {
     id: 'fund_balance',
     category: 'fundamentals',
     questionPatterns: ['falling off balance', 'lose balance', 'balanced finish', 'finish position'],
     genericAnswer: "A balanced finish position is a tell on swing quality. If you can hold your finish until the ball lands, you stayed in posture and didn't lose your base.",
-    styleNotes: "'Finish balanced or it didn't happen' is the standard. 'Balance is the report card' is a Tank metaphor that holds up — testable, blameless, work-focused.",
+    styleNotes: "'Finish balanced or it didn't happen' is the standard. 'Balance is the report card' is a the coach metaphor that holds up — testable, blameless, work-focused.",
   },
 
   // ── Club Selection (6) ─────────────────────────────────────────────
@@ -211,42 +193,42 @@ const PERSONA_KB: PersonaKBEntry[] = [
     category: 'club_selection',
     questionPatterns: ['take more club', 'one more club', 'which club here', 'between clubs', 'club for this yardage'],
     genericAnswer: "When between clubs, most amateurs benefit from taking one more and swinging smoothly. Coming up short of the green is more common than going long, and short almost always brings hazards into play.",
-    styleNotes: "Tank gives the answer in the first sentence, then the reasoning (one line), then the imperative stack. Article-dropping in 'wrong end of the green is short'. The 'amateurs short ninety percent' is a confident statement of his coaching experience — no hedging.",
+    styleNotes: "the coach gives the answer in the first sentence, then the reasoning (one line), then the imperative stack. Article-dropping in 'wrong end of the green is short'. The 'amateurs short ninety percent' is a confident statement of his coaching experience — no hedging.",
   },
   {
     id: 'club_attacking_pin',
     category: 'club_selection',
     questionPatterns: ['go at the pin', 'attack flag', 'pin hunting', 'tight pin'],
     genericAnswer: "Attacking tight pins is rarely the percentage play. Middle of the green is rarely more than 20-25 feet from any pin and removes the cost of a miss to the wrong side.",
-    styleNotes: "Tank calls out 'ego shot' — strong, demanding word, aimed at the decision, not the player. The standard violated is the work (decision-making), not the person.",
+    styleNotes: "the coach calls out 'ego shot' — strong, demanding word, aimed at the decision, not the player. The standard violated is the work (decision-making), not the person.",
   },
   {
     id: 'club_gapping',
     category: 'club_selection',
     questionPatterns: ['gap between clubs', 'distance gaps', 'how far each club', 'clubs going same distance'],
     genericAnswer: "Each club should have a clear distance gap (10-15 yards for most amateurs). If two clubs go the same distance, the gap is closed — usually from technique with one of them, sometimes from gear. Test on a measured range or launch monitor.",
-    styleNotes: "Tank's 'real number vs good-day number' is a sharp coaching distinction — tour pros plan from carry-not-roll, average-not-best. Worth keeping verbatim.",
+    styleNotes: "the coach's 'real number vs good-day number' is a sharp coaching distinction — tour pros plan from carry-not-roll, average-not-best. Worth keeping verbatim.",
   },
   {
     id: 'club_for_wind',
     category: 'club_selection',
     questionPatterns: ['club into wind', 'how much wind', 'play in wind', 'extra club wind'],
     genericAnswer: "Into a 10 mph wind, take one extra club. Downwind, take half-club less. Crosswind needs aim adjustment, not necessarily club change. Lower-spin shots fight wind better.",
-    styleNotes: "Tank gives the rule of thumb in clean ratios. 'Wind beats spin. Less spin wins.' is a Tank-style closer — short, declarative, rhymed almost like a Marine slogan.",
+    styleNotes: "the coach gives the rule of thumb in clean ratios. 'Wind beats spin. Less spin wins.' is a direct-style closer — short, declarative, rhymed almost like a clipped slogan.",
   },
   {
     id: 'club_elevation',
     category: 'club_selection',
     questionPatterns: ['uphill club', 'downhill yardage', 'elevation change', 'elevated green'],
     genericAnswer: "Uphill shots need extra club (roughly one club per 15 ft of elevation gain). Downhill shots play shorter by similar amounts. Trust the measured distance, not the visual perception.",
-    styleNotes: "'Don't trust your eyes; trust the laser' anchors Tank's preparation-over-feel philosophy. The 'commit' closer is core Tank — math first, then 100% commit to the choice.",
+    styleNotes: "'Don't trust your eyes; trust the laser' anchors the coach's preparation-over-feel philosophy. The 'commit' closer is core the coach — math first, then 100% commit to the choice.",
   },
   {
     id: 'club_leave_wedge',
     category: 'club_selection',
     questionPatterns: ['lay up wedge', 'short of wedge yardage', 'wedge distance', 'leave full wedge'],
     genericAnswer: "When laying up, aim for your full-wedge distance (often 90-115 yards) rather than leaving an awkward in-between shot. Three-quarter wedges are statistically the least consistent shot in amateur golf.",
-    styleNotes: "Tank's 'half-wedge and three-quarter wedge are the worst shots in golf for amateurs' is the kind of confident, experience-backed statement that defines his voice. The closer is a tricolon: 'Full swing. Full commitment. Full shot.'",
+    styleNotes: "the coach's 'half-wedge and three-quarter wedge are the worst shots in golf for amateurs' is the kind of confident, experience-backed statement that defines his voice. The closer is a tricolon: 'Full swing. Full commitment. Full shot.'",
   },
 
   // ── Course Management (7) ──────────────────────────────────────────
@@ -255,49 +237,49 @@ const PERSONA_KB: PersonaKBEntry[] = [
     category: 'course_management',
     questionPatterns: ['driver every tee', 'tee shot strategy', 'leave driver', 'when not to hit driver'],
     genericAnswer: "Driver isn't the right play on every tee. Evaluate the trouble: if a 3-wood or hybrid still leaves a manageable approach AND keeps the ball in the fairway more often, it's the better choice on tight or hazardous holes.",
-    styleNotes: "'Driver's a tool, not a default' is a Tank-style opening reframe. 'Bag it' is article-drop and direct — the kind of imperative Tank uses to close a decision.",
+    styleNotes: "'Driver's a tool, not a default' is a direct-style opening reframe. 'Bag it' is article-drop and direct — the kind of imperative the coach uses to close a decision.",
   },
   {
     id: 'course_par5_second',
     category: 'course_management',
     questionPatterns: ['par 5 second shot', 'go for par 5', 'lay up par 5', 'reach in two'],
     genericAnswer: "Going for a par-5 in two requires a realistic carry chance over hazards (~60%+) and an acceptable downside if you miss. Otherwise, lay up to a full-wedge distance and play for birdie from there.",
-    styleNotes: "Math-first framing is Tank — preparation over wishful thinking. 'Eagle's a fantasy. Birdie's the goal.' is a memorable pair-clause; closes with 'Don't trade birdie for double' which sticks as a slogan.",
+    styleNotes: "Math-first framing is the coach — preparation over wishful thinking. 'Eagle's a fantasy. Birdie's the goal.' is a memorable pair-clause; closes with 'Don't trade birdie for double' which sticks as a slogan.",
   },
   {
     id: 'course_miss_side',
     category: 'course_management',
     questionPatterns: ['where to miss', 'good miss', 'fat side of green', 'aim safe side'],
     genericAnswer: "Every approach has a 'fat' side — the side opposite the trouble or short-sided position. Aim there: the worst outcome from the fat-side miss is way better than the worst outcome from the short-sided miss.",
-    styleNotes: "Tank's symmetric phrasing ('Pin's on the left, trouble's left… Pin's right, trouble's right…') mimics Marine drill-instruction repetition. Lands on a signature 'Standards are non-negotiable'.",
+    styleNotes: "the coach's symmetric phrasing ('Pin's on the left, trouble's left… Pin's right, trouble's right…') mimics clipped drill-instruction repetition. Lands on a signature 'Standards are non-negotiable'.",
   },
   {
     id: 'course_chip_vs_pitch',
     category: 'course_management',
     questionPatterns: ['chip or pitch', 'flop or chip', 'around the green choice', 'wedge selection around green'],
     genericAnswer: "Around the green, prefer the lowest-risk shot that gets the ball close. Chip-and-roll when you have green to work with; pitch when you need to carry trouble; putt from off the green when the path is clean.",
-    styleNotes: "Tank's 'putter from off the green saves more strokes than your flop ever will' is the kind of confident heuristic that anchors his voice. Article-drop 'lowest shot' makes it feel like a maxim.",
+    styleNotes: "the coach's 'putter from off the green saves more strokes than your flop ever will' is the kind of confident heuristic that anchors his voice. Article-drop 'lowest shot' makes it feel like a maxim.",
   },
   {
     id: 'course_aggressive_vs_safe',
     category: 'course_management',
     questionPatterns: ['be aggressive', 'play it safe', 'attack the hole', 'conservative play'],
     genericAnswer: "Smart play is aggressive to safe targets — go at fat parts of greens with conviction — and conservative to dangerous ones. Save the aggression for holes where the downside isn't a penalty stroke.",
-    styleNotes: "'Aggressive to safe targets. Conservative to dangerous ones.' is the cleanest one-line statement of modern course-management theory (often attributed to Dr. Bob Rotella). Tank delivers it as a Marine sequence.",
+    styleNotes: "'Aggressive to safe targets. Conservative to dangerous ones.' is the cleanest one-line statement of modern course-management theory (often attributed to Dr. Bob Rotella). the coach delivers it as a clipped sequence.",
   },
   {
     id: 'course_recovery',
     category: 'course_management',
     questionPatterns: ['in the trees', 'punch out', 'hero shot trees', 'recovery shot'],
     genericAnswer: "From trouble, the highest-percentage play is usually a punch-out to a known yardage. Hero shots through narrow gaps have low success rates and high downside.",
-    styleNotes: "'Take your medicine. Move on.' is a Tank closer — accepts the cost, doesn't dwell. The math ('putting for par' vs 'triple at worst') frames the choice.",
+    styleNotes: "'Take your medicine. Move on.' is a the coach closer — accepts the cost, doesn't dwell. The math ('putting for par' vs 'triple at worst') frames the choice.",
   },
   {
     id: 'course_thinking_target',
     category: 'course_management',
     questionPatterns: ['where to aim', 'pick the target', 'target selection', 'how to choose target'],
     genericAnswer: "Specific targets produce more consistent shots than vague ones. Pick a feature you can see — a divot, a tree, a sprinkler — rather than 'the green' or 'the fairway'.",
-    styleNotes: "'Vague target, vague shot. Sharp target, sharp shot.' is the cleanest possible Tank pair-clause. Closes with 'Pick the spot. Hit the spot.' — drumbeat repetition.",
+    styleNotes: "'Vague target, vague shot. Sharp target, sharp shot.' is the cleanest possible the coach pair-clause. Closes with 'Pick the spot. Hit the spot.' — drumbeat repetition.",
   },
 
   // ── Driving (5) ────────────────────────────────────────────────────
@@ -306,28 +288,28 @@ const PERSONA_KB: PersonaKBEntry[] = [
     category: 'driving',
     questionPatterns: ['big miss driver', 'snap hook', 'huge slice', 'block off tee', 'lost ball off tee'],
     genericAnswer: "When the driver is producing big misses on multiple holes, switch to a more reliable club off the tee (3-wood, hybrid, even a long iron) for the rest of the round and address the driver in practice afterward.",
-    styleNotes: "Tank's 'Earn the driver back at the range, not on the next tee' is a standards line — the player has to prove fitness, not assume it. Marine accountability.",
+    styleNotes: "the coach's 'Earn the driver back at the range, not on the next tee' is a standards line — the player has to prove fitness, not assume it. clipped accountability.",
   },
   {
     id: 'driving_swing_thought',
     category: 'driving',
     questionPatterns: ['swing thought driver', 'thinking on the tee', 'what to think driver', 'driver mental cue'],
     genericAnswer: "Limit your driver swing thought to one cue — tempo, target line, or a specific feel. Multiple swing thoughts at impact cause inconsistency.",
-    styleNotes: "All-caps 'ONE' is the only place in this KB Tank shouts — earned, single emphasis. The list-of-three example cues ('Smooth tempo', etc.) gives the player a concrete starting point.",
+    styleNotes: "All-caps 'ONE' is the only place in this KB the coach shouts — earned, single emphasis. The list-of-three example cues ('Smooth tempo', etc.) gives the player a concrete starting point.",
   },
   {
     id: 'driving_speed_vs_accuracy',
     category: 'driving',
     questionPatterns: ['swing harder driver', 'swing speed', 'hitting it long', 'hit it further'],
     genericAnswer: "Distance comes more from clean center-strike contact than from raw swing effort. An 85% smooth swing struck flush goes further than a max-effort swing struck off-center.",
-    styleNotes: "'Tour pros swing at eighty percent. You're not stronger than them.' is a Tank line — challenges ego with a fact. 'Smooth fast. Not hard fast.' is the maxim.",
+    styleNotes: "'Tour pros swing at eighty percent. You're not stronger than them.' is a the coach line — challenges ego with a fact. 'Smooth fast. Not hard fast.' is the maxim.",
   },
   {
     id: 'driving_fairway_finder',
     category: 'driving',
     questionPatterns: ['tight fairway', 'narrow tee shot', 'fairway finder', 'put it in play'],
     genericAnswer: "On tight tee shots, a controlled three-quarter swing with a lower-teed ball produces a lower, straighter ball flight. Trade 10-20 yards of distance for fairway position.",
-    styleNotes: "'No ego' is the standard. The closing comparison ('twenty yards shorter in the fairway beats twenty longer in the trees') is the math justification Tank always pairs with the imperative.",
+    styleNotes: "'No ego' is the standard. The closing comparison ('twenty yards shorter in the fairway beats twenty longer in the trees') is the math justification the coach always pairs with the imperative.",
   },
   {
     id: 'driving_recovery_after_lost',
@@ -343,35 +325,35 @@ const PERSONA_KB: PersonaKBEntry[] = [
     category: 'iron_play',
     questionPatterns: ['compress the ball', 'hit down on it', 'fat shot iron', 'turf interaction'],
     genericAnswer: "Hit irons with a slightly descending angle of attack. The ball is struck first, then the turf — the divot starts in front of the original ball position. Hands lead the clubhead at impact, generating compression.",
-    styleNotes: "'Ball first, turf second' is the Marine briefing-card version of compression. 'Trust the loft' acknowledges the player's instinct to scoop and corrects it without insult.",
+    styleNotes: "'Ball first, turf second' is the briefing-card version of compression. 'Trust the loft' acknowledges the player's instinct to scoop and corrects it without insult.",
   },
   {
     id: 'iron_divot_direction',
     category: 'iron_play',
     questionPatterns: ['divot pointing', 'divot direction', 'reading divots', 'divot left or right'],
     genericAnswer: "Divots are diagnostic — they point in the direction your club was traveling through impact. Divots aimed left of target indicate a left-going swing path; right divots indicate right-going path.",
-    styleNotes: "'The divot's an honest witness' is a memorable Tank metaphor — it shifts blame off the player and onto the data, a Tank hallmark.",
+    styleNotes: "'The divot's an honest witness' is a memorable the coach metaphor — it shifts blame off the player and onto the data, a the coach hallmark.",
   },
   {
     id: 'iron_thin_fat',
     category: 'iron_play',
     questionPatterns: ['hitting it thin', 'thin shot', 'fat the ball', 'topping it', 'bladed'],
     genericAnswer: "Thin and fat shots usually share a cause: incorrect low point. Adjust by checking ball position (slightly back for shorter irons) and ensuring weight transfers forward through impact.",
-    styleNotes: "Tank diagnoses both miss patterns to a single root cause ('low point's wrong') — economy of explanation. The 'Get those right. Both go away.' closer is confident and assignment-style.",
+    styleNotes: "the coach diagnoses both miss patterns to a single root cause ('low point's wrong') — economy of explanation. The 'Get those right. Both go away.' closer is confident and assignment-style.",
   },
   {
     id: 'iron_uphill_downhill',
     category: 'iron_play',
     questionPatterns: ['uphill lie iron', 'downhill lie', 'ball above feet', 'ball below feet'],
     genericAnswer: "On slopes: uphill lie plays longer and tends to pull (take more club, aim right slightly). Downhill plays shorter and tends to push. Ball above the feet tends to pull left; ball below tends to fade right. Adjust club and aim accordingly.",
-    styleNotes: "Tank gives the full slope matrix in one paragraph — clipped, every variant named. 'Match the slope' is the maxim; 'Send it' is the earned closer.",
+    styleNotes: "the coach gives the full slope matrix in one paragraph — clipped, every variant named. 'Match the slope' is the maxim; 'Send it' is the earned closer.",
   },
   {
     id: 'iron_full_swing_short_iron',
     category: 'iron_play',
     questionPatterns: ['short iron full swing', '9 iron distance', 'half wedge', 'feel for distance'],
     genericAnswer: "Short irons benefit from full, controlled swings rather than steered or half swings. Consistent contact and tempo produce predictable distances; half-swings introduce variability.",
-    styleNotes: "Tank explicitly forbids deceleration ('Don't decel') — common amateur fault. The 'Standards are non-negotiable' signature phrase here labels the swing technique itself as the standard.",
+    styleNotes: "the coach explicitly forbids deceleration ('Don't decel') — common amateur fault. The 'Standards are non-negotiable' signature phrase here labels the swing technique itself as the standard.",
   },
 
   // ── Short Game (5) ─────────────────────────────────────────────────
@@ -380,35 +362,35 @@ const PERSONA_KB: PersonaKBEntry[] = [
     category: 'short_game',
     questionPatterns: ['chunk chip', 'fat chip', 'chunked it', 'chip going nowhere'],
     genericAnswer: "Chunked chips usually come from weight hanging back and hands flipping through impact. Set up with weight (about 60%) on the lead foot, hands slightly ahead of the ball, and rotate through with minimal wrist break.",
-    styleNotes: "Tank names the cause in line one ('weight stayed back, hands flipped') — diagnostic, not consolatory. The drumbeat 'Ball first. Every chip. Every time.' is the standard.",
+    styleNotes: "the coach names the cause in line one ('weight stayed back, hands flipped') — diagnostic, not consolatory. The drumbeat 'Ball first. Every chip. Every time.' is the standard.",
   },
   {
     id: 'short_bump_run',
     category: 'short_game',
     questionPatterns: ['bump and run', 'low chip', 'putt from fringe', 'chip with 7 iron'],
     genericAnswer: "Bump-and-run uses a less-lofted club (7-iron, 8-iron) with a putting-style stroke. Ball lands just on the green and rolls like a putt — much more predictable than carrying with a wedge.",
-    styleNotes: "'No wrists. No air.' is two-word command-stacking — pure Tank. 'Lowest shot wins' is the closer maxim.",
+    styleNotes: "'No wrists. No air.' is two-word command-stacking — pure the coach. 'Lowest shot wins' is the closer maxim.",
   },
   {
     id: 'short_pitch_carry',
     category: 'short_game',
     questionPatterns: ['pitch over bunker', 'high soft pitch', 'flop shot', 'land it soft'],
     genericAnswer: "Higher, softer pitches require an open clubface, a slower-feeling tempo with full acceleration through impact, and continued body rotation. Decelerating causes the leading edge to dig and chunks the shot.",
-    styleNotes: "'Don't quit on it' addresses the most common amateur fault — decel at impact. Tank gives the technique then makes the closer about the mental commitment.",
+    styleNotes: "'Don't quit on it' addresses the most common amateur fault — decel at impact. the coach gives the technique then makes the closer about the mental commitment.",
   },
   {
     id: 'short_tight_lie',
     category: 'short_game',
     questionPatterns: ['tight lie chip', 'no grass chip', 'hardpan', 'lie too tight for wedge'],
     genericAnswer: "On tight lies, a high-bounce wedge can deflect off the firm surface. Use a lower-loft wedge (PW, GW) with the shaft leaned forward, or putt the ball if path allows.",
-    styleNotes: "'Bounce is the enemy' is a technical cue rendered in Tank's adversarial frame. The 'Or grab the putter' acknowledges the practical alternative without hedging.",
+    styleNotes: "'Bounce is the enemy' is a technical cue rendered in the coach's adversarial frame. The 'Or grab the putter' acknowledges the practical alternative without hedging.",
   },
   {
     id: 'short_fluffy_lie',
     category: 'short_game',
     questionPatterns: ['fluffy lie', 'ball sitting up', 'rough around green', 'cushioned lie'],
     genericAnswer: "When a ball sits up in fluffy rough or grass, the clubface can slide under without contacting the ball — a 'pop-up' effect. Stay taller in posture, avoid grounding the club, and strike cleaner.",
-    styleNotes: "'Sneaky dangerous' is a Tank framing — the lie LOOKS easy but isn't, and Tank flags it. The 'Read the lie. Adjust.' closer is anti-autopilot.",
+    styleNotes: "'Sneaky dangerous' is a the coach framing — the lie LOOKS easy but isn't, and the coach flags it. The 'Read the lie. Adjust.' closer is anti-autopilot.",
   },
 
   // ── Bunker (3) ─────────────────────────────────────────────────────
@@ -417,14 +399,14 @@ const PERSONA_KB: PersonaKBEntry[] = [
     category: 'bunker',
     questionPatterns: ['greenside bunker', 'sand shot', 'bunker shot basics', 'splash out'],
     genericAnswer: "Standard greenside bunker shot: open the clubface, open the stance, aim slightly left of target, and strike the sand about 2 inches behind the ball with an accelerating swing. The sand carries the ball out.",
-    styleNotes: "Four single-imperative lines at the top — Marine briefing-card. The contrast 'Sand goes out, ball goes out' is a Tank rhythm. 'No half-swings in the bunker' is the standard.",
+    styleNotes: "Four single-imperative lines at the top — briefing-card. The contrast 'Sand goes out, ball goes out' is a the coach rhythm. 'No half-swings in the bunker' is the standard.",
   },
   {
     id: 'bunker_buried',
     category: 'bunker',
     questionPatterns: ['buried lie sand', 'fried egg', 'plugged in bunker', 'buried bunker shot'],
     genericAnswer: "For a buried (fried-egg) lie, square or slightly close the clubface, take a steeper swing, and strike close to the ball. The shot exits low and runs significantly with little spin — plan for the runout.",
-    styleNotes: "'Don't try to be cute' is the standard against ego shots. The closer ('Putting for par beats bunker for triple') is Tank's math justification in maxim form.",
+    styleNotes: "'Don't try to be cute' is the standard against ego shots. The closer ('Putting for par beats bunker for triple') is the coach's math justification in maxim form.",
   },
   {
     id: 'bunker_fairway',
@@ -440,7 +422,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     category: 'putting',
     questionPatterns: ['read green', 'reading the break', 'how to read putt', 'green reading'],
     genericAnswer: "Read greens from at least two angles — typically from behind the ball and from the low side. Identify the dominant slope first, then estimate speed, then commit to a line. Don't re-read after addressing the ball.",
-    styleNotes: "'Three reads, one stroke' is a Tank-style maxim. 'No going back to the well' is Marine slang for not second-guessing — commit and execute.",
+    styleNotes: "'Three reads, one stroke' is a direct-style maxim. 'No going back to the well' is clipped slang for not second-guessing — commit and execute.",
   },
   {
     id: 'putt_speed',
@@ -454,21 +436,21 @@ const PERSONA_KB: PersonaKBEntry[] = [
     category: 'putting',
     questionPatterns: ['short putt', '3 foot putt', 'inside the leather', 'pressure putt'],
     genericAnswer: "Short putts (under 3 feet) are best struck firmly to the back of the cup — a firmer stroke holds the line and reduces lip-outs. Don't watch the ball during the stroke; listen for the drop.",
-    styleNotes: "'No die-it-in. Die-it-ins catch the lip and lip out.' is a Tank statement of strategy preference — firm wins. The 'Listen for the ball drop' detail is sensory-specific and concrete.",
+    styleNotes: "'No die-it-in. Die-it-ins catch the lip and lip out.' is a the coach statement of strategy preference — firm wins. The 'Listen for the ball drop' detail is sensory-specific and concrete.",
   },
   {
     id: 'putt_pressure',
     category: 'putting',
     questionPatterns: ['nervous over putt', 'pressure putt', 'yips', 'knee knocker', 'cant make short putts'],
     genericAnswer: "Under pressure, maintain the exact pre-putt routine you use on a meaningless practice green. Adding looks or pauses introduces tension. Trust the routine and commit.",
-    styleNotes: "Triple 'Don't' parallelism builds Marine cadence. 'The routine is the armor' is the Tank closer — pressure-tested, sticks.",
+    styleNotes: "Triple 'Don't' parallelism builds clipped cadence. 'The routine is the armor' is the the coach closer — pressure-tested, sticks.",
   },
   {
     id: 'putt_routine',
     category: 'putting',
     questionPatterns: ['putting routine', 'pre-putt routine', 'before the putt'],
     genericAnswer: "A consistent putting routine — typically a small set of looks, a practice stroke, set up, and execute — produces more reliable results across distances and pressure situations.",
-    styleNotes: "'Two looks. One practice stroke. Set the putter. Pull the trigger.' is a four-beat Tank sequence. 'Variation in routine, variation in result' is the diagnostic pair.",
+    styleNotes: "'Two looks. One practice stroke. Set the putter. Pull the trigger.' is a four-beat the coach sequence. 'Variation in routine, variation in result' is the diagnostic pair.",
   },
   {
     id: 'putt_breaking',
@@ -484,42 +466,42 @@ const PERSONA_KB: PersonaKBEntry[] = [
     category: 'mental_game',
     questionPatterns: ['blow up hole', 'big number', 'triple bogey', 'disaster hole', 'in trouble'],
     genericAnswer: "On a disaster hole, accept the score (even double or triple bogey), avoid re-litigating the bad shots, and reset mentally on the next tee. Letting one bad hole bleed into the next is how rounds spiral.",
-    styleNotes: "This entry maps directly to Tank's DISASTER DISCIPLINE in his character spec. 'No replays out loud. No 'what if I had.'' restates the rule from the spec — Tank refusing to add weight to a moment that already has too much.",
+    styleNotes: "This entry maps directly to the coach's DISASTER DISCIPLINE in his character spec. 'No replays out loud. No 'what if I had.'' restates the rule from the spec — the coach refusing to add weight to a moment that already has too much.",
   },
   {
     id: 'mental_bad_shot',
     category: 'mental_game',
     questionPatterns: ['after bad shot', 'angry at myself', 'frustrated with shot', 'shake off bad shot'],
     genericAnswer: "After a bad shot, give yourself a short emotional window (a few seconds), then deliberately reset. Carrying frustration into the next shot is a primary cause of stacking bad shots.",
-    styleNotes: "The 'five seconds' rule is a coaching standard (sometimes called the '10-second rule'). Tank tightens to five — characteristic. 'The shot you have is the shot that matters' is the maxim.",
+    styleNotes: "The 'five seconds' rule is a coaching standard (sometimes called the '10-second rule'). the coach tightens to five — characteristic. 'The shot you have is the shot that matters' is the maxim.",
   },
   {
     id: 'mental_nervous_tee',
     category: 'mental_game',
     questionPatterns: ['nervous on tee', 'first tee jitters', 'shaking over the ball', 'cant breathe before swing'],
     genericAnswer: "Pre-shot nerves are normal. Acknowledge them, take a few breaths to lower heart rate, focus on a specific target, and commit. The goal isn't to feel no nerves — it's to swing through them.",
-    styleNotes: "'Pretending you're not is the mistake' is the Tank reframe — opens with the truth, not the comfort. The closer ('you swing through it') doesn't promise the feeling goes away.",
+    styleNotes: "'Pretending you're not is the mistake' is the the coach reframe — opens with the truth, not the comfort. The closer ('you swing through it') doesn't promise the feeling goes away.",
   },
   {
     id: 'mental_slumps',
     category: 'mental_game',
     questionPatterns: ['in a slump', 'cant hit a shot', 'lost my swing', 'cant find it'],
     genericAnswer: "Slumps usually trace to a specific change — tempo, setup, or path. Video your swing, compare to a known-good version, identify ONE thing to fix, and grind that one fix on the range until contact returns.",
-    styleNotes: "Tank's diagnostic discipline ('Find what'). The 'One. Not five.' is the all-caps spec from the driving swing-thought entry, used again. 'No half-reps' is signature.",
+    styleNotes: "the coach's diagnostic discipline ('Find what'). The 'One. Not five.' is the all-caps spec from the driving swing-thought entry, used again. 'No half-reps' is signature.",
   },
   {
     id: 'mental_confidence',
     category: 'mental_game',
     questionPatterns: ['no confidence', 'doubting my swing', 'lost confidence', 'how to build confidence'],
     genericAnswer: "Confidence is built through preparation — practice reps, evidence of past successful execution, and a trusted routine. When doubt appears, lean on the evidence rather than the feeling.",
-    styleNotes: "'Confidence isn't a feeling. It's evidence.' is the strongest possible statement of Tank's preparation-philosophy. 'Doubt's a luxury' is challenging but on the work, not the player.",
+    styleNotes: "'Confidence isn't a feeling. It's evidence.' is the strongest possible statement of the coach's preparation-philosophy. 'Doubt's a luxury' is challenging but on the work, not the player.",
   },
   {
     id: 'mental_between_shots',
     category: 'mental_game',
     questionPatterns: ['between shots', 'walking up to the ball', 'mental between holes', 'stay focused'],
     genericAnswer: "Between shots, let go of the previous shot and disengage from intense focus. Reengage roughly 100 yards out — start the routine, pick the target, choose the club, execute.",
-    styleNotes: "'Stay loose. Lock in late. Repeat.' is the three-beat cadence. The hundred-yard threshold is a concrete trigger — Tank converts a vague mental concept into a measurable behavior.",
+    styleNotes: "'Stay loose. Lock in late. Repeat.' is the three-beat cadence. The hundred-yard threshold is a concrete trigger — the coach converts a vague mental concept into a measurable behavior.",
   },
 
   // ── Practice (5) ───────────────────────────────────────────────────
@@ -528,21 +510,21 @@ const PERSONA_KB: PersonaKBEntry[] = [
     category: 'practice',
     questionPatterns: ['cage practice', 'what to work on cage', 'practice goals', 'SwingLab session'],
     genericAnswer: "Effective cage sessions focus on one element at a time (tempo, ball position, contact). Quality reps matter more than quantity — 20 deliberate balls outweigh 100 mindless ones.",
-    styleNotes: "ONE in all-caps reuses the driving-swing-thought emphasis. The '20 focused beats 100 lazy' is a Tank math justification.",
+    styleNotes: "ONE in all-caps reuses the driving-swing-thought emphasis. The '20 focused beats 100 lazy' is a the coach math justification.",
   },
   {
     id: 'practice_range_vs_course',
     category: 'practice',
     questionPatterns: ['range vs course', 'why do I play worse on course', 'practice doesnt transfer', 'beat at the range'],
     genericAnswer: "Range practice often fails to transfer because it lacks the variability of a real round. Change clubs each shot, play imaginary holes, use your full pre-shot routine on every ball, and treat each shot as distinct.",
-    styleNotes: "'No raking-and-raking. That's not practice. That's noise.' is the Tank standard against unfocused range work. 'Different sports if you practice them that way' is the diagnostic.",
+    styleNotes: "'No raking-and-raking. That's not practice. That's noise.' is the the coach standard against unfocused range work. 'Different sports if you practice them that way' is the diagnostic.",
   },
   {
     id: 'practice_drills',
     category: 'practice',
     questionPatterns: ['best drill', 'practice drill', 'drill for swing', 'how to drill'],
     genericAnswer: "Choose drills that target underlying mechanics (tempo, setup, balance) rather than specific shot shapes. Fundamental drills transfer to many shots; symptom-specific drills only fix one fault.",
-    styleNotes: "'Drill the cause, you fix ten shots' is the Tank multiplier argument. Reframes drilling as systems thinking.",
+    styleNotes: "'Drill the cause, you fix ten shots' is the the coach multiplier argument. Reframes drilling as systems thinking.",
   },
   {
     id: 'practice_warmup',
@@ -556,7 +538,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     category: 'practice',
     questionPatterns: ['kid practicing', 'junior practice', 'teaching child golf', 'practice with my kid'],
     genericAnswer: "For juniors, keep practice sessions short (20-30 minutes), variable (multiple skills, not just full swings), and game-based. Mechanics are introduced gradually; fundamentals like grip and stance can be taught through games.",
-    styleNotes: "'Standards apply — to having fun, first' is the Tank twist on his standards-everywhere voice. He doesn't bend the philosophy, he applies it to the right metric for the situation.",
+    styleNotes: "'Standards apply — to having fun, first' is the the coach twist on his standards-everywhere voice. He doesn't bend the philosophy, he applies it to the right metric for the situation.",
   },
 
   // ── Pre-round / Weather (4) ────────────────────────────────────────
@@ -565,32 +547,32 @@ const PERSONA_KB: PersonaKBEntry[] = [
     category: 'pre_round_weather',
     questionPatterns: ['eat before round', 'breakfast golf', 'food before tee time', 'what to eat'],
     genericAnswer: "Eat a moderate meal of protein and complex carbohydrates about 90 minutes before tee time. Hydrate the day before — drinking heavily on the course is too late. Avoid heavy meals that cause sluggishness.",
-    styleNotes: "'Standards apply to fuel too' extends the Tank philosophy to pre-round prep. Concrete and specific (90 minutes, night before).",
+    styleNotes: "'Standards apply to fuel too' extends the the coach philosophy to pre-round prep. Concrete and specific (90 minutes, night before).",
   },
   {
     id: 'weather_wind',
     category: 'pre_round_weather',
     questionPatterns: ['windy day', 'play in wind', 'wind golf', 'windy round'],
     genericAnswer: "On windy days, hit lower-trajectory shots (knock-downs), take more club to swing smoother, and prefer clubs that produce lower spin. Lower-flying shots are less affected by wind.",
-    styleNotes: "'Three rules' framing is Marine briefing-card. 'Adapt or you bleed strokes' is the Tank consequence-statement.",
+    styleNotes: "'Three rules' framing is briefing-card. 'Adapt or you bleed strokes' is the the coach consequence-statement.",
   },
   {
     id: 'weather_cold',
     category: 'pre_round_weather',
     questionPatterns: ['cold weather golf', 'cold round', 'winter golf', 'frozen ground'],
     genericAnswer: "Cold weather reduces ball flight roughly 5% per 10°F below 60°F. Take extra club, keep hands warm between shots, and avoid bulky layers that restrict the swing.",
-    styleNotes: "'Cold doesn't excuse a bad swing' is the standards-anchor — Tank refuses to let weather become an alibi.",
+    styleNotes: "'Cold doesn't excuse a bad swing' is the standards-anchor — the coach refuses to let weather become an alibi.",
   },
   {
     id: 'weather_rain',
     category: 'pre_round_weather',
     questionPatterns: ['playing in rain', 'wet conditions', 'rain golf', 'soggy course'],
     genericAnswer: "In wet conditions, the ball plugs and doesn't roll — plan for fewer total yards. Keep grips and hands dry between shots (extra towels), and be especially careful on tee shots where a wet grip causes hooks.",
-    styleNotes: "'Mission-critical' is a Marine-cadence intensifier — earned in a real consequence (wet grip → snap hook). 'Dry. Every. Shot.' is Tank's typical end-state imperative.",
+    styleNotes: "'Mission-critical' is a Marine-cadence intensifier — earned in a real consequence (wet grip → snap hook). 'Dry. Every. Shot.' is the coach's typical end-state imperative.",
   },
 
   // ─── 2026-05-23 — Expansion batch: 30 new entries ─────────────────────
-  // Adds depth where the original 60 left gaps. Tank coverage on all.
+  // Adds depth where the original 60 left gaps. Coach coverage on all.
   // Serena / Harry / Kevin variants added on the most-differentiated
   // entries (where each persona's voice meaningfully changes the
   // delivery, not just the punctuation).
@@ -604,7 +586,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "We're going to picture the shot before we hit it. The full ball flight — apex, landing, roll. Let the body follow what the eyes have already planned. Worth thinking about every time.",
     kevinAnswer: "Alright, picture it first. Where it starts, where it lands, where it rolls out. Once you can see it, the swing just delivers what your eyes already drew.",
     genericAnswer: "Visualize the full ball flight before addressing the ball — start line, peak height, landing point, roll out. A clear mental picture leads to a more committed swing.",
-    styleNotes: "Tank is sequenced + imperative; Serena emphasizes preparation = clarity; Harry frames as 'we' + observational; Kevin uses 'alright' + casual 'just delivers'. The same coaching point, four distinct voices.",
+    styleNotes: "the coach is sequenced + imperative; Serena emphasizes preparation = clarity; Harry frames as 'we' + observational; Kevin uses 'alright' + casual 'just delivers'. The same coaching point, four distinct voices.",
   },
   {
     id: 'mental_commit_phrase',
@@ -614,7 +596,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "We give ourselves one word before the swing. Same word, every time. 'Smooth' works. 'Through' works. It's the bridge from planning to playing.",
     kevinAnswer: "Just one word over the ball. 'Smooth' is the most common one. Same word every swing — it's the cue that flips you from thinking into doing.",
     genericAnswer: "Choose a single, consistent commit phrase (e.g., 'smooth', 'through', 'trust') as your last thought before the swing. It serves as a trigger from deliberation to execution.",
-    styleNotes: "Tank gives 3 examples then commands; Serena describes the transition; Harry frames as partnership; Kevin lands on a relatable 'thinking into doing'.",
+    styleNotes: "the coach gives 3 examples then commands; Serena describes the transition; Harry frames as partnership; Kevin lands on a relatable 'thinking into doing'.",
   },
   {
     id: 'mental_breath',
@@ -624,7 +606,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "One slow breath behind the ball before each shot. Settles the hands, slows the tempo. You'll feel the difference inside three holes.",
     kevinAnswer: "One deep breath before each shot. It sounds basic but it works — heart rate drops, hands soften, tempo settles in. Cheap insurance.",
     genericAnswer: "A single slow breath before stepping in lowers heart rate and steadies the hands. Box breathing (4 counts in, hold, out) is a common variant.",
-    styleNotes: "Tank gives the specific technique as a command sequence. Harry's 'Take a breath' is signature. Serena promises a concrete benefit ('inside three holes'). Kevin frames it as 'cheap insurance' — his pragmatic tone.",
+    styleNotes: "the coach gives the specific technique as a command sequence. Harry's 'Take a breath' is signature. Serena promises a concrete benefit ('inside three holes'). Kevin frames it as 'cheap insurance' — his pragmatic tone.",
   },
   {
     id: 'mental_target_lock',
@@ -633,7 +615,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Two looks at the target, one look at the ball, swing. Long look first to lock the line, short look at the ball, then go. Don't linger over it.",
     harryAnswer: "We look at where we want it to go more than where it is. Long look at the target, short look at the ball. The longer you stare at the ball, the more likely you are to steer.",
     genericAnswer: "Spend more time looking at the target than at the ball. A long final look at the target locks the line; a short look at the ball is enough to make contact.",
-    styleNotes: "Tank's 'don't stare the ball into the hazard' is sharp + characteristic. Harry names the failure mode ('more likely to steer'). Serena gives the exact look-count.",
+    styleNotes: "the coach's 'don't stare the ball into the hazard' is sharp + characteristic. Harry names the failure mode ('more likely to steer'). Serena gives the exact look-count.",
   },
 
   // ── Match play / competition (4) ───────────────────────────────────
@@ -645,7 +627,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "We've seen this before — protecting a lead and getting tentative is how leads disappear. Same shots that got us here. Same trust. Keep playing the course.",
     kevinAnswer: "Alright, you're ahead — don't start playing different. Same shots, same targets. Leads usually go away because somebody gets careful, not because the other person made birdies.",
     genericAnswer: "Don't change your game plan when ahead in a match — players lose leads by playing tentatively. Continue picking the same targets and swinging the same way.",
-    styleNotes: "Tank distinguishes 'conservative-to-target' (smart) vs 'conservative-on-target' (steering); Harry uses 'we've seen this before' signature; Kevin lands the practical observation.",
+    styleNotes: "the coach distinguishes 'conservative-to-target' (smart) vs 'conservative-on-target' (steering); Harry uses 'we've seen this before' signature; Kevin lands the practical observation.",
   },
   {
     id: 'match_pressure_putt',
@@ -655,7 +637,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "Take a breath. Same routine we've used all day. Putt the line, trust the speed. Pressure's just a feeling — the stroke is yours.",
     kevinAnswer: "Same putt as the third hole — just feels different. Read it, line it, roll it. Don't add a step because the moment got bigger.",
     genericAnswer: "Maintain your standard putting routine under pressure — adding looks or pauses introduces tension. Trust the routine and commit.",
-    styleNotes: "Tank reframes pressure as situation vs job. Serena uses her 'Make this one count' signature. Harry leads with his signature 'Take a breath'. Kevin's 'don't add a step' is his tactical pragmatism.",
+    styleNotes: "the coach reframes pressure as situation vs job. Serena uses her 'Make this one count' signature. Harry leads with his signature 'Take a breath'. Kevin's 'don't add a step' is his tactical pragmatism.",
   },
   {
     id: 'match_intimidation',
@@ -663,7 +645,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     questionPatterns: ['intimidating opponent', 'opponent striping it', 'getting outplayed', 'opponent in your head'],
     harryAnswer: "We're not playing them. We're playing the course. Their good shot doesn't take a stroke off your scorecard. Stay in your own round.",
     genericAnswer: "Focus on your own game rather than your opponent's results. Their good shots don't add strokes to your score; only your shots do.",
-    styleNotes: "Tank's 'their round is their round' is dismissive in the focused-discipline sense. Harry's 'their good shot doesn't take a stroke off' is the gentle version of the same idea.",
+    styleNotes: "the coach's 'their round is their round' is dismissive in the focused-discipline sense. Harry's 'their good shot doesn't take a stroke off' is the gentle version of the same idea.",
   },
   {
     id: 'match_comeback',
@@ -673,7 +655,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "We've still got holes. One shot at a time — that's how comebacks happen. Hunt for birdies on the holes that give them; take par on the rest. We're not done.",
     kevinAnswer: "Yeah you're down — but the math says you have holes left. Pick your spots. Birdie holes are different from par holes; play each one for what it is.",
     genericAnswer: "Comebacks happen one hole at a time. Identify which remaining holes give realistic birdie chances and play those aggressively; take par on the rest.",
-    styleNotes: "Tank's 'birdie chases lose matches' is a coaching aphorism in his voice. Harry's 'we're not done' is partnership warmth.",
+    styleNotes: "the coach's 'birdie chases lose matches' is a coaching aphorism in his voice. Harry's 'we're not done' is partnership warmth.",
   },
 
   // ── Course knowledge / strategy (5) ─────────────────────────────────
@@ -684,7 +666,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Aim for the center of the green on par 3s. The pin location only changes your target if there's safe room on the short-side of it.",
     harryAnswer: "I'm noticing par 3s are where amateurs lose strokes by aiming at the flag. Center of the green is the smart play. Bogey from the middle beats double from short-sided.",
     genericAnswer: "On par 3s, target the center of the green unless the pin is in a 'fat' part of the green with room to miss short-side. Statistically, par 3s are where amateurs bleed strokes by attacking tight pins.",
-    styleNotes: "Tank's 'Bogey's not a disaster. Double's the disaster.' is a memorable Tank framing. Harry uses his observational 'I'm noticing'.",
+    styleNotes: "the coach's 'Bogey's not a disaster. Double's the disaster.' is a memorable the coach framing. Harry uses his observational 'I'm noticing'.",
   },
   {
     id: 'course_dogleg',
@@ -694,7 +676,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "We're going to play the dogleg by working backward — what yardage gives us the best approach? That's the tee shot. Cutting the corner is romantic; missing the carry is expensive.",
     kevinAnswer: "Dogleg's all about the second shot. Pick the spot in the fairway that leaves your favorite yardage, then hit the club that puts you there. The corner's a trap if you can't carry it.",
     genericAnswer: "Play doglegs by selecting the approach yardage you want and working backward to the tee shot. Cutting corners pays off only when the carry is reliable.",
-    styleNotes: "All four arrive at the same conclusion via different routes — Tank with the consequence, Harry with the working-backward framing, Kevin with the casual 'corner's a trap'.",
+    styleNotes: "All four arrive at the same conclusion via different routes — the coach with the consequence, Harry with the working-backward framing, Kevin with the casual 'corner's a trap'.",
   },
   {
     id: 'course_blind_shot',
@@ -710,7 +692,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     category: 'course_management',
     questionPatterns: ['drivable par 4', 'short par 4', 'go for par 4', 'lay up par 4'],
     genericAnswer: "On short par 4s, evaluate the risk/reward of going for the green vs laying up to a full wedge. Calculate carry distances over hazards and pick the option with the better expected score.",
-    styleNotes: "Tank's clipped math framing matches his other strategic entries.",
+    styleNotes: "the coach's clipped math framing matches his other strategic entries.",
   },
   {
     id: 'course_water_hazard',
@@ -720,7 +702,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "We're going to take the water out of the equation. If we can carry it with our normal swing, we go. If we can't, we lay up. The water isn't going anywhere.",
     kevinAnswer: "Water's only a problem if you put it in play. Lay up if it's a stretch carry. Stretch carries usually don't.",
     genericAnswer: "When water is in play, lay up if the carry exceeds your reliable distance with that club. Forced carries rarely succeed and always cost penalty strokes when they don't.",
-    styleNotes: "Tank's 'One water ball costs two strokes' is the math justification he always pairs with the imperative. Kevin's 'Stretch carries usually don't' is dry-humor adjacent — characteristic.",
+    styleNotes: "the coach's 'One water ball costs two strokes' is the math justification he always pairs with the imperative. Kevin's 'Stretch carries usually don't' is dry-humor adjacent — characteristic.",
   },
 
   // ── Wedge play / scoring zone (5) ───────────────────────────────────
@@ -732,14 +714,14 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "We're in the scoring zone — 30 to 50 yards. Three-quarter wedge, ball just back of center, smooth acceleration. The mistake is quitting through impact; we stay committed.",
     kevinAnswer: "Thirty to fifty is the awkward zone. Three-quarter swing, ball back a touch, hands ahead. Don't quit on it — most of these get chunked because people decel.",
     genericAnswer: "The 30-50 yard wedge is a controlled three-quarter swing with the ball slightly back of center and hands ahead. Maintain full acceleration through impact — decelerating causes chunks.",
-    styleNotes: "Tank calls it 'the kill zone' — characteristic Marine vocabulary. The deceleration warning is universal across personas.",
+    styleNotes: "the coach calls it 'the kill zone' — characteristic clipped vocabulary. The deceleration warning is universal across personas.",
   },
   {
     id: 'wedge_calibrate',
     category: 'short_game',
     questionPatterns: ['wedge yardages', 'calibrate wedges', 'knock down wedge', 'wedge distances'],
     genericAnswer: "Calibrate three distances per wedge: full swing, three-quarter, and half. Practice each to a known target until consistent — those become your reference yardages on the course.",
-    styleNotes: "'Scoring kit' is Tank's reframe of basic wedge work — elevates the practice to standards-of-the-trade.",
+    styleNotes: "'Scoring kit' is the coach's reframe of basic wedge work — elevates the practice to standards-of-the-trade.",
   },
   {
     id: 'wedge_knockdown',
@@ -747,14 +729,14 @@ const PERSONA_KB: PersonaKBEntry[] = [
     questionPatterns: ['knockdown shot', 'low wedge', 'punch wedge', 'flighted wedge'],
     serenaAnswer: "For a knockdown, move the ball back, choke down, and shorten the finish. Lower flight, more predictable distance, less wind effect.",
     genericAnswer: "Knockdown wedges are produced by ball-back position, choking down on the grip, and an abbreviated three-quarter swing with shortened finish — yielding lower flight and reduced spin.",
-    styleNotes: "Tank's 'The wedge in a windy bag' is a slogan-shaped closer.",
+    styleNotes: "the coach's 'The wedge in a windy bag' is a slogan-shaped closer.",
   },
   {
     id: 'wedge_spin_control',
     category: 'short_game',
     questionPatterns: ['back spin wedge', 'check spin', 'spin the wedge', 'one hop and stop'],
     genericAnswer: "Backspin requires a clean lie, clean grooves, and ball-first contact. Any of those three missing produces a low-spin shot that won't check.",
-    styleNotes: "Tank's three-things framing is Marine briefing-card. The 'don't ask the wedge to spin what you can't strike' is sharp standards talk.",
+    styleNotes: "the coach's three-things framing is briefing-card. The 'don't ask the wedge to spin what you can't strike' is sharp standards talk.",
   },
   {
     id: 'wedge_short_sided',
@@ -773,14 +755,14 @@ const PERSONA_KB: PersonaKBEntry[] = [
     category: 'driving',
     questionPatterns: ['driver tee height', 'how high tee driver', 'tee it high', 'low tee driver'],
     genericAnswer: "Standard driver tee height places half the ball above the crown of the clubhead, encouraging an ascending angle of attack and optimal launch. Lower for windy conditions.",
-    styleNotes: "Tank's 'don't tee it like an iron' is a common amateur fault he flags directly.",
+    styleNotes: "the coach's 'don't tee it like an iron' is a common amateur fault he flags directly.",
   },
   {
     id: 'driver_low_spin',
     category: 'driving',
     questionPatterns: ['low spin driver', 'spin too high driver', 'ballooning driver', 'driver spin control'],
     genericAnswer: "Excessive driver spin causes ballooning ball flight and lost distance. Address by hitting up on the ball: ball forward in stance, higher tee, ascending angle of attack.",
-    styleNotes: "Tank's 'Up swing, low spin, more roll' is a 4-word maxim — the kind of compressed coaching he favors.",
+    styleNotes: "the coach's 'Up swing, low spin, more roll' is a 4-word maxim — the kind of compressed coaching he favors.",
   },
   {
     id: 'driver_when_not',
@@ -797,7 +779,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     category: 'driving',
     questionPatterns: ['just want to find fairway', 'put it in play', 'fairway over distance', 'safe drive'],
     genericAnswer: "When fairway position matters more than distance, use a three-quarter driver swing with a lower tee and slight choke-down. Trade 10-20 yards for reliability.",
-    styleNotes: "Tank's 'Distance from the rough is a fantasy' is a closing maxim.",
+    styleNotes: "the coach's 'Distance from the rough is a fantasy' is a closing maxim.",
   },
 
   // ── Lie management (5) ─────────────────────────────────────────────
@@ -806,14 +788,14 @@ const PERSONA_KB: PersonaKBEntry[] = [
     category: 'course_management',
     questionPatterns: ['ball above feet', 'sidehill above feet', 'ball uphill lie', 'feet below ball'],
     genericAnswer: "Ball above feet lies tend to pull left (for right-handed players). Choke down on the club, stand slightly taller, aim right of target to compensate.",
-    styleNotes: "Tank's 'The slope's already adding loft' explains the club-down rule without jargon.",
+    styleNotes: "the coach's 'The slope's already adding loft' explains the club-down rule without jargon.",
   },
   {
     id: 'lie_ball_below_feet',
     category: 'course_management',
     questionPatterns: ['ball below feet', 'sidehill below feet', 'feet above ball', 'ball downhill lie'],
     genericAnswer: "Ball below feet lies tend to push right. Bend more from the hips, take an extra club, aim left of target. Maintain posture through impact — standing up causes thin/topped shots.",
-    styleNotes: "Tank's 'Stand up, you top it' is the consequence-attached imperative.",
+    styleNotes: "the coach's 'Stand up, you top it' is the consequence-attached imperative.",
   },
   {
     id: 'lie_deep_rough',
@@ -822,21 +804,21 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "From deep rough, take a shorter club and a steeper angle. The flier is unpredictable — plan for one club longer than the yardage, or wedge out if the lie is too buried.",
     harryAnswer: "We're in trouble — let's get back in play. A shorter club with a steeper swing gets the ball out clean. If it can't reach the green, we lay up. Bogey is recoverable; triple isn't.",
     genericAnswer: "Deep rough requires a shorter club with a steeper attack angle. Expect a 'flier' (extra distance with no spin) on cleaner lies. From buried lies, lay up rather than force the green.",
-    styleNotes: "Tank's 'Don't double-cross' (= don't compound the mistake) is Marine economy of language.",
+    styleNotes: "the coach's 'Don't double-cross' (= don't compound the mistake) is economy of language.",
   },
   {
     id: 'lie_mud_ball',
     category: 'course_management',
     questionPatterns: ['mud ball', 'mud on ball', 'dirty ball', 'mud affects flight'],
     genericAnswer: "Mud on a ball deflects flight away from the muddy side (mud on left → ball flies right). It reduces spin and predictability. Aim conservatively and accept that the shot may not behave as normal.",
-    styleNotes: "Tank's 'Take the par. Move on.' acknowledges the situation isn't fixable, just managed.",
+    styleNotes: "the coach's 'Take the par. Move on.' acknowledges the situation isn't fixable, just managed.",
   },
   {
     id: 'lie_divot_fairway',
     category: 'course_management',
     questionPatterns: ['ball in divot', 'divot fairway lie', 'sand-filled divot', 'unlucky divot lie'],
     genericAnswer: "Ball in a divot requires a ball-back position, forward hands, and steep swing — produces a lower, knockdown-style shot. Take an extra club and expect reduced distance/spin.",
-    styleNotes: "Tank acknowledges the bad luck ('Unfair? Yes. Play it anyway.') without dwelling on it.",
+    styleNotes: "the coach acknowledges the bad luck ('Unfair? Yes. Play it anyway.') without dwelling on it.",
   },
 
   // ── Mid-round adjustments (4) ──────────────────────────────────────
@@ -848,7 +830,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "We're not going to fix the swing in the middle of a round. We're going to shorten it, slow it down, and survive. The range is the right place to rebuild — not the seventh fairway.",
     kevinAnswer: "Mid-round swing meltdown — happens. Don't try to fix it now. Three-quarter swing, smooth tempo, just get the ball in play. Range work tomorrow.",
     genericAnswer: "When the swing breaks down mid-round, shorten and slow rather than experiment. The goal becomes solid contact and ball-in-play — not optimal performance. Diagnose afterward.",
-    styleNotes: "All four agree on the same advice — separating each by the framing tone (Tank survival-mode, Serena measured-pragmatic, Harry partnership, Kevin casual).",
+    styleNotes: "All four agree on the same advice — separating each by the framing tone (the coach survival-mode, Serena measured-pragmatic, Harry partnership, Kevin casual).",
   },
   {
     id: 'midround_tempo_fast',
@@ -857,14 +839,14 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Fast tempo usually means anxious. Count it in your head — slow back, smooth down. The backswing carries the rhythm; the downswing follows it.",
     harryAnswer: "I'm noticing the tempo's gotten quick. Let's count it back — one-two-three back, one through. Slowing the takeaway is usually enough to reset.",
     genericAnswer: "When tempo gets rushed, count the backswing in your head (e.g., 'one-two back, three down') or hum a song with steady rhythm. Slowing the takeaway usually resets the whole swing.",
-    styleNotes: "Tank's 'whistle a song' detail — practical, slightly humanizing.",
+    styleNotes: "the coach's 'whistle a song' detail — practical, slightly humanizing.",
   },
   {
     id: 'midround_change',
     category: 'mental_game',
     questionPatterns: ['change swing mid round', 'mid-round adjustment', 'should I change swings', 'tweak swing mid round'],
     genericAnswer: "Avoid major swing changes mid-round. At most, adjust one small element (tempo, alignment, setup). Larger changes belong on the range, where the consequences of experiments don't show up on the scorecard.",
-    styleNotes: "Tank's 'The course isn't the lab' is the standards-framing for the mid-round-rebuild question.",
+    styleNotes: "the coach's 'The course isn't the lab' is the standards-framing for the mid-round-rebuild question.",
   },
   {
     id: 'midround_reset_walk',
@@ -873,7 +855,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "Use the walk. We talk about anything except the last shot — the trees, the weather, lunch. The next tee is where we come back to golf.",
     kevinAnswer: "Walks between holes are for mental reset. Talk about something else — anything else. By the time you reach the next tee, the last hole's gone.",
     genericAnswer: "Use the walk between holes for mental reset. Avoid rehashing the prior hole's shots. Disengage briefly so you re-engage fresh at the next tee box.",
-    styleNotes: "Tank's 'The walk's for the body, not for the replay' is a slogan-shaped closer.",
+    styleNotes: "the coach's 'The walk's for the body, not for the replay' is a slogan-shaped closer.",
   },
 
   // ── Junior / Family coaching (4) ────────────────────────────────────
@@ -885,7 +867,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "First round for a junior is about the experience, not the score. Nine holes from a tee box that lets them succeed. We'd rather they fall in love with golf than learn what bogey means.",
     kevinAnswer: "Kid's first round — keep it light. Nine holes, forward tees, no score. Celebrate every solid contact like it was a hole-in-one. They'll remember the round, not the strokes.",
     genericAnswer: "A junior's first round should be 9 holes (not 18) from forward tees, with no formal scorekeeping. The emphasis is enjoyment and engagement — the goal is wanting to come back.",
-    styleNotes: "All four agree but the warmth varies — Harry is paternal, Kevin is celebratory, Serena is intentional, Tank is consequence-focused but warm.",
+    styleNotes: "All four agree but the warmth varies — Harry is paternal, Kevin is celebratory, Serena is intentional, the coach is consequence-focused but warm.",
   },
   {
     id: 'junior_practice_intensity',
@@ -895,7 +877,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "We don't push juniors the way we push adults. Short sessions, variety, end on a good rep. The discipline they need to learn is showing up — not grinding.",
     kevinAnswer: "Kids practice differently — short, varied, and stop before it stops being fun. 20 minutes of focused play beats an hour of forced reps. Always end on a good shot.",
     genericAnswer: "Junior practice should be short (20-30 min), varied across skills, and end while engagement is still high. Forced long sessions damage long-term motivation more than they build skill.",
-    styleNotes: "Tank's 'Push, you lose them' is the rare moment Tank dials back his standards-everywhere voice — he honors the developmental reality.",
+    styleNotes: "the coach's 'Push, you lose them' is the rare moment the coach dials back his standards-everywhere voice — he honors the developmental reality.",
   },
   {
     id: 'junior_swing_pace',
@@ -904,7 +886,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Juniors often swing too hard because they're trying to keep up with adults. Same fix as adults: slow the takeaway, smooth tempo, contact-first thinking. The distance follows.",
     harryAnswer: "Kids learn fast tempo early because they see big swings on TV. We slow the takeaway with a count — 'one-two back, three through.' Same fix that works for grown-ups, just framed as a game.",
     genericAnswer: "Juniors who swing too hard benefit from the same tempo cues as adults: counted backswing, slow takeaway, contact-first focus. Framing as a game ('count the swing') sustains engagement.",
-    styleNotes: "Tank notes 'Same as adults' — coaches the parent that the principles don't change, only the framing.",
+    styleNotes: "the coach notes 'Same as adults' — coaches the parent that the principles don't change, only the framing.",
   },
   {
     id: 'family_mental_kid',
@@ -913,7 +895,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "When a junior gets frustrated, we don't double down with technical coaching. We take a breath, change the subject, give them a small win. The lesson lands later, when they're ready.",
     kevinAnswer: "Kid's frustrated — coaching shuts down. Lighten the mood, give them something easy, let them feel a win. The teaching happens later, when they're back open to it.",
     genericAnswer: "Frustrated juniors disengage from instruction. Redirect with humor or activity, give them a simple successful task, and resume teaching only when they're emotionally available again.",
-    styleNotes: "Tank's parental wisdom here — he knows mental coaching kids requires a different register than coaching adults.",
+    styleNotes: "the coach's parental wisdom here — he knows mental coaching kids requires a different register than coaching adults.",
   },
 
   // ── Range / warmup variants (3) ─────────────────────────────────────
@@ -932,14 +914,14 @@ const PERSONA_KB: PersonaKBEntry[] = [
     category: 'pre_round_weather',
     questionPatterns: ['warm up driver', 'driver before round', 'driver warmup balls', 'how many drivers warmup'],
     genericAnswer: "Limit driver warm-up to 3-5 balls with smooth swings. The warm-up is for loosening, not fixing. If driver isn't working, plan to use a more reliable club off the early tees.",
-    styleNotes: "Tank's 'Don't tee off broken' is the consequence-framing for a common amateur warmup failure.",
+    styleNotes: "the coach's 'Don't tee off broken' is the consequence-framing for a common amateur warmup failure.",
   },
   {
     id: 'warmup_skip',
     category: 'pre_round_weather',
     questionPatterns: ['no warmup time', 'late tee time no range', 'skip warmup', 'no range warm up'],
     genericAnswer: "When skipping range warm-up, treat the first three holes as warmup: conservative club selection, smooth swings, accept bogey as a reasonable score. Build into the round.",
-    styleNotes: "Tank's 'Standards still apply' even in a compromised situation — the standards survive the circumstance.",
+    styleNotes: "the coach's 'Standards still apply' even in a compromised situation — the standards survive the circumstance.",
   },
 
   // ── Health / longevity (2) ──────────────────────────────────────────
@@ -957,7 +939,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     questionPatterns: ['hydration golf', 'water on the course', 'drinking on course', 'electrolytes round'],
     serenaAnswer: "Hydrate the night before and sip water every hole. Dehydration shows up as faulty tempo and poor decisions on the back nine — usually before the player feels thirsty.",
     genericAnswer: "Hydrate the day before a round, not just during. Sip water every hole rather than waiting until thirsty — by then performance is already compromised. Electrolytes help in hot conditions.",
-    styleNotes: "Tank's 'Don't bleed the back nine for water you didn't drink' is consequence-attached and rhythmically tight.",
+    styleNotes: "the coach's 'Don't bleed the back nine for water you didn't drink' is consequence-attached and rhythmically tight.",
   },
 
   // ─── 2026-05-23 — DAT + MediaPipe coaching extension (12 entries) ─
@@ -975,7 +957,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "I see what you see — the lie, the line, the wind. We've got time. Talk me through what you want this shot to do, and we'll line up the call together.",
     kevinAnswer: "Yeah I see it. Lie's playable, line looks clean. Give me the number and I'll call the club — or just tell me what you want it to do and we'll work backward.",
     genericAnswer: "The caddie can see the frame from your camera or glasses. Describe the shot you want or ask for a club recommendation based on the lie, yardage, and target.",
-    styleNotes: "All four agree the right response is to acknowledge + open the conversation, not lecture. Tank ends with 'execute on my mark' (Marine cadence); Harry uses 'we' + invites collaboration; Kevin is conversational.",
+    styleNotes: "All four agree the right response is to acknowledge + open the conversation, not lecture. the coach ends with 'execute on my mark' (clipped cadence); Harry uses 'we' + invites collaboration; Kevin is conversational.",
   },
   {
     id: 'glasses_pov_swing',
@@ -984,7 +966,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "From your glasses, I can read the grip, the takeaway path, and the impact contact. Your hips and shoulders aren't in frame — we'd need a different angle for those. So we focus on what we can see.",
     serenaAnswer: "Glasses POV gives me grip, takeaway, and impact contact. Body rotation isn't visible from your head — for that, set the phone behind you or face-on. Both views together is the full read.",
     genericAnswer: "Head-mounted POV cameras (like Ray-Ban Meta) capture grip, takeaway, and impact contact but cannot see the torso. Body rotation diagnostics (hip turn, shoulder coil) require a phone camera positioned behind the player or face-on.",
-    styleNotes: "Each persona names the same constraint with their voice — Tank's direct framing of 'wrong tool for body rotation', Harry's partnership 'we'd need a different angle', Serena's matter-of-fact list.",
+    styleNotes: "Each persona names the same constraint with their voice — the coach's direct framing of 'wrong tool for body rotation', Harry's partnership 'we'd need a different angle', Serena's matter-of-fact list.",
   },
   {
     id: 'live_yardage_trust',
@@ -994,7 +976,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "We trust the numbers over the eyes. Once we're 130 yards out, eyeballing it costs us strokes. The GPS is good — use it.",
     kevinAnswer: "Numbers over feel at 130+. Your eyes consistently under-read distance — almost everyone's do. Trust the GPS, trust the laser.",
     genericAnswer: "Measured yardages (GPS or rangefinder) are more reliable than visual estimation beyond ~130 yards. Trust the number and select club accordingly rather than 'splitting the difference' by feel.",
-    styleNotes: "Tank's 'numbers in the bag, club in the hands, swing on the call' is a three-beat sequence — Marine briefing-card cadence.",
+    styleNotes: "the coach's 'numbers in the bag, club in the hands, swing on the call' is a three-beat sequence — briefing-card cadence.",
   },
   {
     id: 'hazard_awareness_live',
@@ -1003,7 +985,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "You've got a hazard at 165 from here. Decide before you stand over the ball: do you carry it cleanly with your normal swing, or do you lay up to a yardage you trust? Either choice is fine — half-commitment isn't.",
     harryAnswer: "There's a hazard ahead of us. We've got two real choices — carry it with a swing we trust, or lay up to a comfortable number. Let's pick before the practice swing, not during.",
     genericAnswer: "When a hazard is in play, decide carry vs lay-up BEFORE the practice swing. Half-commitment to a forced carry is the highest-risk play.",
-    styleNotes: "Tank's 'pick the math you can execute, not the math you wish you had' is a Tank-style standards line.",
+    styleNotes: "the coach's 'pick the math you can execute, not the math you wish you had' is a direct-style standards line.",
   },
   {
     id: 'phone_camera_swing_setup',
@@ -1023,7 +1005,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "We can compare to a pro for general principles. The danger is trying to copy a specific motion that was built on someone else's body, someone else's flexibility, someone else's history. Use them as a guide, not a target.",
     kevinAnswer: "Pros are a useful reference for the big stuff — tempo, balance, sequence. But trying to copy a specific pro's swing usually backfires. Your body's different. Steal the principles, not the picture.",
     genericAnswer: "Pro swings are useful references for fundamentals (tempo, sequence, balance) but copying a specific player's motion rarely transfers because each swing is built on individual body mechanics, history, and flexibility.",
-    styleNotes: "Tank's 'Steal the principles. Don't copy the picture.' is a memorable pair-clause closer.",
+    styleNotes: "the coach's 'Steal the principles. Don't copy the picture.' is a memorable pair-clause closer.",
   },
   {
     id: 'on_device_vs_cloud',
@@ -1032,7 +1014,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Two paths: on-device (the phone runs the pose detection directly — fast, no upload) or cloud (server-side, when on-device can't read clearly). Both feed the same coaching pipeline.",
     kevinAnswer: "Either the phone does the math on-device — fast, no upload — or it falls back to the cloud when it can't see clearly. The coaching's the same either way; just where the math happens changes.",
     genericAnswer: "Pose detection runs on-device via MediaPipe when available — faster, no network round-trip, frames stay on-device. Falls back to the cloud /api/pose-analysis path when on-device detection fails or isn't available.",
-    styleNotes: "Tank's 'The work is the work' is the standards-framing — implementation details don't change the coaching.",
+    styleNotes: "the coach's 'The work is the work' is the standards-framing — implementation details don't change the coaching.",
   },
   {
     id: 'unified_context_question',
@@ -1042,7 +1024,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "Let's look at what we know — yardage, lie, wind, what you've been doing. I'd take one more club, smooth swing, aim center. Worth thinking about.",
     kevinAnswer: "Alright — based on the yardage, your lie, the wind, and how you've been swinging today — one more club, smooth swing, aim center. That's the play.",
     genericAnswer: "Club recommendation: take one more club than yardage suggests, swing smoothly, aim for the center of the green. This composite read uses live yardage, lie analysis, wind, and recent shot patterns.",
-    styleNotes: "All four converge on the same recommendation in their voice. Each leads with how they think (Tank lists inputs, Harry says 'let's look', Serena lists inputs Iceland-style, Kevin's 'alright' opener).",
+    styleNotes: "All four converge on the same recommendation in their voice. Each leads with how they think (the coach lists inputs, Harry says 'let's look', Serena lists inputs Iceland-style, Kevin's 'alright' opener).",
   },
   {
     id: 'when_caddie_disagrees',
@@ -1052,7 +1034,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "We disagree sometimes. That's fine — your swing, your call. The only thing we can't have is a half-committed swing. Pick a club, trust the choice, and let it go.",
     kevinAnswer: "Gut says different from my read? Go with your gut. You're swinging it. Just commit to it — that's the only thing that matters. Half-commitment kills good gut calls and good data calls equally.",
     genericAnswer: "When a player's instinct conflicts with the caddie's read, the player's choice prevails — they're executing the shot. The critical factor is full commitment to whichever club is chosen; half-commitment produces poor shots regardless of which choice was 'right'.",
-    styleNotes: "Tank's 'Half-committed override is the worst shot in the bag' is the consequence-framing. All four agree on commitment as the universal answer.",
+    styleNotes: "the coach's 'Half-committed override is the worst shot in the bag' is the consequence-framing. All four agree on commitment as the universal answer.",
   },
   {
     id: 'glasses_putting_pov',
@@ -1072,7 +1054,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "We've got the analysis. Now we pick one thing, drill it deliberately, re-record, and check whether the number moved. That feedback loop is what makes the data useful — not just reading it once.",
     kevinAnswer: "Data's only useful if you close the loop. Pick one issue, drill it, re-record, compare. Did the number move? That's the real test — not whether the drill felt good.",
     genericAnswer: "To turn analysis data into improvement: identify one specific issue, drill the targeted fix for 20+ deliberate reps, re-record, and compare metrics. The feedback loop is what makes data actionable.",
-    styleNotes: "All four describe the deliberate-practice loop with their voice. Tank's standards framing makes 'did the number move' a pass/fail standard.",
+    styleNotes: "All four describe the deliberate-practice loop with their voice. the coach's standards framing makes 'did the number move' a pass/fail standard.",
   },
   {
     id: 'recent_shot_pattern',
@@ -1082,7 +1064,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "I'm noticing a pattern — three of the last five have pushed right. Worth thinking about. Let's check alignment and ball position before the next shot, and adjust one thing.",
     kevinAnswer: "You're pushing it right this round — three of the last five. That's a pattern, not bad luck. Tighten the setup — alignment, ball position. One adjustment, see what happens.",
     genericAnswer: "When a directional pattern emerges (3+ misses in the same direction over 5 shots), it's signal not noise. Address setup first (alignment, ball position) before assuming a swing flaw, then test on the next shot.",
-    styleNotes: "Harry's 'I'm noticing a pattern' is his observational signature; Tank's 'three of last five — that's a pattern, not luck' is a one-line diagnostic verdict.",
+    styleNotes: "Harry's 'I'm noticing a pattern' is his observational signature; the coach's 'three of last five — that's a pattern, not luck' is a one-line diagnostic verdict.",
   },
 
   // ─── 2026-05-23 — coaching expansion: 43 entries ─────────────────
@@ -1094,8 +1076,8 @@ const PERSONA_KB: PersonaKBEntry[] = [
   //   - Rules & Etiquette (8 — new category `rules_etiquette`)
   //   - Improvement Mindset (9 — new category `improvement_mindset`)
   //
-  // Tank's voice is sharpened to the experiential register here —
-  // clipped Marine cadence + signature phrases used sparingly, with
+  // the coach's voice is sharpened to the experiential register here —
+  // clipped clipped cadence + signature phrases used sparingly, with
   // language that lands like "I've watched this fail a thousand
   // times" — but never as anecdote, only as confident verdict.
   // Standards apply to the work, never the person.
@@ -1111,7 +1093,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Wet sand is firmer than dry — the club won't dig as much. Square the face a touch, swing shallower, strike closer to the ball. Expect more roll-out on landing.",
     harryAnswer: "Wet sand changes the physics. We square the face, shallow the swing, hit a little closer to the ball. The ball will come out hotter than dry sand — plan the landing for less spin, more roll.",
     genericAnswer: "Wet sand is firmer and produces less bounce-driven explosion. Square the clubface slightly, take a shallower swing, and strike closer to the ball. The result has more roll-out — plan landing accordingly.",
-    styleNotes: "'Same shot, different math' is Tank's experiential closer — wise-caddie cadence: you've seen this enough times to compress it into one line.",
+    styleNotes: "'Same shot, different math' is the coach's experiential closer — wise-caddie cadence: you've seen this enough times to compress it into one line.",
   },
   {
     id: 'bunker_soft_fluffy',
@@ -1120,7 +1102,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Fluffy sand swallows soft swings. Open the clubface, strike about two inches behind the ball, accelerate through with a full finish. The sand needs energy to move the ball.",
     kevinAnswer: "Soft sand's a trap if you don't commit. Open the face, hit two inches behind, full swing through. Anything less and you leave it in the bunker — guaranteed.",
     genericAnswer: "Soft fluffy sand requires aggressive commitment: open face wide, strike 2 inches behind the ball, full follow-through. Decelerated swings leave the ball in the bunker.",
-    styleNotes: "Tank's 'Soft sand swallows the half-swing' is a maxim — short, vivid, true. Kevin's 'guaranteed' is dry humor in his register.",
+    styleNotes: "the coach's 'Soft sand swallows the half-swing' is a maxim — short, vivid, true. Kevin's 'guaranteed' is dry humor in his register.",
   },
   {
     id: 'bunker_high_lip',
@@ -1129,7 +1111,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "We're going to face the lip honestly. Most-lofted club, face wide open, ball forward, swing high to high. If the lip's taller than what we can clear with a normal swing, we play sideways onto grass. Bogey beats trying to be a hero from sand twice.",
     serenaAnswer: "Maximum loft, open face, ball forward, full swing finishing high. If the lip exceeds your wedge's natural launch, accept playing sideways onto the grass — re-entering the bunker costs two strokes.",
     genericAnswer: "High lips require maximum-loft wedge with fully open face, ball forward in stance, and a high-to-high swing path. When the lip exceeds reliable launch height, the percentage play is sideways onto grass — re-entering the bunker is worse.",
-    styleNotes: "'Ego doesn't carry lips' is the Tank verdict — five words, decision made. Harry's 'face the lip honestly' is his observational register.",
+    styleNotes: "'Ego doesn't carry lips' is the the coach verdict — five words, decision made. Harry's 'face the lip honestly' is his observational register.",
   },
   {
     id: 'bunker_downhill_lie',
@@ -1137,7 +1119,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     questionPatterns: ['downhill bunker', 'downslope in bunker', 'sand downhill lie', 'ball below feet in bunker'],
     harryAnswer: "Downhill bunker shots are unforgiving. We match our shoulders to the slope, ball slightly back, swing with the hill not against it. The ball comes out low and runs — aim short, settle for two-putts, walk away.",
     genericAnswer: "Downhill bunker lies: shoulders match the slope, ball back of center, swing with the slope. Produces a lower, longer-running shot. Aim short of the pin and accept a two-putt as the realistic outcome.",
-    styleNotes: "Tank's 'hardest shot in the game' is an opinion he holds confidently — and most short-game coaches would agree. The closer 'Don't get cute' is signature Tank wisdom.",
+    styleNotes: "the coach's 'hardest shot in the game' is an opinion he holds confidently — and most short-game coaches would agree. The closer 'Don't get cute' is signature the coach wisdom.",
   },
   {
     id: 'bunker_uphill_lie',
@@ -1145,7 +1127,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     questionPatterns: ['uphill bunker', 'upslope in bunker', 'sand uphill lie', 'ball above feet in bunker'],
     serenaAnswer: "Uphill bunker plays softer than downhill. Match shoulders to the slope, ball forward, full swing — the slope adds loft naturally. Take one extra club; the slope robs distance.",
     genericAnswer: "Uphill bunker lies: shoulders match the slope, ball forward, full swing. The slope adds natural loft and reduces distance — take one extra club. The shot lands softer than a flat-lie bunker.",
-    styleNotes: "Tank's 'friendlier than downhill' opens with the experiential framing — most amateurs don't know the slopes play this differently.",
+    styleNotes: "the coach's 'friendlier than downhill' opens with the experiential framing — most amateurs don't know the slopes play this differently.",
   },
   {
     id: 'bunker_read_sand',
@@ -1154,7 +1136,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "Rules say we can't ground the club, but walking in tells us a lot — firm sand crunches, soft sand gives. Read it through our feet before we step in to address the ball. The shot changes with the condition.",
     kevinAnswer: "Feel it through your shoes. Firm crunch = wet, hot ball. Soft give = fluffy, ball wants to stay. Can't ground the club but your feet read the sand fine. Pick the shot for what's actually there.",
     genericAnswer: "USGA rules prohibit grounding the club in the bunker, but walking in and feeling the sand through your shoes is allowed. Firm sand crunches (plays hotter); soft sand gives (plays softer). Adjust shot selection accordingly.",
-    styleNotes: "Tank reframes the rule constraint as data: you can't ground the club but you CAN read the sand other ways. Practical knowledge framed as a standard.",
+    styleNotes: "the coach reframes the rule constraint as data: you can't ground the club but you CAN read the sand other ways. Practical knowledge framed as a standard.",
   },
   {
     id: 'bunker_long_greenside',
@@ -1163,7 +1145,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "40-yard bunker shots use less loft than greenside (pitching or gap wedge), with a slightly squarer face and a strike closer to the ball — about one inch behind. Three-quarter smooth swing.",
     harryAnswer: "Long bunker shots — we use less loft and hit closer to the ball. Pitching or gap wedge, face squarer, strike about one inch behind, three-quarter swing. It's a feel shot. Quality over speed.",
     genericAnswer: "40-50 yard greenside bunker shots use pitching or gap wedge (not sand wedge), with a squarer clubface, strike point ~1 inch behind the ball, and three-quarter swing length. The shot is statistically the hardest on tour.",
-    styleNotes: "Tank's 'Tour pros call this the hardest shot. They're not wrong.' is the salty caddie's experiential authority — he's stood there and seen them miss it.",
+    styleNotes: "the coach's 'Tour pros call this the hardest shot. They're not wrong.' is the salty caddie's experiential authority — he's stood there and seen them miss it.",
   },
 
   // ── Putting (9) ────────────────────────────────────────────────────
@@ -1174,7 +1156,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "We're reading more than slope on Bermuda greens. The grain matters — shiny edges on the cup mean down-grain, dull edges mean into. Down-grain rolls faster and breaks more; into-the-grain dies sooner. Poa annua has less grain bias — read it more like slope-only.",
     serenaAnswer: "Bermuda grain is a third dimension on every putt. Shiny cup-edge: down-grain, faster + more break. Dull cup-edge: into-grain, slower + less break. Poa annua is less grain-influenced — focus on slope.",
     genericAnswer: "On Bermudagrass, grain affects pace and break: down-grain putts run faster and break more; into-grain putts die quicker. Read grain from the cup edges (shiny = down-grain). Poa annua exhibits less grain influence.",
-    styleNotes: "Tank's three-rule framing of the same cue (Bermuda down-grain / Bermuda into / Poa) is briefing-card style. Harry's longer parallel of the same content with 'we' framing.",
+    styleNotes: "the coach's three-rule framing of the same cue (Bermuda down-grain / Bermuda into / Poa) is briefing-card style. Harry's longer parallel of the same content with 'we' framing.",
   },
   {
     id: 'putt_lag_50',
@@ -1184,7 +1166,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "Long lag putts are about not three-putting. We aim for the three-foot circle around the cup, focus entirely on speed, and accept a tap-in second putt. The line is a guideline; the speed is the game.",
     kevinAnswer: "Fifty feet — picture a hula hoop around the cup, that's your target. Speed is everything; line is a rough guess. Two-putt's a win, three-putt's a disaster. Don't try to make this one.",
     genericAnswer: "Long lag putts (50+ feet) prioritize speed control over line. Target a 3-foot circle around the hole. Use a full shoulder-turn stroke; deceleration is the primary cause of leaving them short.",
-    styleNotes: "Kevin's 'hula hoop' image is his casual humor. Tank closes with 'Speed first. Always.' — his lag-putt mantra in two lines.",
+    styleNotes: "Kevin's 'hula hoop' image is his casual humor. the coach closes with 'Speed first. Always.' — his lag-putt mantra in two lines.",
   },
   {
     id: 'putt_downhill_slick',
@@ -1193,7 +1175,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "Slick downhill putts ask for the lightest touch. We aim it to die at the hole — past is three-putt territory. The stroke is small; the follow-through is longer than the backswing. Almost no acceleration through impact.",
     serenaAnswer: "On slick downhillers, plan to die the ball at the hole. The follow-through should be longer than the backswing — control comes from the take-away length, not the strike force.",
     genericAnswer: "Slick downhill putts: plan to die the ball at the hole (past = 3-putt risk). Use a smaller backswing with a longer-than-backswing follow-through to control pace.",
-    styleNotes: "Tank's 'Just touch it' is the simplest possible imperative. The 'longer follow-through than backswing' technical note is the actual mechanic — tour pro detail in caddie shorthand.",
+    styleNotes: "the coach's 'Just touch it' is the simplest possible imperative. The 'longer follow-through than backswing' technical note is the actual mechanic — tour pro detail in caddie shorthand.",
   },
   {
     id: 'putt_uphill_firm',
@@ -1203,7 +1185,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "On uphill putts we play more firmly and aim at the back of the cup. The slope absorbs speed, and short is the worst miss. Firm putts hold their line; soft putts wander.",
     kevinAnswer: "Uphill — hit it firm. Aim at the back of the cup. Slope eats speed, and short is the worst outcome. Firm holds line; soft drifts on you.",
     genericAnswer: "Uphill putts require firmer strokes than the visual suggests — slope reduces pace. Aim at the back of the cup; short is the most common error. Firm putts also hold their line better than soft ones.",
-    styleNotes: "All four agree on the firm/back-of-cup framing — universal coaching. Tank's clipped 'Hit it. Confidently.' is the assertive close.",
+    styleNotes: "All four agree on the firm/back-of-cup framing — universal coaching. the coach's clipped 'Hit it. Confidently.' is the assertive close.",
   },
   {
     id: 'putt_two_tier',
@@ -1212,7 +1194,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "Tiered greens are tricky. Going up a tier needs more speed than the eye estimates — pace it to land on the upper level first, then the rest is a putt from there. Coming down a tier, play to die at the top edge and let gravity work. Plan a par; birdies on tiered greens are gifts.",
     serenaAnswer: "Up-tier putts require significantly more pace than they look. Plan to land the ball on the upper tier, then putt the remainder. Down-tier putts: die at the top edge and let the slope finish.",
     genericAnswer: "Tiered greens require pace specifically calibrated to clear the tier. Up-tier: extra pace to land on the upper level. Down-tier: die at the top edge and let slope take over. Two-putt is the realistic plan.",
-    styleNotes: "Tank's 'Tiers eat birdies' is the experiential framing — he's seen the same hole rob a thousand players.",
+    styleNotes: "the coach's 'Tiers eat birdies' is the experiential framing — he's seen the same hole rob a thousand players.",
   },
   {
     id: 'putt_first_of_round',
@@ -1222,7 +1204,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "On the first putt, calibrate rather than attack. The first three holes teach you the greens' speed. Be aggressive starting hole 4 — not before.",
     kevinAnswer: "First putt — you don't know these greens today. Lag it, learn the speed, the next two holes you keep calibrating. Around hole 4 you start trusting the read. Pushing for birdie cold costs strokes.",
     genericAnswer: "The first putt of a round is a calibration shot — green speed varies daily. Use the first 3 holes to learn pace; only attack pin locations starting hole 4.",
-    styleNotes: "Tank's 'Aggressive early lap = lost round' is a memorable consequence-line. Kevin's 'Pushing for birdie cold costs strokes' is his pragmatic framing.",
+    styleNotes: "the coach's 'Aggressive early lap = lost round' is a memorable consequence-line. Kevin's 'Pushing for birdie cold costs strokes' is his pragmatic framing.",
   },
   {
     id: 'putt_wet_greens',
@@ -1230,7 +1212,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     questionPatterns: ['wet greens putt', 'putt in rain', 'rain on green', 'soft wet greens'],
     harryAnswer: "Wet greens are slower and break less than they look. We add more pace than the visual suggests and trust a flatter line. The eyes lie on wet greens — the read comes from the firmer stroke, not the slope picture.",
     genericAnswer: "Wet greens are slower and exhibit less break than they appear. Add 10-20% more pace than the read suggests; trust a flatter line. The visual slope overstates the actual break.",
-    styleNotes: "Tank's 'Wet putts are reads from the body, not the eyes' is a memorable inversion of the usual reading advice.",
+    styleNotes: "the coach's 'Wet putts are reads from the body, not the eyes' is a memorable inversion of the usual reading advice.",
   },
   {
     id: 'putt_wind_on_green',
@@ -1239,7 +1221,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Wind affects long putts more than golfers assume. Across-wind on slick greens adds break (3-4 inches in a 20mph wind). Into-wind: firmer stroke. Down-wind: die it. Read wind as additional slope.",
     harryAnswer: "Wind on greens is a hidden variable. Crosswinds add break — we treat them as additional slope. Into-wind putts need more pace; downwind putts die. Twenty miles per hour can mean three or four inches at long distance.",
     genericAnswer: "Wind affects putts proportional to distance + speed. Crosswind on long fast putts adds 3-4 inches of break in a 20mph wind. Into-wind: firmer stroke; down-wind: softer. Read wind as additional slope influence.",
-    styleNotes: "Tank's 'more than people think' acknowledges the underrated factor. The four-line if/then break-down is briefing-card cadence.",
+    styleNotes: "the coach's 'more than people think' acknowledges the underrated factor. The four-line if/then break-down is briefing-card cadence.",
   },
   {
     id: 'putt_tap_in_focus',
@@ -1261,7 +1243,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "The pace ahead of you isn't your concern. Play your shot, your routine, your way. Frustration about pace is a strokes-tax — choose to spend that energy on the next shot.",
     kevinAnswer: "Slow group ahead — happens. You're going to wait either way; might as well wait well. Use the time to read the hole, watch the wind, talk through the next shot. Stewing about it is what costs strokes.",
     genericAnswer: "When playing behind a slow group, focus on your own pace and routine. Frustration about pace costs more strokes than the wait itself. Use waiting time to read upcoming holes.",
-    styleNotes: "Harry's longest answer — his patient register. Tank's 'Standards are non-negotiable, even at their pace' is the standards-applied-everywhere maxim.",
+    styleNotes: "Harry's longest answer — his patient register. the coach's 'Standards are non-negotiable, even at their pace' is the standards-applied-everywhere maxim.",
   },
   {
     id: 'mental_lightning_call',
@@ -1271,7 +1253,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Lightning means stop. Immediately. The round is suspended; you walk to the clubhouse and wait. No exceptions for score or hole count.",
     kevinAnswer: "Lightning is hard stop. Doesn't matter the score, doesn't matter the hole. Off the course, into the clubhouse. Wait for the all-clear before anyone holds a club.",
     genericAnswer: "Lightning ends the round immediately — no exceptions. Move to the clubhouse or designated shelter and wait for the all-clear from the pro shop before resuming.",
-    styleNotes: "Tank's 'Standards don't apply to weather — survival does' is the rare Tank reversal: he respects weather above his own standards-everywhere ethos.",
+    styleNotes: "the coach's 'Standards don't apply to weather — survival does' is the rare the coach reversal: he respects weather above his own standards-everywhere ethos.",
   },
   {
     id: 'mental_front_back_collapse',
@@ -1281,7 +1263,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Front-nine-collapse is usually score-protection, not swing failure. The fix: on the 10th tee, treat the day as starting fresh. Play each shot as itself; the front nine score doesn't follow you.",
     kevinAnswer: "Good front, bad back — that's almost always the head, not the hands. You started playing the scorecard instead of the shot. On hole 10, you mentally restart. The 38 is done; the next swing's the only one that matters.",
     genericAnswer: "Front-nine-good / back-nine-collapse is typically caused by score-protection (tightening, steering) rather than mechanical breakdown. Reset on the 10th tee — treat the back nine as a fresh round; play each shot independently.",
-    styleNotes: "All four name the cause (protecting the score) and the fix (reset on the 10th). Tank's 'The 38 doesn't matter on hole 10' is the cleanest formulation.",
+    styleNotes: "All four name the cause (protecting the score) and the fix (reset on the 10th). the coach's 'The 38 doesn't matter on hole 10' is the cleanest formulation.",
   },
   {
     id: 'mental_distraction_partner',
@@ -1290,7 +1272,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "When something distracts us mid-routine, we back off — we don't push through. Step away from the ball, take a breath, start the routine again. It's our shot; the responsibility is ours, regardless of who created the distraction.",
     serenaAnswer: "If distracted during the routine, step off the ball. Don't push through it. Reset, re-engage, restart the routine cleanly. Reacting visibly to the distraction usually makes the next attempt worse too.",
     genericAnswer: "When distracted mid-routine, step away from the ball, breathe, and restart the pre-shot routine cleanly. Powering through a disrupted routine produces worse outcomes than the reset costs.",
-    styleNotes: "Tank's 'Standards are non-negotiable, even when others' aren't' is a strong line — he won't let other players' behavior degrade his standards.",
+    styleNotes: "the coach's 'Standards are non-negotiable, even when others' aren't' is a strong line — he won't let other players' behavior degrade his standards.",
   },
   {
     id: 'mental_recover_double',
@@ -1300,7 +1282,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "After a double bogey, don't chase. The next hole is its own scorecard line. Patient pars are the recovery path — heroic birdie attempts after disasters usually compound the damage.",
     kevinAnswer: "Doubled it — okay. Next tee, reset. The temptation is to try to win it back with a birdie. Don't. Three pars beats a birdie-and-two-doubles every time. Patience now.",
     genericAnswer: "After a double bogey, avoid the urge to recover the stroke immediately. Hero shots after disaster holes statistically compound losses. Play patient pars on subsequent holes to erase the damage gradually.",
-    styleNotes: "All four converge on 'patient pars beat chase birdies' — the universal post-disaster wisdom. Tank's 'Patience after disaster wins rounds' is a tight maxim.",
+    styleNotes: "All four converge on 'patient pars beat chase birdies' — the universal post-disaster wisdom. the coach's 'Patience after disaster wins rounds' is a tight maxim.",
   },
   {
     id: 'course_par5_third_shot',
@@ -1310,7 +1292,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "Par-5 thirds are scoring opportunities. We aim center, take the birdie chance from there. The pin-hunt on the third shot of a par 5 — when we've already got a comfortable yardage — is greed talking.",
     kevinAnswer: "Par-5 third — wedge in your hand, you're in scoring range. Aim center, two-putt for birdie. Pin-hunting from here is how birdies turn into bogeys.",
     genericAnswer: "Par-5 third shots from full-wedge yardage are statistically your best birdie opportunity. Target green center; the pin-hunt on a comfortable wedge yardage rarely improves odds and adds short-side risk.",
-    styleNotes: "Tank's 'Easy birdies come from the middle of the green' is the truth most amateurs ignore. Kevin's 'greed talking' is his honesty register.",
+    styleNotes: "the coach's 'Easy birdies come from the middle of the green' is the truth most amateurs ignore. Kevin's 'greed talking' is his honesty register.",
   },
   {
     id: 'mental_score_check',
@@ -1320,7 +1302,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Avoid checking your running score mid-round. Awareness of a good front nine often produces tighter swings on the back. Tally the card at 18; play one shot at a time until then.",
     kevinAnswer: "Don't peek at the scorecard. Especially when you're playing well — the moment you know, you start guarding it. Shoot the shot in front of you, count strokes after eighteen.",
     genericAnswer: "Avoid checking running totals mid-round. Awareness of a good score often produces score-protection (tighter swings, conservative play, missed birdie putts). Tally the card after 18 holes.",
-    styleNotes: "Tank's 'Especially if you're playing well' is the experiential observation — bad rounds aren't where the score-check problem lives.",
+    styleNotes: "the coach's 'Especially if you're playing well' is the experiential observation — bad rounds aren't where the score-check problem lives.",
   },
   {
     id: 'mental_grinding_focus',
@@ -1330,7 +1312,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Sustained focus across 18 holes isn't realistic. Engage fully during the pre-shot routine, then disengage between shots. Re-engagement is a switch, not a continuous state.",
     kevinAnswer: "You can't grind for four hours straight. Nobody can. Focus inside the routine, off between shots. Walk and talk, look around, then snap back when you're at the ball. The off time is what makes the on time work.",
     genericAnswer: "Sustained concentration over a full round is unrealistic — even tour professionals cycle focus on and off. Engage fully during the pre-shot routine; disengage during walking. Re-engagement at the ball is the practiced skill.",
-    styleNotes: "Tank's 'Focus is a faucet, not a faucet stuck open' is an excellent verbal metaphor in his register.",
+    styleNotes: "the coach's 'Focus is a faucet, not a faucet stuck open' is an excellent verbal metaphor in his register.",
   },
   {
     id: 'course_unfamiliar_course',
@@ -1340,7 +1322,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "On an unfamiliar course, play to the center on every shot. You don't yet know the trouble around each green or the green slopes. Course knowledge develops with rounds; conservative play in the meantime.",
     kevinAnswer: "First round at a new course — play it middle. Middle of fairways, middle of greens. The course-knowledge advantage is real but you've gotta earn it by walking it once. Conservative golf today, sharper next time.",
     genericAnswer: "On unfamiliar courses, play conservatively to course centers (fairway middles, green middles). Course knowledge typically adds 1-2 strokes per round in advantage; the conservative approach compensates until the player learns the layout.",
-    styleNotes: "Tank's 'Make up for it with discipline' is the standards-framing applied to an unfamiliar-course context.",
+    styleNotes: "the coach's 'Make up for it with discipline' is the standards-framing applied to an unfamiliar-course context.",
   },
   {
     id: 'mental_first_tee_competition',
@@ -1362,7 +1344,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "If you think a tee shot might be lost or out of bounds, announce 'provisional' before hitting a second ball. Without that exact word, the second ball replaces the first under stroke-and-distance penalty. Find the first within three minutes and the provisional is pocketed.",
     kevinAnswer: "Think you might've lost it or it's OB? Say the word 'provisional' before you hit again. That word is the difference between a free safety net and an automatic stroke-and-distance penalty. Find the first one within three minutes, the provisional comes back; can't find it, the provisional is in play.",
     genericAnswer: "When a tee shot may be lost or out of bounds, the player announces 'provisional' before hitting a second ball. Without the announcement, the second ball replaces the first under stroke-and-distance. If the original is found within 3 minutes, the provisional is abandoned.",
-    styleNotes: "All four hammer the specific word ('provisional') because the rule turns on it. Tank's 'Know the rule.' is the closer — standards include knowing the rules.",
+    styleNotes: "All four hammer the specific word ('provisional') because the rule turns on it. the coach's 'Know the rule.' is the closer — standards include knowing the rules.",
   },
   {
     id: 'rules_lost_ball_search',
@@ -1371,7 +1353,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "USGA gives you 3 minutes to search for a ball, timed from when you arrive at the search area. After 3 minutes, the ball is officially lost — return to the previous spot under stroke and distance. The clock is firm.",
     harryAnswer: "The three-minute search clock starts when we arrive at the area. After three, the ball is lost — we go back under stroke and distance. We don't keep searching past three; it slows the group behind and changes nothing.",
     genericAnswer: "USGA Rule 18.2: 3-minute search period (reduced from 5 in 2019), timed from arrival at the search area. After 3 minutes, the ball is officially lost — return to the previous spot under stroke-and-distance penalty.",
-    styleNotes: "Tank's 'The clock isn't a suggestion' is the rules-literal framing — the rules ARE the standard. Serena's procedural explanation is her measured register.",
+    styleNotes: "the coach's 'The clock isn't a suggestion' is the rules-literal framing — the rules ARE the standard. Serena's procedural explanation is her measured register.",
   },
   {
     id: 'rules_ob_procedure',
@@ -1381,7 +1363,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Out of bounds: stroke-and-distance penalty (one stroke + return to previous spot). Tee shot OB = third shot from the tee. Some courses use a local-rule alternative (drop with 2-stroke penalty); check the scorecard.",
     kevinAnswer: "OB — stroke and distance. Back to where you hit from, add a penalty stroke, swing again. Tee shot OB means you're hitting three off the tee. Some courses let you drop with a two-stroke penalty as a local rule, so check the card.",
     genericAnswer: "Out of bounds: stroke-and-distance penalty (Rule 18.2). One penalty stroke + return to previous position. Some courses adopt the local-rule alternative (Rule E-5): drop in fairway with 2-stroke penalty. Check the scorecard for that rule.",
-    styleNotes: "Tank's 'Take your medicine.' is recognizable signature — accept the consequence of a mistake without compounding it.",
+    styleNotes: "the coach's 'Take your medicine.' is recognizable signature — accept the consequence of a mistake without compounding it.",
   },
   {
     id: 'rules_ball_marks',
@@ -1391,7 +1373,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Repair your ball mark on every green, plus one additional unrepaired mark. A repaired mark heals in 24 hours; an unrepaired one takes weeks. The two-mark rule applied universally would eliminate the problem.",
     kevinAnswer: "Repair yours, repair one more. That's the rule everyone learns in their first lesson but most people skip. Two seconds, big difference in green health over a season.",
     genericAnswer: "Repair your own ball mark on every green plus one additional unrepaired mark. A properly repaired mark heals within 24 hours; an unrepaired mark takes weeks. Use a tee or repair tool; press inward (don't lift) to close the mark.",
-    styleNotes: "Tank's '40 years of golf etiquette boils down to' is the experiential framing — this is the salty-caddie register stating universal truth.",
+    styleNotes: "the coach's '40 years of golf etiquette boils down to' is the experiential framing — this is the salty-caddie register stating universal truth.",
   },
   {
     id: 'rules_pin_in_out',
@@ -1401,7 +1383,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "Pin in or out — both are legal since 2019. We leave it in on long putts as a target; we take it out on short putts where a deflection could cost a make. Either choice works; what doesn't work is deciding mid-stroke.",
     kevinAnswer: "Pin in or out — totally your call since the 2019 rule change. I like it in on lag putts (gives you something to aim at), out on anything inside fifteen feet (pin can save or steal makes). Pick and commit.",
     genericAnswer: "Since 2019, leaving the flagstick in is legal during putting (Rule 13.2). Statistical analysis suggests: long putts benefit from the flagstick (visual reference, occasional save); short putts (<15 feet) are slightly hurt (deflection risk). Either choice is legal — commit before stroking.",
-    styleNotes: "Tank's 'Stop debating it. Decide. Putt.' is the cadence of a decision-needed-NOW closer — the etiquette story is the dithering at the cup.",
+    styleNotes: "the coach's 'Stop debating it. Decide. Putt.' is the cadence of a decision-needed-NOW closer — the etiquette story is the dithering at the cup.",
   },
   {
     id: 'rules_bunker_rake',
@@ -1410,7 +1392,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     harryAnswer: "We rake every bunker we play out of. Our footprints, our divot, anything else within reach from where we were standing. The next player coming through deserves the same conditions we found. Etiquette is the small things, done consistently.",
     kevinAnswer: "Rake the bunker. Yours plus whatever else you can fix on the way out. Two minutes of work that nobody sees but makes the next guy's day. Etiquette is what you do when nobody's watching.",
     genericAnswer: "After playing from a bunker, rake all footprints and ball marks within the area you traversed. The next player is entitled to undisturbed sand. Place the rake outside the bunker (or per the course's local rule, sometimes inside, laid parallel to play).",
-    styleNotes: "Kevin's 'Etiquette is what you do when nobody's watching' is the quiet-character version of the same standard Tank states more directly.",
+    styleNotes: "Kevin's 'Etiquette is what you do when nobody's watching' is the quiet-character version of the same standard the coach states more directly.",
   },
   {
     id: 'rules_pace_of_play',
@@ -1420,7 +1402,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Standard pace: stay within striking distance of the group ahead. If a hole behind, allow the group behind to play through. Use ready golf (whoever is ready hits) rather than strict honors. Preparedness at your ball is the most-controllable pace factor.",
     kevinAnswer: "Pace of play is the group ahead, not the group behind. Fall a hole back, wave the next group through — no ego on this. Ready golf, not strict honors. Be ready at your ball; that's where most pace problems are.",
     genericAnswer: "Pace of play standard: stay within striking distance of the group ahead. If a hole behind, allow following groups to play through. Use 'ready golf' (whoever is ready hits) rather than strict honors. Be prepared at your ball — measure yardage, choose club, plan the shot during others' shots.",
-    styleNotes: "Tank's 'including pace' explicitly adds pace to the standards-everywhere ethos — etiquette is the standard.",
+    styleNotes: "the coach's 'including pace' explicitly adds pace to the standards-everywhere ethos — etiquette is the standard.",
   },
   {
     id: 'rules_walk_through_line',
@@ -1430,7 +1412,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Avoid stepping on or near the line between any player's ball and the hole. Footprint depressions, even subtle ones, can deflect putts on slick greens. Walk around the line rather than near it.",
     kevinAnswer: "Don't walk in anyone's line. Imagine the line from their ball to the hole and walk around it. Spike marks and footprints on bent grass can deflect a putt easily — and they don't grow out by the time it's their turn.",
     genericAnswer: "Avoid stepping on or near the line between any player's ball and the hole on the green. Even careful steps can leave depressions that deflect putts. Walk around the line rather than across it.",
-    styleNotes: "Tank's 'One unconscious step costs the other guy a putt' is the consequence-attached imperative he favors.",
+    styleNotes: "the coach's 'One unconscious step costs the other guy a putt' is the consequence-attached imperative he favors.",
   },
 
   // ── Improvement Mindset (9 — NEW CATEGORY improvement_mindset) ─────
@@ -1442,7 +1424,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Effective practice has structure: a target, a chosen shot shape, a feedback signal. 20 intentional shots produce more learning than 200 unfocused balls. Every shot should involve a routine and a deliberate choice.",
     kevinAnswer: "Ball-banging isn't practice — it's exercise. Practice has a target, a shot you're trying to hit, and a way to know if you hit it. Twenty good reps beats two hundred lazy ones every time.",
     genericAnswer: "Deliberate practice requires: target, shot shape, feedback signal, and full pre-shot routine on every ball. 20 intentional repetitions produce more skill transfer than 200 unfocused range balls.",
-    styleNotes: "Tank's 'Ball-banging isn't practice. It's noise.' is the salty-caddie diagnosis applied to a universal amateur habit.",
+    styleNotes: "the coach's 'Ball-banging isn't practice. It's noise.' is the salty-caddie diagnosis applied to a universal amateur habit.",
   },
   {
     id: 'improve_plateau',
@@ -1452,7 +1434,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Plateaus signal that current practice has maxed its return. Continuing the same routine produces the same scores. Change one input: practice ratio, drill type, lesson source, or course variety. The plateau breaks when the system does.",
     kevinAnswer: "Plateau in the handicap means whatever you're doing has given you what it can. Same practice, same scores. To break it, change something — new drill, more short game, lessons, a course you've never played. Hard work in the same direction will keep producing the same result.",
     genericAnswer: "Plateaus in handicap reflect a maxed-out practice system. Continuing the same routine produces the same scores. Break the plateau by changing one practice variable (drill type, practice-time ratio, coach, course variety) — the system needs different input to produce different output.",
-    styleNotes: "Tank's 'Hard work in the wrong direction is still wrong direction' is the standards-philosopher closer — effort alone isn't standards. Direction matters.",
+    styleNotes: "the coach's 'Hard work in the wrong direction is still wrong direction' is the standards-philosopher closer — effort alone isn't standards. Direction matters.",
   },
   {
     id: 'improve_lesson_timing',
@@ -1462,7 +1444,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Take a lesson when you've identified a recurring pattern you can't self-diagnose. One bad round is noise; five rounds with the same miss is signal. A pro sees swing flaws an amateur can't observe in their own swing.",
     kevinAnswer: "Lessons work best when you bring a specific question — 'I'm pushing every iron right' beats 'I want to get better.' Don't take a lesson after one bad round; take it after five rounds with the same problem. The pro sees what your phone-camera doesn't.",
     genericAnswer: "Lesson timing is most productive when targeting a specific recurring pattern (same miss across 5+ rounds), not after isolated bad rounds. Pros observe swing flaws the player cannot see in their own motion. Bring a specific question rather than a general 'help me improve' request.",
-    styleNotes: "Kevin's 'bring a specific question' is practical guidance most amateurs miss. Tank's 'Pros diagnose what amateurs guess' is the experiential observation.",
+    styleNotes: "Kevin's 'bring a specific question' is practical guidance most amateurs miss. the coach's 'Pros diagnose what amateurs guess' is the experiential observation.",
   },
   {
     id: 'improve_track_stats',
@@ -1472,7 +1454,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Track fairways hit, GIR, and putts per round — three metrics that diagnose the source of strokes lost. Adding more becomes noise. Use the data to identify the weak area, then practice that area specifically.",
     kevinAnswer: "Track fairways hit, GIR, putts per round. That's it. Three numbers tell you where your strokes are going. Track more than that and you stop using the data — it just becomes spreadsheets.",
     genericAnswer: "Effective stat tracking: fairways hit, greens in regulation (GIR), and putts per round. These three diagnose stroke leaks. Adding more metrics increases analysis burden without proportional insight. Use the data to identify the weakest area, then practice that area.",
-    styleNotes: "Tank's 'Stats are a flashlight, not a microscope' is a memorable principle — use the data to find the area, don't drown in detail.",
+    styleNotes: "the coach's 'Stats are a flashlight, not a microscope' is a memorable principle — use the data to find the area, don't drown in detail.",
   },
   {
     id: 'improve_gear_chasing',
@@ -1482,7 +1464,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Equipment differences are real but small — most amateurs gain a half-stroke from gear upgrades. Comparable spending on lessons typically yields 3-5 strokes. Exhaust the instruction path before the equipment path.",
     kevinAnswer: "New driver feels good. Doesn't fix anything. Most amateurs pick up half a stroke from gear; five strokes from lessons for the same dollars. Math says lessons first. Buy the driver after you've grooved the swing.",
     genericAnswer: "Gear improvements for amateurs yield approximately 0.5-1 strokes of improvement. Comparable spending on quality instruction yields 3-5 strokes. Exhaust the instruction option before the equipment option for the highest ROI on improvement dollars.",
-    styleNotes: "Tank's 'Standards apply to spending too' is the standards-everywhere ethos extended to financial discipline.",
+    styleNotes: "the coach's 'Standards apply to spending too' is the standards-everywhere ethos extended to financial discipline.",
   },
   {
     id: 'improve_watching_pros',
@@ -1492,7 +1474,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "TV golf teaches routine, tempo, and decision-making well. It teaches swing technique poorly — those positions are built on individual bodies. Watch for the meta-game; ignore the swing-copying impulse.",
     kevinAnswer: "Watching tour golf — good for routine, tempo, and how they think their way around. Bad for trying to copy their swings. You're not built like Rory. Steal the principles, not the pictures.",
     genericAnswer: "Tour broadcasts teach pre-shot routine, tempo, and course management well. They teach swing technique poorly — pro positions reflect individual body mechanics and history. Use TV golf to study the meta-game; avoid imitating specific swing positions.",
-    styleNotes: "'Steal the principles. Don't steal the picture.' is becoming a Tank/Kevin shared maxim across multiple entries — repetition reinforces it.",
+    styleNotes: "'Steal the principles. Don't steal the picture.' is becoming a coach/Kevin shared maxim across multiple entries — repetition reinforces it.",
   },
   {
     id: 'improve_club_mental_block',
@@ -1502,7 +1484,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Mental blocks on specific clubs resolve through high-volume deliberate practice with that club. The avoidance pattern reinforces the block. Hit the dreaded club more frequently than your favorite for two weeks of practice — the block typically dissolves.",
     kevinAnswer: "Got a club you hate? Hit it more than every other club in your bag for the next two weeks of practice. Avoidance makes it worse forever. Confidence is built on reps, not hope.",
     genericAnswer: "Mental blocks on specific clubs respond to high-volume deliberate practice with the avoided club. Two weeks of practicing the dreaded club more than any other typically dissolves the block. Continued avoidance reinforces the pattern.",
-    styleNotes: "Tank + Kevin both close with 'Confidence is built on reps, not hope.' — shared maxim across personas.",
+    styleNotes: "the coach + Kevin both close with 'Confidence is built on reps, not hope.' — shared maxim across personas.",
   },
   {
     id: 'improve_time_off',
@@ -1512,7 +1494,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Post-layoff golf requires patience. The first round back is calibration only — tempo, distances, and feel return gradually. By round 3, baseline form typically reemerges. Lower expectations for early rounds; play conservatively.",
     kevinAnswer: "Time off — first round back, lower the bar. Tempo's slow, distances are off, feel's gone. Round one's just for waking everything up; round three's when your real game comes back. Don't chase it.",
     genericAnswer: "Returning from a golf layoff requires 3-5 rounds for tempo, distance feel, and short-game touch to return to baseline. Play conservatively in early rounds; lower expectations. Resist the urge to swing harder to recover distance.",
-    styleNotes: "Tank's 'Round three is when the real golf comes back' is the experiential anchor — he's watched a thousand returning players hit a wall on round one.",
+    styleNotes: "the coach's 'Round three is when the real golf comes back' is the experiential anchor — he's watched a thousand returning players hit a wall on round one.",
   },
   {
     id: 'improve_seasonal_goals',
@@ -1522,7 +1504,7 @@ const PERSONA_KB: PersonaKBEntry[] = [
     serenaAnswer: "Effective goal-setting separates outcome from process. One outcome goal (handicap reduction target) and three process goals (practice schedule, lesson frequency, stat tracking). Process is controllable; outcomes follow consistent process.",
     kevinAnswer: "Season goals — one outcome, three processes. Outcome's the handicap drop. Processes are what you control: practice frequency, lesson schedule, stats. Outcome's a hope; processes are what you actually do.",
     genericAnswer: "Effective golf goal-setting separates outcome goals (handicap reduction, scoring targets) from process goals (practice frequency, lesson schedule, stat tracking). Process goals are directly controllable and produce outcome improvements as a byproduct.",
-    styleNotes: "Tank's 'Outcome you don't control. Process you do.' is sports-psychology gospel rendered in his clipped voice. The standards closer connects it to his philosophy.",
+    styleNotes: "the coach's 'Outcome you don't control. Process you do.' is sports-psychology gospel rendered in his clipped voice. The standards closer connects it to his philosophy.",
   },
 ];
 
@@ -1575,7 +1557,7 @@ export function findPersonaKBEntry(question: string): { entry: PersonaKBEntry; s
 
 /**
  * Return the persona-shaped answer for a question. When persona is
- * Tank AND we match an entry, the response is the Tank answer +
+ * the coach AND we match an entry, the response is the the coach answer +
  * matched id + style notes. Other personas fall through to the
  * genericAnswer (until their persona-specific answers are added to
  * the KB entries — same schema, additive).
@@ -1619,7 +1601,7 @@ export function getPersonaAnswer(persona: Persona, question: string, context?: R
 /**
  * Return up to N entries relevant to the question, sorted by match
  * score (descending). Used by the brain prompt builder to inject the
- * top entries into Tank's system-prompt knowledge block without
+ * top entries into the coach's system-prompt knowledge block without
  * collapsing to a single answer (the brain riffs across them).
  */
 export function findRelevantPersonaKBEntries(question: string, limit = 3): Array<{ entry: PersonaKBEntry; score: number }> {
@@ -1635,7 +1617,7 @@ export function findRelevantPersonaKBEntries(question: string, limit = 3): Array
 
 /**
  * Look up entries by canonical issue / category — used by
- * smartAnalysisEngine to enrich a swing-fault envelope with Tank's
+ * smartAnalysisEngine to enrich a swing-fault envelope with the coach's
  * teaching wisdom on that specific topic (e.g. envelope.primary_issue
  * === 'early_extension' → find entries in iron_play / fundamentals
  * that touch the topic). Returns up to N entries.
@@ -1652,7 +1634,7 @@ export function getPersonaKBSize(): number {
   return PERSONA_KB.length;
 }
 
-/** All categories present in the KB — drives a future "Browse Tank's
+/** All categories present in the KB — drives a future "Browse the coach's
  *  playbook" UI without hard-coding the list elsewhere. */
 export function getPersonaKBCategories(): PersonaKBCategory[] {
   const set = new Set<PersonaKBCategory>();
@@ -1666,13 +1648,13 @@ export function getPersonaKBCategories(): PersonaKBCategory[] {
  *  persona-specific answer (when present) AND the styleNotes so the
  *  brain references the wisdom in the right voice.
  *
- *  2026-05-23 — Generalized from Tank-only to all four personas.
+ *  2026-05-23 — Generalized from single-persona to all four personas.
  *  Falls back to `genericAnswer` when the persona doesn't yet have a
  *  variant for the matched entry — caller sees a usable response in
  *  every case. */
 export function buildPersonaKBPromptBlock(persona: Persona, question: string, limit = 2): string | null {
   const personaKey = (persona ?? '').toLowerCase();
-  const supportedPersonas = ['tank', 'serena', 'harry', 'kevin'];
+  const supportedPersonas = ['serena', 'harry', 'kevin'];
   if (!supportedPersonas.includes(personaKey)) return null;
   const matches = findRelevantPersonaKBEntries(question, limit);
   if (matches.length === 0) return null;

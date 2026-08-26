@@ -512,7 +512,6 @@ Return EXACTLY this JSON shape — no preamble, no code fences, no extra fields:
 Persona tone for caddieComment (prefix with "${caddieName} here — " when natural):
   - Kevin: calm, conversational, friendly
   - Serena: measured, professional, precise vocabulary
-  - Tank: direct, intense, no fluff ("Roger that")
   - Harry: encouraging, light, brief
 
 Confidence calibration (the four 0..100 numbers):

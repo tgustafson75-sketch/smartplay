@@ -1320,7 +1320,6 @@ export const useVoiceCaddie = ({
           customCaddieBasePersona: usePlayerProfileStore.getState().customCaddieBasePersona ?? 'kevin',
           customCaddieName: usePlayerProfileStore.getState().customCaddieName ?? null,
           personaIntensity: useSettingsStore.getState().personaIntensity?.[getActiveCaddie()] ?? 100,
-          tankSoftIntro: useSettingsStore.getState().tankSoftIntro,
           // 2026-05-30 — Fix FY: Local Mode → pin brain to TACTICAL
           // tier (Haiku 4.5). Server's classifyQuestion auto-tier is
           // skipped; query gets the cheapest, fastest, least-radio-time

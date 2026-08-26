@@ -128,7 +128,7 @@ interface RecapRequest {
   // by services/tutorialContext.buildFullPracticeContext on the client side.
   // Multi-line string when ≥1 tutorials are active, null otherwise.
   practice_context?: string | null;
-  // Persona — preferred 'kevin'|'serena'|'harry'|'tank'. Legacy clients
+  // Persona — preferred 'kevin'|'serena'|'harry'. Legacy clients
   // send only voiceGender ('male'|'female'); supported as fallback.
   voiceGender?: VoiceGender;
   persona?: string;

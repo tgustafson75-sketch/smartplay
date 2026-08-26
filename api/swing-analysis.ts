@@ -185,7 +185,7 @@ type SwingAnalysisResponse = {
   // fault headline so the player can see WHY the call was made.
   evidence?: string;
   // 2026-06-14 (Tim) — 1-2 genuinely-observed strengths for THIS swing,
-  // named alongside the fault. Tank's fundamentals (setup: grip / stance /
+  // named alongside the fault. The fundamentals (setup: grip / stance /
   // ball position from the address frame; balance from the finish frame) are
   // the primary source. CAUSAL: a confirmed-sound fundamental RULES OUT that
   // fundamental as the source of the fault (state it — "neutral grip rules
@@ -290,7 +290,7 @@ Output ONLY a JSON object using the SAME schema as full-swing analysis so the do
 Rules:
 - detected_issue: prefer 'none' for putts/chips unless a full-swing issue is genuinely visible. The observation field is where the real value lives.
 - observation MUST be in short-game language. Never say "swing path outside-in" on a putt — that's a tee shot read.
-- Voice: when caddie_name is provided, use that cadence (Tank clipped, Kevin neutral, Serena precise, Harry warm).
+- Voice: when caddie_name is provided, use that cadence (Kevin neutral, Serena precise, Harry warm).
 - Output ONLY valid JSON. No code fences, no preamble.`;
 
 // 2026-06-14 (Tim — 20-min "get me ready" routine, setup check) — SETUP mode.
@@ -339,7 +339,7 @@ Output ONLY a JSON object using the SAME schema as full-swing analysis:
 Rules:
 - valid_swing is false ONLY when no readable person at address (no person, cut off, too dark). A normal address photo with netting / range / indoor background is VALID.
 - cause/fix/drill MUST be non-empty when valid_swing is true (a readable setup always has a read). primary_fault stays "no_dominant_fault".
-- Voice: when caddie_name is provided, use that cadence (Tank clipped, Kevin neutral, Serena precise, Harry warm).
+- Voice: when caddie_name is provided, use that cadence (Kevin neutral, Serena precise, Harry warm).
 - Keep every field tight — the player has minutes. No paragraphs.
 - Output ONLY valid JSON. No code fences, no preamble.`;
 
@@ -484,7 +484,7 @@ EXPLAIN — layman_explanation quality bar (CRITICAL).
 Most of this app's users are higher-handicap golfers. "Early extension" lands as noise to them and the diagnosis gets lost. The expert term stays the headline of the card (kept for trust); your job in layman_explanation is to TRANSLATE the term into something a beginner reads once and understands. Rules:
 
 - 1-2 sentences. Second person ("you"). Encouraging cadence, never condescending.
-- Stay in the active caddie's voice (Kevin / Serena / Tank / Harry per Caddie voice context). Default Kevin neutral when no voice is set.
+- Stay in the active caddie's voice (Kevin / Serena / Harry per Caddie voice context). Default Kevin neutral when no voice is set.
 - MUST contain BOTH (a) what the fault FEELS or LOOKS like in plain body terms, AND (b) the common MISS it causes — the bad shot the golfer already knows (thin, fat, slice, pull, push, lost distance, weak contact, etc.).
 - NO biomechanical jargon. Do NOT define or rephrase the technical term using its own words.
 - FORBIDDEN (circular and useless): "Early extension means your hips and spine extend early." That just repeats the term — it teaches nothing.
@@ -506,7 +506,7 @@ Rules:
 - contact_read: an HONEST strike read. Set it to 'unknown' by DEFAULT — from body-motion frames you almost never see contact. ONLY set 'fat' when there is clear visible evidence the club hit the ground behind the ball (a divot opening up before the ball, the clubhead visibly digging into the turf behind the ball, a steep decelerating chop into the ground); 'thin'/'topped' only when you can see the club catch the ball high / above center or the ball squirting low along the ground. If you cannot actually see the strike, it is 'unknown' — do NOT infer 'clean' from clean-looking motion. 'clean' requires seeing a centered, ball-first strike, which is rare from these angles. When in any doubt: 'unknown'.
 - The observation field is the single sentence the user will hear ("Your hips are moving toward the ball through impact"). Specific, factual, no jargon.
 - fault_frame_index: when detected_issue is anything other than 'none', return the integer index of the frame that most clearly shows the tendency. When detected_issue is 'none', return -1.
-- Voice / cadence: when a caddie name is provided in the user context, write the observation in that caddie's voice. Tank = clipped imperative, military cadence ("Weight's hanging back at impact. Not acceptable."). Kevin = neutral conversational technical ("Your weight is still on your back foot at impact"). Serena = precise instructor ("At impact your weight has not transferred forward — about 60 percent still on the trail side"). Harry = warm encouraging ("I can see you're hanging back a bit at impact — that's a common one"). Default (no caddie_name) = neutral technical.
+- Voice / cadence: when a caddie name is provided in the user context, write the observation in that caddie's voice. Kevin = neutral conversational technical ("Your weight is still on your back foot at impact"). Serena = precise instructor ("At impact your weight has not transferred forward — about 60 percent still on the trail side"). Harry = warm encouraging ("I can see you're hanging back a bit at impact — that's a common one"). Default (no caddie_name) = neutral technical.
 - Personalization: when player_context is provided, tailor the read. Higher handicap (≥20) — favor plain language, biggest single fault; do NOT pile on. Lower handicap (≤10) — get technical, name secondary tendencies. When dominant_miss is named (e.g. "slice"), bias your priority toward the fault most consistent with that miss pattern. When experience signals beginner, skip jargon. Default (no player_context) = neutral technical.
 - Output ONLY valid JSON. No code fences, no preamble.`;
 
@@ -1498,7 +1498,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // tier=quick: SmartMotion speed path ships Gemini's read immediately,
     // skipping OpenAI escalation — same latency contract as old Haiku path.
     const tier = typeof ctx.tier === 'string' && ctx.tier === 'quick' ? 'quick' : 'full';
-    // 2026-06-25 (Tank — Setup Check wouldn't analyze): a SETUP read is a one-shot
+    // 2026-06-25 (field report — Setup Check wouldn't analyze): a SETUP read is a one-shot
     // pre-round capture, NOT a latency-critical live SmartMotion swing. It rode tier
     // 'quick', which short-circuits OpenAI — so if Gemini hiccuped/timed out (cold
     // Lambda) there was NO fallback and the server 502'd, surfacing to the user as the

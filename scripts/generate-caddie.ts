@@ -53,7 +53,6 @@ const REPO_RAW_BASE = 'https://raw.githubusercontent.com/tgustafson75-sketch/sma
 const CADDIE_PORTRAIT_URLS: Record<string, string> = {
   kevin:  `${REPO_RAW_BASE}/kevin_portrait.jpg`,
   serena: `${REPO_RAW_BASE}/serena_portrait.jpg`,
-  tank:   `${REPO_RAW_BASE}/tank_portrait.png`,
   harry:  `${REPO_RAW_BASE}/harry_portrait.png`,
 };
 const ALICE_FALLBACK_URL = 'https://d-id-public-bucket.s3.us-west-2.amazonaws.com/alice.jpg';

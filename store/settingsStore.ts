@@ -21,9 +21,7 @@ export type CaddiePillar = 'round' | 'cage' | 'drills' | 'play';
 // Defaults reflect each caddie's natural fit.
 export const DEFAULT_CADDIE_ASSIGNMENTS: Record<CaddiePillar, Persona> = {
   round: 'kevin',   // steady conversational companion on the course
-  // 2026-08-06 (Tim — clean up to Serena/Kevin; Tank is opt-in via Owner Tools) — cage default was Tank;
-  // now Serena (measured professional). Tank returns as a choice only when tankEnabled is on.
-  cage: 'serena',   // measured professional for cage practice (was Tank, now opt-in)
+  cage: 'serena',   // measured professional for cage practice
   drills: 'serena', // measured professional for technical drill work
   play: 'kevin',    // balanced companion for Arena / fun gameplay
 };
@@ -126,10 +124,6 @@ interface SettingsState {
   // launch; existing users with only caddiePersonality migrate at hydrate
   // (see persist `migrate` callback below).
   caddieAssignments: CaddieAssignments;
-  // 2026-08-06 (Tim — "don't remove Tank; hide him behind a toggle in Owner Tools; I can turn Tank on/off,
-  // but clean up to Serena and Kevin"). Tank is OFF by default: he's hidden from the persona pickers and a
-  // 'tank' assignment resolves to the pillar's non-tank default (see services/caddieResolver). Owners flip
-  // this on in Owner Tools to bring Tank back.
   // Phase 106 — caddie team handoff suggestions.
   // 'on'   = caddies offer suggestions verbally + visually (default)
   // 'soft' = visual card only, no voice interruption
@@ -167,14 +161,8 @@ interface SettingsState {
   simpleBriefingUserTouched: boolean;
   // PGA HOPE follow-up (A5) — per-persona TTS intensity 0..100. Drives
   // playback volume and is forwarded to system prompts so the model
-  // can match cadence to the dial. Default Tank=70 (sound-sensitive
-  // default), others=100.
+  // can match cadence to the dial.
   personaIntensity: Record<Persona, number>;
-  // PGA HOPE follow-up (Tank softening) — when true, Tank's first
-  // utterance with a player drops Marine cadence + signature phrases
-  // and uses a neutral introduction. Auto-clears after the player has
-  // accepted Tank for at least one full session.
-  tankSoftIntro: boolean;
 
   // 2026-05-21 — Consolidation 1 / Merge C: watchConnected moved to
   // the dedicated watchStore (store/watchStore.ts) so the
@@ -373,7 +361,6 @@ interface SettingsState {
   setTtsCaptionsBluetoothPrompt: (v: 'unasked' | 'asked' | 'never') => void;
   setSimpleBriefing: (v: boolean) => void;
   setPersonaIntensity: (p: Persona, v: number) => void;
-  setTankSoftIntro: (v: boolean) => void;
   // setWatchConnected moved to watchStore.setConnected (Consolidation 1 / Merge C).
   setAutoListenEnabled: (v: boolean) => void;
   setCartMode: (v: boolean) => void;
@@ -473,12 +460,11 @@ export const useSettingsStore = create<SettingsState>()(
       simpleBriefing: true,
       simpleBriefingUserTouched: false,
       // Re-sim P2 — Harry default 100 → 90 (was a touch loud in carts for
-      // multiple players). Tank stays 70 (sound-sensitive default).
+      // multiple players).
       // Note: Harry is soft-removed from active UI (see lib/persona.ts
       // ACTIVE_PERSONAS) but the intensity entry stays so flipping him
       // back active is a single-line edit.
       personaIntensity: { kevin: 100, serena: 100, harry: 90, custom: 100 },
-      tankSoftIntro: true,
       // 2026-07-06 — hands-free is the #1 priority. Active Listening on by default so
       // "start a round → just talk" works without digging into Settings. The
       // ActiveListeningPill shows it's live; the Settings toggle mutes it. Still scoped
@@ -576,7 +562,7 @@ export const useSettingsStore = create<SettingsState>()(
       },
       setResponseMode: (m) => set({ responseMode: m }),
       setCaddiePersonality: (p) => {
-        // 2026-08-25 — the Tank setter guard is gone with the persona. It exists no longer as a type,
+        // 2026-08-25 — the removed persona's setter guard is gone with it. It is no longer a type,
         // so no surface can name it; a persisted value is migrated to Kevin by v22.
         // 2026-05-21 — Fix Q (Path B): global persona is the single source
         // of truth. Setting it ALSO resets every per-pillar assignment to
@@ -649,7 +635,6 @@ export const useSettingsStore = create<SettingsState>()(
          *     kevin  "Tap the mic when you're ready to talk."
          *     serena "I'm here when you're ready. Just tap to chat."
          *     harry  "Take your time. Tap when you'd like to chat."
-         *     tank   "Hit the mic when you're ready, soldier."
          * Two entirely different scripts for one moment: the screen said one thing, the caddie said
          * another. It dates to 2026-06-11, when a network TTS call was swapped for the bundled clip
          * to stop cold-Lambda silence — the caption was kept and the AUDIO changed underneath it,
@@ -742,7 +727,6 @@ export const useSettingsStore = create<SettingsState>()(
           [p]: Math.max(30, Math.min(100, Math.round(v))),
         },
       })),
-      setTankSoftIntro: (v) => set({ tankSoftIntro: v }),
       setAutoListenEnabled: (v) => set({ autoListenEnabled: v }),
       setCartMode: (v) => set({ cartMode: v }),
       // 2026-05-22 — Fix T setters.
@@ -850,7 +834,6 @@ export const useSettingsStore = create<SettingsState>()(
           if (p.largeText == null) p.largeText = false;
           if (p.ttsCaptions == null) p.ttsCaptions = true;
           if (p.simpleBriefing == null) p.simpleBriefing = false;
-          if (p.tankSoftIntro == null) p.tankSoftIntro = true;
           if (p.personaIntensity == null) {
             p.personaIntensity = { kevin: 100, serena: 100, harry: 100, custom: 100 };
           }
@@ -914,13 +897,13 @@ export const useSettingsStore = create<SettingsState>()(
         // setPersonaIntensity setter enforces a 30 floor going
         // forward; this migration repairs any historical dial that
         // was already below 30 (lift to 70 — a confident mid value
-        // that matches Tank's existing default). Hardcoded list of
+        // that matches the existing default). Hardcoded list of
         // personas so we don't depend on import order at migrate time.
         if (version < 8) {
           const dial = p.personaIntensity as Record<string, number> | undefined;
           if (dial && typeof dial === 'object') {
             const repaired: Record<string, number> = { ...dial };
-            (['kevin', 'serena', 'harry', 'tank'] as const).forEach((persona) => {
+            (['kevin', 'serena', 'harry'] as const).forEach((persona) => {
               const v = repaired[persona];
               if (typeof v !== 'number' || v < 30) {
                 repaired[persona] = 70;
@@ -1053,7 +1036,6 @@ export const useSettingsStore = create<SettingsState>()(
         simpleBriefing: s.simpleBriefing,
         simpleBriefingUserTouched: s.simpleBriefingUserTouched,
         personaIntensity: s.personaIntensity,
-        tankSoftIntro: s.tankSoftIntro,
         autoListenEnabled: s.autoListenEnabled,
         cartMode: s.cartMode,
         autoHoleAdvance: s.autoHoleAdvance,
@@ -1101,7 +1083,7 @@ export const useSettingsStore = create<SettingsState>()(
       // / 'en' before AsyncStorage rehydrated the persisted values. The
       // greeting screen's audio-kickoff effect was the worst hit — it
       // picked the kevin-mp3 vs other-persona-TTS branch based on a
-      // stale value, so users with persisted Serena / Tank heard Kevin's
+      // stale value, so users with a persisted non-default persona heard Kevin's
       // greeting (or silence, when the bundled mp3 didn't exist for the
       // intended persona).
       //

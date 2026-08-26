@@ -211,7 +211,7 @@ export const INSTRUCTOR_VIDEO_KNOWLEDGE: KBEntry[] = [
 
   // ── EARLY EXTENSION — the tough-love read (SmartPlay Caddie) ─────────────
   {
-    id: 'video.early_extension.tank',
+    id: 'video.early_extension.blunt',
     layer: 'full_swing',
     module: MODULE,
     topic: 'early extension — the tough-love read',

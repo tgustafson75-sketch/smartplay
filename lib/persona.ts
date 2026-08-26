@@ -1,7 +1,6 @@
 import { KEVIN_CHARACTER_SPEC } from '../constants/kevinCharacter';
 import { SERENA_CHARACTER_SPEC } from '../constants/serenaCharacter';
 import { HARRY_CHARACTER_SPEC } from '../constants/harryCharacter';
-import { TANK_CHARACTER_SPEC } from '../constants/tankCharacter';
 
 export type VoiceGender = 'male' | 'female';
 // 2026-06-06 — 'custom' added as 5th persona for the user's

@@ -102,7 +102,7 @@ export async function generateRecap(
     // 2026-05-21 — Fix Q: pass active persona so the recap renders in
     // the user's selected caddie's voice + perspective, not the server's
     // voiceGender→Kevin fallback.
-    persona?: 'kevin' | 'serena' | 'harry' | 'tank' | 'custom';
+    persona?: 'kevin' | 'serena' | 'harry' | 'custom';
     // FIX M15 — post-round feelings collected on the feelings screen.
     postRoundFeelings?: { energy?: string; focus?: string; vibe?: string; weather?: string } | null;
   },

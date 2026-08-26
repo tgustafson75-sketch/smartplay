@@ -114,8 +114,6 @@ export default function Settings() {
     simpleBriefingUserTouched,
     personaIntensity,
     setPersonaIntensity,
-    tankSoftIntro,
-    setTankSoftIntro,
     setAutoListenEnabled,
     setCartMode,
     setSkipBriefings,
@@ -148,10 +146,6 @@ export default function Settings() {
   const caddieAssignments = useSettingsStore(s => s.caddieAssignments);
   const setCaddieForPillar = useSettingsStore(s => s.setCaddieForPillar);
   const resetCaddieAssignments = useSettingsStore(s => s.resetCaddieAssignments);
-  // 2026-08-26 — the Tank opt-in and its picker gating are gone with the persona. personaChoices and
-  // gatedPersona existed only to hide/redirect Tank; the pickers now render the real roster directly.
-  const personaChoices = (base: { label: string; value: string }[]) => base;
-  const gatedPersona = (_pillar: 'round' | 'cage' | 'drills' | 'play', v: string) => v;
   // Phase 106 — team handoff suggestions suppression.
   const caddieSuggestions = useSettingsStore(s => s.caddieSuggestions);
   const setCaddieSuggestions = useSettingsStore(s => s.setCaddieSuggestions);
@@ -174,7 +168,7 @@ export default function Settings() {
   const setAnalyticsOptIn = useSettingsStore(s => s.setAnalyticsOptIn);
 
   // Persona-aware display name. Settings labels reference the active caddie
-  // by name (Kevin / Serena / Harry / Tank) consistently with the rest of the app.
+  // by name consistently with the rest of the app.
   const caddieName = getCaddieName(caddiePersonality);
 
   // 2026-05-19 — trust level read inline in Round Experience instead of
@@ -1024,41 +1018,41 @@ export default function Settings() {
 
           <PillRow
             label="Round (on-course)  ·  default Kevin"
-            options={personaChoices([
+            options={[
               { label: 'Kevin', value: 'kevin' },
               { label: 'Serena', value: 'serena' },
-            ])}
-            value={gatedPersona('round', caddieAssignments.round)}
+            ]}
+            value={caddieAssignments.round}
             onSelect={(v) => setCaddieForPillar('round', v as 'kevin' | 'serena' | 'harry')}
           />
 
           <PillRow
             label="Cage Mode  ·  default Serena"
-            options={personaChoices([
+            options={[
               { label: 'Serena', value: 'serena' },
               { label: 'Kevin', value: 'kevin' },
-            ])}
-            value={gatedPersona('cage', caddieAssignments.cage)}
+            ]}
+            value={caddieAssignments.cage}
             onSelect={(v) => setCaddieForPillar('cage', v as 'kevin' | 'serena' | 'harry')}
           />
 
           <PillRow
             label="Drills (SwingLab)  ·  default Serena"
-            options={personaChoices([
+            options={[
               { label: 'Serena', value: 'serena' },
               { label: 'Kevin', value: 'kevin' },
-            ])}
-            value={gatedPersona('drills', caddieAssignments.drills)}
+            ]}
+            value={caddieAssignments.drills}
             onSelect={(v) => setCaddieForPillar('drills', v as 'kevin' | 'serena' | 'harry')}
           />
 
           <PillRow
             label="Play / Arena  ·  default Kevin"
-            options={personaChoices([
+            options={[
               { label: 'Kevin', value: 'kevin' },
               { label: 'Serena', value: 'serena' },
-            ])}
-            value={gatedPersona('play', caddieAssignments.play)}
+            ]}
+            value={caddieAssignments.play}
             onSelect={(v) => setCaddieForPillar('play', v as 'kevin' | 'serena' | 'harry')}
           />
 
@@ -1107,10 +1101,7 @@ export default function Settings() {
               Now mirrors the cycler: same ACTIVE_PERSONAS set + the same sync. */}
           <PillRow
             label="Active Caddie"
-            // 2026-08-07 (Tim — "you can STILL toggle to Tank") — this picker hardcoded Tank and skipped the
-            // personaChoices() filter the per-pillar pickers use, so Tank stayed selectable while disabled.
-            // Filtered now; Tank shows here only when enabled in Owner Tools.
-            options={personaChoices([
+            options={[
               { label: 'Kevin', value: 'kevin' },
               { label: 'Serena', value: 'serena' },
               {
@@ -1122,7 +1113,7 @@ export default function Settings() {
                 })(),
                 value: 'custom',
               },
-            ])}
+            ]}
             value={caddiePersonality}
             onSelect={(v) => {
               setCaddiePersonality(v as 'kevin' | 'serena' | 'custom');
@@ -1406,15 +1397,8 @@ export default function Settings() {
             value={simpleBriefing}
             onValueChange={setSimpleBriefing}
           />
-          <ToggleRow
-            label="Tank soft-intro"
-            sub="Tank drops Marine cadence for his first three turns with you, then unlocks. Auto-clears after one full round."
-            value={tankSoftIntro}
-            onValueChange={setTankSoftIntro}
-          />
 
-          {/* PER-PERSONA INTENSITY DIAL — slider per caddie. Default Tank=70,
-              Harry=90, Kevin/Serena=100. 2026-08-07 (Tim) — hide Tank's dial when Tank is disabled. */}
+          {/* PER-PERSONA INTENSITY DIAL — one slider per caddie on the roster. */}
           {selectablePersonas().map((p, idx, arr) => {
             // 2026-06-06 — Display the user's chosen custom caddie name
             // here instead of the static "My Caddie" fallback. Also
@@ -1853,7 +1837,7 @@ export default function Settings() {
               Roster + Swing Library →
             </Text>
           </TouchableOpacity>
-          {/* 2026-06-30 (Tim) — minimal in-app messaging (Tim ↔ Tank to start).
+          {/* 2026-06-30 (Tim) — minimal in-app messaging.
               2026-07-21 — RELEASE feature, hidden in beta behind MESSAGING_ENABLED. */}
           {MESSAGING_ENABLED && (
           <TouchableOpacity
@@ -1981,11 +1965,8 @@ export default function Settings() {
               {caddieName}
             </Text>
           </View>
-          {/* 2026-05-24 v1.2 — Company attribution. Built by SmartPlay
-              AI (the company). All four caddies (Kevin / Serena / Tank
-              / Harry) are equal personas — none is "the face" in the
-              About row. Tank is named only where his feature scope
-              requires it (ask_golf_father). */}
+          {/* 2026-05-24 v1.2 — Company attribution. Built by SmartPlay AI (the company).
+              The caddies are equal personas — none is "the face" in the About row. */}
           <View style={styles.aboutRow}>
             <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Built by</Text>
             <Text style={[styles.aboutValue, { color: colors.text_primary }]}>SmartPlay AI</Text>
@@ -2031,9 +2012,8 @@ export default function Settings() {
             <Ionicons name="bug-outline" size={20} color={colors.text_muted} />
           </TouchableOpacity>
 
-          {/* 2026-05-25 — Fix AI: Coach Knowledge entry. Same Beta
-              Feedback section so coaches (Marc/Tank) can find their
-              "remember this" captures and export them to Tim. */}
+          {/* 2026-05-25 — Fix AI: Coach Knowledge entry. Same Beta Feedback section so a
+              coach can find their "remember this" captures and export them. */}
           <TouchableOpacity
             style={styles.resetRow}
             onPress={() => router.push('/coach-knowledge' as never)}
@@ -2064,8 +2044,8 @@ export default function Settings() {
                 <CollapsibleSection title="Owner Tools" icon="construct-outline">
                   {/* 2026-05-24 v1.2.1 — Glasses Mode toggle. Pre-
                       configures the audio session for background
-                      Bluetooth so Tank's voice routes to Ray-Ban Meta
-                      glasses when paired. Persisted on settingsStore.
+                      Bluetooth so the caddie's voice routes to Ray-Ban
+                      Meta glasses when paired. Persisted on settingsStore.
                       Audio mode applied on toggle ON via existing
                       voiceService.configureAudioForSpeech (queued, no
                       race with the rest of voice stack). */}
@@ -2079,7 +2059,7 @@ export default function Settings() {
                   {/* 2026-06-15 (Tim) — "Train the Trainer" — the reference-asset
                       authoring tool (capture example pics + narrative for faults
                       like open-face), moved here from the global Tools menu so it's
-                      an owner/instructor surface Tim can point Tank to. */}
+                      an owner/instructor surface. */}
                   <TouchableOpacity
                     style={styles.resetRow}
                     onPress={() => router.push('/author/reference-assets' as never)}
@@ -2158,7 +2138,7 @@ export default function Settings() {
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Voice Misses</Text>
                       <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        Phrasings that didn&apos;t match a handler. Tank&apos;s testing surfaces the gaps here for review.
+                        Phrasings that didn&apos;t match a handler. Field testing surfaces the gaps here for review.
                       </Text>
                     </View>
                     <Ionicons name="mic-off-outline" size={20} color={colors.text_muted} />

@@ -1,7 +1,7 @@
 /**
  * 2026-05-25 — Fix AF: voice intent for coach refinement.
  *
- * Triggered when an authorized coach (e.g. Marc / real Tank) says one
+ * Triggered when an authorized coach says one
  * of the trigger phrases AFTER the caddie has just answered a topic
  * question. The handler:
  *   1. Reads the prior conversation turns (user question + caddie
@@ -44,7 +44,7 @@ function extractTopic(priorUserText: string | null): string {
   const stripped = priorUserText
     .toLowerCase()
     .replace(/[?.!,]/g, '')
-    .replace(/^(hey|kevin|tank|serena|harry)[, ]+/i, '')
+    .replace(/^(hey|kevin|serena|harry)[, ]+/i, '')
     .replace(/^(what\s+is|what's|tell\s+me\s+about|explain|define|how\s+does|how\s+do\s+you|what\s+does)\s+/i, '')
     .replace(/^(the|a|an)\s+/i, '')
     .trim();

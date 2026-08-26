@@ -2029,19 +2029,6 @@ export const useRoundStore = create<RoundState>()(
           }
         })();
 
-        // PGA HOPE follow-up — auto-clear Tank's soft-intro after the player
-        // has completed at least one full round (>=9 holes) with Tank as
-        // their active caddie.
-        if (holesPlayed >= 9 && !s.isSimRound) { // 2026-07-04 — no points farming via sim rounds
-          try {
-            const settingsMod = require('./settingsStore');
-            const cur = settingsMod.useSettingsStore.getState();
-            if (cur.tankSoftIntro && cur.caddiePersonality === 'tank') {
-              cur.setTankSoftIntro(false);
-            }
-          } catch { /* ignore */ }
-        }
-
         // 2026-05-16 — Handicap pipeline now wired into round-end.
         // Previously: pushDifferential() + computeRoundHandicap() existed
         // but nothing called them at round end, so Tim's manual handicap
@@ -2103,10 +2090,10 @@ export const useRoundStore = create<RoundState>()(
           }
         }
 
-        // Points — completed round = 100 pts. 2026-07-06 (audit P0) — sim gate
-        // was documented ("no points farming via sim rounds") but the check
-        // landed on the tankSoftIntro block above; a narrated sim round was
-        // still worth 100 pts + tier climb. Gate THIS block too.
+        // Points — completed round = 100 pts. 2026-07-06 (audit P0) — the sim gate
+        // was documented ("no points farming via sim rounds") but landed on a
+        // neighbouring block; a narrated sim round was still worth 100 pts + tier
+        // climb. Gate THIS block too.
         if (holesPlayed >= 9 && !s.isSimRound) {
           try {
             const pointsMod = require('./pointsStore');
@@ -2140,9 +2127,7 @@ export const useRoundStore = create<RoundState>()(
             const apiUrl = getApiBaseUrl();
             // 2026-05-21 — Fix Q: pass voiceGender + persona so the recap
             // renders in the user's selected caddie's voice instead of
-            // falling through to the server's Kevin default. cur is the
-            // active settings snapshot captured higher up in this scope
-            // (see the tankSoftIntro branch above line 825).
+            // falling through to the server's Kevin default.
             const settingsForRecap = (() => {
               try {
                 const mod = require('./settingsStore');

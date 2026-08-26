@@ -10,7 +10,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 25_000,
 // hit a persistent 401. The dead branch was load-bearing for nothing
 // but adding a failure surface. OpenAI gpt-4o-mini-tts is the
 // confirmed winner; per-persona voice mapping below keeps the
-// character distinction Tank/Serena/Harry/Kevin need.
+// character distinction each caddie needs.
 
 const OPENAI_VOICES = {
   male:   'onyx' as const,
@@ -21,7 +21,6 @@ const OPENAI_VOICES = {
 // voice picked to match the persona's character + age:
 //   - kevin: onyx (deep, warm — middle-aged 'friend in the cart')
 //   - serena: nova (clear, composed — professional female caddie)
-//   - tank: ash (confident, expressive — high-intensity drill-sergeant)
 //   - harry: fable (British male storyteller — natural older-mentor
 //     gravitas; Tim reminded that Harry is an OLD guy, so the
 //     grandfather/wise-counsel tone matters more than just 'calm').
@@ -29,7 +28,6 @@ const OPENAI_VOICES = {
 const OPENAI_VOICES_BY_PERSONA: Record<string, 'alloy' | 'ash' | 'coral' | 'echo' | 'fable' | 'nova' | 'onyx' | 'sage' | 'shimmer' | 'verse'> = {
   kevin:  'onyx',
   serena: 'nova',
-  tank:   'ash',
   harry:  'fable',
 };
 

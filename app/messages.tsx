@@ -107,7 +107,7 @@ function MessagesScreenInner() {
         <TextInput
           value={recipient}
           onChangeText={setRecipient}
-          placeholder="their account email (e.g. Tank's)"
+          placeholder="their account email"
           placeholderTextColor={colors.text_muted}
           autoCapitalize="none"
           keyboardType="email-address"

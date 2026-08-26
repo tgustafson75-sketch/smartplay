@@ -2,7 +2,7 @@
  * Phase v3-port (step 3/5) — curated instructor video links per fault category.
  *
  * Every URL is a real YouTube video by the attributed instructor (Hank Haney, Sean Foley,
- * Mike Malaska, Mike Bender) plus Tank's + Randy's clips.
+ * Mike Malaska, Mike Bender) plus SmartPlay Caddie's own clips.
  *
  * 2026-07-19 — all 14 URLs VERIFIED live + public via the YouTube oEmbed API (HTTP 200 + the
  * returned title matches the attributed instructor), so `verified: true` is now accurate — no
@@ -33,7 +33,7 @@ export type IssueCategory =
   // fills the pair so the grid reads clean. URL empty until Tank
   // recording lands. Consumers should render the SmartPlay logo when
   // url === '' (vs the youtube thumbnail other categories use).
-  | 'tank_caddie';
+  | 'early_extension';
 
 export interface InstructorVideoLink {
   title: string;
@@ -42,7 +42,7 @@ export interface InstructorVideoLink {
   approxRuntimeSec: number;
   verified: boolean;
   // 2026-05-26 — Optional placeholder thumbnail for slots whose video
-  // isn't recorded yet (notably tank_caddie). When set, the drill-card
+  // isn't recorded yet. When set, the drill-card
   // UI should render this asset instead of trying to derive a YouTube
   // thumbnail from the (empty) url. require()-style ImageSourcePropType.
   placeholderThumbnail?: number;
@@ -163,17 +163,13 @@ export const INSTRUCTOR_VIDEOS: Record<IssueCategory, CategoryVideos> = {
       verified: true,
     },
   },
-  // 2026-05-26 — 8th slot reserved for Tank-narrated SmartPlay-branded
-  // drill content.
-  // 2026-05-27 — Tim provided the FIRST Tank video: "Tank's Take on
-  // Early Extension." This unlocks the tank_caddie slot — Tank's
-  // card on the Drills surface now opens the real video instead of
-  // showing a placeholder thumbnail. Verified=false pending Tim's
-  // playback check on the Galaxy Z Fold per the standing verify rule.
-  tank_caddie: {
+  // 2026-05-26 — 8th slot: SmartPlay-branded drill content, own recording.
+  // 2026-08-26 — de-branded from the removed persona; the lesson itself is
+  // unchanged and the same read is in the KB as video.early_extension.blunt.
+  early_extension: {
     primary: {
-      title: "Tank's Take on Early Extension",
-      instructor: 'Tank · SmartPlay Caddie',
+      title: 'Caddie Take on Early Extension',
+      instructor: 'SmartPlay Caddie',
       url: 'https://www.youtube.com/watch?v=c_ePVepaAp4',
       approxRuntimeSec: 180,
       verified: true,

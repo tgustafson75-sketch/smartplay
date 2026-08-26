@@ -5,8 +5,8 @@
  * store/RN imports) for two reasons:
  *   1. It's UNIT-TESTABLE — brainSettings.test.ts asserts every brain-bound field is forwarded, so a
  *      new toggle that someone forgets to send FAILS A TEST instead of silently dying on the live
- *      path. That silent-death class is exactly what made cecilyMode / responseMode / personaIntensity
- *      / tankSoftIntro dead for so long.
+ *      path. That silent-death class is exactly what made cecilyMode / responseMode /
+ *      personaIntensity dead for so long.
  *   2. It's the SINGLE choke point — every setting the brain reads flows through here, so wiring one
  *      is a one-line, obviously-safe change (buildPipecatContext spreads it; pipecat-turn consumes it).
  *

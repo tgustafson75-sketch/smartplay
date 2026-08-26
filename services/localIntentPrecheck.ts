@@ -219,7 +219,7 @@ const PATTERNS: Pattern[] = [
   {
     // Caddie persona — anchored on a switch verb + one of the 4 KNOWN names, so a guest named e.g.
     // "Kevin" is never mistaken for a persona switch.
-    rx: /\b(?:switch|change)(?:\s+(?:my\s+)?caddie)?\s+to\s+(kevin|tank|serena|harry)\b|\bput\s+(kevin|tank|serena|harry)\s+in\s+charge\b/i,
+    rx: /\b(?:switch|change)(?:\s+(?:my\s+)?caddie)?\s+to\s+(kevin|serena|harry)\b|\bput\s+(kevin|serena|harry)\s+in\s+charge\b/i,
     build: (raw, m) => intent(raw, 'change_setting', { setting_name: 'caddie_persona', new_value: (m[1] ?? m[2]).toLowerCase() }),
   },
   {

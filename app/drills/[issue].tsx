@@ -38,14 +38,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getDrillEntry } from '../../data/drillCatalog';
 import { getInstructorVideo } from '../../data/instructorVideos';
-// 2026-05-27 — Fix EP: send-to-Tank CTA on Tank's drill detail.
 
 export default function DrillDetail() {
   const router = useRouter();
   const { colors } = useTheme();
   const { issue } = useLocalSearchParams<{ issue?: string }>();
   const [zoomOpen, setZoomOpen] = useState(false);
-  // 2026-05-27 — Fix EF: separate zoom state for the optional Tank's
+  // 2026-05-27 — Fix EF: separate zoom state for the optional coach's
   // Tips infographic so each Modal targets the right image. The two
   // modals share the same zoom UI shell but render distinct sources.
   const [tipsZoomOpen, setTipsZoomOpen] = useState(false);
@@ -179,20 +178,20 @@ export default function DrillDetail() {
           </Pressable>
         )}
 
-        {/* 2026-05-27 — Fix EF: TANK'S TIPS — optional dense
+        {/* 2026-05-27 — Fix EF: COACH'S TIPS — optional dense
             infographic for drills that have one. Rendered between
             the DRILLS list and WATCH card so the reading flow is:
             problem → drills → deep reference → video. Same tap-to-
             zoom pattern as the top illustration but with a distinct
-            "TANK'S TIPS" eyebrow so it reads as Tank's voice, not a
-            second generic illustration. */}
+            eyebrow so it reads as a coach's note, not a second
+            generic illustration. */}
         {entry.tipsImage && (
           <>
-            <Text style={[styles.sectionLabel, { color: '#F0C030' }]}>TANK&apos;S TIPS</Text>
+            <Text style={[styles.sectionLabel, { color: '#F0C030' }]}>COACH&apos;S TIPS</Text>
             <Pressable
               onPress={() => setTipsZoomOpen(true)}
               accessibilityRole="button"
-              accessibilityLabel="Tank's Tips infographic. Tap to zoom."
+              accessibilityLabel="Coach's Tips infographic. Tap to zoom."
               style={styles.illustrationWrap}
             >
               <Image source={entry.tipsImage} style={styles.illustration} resizeMode="contain" />
@@ -253,13 +252,6 @@ export default function DrillDetail() {
         </TouchableOpacity>
         </>)}
 
-        {/* 2026-05-27 — Fix EP: Send-to-Tank CTA. ONLY on Tank's
-            drill (videoCategory === 'tank_caddie') for now — Tank IS
-            the human review layer behind the AI analysis, and the
-            other drills route through their respective pro instructors
-            (Hank Haney, Sean Foley, etc.) who don't have a review
-            queue. Tapping routes the user to the Library so they can
-            pick the swing to send. Hidden when paywall locked. */}
       </ScrollView>
 
       {/* ZOOM MODAL */}
@@ -287,7 +279,7 @@ export default function DrillDetail() {
         </View>
       </Modal>
 
-      {/* 2026-05-27 — Fix EF: separate zoom modal for Tank's Tips.
+      {/* 2026-05-27 — Fix EF: separate zoom modal for Coach's Tips.
           Reuses the same backdrop / close-button shell as the
           illustration zoom above; just renders entry.tipsImage. */}
       <Modal
@@ -302,7 +294,7 @@ export default function DrillDetail() {
               onPress={() => setTipsZoomOpen(false)}
               hitSlop={14}
               accessibilityRole="button"
-              accessibilityLabel="Close Tank's Tips"
+              accessibilityLabel="Close Coach's Tips"
               style={styles.zoomCloseBtn}
             >
               <Ionicons name="close" size={28} color="#ffffff" />

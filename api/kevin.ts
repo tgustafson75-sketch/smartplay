@@ -23,7 +23,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 10_000,
 // 2026-06-04 — Persona → OpenAI TTS voice map. Mirrors the table in
 // api/voice.ts so the inline brain-response audio matches the standalone
 // speak() path's voice for every persona. Previous shape only branched
-// serena → nova and used onyx for everyone else, which meant Tank lost
+// serena → nova and used onyx for everyone else, which meant other personas lost
 // their "ash" voice and Harry lost their "fable" voice on every brain reply.
 // Future drift prevention: if a fifth persona is added, update both
 // files (api/voice.ts:28 and here) — extracting to a shared module would
@@ -31,7 +31,6 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 10_000,
 const VOICE_BY_PERSONA: Record<string, 'alloy' | 'ash' | 'coral' | 'echo' | 'fable' | 'nova' | 'onyx' | 'sage' | 'shimmer' | 'verse'> = {
   kevin:  'onyx',
   serena: 'nova',
-  tank:   'ash',
   harry:  'fable',
 };
 
@@ -444,7 +443,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
        * heard as the robotic device voice.
        */
       skip_tts = false,
-      // Persona — preferred 'kevin'|'serena'|'harry'|'tank'. Legacy clients
+      // Persona — preferred 'kevin'|'serena'|'harry'. Legacy clients
       // send only voiceGender ('male'|'female'); supported as fallback.
       voiceGender = 'male',
       persona = null,
@@ -548,7 +547,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const rawPersona = (typeof persona === 'string' ? persona : voiceGender);
     // 2026-07-30 (voice/brain audit H2) — resolve a CUSTOM caddie to its chosen base persona for the
     // character spec + server-TTS voice (both derive from personaInput below), but keep the custom NAME.
-    const customBase = ['kevin', 'serena', 'harry', 'tank'].includes(String(customCaddieBasePersona))
+    const customBase = ['kevin', 'serena', 'harry'].includes(String(customCaddieBasePersona))
       ? String(customCaddieBasePersona) : 'kevin';
     const personaInput = rawPersona === 'custom' ? customBase : rawPersona;
     const caddieName = (rawPersona === 'custom' && typeof customCaddieName === 'string' && customCaddieName.trim())
@@ -564,13 +563,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const _playerHistory: string | null = capOrNull(playerHistoryBlock, 1200);
     const _practicePlan: string | null = capOrNull(practicePlanBlock, 1200);
     const _routineImpact: string | null = capOrNull(routineImpactBlock, 600);
-    // 2026-05-23 — Persona Knowledge Layer. When persona='tank' AND the
-    // user message matches a KB entry above the score threshold, inject
-    // the top entries as a teaching-wisdom block. The brain riffs off
-    // the entry in Tank's voice rather than freestyling. For other
-    // personas this resolves to null (no injection) — they fall back to
-    // the existing brain logic. Failures (require failure, KB not
-    // present in test env) collapse to null so the brain still works.
+    // 2026-05-23 — Persona Knowledge Layer. When the user message matches a KB entry
+    // above the score threshold, inject the top entries as a teaching-wisdom block so
+    // the brain riffs off vetted coaching rather than freestyling. Resolves to null
+    // (no injection) when nothing matches. Failures (require failure, KB not present
+    // in test env) collapse to null so the brain still works.
     let _personaKBBlock: string | null = null;
     try {
       const kb = await import('../services/personaKnowledgeBase');
@@ -2206,7 +2203,7 @@ ${kbPrefix ? `${kbPrefix}\n\n` : ''}${onCourseContextBlock}${roundFactsPrefix}${
 
     // 2026-06-04 — OpenAI TTS only. ElevenLabs branch removed.
     // Full per-persona voice map at module top (VOICE_BY_PERSONA) so
-    // Tank → ash and Harry → fable land on the brain-reply path just
+    // Harry → fable lands on the brain-reply path just
     // like they do on the standalone /api/voice path.
     const personaKey =
       typeof personaInput === 'string' ? personaInput.toLowerCase() : '';

@@ -262,7 +262,7 @@ check('getCaddieName(null)', getCaddieName(null) === 'Kevin', `expected 'Kevin',
 check('getCaddieName(undefined)', getCaddieName(undefined) === 'Kevin', `expected 'Kevin', got '${getCaddieName(undefined)}'`);
 check('getCaddieName("garbage")', getCaddieName('garbage') === 'Kevin', `expected 'Kevin', got '${getCaddieName('garbage')}'`);
 
-// Pronoun helpers — Tank/Harry/Kevin male, Serena female, Custom they/them
+// Pronoun helpers — Kevin/Harry male, Serena female, Custom they/them
 // (gender-neutral so any user-chosen identity works).
 for (const p of ALL_PERSONAS) {
   const expectedSubj = p === 'serena' ? 'she' : p === 'custom' ? 'they' : 'he';
@@ -299,9 +299,9 @@ for (const p of ALL_PERSONAS) {
 
 // Cross-check: each persona's spec should NOT contain the OTHER personas' uniquely-distinctive markers
 const CROSS_CHECK_NEGATIVE: Record<Persona, string[]> = {
-  kevin:  ['Send it', 'Lock it in'],         // Tank's commands shouldn't be in Kevin's spec
-  serena: ['Take a breath', 'Send it'],      // Harry's + Tank's
-  harry:  ['Send it', 'Marine cadence'],     // Tank's
+  kevin:  ['Send it', 'Lock it in'],         // a removed persona's commands must not be in Kevin's spec
+  serena: ['Take a breath', 'Send it'],      // Harry's + the removed persona's
+  harry:  ['Send it', 'Marine cadence'],     // the removed persona's
   // Custom = Kevin's spec, so the same negative markers apply.
   custom: ['Send it', 'Lock it in'],
 };
@@ -587,15 +587,6 @@ check('voiceService exports caption + speaking subscriptions',
 check('voiceService volume reads currentPlaybackVolume() (per-persona dial)',
   /volume:\s*currentPlaybackVolume\(\)/.test(voiceSrc),
   'volume threaded from intensity dial');
-
-const tankSpecPath = path.resolve(__dirname, '../../constants/tankCharacter.ts');
-const tankSpec = fs.readFileSync(tankSpecPath, 'utf-8');
-check('Tank character spec has DISASTER DISCIPLINE block',
-  tankSpec.includes('DISASTER DISCIPLINE'),
-  'disaster discipline guard present');
-check('Tank character spec has SOFT-INTRO MODE block',
-  tankSpec.includes('SOFT-INTRO MODE'),
-  'soft-intro mode present');
 
 const kevinApiPath = path.resolve(__dirname, '../../api/kevin.ts');
 const kevinSrc = fs.readFileSync(kevinApiPath, 'utf-8');
@@ -2012,11 +2003,11 @@ check('Final QA: "what\'s my 7 iron" answers, offline settings flip, and the fal
     // (a) "what's my 7 iron" routes to a real handler (was cage-only / re-prompt), and doesn't
     //     hijack score/handicap; offline persona/theme/cart/ghost flip locally.
     const seven = precheckLocalIntent('how far do I hit my 7 iron');
-    const persona = precheckLocalIntent('switch to Tank');
+    const persona = precheckLocalIntent('switch to Serena');
     const okRouting =
       seven?.intent_type === 'query_status' && seven?.parameters?.query_topic === 'club_distance' &&
       precheckLocalIntent("what's my score")?.parameters?.query_topic === 'score' &&
-      persona?.intent_type === 'change_setting' && persona?.parameters?.new_value === 'tank' &&
+      persona?.intent_type === 'change_setting' && persona?.parameters?.new_value === 'serena' &&
       /case 'club_distance':/.test(read('services/intents/queryStatusHandler.ts'));
     // (b) chart calibration: Driver is no longer the scratch-level 275, and 5H no longer collides
     //     with 3I (was 206 vs 205). Both copies (store + recommendation) match.
@@ -2614,13 +2605,13 @@ check('Voice: persona switch never leaks the old voice for a turn (live-persona 
   // 2026-06-13 — wrong-voice-for-a-turn fix. speak() read persona LIVE but defaulted the
   // voice gender to the caller's param (a stale closure value after a mid-flight persona
   // switch), so the in-flight answer spoke the OLD voice once. Now gender is derived from
-  // the LIVE persona too (serena=female; kevin/harry/tank=male; custom keeps its toggle).
+  // the LIVE persona too (serena=female; kevin/harry=male; custom keeps its toggle).
   (() => {
     const v = read('services/voiceService.ts');
     return (
       /persona = require\('\.\.\/store\/settingsStore'\)\.useSettingsStore\.getState\(\)\.caddiePersonality/.test(v) &&
       /if \(persona === 'serena'\) effectiveGender = 'female'/.test(v) &&
-      /else if \(persona === 'kevin' \|\| persona === 'harry' \|\| persona === 'tank'\) effectiveGender = 'male'/.test(v) &&
+      /else if \(persona === 'kevin' \|\| persona === 'harry'\) effectiveGender = 'male'/.test(v) &&
       /else if \(persona === 'custom'\)/.test(v) &&        // custom still uses its own toggle
       /gender: effectiveGender/.test(v)                     // the live-derived gender is what's sent
     );
@@ -12450,6 +12441,65 @@ console.log('\n=== Guards that read prose ===');
 }
 
 // ─── Synthesis ─────────────────────────────────────────────────────────────────
+
+/**
+ * 2026-08-26 (Tim — "any references whatsoever to Tank or Marc Ward need to be stripped").
+ *
+ * A RATCHET, not a search. The 08-25 pass removed the persona and reported it done; five days
+ * later a sweep still found a visible "Tank soft-intro" toggle in Settings, a "TANK'S TIPS"
+ * header on every drill page, a selectable "Tank" base-personality chip, a handler that prefixed
+ * every reply with "Tank: ", four server prompts that taught the model the name — and an outside
+ * instructor's real email address shipping in the bundle with a live coachMode grant.
+ *
+ * Removal-by-inspection is exactly the class of work that comes back. So this reads SHIPPED source
+ * with comments stripped (a comment cannot speak the name to a player) and fails on any occurrence
+ * outside a FROZEN allowlist. The allowlist holds only lines that must name the old value in order
+ * to migrate away from it — deleting the migration is the only way to shorten it.
+ */
+check('LOCK: the removed persona cannot return to shipped code',
+  (() => {
+    const DIRS = ['services', 'lib', 'hooks', 'app', 'components', 'store', 'api', 'constants', 'data', 'types'];
+    // Lines that MUST name the old value: the two persisted-settings migrations and the profile one.
+    const ALLOWED = new Set([
+      "if ((p.caddiePersonality as string) === 'tank') p.caddiePersonality = 'kevin';",
+      "if ((reassigned[pillar] as string) === 'tank') reassigned[pillar] = 'kevin';",
+      "if (p && (p.customCaddieBasePersona as string) === 'tank') p.customCaddieBasePersona = 'kevin';",
+    ]);
+    // The wire token the classifier still emits for ask_golf_father; renaming it would break
+    // in-flight clients. Documented at api/voice-intent.ts.
+    const WIRE_TOKEN = /tank_advice/;
+    const NAME = /\btank\b/i;
+    const PERSON = /marc[\s._-]*ward|marc\.ward3533/i;
+    const walk = (dir: string): string[] => {
+      const out: string[] = [];
+      let entries: string[] = [];
+      try { entries = fs.readdirSync(dir); } catch { return out; }
+      for (const e of entries) {
+        const p = `${dir}/${e}`;
+        let stat;
+        try { stat = fs.statSync(p); } catch { continue; }
+        if (stat.isDirectory()) out.push(...walk(p));
+        else if (/\.(ts|tsx)$/.test(e)) out.push(p);
+      }
+      return out;
+    };
+    const offenders: string[] = [];
+    for (const dir of DIRS) {
+      for (const f of walk(path.resolve(__dirname, '../../', dir))) {
+        const rel = f.slice(path.resolve(__dirname, '../../').length + 1);
+        const src = readCode(rel);
+        for (const line of src.split('\n')) {
+          const t = line.trim();
+          if (!t || ALLOWED.has(t)) continue;
+          if (WIRE_TOKEN.test(t) && !PERSON.test(t)) continue;
+          if (NAME.test(t) || PERSON.test(t)) offenders.push(`${rel}: ${t.slice(0, 90)}`);
+        }
+      }
+    }
+    if (offenders.length) console.log('   offenders:\n     ' + offenders.slice(0, 12).join('\n     '));
+    return offenders.length === 0;
+  })(),
+  'no shipped source line names the removed persona or the instructor behind it, outside the frozen migration allowlist');
 
 console.log('\n=== SYNTHESIS ===');
 // Emitted UNCONDITIONALLY, so this is a standing guard in the suite rather than an error path that

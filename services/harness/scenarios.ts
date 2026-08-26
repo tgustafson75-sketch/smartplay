@@ -118,9 +118,9 @@ const SCEN_3: Scenario = {
 
 const SCEN_4: Scenario = {
   id: 'C4',
-  title: 'Tank rule — red_vs_yellow EN + ES',
+  title: 'Golf Father rule — red_vs_yellow EN + ES',
   category: 'critical',
-  run: () => runWithAsserts('C4', 'Tank rule — red_vs_yellow EN + ES', async (a) => {
+  run: () => runWithAsserts('C4', 'Golf Father rule — red_vs_yellow EN + ES', async (a) => {
     // EN — i18n defaults to 'en'; assert canonical English phrase fragment.
     const tEn = M.seedLanguage('en');
     const en = await dispatchVoiceIntent({
@@ -147,9 +147,9 @@ const SCEN_4: Scenario = {
 
 const SCEN_5: Scenario = {
   id: 'C5',
-  title: 'Tank rule — driver_or_3wood (over-the-top branch)',
+  title: 'Golf Father rule — driver_or_3wood (over-the-top branch)',
   category: 'critical',
-  run: () => runWithAsserts('C5', 'Tank rule — driver_or_3wood over-the-top', async (a) => {
+  run: () => runWithAsserts('C5', 'Golf Father rule — driver_or_3wood over-the-top', async (a) => {
     const tEn = M.seedLanguage('en');
     const tReset = M.resetPracticeStats();
     const tFeed = M.feedPracticeSwings(8, { detected_issue: 'over_the_top', severity: 'significant' });
@@ -164,7 +164,7 @@ const SCEN_5: Scenario = {
       raw_text: 'driver or 3 wood here',
     });
     a.expect('Dispatch succeeded', r.success);
-    // EN copy from i18n/locales/en.json tank.driver_or_3wood
+    // EN copy from i18n/locales/en.json the Golf Father.driver_or_3wood
     a.expectContains('Response mentions 3-wood', r.voice_response, '3-wood');
     await tLoc(); await tFeed(); await tReset(); await tEn();
   }),
@@ -172,9 +172,9 @@ const SCEN_5: Scenario = {
 
 const SCEN_6: Scenario = {
   id: 'C6',
-  title: 'Tank rule — flag_or_center (default handicap)',
+  title: 'Golf Father rule — flag_or_center (default handicap)',
   category: 'critical',
-  run: () => runWithAsserts('C6', 'Tank rule — flag_or_center safe', async (a) => {
+  run: () => runWithAsserts('C6', 'Golf Father rule — flag_or_center safe', async (a) => {
     const tEn = M.seedLanguage('en');
     // Handler defaults user_handicap to 18 (> 15 → safe branch).
     const r = await dispatchVoiceIntent({
@@ -211,11 +211,11 @@ const SCEN_7: Scenario = {
 
 const SCEN_8: Scenario = {
   id: 'C8',
-  title: 'ES language thread — Tank rule routes through i18n',
+  title: 'ES language thread — the Golf Father rule routes through i18n',
   category: 'critical',
   run: () => runWithAsserts('C8', 'ES language thread', async (a) => {
     // Verify the language thread through a path that does NOT need
-    // an active round. ask_golf_father (Tank rules) reads i18n.t
+    // an active round. ask_golf_father (Golf Father rules) reads i18n.t
     // directly, so flipping language end-to-end exercises the same
     // translation plumbing distance_to_green would use, without the
     // global isRoundActive flip the prior version did (that flip

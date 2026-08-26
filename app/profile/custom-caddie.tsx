@@ -750,7 +750,7 @@ export default function CustomCaddieScreen() {
             </Text>
           </View>
 
-          {/* 2026-07-30 (Tim — "tie my persona and tendencies to Tank or Kevin or Serena"). The custom
+          {/* 2026-07-30 (Tim — "tie my persona and tendencies to one of the caddies"). The custom
               caddie keeps its own name + face but INHERITS a real persona's personality + speaking voice,
               so it always behaves like a fully-built caddie. A matched/picked voice below still overrides. */}
           <Text style={[styles.sectionLabel, { marginTop: 18 }]}>Base personality</Text>
@@ -758,11 +758,11 @@ export default function CustomCaddieScreen() {
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8, marginBottom: 4 }}>
             {/* 2026-08-01 (tester — "he can select Harry, this should not be possible"). Harry is a
                 DORMANT persona (not in ACTIVE_PERSONAS); it leaked back in here as a base-persona option.
-                Removed — only the shipped personas (Kevin/Serena/Tank) can back a custom caddie. */}
+                2026-08-26 — the removed persona was still listed one line below it, the same defect the
+                note above describes. Only personas in ACTIVE_PERSONAS may back a custom caddie. */}
             {([
               { id: 'kevin' as const, label: 'Kevin', sub: 'warm, steady' },
               { id: 'serena' as const, label: 'Serena', sub: 'calm, pro' },
-              { id: 'tank' as const, label: 'Tank', sub: 'intense, direct' },
             ]).map(p => {
               const on = (customCaddieBasePersona ?? 'kevin') === p.id;
               return (

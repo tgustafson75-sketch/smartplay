@@ -154,7 +154,7 @@ export async function analyzePutt(
   // the latest frame as base64 from the rolling queue (was only
   // checking URI presence before). When extractPuttKeyFrames isn't
   // already feeding frames, this picks up a glasses POV frame for
-  // free so Tank/Kevin can see what the player just lined up over.
+  // free so the caddie can see what the player just lined up over.
   let frames = input.frames_base64 ?? [];
   if (frames.length === 0) {
     try {
@@ -207,11 +207,12 @@ export async function analyzePutt(
     }
     const data = (await res.json()) as Partial<PuttingAnalysis>;
     const normalized = normalize(data, input, holeNumber, settings.caddiePersonality);
-    // Persona enrichment: fold Tank's putting wisdom into the
-    // mentalCue when the persona is Tank and the KB has a relevant
-    // entry. The server's mentalCue stays as the fallback; this only
-    // strengthens it.
-    const enriched = await enrichRecommendationWithPersonaKB(normalized, settings.caddiePersonality);
+    // 2026-08-26 — a persona-KB enrichment hop used to sit here. It only ever ran for a
+    // persona that no longer ships, so by 08-25 it had become a function that awaited
+    // nothing and returned its argument, under a comment describing work it wasn't doing.
+    // Re-pointing it at the ACTIVE caddie's KB answers is a real improvement and is logged
+    // in docs/OPEN-ITEMS; what is gone is the no-op that read like a feature.
+    const enriched = normalized;
     enriched.partialCapture = partialCapture || normalized.partialCapture;
     devLog(`[putting] analysis ok overallScore=${enriched.overallScore} dist=${enriched.distanceFeet}ft partial=${enriched.partialCapture ?? false}`);
     return enriched;
@@ -219,23 +220,6 @@ export async function analyzePutt(
     console.warn('[putting] analyze exception:', e);
     return fallbackAnalysis(input, holeNumber, settings.caddiePersonality, partialCapture);
   }
-}
-
-/**
- * 2026-05-23 — When persona is Tank AND the personaKnowledgeBase has
- * a relevant putting entry for the situation, replace the generic
- * mentalCue with Tank's first-sentence take. Tactical/technical cues
- * stay as-is (server already tuned for putting specifics). Non-Tank
- * personas pass through unchanged.
- */
-async function enrichRecommendationWithPersonaKB(
-  analysis: PuttingAnalysis,
-  persona: string,
-): Promise<PuttingAnalysis> {
-  const p = (persona ?? '').toLowerCase();
-  // 2026-08-25 — this enrichment only ever ran when the persona was Tank, which no longer exists.
-  // Removed rather than left as unreachable code; the putt read stands on its own measurement.
-  return analysis;
 }
 
 /**
@@ -259,7 +243,7 @@ export async function speakPuttRead(result: PuttingAnalysis): Promise<void> {
   try {
     const settings = useSettingsStore.getState();
     const voiceMod = await import('./voiceService');
-    // Phase 100: pass caddiePersonality (not voiceGender) so Tank / Harry use their correct male
+    // Phase 100: pass caddiePersonality (not voiceGender) so every caddie uses its correct
     // voice, not Kevin's default.
     const persona = (settings.caddiePersonality ?? 'kevin') as import('../lib/persona').Persona;
     void voiceMod.speak?.(
@@ -471,9 +455,8 @@ function normalize(
  *  return a complete PuttingAnalysis with low confidence. The point is
  *  never to leave the player without coaching.
  *
- *  2026-05-23 — Tank-specific copy when persona === 'tank'. Marine
- *  cadence + signature phrases instead of generic putting cues. Other
- *  personas keep the prior copy. Also stamps `partialCapture` so the
+ *  2026-08-26 — a second, persona-specific copy bank lived here for a caddie that no
+ *  longer ships. One bank now, for every caddie. Also stamps `partialCapture` so the
  *  UI can surface the "approximate" hint. */
 function fallbackAnalysis(
   input: PuttingAnalysisInput,
@@ -482,28 +465,16 @@ function fallbackAnalysis(
   partialCapture: boolean = true,
 ): PuttingAnalysis {
   const caddieName = getCaddieName(persona);
-  const p = (persona ?? '').toLowerCase();
   const echo = input.spoken_read && input.spoken_read.trim().length > 0
     ? `Heard "${input.spoken_read.trim()}". `
     : '';
-  // Tank-specific copy bank — clipped, command-stacked, no fluff.
-  const isTank = p === 'tank';
-  const recommendation = isTank
-    ? {
-        line: 'Trust your read. Pick the apex. Aim there.',
-        speedFeel: 'Three-foot circle past the hole. Lag distance, not line.',
-        mentalCue: 'Speed first. Line second. Standards are non-negotiable.',
-        technicalCue: 'Accelerate through. No decel. Eyes still.',
-      }
-    : {
-        line: 'Trust your read.',
-        speedFeel: 'Die it into the hole — smooth pendulum.',
-        mentalCue: 'Smooth pendulum, eyes still through impact.',
-        technicalCue: 'Accelerate gently — no deceleration.',
-      };
-  const caddieComment = isTank
-    ? `${echo}Limited reads on this one. Run the routine. Speed first. Line second. Lock it in.`
-    : `${caddieName} here. ${echo}Smooth pendulum, eyes still, trust the line.`;
+  const recommendation = {
+    line: 'Trust your read.',
+    speedFeel: 'Die it into the hole — smooth pendulum.',
+    mentalCue: 'Smooth pendulum, eyes still through impact.',
+    technicalCue: 'Accelerate gently — no deceleration.',
+  };
+  const caddieComment = `${caddieName} here. ${echo}Smooth pendulum, eyes still, trust the line.`;
   return {
     puttId: newPuttId(),
     timestamp: new Date().toISOString(),

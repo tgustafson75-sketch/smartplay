@@ -27,8 +27,8 @@ export interface InviteePreference {
   /** 2026-05-25 — Fix AF: coach refinement authorization. When true,
    *  this invitee can use the "remember this" / "add to brain" voice
    *  trigger to ingest refined instructional definitions into the
-   *  caddie brain. Marc (real Tank) is the canonical coach; other
-   *  vetted instructors can be added with this flag flipped on. */
+   *  caddie brain. No entry sets it today; a vetted instructor can be
+   *  added with this flag flipped on. */
   coachMode?: boolean;
 }
 
@@ -41,18 +41,11 @@ const INVITEE_PREFERENCES: Record<string, InviteePreference> = {
     displayName: 'Uncle Tommy',
     notes: "Tim's uncle, weekend HOST. Default to 'Uncle Tommy' until he says otherwise. Android. 2026-05-25 weekend invitee.",
   },
-  // 2026-05-25 — Fix AF: coach refinement. The coaching persona (the real
-  // instructor behind the Tank persona). coachMode unlocks the
-  // "remember this" / "add to brain" voice trigger so Marc can refine
-  // definitions ("what is Smash Factor") in his own words and have
-  // them ingested into the brain via coachKnowledgeStore. Salutation
-  // stays "Tank" so the in-app voice address matches the persona he's
-  // anchoring; Marc can override anytime with "call me Marc".
-  'marc.ward3533@gmail.com': {
-    displayName: 'Tank',
-    notes: "Real instructor behind the Tank persona. coachMode=true unlocks the 'remember this' refinement loop. 2026-05-25.",
-    coachMode: true,
-  },
+  // 2026-08-26 — an outside instructor's real email address shipped here, in the app
+  // bundle on every device, carrying coachMode=true — a live authorization to write into
+  // the caddie brain. Both the persona and the arrangement are gone. The coachMode flag
+  // stays on the interface: it is the mechanism for vetting a future instructor, and it
+  // now grants nothing to nobody until an entry deliberately sets it.
 };
 
 /**

@@ -208,7 +208,6 @@ export function useKevin(callbacks: KevinCallbacks = {}) {
           customCaddieBasePersona: usePlayerProfileStore.getState().customCaddieBasePersona ?? 'kevin',
           customCaddieName: usePlayerProfileStore.getState().customCaddieName ?? null,
           personaIntensity: useSettingsStore.getState().personaIntensity?.[getActiveCaddie()] ?? 100,
-          tankSoftIntro: useSettingsStore.getState().tankSoftIntro,
           // 2026-07-24 (full-app audit) — typed Caddie chat was dropping Response Style + Kids Mode, so
           // a child using typed chat (or anyone who set Brief/Detailed) silently got default cadence.
           responseMode: useSettingsStore.getState().responseMode ?? 'neutral',

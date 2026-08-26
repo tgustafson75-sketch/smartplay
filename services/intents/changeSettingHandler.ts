@@ -20,7 +20,7 @@ export const changeSettingHandler: IntentHandler = {
 
   parameter_schema: {
     setting_name: 'one of: theme, voice_enabled, auto_listen, cart_mode, language, response_mode, round_mode, ghost, caddie_persona, handedness, units, imagery, risk_mode',
-    new_value: 'theme: light|dark|system; voice_enabled/auto_listen/cart_mode: boolean; language: en|es|zh; response_mode: short|neutral|detailed; caddie_persona: kevin|tank|serena|harry; handedness: left|right; units: yards|meters; imagery: satellite|static|auto (SmartVision aerial vs static hole photo)',
+    new_value: 'theme: light|dark|system; voice_enabled/auto_listen/cart_mode: boolean; language: en|es|zh; response_mode: short|neutral|detailed; caddie_persona: kevin|serena|harry; handedness: left|right; units: yards|meters; imagery: satellite|static|auto (SmartVision aerial vs static hole photo)',
   },
 
   examples: [
@@ -29,7 +29,7 @@ export const changeSettingHandler: IntentHandler = {
     'mute Kevin',
     'switch to Spanish',
     'be more concise',
-    'switch to Tank',
+    'switch to Serena',
     'change caddie to Serena',
     'put Harry in charge',
     // 2026-07-24 (final QA — "ask for settings") — handedness + units were settable in

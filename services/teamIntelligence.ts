@@ -78,7 +78,9 @@ function buildSuggestion(
 }
 
 function nameOf(p: Persona): string {
-  return p === 'kevin' ? 'Kevin' : p === 'serena' ? 'Serena' : p === 'harry' ? 'Harry' : 'Tank';
+  // 2026-08-26 — the fallback used to be a persona that no longer ships, so ANY unrecognised
+  // value (including 'custom') was announced to the player under that name. Kevin is the default.
+  return p === 'serena' ? 'Serena' : p === 'harry' ? 'Harry' : 'Kevin';
 }
 function objectOf(p: Persona): string {
   return p === 'serena' ? 'her' : 'him';

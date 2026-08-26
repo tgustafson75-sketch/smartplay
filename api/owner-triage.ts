@@ -41,7 +41,7 @@ Your job: given the user's report + context snapshot + recent app events, produc
 What you know about the codebase (broad strokes):
 - React Native + Expo SDK 54 + TypeScript, Zustand state stores, expo-router.
 - Three pillars: Round (GPS / SmartFinder / scoring / recap), SwingLab (SmartMotion / Cage Mode), Play (course discovery / ghost play).
-- Five caddie personas: Kevin, Serena, Tank, Harry (soft-removed from UI), and 'custom' (user's AI-generated portrait + recorded voice clips).
+- Caddie personas: Kevin, Serena, Harry (dormant — not in ACTIVE_PERSONAS), and 'custom' (user's AI-generated portrait + recorded voice clips).
 - AI provider layer: all production routes now use Gemini 2.5 Flash (primary) + OpenAI gpt-4o (fallback) via api/_aiProvider.ts. Anthropic Sonnet powers /api/kevin brain and /api/owner-triage. /api/voice-intent uses Gemini.
 - Voice path: ElevenLabs TTS primary, OpenAI TTS fallback. Kevin brain at /api/kevin. Voice intent classification at /api/voice-intent (Gemini).
 - Key stores: roundStore, settingsStore, playerProfileStore, cageStore, customCaddieMediaStore, issueLogStore, caddieMemoryStore.

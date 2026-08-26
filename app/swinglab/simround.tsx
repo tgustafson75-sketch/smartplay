@@ -40,17 +40,13 @@ interface ShotMark { x: number; y: number }
 
 // Persona one-liners (local, offline). Picked by outcome; generic fallback.
 function callLine(persona: string, kind: 'flush' | 'good' | 'poor' | 'trees' | 'birdie' | 'bogey'): string {
-  const tank: Record<string, string> = {
-    flush: 'THAT one. Do it again.', good: 'Playable. Next.', poor: 'You snatched it. Reset.',
-    trees: 'In the lumber. Punch out, no heroes.', birdie: 'Circle it. More.', bogey: 'Shake it off. Next tee.',
-  };
   const kevin: Record<string, string> = {
     flush: 'Flushed it — that tempo is the one we bottle.', good: 'Solid. We can score from there.',
     poor: 'Quick from the top — same move the range sees.', trees: 'We\'re in trouble — take the medicine.',
     birdie: 'Birdie! That\'s the rhythm paying off.', bogey: 'Bogey — we take it and move on.',
   };
-  const book = persona === 'tank' ? tank : kevin;
-  return book[kind];
+  void persona; // 2026-08-26 — the second book belonged to a persona that no longer ships.
+  return kevin[kind];
 }
 
 export default function SwingSimScreen() {

@@ -23,7 +23,7 @@ const DG_LANG: Record<string, string> = { en: 'en', es: 'es', zh: 'zh-CN' };
 const DG_KEYWORDS = [
   'SmartPlay:5', 'SmartMotion:5', 'SmartVision:5', 'SmartFinder:5',
   'SwingLab:4', 'TightLie:4', 'SmartCaddie:4',
-  'Kevin:3', 'Serena:3', 'Harry:3', 'Tank:3',
+  'Kevin:3', 'Serena:3', 'Harry:3',
   'fairway:2', 'bunker:2', 'yardage:2', 'birdie:2', 'bogey:2',
 ].map(k => `keywords=${encodeURIComponent(k)}`).join('&');
 

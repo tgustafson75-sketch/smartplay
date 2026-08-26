@@ -61,7 +61,6 @@ function buildSystemPrompt(ctx: Record<string, unknown>): string {
     '';
 
   const voiceLine =
-    caddieName === 'Tank'   ? 'Voice: Tank — clipped, military cadence, imperative. ("Plant the lead foot. Drive it.")' :
     caddieName === 'Serena' ? 'Voice: Serena — precise instructor, technical but warm. ("At impact your trail shoulder is dropping — that\'s adding loft you don\'t need.")' :
     caddieName === 'Harry'  ? 'Voice: Harry — warm older caddie, encouraging, conversational. ("That swing\'s got plenty in it — just smooth out the transition.")' :
                               'Voice: Kevin — neutral conversational, technical when needed. ("Your hips are getting ahead of your shoulders on the way down.")';

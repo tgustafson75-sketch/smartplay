@@ -136,7 +136,7 @@ interface PlayerProfileState {
   // instead of a name-only shell (which behaved oddly / "stuck in logic" — no personality spec to run,
   // no mapped voice). customCaddieVoice (photo-matched) still overrides the inherited voice when set.
   // Default 'kevin'. One of the four real personas.
-  customCaddieBasePersona: 'kevin' | 'serena' | 'harry' | 'tank';
+  customCaddieBasePersona: 'kevin' | 'serena' | 'harry';
 
   // 2026-05-26 — Fix DY: Personal-caddie user-recorded voice clips.
   // Keyed by phrase id from services/customCaddieClips.ts (NOT by the
@@ -231,7 +231,7 @@ interface PlayerProfileState {
   setPreRoundRoutine: (r: string | null) => void;
   setCustomCaddieName: (name: string | null) => void;
   setCustomCaddieVoice: (voice: string | null) => void;
-  setCustomCaddieBasePersona: (p: 'kevin' | 'serena' | 'harry' | 'tank') => void;
+  setCustomCaddieBasePersona: (p: 'kevin' | 'serena' | 'harry') => void;
   // 2026-05-26 — Fix DY: clip CRUD. Pass uri=null to clear a phrase.
   setCustomCaddieClip: (phraseId: string, uri: string | null) => void;
   clearAllCustomCaddieClips: () => void;
@@ -371,7 +371,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       setCustomCaddieGender: (g) => set({ customCaddieGender: g === 'female' ? 'female' : 'male' }),
       setPreRoundRoutine: (r) => set({ preRoundRoutine: r && r.trim() ? r.trim() : null }),
       setCustomCaddieVoice: (voice) => set({ customCaddieVoice: voice }),
-      setCustomCaddieBasePersona: (p) => set({ customCaddieBasePersona: (['kevin', 'serena', 'harry', 'tank'] as const).includes(p) ? p : 'kevin' }),
+      setCustomCaddieBasePersona: (p) => set({ customCaddieBasePersona: (['kevin', 'serena', 'harry'] as const).includes(p) ? p : 'kevin' }),
       setCustomCaddieName: (name) => {
         const trimmed = typeof name === 'string' ? name.trim() : '';
         set({ customCaddieName: trimmed.length > 0 ? trimmed : null });
@@ -431,8 +431,16 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       // 2026-05-26 Fix BZ — __BZ_baseline__ version + passthrough migrate so future
       // version bumps don't wipe state. Replace `as never` with the real
       // state type when adding actual migration logic.
-      version: 1,
-      migrate: (s) => s as never,
+      // 2026-08-26 (v2) — a removed persona could be PERSISTED here as a custom caddie's base
+      // personality from an earlier build. The union no longer admits it, so a stale blob would
+      // otherwise keep feeding that name + voice to the brain. Map it to Kevin, matching the
+      // settings v22 migration. Everything else passes through untouched.
+      version: 2,
+      migrate: (s) => {
+        const p = s as Record<string, unknown> | null;
+        if (p && (p.customCaddieBasePersona as string) === 'tank') p.customCaddieBasePersona = 'kevin';
+        return p as never;
+      },
       // 2026-06-08 (audit #2, privacy) — keep the GHIN # OUT of the on-disk
       // blob so there's no plaintext at rest. It stays in memory for the
       // session (re-enter after a cold start until the encrypted-at-rest
