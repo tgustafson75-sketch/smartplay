@@ -2558,7 +2558,12 @@ check('CNS re-audit fixes: course-less reflection (G1 bug) + real approach/troub
     const g5 = /mergeMemoryIntoContext\(/.test(builder) &&
       /getCaddieContext\(/.test(builder) &&
       /getUnifiedVisionContext\(\)\)\.promptBlock/.test(voice) &&
-      /unified_context_block: mergeMemoryIntoContext\(\s*\n\s*liveBlock,/.test(voice) &&
+      // 2026-08-26 — the clause that used to sit here asserted the voice hook calls
+      // mergeMemoryIntoContext ITSELF, which is the duplication the 08-23 re-aim above says it
+      // removed. The comment was updated and the assertion was not, so the guard went on requiring
+      // the second owner and went red the moment it was deleted. What the property actually is:
+      // the hook FETCHES the live half and HANDS IT to the builder, which does the merge.
+      /buildCaddieRequestBody\(\{ message, language, liveBlock/.test(voice) &&
       /getUnifiedVisionContext\(\)\)\.promptBlock/.test(diag) &&
       /liveBlock: live,/.test(diag);
     return g1 && g3 && g5;

@@ -143,6 +143,44 @@ describe('both paths actually USE the one builder', () => {
     }
   });
 
+  /**
+   * 2026-08-26 — SPREAD-FIRST IS NOT ENOUGH ON ITS OWN.
+   *
+   * The union going in first only guarantees every KEY is present. The literal that follows still
+   * WINS on value, so a surface can hand-roll a worse answer for a key the builder already
+   * resolved — and that is exactly what happened to the one number the whole app turns on.
+   *
+   * caddieRequestBody resolves the working yardage (stated > live GPS > card) into `currentYardage`.
+   * useVoiceCaddie overrode it with the raw store field while separately sending the RESOLVED
+   * figure in `yardageInsight`, so the caddie-tab mic sent two different numbers for one shot, and
+   * api/kevin's headline "DISTANCE REMAINING RIGHT NOW" line was built from the raw one.
+   *
+   * Every regression test for this exercises the BUILDER, and every one of them passed throughout.
+   * So this asserts the CALL SITE: no spreader may re-declare a key the builder already owns and
+   * resolves. Listed explicitly rather than "any key", because a few keys genuinely belong to the
+   * caller (forceTier, and the extras the builder documents as caller-supplied).
+   */
+  it('a spreader never re-declares a key the builder already RESOLVES', () => {
+    const OWNED_BY_THE_BUILDER = ['currentYardage', 'yardageInsight', 'unified_context_block'];
+    for (const f of ['hooks/useVoiceCaddie.ts']) {
+      const src = stripComments(read(f));
+      const spread = src.indexOf('...buildCaddieRequestBody(');
+      expect(spread).toBeGreaterThan(-1);
+      // the object literal that follows the spread, to its closing brace
+      let depth = 1;
+      let i = spread;
+      while (depth > 0 && i < src.length) {
+        i += 1;
+        if ('({['.includes(src[i])) depth += 1;
+        else if (')}]'.includes(src[i])) depth -= 1;
+      }
+      const literal = src.slice(spread, i);
+      for (const key of OWNED_BY_THE_BUILDER) {
+        expect([f, key, new RegExp(`^\\s*${key}\\s*[,:]`, 'm').test(literal)]).toEqual([f, key, false]);
+      }
+    }
+  });
+
   it('a spread-in union is spread FIRST so a path cannot omit a key', () => {
     // Spread-last would let a hand-built literal keep winning with a missing field. Only applies to
     // senders that spread; the ones that pass the builder's result directly cannot express the bug.

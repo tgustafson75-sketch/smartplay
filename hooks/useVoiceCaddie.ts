@@ -1142,18 +1142,30 @@ export const useVoiceCaddie = ({
           sessionsTogether,
           currentHole,
           currentPar,
-          currentYardage,
-          // 2026-05-25 — Fix I: yardageInsight carries source + confidence
-          // so Kevin's prompt can hedge honestly ("Reading 168 from the
-          // static card — GPS is soft right now") instead of asserting
-          // a soft GPS number as truth. See services/yardageResolver.ts.
-          yardageInsight: (() => {
-            try {
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
-              const { buildYardageInsight } = require('../services/yardageResolver') as typeof import('../services/yardageResolver');
-              return buildYardageInsight();
-            } catch { return null; }
-          })(),
+          /**
+           * 2026-08-26 — `currentYardage` AND `yardageInsight` DELIBERATELY REMOVED from this
+           * literal. They are the reason the fix Tim signed off on was still failing on this
+           * surface.
+           *
+           * The shared builder resolves the working number — STATED > live GPS > card — and emits
+           * it as `currentYardage` (see caddieRequestBody.workingYards). This hook overrode it with
+           * the RAW `useRoundStore.currentYardage`, and because the union is spread first and the
+           * literal second, the raw value won. Meanwhile the hook DID send the resolved figure, in
+           * `yardageInsight`. So the caddie-tab mic sent two different numbers for one shot.
+           *
+           * That is not cosmetic. api/kevin builds its headline line straight off this field —
+           * "DISTANCE REMAINING RIGHT NOW: ${currentYardage} yards. This is the shot in front of
+           * them." — and the physical-limitation adjustment does its arithmetic on it too. With a
+           * rangefinder read of 205 and a card of 180, the brain was told the shot was 180, then
+           * told separately that the player had stated 205. It quoted one and clubbed from the
+           * other: exactly the "7 wood / 3 iron" call Tim reported.
+           *
+           * The regression tests for this (live-yardage-not-scorecard, "the distance the caddie
+           * quotes and the one it clubs from are the SAME field") all exercise the BUILDER, and
+           * they passed the whole time. The fix was verified at the owner and defeated at the call
+           * site. yardageInsight went with it because the builder's derivation is character-for-
+           * character the same call — one owner, or this comes back.
+           */
           activeCourse,
           activeCourseId,
           courseContext,
@@ -1161,10 +1173,13 @@ export const useVoiceCaddie = ({
           // 2026-06-10 — CNS Phase 2: learned-memory slice (bag, course/hole
           // history, tendencies). 2026-06-13 (audit G5): now MERGED with the live
           // context block above (was CNS-only) so the voice brain matches the chat path.
-          unified_context_block: mergeMemoryIntoContext(
-            liveBlock,
-            getCaddieContext({ courseId: activeCourseId, hole: currentHole, club }).promptBlock,
-          ),
+          /**
+           * 2026-08-26 — also removed, same reason. This was the identical merge the builder does,
+           * from the identical inputs (the hook already hands it `liveBlock`), minus the builder's
+           * contextSuffix support — so the override could only ever match it or lose to it. Found
+           * by the call-site guard on its first run, which is the point of asserting the call site
+           * rather than the owner.
+           */
           roundMode,
           patternInsights,
           ghostContext,
