@@ -394,3 +394,36 @@ part" feel slow enough that nobody would use it twice.
    resolvable rather than narrating a guess.
 
 Not started. Recorded so the substrate that makes it cheap is not accidentally dismantled.
+
+## §15 — useVoiceCaddie still hand-declares 57 keys the shared union already builds (2026-08-26)
+
+`services/caddieRequestBody` is the one payload. `hooks/useVoiceCaddie` spreads it in and then
+follows with a literal of **58 keys** — and the literal WINS. 57 of those shadow a key the builder
+already produces; only `forceTier` (Local Mode tier pin) is genuinely the caller's.
+
+Three were removed on 08-26 because they were actively wrong or exactly duplicated:
+`currentYardage` (the builder RESOLVES stated > GPS > card; the hook sent the raw card number, and
+api/kevin's headline distance line is built from it), `yardageInsight`, `unified_context_block`.
+A jest guard now forbids re-declaring any key on that list.
+
+**The rest is per-key work, not a blanket delete** — four are NOT safe to drop:
+
+| key | why it must not just be deleted |
+|---|---|
+| `courseContext` | builder has `courseContext: null` — a documented placeholder for a caller-supplied record |
+| `penaltyContext` | builder reads `extras.overrides?.penaltyContext`; the hook does not pass extras |
+| `smartVisionContext` | builder reads `extras.smartVisionContext`; same |
+| `coachKnowledgeContext` | keyed off the CURRENT MESSAGE — the builder would need the message threaded in |
+
+The remaining ~53 are the same store read twice (17 imperative `getState()` reads, ~36 reactive
+`useShallow` selectors) or a pure call the builder already makes (`bagDistances()`,
+`getActiveCaddie()`, `screenContextForPrompt()`, `buildFullPracticeContext()`, `new Date().getHours()`).
+Each needs a one-line confirmation that the builder's derivation is identical, then deletion.
+
+**Order:** thread the four caller-owned values through `CaddieRequestExtras` FIRST, so the builder
+is complete; then delete the literal wholesale and let the guard hold the line. Doing it in the
+other order drops real data on the primary mic surface.
+
+**Why it matters beyond tidiness:** every regression test for the payload exercises the BUILDER.
+While a call site can override, a green builder test proves nothing about what the caddie was
+actually sent — which is how the yardage defect survived its own fix for two days.
