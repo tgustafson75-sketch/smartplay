@@ -161,7 +161,11 @@ const CASES: Array<{ expect: string | null; say: string; ctx?: Record<string, un
   { expect: 'set_reminder',        say: 'remind me to work on my putting Thursday' },
   { expect: 'log_issue',           say: 'log an issue, the yardage on hole 3 looked wrong' },
   { expect: 'mark_green',          say: 'mark the green here', ctx: ON_COURSE },
-  { expect: 'switch_caddie',       say: 'switch to Tank' },
+  // 2026-08-26 — was 'switch to Tank'. That persona is removed, and the caddie now correctly
+  // answers "Tank isn't on the roster — your three are Kevin, Serena, and Harry" instead of firing
+  // the tool. The APP was right and the probe was stale; asserting a removed persona would have
+  // trained us to ignore a real failure line.
+  { expect: 'switch_caddie',       say: 'switch to Serena' },
   { expect: 'switch_caddie',       say: 'switch me to Harry' },
   { expect: 'zoom_target',         say: 'zoom in on the pin' },
   { expect: 'open_smartfinder',    say: 'open the rangefinder' },

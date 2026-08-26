@@ -350,3 +350,47 @@ response now echoes `primary_failure` whenever it served from the fallback, so a
 degraded path can never again look like a healthy one.
 
 Bundling Torrey Pines / Pebble / Streamsong does not depend on this.
+
+## 14. 2.0 IDEA — "circle the shoulders": a focused second analysis pass
+
+Tim, 2026-08-26 (explicitly 2.0, asked while under build hold): after the first analysis finishes
+and playback is up, the player says *"circle the grip"* / *"circle my hands"* / *"circle the
+shoulders"* / *"circle the club"*, and the analysis re-runs focused on that part.
+
+**Feasibility: high, and most of the substrate already exists.** This is assembly, not invention.
+
+### What can be circled today, from signals already computed
+
+| ask | source | status |
+|---|---|---|
+| shoulders | `left_shoulder` / `right_shoulder` landmarks | ✅ already drive tilt, turn, sway |
+| hips | `left_hip` / `right_hip` | ✅ already drive weight shift + sequencing |
+| wrists / hands (as JOINTS) | `left_wrist` / `right_wrist` | ✅ position and path |
+| elbows, knees | landmarks present | ✅ |
+| the club | the clubhead trace (shaft-anchored) | ✅ — clubhead-or-nothing, never a wrist fallback |
+
+### The one that must NOT be faked
+
+**Grip cannot be read at swing speed.** The hands are small, occluded by the club and unresolvable
+in 2D — this is already a settled, tested position in `services/swing/drillFocusRead`, which
+refuses it in those words and points at Setup Check, which reads grip properly from a STILL address
+photo. So "circle the grip" should route to a Setup Check capture, not draw a confident circle
+around three unreliable pixels. Getting that one right is what makes the other five trustworthy.
+
+### Why it is cheaper than it looks
+
+The frame cache shipped 2026-08-25 means a second pass over the SAME clip reuses decoded frames
+instead of re-decoding them, and decodes are serialized app-wide. A focused re-ask is therefore
+mostly free — which is precisely the cost that would otherwise make "ask again about a different
+part" feel slow enough that nobody would use it twice.
+
+### Shape it should take
+
+1. Primary analysis completes and stops (unchanged).
+2. The player asks by voice; the intent carries a body-part parameter.
+3. A focused pass reads the CACHED pose frames for that part across address → top → impact, and
+   draws the overlay on landmarks that already exist.
+4. The caddie speaks only about that part, from measurement — and says plainly when a part is not
+   resolvable rather than narrating a guess.
+
+Not started. Recorded so the substrate that makes it cheap is not accidentally dismantled.
