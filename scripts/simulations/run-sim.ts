@@ -12534,6 +12534,29 @@ check('LOCK: the removed persona cannot return to shipped code',
   })(),
   'no shipped source line names the removed persona or the instructor behind it, outside the frozen migration allowlist');
 
+check('Smart Motion: "go again" asked DURING analysis is queued, never dropped',
+  // 2026-08-26 (Tim — "starting a new recording when you're in a session… I know we have the
+  // function built, but I don't know where it surfaced"). It IS surfaced — a labelled NEW SET
+  // badge — but ONLY in the review bar. The analyzing branch renders an empty placeholder, and
+  // beginNextRecording's own guard (`phase !== 'analyzing' && phase !== 'recording'`) meant the
+  // VOICE command died in the same gap. At the range that gap is precisely when the player wants
+  // the next ball. Asserted by shape: the analyzing branch sets the queue flag, and a review-phase
+  // effect consumes it exactly once.
+  (() => {
+    const sm = readCode('app/swinglab/smartmotion.tsx');
+    return (
+      /const queuedGoAgainRef = useRef\(false\)/.test(sm) &&
+      // the analyzing branch QUEUES rather than falling through to nothing
+      /\} else if \(phase === 'analyzing'\) \{[\s\S]{0,400}?queuedGoAgainRef\.current = true;/.test(sm) &&
+      // and a review-phase effect drains it, once, into the real go-again
+      /if \(phase !== 'review' \|\| !queuedGoAgainRef\.current\) return;\s*queuedGoAgainRef\.current = false;\s*beginNextRecording\(\);/.test(sm) &&
+      // the NEW SET control itself still exists and still auto-saves the set it leaves
+      /accessibilityLabel="New set — saves this one and records again"/.test(sm) &&
+      /persistReviewRef\.current\(false\)/.test(sm)
+    );
+  })(),
+  'a go-again requested while the read is running is queued and fires when it lands; the NEW SET control still auto-saves the set it leaves');
+
 console.log('\n=== SYNTHESIS ===');
 // Emitted UNCONDITIONALLY, so this is a standing guard in the suite rather than an error path that
 // only exists once something is already broken. Every guard that reads a missing file is asserting

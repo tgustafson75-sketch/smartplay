@@ -4178,6 +4178,8 @@ export default function SmartMotion() {
   // CameraView's onCameraReady then auto-starts the next recording. This keeps
   // the hands-free "do a minute, review, go again" loop working by voice.
   const pendingStartRef = useRef(false);
+  // Set when the player asks to go again DURING analysis (see beginNextRecording's analyzing branch).
+  const queuedGoAgainRef = useRef(false);
   // Ref indirection: persistReviewToLibrary is defined below (it needs the full review
   // state); beginNextRecording only fires from user taps, long after both exist.
   const persistReviewRef = useRef<(navigate: boolean) => void>(() => {});
@@ -4198,10 +4200,33 @@ export default function SmartMotion() {
       }
       pendingStartRef.current = true;
       reset(); // → setup; CameraView mounts; onCameraReady fires startRecording
-    } else if (phase !== 'analyzing' && phase !== 'recording') {
+    } else if (phase === 'analyzing') {
+      /**
+       * 2026-08-26 (Tim — "starting a new recording when you're in a session… I know we have the
+       * function built, but I don't know where it surfaced").
+       *
+       * While a read is running there is NO control in the bar — the analyzing branch renders an
+       * empty 46px placeholder — and this branch used to fall through to nothing, so a voice
+       * "record again" mid-analysis was a silent no-op too. At the range that is the exact moment
+       * the player wants: ball struck, next ball teed up, phone still thinking. Both the tap and
+       * the voice command died in the gap.
+       *
+       * Queue it instead of dropping it. The read finishes, the set auto-saves as it always does,
+       * and the next recording starts — the player never waits on the phone to catch up.
+       */
+      queuedGoAgainRef.current = true;
+      try { useToastStore.getState().show('Next set queued — starting when this read lands'); } catch { /* non-fatal */ }
+    } else if (phase !== 'recording') {
       void startRecording();
     }
   }, [phase, reset, startRecording, isDrill, drillName, drillFocus, drillId]);
+
+  // Fire the queued go-again the moment the read lands. Ref-guarded so it runs once per queue.
+  useEffect(() => {
+    if (phase !== 'review' || !queuedGoAgainRef.current) return;
+    queuedGoAgainRef.current = false;
+    beginNextRecording();
+  }, [phase, beginNextRecording]);
 
   // 2026-06-30 (Tim — "watch this swing" on the course should open STRAIGHT INTO recording).
   // When navigated here with ?autoRecord=1 (a voice "watch/record my swing" from the Caddie
