@@ -478,3 +478,14 @@ expo path is untouched.
 **On arrival, in order:** flip the engine on the debug screen → confirm `capturedFps` reads 120 on
 the Pro Max → re-shoot a DTL swing and check the trace and the shot map populate → only then judge
 whether §16's `direction` wire is still needed.
+
+## §18 — PARKED: ghost match vs a synthetic opponent (2026-08-26)
+
+Tim's idea (play a ghost match against an archetype opponent — "college player off +1", "tour pro")
+and his week-one idea ("how would I play Pebble Beach, from my tendencies") are the same engine.
+
+**The week-one one was never built** — no projection engine exists anywhere in code or history.
+**The ghost half already works and is proven against a synthetic record.** Full write-up, including
+the four handicap functions that already do the hard arithmetic, in `docs/FUTURE-GHOST-MATCH.md`.
+
+Parked deliberately: post-freeze, post-launch.
