@@ -82,21 +82,77 @@ describe('both paths actually USE the one builder', () => {
    * A builder nobody calls is the exact bug class this whole session has been about: built, correct,
    * and reached by nothing.
    */
-  it.each(['hooks/useVoiceCaddie.ts', 'hooks/useKevin.ts'])('%s spreads the shared union', (f) => {
-    const src = read(f);
-    expect(src).toMatch(/\.\.\.buildCaddieRequestBody\(/);
-    // It must be spread INTO the request body, not merely imported.
-    const body = src.indexOf('body: JSON.stringify({');
-    const spread = src.indexOf('...buildCaddieRequestBody(');
-    expect(body).toBeGreaterThan(-1);
-    expect(spread).toBeGreaterThan(body);
+  /**
+   * 2026-08-26 — THE SHAPE, NOT A FILE LIST (again).
+   *
+   * This was a hand-written list of two files, and one of them — hooks/useKevin.ts — had been
+   * unreachable since CaddieBottomBar took over the text box on 07-24. So half of "one caddie, one
+   * payload" was being proved against code that could not run, while the live typed path was never
+   * checked at all. A list you maintain by hand rots exactly where you stop looking.
+   *
+   * So: DISCOVER every module that POSTs to the brain, and require each to go through the shared
+   * builder. A new sender is caught the day it is written, not the day someone re-reads this file.
+   */
+  const EXEMPT: Record<string, string> = {
+    'services/apiBase.ts': 'warmup ping — sends { message: "__ping__" }, not a caddie turn',
+    'services/voiceWarmup.ts': 'lambda warmup — POSTs { mode: "warmup" } to a path list, no turn',
+    'components/OfflineBanner.tsx': 'reachability probe, no conversation',
+    'app/ghost-debug.tsx': 'owner-only debug screen for hand-crafted payloads (DEBUG_ROUTES gate)',
+    'app/api-debug.tsx': 'owner-only endpoint prober — fixture payloads by design (DEBUG_ROUTES gate)',
+    'services/sceneReadService.ts':
+      'DELIBERATE, documented in-file: a multimodal scene read already carries an image plus a ' +
+      'large system prompt, and injecting only the current hole halves the effective prompt. The ' +
+      'union would work against the reason that payload is shaped the way it is.',
+  };
+
+  /** Block and line comments removed — a mention of an endpoint is not a call to it. */
+  const stripComments = (src: string): string =>
+    src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+
+  const walk = (dir: string): string[] => {
+    const out: string[] = [];
+    for (const e of fs.readdirSync(path.resolve(__dirname, '../../', dir))) {
+      const rel = `${dir}/${e}`;
+      const abs = path.resolve(__dirname, '../../', rel);
+      if (fs.statSync(abs).isDirectory()) out.push(...walk(rel));
+      else if (/\.(ts|tsx)$/.test(e)) out.push(rel);
+    }
+    return out;
+  };
+
+  it('every module that POSTs to the brain goes through the one builder', () => {
+    const senders = ['hooks', 'services', 'app', 'components']
+      .flatMap(walk)
+      // Two things this filter had to learn, both on its first run:
+      //   - `/api/kevin` exactly, NOT /api/kevin-read — a different endpoint (Haiku over the last
+      //     five rounds' shots, no conversational turn) with its own contract.
+      //   - COMMENTS DON'T SEND. courseIntelligenceService only mentions /api/kevin in its header,
+      //     to say which field it populates; it POSTs to /api/course-intelligence. Matching raw
+      //     source made a doc comment look like a brain sender — the same class of mistake this
+      //     suite exists to catch, arrived at from the other direction.
+      .filter((f) => /\/api\/kevin(?![-\w])/.test(stripComments(read(f))))
+      .filter((f) => !EXEMPT[f]);
+    // The discovery itself must keep working — an empty list would pass vacuously.
+    expect(senders.length).toBeGreaterThanOrEqual(3);
+    for (const f of senders) {
+      // Either it builds the union itself, or it delegates to caddieBrain.askCaddie(), which does.
+      // Both are "through the one builder"; what is forbidden is hand-assembling a second payload.
+      const src = read(f);
+      const throughTheBuilder = /buildCaddieRequestBody\(/.test(src) || /askCaddie\(/.test(src);
+      expect([f, throughTheBuilder]).toEqual([f, true]);
+    }
   });
 
-  it('the union is spread FIRST so a path cannot omit a key', () => {
-    // Spread-last would let a hand-built literal keep winning with a missing field.
-    for (const f of ['hooks/useVoiceCaddie.ts', 'hooks/useKevin.ts']) {
+  it('a spread-in union is spread FIRST so a path cannot omit a key', () => {
+    // Spread-last would let a hand-built literal keep winning with a missing field. Only applies to
+    // senders that spread; the ones that pass the builder's result directly cannot express the bug.
+    const spreaders = ['hooks/useVoiceCaddie.ts'];
+    for (const f of spreaders) {
       const src = read(f);
+      const body = src.indexOf('body: JSON.stringify({');
       const spread = src.indexOf('...buildCaddieRequestBody(');
+      expect(body).toBeGreaterThan(-1);
+      expect(spread).toBeGreaterThan(body);
       const firstField = src.indexOf('\n          message,', spread);
       expect(firstField).toBeGreaterThan(spread);
     }

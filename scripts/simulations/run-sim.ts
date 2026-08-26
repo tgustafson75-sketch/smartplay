@@ -5220,13 +5220,26 @@ check('Voice path has no preemptive "voice paused" / brain short-circuit walls',
   'mic + brain always attempt; removed the breaker short-circuits that walled voice on a transient blip');
 
 check('Brain failure falls back to a real local answer (not a snag prompt)',
-  /brainFallbackReply/.test(read('hooks/useKevin.ts')) &&
-    /tryLocalReply/.test(read('hooks/useKevin.ts')) &&
-    !/Hit a snag on my end/.test(read('hooks/useKevin.ts')),
-  'a failed brain call answers locally (on-course status) or a brief non-alarming line — never "hit a snag / no network"');
+  // 2026-08-26 — RE-POINTED. This guard used to read hooks/useKevin.ts, which had the fallback and
+  // has had no caller since CaddieBottomBar replaced it on 07-24. So it was green on a dead file
+  // while the LIVE typed path — handleTranscribedUtterance — went straight to "having trouble
+  // connecting" on an empty brain reply, with the same GPS and bag in its pocket that the mic path
+  // used to answer from. Both empty-brain branches in listeningSession must try answerOffline first.
+  (() => {
+    const ls = readCode('services/listeningSession.ts');
+    const emptyBrainBranches = (ls.match(/answerOffline\(/g) ?? []).length;
+    return (
+      emptyBrainBranches >= 2 &&                                   // route_to_brain AND the typed/hands-free branch
+      /localAnswer/.test(ls) &&                                    // the typed branch keeps the answer before apologising
+      /if \(localAnswer\) \{/.test(ls) &&
+      !/Hit a snag on my end/.test(ls) &&
+      /export function tryLocalReply/.test(readCode('services/localStatusResponder.ts'))
+    );
+  })(),
+  'a failed brain call answers locally from device state (GPS/bag/green) on BOTH the mic and the typed/hands-free branch before it ever says "having trouble connecting"');
 
 check('Offline caddie Tier 1: local CLUB CALL + LAST SHOT, grounded + honest (2026-06-12)',
-  // Extends tryLocalReply (the single brain-failure hook used by useKevin /
+  // Extends tryLocalReply (the single brain-failure hook used by listeningSession /
   // useVoiceCaddie / voiceCommandRouter), so it works on every fallback path with
   // no native module — ships via OTA. The club call uses the player's REAL logged
   // bag (bagDistances) + the GPS/green distance; NEVER a fabricated yardage.
@@ -6099,7 +6112,7 @@ check('API base URL — one resolver, single custom-domain host, no *.vercel.app
     !/activeBase = other/.test(apiBaseSrc) &&                             // ensureBackendReachable never switches hosts anymore
     /\^https\?:\\\/\\\/\.\+/.test(apiBaseSrc) &&                          // absolute-url guard present
     !/EXPO_PUBLIC_API_URL \?\? /.test(read('hooks/useVoiceCaddie.ts')) && // voice no longer reads env raw
-    !/EXPO_PUBLIC_API_URL \?\? /.test(read('hooks/useKevin.ts')) &&       // brain no longer reads env raw
+    !/EXPO_PUBLIC_API_URL \?\? /.test(read('services/caddieBrain.ts')) && // the shared brain sender never reads env raw
     /getApiBaseUrl\(\)/.test(read('hooks/useVoiceCaddie.ts')),
   'every backend fetch resolves through getApiBaseUrl() (absolute prod custom-domain fallback, never relative/dead), and the app no longer fails over to the content-filter-blocklisted *.vercel.app alias — the root cause of the recurring on-course voice death');
 
@@ -6268,7 +6281,7 @@ check('Caddie CNS Phase 1 writers wired (shot + round + fault), best-effort',
 
 // 2026-06-10 — Caddie CNS Phase 2: retrieval layer feeds the brain.
 const retrievalSrc = read('services/caddieMemoryRetrieval.ts');
-const kevinHookSrc = read('hooks/useKevin.ts');
+const requestBodySrc = read('services/caddieRequestBody.ts');
 const voiceHookSrc = read('hooks/useVoiceCaddie.ts');
 check('Caddie CNS Phase 2: retrieval is sync, never-throws, gated, honest',
   /export function getCaddieContext\(/.test(retrievalSrc) &&
@@ -6277,14 +6290,18 @@ check('Caddie CNS Phase 2: retrieval is sync, never-throws, gated, honest',
     /live GPS still wins/.test(retrievalSrc),
   'getCaddieContext returns a compact null-safe slice, can never throw, is flag-gated, and tells the brain memory is a prior (GPS still wins live)');
 
-check('Caddie CNS Phase 2 wired into BOTH brain paths (live + memory merged)',
-  // 2026-06-13 (audit G5) — voice path upgraded: it now MERGES the live context block
-  // with the CNS slice (was CNS-only), matching useKevin. Both paths send the merged
-  // unified_context_block the server pastes — no server change.
-  /mergeMemoryIntoContext\(\s*\n?\s*unifiedPromptBlock/.test(kevinHookSrc) &&
-    /getUnifiedVisionContext\(\)\)\.promptBlock/.test(voiceHookSrc) &&
-    /unified_context_block: mergeMemoryIntoContext\(\s*\n\s*liveBlock,/.test(voiceHookSrc),
-  'typed-chat (useKevin) AND voice (useVoiceCaddie) both merge the LIVE context block with the CNS memory slice into unified_context_block — the field the server already pastes');
+check('Caddie CNS Phase 2 wired into EVERY brain path (live + memory merged, one owner)',
+  // 2026-06-13 (audit G5) — the voice path was CNS-only and got the live block too.
+  // 2026-08-26 — RE-POINTED at the shared builder. Asserting the merge in each hand-built payload
+  // was asserting the DUPLICATION: one of the two files it read (hooks/useKevin) had been dead for
+  // a month, so half this guard proved nothing. caddieRequestBody owns unified_context_block, so
+  // every surface that calls it gets the merge by construction and none can forget it.
+  /const unified_context_block = safe\(/.test(requestBodySrc) &&
+    /mergeMemoryIntoContext\(/.test(requestBodySrc) &&
+    /getCaddieContext\(\{/.test(requestBodySrc) &&
+    /unified_context_block,/.test(requestBodySrc) &&                 // and it is actually emitted
+    /getUnifiedVisionContext\(\)\)\.promptBlock/.test(voiceHookSrc),
+  'unified_context_block (LIVE context merged with the CNS memory slice) is built ONCE in caddieRequestBody and emitted on every payload — no surface hand-rolls it');
 
 // 2026-06-10 — CNS Phase 3 (reflection loop) + Phase 4 (signal-independence).
 const memStoreSrc = read('store/caddieMemoryStore.ts');
@@ -8294,7 +8311,7 @@ console.log('\n=== Beta-wrap deep-audit LOCK ===');
     (listenSrc.match(/flashCaption\?\.\(/g) ?? []).length >= 4,
     'H1: openSession + handleTranscribedUtterance caption the reply when voice is off so a hands-free turn is never silently dead');
   check('Custom caddie inherits base persona on the kevin fallback (H2)',
-    /customCaddieBasePersona/.test(read('api/kevin.ts')) && /customCaddieBasePersona/.test(read('hooks/useKevin.ts')),
+    /customCaddieBasePersona/.test(read('api/kevin.ts')) && /customCaddieBasePersona/.test(read('services/caddieRequestBody.ts')),
     'H2: /api/kevin resolves a custom caddie to its chosen base persona for spec + voice (was Kevin/onyx on follow-ups)');
   check('open_course only navigates at HIGH confidence (H3)',
     /intent\.confidence !== 'high'/.test(read('services/intents/openCourseHandler.ts')),

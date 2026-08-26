@@ -89,9 +89,13 @@ describe('it reaches the brain through the ONE shared block', () => {
     expect(builder).toMatch(/getCaddieContext\(/);
     expect(builder).toMatch(/mergeMemoryIntoContext\(/);
 
+    // 2026-08-26 — hooks/useKevin.ts left this list when it left the app: it was the OLD typed-chat
+    // path, superseded by CaddieBottomBar on 07-24, and had had no caller for a month. Its stand-in
+    // is the surface that actually carries typed questions now — listeningSession, which is also
+    // where the watch and hands-free land.
     for (const f of [
       'hooks/useVoiceCaddie.ts',
-      'hooks/useKevin.ts',
+      'services/listeningSession.ts',
       'services/conversationalBrain.ts',
       'services/intents/inRoundDiagnosticHandler.ts',
       'hooks/usePipecatVoice.ts',

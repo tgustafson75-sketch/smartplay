@@ -1688,6 +1688,37 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
             try { flashCaption?.(r.text, 7000); } catch { /* non-fatal */ }
           }
         } else {
+          /**
+           * 2026-08-26 — TRY TO ANSWER BEFORE APOLOGISING. The mic's route_to_brain branch, ~250
+           * lines up, does exactly this: on an empty brain reply it calls answerOffline() and only
+           * falls through to the honest-failure line when the device genuinely cannot answer. This
+           * branch — the TYPED bar, the watch, hands-free — went straight to the apology.
+           *
+           * So on a flaky signal the same question got two different CAPABILITIES depending on how
+           * you asked it: spoken, "162 to the middle, that's a smooth 8" from device state; typed,
+           * "I'm having trouble connecting." Not a wording difference — the typed path had the same
+           * GPS, the same bag and the same green in its pocket and never reached for them.
+           *
+           * The dead hooks/useKevin.ts had this fallback (brainFallbackReply → tryLocalReply) and a
+           * sim guard asserted it, which is how the gap stayed invisible: the guard was reading a
+           * file that no longer runs.
+           */
+          const offLang = (['en', 'es', 'zh'] as const).includes(settings.language as never)
+            ? (settings.language as 'en' | 'es' | 'zh') : 'en';
+          let localAnswer: string | null = null;
+          try {
+            const off = (require('./offlineCaddie') as typeof import('./offlineCaddie')).answerOffline(text, offLang);
+            localAnswer = off?.text?.trim() || null;
+          } catch { /* the local answer is a bonus, never a dependency */ }
+          if (localAnswer) {
+            const { speak: speakLine, flashCaption: flash } = await import('./voiceService');
+            if (ttsAllowed) {
+              await speakLine(localAnswer, settings.voiceGender, intent.language ?? settings.language ?? 'en', apiUrl, { userInitiated: true })?.catch?.(() => undefined);
+            } else {
+              try { flash?.(localAnswer, 7000); } catch { /* non-fatal */ }
+            }
+            return;
+          }
           // 2026-07-30 (voice/brain audit H5) — brain returned EMPTY (timeout / flaky signal). Don't leave
           // a dead turn on the watch/earbud: speak the honest "trouble connecting" line, or caption it muted.
           if (ttsAllowed) { try { await speakHonestFailure(settings.language, settings.voiceGender, apiUrl); } catch { /* non-fatal */ } }

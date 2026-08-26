@@ -66,7 +66,7 @@ import { generatePatternInsights } from '../../services/patternDetection';
 import { useGhostStore } from '../../store/ghostStore';
 import { useVoiceCaddie } from '../../hooks/useVoiceCaddie';
 import { usePipecatVoice } from '../../hooks/usePipecatVoice';
-import { useKevin, type ToolAction } from '../../hooks/useKevin';
+import type { ToolAction } from '../../types/toolAction';
 import { useKevinPresence } from '../../contexts/KevinPresenceContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useVoiceActivityDetection } from '../../hooks/useVoiceActivityDetection';
@@ -1645,7 +1645,14 @@ export default function CaddieTab() {
   };
 
   // ── Kevin programmatic hook ──────────────
-  const { isThinking: kevinThinking } = useKevin();
+  /**
+   * 2026-08-26 — hooks/useKevin was the OLD typed-chat path. CaddieBottomBar superseded it on
+   * 2026-07-24 (text and mic both go to listeningSession.handleTranscribedUtterance), and its
+   * `ask` has had no caller since. This screen mounted it for `isThinking` alone — a value that
+   * could never become true, because setIsThinking lives inside `ask`. It subscribed to eight
+   * zustand stores to hand back a constant `false`. The avatar's own voiceState already renders
+   * the thinking state, so nothing here changes on screen.
+   */
 
   // ── Tool action handler ──────────────────
   const handleToolAction = useCallback((action: ToolAction) => {
@@ -3199,7 +3206,6 @@ export default function CaddieTab() {
                   onTap={handleMicPress}
                   emotion={kevinEmotion}
                   fillMode="cover"
-                  isThinking={kevinThinking}
                   trustLevel={trustLevel}
                   customPortraitB64={activeCustomPortrait}
                 />
@@ -3247,7 +3253,6 @@ export default function CaddieTab() {
                 onTap={handleMicPress}
                 emotion={kevinEmotion}
                 fillMode="cover"
-                isThinking={kevinThinking}
                 trustLevel={trustLevel}
                 customPortraitB64={activeCustomPortrait}
               />
@@ -3292,7 +3297,6 @@ export default function CaddieTab() {
             onTap={handleMicPress}
             emotion={kevinEmotion}
             fillMode="cover"
-            isThinking={kevinThinking}
             trustLevel={trustLevel}
             customPortraitB64={activeCustomPortrait}
           />
