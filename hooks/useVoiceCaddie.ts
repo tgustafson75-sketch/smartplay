@@ -3,7 +3,6 @@ import { useShallow } from 'zustand/react/shallow';
 import { Audio } from 'expo-av';
 import { Vibration, Alert, Linking, AppState } from 'react-native';
 import { prewarmVoice, abortVoiceWarmup } from '../services/voiceWarmup';
-import { getActiveCaddie } from '../services/caddieResolver';
 import { BRAIN_FETCH_TIMEOUT_MS as BRAIN_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { usePathname } from 'expo-router';
 import { endsAsQuestion } from '../services/voice/endsAsQuestion';
@@ -25,8 +24,6 @@ import {
   speakDeviceNotice,
 } from '../services/voiceService';
 import { initFillerLibrary } from '../services/fillerLibrary';
-import { bagDistances } from '../services/shotStrategy';
-import { getCaddieContext, mergeMemoryIntoContext } from '../services/caddieMemoryRetrieval';
 import { buildCaddieRequestBody } from '../services/caddieRequestBody';
 import { checkContent } from '../services/contentGuardrail';
 import { resolveGreetingClip } from '../services/quickGreetingClips';
@@ -53,22 +50,15 @@ import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useFamilyStore } from '../store/familyStore';
 import { useRelationshipStore } from '../store/relationshipStore';
-import { useCageStore } from '../store/cageStore';
 import { recordUserTurn, recordKevinTurn, isAwaitingFollowUp } from '../services/conversationState';
 import { resolvePendingCourseUtterance } from '../services/pendingDisambiguation';
 import { useConversationLog } from '../store/conversationLogStore';
-import { buildFullPracticeContext } from '../services/tutorialContext';
-import { screenContextForPrompt } from '../services/screenContext';
-import { useWatchStore } from '../store/watchStore';
 import { VoiceState } from '../components/CaddieAvatar';
 import { getCourse as getApiCourse, courseSummaryForContext } from '../services/golfCourseApi';
 import { generatePatternInsights } from '../services/patternDetection';
-import { useGhostStore } from '../store/ghostStore';
-import { useSmartFinderStore } from '../store/smartFinderStore';
 import { logVoiceError, logTranscribeError, logVoiceSilentFail, noteVoiceTurnStarted } from '../services/voiceErrorLog';
-import { getApiBaseUrl, ensureBackendReachable, isConnectionWarmed, markConnectionWarmed, markEndpointWarmed, isEndpointWarmed, getConnectionEvidence } from '../services/apiBase';
+import { getApiBaseUrl, ensureBackendReachable, isConnectionWarmed, markEndpointWarmed, isEndpointWarmed, getConnectionEvidence } from '../services/apiBase';
 import { CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_ON_US } from '../services/caddieAckLines';
-import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 
 // ─── CONSTANTS ────────────────────────────
 
@@ -117,6 +107,33 @@ const MIC_PRESS_REENTRY_MS = 700;
 // (Deepgram nova-2, measured 0.27-0.85s). If it isn't back in 12s the request
 // isn't getting through, and waiting 45s (then RETRYING for another 45s = 90s of
 // dead "thinking") helps nobody. Fail fast, speak a fallback, reset to idle.
+// 2026-07-18 (Tim — "a minute of warming up, first couple responses error, then good") — the FIRST
+// turn after a cold launch races the background connection warm; DNS+TLS to the custom domain +
+// a cold Deepgram/Lambda can genuinely take >12s on the first hit. When the connection is not yet
+// confirmed warm, give that first transcribe a longer budget so it lands a REAL cloud transcript
+// instead of aborting at 12s and dropping to a garbage on-device STT result (the "error reply,
+// then it's fine" symptom). Once warmed, the 12s fast-fail (below) resumes for genuine dead zones.
+/**
+ * 2026-08-21 — RETAINED ONLY AS THE COLD CEILING REFERENCE. The single 22s attempt it used to drive
+ * was replaced by hedged escalating budgets; leaving the constant unused while a guard still
+ * asserted its value made that guard vacuous. Kept and referenced so the relationship is explicit:
+ * no single attempt may exceed this.
+ */
+/**
+ * 2026-08-26 — THESE TWO ARE DELIBERATELY UNREFERENCED AT RUNTIME. DO NOT DELETE THEM AS DEAD CODE.
+ *
+ * They are BOUNDS, and a sim LOCK enforces the relationship: "no single transcribe attempt may
+ * exceed the cold ceiling" reads COLD_TRANSCRIBE_TIMEOUT_MS and asserts every entry in
+ * attemptBudgets sits below it. A linter cannot see that, calls them unused — and today I believed
+ * the linter and deleted them, turning a live safety bound into a red guard. The note below already
+ * explained why the constant stays; the warning now sits where the deletion happens, not only where
+ * the value is justified.
+ */
+// 2026-06-26 — 45s → 12s. Transcribe is < 1s when the network is reachable
+// (Deepgram nova-2, measured 0.27-0.85s). If it isn't back in 12s the request
+// isn't getting through, and waiting 45s (then RETRYING for another 45s = 90s of
+// dead "thinking") helps nobody. Fail fast, speak a fallback, reset to idle.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const TRANSCRIBE_TIMEOUT_MS = 12000;
 // 2026-07-18 (Tim — "a minute of warming up, first couple responses error, then good") — the FIRST
 // turn after a cold launch races the background connection warm; DNS+TLS to the custom domain +
@@ -130,6 +147,7 @@ const TRANSCRIBE_TIMEOUT_MS = 12000;
  * asserted its value made that guard vacuous. Kept and referenced so the relationship is explicit:
  * no single attempt may exceed this.
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const COLD_TRANSCRIBE_TIMEOUT_MS = 22000;
 /**
  * 2026-08-20 — the wall-clock ceiling on ONE voice turn, across every attempt and probe.
@@ -625,7 +643,6 @@ export const useVoiceCaddie = ({
     activeCourseId,
     club,
     scores,
-    isCompetition,
     mode: roundMode,
     shots,
     courseHoles,
@@ -638,7 +655,6 @@ export const useVoiceCaddie = ({
       activeCourseId: s.activeCourseId,
       club: s.club,
       scores: s.scores,
-      isCompetition: s.isCompetition,
       mode: s.mode,
       shots: s.shots,
       courseHoles: s.courseHoles,
@@ -781,16 +797,10 @@ export const useVoiceCaddie = ({
   }, []);
 
   const {
-    name,
-    firstName,
     handicap,
     dominantMiss,
-    physicalLimitation,
-    goal,
-    personalBest,
   } = usePlayerProfileStore(
     useShallow((s) => ({
-      name: s.name,
       // 2026-05-25 — firstName gets layered through inviteePreferences
       // map so Tim's pre-set salutations ("Uncle Mike" for m.hayes@snet.net)
       // override the default sign-in firstName. Applied here so EVERY
@@ -807,36 +817,24 @@ export const useVoiceCaddie = ({
       })(),
       handicap: s.handicap,
       dominantMiss: s.dominantMiss,
-      physicalLimitation: s.physicalLimitation,
-      goal: s.goal,
-      personalBest: s.personalBest,
     }))
   );
 
   // dominantMiss from profile has compatible type — just cast for patternDetection
   const profileDominantMiss = dominantMiss as 'left' | 'right' | 'straight' | null;
 
-  const {
-    roundsTogether,
-    sessionsTogether,
-    currentMentalState,
-    consecutiveBadHoles,
-    isSpiralRisk,
-  } = useRelationshipStore(
-    useShallow((s) => ({
-      roundsTogether: s.roundsTogether,
-      sessionsTogether: s.sessionsTogether,
-      currentMentalState: s.currentMentalState,
-      consecutiveBadHoles: s.consecutiveBadHoles,
-      isSpiralRisk: s.isSpiralRisk,
-    }))
-  );
+  /**
+   * 2026-08-26 — the whole relationship-store subscription came out with the hand-built payload.
+   * These five values were read for ONE purpose: to be pasted into a request body that
+   * caddieRequestBody already fills from the same store. What is left is a component that no longer
+   * re-renders when the mental-state or spiral-risk fields change — which it never needed to,
+   * because nothing on screen here reads them.
+   */
   // Function refs pulled separately — they're stable across renders
   // and including them in the shallow selector would cost nothing
   // either way, but separating clarifies "these are actions, not data."
   const getTopObservations = useRelationshipStore((s) => s.getTopObservations);
   const markObservationsUsed = useRelationshipStore((s) => s.markObservationsUsed);
-  const getRecentHeroMoments = useRelationshipStore((s) => s.getRecentHeroMoments);
   const addHeroMoment = useRelationshipStore((s) => s.addHeroMoment);
 
   const apiUrl = getApiBaseUrl();
@@ -1001,49 +999,10 @@ export const useVoiceCaddie = ({
       // 2026-05-17 — record the use AFTER we read, so the bump
       // happens exactly once per brain send (not per re-render).
       if (topObs.length > 0) markObservationsUsed(topObs.map(o => o.id));
-      const heroMoments = getRecentHeroMoments(2);
-
-      const watchState = useWatchStore.getState();
-      const watchSummary = watchState.getSessionSummary();
 
       // Defensive: a single malformed session in history (e.g. a shape the
       // SmartMotion redesign produced) must never throw here and take the whole
       // brain call down. Guard every field access.
-      const recentCageSessions = useCageStore.getState()
-        .sessionHistory
-        .slice(-3)
-        .reverse()
-        .map(s => {
-          const shotsArr = Array.isArray(s.shots) ? s.shots : [];
-          let dateStr = '';
-          try {
-            if (s.date != null) {
-              dateStr = new Date(s.date).toLocaleDateString('en-US', {
-                weekday: 'short', month: 'short', day: 'numeric',
-              });
-            }
-          } catch { dateStr = ''; }
-          return {
-            club: s.club,
-            shots: shotsArr.length,
-            dominantMiss: s.dominantMiss,
-            rootCause: s.rootCause,
-            summary: s.summary,
-            // 2026-05-25 — Fix AJ Phase 2: surface the spoken commentary
-            // for the most-recent shot in this session so Kevin / Tank /
-            // etc. can answer "what did I just say about that swing".
-            last_shot_commentary: shotsArr.length > 0
-              ? (shotsArr[shotsArr.length - 1]?.commentary_transcript ?? null)
-              : null,
-            date: dateStr,
-          };
-        });
-
-      const ghostContext = useGhostStore.getState().getSummaryText();
-      const smartFinderLock = useSmartFinderStore.getState().currentLock;
-      const smartFinderContext = smartFinderLock
-        ? `SMARTFINDER ACTIVE: User has locked distance of ${smartFinderLock.distance_yards} yards (${smartFinderLock.distance_meters} meters) at compass heading ${Math.round(smartFinderLock.compass_heading)}°. Confidence: ${smartFinderLock.distance_yards >= 50 && smartFinderLock.distance_yards <= 250 ? 'high' : smartFinderLock.distance_yards >= 10 && smartFinderLock.distance_yards <= 400 ? 'medium' : 'low'}. Treat the locked distance as the working number.`
-        : null;
 
       // Build player pattern insights (on-device, sync — cheap enough per-request)
       const patternInsights = generatePatternInsights(shots, {
@@ -1116,234 +1075,48 @@ export const useVoiceCaddie = ({
         signal: controller.signal,
         body: JSON.stringify({
           /**
-           * 2026-08-22 — THE UNION FIRST, this path's own values second.
+           * 2026-08-26 — THE LAST HAND-BUILT CADDIE PAYLOAD IN THE APP.
            *
-           * The mic and the text box both POST here and each hand-built its own body: 45 fields vs
-           * 34, only 20 shared. The mic never sent `persona`/`personaIntensity`, so the server fell
-           * back to a default voice; the text box never sent `courseIntelligence`/`yardageInsight`.
-           * Tim felt exactly that: "it's generic, and then the tone of the voice changes a little
-           * bit, and the information's more accurate." Same brain, different inputs.
+           * This literal carried 58 keys. 57 of them shadowed a key services/caddieRequestBody
+           * already builds from the same stores, and because the spread comes first and the literal
+           * second, THE COPY WON. That is how the resolved working yardage lost to the raw card
+           * number on this exact surface for two days while every regression test — all of which
+           * exercise the builder — stayed green.
            *
-           * Spreading the shared builder first guarantees EVERY key is present on EVERY path, while
-           * the literal below still wins wherever this hook already computed something. Neither path
-           * can silently omit a field again.
+           * A union that guarantees KEYS but lets each caller re-answer them is not one payload. It
+           * is ten payloads with a shared spell-checker.
+           *
+           * What remains below is only what this hook genuinely OWNS and the builder cannot see:
+           * a React context, and three values composed from refs this hook fills during the round.
+           * They go through `overrides`, which the builder applies to keys it already emits — so
+           * the contract stays closed and a caller still cannot invent a field.
+           *
+           * `forceTier` is gone rather than moved: see the note where it used to live.
            */
-          ...buildCaddieRequestBody({ message, language, liveBlock, responseMode }),
-          message,
-          language,
-          // 2026-08-21 (brain consolidation, phase 1) — parity with the pipecat path, which has
-          // always framed a narrated practice round. A server field nothing ever sets is
-          // indistinguishable from the bug it was added to fix.
-          sim_round: useRoundStore.getState().isSimRound || false,
-          playerName: name,
-          firstName,
-          handicap,
-          roundsTogether,
-          sessionsTogether,
-          currentHole,
-          currentPar,
-          /**
-           * 2026-08-26 — `currentYardage` AND `yardageInsight` DELIBERATELY REMOVED from this
-           * literal. They are the reason the fix Tim signed off on was still failing on this
-           * surface.
-           *
-           * The shared builder resolves the working number — STATED > live GPS > card — and emits
-           * it as `currentYardage` (see caddieRequestBody.workingYards). This hook overrode it with
-           * the RAW `useRoundStore.currentYardage`, and because the union is spread first and the
-           * literal second, the raw value won. Meanwhile the hook DID send the resolved figure, in
-           * `yardageInsight`. So the caddie-tab mic sent two different numbers for one shot.
-           *
-           * That is not cosmetic. api/kevin builds its headline line straight off this field —
-           * "DISTANCE REMAINING RIGHT NOW: ${currentYardage} yards. This is the shot in front of
-           * them." — and the physical-limitation adjustment does its arithmetic on it too. With a
-           * rangefinder read of 205 and a card of 180, the brain was told the shot was 180, then
-           * told separately that the player had stated 205. It quoted one and clubbed from the
-           * other: exactly the "7 wood / 3 iron" call Tim reported.
-           *
-           * The regression tests for this (live-yardage-not-scorecard, "the distance the caddie
-           * quotes and the one it clubs from are the SAME field") all exercise the BUILDER, and
-           * they passed the whole time. The fix was verified at the owner and defeated at the call
-           * site. yardageInsight went with it because the builder's derivation is character-for-
-           * character the same call — one owner, or this comes back.
-           */
-          activeCourse,
-          activeCourseId,
-          courseContext,
-          courseIntelligence,
-          // 2026-06-10 — CNS Phase 2: learned-memory slice (bag, course/hole
-          // history, tendencies). 2026-06-13 (audit G5): now MERGED with the live
-          // context block above (was CNS-only) so the voice brain matches the chat path.
-          /**
-           * 2026-08-26 — also removed, same reason. This was the identical merge the builder does,
-           * from the identical inputs (the hook already hands it `liveBlock`), minus the builder's
-           * contextSuffix support — so the override could only ever match it or lose to it. Found
-           * by the call-site guard on its first run, which is the point of asserting the call site
-           * rather than the owner.
-           */
-          roundMode,
-          patternInsights,
-          ghostContext,
-          smartFinderContext,
-          penaltyContext,
-          // 2026-05-25 — Fix AF: pull matching coach refinements for the
-          // current user message and ship as a context string the brain
-          // prompt embeds verbatim. Empty when no entries match.
-          coachKnowledgeContext: (() => {
-            try {
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
-              const { getCoachKnowledgeForMessage } = require('../store/coachKnowledgeStore') as typeof import('../store/coachKnowledgeStore');
-              return getCoachKnowledgeForMessage(message);
-            } catch { return ''; }
-          })(),
-          isRoundActive,
-          isCompetition,
-          mentalState: currentMentalState,
-          consecutiveBadHoles,
-          isSpiralRisk: isSpiralRisk(),
-          topObservations: topObs,
-          recentHeroMoments: heroMoments,
-          dominantMiss,
-          physicalLimitation,
-          goal,
-          personalBest,
-          recentCageSessions,
-          club,
-          scores,
-          // Phase BM — slice courseHoles to current ± 1 instead of the full
-          // 18-hole array. Kevin only needs the hole he's playing (and the
-          // next hole when transitioning); shipping the entire course
-          // geometry added 5-15KB to every brain call.
-          courseHoles: (() => {
-            const all = useRoundStore.getState().courseHoles;
-            if (currentHole == null) return all.slice(0, 1);
-            return all.filter(h => Math.abs(h.hole - currentHole) <= 1);
-          })(),
-          responseMode,
-          smartVisionContext: smartVision.isOpen ? {
-            holeNumber: smartVision.holeNumber,
-            par: smartVision.par,
-            centerYards: smartVision.centerYards,
-            measureYards: smartVision.measureYards,
-            analysisText: smartVision.analysisText,
-          } : null,
-          watchData: watchState.isConnected && watchSummary
-            ? {
-                averageTempo: watchSummary.averageTempo.toFixed(1),
-                dominantFault: watchSummary.dominantTempoFault,
-                earlyTransitionRate: Math.round(watchSummary.earlyTransitionRate * 100),
-                averageClubSpeed: Math.round(watchSummary.averageClubSpeed),
-                swingCount: watchSummary.swings.length,
-              }
-            : null,
-          // Phase V.7+ — client local hour (0-23) so Kevin's prompt can
-          // match tone to time of day (groggy AM, calm PM). Cheap to send.
-          clientHour: new Date().getHours(),
-          // Phase AQ — persistent context blobs from prior synthesis.
-          // Read at call time so any newly-synthesized insights show up
-          // in the next reply without app restart.
-          kevinContext: usePlayerProfileStore.getState().kevinContext,
-          persistentPatterns: usePlayerProfileStore.getState().persistentPatterns,
-          // 2026-05-26 — Fix AB Phase 1: surface GHIN # so Kevin can
-          // answer "what's my GHIN?" and reference it in tournament /
-          // posted-score context without forcing the user to re-state
-          // it every time. Phase 2 (live GHIN API) will use this as
-          // the lookup key.
-          ghinNumber: usePlayerProfileStore.getState().ghin_number,
-          // 2026-05-26 — Fix BE: Cecily Mode flag. Tim's granddaughter
-          // uses the caddie to chat (and helped test ES/EN switching).
-          // When true, brain unlocks general-topic free-conversation
-          // mode with warm/playful/age-appropriate tone. Default off;
-          // adults are unaffected.
-          cecilyMode: useSettingsStore.getState().cecilyMode,
-          // 2026-05-19 — pipe the player's learned vocabulary into the
-          // brain so phrases they've used before inform replies. Tim's
-          // "I saw Kevin learned 22 phrases — can he use them?" The
-          // top phrases are the ones Kevin has heard most; sending them
-          // as background grounding lets the caddie pick up Tim's
-          // shorthand instead of staying generic.
-          playerVocabulary: (() => {
-            try {
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
-              const vocab = require('../store/vocabularyProfileStore');
-              const top = vocab.useVocabularyProfileStore.getState().getTopPhrases(20);
-              return Array.isArray(top) && top.length > 0 ? top : null;
-            } catch { return null; }
-          })(),
-          // Phase BR — active practice context from tutorialStore. Null
-          // when no tutorials are flagged active. Capped at 3 active.
-          practice_context: buildFullPracticeContext(),
-          screen_context: screenContextForPrompt(),
-          recentCageInsights: useCageStore.getState().recentInsights.slice(-3),
-          recentRoundInsights: useRoundStore.getState().recentInsights.slice(-3),
-          holeNotes: useRoundStore.getState().holeNotes,
-          // Phase AR — within-session conversation buffer for follow-up
-          // resolution ("and the wind?" → Kevin knows you mean wind for
-          // the prior shot). Cleared after 60s of no activity OR on
-          // round/hole change.
-          // 2026-08-23 — override REMOVED. This sent only conversationState's buffer, so the mic's
-          // brain saw a different conversation from every other surface's. The builder now merges
-          // BOTH histories, and letting its value stand is what makes them one conversation.
-          // (getRecentTurns had no other caller here, so its import goes too — follow-up detection
-          // uses isAwaitingFollowUp, which is separate.)
-          // Phase BJ — on-course shot context. holeShots is current-hole
-          // only (front-loaded for "this hole again" pattern); recentShots
-          // is last 5 across the round (round-wide pattern detection).
-          // Mapped to the lite shape the server prompt expects.
-          holeShots: (() => {
-            const all = useRoundStore.getState().shots;
-            return all.filter(s => s.hole === (currentHole ?? -1)).map(s => ({
-              hole: s.hole,
-              shotIndex: s.shot_in_hole_index ?? null,
-              direction: s.direction,
-              outcome: s.outcome ?? null,
-              outcomeText: s.outcome_text ?? null,
-              feel: s.swing_feel ?? null,
-            }));
-          })(),
-          recentShots: useRoundStore.getState().shots.slice(-5).map(s => ({
-            hole: s.hole,
-            shotIndex: s.shot_in_hole_index ?? null,
-            club: s.club,
-            shape: s.shape,
-            direction: s.direction,
-            outcome: s.outcome ?? null,
-            outcomeText: s.outcome_text ?? null,
-            feel: s.swing_feel ?? null,
-            distance_yards: s.distance_yards ?? null,
-          })),
-          // Subjective self-reports so the caddie can ADAPT, not just log.
-          // Last 5 emotional states ("I'm frustrated", "feeling locked
-          // in") with valence + hole. Pairs with shot `feel` ("rushed")
-          // already sent above. Server uses these to adjust tone/coaching.
-          emotionalLog: (useRoundStore.getState().emotionalLog ?? []).slice(-5).map(e => ({
-            state: e.state,
-            valence: e.valence,
-            hole: e.hole,
-          })),
-          // Player's REAL bag distances (learned avgs, standard fallback) so
-          // club/strategy answers use actual numbers, not assumptions. The
-          // brain applies the "beyond your longest = two-shot" rule.
-          clubDistances: bagDistances(),
-          // PGA HOPE follow-up — server-side persona resolution, intensity
-          // dial, and Tank soft-intro flag. Read fresh at call time so
-          // settings changes apply to the next utterance without restart.
-          // 2026-08-09 (pass-2 systemic) — persona + intensity off the ACTIVE per-pillar caddie so the
-          // spoken answer + its cadence dial match the caddie actually speaking, not the global pick.
-          persona: getActiveCaddie(),
-          // 2026-07-30 (voice audit #1) — carry the custom caddie's base persona + name on the brain
-          // FALLBACK/follow-up too, or it reverts to Kevin's name + onyx voice off the primary path.
-          customCaddieBasePersona: usePlayerProfileStore.getState().customCaddieBasePersona ?? 'kevin',
-          customCaddieName: usePlayerProfileStore.getState().customCaddieName ?? null,
-          personaIntensity: useSettingsStore.getState().personaIntensity?.[getActiveCaddie()] ?? 100,
-          // 2026-05-30 — Fix FY: Local Mode → pin brain to TACTICAL
-          // tier (Haiku 4.5). Server's classifyQuestion auto-tier is
-          // skipped; query gets the cheapest, fastest, least-radio-time
-          // path. Server falls back to OpenAI gpt-4o if Haiku errors
-          // (same fallback path as today). Sonnet escalation is
-          // suppressed in this mode — the user explicitly chose
-          // conservation over depth. Omitted when localMode is off so
-          // the server's default classifyQuestion behavior is unchanged.
-          forceTier: useSettingsStore.getState().localMode === true ? 'TACTICAL' : undefined,
+          ...buildCaddieRequestBody({
+            message,
+            language,
+            liveBlock,
+            responseMode,
+            // SmartVision lives in a React context — only a component can hand it over.
+            smartVisionContext: smartVision.isOpen ? {
+              holeNumber: smartVision.holeNumber,
+              par: smartVision.par,
+              centerYards: smartVision.centerYards,
+              measureYards: smartVision.measureYards,
+              analysisText: smartVision.analysisText,
+            } : null,
+            overrides: {
+              // Composed from courseContextRef, which this hook fills from the bundled holes at
+              // round start. The builder emits `courseContext: null` and documents that the caller
+              // holding the loaded course is the one that can supply it.
+              ...(courseContext != null ? { courseContext } : {}),
+              // The sync cache MISS path here also kicks off a fetch; the builder only reads cache.
+              ...(courseIntelligence != null ? { courseIntelligence } : {}),
+              // Assembled from this turn's penalty lines, which exist only in this scope.
+              ...(penaltyContext != null ? { penaltyContext } : {}),
+            },
+          }),
         }),
       }).finally(() => clearTimeout(timeout));
 
@@ -2288,11 +2061,20 @@ export const useVoiceCaddie = ({
           }
           transcribeRes = await doTranscribeFetch(probeSaysDown ? retryBudgetMs : Math.min(15000, retryBudgetMs));
           if (probeSaysDown) console.log('[voice] probe was WRONG — retry succeeded; the connection was fine');
-        } catch (retryErr) {
-          const name = retryErr instanceof Error ? retryErr.name : 'transcribe_retry_failed';
+        } catch {
           // Two genuine attempts have now failed. Log the probe's real verdict so "probe wrong,
           // upload fine" stays distinguishable from "genuinely down" in the field data.
-          await failTranscribeOffline(name, ping.ok, ping.ms, get.ok, get.ms, cdn.ok, cdn.ms);
+          //
+          // 2026-08-26 — this passed a bare `name`, which resolved to the PLAYER'S NAME from the
+          // profile-store destructure at the top of the hook. failTranscribeOffline's first
+          // parameter is a REASON label — its sibling call ten lines up passes
+          // 'transcribe_host_unreachable' — so every retry failure filed a trace whose `reason`
+          // field was the player's name. Wrong in the field data, and the player's name in a
+          // diagnostic where it does not belong.
+          //
+          // Found by deleting dead locals: the profile `name` had no other reader, so lint called
+          // it unused and this one accidental reference was the only thing keeping it alive.
+          await failTranscribeOffline('transcribe_retry_failed', ping.ok, ping.ms, get.ok, get.ms, cdn.ok, cdn.ms);
           return;
         }
       }

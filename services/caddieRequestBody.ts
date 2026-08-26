@@ -425,9 +425,15 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     recentCageSessions: safe(() => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const c = require('../store/cageStore').useCageStore.getState();
-      return (c.sessionHistory ?? []).slice(-3).map((s: { date: number; club: string; shots?: unknown[] }) => ({
-        date: s.date, club: s.club, shots: (s.shots ?? []).length,
-      }));
+      // 2026-08-26 — Array.isArray, not `?? []`. A malformed persisted session whose `shots` is a
+      // string or an object does not throw on `.length`; it silently reports a character count or
+      // undefined, and the caddie is told a number that means nothing. This is the shape check the
+      // hook carried before this derivation moved here, and it moved with it. safe() below makes
+      // this throw-proof; only Array.isArray makes it SHAPE-proof, and those are different claims.
+      return (Array.isArray(c.sessionHistory) ? c.sessionHistory : []).slice(-3)
+        .map((s: { date: number; club: string; shots?: unknown }) => ({
+          date: s.date, club: s.club, shots: Array.isArray(s.shots) ? s.shots.length : 0,
+        }));
     }, []),
     recent_analyses_snippet: safe(() => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -435,7 +441,20 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       const recent = eng.getRecentAnalyses?.(8) ?? [];
       return recent.length ? recent.map((a) => `[${a.kind}] ${a.voice_summary}`).join('\n') : null;
     }, null),
-    practice_context: safe(() => extras.overrides?.practice_context ?? null, null),
+    /**
+     * 2026-08-26 — DERIVED HERE, not merely accepted. This read the caller's override and nothing
+     * else, so a surface that didn't hand it over sent null and the caddie forgot the drill the
+     * player was standing in the middle of. buildFullPracticeContext reads the practice stores
+     * directly, so every path can have it; an override still wins for a caller holding something
+     * better.
+     */
+    practice_context: safe(() => {
+      const supplied = extras.overrides?.practice_context;
+      if (typeof supplied === 'string' && supplied.trim()) return supplied;
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { buildFullPracticeContext } = require('./tutorialContext') as typeof import('./tutorialContext');
+      return buildFullPracticeContext() || null;
+    }, null),
     coachKnowledgeContext: safe(() => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { getCoachKnowledgeForMessage } = require('../store/coachKnowledgeStore') as { getCoachKnowledgeForMessage: (m: string) => string };
@@ -913,7 +932,11 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
   // A caller that has already computed something better wins — but it can only REPLACE a key that
   // already exists, never introduce one this builder doesn't know about. That keeps the union here.
   for (const [k, v] of Object.entries(extras.overrides ?? {})) {
-    if (k in body) body[k] = v;
+    // 2026-08-26 — `undefined` is never a caller SAYING anything; it is a value that wasn't there.
+    // Assigning it clobbered a real value the builder had already resolved, which made
+    // `overrides: { x: maybeX }` quietly destructive whenever maybeX happened to be absent. An
+    // explicit null still wins — that is a caller saying "none", and it is a different statement.
+    if (k in body && v !== undefined) body[k] = v;
   }
   return body;
 }

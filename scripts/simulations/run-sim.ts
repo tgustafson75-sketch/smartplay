@@ -6036,9 +6036,19 @@ check('Brain has a minimal-body fail-safe retry (survives context throw / 413)',
     !/Hit a snag on my end/.test(voiceCaddieSrc),
   'a context-builder throw or a too-large-payload 413 retries once with a minimal body against the healthy endpoint, so the first ask still answers');
 
-check('Cage-session context build is throw-proof',
-  /Array\.isArray\(s\.shots\) \? s\.shots : \[\]/.test(voiceCaddieSrc),
-  'a malformed session in history can no longer crash the brain context builder');
+check('Cage-session context build is throw-proof AND shape-proof',
+  // 2026-08-26 — RE-AIMED with the derivation. This lived in useVoiceCaddie until that hook's
+  // hand-built payload was collapsed into the shared builder; the guard followed the code rather
+  // than being deleted with it. Both halves are asserted because they are different claims: safe()
+  // makes the build throw-proof, and only Array.isArray makes it shape-proof — a malformed `shots`
+  // that is a string does not throw, it reports a character count.
+  (() => {
+    const b = readCode('services/caddieRequestBody.ts');
+    return /Array\.isArray\(s\.shots\) \? s\.shots\.length : 0/.test(b) &&
+      /Array\.isArray\(c\.sessionHistory\) \? c\.sessionHistory : \[\]/.test(b) &&
+      /recentCageSessions: safe\(/.test(b);
+  })(),
+  'a malformed session in history can neither crash the brain context builder nor be counted as a number that means nothing');
 
 check('Caddie brain is warmed whenever the tab is open (not only in a round)',
   // 2026-06-16 — the per-tab __ping__ keepWarm was removed; warming is now the
@@ -8335,9 +8345,17 @@ console.log('\n=== Beta-wrap deep-audit LOCK ===');
    * surfaces that still merge their own literal over the union.
    */
   check('Custom caddie base persona reaches the brain from every surface (voice #1)',
+    // 2026-08-26 — RE-AIMED, and the old clause is worth recording. It required
+    // `customCaddieBasePersona` to appear in hooks/useVoiceCaddie — which was asserting the SECOND
+    // OWNER. The claim on the line below is that the BUILDER resolves it for every surface; a hook
+    // that also mentions it is the duplication, not the evidence. So it went red the moment that
+    // hook's hand-built payload was collapsed into the builder, demanding the very copy the claim
+    // says should not exist. Second guard today caught doing this.
+    //
+    // The property: the builder emits both fields, and the surfaces reach the brain THROUGH it.
     /customCaddieBasePersona: safe/.test(read('services/caddieRequestBody.ts')) &&
       /customCaddieName: safe/.test(read('services/caddieRequestBody.ts')) &&
-      /customCaddieBasePersona/.test(read('hooks/useVoiceCaddie.ts')) &&
+      /buildCaddieRequestBody\(/.test(readCode('hooks/useVoiceCaddie.ts')) &&
       /buildCaddieRequestBody/.test(listenSrc),
     'voice#1: the one payload builder resolves the custom caddie base persona + name for EVERY surface, so no path can revert to Kevin/onyx');
   // 2026-08-23 — RE-AIMED onto services/caddieBrain, where the acknowledgement now lives for EVERY

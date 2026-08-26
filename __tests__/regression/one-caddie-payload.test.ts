@@ -204,18 +204,54 @@ describe('both paths actually USE the one builder', () => {
     }
   });
 
-  it('a spread-in union is spread FIRST so a path cannot omit a key', () => {
-    // Spread-last would let a hand-built literal keep winning with a missing field. Only applies to
-    // senders that spread; the ones that pass the builder's result directly cannot express the bug.
-    const spreaders = ['hooks/useVoiceCaddie.ts'];
-    for (const f of spreaders) {
-      const src = read(f);
-      const body = src.indexOf('body: JSON.stringify({');
-      const spread = src.indexOf('...buildCaddieRequestBody(');
-      expect(body).toBeGreaterThan(-1);
-      expect(spread).toBeGreaterThan(body);
-      const firstField = src.indexOf('\n          message,', spread);
-      expect(firstField).toBeGreaterThan(spread);
+  /**
+   * 2026-08-26 — THIS USED TO ASSERT SPREAD-ORDER. It no longer can, because there is no longer a
+   * literal to be ordered against: useVoiceCaddie's 58-key hand-built payload is gone, and what it
+   * genuinely owns now goes IN, through `overrides`, rather than being pasted on top.
+   *
+   * Spread-order was always the weaker property anyway. It guaranteed every KEY was present while
+   * leaving each caller free to re-answer it — which is exactly how the resolved working yardage
+   * lost to the raw card number on this surface for two days with every builder test green.
+   *
+   * So the assertion is now the strong one: after the spread, a sender adds NOTHING. Anything it
+   * genuinely owns is threaded in as an input, where the builder's own contract keeps it honest.
+   */
+  it('a sender adds nothing after the spread — what it owns goes IN, not on top', () => {
+    /**
+     * Returns the TOP-LEVEL entries of the object literal passed to JSON.stringify that contains
+     * the builder spread. A spread reads as "...", anything else is a re-declared key.
+     *
+     * The first version of this walked forward from the spread counting braces, starting at the
+     * "." with depth 1 — so the count was off by the builder call's own paren and the walk sailed
+     * past the literal to an outer brace. `tail` came back as "}" and it passed VACUOUSLY. Caught
+     * by break-testing it: re-adding a key produced no failure. A guard that cannot fail is worse
+     * than no guard, because it is also a claim.
+     */
+    const topLevelEntries = (src: string): string[] => {
+      const anchor = src.indexOf('...buildCaddieRequestBody(');
+      expect(anchor).toBeGreaterThan(-1);
+      const open = src.lastIndexOf('{', anchor);
+      let depth = 0;
+      let i = open;
+      const entries: string[] = [];
+      let buf = '';
+      for (; i < src.length; i += 1) {
+        const c = src[i];
+        if ('({['.includes(c)) { depth += 1; if (depth === 1) continue; }
+        else if (')}]'.includes(c)) { depth -= 1; if (depth === 0) break; }
+        if (depth === 1 && c === ',') { entries.push(buf.trim()); buf = ''; continue; }
+        if (depth >= 1) buf += c;
+      }
+      if (buf.trim()) entries.push(buf.trim());
+      return entries.filter(Boolean);
+    };
+
+    for (const f of ['hooks/useVoiceCaddie.ts']) {
+      const entries = topLevelEntries(stripComments(read(f)));
+      const declared = entries.filter((e) => !e.startsWith('...'));
+      expect([f, declared]).toEqual([f, []]);
+      // and the spread must actually be there — an empty literal would otherwise pass
+      expect(entries.some((e) => e.startsWith('...buildCaddieRequestBody'))).toBe(true);
     }
   });
 });
