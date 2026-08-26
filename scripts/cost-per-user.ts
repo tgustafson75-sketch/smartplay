@@ -18,8 +18,55 @@ const MESSAGE_TOKENS = 366;     // per-turn message BEFORE live facts moved into
 const LIVE_FACTS_TOKENS = 900;  // the block moved out of the cached prompt (varies with conditions)
 const OUTPUT_TOKENS = 120;      // a caddie answer is short by design
 
-// ── Sonnet 4.6 list price, $/M ─────────────────────────────────────────────────────────────────
-const IN = 3, OUT = 15, CACHE_READ = 0.30, CACHE_WRITE_1H = 6;
+/**
+ * ── THE MODEL TABLE ────────────────────────────────────────────────────────────────────────────
+ *
+ * Tim, 2026-08-26: "we need to always be on the consistent lookout for less expensive agent models…
+ * Is it the right agent for us? And is that a move we should make?"
+ *
+ * So this stopped being a one-model script. Add a row when a model ships, run it, and the answer is
+ * a number rather than a feeling.
+ *
+ * RATES ARE $/MILLION TOKENS AND MUST BE COPIED FROM THE PRICING PAGE, NOT REMEMBERED. A row with
+ * `rates: null` prints as UNPRICED rather than guessing — a cost model with an invented input is
+ * worse than no cost model, because it looks like evidence. See docs/MODEL-EVALUATION.md for what
+ * price does NOT tell you, which for this app is most of the decision.
+ */
+interface ModelRates { in: number; out: number; cacheRead: number; cacheWrite1h: number }
+interface Candidate {
+  id: string;
+  label: string;
+  rates: ModelRates | null;
+  note: string;
+}
+
+const MODELS: Candidate[] = [
+  {
+    id: 'claude-sonnet-4-6',
+    label: 'Sonnet 4.6  (the caddie brain today)',
+    rates: { in: 3, out: 15, cacheRead: 0.30, cacheWrite1h: 6 },
+    note: 'api/kevin pins tier=quality on EVERY turn — a deliberate 08-23 decision, not an oversight.',
+  },
+  {
+    id: 'claude-sonnet-5',
+    label: 'Sonnet 5',
+    rates: null,
+    note: 'ALREADY IN PRODUCTION on api/club-path. Intro pricing ran to 2026-08-31; after that the '
+        + '2026-08-24 note records it as identical to 4.6 — so confirm before assuming a saving.',
+  },
+  {
+    id: 'claude-haiku-4-5',
+    label: 'Haiku 4.5',
+    rates: null,
+    note: 'Already the "fast" tier in api/_aiProvider. Measured 2026-08-24 at $0.92/user-month under '
+        + 'these same assumptions — the cheapest CLAUDE option by a distance. The question is not '
+        + 'price, it is whether it does the club arithmetic.',
+  },
+];
+
+const CURRENT = MODELS[0];
+if (!CURRENT.rates) throw new Error('the current model must be priced');
+const { in: IN, out: OUT, cacheRead: CACHE_READ, cacheWrite1h: CACHE_WRITE_1H } = CURRENT.rates;
 
 // TTS: gpt-4o-mini-tts, ~$0.015/min of audio. A caddie line is ~4 seconds.
 const TTS_PER_LINE = 0.015 * (4 / 60);
@@ -67,4 +114,22 @@ Not included: SmartMotion pose analysis (on-device MediaPipe, free), elevation a
 next to per-token spend; revisit if any becomes material.
 
 At a $9.99/mo subscription the brain is roughly ${((perRound * roundsPerMonth) / 9.99 * 100).toFixed(1)}% of revenue per user.
+`);
+
+// ── The comparison ─────────────────────────────────────────────────────────────────────────────
+const monthlyFor = (r: ModelRates): number => {
+  const first = (SYSTEM_TOKENS * r.cacheWrite1h + (MESSAGE_TOKENS + LIVE_FACTS_TOKENS) * r.in + OUTPUT_TOKENS * r.out) / 1e6;
+  const later = (SYSTEM_TOKENS * r.cacheRead + (MESSAGE_TOKENS + LIVE_FACTS_TOKENS) * r.in + OUTPUT_TOKENS * r.out) / 1e6;
+  return (first + later * (turnsPerRound - 1) + voicePerRound) * roundsPerMonth;
+};
+
+console.log('IS IT THE RIGHT MODEL FOR US?  (same assumptions; voice cost identical across rows)\n');
+for (const m of MODELS) {
+  const price = m.rates ? money(monthlyFor(m.rates)) + '/mo' : 'UNPRICED — fill rates from the pricing page';
+  console.log(`  ${m.label.padEnd(38)} ${price}`);
+  console.log(`  ${' '.repeat(38)} ${m.note}\n`);
+}
+console.log(`Price is the easy half. docs/MODEL-EVALUATION.md holds the other half — latency on a caddie
+whose value is a 2.5s answer, and whether a cheaper model still does the club arithmetic that took
+three prompt rewrites and a move into code to get right on this one.
 `);
