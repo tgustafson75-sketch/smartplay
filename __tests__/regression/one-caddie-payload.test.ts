@@ -160,6 +160,29 @@ describe('both paths actually USE the one builder', () => {
    * resolves. Listed explicitly rather than "any key", because a few keys genuinely belong to the
    * caller (forceTier, and the extras the builder documents as caller-supplied).
    */
+  /**
+   * 2026-08-26 (Tim — "make sure the caddie has full context of everything in the app").
+   *
+   * The other half of that question. The rest of this suite proves every SENDER goes through the one
+   * builder; this proves the RECEIVER actually consumes what the builder emits. A payload key the
+   * server destructures and drops is the same half-build as a store the payload never sends — the
+   * app computes something, ships it across the wire, and nothing is different at the other end.
+   *
+   * Comments are stripped first, because api/kevin's prose discusses fields at length and a field
+   * DISCUSSED is not a field READ. Twice today a doc comment made dead wiring look alive.
+   *
+   * "Referenced at least twice" is the bar deliberately: once is the destructure itself.
+   */
+  it('every key the builder emits is actually consumed by the server', () => {
+    const kevin = stripComments(read('api/kevin.ts'));
+    const dropped: string[] = [];
+    for (const key of CADDIE_REQUEST_KEYS) {
+      const hits = kevin.match(new RegExp(`\\b${key}\\b`, 'g'))?.length ?? 0;
+      if (hits <= 1) dropped.push(`${key} (x${hits})`);
+    }
+    expect(dropped).toEqual([]);
+  });
+
   it('a spreader never re-declares a key the builder already RESOLVES', () => {
     const OWNED_BY_THE_BUILDER = ['currentYardage', 'yardageInsight', 'unified_context_block'];
     for (const f of ['hooks/useVoiceCaddie.ts']) {
