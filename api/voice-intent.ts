@@ -234,7 +234,7 @@ Available intents:
    - "free play" -> { setting_name: "round_mode", new_value: "free_play" }
    - "turn off active listening" / "stop listening to me" / "stop active listening" -> { setting_name: "auto_listen", new_value: false }
    - "turn on active listening" / "active listening on" / "hands-free mode" -> { setting_name: "auto_listen", new_value: true }
-   - "switch to Tank" / "change caddie to Tank" / "put Tank in" -> { setting_name: "caddie_persona", new_value: "tank" }
+   - "switch to Serena" / "change caddie to Harry" / "put Kevin in" -> { setting_name: "caddie_persona", new_value: "serena" }
    - "switch to Serena" / "I want Serena" -> { setting_name: "caddie_persona", new_value: "serena" }
    - "switch to Harry" / "let me hear Harry" -> { setting_name: "caddie_persona", new_value: "harry" }
    - "switch back to Kevin" / "give me Kevin" -> { setting_name: "caddie_persona", new_value: "kevin" }
@@ -352,7 +352,7 @@ Available intents:
    - "${caddieName} log this — recap is slow" -> { note: "recap is slow" }
    - "log an issue: SmartFinder white-screened at 10x" -> { note: "SmartFinder white-screened at 10x" }
    - "I have feedback — active listening pill covers the brand row" -> { note: "active listening pill covers the brand row" }
-   - "report a bug — Tank cut me off mid-sentence" -> { note: "Tank cut me off mid-sentence" }
+   - "report a bug — the caddie cut me off mid-sentence" -> { note: "the caddie cut me off mid-sentence" }
    - "note this: Sunnyvale hole 7 yardage looks wrong" -> { note: "Sunnyvale hole 7 yardage looks wrong" }
    Trigger phrases: "log this", "log an issue", "log a bug", "report a bug", "I have feedback", "note this", "save this note", "make a note". Always followed by the description.
 
@@ -544,21 +544,23 @@ Available intents:
    - "ball position" -> { intent_type: "at_my_ball" }
    DO NOT match shot-logging phrases ("I hit driver 240 left") — those are log_shot. at_my_ball is the position-capture, not a shot.
 
-22. ask_golf_father — User wants strategic in-round advice from Tank ("the Golf Father"). Triggered by "what would Tank do", "Tank advice", "what's the play here", "Golf Father help", etc. Distinct from in_round_diagnostic (which reasons about multi-shot patterns) and from query_status/shot_strategy (which asks about a specific shot). This is the "give me Tank's read" channel.
+22. ask_golf_father — User wants strategic in-round advice ("the Golf Father"). Triggered by "what's the play here", "Golf Father help", "tell me what to do here", etc. Distinct from in_round_diagnostic (which reasons about multi-shot patterns) and from query_status/shot_strategy (which asks about a specific shot). This is the "give me the read" channel.
    parameters: { topic?: "course_management" | "mental" | "swing", subtopic?: "tank_advice", use_context?: boolean }
+   NOTE (2026-08-25): the subtopic TOKEN is still "tank_advice" and must stay so — it is a
+   client/server contract, and clients on an older bundle branch on that exact string. Renaming it
+   here without shipping the client first would break the channel during the deploy gap. The
+   persona it was named after is gone from the app; no example above invokes it by name any more.
    Examples:
-   - "what would Tank do here" -> { topic: "course_management", subtopic: "tank_advice", use_context: true }
    - "what would the Golf Father do" / "Golf Father help" -> { topic: "course_management", subtopic: "tank_advice", use_context: true }
-   - "Tank advice" / "give me Tank" -> { topic: "course_management", subtopic: "tank_advice", use_context: true }
    - "tell me what to do here" -> { topic: "course_management", subtopic: "tank_advice", use_context: true }
    - "red penalty vs yellow" / "red stake vs yellow" / "what's the difference between red and yellow" -> { topic: "rules", subtopic: "red_vs_yellow" }
    - "driver or 3 wood" / "should I hit driver" / "what club off the tee" -> { topic: "course_management", subtopic: "driver_or_3wood", use_context: true }
-   - "Hey Tank what's the best club for 300 yards" / "Tank what club for 300" / "Golf Father what should I hit from 250" -> { topic: "course_management", subtopic: "tank_advice", use_context: true } (When Tank/Golf Father is explicitly named in a club-recommendation question — even with a yardage — route here, NOT query_status. Tank's the canonical "give me the read" channel; the handler weaves in distance + lie + wind on top.)
+   - "Golf Father what should I hit from 250" / "Golf Father what club for 300" -> { topic: "course_management", subtopic: "tank_advice", use_context: true } (When the Golf Father is explicitly named in a club-recommendation question — even with a yardage — route here, NOT query_status. It is the canonical "give me the read" channel; the handler weaves in distance + lie + wind on top.)
    - "should I lay up" / "lay up or go for it" / "go for the green" -> { topic: "course_management", subtopic: "lay_up" }
    - "nearest point of relief" / "free drop here" / "cart path relief" -> { topic: "rules", subtopic: "nearest_point_relief" }
    - "can I ground my club" / "can I touch the sand" / "ground club in bunker" -> { topic: "rules", subtopic: "can_ground_club", use_context: true }
    - "flag or center" / "should I attack the pin" / "pin or middle" -> { topic: "course_management", subtopic: "flag_or_center", use_context: true }
-   Default subtopic = "tank_advice" and use_context = true when omitted. Use this intent ONLY when the user names Tank / Golf Father OR explicitly asks for in-context strategic advice; "what should I hit" with no Tank reference stays on query_status/shot_strategy.
+   Default subtopic = "tank_advice" (a legacy token — see the note above) and use_context = true when omitted. Use this intent ONLY when the user names the Golf Father OR explicitly asks for in-context strategic advice; "what should I hit" on its own stays on query_status/shot_strategy.
 
 20. sequence — User chained two or more distinct commands in a single utterance, separated by "and", "then", commas, or implicit pause. Each step is a real first-class intent above (open_tool, change_setting, log_shot, etc.). Use this ONLY when the steps are independent actions; do NOT use for a single clause with multiple parameters (e.g. "log driver 240 left" is one log_shot, not a sequence).
    parameters: { steps: [{ intent_type, parameters }, ...] }

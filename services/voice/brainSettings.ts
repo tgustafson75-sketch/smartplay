@@ -22,7 +22,6 @@ export type BrainSettings = {
   cecilyMode: boolean;
   /** The ACTIVE persona's 0–100 intensity dial (pipecat-turn / kevin.ts scale cadence off this). */
   personaIntensity: number;
-  tankSoftIntro: boolean;
 };
 
 export function brainSettings(s: {
@@ -31,7 +30,6 @@ export function brainSettings(s: {
   responseMode?: 'short' | 'neutral' | 'detailed';
   cecilyMode?: boolean;
   personaIntensity?: Record<string, number> | null;
-  tankSoftIntro?: boolean;
   caddiePersonality: Persona;
 }): BrainSettings {
   const lang = s.language === 'es' || s.language === 'zh' ? s.language : 'en';
@@ -43,6 +41,5 @@ export function brainSettings(s: {
     responseMode: s.responseMode ?? 'neutral',
     cecilyMode: s.cecilyMode ?? false,
     personaIntensity: typeof intensity === 'number' && Number.isFinite(intensity) ? intensity : 100,
-    tankSoftIntro: s.tankSoftIntro ?? false,
   };
 }

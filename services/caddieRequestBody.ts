@@ -255,7 +255,6 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     customCaddieName: safe(() => p.customCaddieName ?? null, null),
     customCaddieBasePersona: safe(() => p.customCaddieBasePersona ?? 'kevin', 'kevin'),
     cecilyMode: safe(() => st.cecilyMode ?? false, false),
-    tankSoftIntro: safe(() => st.tankSoftIntro ?? false, false),
 
     // ─── the round ──────────────────────────────────────────────────────────
     isRoundActive,

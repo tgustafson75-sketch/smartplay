@@ -361,10 +361,10 @@ export const BRAIN_TOOLS: AiToolDef[] = [
   },
   {
     name: 'switch_caddie',
-    description: 'Switch the active caddie persona when the player asks for a different caddie BY NAME ("switch to Harry", "put Tank on the bag", "I want Serena", "give me Kevin back"). personality must be one of: kevin, serena, harry, tank.',
+    description: 'Switch the active caddie persona when the player asks for a different caddie BY NAME ("switch to Harry", "I want Serena", "give me Kevin back"). personality must be one of: kevin, serena, harry.',
     parameters: {
       type: 'object',
-      properties: { personality: { type: 'string', enum: ['kevin', 'serena', 'harry', 'tank'], description: 'The caddie to switch to.' } },
+      properties: { personality: { type: 'string', enum: ['kevin', 'serena', 'harry'], description: 'The caddie to switch to.' } },
       required: ['personality'],
     },
   },

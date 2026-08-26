@@ -40,7 +40,7 @@ export function selfReferenceBlock(name: string): string {
  * paid for does not exist, and they have no reason to ask twice.
  */
 export function caddieRosterBlock(current: string): string {
-  return `CADDIE ROSTER — Kevin, Serena, Harry and Tank are ALL available, always, plus the player's own custom caddie if they made one. You are currently ${current}. If they ask for a different one BY NAME, call switch_caddie with that name and confirm warmly. NEVER say a caddie is retired, unavailable, busy, or does not exist — every one of them can be switched to at any time. If you did not catch which caddie they meant, ask.`;
+  return `CADDIE ROSTER — Kevin, Serena and Harry are ALL available, always, plus the player's own custom caddie if they made one. You are currently ${current}. If they ask for a different one BY NAME, call switch_caddie with that name and confirm warmly. NEVER say a caddie is retired, unavailable, busy, or does not exist — every one of them can be switched to at any time. If you did not catch which caddie they meant, ask.`;
 }
 
 /** Whose perspective "I/me/my" and "you/your" carry, and how to take feedback about the caddie itself. */
