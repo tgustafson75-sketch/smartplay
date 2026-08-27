@@ -83,6 +83,18 @@ export function ShotMapPage({
   style?: StyleProp<ViewStyle>;
 }) {
   // Lateral fraction (−1 left … +1 right), capped at ~25° = full deflection.
+  /**
+   * 2026-08-26 (adversarial pass) — `lateral` collapsed TWO different states onto 0: a trace that
+   * measured ON LINE, and NO TRACE AT ALL. The dot was plotted dead centre either way, so a swing
+   * whose launch direction we never read was drawn as a shot hit straight down the middle. The
+   * DIRECTION stat said "—" honestly while the dot — the thing the eye actually reads — asserted
+   * the opposite.
+   *
+   * This file's own header promises "with no read the field shows an empty state, never a
+   * fabricated dot" and "every number traces to a real measurement". The centre-by-default dot was
+   * exactly the fabrication it forbids.
+   */
+  const lateralKnown = trace != null;
   const lateral = trace && trace.side !== 'straight'
     ? Math.min(1, trace.divergenceDeg / 25) * (trace.side === 'left' ? -1 : 1)
     : 0;
@@ -123,6 +135,7 @@ export function ShotMapPage({
           handicap={handicap}
           learnedCarry={learnedCarry}
           estCarry={estCarry}
+          lateralKnown={lateralKnown}
           effortPct={effortPct}
           lateral={lateral}
           dirLabel={dirLabel}
@@ -135,7 +148,7 @@ export function ShotMapPage({
 
 // ─── Full-swing vertical "course" map ────────────────────────────────
 function CourseMap({
-  club, handicap, learnedCarry, estCarry, effortPct, lateral, dirLabel, colors,
+  club, handicap, learnedCarry, estCarry, effortPct, lateral, lateralKnown, dirLabel, colors,
 }: {
   club: ClubId | null;
   handicap: number | null;
@@ -143,6 +156,8 @@ function CourseMap({
   estCarry: number | null;
   effortPct: number | null;
   lateral: number;
+  /** False when no ball-trace was read — the downrange estimate stands, the LINE does not. */
+  lateralKnown: boolean;
   dirLabel: string | null;
   colors: ThemeColors;
 }) {
@@ -172,17 +187,28 @@ function CourseMap({
           <View style={styles.tee} />
           {/* ball marker — only when we have an honest carry estimate */}
           {has && downFrac != null ? (
-            <View
-              style={[
-                styles.ball,
-                { bottom: `${Math.max(2, downFrac * 96)}%`, left: `${50 + lateral * 38}%` },
-              ]}
-            >
-              <View style={styles.ballDot} />
-              <View style={styles.ballPill}>
-                <Text style={styles.ballPillText}>~{estCarry}y</Text>
+            lateralKnown ? (
+              <View
+                style={[
+                  styles.ball,
+                  { bottom: `${Math.max(2, downFrac * 96)}%`, left: `${50 + lateral * 38}%` },
+                ]}
+              >
+                <View style={styles.ballDot} />
+                <View style={styles.ballPill}>
+                  <Text style={styles.ballPillText}>~{estCarry}y</Text>
+                </View>
               </View>
-            </View>
+            ) : (
+              /* Distance read, line NOT read — a band across the field at that distance says
+                 "somewhere along here", which is the truth. A dot would say "straight". */
+              <View style={[styles.distanceBand, { bottom: `${Math.max(2, downFrac * 96)}%` }]}>
+                <View style={styles.distanceBandLine} />
+                <View style={styles.ballPill}>
+                  <Text style={styles.ballPillText}>~{estCarry}y · line not read</Text>
+                </View>
+              </View>
+            )
           ) : null}
         </LinearGradient>
       </View>
@@ -193,7 +219,7 @@ function CourseMap({
               your target effort), NOT a measured outcome. Label it so a chunk that
               flew 30y isn't shown here as "~129y CARRY" like a real result. */}
           <Stat label="PLAN CARRY" value={`~${estCarry}y`} colors={colors} est />
-          <Stat label="DIRECTION" value={dirLabel ?? '—'} colors={colors} est={!!dirLabel} />
+          <Stat label="DIRECTION" value={dirLabel ?? 'not read'} colors={colors} est={!!dirLabel} />
           <Stat label="EFFORT" value={effortPct != null ? `${effortPct}%` : '—'} colors={colors} />
         </View>
       ) : (
@@ -324,6 +350,8 @@ const styles = StyleSheet.create({
   centerLine: { position: 'absolute', left: '50%', top: '4%', bottom: '6%', width: 1, marginLeft: -0.5, backgroundColor: 'rgba(255,255,255,0.18)' },
   tee: { position: 'absolute', bottom: '3%', left: '50%', marginLeft: -4, width: 8, height: 8, borderRadius: 4, backgroundColor: '#fff', opacity: 0.85 },
   ball: { position: 'absolute', alignItems: 'center', marginLeft: -6 },
+  distanceBand: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  distanceBandLine: { alignSelf: 'stretch', height: 2, backgroundColor: 'rgba(136,247,0,0.32)' },
   ballDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#88F700', borderWidth: 2, borderColor: '#06281b' },
   ballPill: { marginTop: 2, backgroundColor: 'rgba(6,15,9,0.85)', borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 },
   ballPillText: { color: '#88F700', fontSize: 10, fontWeight: '800' },
