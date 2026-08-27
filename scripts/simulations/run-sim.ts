@@ -12597,6 +12597,72 @@ check('Smart Motion: "go again" asked DURING analysis is queued, never dropped',
   })(),
   'a go-again requested while the read is running is queued and fires when it lands; the NEW SET control still auto-saves the set it leaves');
 
+check('LOCK: no turn on the typed / watch / hands-free path ends in silence',
+  /**
+   * 2026-08-26 (adversarial pass) — handleTranscribedUtterance is what the global bottom bar sends
+   * every TYPED question to, and what the watch and handsFreeOrchestrator route through. Every
+   * terminal branch in it speaks, captions or offers — except one: a non-ok reply from
+   * /api/voice-intent logged and returned, so a 500 or a timeout from the CLASSIFIER left the
+   * player with nothing at all.
+   *
+   * The classifier's job is TOOL ROUTING; a question does not need it. A failure there means "no
+   * tool intent", which this function already handles well — the no-handler branch routes to the
+   * conversational brain, falls back to a local answer from device state, and only then speaks an
+   * honest failure line.
+   *
+   * Asserted as a SHAPE, by walking the function body and requiring that every bare `return;` has
+   * a speak / caption / offer / local-answer within the preceding lines. A guard naming this one
+   * branch would not have caught the next one.
+   */
+  (() => {
+    const src = readCode('services/listeningSession.ts');
+    const at = src.indexOf('export async function handleTranscribedUtterance');
+    if (at < 0) return false;
+    let depth = 0;
+    let i = src.indexOf('{', at);
+    const open = i;
+    for (; i < src.length; i += 1) {
+      if (src[i] === '{') depth += 1;
+      else if (src[i] === '}') { depth -= 1; if (depth === 0) break; }
+    }
+    /**
+     * 2026-08-26 — CHARACTER window, not a line window. readCode() replaces each block comment with
+     * a single SPACE, which collapses a twelve-line doc comment onto one line — so "the previous 12
+     * lines" could reach back over hundreds of lines of real code and find a speak() that has
+     * nothing to do with this branch. That is precisely how the block-form break test slipped
+     * through while the one-line form was caught. A byte window cannot be fooled by comment shape.
+     */
+    const body = src.slice(open, i);
+    const lines = body.split('\n');
+    const offsets: number[] = [];
+    let acc = 0;
+    for (const l of lines) { offsets.push(acc); acc += l.length + 1; }
+    const ANSWERS = /speak\w*\(|flashCaption|speakHonestFailure|localAnswer|offer/;
+    let silent = 0;
+    lines.forEach((l, n) => {
+      /**
+       * 2026-08-26 — BOTH shapes, and it took three tries to say that in a regex.
+       *   /^\s*return;\s*$/          caught the block form, blind to `if (!ok) return;`
+       *   /(^|[;{)]\s*)return;/      caught the one-line form and went blind to the block form,
+       *                              because `^` then demanded `return;` at column zero and every
+       *                              real one is indented.
+       * Each version was break-tested against only the shape it already caught, which is how a
+       * narrowing passed for a broadening twice in a row. Test a guard against the case it does
+       * NOT yet handle, not the one that motivated it.
+       */
+      if (!/(^\s*|[;{)]\s*)return;/.test(l)) return;
+      // The ONE honest exemption: a guard clause on empty input. The player said nothing, so there
+      // is nothing to answer and silence is correct. Named explicitly rather than loosening the
+      // pattern, because every other early exit here IS a turn the player started.
+      if (/if \(!text\)|if \(!utterance\)|\.trim\(\)\)? return/.test(l)) return;
+      const ctx = body.slice(Math.max(0, offsets[n] - 500), offsets[n] + l.length);
+      if (!ANSWERS.test(ctx)) silent += 1;
+    });
+    if (silent > 0) console.log(`   ${silent} terminal return(s) leave the player with nothing`);
+    return silent === 0;
+  })(),
+  'every terminal branch of the typed/watch/hands-free turn leaves the player with speech, a caption, or an honest line — a classifier failure routes to the brain rather than ending the turn');
+
 console.log('\n=== SYNTHESIS ===');
 // Emitted UNCONDITIONALLY, so this is a standing guard in the suite rather than an error path that
 // only exists once something is already broken. Every guard that reads a missing file is asserting

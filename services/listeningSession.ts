@@ -1637,16 +1637,37 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
           ...customCaddieFields(),
         }),
       }, intentTimeout());
+      /**
+       * 2026-08-26 — A CLASSIFIER FAILURE IS NOT THE END OF THE TURN.
+       *
+       * This logged and returned, so a 500 or a timeout from /api/voice-intent left the player with
+       * NOTHING — on the surface the global bottom bar sends every TYPED question to, and the one
+       * the watch and hands-free use. Type a question while that route is unhappy and the caddie
+       * simply says nothing back. Every other terminal branch in this function speaks, captions, or
+       * offers; this one was the hole.
+       *
+       * The classifier's job is TOOL ROUTING. A question does not need it. So a failure here means
+       * exactly "no tool intent", which is already a case this function handles well: the no-handler
+       * branch below routes to the conversational brain, falls back to a local answer from device
+       * state, and only then says an honest failure line. Falling into it is a strict improvement
+       * over silence and reuses the tested path rather than inventing a second one.
+       */
       if (!parseRes.ok) {
-        console.log(`[handsFree-route] classifier non-ok ${parseRes.status}`);
-        return;
+        console.log(`[handsFree-route] classifier non-ok ${parseRes.status} — routing to the brain as a plain question`);
       }
-      intent = await parseRes.json();
+      intent = parseRes.ok ? await parseRes.json() : null;
+      if (!intent) {
+        intent = { intent_type: 'conversational', confidence: 'low', raw_text: text } as VoiceIntent;
+      }
     }
     // 2026-07-04 (clean-audit M4) — the cloud classifier response carries no
     // raw_text; handlers' raw-text fallbacks (catalog lookup, hole parse, coach
     // name) silently died on this path. Always carry the utterance.
-    if (!intent) return;
+    //
+    // 2026-08-26 — `if (!intent) return;` stood here and is now unreachable: the classifier branch
+    // above always ends holding an intent, synthesising a conversational one when the route fails.
+    // Left in place it would read as a live silent exit, which is the shape the new LOCK exists to
+    // forbid, so it goes rather than being exempted.
     if (!intent.raw_text) intent.raw_text = text;
     const handler = voiceCommandRouter.getHandler(intent.intent_type);
     if (!handler) {

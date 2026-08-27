@@ -132,7 +132,7 @@ export interface GolferNarrative {
   workAreas: string[];
   strengths: string[];
   goals: string[];
-  /** Free-form remembered facts worth knowing ("plays with his son Tank", ...). */
+  /** Free-form remembered facts worth knowing ("plays with his son on Sundays", …). */
   story: string[];
   updated_at: number;
 }
@@ -146,7 +146,18 @@ export interface PlayerMemory {
   swingMetrics?: SwingMetricTendencies;
   /** The golfer's narrative profile. Optional for legacy persisted players. */
   narrative?: GolferNarrative;
-  preferences: { respondsTo: string | null; tone: string | null };
+  /**
+   * 2026-08-26 — REMOVED. `preferences: { respondsTo, tone }` was the CNS's "how this player likes
+   * to be coached" slot, and the loop never ran: recordPreference had zero callers, and the field
+   * was read by nothing — not the retrieval layer, not any payload. A designed slot that never
+   * learns anything is worse than no slot, because the store's shape implies the caddie is picking
+   * this up.
+   *
+   * It is also SUPERSEDED. GolferNarrative.likes / dislikes / story carry the same knowledge in the
+   * player's own words, are populated by api/narrative-extract through narrativeIngest, and ARE
+   * read into the CNS block ("enjoys: … | avoid pushing: … | worth knowing: …"). Two owners for
+   * "what this golfer responds to", one of them inert.
+   */
   courses: Record<string, CourseMemory>;
   reflections: Reflection[];
   updated_at: number;
@@ -221,7 +232,6 @@ function emptyPlayer(player_id: string): PlayerMemory {
     player_id,
     bag: {},
     tendencies: { dominantMiss: null, recentFaults: [] },
-    preferences: { respondsTo: null, tone: null },
     courses: {},
     reflections: [],
     updated_at: 0,
@@ -282,7 +292,6 @@ interface CaddieMemoryState {
     playerId?: string;
   }) => void;
   recordReflection: (input: { round_id: string; course_id?: string | null; summary: string; keyTakeaways?: string[]; nowMs: number; playerId?: string }) => void;
-  recordPreference: (input: { respondsTo?: string | null; tone?: string | null; playerId?: string }) => void;
   /** 2026-07-07 — record a swing's MEASURED signals (tempo / divergence / mishit) into
    *  rolling tendencies so the brain can cite real numbers. All fields optional —
    *  record whatever was honestly measured for this swing. */
@@ -546,16 +555,6 @@ export const useCaddieMemoryStore = create<CaddieMemoryState>()(
         });
       },
 
-      recordPreference: ({ respondsTo, tone, playerId }) => {
-        const id = pid(playerId);
-        set((s) => {
-          const p = s.players[id] ?? emptyPlayer(id);
-          return { players: { ...s.players, [id]: { ...p, preferences: {
-            respondsTo: respondsTo ?? p.preferences.respondsTo,
-            tone: tone ?? p.preferences.tone,
-          } } } };
-        });
-      },
 
       recordSwingMetrics: ({ tempoRatio, backswingMs, divergenceDeg, mishit, nowMs, playerId }) => {
         const id = pid(playerId);
