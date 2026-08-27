@@ -1575,6 +1575,12 @@ export const useVoiceCaddie = ({
           console.log('[voice] audio file too small (<1KB), skipping transcribe');
           // 2026-06-16 — breadcrumb: empty/tiny recording (cold mic / speaker→record
           // transition on the first capture) lands here. Visible in the voice log now.
+          //
+          // 2026-08-26 (adversarial pass) — LEFT SILENT ON PURPOSE, unlike the too-large branch
+          // below. Under 1 KB is the stray-tap signature, and apologising for a tap the player
+          // never meant as speech is its own defect. The breadcrumb is the right response: if the
+          // voice log shows this firing on real turns (the cold-mic case the comment names), the
+          // judgement flips — but that is a decision from field data, not from a sweep.
           logVoiceSilentFail('capture_file_too_small', { source: 'processAudioUri', size, exists: info.exists, sourceKind: source });
           wrappedOnVoiceStateChange('idle');
           isProcessingRef.current = false;
@@ -1587,6 +1593,18 @@ export const useVoiceCaddie = ({
         if (size > 3.5 * 1024 * 1024) {
           console.log('[voice] audio file too large (', size, 'bytes), skipping transcribe to avoid Vercel 413');
           logTranscribeError(null, `audio_too_large_${size}_bytes`, { size, source: 'processAudioUri_max_size' });
+          /**
+           * 2026-08-26 (adversarial pass) — AND TELL THEM. This dropped the turn in silence.
+           *
+           * Unlike the <1KB branch above, this is unambiguous: 3.5 MB of audio is a long spoken
+           * sentence, never a stray tap. The player said something substantial and got nothing back,
+           * and the reason — our own client-side cap, set to dodge an opaque Vercel 413 — is
+           * entirely on our side of the line. Same localized on-us line and same mechanism as the
+           * other app-side failures, rather than a new wording for a rare branch.
+           */
+          const line = CADDIE_NOTICE_ON_US[language] ?? CADDIE_NOTICE_ON_US.en;
+          onResponseReceived(line);
+          if (voiceEnabled) void speakDeviceNotice(line, language, voiceGender).catch(() => {});
           wrappedOnVoiceStateChange('idle');
           isProcessingRef.current = false;
           return;
@@ -2831,9 +2849,26 @@ export const useVoiceCaddie = ({
         recordingRef.current = null;
 
         if (!uri) {
-          // 2026-06-16 (Tim — "front-end path has a glitch", first-ask 90% fail) —
-          // breadcrumb so this silent exit is visible in the voice log.
+          /**
+           * 2026-06-16 (Tim — "front-end path has a glitch", first-ask 90% fail) — breadcrumb so
+           * this exit is visible in the voice log.
+           *
+           * 2026-08-26 (adversarial pass) — AND NOW IT SAYS SOMETHING. The breadcrumb made the
+           * failure visible to US; the player still tapped the mic, spoke a sentence, and got
+           * silence. The recorder stopped and handed back no file, which is our failure, not
+           * theirs — so this uses the SAME line and the SAME mechanism as the sibling app-side
+           * branch in processAudioUri rather than inventing wording: CADDIE_NOTICE_ON_US ("that
+           * one got away from me"), which is localized and already warmed into the offline clip
+           * cache in the caddie's real voice.
+           *
+           * Deliberately NOT "Didn't catch that" — that blames the player for not speaking when
+           * the microphone worked fine and the file did not survive. The comment at the abort
+           * branch below calls that exact substitution out as an untruth; this is the same class.
+           */
           logVoiceSilentFail('tap_no_uri', { source: 'handleMicPress', durationMs });
+          const line = CADDIE_NOTICE_ON_US[language] ?? CADDIE_NOTICE_ON_US.en;
+          onResponseReceived(line);
+          if (voiceEnabled) void speakDeviceNotice(line, language, voiceGender).catch(() => {});
           wrappedOnVoiceStateChange('idle');
           return;
         }

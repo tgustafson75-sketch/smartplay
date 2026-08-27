@@ -255,3 +255,54 @@ describe('a mic the user never asked for does not stay hot', () => {
     expect(src).toContain('if (!micHasSpoken && Date.now() - recordStartedAt >= NO_SPEECH_STANDDOWN_MS)');
   });
 });
+
+/**
+ * 2026-08-26 (adversarial pass) — A TURN THE PLAYER STARTED MUST NOT END IN SILENCE.
+ *
+ * logVoiceSilentFail is telemetry: it makes a dead turn visible to US. It says nothing to the
+ * player. Two sites logged and returned, so the player tapped the mic, spoke, and got nothing:
+ *
+ *   tap_no_uri            the recorder stopped and handed back no file — our failure, not theirs
+ *   audio_too_large       3.5 MB of audio, dropped by our own client-side cap to dodge a 413
+ *
+ * Both now speak CADDIE_NOTICE_ON_US ("that one got away from me"), which is localized and already
+ * warmed into the offline clip cache in the caddie's real voice — deliberately NOT "Didn't catch
+ * that", which blames the player for not speaking when the microphone worked fine.
+ *
+ * Two sites stay silent ON PURPOSE and are named here so the distinction survives:
+ *   tap_capture_too_short / capture_file_too_small — the stray double-tap signature. Apologising
+ *   for a tap the player never meant as speech is its own defect.
+ */
+describe('a turn the player started never ends in silence', () => {
+  const fs = require('fs') as typeof import('fs');
+  const path = require('path') as typeof import('path');
+  const src = fs.readFileSync(path.resolve(__dirname, '../../hooks/useVoiceCaddie.ts'), 'utf-8');
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+
+  const answersWithin = (marker: string, chars = 600): boolean => {
+    const at = code.indexOf(marker);
+    expect(at).toBeGreaterThan(-1);
+    return /onResponseReceived\(|speakDeviceNotice\(|flashCaption\(/.test(code.slice(at, at + chars));
+  };
+
+  it('a recording that produced no file tells the player', () => {
+    expect(answersWithin("logVoiceSilentFail('tap_no_uri'")).toBe(true);
+  });
+
+  it('an utterance dropped by our own size cap tells the player', () => {
+    expect(answersWithin('audio_too_large_')).toBe(true);
+  });
+
+  it('uses the on-us line, not one that blames the player for not speaking', () => {
+    const at = code.indexOf("logVoiceSilentFail('tap_no_uri'");
+    const window = code.slice(at, at + 600);
+    expect(window).toContain('CADDIE_NOTICE_ON_US');
+    expect(window).not.toContain("Didn't catch that");
+  });
+
+  it('the stray-tap branches stay silent deliberately', () => {
+    // If these ever start speaking, it should be a decision from field data, not a sweep.
+    expect(answersWithin("logVoiceSilentFail('capture_file_too_small'", 300)).toBe(false);
+    expect(answersWithin("logVoiceSilentFail('tap_capture_too_short'", 300)).toBe(false);
+  });
+});
