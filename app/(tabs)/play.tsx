@@ -668,6 +668,12 @@ export default function PlayTab() {
   // mic appends transcribed speech to the existing notes; the check
   // button dismisses the keyboard cleanly.
   const [notesDictating, setNotesDictating] = useState(false);
+  /** The screen's existing toast, which the course-download path already uses — one feedback surface. */
+  const toast = React.useCallback((message: string) => {
+    try {
+      (require('../../store/toastStore') as typeof import('../../store/toastStore')).useToastStore.getState().show(message);
+    } catch { /* telling the player is best-effort; it must never break the thing it reports on */ }
+  }, []);
   const notesInputRef = React.useRef<TextInput>(null);
   const apiUrlForNotes = getApiBaseUrl();
   const notesLanguage = useSettingsStore(s => s.language);
@@ -684,13 +690,25 @@ export default function PlayTab() {
       ]);
       if (transcript && transcript.trim()) {
         setSetupNotes(prev => (prev ? prev.trim() + ' ' : '') + transcript.trim());
+      } else {
+        /**
+         * 2026-08-27 (app-wide sweep for the defect class behind Tim's silent Serena turn) — an
+         * EMPTY transcript did nothing at all: the mic icon stopped pulsing and the notes field
+         * stayed as it was. Indistinguishable, from the player's side, from "it heard me and I said
+         * nothing worth writing down". Same rule as the caddie's mic — if we opened the microphone,
+         * we owe an answer either way.
+         */
+        toast('Didn\'t catch that — tap the mic and try again.');
       }
     } catch (e) {
       console.log('[play] notes dictation failed', e);
+      // Includes the 20s hard timeout above, which is precisely the case where the player has been
+      // holding the phone waiting and has the least reason to guess.
+      toast('Dictation had trouble. Tap the mic to try again, or type it.');
     } finally {
       setNotesDictating(false);
     }
-  }, [notesDictating, apiUrlForNotes, notesLanguage]);
+  }, [notesDictating, apiUrlForNotes, notesLanguage, toast]);
   // Phase 405 wave 3 — tee box color selection. 'unspecified' until the
   // user picks. Survives the Play tab lifetime so navigating away and
   // back doesn't lose the selection.

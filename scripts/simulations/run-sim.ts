@@ -3542,6 +3542,56 @@ check('Voice: capture silences the caddie before opening the mic (no self-record
   })(),
   'capture stops in-flight TTS (cloud + device) before recording — no echo/self-record, clean barge-in');
 
+check('LOCK: an opened microphone always answers, on the notes field too',
+  /**
+   * 2026-08-27 — found by sweeping the whole app for the class behind Tim's silent Serena turn,
+   * rather than waiting for a second report of it.
+   *
+   * The pre-round notes mic had both halves of the same defect: an EMPTY transcript fell through an
+   * `if (transcript && transcript.trim())` with no else, and the catch — which covers a 20s hard
+   * timeout, i.e. exactly the case where the player has been holding the phone waiting — only wrote
+   * to the console. Either way the icon stopped pulsing and the field stayed as it was, which from
+   * the player's side is indistinguishable from "it heard me and decided I said nothing".
+   *
+   * The rule is the same one the caddie's mic now follows: IF WE OPENED THE MICROPHONE, WE OWE AN
+   * ANSWER. Asserted on both branches, because fixing only the throw would leave the commoner one.
+   */
+  (() => {
+    const src = readCode('app/(tabs)/play.tsx');
+    const at = src.indexOf('const handleDictateNotes');
+    if (at < 0) return false;
+    const body = src.slice(at, at + 2200);
+    /**
+     * BRACE-MATCHED, not windowed — and this is the second time today a character window has been
+     * the bug rather than the fix.
+     *
+     * The first version tested /\} else \{[\s\S]{0,200}?toast\(/. Break-testing it by deleting the
+     * else-branch toast left it GREEN: the non-greedy match simply ran on past the else block and
+     * found the toast in the CATCH, so the guard proved "there is a toast somewhere below the word
+     * else" — which is true whenever either branch answers, i.e. it could not fail on the branch it
+     * was written for. Only the break test that removes the OTHER branch's answer would have caught
+     * this, which is the pass I keep having to force. [[break-test-every-guard-you-write]]
+     */
+    const blockAfter = (marker: string): string => {
+      const i = body.indexOf(marker);
+      if (i < 0) return '';
+      const open = body.indexOf('{', i);
+      if (open < 0) return '';
+      let d = 0;
+      for (let j = open; j < body.length; j += 1) {
+        if (body[j] === '{') d += 1;
+        else if (body[j] === '}') { d -= 1; if (d === 0) return body.slice(open, j); }
+      }
+      return '';
+    };
+    const answersOnEmpty = /toast\(/.test(blockAfter('} else {'));
+    const answersOnThrow = /toast\(/.test(blockAfter('catch (e) {'));
+    if (!answersOnEmpty) console.log('   an empty dictation says nothing');
+    if (!answersOnThrow) console.log('   a failed/timed-out dictation says nothing');
+    return answersOnEmpty && answersOnThrow;
+  })(),
+  'the notes microphone answers whether it heard nothing or failed outright — an opened mic never ends in silence');
+
 check('LOCK: no brain call is fired that nothing can consume',
   /**
    * 2026-06-16 (Tim — "I speak but he waits 4-5s, then thinks") — this guard was written to hold a

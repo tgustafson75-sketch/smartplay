@@ -353,7 +353,21 @@ function LeaderboardPanel() {
   const onShare = useCallback(async () => {
     const text = leaderboardAsText(state, result);
     try { await Share.share({ message: text, title: state.label || 'Tournament leaderboard' }); }
-    catch (e) { console.log('[tournament] share failed', e); }
+    catch (e) {
+      console.log('[tournament] share failed', e);
+      /**
+       * 2026-08-27 (app-wide sweep for the silent-failure class) — a tap that did nothing at all.
+       *
+       * Deliberately only on a THROW: dismissing the share sheet resolves with
+       * `action: 'dismissedAction'` rather than throwing, so backing out stays silent as it should.
+       * Telling someone their share "failed" because they changed their mind is the false-alarm
+       * version of the same discourtesy.
+       */
+      try {
+        (require('../store/toastStore') as typeof import('../store/toastStore')).useToastStore
+          .getState().show('Could not open the share sheet. The leaderboard is still here.');
+      } catch { /* best-effort */ }
+    }
   }, [state, result]);
 
   return (

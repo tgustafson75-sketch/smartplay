@@ -503,3 +503,53 @@ feels good, and a CONTINUOUS command grammar (every voice surface today is one-s
 Build §14 first (circle a region, re-read it — tap-driven): it forces the region map into existence
 against a UI that cannot mis-hear you. Depends on §17's 120fps build — "forward three steps" means
 nothing at 30fps.
+
+## §20 — TIM'S CALL: the earbud's classifier/brain overlap is gone. Buy it back? (2026-08-27)
+
+Deleted today: a speculative `/api/kevin` fired in parallel with the classifier on every
+precheck-miss, so the brain's network + LLM time overlapped the classify (~0.7-1s per conversational
+turn). It was written 06-16 and **stopped working on 07-01**, when the mic convergence put
+`conversationalBrainTurn` in front of its only consumer behind a gate that is unconditionally true.
+From then on it was fired and discarded 100% of the time — a full union payload, a Lambda
+invocation and model tokens, per conversational earbud turn, for eight weeks.
+
+Removing it costs nothing that was actually working. **Restoring the overlap is a real product
+choice with a real bill attached**, which is why it is here and not done:
+
+- The classifier decides IF a deterministic handler runs; the brain takes the raw utterance. To
+  overlap them you must fire the brain BEFORE you know whether a handler will claim the turn.
+- So every handler turn ("start my round", "log a bogey", "open SmartFinder") pays for a brain
+  answer it throws away. That is the trade the original design accepted silently.
+- It also needs `askCaddie` to defer its history write (`appendPipecatTurn`) until the answer is
+  actually used, or a discarded speculative reply pollutes the shared conversation with something
+  the player never heard. ~6 lines plus an explicit commit at the consumer — small, but it must be
+  done or the amnesia fix goes backwards in the other direction.
+
+**Rough shape of the bill:** one extra brain call per conversational turn that routes to a handler.
+The share of turns that do is the number to look at before deciding; `voiceHitRateStore` already
+records precheck vs cloud routing and could answer it.
+
+Worth knowing: **the 8× cache cut (08-25) was a bigger latency + cost move than this ever was**, and
+`speed-is-the-wow` is still the standing rule. If the answer is "buy it back", do it after launch
+with the history fix, not before.
+
+## §21 — TIM'S CALL: two built-and-tested capabilities nothing imports (2026-08-27)
+
+Found by the new wire-integrity marshal, which sees them where the orphan sweep structurally cannot
+(that one counts any MENTION of a symbol as a reference, so a guard naming an export makes it look
+wired — a guard is not a caller).
+
+- **`hooks/useLayout.ts` — `classifyLayout`.** Written 07-26 as the ONE responsive classifier,
+  because "every screen used its own W/H breakpoints → drift + per-size bugs". Six sim guards certify
+  it against iPhone, Fold-Z folded, Pro Max and iPad geometry and all pass. **No screen imports it**,
+  so the drift it was written to end was never ended. Wiring it means touching sizing on every
+  screen, which is inside the whole-app layout freeze (07-29, "BEAUTIFUL") — hence Tim's call.
+- **`services/swing/poseMotion.ts` — `deriveSwingAnchors`.** 07-21 "pose-first foundation": finds
+  top-of-backswing and impact from the hand-velocity signal, with a synthetic-swing test that really
+  exercises the maths. Only the guard calls it. Plausibly wanted by §19.
+
+Neither deleted: deleting working, tested capability the day before a ship date is the other wrong
+answer. Both are frozen in `ISLAND_BASELINE`, so nothing NEW can join them quietly.
+
+**`components/caddie/CockpitCaddieScreen.tsx` is the third and is PARKED, not stray** — Tim 08-27:
+keep it hidden, may come back.
