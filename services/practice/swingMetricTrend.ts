@@ -27,9 +27,11 @@
  * BENCHMARK_FRAMING rides along so no surface can render this without saying what it is.
  *
  * HONESTY RULES, each with a test:
- *   - a week is plotted only with MIN_SWINGS_PER_WEEK graded reads; a quiet week is NO DATA, never
- *     a zero. A zero here would draw a collapse that never happened.
- *   - the weekly value is a MEDIAN, not a mean — one bad pose read cannot swing a week.
+ *   - a week with no read at all is NO DATA, never a zero. A zero here would draw a collapse that
+ *     never happened.
+ *   - the weekly value is a MEDIAN, and the trend compares the mean of the EARLIER HALF of the weeks
+ *     against the LATER HALF — never two endpoints, which at this data's real granularity would be
+ *     one pose read deciding a verdict against another.
  *   - a metric the pose pass could not read is absent, never defaulted. Unreadable is not zero.
  *   - REGRESSION IS REPORTED AS PLAINLY AS PROGRESS. Tim asked for both, and a trend rail that only
  *     speaks when the news is good is a rail nobody can trust when it says nothing.
@@ -72,7 +74,7 @@ export interface MetricTrend {
   gradedReads: number;
   /** Weeks carrying data. */
   weeksWithData: number;
-  /** Change in band closeness from the first week with data to the last. */
+  /** Change in band closeness: median of the later half of data weeks minus the earlier half. */
   deltaBandScore: number;
   /** Change in the raw reading, in the metric's own units. */
   deltaRaw: number;
@@ -100,12 +102,32 @@ export interface SwingMetricTrendResult {
 const WEEKS = 8;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 /**
- * Below three reads a "median" is one swing wearing a statistic's clothes. This is the gate that
- * stops a single warm-up hack from drawing a regression the player never had.
+ * 2026-08-28 (adversarial pass over my own work, same day it was written) — RECALIBRATED, because
+ * the first version was gated in the wrong UNIT and would have shipped as a feature almost nobody
+ * ever saw.
+ *
+ * It required 3 readable swings per week, on the assumption that a range session yields a swing's
+ * worth of biomech per ball. It does not. `setShotBiomechanics` is called for exactly ONE swing per
+ * session — the one being viewed — and its own comment says why: "per-shot clubhead arc is left to
+ * a LAZY library backfill so capture stays fast, no N extra detectClubPath runs". The session-level
+ * read is that same swing. So the real granularity is **about one readable value per SESSION**.
+ *
+ * Which made the old gate mean "three range sessions a week, three weeks running" — nine sessions
+ * in three weeks. A golfer who practises once a week for two months would have had EIGHT real
+ * measurements spanning the whole period and been told there was not enough data, forever.
+ *
+ * The fix is not to lower the bar until the feature appears — that is how an honesty gate becomes
+ * decoration. It is to protect against noise in the axis where the data actually is: a week with one
+ * read is a legitimate data point, so require MORE WEEKS instead, and stop reading the trend from
+ * two endpoints. See the half-vs-half comparison below. [[illustration-data-points]]
  */
-const MIN_SWINGS_PER_WEEK = 3;
-/** Two points make a line; three make a trend worth showing a player. */
-const MIN_WEEKS_WITH_DATA = 3;
+const MIN_SWINGS_PER_WEEK = 1;
+/**
+ * Four, not three. With one read per week, "first week vs last week" is two measurements deciding a
+ * verdict, and a single bad pose read at either end invents a trend. Four weeks is the minimum that
+ * lets the halves below each contain more than one point.
+ */
+const MIN_WEEKS_WITH_DATA = 4;
 /** A move smaller than this is noise in a pose read, not a change in a golf swing. */
 const STEADY_BAND_SCORE = 5;
 
@@ -230,10 +252,37 @@ export function computeSwingMetricTrend(input: {
     const dataIdx = weekHasData.map((h, i) => (h ? i : -1)).filter((i) => i >= 0);
     if (dataIdx.length < MIN_WEEKS_WITH_DATA) continue;
 
-    const first = dataIdx[0];
+    /**
+     * HALF VERSUS HALF, not endpoint versus endpoint.
+     *
+     * The first version compared the first data week with the last, which at this data's real
+     * granularity is one pose read against one pose read — so a single soft read at either end
+     * would draw a trend that never happened, on the metric a player is being asked to trust. The
+     * mean of the earlier half against the mean of the later half uses every measurement and
+     * degrades gracefully when one of them is poor.
+     *
+     * The reported deltas stay in the player's units (band points, and the metric's own units), so
+     * the number under the headline still means what it says.
+     */
+    /**
+     * MEDIAN of each half, not the mean — caught by the test written for this exact property.
+     *
+     * The first version averaged the halves, and one bad read out of three still dragged a half by
+     * 33 band points: a flat swing with a single soft read in the most recent week was reported as
+     * REGRESSING, which is the fabricated verdict this whole comparison exists to prevent. It was
+     * also internally inconsistent — the weekly value is already a median, chosen so one bad read
+     * cannot swing a week, and then the halves undid that with a mean.
+     *
+     * A median in both places means a lone outlier at either end moves nothing, while a sustained
+     * move (the thing worth telling a player about) still comes through at full size.
+     */
+    const halfMedian = (idx: number[], series: number[]): number => median(idx.map((i) => series[i]));
+    const mid = Math.floor(dataIdx.length / 2);
+    const earlier = dataIdx.slice(0, mid);
+    const later = dataIdx.slice(dataIdx.length - mid);
     const last = dataIdx[dataIdx.length - 1];
-    const deltaBandScore = bandScoreSeries[last] - bandScoreSeries[first];
-    const deltaRaw = Math.round((rawSeries[last] - rawSeries[first]) * 10) / 10;
+    const deltaBandScore = Math.round(halfMedian(later, bandScoreSeries) - halfMedian(earlier, bandScoreSeries));
+    const deltaRaw = Math.round((halfMedian(later, rawSeries) - halfMedian(earlier, rawSeries)) * 10) / 10;
     const direction: MetricTrend['direction'] =
       Math.abs(deltaBandScore) < STEADY_BAND_SCORE ? 'steady' : deltaBandScore > 0 ? 'improving' : 'regressing';
     const inBandNow = bandScoreSeries[last] === 100;
@@ -271,15 +320,22 @@ export function computeSwingMetricTrend(input: {
   }
 
   if (trends.length === 0) {
-    const need = Math.max(0, MIN_SWINGS_PER_WEEK * MIN_WEEKS_WITH_DATA - totalGradedSwings);
+    /**
+     * Says what is missing in the unit the PLAYER experiences. A range session produces about one
+     * readable swing, so "4 more graded swings" would be honest arithmetic and useless advice; weeks
+     * with a session in them is the thing they can act on.
+     */
+    const weeksCovered = swingsPerWeek.filter((n) => n > 0).length;
+    const weeksNeeded = Math.max(0, MIN_WEEKS_WITH_DATA - weeksCovered);
     return {
       ...empty,
       swingsPerWeek,
       totalGradedSwings,
-      headline: need > 0
-        // Says exactly what is missing, in counts — the same contract the other rails hold to.
-        ? `${totalGradedSwings} graded swing${totalGradedSwings === 1 ? '' : 's'} so far. About ${need} more, spread over ${MIN_WEEKS_WITH_DATA} weeks, and the trend opens up.`
-        : `${totalGradedSwings} graded swings, but not yet ${MIN_SWINGS_PER_WEEK} in each of ${MIN_WEEKS_WITH_DATA} separate weeks — the trend needs them spread out, not in one session.`,
+      headline: totalGradedSwings === 0
+        ? 'No graded swings yet — record a few in Smart Motion and this starts tracking.'
+        : weeksNeeded > 0
+          ? `${totalGradedSwings} graded swing${totalGradedSwings === 1 ? '' : 's'} across ${weeksCovered} week${weeksCovered === 1 ? '' : 's'}. Record in ${weeksNeeded} more week${weeksNeeded === 1 ? '' : 's'} and the trend opens up — it needs them spread out, not all in one session.`
+          : `${totalGradedSwings} graded swings across ${weeksCovered} weeks, but no single measurement is readable in enough of them yet.`,
     };
   }
 

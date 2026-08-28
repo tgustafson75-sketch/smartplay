@@ -29,7 +29,7 @@ export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
     note: 'Your swing now has a trend line. Every graded swing in your library gets compared over time, so you can see a number moving toward the tour range — or quietly drifting away from it. It leads with whatever has slipped, because that is the one you cannot feel.',
-    howTo: 'Dashboard, the PROGRESS graph — tap the Swing tab. It opens up once a few swings have been read in each of three separate weeks.',
+    howTo: 'Dashboard, the PROGRESS graph — tap the Swing tab. It opens up once SmartMotion has read a swing in each of four separate weeks, so it needs practice spread out rather than one big session.',
   },
   {
     when: 'Aug 2026',
