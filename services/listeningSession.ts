@@ -6,7 +6,7 @@ import { speak, speakFromBase64, stopSpeaking, captureUtteranceDetailed, release
 import { logVoiceSilentFail, describeError } from './voiceErrorLog';
 import { responseForCaptureBail, shouldRetryCapture } from './voice/captureBail';
 import { conversationalBrainTurn } from './conversationalBrain';
-import { buildCaddieRequestBody } from './caddieRequestBody';
+import { askCaddie } from './caddieBrain';
 import { abortVoiceWarmup } from './voiceWarmup';
 import { getDialog } from './dialogEngine';
 import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_ON_US, LISTEN_CUES, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
@@ -1114,17 +1114,32 @@ async function openSession() {
     if (intent) {
       try { useVoiceHitRateStore.getState().recordLocal(`precheck:${intent.intent_type}`, Date.now()); } catch { /* non-fatal */ }
     }
-    // 2026-06-16 (Tim — "I speak but he waits 4-5s, then thinks") — on a precheck
-    // MISS the turn is almost always conversational and routes to /api/kevin anyway;
-    // the classifier (/api/voice-intent) only decides IF a deterministic handler
-    // should run, and the brain takes the RAW utterance (not the intent). So fire a
-    // SPECULATIVE brain call in PARALLEL with the classifier instead of stacking
-    // brain-after-classify — the brain's network+LLM time overlaps the classify
-    // (~0.7-1s shaved off every conversational turn, which matters most on weak
-    // signal). If the classifier ends up routing to a handler/diagnostic, this
-    // result is just dropped. Body matches the small-talk path below exactly.
-    let speculativeBrainP: Promise<Response | null> | null = null;
-    let speculativeController: AbortController | null = null;
+    /**
+     * 2026-06-16 (Tim — "I speak but he waits 4-5s, then thinks") — a SPECULATIVE brain call fired
+     * in parallel with the classifier, so the brain's network + LLM time overlapped the classify
+     * instead of stacking behind it. ~0.7-1s off every conversational turn.
+     *
+     * 2026-08-27 — DELETED, because it had not shaved a millisecond off anything since 07-01.
+     *
+     * It was consumed in exactly one place: the small-talk kevin block below. On 07-01 the mic
+     * convergence put conversationalBrainTurn IN FRONT of that block, gated on
+     * `voiceOrchestrator === 'pipecat'` — and that gate is unconditionally true on every device.
+     * The v15 migration force-sets 'pipecat' for every existing install, the store default is
+     * 'pipecat' for every new one, and setVoiceOrchestrator has NO caller in any screen. So the
+     * pipecat branch always ran, and its first two statements aborted the speculative call and
+     * nulled the promise before anything could read it.
+     *
+     * Which means: every conversational earbud / badge turn fired a full /api/kevin request — the
+     * complete union payload, a Lambda invocation, model tokens — and threw the answer away, 100%
+     * of the time, for eight weeks. Every other exit path had an `abort()` too, each added by a
+     * bug-hunt that noticed the leak on ONE branch and patched that branch. Five aborts accumulated
+     * around a call that nothing could ever consume; not one of them asked whether the call should
+     * still be fired at all.
+     *
+     * The remaining latency argument does not survive either: the answer now comes from
+     * conversationalBrainTurn, which cannot start until the classifier returns, so the overlap this
+     * was written for no longer exists to be captured. [[two-owners-is-the-root-cause]]
+     */
     if (!intent) {
       // ── LOCAL-FIRST (2026-06-16, Tim) ──────────────────────────────────────
       // Before paying ANY cloud round-trip, try to answer the ask instantly from
@@ -1158,27 +1173,6 @@ async function openSession() {
        * The local responder still exists as an OFFLINE answer when the brain genuinely cannot be
        * reached — that is a failure being handled honestly, not a second caddie answering first.
        */
-      speculativeController = new AbortController();
-      // 2026-08-25 — the one caddie access gate. This is the EARBUD path's speculative brain call;
-      // on a conversational turn its answer is the one the player actually hears, so it is a caddie
-      // turn like any other and gates with them. Leaving it null degrades to the classifier path.
-      speculativeBrainP = !mayTalkToCaddie() ? null : fetchWithTimeout(`${apiUrl}/api/kevin`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settings.aiProvider ?? 'gemini' },
-        signal: speculativeController.signal,
-        /**
-         * 2026-08-23 (Tim, sprint finish) — was eight hand-listed fields plus steering.
-         *
-         * This is the EARBUD path's speculative brain call — fired in parallel with the classifier,
-         * and on a small-talk or conversational turn its answer is the one the player actually
-         * hears. It knew the hole number and nothing else: no course intelligence, no hazards, no
-         * bag, no round stats, no learned memory block, no handedness. The player asking his caddie
-         * a question through his earbuds was reaching the thinnest payload in the app.
-         *
-         * Now the same union every other surface sends. [[unconnected-halves-not-broken-code]]
-         */
-        body: JSON.stringify(buildCaddieRequestBody({ message: utterance, language: settings.language })),
-      }, kevinTimeout()).catch(() => null);
 
       const parseRes = await fetchWithTimeout(`${apiUrl}/api/voice-intent`, {
         method: 'POST',
@@ -1195,7 +1189,6 @@ async function openSession() {
         }),
       }, intentTimeout());
       if (!parseRes.ok) {
-        speculativeController?.abort();
         // 2026-07-06 (voice-lifecycle audit #8a) — this was a SILENT return: the user
         // heard the opener, spoke, and got dead air. Speak the honest failure line
         // (same treatment the diagnostic + small-talk branches already have).
@@ -1273,10 +1266,6 @@ async function openSession() {
     // three are truly held until the user re-confirms.
     const DISRUPTIVE_OPEN_INTENTS = new Set(['open_tool', 'media_capture', 'navigate']);
     if (DISRUPTIVE_OPEN_INTENTS.has(intent.intent_type) && intent.confidence !== 'high') {
-      // 2026-07-20 (bug-hunt fix) — this gate returns without consuming the speculative
-      // brain call, so abort it (matches the handler + small-talk exit paths) instead of
-      // leaking an in-flight billed /api/kevin fetch whose result is discarded.
-      speculativeController?.abort();
       await stopSpeaking().catch(() => {});
       if (ttsAllowed && getSessionState() === 'responding') {
         await speak(
@@ -1318,10 +1307,9 @@ async function openSession() {
     // register='coach' override + inRoundDiagnostic flag. The Coach
     // prompt sub-branch returns ~30-45s of pattern reasoning.
     if (intent.intent_type === 'in_round_diagnostic' && round.isRoundActive) {
-      // 2026-07-20 (bug-hunt fix) — this branch fires its OWN /api/kevin diagnostic call and
-      // returns without consuming the speculative one; abort the speculative fetch up front so
-      // we don't run two concurrent billed /api/kevin calls for a single utterance.
-      speculativeController?.abort();
+      // 2026-08-27 — the "abort the speculative call" note that stood here (07-20) went with the
+      // speculative call itself; the diagnostic request below now goes through askCaddie like every
+      // other brain turn in this file.
       const patternText = (intent.parameters?.pattern_text as string | undefined) ?? utterance;
       const wantsCard = intent.parameters?.wants_card === true;
       try {
@@ -1333,52 +1321,53 @@ async function openSession() {
          * `experienceContext`, which the brain read under no name at all — sent and ignored (now
          * wired, see api/kevin.ts).
          *
-         * This is the "why am I slicing this" turn. The one question where the player wants the
-         * caddie to actually KNOW him.
+         * 2026-08-27 — and now it builds no payload of its own at all: askCaddie owns that, so the
+         * union cannot be reassembled here and drift again. This is the "why am I slicing this"
+         * turn — the one question where the player wants the caddie to actually KNOW him.
          */
-        const apiUrlBody = buildCaddieRequestBody({
+        await fillerP;
+        /**
+         * 2026-08-27 — THE SIXTH BRAIN SITE, and the last raw one in this file.
+         *
+         * It was a hand-rolled fetch: its own timeout, its own response parsing, its own
+         * error handling, and — like the five before it — a reply spoken only while the session was
+         * still 'responding', with an explicit `setSessionStateMirror('idle'); return;` that threw
+         * away a finished answer when it wasn't. On the ONE turn where the player has asked the
+         * caddie to explain his own swing to him, after a 30-45s Sonnet read.
+         *
+         * It never needed to be raw: askCaddie has taken `overrides` since 08-23, which is the only
+         * thing this call has that a normal turn does not (register: 'coach', inRoundDiagnostic).
+         * Going through it also files the exchange in the shared history, so the follow-up question
+         * every player asks next — "so what do I do about it?" — reaches a caddie that remembers
+         * what it just said.
+         */
+        const turn = await askCaddie({
           message: patternText,
           language: settingsStore.language ?? 'en',
+          timeoutMs: kevinTimeout(),
           overrides: { register: 'coach', inRoundDiagnostic: true },
         });
-        await fillerP;
-        // 2026-05-21 — Fix I shape A: track whether anything was spoken
-        // and fall back to the honest failure line otherwise.
-        let diagnosticSpoken = false;
-        const r = await fetchWithTimeout(`${apiUrl}/api/kevin`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settingsStore.aiProvider ?? 'gemini' },
-          body: JSON.stringify(apiUrlBody),
-        }, kevinTimeout());
-        if (r.ok) {
-          const j = await r.json() as { text?: string; audioBase64?: string };
-          if (j.text && ttsAllowed && getSessionState() === 'responding') {
-            await stopSpeaking().catch(() => {});
-            if (getSessionState() !== 'responding') {
-              setSessionStateMirror('idle');
-              return;
-            }
-            await speak(j.text, settings.voiceGender, settings.language, apiUrl, { userInitiated: true });
-            diagnosticSpoken = true;
-          }
-          // If user wanted card, push to the new diagnostic-card screen
-          // with the reasoning text as a param so it can render +
-          // re-play audio without re-querying Sonnet.
-          if (wantsCard && j.text) {
-            try {
-              const router = require('expo-router').router;
-              router.push({
-                pathname: '/diagnostic-card',
-                params: { pattern: patternText, reasoning: j.text },
-              });
-            } catch (e) { console.log('[listeningSession] diagnostic-card nav failed', e); }
-          }
-        } else {
-          console.log('[listeningSession] in_round_diagnostic non-ok:', r.status);
+        // The card renders the reasoning and re-plays it without re-querying Sonnet, so it is
+        // pushed whether or not the line was spoken aloud — a muted player still gets the read.
+        if (wantsCard && turn?.text) {
+          try {
+            const router = require('expo-router').router;
+            router.push({
+              pathname: '/diagnostic-card',
+              params: { pattern: patternText, reasoning: turn.text },
+            });
+          } catch (e) { console.log('[listeningSession] diagnostic-card nav failed', e); }
         }
-        if (!diagnosticSpoken && ttsAllowed && getSessionState() === 'responding') {
-          await speakHonestFailure(settings.language, settings.voiceGender, apiUrl);
-        }
+        await deliverBrainReply({
+          reply: { text: turn?.text ?? null, audioBase64: turn?.audioBase64 ?? null },
+          utterance: patternText,
+          language: settingsStore.language ?? settings.language,
+          voiceGender: settings.voiceGender,
+          apiUrl,
+          ttsAllowed,
+          site: 'listeningSession.in_round_diagnostic',
+          requireResponding: true,
+        });
       } catch (e) {
         console.log('[listeningSession] in_round_diagnostic failed', e);
         if (ttsAllowed && getSessionState() === 'responding') {
@@ -1427,8 +1416,6 @@ async function openSession() {
           // this can never break the earbud path worse than before. Gated on voiceOrchestrator.
           if ((settings.voiceOrchestrator ?? 'pipecat') === 'pipecat') {
             try {
-              speculativeController?.abort();
-              speculativeBrainP = null;
               const r = await conversationalBrainTurn(utterance, { timeoutMs: kevinTimeout() });
               // 2026-07-01 (re-audit — voice H2) — dispatch service-safe tool actions
               // (switch_caddie / navigate) the conversational brain returned; this
@@ -1459,56 +1446,46 @@ async function openSession() {
               }
             } catch (e) { console.log('[listeningSession] pipecat conversational failed → kevin', e); }
           }
+          /**
+           * ONE RETRY, SAME QUESTION, SAME CADDIE — not a ladder to a lesser one.
+           *
+           * 2026-08-27 — this was a raw /api/kevin fetch with its own hand-built body, its own
+           * timeout, its own response-shape parsing and its own error handling: the last brain
+           * transport in this file that did not go through askCaddie. It also never wrote the turn
+           * to the shared conversation history, because appendPipecatTurn has exactly ONE caller
+           * (caddieBrain), so any turn this block answered was invisible to the NEXT one — the very
+           * amnesia services/voice/pipecatHistory was created to end.
+           *
+           * caddieBrain's own header says the fallback ladder was deleted on 08-23 ("four different
+           * caddies, each thinner than the last, and the player could not tell which one had
+           * answered"). It was deleted THERE. Here it survived, one layer up, in a file that reads
+           * as if it had not.
+           *
+           * A second attempt is still worth making — a cold Lambda that missed its budget usually
+           * answers on the retry. So the retry stays and the SECOND CADDIE goes: the same call,
+           * the same payload, the same history, once more. [[no-half-fixes-enforce-every-surface]]
+           */
           if (!chatSpoken) try {
-            // 2026-06-16 — prefer the SPECULATIVE brain call fired in parallel with
-            // the classifier above; it's already in flight, so the classify time was
-            // overlapped instead of stacked. Falls back to a fresh call if it wasn't
-            // fired (precheck hit) or errored. Same body either way.
-            const chatRes = (speculativeBrainP && await speculativeBrainP) || await fetchWithTimeout(`${apiUrl}/api/kevin`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-AI-Provider': settings.aiProvider ?? 'gemini' },
-              // 2026-08-23 — the same union as the speculative call above. The comment on the
-              // fetch says "Same body either way", and that only stays true if there is ONE body.
-              body: JSON.stringify(buildCaddieRequestBody({ message: utterance, language: settings.language })),
-            }, kevinTimeout());
-            if (chatRes.ok) {
-              const chatJson = await chatRes.json() as { text?: string; audioBase64?: string | null };
-              // /api/kevin returns { text, audioBase64, toolAction } — not
-              // { response }. The earlier shape mismatch silently dropped
-              // every small-talk fallback ("hey Tank, how are you") through
-              // the listening pill. Prefer the audioBase64 path so the
-              // user hears the canonical persona voice when present.
-              //
-              // Fix I shape C — /api/kevin's outer catch now returns
-              // 200 with {text: localizedFallback, audioBase64: null}
-              // on exception. So even server-side failures land here
-              // with a non-empty `text` and we just speak it (no audio).
-              const reply = typeof chatJson?.text === 'string' ? chatJson.text : null;
-              const replyAudio = typeof chatJson?.audioBase64 === 'string' ? chatJson.audioBase64 : null;
-              /**
-               * 2026-08-27 — this branch did the most visible version of the damage: on a reply that
-               * arrived after the session had moved, it called setSessionStateMirror('idle') and
-               * RETURNED — deliberately discarding an answer the brain had already produced and
-               * billed us for, with no line, no caption and no log.
-               */
-              if (reply) {
-                await deliverBrainReply({
-                  reply: { text: reply, audioBase64: replyAudio },
-                  utterance,
-                  language: settings.language,
-                  voiceGender: settings.voiceGender,
-                  apiUrl,
-                  ttsAllowed: responseAllowed,
-                  site: 'listeningSession.chat_fallback',
-                  requireResponding: true,
-                });
-                chatSpoken = true;
-              }
-            } else {
-              console.log('[listeningSession] chat fallback non-ok:', chatRes.status);
+            const retry = await conversationalBrainTurn(utterance, { timeoutMs: kevinTimeout() });
+            if (retry.toolActions?.length) {
+              const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
+              dispatchConversationalToolActions(retry.toolActions);
+            }
+            if (retry.text) {
+              await deliverBrainReply({
+                reply: retry,
+                utterance,
+                language: settings.language,
+                voiceGender: settings.voiceGender,
+                apiUrl,
+                ttsAllowed: responseAllowed,
+                site: 'listeningSession.conversational_retry',
+                requireResponding: true,
+              });
+              chatSpoken = true;
             }
           } catch (e) {
-            console.log('[listeningSession] chat fallback fetch failed', e);
+            console.log('[listeningSession] conversational retry failed', e);
           }
           /**
            * 2026-08-27 — the last-resort line was itself gated on responseAllowed AND the session
@@ -1536,8 +1513,6 @@ async function openSession() {
 
     const handler = voiceCommandRouter.getHandler(intent.intent_type);
     if (handler) {
-      speculativeController?.abort();
-      speculativeBrainP = null;
       // Phase V.6 — race the handler against filler completion. If the
       // handler hasn't resolved by the time the first filler ends, play
       // an extension filler ('Still working through this...') and re-check.

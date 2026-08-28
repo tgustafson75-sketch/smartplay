@@ -3525,26 +3525,47 @@ check('Voice: capture silences the caddie before opening the mic (no self-record
   })(),
   'capture stops in-flight TTS (cloud + device) before recording — no echo/self-record, clean barge-in');
 
-check('Voice latency: brain fired in parallel with the classifier on precheck-miss',
-  // 2026-06-16 (Tim — "I speak but he waits 4-5s, then thinks") — the cloud classifier
-  // sat serially in front of the brain even though the brain takes the raw utterance.
-  // On precheck-miss we now fire a speculative /api/kevin in PARALLEL with the
-  // classifier and consume it on the conversational branch (~1 round-trip saved).
+check('LOCK: no brain call is fired that nothing can consume',
+  /**
+   * 2026-06-16 (Tim — "I speak but he waits 4-5s, then thinks") — this guard was written to hold a
+   * LATENCY optimisation in place: a speculative /api/kevin fired in PARALLEL with the classifier
+   * on a precheck miss, consumed on the conversational branch, ~1 round-trip saved.
+   *
+   * 2026-08-27 — THE OPTIMISATION HAD NOT EXISTED SINCE 07-01, and this guard was green the whole
+   * time. The mic convergence put conversationalBrainTurn in front of the consumer, gated on
+   * `voiceOrchestrator === 'pipecat'` — which is unconditionally true on every device (v15 migration
+   * force-sets it, the store defaults to it, setVoiceOrchestrator has no caller in any screen). That
+   * branch's first two statements aborted the speculative call and nulled its promise, so the one
+   * line that read it could never see anything but null.
+   *
+   * Eight weeks of firing a full brain request — the whole union payload, a Lambda invocation, model
+   * tokens — and discarding the answer on every conversational earbud turn. Five separate `abort()`
+   * calls had accumulated around it, each added by a bug-hunt that spotted the leak on ONE exit
+   * branch and patched that branch; not one asked whether the call should be fired at all.
+   *
+   * So the guard is re-aimed from the optimisation to the invariant the optimisation broke: DO NOT
+   * BILL FOR AN ANSWER NOTHING CAN RECEIVE. Asserted by shape — any promise assigned from a brain
+   * call in this file must have a reader, not just aborters.
+   *
+   * The latency the original bought is genuinely gone, and restoring it means deliberately paying
+   * for discarded calls on handler turns. That is a cost decision, not a code one — docs/OPEN-ITEMS.
+   * [[speed-is-the-wow]] [[break-test-every-guard-you-write]]
+   */
   (() => {
-    const ls = read('services/listeningSession.ts');
-    return (
-      /let speculativeBrainP: Promise<Response \| null> \| null = null;/.test(ls) &&
-      // 2026-08-25 — the assignment now carries the caddie access gate in front of it
-      // (`!mayTalkToCaddie() ? null : fetchWithTimeout(...)`). PARALLELISM IS UNCHANGED when the
-      // turn is allowed, which is what this guard is really about — the call is still fired and
-      // awaited later, not stacked behind the classifier. When it is NOT allowed the speculative
-      // call is simply never made, and the existing `speculativeBrainP && await` consumer already
-      // handles null, degrading to the classifier path rather than breaking.
-      /speculativeBrainP = !mayTalkToCaddie\(\) \? null : fetchWithTimeout\(`\$\{apiUrl\}\/api\/kevin`/.test(ls) &&
-      /const chatRes = \(speculativeBrainP && await speculativeBrainP\) \|\| await fetchWithTimeout/.test(ls)
-    );
+    const ls = readCode('services/listeningSession.ts');
+    // No brain promise may be held in a variable that only ever gets aborted.
+    const held = [...ls.matchAll(/(\w*[Bb]rainP\w*)\s*=\s*[^;]*(?:fetchWithTimeout|askCaddie|conversationalBrainTurn)/g)]
+      .map((m) => m[1]);
+    const unconsumed = held.filter((name) => {
+      const reads = [...ls.matchAll(new RegExp(`await\\s+${name}\\b|${name}\\s*&&`, 'g'))].length;
+      return reads === 0;
+    });
+    if (unconsumed.length) console.log(`   billed brain calls with no reader: ${unconsumed.join(', ')}`);
+    // And the specific corpse cannot come back by name.
+    const gone = !/speculativeBrainP/.test(ls) && !/speculativeController/.test(ls);
+    return unconsumed.length === 0 && gone;
   })(),
-  'conversational brain overlaps the classifier instead of stacking after it');
+  'no brain request is fired into a variable that nothing reads — the speculative call that was billed and discarded on every conversational turn for eight weeks cannot return');
 
 check('Voice: stale speech cleared on navigation (no carry-over), with speak-then-nav grace',
   // 2026-06-16 (Tim — "old voices leaking from prior steps") — route change stops
@@ -8410,11 +8431,25 @@ console.log('\n=== Beta-wrap deep-audit LOCK ===');
     // says should not exist. Second guard today caught doing this.
     //
     // The property: the builder emits both fields, and the surfaces reach the brain THROUGH it.
-    /customCaddieBasePersona: safe/.test(read('services/caddieRequestBody.ts')) &&
-      /customCaddieName: safe/.test(read('services/caddieRequestBody.ts')) &&
-      /buildCaddieRequestBody\(/.test(readCode('hooks/useVoiceCaddie.ts')) &&
-      /buildCaddieRequestBody/.test(listenSrc),
-    'voice#1: the one payload builder resolves the custom caddie base persona + name for EVERY surface, so no path can revert to Kevin/onyx');
+    //
+    // 2026-08-27 — AND IT DID IT AGAIN, one clause further along. `/buildCaddieRequestBody/.test(
+    // listenSrc)` required listeningSession to call the builder DIRECTLY; when that file stopped
+    // building payloads at all and went through askCaddie, this went red — demanding, for the third
+    // time in two days, the exact duplication the claim above says must not exist.
+    //
+    // The bug is the SHAPE of the assertion, not the file it names: "reaches the brain through the
+    // builder" is not the same claim as "contains the builder's name", and every time they are
+    // conflated the guard ends up defending the copy. A surface satisfies this by calling the
+    // builder OR by calling something that does. [[run-the-second-pass-yourself]]
+    (() => {
+      const b = read('services/caddieRequestBody.ts');
+      if (!/customCaddieBasePersona: safe/.test(b) || !/customCaddieName: safe/.test(b)) return false;
+      // Reaching the brain through the ONE builder — directly, or via the one sender that uses it.
+      const throughBuilder = (src: string): boolean =>
+        /buildCaddieRequestBody\(/.test(src) || /askCaddie\(/.test(src) || /conversationalBrainTurn\(/.test(src);
+      return throughBuilder(readCode('hooks/useVoiceCaddie.ts')) && throughBuilder(readCode('services/listeningSession.ts'));
+    })(),
+    'voice#1: the one payload builder resolves the custom caddie base persona + name for EVERY surface, reached directly or through askCaddie, so no path can revert to Kevin/onyx');
   // 2026-08-23 — RE-AIMED onto services/caddieBrain, where the acknowledgement now lives for EVERY
   // surface rather than being re-implemented per mic (it was duplicated in three places, and the
   // earbud copy is how the drop was found in the first place).
@@ -10617,6 +10652,13 @@ check('LOCK: every caddie sender passes through the one access gate',
      * Consolidating them behind a single sender is the right end state and remains open work. This
      * guard is what makes the interim safe — one owner for the decision, and a mechanical check
      * that no sender quietly stops asking.
+     *
+     * 2026-08-27 — FOUR NOW. listeningSession stopped being a sender: its three raw /api/kevin
+     * fetches are gone (one fired and discarded on every turn, one was a fallback ladder, one was
+     * the diagnostic) and it reaches the brain only through askCaddie / conversationalBrainTurn,
+     * which gate for it. The end state this guard called "open work" is one module closer. Removing
+     * it from the list is the POINT, not an exemption — a module that cannot build a payload cannot
+     * forget to gate one.
      */
     const OWNER = readCode('services/featureAccess.ts');
     if (!/export function mayTalkToCaddie/.test(OWNER)) return false;
@@ -10627,16 +10669,24 @@ check('LOCK: every caddie sender passes through the one access gate',
       'services/caddieBrain.ts',
       'services/conversationalBrain.ts',
       'services/presenceCaddie.ts',
-      'services/listeningSession.ts',
       'services/sceneReadService.ts',
     ];
-    return SENDERS.every((f) => {
+    const gated = SENDERS.every((f) => {
       const src = readCode(f);
       // Imports it AND calls it — an unused import is not a gate.
       return /from '\.\/featureAccess'/.test(src) && /mayTalkToCaddie\(\)/.test(src);
     });
+    /**
+     * And the list cannot silently get shorter by a module going ungated instead of un-sending.
+     * listeningSession earned its way off only by building no payload and opening no brain socket
+     * of its own; if either comes back, it is a sender again and must gate again.
+     */
+    const ls = readCode('services/listeningSession.ts');
+    const listeningSessionIsNotASender =
+      !/buildCaddieRequestBody\(/.test(ls) && !/fetchWithTimeout\(`\$\{apiUrl\}\/api\/kevin`/.test(ls);
+    return gated && listeningSessionIsNotASender;
   })(),
-  'all five caddie payload senders consult mayTalkToCaddie(), the single owner of the voice_advanced decision');
+  'all four remaining caddie payload senders consult mayTalkToCaddie(), and listeningSession builds no payload of its own to forget to gate');
 
 check('RATCHET: every gateable feature is actually enforced somewhere',
   (() => {

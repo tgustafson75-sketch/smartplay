@@ -209,9 +209,13 @@ export const MARSHAL_TOLERANCE = 0.01;
  * WITH its guards — never by adding a line here. This list may only get shorter.
  */
 export const ISLAND_BASELINE: Record<string, string> = {
-  // A whole alternate caddie screen. useVoiceCaddie still has comments describing what "reaches the
-  // CockpitCaddieScreen advice card"; nothing routes to it. TRIAGE — delete or wire, Tim's call.
-  'components/caddie/CockpitCaddieScreen.tsx': 'TRIAGE — cockpit mode screen, no route reaches it',
+  /**
+   * PARKED, not stray — Tim 2026-08-27: "just keep it hidden. For cockpit, we may bring that back.
+   * Feedback says people don't want to face [a driving-mode screen], they'd like just a manual, but
+   * I don't think so." Kept deliberately unrouted while that call is open, so it stays here as a
+   * KNOWN island rather than being deleted or wired. Revisit post-launch.
+   */
+  'components/caddie/CockpitCaddieScreen.tsx': 'PARKED (Tim 08-27) — cockpit mode, hidden, may return',
   'hooks/useLayout.ts': 'TRIAGE — no consumer since the layout freeze',
   'services/swing/poseMotion.ts': 'TRIAGE — motion helpers, superseded by poseAnalysisApi',
 };
