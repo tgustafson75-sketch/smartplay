@@ -3542,6 +3542,53 @@ check('Voice: capture silences the caddie before opening the mic (no self-record
   })(),
   'capture stops in-flight TTS (cloud + device) before recording — no echo/self-record, clean barge-in');
 
+check('LOCK: a dropped TTS connection gets the same second chance a truncated clip does',
+  /**
+   * 2026-08-28 (Tim's issue log: three `speak_catch — Network request failed` in fifteen minutes,
+   * Serena, caddie tab, warmed connection).
+   *
+   * TWO FAILURES OF THE SAME WEAK LINK, TWO DIFFERENT POLICIES. A clip that arrived SHORT was
+   * re-fetched once, with a comment arguing the case — "a truncated download is the most retryable
+   * failure there is: same URL, same body, and the server is demonstrably healthy". A connection
+   * that DROPPED, which is the same link seen one step earlier and no less retryable, threw straight
+   * past to the outer catch and surrendered the persona voice to device TTS on the first try.
+   *
+   * So the player got the robot voice — the exact outcome the truncation retry exists to avoid,
+   * because it "is precisely what reads as broken".
+   *
+   * Guarded as a PAIR, because the defect is the asymmetry, not either branch: both recovery paths
+   * must exist, and the connectivity retry must refuse to fire when a newer utterance already owns
+   * the speaker (retrying then would talk over it) or when the error is an AbortError (preempted or
+   * out of budget — both correctly silent).
+   */
+  (() => {
+    const vs = readCode('services/voiceService.ts');
+    const truncationRetries = /speak_truncated_clip/.test(vs) && /const retryRes = await fetch\(apiUrl \+ '\/api\/voice'/.test(vs);
+    const connectivityRetries = /logVoiceSilentFail\('speak_fetch_retry'/.test(vs);
+    // The retry must be gated on BOTH conditions, or it becomes a way to talk over the player.
+    const gated = /if \(!isConnectivityError\(fetchErr\) \|\| myId !== currentSpeechId\)[\s\S]{0,120}?throw fetchErr;/.test(vs);
+    // AbortError must never be treated as retryable connectivity trouble.
+    const abortExcluded = /e\.name !== 'AbortError'/.test(vs);
+    /**
+     * And the last resort is still there: a second failure speaks on the DEVICE rather than nothing.
+     *
+     * Anchored to the speak_catch block, not to the file. The first version tested for
+     * `deviceSpeakFallback(...)` anywhere in voiceService — and that exact call appears TWICE, here
+     * and in the circuit-breaker path 350 lines earlier. Break-testing by deleting the one in the
+     * catch left the guard GREEN on the strength of the other. Third time today an assertion matched
+     * the right text in the wrong place. Search only the region that follows the log line, which the
+     * circuit-breaker copy precedes. [[break-test-every-guard-you-write]]
+     */
+    const catchAt = vs.indexOf("logVoiceSilentFail('speak_catch'");
+    const stillFallsBack = catchAt > 0
+      && /await deviceSpeakFallback\(text, language, myId, effectiveGender\);/.test(vs.slice(catchAt, catchAt + 700));
+    if (!truncationRetries) console.log('   the truncated-clip retry is gone');
+    if (!connectivityRetries) console.log('   a dropped connection surrenders the voice on the first failure');
+    if (!gated) console.log('   the retry is not gated on ownership + error kind');
+    return truncationRetries && connectivityRetries && gated && abortExcluded && stillFallsBack;
+  })(),
+  'both TTS failure modes retry once on a healthy server before the caddie gives up his own voice, and neither retry can talk over a newer utterance');
+
 check('LOCK: an opened microphone always answers, on the notes field too',
   /**
    * 2026-08-27 — found by sweeping the whole app for the class behind Tim's silent Serena turn,

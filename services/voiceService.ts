@@ -1745,12 +1745,56 @@ export const speak = async (
       return;
     }
 
-    const response = await fetch(apiUrl + '/api/voice', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: preprocessTtsText(text, language), gender: effectiveGender, language, persona, model_id: ttsModel, voice: customVoice }),
-      signal: abortController.signal,
-    }).finally(() => clearTimeout(voiceTimeout));
+    /**
+     * 2026-08-28 (Tim's issue log — three `speak_catch — Network request failed` in fifteen minutes,
+     * Serena, caddie tab, `warmed: true`, speechIds 6 / 14 / 24).
+     *
+     * THE CONNECTION DROPPED AND WE GAVE UP THE VOICE; THE CLIP ARRIVING SHORT GOT A SECOND CHANCE.
+     *
+     * The truncated-clip path ~120 lines down re-fetches once, and its comment makes the argument:
+     * "a truncated download is the most retryable failure there is: same URL, same body, and the
+     * server is demonstrably healthy." Every word of that applies at least as strongly to a
+     * connection that dropped mid-transfer — which is the SAME weak link seen from one step further
+     * back. Yet a throw here fell straight through to the outer catch and surrendered to device TTS.
+     *
+     * That is the failure Tim heard three times on a warm connection: the robot voice, which the
+     * truncation retry exists precisely to avoid, because it "is precisely what reads as broken".
+     *
+     * So the two paths get the same policy. ONE retry, tight budget, and only for a genuine
+     * connectivity error: an AbortError means a newer utterance preempted us or the budget ran out,
+     * and both correctly stay quiet. A second failure means the link really cannot carry it, and
+     * device TTS is the kinder answer. [[voice-one-voice-invariant]] [[feels-like-a-real-caddie]]
+     */
+    const ttsBody = JSON.stringify({ text: preprocessTtsText(text, language), gender: effectiveGender, language, persona, model_id: ttsModel, voice: customVoice });
+    const isConnectivityError = (e: unknown): boolean =>
+      e instanceof Error && e.name !== 'AbortError' && /network request failed|connection refused|network error|failed to fetch/i.test(e.message);
+    let response: Response;
+    try {
+      response = await fetch(apiUrl + '/api/voice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: ttsBody,
+        signal: abortController.signal,
+      });
+    } catch (fetchErr) {
+      // A newer utterance already owns the speaker — retrying would talk over it.
+      if (!isConnectivityError(fetchErr) || myId !== currentSpeechId) { clearTimeout(voiceTimeout); throw fetchErr; }
+      logVoiceSilentFail('speak_fetch_retry', {
+        speechId: myId,
+        error: fetchErr instanceof Error ? fetchErr.message : String(fetchErr),
+        textHead: text.slice(0, 40),
+      });
+      response = await fetch(apiUrl + '/api/voice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: ttsBody,
+        // Its own bounded budget: the shared abortController's timer may already be spent, and a
+        // player is waiting. Slower than this and the device voice is genuinely kinder.
+        signal: AbortSignal.timeout(8000),
+      });
+    } finally {
+      clearTimeout(voiceTimeout);
+    }
 
     // Bail if a newer speak() or stopSpeaking() fired while we were fetching.
     // 2026-05-26 — Fix DD: log the bail. Without this, opener silence
