@@ -3542,6 +3542,51 @@ check('Voice: capture silences the caddie before opening the mic (no self-record
   })(),
   'capture stops in-flight TTS (cloud + device) before recording — no echo/self-record, clean barge-in');
 
+check('LOCK: the stated yardage has ONE owner of what counts as a yardage',
+  /**
+   * 2026-08-28 (SmartFinder sweep, part 2 — the resolver rather than the rangefinder maths).
+   *
+   * A stated yardage is the highest-trust number in the app: yardageResolver Tier 3 hands it back at
+   * `confidence: 'high'`, it BEATS live GPS for five minutes, and the caddie both quotes it and
+   * clubs from it. FIVE call sites wrote it and each had invented its own plausibility band —
+   * 700 / 700 / 900 / 400 / 400 — so "I'm 850 out" was accepted through one voice route and refused
+   * through another: the same sentence, a different caddie, depending on which parser caught it.
+   *
+   * And the setter they all converge on validated NOTHING. NaN, Infinity, 0 and negatives were all
+   * writable, and any producer added later inherited no protection at all, which is how the list
+   * reached five.
+   *
+   * The band belongs to the FIELD. Guarded at both ends because a guard at the door does nothing
+   * about what is already in the room: the setter refuses bad writes, and the resolver refuses a bad
+   * value that PERSISTED from before the setter existed and rehydrated into a new session.
+   * [[two-owners-is-the-root-cause]] [[no-half-fixes-enforce-every-surface]]
+   */
+  (() => {
+    const store = readCode('store/roundStore.ts');
+    const resolver = readCode('services/yardageResolver.ts');
+    // One owned band, not a literal repeated at the check site.
+    const ownsTheBand = /const MIN_STATED_YARDAGE = \d+;/.test(store) && /const MAX_STATED_YARDAGE = \d+;/.test(store);
+    // The setter actually consults it, rejects non-finite, and reports the refusal to its caller.
+    const at = store.indexOf('setUserStatedYardage: (value, source) =>');
+    const setter = at > 0 ? store.slice(at, at + 900) : '';
+    const setterGuards =
+      /!Number\.isFinite\(value\)/.test(setter) &&
+      /value < MIN_STATED_YARDAGE/.test(setter) &&
+      /value > MAX_STATED_YARDAGE/.test(setter) &&
+      /return false;/.test(setter) &&
+      /return true;/.test(setter);
+    // A refused write must LEAVE THE FIELD ALONE rather than clearing a good value.
+    const setterDoesNotClobber = setter.indexOf('return false;') < setter.indexOf('set({');
+    // And the reader refuses a rehydrated implausible value instead of quoting it at high confidence.
+    const resolverDistrustsStore = /Number\.isFinite\(stated\.value\) && stated\.value > 0 && stated\.value <= \d+/.test(resolver);
+    if (!ownsTheBand) console.log('   the plausible band is not owned by the store');
+    if (!setterGuards) console.log('   the setter accepts anything again');
+    if (!setterDoesNotClobber) console.log('   a refused write can clear a good yardage');
+    if (!resolverDistrustsStore) console.log('   the resolver trusts a persisted value it should re-check');
+    return ownsTheBand && setterGuards && setterDoesNotClobber && resolverDistrustsStore;
+  })(),
+  'one owner decides whether a stated yardage is a yardage — the setter refuses NaN/0/negative/absurd without clobbering a good value, and the resolver re-checks what rehydrates from disk');
+
 check('LOCK: a dropped TTS connection gets the same second chance a truncated clip does',
   /**
    * 2026-08-28 (Tim's issue log: three `speak_catch — Network request failed` in fifteen minutes,

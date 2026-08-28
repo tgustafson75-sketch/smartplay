@@ -747,7 +747,11 @@ interface RoundState {
    * holeAtCapture is bound to currentHole so the value invalidates
    * cleanly when the user advances holes.
    */
-  setUserStatedYardage: (value: number, source: 'user' | 'rangefinder' | 'golfshot' | 'other') => void;
+  /**
+   * Record a yardage the player stated. Returns false when the value is not a plausible yardage —
+   * the one owner of that judgment; see the implementation for why it does not live at the callers.
+   */
+  setUserStatedYardage: (value: number, source: 'user' | 'rangefinder' | 'golfshot' | 'other') => boolean;
   /** Clear the stated yardage. Called automatically on next shot logged
    *  or next hole advance; exposed for manual reset too. */
   clearUserStatedYardage: () => void;
@@ -826,6 +830,14 @@ interface RoundState {
 // (years of play) while bounding the worst case. The deeper per-tick-serialization
 // win (relocating past-round shots off the hot blob) is a separate refactor that
 // wants device verification — see audit-backlog.
+/**
+ * The plausible band for a yardage the PLAYER states. Owned here because five producers each had
+ * their own number (700 / 700 / 900 / 400 / 400) and the field they all write had none.
+ * 1 covers a tap-in; 600-odd covers a par 5 from the tee; 850 is not a golf shot.
+ */
+const MIN_STATED_YARDAGE = 1;
+const MAX_STATED_YARDAGE = 700;
+
 const MAX_ROUND_HISTORY = 1000;
 const capHistory = (h: RoundRecord[]): RoundRecord[] =>
   h.length > MAX_ROUND_HISTORY ? h.slice(-MAX_ROUND_HISTORY) : h;
@@ -2475,8 +2487,53 @@ export const useRoundStore = create<RoundState>()(
 
       setCurrentYardage: (yards) => set({ currentYardage: yards }),
 
+      /**
+       * 2026-08-28 (SmartFinder sweep, part 2 — the resolver rather than the rangefinder maths).
+       *
+       * FIVE PRODUCERS, FIVE DIFFERENT ANSWERS TO THE SAME QUESTION, AND NO OWNER.
+       *
+       * A stated yardage is the highest-trust number in the app: yardageResolver Tier 3 returns it
+       * at `confidence: 'high'`, it BEATS live GPS for five minutes, and the caddie both quotes and
+       * clubs from it. Every caller was validating it, and each had invented its own band:
+       *
+       *   caddie.tsx plan_shot                 0 < d <= 700
+       *   conversationalToolDispatch plan_shot 0 < d <= 700
+       *   conversationalToolDispatch (other)   isFinite && 0 < y < 900
+       *   clubHandler / parseStatedYardage     20..400   (an ambiguity guard, legitimately tighter)
+       *   stateYardageHandler / extractYardage 10..400
+       *
+       * So "I'm 850 out" was accepted through one voice path and refused through another — the same
+       * sentence, a different caddie, depending on which route parsed it. And this setter, the one
+       * place all five converge, accepted anything at all: NaN, Infinity, 0, negative. Any producer
+       * added later inherits no protection whatever, which is how the list got to five.
+       *
+       * The band belongs to the FIELD, not to the callers. 1..700 covers every real stated distance
+       * (a 600-yard par 5 from the tee is a real thing to say; 850 is not a golf shot) and rejects
+       * the shapes that are never a yardage. The parser-level limits above stay as they are: those
+       * exist to stop a loft, a wind speed or a hole number being MISREAD as a distance, which is a
+       * different job from asking whether a number is a plausible yardage.
+       *
+       * Returns whether it was accepted, so a caller that ANNOUNCES the number can avoid saying
+       * "got it, 850" about a value the store refused. [[no-half-fixes-enforce-every-surface]]
+       * [[two-owners-is-the-root-cause]]
+       */
       setUserStatedYardage: (value, source) => {
         const hole = get().currentHole;
+        if (!Number.isFinite(value) || value < MIN_STATED_YARDAGE || value > MAX_STATED_YARDAGE) {
+          /**
+           * Console only, deliberately. The first version filed this to the issue log — and the
+           * unit tests immediately tripped the log's AUTO-SEND, which tries to forward to Tim's
+           * inbox. A store setter is a synchronous write path called from render-adjacent code; it
+           * has no business reaching a network side effect, and a producer that loops on a bad value
+           * would have mailed him about it repeatedly.
+           *
+           * A refused write means a PRODUCER BUG, which is a build-time concern. That is what the
+           * sim guard below and the tests are for — they catch it before it ships, rather than
+           * reporting it from the field after it has already misled someone.
+           */
+          console.log('[roundStore] userStatedYardage REFUSED', { value, source, hole });
+          return false;
+        }
         set({
           userStatedYardage: {
             value,
@@ -2486,6 +2543,7 @@ export const useRoundStore = create<RoundState>()(
           },
         });
         console.log('[roundStore] userStatedYardage set', { value, source, hole });
+        return true;
       },
 
       clearUserStatedYardage: () => set({ userStatedYardage: null }),

@@ -64,6 +64,17 @@ export function resolveYardage(holeNumberArg?: number): ResolvedYardage {
   const stated = round.userStatedYardage;
   if (
     stated &&
+    /**
+     * 2026-08-28 — the setter is now the one owner of "is this a plausible yardage", but this READER
+     * cannot assume it. `userStatedYardage` is PERSISTED, so a value written before that guard
+     * existed can be rehydrated into a fresh session and would be returned here at `confidence:
+     * 'high'`, beating live GPS, with the caddie clubbing from it. A guard at the door does nothing
+     * about what is already inside the room.
+     *
+     * Cheap, and it degrades correctly: an implausible stored value falls through to the live-GPS
+     * tier below rather than being clamped into something we would then state as fact.
+     */
+    Number.isFinite(stated.value) && stated.value > 0 && stated.value <= 700 &&
     stated.holeAtCapture === hole &&
     now - stated.asOf < STATED_TTL_MS
   ) {
