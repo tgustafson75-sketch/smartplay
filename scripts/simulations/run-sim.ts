@@ -657,6 +657,23 @@ const readCode = (rel: string): string =>
 
 const missingReads: string[] = [];
 const readPaths = new Set<string>();
+/**
+ * 2026-08-27 — READ WITHOUT CLAIMING COVERAGE.
+ *
+ * `read()` records every path into readPaths, which the marshal uses to answer "is this file
+ * guarded". That is right for a targeted guard and WRONG for a bulk sweep: the removed-persona LOCK
+ * walks eight directories and reads every .ts/.tsx in the app, so routing it through read() marked
+ * ~480 files as covered on the strength of one grep for a name. The first marshal run reported
+ * recall 98.8% on that basis — a number that said the app was almost fully guarded when most of
+ * those files have no guard of their own at all.
+ *
+ * A sweep proves one property about everything. Coverage means a guard that knows what a file is
+ * FOR. Counting the first as the second is how a metric starts lying in the reassuring direction,
+ * which is the only direction that matters. [[my-measurement-is-the-least-reliable-part]]
+ */
+const readBulk = (abs: string): string => {
+  try { return fs.readFileSync(abs, 'utf-8'); } catch { return ''; }
+};
 const read = (rel: string) => {
   readPaths.add(rel);
   try {
@@ -12667,7 +12684,9 @@ check('LOCK: the removed persona cannot return to shipped code',
     for (const dir of DIRS) {
       for (const f of walk(path.resolve(__dirname, '../../', dir))) {
         const rel = f.slice(path.resolve(__dirname, '../../').length + 1);
-        const src = readCode(rel);
+        // readBulk, not readCode: a name-sweep over the whole app proves one property about every
+        // file and is not coverage of any of them. See the note on readBulk.
+        const src = readBulk(f).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
         for (const line of src.split('\n')) {
           const t = line.trim();
           if (!t || ALLOWED.has(t)) continue;

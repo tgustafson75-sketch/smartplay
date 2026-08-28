@@ -123,7 +123,10 @@ export interface WireIntegrity {
   coveredShipped: number;
   /** Guards pointed at a path that does not exist — they assert against an empty string. */
   unreadable: string[];
-  /** Guards pointed at a real file that nothing imports — green on code that cannot run. */
+  /**
+   * Shipped files nothing imports — stray code. A guard pointed at one is green on code that cannot
+   * run; an unguarded one is just weight. Measured over the whole app, not only the guarded part.
+   */
   islands: string[];
   /** Assertions satisfied only by a comment. Reported alongside; see the note on scoring below. */
   proseAssertions: number;
@@ -146,8 +149,18 @@ export function computeWireIntegrity(input: {
   const guarded = [...input.readPaths].filter((p) => shippedSet.has(p) || input.missingReads.includes(p));
 
   const unreadable = guarded.filter((p) => input.missingReads.includes(p)).sort();
-  const islands = guarded
-    .filter((p) => shippedSet.has(p) && !isEntryPoint(p) && !referenced.has(p))
+  /**
+   * STRAY CODE, measured across the WHOLE shipped app rather than only the guarded part.
+   *
+   * It was `guarded.filter(...)` first, which quietly made the check depend on the thing it was
+   * meant to be independent of: when the coverage accounting was corrected, CockpitCaddieScreen
+   * stopped being "guarded" and therefore stopped being reported as stray — a file nothing imports
+   * disappeared from the stray list by becoming LESS covered. Exactly backwards, and it would have
+   * hidden the next one the same way. Tim asked for "not having stray code", not "not having stray
+   * code among the files we happen to guard".
+   */
+  const islands = shipped
+    .filter((p) => !isEntryPoint(p) && !referenced.has(p))
     .sort();
 
   /**
@@ -159,7 +172,7 @@ export function computeWireIntegrity(input: {
    * either unit. They have their own ratchet (PROSE_ASSERTION_BASELINE) which is the stricter
    * control anyway — that one forbids a single new occurrence, where a ratio would absorb it.
    */
-  const bad = new Set([...unreadable, ...islands]);
+  const bad = new Set([...unreadable, ...islands.filter((p) => guarded.includes(p))]);
   const precision = guarded.length === 0 ? 0 : (guarded.length - bad.size) / guarded.length;
 
   // RECALL — of the shipped app, how much does any guard read at all?
@@ -192,7 +205,20 @@ export function computeWireIntegrity(input: {
  * The tolerance exists because recall moves whenever a file is added — writing one new module before
  * its guard should not fail the build, but a run of them should.
  */
-export const MARSHAL_F1_FLOOR = 0.98;
+/**
+ * 2026-08-27 — set from 91.6%, the HONEST measurement.
+ *
+ * The first floor was 98%, taken from a first run that reported recall 98.8%. That number was
+ * inflated: the removed-persona LOCK walks every directory in the app through the tracked reader,
+ * so one grep for a name marked ~480 files "guarded". Correcting the accounting dropped recall to
+ * 84.6% and F1 to 91.6%, and the floor comes down with it.
+ *
+ * THIS IS NOT LOWERING THE BAR TO GO GREEN — it is the bar moving to where the measurement is real.
+ * The distinction matters because the two look identical in a diff, so: the previous floor was
+ * never met by anything; nothing about the guards changed; only the counting did. Any future move
+ * of this number that is not accompanied by a change to what is MEASURED is the other thing.
+ */
+export const MARSHAL_F1_FLOOR = 0.91;
 export const MARSHAL_TOLERANCE = 0.01;
 
 /**
@@ -216,8 +242,30 @@ export const ISLAND_BASELINE: Record<string, string> = {
    * KNOWN island rather than being deleted or wired. Revisit post-launch.
    */
   'components/caddie/CockpitCaddieScreen.tsx': 'PARKED (Tim 08-27) — cockpit mode, hidden, may return',
-  'hooks/useLayout.ts': 'TRIAGE — no consumer since the layout freeze',
-  'services/swing/poseMotion.ts': 'TRIAGE — motion helpers, superseded by poseAnalysisApi',
+  /**
+   * BUILT, GUARDED, NEVER WIRED — and the guard is the only consumer, which is what makes these the
+   * exact failure this marshal exists to name.
+   *
+   * `classifyLayout` was written 07-26 as the ONE responsive classifier, because "every screen used
+   * its own W/H breakpoints → drift + per-size bugs". Six sim guards check it against iPhone, Fold,
+   * Pro Max and iPad geometry, and they all pass. No screen imports it. The drift it was written to
+   * end was never actually ended; the guards have been certifying a classifier the app does not use.
+   *
+   * `deriveSwingAnchors` (07-21, "pose-first foundation") is the same story with a synthetic-swing
+   * test that genuinely exercises the maths.
+   *
+   * NOT DELETED, and not wired either: wiring classifyLayout means touching sizing on every screen,
+   * which is inside the whole-app layout freeze (07-29, Tim signed off "BEAUTIFUL"), and deleting a
+   * working, tested capability the day before a ship date is the other wrong answer. Tim's call
+   * post-launch. [[orphan-export-sweep-finds-half-builds]] [[layout-theme-voice-lock-2026-07-29]]
+   *
+   * WHY THE ORPHAN SWEEP DOES NOT SEE THESE: findOrphanExports counts any MENTION of a symbol as a
+   * reference, so a guard naming an export makes it look wired (run-sim carries a note about this
+   * for exactly that reason). A guard is not a caller. That blind spot is precisely what a
+   * FILE-level import-graph check catches and a symbol-level one cannot.
+   */
+  'hooks/useLayout.ts': 'TRIAGE — classifyLayout: the single sizing classifier no screen imports',
+  'services/swing/poseMotion.ts': 'TRIAGE — deriveSwingAnchors: pose-first foundation, guard is the only caller',
 };
 
 export function formatWireIntegrity(w: WireIntegrity): string {
@@ -226,7 +274,7 @@ export function formatWireIntegrity(w: WireIntegrity): string {
     `F1 ${pct(w.f1)}  ·  precision ${pct(w.precision)} (${w.guardedFiles - w.unreadable.length - w.islands.length}/${w.guardedFiles} guarded files are live + readable)  ·  recall ${pct(w.recall)} (${w.coveredShipped}/${w.shippedFiles} shipped files guarded)`,
   ];
   if (w.unreadable.length) lines.push(`  UNREADABLE (assert against ""): ${w.unreadable.slice(0, 8).join(', ')}${w.unreadable.length > 8 ? ` +${w.unreadable.length - 8}` : ''}`);
-  if (w.islands.length) lines.push(`  ISLANDS (guarded, but nothing imports them): ${w.islands.slice(0, 8).join(', ')}${w.islands.length > 8 ? ` +${w.islands.length - 8}` : ''}`);
+  if (w.islands.length) lines.push(`  STRAY (shipped, nothing imports them): ${w.islands.slice(0, 8).join(', ')}${w.islands.length > 8 ? ` +${w.islands.length - 8}` : ''}`);
   lines.push(`  prose-reading assertions: ${w.proseAssertions} (own ratchet)`);
   return lines.join('\n');
 }
