@@ -3404,7 +3404,13 @@ check('Tester round 2: typed reply always shows, keyboard dismiss, Harry not sel
       // 1 — a TYPED turn shows the brain reply even when voice is muted (regression from removing the
       //     canned greeting handler: "I type hi now and nothing happens"). speak() already flashes the
       //     caption when muted, so handler/command replies show too — this covers the brain branch.
-      /try \{ flashCaption\?\.\(r\.text, 7000\); \}/.test(ls) &&
+      //     2026-08-27 — was the literal `try { flashCaption?.(r.text, 7000); }` written inline in the
+      //     typed branch. That line is gone because the branch now hands the reply to the one
+      //     deliverer, which captions anything it may not speak (see the H1 + delivery-contract
+      //     LOCKs). Asserting the wire, not the copy: the typed branch reaches the deliverer, and
+      //     the deliverer shows a reply it cannot voice.
+      /site: 'handsFree-route\.conversational'/.test(ls) &&
+      /const shown = caption\(text, \d+\);/.test(ls) &&
       // 2 — the on-screen input bar can minimize the keyboard while typing
       /accessibilityLabel="Hide keyboard"/.test(bottombar) && /Keyboard\.dismiss\(\)/.test(bottombar) &&
       // 3 — Harry is NOT a selectable base persona for the custom caddie
@@ -5230,18 +5236,44 @@ check('Brain failure falls back to a real local answer (not a snag prompt)',
   // while the LIVE typed path — handleTranscribedUtterance — went straight to "having trouble
   // connecting" on an empty brain reply, with the same GPS and bag in its pocket that the mic path
   // used to answer from. Both empty-brain branches in listeningSession must try answerOffline first.
+  /**
+   * 2026-08-27 — RE-AIMED AGAIN, and this time at the property instead of the copies.
+   *
+   * It counted `answerOffline(` and demanded AT LEAST TWO, because on 08-26 the two branches each
+   * carried their own copy of the fallback. Collapsing them onto one delivery contract drops that
+   * count to one — so the guard, read literally, was requiring the duplication whose absence is the
+   * improvement. It would have been "fixed" by pasting the local-answer block back into a second
+   * branch, which is the bug it exists to prevent.
+   *
+   * What it should assert, and now does: every brain call on this path hands its reply to the ONE
+   * deliverer, and that deliverer reaches for the device before it apologises. Two branches or ten,
+   * they cannot differ. [[two-owners-is-the-root-cause]] [[run-the-second-pass-yourself]]
+   */
   (() => {
     const ls = readCode('services/listeningSession.ts');
-    const emptyBrainBranches = (ls.match(/answerOffline\(/g) ?? []).length;
+    // Every conversational brain call is followed by the shared deliverer — no site hand-rolls it.
+    const brainCalls = [...ls.matchAll(/conversationalBrainTurn\(/g)].map((m) => m.index ?? 0);
+    const everyCallDelivers = brainCalls.length >= 2 && brainCalls.every(
+      (idx) => /deliverBrainReply\(/.test(ls.slice(idx, idx + 1400)),
+    );
+    // Exactly ONE owner of the local fallback in this file — the point of the collapse.
+    const oneOwner = (ls.match(/answerOffline\(/g) ?? []).length === 1;
+    // And that owner tries the device BEFORE the apology.
+    const deviceBeforeApology =
+      ls.indexOf('answerOffline') > 0 &&
+      ls.indexOf('answerOffline') < ls.indexOf('speakHonestFailure(lang');
+    if (!everyCallDelivers) console.log('   a brain call on this path does not route through the shared deliverer');
+    if (!oneOwner) console.log(`   ${(ls.match(/answerOffline\(/g) ?? []).length} owners of the local fallback — expected exactly 1`);
     return (
-      emptyBrainBranches >= 2 &&                                   // route_to_brain AND the typed/hands-free branch
-      /localAnswer/.test(ls) &&                                    // the typed branch keeps the answer before apologising
+      everyCallDelivers &&
+      oneOwner &&
+      deviceBeforeApology &&
       /if \(localAnswer\) \{/.test(ls) &&
       !/Hit a snag on my end/.test(ls) &&
       /export function tryLocalReply/.test(readCode('services/localStatusResponder.ts'))
     );
   })(),
-  'a failed brain call answers locally from device state (GPS/bag/green) on BOTH the mic and the typed/hands-free branch before it ever says "having trouble connecting"');
+  'a failed brain call answers locally from device state (GPS/bag/green) on BOTH the mic and the typed/hands-free branch before it ever says "having trouble connecting" — via one deliverer they cannot drift apart from');
 
 check('Offline caddie Tier 1: local CLUB CALL + LAST SHOT, grounded + honest (2026-06-12)',
   // Extends tryLocalReply (the single brain-failure hook used by listeningSession /
@@ -8322,9 +8354,33 @@ console.log('\n=== Beta-wrap deep-audit LOCK ===');
 
   // VOICE-OFF text + custom caddie
   const listenSrc = read('services/listeningSession.ts');
+  /**
+   * 2026-08-27 — RE-AIMED. This counted `flashCaption?.(` and required FOUR, one per branch that
+   * had its own copy of "show it when muted". The delivery collapse leaves three call sites and one
+   * shared captioner, so a count assertion now reads the duplication rather than the guarantee —
+   * and would be satisfied by re-scattering the copies. Assert the property instead: the deliverer
+   * captions whatever it may not speak, and the two branches that answer WITHOUT the brain (a
+   * handler's voice_response, a disruptive-open offer) still caption for themselves.
+   */
   check('Hands-free surfaces text when voice is muted (H1)',
-    (listenSrc.match(/flashCaption\?\.\(/g) ?? []).length >= 4,
-    'H1: openSession + handleTranscribedUtterance caption the reply when voice is off so a hands-free turn is never silently dead');
+    (() => {
+      const at = listenSrc.indexOf('async function deliverBrainReply');
+      if (at < 0) return false;
+      const fn = listenSrc.slice(at, at + 4000);
+      return (
+        // the shared captioner exists and is the muted path's answer
+        /const caption = \(line: string, ms: number\): boolean =>/.test(fn) &&
+        /flashCaption\?\.\(line, ms\); return true;/.test(fn) &&
+        // a reply that cannot be spoken is still SHOWN — never dropped
+        /const shown = caption\(text, \d+\);/.test(fn) &&
+        // a local answer and the honest line are captioned too, so no muted turn is ever blank
+        /caption\(localAnswer, \d+\)/.test(fn) &&
+        /caption\(failureFallbackFor\(lang\), \d+\)/.test(fn) &&
+        // and the two non-brain branches still caption on their own
+        (listenSrc.match(/flashCaption\?\.\(/g) ?? []).length >= 3
+      );
+    })(),
+    'H1: every hands-free turn the caddie cannot SPEAK is shown instead — reply, local answer and honest line all caption when voice is off, from one captioner');
   check('Custom caddie inherits base persona on the kevin fallback (H2)',
     /customCaddieBasePersona/.test(read('api/kevin.ts')) && /customCaddieBasePersona/.test(read('services/caddieRequestBody.ts')),
     'H2: /api/kevin resolves a custom caddie to its chosen base persona for spec + voice (was Kevin/onyx on follow-ups)');
@@ -12631,13 +12687,36 @@ check('LOCK: no turn on the typed / watch / hands-free path ends in silence',
      * lines" could reach back over hundreds of lines of real code and find a speak() that has
      * nothing to do with this branch. That is precisely how the block-form break test slipped
      * through while the one-line form was caught. A byte window cannot be fooled by comment shape.
+     *
+     * 2026-08-27 — AND IT WAS READING PROSE ANYWAY. readCode() strips BLOCK comments; it leaves
+     * `//` lines untouched. This walk was therefore matching `return;` inside a sentence — the line
+     * `// 2026-08-26 — \`if (!intent) return;\` stood here and is now unreachable` was counted as a
+     * live silent exit, so one of the two failures it reported was a comment describing a return
+     * that had been DELETED. Eighth time a comment has defeated an assertion in this suite.
+     *
+     * Strip both comment kinds first, and the reason for the byte window disappears with them: with
+     * no comments left to collapse, a LINE window measures actual code again. That matters here
+     * because a delivery call with named options legitimately spans ~15 lines, and the 500-byte
+     * window was cutting through the middle of one — reporting two more silent returns whose answer
+     * sat four lines above. [[break-test-every-guard-you-write]] [[grep-guards-cant-see-dead-code]]
      */
-    const body = src.slice(open, i);
+    const body = src
+      .slice(open, i)
+      // `[^:]` so a URL inside a string literal is not mistaken for a comment.
+      .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
     const lines = body.split('\n');
     const offsets: number[] = [];
     let acc = 0;
     for (const l of lines) { offsets.push(acc); acc += l.length + 1; }
-    const ANSWERS = /speak\w*\(|flashCaption|speakHonestFailure|localAnswer|offer/;
+    /**
+     * 2026-08-27 — RE-AIMED, not loosened. deliverBrainReply now carries the delivery contract that
+     * used to be written out inline at each site (speak → caption → local answer → honest line →
+     * log), so a branch that calls it is MORE answered than one that hand-rolls three of the five.
+     * Naming it here is only safe because the assertion below proves the function is itself total;
+     * without that this would be a guard satisfied by a function name.
+     * [[break-test-every-guard-you-write]]
+     */
+    const ANSWERS = /speak\w*\(|flashCaption|speakHonestFailure|localAnswer|offer|deliverBrainReply/;
     let silent = 0;
     lines.forEach((l, n) => {
       /**
@@ -12655,13 +12734,90 @@ check('LOCK: no turn on the typed / watch / hands-free path ends in silence',
       // is nothing to answer and silence is correct. Named explicitly rather than loosening the
       // pattern, because every other early exit here IS a turn the player started.
       if (/if \(!text\)|if \(!utterance\)|\.trim\(\)\)? return/.test(l)) return;
-      const ctx = body.slice(Math.max(0, offsets[n] - 500), offsets[n] + l.length);
-      if (!ANSWERS.test(ctx)) silent += 1;
+      // 20 comment-free lines back — enough to hold one delivery call written out with named
+      // options, and (with comments gone) unable to reach past the branch it belongs to.
+      const ctx = lines.slice(Math.max(0, n - 20), n + 1).join('\n');
+      if (!ANSWERS.test(ctx)) { silent += 1; console.log(`   unanswered return at body line ${n}: ${l.trim().slice(0, 70)}`); }
     });
     if (silent > 0) console.log(`   ${silent} terminal return(s) leave the player with nothing`);
     return silent === 0;
   })(),
   'every terminal branch of the typed/watch/hands-free turn leaves the player with speech, a caption, or an honest line — a classifier failure routes to the brain rather than ending the turn');
+
+check('LOCK: the one delivery contract is TOTAL — no combination ends a turn in nothing',
+  /**
+   * 2026-08-27 (Tim — "I asked Serena, she thought for a while, and then just didn't answer… I
+   * didn't get an issue log out of it").
+   *
+   * The guard above now accepts `deliverBrainReply` as proof that a branch answers. That is only
+   * legitimate while the function it names cannot itself fall through — otherwise the first guard
+   * has been satisfied by an identifier, which is the failure mode the 08-24 sweep named: an
+   * assertion that matches a NAME rather than a behaviour.
+   *
+   * WHAT WENT WRONG, and what this forbids returning: every route_to_brain site was three branches
+   * — speak / caption-when-muted / apologise-when-empty — each gating speech on the session still
+   * being 'responding'. Three combinations matched no branch and did nothing at all, the worst of
+   * them being "the brain ANSWERED and the session had moved on", which discarded a real answer
+   * after a cold-start wait of up to 70s. None of the three logged, so the dead turn was invisible
+   * to us as well as to the player — the field report arrived with an empty issue log, and the
+   * ABSENCE of the entry was the evidence.
+   *
+   * Asserted structurally: the function's reply-present path cannot reach its end without either
+   * speaking or captioning, the no-reply path tries the device before apologising, and the final
+   * fallthrough always logs. Break-tested against the shape it does NOT yet handle: deleting the
+   * caption on the not-spoken path, or the log on the final path, must turn this red.
+   */
+  (() => {
+    const src = readCode('services/listeningSession.ts');
+    const at = src.indexOf('async function deliverBrainReply');
+    if (at < 0) return false;
+    /**
+     * Brace-match from the RETURN TYPE, not from the function name. `indexOf('{', at)` lands on the
+     * opening brace of the inline `opts: { … }` parameter type, so the walk closes at the end of the
+     * PARAMETER LIST and the "body" is a type literal containing no code at all — every assertion
+     * below then fails for a reason that has nothing to do with the code being wrong. Caught by
+     * break-testing the guard against the passing case, which is the pass I keep having to force
+     * myself to run. [[break-test-every-guard-you-write]]
+     */
+    const sig = src.indexOf('): Promise<void> {', at);
+    if (sig < 0) return false;
+    let depth = 0;
+    let i = src.indexOf('{', sig);
+    const open = i;
+    for (; i < src.length; i += 1) {
+      if (src[i] === '{') depth += 1;
+      else if (src[i] === '}') { depth -= 1; if (depth === 0) break; }
+    }
+    const body = src.slice(open, i);
+    // 1 — a real answer is never discarded: when it cannot be SPOKEN it is still captioned, and the
+    //     fact that the player never heard it is recorded.
+    const answerNeverDropped =
+      /const shown = caption\(text, \d+\);/.test(body) &&
+      /logVoiceSilentFail\('brain_reply_not_spoken'/.test(body);
+    // 2 — an empty reply reaches for the device (GPS / bag / green) BEFORE it apologises.
+    const triesDeviceFirst =
+      body.indexOf('answerOffline') > 0 &&
+      body.indexOf('answerOffline') < body.indexOf('speakHonestFailure');
+    // 3 — the last path standing always delivers something AND always logs. `delivered` must be
+    //     computed from both the spoken and the captioned attempt, so a muted player still counts.
+    const lastResortAlwaysLands =
+      /if \(!delivered\) delivered = caption\(failureFallbackFor\(lang\), \d+\);/.test(body) &&
+      /logVoiceSilentFail\('turn_ended_without_answer'/.test(body);
+    // 4 — no bare `return;` may sit in this function without an answer in front of it: the contract
+    //     cannot be escaped by adding a fourth early exit later.
+    const escapes = body.split('\n').filter((l) => /(^\s*|[;{)]\s*)return;/.test(l)).length;
+    const answeredReturns = body.split('\n').filter((l, n, all) => {
+      if (!/(^\s*|[;{)]\s*)return;/.test(l)) return false;
+      return /speak\w*\(|caption\(|logVoiceSilentFail/.test(all.slice(Math.max(0, n - 12), n + 1).join('\n'));
+    }).length;
+    const noEscapeHatch = escapes === answeredReturns;
+    if (!answerNeverDropped) console.log('   a reply that cannot be spoken is dropped rather than shown');
+    if (!triesDeviceFirst) console.log('   apologises before trying to answer from device state');
+    if (!lastResortAlwaysLands) console.log('   the final path can end without delivering or logging');
+    if (!noEscapeHatch) console.log(`   ${escapes - answeredReturns} return(s) inside the contract answer nothing`);
+    return answerNeverDropped && triesDeviceFirst && lastResortAlwaysLands && noEscapeHatch;
+  })(),
+  'the single delivery contract always ends in speech, a caption or a logged failure — a real answer is shown rather than discarded when the session moves on, and the device is asked before the caddie apologises');
 
 console.log('\n=== SYNTHESIS ===');
 // Emitted UNCONDITIONALLY, so this is a standing guard in the suite rather than an error path that

@@ -3,7 +3,7 @@ import { mayTalkToCaddie } from './featureAccess';
 import { BRAIN_FETCH_TIMEOUT_MS as KEVIN_FETCH_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { endsAsQuestion } from './voice/endsAsQuestion';
 import { speak, speakFromBase64, stopSpeaking, captureUtteranceDetailed, releaseExternalMic, playLocalFile, stopCapture, endCaptureEarly, flashCaption, getLastSpokenLine, type CaptureBail, type CaptureResult } from './voiceService';
-import { logVoiceSilentFail } from './voiceErrorLog';
+import { logVoiceSilentFail, describeError } from './voiceErrorLog';
 import { responseForCaptureBail, shouldRetryCapture } from './voice/captureBail';
 import { conversationalBrainTurn } from './conversationalBrain';
 import { buildCaddieRequestBody } from './caddieRequestBody';
@@ -194,9 +194,27 @@ export function isSessionInFlight(): boolean {
 //
 // 90s window chosen to accommodate the longest legitimate path:
 // listening (up to 12s) + classifier (~3s) + brain (up to 30s) +
-// TTS playback (long replies can hit 40-50s for Tank/Serena multi-
+// TTS playback (long replies can hit 40-50s for Serena multi-
 // sentence answers). 90s comfortably covers that with headroom.
-const DORMANCY_MAX_MS = 90_000;
+/**
+ * 2026-08-27 — RE-DERIVE THIS WHEN A TIMEOUT MOVES. The arithmetic above is the arithmetic of
+ * 2026-05-26 and two of its terms have since changed underneath it: the classifier's "~3s" became
+ * COLD_INTENT_FETCH_TIMEOUT_MS = 22s (07-29) and the brain's "up to 30s" became
+ * COLD_KEVIN_FETCH_TIMEOUT_MS = 48s (07-25). Neither commit came back here.
+ *
+ * The watchdog re-arms on every state transition, so the budget that matters is the LONGEST SINGLE
+ * STATE, not the whole turn — and 'responding' now holds a cold brain call (48s) plus TTS render and
+ * playback (40-50s on a long answer). That is 88-98s against a 90s force-close, i.e. the watchdog
+ * can fire on a turn that is working. It closes the session mid-answer, and every speak branch is
+ * gated on the session still being 'responding'.
+ *
+ * Raised to 150s, derived from the real constants rather than the old ones, with headroom for the
+ * same reason the original had it. This is a WATCHDOG against a wedged session, not a response-time
+ * budget — the fetches carry their own timeouts and are what actually bound a slow turn. Making it
+ * generous costs a stuck session a longer wait; making it too tight costs a good answer.
+ * [[my-measurement-is-the-least-reliable-part]]
+ */
+const DORMANCY_MAX_MS = 150_000;
 let dormancyTimer: ReturnType<typeof setTimeout> | null = null;
 
 function clearDormancyTimer(): void {
@@ -620,6 +638,138 @@ export async function speakHonestFailure(
   try {
     await speak(msg, voiceGender, language ?? 'en', apiUrl, { userInitiated: true });
   } catch (e) { console.log('[listeningSession] failure-fallback speak threw', e); }
+}
+
+/**
+ * 2026-08-27 (Tim, first turn after launch — "I asked Serena, and she thought for a while, and then
+ * just didn't answer… I didn't get an issue log out of it").
+ *
+ * THE BRANCHES THAT SPOKE WERE COMPLETE. THE ONES THAT DIDN'T WERE MISSING.
+ *
+ * Every route_to_brain site in this file was written as three branches — speak the answer, caption
+ * it when voice is off, apologise when the brain came back empty — and each gated speaking on
+ * `getSessionState() === 'responding'`. THREE combinations fell through all three branches and did
+ * nothing at all:
+ *
+ *   1. the brain ANSWERED, voice was on, and the session had left 'responding' while we waited.
+ *      A cold first turn waits up to 48s for the brain (COLD_KEVIN_FETCH_TIMEOUT_MS) on top of a
+ *      22s cold classify — any tap, earbud press, close or dormancy force-close inside that window
+ *      drops a REAL ANSWER on the floor. The caddie had the words and never said them.
+ *   2. the brain came back empty AND voice was muted (or the phone-speaker gate was shut) — no
+ *      caption, where the sibling hands-free branch 250 lines down captions failureFallbackFor().
+ *   3. the brain came back empty and the session had moved on.
+ *
+ * NONE OF THE THREE LOGGED. logVoiceSilentFail is how a dead turn becomes visible to us, and a
+ * fallthrough with no `else` cannot call it — which is precisely why the field report arrived with
+ * an empty issue log attached. The absence of the entry WAS the evidence.
+ *
+ * So delivery stops being three hand-written branches per call site — four sites, and the two mic
+ * ones had already drifted from the two hands-free ones — and becomes ONE function with a total
+ * contract:
+ *
+ *      A TURN THE PLAYER STARTED ALWAYS ENDS IN SOMETHING THEY CAN PERCEIVE.
+ *
+ * In order: speak the answer → caption the answer when we may not speak, INCLUDING when the session
+ * moved on (a real answer is shown, never discarded) → answer from device state → the honest
+ * failure line, spoken or captioned from the one shared source. Only when every one of those is
+ * impossible does it fall through, and then it ALWAYS logs.
+ *
+ * [[caddie-failsafe-no-walls]] [[no-half-fixes-enforce-every-surface]] [[feels-like-a-real-caddie]]
+ */
+async function deliverBrainReply(opts: {
+  reply: { text: string | null; audioBase64: string | null };
+  utterance: string;
+  language: string | null | undefined;
+  voiceGender: 'male' | 'female';
+  apiUrl: string;
+  /** voiceEnabled AND the phone-speaker gate, resolved by the caller that owns that judgment. */
+  ttsAllowed: boolean;
+  /** Call site, for the issue log — so "always the mic" and "only hands-free" are distinguishable. */
+  site: string;
+  /**
+   * The mic path speaks only while the session is still 'responding' (a tap mid-answer means the
+   * player moved on and must not be talked over). The hands-free / typed / watch path has no such
+   * session and passes false.
+   */
+  requireResponding: boolean;
+}): Promise<void> {
+  const { reply, utterance, voiceGender, apiUrl, ttsAllowed, site, requireResponding } = opts;
+  const lang: 'en' | 'es' | 'zh' = (['en', 'es', 'zh'] as const).includes(opts.language as never)
+    ? (opts.language as 'en' | 'es' | 'zh')
+    : 'en';
+  const maySpeak = (): boolean => ttsAllowed && (!requireResponding || getSessionState() === 'responding');
+  const caption = (line: string, ms: number): boolean => {
+    try { flashCaption?.(line, ms); return true; } catch { return false; }
+  };
+
+  const text = reply.text?.trim() || null;
+
+  // 1 — The caddie answered. Say it.
+  if (text) {
+    if (maySpeak()) {
+      await stopSpeaking().catch(() => {});
+      if (maySpeak()) {
+        if (reply.audioBase64) {
+          await speakFromBase64(reply.audioBase64, { userInitiated: true, caption: text })
+            .catch((e) => console.log(`[${site}] speakFromBase64 failed`, e));
+        } else {
+          await speak(text, voiceGender, lang, apiUrl, { userInitiated: true })
+            .catch((e) => console.log(`[${site}] speak failed`, e));
+        }
+        return;
+      }
+    }
+    /**
+     * Muted, gated, or the session moved while the brain was thinking. The answer is REAL — the
+     * player asked and the caddie found it — so it goes on screen rather than in the bin, and the
+     * fact that it was never SPOKEN is recorded. This is the case that produced Tim's report.
+     */
+    const shown = caption(text, 7000);
+    logVoiceSilentFail('brain_reply_not_spoken', {
+      source: site,
+      shown,
+      ttsAllowed,
+      sessionState: getSessionState(),
+      replyHead: text.slice(0, 60),
+    });
+    return;
+  }
+
+  // 2 — No answer from the brain. TRY TO ANSWER BEFORE APOLOGISING: the device holds the GPS, the
+  //     bag and the green, and a local club call beats "I'm having trouble connecting" every time.
+  let localAnswer: string | null = null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const off = (require('./offlineCaddie') as typeof import('./offlineCaddie')).answerOffline(utterance, lang);
+    localAnswer = off?.text?.trim() || null;
+  } catch { /* the local answer is a bonus, never a dependency */ }
+  if (localAnswer) {
+    if (maySpeak()) {
+      await stopSpeaking().catch(() => {});
+      await speak(localAnswer, voiceGender, lang, apiUrl, { userInitiated: true })
+        .catch((e) => console.log(`[${site}] local-answer speak failed`, e));
+    } else {
+      caption(localAnswer, 7000);
+    }
+    return;
+  }
+
+  // 3 — Nothing left but the truth, in the SAME words whether it is heard or read.
+  let delivered = false;
+  if (maySpeak()) {
+    try { await speakHonestFailure(lang, voiceGender, apiUrl); delivered = true; }
+    catch (e) { console.log(`[${site}] honest-failure speak threw`, e); }
+  }
+  if (!delivered) delivered = caption(failureFallbackFor(lang), 6000);
+  // Logged whether it was spoken or read: a turn that reached here is a turn the caddie could not
+  // answer, and that is the class worth counting.
+  logVoiceSilentFail('turn_ended_without_answer', {
+    source: site,
+    delivered,
+    ttsAllowed,
+    sessionState: getSessionState(),
+    utteranceHead: utterance.slice(0, 60),
+  });
 }
 
 async function openSession() {
@@ -1287,13 +1437,25 @@ async function openSession() {
                 const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
                 dispatchConversationalToolActions(r.toolActions);
               }
-              if (r.text && getSessionState() === 'responding') {
-                await stopSpeaking().catch(() => {});
-                if (getSessionState() === 'responding') {
-                  if (r.audioBase64) await speakFromBase64(r.audioBase64, { userInitiated: true, caption: r.text }).catch((e) => console.log('[listeningSession] pipecat speakFromBase64 failed', e));
-                  else await speak(r.text, settings.voiceGender, settings.language, apiUrl, { userInitiated: true }).catch((e) => console.log('[listeningSession] pipecat speak failed', e));
-                  chatSpoken = true;
-                }
+              /**
+               * 2026-08-27 — the fifth brain site, and it had the same hole as the other four: the
+               * reply was spoken only while the session was still 'responding', with nothing at all
+               * for the case where it wasn't. A cold turn can sit here for the better part of a
+               * minute. Handing it to the deliverer means a reply that arrives late is SHOWN rather
+               * than binned, and the fact that it was never heard is logged.
+               */
+              if (r.text) {
+                await deliverBrainReply({
+                  reply: r,
+                  utterance,
+                  language: settings.language,
+                  voiceGender: settings.voiceGender,
+                  apiUrl,
+                  ttsAllowed: responseAllowed,
+                  site: 'listeningSession.conversational',
+                  requireResponding: true,
+                });
+                chatSpoken = true;
               }
             } catch (e) { console.log('[listeningSession] pipecat conversational failed → kevin', e); }
           }
@@ -1323,19 +1485,23 @@ async function openSession() {
               // with a non-empty `text` and we just speak it (no audio).
               const reply = typeof chatJson?.text === 'string' ? chatJson.text : null;
               const replyAudio = typeof chatJson?.audioBase64 === 'string' ? chatJson.audioBase64 : null;
-              if (reply && getSessionState() === 'responding') {
-                await stopSpeaking().catch(() => {});
-                if (getSessionState() !== 'responding') {
-                  setSessionStateMirror('idle');
-                  return;
-                }
-                if (replyAudio) {
-                  await speakFromBase64(replyAudio, { userInitiated: true, caption: reply })
-                    .catch((e) => console.log('[listeningSession] chat fallback speakFromBase64 failed', e));
-                } else {
-                  await speak(reply, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
-                    .catch((e) => console.log('[listeningSession] chat fallback speak failed', e));
-                }
+              /**
+               * 2026-08-27 — this branch did the most visible version of the damage: on a reply that
+               * arrived after the session had moved, it called setSessionStateMirror('idle') and
+               * RETURNED — deliberately discarding an answer the brain had already produced and
+               * billed us for, with no line, no caption and no log.
+               */
+              if (reply) {
+                await deliverBrainReply({
+                  reply: { text: reply, audioBase64: replyAudio },
+                  utterance,
+                  language: settings.language,
+                  voiceGender: settings.voiceGender,
+                  apiUrl,
+                  ttsAllowed: responseAllowed,
+                  site: 'listeningSession.chat_fallback',
+                  requireResponding: true,
+                });
                 chatSpoken = true;
               }
             } else {
@@ -1344,8 +1510,23 @@ async function openSession() {
           } catch (e) {
             console.log('[listeningSession] chat fallback fetch failed', e);
           }
-          if (!chatSpoken && responseAllowed && getSessionState() === 'responding') {
-            await speakHonestFailure(settings.language, settings.voiceGender, apiUrl);
+          /**
+           * 2026-08-27 — the last-resort line was itself gated on responseAllowed AND the session
+           * still being 'responding', so the one branch whose whole job is "never leave dead air"
+           * had two ways to leave dead air. The deliverer owns those judgments now: it reaches for
+           * a device answer first, speaks or captions the honest line, and logs either way.
+           */
+          if (!chatSpoken) {
+            await deliverBrainReply({
+              reply: { text: null, audioBase64: null },
+              utterance,
+              language: settings.language,
+              voiceGender: settings.voiceGender,
+              apiUrl,
+              ttsAllowed: responseAllowed,
+              site: 'listeningSession.conversational_exhausted',
+              requireResponding: true,
+            });
           }
         }
       }
@@ -1402,24 +1583,36 @@ async function openSession() {
             const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
             dispatchConversationalToolActions(r.toolActions);
           }
-          if (r.text && responseAllowed && getSessionState() === 'responding') {
-            await stopSpeaking().catch(() => {});
-            if (getSessionState() === 'responding') {
-              if (r.audioBase64) await speakFromBase64(r.audioBase64, { userInitiated: true, caption: r.text }).catch((e) => console.log('[listeningSession] route_to_brain speakFromBase64 failed', e));
-              else await speak(r.text, settings.voiceGender, intent.language ?? settings.language, apiUrl, { userInitiated: true }).catch((e) => console.log('[listeningSession] route_to_brain speak failed', e));
-            }
-          } else if (r.text && !responseAllowed) {
-            // 2026-07-30 (voice/brain audit H1 — Tim: "user should be able to voice off and still get
-            // ALL the text responses"). Earbud/hands-free path: voice muted (or phone-speaker gate) → still
-            // SHOW the brain's reply so a hands-free turn is never a silent dead turn.
-            try { flashCaption?.(r.text, 7000); } catch { /* non-fatal */ }
-          } else if (!r.text && responseAllowed && getSessionState() === 'responding') {
-            const offLang = (['en', 'es', 'zh'] as const).includes(settings.language as never) ? (settings.language as 'en' | 'es' | 'zh') : 'en';
-            const off = require('./offlineCaddie').answerOffline(utterance, offLang) as { text?: string } | null;
-            if (off?.text) await speak(off.text, settings.voiceGender, settings.language, apiUrl, { userInitiated: true }).catch(() => {});
-            else await speakHonestFailure(settings.language, settings.voiceGender, apiUrl);
-          }
-        } catch (e) { console.log('[listeningSession] route_to_brain failed', e); }
+          await deliverBrainReply({
+            reply: r,
+            utterance,
+            language: intent.language ?? settings.language,
+            voiceGender: settings.voiceGender,
+            apiUrl,
+            ttsAllowed: responseAllowed,
+            site: 'listeningSession.route_to_brain',
+            requireResponding: true,
+          });
+        } catch (e) {
+          /**
+           * conversationalBrainTurn swallows its own failures and hands back text:null, so reaching
+           * this catch means the TOOL DISPATCH or its dynamic import threw — and the player is still
+           * owed an answer. This used to be a bare console.log: the turn ended here, silently, with
+           * nothing in the issue log.
+           */
+          console.log('[listeningSession] route_to_brain failed', e);
+          logVoiceSilentFail('route_to_brain_threw', { source: 'listeningSession', error: describeError(e) });
+          await deliverBrainReply({
+            reply: { text: null, audioBase64: null },
+            utterance,
+            language: intent.language ?? settings.language,
+            voiceGender: settings.voiceGender,
+            apiUrl,
+            ttsAllowed: responseAllowed,
+            site: 'listeningSession.route_to_brain_catch',
+            requireResponding: true,
+          }).catch((e2) => console.log('[listeningSession] route_to_brain recovery failed', e2));
+        }
         setSessionStateMirror('idle');
         return;
       }
@@ -1693,66 +1886,39 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
         const route = getCurrentRoute();
         const allowPhoneSpeaker = (settings as unknown as { voiceOnPhoneSpeaker?: boolean }).voiceOnPhoneSpeaker === true;
         const ttsAllowed = (settings.voiceEnabled ?? true) && (route !== 'phone_speaker' || allowPhoneSpeaker);
-        if (r.text) {
-          const { speak, speakFromBase64, flashCaption } = await import('./voiceService');
-          if (ttsAllowed) {
-            if (r.audioBase64) {
-              await speakFromBase64(r.audioBase64, { userInitiated: true, caption: r.text }).catch(() => undefined);
-            } else {
-              await speak(r.text, settings.voiceGender, intent.language ?? settings.language ?? 'en', apiUrl, { userInitiated: true })
-                ?.catch?.(() => undefined);
-            }
-          } else {
-            // 2026-08-01 (tester — "took out canned greetings, now I type 'hi' and nothing happens").
-            // With voice OFF (or the phone-speaker gate), still SHOW the brain's reply so a TYPED
-            // question always gets a visible answer instead of silence.
-            try { flashCaption?.(r.text, 7000); } catch { /* non-fatal */ }
-          }
-        } else {
-          /**
-           * 2026-08-26 — TRY TO ANSWER BEFORE APOLOGISING. The mic's route_to_brain branch, ~250
-           * lines up, does exactly this: on an empty brain reply it calls answerOffline() and only
-           * falls through to the honest-failure line when the device genuinely cannot answer. This
-           * branch — the TYPED bar, the watch, hands-free — went straight to the apology.
-           *
-           * So on a flaky signal the same question got two different CAPABILITIES depending on how
-           * you asked it: spoken, "162 to the middle, that's a smooth 8" from device state; typed,
-           * "I'm having trouble connecting." Not a wording difference — the typed path had the same
-           * GPS, the same bag and the same green in its pocket and never reached for them.
-           *
-           * The dead hooks/useKevin.ts had this fallback (brainFallbackReply → tryLocalReply) and a
-           * sim guard asserted it, which is how the gap stayed invisible: the guard was reading a
-           * file that no longer runs.
-           */
-          const offLang = (['en', 'es', 'zh'] as const).includes(settings.language as never)
-            ? (settings.language as 'en' | 'es' | 'zh') : 'en';
-          let localAnswer: string | null = null;
-          try {
-            const off = (require('./offlineCaddie') as typeof import('./offlineCaddie')).answerOffline(text, offLang);
-            localAnswer = off?.text?.trim() || null;
-          } catch { /* the local answer is a bonus, never a dependency */ }
-          if (localAnswer) {
-            const { speak: speakLine, flashCaption: flash } = await import('./voiceService');
-            if (ttsAllowed) {
-              await speakLine(localAnswer, settings.voiceGender, intent.language ?? settings.language ?? 'en', apiUrl, { userInitiated: true })?.catch?.(() => undefined);
-            } else {
-              try { flash?.(localAnswer, 7000); } catch { /* non-fatal */ }
-            }
-            return;
-          }
-          // 2026-07-30 (voice/brain audit H5) — brain returned EMPTY (timeout / flaky signal). Don't leave
-          // a dead turn on the watch/earbud: speak the honest "trouble connecting" line, or caption it muted.
-          if (ttsAllowed) { try { await speakHonestFailure(settings.language, settings.voiceGender, apiUrl); } catch { /* non-fatal */ } }
-          // 2026-08-20 — caption the SAME line the caddie would have spoken. This was a hardcoded
-          // third wording ("Having trouble connecting — try again in a moment"), so a voice-off user
-          // read different words than a voice-on user heard — and it ALWAYS blamed the connection,
-          // even when getConnectionEvidence proves the host answered seconds ago. That is the line
-          // Tim had removed from the spoken path on 2026-08-12; it survived here because the muted
-          // branch was written separately and nothing tied the two to one source.
-          else { try { flashCaption?.(failureFallbackFor(settings.language), 6000); } catch { /* non-fatal */ } }
-        }
+        /**
+         * 2026-08-27 — the three branches that used to live here (speak / caption / apologise, plus
+         * a hand-rolled answerOffline pass) are now the shared delivery contract. They said the same
+         * things as the mic path's three branches, in different code, which is how the two drifted:
+         * this one had the local-answer fallback the mic path lacked on 08-26, and the mic path had
+         * captions this one lacked. One function, one contract, no drift. See deliverBrainReply.
+         */
+        await deliverBrainReply({
+          reply: r,
+          utterance: text,
+          language: intent.language ?? settings.language,
+          voiceGender: settings.voiceGender,
+          apiUrl,
+          ttsAllowed,
+          site: 'handsFree-route.conversational',
+          // No listening session behind a typed / watch / hands-free turn — nothing to be interrupted.
+          requireResponding: false,
+        });
       } catch (e) {
         console.log('[handsFree-route] conversational fallback failed:', e);
+        logVoiceSilentFail('handsfree_conversational_threw', { source: 'handsFree-route', error: describeError(e) });
+        const routeC = getCurrentRoute();
+        const allowPhoneSpeakerC = (settings as unknown as { voiceOnPhoneSpeaker?: boolean }).voiceOnPhoneSpeaker === true;
+        await deliverBrainReply({
+          reply: { text: null, audioBase64: null },
+          utterance: text,
+          language: intent.language ?? settings.language,
+          voiceGender: settings.voiceGender,
+          apiUrl,
+          ttsAllowed: (settings.voiceEnabled ?? true) && (routeC !== 'phone_speaker' || allowPhoneSpeakerC),
+          site: 'handsFree-route.conversational_catch',
+          requireResponding: false,
+        }).catch((e2) => console.log('[handsFree-route] conversational recovery failed', e2));
       }
       return;
     }
@@ -1798,28 +1964,41 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
           const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
           dispatchConversationalToolActions(r.toolActions);
         }
-        if (r.text) {
-          const route2 = getCurrentRoute();
-          const allowPhoneSpeaker2 = (settings as unknown as { voiceOnPhoneSpeaker?: boolean }).voiceOnPhoneSpeaker === true;
-          const ttsAllowed2 = (settings.voiceEnabled ?? true) && (route2 !== 'phone_speaker' || allowPhoneSpeaker2);
-          const { speak, speakFromBase64, flashCaption } = await import('./voiceService');
-          if (ttsAllowed2) {
-            if (r.audioBase64) await speakFromBase64(r.audioBase64, { userInitiated: true, caption: r.text }).catch(() => undefined);
-            else await speak(r.text, settings.voiceGender, intent.language ?? settings.language ?? 'en', apiUrl, { userInitiated: true })?.catch?.(() => undefined);
-          } else {
-            // 2026-08-01 (tester) — show the reply for a TYPED turn even when voice is muted.
-            try { flashCaption?.(r.text, 7000); } catch { /* non-fatal */ }
-          }
-        } else {
-          // 2026-07-30 (voice/brain audit H5) — empty brain reply → honest line, don't leave dead air.
-          const route2 = getCurrentRoute();
-          const allowPhoneSpeaker2 = (settings as unknown as { voiceOnPhoneSpeaker?: boolean }).voiceOnPhoneSpeaker === true;
-          const ttsAllowed2 = (settings.voiceEnabled ?? true) && (route2 !== 'phone_speaker' || allowPhoneSpeaker2);
-          if (ttsAllowed2) { try { await speakHonestFailure(settings.language, settings.voiceGender, apiUrl); } catch { /* non-fatal */ } }
-          // Same one-source rule as the sibling branch above.
-          else { try { flashCaption?.(failureFallbackFor(settings.language), 6000); } catch { /* non-fatal */ } }
-        }
-      } catch (e) { console.log('[handsFree-route] route_to_brain failed:', e); }
+        const route2 = getCurrentRoute();
+        const allowPhoneSpeaker2 = (settings as unknown as { voiceOnPhoneSpeaker?: boolean }).voiceOnPhoneSpeaker === true;
+        const ttsAllowed2 = (settings.voiceEnabled ?? true) && (route2 !== 'phone_speaker' || allowPhoneSpeaker2);
+        /**
+         * 2026-08-27 — and this branch never had the local fallback at all: an empty brain reply
+         * went straight to the apology while the device held the GPS and the bag. Three sites, three
+         * different sets of capabilities for the same failure. deliverBrainReply is now the only
+         * one, so a fix lands on all of them or on none.
+         */
+        await deliverBrainReply({
+          reply: r,
+          utterance: text,
+          language: intent.language ?? settings.language,
+          voiceGender: settings.voiceGender,
+          apiUrl,
+          ttsAllowed: ttsAllowed2,
+          site: 'handsFree-route.route_to_brain',
+          requireResponding: false,
+        });
+      } catch (e) {
+        console.log('[handsFree-route] route_to_brain failed:', e);
+        logVoiceSilentFail('handsfree_route_to_brain_threw', { source: 'handsFree-route', error: describeError(e) });
+        const routeR = getCurrentRoute();
+        const allowPhoneSpeakerR = (settings as unknown as { voiceOnPhoneSpeaker?: boolean }).voiceOnPhoneSpeaker === true;
+        await deliverBrainReply({
+          reply: { text: null, audioBase64: null },
+          utterance: text,
+          language: intent.language ?? settings.language,
+          voiceGender: settings.voiceGender,
+          apiUrl,
+          ttsAllowed: (settings.voiceEnabled ?? true) && (routeR !== 'phone_speaker' || allowPhoneSpeakerR),
+          site: 'handsFree-route.route_to_brain_catch',
+          requireResponding: false,
+        }).catch((e2) => console.log('[handsFree-route] route_to_brain recovery failed', e2));
+      }
       return;
     }
     if (result?.voice_response) {
