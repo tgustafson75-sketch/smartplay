@@ -55,6 +55,7 @@ import { exercisesForFault } from '../../services/swing/faultWorkouts';
 import { usePointsBaselineStore } from '../../store/pointsBaselineStore';
 import { useWorkoutStore } from '../../store/workoutStore';
 import { computeWorkoutSwingImpact } from '../../services/practice/workoutSwingImpact';
+import { computeSwingMetricTrend, type TrendSwing } from '../../services/practice/swingMetricTrend';
 import { useWatchStore } from '../../store/watchStore';
 import { roundTempoBaseline, holeTempoFlag } from '../../services/round/roundSwingRead';
 import { useToastStore } from '../../store/toastStore';
@@ -357,6 +358,61 @@ export default function Dashboard() {
     [workoutHistory, libraryHistory],
   );
 
+  /**
+   * 2026-08-27 (Tim — "auto comparison of swings over time from the swing library… showing PROGRESS
+   * AND REGRESSION as part of our graphs and trends").
+   *
+   * Reads PER-SHOT biomech first and falls back to the session's own read. Per-shot is what makes
+   * the weekly medians honest: a session is one date but many swings, and grading a week off one
+   * session-level summary would let a single read speak for twenty balls. A shot the pose pass could
+   * not read contributes nothing rather than a zero.
+   *
+   * Self-only, for the same reason the Strike source is: in Family/Coach mode a student's swings land
+   * in this same history, and drawing their hip turn as the owner's regression would be worse than
+   * showing nothing at all.
+   */
+  const swingTrend = useMemo(() => {
+    const swings: TrendSwing[] = [];
+    for (const sess of libraryHistory ?? []) {
+      if (resolvePlayerName(sess.player_id, '__self__') !== '__self__') continue;
+      // Tempo is a SESSION read (it needs marked phases), so it rides on each of that session's
+      // swings rather than being dropped for lack of a per-shot equivalent.
+      const tempoRatio = typeof sess.tempo_result?.ratio === 'number' ? sess.tempo_result.ratio : null;
+      const perShot = (sess.shots ?? []).filter((sh) => sh.biomechanics);
+      if (perShot.length > 0) {
+        for (const sh of perShot) {
+          const b = sh.biomechanics!;
+          swings.push({
+            date: sess.date,
+            club: sh.club ?? sess.club ?? null,
+            metrics: {
+              hipTurnDeg: b.hipTurnDeg, shoulderTurnDeg: b.shoulderTurnDeg,
+              shoulderTiltDeg: b.shoulderTiltDeg ?? null, weightShiftPct: b.weightShiftPct,
+              spineAngleDeltaDeg: b.spineAngleDeltaDeg, headDriftPxNorm: b.headDriftPxNorm,
+              hipSlideRatio: b.hipSlideRatio, sequencingScore: b.sequencingScore ?? null,
+              tempoRatio,
+            },
+          });
+        }
+        continue;
+      }
+      const b = sess.biomechanics;
+      if (!b && tempoRatio == null) continue;
+      swings.push({
+        date: sess.date,
+        club: sess.club ?? null,
+        metrics: {
+          hipTurnDeg: b?.hipTurnDeg ?? null, shoulderTurnDeg: b?.shoulderTurnDeg ?? null,
+          shoulderTiltDeg: b?.shoulderTiltDeg ?? null, weightShiftPct: b?.weightShiftPct ?? null,
+          spineAngleDeltaDeg: b?.spineAngleDeltaDeg ?? null, headDriftPxNorm: b?.headDriftPxNorm ?? null,
+          hipSlideRatio: b?.hipSlideRatio ?? null, sequencingScore: b?.sequencingScore ?? null,
+          tempoRatio,
+        },
+      });
+    }
+    return computeSwingMetricTrend({ swings, nowMs: Date.now() });
+  }, [libraryHistory]);
+
   // 2026-08-06 (Tim — "there should be ONE graph not multiple"). Collapse the three correlation cards
   // (practice / points / training, each two stacked sparklines) into a SINGLE progress graph: score-vs-par
   // (the outcome) with the chosen EFFORT line overlaid, a source toggle, and warm-ups marked on the practice
@@ -365,7 +421,7 @@ export default function Dashboard() {
     // 2026-08-22 — the OUTCOME axis is per-source now. It was hardcoded to score-vs-par in the JSX,
     // which silently assumed every source is judged the same way; strike rate is a percentage where
     // HIGHER is better, so a hardcoded axis would have drawn improvement as decline.
-    type Src = { key: 'practice' | 'points' | 'training' | 'strike'; tab: string; effort: number[]; effortLabel: string; deltaUnit: string; score: number[]; hasEnough: boolean; headline: string; markers: number[]; scoreLabel: string; scoreDeltaUnit: string; scoreHigherIsBetter: boolean };
+    type Src = { key: 'practice' | 'points' | 'training' | 'strike' | 'swing'; tab: string; effort: number[]; effortLabel: string; deltaUnit: string; score: number[]; hasEnough: boolean; headline: string; markers: number[]; scoreLabel: string; scoreDeltaUnit: string; scoreHigherIsBetter: boolean };
     const list: Src[] = [];
     if (practiceHistory.length > 0 && roundHistory.length > 0) {
       list.push({ key: 'practice', tab: 'Practice', effort: practiceImpact.practiceSeries, effortLabel: 'PRACTICE / WK', deltaUnit: 'balls', score: practiceImpact.scoreSeries, hasEnough: practiceImpact.hasEnough, headline: practiceImpact.headline, markers: practiceImpact.warmupWeekIndices, scoreLabel: 'SCORE VS PAR', scoreDeltaUnit: 'vs par', scoreHigherIsBetter: false });
@@ -402,8 +458,41 @@ export default function Dashboard() {
         scoreHigherIsBetter: true,
       });
     }
+    /**
+     * 2026-08-27 — SWING, the fifth source: range volume against how close the swing itself sits to
+     * the tour band. Every other source answers "did the work show up in the SCORE"; this is the one
+     * that answers "did it show up in the SWING", which is the question the swing library was
+     * collecting the data for all along.
+     *
+     * The metric plotted is the WORST-trending one (computeSwingMetricTrend sorts worst-first). A
+     * player can feel a good week; what they cannot feel is a hip turn that has quietly given back
+     * eight degrees since June, and surfacing the best line instead would bury exactly that.
+     *
+     * Only weeks carrying enough graded reads are plotted, and the volume line is filtered to the
+     * SAME weeks so the two stay index-aligned — a week with no range time is not a zero-degree hip
+     * turn, and drawing it as one would invent a collapse. (Same rule the Strike source needed.)
+     */
+    if (swingTrend.hasEnough && swingTrend.trends.length > 0) {
+      const lead = swingTrend.trends[0];
+      const keep = lead.weekHasData;
+      list.push({
+        key: 'swing', tab: 'Swing',
+        effort: swingTrend.swingsPerWeek.filter((_, i) => keep[i]),
+        effortLabel: 'SWINGS / WK',
+        deltaUnit: 'swings',
+        score: lead.bandScoreSeries.filter((_, i) => keep[i]),
+        hasEnough: true,
+        headline: lead.headline,
+        markers: [],
+        scoreLabel: `${lead.label.toUpperCase()} VS TOUR RANGE`,
+        scoreDeltaUnit: 'pts',
+        // Closeness to the band: higher is better for every metric, which is the entire reason the
+        // axis is closeness and not raw degrees.
+        scoreHigherIsBetter: true,
+      });
+    }
     return list;
-  }, [practiceHistory, roundHistory, libraryHistory, workoutHistory, practiceImpact, pointsPerf, workoutPerf, workoutSwing, isOwner]);
+  }, [practiceHistory, roundHistory, libraryHistory, workoutHistory, practiceImpact, pointsPerf, workoutPerf, workoutSwing, swingTrend, isOwner]);
   /**
    * 2026-08-12 (Tim) — WARM-UP vs SCORE, the question the trend tabs above structurally can't answer.
    *
@@ -436,7 +525,7 @@ export default function Dashboard() {
     return holeTempoFlag(watchSwings, rs.currentHole, baseline);
   }, [isRoundActive, watchSwings]);
 
-  const [progressSourceKey, setProgressSourceKey] = useState<'practice' | 'points' | 'training' | 'strike'>('practice');
+  const [progressSourceKey, setProgressSourceKey] = useState<'practice' | 'points' | 'training' | 'strike' | 'swing'>('practice');
   const activeProgress = progressSources.find((s) => s.key === progressSourceKey) ?? progressSources[0] ?? null;
 
   // 2026-06-13 (Tim) — one-time backfill of a deterministic caddie summary onto past

@@ -28,6 +28,11 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'Your swing now has a trend line. Every graded swing in your library gets compared over time, so you can see a number moving toward the tour range — or quietly drifting away from it. It leads with whatever has slipped, because that is the one you cannot feel.',
+    howTo: 'Dashboard, the PROGRESS graph — tap the Swing tab. It opens up once a few swings have been read in each of three separate weeks.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'Your caddie now reads the putt out loud. The green read was on the card but never spoken — on a caddie whose whole point is that he talks. Record a putt and you will hear the line and the pace.',
     howTo: 'Record a putt in SmartMotion. He speaks the read as the card fills in.',
   },
