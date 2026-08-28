@@ -31,6 +31,7 @@
 import { findOrphanExports, ORPHAN_BASELINE } from './orphanExports';
 import { findMissingAssetRequires } from './assetRequires';
 import { findProseAssertions, PROSE_ASSERTION_BASELINE } from './proseAssertions';
+import { computeWireIntegrity, formatWireIntegrity, MARSHAL_F1_FLOOR, MARSHAL_TOLERANCE, ISLAND_BASELINE } from './marshal';
 import {
   getCaddieName,
   getCharacterSpec,
@@ -12830,6 +12831,60 @@ check(
     ? `all ${readPaths.size} guard source paths resolved`
     : `UNREADABLE (guards touching these proved nothing): ${missingReads.join(', ')}`,
 );
+/**
+ * THE MARSHAL — runs LAST, on purpose.
+ *
+ * readPaths is only complete once every guard above has run, so this is the one place in the harness
+ * that can see the whole coverage picture. It is also why it is a standing check rather than a
+ * script someone remembers to run: the failure it catches (a guard that passes while proving
+ * nothing) is invisible precisely because everything is green.
+ */
+{
+  const wire = computeWireIntegrity({
+    readPaths,
+    missingReads,
+    proseAssertions: findProseAssertions(),
+  });
+  console.log(`\n${formatWireIntegrity(wire)}`);
+  const floor = MARSHAL_F1_FLOOR - MARSHAL_TOLERANCE;
+  check(
+    'MARSHAL: wire integrity has not gone backwards',
+    wire.f1 >= floor,
+    wire.f1 >= floor
+      ? `F1 ${(wire.f1 * 100).toFixed(1)}% >= floor ${(MARSHAL_F1_FLOOR * 100).toFixed(1)}% — guards point at live code, and the shipped app stays covered`
+      : `WIRE INTEGRITY DROPPED to ${(wire.f1 * 100).toFixed(1)}% (floor ${(MARSHAL_F1_FLOOR * 100).toFixed(1)}%). Either a guard now reads a file that does not exist or that nothing imports, or the app grew surfaces nobody guards. Do not lower the floor to make this pass.`,
+  );
+  // Ratcheting UP is the other half: a sweep that improves coverage has to bank it, or the floor
+  // silently permits sliding back to where it was.
+  if (wire.f1 >= MARSHAL_F1_FLOOR + 0.05) {
+    console.log(`   ↑ wire integrity is ${(wire.f1 * 100).toFixed(1)}% — raise MARSHAL_F1_FLOOR in scripts/simulations/marshal.ts to bank it`);
+  }
+
+  /**
+   * The teeth. A ratio cannot fire on three dead-file guards out of 753 without also firing on
+   * ordinary churn, so the ISLAND LIST is where the enforcement lives — a new one fails immediately,
+   * and a resolved one has to be banked. Same two-sided ratchet as the orphan baseline: it catches
+   * both a guard pointed at dead code AND a baseline quietly rotting into a permanent excuse.
+   */
+  const knownIslands = new Set(Object.keys(ISLAND_BASELINE));
+  const newIslands = wire.islands.filter((i) => !knownIslands.has(i));
+  check(
+    'MARSHAL: no NEW guard may be pointed at a file nothing imports',
+    newIslands.length === 0,
+    newIslands.length === 0
+      ? `${wire.islands.length} known islands, all accounted for in ISLAND_BASELINE`
+      : `GUARDS PROVING NOTHING — these files are read by a guard and imported by nobody, so the guard is green on code that cannot run (this is the hooks/useKevin.ts failure, which hid a real gap for a month). Wire the file up or delete it WITH its guards:\n    ${newIslands.join('\n    ')}`,
+  );
+  const staleIslands = [...knownIslands].filter((i) => !wire.islands.includes(i));
+  check(
+    'MARSHAL: the island baseline cannot rot',
+    staleIslands.length === 0,
+    staleIslands.length === 0
+      ? `all ${knownIslands.size} baseline entries are still genuinely unimported`
+      : `FIXED — delete these from ISLAND_BASELINE so the list can only get shorter:\n    ${staleIslands.join('\n    ')}`,
+  );
+}
+
 const total = results.length;
 const passed = results.filter((r) => r.passed).length;
 const failed = results.filter((r) => !r.passed);
