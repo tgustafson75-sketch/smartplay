@@ -32,6 +32,7 @@ import { findOrphanExports, ORPHAN_BASELINE } from './orphanExports';
 import { findMissingAssetRequires } from './assetRequires';
 import { findProseAssertions, PROSE_ASSERTION_BASELINE } from './proseAssertions';
 import { computeWireIntegrity, formatWireIntegrity, MARSHAL_F1_FLOOR, MARSHAL_TOLERANCE, ISLAND_BASELINE } from './marshal';
+import { findWeakWindows, WEAK_WINDOW_BASELINE } from './weakWindows';
 import {
   getCaddieName,
   getCharacterSpec,
@@ -3541,6 +3542,31 @@ check('Voice: capture silences the caddie before opening the mic (no self-record
     );
   })(),
   'capture stops in-flight TTS (cloud + device) before recording — no echo/self-record, clean barge-in');
+
+check('LOCK: no guard may use a window whose target appears twice inside it',
+  /**
+   * 2026-08-28 (adversarial audit 3 — the measuring apparatus). The THIRD way a guard can be
+   * worthless, after prose-only assertions and guards pointed at islands. This one I hit three times
+   * in a single day, which is what earned it a ratchet rather than a resolution to be more careful.
+   *
+   * A non-greedy window /A[\s\S]{0,N}?B/ is only meaningful while B is UNIQUE in those N chars.
+   * When it is not, deleting the B the guard MEANS leaves the pattern matching the next one — so the
+   * guard cannot fail on the edit it exists to catch, while still counting as coverage.
+   *
+   * The sweep is honest about its own reach: it resolves patterns tested against a bound const, uses
+   * the first match of the pre-pattern, and does not attempt count-threshold assertions (a different
+   * failure — those can come to REQUIRE the duplication a fix removes). See weakWindows.ts.
+   */
+  (() => {
+    const found = findWeakWindows();
+    const known = new Set(WEAK_WINDOW_BASELINE);
+    const added = found.filter((w) => !known.has(w.label));
+    for (const w of added) {
+      console.log(`   [${w.label}] window(${w.window}) — /${w.post}/ appears ${w.occurrences}x inside it (${w.file}); deleting one still matches`);
+    }
+    return added.length === 0;
+  })(),
+  'every non-greedy window in the harness targets something unique inside it, so deleting the line a guard means actually turns that guard red');
 
 check('LOCK: no new branch may be added on a setting nothing can set',
   /**
