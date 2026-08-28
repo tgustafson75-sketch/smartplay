@@ -553,3 +553,37 @@ answer. Both are frozen in `ISLAND_BASELINE`, so nothing NEW can join them quiet
 
 **`components/caddie/CockpitCaddieScreen.tsx` is the third and is PARKED, not stray** — Tim 08-27:
 keep it hidden, may come back.
+
+## §22 — TIM'S CALL: a setting that cannot vary, and three branches pretending it can (2026-08-28)
+
+Found by adversarial audit 2 ("is anything built but unreachable?").
+
+**`voiceOrchestrator` looks like a user setting and is a CONSTANT.** The v15 migration force-sets
+`'pipecat'` for every existing install, the store defaults to it for every new one, and
+`setVoiceOrchestrator` has **no caller in any screen, service or handler**. It can only ever hold one
+value. Three modules still branch on it, and each keeps a legacy alternative alive that cannot run:
+
+1. **`services/listeningSession.ts`** — FIXED 08-27. The always-true branch aborted a speculative
+   brain call before anything could read it: eight weeks of a full billed `/api/kevin` request
+   discarded on every conversational earbud turn.
+2. **`services/intents/queryStatusHandler.ts:290`** — **NOT fixed, and the biggest one.** The pipecat
+   branch returns `route_to_brain: true` *unconditionally*, so the entire deterministic
+   shot-strategy engine below it is **unreachable** — while the comment above it says "the engine
+   stays the read for kevin-mode + non-voice callers". There is no kevin-mode any more. That is a
+   substantial block of club-strategy code that cannot execute, and its own comment misdescribes it.
+3. **`app/(tabs)/caddie.tsx:2182`** — `processTranscriptOverride: voiceOrchestrator === 'pipecat' ?
+   pipecatVoice.processTurn : undefined`. The `undefined` arm (legacy in-hook processing) can never
+   be chosen.
+
+**Not deleted, deliberately.** #2 is a real behavioural surface and this is the day before a ship
+date; ripping it out unverified is how a "cleanup" becomes an outage. A sim LOCK now freezes the
+three and fails on a fourth, so the class cannot grow while the decision waits.
+
+**The decision:** either delete the setting and the three dead arms (a genuine simplification —
+`brain-consolidation-two-to-one` says this is the payoff of the shim), or restore a real toggle if
+the legacy path is still wanted for anything. Doing neither leaves three pieces of code that read as
+live choices and are not.
+
+Related: `setVoiceGender`, `setCockpitMode` + `cockpitMode`, and `setPipecatServerUrl` are also
+setters nothing calls. `voiceGender` is fine — it is DERIVED from the persona now (one owner), so
+only the setter is dead. The other two are dead field-and-setter pairs (cockpit is parked by Tim).

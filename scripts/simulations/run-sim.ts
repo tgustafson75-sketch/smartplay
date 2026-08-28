@@ -3542,6 +3542,72 @@ check('Voice: capture silences the caddie before opening the mic (no self-record
   })(),
   'capture stops in-flight TTS (cloud + device) before recording — no echo/self-record, clean barge-in');
 
+check('LOCK: no new branch may be added on a setting nothing can set',
+  /**
+   * 2026-08-28 (adversarial audit 2 — is anything built but unreachable?).
+   *
+   * `voiceOrchestrator` LOOKS like a user setting and is a CONSTANT. The v15 migration force-sets
+   * 'pipecat' for every existing install, the store defaults to it for every new one, and
+   * `setVoiceOrchestrator` has no caller in any screen, service or handler. It can only ever hold
+   * one value.
+   *
+   * Two modules still branch on it, and each keeps a "legacy" alternative alive that cannot run:
+   *   - listeningSession fired a speculative brain call that the always-true branch aborted before
+   *     anything could read it — eight weeks of paying for an answer nobody could receive (fixed).
+   *   - queryStatusHandler's pipecat branch returns route_to_brain UNCONDITIONALLY, so the whole
+   *     deterministic shot-strategy engine below it is unreachable — while its comment says "the
+   *     engine stays the read for kevin-mode + non-voice callers". There is no kevin-mode any more.
+   *
+   * The dead engine is NOT deleted here: that is a real behavioural surface and this is the day
+   * before a ship date. It is recorded in OPEN-ITEMS with the line numbers. What this guard does is
+   * stop the class GROWING — a third branch on a setting that cannot vary is a third piece of code
+   * that reads as a live choice and is not one. Freeze the two, forbid the next.
+   * [[grep-guards-cant-see-dead-code]]
+   */
+  (() => {
+    /**
+     * THREE, not two — the third was found by this guard on its first run, which is the argument for
+     * writing it as a sweep rather than as a check on the two files I already knew about. The caddie
+     * tab picks its transcript processor on the same constant
+     * (`processTranscriptOverride: voiceOrchestrator === 'pipecat' ? pipecatVoice.processTurn :
+     * undefined`), so the `undefined` arm — the legacy in-hook processing — can never be chosen.
+     */
+    const KNOWN = [
+      'services/listeningSession.ts',
+      'services/intents/queryStatusHandler.ts',
+      'app/(tabs)/caddie.tsx',
+    ];
+    const DIRS = ['services', 'hooks', 'app', 'components', 'store', 'lib'];
+    const found: string[] = [];
+    const walkDir = (dir: string): string[] => {
+      const out: string[] = [];
+      let entries: string[] = [];
+      try { entries = fs.readdirSync(dir); } catch { return out; }
+      for (const e of entries) {
+        const p2 = `${dir}/${e}`;
+        let st;
+        try { st = fs.statSync(p2); } catch { continue; }
+        if (st.isDirectory()) out.push(...walkDir(p2));
+        else if (/\.(ts|tsx)$/.test(e)) out.push(p2);
+      }
+      return out;
+    };
+    const root = path.resolve(__dirname, '../../');
+    for (const d of DIRS) {
+      for (const f of walkDir(path.resolve(root, d))) {
+        const rel = f.slice(root.length + 1);
+        if (rel === 'store/settingsStore.ts') continue;   // the declaration + its migration
+        // readBulk: a sweep is not coverage of every file it opens.
+        const src = readBulk(f).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+        if (/voiceOrchestrator/.test(src)) found.push(rel);
+      }
+    }
+    const added = found.filter((f) => !KNOWN.includes(f));
+    if (added.length) console.log(`   new branch on a constant setting: ${added.join(', ')}`);
+    return added.length === 0;
+  })(),
+  'only the three known modules branch on voiceOrchestrator, a setting no UI can change — a new one would be a live-looking choice that cannot vary');
+
 check('LOCK: the stated yardage has ONE owner of what counts as a yardage',
   /**
    * 2026-08-28 (SmartFinder sweep, part 2 — the resolver rather than the rangefinder maths).
