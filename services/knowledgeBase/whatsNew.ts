@@ -28,6 +28,11 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'Sending your issue log now sends only what is new. It used to re-send everything you had ever reported, so problems that were already fixed kept arriving alongside the one you just hit. Nothing is deleted — the full list is still there on the screen.',
+    howTo: 'Tools, Issue Log, then Send. If everything has already gone out, it now tells you there is nothing new rather than looking like it failed.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'Your swing now has a trend line. Every graded swing in your library gets compared over time, so you can see a number moving toward the tour range — or quietly drifting away from it. It leads with whatever has slipped, because that is the one you cannot feel.',
     howTo: 'Dashboard, the PROGRESS graph — tap the Swing tab. It opens up once SmartMotion has read a swing in each of four separate weeks, so it needs practice spread out rather than one big session.',
   },
