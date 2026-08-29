@@ -16,6 +16,41 @@ import { getApiBaseUrl, appKeyHeaders } from './apiBase';
 import { getInstallId } from './installId';
 
 // App-key gate → shared appKeyHeaders() (services/apiBase.ts), mirrors api/_appKey.ts on the server.
+/**
+ * 2026-08-29 — A TEST RUN MUST NOT BE ABLE TO MAIL THE OWNER.
+ *
+ * On 2026-08-28 twelve "voice_silent_fail: stated_yardage_refused" entries arrived in Tim's inbox
+ * as a beta-tester report from install spc-iir7xawq677x, on hole 4, inside 20ms. There was no
+ * tester. The values — NaN, ±Infinity, 0, -1, -120, 850, 900, 10000 — are the fixture table of
+ * __tests__/regression/stated-yardage-is-a-yardage.test.ts, and `hole 4` is that file's
+ * freshRound(). The first version of the setUserStatedYardage guard filed its refusals to the
+ * issue log; the store schedules an auto-send on every entry; the suite runs under plain node with
+ * real global fetch, shareDiagnostics defaults true and getApiBaseUrl() falls back to the
+ * production host. So the tests POSTed to /api/issue-report, and the refusals the suite was
+ * PROVING were forwarded as field failures — into Tim's inbox and the Supabase issues table,
+ * attributed to an install id that is a test machine.
+ *
+ * That was fixed at the setter (it logs to console now, see store/roundStore setUserStatedYardage).
+ * This is the CLASS fix. The store calls scheduleAutoSend() from seven places covering every entry
+ * kind, and ~40 logVoiceSilentFail / logVoiceError call sites sit behind those; the setter was
+ * simply the first one a test happened to reach. Nothing about "don't log from that one setter"
+ * stops the next guard or the next test from doing it again. [[run-the-second-pass-yourself]]
+ * [[no-half-fixes-enforce-every-surface]]
+ *
+ * The invariant belongs HERE, at the single point where an issue leaves the device: under a test
+ * runner, nothing is scheduled and nothing is sent. Evaluated per call rather than at module eval
+ * so it cannot be defeated by import ordering. Inert in the app — React Native never sets
+ * NODE_ENV=test and has no JEST_WORKER_ID — so this changes no shipped behaviour.
+ */
+function isTestRunner(): boolean {
+  try {
+    if (typeof process === 'undefined' || process.env == null) return false;
+    return process.env.JEST_WORKER_ID != null || process.env.NODE_ENV === 'test';
+  } catch {
+    return false;
+  }
+}
+
 const AUTOSEND_DEBOUNCE_MS = 4000;
 // 2026-07-30 (audit #17) — cap how long the debounce can keep deferring. A SUSTAINED sub-4s failure
 // cadence (e.g. glasses DAT_START_FAILED firing every ~1s — see Tim's issue log) re-armed the 4s timer
@@ -75,6 +110,8 @@ export function buildIssueLogBody(): { subject: string; body: string; count: num
  * no longer rides the course-sharing toggle silently.
  */
 export function scheduleIssueAutoSend(): void {
+  // A test run never arms the timer — see isTestRunner() above.
+  if (isTestRunner()) return;
   if (useSettingsStore.getState().shareDiagnostics === false) return;
   const now = Date.now();
   if (!autoSendTimer) autoSendFirstArmedAt = now;
@@ -89,6 +126,8 @@ export function scheduleIssueAutoSend(): void {
 }
 
 export async function autoSendIssues(): Promise<boolean> {
+  // ...and never sends, even if something calls it directly.
+  if (isTestRunner()) return false;
   if (useSettingsStore.getState().shareDiagnostics === false) return false;
   const base = getApiBaseUrl();
   if (!base) return false;
