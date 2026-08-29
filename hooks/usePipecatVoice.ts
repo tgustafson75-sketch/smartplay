@@ -222,7 +222,7 @@ export function usePipecatVoice({
 
   /**
    * Phase 2 full pipeline: audio URI → Whisper STT → processTurn → speak.
-   * Drop-in for useVoiceCaddie's processAudioUri when voiceOrchestrator === 'pipecat'.
+   * Drop-in for useVoiceCaddie's processAudioUri — the only processor there is.
    */
   /**
    * 2026-08-19 — the same cold-vs-warm budget the tap path uses (useVoiceCaddie's 12s/22s), so the two

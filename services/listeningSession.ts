@@ -1125,7 +1125,8 @@ async function openSession() {
      * convergence put conversationalBrainTurn IN FRONT of that block, gated on
      * `voiceOrchestrator === 'pipecat'` — and that gate is unconditionally true on every device.
      * The v15 migration force-sets 'pipecat' for every existing install, the store default is
-     * 'pipecat' for every new one, and setVoiceOrchestrator has NO caller in any screen. So the
+     * 'pipecat' for every new one, and setVoiceOrchestrator had NO caller in any screen. (The
+     * setting itself was deleted 2026-08-29 — OPEN-ITEMS §22.) So the
      * pipecat branch always ran, and its first two statements aborted the speculative call and
      * nulled the promise before anything could read it.
      *
@@ -1413,39 +1414,40 @@ async function openSession() {
           // conversational turn to the SAME unified pipecat brain the caddie-tab mic uses.
           // conversationalBrainTurn falls back to legacy kevin internally on any pipecat failure, and
           // on a total miss (null text) we still fall through to the untouched kevin block below — so
-          // this can never break the earbud path worse than before. Gated on voiceOrchestrator.
-          if ((settings.voiceOrchestrator ?? 'pipecat') === 'pipecat') {
-            try {
-              const r = await conversationalBrainTurn(utterance, { timeoutMs: kevinTimeout() });
-              // 2026-07-01 (re-audit — voice H2) — dispatch service-safe tool actions
-              // (switch_caddie / navigate) the conversational brain returned; this
-              // branch previously spoke the reply but dropped them.
-              if (r.toolActions?.length) {
-                const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
-                dispatchConversationalToolActions(r.toolActions);
-              }
-              /**
-               * 2026-08-27 — the fifth brain site, and it had the same hole as the other four: the
-               * reply was spoken only while the session was still 'responding', with nothing at all
-               * for the case where it wasn't. A cold turn can sit here for the better part of a
-               * minute. Handing it to the deliverer means a reply that arrives late is SHOWN rather
-               * than binned, and the fact that it was never heard is logged.
-               */
-              if (r.text) {
-                await deliverBrainReply({
-                  reply: r,
-                  utterance,
-                  language: settings.language,
-                  voiceGender: settings.voiceGender,
-                  apiUrl,
-                  ttsAllowed: responseAllowed,
-                  site: 'listeningSession.conversational',
-                  requireResponding: true,
-                });
-                chatSpoken = true;
-              }
-            } catch (e) { console.log('[listeningSession] pipecat conversational failed → kevin', e); }
-          }
+          // this can never break the earbud path worse than before.
+          // 2026-08-29 (OPEN-ITEMS §22) — was wrapped in `if (voiceOrchestrator === 'pipecat')`, a
+          // setting with no UI setter that the v15 migration force-set, so the test could only ever
+          // be true and the absent `else` was a legacy path nothing could reach. Unwrapped.
+          try {
+            const r = await conversationalBrainTurn(utterance, { timeoutMs: kevinTimeout() });
+            // 2026-07-01 (re-audit — voice H2) — dispatch service-safe tool actions
+            // (switch_caddie / navigate) the conversational brain returned; this
+            // branch previously spoke the reply but dropped them.
+            if (r.toolActions?.length) {
+              const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
+              dispatchConversationalToolActions(r.toolActions);
+            }
+            /**
+             * 2026-08-27 — the fifth brain site, and it had the same hole as the other four: the
+             * reply was spoken only while the session was still 'responding', with nothing at all
+             * for the case where it wasn't. A cold turn can sit here for the better part of a
+             * minute. Handing it to the deliverer means a reply that arrives late is SHOWN rather
+             * than binned, and the fact that it was never heard is logged.
+             */
+            if (r.text) {
+              await deliverBrainReply({
+                reply: r,
+                utterance,
+                language: settings.language,
+                voiceGender: settings.voiceGender,
+                apiUrl,
+                ttsAllowed: responseAllowed,
+                site: 'listeningSession.conversational',
+                requireResponding: true,
+              });
+              chatSpoken = true;
+            }
+          } catch (e) { console.log('[listeningSession] pipecat conversational failed → kevin', e); }
           /**
            * ONE RETRY, SAME QUESTION, SAME CADDIE — not a ladder to a lesser one.
            *

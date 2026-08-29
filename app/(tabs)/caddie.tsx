@@ -710,14 +710,12 @@ export default function CaddieTab() {
     language,
     autoListenEnabled,
     setVoiceEnabled,
-    voiceOrchestrator,
   } = useSettingsStore(useShallow((s) => ({
     voiceGender: s.voiceGender,
     voiceEnabled: s.voiceEnabled,
     language: s.language,
     autoListenEnabled: s.autoListenEnabled,
     setVoiceEnabled: s.setVoiceEnabled,
-    voiceOrchestrator: s.voiceOrchestrator,
   })));
 
   const { firstName: _firstName, goal: _goal, subscription_status, trial_started_at, dominantMiss: _dominantMiss, useCustomCaddie, customCaddiePortraitB64, customCaddieName } = usePlayerProfileStore(useShallow((s) => ({
@@ -2178,10 +2176,12 @@ export default function CaddieTab() {
     // 2026-06-27 (A2) — voice couldn't reach the backend; open the typed
     // offline-caddie fallback so a dead network degrades to "type it".
     onOfflineFallback: () => setOfflineFallbackOpen(true),
-    // Pipecat override — when active, Claude handles brain + TTS + tools
-    processTranscriptOverride: voiceOrchestrator === 'pipecat'
-      ? pipecatVoice.processTurn
-      : undefined,
+    // Claude handles brain + TTS + tools for the transcribed turn.
+    // 2026-08-29 (OPEN-ITEMS §22) — was a ternary on `voiceOrchestrator`, a setting no UI could
+    // change and the v15 migration force-set, so the `undefined` arm (legacy in-hook processing)
+    // could never be chosen. This guard was found by the sim sweep, not by hand — the argument for
+    // sweeping every directory instead of checking the two files already known. [[run-the-second-pass-yourself]]
+    processTranscriptOverride: pipecatVoice.processTurn,
   });
 
   // 2026-06-29 (Tim — "single brain everywhere") — the SmartMotion screen's mic

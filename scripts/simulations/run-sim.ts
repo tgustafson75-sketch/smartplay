@@ -3568,41 +3568,43 @@ check('LOCK: no guard may use a window whose target appears twice inside it',
   })(),
   'every non-greedy window in the harness targets something unique inside it, so deleting the line a guard means actually turns that guard red');
 
-check('LOCK: no new branch may be added on a setting nothing can set',
+check('LOCK: the setting nothing could set is gone, and cannot come back',
   /**
-   * 2026-08-28 (adversarial audit 2 — is anything built but unreachable?).
+   * 2026-08-28 (adversarial audit 2 — is anything built but unreachable?), CLOSED 2026-08-29.
    *
-   * `voiceOrchestrator` LOOKS like a user setting and is a CONSTANT. The v15 migration force-sets
-   * 'pipecat' for every existing install, the store defaults to it for every new one, and
-   * `setVoiceOrchestrator` has no caller in any screen, service or handler. It can only ever hold
-   * one value.
-   *
-   * Two modules still branch on it, and each keeps a "legacy" alternative alive that cannot run:
+   * `voiceOrchestrator` LOOKED like a user setting and was a CONSTANT. The v15 migration force-set
+   * 'pipecat' for every existing install, the store defaulted to it for every new one, and
+   * `setVoiceOrchestrator` had no caller in any screen, service or handler. It could only ever hold
+   * one value — and three modules branched on it, each keeping a "legacy" alternative that could
+   * not run:
    *   - listeningSession fired a speculative brain call that the always-true branch aborted before
-   *     anything could read it — eight weeks of paying for an answer nobody could receive (fixed).
-   *   - queryStatusHandler's pipecat branch returns route_to_brain UNCONDITIONALLY, so the whole
-   *     deterministic shot-strategy engine below it is unreachable — while its comment says "the
-   *     engine stays the read for kevin-mode + non-voice callers". There is no kevin-mode any more.
+   *     anything could read it — eight weeks of paying for an answer nobody could receive.
+   *   - queryStatusHandler's pipecat branch returned route_to_brain UNCONDITIONALLY, so 80 lines of
+   *     deterministic shot-strategy engine below it were unreachable, while its comment claimed
+   *     "the engine stays the read for kevin-mode + non-voice callers".
+   *   - app/(tabs)/caddie.tsx chose its transcript processor on the same constant, so the
+   *     `undefined` arm — the legacy in-hook processing — could never be chosen.
    *
-   * The dead engine is NOT deleted here: that is a real behavioural surface and this is the day
-   * before a ship date. It is recorded in OPEN-ITEMS with the line numbers. What this guard does is
-   * stop the class GROWING — a third branch on a setting that cannot vary is a third piece of code
-   * that reads as a live choice and is not one. Freeze the two, forbid the next.
-   * [[grep-guards-cant-see-dead-code]]
+   * 2026-08-29 (Tim's call): all three arms deleted, and the setting with them. The engine was NOT
+   * collateral damage — `smartAnalysisEngine.analyze({kind:'shot_strategy'})` has live callers in
+   * app/(tabs)/caddie.tsx, which is what "non-voice callers" actually meant. Only the dead route
+   * to it went.
+   *
+   * The guard inverts with the fix. It used to freeze three known branches so the class could not
+   * GROW; now the allowlist is EMPTY and settingsStore is no longer exempt, so the name may not
+   * appear in shipped code at all — not as a branch, not as a re-declared setting. Comments are
+   * stripped before the test, so the history above (and in the four files that narrate the
+   * deletion) is allowed to keep saying what happened.
+   * [[grep-guards-cant-see-dead-code]] [[three-ways-a-guard-is-worthless]]
    */
   (() => {
     /**
-     * THREE, not two — the third was found by this guard on its first run, which is the argument for
-     * writing it as a sweep rather than as a check on the two files I already knew about. The caddie
-     * tab picks its transcript processor on the same constant
-     * (`processTranscriptOverride: voiceOrchestrator === 'pipecat' ? pipecatVoice.processTurn :
-     * undefined`), so the `undefined` arm — the legacy in-hook processing — can never be chosen.
+     * EMPTY on purpose. The third branch was found by this guard on its first run, not by hand —
+     * the argument for writing it as a sweep over every directory rather than as a check on the two
+     * files already known. That is also why the allowlist stays here rather than being deleted with
+     * the setting: an empty allowlist that is swept is a stronger statement than no guard at all.
      */
-    const KNOWN = [
-      'services/listeningSession.ts',
-      'services/intents/queryStatusHandler.ts',
-      'app/(tabs)/caddie.tsx',
-    ];
+    const KNOWN: string[] = [];
     const DIRS = ['services', 'hooks', 'app', 'components', 'store', 'lib'];
     const found: string[] = [];
     const walkDir = (dir: string): string[] => {
@@ -3622,17 +3624,16 @@ check('LOCK: no new branch may be added on a setting nothing can set',
     for (const d of DIRS) {
       for (const f of walkDir(path.resolve(root, d))) {
         const rel = f.slice(root.length + 1);
-        if (rel === 'store/settingsStore.ts') continue;   // the declaration + its migration
         // readBulk: a sweep is not coverage of every file it opens.
         const src = readBulk(f).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
         if (/voiceOrchestrator/.test(src)) found.push(rel);
       }
     }
     const added = found.filter((f) => !KNOWN.includes(f));
-    if (added.length) console.log(`   new branch on a constant setting: ${added.join(', ')}`);
+    if (added.length) console.log(`   voiceOrchestrator is back in shipped code: ${added.join(', ')}`);
     return added.length === 0;
   })(),
-  'only the three known modules branch on voiceOrchestrator, a setting no UI can change — a new one would be a live-looking choice that cannot vary');
+  'no shipped file branches on voiceOrchestrator or re-declares it — the setting that could only hold one value is gone, and a new branch on it would be a live-looking choice that cannot vary');
 
 check('LOCK: the stated yardage has ONE owner of what counts as a yardage',
   /**

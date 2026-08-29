@@ -92,8 +92,25 @@ function isReportable(e: { kind?: string }): boolean {
   return e.kind == null || REPORTABLE_KINDS.has(e.kind);
 }
 
+/**
+ * 2026-08-29 (Tim, from a 5-entry export where every entry was already fixed) — SEND WHAT IS NEW.
+ *
+ * This built the body from every retained reportable entry, with no notion of what had already been
+ * sent, while `exportAllIssues` set `lastExportedAt` immediately afterwards. So each manual Send
+ * re-mailed the whole history: a report arrived carrying a Jul 18 empty-transcript, an Aug 7 crash
+ * fixed on Aug 9, and an Aug 28 TTS drop fixed that afternoon — three closed defects reading as a
+ * live pile, and the genuinely new entry indistinguishable among them.
+ *
+ * `OwnerIssueLogPrompt` was already counting the right thing (`timestamp > lastExportedAt`) to
+ * decide when to nudge — it said "5 piled up" and then sent forty. The number the tester is shown
+ * and the payload they send are now the same set.
+ *
+ * Nothing is deleted or hidden: the full log stays on the device and in /owner-logs, and a first
+ * export (lastExportedAt 0) still sends everything.
+ */
 export function buildIssueLogBody(): { subject: string; body: string; count: number } {
-  const entries = useIssueLogStore.getState().entries.filter(isReportable);
+  const { entries: all, lastExportedAt } = useIssueLogStore.getState();
+  const entries = all.filter(e => isReportable(e) && e.timestamp > (lastExportedAt ?? 0));
   const reporter = usePlayerProfileStore.getState().email || 'beta tester';
   const text = entries.map(entryBlock).join('\n\n');
   const subject = `SmartPlay Caddie issue log — ${reporter}`;
@@ -184,11 +201,14 @@ export async function autoSendIssues(): Promise<boolean> {
 /**
  * One-tap export: open the mail client pre-filled to support@ (or the share sheet
  * if no mail app), then mark the log exported so the auto-prompt count resets.
- * Returns false if there's nothing to send or the handoff failed.
+ *
+ * 2026-08-29 — returns a STATUS rather than a boolean. Once the body only carries what is new,
+ * "there is nothing new to send" became a normal outcome, and the caller was showing it as
+ * "Export failed" — telling a tester something broke when the truth is everything already went.
  */
-export async function exportAllIssues(): Promise<boolean> {
+export async function exportAllIssues(): Promise<'sent' | 'nothing_new' | 'failed'> {
   const { subject, body, count } = buildIssueLogBody();
-  if (count === 0) return false;
+  if (count === 0) return 'nothing_new';
   const mailto = `mailto:tim@smartplaycaddie.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   try {
     if (await Linking.canOpenURL(mailto).catch(() => false)) {
@@ -197,8 +217,8 @@ export async function exportAllIssues(): Promise<boolean> {
       await Share.share({ message: `tim@smartplaycaddie.com\n\n${body}`, title: subject });
     }
     useIssueLogStore.getState().markExported();
-    return true;
+    return 'sent';
   } catch {
-    return false;
+    return 'failed';
   }
 }

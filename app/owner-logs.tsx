@@ -224,8 +224,15 @@ export default function OwnerLogsScreen() {
     // 2026-06-28 — body-building + mailto/share + markExported() centralized in
     // services/issueLogExport so the manual Export here and the owner auto-prompt
     // (OwnerIssueLogPrompt) format identically and both reset the unsent count.
-    const ok = await exportAllIssues();
-    if (!ok) {
+    const result = await exportAllIssues();
+    // 2026-08-29 — the export now sends only what is NEW since the last one, so "nothing new" is a
+    // normal outcome and must not be reported as a failure.
+    if (result === 'nothing_new') {
+      Alert.alert(
+        'Nothing new to send',
+        'Everything in this log has already been exported. New issues will be included next time.',
+      );
+    } else if (result === 'failed') {
       Alert.alert(
         'Export failed',
         'Email support@smartplaycaddie.com directly with the log from this screen.',

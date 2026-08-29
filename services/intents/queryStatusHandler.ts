@@ -278,128 +278,52 @@ export const queryStatusHandler: IntentHandler = {
       }
 
       case 'shot_strategy': {
-        // 2026-07-04 (Tim — "the AI needs to be front and center and the highlight") —
-        // in pipecat mode (default), the CONVERSATIONAL Claude caddie LEADS the "what
-        // should I hit" read (personality-forward, uses its live yardage+bag+hole
-        // context) instead of the deterministic strategy engine. Defer to the brain;
-        // the engine stays the read for kevin-mode + non-voice callers, and Claude's
-        // own failure path falls back to the offline caddie (which includes the local
-        // club-call), so a signal drop still answers.
+        // 2026-07-04 (Tim — "the AI needs to be front and center and the highlight") — the
+        // CONVERSATIONAL Claude caddie LEADS the "what should I hit" read (personality-forward,
+        // uses its live yardage + bag + hole context). Defer to the brain; its own failure path
+        // falls back to the offline caddie, which includes the local club-call, so a signal drop
+        // still answers.
+        //
+        // 2026-08-29 (OPEN-ITEMS §22) — the deterministic strategy engine that used to sit below
+        // this return is DELETED, along with the `voiceOrchestrator` branch that chose between
+        // them. That setting had no UI setter and the v15 migration force-set it, so the branch was
+        // unconditionally true and the 80 lines under it had been unreachable since. The comment
+        // here said the engine "stays the read for kevin-mode + non-voice callers" — there is no
+        // kevin-mode, and the non-voice callers reach smartAnalysisEngine.analyze({kind:
+        // 'shot_strategy'}) DIRECTLY from app/(tabs)/caddie.tsx, which is untouched. So the engine
+        // itself is still very much alive; only this dead route to it is gone.
+        // [[grep-guards-cant-see-dead-code]] [[two-owners-is-the-root-cause]]
+        // 2026-08-09 (Tim — "missing major club use logic", dead-path audit) — the DEFAULT pipecat
+        // path returns here to let the brain speak the play, and used to NEVER stamp a
+        // recommendation (only the legacy non-pipecat engine below called setPendingKevinRec). So
+        // "caddie says a club, player hits it silently" attributed NOTHING and trained no distance —
+        // the exact lost club logic. Stamp the player's LEARNED-BAG club for the real distance-to-green
+        // here so silent adherence is captured + trains the bag on the production path too. Best-effort,
+        // active-round only; the shot-club resolver arbitrates this against any club the player then
+        // declares, and it clears on hole change. (A server-side recommend_club tool would let us stamp
+        // the brain's EXACT spoken club incl. hazard/lie nuance — queued; this distance-club is the
+        // honest baseline and a strict improvement over stamping nothing.)
         try {
-          const settingsMod = require('../../store/settingsStore') as typeof import('../../store/settingsStore');
-          if ((settingsMod.useSettingsStore.getState().voiceOrchestrator ?? 'pipecat') === 'pipecat') {
-            // 2026-08-09 (Tim — "missing major club use logic", dead-path audit) — the DEFAULT pipecat
-            // path returns here to let the brain speak the play, and used to NEVER stamp a
-            // recommendation (only the legacy non-pipecat engine below called setPendingKevinRec). So
-            // "caddie says a club, player hits it silently" attributed NOTHING and trained no distance —
-            // the exact lost club logic. Stamp the player's LEARNED-BAG club for the real distance-to-green
-            // here so silent adherence is captured + trains the bag on the production path too. Best-effort,
-            // active-round only; the shot-club resolver arbitrates this against any club the player then
-            // declares, and it clears on hole change. (A server-side recommend_club tool would let us stamp
-            // the brain's EXACT spoken club incl. hazard/lie nuance — queued; this distance-club is the
-            // honest baseline and a strict improvement over stamping nothing.)
-            try {
-              const r = useRoundStore.getState();
-              if (r.isRoundActive) {
-                const fix = await getOneShotFix({ maxAgeMs: 6_000 });
-                const green = resolveGreenCoords(r.currentHole).middle;
-                if (fix && green) {
-                  const yds = Math.round(haversineYards({ lat: fix.lat, lng: fix.lng }, green));
-                  if (yds > 0 && yds <= 400) {
-                    // eslint-disable-next-line @typescript-eslint/no-require-imports
-                    const { useClubStatsStore } = require('../../store/clubStatsStore') as typeof import('../../store/clubStatsStore');
-                    const recClub = useClubStatsStore.getState().inferClub(yds);
-                    // kind 'inferred': this is inferClub(yards) — the APP picking a club from a
-                    // distance, not the caddie advising one. It still attributes which club was
-                    // hit (which is why it's stamped), but adherence must never be scored against
-                    // it: the player cannot follow advice nobody gave.
-                    if (recClub) r.setPendingKevinRec({ club: recClub, shape: null, aimPoint: null, kind: 'inferred' });
-                  }
-                }
+          const r = useRoundStore.getState();
+          if (r.isRoundActive) {
+            const fix = await getOneShotFix({ maxAgeMs: 6_000 });
+            const green = resolveGreenCoords(r.currentHole).middle;
+            if (fix && green) {
+              const yds = Math.round(haversineYards({ lat: fix.lat, lng: fix.lng }, green));
+              if (yds > 0 && yds <= 400) {
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                const { useClubStatsStore } = require('../../store/clubStatsStore') as typeof import('../../store/clubStatsStore');
+                const recClub = useClubStatsStore.getState().inferClub(yds);
+                // kind 'inferred': this is inferClub(yards) — the APP picking a club from a
+                // distance, not the caddie advising one. It still attributes which club was
+                // hit (which is why it's stamped), but adherence must never be scored against
+                // it: the player cannot follow advice nobody gave.
+                if (recClub) r.setPendingKevinRec({ club: recClub, shape: null, aimPoint: null, kind: 'inferred' });
               }
-            } catch { /* stamp is best-effort — never blocks the brain answer */ }
-            return { success: false, voice_response: null, side_effects: ['query:shot_strategy:route_to_brain'], follow_up_needed: false, route_to_brain: true };
-          }
-        } catch { /* settings unavailable — fall through to the engine */ }
-        // 2026-05-22 — Caddie Brain: "what's the play here". Routes
-        // through smartAnalysisEngine.analyze({kind:'shot_strategy'}) →
-        // metaCourseIntelligence.recommendShot which composes 8 signals
-        // (geometry, GPS, wind, vision, lie, ghost, golfer model, recent
-        // shots) into one strategic recommendation.
-        // FIX B12 — guard: no active round / no course context
-        if (!round.isRoundActive || !round.activeCourseId) {
-          return {
-            success: true,
-            voice_response: "I need an active round and a course loaded to give you a play recommendation.",
-            side_effects: ['query:shot_strategy:no_round'],
-            follow_up_needed: false,
-          };
-        }
-        // FIX B12 — guard: stale GPS (mirror distance_to_green presenceFill path)
-        const stratFix = await getOneShotFix({ maxAgeMs: 5_000 });
-        if (!stratFix) {
-          return {
-            success: true,
-            voice_response: "I need a fresh GPS fix before I can call the play — give it a few seconds and try again.",
-            side_effects: ['query:shot_strategy:no_gps'],
-            follow_up_needed: false,
-          };
-        }
-        const engine = await import('../smartAnalysisEngine');
-        const lieHint = typeof intent.parameters.lie_hint === 'string'
-          ? intent.parameters.lie_hint
-          : null;
-        const targetYards = typeof intent.parameters.target_yards === 'number'
-          ? intent.parameters.target_yards
-          : null;
-        // Compute plays-like yardage (wind + temp + elevation) so Kevin's
-        // club recommendation reflects the effective distance, not raw GPS.
-        let shotStrategyPlaysLike: number | null = null;
-        try {
-          const here = await import('../shotLocationService').then(m => m.getCurrentLocation());
-          const hole = context.current_hole ?? round.currentHole;
-          const green = here ? (await import('../shotLocationService').then(m => m.getGreenCentroid(hole))) : null;
-          let rawYds = targetYards ?? (here && green ? Math.round((await import('../../utils/geoDistance').then(m => m.haversineYards))(here, green)) : null);
-          // 2026-07-02 (re-audit) — green-less course (no green coords, the Wachusett /
-          // new-course case): fall back to the SAME tee-relative GPS estimate the strip
-          // shows, so the club recommendation isn't blank while the strip counts down.
-          if (rawYds == null) {
-            try {
-              const est = await getGreenYardages(hole);
-              if (est && (est as { reason?: string }).reason === 'estimated' && typeof est.middle === 'number') {
-                rawYds = est.middle;
-              }
-            } catch { /* no estimate available — engine still degrades gracefully */ }
-          }
-          if (rawYds != null && here) {
-            const w = (await import('../weatherService').then(m => m.getCachedWeather))(here)
-              ?? await (await import('../weatherService')).fetchWeatherAt(here).catch(() => null);
-            if (w) {
-              const bearing = currentShotBearingDeg(round, hole);
-              let elevFeet = 0;
-              if (green) {
-                try {
-                  const { getPlaysLikeElevationDeltaFeet } = await import('../elevationService');
-                  elevFeet = await getPlaysLikeElevationDeltaFeet(here, green);
-                } catch { /* flat */ }
-              }
-              const breakdown = playsLikeDistance(rawYds, w, bearing, elevFeet);
-              shotStrategyPlaysLike = breakdown.plays_like_yards;
             }
           }
-        } catch { /* non-fatal — recommendShot degrades gracefully without it */ }
-        const env = await engine.analyze({
-          kind: 'shot_strategy',
-          lie_hint: lieHint,
-          target_yards: targetYards,
-          plays_like_yards: shotStrategyPlaysLike,
-        });
-        return {
-          success: env.status !== 'error',
-          voice_response: env.voice_summary,
-          side_effects: [`query:shot_strategy:conf_${env.confidence}`],
-          follow_up_needed: false,
-        };
+        } catch { /* stamp is best-effort — never blocks the brain answer */ }
+        return { success: false, voice_response: null, side_effects: ['query:shot_strategy:route_to_brain'], follow_up_needed: false, route_to_brain: true };
       }
 
       case 'hole_read': {

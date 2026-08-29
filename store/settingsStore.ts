@@ -411,12 +411,15 @@ interface SettingsState {
   setAnalyticsOptIn: (v: boolean) => void;
 
   // ─── PIPECAT VOICE ORCHESTRATOR ─────────────────────────────────
-  // 'legacy' = existing batch STT → intent classify → Kevin API chain
-  // 'pipecat' = real-time Pipecat server (Deepgram + Claude + OpenAI TTS)
-  voiceOrchestrator: 'legacy' | 'pipecat';
+  // 2026-08-29 (OPEN-ITEMS §22) — `voiceOrchestrator` is DELETED. It read as a user choice
+  // ('legacy' | 'pipecat') and was a constant: no screen ever called setVoiceOrchestrator, the
+  // store defaulted to 'pipecat' and the v15 migration force-set it for every existing install.
+  // Three modules branched on it and each kept a legacy half that could not run. A setting nothing
+  // can set is a constant, and every branch on it is half-dead code that reads as a live choice.
+  // The persisted key is simply dropped: nothing reads it, and it leaves storage on the next write
+  // because it is no longer in partialize.
   // URL of the deployed Pipecat server (e.g. https://kevin.up.railway.app)
   pipecatServerUrl: string;
-  setVoiceOrchestrator: (v: 'legacy' | 'pipecat') => void;
   setPipecatServerUrl: (v: string) => void;
 }
 
@@ -540,8 +543,6 @@ export const useSettingsStore = create<SettingsState>()(
       aiProvider: 'openai' as const,
       // 2026-06-24 — Usage telemetry OPT-IN, default OFF.
       analyticsOptIn: false,
-      // Pipecat voice orchestrator — off by default until server is deployed.
-      voiceOrchestrator: 'pipecat' as const,
       pipecatServerUrl: '',
 
       setVoiceEnabled: (v) => set({ voiceEnabled: v }),
@@ -812,7 +813,6 @@ export const useSettingsStore = create<SettingsState>()(
           } catch { /* ignore */ }
         }
       },
-      setVoiceOrchestrator: (v) => set({ voiceOrchestrator: v }),
       setPipecatServerUrl: (v) => set({ pipecatServerUrl: v }),
     }),
     {
@@ -976,13 +976,10 @@ export const useSettingsStore = create<SettingsState>()(
           if (p.aiProvider == null) p.aiProvider = 'gemini';
         }
         if (version < 14) {
-          if (p.voiceOrchestrator == null) p.voiceOrchestrator = 'legacy';
           if (p.pipecatServerUrl == null) p.pipecatServerUrl = '';
         }
-        // v15 — 2026-06-22 — Pipecat is now the default brain (Vercel-hosted, no Railway needed).
-        if (version < 15) {
-          p.voiceOrchestrator = 'pipecat';
-        }
+        // v15 — 2026-06-22 — Pipecat became the default brain. The key it seeded
+        // (`voiceOrchestrator`) was deleted 2026-08-29; see the type declaration above.
         // v16 — 2026-06-24 — usage telemetry opt-in added. Seed FALSE for
         // existing installs so telemetry stays off until the user opts in.
         if (version < 16) {
@@ -1092,7 +1089,6 @@ export const useSettingsStore = create<SettingsState>()(
         ghostAutoActivate: s.ghostAutoActivate,
         aiProvider: s.aiProvider,
         analyticsOptIn: s.analyticsOptIn,
-        voiceOrchestrator: s.voiceOrchestrator,
         pipecatServerUrl: s.pipecatServerUrl,
         // watchConnected lives in watchStore; not persisted here
       }),

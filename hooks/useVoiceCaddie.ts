@@ -434,7 +434,7 @@ interface UseVoiceCaddieOptions {
   onOfflineFallback?: () => void;
   // When set, bypasses the intent router + Kevin API entirely.
   // Called with the raw transcript; caller owns TTS and tool dispatch.
-  // Used when voiceOrchestrator === 'pipecat'.
+  // Always supplied by the sole mount (app/(tabs)/caddie.tsx); there is no second processor.
   processTranscriptOverride?: (transcript: string) => Promise<void>;
 }
 
@@ -2517,8 +2517,8 @@ export const useVoiceCaddie = ({
       // Only a CONVERSATIONAL / unknown turn reaches here (the router above already
       // handled + returned for any deterministic command). The pipecat brain owns it:
       // processTranscriptOverride is always supplied by the sole mount (app/(tabs)/
-      // caddie.tsx) while voiceOrchestrator==='pipecat' — the forced default that
-      // setVoiceOrchestrator (zero callers) cannot flip. The old legacy /api/kevin
+      // caddie.tsx). It used to be a ternary on `voiceOrchestrator`, a setting no UI
+      // could change; that setting was deleted 2026-08-29 (§22). The old legacy /api/kevin
       // fallthrough that used to live here is DELETED (2026-07-23); sendToBrain now
       // survives only for the follow-up listen loop (processFollowUp). New brain-bound
       // settings go through services/voice/brainSettings.ts (buildPipecatContext →
