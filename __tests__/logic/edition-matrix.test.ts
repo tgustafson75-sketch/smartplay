@@ -50,13 +50,13 @@ describe('subscriptions are OFF — testers see no paywall and no clock', () => 
   });
 
   it('every billing state resolves to the full edition while the switch is off', () => {
-    for (const s of ALL_STATUSES) expect(editionFor(s)).toBe('full');
+    for (const s of ALL_STATUSES) expect(editionFor(s)).toBe('pro');
   });
 });
 
 describe('the Lite/Full split is coherent (mechanism, dormant today)', () => {
   it('every feature is assigned an edition', () => {
-    const unassigned = ALL_FEATURES.filter(f => !['lite', 'full'].includes(FEATURE_EDITION[f]));
+    const unassigned = ALL_FEATURES.filter(f => !['lite', 'pro'].includes(FEATURE_EDITION[f]));
     expect(unassigned).toEqual([]);
   });
 
@@ -69,13 +69,13 @@ describe('the Lite/Full split is coherent (mechanism, dormant today)', () => {
 
   it('every inference-spending feature is Full — the wall sits on marginal cost', () => {
     for (const f of ['smartvision', 'smartfinder', 'cage_mode', 'voice_advanced'] as FeatureKey[]) {
-      expect(FEATURE_EDITION[f]).toBe('full');
+      expect(FEATURE_EDITION[f]).toBe('pro');
     }
   });
 
   it('Lite is a strict subset of Full', () => {
     const lite = featuresIn('lite');
-    const full = featuresIn('full');
+    const full = featuresIn('pro');
     expect(lite.every(f => full.includes(f))).toBe(true);
     expect(full.length).toBeGreaterThan(lite.length);
   });

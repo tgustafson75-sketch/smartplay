@@ -166,12 +166,14 @@ export async function withGoogleKeys<T>(
     console.log(`[googleKeys] ${label}: no Google key configured`);
     return null;
   }
+  const reasons: GoogleFailureReason[] = [];
   for (const ref of keys) {
     let res: KeyAttempt<T>;
     try {
       res = await attempt(ref.key, ref);
     } catch (e) {
       console.log(`[googleKeys] ${label}: key ${ref.name}(${ref.fp}) threw — ${e instanceof Error ? e.message : e}`);
+      reasons.push('unknown');
       continue;
     }
     if (res.ok) {
@@ -198,8 +200,24 @@ export async function withGoogleKeys<T>(
       );
       return null; // a real failure on a correctly-configured key — don't mask it
     }
+    reasons.push(fail.reason ?? 'not_enabled');
     console.log(`[googleKeys] ${label}: ${ref.name}(${ref.fp}) lacks this API (${fail.reason ?? 'not_enabled'}) — trying next project`);
   }
-  console.log(`[googleKeys] ${label}: no configured project has this API enabled`);
+  /**
+   * 2026-08-30 — REPORT WHAT ACTUALLY HAPPENED, not one assumption about all of it.
+   *
+   * This line used to be unconditional: whatever every key did, the walker signed off with "no
+   * configured project has this API enabled". A bare 403 with nothing readable in it gets classified
+   * 'unknown' and still walks to the next key — correct, and the behaviour that was already working —
+   * but the summary then asserted a diagnosis nobody had checked, about a project nobody had looked
+   * at. That is how a restricted key or an unpaid bill sends someone to the wrong console page.
+   */
+  const seen = [...new Set(reasons)];
+  const onlyNotEnabled = seen.length === 1 && seen[0] === 'not_enabled';
+  console.log(
+    onlyNotEnabled
+      ? `[googleKeys] ${label}: no configured project has this API enabled`
+      : `[googleKeys] ${label}: every key failed — ${seen.join(', ')} (only 'not_enabled' means the API is actually off)`,
+  );
   return null;
 }

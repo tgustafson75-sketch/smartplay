@@ -56,7 +56,18 @@ export type FeatureKey =
  * can DO. Keeping them separate is the point — conflating them is what made the
  * old boolean unable to express a free tier that still works.
  */
-export type Edition = 'lite' | 'full';
+/**
+ * 2026-08-30 — 'full' RENAMED TO 'pro', because three layers were using three names for one thing.
+ *
+ * The player reads "Pro" in all eight places it appears — the paywall card, the About row, the
+ * support-email subject, the scorecard footer and the caddie's own "part of the Pro plan" lines.
+ * RevenueCat's entitlement is `smartplay_caddie_pro`. Only this type still said "full", so a reader
+ * had to hold Pro / Full / full in their head and decide which two meant the same thing. They all
+ * did. [[two-owners-is-the-root-cause]]
+ *
+ * 'lite' keeps its name: it is internal only and no player ever sees the word.
+ */
+export type Edition = 'lite' | 'pro';
 
 /**
  * Global kill-switch. FALSE = every feature unlocked, no trial, paywall is a
@@ -82,15 +93,15 @@ export const FEATURE_EDITION: Record<FeatureKey, Edition> = {
   round_start: 'lite',
 
   // ── FULL — every one of these spends inference per use ──
-  smartvision: 'full',
-  smartfinder: 'full',
-  cage_mode: 'full',
-  voice_advanced: 'full',
+  smartvision: 'pro',
+  smartfinder: 'pro',
+  cage_mode: 'pro',
+  voice_advanced: 'pro',
   // Human coaching time, not inference — the most expensive thing here.
 };
 
-/** Billing states that grant the Full edition once subscriptions are live. */
-const FULL_STATUSES: readonly SubscriptionStatus[] = ['active', 'trial', 'lifetime'];
+/** Billing states that grant the Pro edition once subscriptions are live. */
+const PRO_STATUSES: readonly SubscriptionStatus[] = ['active', 'trial', 'lifetime'];
 
 /**
  * The edition a billing status grants.
@@ -100,8 +111,8 @@ const FULL_STATUSES: readonly SubscriptionStatus[] = ['active', 'trial', 'lifeti
  * never take a player's own data hostage. They lose the caddie, not the round.
  */
 export function editionFor(status: SubscriptionStatus): Edition {
-  if (!SUBSCRIPTIONS_ENABLED) return 'full';
-  return FULL_STATUSES.includes(status) ? 'full' : 'lite';
+  if (!SUBSCRIPTIONS_ENABLED) return 'pro';
+  return PRO_STATUSES.includes(status) ? 'pro' : 'lite';
 }
 
 /**
@@ -113,7 +124,7 @@ export function editionFor(status: SubscriptionStatus): Edition {
 export function canAccess(feature: FeatureKey, status: SubscriptionStatus): boolean {
   if (!SUBSCRIPTIONS_ENABLED) return true;
   const required = FEATURE_EDITION[feature];
-  return required === 'lite' || editionFor(status) === 'full';
+  return required === 'lite' || editionFor(status) === 'pro';
 }
 
 /**
@@ -149,7 +160,7 @@ export function trialDaysLeft(trial_started_at: number | null): number | null {
 /** Features in an edition — for the marketing/comparison surface, not gating. */
 export function featuresIn(edition: Edition): FeatureKey[] {
   return (Object.keys(FEATURE_EDITION) as FeatureKey[])
-    .filter(f => FEATURE_EDITION[f] === 'lite' || edition === 'full');
+    .filter(f => FEATURE_EDITION[f] === 'lite' || edition === 'pro');
 }
 
 /**

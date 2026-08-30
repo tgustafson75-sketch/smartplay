@@ -1,15 +1,26 @@
 # PRE-LAUNCH — a clean 22 emotional states per caddie
 
-> ## ✅ SERENA: EIGHT LANDED 2026-08-30 — 4 distinct → 11, worst reuse 15x → 5x
+> ## ⏳ SERENA: 8 OF 18 LANDED 2026-08-30 — 4 distinct → 11 across the 22 slots
 >
 > Cowork generated the eight highest-traffic moods from the spec below: idle, listening, happy,
 > supportive, wincing, celebrating, focused, explaining. Wired in `components/CaddieAvatar.tsx`.
 > Shipped as JPEG q82 (140 KB each, 1.1 MB total) — the source PNGs were 2.1 MB each and 17 MB for
 > the set, which is real weight on a bundle near its budget and inside every future OTA.
 >
-> **Still open — five slots on the neutral studio portrait:** `pensive`, `inquisitive`, `humble`,
-> `surprised`, `confident`. Deliberately not forced onto a near-neighbour: a wrong face is worse
-> than a neutral one. Same prompt, same reference, same rules — the brief is at
+> **STILL OPEN: 10 of the 18.** The brief asks for eighteen expressions; eight exist. Corrected
+> 2026-08-30 — I had been calling it "five remaining" by counting SLOTS still on the neutral
+> portrait rather than IMAGES still to draw. Those are different numbers and the smaller one
+> flatters us: five slots are bare, but ten images are missing, because several finished images
+> would each relieve a slot currently doubled onto another expression.
+>
+> Bare slots today: `pensive`, `inquisitive`, `humble`, `surprised`, `confident`. Deliberately not
+> forced onto a near-neighbour — a wrong face is worse than a neutral one.
+>
+> **Correction for whoever reads the fallback behaviour:** unmatched moods fall back to
+> `serena-studio-portrait-001`, the neutral studio portrait — NOT to `idle`. Anything written
+> elsewhere saying "falls back to idle" is wrong about this code.
+>
+> Same prompt, same reference, same rules — the brief is at
 > `~/Desktop/SmartPlay-Project-Files/reference/serena-art-cowork-prompt.md`.
 >
 > Tank remains the nice-to-have at ~8 images. Kevin (20 distinct) and Harry (18) need nothing.
