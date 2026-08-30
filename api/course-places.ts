@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { applyCors } from './_cors';
-import { googleKeys, withGoogleKeys, isCapabilityMiss } from './_googleKeys';
+import { googleKeys, withGoogleKeys, isCapabilityMiss, keyFailure } from './_googleKeys';
 
 /**
  * 2026-07-10 (audit S2) — SERVER proxy for the course website/phone lookup that used to run
@@ -50,14 +50,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         `https://maps.googleapis.com/maps/api/place/findplacefromtext/json` +
         `?input=${encodeURIComponent(name)}&inputtype=textquery&fields=place_id${bias}&key=${KEY}`;
       const findRes = await fetch(findUrl, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-      if (!findRes.ok) return { ok: false, capabilityMiss: isCapabilityMiss({ httpStatus: findRes.status }) };
+      if (!findRes.ok) return keyFailure({ httpStatus: findRes.status });
       const findData = (await findRes.json()) as { status?: string; error_message?: string; candidates?: { place_id?: string }[] };
       if (findData.status !== 'OK') {
         console.log(`[course-places] Places findplace status=${findData.status} — ${findData.error_message || 'no candidates'}`);
         // ZERO_RESULTS is a real answer (this project works, the course just isn't found) — only a
         // permission/not-enabled status should send us to the other project.
         if (isCapabilityMiss({ status: findData.status, message: findData.error_message })) {
-          return { ok: false, capabilityMiss: true };
+          return keyFailure({ status: findData.status, message: findData.error_message });
         }
         return { ok: true, value: { website: null, phone: null, lat: null, lng: null, diag: { status: findData.status, error_message: findData.error_message || null } } };
       }
@@ -68,7 +68,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         `https://maps.googleapis.com/maps/api/place/details/json` +
         `?place_id=${encodeURIComponent(placeId)}&fields=website,formatted_phone_number,geometry&key=${KEY}`;
       const detRes = await fetch(detUrl, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-      if (!detRes.ok) return { ok: false, capabilityMiss: isCapabilityMiss({ httpStatus: detRes.status }) };
+      if (!detRes.ok) return keyFailure({ httpStatus: detRes.status });
       const detData = (await detRes.json()) as {
         result?: {
           website?: string;

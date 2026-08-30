@@ -62,28 +62,94 @@ export function googleKeys(): GoogleKeyRef[] {
 }
 
 /**
- * Google's way of saying "this API is not enabled for the project behind this key" — the signal to
- * try the next project rather than give up. Covers both API families:
- *   - Places (New) / other googleapis.com surfaces → HTTP 403 with PERMISSION_DENIED / SERVICE_DISABLED
- *   - Legacy Maps surfaces → HTTP 200 with status REQUEST_DENIED (the error lives in the body)
- * Deliberately does NOT include OVER_QUERY_LIMIT: a quota-exhausted key is CORRECTLY configured, and
- * silently spilling that load onto the other project would hide a billing problem behind a fallback.
+ * Why a Google key failed — the distinction the boolean below could not make.
+ *
+ * 2026-08-30. `isCapabilityMiss` folded four different failures into one `true`, and the walker
+ * turned that into "no configured project has this API enabled". That sentence is FALSE for two of
+ * them, and it is the sentence someone will read while debugging:
+ *
+ *   - not_enabled — the API genuinely is not on for that project. Try the next key. Correct.
+ *   - billing     — billing is off. The key is configured perfectly; every other key will most
+ *                   likely fail the same way, and walking past it hides exactly the problem this
+ *                   file's own comment says must not be hidden behind a fallback.
+ *   - restricted  — the key has an application restriction (IP / referer / bundle) that this caller
+ *                   violates. Also a correct key, also not a missing API.
+ *
+ * This matters NOW: `eas.json` ships EXPO_PUBLIC_GOOGLE_MAPS_KEY with Application restrictions
+ * NONE, and restricting it is on the Cowork list. The day that happens, Google starts returning
+ * REQUEST_DENIED, and without this the app would report a missing API and send whoever is looking
+ * to the wrong console page entirely.
+ *
+ * Order matters: billing and restriction messages both arrive as REQUEST_DENIED / 403, so they are
+ * matched BEFORE the generic not-enabled phrases.
  */
-export function isCapabilityMiss(input: { httpStatus?: number; status?: string | null; message?: string | null }): boolean {
+export type GoogleFailureReason = 'not_enabled' | 'billing' | 'restricted' | 'unknown';
+
+export function classifyGoogleFailure(input: {
+  httpStatus?: number;
+  status?: string | null;
+  message?: string | null;
+}): GoogleFailureReason {
   const status = (input.status ?? '').toUpperCase();
-  if (status === 'REQUEST_DENIED' || status === 'PERMISSION_DENIED' || status === 'SERVICE_DISABLED') return true;
-  if (input.httpStatus === 401 || input.httpStatus === 403) return true;
   const msg = (input.message ?? '').toLowerCase();
-  return (
+
+  if (status === 'BILLING_NOT_ACTIVE' || msg.includes('billing')) return 'billing';
+  if (
+    msg.includes('not authorized to use this api key') ||
+    msg.includes('ip, site or mobile application') ||
+    msg.includes('referer restrictions') ||
+    msg.includes('api keys with referer restrictions')
+  ) {
+    return 'restricted';
+  }
+  if (status === 'REQUEST_DENIED' || status === 'PERMISSION_DENIED' || status === 'SERVICE_DISABLED') return 'not_enabled';
+  if (
     msg.includes('has not been used in project') ||
     msg.includes('is not enabled') ||
     msg.includes('api not enabled') ||
     msg.includes('not authorized to use this api')
-  );
+  ) {
+    return 'not_enabled';
+  }
+  // A bare 401/403 with nothing to read. Treated as not_enabled below so the multi-key fallback
+  // behaves exactly as it did before this change — but named 'unknown' so the log says so rather
+  // than asserting something about the project.
+  if (input.httpStatus === 401 || input.httpStatus === 403) return 'unknown';
+  return 'unknown';
+}
+
+/**
+ * Google's way of saying "this API is not enabled for the project behind this key" — the signal to
+ * try the next project rather than give up.
+ *
+ * 2026-08-30 — now derived from classifyGoogleFailure, so BILLING and RESTRICTION failures are no
+ * longer swallowed as capability misses. That was the behaviour this function's own comment already
+ * forbade for OVER_QUERY_LIMIT ("a quota-exhausted key is CORRECTLY configured, and silently
+ * spilling that load onto the other project would hide a billing problem behind a fallback") while
+ * doing exactly that for billing itself.
+ *
+ * A bare 401/403 with no readable message still walks to the next key, so the existing fallback is
+ * unchanged for every case that was working.
+ */
+export function isCapabilityMiss(input: { httpStatus?: number; status?: string | null; message?: string | null }): boolean {
+  const reason = classifyGoogleFailure(input);
+  return reason === 'not_enabled' || reason === 'unknown';
+}
+
+/** Build a walker failure that carries WHY, so the log can name it. */
+export function keyFailure(input: {
+  httpStatus?: number;
+  status?: string | null;
+  message?: string | null;
+}): { ok: false; capabilityMiss: boolean; reason: GoogleFailureReason } {
+  const reason = classifyGoogleFailure(input);
+  return { ok: false, capabilityMiss: reason === 'not_enabled' || reason === 'unknown', reason };
 }
 
 /** What an attempt tells the walker: a usable answer, or "wrong project, try the next key". */
-export type KeyAttempt<T> = { ok: true; value: T } | { ok: false; capabilityMiss: boolean };
+export type KeyAttempt<T> =
+  | { ok: true; value: T }
+  | { ok: false; capabilityMiss: boolean; reason?: GoogleFailureReason };
 
 /**
  * Run `attempt` against each configured key until one produces a usable answer.
@@ -112,8 +178,27 @@ export async function withGoogleKeys<T>(
       if (keys.length > 1) console.log(`[googleKeys] ${label}: served by ${ref.name}(${ref.fp})`);
       return res.value;
     }
-    if (!res.capabilityMiss) return null; // a real failure on a correctly-configured key — don't mask it
-    console.log(`[googleKeys] ${label}: ${ref.name}(${ref.fp}) lacks this API — trying next project`);
+    /**
+     * Narrowed by hand rather than relying on the discriminant. The project tsconfig narrows this
+     * union fine; ts-jest compiles with `strict: false`, where it does not — and this file had never
+     * been type-checked by the test runner because nothing imported it until 2026-08-30. Two
+     * compilers disagreeing about a union is not worth a runtime surprise on the error path.
+     */
+    const fail = res as { ok: false; capabilityMiss: boolean; reason?: GoogleFailureReason };
+    if (!fail.capabilityMiss) {
+      /**
+       * 2026-08-30 — THIS RETURNED null IN SILENCE. A correctly-configured key failing for a real
+       * reason produced no log line at all, which is the worst possible outcome for the one case
+       * that most needs explaining. Billing off and key restricted both land here now.
+       */
+      console.log(
+        `[googleKeys] ${label}: ${ref.name}(${ref.fp}) FAILED — ${fail.reason ?? 'unclassified'}`
+        + (fail.reason === 'billing' ? ' (billing is off for this project — no other key will fix it)' : '')
+        + (fail.reason === 'restricted' ? ' (this key has an application restriction this caller violates)' : ''),
+      );
+      return null; // a real failure on a correctly-configured key — don't mask it
+    }
+    console.log(`[googleKeys] ${label}: ${ref.name}(${ref.fp}) lacks this API (${fail.reason ?? 'not_enabled'}) — trying next project`);
   }
   console.log(`[googleKeys] ${label}: no configured project has this API enabled`);
   return null;

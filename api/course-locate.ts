@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 import { applyCors } from './_cors';
-import { googleKeys, withGoogleKeys, isCapabilityMiss } from './_googleKeys';
+import { googleKeys, withGoogleKeys, isCapabilityMiss, keyFailure } from './_googleKeys';
 
 /**
  * api/course-locate.ts — the COURSE-DOWNLOAD ENGINE's locator (2026-08-06, Tim — "build the course
@@ -189,7 +189,7 @@ async function searchNearbyNew(lat: number, lng: number, radius: number, timeout
        * blocked" into "this env var's key is missing Places API (New) in its API restrictions".
        */
       lastPrimaryFailure = `http_${r.status} on key ${ref.name}(${ref.fp})${message ? `: ${message.slice(0, 140)}` : ''}`;
-      return { ok: false, capabilityMiss: isCapabilityMiss({ httpStatus: r.status, message }) };
+      return keyFailure({ httpStatus: r.status, message });
     }
     type NewPlace = {
       id?: string;
@@ -231,13 +231,13 @@ async function searchNearbyLegacy(lat: number, lng: number, radius: number, time
       `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
       `?location=${lat},${lng}&radius=${radius}&keyword=${encodeURIComponent('golf course')}&key=${KEY}`;
     const r = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
-    if (!r.ok) return { ok: false, capabilityMiss: isCapabilityMiss({ httpStatus: r.status }) };
+    if (!r.ok) return keyFailure({ httpStatus: r.status });
     const data = (await r.json()) as { status?: string; error_message?: string; results?: PlaceResult[] };
     if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
       // Legacy reports "API not enabled for this project" as HTTP 200 + REQUEST_DENIED, so the
       // capability check has to read the BODY here, not the status code.
       console.log(`[course-locate] Places nearbysearch status=${data.status} — ${data.error_message || ''}`);
-      return { ok: false, capabilityMiss: isCapabilityMiss({ status: data.status, message: data.error_message }) };
+      return keyFailure({ status: data.status, message: data.error_message });
     }
     const value = (data.results ?? [])
       .map((p): Located | null => {
