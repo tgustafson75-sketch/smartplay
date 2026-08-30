@@ -10,6 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AppIcon, { type IconName } from '../components/AppIcon';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
@@ -236,6 +237,21 @@ export default function PaywallScreen() {
             <Text style={styles.restoreText}>Restore Purchase</Text>
           </TouchableOpacity>
 
+          {/* 2026-08-30 — guideline 3.1.2 wants both documents reachable from the screen that sells
+              the subscription, and this was the only purchase-adjacent surface without them.
+              app/legal.tsx has rendered both from constants/legalText.ts since 2026-07-18; settings
+              and welcome already route here. Same styling as Restore Purchase above — this is a
+              wire-up, not a new surface. */}
+          <View style={styles.legalLinksRow}>
+            <TouchableOpacity onPress={() => router.push('/legal?doc=privacy' as never)} accessibilityRole="button">
+              <Text style={styles.restoreText}>Privacy Policy</Text>
+            </TouchableOpacity>
+            <Text style={styles.legalLinkSep}>·</Text>
+            <TouchableOpacity onPress={() => router.push('/legal?doc=terms' as never)} accessibilityRole="button">
+              <Text style={styles.restoreText}>Terms of Service</Text>
+            </TouchableOpacity>
+          </View>
+
           <Text style={styles.legalText}>
             Subscription automatically renews unless cancelled at least 24 hours before the end of the trial period.
           </Text>
@@ -374,6 +390,17 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: 13,
     textDecorationLine: 'underline',
+  },
+  legalLinksRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  legalLinkSep: {
+    color: '#6b7280',
+    fontSize: 13,
+    marginHorizontal: 10,
   },
   legalText: {
     color: '#374151',

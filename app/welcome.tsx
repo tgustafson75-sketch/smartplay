@@ -106,8 +106,8 @@ export default function WelcomeScreen() {
   }, [termsAccepted, ctaOpacity]);
 
   // 2026-07-18 — real in-app legal documents (constants/legalText.ts, rendered by app/legal.tsx).
-  const showTermsPlaceholder = () => router.push('/legal?doc=terms' as never);
-  const showPrivacyPlaceholder = () => router.push('/legal?doc=privacy' as never);
+  const openTerms = () => router.push('/legal?doc=terms' as never);
+  const openPrivacy = () => router.push('/legal?doc=privacy' as never);
 
   const handleGetStarted = () => {
     // 2026-05-22 — T&C gate. CTA is visually disabled when terms not
@@ -302,12 +302,10 @@ export default function WelcomeScreen() {
               ))}
             </ScrollView>
 
-            {/* View Full Terms · Privacy Policy — placeholder ghost
-                buttons until the legal documents are published. */}
             <View style={styles.termsLinksRow}>
               <TouchableOpacity
                 style={[styles.termsLink, { borderColor: colors.border }]}
-                onPress={showTermsPlaceholder}
+                onPress={openTerms}
                 accessibilityRole="button"
                 accessibilityLabel="View Full Terms"
               >
@@ -316,7 +314,7 @@ export default function WelcomeScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.termsLink, { borderColor: colors.border }]}
-                onPress={showPrivacyPlaceholder}
+                onPress={openPrivacy}
                 accessibilityRole="button"
                 accessibilityLabel="Privacy Policy"
               >
