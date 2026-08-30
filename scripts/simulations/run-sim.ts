@@ -3635,6 +3635,79 @@ check('LOCK: the setting nothing could set is gone, and cannot come back',
   })(),
   'no shipped file branches on voiceOrchestrator or re-declares it — the setting that could only hold one value is gone, and a new branch on it would be a live-looking choice that cannot vary');
 
+check('LOCK: a denied feature must OFFER the upgrade, never just refuse',
+  /**
+   * 2026-08-29 (adversarial audit 2, generalised). TWO CASES ASKED A QUESTION THEY COULD NOT ANSWER.
+   *
+   * `open_smartvision` and `open_smartfinder` in app/(tabs)/caddie.tsx said "…is part of the Pro
+   * plan. Want to unlock it?" and returned. Nothing opened the paywall and nothing handled a yes, so
+   * a player who said yes got silence — a dead end, a lost sale, and a caddie ignoring the answer to
+   * his own question. Seven sibling denial sites, two of them in the same switch statement, routed
+   * through triggerPaywall correctly. Nothing was watching the difference.
+   *
+   * The instance is fixed; this forbids the SHAPE. Every `!canAccess(...)` branch must reach
+   * triggerPaywall inside its own block — brace-matched, because a byte window would either stop
+   * short of a long branch or run past it into the next case's trigger and pass for the wrong
+   * reason. [[run-the-second-pass-yourself]] [[three-ways-a-guard-is-worthless]]
+   *
+   * SCOPE, stated so the gap is known rather than implied: this reads the `!canAccess(` form, which
+   * is the deny-then-return shape all nine call sites use. The inverted guard-clause
+   * (`if (canAccess(x)) return;` — smartmotion.tsx, where the DENIAL is the fallthrough) is not
+   * matched here. services/featureAccess.ts is excluded: it defines canAccess and composes it
+   * internally, and has no business navigating anywhere.
+   */
+  (() => {
+    const DIRS = ['services', 'hooks', 'app', 'components'];
+    const offenders: string[] = [];
+    let branches = 0;
+    const walkDir = (dir: string): string[] => {
+      const out: string[] = [];
+      let entries: string[] = [];
+      try { entries = fs.readdirSync(dir); } catch { return out; }
+      for (const e of entries) {
+        const p2 = `${dir}/${e}`;
+        let st;
+        try { st = fs.statSync(p2); } catch { continue; }
+        if (st.isDirectory()) out.push(...walkDir(p2));
+        else if (/\.(ts|tsx)$/.test(e)) out.push(p2);
+      }
+      return out;
+    };
+    const root = path.resolve(__dirname, '../../');
+    for (const d of DIRS) {
+      for (const f of walkDir(path.resolve(root, d))) {
+        const rel = f.slice(root.length + 1);
+        if (rel === 'services/featureAccess.ts') continue;
+        if (rel === 'components/caddie/CockpitCaddieScreen.tsx') continue; // parked, imported by nothing
+        const src = readBulk(f).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+        let from = 0;
+        for (;;) {
+          const at = src.indexOf('!canAccess(', from);
+          if (at < 0) break;
+          from = at + 1;
+          branches += 1;
+          // Brace-match the block this condition guards.
+          const open = src.indexOf('{', at);
+          if (open < 0) { offenders.push(`${rel} (no block)`); continue; }
+          let depth = 0, end = -1;
+          for (let i = open; i < src.length; i++) {
+            if (src[i] === '{') depth++;
+            else if (src[i] === '}') { depth--; if (depth === 0) { end = i; break; } }
+          }
+          if (end < 0) { offenders.push(`${rel} (unterminated)`); continue; }
+          if (!/triggerPaywall\s*\(/.test(src.slice(open, end + 1))) {
+            offenders.push(`${rel}:${src.slice(0, at).split('\n').length}`);
+          }
+        }
+      }
+    }
+    if (offenders.length) console.log(`   denial with no upgrade offered: ${offenders.join(', ')}`);
+    // A zero here must mean "all branches checked and clean", not "no branches found".
+    if (branches === 0) { console.log('   found no !canAccess branches at all — the sweep is broken'); return false; }
+    return offenders.length === 0;
+  })(),
+  'every !canAccess branch reaches triggerPaywall inside its own block — a refused feature always offers the upgrade rather than dead-ending the player');
+
 check('LOCK: the billing SDK is never reached except through the lazy require',
   /**
    * 2026-08-29 — A STATIC IMPORT OF react-native-purchases WOULD CRASH EVERY TESTER.

@@ -1665,7 +1665,22 @@ export default function CaddieTab() {
     switch (action.type) {
       case 'open_smartvision':
         if (!canAccess('smartvision', subscription_status)) {
-          setCaddieResponse("SmartVision is part of the Pro plan. Want to unlock it?");
+          /**
+           * 2026-08-29 (adversarial audit 2 — built but unreachable) — THIS ASKED A QUESTION IT
+           * COULD NOT ANSWER. It said "Want to unlock it?" and returned. Nothing opened the paywall
+           * and nothing handled a yes, so a player who said yes got silence: a dead end, a lost
+           * sale, and a caddie ignoring the answer to his own question. Seven other denial sites in
+           * this app route through triggerPaywall; these two cases did not.
+           *
+           * triggerPaywall DEFERS during an active round rather than interrupting play, so the line
+           * has to be honest about which of the two just happened — otherwise the mid-round case
+           * still ends in a question nobody answers. [[feels-like-a-real-caddie]]
+           */
+          void triggerPaywall('smartvision', () => router.push('/paywall' as never)).then((shown) => {
+            setCaddieResponse(shown
+              ? "SmartVision is part of the Pro plan — here's what you'd get."
+              : "SmartVision is part of the Pro plan. Let's not stop your round for it — I'll bring it up at the end.");
+          });
           return;
         }
         openSmartVision();
@@ -1953,7 +1968,12 @@ export default function CaddieTab() {
         break;
       case 'open_smartfinder':
         if (!canAccess('smartfinder', subscription_status)) {
-          setCaddieResponse("SmartFinder is part of the Pro plan. Want to unlock it?");
+          // Audit 2, the twin of open_smartvision above — same dead end, same fix.
+          void triggerPaywall('smartfinder', () => router.push('/paywall' as never)).then((shown) => {
+            setCaddieResponse(shown
+              ? "SmartFinder is part of the Pro plan — here's what you'd get."
+              : "SmartFinder is part of the Pro plan. Let's not stop your round for it — I'll bring it up at the end.");
+          });
           return;
         }
         router.push('/smartfinder' as never);

@@ -17,11 +17,27 @@
  * restore and cross-platform entitlement come with it.
  *
  * ── WHY EVERY NATIVE CALL IS BEHIND `sdk()` ──────────────────────────────────────────────────────
- * react-native-purchases is a NATIVE module. Testers are frozen on a TestFlight binary that does not
- * contain it, and this repo ships JS over the air to that binary. A bare top-level import would make
- * the next OTA crash every one of them at boot. `sdk()` requires it lazily inside a try/catch and
- * returns null when the native side is absent, so an OTA-delivered bundle running on an older binary
- * degrades to "billing unavailable" instead of dying. Every export below tolerates that null.
+ * react-native-purchases is a NATIVE module, and testers are frozen on a TestFlight binary that does
+ * not contain it while this repo ships JS to that binary over the air.
+ *
+ * 2026-08-29, adversarial audit 1 — CORRECTING WHAT THIS COMMENT FIRST CLAIMED. I wrote that a bare
+ * import would crash them at boot. It would not: this version of the SDK reads
+ * `NativeModules.RNPurchases` into a variable that is simply undefined when the native side is
+ * absent, and explicitly guards its NativeEventEmitter construction — its own comment says "Only
+ * create event emitter if native module is available to avoid crash on import" (their issue #1298,
+ * i.e. it DID crash on import until they fixed it). Importing throws nothing today.
+ *
+ * What actually happens is worse for being quieter: `Purchases.configure` exists as a plain static
+ * method either way, so no presence check on the object can tell you anything. The absence only
+ * surfaces when a method is CALLED and the SDK's own `throwIfNativeModuleNotAvailable()` fires.
+ * That is why `initBilling()` — which wraps the real `configure` call in a try/catch — is the single
+ * honest answer to "is billing usable here", and why `billingAvailable()` delegates to it rather
+ * than asking whether the module could be required.
+ *
+ * The lazy require and the LOCK forbidding a static import elsewhere both STAY. A static import puts
+ * the SDK on the boot path for every user on every launch, where an SDK regression or an RN upgrade
+ * would land on them at boot rather than on the one screen that sells a subscription — the SDK's own
+ * history shows that is not hypothetical.
  * [[ota-must-work-on-the-shipped-ios-build]] [[caddie-failsafe-no-walls]]
  *
  * `statusFromCustomerInfo` is exported and PURE on purpose: the jest suite cannot load a native
@@ -78,6 +94,8 @@ function sdk(): AnySdk | null {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mod = require('react-native-purchases');
     const Purchases = mod?.default ?? mod;
+    // NOTE (audit 1): this proves the JS module loaded, NOT that the native side exists — configure
+    // is a static method that is present either way. initBilling() is what establishes usability.
     if (!Purchases || typeof Purchases.configure !== 'function') {
       sdkMissing = true;
       return null;
@@ -116,9 +134,20 @@ export function initBilling(): boolean {
   }
 }
 
-/** Is billing usable on this device right now? */
+/**
+ * Is billing usable on this device right now?
+ *
+ * 2026-08-29, audit 1 — was `sdk() != null && apiKey() !== ''`, which could answer YES on a binary
+ * with no native billing at all: requiring the module succeeds regardless (see the header), so that
+ * test only ever proved a key was set. The paywall reads this to choose between "update the app" and
+ * carrying on, so a false yes sent the player down the purchase path to a bare offerings list and the
+ * message "not on sale in your region yet" — true-sounding, and wrong.
+ *
+ * Delegating to initBilling() makes it the same question as "did configure() actually work", which
+ * is the only version of it the SDK will answer honestly. Idempotent and cheap after the first call.
+ */
 export function billingAvailable(): boolean {
-  return sdk() != null && apiKey() !== '';
+  return initBilling();
 }
 
 /**
