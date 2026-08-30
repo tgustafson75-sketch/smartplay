@@ -12,6 +12,7 @@ import { usePlayerProfileStore, isOwnerEmail, OWNER_EMAILS } from '../store/play
 import { useOnboardingTourStore } from '../store/onboardingTourStore';
 import { useCustomCaddieMediaStore } from '../store/customCaddieMediaStore';
 import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
+import { refreshEntitlement } from '../services/billing/purchases';
 import { useSettingsStore } from '../store/settingsStore';
 import { useRoundStore, whenRoundStoreHydrated } from '../store/roundStore';
 import { stopSpeaking, getLastSpeakStartedAt } from '../services/voiceService';
@@ -411,6 +412,63 @@ function AppNavigator() {
     if (noteOpen()) return;
     const unsub = useOnboardingTourStore.persist.onFinishHydration(() => { noteOpen(); });
     return () => { try { unsub?.(); } catch { /* no-op */ } };
+  }, []);
+
+  /**
+   * 2026-08-29 — ASK THE STORE WHAT THIS PLAYER OWNS, once per launch.
+   *
+   * The App Store / Play is the authority on entitlement, not our local field, and it can change
+   * without the app running: a renewal, a cancellation, a refund, a family-sharing change, or the
+   * same Apple ID on a new phone. Without a launch read, `subscription_status` drifts from what the
+   * player has actually paid for and only a manual Restore would fix it.
+   *
+   * Gated on SUBSCRIPTIONS_ENABLED so nothing at all happens today, and hydration-gated like every
+   * other boot effect here — an unhydrated read sees zustand defaults, which is how the trial
+   * timestamp got reset once before.
+   *
+   * refreshEntitlement never throws and returns the CURRENT status on any failure, so an offline
+   * first tee cannot revoke the caddie from someone who paid. [[overstrict-gate-lens]]
+   */
+  useEffect(() => {
+    if (!SUBSCRIPTIONS_ENABLED) return;
+    let cancelled = false;
+    let done = false;
+    const runEntitlementRefresh = (): boolean => {
+      if (done) return true;
+      if (!usePlayerProfileStore.persist.hasHydrated()) return false;
+      done = true;
+      void (async () => {
+        const before = usePlayerProfileStore.getState().subscription_status;
+        const snapshot = await refreshEntitlement(before);
+        if (cancelled) return;
+        const next = snapshot.status;
+        /**
+         * Re-read rather than trusting `before`. The trial-lifecycle effect below can grant
+         * lifetime to an owner account while this store call is in flight, and writing a stale
+         * 'free' over that grant would lock Tim out of his own app on his own launch.
+         * [[two-owners-is-the-root-cause]]
+         */
+        const nowStatus = usePlayerProfileStore.getState().subscription_status;
+        if (nowStatus === 'lifetime') return;
+        /**
+         * Correct the trial's START before the status, because app/(tabs)/caddie.tsx reads the
+         * countdown off `trial_started_at` — which initTrial stamped at FIRST APP OPEN. Under IAP
+         * the trial begins at purchase, so without this a player who subscribes a fortnight after
+         * installing is told their brand-new trial has already run out.
+         */
+        if (snapshot.trialStartedAt != null) {
+          usePlayerProfileStore.getState().setTrialStartedAt(snapshot.trialStartedAt);
+        }
+        if (next === nowStatus) return;
+        usePlayerProfileStore.getState().setSubscriptionStatus(next);
+      })();
+      return true;
+    };
+    let unsub: (() => void) | undefined;
+    if (!runEntitlementRefresh()) {
+      unsub = usePlayerProfileStore.persist.onFinishHydration(() => { runEntitlementRefresh(); });
+    }
+    return () => { cancelled = true; try { unsub?.(); } catch { /* no-op */ } };
   }, []);
 
   useEffect(() => {

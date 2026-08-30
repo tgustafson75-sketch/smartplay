@@ -1,0 +1,269 @@
+/**
+ * services/billing/purchases.ts — THE ONE OWNER OF "IS THIS PLAYER ENTITLED".
+ *
+ * 2026-08-29 (Tim — "the apple store is the subscription handler right … do what is needed").
+ * Yes. On iOS the App Store runs checkout, the free trial, renewals, cancellations, refunds, tax
+ * and dunning; Google Play does the same on Android. App Store guideline 3.1.1 makes that mandatory
+ * for in-app digital subscriptions — Stripe inside the app is a rejection, which is why the paywall
+ * has sat behind a kill-switch instead of being wired to a card form.
+ *
+ * It is also the only path that WORKS here, independent of the rule. A Stripe purchase happens on a
+ * server and has to be delivered back to a phone, and this app has no accounts and no server-side
+ * identity: `subscription_status` is a local field in playerProfileStore that `api/*` never writes.
+ * The store SDKs carry entitlement on the Apple ID / Play account themselves, so nothing has to be
+ * built to connect a payment to a player. [[billing-stripe-vs-iap-constraint]]
+ *
+ * RevenueCat wraps both stores so this is one integration rather than two, and receipt validation,
+ * restore and cross-platform entitlement come with it.
+ *
+ * ── WHY EVERY NATIVE CALL IS BEHIND `sdk()` ──────────────────────────────────────────────────────
+ * react-native-purchases is a NATIVE module. Testers are frozen on a TestFlight binary that does not
+ * contain it, and this repo ships JS over the air to that binary. A bare top-level import would make
+ * the next OTA crash every one of them at boot. `sdk()` requires it lazily inside a try/catch and
+ * returns null when the native side is absent, so an OTA-delivered bundle running on an older binary
+ * degrades to "billing unavailable" instead of dying. Every export below tolerates that null.
+ * [[ota-must-work-on-the-shipped-ios-build]] [[caddie-failsafe-no-walls]]
+ *
+ * `statusFromCustomerInfo` is exported and PURE on purpose: the jest suite cannot load a native
+ * module, so the mapping — which is where the real logic lives — is tested directly.
+ */
+
+import { Platform } from 'react-native';
+import { PRICING } from '../../lib/pricing';
+import type { SubscriptionStatus } from '../../store/playerProfileStore';
+
+/**
+ * The entitlement identifier configured in the RevenueCat dashboard. Cowork creates this; if the
+ * string here and the string there disagree, every paying customer reads as unsubscribed, so it is
+ * written down in one place and recorded in the Cowork task list. [[cowork-task-list]]
+ */
+export const ENTITLEMENT_ID = 'full';
+
+/**
+ * Product identifiers live in lib/pricing.ts next to the prices, and ONLY there. They were briefly
+ * duplicated here too, which the orphan sweep caught within minutes — a second copy of an id that
+ * must match a dashboard by hand is the same defect this file's header is about.
+ * [[two-owners-is-the-root-cause]]
+ */
+
+/**
+ * RevenueCat PUBLIC SDK keys. These are publishable — they are meant to ship in the client, exactly
+ * like the Mapbox token already in eas.json. The secret keys never come near this repo.
+ *
+ * Read from EXPO_PUBLIC_* with a literal fallback because, as services/apiBase.ts documents, those
+ * vars arrive EMPTY in an OTA-delivered bundle: they are inlined at BUILD time, so a JS-only update
+ * carries whatever the binary was built with. The fallback is what actually runs in the field.
+ */
+const IOS_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || '';
+const ANDROID_KEY = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY || '';
+
+function apiKey(): string {
+  return Platform.OS === 'ios' ? IOS_KEY : ANDROID_KEY;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnySdk = any;
+
+let cachedSdk: AnySdk | null = null;
+let sdkMissing = false;
+
+/**
+ * The native module, or null. Never throws. Null means "this binary has no billing" — which is the
+ * normal state for every tester until the next native build ships.
+ */
+function sdk(): AnySdk | null {
+  if (cachedSdk) return cachedSdk;
+  if (sdkMissing) return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('react-native-purchases');
+    const Purchases = mod?.default ?? mod;
+    if (!Purchases || typeof Purchases.configure !== 'function') {
+      sdkMissing = true;
+      return null;
+    }
+    cachedSdk = Purchases;
+    return cachedSdk;
+  } catch {
+    // Native side absent (OTA bundle on an older binary, or a jest/node context).
+    sdkMissing = true;
+    return null;
+  }
+}
+
+let configured = false;
+
+/**
+ * Configure the SDK once. Safe to call on every launch and from more than one place.
+ *
+ * Returns whether billing is actually available, so a caller can tell "not configured" apart from
+ * "configured and this player has nothing" — the two look identical if you only read the status.
+ */
+export function initBilling(): boolean {
+  if (configured) return true;
+  const Purchases = sdk();
+  if (!Purchases) return false;
+  const key = apiKey();
+  // No key = not set up yet (Cowork creates the RevenueCat project). Configuring with an empty
+  // string makes the SDK throw on the first call instead of here, which is a worse place to find out.
+  if (!key) return false;
+  try {
+    Purchases.configure({ apiKey: key });
+    configured = true;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Is billing usable on this device right now? */
+export function billingAvailable(): boolean {
+  return sdk() != null && apiKey() !== '';
+}
+
+/**
+ * Map a RevenueCat CustomerInfo onto the app's SubscriptionStatus.
+ *
+ * PURE and exported so it can be tested without the native module — this mapping is where the
+ * decisions live, and two of them are easy to get wrong:
+ *
+ *  1. `'lifetime'` is an OWNER GRANT (the allow-list in playerProfileStore), not something the store
+ *     knows about. RevenueCat will report no entitlement for those accounts, so a naive mapping
+ *     would downgrade Tim to 'free' and lock him out of his own app on first launch. The current
+ *     status is passed in specifically so lifetime survives.
+ *  2. Someone who HAD the entitlement and no longer does is `'expired'`, not `'free'`. featureAccess
+ *     treats both as Lite, but they are different people and the paywall says different things to
+ *     them.
+ */
+export function statusFromCustomerInfo(
+  info: { entitlements?: { active?: Record<string, unknown>; all?: Record<string, unknown> } } | null | undefined,
+  current: SubscriptionStatus,
+): SubscriptionStatus {
+  // An owner grant is ours, not the store's. Never let a store read take it away.
+  if (current === 'lifetime') return 'lifetime';
+  if (!info?.entitlements) return current === 'trial' ? 'trial' : current;
+
+  const active = info.entitlements.active?.[ENTITLEMENT_ID] as
+    | { isActive?: boolean; periodType?: string }
+    | undefined;
+
+  if (active?.isActive) {
+    // periodType is a plain string on the RN surface and an enum internally; compare loosely so a
+    // casing change in the SDK cannot silently turn every trial into a paid subscription.
+    return String(active.periodType ?? '').toUpperCase() === 'TRIAL' ? 'trial' : 'active';
+  }
+
+  // Not active now. Did they ever have it?
+  const everHad = info.entitlements.all?.[ENTITLEMENT_ID] != null;
+  return everHad ? 'expired' : 'free';
+}
+
+/**
+ * When the store-run free trial STARTED, in epoch ms — or null if this player is not in one.
+ *
+ * 2026-08-29 — this exists because the app measures the trial from the wrong moment. `initTrial()`
+ * stamps `trial_started_at` the first time the app is OPENED, which was right when the trial was
+ * ours to run. Under IAP the trial starts when the player BUYS, which can be days or weeks later,
+ * so the local countdown would report a trial already half gone the moment someone subscribes.
+ *
+ * Rather than add a second countdown function beside featureAccess.trialDaysLeft — two owners of
+ * one number, the exact bug being fixed one file over — this corrects the INPUT. The store's
+ * expiry, minus the one configured trial length, is when the trial really began; writing that back
+ * makes the existing countdown right without anything else changing.
+ * [[two-owners-is-the-root-cause]]
+ */
+export function trialStartFromCustomerInfo(
+  info: { entitlements?: { active?: Record<string, unknown> } } | null | undefined,
+): number | null {
+  const active = info?.entitlements?.active?.[ENTITLEMENT_ID] as
+    | { isActive?: boolean; periodType?: string; expirationDateMillis?: number | null }
+    | undefined;
+  if (!active?.isActive) return null;
+  if (String(active.periodType ?? '').toUpperCase() !== 'TRIAL') return null;
+  const ms = active.expirationDateMillis;
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return null;
+  return ms - PRICING.trialDays * 24 * 60 * 60 * 1000;
+}
+
+/**
+ * Ask the store what this player owns and write it to the profile.
+ *
+ * Best-effort by design: a launch with no network must not change anyone's status. On any failure
+ * we return the status unchanged rather than guessing 'free', because guessing 'free' revokes the
+ * caddie from someone who paid. [[overstrict-gate-lens]]
+ */
+export type EntitlementSnapshot = {
+  status: SubscriptionStatus;
+  /** Non-null only while the store reports an active TRIAL — see trialStartFromCustomerInfo. */
+  trialStartedAt: number | null;
+};
+
+export async function refreshEntitlement(
+  current: SubscriptionStatus,
+): Promise<EntitlementSnapshot> {
+  const unchanged: EntitlementSnapshot = { status: current, trialStartedAt: null };
+  if (!initBilling()) return unchanged;
+  const Purchases = sdk();
+  if (!Purchases) return unchanged;
+  try {
+    const info = await Purchases.getCustomerInfo();
+    return { status: statusFromCustomerInfo(info, current), trialStartedAt: trialStartFromCustomerInfo(info) };
+  } catch {
+    return unchanged;
+  }
+}
+
+/** The purchasable packages from the current Offering, or [] if billing is unavailable. */
+export async function getPackages(): Promise<unknown[]> {
+  if (!initBilling()) return [];
+  const Purchases = sdk();
+  if (!Purchases) return [];
+  try {
+    const offerings = await Purchases.getOfferings();
+    return offerings?.current?.availablePackages ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export type PurchaseOutcome =
+  | { ok: true; status: SubscriptionStatus; trialStartedAt: number | null }
+  | { ok: false; reason: 'cancelled' | 'unavailable' | 'failed'; message?: string };
+
+/**
+ * Buy a package. The store presents its own sheet; we never see a card.
+ *
+ * `cancelled` is separated from `failed` because they need opposite treatment: a player who backed
+ * out of Apple's sheet must not be shown an error, and a player whose purchase genuinely failed must
+ * not be left thinking it worked.
+ */
+export async function purchasePackage(pkg: unknown, current: SubscriptionStatus): Promise<PurchaseOutcome> {
+  if (!initBilling()) return { ok: false, reason: 'unavailable' };
+  const Purchases = sdk();
+  if (!Purchases) return { ok: false, reason: 'unavailable' };
+  try {
+    const result = await Purchases.purchasePackage(pkg);
+    const info = result?.customerInfo;
+    return { ok: true, status: statusFromCustomerInfo(info, current), trialStartedAt: trialStartFromCustomerInfo(info) };
+  } catch (e) {
+    const err = e as { userCancelled?: boolean | null; message?: string };
+    if (err?.userCancelled) return { ok: false, reason: 'cancelled' };
+    return { ok: false, reason: 'failed', message: err?.message };
+  }
+}
+
+/**
+ * Restore purchases. Apple REQUIRES a restore path on any screen that sells a subscription —
+ * a paywall without one is a review rejection, not a missing nicety.
+ */
+export async function restorePurchases(current: SubscriptionStatus): Promise<PurchaseOutcome> {
+  if (!initBilling()) return { ok: false, reason: 'unavailable' };
+  const Purchases = sdk();
+  if (!Purchases) return { ok: false, reason: 'unavailable' };
+  try {
+    const info = await Purchases.restorePurchases();
+    return { ok: true, status: statusFromCustomerInfo(info, current), trialStartedAt: trialStartFromCustomerInfo(info) };
+  } catch (e) {
+    return { ok: false, reason: 'failed', message: (e as { message?: string })?.message };
+  }
+}

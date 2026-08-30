@@ -3635,6 +3635,92 @@ check('LOCK: the setting nothing could set is gone, and cannot come back',
   })(),
   'no shipped file branches on voiceOrchestrator or re-declares it — the setting that could only hold one value is gone, and a new branch on it would be a live-looking choice that cannot vary');
 
+check('LOCK: the billing SDK is never reached except through the lazy require',
+  /**
+   * 2026-08-29 — A STATIC IMPORT OF react-native-purchases WOULD CRASH EVERY TESTER.
+   *
+   * The SDK is a NATIVE module. Testers sit on a TestFlight binary that does not contain it, and
+   * this repo ships JS to that binary over the air. A bare `import Purchases from
+   * 'react-native-purchases'` anywhere in shipped code resolves at module-eval on the OLD binary,
+   * finds no native side, and takes the app down at boot — for everyone, before any billing code is
+   * called, and regardless of SUBSCRIPTIONS_ENABLED.
+   *
+   * services/billing/purchases.ts reaches it through a lazy require inside a try/catch that returns
+   * null when the native module is absent. That file is the ONLY one allowed to name it. A guard
+   * rather than a comment because the failure is invisible in development (the dev build HAS the
+   * module) and total in the field. [[ota-must-work-on-the-shipped-ios-build]]
+   */
+  (() => {
+    const OWNER = 'services/billing/purchases.ts';
+    const DIRS = ['services', 'hooks', 'app', 'components', 'store', 'lib', 'utils'];
+    const offenders: string[] = [];
+    const walkDir = (dir: string): string[] => {
+      const out: string[] = [];
+      let entries: string[] = [];
+      try { entries = fs.readdirSync(dir); } catch { return out; }
+      for (const e of entries) {
+        const p2 = `${dir}/${e}`;
+        let st;
+        try { st = fs.statSync(p2); } catch { continue; }
+        if (st.isDirectory()) out.push(...walkDir(p2));
+        else if (/\.(ts|tsx)$/.test(e)) out.push(p2);
+      }
+      return out;
+    };
+    const root = path.resolve(__dirname, '../../');
+    for (const d of DIRS) {
+      for (const f of walkDir(path.resolve(root, d))) {
+        const rel = f.slice(root.length + 1);
+        if (rel === OWNER) continue;
+        const src = readBulk(f).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+        if (/['"`]react-native-purchases['"`]/.test(src)) offenders.push(rel);
+      }
+    }
+    if (offenders.length) console.log(`   billing SDK named outside its owner: ${offenders.join(', ')}`);
+    return offenders.length === 0;
+  })(),
+  'only services/billing/purchases.ts names react-native-purchases, and only through the lazy require — a static import would crash every OTA tester at boot');
+
+check('LOCK: the trial length has ONE owner',
+  /**
+   * 2026-08-29 — THE PAYWALL PROMISED 14 DAYS AND THE GATE CUT ACCESS AT 7.
+   *
+   * lib/pricing.ts said `trialDays: 14`, the paywall read it in three places and the caddie spoke it
+   * aloud — and services/featureAccess.trialDaysLeft counted down from a hardcoded 7 of its own.
+   * Invisible only because SUBSCRIPTIONS_ENABLED is false; it would have landed the day the switch
+   * flipped, on the people who had just paid.
+   *
+   * Same shape as the stated-yardage band below: two owners of one number and no arbiter. This
+   * asserts the FUNCTION, brace-matched rather than byte-windowed, and forbids any bare integer in
+   * it — so re-introducing a literal fails even if it is 14. The only number allowed is the
+   * milliseconds-in-a-day expression. [[two-owners-is-the-root-cause]]
+   * [[break-test-every-guard-you-write]]
+   */
+  (() => {
+    const src = read('services/featureAccess.ts');
+    const at = src.indexOf('export function trialDaysLeft(');
+    if (at < 0) return false;
+    // Brace-match the function body — a byte window would stop inside the doc comment.
+    const open = src.indexOf('{', at);
+    if (open < 0) return false;
+    let depth = 0, end = -1;
+    for (let i = open; i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}') { depth--; if (depth === 0) { end = i; break; } }
+    }
+    if (end < 0) return false;
+    const body = src.slice(open, end + 1)
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+    if (!/PRICING\.trialDays/.test(body)) return false;
+    // Strip the one legitimate arithmetic constant, then no integer may remain.
+    const stripped = body.replace(/24\s*\*\s*60\s*\*\s*60\s*\*\s*1000/g, ' ');
+    const strays = stripped.match(/\b\d+\b/g)?.filter((n) => n !== '0');
+    if (strays?.length) console.log(`   featureAccess owns a second trial number: ${strays.join(', ')}`);
+    return !strays?.length;
+  })(),
+  'trialDaysLeft derives the trial length from PRICING.trialDays and carries no day-count literal of its own');
+
 check('LOCK: the stated yardage has ONE owner of what counts as a yardage',
   /**
    * 2026-08-28 (SmartFinder sweep, part 2 — the resolver rather than the rangefinder maths).

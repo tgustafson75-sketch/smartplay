@@ -1,4 +1,5 @@
 import { type SubscriptionStatus } from '../store/playerProfileStore';
+import { PRICING } from '../lib/pricing';
 
 /**
  * ── EDITION ACCESS ───────────────────────────────────────────────────────────
@@ -126,7 +127,23 @@ export function trialDaysLeft(trial_started_at: number | null): number | null {
   if (!SUBSCRIPTIONS_ENABLED) return null;
   if (!trial_started_at) return null;
   const elapsed = Date.now() - trial_started_at;
-  return Math.max(0, 7 - Math.floor(elapsed / (24 * 60 * 60 * 1000)));
+  /**
+   * 2026-08-29 — WAS A HARDCODED 7, AND lib/pricing.ts SAYS 14.
+   *
+   * The paywall promises "14-day free trial" in three separate places, reads PRICING.trialDays for
+   * all of them, and then this gate cut the caddie off on day 7. Invisible only because
+   * SUBSCRIPTIONS_ENABLED is false — it would have landed the moment the switch flipped, on the
+   * people who had just paid, which is the worst possible audience for it.
+   *
+   * Two owners of one number, with no arbiter, exactly like the stated-yardage band. lib/pricing is
+   * the source of truth (it is what the customer was shown and what the App Store Connect
+   * introductory offer is set to), so it owns this too. [[two-owners-is-the-root-cause]]
+   *
+   * NOTE once billing is live: the STORE owns the trial clock. services/billing/purchases.ts
+   * `trialDaysLeftFromCustomerInfo` reads the real expiry from the entitlement; this local count is
+   * the fallback for when the store cannot be reached.
+   */
+  return Math.max(0, PRICING.trialDays - Math.floor(elapsed / (24 * 60 * 60 * 1000)));
 }
 
 /** Features in an edition — for the marketing/comparison surface, not gating. */

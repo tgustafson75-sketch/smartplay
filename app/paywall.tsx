@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -16,11 +16,17 @@ import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { speak, configureAudioForSpeech } from '../services/voiceService';
 import { useSettingsStore } from '../store/settingsStore';
 import { track } from '../services/analytics';
-import { PRICING, PAYWALL_HEADLINE, PAYWALL_SUBHEAD } from '../lib/pricing';
+import { PRICING, paywallHeadline, PAYWALL_SUBHEAD } from '../lib/pricing';
 import { safeBack } from '../services/safeBack';
 import { getCaddieName } from '../lib/persona';
 import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
 import { getApiBaseUrl } from '../services/apiBase';
+import {
+  getPackages,
+  purchasePackage,
+  restorePurchases,
+  billingAvailable,
+} from '../services/billing/purchases';
 
 export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
@@ -28,7 +34,8 @@ export default function PaywallScreen() {
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
   const apiUrl = getApiBaseUrl();
-  const { subscription_status, setSubscriptionStatus: _setSubscriptionStatus } = usePlayerProfileStore();
+  const { subscription_status, setSubscriptionStatus, setTrialStartedAt } = usePlayerProfileStore();
+  const [busy, setBusy] = useState(false);
 
   const caddieName = getCaddieName(caddiePersonality);
   const FEATURES: { icon: IconName; label: string; sub: string }[] = [
@@ -69,19 +76,102 @@ export default function PaywallScreen() {
   // the safeBack() above unwinding the route.
   if (!SUBSCRIPTIONS_ENABLED) return null;
 
-  const handleSubscribe = () => {
-    // Stripe integration wired in Wrap Layer 2B
+  /**
+   * 2026-08-29 — this popped "Stripe checkout will be available in the next update".
+   *
+   * Wrong twice over: Stripe cannot sell an in-app subscription at all (guideline 3.1.1), and a
+   * Subscribe button that opens an apology is not a paywall. Unreachable while the kill-switch is
+   * off, which is exactly why it survived — it would have gone live the day the switch flipped.
+   *
+   * The App Store presents its own sheet; we never see a card. Everything below distinguishes the
+   * three outcomes that need different words: bought, backed out, and genuinely broken.
+   */
+  const handleSubscribe = async () => {
+    if (busy) return;
     track('subscribe_tapped', { subscription_status });
-    Alert.alert(
-      'Coming Soon',
-      'Stripe checkout will be available in the next update. Your trial continues.',
-      [{ text: 'Got it', style: 'default' }],
-    );
+    if (!billingAvailable()) {
+      // Honest, not a fake success. This is the state on a binary built before the billing module.
+      Alert.alert(
+        'Not available yet',
+        'Subscriptions need the latest version of the app. Update from TestFlight and try again.',
+        [{ text: 'OK' }],
+      );
+      return;
+    }
+    setBusy(true);
+    try {
+      const packages = await getPackages();
+      // Default to the monthly package — it is what the headline, the card and the spoken line all
+      // quote, so buying anything else here would contradict what the player was just told.
+      const pkg =
+        packages.find(
+          (p) => (p as { product?: { identifier?: string } })?.product?.identifier === PRICING.monthly.productId,
+        ) ?? packages[0];
+      if (!pkg) {
+        Alert.alert('Not available yet', 'The subscription is not on sale in your region yet.', [{ text: 'OK' }]);
+        return;
+      }
+      const result = await purchasePackage(pkg, subscription_status);
+      if (result.ok) {
+        // The trial's clock starts NOW, at the purchase — not when the app was first opened.
+        if (result.trialStartedAt != null) setTrialStartedAt(result.trialStartedAt);
+        setSubscriptionStatus(result.status);
+        track('subscribe_succeeded', { status: result.status });
+        safeBack();
+        return;
+      }
+      // A player who backed out of Apple's sheet chose that. Showing them an error reads as a bug.
+      if (result.reason === 'cancelled') {
+        track('subscribe_cancelled');
+        return;
+      }
+      track('subscribe_failed', { reason: result.reason });
+      Alert.alert(
+        "That didn't go through",
+        'Nothing was charged. Give it another go, or check your payment method in Settings.',
+        [{ text: 'OK' }],
+      );
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const handleRestore = () => {
+  /**
+   * Apple REQUIRES a working restore on any screen selling a subscription — a paywall without one is
+   * a rejection, not a missing nicety. This used to hardcode "No active subscription found", which
+   * would have told a paying customer on a new phone that their subscription did not exist.
+   */
+  const handleRestore = async () => {
+    if (busy) return;
     track('restore_tapped');
-    Alert.alert('Restore Purchase', 'No active subscription found.', [{ text: 'OK' }]);
+    if (!billingAvailable()) {
+      Alert.alert(
+        'Not available yet',
+        'Restoring needs the latest version of the app. Update from TestFlight and try again.',
+        [{ text: 'OK' }],
+      );
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await restorePurchases(subscription_status);
+      if (result.ok && (result.status === 'active' || result.status === 'trial' || result.status === 'lifetime')) {
+        if (result.trialStartedAt != null) setTrialStartedAt(result.trialStartedAt);
+        setSubscriptionStatus(result.status);
+        track('restore_succeeded', { status: result.status });
+        Alert.alert('Restored', `You're all set — full ${caddieName} is back.`, [{ text: 'Great' }]);
+        safeBack();
+        return;
+      }
+      if (result.ok) {
+        setSubscriptionStatus(result.status);
+        Alert.alert('Nothing to restore', 'No active subscription on this Apple ID.', [{ text: 'OK' }]);
+        return;
+      }
+      Alert.alert("Couldn't check", 'We could not reach the store just now. Try again in a moment.', [{ text: 'OK' }]);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleClose = () => {
@@ -111,7 +201,7 @@ export default function PaywallScreen() {
             resizeMode="cover"
           />
 
-          <Text style={styles.headline}>{PAYWALL_HEADLINE}</Text>
+          <Text style={styles.headline}>{paywallHeadline(caddieName)}</Text>
           <Text style={styles.subhead}>
             {PAYWALL_SUBHEAD}{'\n'}
             {PRICING.trialDays}-day free trial. Cancel anytime.
@@ -138,11 +228,11 @@ export default function PaywallScreen() {
             <Text style={styles.pricingTrial}>Free for {PRICING.trialDays} days</Text>
           </View>
 
-          <TouchableOpacity style={styles.ctaBtn} onPress={handleSubscribe} activeOpacity={0.88}>
-            <Text style={styles.ctaText}>Start Free Trial</Text>
+          <TouchableOpacity style={styles.ctaBtn} onPress={handleSubscribe} activeOpacity={0.88} disabled={busy}>
+            <Text style={styles.ctaText}>{busy ? 'One moment…' : 'Start Free Trial'}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.restoreBtn} onPress={handleRestore}>
+          <TouchableOpacity style={styles.restoreBtn} onPress={handleRestore} disabled={busy}>
             <Text style={styles.restoreText}>Restore Purchase</Text>
           </TouchableOpacity>
 

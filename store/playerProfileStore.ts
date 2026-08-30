@@ -208,6 +208,13 @@ interface PlayerProfileState {
   setDefaultMode: (m: 'break_100' | 'break_90' | 'break_80' | 'free_play') => void;
   initTrial: () => void;
   setSubscriptionStatus: (s: SubscriptionStatus) => void;
+  /**
+   * 2026-08-29 — set the trial start from the STORE's clock rather than from first app open.
+   * initTrial() stamps the moment the app was first opened, which was correct while the trial was
+   * ours to run; under IAP the trial begins when the player buys. See services/billing/purchases.ts
+   * `trialStartFromCustomerInfo`.
+   */
+  setTrialStartedAt: (ms: number | null) => void;
   setEmail: (email: string | null) => void;
   /** Owner override — sets subscription_status='lifetime' and stamps
    *  first_opened_at if missing. Idempotent. */
@@ -342,6 +349,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
         set({ first_opened_at: now, trial_started_at: now, subscription_status: 'trial' });
       },
       setSubscriptionStatus: (s) => set({ subscription_status: s }),
+      setTrialStartedAt: (ms) => set({ trial_started_at: ms }),
       setEmail: (email) => set({ email }),
       grantLifetime: () =>
         set(s => ({
