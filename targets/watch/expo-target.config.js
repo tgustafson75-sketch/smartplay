@@ -8,12 +8,27 @@
  * ios/ directory — this project is Continuous Native Generation (no ios/ or android/ in the repo),
  * so anything that must survive a prebuild has to be expressed as config + sources like this.
  *
- * ⚠️ KNOWN TOOLING BUG — read before building. EvanBacon/expo-apple-targets#175 (opened 2026-02-18,
- * still OPEN as of 2026-08-25) reports that `expo prebuild` emits incorrect watch wiring: wrong
- * target dependencies, a MISSING "Embed Watch Content" copy phase on the app target, and duplicate
- * or stale watch.app entries. A build can therefore succeed and produce an app with NO watch app
- * embedded. The documented workaround is a patch-package patch over the target-detection logic.
- * Verify the built .ipa actually contains Watch/*.app before assuming this shipped.
+ * ⚠️ KNOWN TOOLING BUG — EvanBacon/expo-apple-targets#175 (opened 2026-02-18, still open) reports
+ * that `expo prebuild` emits incorrect watch wiring: wrong target dependencies, a MISSING
+ * "Embed Watch Content" copy phase, and duplicate or stale watch.app entries. A build can therefore
+ * succeed and produce an app with NO watch app embedded.
+ *
+ * ✅ CHECKED 2026-08-30 against a real prebuild of THIS project, rather than assumed either way.
+ * The wiring is correct here: the Embed Watch Content phase exists, is a PBXCopyFilesBuildPhase
+ * with dstPath "$(CONTENTS_FOLDER_PATH)/Watch" and dstSubfolderSpec 16, contains the watch app
+ * product, and is attached to the app target's buildPhases alongside a real target dependency.
+ * Re-check if apple-targets is upgraded. Still worth confirming the built .ipa contains Watch/*.app
+ * the first time one is produced.
+ *
+ * ⚠️ WHAT DID BITE US — SIGNING, not embedding. Build 13 (2026-08-30) failed in "Run fastlane":
+ * "No profiles for 'com.smartplaycaddie.app.watchkitapp' were found ... Automatic signing is
+ * disabled and unable to generate a profile." apple-targets hardcodes CODE_SIGN_STYLE "Automatic"
+ * for watch targets, EAS turns automatic signing off for store builds, and the target was left with
+ * no profile and no way to make one. Three config-plugin approaches could not reach it: the package
+ * installs its OWN base mod (withXcodeProjectBetaBaseMod) and writes the target in a phase nothing
+ * registered in app.json can follow. Fixed with `patches/@bacons+apple-targets+5.0.0.patch`, which
+ * flips that one function to "Manual" so EAS's injected profile is honoured. `postinstall:
+ * patch-package` applies it on EAS too.
  */
 module.exports = {
   type: 'watch',

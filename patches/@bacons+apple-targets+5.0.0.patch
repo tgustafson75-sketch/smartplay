@@ -1,0 +1,13 @@
+diff --git a/node_modules/@bacons/apple-targets/build/configuration-list.js b/node_modules/@bacons/apple-targets/build/configuration-list.js
+index 3a2a4c1..1d7d7fa 100644
+--- a/node_modules/@bacons/apple-targets/build/configuration-list.js
++++ b/node_modules/@bacons/apple-targets/build/configuration-list.js
+@@ -274,7 +274,7 @@ function createWatchAppConfigurationList(project, { name, displayName, cwd, bund
+         CLANG_WARN_DOCUMENTATION_COMMENTS: "YES",
+         CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER: "YES",
+         CLANG_WARN_UNGUARDED_AVAILABILITY: "YES_AGGRESSIVE",
+-        CODE_SIGN_STYLE: "Automatic",
++        CODE_SIGN_STYLE: "Manual",
+         CURRENT_PROJECT_VERSION: currentProjectVersion,
+         ENABLE_PREVIEWS: "YES",
+         GCC_C_LANGUAGE_STANDARD: "gnu11",
