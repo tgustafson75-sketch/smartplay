@@ -28,6 +28,10 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'Serena reacts now. Her face used to stay the same no matter what happened — one photograph for almost every mood. She has eight new expressions, so she looks focused when she is reading your shot, pleased when you pull it off, and sympathetic when you do not.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'One less switch to think about. Your caddie used to need a setting called "Voice on Phone Speaker" before he would talk without earbuds in. He now works out for himself what you are listening on, so the setting is gone and he just speaks.',
     howTo: 'Nothing to do. If you had it turned on, nothing changes — he talks exactly as he did before, and the setting is no longer in Settings, Voice.',
   },

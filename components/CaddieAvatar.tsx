@@ -57,37 +57,62 @@ const AVATARS = {
 
 type AvatarKey = keyof typeof AVATARS;
 
-// Serena counterparts for the same emotion keys. Until per-emotion Serena
-// PNGs exist (Tim generates via chatly.ai when scoping permits), most
-// emotional states fall back to the studio portrait. The high-res
-// caddie-nod covers the "with you" CALM cluster (idle/listening/nod/
-// mentorship/supportive). Replace individual entries as new Serena
-// assets land — keys mirror AVATARS so swap is one-line per emotion.
+/**
+ * Serena's emotional states.
+ *
+ * 2026-08-30 — EIGHT PURPOSE-MADE EXPRESSIONS LANDED. Before today this map held four distinct
+ * images across 22 slots, one neutral studio portrait covering FIFTEEN of them, so on the caddie
+ * half the players get by default the avatar could not react to a great shot, a bad stretch or a
+ * question. The avatar is the only continuous VISUAL signal that the caddie is responding at all —
+ * the mental-game work is audible and invisible — so a face that never changes reads as a system
+ * that is not listening. [[feels-like-a-real-caddie]]
+ *
+ * Now ELEVEN distinct images, worst reuse 5 — up from four distinct with one portrait covering
+ * fifteen slots. Not yet Kevin's bar (20 distinct, worst 2); five slots still await art.
+ *
+ * serena-caddie-nod-001.png is no longer referenced. Left in the repo rather than deleted: Metro
+ * only bundles what is require()d, so an unreferenced asset costs nothing at runtime, and it is a
+ * candidate for one of the five remaining slots.
+ *
+ * A slot is only pointed at a real expression where the expression genuinely fits. pensive,
+ * inquisitive, humble, surprised and confident still resolve to the studio portrait rather than
+ * being forced onto a near-neighbour: a wrong face is worse than a neutral one, because it makes
+ * the caddie look like he misread you.
+ *
+ * Shipped as JPEG at quality 82, matching serena_portrait.jpg. The source PNGs were 2.1 MB each —
+ * 17 MB for the set, on a bundle already near its budget and inside every future OTA. These are
+ * 140 KB each, 1.1 MB for the set, with no visible loss at avatar size and no alpha to preserve.
+ */
 const SERENA_AVATARS: Record<AvatarKey, ImageSourcePropType> = {
   kevin_course:        require('../assets/avatars/serena_portrait.jpg'),
   kevin_dark:          require('../assets/avatars/serena_dark.jpg'),
-  kevin_nod:           require('../assets/avatars/serena-caddie-nod-001.png'),
-  kevin_idle:          require('../assets/avatars/serena-caddie-nod-001.png'),
-  kevin_listening:     require('../assets/avatars/serena-caddie-nod-001.png'),
-  kevin_mentorship:    require('../assets/avatars/serena-caddie-nod-001.png'),
-  kevin_supportive:    require('../assets/avatars/serena-caddie-nod-001.png'),
-  kevin_explaining:    require('../assets/avatars/serena-studio-portrait-001.png'),
-  kevin_focused:       require('../assets/avatars/serena-studio-portrait-001.png'),
-  kevin_determined:    require('../assets/avatars/serena-studio-portrait-001.png'),
+
+  // ── purpose-made expressions ──
+  kevin_idle:          require('../assets/avatars/serena_expressive_idle.jpg'),
+  kevin_nod:           require('../assets/avatars/serena_expressive_idle.jpg'),
+  kevin_listening:     require('../assets/avatars/serena_expressive_listening.jpg'),
+  kevin_curious:       require('../assets/avatars/serena_expressive_listening.jpg'),
+  kevin_explaining:    require('../assets/avatars/serena_expressive_explaining.jpg'),
+  kevin_focused:       require('../assets/avatars/serena_expressive_focused.jpg'),
+  // Cowork's own reject folder names determined as a duplicate of focused — same read, so it
+  // points at focused rather than at a ninth image that would have been the same picture.
+  kevin_determined:    require('../assets/avatars/serena_expressive_focused.jpg'),
+  kevin_gameface:      require('../assets/avatars/serena_expressive_focused.jpg'),
+  kevin_happy:         require('../assets/avatars/serena_expressive_happy.jpg'),
+  kevin_enthusiastic:  require('../assets/avatars/serena_expressive_happy.jpg'),
+  kevin_supportive:    require('../assets/avatars/serena_expressive_supportive.jpg'),
+  kevin_mentorship:    require('../assets/avatars/serena_expressive_supportive.jpg'),
+  kevin_wincing:       require('../assets/avatars/serena_expressive_wincing.jpg'),
+  kevin_self_critical: require('../assets/avatars/serena_expressive_wincing.jpg'),
+  kevin_celebrating:   require('../assets/avatars/serena_expressive_celebrating.jpg'),
+
+  // ── still awaiting art — neutral on purpose, see the header ──
   kevin_pensive:       require('../assets/avatars/serena-studio-portrait-001.png'),
   kevin_inquisitive:   require('../assets/avatars/serena-studio-portrait-001.png'),
   kevin_humble:        require('../assets/avatars/serena-studio-portrait-001.png'),
-  kevin_happy:         require('../assets/avatars/serena-studio-portrait-001.png'),
-  kevin_enthusiastic:  require('../assets/avatars/serena-studio-portrait-001.png'),
   kevin_surprised:     require('../assets/avatars/serena-studio-portrait-001.png'),
-  kevin_celebrating:   require('../assets/avatars/serena-studio-portrait-001.png'),
   kevin_confident:     require('../assets/avatars/serena-studio-portrait-001.png'),
-  kevin_gameface:      require('../assets/avatars/serena-studio-portrait-001.png'),
-  kevin_curious:       require('../assets/avatars/serena-studio-portrait-001.png'),
-  kevin_wincing:       require('../assets/avatars/serena-studio-portrait-001.png'),
-  kevin_self_critical: require('../assets/avatars/serena-studio-portrait-001.png'),
 };
-
 // Harry counterparts. Each emotion slot maps to the closest-matching PNG
 // from harry_emotions_24.zip. Slots without a perfect match reuse the
 // nearest expressive sibling (e.g. kevin_curious reuses attentive).
