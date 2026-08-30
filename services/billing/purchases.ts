@@ -70,8 +70,26 @@ export const ENTITLEMENT_ID = 'full';
  * vars arrive EMPTY in an OTA-delivered bundle: they are inlined at BUILD time, so a JS-only update
  * carries whatever the binary was built with. The fallback is what actually runs in the field.
  */
-const IOS_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || '';
-const ANDROID_KEY = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY || '';
+/**
+ * 2026-08-30 — the TEST STORE key, deliberately, and it must not reach a paid launch.
+ *
+ * RevenueCat's key prefixes say which store is behind them: `appl_` is App Store, `goog_` is Play,
+ * and `test_` is RevenueCat's own Test Store. Tim supplied one `test_` value for BOTH platforms,
+ * which is the tell — real platform keys always differ.
+ *
+ * It is here on purpose. Apple sandbox purchases need the Paid Applications agreement to be active,
+ * that needs banking and tax, and that is blocked on an EIN. The Test Store is the only way to
+ * exercise a real purchase, restore and trial before then, so the flow can be proven rather than
+ * assumed while the paperwork clears.
+ *
+ * It is also a launch-breaking mistake waiting to happen: flip SUBSCRIPTIONS_ENABLED with this in
+ * place and every player transacts against a test store instead of Apple. A sim LOCK fails the
+ * build if a `test_` key is ever present while subscriptions are ON, so that combination cannot
+ * ship. Replace these with the appl_/goog_ keys before the switch moves. [[cowork-task-list]]
+ */
+const TEST_STORE_KEY = 'test_xTYhIjxcMjCQkAzNExcmQzhFdvA';
+const IOS_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || TEST_STORE_KEY;
+const ANDROID_KEY = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY || TEST_STORE_KEY;
 
 function apiKey(): string {
   return Platform.OS === 'ios' ? IOS_KEY : ANDROID_KEY;
@@ -126,6 +144,14 @@ export function initBilling(): boolean {
   // string makes the SDK throw on the first call instead of here, which is a worse place to find out.
   if (!key) return false;
   try {
+    // Verbose SDK logging in development only — it prints every request and receipt, which is what
+    // you want while proving the flow and noise you do not want in a shipped build.
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      // setDebugLogsEnabled rather than setLogLevel(LOG_LEVEL.VERBOSE): the enum is a named export
+      // on the module and would need a second require of the SDK, which this file exists to avoid
+      // doing more than once. Same outcome.
+      try { void Purchases.setDebugLogsEnabled?.(true); } catch { /* optional */ }
+    }
     Purchases.configure({ apiKey: key });
     configured = true;
     return true;

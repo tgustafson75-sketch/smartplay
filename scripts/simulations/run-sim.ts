@@ -3835,6 +3835,35 @@ check('LOCK: a denied feature must OFFER the upgrade, never just refuse',
   })(),
   'every !canAccess branch reaches triggerPaywall inside its own block — a refused feature always offers the upgrade rather than dead-ending the player');
 
+check('LOCK: a test-store key can never ship with subscriptions ON',
+  /**
+   * 2026-08-30 — the Test Store key is in the repo on purpose, and it must not survive the switch.
+   *
+   * Apple sandbox purchases need the Paid Applications agreement active, which needs banking and
+   * tax, which is blocked on an EIN. RevenueCat's Test Store (`test_` prefix) is the only way to
+   * prove the purchase, restore and trial flow before then — so the key is committed deliberately.
+   *
+   * The failure it invites is total and silent: flip SUBSCRIPTIONS_ENABLED with a `test_` key still
+   * in place and every player transacts against a test store instead of Apple. Nothing errors.
+   * Purchases appear to succeed. No money moves.
+   *
+   * So the two are locked together: a `test_` key is allowed only while subscriptions are OFF. The
+   * day the appl_/goog_ keys arrive they replace it, and the day the switch moves this guard checks
+   * that they did. [[no-half-fixes-enforce-every-surface]]
+   */
+  (() => {
+    const billing = readCode('services/billing/purchases.ts');
+    const access = readCode('services/featureAccess.ts');
+    const on = /SUBSCRIPTIONS_ENABLED\s*=\s*true/.test(access);
+    const testKeys = billing.match(/'test_[A-Za-z0-9]+'/g) ?? [];
+    if (!on) return true;                       // subscriptions off — a test key is the point
+    if (testKeys.length === 0) return true;     // subscriptions on, real keys — correct
+    console.log(`   SUBSCRIPTIONS_ENABLED is true while a RevenueCat TEST-STORE key is still wired: ${testKeys.join(', ')}`);
+    console.log('   every purchase would go to the test store instead of Apple, and would appear to succeed');
+    return false;
+  })(),
+  'a RevenueCat test-store key is present only while SUBSCRIPTIONS_ENABLED is false — turning subscriptions on requires the real appl_/goog_ keys');
+
 check('LOCK: the billing SDK is never reached except through the lazy require',
   /**
    * 2026-08-29 — A STATIC IMPORT OF react-native-purchases WOULD CRASH EVERY TESTER.
