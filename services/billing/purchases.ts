@@ -49,11 +49,18 @@ import { PRICING } from '../../lib/pricing';
 import type { SubscriptionStatus } from '../../store/playerProfileStore';
 
 /**
- * The entitlement identifier configured in the RevenueCat dashboard. Cowork creates this; if the
- * string here and the string there disagree, every paying customer reads as unsubscribed, so it is
- * written down in one place and recorded in the Cowork task list. [[cowork-task-list]]
+ * The entitlement identifier configured in the RevenueCat dashboard.
+ *
+ * 2026-08-30 — CORRECTED from 'full' to 'smartplay_caddie_pro', which is what the dashboard
+ * actually has. I chose 'full' on 08-29 to match the app's own Lite/Full edition language and
+ * recorded it for Cowork to create; the project was set up with a different name, and RevenueCat's
+ * onboarding snippet is what surfaced it.
+ *
+ * The dashboard wins, always — the SDK returns entitlements keyed by ITS identifier, so a mismatch
+ * is not a naming inconsistency, it is every paying customer reading as unsubscribed with nothing
+ * in the app able to explain why. Pinned by a test for exactly that reason. [[cowork-task-list]]
  */
-export const ENTITLEMENT_ID = 'full';
+export const ENTITLEMENT_ID = 'smartplay_caddie_pro';
 
 /**
  * Product identifiers live in lib/pricing.ts next to the prices, and ONLY there. They were briefly

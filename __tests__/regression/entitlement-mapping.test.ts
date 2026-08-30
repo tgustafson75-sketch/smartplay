@@ -143,7 +143,10 @@ describe('the identifiers the dashboard must match', () => {
     // These are typed into App Store Connect, Play Console and RevenueCat by hand. If the string
     // here and the string there disagree, every paying customer reads as unsubscribed and nothing
     // in the app can tell you why. Changing one of these means changing a dashboard too.
-    expect(ENTITLEMENT_ID).toBe('full');
+    // Corrected 2026-08-30: the RevenueCat project uses 'smartplay_caddie_pro', not the 'full' I
+    // had picked to match the app's Lite/Full language. The dashboard's identifier is the only one
+    // the SDK answers to.
+    expect(ENTITLEMENT_ID).toBe('smartplay_caddie_pro');
     expect(PRICING.monthly.productId).toBe('com.smartplaycaddie.app.full.monthly');
     expect(PRICING.annual.productId).toBe('com.smartplaycaddie.app.full.annual');
   });

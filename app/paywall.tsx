@@ -117,12 +117,25 @@ export default function PaywallScreen() {
     setBusy(true);
     try {
       const packages = await getPackages();
-      // Default to the monthly package — it is what the headline, the card and the spoken line all
-      // quote, so buying anything else here would contradict what the player was just told.
-      const pkg =
-        packages.find(
-          (p) => (p as { product?: { identifier?: string } })?.product?.identifier === PRICING.monthly.productId,
-        ) ?? packages[0];
+      /**
+       * Default to the MONTHLY package — it is what the headline, the pricing card and the spoken
+       * line all quote, so buying anything else would contradict what the player was just told.
+       *
+       * 2026-08-30 — matched on RevenueCat's `packageType` FIRST, falling back to the App Store
+       * product id. Matching only on the product id worked against App Store Connect and found
+       * nothing against RevenueCat's Test Store, whose products are named `monthly` / `yearly` /
+       * `lifetime`. It would have silently fallen through to packages[0] — which is whatever the
+       * offering happens to list first, and could be the lifetime product. Selling someone a
+       * lifetime plan because a string did not match is not a fallback, it is a wrong charge.
+       * packageType is the store-agnostic answer and is what the SDK is built around.
+       */
+      const byType = packages.find(
+        (p) => (p as { packageType?: string })?.packageType === 'MONTHLY',
+      );
+      const byProductId = packages.find(
+        (p) => (p as { product?: { identifier?: string } })?.product?.identifier === PRICING.monthly.productId,
+      );
+      const pkg = byType ?? byProductId ?? packages[0];
       if (!pkg) {
         Alert.alert('Not available yet', 'The subscription is not on sale in your region yet.', [{ text: 'OK' }]);
         return;
