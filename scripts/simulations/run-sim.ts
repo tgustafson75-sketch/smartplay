@@ -3635,6 +3635,53 @@ check('LOCK: the setting nothing could set is gone, and cannot come back',
   })(),
   'no shipped file branches on voiceOrchestrator or re-declares it — the setting that could only hold one value is gone, and a new branch on it would be a live-looking choice that cannot vary');
 
+check('LOCK: the audio route is WATCHED, and every layer of the bridge agrees',
+  /**
+   * 2026-08-29 — the route read was one-shot, and the header claimed things that were never true.
+   *
+   * getAudioRoute (08-25) answered "is a headset connected"; audioRoutingService asked exactly once,
+   * on first subscribe. Players put earbuds in on the first tee, not in the car park, so the caddie
+   * spent the round deciding whether to talk out loud from an answer that was already stale — while
+   * the file header described 2-second polling and an expo-av abstraction, neither of which existed
+   * anywhere in it.
+   *
+   * FIVE LAYERS have to agree for a route change to reach the app, and only one of them fails loudly:
+   *   1. Kotlin registers an AudioDeviceCallback and emits onAudioRouteChanged
+   *   2. Swift observes routeChangeNotification and emits onAudioRouteChanged
+   *   3. Swift declares that event in supportedEvents() — RCTEventEmitter drops it silently otherwise
+   *   4. the .m bridge exports startRouteWatch — WITHOUT THIS THE SWIFT METHOD IS INVISIBLE AT
+   *      RUNTIME AND NOTHING FAILS TO COMPILE. It is the single easiest layer to forget.
+   *   5. JS calls startRouteWatch and subscribes to the event
+   *
+   * No test can reach layers 1-4: they are native, and the jest suite runs in node. This is the only
+   * thing standing between "iOS route detection silently does nothing" and someone noticing.
+   * [[no-half-fixes-enforce-every-surface]] [[grep-guards-cant-see-dead-code]]
+   */
+  (() => {
+    const EVENT = 'onAudioRouteChanged';
+    const kt = read('android-native/BluetoothMediaButtonModule.kt');
+    const swift = read('ios-native/BluetoothMediaButtonModule.swift');
+    const objc = read('ios-native/BluetoothMediaButton.m');
+    const js = readCode('services/audioRoutingService.ts');
+    const missing: string[] = [];
+    if (!/registerAudioDeviceCallback/.test(kt)) missing.push('kotlin: no AudioDeviceCallback registered');
+    if (!kt.includes(EVENT)) missing.push(`kotlin: never emits ${EVENT}`);
+    if (!/fun startRouteWatch/.test(kt)) missing.push('kotlin: no startRouteWatch');
+    if (!/unregisterAudioDeviceCallback/.test(kt)) missing.push('kotlin: callback never unregistered');
+    if (!/routeChangeNotification/.test(swift)) missing.push('swift: not observing routeChangeNotification');
+    if (!swift.includes(EVENT)) missing.push(`swift: never emits ${EVENT}`);
+    if (!/func startRouteWatch/.test(swift)) missing.push('swift: no startRouteWatch');
+    // supportedEvents must NAME the event or RCTEventEmitter discards every send silently.
+    const se = swift.slice(swift.indexOf('supportedEvents'), swift.indexOf('supportedEvents') + 300);
+    if (!se.includes(EVENT)) missing.push(`swift: ${EVENT} missing from supportedEvents()`);
+    if (!/RCT_EXTERN_METHOD\(startRouteWatch/.test(objc)) missing.push('objc bridge: startRouteWatch not exported — the Swift method is invisible at runtime');
+    if (!/startRouteWatch/.test(js)) missing.push('js: never calls startRouteWatch');
+    if (!js.includes(EVENT)) missing.push(`js: never subscribes to ${EVENT}`);
+    if (missing.length) console.log(`   audio route bridge broken → ${missing.join(' · ')}`);
+    return missing.length === 0;
+  })(),
+  'a headset plugged in mid-round reaches the app: both native modules watch and emit, the event is declared and bridged, and JS starts the watch and subscribes');
+
 check('LOCK: a denied feature must OFFER the upgrade, never just refuse',
   /**
    * 2026-08-29 (adversarial audit 2, generalised). TWO CASES ASKED A QUESTION THEY COULD NOT ANSWER.

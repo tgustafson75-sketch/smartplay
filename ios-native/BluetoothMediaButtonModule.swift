@@ -43,12 +43,13 @@ class BluetoothMediaButton: RCTEventEmitter {
 
     private var isActive = false
     private var hasListeners = false
+    private var routeWatching = false
 
     override static func requiresMainQueueSetup() -> Bool { return true }
 
     override func supportedEvents() -> [String]! {
-        // Single event surface for parity with Android module.
-        return ["onRemoteControl"]
+        // Two event surfaces, mirrored exactly on the Android module.
+        return ["onRemoteControl", "onAudioRouteChanged"]
     }
 
     override func startObserving() {
@@ -57,6 +58,10 @@ class BluetoothMediaButton: RCTEventEmitter {
 
     override func stopObserving() {
         hasListeners = false
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     /// Activate the remote-control session. Idempotent.
@@ -159,9 +164,8 @@ class BluetoothMediaButton: RCTEventEmitter {
      * Never rejects. An unknown route degrades to "speaker", which is the conservative answer —
      * do not start talking out loud on an assumption.
      */
-    @objc(getAudioRoute:rejecter:)
-    func getAudioRoute(_ resolve: @escaping RCTPromiseResolveBlock,
-                       rejecter reject: @escaping RCTPromiseRejectBlock) {
+    /// The route right now, in the shape both platforms return.
+    private func currentRouteBody() -> [String: Any] {
         let outputs = AVAudioSession.sharedInstance().currentRoute.outputs
         var bluetooth = false
         var wired = false
@@ -175,10 +179,51 @@ class BluetoothMediaButton: RCTEventEmitter {
                 break   // built-in speaker / receiver / HDMI — not a headset
             }
         }
-        resolve([
+        return [
             "route": bluetooth ? "bluetooth" : (wired ? "wired" : "speaker"),
             "headsetConnected": bluetooth || wired,
-        ])
+        ]
+    }
+
+    @objc(getAudioRoute:rejecter:)
+    func getAudioRoute(_ resolve: @escaping RCTPromiseResolveBlock,
+                       rejecter reject: @escaping RCTPromiseRejectBlock) {
+        resolve(currentRouteBody())
+    }
+
+    /**
+     * 2026-08-29 — WATCH THE ROUTE, DO NOT JUST READ IT ONCE.
+     *
+     * getAudioRoute (08-25) answered the question, and services/audioRoutingService asked it exactly
+     * once, on first subscribe. So the app learned the route at app start and never again: a player
+     * who puts earbuds in on the first tee — which is when people actually put earbuds in — kept
+     * whatever answer was true in the car park, and the caddie went on deciding whether to talk out
+     * loud from stale information.
+     *
+     * AVAudioSession posts routeChangeNotification for exactly this. Idempotent; safe to call on
+     * every subscribe.
+     */
+    @objc(startRouteWatch:rejecter:)
+    func startRouteWatch(_ resolve: @escaping RCTPromiseResolveBlock,
+                         rejecter reject: @escaping RCTPromiseRejectBlock) {
+        if routeWatching {
+            resolve(true)
+            return
+        }
+        routeWatching = true
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleRouteChange(_:)),
+            name: AVAudioSession.routeChangeNotification,
+            object: AVAudioSession.sharedInstance()
+        )
+        resolve(true)
+    }
+
+    @objc private func handleRouteChange(_ note: Notification) {
+        // Same listener guard emitTap uses — RCTEventEmitter warns on an emit with no subscriber.
+        guard hasListeners else { return }
+        sendEvent(withName: "onAudioRouteChanged", body: currentRouteBody())
     }
 
     private func emitTap(type: String) {

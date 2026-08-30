@@ -1,24 +1,28 @@
 /**
- * Phase O — Audio routing monitor.
+ * services/audioRoutingService.ts — is the caddie's voice going into a headset, or into the air?
  *
- * Tracks whether audio is currently routing through Bluetooth/wired headset
- * vs the phone's built-in speaker. Phase O's listening session uses this to
- * decide whether Kevin's voice is safe to play (earbuds connected → yes;
- * phone speaker → suppress + show notification per spec, unless the user
- * explicitly enabled "Voice on phone speaker" in settings).
+ * The listening session uses this to decide whether it is safe to speak: earbuds connected → yes;
+ * phone speaker → suppress and caption instead, unless the player explicitly enabled "Voice on phone
+ * speaker" in Settings.
  *
- * Implementation: subscribes to expo-av audio session changes. The native
- * detail (iOS AVAudioSession.routeChangeNotification, Android
- * AudioManager.ACTION_HEADSET_PLUG + Bluetooth profile) is abstracted by
- * expo-av at managed-workflow level. For richer detection (distinguishing
- * "earbuds with mic" from "speakers without mic"), a future custom native
- * module would expose CMHeadphoneMotionManager / Bluetooth class data.
+ * 2026-08-29 — THIS HEADER USED TO DESCRIBE A FILE THAT DOES NOT EXIST. It claimed the service
+ * "subscribes to expo-av audio session changes", that the native detail was "abstracted by expo-av
+ * at managed-workflow level", and that it "polls every 2s ... falls back to a best-effort detection
+ * via Audio.getPermissionsAsync". None of that was ever true here: there is no polling, no expo-av
+ * subscription, and no permissions-based fallback. Anyone reading the file to find out why route
+ * detection was unreliable would have gone looking for a 2-second timer that was never written.
+ * [[grep-guards-cant-see-dead-code]]
  *
- * KNOWN LIMITATION: in Expo managed workflow, expo-av exposes audio session
- * state but not granular route-change events. This service polls every 2s
- * for the configured audio mode and falls back to a "best-effort" detection
- * via Audio.getPermissionsAsync + checking allowsRecordingIOS state.
- * Future: replace polling with native event listener via custom module.
+ * What is actually true, as of the 08-29 build:
+ *
+ *   - `detectRoute()` configures the audio mode, then ASKS the native module once.
+ *   - `startRouteWatch()` + the `onAudioRouteChanged` event keep it current afterwards —
+ *     AVAudioSession.routeChangeNotification on iOS, AudioManager.AudioDeviceCallback on Android.
+ *   - Everything degrades to the manual Settings toggle when the native method is absent, which is
+ *     every build before this one.
+ *
+ * An unknown route is left alone rather than forced to 'phone_speaker': overriding a player's
+ * explicit choice with a guess is worse than not knowing.
  */
 
 export type AudioRoute = 'phone_speaker' | 'wired' | 'bluetooth' | 'unknown';
@@ -28,6 +32,7 @@ type Listener = (route: AudioRoute) => void;
 let currentRoute: AudioRoute = 'unknown';
 const listeners: Set<Listener> = new Set();
 let audioModeConfigured = false;
+let routeWatchStarted = false;
 
 /**
  * Returns the most recently detected audio route.
@@ -91,20 +96,52 @@ async function detectRoute() {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { NativeModules } = require('react-native') as typeof import('react-native');
     const mod = (NativeModules as Record<string, unknown>).BluetoothMediaButton as
-      | { getAudioRoute?: () => Promise<{ route?: string; headsetConnected?: boolean }> }
+      | {
+          getAudioRoute?: () => Promise<{ route?: string; headsetConnected?: boolean }>;
+          startRouteWatch?: () => Promise<boolean>;
+        }
       | undefined;
     if (mod?.getAudioRoute) {
       const r = await mod.getAudioRoute();
-      const mapped: AudioRoute =
-        r?.route === 'bluetooth' ? 'bluetooth'
-        : r?.route === 'wired' ? 'wired'
-        : r?.route === 'speaker' ? 'phone_speaker'
-        : 'unknown';
-      if (mapped !== 'unknown') setRouteForOverride(mapped);
+      applyNativeRoute(r);
+    }
+    /**
+     * 2026-08-29 — READING THE ROUTE ONCE IS NOT DETECTING IT.
+     *
+     * The read above ran exactly once, on first subscribe, so the app learned the route at app start
+     * and never again. Players put earbuds in on the first tee, not in the car park — so the caddie
+     * spent the round deciding whether to talk out loud from an answer that was already stale, and
+     * the only way to correct it was the manual toggle this was supposed to replace.
+     *
+     * Both platforms have always broadcast route changes. Subscribing is the whole fix.
+     */
+    if (mod?.startRouteWatch && !routeWatchStarted) {
+      routeWatchStarted = true;
+      const started = await mod.startRouteWatch().catch(() => false);
+      if (started) {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { DeviceEventEmitter } = require('react-native') as typeof import('react-native');
+        DeviceEventEmitter.addListener('onAudioRouteChanged', (payload: unknown) => {
+          applyNativeRoute(payload as { route?: string });
+        });
+      }
     }
   } catch (e) {
     console.log('[audioRouting] route detection unavailable (pre-build client):', e);
   }
+}
+
+/**
+ * One mapper for both the one-shot read and the change event — they carry the same payload shape
+ * from both platforms deliberately, so there is no second place for the mapping to drift.
+ */
+function applyNativeRoute(r: { route?: string } | null | undefined): void {
+  const mapped: AudioRoute =
+    r?.route === 'bluetooth' ? 'bluetooth'
+    : r?.route === 'wired' ? 'wired'
+    : r?.route === 'speaker' ? 'phone_speaker'
+    : 'unknown';
+  if (mapped !== 'unknown') setRouteForOverride(mapped);
 }
 
 /**

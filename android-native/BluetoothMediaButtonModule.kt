@@ -52,12 +52,14 @@ package com.smartplaycaddie.btmedia
 
 import android.content.ComponentName
 import android.content.Context
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.os.Build
 import android.util.Log
 import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.WritableMap
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -70,6 +72,7 @@ class BluetoothMediaButtonModule(reactContext: ReactApplicationContext) :
     private val tag = "BTMediaButton"
     @Volatile private var session: MediaSession? = null
     @Volatile private var isActive: Boolean = false
+    @Volatile private var deviceCallback: AudioManager.AudioDeviceCallback? = null
 
     override fun getName(): String = "BluetoothMediaButton"
 
@@ -180,8 +183,9 @@ class BluetoothMediaButtonModule(reactContext: ReactApplicationContext) :
      * be spoken through freely, Bluetooth is the hands-free case, and the phone speaker is the one
      * where talking out loud might embarrass someone on a quiet tee.
      */
-    @ReactMethod
-    fun getAudioRoute(promise: Promise) {
+    /** The route right now, in the shape both platforms return. Never throws. */
+    private fun currentRouteMap(): WritableMap {
+        val map = Arguments.createMap()
         try {
             val am = reactApplicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             var bluetooth = false
@@ -191,28 +195,74 @@ class BluetoothMediaButtonModule(reactContext: ReactApplicationContext) :
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 for (d in am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
                     when (d.type) {
-                        android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
-                        android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
-                        android.media.AudioDeviceInfo.TYPE_HEARING_AID -> bluetooth = true
-                        android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET,
-                        android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
-                        android.media.AudioDeviceInfo.TYPE_USB_HEADSET -> wired = true
+                        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+                        AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+                        AudioDeviceInfo.TYPE_HEARING_AID -> bluetooth = true
+                        AudioDeviceInfo.TYPE_WIRED_HEADSET,
+                        AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+                        AudioDeviceInfo.TYPE_USB_HEADSET -> wired = true
                         else -> { /* speaker, earpiece, HDMI — not a headset */ }
                     }
                 }
             }
-            val map = Arguments.createMap()
             map.putString("route", if (bluetooth) "bluetooth" else if (wired) "wired" else "speaker")
             map.putBoolean("headsetConnected", bluetooth || wired)
-            promise.resolve(map)
         } catch (t: Throwable) {
-            Log.e(tag, "getAudioRoute failed", t)
-            // Never reject an audio query — an unknown route must degrade to "assume speaker",
-            // which is the conservative answer (do not start talking out loud on an assumption).
-            val map = Arguments.createMap()
+            Log.e(tag, "route query failed", t)
+            // An unknown route degrades to "assume speaker", the conservative answer — do not start
+            // talking out loud on an assumption.
             map.putString("route", "speaker")
             map.putBoolean("headsetConnected", false)
-            promise.resolve(map)
+        }
+        return map
+    }
+
+    @ReactMethod
+    fun getAudioRoute(promise: Promise) {
+        // Never rejects; currentRouteMap swallows its own failures.
+        promise.resolve(currentRouteMap())
+    }
+
+    /**
+     * 2026-08-29 — WATCH THE ROUTE, DO NOT JUST READ IT ONCE.
+     *
+     * getAudioRoute (08-25) answered the question, and services/audioRoutingService asked it exactly
+     * once, on first subscribe. So the app learned the route at app start and never again: a player
+     * who puts earbuds in on the first tee — which is when people actually put earbuds in — kept
+     * whatever answer was true in the car park, and the caddie went on deciding whether to talk out
+     * loud from stale information.
+     *
+     * AudioDeviceCallback fires on both add and remove, which covers a headset going away mid-round
+     * as well as arriving. Idempotent; safe to call on every subscribe.
+     */
+    @ReactMethod
+    fun startRouteWatch(promise: Promise) {
+        try {
+            if (deviceCallback != null) { promise.resolve(true); return }
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) { promise.resolve(false); return }
+            val am = reactApplicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val cb = object : AudioManager.AudioDeviceCallback() {
+                override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) = emitRoute()
+                override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) = emitRoute()
+            }
+            am.registerAudioDeviceCallback(cb, null)
+            deviceCallback = cb
+            promise.resolve(true)
+        } catch (t: Throwable) {
+            Log.e(tag, "startRouteWatch failed", t)
+            // Resolve false rather than reject: no route watching is a degraded feature, not an error
+            // the caller should have to catch.
+            promise.resolve(false)
+        }
+    }
+
+    private fun emitRoute() {
+        try {
+            reactApplicationContext
+                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                .emit("onAudioRouteChanged", currentRouteMap())
+        } catch (t: Throwable) {
+            Log.w(tag, "route emit failed (non-fatal)", t)
         }
     }
 
@@ -255,6 +305,13 @@ class BluetoothMediaButtonModule(reactContext: ReactApplicationContext) :
             session?.isActive = false
             session?.release()
         }
+        runCatching {
+            deviceCallback?.let {
+                val am = reactApplicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                am.unregisterAudioDeviceCallback(it)
+            }
+        }
+        deviceCallback = null
         session = null
         isActive = false
     }

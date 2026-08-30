@@ -23,4 +23,7 @@ RCT_EXTERN_METHOD(getStatus:(RCTPromiseResolveBlock)resolve
 RCT_EXTERN_METHOD(getAudioRoute:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(startRouteWatch:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
 @end
