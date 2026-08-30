@@ -3917,9 +3917,27 @@ check('LOCK: the trial length has ONE owner',
     const stripped = body.replace(/24\s*\*\s*60\s*\*\s*60\s*\*\s*1000/g, ' ');
     const strays = stripped.match(/\b\d+\b/g)?.filter((n) => n !== '0');
     if (strays?.length) console.log(`   featureAccess owns a second trial number: ${strays.join(', ')}`);
-    return !strays?.length;
+    if (strays?.length) return false;
+
+    /**
+     * 2026-08-30 — AND THE ONE THAT ACTUALLY ENDS THE TRIAL.
+     *
+     * The 08-29 version of this guard was pinned to trialDaysLeft, so it proved the DISPLAY derived
+     * from PRICING and said nothing about the EXPIRY. app/_layout.tsx kept
+     * `TRIAL_DURATION_MS = 7 * 24 * 60 * 60 * 1000` one file away: the countdown would have read 14
+     * while the cut-off fired on day 7, which is the worse half of the pair. A guard that names a
+     * FUNCTION cannot protect a PROPERTY OF THE APP. [[guard-the-shape-not-the-file-list]]
+     */
+    const layout = readCode('app/_layout.tsx');
+    const dur = layout.match(/const\s+TRIAL_DURATION_MS\s*=\s*([^;]+);/);
+    if (!dur) { console.log('   _layout: TRIAL_DURATION_MS not found'); return false; }
+    if (!/PRICING\.trialDays/.test(dur[1])) {
+      console.log(`   _layout owns a second trial length: TRIAL_DURATION_MS = ${dur[1].trim()}`);
+      return false;
+    }
+    return true;
   })(),
-  'trialDaysLeft derives the trial length from PRICING.trialDays and carries no day-count literal of its own');
+  'both the trial COUNTDOWN (featureAccess) and the trial EXPIRY (_layout TRIAL_DURATION_MS) derive from PRICING.trialDays — neither carries a day count of its own');
 
 check('LOCK: the stated yardage has ONE owner of what counts as a yardage',
   /**

@@ -25,15 +25,28 @@ export default function SubscriptionDebugScreen() {
     trial_started_at,
     setSubscriptionStatus,
     initTrial: _initTrial,
+    promo_expires_at,
+    grantPromo,
+    clearPromo,
   } = usePlayerProfileStore();
 
   const daysLeft = trialDaysLeft(trial_started_at);
+  /**
+   * The comp's countdown, computed from its own end date rather than from a duration constant —
+   * there is no second copy of "how long is it" to drift out of step with the stamp.
+   */
+  const promoDaysLeft = promo_expires_at != null
+    ? Math.max(0, Math.ceil((promo_expires_at - Date.now()) / (24 * 60 * 60 * 1000)))
+    : null;
 
   const rows: { label: string; value: string }[] = [
     { label: 'subscription_status', value: subscription_status },
     { label: 'first_opened_at', value: first_opened_at ? new Date(first_opened_at).toISOString() : 'null' },
     { label: 'trial_started_at', value: trial_started_at ? new Date(trial_started_at).toISOString() : 'null' },
     { label: 'trial_days_left', value: daysLeft !== null ? String(daysLeft) : 'N/A' },
+    // 2026-08-30 — the comp, shown next to the trial so the two are never confused for each other.
+    { label: 'promo_expires_at', value: promo_expires_at ? new Date(promo_expires_at).toISOString() : 'null' },
+    { label: 'promo_days_left', value: promoDaysLeft !== null ? String(promoDaysLeft) : 'N/A' },
   ];
 
   // 2026-05-17 — gate check AFTER all hooks (Rules of Hooks)
@@ -100,6 +113,35 @@ export default function SubscriptionDebugScreen() {
         >
           <Text style={styles.btnText}>Trigger paywall screen</Text>
         </TouchableOpacity>
+
+        <Text style={styles.section}>Promotion</Text>
+
+        {/* 2026-08-30 (Tim) — a 30-day comp with a real end date, instead of the permanent
+            lifetime grant an owner email gets. It outranks both blanket lifetime grants in
+            _layout's boot ladder, so it survives a relaunch. */}
+        <TouchableOpacity
+          style={styles.btn}
+          onPress={() => {
+            grantPromo(30);
+            Alert.alert(
+              '30-day promotion started',
+              'Status is now active and runs out in 30 days. While subscriptions are switched off '
+              + 'this changes the state, not what is unlocked — everything is open either way.',
+              [{ text: 'OK' }],
+            );
+          }}
+        >
+          <Text style={styles.btnText}>Start 30-day promotion</Text>
+        </TouchableOpacity>
+
+        {promo_expires_at != null && (
+          <TouchableOpacity
+            style={styles.btn}
+            onPress={() => { clearPromo(); Alert.alert('Promotion cleared', 'Back to the normal ladder on next launch.', [{ text: 'OK' }]); }}
+          >
+            <Text style={styles.btnText}>End promotion now</Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={[styles.btn, styles.btnForce]}

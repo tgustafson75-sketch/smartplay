@@ -69,6 +69,16 @@ interface PlayerProfileState {
   default_mode: 'break_100' | 'break_90' | 'break_80' | 'free_play' | null;
   first_opened_at: number | null;
   trial_started_at: number | null;
+  /**
+   * 2026-08-30 — an owner COMP with a real end date, distinct from the trial and from lifetime.
+   *
+   * Tim wanted to live with the paid experience and watch it run down, rather than sit on the
+   * permanent lifetime grant his email gets. Deliberately NOT the trial: the trial length is owned
+   * by lib/pricing (14 days, matching the App Store Connect introductory offer) and a guard forbids
+   * a second copy of that number, so a 30-day comp had to be its own concept rather than a trial of
+   * a different length. Persisted automatically — partialize keeps everything it does not name.
+   */
+  promo_expires_at: number | null;
   subscription_status: SubscriptionStatus;
   /** Optional player email. Used by isOwnerEmail() to grant lifetime
    *  access on first boot. Currently no auth surface populates this; set
@@ -208,6 +218,10 @@ interface PlayerProfileState {
   setDefaultMode: (m: 'break_100' | 'break_90' | 'break_80' | 'free_play') => void;
   initTrial: () => void;
   setSubscriptionStatus: (s: SubscriptionStatus) => void;
+  /** Start a comp for N days. Stamps the end date and sets status 'active'. */
+  grantPromo: (days: number) => void;
+  /** End a comp early, or clear one that has run out. */
+  clearPromo: () => void;
   /**
    * 2026-08-29 — set the trial start from the STORE's clock rather than from first app open.
    * initTrial() stamps the moment the app was first opened, which was correct while the trial was
@@ -285,6 +299,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       default_mode: null,
       first_opened_at: null,
       trial_started_at: null,
+      promo_expires_at: null,
       subscription_status: 'free',
       email: null,
       handicap_index: null,
@@ -349,6 +364,12 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
         set({ first_opened_at: now, trial_started_at: now, subscription_status: 'trial' });
       },
       setSubscriptionStatus: (s) => set({ subscription_status: s }),
+      grantPromo: (days) =>
+        set({
+          promo_expires_at: Date.now() + Math.max(1, Math.floor(days)) * 24 * 60 * 60 * 1000,
+          subscription_status: 'active',
+        }),
+      clearPromo: () => set({ promo_expires_at: null }),
       setTrialStartedAt: (ms) => set({ trial_started_at: ms }),
       setEmail: (email) => set({ email }),
       grantLifetime: () =>

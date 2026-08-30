@@ -13,6 +13,7 @@ import { useOnboardingTourStore } from '../store/onboardingTourStore';
 import { useCustomCaddieMediaStore } from '../store/customCaddieMediaStore';
 import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
 import { refreshEntitlement } from '../services/billing/purchases';
+import { PRICING } from '../lib/pricing';
 import { useSettingsStore } from '../store/settingsStore';
 import { useRoundStore, whenRoundStoreHydrated } from '../store/roundStore';
 import { stopSpeaking, getLastSpeakStartedAt } from '../services/voiceService';
@@ -117,7 +118,21 @@ if (sentryDsn) {
   });
 }
 
-const TRIAL_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+/**
+ * 2026-08-30 — WAS A HARDCODED 7, AND THIS IS THE ONE THAT ACTUALLY ENDS THE TRIAL.
+ *
+ * lib/pricing says 14, the paywall promises 14 in three places, the caddie says it aloud, and the
+ * App Store Connect introductory offer is configured as 14. On 08-29 I found the same literal in
+ * featureAccess.trialDaysLeft, fixed it, and pinned a LOCK to that FUNCTION — so this one, one file
+ * away, survived. That is the mistake worth remembering: the guard named a function when the thing
+ * it needed to protect was a PROPERTY of the whole app.
+ *
+ * The display was corrected and the EXPIRY was not, which is the worse half of the pair: the
+ * countdown would have read "7 days left" on day 7 of a 14-day trial and then cut the caddie off
+ * while the paywall still advertised a fortnight. [[two-owners-is-the-root-cause]]
+ * [[guard-the-shape-not-the-file-list]]
+ */
+const TRIAL_DURATION_MS = PRICING.trialDays * 24 * 60 * 60 * 1000;
 
 // Inner layout reads theme and guards onboarding
 // 2026-05-20 — Day 1 / Fix 3: central debug-route gate. Single source
@@ -502,6 +517,31 @@ function AppNavigator() {
         } else if (OWNER_EMAILS.length === 1) {
           profile.setEmail(OWNER_EMAILS[0]);
         }
+      }
+
+      /**
+       * 2026-08-30 — AN ACTIVE COMP OUTRANKS BOTH BLANKET GRANTS.
+       *
+       * Steps 0 and 1 below re-assert `lifetime` on EVERY boot — step 0 for everyone while the
+       * kill-switch is off, step 1 for owner emails forever. Either would have overwritten a comp
+       * on the next launch, so a 30-day promotion set on Tim's own account would have lasted until
+       * he closed the app. It has to be checked first or it does not exist.
+       *
+       * An expired comp is cleared and then falls through to the normal ladder, which grants
+       * lifetime again while the kill-switch is off — so running out is visible in the status
+       * without locking anyone out of anything.
+       *
+       * Honest note while SUBSCRIPTIONS_ENABLED is false: canAccess() returns true for every
+       * feature regardless, so a comp does not unlock anything that was locked. What it does is
+       * make the STATE real — status, end date, countdown — which is what there is to look at.
+       */
+      const promoAt = profile.promo_expires_at;
+      if (promoAt != null) {
+        if (promoAt > Date.now()) {
+          if (subscription_status !== 'active') setSubscriptionStatus('active');
+          return true;
+        }
+        profile.clearPromo();
       }
 
       // 0) Global kill-switch — make everyone lifetime, skip everything else.
