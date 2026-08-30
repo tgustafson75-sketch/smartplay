@@ -10,10 +10,10 @@ import {
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AppIcon, { type IconName } from '../components/AppIcon';
-import { usePlayerProfileStore } from '../store/playerProfileStore';
+import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
 import { speak, configureAudioForSpeech } from '../services/voiceService';
 import { useSettingsStore } from '../store/settingsStore';
 import { track } from '../services/analytics';
@@ -35,8 +35,23 @@ export default function PaywallScreen() {
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
   const apiUrl = getApiBaseUrl();
-  const { subscription_status, setSubscriptionStatus, setTrialStartedAt } = usePlayerProfileStore();
+  const { subscription_status, setSubscriptionStatus, setTrialStartedAt, email } = usePlayerProfileStore();
   const [busy, setBusy] = useState(false);
+  /**
+   * 2026-08-30 — OWNER PREVIEW, so this screen can be photographed.
+   *
+   * App Store Connect requires a Review Screenshot of the purchase screen for every subscription,
+   * and there was no way to reach this screen on a device: the kill-switch bounces it, and
+   * forcePaywall suppressed itself on the same flag, so the debug "Force Paywall Now" button did
+   * nothing. Flipping SUBSCRIPTIONS_ENABLED to take one photograph would gate features and start
+   * every tester's trial clock.
+   *
+   * Owner-gated on the SAME email allow-list the debug routes use, not on the query param alone —
+   * a bare `?preview=1` that anyone could type would put a subscription screen in front of a
+   * reviewer while subscriptions are off, which is the confusion this whole switch exists to avoid.
+   */
+  const { preview } = useLocalSearchParams<{ preview?: string }>();
+  const previewing = preview === '1' && isOwnerEmail(email);
 
   const caddieName = getCaddieName(caddiePersonality);
   const FEATURES: { icon: IconName; label: string; sub: string }[] = [
@@ -52,7 +67,7 @@ export default function PaywallScreen() {
     // disabled (e.g. via subscription-debug or a stale route), bounce
     // immediately so the paywall surface never renders. Re-enable by
     // flipping SUBSCRIPTIONS_ENABLED in services/featureAccess.ts.
-    if (!SUBSCRIPTIONS_ENABLED) {
+    if (!SUBSCRIPTIONS_ENABLED && !previewing) {
       safeBack();
       return;
     }
@@ -75,7 +90,7 @@ export default function PaywallScreen() {
 
   // Hard-stop render when disabled — covers the moment between mount and
   // the safeBack() above unwinding the route.
-  if (!SUBSCRIPTIONS_ENABLED) return null;
+  if (!SUBSCRIPTIONS_ENABLED && !previewing) return null;
 
   /**
    * 2026-08-29 — this popped "Stripe checkout will be available in the next update".

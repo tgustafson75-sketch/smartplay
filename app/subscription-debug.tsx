@@ -103,7 +103,7 @@ export default function SubscriptionDebugScreen() {
 
         <TouchableOpacity
           style={[styles.btn, styles.btnForce]}
-          onPress={() => forcePaywall(() => router.push('/paywall' as never))}
+          onPress={() => forcePaywall(() => router.push('/paywall?preview=1' as never))}
         >
           <Text style={[styles.btnText, { color: '#fbbf24' }]}>[DEBUG] Force Paywall Now</Text>
         </TouchableOpacity>

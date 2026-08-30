@@ -3635,6 +3635,38 @@ check('LOCK: the setting nothing could set is gone, and cannot come back',
   })(),
   'no shipped file branches on voiceOrchestrator or re-declares it — the setting that could only hold one value is gone, and a new branch on it would be a live-looking choice that cannot vary');
 
+check('LOCK: the paywall preview is owner-only',
+  /**
+   * 2026-08-30 — the paywall can now be opened while SUBSCRIPTIONS_ENABLED is false, so that App
+   * Store Connect's required Review Screenshot can be taken on a device without flipping the global
+   * switch and starting every tester's trial clock.
+   *
+   * That bypass is the whole risk. A screen that sells a subscription appearing while subscriptions
+   * are off is confusing to a tester and worse to a reviewer, and `?preview=1` is a string anyone
+   * could type into a deep link. So the preview is gated on the SAME owner email allow-list the
+   * debug routes use — the query param alone must never be enough.
+   *
+   * Asserted on the FUNCTION's own binding rather than on the file containing the words: the two
+   * checks have to be in one expression, or a later edit that drops the owner half leaves a
+   * paywall reachable by anyone who knows the URL. [[break-test-every-guard-you-write]]
+   */
+  (() => {
+    const src = readCode('app/paywall.tsx');
+    const m = src.match(/const\s+previewing\s*=\s*([^;]+);/);
+    if (!m) { console.log('   paywall preview: no `previewing` binding found'); return false; }
+    const expr = m[1];
+    const problems: string[] = [];
+    if (!/isOwnerEmail\s*\(/.test(expr)) problems.push('preview is not owner-gated');
+    if (!/preview\s*===\s*'1'/.test(expr)) problems.push('preview flag not required');
+    if (!/&&/.test(expr)) problems.push('the two checks are not ANDed');
+    // Both the bounce and the render guard must consult it, or one path renders regardless.
+    const uses = (src.match(/!SUBSCRIPTIONS_ENABLED\s*&&\s*!previewing/g) ?? []).length;
+    if (uses < 2) problems.push(`only ${uses} of the 2 kill-switch checks consult previewing`);
+    if (problems.length) console.log(`   paywall preview: ${problems.join(' · ')}`);
+    return problems.length === 0;
+  })(),
+  'the paywall renders past the kill-switch only for an owner email AND an explicit preview flag, and both the bounce and the render guard consult it');
+
 check('LOCK: the retired phone-speaker toggle cannot come back',
   /**
    * 2026-08-29 (Tim: "Retire voice on phone speaker").

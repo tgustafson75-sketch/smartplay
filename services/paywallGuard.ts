@@ -91,12 +91,24 @@ export async function consumeDeferredPaywall(): Promise<DeferredPaywall | null> 
   }
 }
 
-/** Force-show the paywall, bypassing the round-active guard. Debug-only. */
+/**
+ * Force-show the paywall, bypassing the round-active guard AND the subscriptions kill-switch.
+ * Owner-only: the sole caller is app/subscription-debug.tsx, behind useDebugRouteGate.
+ *
+ * 2026-08-30 — IT USED TO SUPPRESS ITSELF, WHICH IS THE ONE THING IT MUST NOT DO. The early return
+ * on !SUBSCRIPTIONS_ENABLED made "[DEBUG] Force Paywall Now" a button that did nothing for the
+ * entire time the kill-switch has been off — i.e. always. That is not a debug control, it is a
+ * second copy of the gate it exists to bypass.
+ *
+ * It matters now because App Store Connect requires a Review Screenshot of the purchase screen for
+ * each subscription, and there was no way to reach that screen on a device without flipping the
+ * global switch and starting everybody's clock.
+ *
+ * The paywall itself still refuses to render for anyone who is not an owner — see app/paywall.tsx.
+ * Two independent checks, because a screen that sells a subscription appearing while subscriptions
+ * are off would be confusing to a tester and worse to a reviewer.
+ */
 export function forcePaywall(navigate: () => void): void {
-  if (!SUBSCRIPTIONS_ENABLED) {
-    breadcrumb('paywall_forced_suppressed', { source: 'debug' });
-    return;
-  }
-  breadcrumb('paywall_forced', { source: 'debug' });
+  breadcrumb('paywall_forced', { source: 'debug', subscriptionsEnabled: SUBSCRIPTIONS_ENABLED });
   navigate();
 }
