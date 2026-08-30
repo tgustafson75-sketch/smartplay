@@ -28,6 +28,11 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'One less switch to think about. Your caddie used to need a setting called "Voice on Phone Speaker" before he would talk without earbuds in. He now works out for himself what you are listening on, so the setting is gone and he just speaks.',
+    howTo: 'Nothing to do. If you had it turned on, nothing changes — he talks exactly as he did before, and the setting is no longer in Settings, Voice.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'Sending your issue log now sends only what is new. It used to re-send everything you had ever reported, so problems that were already fixed kept arriving alongside the one you just hit. Nothing is deleted — the full list is still there on the screen.',
     howTo: 'Tools, Issue Log, then Send. If everything has already gone out, it now tells you there is nothing new rather than looking like it failed.',
   },

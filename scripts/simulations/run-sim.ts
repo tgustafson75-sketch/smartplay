@@ -3635,6 +3635,54 @@ check('LOCK: the setting nothing could set is gone, and cannot come back',
   })(),
   'no shipped file branches on voiceOrchestrator or re-declares it — the setting that could only hold one value is gone, and a new branch on it would be a live-looking choice that cannot vary');
 
+check('LOCK: the retired phone-speaker toggle cannot come back',
+  /**
+   * 2026-08-29 (Tim: "Retire voice on phone speaker").
+   *
+   * `voiceOnPhoneSpeaker` asked the player to answer a question the app can now answer itself — and
+   * it had not changed an outcome since 2026-05, because migration v7 force-set it TRUE for
+   * everyone on purpose ("avatar acknowledges but doesn't speak" was the failure it fixed). So
+   * `route !== 'phone_speaker' || allowPhoneSpeaker` evaluated to true on every device for three
+   * months: eleven call sites of a dead term that read like a live gate.
+   *
+   * Removing it was behaviour-identical. This stops it drifting back — as a setting, as a store
+   * field, or as a route test standing between the player and the caddie's voice. The live route is
+   * still detected and still drives captions; what it must never again do is decide whether the
+   * caddie is allowed to speak. Comments are stripped first, so the history in settingsStore and
+   * handsFreeOrchestrator is allowed to keep saying what happened.
+   * [[hands-free-zero-setup-is-the-product]] [[overstrict-gate-lens]]
+   */
+  (() => {
+    const DIRS = ['services', 'hooks', 'app', 'components', 'store', 'lib'];
+    const offenders: string[] = [];
+    const walkDir = (dir: string): string[] => {
+      const out: string[] = [];
+      let entries: string[] = [];
+      try { entries = fs.readdirSync(dir); } catch { return out; }
+      for (const e of entries) {
+        const p2 = `${dir}/${e}`;
+        let st;
+        try { st = fs.statSync(p2); } catch { continue; }
+        if (st.isDirectory()) out.push(...walkDir(p2));
+        else if (/\.(ts|tsx)$/.test(e)) out.push(p2);
+      }
+      return out;
+    };
+    const root = path.resolve(__dirname, '../../');
+    for (const d of DIRS) {
+      for (const f of walkDir(path.resolve(root, d))) {
+        const rel = f.slice(root.length + 1);
+        const src = readBulk(f).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+        if (/voiceOnPhoneSpeaker/.test(src)) offenders.push(`${rel} (setting is back)`);
+        // The shape matters more than the name: any route test gating speech is the same defect.
+        if (/route\w*\s*!==\s*'phone_speaker'/.test(src)) offenders.push(`${rel} (route gating speech again)`);
+      }
+    }
+    if (offenders.length) console.log(`   phone-speaker gate returned: ${offenders.join(', ')}`);
+    return offenders.length === 0;
+  })(),
+  'no shipped file carries the voiceOnPhoneSpeaker setting or gates speech on the phone-speaker route — the retired toggle cannot return as a setting or as a bare route test');
+
 check('LOCK: the audio route is WATCHED, and every layer of the bridge agrees',
   /**
    * 2026-08-29 — the route read was one-shot, and the header claimed things that were never true.

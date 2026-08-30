@@ -255,7 +255,6 @@ interface SettingsState {
   // isOwnerEmail at the call site so only the owner's testing
   // sessions produce data even if the flag leaks.
   feelCaptureEnabled: boolean;
-  voiceOnPhoneSpeaker: boolean;
   kevinGreetingEnabled: boolean;
   /** 2026-07-06 — epoch ms of the last cold app-open. Lets Index throttle the
    *  greeting so it doesn't replay its ~4s hello on every rapid reopen (the
@@ -392,7 +391,6 @@ interface SettingsState {
   setEarbudTapToTalk: (v: boolean) => void;
   setGlassesMode: (v: boolean) => void;
   setFeelCaptureEnabled: (v: boolean) => void;
-  setVoiceOnPhoneSpeaker: (v: boolean) => void;
   setKevinGreetingEnabled: (v: boolean) => void;
   setSmartVisionImagery: (v: 'curated' | 'gps' | 'auto') => void;
   setYardageMode: (v: 'live' | 'preround') => void;
@@ -524,7 +522,6 @@ export const useSettingsStore = create<SettingsState>()(
       earbudTapToTalk: true,
       glassesMode: false,
       feelCaptureEnabled: false,
-      voiceOnPhoneSpeaker: true,
       kevinGreetingEnabled: true,
       smartVisionImagery: 'auto' as const,
       yardageMode: 'live' as const,
@@ -763,7 +760,6 @@ export const useSettingsStore = create<SettingsState>()(
       setEarbudTapToTalk: (v) => set({ earbudTapToTalk: v }),
       setGlassesMode: (v) => set({ glassesMode: v }),
       setFeelCaptureEnabled: (v) => set({ feelCaptureEnabled: v }),
-      setVoiceOnPhoneSpeaker: (v) => set({ voiceOnPhoneSpeaker: v }),
       setKevinGreetingEnabled: (v) => set({ kevinGreetingEnabled: v }),
       setSmartVisionImagery: (v) => set({ smartVisionImagery: v }),
       setYardageMode: (v) => {
@@ -899,15 +895,10 @@ export const useSettingsStore = create<SettingsState>()(
             p.caddieAssignments = reassigned;
           }
         }
-        // v7 — flip voiceOnPhoneSpeaker default to TRUE for existing users.
-        // The old default (false) silently blocked the caddie's voice
-        // whenever the user wasn't paired to earbuds/glasses — a confusing
-        // failure mode ("avatar acknowledges but doesn't speak"). New
-        // default lets the phone speaker play voice; users who want to
-        // mute on speaker can flip the toggle off in Settings → Voice.
-        if (version < 7) {
-          p.voiceOnPhoneSpeaker = true;
-        }
+        // v7 — 2026-05 — force-set voiceOnPhoneSpeaker TRUE for existing users, because the old
+        // default (false) silently blocked the caddie's voice whenever the player wasn't paired to
+        // earbuds — "avatar acknowledges but doesn't speak". That decision STANDS; the setting it
+        // wrote was retired 2026-08-29 and the migration with it. The gate had been dead since.
         // 2026-05-28 — v8 — Fix FD: persona intensity floor repair.
         // Tim's report: Serena selected on Android + silent. If a
         // persisted intensity got dragged near zero in an older
@@ -1076,7 +1067,6 @@ export const useSettingsStore = create<SettingsState>()(
         earbudTapToTalk: s.earbudTapToTalk,
         glassesMode: s.glassesMode,
         feelCaptureEnabled: s.feelCaptureEnabled,
-        voiceOnPhoneSpeaker: s.voiceOnPhoneSpeaker,
         kevinGreetingEnabled: s.kevinGreetingEnabled,
         smartVisionImagery: s.smartVisionImagery,
         yardageMode: s.yardageMode,

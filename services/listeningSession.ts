@@ -802,13 +802,21 @@ async function openSession() {
   // Phase V.7+ — Quiet (L1) is also a hard suppress for the spoken opener
   // and any filler. The user gets text-only feedback at L1; voice is only
   // for L2+. This closes the leak where "Yeah?" played on every earbud tap.
-  const route = getCurrentRoute();
-  const allowPhoneSpeaker = (settings as unknown as { voiceOnPhoneSpeaker?: boolean }).voiceOnPhoneSpeaker === true;
+  /**
+   * 2026-08-29 — "Voice on Phone Speaker" RETIRED (Tim). The route no longer gates speech.
+   *
+   * The toggle asked the player to answer a question the app can now answer itself, and it had not
+   * changed an outcome since 2026-05: migration v7 force-set it TRUE for everyone, deliberately,
+   * because suppressing on the speaker was "a confusing failure mode (avatar acknowledges but
+   * doesn't speak)". So `route !== 'phone_speaker' || allowPhoneSpeaker` has evaluated to true on
+   * every device ever since — a dead term that read like a live gate.
+   *
+   * Removing it is behaviour-identical, which is the point: the setting is gone from Settings, and
+   * the decision it encoded stays exactly where v7 put it. The live route is still detected — it
+   * drives captions, not silence. [[hands-free-zero-setup-is-the-product]]
+   */
   const trustLevel = getTrustLevel();
-  const ttsAllowed =
-    settings.voiceEnabled &&
-    trustLevel !== 1 &&
-    (route !== 'phone_speaker' || allowPhoneSpeaker);
+  const ttsAllowed = settings.voiceEnabled && trustLevel !== 1;
 
   // Phase 1 — NO canned spoken opener.
   // 2026-07-26 (Tim — "we were supposed to remove the canned speech when I tap the earbuds w/ haptics;
@@ -994,9 +1002,9 @@ async function openSession() {
       const settingsNow = useSettingsStore.getState();
       const lang = (['en', 'es', 'zh'] as const).includes(settingsNow.language as never) ? (settingsNow.language as 'en' | 'es' | 'zh') : 'en';
       // 2026-07-20 (bug-hunt fix) — respect the phone-speaker mute: the opener + every real
-      // reply are suppressed on the phone speaker when voiceOnPhoneSpeaker is off, but this
+      // reply are no longer route-gated (the phone-speaker toggle was retired 08-29), but this
       // device-TTS notice bypassed that gate and spoke aloud on a route the user muted.
-      if (!silentBail && settingsNow.voiceEnabled && (route !== 'phone_speaker' || allowPhoneSpeaker)) {
+      if (!silentBail && settingsNow.voiceEnabled) {
         if (transcribeFailed) {
           await speakHonestFailure(lang, settingsNow.voiceGender, apiUrl);
         } else {
@@ -1024,7 +1032,7 @@ async function openSession() {
     // persona "Got it" cue (within 4s): firing it here stops the mp3 mid-word (one-voice invariant) and
     // replaces a natural cue with a robotic stutter. Silence/VAD-ended captures (no tap cue) still ack.
     const gotItRecent = Date.now() - gotItCueFiredAt < 4000;
-    if (settingsAck.voiceEnabled && !gotItRecent && (route !== 'phone_speaker' || allowPhoneSpeaker)) {
+    if (settingsAck.voiceEnabled && !gotItRecent) {
       const lang = (['en', 'es', 'zh'] as const).includes(settingsAck.language as never) ? (settingsAck.language as 'en' | 'es' | 'zh') : 'en';
       const { speakDeviceNotice } = await import('./voiceService');
       void speakDeviceNotice(pickAck(lang), lang, settingsAck.voiceGender).catch(() => {});
@@ -1046,7 +1054,7 @@ async function openSession() {
     // precheck/classify below untouched — it never hijacks or false-starts.
     const courseResolved = resolvePendingCourseUtterance(utterance);
     if (courseResolved) {
-      const resolveAllowed = settings.voiceEnabled && (route !== 'phone_speaker' || allowPhoneSpeaker);
+      const resolveAllowed = settings.voiceEnabled;
       if ((state as SessionState) === 'thinking') setSessionStateMirror('responding');
       if (resolveAllowed && getSessionState() === 'responding') {
         await stopSpeaking().catch(() => {});
@@ -1097,7 +1105,7 @@ async function openSession() {
         clearAwaitingPutts();
         const line = `Got it — ${answered} putt${answered !== 1 ? 's' : ''}.`;
         if ((state as SessionState) === 'thinking') setSessionStateMirror('responding');
-        if (settings.voiceEnabled && (route !== 'phone_speaker' || allowPhoneSpeaker)) {
+        if (settings.voiceEnabled) {
           await stopSpeaking().catch(() => {});
           await speak(line, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
             .catch((e) => console.log('[listeningSession] putt-answer speak failed', e));
@@ -1388,9 +1396,7 @@ async function openSession() {
     // follow_up_question, speak that. Otherwise route the raw utterance
     // to /api/kevin for a conversational reply.
     if (!voiceCommandRouter.getHandler(intent.intent_type) && (state as SessionState) === 'responding') {
-      const responseAllowed =
-        settings.voiceEnabled &&
-        (route !== 'phone_speaker' || allowPhoneSpeaker);
+      const responseAllowed = settings.voiceEnabled;
       await fillerP;
       if (responseAllowed) {
         if (intent.follow_up_question) {
@@ -1544,11 +1550,9 @@ async function openSession() {
 
       // Phase V.7+ — the response is user-initiated (mic-tap reply), so it
       // speaks at L1 too via { userInitiated: true }. Opener + filler stay
-      // suppressed at L1 above. Still respect voiceEnabled + phone-speaker
-      // route via isVoiceAllowed inside speak().
-      const responseAllowed =
-        settings.voiceEnabled &&
-        (route !== 'phone_speaker' || allowPhoneSpeaker);
+      // suppressed at L1 above. voiceEnabled is still enforced inside speak(); the phone-speaker
+      // route no longer gates anything (toggle retired 2026-08-29).
+      const responseAllowed = settings.voiceEnabled;
       // 2026-07-04 (Tim — "AI front and center") — the handler DEFERRED this judgment
       // read (shot_strategy) to the conversational caddie brain. Answer with Claude
       // (pipecat→kevin inside conversationalBrainTurn) + dispatch any tool actions; on a
@@ -1672,9 +1676,8 @@ async function openSession() {
     console.log('[listeningSession] respond failed', e);
     try {
       const settingsFresh = useSettingsStore.getState();
-      const routeAllowed = getCurrentRoute() !== 'phone_speaker' ||
-        (settingsFresh as unknown as { voiceOnPhoneSpeaker?: boolean }).voiceOnPhoneSpeaker === true;
-      if (settingsFresh.voiceEnabled && routeAllowed && getSessionState() !== 'idle') {
+      // Route no longer gates speech — see the "Voice on Phone Speaker" retirement note above.
+      if (settingsFresh.voiceEnabled && getSessionState() !== 'idle') {
         await speakHonestFailure(
           settingsFresh.language,
           settingsFresh.voiceGender,
@@ -1860,9 +1863,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
         // 2026-07-01 (re-audit — voice H1) — respect the SAME phone-speaker gate the
         // main path uses: don't talk out loud when audio is on the phone speaker and
         // "Voice on phone speaker" is off. voiceEnabled is still enforced inside speak().
-        const route = getCurrentRoute();
-        const allowPhoneSpeaker = (settings as unknown as { voiceOnPhoneSpeaker?: boolean }).voiceOnPhoneSpeaker === true;
-        const ttsAllowed = (settings.voiceEnabled ?? true) && (route !== 'phone_speaker' || allowPhoneSpeaker);
+        const ttsAllowed = (settings.voiceEnabled ?? true);
         /**
          * 2026-08-27 — the three branches that used to live here (speak / caption / apologise, plus
          * a hand-rolled answerOffline pass) are now the shared delivery contract. They said the same
@@ -1884,15 +1885,13 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
       } catch (e) {
         console.log('[handsFree-route] conversational fallback failed:', e);
         logVoiceSilentFail('handsfree_conversational_threw', { source: 'handsFree-route', error: describeError(e) });
-        const routeC = getCurrentRoute();
-        const allowPhoneSpeakerC = (settings as unknown as { voiceOnPhoneSpeaker?: boolean }).voiceOnPhoneSpeaker === true;
         await deliverBrainReply({
           reply: { text: null, audioBase64: null },
           utterance: text,
           language: intent.language ?? settings.language,
           voiceGender: settings.voiceGender,
           apiUrl,
-          ttsAllowed: (settings.voiceEnabled ?? true) && (routeC !== 'phone_speaker' || allowPhoneSpeakerC),
+          ttsAllowed: (settings.voiceEnabled ?? true),
           site: 'handsFree-route.conversational_catch',
           requireResponding: false,
         }).catch((e2) => console.log('[handsFree-route] conversational recovery failed', e2));
@@ -1941,9 +1940,7 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
           const { dispatchConversationalToolActions } = await import('./voice/conversationalToolDispatch');
           dispatchConversationalToolActions(r.toolActions);
         }
-        const route2 = getCurrentRoute();
-        const allowPhoneSpeaker2 = (settings as unknown as { voiceOnPhoneSpeaker?: boolean }).voiceOnPhoneSpeaker === true;
-        const ttsAllowed2 = (settings.voiceEnabled ?? true) && (route2 !== 'phone_speaker' || allowPhoneSpeaker2);
+        const ttsAllowed2 = (settings.voiceEnabled ?? true);
         /**
          * 2026-08-27 — and this branch never had the local fallback at all: an empty brain reply
          * went straight to the apology while the device held the GPS and the bag. Three sites, three
@@ -1963,15 +1960,13 @@ export async function handleTranscribedUtterance(utterance: string): Promise<voi
       } catch (e) {
         console.log('[handsFree-route] route_to_brain failed:', e);
         logVoiceSilentFail('handsfree_route_to_brain_threw', { source: 'handsFree-route', error: describeError(e) });
-        const routeR = getCurrentRoute();
-        const allowPhoneSpeakerR = (settings as unknown as { voiceOnPhoneSpeaker?: boolean }).voiceOnPhoneSpeaker === true;
         await deliverBrainReply({
           reply: { text: null, audioBase64: null },
           utterance: text,
           language: intent.language ?? settings.language,
           voiceGender: settings.voiceGender,
           apiUrl,
-          ttsAllowed: (settings.voiceEnabled ?? true) && (routeR !== 'phone_speaker' || allowPhoneSpeakerR),
+          ttsAllowed: (settings.voiceEnabled ?? true),
           site: 'handsFree-route.route_to_brain_catch',
           requireResponding: false,
         }).catch((e2) => console.log('[handsFree-route] route_to_brain recovery failed', e2));

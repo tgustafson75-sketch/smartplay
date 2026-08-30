@@ -943,11 +943,10 @@ const isVoiceAllowed = (opts?: SpeakOpts): boolean => {
       console.log('[voice] gate denied: localMode=true and !userInitiated');
       return false;
     }
-    const route = routingMod.getCurrentRoute();
-    if (route === 'phone_speaker' && !settings.voiceOnPhoneSpeaker) {
-      console.log('[voice] gate denied: phone_speaker route + voiceOnPhoneSpeaker=false');
-      return false;
-    }
+    // 2026-08-29 — the phone-speaker gate is GONE (Tim retired "Voice on Phone Speaker"). It had
+    // been dead since migration v7 force-set the setting TRUE for everyone in 2026-05, so this
+    // branch could not fire on any device. Route is still read above; it drives captions, not
+    // silence.
     return true;
   } catch (e) {
     // 2026-05-26 — Fix CZ: BLOCK on guard failure (was: allow).

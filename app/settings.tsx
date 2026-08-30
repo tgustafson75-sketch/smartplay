@@ -94,9 +94,7 @@ export default function Settings() {
     // second implementation. Live toggle restored.
     earbudTapToTalk,
     setEarbudTapToTalk,
-    voiceOnPhoneSpeaker,
     kevinGreetingEnabled,
-    setVoiceOnPhoneSpeaker,
     setKevinGreetingEnabled,
     // 2026-05-30 — Fix FY: Local Mode toggle.
     localMode,
@@ -1295,12 +1293,10 @@ export default function Settings() {
               not-yet-wired hardware integrations are listed together
               with honest copy. Voice section now only carries actually-
               live voice settings. */}
-          <ToggleRow
-            label="Voice on Phone Speaker"
-            sub={`Allow ${caddieName}'s voice when no earbuds are connected`}
-            value={voiceOnPhoneSpeaker}
-            onValueChange={confirmToggle('Voice on Phone Speaker', setVoiceOnPhoneSpeaker)}
-          />
+          {/* 2026-08-29 — "Voice on Phone Speaker" RETIRED (Tim). It asked the player to answer a
+              question the app can now answer itself, and it had not changed an outcome since
+              migration v7 force-set it TRUE for everyone in 2026-05. The app detects the audio route
+              for real now; it drives captions, not silence. */}
           {/* 2026-06-10 — Caption moved here from Display (it's about caddie
               speech, and was the only "voice" thing living under Display). */}
           <ToggleRow

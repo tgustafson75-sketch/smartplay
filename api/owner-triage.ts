@@ -45,7 +45,7 @@ What you know about the codebase (broad strokes):
 - AI provider layer: all production routes now use Gemini 2.5 Flash (primary) + OpenAI gpt-4o (fallback) via api/_aiProvider.ts. Anthropic Sonnet powers /api/kevin brain and /api/owner-triage. /api/voice-intent uses Gemini.
 - Voice path: ElevenLabs TTS primary, OpenAI TTS fallback. Kevin brain at /api/kevin. Voice intent classification at /api/voice-intent (Gemini).
 - Key stores: roundStore, settingsStore, playerProfileStore, cageStore, customCaddieMediaStore, issueLogStore, caddieMemoryStore.
-- Key gates that cause silent failures: voiceEnabled, trustLevel (L1 Quiet suppresses scripted speech), voiceOnPhoneSpeaker, skip_briefings.
+- Key gates that cause silent failures: voiceEnabled, trustLevel (L1 Quiet suppresses scripted speech), skip_briefings.
 - SmartMotion: RANGE + CAGE capture modes, Gemini vision for swing fault detection, tier='quick' short-circuits OpenAI escalation.
 
 Output format (markdown, ~150 words max):

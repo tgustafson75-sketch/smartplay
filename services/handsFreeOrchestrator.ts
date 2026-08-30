@@ -18,7 +18,7 @@
  *     opening the listening window. The user tapped because they want
  *     to talk OVER the caddie — they shouldn't have to wait for the
  *     line to finish.
- *   - If audio is routed to the phone speaker AND voiceOnPhoneSpeaker
+ *   - (Retired 2026-08-29) audio routed to the phone speaker AND voiceOnPhoneSpeaker
  *     setting is false, suppress the listening session (the user
  *     doesn't have earbuds in; the conversation would broadcast).
  *     Toast informs them.

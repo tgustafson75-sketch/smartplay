@@ -146,7 +146,6 @@ export default function OwnerLogsScreen() {
       const settingsSnapshot = {
         caddiePersonality: settings.caddiePersonality,
         voiceEnabled: settings.voiceEnabled,
-        voiceOnPhoneSpeaker: settings.voiceOnPhoneSpeaker,
         skip_briefings: settings.skip_briefings,
         language: settings.language,
         responseMode: settings.responseMode,
