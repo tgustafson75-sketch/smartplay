@@ -2288,6 +2288,28 @@ export default function Settings() {
                     </View>
                     <Ionicons name="construct-outline" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
+                  {/* 2026-08-30 (Tim: "I am not seeing subscription debug in my owners tools") —
+                      it WAS reachable, but only as Owner Tools → Cage Debug → Subscription Debug:
+                      two levels deep, behind a hub named after the cage. Nobody looks for
+                      subscription state there, and Owner Tools itself listed only swing-analysis,
+                      native-modules and cage-debug. Buried is not the same as missing, but for the
+                      person trying to find it the difference does not matter. Direct row, because
+                      this is now the screen that reads subscription state, runs the 30-day
+                      promotion, and forces the paywall for the App Store review screenshot. */}
+                  <TouchableOpacity
+                    style={styles.resetRow}
+                    onPress={() => router.push('/subscription-debug' as never)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open subscription debug"
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Subscription Debug</Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                        Subscription + trial state, the 30-day promotion, and Force Paywall (for the App Store review screenshot).
+                      </Text>
+                    </View>
+                    <Ionicons name="card-outline" size={20} color={colors.text_muted} />
+                  </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.resetRow}
                     onPress={() => router.push('/kevin-learning' as never)}
