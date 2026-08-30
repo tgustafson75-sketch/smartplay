@@ -27,7 +27,7 @@ import type { Persona } from '../store/settingsStore';
 const PORTRAIT_FOR: Record<Persona, ImageSourcePropType> = {
   kevin:  require('../assets/avatars/kevin_portrait.jpg'),
   serena: require('../assets/avatars/serena_portrait.jpg'),
-  harry:  require('../assets/avatars/harry_portrait.png'),
+  harry:  require('../assets/avatars/harry_portrait.jpg'),
   // Custom caddie falls back to Kevin's portrait here. The actual
   // user-generated portrait (customCaddiePortraitB64) is consumed by
   // CaddieAvatar.tsx + caddie.tsx where it has access to the profile

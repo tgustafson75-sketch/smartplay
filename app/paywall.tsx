@@ -210,7 +210,7 @@ export default function PaywallScreen() {
           <Image
             source={
               caddiePersonality === 'serena' ? require('../assets/avatars/serena_portrait.jpg')
-              : caddiePersonality === 'harry' ? require('../assets/avatars/harry_portrait.png')
+              : caddiePersonality === 'harry' ? require('../assets/avatars/harry_portrait.jpg')
               : require('../assets/avatars/kevin_portrait.jpg')
             }
             style={styles.avatar}
