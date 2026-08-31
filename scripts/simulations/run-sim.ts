@@ -13064,7 +13064,21 @@ check('LOCK: course discovery has ONE budget — the client waits longer than th
 
     // The whole point: the server must always be able to answer inside the client's patience,
     // and the platform must not kill it before its own budget expires.
-    const ordered = budget < clientTimeout && clientTimeout < maxDuration * 1000;
+    /**
+     * 2026-08-31 — THIS ASSERTION WAS BACKWARDS AND PINNED A LIVE DEFECT.
+     *
+     * It required `clientTimeout < maxDuration`, i.e. the client must give up BEFORE the platform
+     * does. That is precisely how a still-running request becomes a reported failure: Vercel was
+     * happily working for 15s while the app abandoned it at 9 and told the player discovery had
+     * timed out. Tim hit it four times in 70 seconds at Menifee, at coordinates where the server
+     * answers in 0.3s with the right course.
+     *
+     * The client must be the LAST to give up. The correct order is server < platform <= client, and
+     * it is the same order the analysis guard below asserts — two guards in this file were requiring
+     * OPPOSITE things, and this was the wrong one. [[three-ways-a-guard-is-worthless]]
+     */
+    const ordered = budget < maxDuration * 1000 && maxDuration * 1000 <= clientTimeout;
+    if (!ordered) console.log(`   course-locate budgets out of order: server ${budget}ms, platform ${maxDuration * 1000}ms, client ${clientTimeout}ms`);
     // The primary may not eat the budget the fallback needs.
     const fallbackCanRun = primaryCap < budget;
     // And the deadline must actually be consulted, not just declared.

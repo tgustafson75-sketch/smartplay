@@ -137,7 +137,22 @@ export async function locateNearbyCourses(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ lat, lng, radius_m: opts?.radiusM, limit: opts?.limit }),
-        signal: AbortSignal.timeout(9_000),
+        /**
+         * 2026-08-31 (Tim's live field report from Menifee: course_locate_failed · timeout, FOUR
+         * times in 70 seconds, at coordinates where the server answers in 0.3s and returns the right
+         * course) — 9 SECONDS WAS STRUCTURALLY TOO TIGHT.
+         *
+         * The budget chain was INVERTED. The server allows itself 7s (BUDGET_MS), Vercel allows the
+         * function 15s (maxDuration), and the client gave up at 9 — SIX SECONDS BEFORE the platform
+         * would. So the app aborted requests that were still legitimately running and reported them
+         * as failures, leaving just 2s of margin over the server's own budget for TLS, mobile RTT
+         * and a cold Lambda that this codebase measures at 2-8s. A cold start alone exceeded it.
+         *
+         * The client must be the LAST thing to give up: server < platform <= client. Anything else
+         * turns a slow answer into a reported failure. Same defect the analysis path was audited for
+         * this morning; a sim guard here was asserting the inverted order and pinning it in place.
+         */
+        signal: AbortSignal.timeout(20_000),
       });
       if (!res.ok) return { courses: [], failure: 'http' };
       const data = (await res.json()) as { courses?: NearbyCourse[] };
