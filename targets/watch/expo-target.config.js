@@ -32,7 +32,24 @@
  */
 module.exports = {
   type: 'watch',
-  name: 'SmartPlay Caddie',
+  /**
+   * 2026-08-30 — `name` IS THE XCODE TARGET NAME, and it must not collide with the app's.
+   *
+   * Build 15 failed with the profiles crossed: the main app got the WATCH profile and the watch got
+   * none. EAS keys credentials by target NAME and printed both of ours identically:
+   *
+   *     - Target: SmartPlayCaddie   Bundle Identifier: com.smartplaycaddie.app
+   *     - Target: SmartPlayCaddie   Bundle Identifier: com.smartplaycaddie.app.watchkitapp
+   *
+   * "SmartPlay Caddie" and "SmartPlayCaddie" are the same string once the space is normalised away,
+   * so the second entry overwrote the first and both targets drew from one bucket.
+   *
+   * `displayName` is what a player actually reads on the watch (it sets
+   * INFOPLIST_KEY_CFBundleDisplayName); `name` only names the target. Splitting them keeps the watch
+   * app called "SmartPlay Caddie" while giving EAS two names it can tell apart.
+   */
+  name: 'SmartPlayWatch',
+  displayName: 'SmartPlay Caddie',
   bundleIdentifier: 'com.smartplaycaddie.app.watchkitapp',
   deploymentTarget: '9.0',
   colors: {
