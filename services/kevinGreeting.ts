@@ -58,16 +58,18 @@ export const getGreetingCaption = (file: GreetingFilename, caddieName: string): 
   }
 };
 
-/**
- * The bundled mp3 voice files were recorded for Kevin (male). For Serena,
- * the on-screen caption stays correct via getGreetingCaption, but the
- * audio cannot play "as Kevin" — so the greeting screen skips playback
- * for Serena and shows the silent caption-only path instead. Once Serena
- * audio is recorded (or TTS is wired up), this list can shrink to just
- * the name-bearing files.
+/*
+ * 2026-08-30 — isKevinSpecificAudio was DELETED, not wired.
+ *
+ * It described a world that no longer exists: "the greeting screen skips playback for Serena and
+ * shows the silent caption-only path instead". Serena has had her own recorded greetings since
+ * 2026-06-07, and kevinGreetingManifest.getGreetingAssetForPersona routes every persona to its own
+ * bundled mp3s. Nothing called this — and wiring it, the default for an orphan, would have been a
+ * REGRESSION: it would have muted a caddie who has a voice.
+ *
+ * Kept as a note rather than a silent deletion because the comment was the misleading part. A file's
+ * description of itself is not its runtime behaviour. [[zero-setup-needs-a-native-build]]
  */
-export const isKevinSpecificAudio = (file: GreetingFilename): boolean =>
-  file === 'first_launch.mp3' || file === 'demo_mode.mp3';
 
 // ─── Selection ───────────────────────────────────────────────────────────────
 

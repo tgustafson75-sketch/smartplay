@@ -1,3 +1,6 @@
+import { proactiveDebounceMs } from './trustLevelService';
+import type { TrustLevel } from '../store/trustLevelStore';
+
 export type ProactiveTriggerType =
   | 'round_start_handoff'
   | 'miss_streak_3'
@@ -29,16 +32,25 @@ interface TriggerContext {
 }
 
 const lastFiredAt: Partial<Record<ProactiveTriggerType, number>> = {};
-const GLOBAL_DEBOUNCE_MS = 2 * 60 * 1000;
-// Sim-report gap 5 — L2 Companion debounce is 2× the standard so the
-// player gets meaningfully fewer mid-round bumps. Devon's complaint:
-// triggers landing right before his shot.
-const L2_DEBOUNCE_MS = 4 * 60 * 1000;
 let lastAnyFiredAt = 0;
+
+/*
+ * 2026-08-30 — GLOBAL_DEBOUNCE_MS and L2_DEBOUNCE_MS moved to trustLevelService.proactiveDebounceMs.
+ *
+ * They encoded a POLICY while looking like a constant: `trustLevel === 2 ? L2 : GLOBAL` gave L1 the
+ * same two minutes as L3, so "Quiet · tap or type to talk" interrupted the player exactly as often
+ * as voice-first mode, and twice as often as Companion. Sim-report gap 5 slowed L2 down and nobody
+ * noticed L1 was never considered at all — the ternary has no branch for it.
+ *
+ * The interruption cost is shared across every trigger, so the interval belongs to the trust level.
+ * This file still owns the CLOCK; it no longer owns the policy. [[two-owners-is-the-root-cause]]
+ */
 
 export function shouldFireProactive(ctx: TriggerContext): ProactiveTrigger | null {
   const now = Date.now();
-  const debounce = ctx.trustLevel === 2 ? L2_DEBOUNCE_MS : GLOBAL_DEBOUNCE_MS;
+  const debounce = proactiveDebounceMs(ctx.trustLevel);
+  // null means "never speak unprompted", not "no delay" — the case the old ternary could not express.
+  if (debounce === null) return null;
   if (now - lastAnyFiredAt < debounce) return null;
 
   const name = ctx.firstName || 'you';
@@ -160,7 +172,8 @@ export function shouldFireProactive(ctx: TriggerContext): ProactiveTrigger | nul
  * with somewhere to live.
  */
 export function mayInterject(trustLevel?: number): boolean {
-  const debounce = trustLevel === 2 ? L2_DEBOUNCE_MS : GLOBAL_DEBOUNCE_MS;
+  const debounce = proactiveDebounceMs(trustLevel as TrustLevel | undefined);
+  if (debounce === null) return false;
   return Date.now() - lastAnyFiredAt >= debounce;
 }
 
