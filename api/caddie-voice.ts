@@ -8,6 +8,7 @@
  * Response: 200 { voice: string, reason: string | null }
  */
 import OpenAI from 'openai';
+import { allowInference } from './_inferLimit';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 20_000, maxRetries: 1 });
@@ -29,6 +30,14 @@ const IDS = VOICES.map((v) => v.id);
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  /**
+   * 2026-08-31 (pre-launch security audit) — THROTTLED. This route spends real money on every call
+   * and had no limit of any kind: no auth, no rate limit, no origin check. The repository is PUBLIC,
+   * so the route name is discoverable by reading it, and the app key ships in the bundle — a hard
+   * key gate cannot work here, which is exactly why api/voice and api/kevin use this IP limiter
+   * instead. Without it one script could spend the inference budget for the whole launch.
+   */
+  if (!allowInference(req, res, 'caddie-voice', 20)) return;
   try {
     const { imageB64, mediaType = 'image/jpeg' } = (req.body ?? {}) as { imageB64?: string; mediaType?: string };
     if (!imageB64 || typeof imageB64 !== 'string' || imageB64.length < 100) {

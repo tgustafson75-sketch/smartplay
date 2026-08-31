@@ -38,6 +38,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { allowInference } from './_inferLimit';
 import { safeFetchPinned } from './_ssrfGuard';
 
 const TIMEOUT_MS = 25_000;
@@ -124,6 +125,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+  /**
+   * 2026-08-31 (pre-launch security audit) — THROTTLED. This route spends real money on every call
+   * and had no limit of any kind: no auth, no rate limit, no origin check. The repository is PUBLIC,
+   * so the route name is discoverable by reading it, and the app key ships in the bundle — a hard
+   * key gate cannot work here, which is exactly why api/voice and api/kevin use this IP limiter
+   * instead. Without it one script could spend the inference budget for the whole launch.
+   */
+  if (!allowInference(req, res, 'pose-analysis', 90)) return;
 
   const auth = buildAuth();
   if ('error' in auth) {

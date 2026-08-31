@@ -13076,6 +13076,49 @@ check('LOCK: course discovery has ONE budget — the client waits longer than th
   })(),
   'course-locate spends less than the client waits and less than the platform allows, the primary cannot starve the fallback, and the deadline is consulted rather than declared');
 
+check('LOCK: every DEPLOYED route that spends money is rate-limited',
+  /**
+   * 2026-08-31 (pre-launch security audit) — THREE DEPLOYED ROUTES SPENT REAL MONEY WITH NO LIMIT OF
+   * ANY KIND: no auth, no rate limit, no origin check.
+   *
+   *   api/caddie-voice   OpenAI VISION on an uploaded image
+   *   api/pose-analysis  a metered RapidAPI pose subscription
+   *   api/course-places  billable Google Places lookups
+   *
+   * The repository is PUBLIC, so the route names are discoverable by reading it, and the app key
+   * ships in the client bundle — a hard key gate cannot work, which is precisely why api/voice and
+   * api/kevin use the IP limiter. Without it a single script could spend the launch's entire
+   * inference budget, and the first sign would be the bill.
+   *
+   * Derived, never a list: this walks vercel.json's DEPLOYED routes and flags any that reach a paid
+   * provider without allowInference. A new paid route fails here on the commit that adds it, rather
+   * than being remembered about. [[run-the-second-pass-yourself]]
+   */
+  (() => {
+    /** Routes that reach a paid provider but legitimately need no limiter, each with a reason. */
+    const EXEMPT: Record<string, string> = {};
+    let builds: { src: string }[] = [];
+    try {
+      builds = (JSON.parse(read('vercel.json')) as { builds?: { src: string }[] }).builds ?? [];
+    } catch { console.log('   vercel.json unreadable'); return false; }
+    const PAID = /openai|anthropic|generativelanguage|gemini|rapidapi|elevenlabs|googleKeys|maps\.googleapis|places\.googleapis|deepgram/i;
+    const offenders: string[] = [];
+    for (const b of builds) {
+      const src = b.src;
+      if (!src || !src.startsWith('api/') || src.startsWith('api/_')) continue;
+      let body = '';
+      try { body = readBulk(path.resolve(__dirname, '../../', src)); } catch { continue; }
+      const code = body.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+      if (!PAID.test(code)) continue;                 // spends nothing — nothing to protect
+      if (/allowInference\(/.test(code)) continue;     // limited
+      if (EXEMPT[src]) continue;
+      offenders.push(src);
+    }
+    if (offenders.length) console.log(`   deployed routes spending money with no rate limit: ${offenders.join(', ')}`);
+    return offenders.length === 0;
+  })(),
+  'no deployed API route reaches a paid provider without the IP rate limiter — the repo is public, the route names are readable, and the app key ships in the bundle');
+
 check('LOCK: the offline course-locate cache is versioned, and its version moved with the fix',
   /**
    * 2026-08-31 (OPEN-ITEMS §7 sweep) — a server-side fix does not reach a client-side cache.

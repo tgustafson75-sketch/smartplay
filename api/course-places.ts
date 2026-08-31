@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { applyCors } from './_cors';
 import { googleKeys, withGoogleKeys, isCapabilityMiss, keyFailure } from './_googleKeys';
+import { allowInference } from './_inferLimit';
 
 /**
  * 2026-07-10 (audit S2) — SERVER proxy for the course website/phone lookup that used to run
@@ -23,6 +24,14 @@ function isNum(v: unknown): v is number { return typeof v === 'number' && Number
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  /**
+   * 2026-08-31 (pre-launch security audit) — THROTTLED. This route spends real money on every call
+   * and had no limit of any kind: no auth, no rate limit, no origin check. The repository is PUBLIC,
+   * so the route name is discoverable by reading it, and the app key ships in the bundle — a hard
+   * key gate cannot work here, which is exactly why api/voice and api/kevin use this IP limiter
+   * instead. Without it one script could spend the inference budget for the whole launch.
+   */
+  if (!allowInference(req, res, 'course-places', 60)) return;
   if (googleKeys().length === 0) return res.status(200).json({ website: null, phone: null, error: 'not_configured' });
 
   try {
