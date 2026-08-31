@@ -150,9 +150,35 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       extras.liveBlock ?? null,
       m.getCaddieContext({ courseId: activeCourseId, hole: currentHole, club }).promptBlock,
     );
+    /**
+     * 2026-08-30 (orphan sweep) — WHAT THE PLAYER SAID WITH NO SIGNAL, which no brain ever heard.
+     *
+     * voiceLogService has captured offline statements since 07-04 (usePipecatVoice calls it when a
+     * turn can't reach the brain) and roundStore marks them "ingested" at round end. Nothing ever
+     * INGESTED them: peekOfflineNotesBlock — the function whose whole job is handing them to the
+     * live caddie once signal returns — had zero callers. Notes were collected, carried all round,
+     * and marked as consumed by a name that described something that never happened.
+     *
+     * So the player would say "I'm pulling everything left" on a dead cell, get nothing, and the
+     * caddie would have no idea it was ever said. Capture with no read is not a loop.
+     * [[close-the-loop-strategy]]
+     *
+     * HERE rather than as its own body field, deliberately, and it is what makes this OTA-safe:
+     * this block is the one every caddie path already merges, so a note reaches kevin, pipecat and
+     * the tactical routes without a new key, a schema change or a server deploy. It also belongs on
+     * the live side rather than the cached system side — notes accumulate DURING a round, and a
+     * block that moves shot to shot must never ride the cached prompt.
+     */
+    const offline = safe(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const vl = require('./voiceLogService') as typeof import('./voiceLogService');
+      return vl.peekOfflineNotesBlock() || null;
+    }, null);
+
     const suffix = extras.contextSuffix?.trim();
-    if (!suffix) return merged;
-    return merged ? `${merged}\n\n${suffix}` : suffix;
+    const tail = [offline, suffix].filter((x): x is string => !!x && x.trim().length > 0).join('\n\n');
+    if (!tail) return merged;
+    return merged ? `${merged}\n\n${tail}` : tail;
   }, extras.liveBlock ?? null);
 
   const patternInsights = safe(() => {

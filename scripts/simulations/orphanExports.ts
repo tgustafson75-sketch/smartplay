@@ -277,8 +277,8 @@ export const ORPHAN_BASELINE: Record<string, string> = {
   'services/trustLevelService.ts :: psychologistEnabled': 'TRIAGE',
   'services/tutorialContext.ts :: buildCompressedPracticeContext': 'TRIAGE',
   'services/vocabularyProfileService.ts :: getTotalShotsParsed': 'TRIAGE',
-  'services/voiceLogService.ts :: peekOfflineNotesBlock': 'TRIAGE',
-  'services/voiceLogService.ts :: pendingOfflineNoteCount': 'TRIAGE',
+  'services/voiceLogService.ts :: pendingOfflineNoteCount':
+    'SURFACE — a peek-without-consuming count for a UI badge. The READ half of this feature is now wired (peekOfflineNotesBlock reaches the caddie via unified_context_block); this is the optional badge on top of it, and a badge showing a count the player cannot act on is not worth a surface during a freeze. Delete if no badge exists by 1.1.',
   'services/voicePermissionService.ts :: PERMISSION_EXPLAINER_TEXT': 'TRIAGE',
   'services/voicePermissionService.ts :: checkMicPermission': 'TRIAGE',
   'services/watchBridge.ts :: isSenderRegistered': 'TRIAGE',
