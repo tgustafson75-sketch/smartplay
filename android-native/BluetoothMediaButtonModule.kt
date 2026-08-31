@@ -52,6 +52,7 @@ package com.smartplaycaddie.btmedia
 
 import android.content.ComponentName
 import android.content.Context
+import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.session.MediaSession
@@ -72,7 +73,18 @@ class BluetoothMediaButtonModule(reactContext: ReactApplicationContext) :
     private val tag = "BTMediaButton"
     @Volatile private var session: MediaSession? = null
     @Volatile private var isActive: Boolean = false
-    @Volatile private var deviceCallback: AudioManager.AudioDeviceCallback? = null
+    /**
+     * 2026-08-30 — `android.media.AudioDeviceCallback`, TOP-LEVEL, not `AudioManager.AudioDeviceCallback`.
+     *
+     * I wrote it nested and the Android build failed with "Unresolved reference 'AudioDeviceCallback'"
+     * plus "'onAudioDevicesAdded' overrides nothing" — the anonymous object was extending something
+     * that does not exist, so its methods overrode nothing and the type errors cascaded from there.
+     * AudioManager only ACCEPTS this type in registerAudioDeviceCallback; it does not contain it.
+     *
+     * Found by compiling locally, after the same code cost a 20-minute EAS build reporting only
+     * "Gradle build failed with unknown error".
+     */
+    @Volatile private var deviceCallback: AudioDeviceCallback? = null
 
     override fun getName(): String = "BluetoothMediaButton"
 
@@ -241,7 +253,7 @@ class BluetoothMediaButtonModule(reactContext: ReactApplicationContext) :
             if (deviceCallback != null) { promise.resolve(true); return }
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) { promise.resolve(false); return }
             val am = reactApplicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            val cb = object : AudioManager.AudioDeviceCallback() {
+            val cb = object : AudioDeviceCallback() {
                 override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) = emitRoute()
                 override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) = emitRoute()
             }
