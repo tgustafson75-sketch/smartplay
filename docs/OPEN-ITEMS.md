@@ -298,7 +298,36 @@ making the switch behave as documented on the day it is thrown — not about lau
 because the key was still named in the `triggerPaywall` line beside it. It now requires the key to
 reach an actual gate function (`canAccess` / `navOrPaywall` / `gatedOpen`), and was break-tested red.
 
-## 13. TPC SAWGRASS IS INVISIBLE TO COURSE DISCOVERY (found 2026-08-25)
+## 13. TPC SAWGRASS — **FIXED AND VERIFIED LIVE 2026-08-31.** Root cause was OURS, not Google's
+
+> **RESOLVED.** `TPC Sawgrass - Dye's Valley Course` (67m) and `TPC Sawgrass` (121m) now come back
+> first in production. Verified live at Pebble Beach, Torrey Pines and Streamsong too — each resolves
+> to the actual nearest course.
+>
+> **Everything below this box diagnosed the wrong cause.** It blamed Google's Places coverage and
+> parked the fix behind a Google Cloud Console change nobody here could make. The console setting is
+> real and still worth fixing — it restores the faster, properly-typed primary path — but **discovery
+> never depended on it.**
+>
+> **What was actually wrong:** `isGolfPlace` was discarding the course. Google files the Stadium
+> Course as `restaurant,food,lodging` (the clubhouse restaurant is the business record) and the name
+> contains no word the name-regex knew. The rows contained TPC Sawgrass on every single query, the
+> whole time.
+>
+> **How it was found:** by echoing what the endpoint threw away (`debug: true`), instead of reasoning
+> about it. Six days of reasoning got this wrong twice — once blaming Google, once (mine, 2026-08-31)
+> asserting `golf_course` is a legacy place type. It is not; legacy silently IGNORES an unknown
+> `type` and returns an unfiltered sweep, and that accident is the only reason the evidence appeared.
+> [[missing-log-entry-is-the-evidence]] [[my-measurement-is-the-least-reliable-part]]
+>
+> **A second defect fell out of it:** `Sawgrass Marriott Golf Resort & Spa` was being returned as the
+> NEAREST course at 1.1km, ahead of every real club. A hospitality-only record must now name itself a
+> course. Handing a player a hotel to play is the same defect class as handing them the wrong club.
+>
+> Locked by `__tests__/regression/tpc-sawgrass-is-a-golf-course.test.ts`, built from the 26 REAL rows
+> captured in production with types verbatim — because reasoning is what was wrong both times.
+
+### Original 2026-08-25 diagnosis, kept because it is instructive about how it misled
 
 Checking marquee courses for bundling turned up a defect that affects real players, not just the
 bundle: **`api/course-locate` does not return TPC Sawgrass.** Two seeds placed directly on the
