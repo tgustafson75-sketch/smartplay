@@ -243,7 +243,29 @@ export function statusFromCustomerInfo(
 
   // Not active now. Did they ever have it?
   const everHad = info.entitlements.all?.[ENTITLEMENT_ID] != null;
-  return everHad ? 'expired' : 'free';
+  if (everHad) return 'expired';
+
+  /**
+   * 2026-08-30 (audit) — THE STORE HAS NEVER HEARD OF THIS PLAYER, SO IT HAS NO OPINION.
+   *
+   * This returned 'free' here, and that quietly destroyed every status the store does not issue.
+   * RevenueCat hands a non-purchaser `entitlements: { active: {}, all: {} }` — present, so the
+   * guard at the top of this function does not fire, and empty, so nothing below matched.
+   *
+   * A player 6 days into OUR 14-day trial would be written to 'free' on the first launch after
+   * billing turns on. planTrialLifecycle then matches no rung for them — its trial rung requires
+   * `!trialStartedAt`, and theirs is set — so they stay 'free', resolve to the 'lite' edition, and
+   * lose the caddie IN THE MIDDLE of a trial they were told they had. Same shape as the lifetime
+   * stamp fixed this morning, pointing the other way.
+   *
+   * It took a comp with it too: grantPromo writes 'active' locally, and this call is async so it
+   * lands AFTER the sync lifecycle effect that granted it — overwriting a 30-day promotion with
+   * 'free' on the same launch that created it.
+   *
+   * Downgrades still happen where the store HAS an opinion: everHad covers refunds, cancellations
+   * and lapses, because RevenueCat keeps the entitlement in `all` once it has ever been issued.
+   */
+  return current;
 }
 
 /**

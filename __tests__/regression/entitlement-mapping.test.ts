@@ -88,10 +88,31 @@ describe('no active entitlement', () => {
     expect(statusFromCustomerInfo(lapsed, 'active')).toBe('expired');
   });
 
-  it('is FREE for someone who never had it', () => {
+  it('does not INVENT a status for someone who never had it', () => {
     const never = { entitlements: { active: {}, all: {} } };
     expect(statusFromCustomerInfo(never, 'free')).toBe('free');
-    expect(statusFromCustomerInfo(never, 'trial')).toBe('free');
+  });
+
+  it('does not TAKE AWAY a status the store never issued', () => {
+    /**
+     * 2026-08-30 — this line asserted `statusFromCustomerInfo(never, 'trial')` is 'free', and that
+     * assertion was written on 08-29, one day before Tim decided the free cohort CONVERTS TO TRIAL
+     * when billing turns on. It encoded a demotion.
+     *
+     * RevenueCat returns `{ active: {}, all: {} }` for a non-purchaser — present, so the null guard
+     * misses it, and empty, so nothing matched. A player six days into OUR 14-day trial was written
+     * to 'free' on the first launch after the flip, then matched no rung in planTrialLifecycle
+     * (its trial rung requires `!trialStartedAt`), and lost the caddie mid-trial. Comps went the
+     * same way: grantPromo writes 'active' with no purchase behind it.
+     *
+     * The store is authoritative about what the STORE issued. Silence is not a downgrade.
+     */
+    const never = { entitlements: { active: {}, all: {} } };
+    expect(statusFromCustomerInfo(never, 'trial')).toBe('trial');
+    expect(statusFromCustomerInfo(never, 'active')).toBe('active');
+    // A real lapse still downgrades, because there the store DOES have an opinion.
+    const lapsed = { entitlements: { active: {}, all: { [ENTITLEMENT_ID]: { isActive: false } } } };
+    expect(statusFromCustomerInfo(lapsed, 'trial')).toBe('expired');
   });
 
   it('ignores an entitlement that is not ours', () => {
