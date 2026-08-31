@@ -59,9 +59,18 @@ export function defaultWakeWordOn(level?: TrustLevel): boolean {
  */
 export function proactiveDebounceMs(level?: TrustLevel): number | null {
   const l = level ?? getTrustLevel();
-  if (l <= 1) return null;          // Quiet — tap or type to talk. Never unprompted.
-  if (l === 2) return 4 * 60 * 1000; // Companion — half the rate of active.
-  return 2 * 60 * 1000;              // Active — voice-first.
+  // Quiet — SmartVision leads, tap or type to talk. Never unprompted.
+  if (l <= 1) return null;
+  // Everything else is ACTIVE. There is no middle level: Tim collapsed the ladder to two on
+  // 2026-07-24, and trustLevelStore enforces it in both directions — setLevel coerces 2 to 3 and
+  // migrate maps anything but 1 to 3, so the persisted level is 1 or 3 and nothing else.
+  //
+  // The first version of this fix kept a 4-minute "Companion" branch for L2, inherited from
+  // proactiveKevin's sim-report gap 5. That rationale PREDATES the collapse: L2's own entry in
+  // TRUST_LEVEL_META has read `id: 'active', label: 'Active'` since July. Keeping the branch would
+  // have made a level that calls itself Active behave at half the rate — a stale second owner,
+  // rebuilt on the same afternoon as the one it replaced.
+  return 2 * 60 * 1000;
 }
 
 /**

@@ -50,8 +50,12 @@ describe('the ladder cannot invert again', () => {
     expect(l3 as number).toBeLessThanOrEqual(l2 as number);
   });
 
-  it('still gives Companion a longer wait than Active — sim-report gap 5 is preserved', () => {
-    expect(proactiveDebounceMs(2)).toBeGreaterThan(proactiveDebounceMs(3) as number);
+  it('treats L2 as the alias of Active that the store says it is', () => {
+    // There is no middle level. Tim collapsed the ladder to two on 2026-07-24; TRUST_LEVEL_META[2]
+    // reads label 'Active', setLevel coerces 2 to 3 and migrate maps anything but 1 to 3. A level
+    // that calls itself Active must not be quieter than Active — the first pass at this fix kept a
+    // 4-minute "Companion" branch and would have shipped exactly that contradiction.
+    expect(proactiveDebounceMs(2)).toBe(proactiveDebounceMs(3));
   });
 
   it('lets L2 and L3 speak, so this is a fix and not a mute button', () => {
