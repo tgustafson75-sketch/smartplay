@@ -97,7 +97,7 @@ type PlaceResult = {
 };
 
 /** The normalized shape both Google paths project into before the golf guard + sort. */
-type Located = {
+export type Located = {
   name: string;
   place_id: string | null;
   lat: number;
@@ -116,10 +116,49 @@ type Located = {
 const GOLF_NAME_RE = /\b(golf|golf ?club|country club|links|c\.?c\.?|g\.?c\.?\b)/i;
 const NOT_A_COURSE_RE = /\b(mini[- ]?golf|miniature golf|top ?golf|driving range|golf shop|golf store|golf galaxy|simulator|indoor golf|putt[- ]?putt|disc golf)\b/i;
 
-function isGolfPlace(p: Located): boolean {
+/**
+ * 2026-08-31 — THE ACTUAL TPC SAWGRASS ROOT CAUSE, found by echoing what the guard discarded.
+ *
+ * The course was never missing from Google. `TPC Sawgrass` AND `TPC Sawgrass - Dye's Valley Course`
+ * were both in the rows, and THIS FUNCTION threw them away — because Google types the Stadium Course
+ * as `restaurant,food,lodging,point_of_interest,establishment` (the clubhouse restaurant is the
+ * business record) and the name contains no word GOLF_NAME_RE knows. Six days of this were blamed on
+ * Google's coverage and on a Google Cloud Console setting. It was our own filter.
+ *
+ * The lesson is the one that keeps recurring: the missing thing was evidence of a DECISION we made,
+ * not of data we lacked. [[missing-log-entry-is-the-evidence]]
+ *
+ * A championship course is very often branded rather than described — TPC, PGA, "The Ocean Course",
+ * "Whistling Straits". So brand and course-noun evidence counts alongside the word "golf".
+ */
+const GOLF_BRAND_RE = /(\bTPC\b|\bPGA\b|\bLPGA\b|\bgolf\b)/i;
+const COURSE_NOUN_RE = /\b(course|links|country club|golf club)\b/i;
+
+/**
+ * Types that mean "this record is a hospitality business". They do NOT disqualify a course — the
+ * clubhouse restaurant IS how Google files TPC Sawgrass — but on their own, with only a weak name,
+ * they describe the hotel next door. `Sawgrass Marriott Golf Resort & Spa` is the case that matters:
+ * it is `lodging`, it contains the word "golf", and it was being offered as the nearest COURSE at
+ * 1.1km. Handing a player a hotel to play is the same defect class as handing them the wrong club.
+ */
+const HOSPITALITY_TYPES = new Set(['lodging', 'restaurant', 'food', 'bar', 'spa', 'cafe']);
+
+export function isGolfPlace(p: Located): boolean {
   if (NOT_A_COURSE_RE.test(p.name)) return false;
+  // Google TYPED it a course — the Places-API-(New) path, and the only unambiguous signal there is.
   if (p.types.some((t) => t === 'golf_course')) return true;
-  return GOLF_NAME_RE.test(p.name);
+
+  const branded = GOLF_BRAND_RE.test(p.name);
+  const courseNoun = COURSE_NOUN_RE.test(p.name);
+  if (!branded && !courseNoun && !GOLF_NAME_RE.test(p.name)) return false;
+
+  // Hospitality-only record: require it to name itself a COURSE (or a club/links), not merely to sit
+  // on a golf property. "TPC Sawgrass" passes on the brand; "... Golf Resort & Spa" does not.
+  const hospitalityOnly =
+    p.types.length > 0 && p.types.every((t) => HOSPITALITY_TYPES.has(t) || t === 'point_of_interest' || t === 'establishment');
+  if (hospitalityOnly && !courseNoun && !/\bTPC\b|\bPGA\b/i.test(p.name)) return false;
+
+  return true;
 }
 
 /**
@@ -270,22 +309,29 @@ async function legacyQuery(url: string, timeoutMs: number): Promise<KeyAttempt<L
  * was offered Sawgrass Country Club, a different club 2.6km away, and handed its card and yardages.
  * Nothing looked broken — that is what made it expensive.
  *
- * The correction is that `golf_course` IS a legacy place type (Table 1), not a Places-API-(New)
- * exclusive. The old comment here — and OPEN-ITEMS §13, which said New is "the only Google surface
- * where golf_course is a supported type filter" — were both wrong, and that wrong belief is why the
- * fix was parked behind a Google Cloud Console change nobody could make from here.
+ * `golf_course` is NOT a legacy place type — the ORIGINAL guard's "phantom type" wording was right,
+ * and an earlier version of this fix asserted the opposite. Legacy silently IGNORES an unknown
+ * `type`, so sending it does not filter; it returns the unfiltered nearby sweep. That accident is
+ * what finally exposed the real bug: the sweep contained TPC Sawgrass all along, and isGolfPlace was
+ * discarding it. See isGolfPlace.
  *
- * So: run the TYPE filter (authoritative, name-independent) and the KEYWORD filter (rescues courses
- * Google mis-types) against the same key, in PARALLEL, and merge. Parallel because the wall-clock
- * budget is the thing that kills this function; merged because a strict swap could silently drop a
- * course that only the keyword finds, and a discovery path may not trade one blind spot for another.
- * Either filter succeeding is enough — only a double failure walks to the next key.
+ * So the two queries are deliberately different in KIND, not two spellings of one filter:
+ *   - KEYWORD `golf course` — precise, but a legacy keyword match is a NAME match, so it can only
+ *     ever find courses that describe themselves. This is what shipped alone, and why a player on
+ *     the Stadium Course was handed a different club's card.
+ *   - BROAD prominence sweep — no name filter at all, so a course branded rather than described is
+ *     reachable. Everything it returns is then judged by isGolfPlace, which is where the golf
+ *     evidence is actually required.
+ *
+ * Run in PARALLEL because wall-clock budget is what kills this function, and MERGED de-duped so the
+ * result is a superset of the keyword-only behaviour — a discovery path may not trade one blind spot
+ * for another. Either query succeeding is enough; only a double failure walks to the next key.
  */
 async function searchNearbyLegacy(lat: number, lng: number, radius: number, timeoutMs: number): Promise<Located[] | null> {
   return withGoogleKeys<Located[]>('places-legacy:nearbysearch', async (KEY) => {
     const base = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=${radius}&key=${KEY}`;
     const [byType, byKeyword] = await Promise.all([
-      legacyQuery(`${base}&type=golf_course`, timeoutMs).catch(() => keyFailure({ status: 'THREW' })),
+      legacyQuery(`${base}&rankby=prominence`, timeoutMs).catch(() => keyFailure({ status: 'THREW' })),
       legacyQuery(`${base}&keyword=${encodeURIComponent('golf course')}`, timeoutMs).catch(() => keyFailure({ status: 'THREW' })),
     ]);
 

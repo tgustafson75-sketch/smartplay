@@ -9790,20 +9790,26 @@ check('LOCK: course-locate filters golf via Places(New) includedTypes + BOTH leg
       // fallback: legacy sends BOTH filters. Keyword alone was the TPC Sawgrass defect; type alone
       // would drop the courses Google mis-types. Neither may be removed without the other failing.
       /keyword=\$\{encodeURIComponent\('golf course'\)\}/.test(s) &&
-      /[?&]type=golf_course/.test(s) &&
+      /[?&]rankby=prominence/.test(s) &&
       // ...and they must be MERGED, not chosen between: a de-dupe over both results is what makes
       // the pair a superset of the old single-filter behaviour rather than a swap.
-      /Promise\.all\(\[[\s\S]{0,400}?type=golf_course[\s\S]{0,400}?keyword=/.test(s) &&
+      /Promise\.all\(\[[\s\S]{0,400}?rankby=prominence[\s\S]{0,400}?keyword=/.test(s) &&
       /byType\.ok[\s\S]{0,200}?byKeyword\.ok/.test(s) &&
       // a double failure must still walk to the next key rather than report an empty course list
       /if \(!byType\.ok && !byKeyword\.ok\) return byKeyword;/.test(s) &&
       // guard: golf evidence required on every row, whichever path produced it
       /function isGolfPlace/.test(s) &&
       /isGolfPlace\(p\)/.test(s) &&
-      /NOT_A_COURSE_RE/.test(s)
+      /NOT_A_COURSE_RE/.test(s) &&
+      // ...and the classifier must still admit a course that is BRANDED rather than described, which
+      // is the actual TPC Sawgrass defect: Google types the Stadium Course restaurant/lodging and its
+      // name contains no "golf". A name-word-only rule silently discards it.
+      /GOLF_BRAND_RE/.test(s) &&
+      /\\bTPC\\b/.test(s) &&
+      /HOSPITALITY_TYPES/.test(s)
     );
   })(),
-  'New-API type filter + BOTH legacy filters merged and de-duped + double-failure still walks keys + isGolfPlace guard');
+  'New-API type filter + keyword AND broad legacy sweep merged + double-failure walks keys + classifier admits branded courses and rejects hospitality-only rows');
 
 // "164-yard shot and the caddie defaults to gap wedge." One mis-attributed sample became a club's
 // permanent average. The band must be enforced at INGEST *and* at READ — read-time is what heals a
