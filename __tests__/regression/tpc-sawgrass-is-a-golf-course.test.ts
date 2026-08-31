@@ -72,3 +72,44 @@ describe('the course you are standing on survives the golf filter', () => {
     }
   });
 });
+
+/**
+ * 2026-08-31 (adversarial audit A) — A WORSE BUG THAN THE ONE ABOVE, found by seeding a CITY.
+ *
+ * Manhattan returned NINETEEN "courses", every one an indoor simulator bay or a mini-golf bar.
+ * Google tags them `indoor_golf_course` AND `golf_course`, so the type check accepted them outright,
+ * and no name list could ever have caught "Five Iron Golf" or "Puttery".
+ *
+ * TPC Sawgrass affected players on one property. This hands EVERY city player a simulator bay as
+ * somewhere to play eighteen. Rows below are REAL, captured from production with types verbatim.
+ */
+describe('a simulator bay is not somewhere you play eighteen', () => {
+  it('DROPS indoor golf even when Google ALSO tags it golf_course', () => {
+    for (const [n, t] of [
+      ['Five Iron Golf', ['indoor_golf_course', 'golf_course', 'sports_bar', 'sports_school']],
+      ['GOLFZON Social - Brooklyn NY', ['indoor_golf_course', 'golf_course', 'sports_bar', 'restaurant']],
+      ['iGolf By Space NYC | Trackman & Golf VX Simulators', ['indoor_golf_course', 'golf_course', 'sports_school']],
+      ['Hudson Golf', ['indoor_golf_course', 'banquet_hall', 'golf_course', 'athletic_field']],
+      ['Powerhouse Golf Club', ['indoor_golf_course', 'golf_course', 'athletic_field', 'sports_club']],
+      ['Ready Golf Club', ['indoor_golf_course', 'golf_course', 'athletic_field', 'establishment']],
+      ['Fitness Factory Health Club', ['fitness_center', 'indoor_golf_course', 'golf_course', 'gym']],
+      ['The Ryder Cup Room', ['indoor_golf_course', 'golf_course', 'athletic_field', 'establishment']],
+    ] as const) {
+      expect([n, isGolfPlace(row(n, [...t]))]).toEqual([n, false]);
+    }
+  });
+
+  it('DROPS a mini-golf cocktail bar tagged golf_course', () => {
+    expect(isGolfPlace(row('Puttery', ['miniature_golf_course', 'indoor_golf_course', 'golf_course', 'cocktail_bar']))).toBe(false);
+  });
+
+  it('and the real outdoor courses in the SAME queries still survive', () => {
+    for (const [n, t] of [
+      ['TPC Scottsdale PGA', ['golf_course', 'establishment']],
+      ['Winged Foot Golf Club', ['point_of_interest', 'establishment']],
+      ['Riviera Country Club', ['point_of_interest', 'establishment']],
+    ] as const) {
+      expect([n, isGolfPlace(row(n, [...t]))]).toEqual([n, true]);
+    }
+  });
+});

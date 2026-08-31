@@ -143,8 +143,28 @@ const COURSE_NOUN_RE = /\b(course|links|country club|golf club)\b/i;
  */
 const HOSPITALITY_TYPES = new Set(['lodging', 'restaurant', 'food', 'bar', 'spa', 'cafe']);
 
+export /**
+ * 2026-08-31 (adversarial audit) — TYPES THAT DISQUALIFY, WHATEVER ELSE GOOGLE ALSO CALLS THE PLACE.
+ *
+ * Seeding Manhattan returned NINETEEN "courses", every one of them an indoor simulator bay or a
+ * mini-golf bar: Five Iron Golf (×5), Puttery, GOLFZON Social, "Fitness Factory Health Club".
+ * Google tags all of them `indoor_golf_course` AND `golf_course`, so the type check accepted them
+ * outright — and the NAME exclusions could never catch them, because "Five Iron Golf" and "Puttery"
+ * contain none of the words a name list can reasonably guess at.
+ *
+ * This is a worse bug than the one that started this file. TPC Sawgrass affected players standing on
+ * one famous property; this hands EVERY city player a simulator bay as somewhere to play eighteen.
+ *
+ * Excluding on TYPE is the fix because the type is Google's own classification rather than our guess
+ * at a brand name, and it is checked BEFORE the `golf_course` acceptance — these places genuinely
+ * carry both tags, so order is the whole point.
+ */
+const NOT_A_COURSE_TYPES = new Set(['indoor_golf_course', 'miniature_golf_course', 'golf_shop']);
+
 export function isGolfPlace(p: Located): boolean {
   if (NOT_A_COURSE_RE.test(p.name)) return false;
+  // Disqualifying TYPE beats every other signal, including golf_course sitting right beside it.
+  if (p.types.some((t) => NOT_A_COURSE_TYPES.has(t))) return false;
   // Google TYPED it a course — the Places-API-(New) path, and the only unambiguous signal there is.
   if (p.types.some((t) => t === 'golf_course')) return true;
 

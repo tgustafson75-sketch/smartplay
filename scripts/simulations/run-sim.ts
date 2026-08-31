@@ -10003,7 +10003,15 @@ check('LOCK: course-locate filters golf via Places(New) includedTypes + BOTH leg
       // name contains no "golf". A name-word-only rule silently discards it.
       /GOLF_BRAND_RE/.test(s) &&
       /\\bTPC\\b/.test(s) &&
-      /HOSPITALITY_TYPES/.test(s)
+      /HOSPITALITY_TYPES/.test(s) &&
+      // ...and a DISQUALIFYING TYPE must beat golf_course sitting beside it. Google tags every
+      // simulator bay `indoor_golf_course` AND `golf_course`; seeding Manhattan returned nineteen
+      // "courses", all of them simulator bays or mini-golf bars. No name list could catch
+      // "Five Iron Golf" or "Puttery", and the exclusion has to be checked BEFORE the acceptance.
+      /NOT_A_COURSE_TYPES/.test(s) &&
+      /indoor_golf_course/.test(s) &&
+      /miniature_golf_course/.test(s) &&
+      /NOT_A_COURSE_TYPES\.has\(t\)\)\) return false;[\s\S]{0,200}?t === 'golf_course'\)\) return true;/.test(s)
     );
   })(),
   'New-API type filter + keyword AND broad legacy sweep merged + double-failure walks keys + classifier admits branded courses and rejects hospitality-only rows');
