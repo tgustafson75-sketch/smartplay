@@ -13056,6 +13056,64 @@ check('LOCK: course discovery has ONE budget — the client waits longer than th
   })(),
   'course-locate spends less than the client waits and less than the platform allows, the primary cannot starve the fallback, and the deadline is consulted rather than declared');
 
+check('LOCK: the ANALYSIS path has one ordered budget too — server < platform < client',
+  /**
+   * 2026-08-31 (OPEN-ITEMS §8 sweep, magic-literal class).
+   *
+   * course-locate has had a guard on this relationship since 2026-08-25. The ANALYSIS path — the
+   * slower, hotter one, and the one that already produced a shipped defect of exactly this kind —
+   * had NONE. Its three numbers live in three different files, one of which is vercel.json:
+   *
+   *     api/swing-analysis.ts    ORCHESTRATION_TOTAL_MS   48s   what the server allows ITSELF
+   *     vercel.json              maxDuration              60s   when the platform kills it
+   *     services/poseDetection   REQUEST_TIMEOUT_MS       63s   how long the client waits
+   *
+   * They are correctly ordered today. Nothing said so, and nothing would have noticed if one moved.
+   * If the client timeout ever drops below maxDuration, the app aborts a request the server is still
+   * legitimately working on and the player is told the analysis failed when it was about to succeed
+   * — which is precisely how the 130_000 literal behaved before it was replaced by
+   * ANALYSIS_WORST_CASE_MS: "the slowest run that could still succeed was killed and shown as
+   * Analysis timed out."
+   *
+   * ANALYSIS_WORST_CASE_MS itself is asserted to stay DERIVED. That is the fix that generalises:
+   * assert the relationship, never the literal — a guard that copies a number out of another file
+   * cannot tell a correct value from a stale one.
+   */
+  (() => {
+    const server = read('api/swing-analysis.ts');
+    const client = read('services/poseDetection.ts');
+    const num = (src: string, re: RegExp): number | null => {
+      const m = re.exec(src);
+      return m ? Number(m[1].replace(/_/g, '')) : null;
+    };
+    const orchestration = num(server, /const ORCHESTRATION_TOTAL_MS = ([\d_]+);/);
+    const clientTimeout = num(client, /const REQUEST_TIMEOUT_MS = ([\d_]+);/);
+    let maxDuration: number | null = null;
+    try {
+      const vj = JSON.parse(read('vercel.json')) as { builds?: { src: string; config?: { maxDuration?: number } }[] };
+      maxDuration = vj.builds?.find(b => b.src === 'api/swing-analysis.ts')?.config?.maxDuration ?? null;
+    } catch { /* fall through to the null check */ }
+    if (orchestration == null || clientTimeout == null || maxDuration == null) {
+      console.log(`   analysis budget anchors missing (orchestration=${orchestration} client=${clientTimeout} maxDuration=${maxDuration})`);
+      return false;
+    }
+    const platformMs = maxDuration * 1000;
+    // The server must finish inside what the platform allows, and the client must out-wait both —
+    // otherwise the app kills a read that was still going to succeed.
+    const ordered = orchestration < platformMs && platformMs <= clientTimeout;
+    if (!ordered) console.log(`   analysis budgets out of order: server ${orchestration}ms, platform ${platformMs}ms, client ${clientTimeout}ms`);
+
+    // And the screen's hang guard must stay DERIVED from the parts, never a copied literal.
+    const derived =
+      /export const ANALYSIS_WORST_CASE_MS =\s*\n?\s*DURATION_PROBE_CEILING_MS \+/.test(client) &&
+      /REQUEST_TIMEOUT_MS;/.test(client) &&
+      // the screen consumes the constant, not a number of its own
+      /ANALYSIS_WORST_CASE_MS/.test(read('app/swinglab/smartmotion.tsx')) &&
+      !/hangGuardMs = [0-9_]+/.test(read('app/swinglab/smartmotion.tsx'));
+    return ordered && derived;
+  })(),
+  'the analysis budget is ordered server < platform < client so a still-succeeding read is never killed, and the hang guard stays derived from its parts rather than copying a literal');
+
 check('LOCK: an aborted swing locate SAYS WHO ABORTED IT',
   (() => {
     /**

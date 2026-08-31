@@ -179,10 +179,31 @@ verification. Everything else on the critical path has had an invariant sweep.
 > is a systematic weakness in how these guards are written, not four coincidences. **Any new guard
 > that greps source MUST strip comments before matching.**
 >
-> **Still unswept in this class:** guards asserting a magic literal that duplicates a value owned in
-> another file (the `ANALYSIS_WORST_CASE_MS` shape). A first pass over numeric literals produced only
-> coincidental collisions on round numbers — the useful version needs to compare each asserted
-> literal against DERIVED constants, and that pass has not been done.
+> **3. The magic-literal class — swept, and it found a MISSING guard rather than a bad one.**
+> Number-matching is a dead end here: round numbers like `1000` and `1024` collide constantly across
+> unrelated constants (48 "hits", all coincidence). The tell that works is SEMANTIC — a literal that
+> must stay ordered against values owned in other files.
+>
+> `course-locate` has had a budget-ordering guard since 2026-08-25. **The analysis path — slower,
+> hotter, and the one that already produced a shipped defect of exactly this kind — had none.** Its
+> three numbers live in three files, one of them `vercel.json`:
+>
+> | value | where | meaning |
+> |---|---|---|
+> | `ORCHESTRATION_TOTAL_MS` 48s | `api/swing-analysis.ts` | what the server allows itself |
+> | `maxDuration` 60s | `vercel.json` | when the platform kills it |
+> | `REQUEST_TIMEOUT_MS` 63s | `services/poseDetection.ts` | how long the client waits |
+>
+> Correctly ordered today; nothing said so, and nothing would have noticed if one moved. Drop the
+> client below the platform cap and the app aborts a request the server is still legitimately working
+> on — the player is told the analysis failed when it was about to succeed, which is precisely how
+> the old `130_000` literal behaved. The guard also pins `ANALYSIS_WORST_CASE_MS` as DERIVED so it
+> can never revert to a copied number. Break-tested red both ways, and it PRINTS the three numbers.
+>
+> **§8 is now swept across all three classes.** The generalisable rule, stated once: **assert the
+> RELATIONSHIP, never the literal, and never a headcount** — a guard that copies a number out of
+> another file cannot tell a correct value from a stale one, and a guard that counts copies cannot
+> tell a fix from a regression.
 
 ### Original note
 **Six guards this week were green BECAUSE a bug was present**, and would have gone red on the fix:
