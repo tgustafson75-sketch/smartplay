@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 import { applyCors } from './_cors';
 import { googleKeys, withGoogleKeys, isCapabilityMiss, keyFailure } from './_googleKeys';
+import type { KeyAttempt } from './_googleKeys';
 
 /**
  * api/course-locate.ts — the COURSE-DOWNLOAD ENGINE's locator (2026-08-06, Tim — "build the course
@@ -225,39 +226,88 @@ async function searchNearbyNew(lat: number, lng: number, radius: number, timeout
 }
 
 /** Legacy Nearby Search, keyword-filtered (`keyword` IS honored by legacy; `type=golf_course` never was). */
+/**
+ * One legacy Nearby Search request. Split out so the two FILTERS below can run against the same key
+ * in parallel and be judged independently — a failure of one must not discard the other's rows.
+ */
+async function legacyQuery(url: string, timeoutMs: number): Promise<KeyAttempt<Located[]>> {
+  const r = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+  if (!r.ok) return keyFailure({ httpStatus: r.status });
+  const data = (await r.json()) as { status?: string; error_message?: string; results?: PlaceResult[] };
+  if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
+    // Legacy reports "API not enabled for this project" as HTTP 200 + REQUEST_DENIED, so the
+    // capability check has to read the BODY here, not the status code.
+    console.log(`[course-locate] Places nearbysearch status=${data.status} — ${data.error_message || ''}`);
+    return keyFailure({ status: data.status, message: data.error_message });
+  }
+  const value = (data.results ?? [])
+    .map((p): Located | null => {
+      const plat = p.geometry?.location?.lat;
+      const plng = p.geometry?.location?.lng;
+      if (!isNum(plat) || !isNum(plng)) return null;
+      return {
+        name: (p.name ?? '').trim(),
+        place_id: p.place_id ?? null,
+        lat: plat,
+        lng: plng,
+        vicinity: (p.vicinity ?? '').trim() || null,
+        rating: isNum(p.rating) ? p.rating : null,
+        open_now: p.opening_hours?.open_now ?? null,
+        types: Array.isArray(p.types) ? p.types : [],
+        closed_permanently: p.business_status === 'CLOSED_PERMANENTLY',
+      };
+    })
+    .filter((p): p is Located => p != null);
+  return { ok: true, value };
+}
+
+/**
+ * LEGACY fallback — TWO filters, merged.
+ *
+ * 2026-08-31 — this path used to send `keyword=golf course` and nothing else, and that single word
+ * was the whole TPC Sawgrass defect. A legacy KEYWORD match is a NAME match, so every course whose
+ * name does not contain "golf" was invisible to discovery: a player standing on the Stadium Course
+ * was offered Sawgrass Country Club, a different club 2.6km away, and handed its card and yardages.
+ * Nothing looked broken — that is what made it expensive.
+ *
+ * The correction is that `golf_course` IS a legacy place type (Table 1), not a Places-API-(New)
+ * exclusive. The old comment here — and OPEN-ITEMS §13, which said New is "the only Google surface
+ * where golf_course is a supported type filter" — were both wrong, and that wrong belief is why the
+ * fix was parked behind a Google Cloud Console change nobody could make from here.
+ *
+ * So: run the TYPE filter (authoritative, name-independent) and the KEYWORD filter (rescues courses
+ * Google mis-types) against the same key, in PARALLEL, and merge. Parallel because the wall-clock
+ * budget is the thing that kills this function; merged because a strict swap could silently drop a
+ * course that only the keyword finds, and a discovery path may not trade one blind spot for another.
+ * Either filter succeeding is enough — only a double failure walks to the next key.
+ */
 async function searchNearbyLegacy(lat: number, lng: number, radius: number, timeoutMs: number): Promise<Located[] | null> {
   return withGoogleKeys<Located[]>('places-legacy:nearbysearch', async (KEY) => {
-    const url =
-      `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
-      `?location=${lat},${lng}&radius=${radius}&keyword=${encodeURIComponent('golf course')}&key=${KEY}`;
-    const r = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
-    if (!r.ok) return keyFailure({ httpStatus: r.status });
-    const data = (await r.json()) as { status?: string; error_message?: string; results?: PlaceResult[] };
-    if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-      // Legacy reports "API not enabled for this project" as HTTP 200 + REQUEST_DENIED, so the
-      // capability check has to read the BODY here, not the status code.
-      console.log(`[course-locate] Places nearbysearch status=${data.status} — ${data.error_message || ''}`);
-      return keyFailure({ status: data.status, message: data.error_message });
+    const base = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=${radius}&key=${KEY}`;
+    const [byType, byKeyword] = await Promise.all([
+      legacyQuery(`${base}&type=golf_course`, timeoutMs).catch(() => keyFailure({ status: 'THREW' })),
+      legacyQuery(`${base}&keyword=${encodeURIComponent('golf course')}`, timeoutMs).catch(() => keyFailure({ status: 'THREW' })),
+    ]);
+
+    // Both dead → hand the walker a real failure so it can try the next key.
+    if (!byType.ok && !byKeyword.ok) return byKeyword;
+
+    // De-dupe by place_id, falling back to name+position for the rare row Google returns without one.
+    const seen = new Set<string>();
+    const merged: Located[] = [];
+    for (const part of [byType, byKeyword]) {
+      if (!part.ok) continue;
+      for (const p of part.value) {
+        const id = p.place_id ?? `${p.name}|${p.lat.toFixed(5)},${p.lng.toFixed(5)}`;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        merged.push(p);
+      }
     }
-    const value = (data.results ?? [])
-      .map((p): Located | null => {
-        const plat = p.geometry?.location?.lat;
-        const plng = p.geometry?.location?.lng;
-        if (!isNum(plat) || !isNum(plng)) return null;
-        return {
-          name: (p.name ?? '').trim(),
-          place_id: p.place_id ?? null,
-          lat: plat,
-          lng: plng,
-          vicinity: (p.vicinity ?? '').trim() || null,
-          rating: isNum(p.rating) ? p.rating : null,
-          open_now: p.opening_hours?.open_now ?? null,
-          types: Array.isArray(p.types) ? p.types : [],
-          closed_permanently: p.business_status === 'CLOSED_PERMANENTLY',
-        };
-      })
-      .filter((p): p is Located => p != null);
-    return { ok: true, value };
+    if (!byType.ok || !byKeyword.ok) {
+      console.log(`[course-locate] legacy served on ONE filter only (type=${byType.ok} keyword=${byKeyword.ok})`);
+    }
+    return { ok: true, value: merged };
   });
 }
 
@@ -289,8 +339,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await searchNearbyNew(lat, lng, radius, Math.min(PRIMARY_CAP_MS, remainingMs(deadlineAt)));
     let source = 'places_new';
 
-    // 2) FALLBACK — New API not enabled on this key (or a transient error). Legacy Nearby Search with
-    // `keyword=golf`, which legacy DOES honor, rather than the phantom type filter that started this.
+    // 2) FALLBACK — New API not enabled on this key (or a transient error). Legacy Nearby Search,
+    // which honors BOTH `type=golf_course` and `keyword=` — see searchNearbyLegacy for why it now
+    // sends both. (This comment used to say `keyword=golf`; the code sent `keyword=golf course`.)
     // Only if there is genuinely time left: starting an 8-second call with 400ms of budget is how the
     // function got killed mid-flight and the player got nothing at all.
     if (located == null) {

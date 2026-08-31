@@ -554,7 +554,19 @@ answer. Both are frozen in `ISLAND_BASELINE`, so nothing NEW can join them quiet
 **`components/caddie/CockpitCaddieScreen.tsx` is the third and is PARKED, not stray** — Tim 08-27:
 keep it hidden, may come back.
 
-## §22 — TIM'S CALL: a setting that cannot vary, and three branches pretending it can (2026-08-28)
+## §22 — CLOSED 2026-08-29: the setting that could not vary is deleted (found 2026-08-28)
+
+> **RESOLVED — verified in code 2026-08-31.** Everything below was written while it was open and is
+> kept for the reasoning. What actually happened: `voiceOrchestrator` and all three dead arms were
+> deleted on 2026-08-29, and the sim LOCK inverted — its allowlist is now EMPTY, so the name may not
+> appear in shipped code at all. Re-verified today: no field, no setter, no branch anywhere.
+>
+> **The strategy engine was NOT collateral damage.** `smartAnalysisEngine.analyze({kind:
+> 'shot_strategy'})` has two live callers in `app/(tabs)/caddie.tsx` (1390, 1457) — the proactive
+> stop-detection read. Only the dead route through `queryStatusHandler` went. (Two further callers
+> live in `CockpitCaddieScreen.tsx`, which is itself an island — parked, not stray.)
+>
+> **What is still open is the "Related" paragraph at the end**, and only that. See §22b.
 
 Found by adversarial audit 2 ("is anything built but unreachable?").
 
@@ -584,6 +596,61 @@ three and fails on a fourth, so the class cannot grow while the decision waits.
 the legacy path is still wanted for anything. Doing neither leaves three pieces of code that read as
 live choices and are not.
 
-Related: `setVoiceGender`, `setCockpitMode` + `cockpitMode`, and `setPipecatServerUrl` are also
-setters nothing calls. `voiceGender` is fine — it is DERIVED from the persona now (one owner), so
-only the setter is dead. The other two are dead field-and-setter pairs (cockpit is parked by Tim).
+## §22b — STILL OPEN: the three dead setters, swept and bounded (2026-08-31)
+
+The original "Related" note said `setVoiceGender`, `setCockpitMode` + `cockpitMode`, and
+`setPipecatServerUrl` are setters nothing calls. **Verified, and now swept exhaustively rather than
+spotted**: all 49 setters in `settingsStore` were checked for callers outside the store itself.
+**Exactly three have none, and they are exactly these three.** The class is bounded — nothing new
+has joined it.
+
+- **`pipecatServerUrl` + `setPipecatServerUrl` — DEAD PAIR, safe to delete.** Zero readers: the only
+  surviving mention is a comment in `hooks/usePipecatVoice.ts:75` narrating the WebSocket scaffold
+  that was deleted 2026-08-23. It is still in `partialize`, so it is persisted to every device for
+  a value nothing can set and nothing reads.
+- **`cockpitMode` + `setCockpitMode` — DEAD PAIR, but PARKED.** The STORE field has zero readers;
+  `app/(tabs)/caddie.tsx:439` declares its own local `const cockpitMode = false`, which is a
+  different binding entirely. Also persisted. Tim parked `CockpitCaddieScreen` ("keep it hidden, may
+  come back"), so this pair is the setting that screen would need.
+- **`setVoiceGender` — dead setter, LIVE field.** Deleting the setter is not just tidying: see §22c,
+  which is the reason it must not be given a caller.
+
+**The guard forbids the instance, not the shape.** `LOCK: the setting nothing could set is gone, and
+cannot come back` sweeps for the literal string `voiceOrchestrator`. It cannot see the three above,
+which are the same shape. Per [[run-the-second-pass-yourself]] — *guards must forbid the SHAPE, not
+the instance* — the guard worth writing is "no persisted setting may have a setter nothing calls",
+seeded with the two parked pairs as its baseline.
+
+## §22c — NEW, needs Tim: `voiceGender` has three owners that disagree for the CUSTOM caddie (2026-08-31)
+
+Found while verifying §22b's claim that "voiceGender is fine — it is DERIVED from the persona now
+(one owner)". It is derived, but not from one place. Three writers each compute it differently, and
+for `caddiePersonality === 'custom'` they disagree:
+
+| writer | what it says a custom caddie is |
+|---|---|
+| `settingsStore.setCaddiePersonality` | `p === 'serena' ? 'female' : 'male'` → **always `male`** |
+| `voiceService.speak` (`effectiveGender`) | from `customCaddieBasePersona` → **`female` if the base is Serena** |
+| `app/_layout.tsx:322` boot reconcile | from `customCaddieGender` → **whatever the user picked** |
+
+`customCaddieGender` and `customCaddieBasePersona` are two independent user-set fields, so all three
+can differ at once. Consequences, all verified:
+
+1. **Activating a female custom caddie sets `voiceGender` to `male`.** `applyCustomCaddie` calls
+   `setCaddiePersonality('custom')`, which cannot see the base persona. The boot reconcile corrects
+   it — so the caddie's gender silently CHANGES at the next app restart.
+2. **The cloud voice and the device-TTS voice can disagree.** `speak()` overrides with the
+   persona-derived `effectiveGender` (correct), but every `speakDeviceNotice(...)` / offline-clip
+   call passes `settings.voiceGender` (stale). Same caddie, two genders depending on the network.
+   [[feels-like-a-real-caddie]] — a robotic moment is a defect, and so is a gender-swapping one.
+3. **UI pronouns follow the wrong one.** `components/VocabBanner.tsx:38` and `app/tutorials.tsx:131`
+   both render `he`/`she` straight from `voiceGender`.
+4. **`app/_layout.tsx:328` leaks a stale gender.** The `custom → kevin` fallback branch (fired when
+   the persona is `custom` but the custom caddie is off or its name was cleared) sets
+   `caddiePersonality` and `caddieAssignments` but **not** `voiceGender` — so Kevin inherits the
+   custom caddie's gender. Its sibling branch four lines above does set it.
+
+**Not touched: this is the voice path** ([[voice-path-change-freeze]]), and #2 changes what the
+player hears. The fix is one owner — a `genderForPersona(persona)` resolver that reads
+`customCaddieBasePersona`, called by all three writers, with `voiceGender` becoming a pure mirror.
+Needs Tim's per-item OK.

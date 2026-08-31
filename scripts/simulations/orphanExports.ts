@@ -403,7 +403,7 @@ export const ORPHAN_BASELINE: Record<string, string> = {
   'services/voicePermissionService.ts :: clearMicDenial':
     'SURFACE — the reset half of the denial state its sibling persists.',
   'services/walkingDetector.ts :: getCachedReading':
-    'WIRE — the sync cache the shot orchestrator was built to read, paired with cartModeSuggestion above. Both are orphaned together, so the detector runs and NOTHING consumes it. Wiring means offering the player a cart-mode flip, which is a new proactive interruption — a product call during a freeze, right after the L1 interruption fix. Named blocker: where the suggestion is shown.',
+    'WIRE — the SYNC cache of the walking/cart reading, for a caller that cannot await. Its former pair cartModeSuggestion is NO LONGER orphaned: cart auto-detect (2026-08-30, 5f9928fb) consumes it at walkingDetector.ts:229, so the detector IS consumed now and the old "both orphaned together, nothing consumes it" verdict here was stale — as was its named blocker ("where the suggestion is shown"), since the correction is silent and shows nothing. What is still unwired is only this SYNC accessor: every live reader (conversationalLoggingOrchestrator) goes through isEffectiveCartMode instead. Delete it or give it the sync caller it was written for; it is no longer waiting on a product call.',
   'services/watchWristInterpretation.ts :: calibrateFromMeasured':
     'PARKED — see estimateClubSpeedMph; this is the calibration half.',
 };

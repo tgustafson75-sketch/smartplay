@@ -9762,7 +9762,24 @@ check('Logic universal: voice yardage + putts + swing-caddie match every other p
 // and `golf_course` exists only in Places API (NEW) — so the filter never bound and every business
 // in the radius came back. Lock all three layers of the fix; the phantom legacy filter must never
 // return, because it fails OPEN (looks like bad ranking, not a broken filter).
-check('LOCK: course-locate filters golf via Places(New) includedTypes + keyword fallback + name/type guard',
+/**
+ * 2026-08-31 — THIS GUARD WAS GREEN BECAUSE THE BUG WAS PRESENT, and it went RED on the fix.
+ *
+ * It asserted `!/[?&]type=golf_course/` — it actively FORBADE the legacy type filter, calling it
+ * "the phantom type". That belief was wrong: `golf_course` is a legacy place type (Table 1), not a
+ * Places-API-(New) exclusive. The legacy fallback therefore matched courses by NAME only, so every
+ * course not named "... Golf Course" was invisible to discovery — TPC Sawgrass among them, which is
+ * how a player on the Stadium Course got offered a different club 2.6km away.
+ *
+ * The guard did not merely fail to catch that. It was the reason the fix was parked for six days
+ * behind a Google Cloud Console change: the wrong belief was written down as an assertion, and an
+ * assertion reads as settled. [[three-ways-a-guard-is-worthless]] — this is a fourth way, and the
+ * exact class OPEN-ITEMS §8 named: a guard written to PROTECT the thing it was keeping broken.
+ *
+ * It now asserts the RELATIONSHIP that has to hold — legacy sends BOTH filters and merges them —
+ * rather than the literal shape of one of them.
+ */
+check('LOCK: course-locate filters golf via Places(New) includedTypes + BOTH legacy filters + name/type guard',
   (() => {
     const s = read('api/course-locate.ts');
     return (
@@ -9770,16 +9787,23 @@ check('LOCK: course-locate filters golf via Places(New) includedTypes + keyword 
       /places\.googleapis\.com\/v1\/places:searchNearby/.test(s) &&
       /includedTypes:\s*\['golf_course'\]/.test(s) &&
       /X-Goog-FieldMask/.test(s) &&
-      // fallback: legacy with a keyword (which legacy DOES honor), never the phantom type
+      // fallback: legacy sends BOTH filters. Keyword alone was the TPC Sawgrass defect; type alone
+      // would drop the courses Google mis-types. Neither may be removed without the other failing.
       /keyword=\$\{encodeURIComponent\('golf course'\)\}/.test(s) &&
-      !/[?&]type=golf_course/.test(s) &&
+      /[?&]type=golf_course/.test(s) &&
+      // ...and they must be MERGED, not chosen between: a de-dupe over both results is what makes
+      // the pair a superset of the old single-filter behaviour rather than a swap.
+      /Promise\.all\(\[[\s\S]{0,400}?type=golf_course[\s\S]{0,400}?keyword=/.test(s) &&
+      /byType\.ok[\s\S]{0,200}?byKeyword\.ok/.test(s) &&
+      // a double failure must still walk to the next key rather than report an empty course list
+      /if \(!byType\.ok && !byKeyword\.ok\) return byKeyword;/.test(s) &&
       // guard: golf evidence required on every row, whichever path produced it
       /function isGolfPlace/.test(s) &&
       /isGolfPlace\(p\)/.test(s) &&
       /NOT_A_COURSE_RE/.test(s)
     );
   })(),
-  'no phantom legacy type=golf_course; New-API type filter + keyword fallback + isGolfPlace guard all present');
+  'New-API type filter + BOTH legacy filters merged and de-duped + double-failure still walks keys + isGolfPlace guard');
 
 // "164-yard shot and the caddie defaults to gap wedge." One mis-attributed sample became a club's
 // permanent average. The band must be enforced at INGEST *and* at READ — read-time is what heals a

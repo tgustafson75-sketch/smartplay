@@ -1238,9 +1238,15 @@ export const useRoundStore = create<RoundState>()(
         // the Settings tap, not the round flow.
         // 2026-05-17 — Phase 413 — start the walking-vs-cart detector
         // ticker. Refreshes every 30s during the round; the
-        // orchestrator reads getCachedReading() / isEffectiveCartMode()
-        // synchronously when deciding whether to auto-fire on a
-        // GPS-displacement event. Stopped at round end.
+        // orchestrator reads isEffectiveCartMode() synchronously when
+        // deciding whether to auto-fire on a GPS-displacement event, and
+        // the detector tick self-corrects settings.cartMode (2026-08-30).
+        // Stopped at round end.
+        // 2026-08-31 — this comment used to name getCachedReading() here
+        // too. That function has ZERO callers and never had one; only
+        // isEffectiveCartMode is actually read. A comment that names a
+        // caller which does not exist is how an orphan stays invisible.
+        // [[a-stale-header-is-a-source-someone-trusts]]
         //
         // 2026-05-21 — Fix N-3 — gate on hasAskedHealthPermission. The
         // ticker's first tick fires immediately (walkingDetector.ts:157)
