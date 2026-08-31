@@ -230,63 +230,130 @@ export const ORPHAN_BASELINE: Record<string, string> = {
   'services/handsFreeOrchestrator.ts :: stopHandsFreeOrchestrator': 'SURFACE — lifecycle symmetry with start.',
   'services/spaceAssessment.ts :: deleteSpaceConfiguration': 'SURFACE — user-data deletion API.',
 
-  // ── TRIAGE — the debt. Not yet assessed; each is WIRE, SURFACE or DELETE. ──────
-  'components/smartmotion/SmartMotionHud.tsx :: MetricRail': 'TRIAGE',
-  'lib/persona.ts :: getCaddieNameFor': 'TRIAGE',
-  'lib/persona.ts :: getCaddieObject': 'TRIAGE',
-  'lib/persona.ts :: getCharacterSpecFor': 'TRIAGE',
-  'services/acousticImpactDetector.ts :: onStrike': 'TRIAGE',
-  'services/caddieRequestBody.ts :: CADDIE_REQUEST_KEYS': 'TRIAGE',
-  'services/cage/targetRig.ts :: moveTargetEnd': 'TRIAGE',
-  'services/cloudSync/snapshot.ts :: NOT_BACKED_UP_STORE_KEYS': 'TRIAGE',
-  'services/conversationState.ts :: isInActiveConversation': 'TRIAGE',
-  'services/dialogEngine.ts :: listSituations': 'TRIAGE',
-  'services/earbudControl.ts :: setSuppressed': 'TRIAGE',
-  'services/featureAccess.ts :: featuresIn': 'TRIAGE — edition matrix; check against docs/edition-matrix.md before launch.',
-  'services/fillerLibrary.ts :: getFallbackTextForCategory': 'TRIAGE',
-  'services/fillerLibrary.ts :: isLibraryGenerated': 'TRIAGE',
-  'services/golfbertApi.ts :: getGolfbertHole': 'TRIAGE',
-  'services/golfbertApi.ts :: getGolfbertHoleImageryUrl': 'TRIAGE',
-  'services/golfbertApi.ts :: golfbertHealth': 'TRIAGE',
-  'services/golferModel.ts :: readPersistedGolferModel': 'TRIAGE',
-  'services/healthData.ts :: getGrantedHealthPermissions': 'TRIAGE',
-  'services/knowledgeBase/causalEngine.ts :: entryForFault': 'TRIAGE',
-  'services/lieAnalysisService.ts :: isVisionActive': 'TRIAGE',
-  'services/lieAnalysisService.ts :: subscribeVisionActive': 'TRIAGE',
-  'services/listeningSession.ts :: isActiveListeningEnabled': 'TRIAGE',
-  'services/mediaPipePoseService.ts :: setPreferredQuality': 'TRIAGE',
+  // ── ASSESSED 2026-08-30 — this block was 70 unassessed TRIAGE lines. ──────────
+  //
+  // Tim: "I don't want any orphans left that we need to deal with." Every line below now carries a
+  // verdict and a reason, so what remains is a set of DECISIONS rather than a pile of unknowns.
+  // Four of them turned out to be live defects and were fixed rather than tagged: the persona lists,
+  // the L1 interruption clock, the offline-notes read, and the only handled-error path to Sentry.
+  // Where a tag says PARKED it names the blocker; "later" is still not a reason.
+  'components/smartmotion/SmartMotionHud.tsx :: MetricRail':
+    'SURFACE — a presentational sibling of MetricCard, exported so the HUD can be composed differently. Rendering it nowhere costs nothing.',
+  'lib/persona.ts :: getCaddieNameFor':
+    'DUPE — built for api/* to resolve persona from a request body, and adopted by none of them: 14 routes each hand-roll the identical `body.persona ?? voiceGender` line instead. Behaviourally equivalent, so this is duplication and not a defect. Collapsing 14 live routes onto it needs a Vercel deploy and is post-freeze work, not a 1.0 change.',
+  'lib/persona.ts :: getCaddieObject':
+    'SURFACE — the object pronoun in the same set as getCaddieSubject/getCaddiePossessive, which ARE used. A pronoun set with a hole in it is worse than an unused export.',
+  'lib/persona.ts :: getCharacterSpecFor':
+    'DUPE — see getCaddieNameFor. Same shape, same 14 routes, same post-freeze consolidation.',
+  'services/acousticImpactDetector.ts :: onStrike':
+    'SURFACE — a subscribe/unsubscribe API for React effects. No subscriber today; the detector is driven by its own polling path.',
+  'services/caddieRequestBody.ts :: CADDIE_REQUEST_KEYS':
+    'SURFACE — exported so the brain-parity suite can assert the key set rather than assume it. Its consumer is a test, which the sweep does not count as a reference. Deleting it would blind the parity check.',
+  'services/cage/targetRig.ts :: moveTargetEnd':
+    'SURFACE — the free-end half of the rig manipulation pair; the anchored-end mover is used. Same reasoning as the pronoun set.',
+  'services/cloudSync/snapshot.ts :: NOT_BACKED_UP_STORE_KEYS':
+    'SURFACE — the deliberate exclusion list. Its whole job is to be READ BY A TEST asserting every persisted store appears in exactly one of the two lists, so that forgetting a key cannot look like deciding against one. Consumed 2026-08-30 by the change that stopped backing up other players data.',
+  'services/conversationState.ts :: isInActiveConversation':
+    'SURFACE — a synchronous read of the turn buffer for callers outside React.',
+  'services/dialogEngine.ts :: listSituations':
+    'SURFACE — introspection over the template registry; its own docstring says tests and help-discovery.',
+  'services/earbudControl.ts :: setSuppressed':
+    'WIRE — suppresses earbud taps during swing capture so a tap cannot open TTS over a swing in progress. The Cage session screen it names never called it. Real, small, and it touches the voice path, which is frozen without Tim per-item approval. [[voice-path-change-freeze]]',
+  'services/featureAccess.ts :: featuresIn':
+    'PARKED — the edition comparison table for the paywall. The paywall ships a written feature list instead, and changing paywall copy is layout-frozen. Revisit when subscriptions turn on; the check against docs/edition-matrix.md belongs to that same pass.',
+  'services/fillerLibrary.ts :: getFallbackTextForCategory':
+    'SURFACE — text fallback when no generated clip exists; the audio path is the one in use.',
+  'services/fillerLibrary.ts :: isLibraryGenerated':
+    'SURFACE — a readiness read for diagnostics.',
+  'services/golfbertApi.ts :: getGolfbertHole':
+    'PARKED — Golfbert per-hole detail. The shipped geometry path is AI-vision hole scan plus the course book; Golfbert is the fallback provider and only its course-level call is wired.',
+  'services/golfbertApi.ts :: getGolfbertHoleImageryUrl':
+    'PARKED — see getGolfbertHole. Imagery ships from the bundled/prefetched set.',
+  'services/golfbertApi.ts :: golfbertHealth':
+    'SURFACE — a /tools health probe.',
+  'services/golferModel.ts :: readPersistedGolferModel':
+    'SURFACE — reads the last snapshot from disk so a prompt has something before the first computed model lands. The live path computes synchronously and does not need the cold read.',
+  'services/healthData.ts :: getGrantedHealthPermissions':
+    'SURFACE — a permission-state read for a settings/diagnostic surface.',
+  'services/knowledgeBase/causalEngine.ts :: entryForFault':
+    'SURFACE — id-to-entry convenience over a corpus the callers already hold.',
+  'services/lieAnalysisService.ts :: isVisionActive':
+    'SURFACE — synchronous read of the vision controller for non-React callers.',
+  'services/lieAnalysisService.ts :: subscribeVisionActive':
+    'SURFACE — the subscription half of the same controller.',
+  'services/listeningSession.ts :: isActiveListeningEnabled':
+    'SURFACE — a one-line settings read for callers outside React.',
+  'services/mediaPipePoseService.ts :: setPreferredQuality':
+    'SURFACE — a quality override for profiling. The service picks quality from device class on its own.',
   'services/personaKnowledgeBase.ts :: findPersonaKBEntriesByKeywords':
     'SURFACE — keyword variant of the retrieval used by buildPersonaKBPromptBlock (which IS wired). Useful for a future context-aware match; not a missing feature.',
   'services/personaKnowledgeBase.ts :: getPersonaKBCategories':
     'SURFACE — KB category list, a diagnostic read.',
   'services/personaKnowledgeBase.ts :: getPersonaKBSize':
     'SURFACE — KB size, a diagnostic read for owner tools.',
-  'services/planStorage.ts :: listArchivedRecaps': 'TRIAGE',
-  'services/positionMarkBus.ts :: getLastMark': 'TRIAGE',
-  'services/rangefinder.ts :: REFERENCE_HEIGHTS': 'TRIAGE — SmartFinder is the screen Tim flagged as never swept.',
-  'services/rangefinder.ts :: buildLock': 'TRIAGE — SmartFinder, see REFERENCE_HEIGHTS.',
-  'services/smartFinderService.ts :: getAnchoredHoleLengthYards': 'TRIAGE — SmartFinder, see above.',
-  'services/responseRouter.ts :: fillerForSonnetVision': 'TRIAGE',
-  'services/smartTempo.ts :: tempoTargetFrames': 'TRIAGE',
-  'services/swing/poseMotion.ts :: wristCentroid': 'TRIAGE — do NOT wire into the trace; trace is clubhead-or-nothing.',
-  'services/swingComparisonEngine.ts :: annotateWithGolferModel': 'TRIAGE',
-  'services/swingDatabase.ts :: listReferences': 'TRIAGE',
-  'services/swingReferences.ts :: listRegisteredReferences': 'TRIAGE',
-  'services/teeTimeLink.ts :: openCourseInMaps': 'TRIAGE',
-  'services/trustLevelService.ts :: defaultWakeWordOn': 'TRIAGE',
-  'services/trustLevelService.ts :: psychologistEnabled': 'TRIAGE',
-  'services/tutorialContext.ts :: buildCompressedPracticeContext': 'TRIAGE',
-  'services/vocabularyProfileService.ts :: getTotalShotsParsed': 'TRIAGE',
+  'services/planStorage.ts :: listArchivedRecaps':
+    'PARKED — the archive browser surface does not exist; recaps are read by id.',
+  'services/positionMarkBus.ts :: getLastMark':
+    'SURFACE — a sync read of the mark bus for non-React consumers.',
+  'services/rangefinder.ts :: REFERENCE_HEIGHTS':
+    'PARKED — a picker of known object heights (flagstick, person, range flag) so the player chooses a '
+    + 'target instead of typing a number. It is one of the two live options for the SmartFinder tilt '
+    + 'cap: at 150y a target subtends 0.67 degrees, under the 2-degree unmeasurable floor, so the '
+    + 'read needs a known height or ray-intersected hole geometry. Named blocker: Tim picks which. '
+    + 'The self-calibrating eye height (fc00882d) fixed the bug; this is the product call.',
+  'services/rangefinder.ts :: buildLock':
+    'PARKED — packages a computed distance into a durable lock record. Belongs with the same '
+    + 'SmartFinder decision as REFERENCE_HEIGHTS: there is nothing to persist a lock FOR until the '
+    + 'high-confidence read exists.',
+  'services/smartFinderService.ts :: getAnchoredHoleLengthYards':
+    'WIRE — a hole length measured from the players own marked tee and green, which its docstring '
+    + 'calls the payoff of marking both ends: a distance to trust over the scorecard AND over GPS '
+    + 'geometry that may not match the tee actually being played. Genuinely built and consumed by '
+    + 'nothing. Named blocker: which surface shows it, and whether it OVERRIDES the scorecard number '
+    + 'or sits beside it — a second answer to "how long is this hole" is the defect class this '
+    + 'baseline exists to catch, so it must replace rather than join.',
+  'services/responseRouter.ts :: fillerForSonnetVision':
+    'WIRE — centralises which filler plays during an out-of-band Sonnet call so every bridge shares one vocabulary. Each bridge currently picks its own. Cosmetic divergence, not a defect; touches the voice path, so it needs Tim per-item. [[voice-path-change-freeze]]',
+  'services/smartTempo.ts :: tempoTargetFrames':
+    'PARKED — frame counts for a replay-at-tempo overlay that has no surface yet.',
+  'services/swing/poseMotion.ts :: wristCentroid':
+    'DO NOT WIRE — the trace is clubhead-or-nothing and a wrist fallback was deliberately removed. '
+    + 'Wiring this would reintroduce a fixed defect. Kept only because the file is shared. '
+    + '[[smartmotion-clubhead-trace-root-cause]]',
+  'services/swingComparisonEngine.ts :: annotateWithGolferModel':
+    'PARKED — folds the learned miss into a comparison; the comparison surface renders the raw read today.',
+  'services/swingDatabase.ts :: listReferences':
+    'SURFACE — a filtered listing for an admin/coverage view.',
+  'services/swingReferences.ts :: listRegisteredReferences':
+    'SURFACE — its own docstring says test/debug, NOT called from production paths.',
+  'services/teeTimeLink.ts :: openCourseInMaps':
+    'PARKED — the tee-time surface links out to booking; a maps link is a second button nobody has designed.',
+  'services/trustLevelService.ts :: defaultWakeWordOn':
+    'PARKED — Phase G ships wake-word detection; this stages the per-level default and there is no detector to default yet.',
+  'services/trustLevelService.ts :: psychologistEnabled':
+    'PARKED — gates the between-shots walking conversation at L3. conversationalLoggingOrchestrator has no trust-level gate at all, so wiring this would CHANGE shipped behaviour rather than restore it, and needs a product call. Named blocker: the walking-conversation gate design. Its sibling proactiveEnabled was a real defect and was fixed 2026-08-30.',
+  'services/tutorialContext.ts :: buildCompressedPracticeContext':
+    'SURFACE — a compressed variant for the tactical prompt; the full builder is the one wired.',
+  'services/vocabularyProfileService.ts :: getTotalShotsParsed':
+    'SURFACE — a maturity counter for diagnostics.',
   'services/voiceLogService.ts :: pendingOfflineNoteCount':
     'SURFACE — a peek-without-consuming count for a UI badge. The READ half of this feature is now wired (peekOfflineNotesBlock reaches the caddie via unified_context_block); this is the optional badge on top of it, and a badge showing a count the player cannot act on is not worth a surface during a freeze. Delete if no badge exists by 1.1.',
-  'services/voicePermissionService.ts :: PERMISSION_EXPLAINER_TEXT': 'TRIAGE',
-  'services/voicePermissionService.ts :: checkMicPermission': 'TRIAGE',
-  'services/watchBridge.ts :: isSenderRegistered': 'TRIAGE',
-  'services/watchWristInterpretation.ts :: estimateClubSpeedMph': 'TRIAGE',
-  'services/youtubeLinks.ts :: openYouTubeSearch': 'TRIAGE',
-  'store/caddieMemoryStore.ts :: caddieMemorySnapshot': 'TRIAGE',
-  'store/geometryStatusStore.ts :: isBuildingSnapshot': 'TRIAGE',
-  'store/guestProfileStore.ts :: findGuestByName': 'TRIAGE',
+  'services/voicePermissionService.ts :: PERMISSION_EXPLAINER_TEXT':
+    'SURFACE — the explainer copy, exported for a surface that renders its own.',
+  'services/voicePermissionService.ts :: checkMicPermission':
+    'DUPE — voiceService.ts:455 requests microphone permission on the live path. This is a second owner that also persists denial state. Not a gap: the mic IS requested. Consolidating owners touches the voice path and needs Tim per-item.',
+  'services/watchBridge.ts :: isSenderRegistered':
+    'SURFACE — a registration read for diagnostics.',
+  'services/watchWristInterpretation.ts :: estimateClubSpeedMph':
+    'PARKED — wrist-peak to clubhead speed. Shipping the number needs the calibration surface; the watch reports tempo and impact today.',
+  'services/youtubeLinks.ts :: openYouTubeSearch':
+    'PARKED — the YouTube portal needs an API key that is not provisioned.',
+  'store/caddieMemoryStore.ts :: caddieMemorySnapshot':
+    'SURFACE — a whole-store read for diagnostics and export.',
+  'store/geometryStatusStore.ts :: isBuildingSnapshot':
+    'SURFACE — a sync progress read for non-React callers.',
+  'store/guestProfileStore.ts :: findGuestByName':
+    'SURFACE — a lookup helper; the shipped paths resolve guests by id.',
 
   // ── ADDED 2026-08-24 (second pass): surfaced once COMMENTS stopped counting as references ──
   'services/courseDataOrchestrator.ts :: getCourseHeroImagery':
@@ -306,21 +373,36 @@ export const ORPHAN_BASELINE: Record<string, string> = {
     'PARKED — Meta glasses profile needs a native build.',
   'services/metaWearablesBridge.ts :: getMetaWearablesStatus':
     'PARKED — Meta glasses profile needs a native build.',
-  'services/activeSurfaceRegistry.ts :: subscribeActiveSurface': 'TRIAGE',
-  'services/analytics.ts :: captureError': 'TRIAGE',
-  'services/cloudSync/snapshot.ts :: unionSnapshots': 'TRIAGE',
-  'services/courseDataOrchestrator.ts :: attachVisionContextToHole': 'TRIAGE',
-  'services/earbudControl.ts :: notifyEarbudLongPress': 'TRIAGE',
-  'services/harness/dispatch.ts :: simulateAnalysisCompletion': 'TRIAGE',
-  'services/localStatusResponder.ts :: AI_LED_QUERY_TYPES': 'TRIAGE',
-  'services/mediaPipePoseService.ts :: smoothPoseFrames': 'TRIAGE',
-  'services/poseTelemetry.ts :: useLatestPoseTelemetry': 'TRIAGE',
-  'services/smartFinderService.ts :: getYardageCalcLog': 'TRIAGE',
-  'services/smartVisionOverlay.ts :: projectToTilePixels': 'TRIAGE',
-  'services/swingBenchmarks.ts :: setBenchmarkOverride': 'TRIAGE',
-  'services/swingComparisonEngine.ts :: compareSwingsMulti': 'TRIAGE',
-  'services/swingDatabase.ts :: getArchetypeMatches': 'TRIAGE',
-  'services/voicePermissionService.ts :: clearMicDenial': 'TRIAGE',
-  'services/walkingDetector.ts :: getCachedReading': 'TRIAGE',
-  'services/watchWristInterpretation.ts :: calibrateFromMeasured': 'TRIAGE',
+  'services/activeSurfaceRegistry.ts :: subscribeActiveSurface':
+    'SURFACE — the subscription half of a registry read via its getter.',
+  'services/cloudSync/snapshot.ts :: unionSnapshots':
+    'PARKED — merges two devices snapshots. The shipped restore is last-writer-wins; a real merge needs a conflict UI.',
+  'services/courseDataOrchestrator.ts :: attachVisionContextToHole':
+    'PARKED — Meta glasses vision context; needs the glasses profile native build.',
+  'services/earbudControl.ts :: notifyEarbudLongPress':
+    'PARKED — long-press is a distinct gesture from the tap that ships; no surface assigns it a meaning yet.',
+  'services/harness/dispatch.ts :: simulateAnalysisCompletion':
+    'SURFACE — a harness affordance, by definition not called by the app.',
+  'services/localStatusResponder.ts :: AI_LED_QUERY_TYPES':
+    'SURFACE — the classification set, exported so the split is inspectable rather than buried.',
+  'services/mediaPipePoseService.ts :: smoothPoseFrames':
+    'SURFACE — an exported pure helper the analyzer applies internally.',
+  'services/poseTelemetry.ts :: useLatestPoseTelemetry':
+    'WIRE — the React half of the telemetry bus whose plain getter is also orphaned. Nothing reads what recordPoseTelemetry writes; see getLatestPoseTelemetry in the WIRE block above.',
+  'services/smartFinderService.ts :: getYardageCalcLog':
+    'SURFACE — the calculation trace for the SmartFinder debug view.',
+  'services/smartVisionOverlay.ts :: projectToTilePixels':
+    'SURFACE — a pure projection helper; the overlay projects through its own owner.',
+  'services/swingBenchmarks.ts :: setBenchmarkOverride':
+    'SURFACE — a testing override for benchmark values.',
+  'services/swingComparisonEngine.ts :: compareSwingsMulti':
+    'PARKED — n-way comparison ahead of a multi-swing surface; the shipped review compares two.',
+  'services/swingDatabase.ts :: getArchetypeMatches':
+    'PARKED — archetype matching ahead of the surface that would show it.',
+  'services/voicePermissionService.ts :: clearMicDenial':
+    'SURFACE — the reset half of the denial state its sibling persists.',
+  'services/walkingDetector.ts :: getCachedReading':
+    'WIRE — the sync cache the shot orchestrator was built to read, paired with cartModeSuggestion above. Both are orphaned together, so the detector runs and NOTHING consumes it. Wiring means offering the player a cart-mode flip, which is a new proactive interruption — a product call during a freeze, right after the L1 interruption fix. Named blocker: where the suggestion is shown.',
+  'services/watchWristInterpretation.ts :: calibrateFromMeasured':
+    'PARKED — see estimateClubSpeedMph; this is the calibration half.',
 };

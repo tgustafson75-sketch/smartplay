@@ -49,6 +49,18 @@ import { PRICING } from '../../lib/pricing';
 import type { SubscriptionStatus } from '../../store/playerProfileStore';
 
 /**
+ * Report a failure we are deliberately swallowing. Never throws — a reporting problem must not
+ * become a billing problem, which is the whole reason these catches were bare to begin with.
+ */
+function reportSilentFailure(e: unknown, context: Record<string, unknown>): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('../analytics') as typeof import('../analytics')).captureError(e, context);
+  } catch { /* reporting is best-effort */ }
+}
+
+
+/**
  * The entitlement identifier configured in the RevenueCat dashboard.
  *
  * 2026-08-30 — CORRECTED from 'full' to 'smartplay_caddie_pro', which is what the dashboard
@@ -284,7 +296,18 @@ export async function refreshEntitlement(
   try {
     const info = await Purchases.getCustomerInfo();
     return { status: statusFromCustomerInfo(info, current), trialStartedAt: trialStartFromCustomerInfo(info) };
-  } catch {
+  } catch (e) {
+    /**
+     * 2026-08-30 — REPORTED, then swallowed. Returning `unchanged` is still the right behaviour:
+     * an offline first tee must never revoke the caddie from someone who paid. But a store read
+     * that fails EVERY time looks identical to one that never fails, and the player's status would
+     * quietly drift from what they are being charged for with nothing anywhere to show it.
+     *
+     * captureError was itself an orphan — the only handled-error path to Sentry, called by nothing,
+     * so every `catch { }` in the app was invisible in production. Wired here first because this is
+     * a path where silence costs money.
+     */
+    reportSilentFailure(e, { where: 'refreshEntitlement' });
     return unchanged;
   }
 }
@@ -297,7 +320,9 @@ export async function getPackages(): Promise<unknown[]> {
   try {
     const offerings = await Purchases.getOfferings();
     return offerings?.current?.availablePackages ?? [];
-  } catch {
+  } catch (e) {
+    // An empty list renders a paywall with nothing to buy. Worth knowing about.
+    reportSilentFailure(e, { where: 'getPackages' });
     return [];
   }
 }
