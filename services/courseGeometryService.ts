@@ -1069,7 +1069,28 @@ async function fetchCourseGeometryInner(
      * 30s is past the slowest response measured, and the request is still bounded. Cheap when the
      * server is fast (it returns as soon as it returns); decisive when it isn't.
      */
-    const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+    /**
+     * 2026-08-31 (Tim: "You can wait as long as it needs to load but show accurate load status and
+     * load as fast as possible") — 30s COULD NOT SUCCEED, so the re-ask ladder was retrying
+     * something structurally impossible.
+     *
+     * The server allows its Overpass fan-out 70s (OVERPASS_TOTAL_BUDGET_MS), sized from measured
+     * live builds where the slow-but-successful ones took ~80s. The client gave up at 30 — so every
+     * attempt at a genuinely slow course was killed mid-flight, the re-ask fired, and that attempt
+     * was killed at 30s too. A course that needed 45s could never map, ever, on any retry.
+     *
+     * 85s clears the server's own budget with real margin and still sits inside the 90s platform
+     * ceiling, so the request is bounded and the function is never killed underneath us.
+     *
+     * WAITING LONGER COSTS THE PLAYER NOTHING HERE, which is what makes this safe:
+     *   - anything already servable returns from cache and never reaches this line (cacheIsServable)
+     *   - a failure still falls back to persisted/bundled geometry rather than a blank hole
+     *   - the "MAPPING" badge is driven by geometryStatusStore.building and cleared in a .finally,
+     *     so a long build reads as honestly in-progress instead of silently hanging
+     *   - when the real build lands it bumps `completions`, and every yardage re-derives on the spot
+     * So the screen shows the best thing it has IMMEDIATELY and upgrades the moment better arrives.
+     */
+    const res = await fetch(url, { signal: AbortSignal.timeout(85_000) });
     if (!res.ok) {
       console.warn('[courseGeometry] fetch failed:', res.status);
       // 2026-08-11 — if we bypassed bundled coords to try the engine and the engine failed, fall
@@ -1223,9 +1244,17 @@ async function refreshGeometryInBackground(courseId: string): Promise<void> {
     if (upstreamId === '__osm_only__') params.set('osmOnly', '1');
     if (centroid) params.set('withPolygons', '1');
     const url = `${apiUrl}/api/course-geometry?${params.toString()}`;
-    // Same 12s→30s reasoning as the primary fetch: a background refresh that always aborts is a
-    // refresh that never happens, so a stale entry could never heal itself either.
-    const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+    /**
+     * Same reasoning as the primary fetch, and it applies here with MORE force: a background refresh
+     * that always aborts is a refresh that never happens, so a stale entry could never heal itself.
+     * 30s could not outlast the server's own 70s Overpass budget, so a stale entry for a slow course
+     * was permanently stale — every heal attempt died mid-build.
+     *
+     * Nothing is waiting on this one. It is stale-while-revalidate: the player already has servable
+     * geometry on screen and this only replaces it when something better arrives. So the longer
+     * ceiling costs no wait at all — it just lets the heal actually finish.
+     */
+    const res = await fetch(url, { signal: AbortSignal.timeout(85_000) });
     if (!res.ok) {
       console.warn('[courseGeometry] background refresh failed:', res.status, courseId);
       return;

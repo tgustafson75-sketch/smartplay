@@ -10557,8 +10557,20 @@ check('LOCK: geometry fetch outlives a slow server, and a raw course id is never
     const sv = read('app/smartvision.tsx');
     const prev = read('components/caddie/L1HolePreview.tsx');
     // both fetch paths must outlast the measured worst case; 12s aborted a live request
-    const timeouts = (g.match(/AbortSignal\.timeout\(30_000\)/g) ?? []).length >= 2 &&
-      !/AbortSignal\.timeout\(12_000\)/.test(g);
+    /**
+     * 2026-08-31 — THIS ASSERTED A LITERAL AND WENT RED ON A CORRECT FIX. Its own title says the
+     * fetch must "outlive a slow server", but it required `AbortSignal.timeout(30_000)` — a value
+     * that CANNOT outlive the server's own 70s Overpass budget. The prose was right and the
+     * assertion contradicted it, so a build the server would have finished was abandoned every time
+     * and the guard defended that. Fourth guard today found asserting a literal where it meant a
+     * relationship. Now derived from the server's actual budget.
+     * [[three-ways-a-guard-is-worthless]]
+     */
+    const overpassBudget = Number((/const OVERPASS_TOTAL_BUDGET_MS = ([\d_]+);/.exec(read('api/course-geometry.ts'))?.[1] ?? '0').replace(/_/g, ''));
+    const clientTimeouts = [...g.matchAll(/AbortSignal\.timeout\(([\d_]+)\)/g)].map((m) => Number(m[1].replace(/_/g, '')));
+    const timeouts = overpassBudget > 0 && clientTimeouts.length >= 2 &&
+      clientTimeouts.every((t) => t > overpassBudget);
+    if (!timeouts) console.log(`   geometry client timeouts do not outlive the server budget (${overpassBudget}ms): ${clientTimeouts.join(', ')}`);
     // a machine id is never a name — and pipeline labels aren't either
     // 2026-08-13 — was an IIFE, now a useMemo keyed on the geometry store's `completions`. The name
     // it resolves comes FROM the geometry build (`course_name`), so resolving it once during render
@@ -10573,7 +10585,7 @@ check('LOCK: geometry fetch outlives a slow server, and a raw course id is never
       !/if \(previewCourseId_resolved\) return previewCourseId_resolved;/.test(prev);
     return timeouts && svName && prevName;
   })(),
-  '30s geometry timeouts on both paths; course name resolved from the cache, raw id never rendered');
+  'both geometry timeouts outlive the server\'s own Overpass budget (derived, never a literal); course name resolved from the cache, raw id never rendered');
 
 // "STILL showing a gap wedge for a 324 yard shot" → then: "why are we basing it on EVIDENCE? We know
 // a standard golf yardage bag, use that as the DEFAULT if we don't have a user-specific one."
@@ -13175,6 +13187,45 @@ check('LOCK: the offline course-locate cache is versioned, and its version moved
     return fallbackOnly && neverCachesEmpty;
   })(),
   'the offline discovery cache is versioned past the generation written before the name-matching fix, is only served when the live call fails, and never caches an empty list');
+
+check('LOCK: a course-geometry build the server will finish is never abandoned by the client',
+  /**
+   * 2026-08-31 (Tim: "You can wait as long as it needs to load but show accurate load status and
+   * load as fast as possible") — the client gave up at 30s on a build the server allows itself 70s
+   * for. Every attempt at a genuinely slow course was killed mid-flight, the re-ask ladder fired,
+   * and that attempt died at 30s too. **A course needing 45s could never map, on any retry, ever.**
+   * That is the "green screen on a course we have never played" symptom.
+   *
+   * Asserts the relationship, not the numbers: BOTH client fetches must outlast the server's own
+   * Overpass budget. The background refresh counts — a heal that always aborts means a stale entry
+   * is stale forever.
+   *
+   * Waiting longer is only safe because the screen never waits on it: servable geometry returns from
+   * cache without reaching the network, a failure still falls back to bundled, the MAPPING badge is
+   * cleared in a `.finally` so it cannot stick, and a landed build bumps `completions` so every
+   * yardage re-derives the moment better data arrives.
+   */
+  (() => {
+    const server = read('api/course-geometry.ts');
+    const client = read('services/courseGeometryService.ts');
+    const num = (src: string, re: RegExp): number | null => {
+      const m = re.exec(src);
+      return m ? Number(m[1].replace(/_/g, '')) : null;
+    };
+    const budget = num(server, /const OVERPASS_TOTAL_BUDGET_MS = ([\d_]+);/);
+    const timeouts = [...client.matchAll(/AbortSignal\.timeout\(([\d_]+)\)/g)].map((m) => Number(m[1].replace(/_/g, '')));
+    if (budget == null || timeouts.length < 2) { console.log(`   geometry budget anchors missing (budget=${budget}, client timeouts=${timeouts.length})`); return false; }
+    const tooShort = timeouts.filter((t) => t <= budget);
+    if (tooShort.length) console.log(`   client abandons a build the server is still running: server ${budget}ms vs client ${tooShort.join(', ')}ms`);
+    // ...and the honest-status machinery that makes a long wait acceptable must stay.
+    const honest =
+      /geometryStatus\(\)\.markBuilding\(courseId\)/.test(client) &&
+      /\.finally\(/.test(client) &&
+      /cacheIsServable\(existing\)/.test(client);
+    if (!honest) console.log('   the MAPPING badge / servable-cache short-circuit is missing — a long wait would be silent');
+    return tooShort.length === 0 && honest;
+  })(),
+  'both course-geometry client fetches outlast the server Overpass budget, so a slow-but-successful build is never abandoned, and the servable-cache short-circuit plus the always-cleared MAPPING badge keep a long build honest rather than silent');
 
 check('LOCK: the ANALYSIS path has one ordered budget too — server < platform < client',
   /**
