@@ -652,17 +652,48 @@ function withMetaWearablesDAT(config) {
   // (maven.pkg.github.com/facebook/…), which needs a read:packages PAT. Without
   // GITHUB_TOKEN, injecting the maven repo + mwdat deps makes gradle 401 and FAILS
   // the whole Android build, so skip ALL Android DAT wiring when the token is absent.
+  /**
+   * 2026-08-31 — A TOKEN'S EXISTENCE IS NOT A REQUEST FOR GLASSES SUPPORT.
+   *
+   * Three Android builds failed with "Gradle build failed with unknown error". The decoded log
+   * (Brotli, which is why it resisted reading) named it:
+   *
+   *   Could not resolve com.meta.wearable:mwdat-core:0.8.0
+   *   Received status code 401 from server: Unauthorized
+   *   https://maven.pkg.github.com/facebook/meta-wearables-dat-android/...
+   *
+   * GITHUB_TOKEN IS set as a secret in the EAS `preview` environment, which production-apk uses. So
+   * on EAS this branch was taken, the maven repo and mwdat deps were injected, and the token turned
+   * out to be expired or missing read:packages — 401, build dead. Locally no token exists, the else
+   * branch ran, and the identical source built fine. That gap is the entire reason the failure
+   * looked environmental.
+   *
+   * The asymmetry was the bug. iOS has ALWAYS required an explicit opt-in — MWDAT_IOS_ENABLED=1,
+   * set only in the `glasses` eas.json profile, never in production — so a stray credential cannot
+   * drag the glasses SDK into a normal build. Android had no such gate and keyed off the token
+   * alone, which is a credential, not an intention. Glasses are 2.0; nothing in 1.0 wants this.
+   *
+   * Now symmetric: Android needs MWDAT_ANDROID_ENABLED=1 **and** a token. Deleting Tim's secret
+   * would also have fixed today's build and would have left the same trap for whoever re-adds it.
+   */
+  const androidWanted = process.env.MWDAT_ANDROID_ENABLED === '1';
   const { token } = resolveGitHubToken(config);
-  if (token) {
+  if (token && androidWanted) {
     next = withMavenRepo(next);
     next = withAppGradle(next, ENV_FALLBACK);
     next = withManifest(next);
     next = withMainApplicationInjection(next);
   } else {
+    // Say WHICH of the two is missing — "not set" was misleading when the token was present and
+    // the build failed anyway, which is what made three builds hard to read.
+    const why = !androidWanted && !token ? 'MWDAT_ANDROID_ENABLED != 1 and no GITHUB_TOKEN'
+      : !androidWanted ? 'MWDAT_ANDROID_ENABLED != 1 (a GITHUB_TOKEN is present but unused)'
+      : 'no GITHUB_TOKEN';
     console.warn(
-      '\n[withMetaWearablesDAT] GITHUB_TOKEN not set — SKIPPING the ANDROID Meta Wearables DAT\n' +
-      '  wiring (its SDK is in GitHub Packages). iOS is unaffected (public SPM repo). Set\n' +
-      '  GITHUB_TOKEN (GitHub PAT, read:packages) in EAS env to enable Android live streaming.\n',
+      `\n[withMetaWearablesDAT] SKIPPING the ANDROID Meta Wearables DAT wiring — ${why}.\n` +
+      '  Its SDK is in GitHub Packages and 401s without a valid read:packages PAT, which fails the\n' +
+      '  whole Gradle build. iOS is unaffected (public SPM repo). Glasses are 2.0: for a glasses\n' +
+      '  build set BOTH MWDAT_ANDROID_ENABLED=1 and a working GITHUB_TOKEN.\n',
     );
   }
 
