@@ -95,6 +95,7 @@ import { startMeteredRecording, type MeteringHandle } from '../../services/swing
 import { detectStrikes, type DetectedStrike } from '../../services/swing/strikeDetector';
 import { analyzeStrike, type AcousticAnalysis } from '../../services/acousticsAnalyzer';
 import { segmentsFromStrikes, segmentsFromVideoSwings, correlateStrikesWithVideo, filterReboundStrikes, type SwingSegment } from '../../services/swing/swingSegmentation';
+import { poseExtractInputsFor, poseExtractKeyFor } from '../../services/swing/poseExtractKey';
 import { detectBallSpeed, type BallSpeedResult } from '../../services/acousticDetectApi';
 import { useCageStore, type PrimaryIssue } from '../../store/cageStore';
 import { deriveDrillVerdict } from '../../services/drillVerdict';
@@ -2243,6 +2244,45 @@ export default function SmartMotion() {
         if (uri !== rawUri) setClipUri(uri);
       } catch { /* use rawUri */ }
 
+      /**
+       * 2026-08-31 (OPEN-ITEMS §10) — WARM THE POSE FRAMES INSIDE THE NETWORK WAIT.
+       *
+       * `analysisP` is already in flight above, and the vision round-trip is the long pole. Until
+       * now the decoder sat idle for all of it and the body read did not start until the phase
+       * flipped to 'review'. Starting the IDENTICAL extraction here moves that decode inside the
+       * wait; the review-phase effect then finds `poseExtractCacheRef` already populated and
+       * computes biomech immediately instead of decoding the clip a second time.
+       *
+       * Deliberately started AFTER the durable copy is resolved: the review effect reads the
+       * PERSISTED `uri`, so warming on `rawUri` would key on a path the review never asks for —
+       * a guaranteed miss that pays for a decode twice. This is exactly why the key has one owner.
+       *
+       * Additive and non-blocking by construction: it is not awaited, it writes only the cache, and
+       * every failure is swallowed. If it is slow, never finishes, or throws, the review effect
+       * simply extracts as it does today. Nothing downstream can tell the difference except in time.
+       *
+       * Duration: the review path uses the player's onLoad value, which does not exist yet here (and
+       * waiting on it was itself a shipped latency defect — "the tap was loading the video"). Probe
+       * it from the file instead. It is NOT part of the cache key — see poseExtractKeyFor.
+       */
+      void (async () => {
+        try {
+          const { poseWindow, acousticImpactMs } = poseExtractInputsFor(segmentsRef.current, selectedSwingRef.current);
+          const warmKey = poseExtractKeyFor({
+            clipUri: uri, poseWindow, selectedSwing: selectedSwingRef.current,
+            handedness: swingerHandedness, acousticImpactMs,
+          });
+          if (poseExtractCacheRef.current?.key === warmKey) return; // already warm — never decode twice
+          const durMs = await probeDurationMs(uri).catch(() => 0);
+          if (!durMs || durMs <= 0) return;
+          const frames = await extractPoseFramesFromVideo(uri, durMs, true, poseWindow, acousticImpactMs);
+          // Only publish if nothing better landed while we decoded, and only for THIS session.
+          if (myRun !== sessionRunRef.current) return;
+          if (poseExtractCacheRef.current?.key === warmKey) return;
+          poseExtractCacheRef.current = { key: warmKey, frames };
+        } catch { /* the warm is an optimisation; the review-phase extract still runs */ }
+      })();
+
       try {
         // Coach Mode attribution: when a family member is active (coach
         // recording a student / parent recording a kid), persist the
@@ -2631,10 +2671,9 @@ export default function SmartMotion() {
     // already window per-swing; pose now matches. Re-runs on selectedSwing change so
     // picking a different swing rebuilds its skeleton. Falls back to whole-clip when
     // there's no usable segment (single un-segmented clips are unchanged).
-    const seg = segments[selectedSwing];
-    const poseWindow = seg && typeof seg.startMs === 'number' && typeof seg.endMs === 'number' && seg.endMs - seg.startMs >= 500
-      ? { startMs: seg.startMs, endMs: seg.endMs }
-      : null;
+    // 2026-08-31 (§10) — window + anchor come from the SHARED helper so the warm started during the
+    // network wait computes the identical key this read looks up. See poseExtractKeyFor.
+    const { poseWindow, acousticImpactMs } = poseExtractInputsFor(segments, selectedSwing);
     // 2026-07-07 (biomech audit #2) — anchor the phase frames to the strike so "impact" doesn't land
     // 100ms+ past the ball / "top" mid-backswing (the wrong-phase numbers).
     // 2026-08-09 (deep-audit A / P3) — anchor VIDEO-located swings too, not just acoustic ones. The
@@ -2644,7 +2683,6 @@ export default function SmartMotion() {
     // already trusts seg.strikeMs for video. The strike-anchored branch clamps to the window, so a ±1s
     // located estimate can't wander outside the swing. EXCLUDE the synthesized whole-clip fallback
     // (strikeMs is a 0.6·duration guess) → it stays on honest window fractions.
-    const acousticImpactMs = seg && seg.strikeMs != null && !seg.synthesized ? seg.strikeMs : null;
     void (async () => {
       try {
         // trustDuration=true: videoDurationMs is the player's real onLoad
@@ -2653,7 +2691,7 @@ export default function SmartMotion() {
         // SAME frames (was two independent extraction runs → ~2× pose inferences and
         // a skeleton that could diverge from the numbers).
         // 2026-08-05 — reuse cached frames when only `angle` changed (kills the double extraction).
-        const extractKey = `${clipUri}|${videoDurationMs}|${poseWindow ? `${poseWindow.startMs}-${poseWindow.endMs}` : 'full'}|${selectedSwing}|${swingerHandedness}|${acousticImpactMs ?? ''}`;
+        const extractKey = poseExtractKeyFor({ clipUri, poseWindow, selectedSwing, handedness: swingerHandedness, acousticImpactMs });
         let frames: Awaited<ReturnType<typeof extractPoseFramesFromVideo>>;
         if (poseExtractCacheRef.current?.key === extractKey) {
           frames = poseExtractCacheRef.current.frames;

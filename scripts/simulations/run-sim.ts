@@ -3655,6 +3655,67 @@ check('LOCK: the setting nothing could set is gone, and cannot come back',
   })(),
   'no shipped file branches on voiceOrchestrator or re-declares it — the setting that could only hold one value is gone, and a new branch on it would be a live-looking choice that cannot vary');
 
+check('LOCK: the pose warm starts INSIDE the network wait, and both paths key it the same way',
+  /**
+   * 2026-08-31 (OPEN-ITEMS §10) — pose/biomech extraction used to wait for the ENTIRE vision
+   * round-trip: extract vision frames → POST → flip to 'review' → only THEN decode again for pose.
+   * The biomech effect returns early unless `phase === 'review'`, and runAnalysis nulls
+   * `videoDurationMs` at its start, so it was doubly blocked for the whole analysing phase. The
+   * decoder sat idle for the entire network wait.
+   *
+   * TWO THINGS MAKE THE FIX REAL, AND A UNIT TEST CAN ONLY SEE ONE OF THEM.
+   *
+   * 1. ORDER. The warm must be started BEFORE `await analysisP` — that is the whole point. Started
+   *    after, it is not an optimisation at all, just the same serial decode with extra steps. This
+   *    is a file-position assertion because ordering inside one function is not otherwise observable.
+   * 2. ONE KEY OWNER. A warm that computes a DIFFERENT key than the review read is strictly worse
+   *    than no warm: it pays for a decode and then pays again. Both must go through
+   *    services/swing/poseExtractKey, and no inline key may survive.
+   *
+   * It must also stay non-blocking (`void`, never awaited) so a slow or failed warm degrades to
+   * exactly today's behaviour rather than delaying the verdict.
+   */
+  (() => {
+    const sm = read('app/swinglab/smartmotion.tsx');
+    /**
+     * COMMENTS STRIPPED. The first version of the duration assertions below failed on the helper's
+     * own doc comment, which NAMES `videoDurationMs` while explaining why it is excluded from the
+     * key. That is the third time in one session a guard has been defeated by prose describing the
+     * very thing it forbids. A file's account of itself is not the file doing the thing.
+     * [[a-stale-header-is-a-source-someone-trusts]] [[break-test-every-guard-you-write]]
+     */
+    const helper = read('services/swing/poseExtractKey.ts')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+
+    const warmAt = sm.indexOf('WARM THE POSE FRAMES INSIDE THE NETWORK WAIT');
+    const awaitAt = sm.indexOf('await analysisP!');
+    const createAt = sm.indexOf('const analysisP:');
+    if (warmAt < 0 || awaitAt < 0 || createAt < 0) { console.log('   pose warm / analysisP anchors missing'); return false; }
+    // Started after the POST is in flight, and before the verdict is awaited.
+    if (!(createAt < warmAt && warmAt < awaitAt)) { console.log(`   pose warm is out of order (create=${createAt} warm=${warmAt} await=${awaitAt})`); return false; }
+
+    return (
+      // both paths import the ONE key owner
+      /import \{ poseExtractInputsFor, poseExtractKeyFor \} from '\.\.\/\.\.\/services\/swing\/poseExtractKey'/.test(sm) &&
+      /export function poseExtractKeyFor/.test(helper) &&
+      /export function poseExtractInputsFor/.test(helper) &&
+      // ...and no inline key survives in the screen
+      !/const extractKey = `/.test(sm) &&
+      // the review read and the warm both call the shared builder
+      (sm.match(/poseExtractKeyFor\(/g) ?? []).length >= 2 &&
+      (sm.match(/poseExtractInputsFor\(/g) ?? []).length >= 2 &&
+      // duration is NOT in the key: the warm probes the file, the review uses the player's onLoad,
+      // and those disagree on the same clip — keying on it makes the warm miss over measurement noise
+      !/durationMs.*\|\$\{/.test(helper) &&
+      !/videoDurationMs/.test(helper) &&
+      // non-blocking: fired with void, and its failures swallowed
+      /void \(async \(\) => \{[\s\S]{0,1200}?poseExtractCacheRef\.current = \{ key: warmKey, frames \};[\s\S]{0,200}?\} catch \{/.test(sm) &&
+      // warmed on the DURABLE uri — keying on rawUri would be a guaranteed miss
+      /clipUri: uri, poseWindow/.test(sm)
+    );
+  })(),
+  'the pose decode moves inside the vision round-trip (started after the POST, before the verdict is awaited), both paths key it through one owner, and a failed warm degrades to the old serial extract');
+
 check('LOCK: no persisted setting may have a setter nothing calls',
   /**
    * 2026-08-31 (OPEN-ITEMS §22b) — THE SHAPE, not the instance.

@@ -167,7 +167,35 @@ deliberately, because the pattern is now established rather than anecdotal.
 ## 9. COGNITIVE-LOAD AUDIT — agreed, not started
 Ethos §6: count what a golfer must read and tap to get ONE decision. The rule AI most easily violates.
 
-## 10. ANALYSIS LATENCY — the remaining lever (found 2026-08-25, NOT yet fixed)
+## 10. ANALYSIS LATENCY — **FIXED 2026-08-31.** The pose decode now runs inside the network wait
+
+> **DONE.** The warm starts the identical pose extraction as soon as the POST is in flight, so the
+> decode happens during the vision round-trip instead of after it. The review-phase effect finds
+> `poseExtractCacheRef` already populated and computes biomech immediately.
+>
+> **The effect was NOT re-gated**, exactly as the plan below insisted — moving the analysis state
+> machine is how a latency tweak becomes an outage. Nothing about state changed: the warm is fired
+> with `void`, writes only the cache, and swallows every failure, so a slow or failed warm degrades
+> to precisely today's serial behaviour.
+>
+> **The part the plan did not anticipate, and it would have made the fix cost MORE than it saved:**
+> the cache key included `videoDurationMs`, which is measured TWICE by two different mechanisms —
+> `probeDurationMs` on the warm path, and the review player's own `onLoad durationMillis`. Those
+> disagree by milliseconds on the same file, so the warm and the read would have missed each other
+> over measurement noise: decode, then decode again. Duration is now out of the key entirely — the
+> clip URI already identifies the clip, and its duration is a property OF that clip, not an
+> independent input. The two helpers live in `services/swing/poseExtractKey.ts` so the warm and the
+> read cannot compute different keys. [[two-owners-is-the-root-cause]]
+>
+> Same class of trap on the second axis: the warm had to start AFTER `persistClipToDocuments`
+> resolves, because the review reads the DURABLE uri — warming on `rawUri` is a guaranteed miss.
+>
+> Locked by `__tests__/regression/pose-warm-runs-inside-the-network-wait.test.ts` (7 tests) and a sim
+> guard that pins what a unit test structurally cannot see: the ORDER (warm starts after the POST is
+> created and before the verdict is awaited). Break-tested red three ways — warm moved after the
+> await, warm keyed on rawUri, and duration put back into the key.
+
+### The original 2026-08-25 write-up, kept because its reasoning held up
 
 **Pose/biomech extraction does not overlap the vision call. It waits for all of it.**
 
