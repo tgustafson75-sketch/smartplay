@@ -64,11 +64,19 @@ the two stay index-aligned — a week with no range time is not a 0% strike week
 **Still open:** decide whether it goes public once there is enough of Tim's own data to know the
 signal is real. [[close-the-loop-strategy]]
 
-## 2. PRE-LAUNCH — caddie emotional art (I cannot produce this)
-`docs/TODO-CADDIE-EMOTIONAL-ART.md`. 22 mood slots exist. Serena has **4 distinct images**, one
-portrait covering 15 slots; Kevin routes 15 slots to a single image. On the two caddies testers
-actually use, the avatar barely moves. Filenames + prompt spec are written so wiring is a one-line
-edit per slot. **Assets are OTA-safe.**
+## 2. ~~PRE-LAUNCH — caddie emotional art~~ **CLOSED 2026-08-31 by Tim**
+
+> **"The 8 Serena images we have are fine."** Not a blocker, not a launch item. 1.0 ships the eight
+> expressive Serena images landed 2026-08-30; the remaining ten are not being drawn.
+>
+> **This section's own numbers were wrong** and are the reason it read as a blocker: it said Serena
+> had *4 distinct images*. She has **8** expressive images plus portraits — verified in
+> `assets/avatars/` and `components/CaddieAvatar.tsx` on 2026-08-31. The doc overstated the gap for
+> ten days. [[a-stale-header-is-a-source-someone-trusts]]
+>
+> **3.0, not now:** Tim wants *"a full agent avatar not screenshots"*. Pre-rendered stills routed to
+> mood slots are a stand-in for an avatar driven by the caddie's state — so drawing more stills
+> spends on the thing being replaced. See `docs/TODO-CADDIE-EMOTIONAL-ART.md`.
 
 ## 3. PARKED — needs a native build
 `docs/NEEDS-A-NATIVE-BUILD.md`. Headset-CONNECTED detection (~10 lines Kotlin + AVAudioSession; would

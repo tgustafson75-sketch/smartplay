@@ -1,4 +1,34 @@
-# PRE-LAUNCH — a clean 22 emotional states per caddie
+# CLOSED FOR 1.0 — a clean 22 emotional states per caddie
+
+> ## ✅ TIM'S CALL 2026-08-31: **"The 8 Serena images we have are fine."**
+>
+> This is **no longer a pre-launch blocker**, and no longer a launch item at all. The eight
+> expressive Serena images that landed 2026-08-30 — `idle, listening, happy, supportive, wincing,
+> celebrating, focused, explaining` — are what 1.0 ships with. The remaining ten are **not being
+> drawn**. Nothing below this box needs doing before release.
+>
+> Verified against the code on 2026-08-31: `assets/avatars/serena_expressive_*.jpg` is exactly eight
+> files, all wired in `components/CaddieAvatar.tsx`, unmatched moods falling back to the neutral
+> `serena-studio-portrait-001`. Tim's number and the repo agree.
+>
+> **Correction:** OPEN-ITEMS §2 and the agent memory both said Serena had **4** distinct images. That
+> was wrong — it counted portraits, not the expressive set. The gap was always smaller than the docs
+> claimed, which is worth noting because it made a non-blocker look like a blocker for ten days.
+>
+> **Tank** (~8 images) and the remaining Serena moods are not launch work. Kevin (20 distinct) and
+> Harry (18) need nothing.
+>
+> ### → 3.0: a real agent avatar, not screenshots
+> Tim, 2026-08-31: *"Eventually I want a full agent avatar not screenshots but that is 3.0."*
+> The whole still-image approach — N pre-rendered expressions routed to mood slots — is a stand-in
+> for a driven avatar that actually animates from the caddie's state. Drawing more stills is
+> therefore spending on the thing being replaced, which is the real argument for stopping at eight.
+> See `docs/FUTURE-3.0-IMMERSION-CONTROL.md`.
+
+---
+
+## Original brief, kept for the 3.0 work and for Tank
+
 
 > ## ⏳ SERENA: 8 OF 18 LANDED 2026-08-30 — 4 distinct → 11 across the 22 slots
 >

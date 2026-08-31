@@ -74,3 +74,54 @@ tells the player what it saw, and the player has no way to ask *show me*.
 **Prerequisite:** the 120fps native build (OPEN-ITEMS §17). "Go forward three steps" is a
 meaningless instruction at 30fps — three frames is a tenth of a second and nothing has moved. This
 feature wants the dense capture, which is another reason it is 3.0 and not sooner.
+
+---
+
+# 3.0 — A FULL AGENT AVATAR, NOT SCREENSHOTS (Tim, 2026-08-31)
+
+> *"Eventually I want a full agent avatar not screenshots but that is 3.0."*
+
+Stated when closing the emotional-art item at eight Serena expressions
+(`docs/TODO-CADDIE-EMOTIONAL-ART.md`). The two decisions are the same decision: **stop investing in
+pre-rendered stills, because stills are the thing being replaced.**
+
+## What exists today, and what it actually is
+
+`components/CaddieAvatar.tsx` maps 22 mood slots onto a fixed set of still images per persona —
+Kevin 20 distinct, Harry 18, Serena 8, Tank 11 — with unmatched moods falling back to a neutral
+studio portrait. It is a **lookup table pretending to be a face.** Its ceiling is hard:
+
+- The caddie's state is continuous (confidence, concern, warmth, how the round is going) and the
+  avatar is discrete. Everything between two moods renders as one of them.
+- It cannot show *transition*, which is most of what reading a face is. A caddie who goes from
+  concerned to pleased shows a cut, not a change.
+- Every new expression is an asset, a bundle cost and an OTA payload. **N moods × M personas** is a
+  drawing bill that grows multiplicatively and is paid again for every persona added.
+- Nothing about it is derived from what the caddie is actually doing. The mood is chosen by code and
+  then *illustrated*; the picture carries no information the code did not already have.
+
+## What 3.0 means instead
+
+An avatar **driven by the caddie's state** rather than selected from it — speech-synced, with
+expression as a continuous parameter, so the face is an output of the same signals that produce the
+words. That is what makes it an *agent* avatar rather than an illustrated one.
+
+Two properties matter more than fidelity:
+
+1. **It must be driven by the SAME state the voice is.** A face that disagrees with the tone is
+   worse than no face — [[feels-like-a-real-caddie]] treats robotic moments as defects, and a smile
+   over bad news is exactly that.
+2. **It must degrade to a still.** Offline, cold, low battery, cheap device: fall back to the
+   portrait we already ship. The still set is therefore not wasted work — it becomes the floor.
+
+## Why it is 3.0 and not sooner
+
+- It is a rendering and animation problem, not a golf problem. It adds no SENSE, closes no LOOP, and
+  reduces no LOAD — it fails all three tests in [[smartplay-core-ethos]]. It is *immersion*, which is
+  why it belongs in this document.
+- It almost certainly needs a native build and real GPU work, which is the opposite of the OTA-safe
+  posture 1.0 is in.
+- The eight Serena stills are enough to ship. Tim's call on 2026-08-31 makes that explicit.
+
+**The one thing not to do in the meantime:** commission the remaining ten Serena expressions, or a
+full 22 for Tank. That is spending on the stand-in.
