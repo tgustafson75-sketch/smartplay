@@ -1,4 +1,17 @@
-import { CourseHole } from '../store/roundStore';
+/**
+ * 2026-08-31 (full-app break test) — `import type`, and the keyword is load-bearing.
+ *
+ * This is a TYPE, so TypeScript elides the import and `data/courses` never requires roundStore at
+ * runtime. That elision is the only reason api/kevin — the caddie brain, the most critical route in
+ * the app — does not crash: the chain kevin → holeContextResolver → data/courses → roundStore →
+ * holeReconciliation → gpsManager → expo-location is real on paper, and expo-location cannot load in
+ * a Node serverless function.
+ *
+ * Adding one VALUE import from roundStore to this file would pull that whole chain in and take the
+ * caddie down in production, with a green typecheck and a green test suite. `import type` states the
+ * intent so the next edit is a deliberate one. api/pipecat-tool died exactly this way.
+ */
+import type { CourseHole } from '../store/roundStore';
 
 export interface Course {
   id: string;

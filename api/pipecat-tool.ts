@@ -9,19 +9,45 @@
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import type { Course } from '../types/course';
-import { searchCourses, getCourse } from '../services/golfCourseApi';
+/**
+ * 2026-08-31 (full-app break test) — THIS ROUTE 500'd ON EVERY SINGLE INVOCATION, in production,
+ * for as long as it has been deployed. Probing it returned `FUNCTION_INVOCATION_FAILED` — a crash at
+ * MODULE LOAD, before the handler ran, so no amount of handler-level error handling could catch it.
+ *
+ * The cause was this import. `services/golfCourseApi` imports `expo-file-system/legacy` — a React
+ * Native native module — which cannot load inside a Node serverless function. A client service was
+ * imported into a server route and nothing type-checks that boundary: `tsc` is happy, the bundle is
+ * happy, and the function dies at runtime.
+ *
+ * Nothing noticed because the only caller is `pipecat-server/*.py`, which was never deployed.
+ * [[orphans-are-live-bugs-not-dead-code]]
+ *
+ * Loaded LAZILY now, inside the handler's existing try/catch, so the three tools that need nothing
+ * from it (log_shot, log_score, log_emotional_state) work, and the two that do degrade to the
+ * graceful 200 instead of taking the whole function down.
+ */
+type CourseApi = typeof import('../services/golfCourseApi');
+const loadCourseApi = (): Promise<CourseApi> => import('../services/golfCourseApi');
 
 const SESSION_SECRET = process.env.PIPECAT_SESSION_SECRET ?? '';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
+  /**
+   * 2026-08-31 — FAIL CLOSED. This was `if (SESSION_SECRET && incoming !== SESSION_SECRET)`, so a
+   * missing PIPECAT_SESSION_SECRET disabled the check entirely and the tool bridge — which logs
+   * shots and scores — accepted anyone. An unset secret is not permission to skip authentication.
+   */
   const incomingSecret = req.headers['x-pipecat-secret'];
-  if (SESSION_SECRET && incomingSecret !== SESSION_SECRET) {
+  if (!SESSION_SECRET || incomingSecret !== SESSION_SECRET) {
     return res.status(403).json({ error: 'Forbidden' });
   }
 
-  const { tool, args = {}, playerId } = req.body as {
+  // Destructuring a null/undefined body throws OUTSIDE the try below — the one place in this
+  // handler an error could still escape as a 500 rather than a graceful answer.
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const { tool, args = {}, playerId } = body as {
     tool: string;
     args: Record<string, unknown>;
     sessionId?: string;
@@ -68,6 +94,7 @@ async function routeTool(
 
     case 'lookup_course': {
       const { query } = args as { query: string };
+      const { searchCourses } = await loadCourseApi();
       const courses = await searchCourses(query);
       if (!courses.length || courses[0]?._error) return `No courses found matching "${query}".`;
       const summary = courses
@@ -83,6 +110,7 @@ async function routeTool(
         hole_number: number;
         tee_name?: string;
       };
+      const { getCourse } = await loadCourseApi();
       const course: Course | null = await getCourse(course_id);
       if (!course) return `Course ${course_id} not found.`;
 

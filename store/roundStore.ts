@@ -3169,6 +3169,13 @@ export const useRoundStore = create<RoundState>()(
       name: 'round-store-v1',
       version: 1,
       migrate: (persisted, version) => {
+        /**
+         * 2026-08-31 (full-app break test) — a migration that THROWS is a player who lost
+         * everything: zustand discards the persisted state and the store comes up on defaults,
+         * silently, on launch. A truncated or cleared write can hand this a primitive or null
+         * rather than the object the cast below assumes, and the cast is a lie in that case.
+         */
+        if (persisted == null || typeof persisted !== 'object') return persisted as never;
         const s = persisted as RoundState;
         if (version === 0) {
           s.shots = (s.shots ?? []).map(sh => ({

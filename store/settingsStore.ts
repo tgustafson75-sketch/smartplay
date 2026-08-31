@@ -827,6 +827,13 @@ export const useSettingsStore = create<SettingsState>()(
       // can customize per pillar in Settings.
       version: 23,
       migrate: (persisted, version) => {
+        /**
+         * 2026-08-31 (full-app break test) — `?? {}` catches null and undefined but NOT a primitive.
+         * A persisted blob that is a string or a number reached `p.caddieAssignments = …` below and
+         * threw, and a throwing migration means zustand drops the persisted state entirely: the
+         * player's caddie, trust level and every preference silently back to defaults on launch.
+         */
+        if (persisted != null && typeof persisted !== 'object') persisted = {};
         const p = (persisted ?? {}) as Partial<SettingsState> & {
           caddiePersonality?: Persona;
           caddieAssignments?: CaddieAssignments;

@@ -410,8 +410,16 @@ export const useIssueLogStore = create<IssueLogState>()(
       // Legacy entries get kind='user' on read; no destructive migration.
       version: 2,
       migrate: (s) => {
+        /**
+         * 2026-08-31 (full-app break test) — a migration that THROWS is a player who lost
+         * everything: zustand discards the persisted state and the store comes up on defaults,
+         * silently, on launch. A truncated or cleared write can hand this a primitive or null
+         * rather than the object the cast below assumes, and the cast is a lie in that case.
+         */
         const state = s as { entries?: IssueLogEntry[] } | undefined;
-        if (state?.entries) {
+        // Array.isArray, not truthiness: a persisted `entries` that is not an array (a bare [] blob,
+        // or a shape change) reached .map() and threw, taking the whole issue log with it.
+        if (state && Array.isArray(state.entries)) {
           state.entries = state.entries.map(e => (e.kind ? e : { ...e, kind: 'user' as const }));
         }
         return state as never;

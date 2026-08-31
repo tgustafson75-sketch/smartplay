@@ -231,6 +231,13 @@ export const useAcousticCalibrationStore = create<AcousticCalibrationState>()(
       name: 'acoustic-calibration-v1',
       version: 2,
       migrate: (persisted, version) => {
+        /**
+         * 2026-08-31 (full-app break test) — a migration that THROWS is a player who lost
+         * everything: zustand discards the persisted state and the store comes up on defaults,
+         * silently, on launch. A truncated or cleared write can hand this a primitive or null
+         * rather than the object the cast below assumes, and the cast is a lie in that case.
+         */
+        if (persisted == null || typeof persisted !== 'object') return persisted as never;
         const s = persisted as AcousticCalibrationState;
         // v1 → v2: added targetSamples array
         if (version < 2) { (s as unknown as Record<string, unknown>).targetSamples = []; }

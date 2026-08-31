@@ -1,6 +1,19 @@
 /**
  * 2026-05-23 — Native fallback banner.
  *
+ * 2026-08-31 (Tim — "we need to remove the glasses related banner from the top") — GLASSES ARE NOT
+ * IN THIS RELEASE, so `MetaWearablesFrame` is missing for EVERY player on EVERY launch. This banner
+ * therefore rendered at the top of the app, always, telling every user that a feature they have
+ * never heard of and cannot use is "unavailable on this build".
+ *
+ * A fallback notice is only honest when something the player HAS is degraded. The absence of a
+ * module that was never shipped is the expected state, not a fallback — announcing it is noise that
+ * makes a working app look broken on first launch.
+ *
+ * The banner is NOT deleted: MediaPipe pose IS in the binary, and if it ever fails to load the
+ * player really is on the slower cloud path and deserves to know. Glasses are filtered out of the
+ * decision entirely, so with only glasses missing the banner does not render at all.
+ *
  * When any critical native bridge fails to load (Meta Wearables DAT,
  * MediaPipe Pose), render a single persistent banner so the player
  * understands which features are unavailable + that the app has
@@ -50,14 +63,19 @@ export default function NativeFallbackBanner() {
   // Don't render until at least one probe has reported — otherwise
   // we'd flash the banner during cold boot before the bridges run.
   if (records.length === 0) return null;
-  // Only show when at least one bridge is MISSING.
-  const missing = records.filter((r) => !r.loaded);
+  /**
+   * Modules that are deliberately NOT in this release. Their absence is the expected state, so it
+   * is never reported as a fallback. Filtered here rather than in nativeModuleHealth so the owner
+   * debug screen can still see the real probe result.
+   */
+  const NOT_IN_THIS_RELEASE = new Set(['MetaWearablesFrame']);
+
+  // Only show when at least one bridge the player SHOULD have is missing.
+  const missing = records.filter((r) => !r.loaded && !NOT_IN_THIS_RELEASE.has(r.id));
   if (missing.length === 0) return null;
 
   const missingLabels = missing.map((m) =>
-    m.id === 'MetaWearablesFrame' ? 'Glasses live stream' :
-    m.id === 'MediaPipePose'      ? 'On-device pose' :
-                                    m.id,
+    m.id === 'MediaPipePose' ? 'On-device pose' : m.id,
   );
 
   return (
