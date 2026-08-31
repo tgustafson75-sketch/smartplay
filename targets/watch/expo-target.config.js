@@ -52,6 +52,26 @@ module.exports = {
   displayName: 'SmartPlay Caddie',
   bundleIdentifier: 'com.smartplaycaddie.app.watchkitapp',
   deploymentTarget: '9.0',
+  /**
+   * 2026-08-30 — REQUIRED. Build 17 uploaded successfully and Apple REJECTED it in processing:
+   *
+   *   Missing Info.plist value. A value for the Info.plist key 'CFBundleIconName' is missing in the
+   *   bundle 'com.smartplaycaddie.app.watchkitapp'. (90713)
+   *   Missing Icons. No icons found for watch application 'SmartPlayWatch.app'. (90391)
+   *
+   * The watch target's asset catalog held only `$accent.colorset` — no AppIcon at all. apple-targets
+   * sets ASSETCATALOG_COMPILER_APPICON_NAME only when an `icon` is supplied ("Only set AppIcon when
+   * an icon is provided, otherwise Xcode will fail to build because the asset catalog doesn't
+   * exist"), so with no icon the watch app shipped iconless and Apple would not accept it.
+   *
+   * It has its own watch generator (generateWatchIconsInternalAsync) which produces the watchOS
+   * sizes and flattens alpha — our source is 892×892 WITH an alpha channel, and Apple rejects icons
+   * that keep one, so that flattening matters rather than being incidental.
+   *
+   * Note this failed at PROCESSING, not at build: xcodebuild was perfectly happy. No local compile
+   * would have caught it — only an actual upload does.
+   */
+  icon: '../../assets/images/icon.png',
   colors: {
     // Canonical SmartPlay neon green, matching the Wear OS face and the app accent.
     $accent: '#88F700',
