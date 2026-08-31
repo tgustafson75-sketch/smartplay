@@ -28,6 +28,7 @@
 const {
   withMainApplication,
   withDangerousMod,
+  withXcodeProject,
 } = require('expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
@@ -171,11 +172,69 @@ function withIOSSourceCopy(config) {
   ]);
 }
 
+// ─── iOS: register those sources with the app target ────────────────
+/**
+ * 2026-08-30 — COPYING A FILE INTO THE TREE DOES NOT COMPILE IT.
+ *
+ * withIOSSourceCopy above has been dropping BluetoothMediaButtonModule.swift and
+ * BluetoothMediaButton.m into ios/SmartPlayCaddie/BTMedia/ and stopping there. Xcode compiles what
+ * is in the target's Sources build phase, not what happens to be on disk, and the app target does
+ * not use an Xcode 16 synchronized group — only the watch target does. Read straight out of a real
+ * prebuild, the Sources phase contained exactly:
+ *
+ *     AppDelegate.swift, WearSwingBridgeModule.swift, WearSwingBridge.m
+ *
+ * So this native module has never been in the binary. NativeModules.BluetoothMediaButton is
+ * undefined at runtime, which takes the earbud media-button bridge with it AND the getAudioRoute /
+ * startRouteWatch headset detection added on 08-29.
+ *
+ * plugins/withWatchSwingBridgeIOS.js called this exact shot in its header — "the sibling plugins
+ * copy their Swift/Obj-C into the prebuilt tree and stop there ... relies on something else picking
+ * the files up ... the difference is a bridge that exists in the repo and does not exist in the
+ * binary". It was right, and nobody checked the siblings.
+ *
+ * Pass the BARE FILENAME to addSourceFile: the path is resolved relative to the group, and this
+ * group's path already contains SmartPlayCaddie/BTMedia. Passing the full path doubles it, which is
+ * how build 16 failed.
+ */
+function withIOSCompileSources(config) {
+  return withXcodeProject(config, (modConfig) => {
+    try {
+      const proj = modConfig.modResults;
+      const appName = modConfig.modRequest.projectName;
+      const GROUP_DIR = 'BTMedia';
+      const FILES = ['BluetoothMediaButtonModule.swift', 'BluetoothMediaButton.m'];
+
+      let groupKey = proj.findPBXGroupKey({ name: GROUP_DIR });
+      if (!groupKey) {
+        groupKey = proj.pbxCreateGroup(GROUP_DIR, `${appName}/${GROUP_DIR}`);
+        const mainKey = proj.findPBXGroupKey({ name: appName }) || proj.getFirstProject().firstProject.mainGroup;
+        if (mainKey) proj.addToPbxGroup(groupKey, mainKey);
+      }
+
+      const targetUuid = proj.getFirstTarget().uuid;
+      for (const f of FILES) {
+        // addSourceFile throws on a duplicate, and prebuild may run more than once.
+        const already = JSON.stringify(proj.hash.project.objects.PBXBuildFile || {}).includes(f);
+        if (already) continue;
+        proj.addSourceFile(f, { target: targetUuid }, groupKey);
+      }
+      console.log('[withBluetoothMediaButton] iOS sources registered with the app target');
+    } catch (e) {
+      // Never fail the build for this — but say so loudly, because the symptom is a native module
+      // that is simply undefined at runtime with nothing to explain why.
+      console.warn('[withBluetoothMediaButton] WARNING: could not register iOS sources — the native module will NOT exist:', e.message);
+    }
+    return modConfig;
+  });
+}
+
 // ─── Plugin entry point ─────────────────────────────────────────────
 function withBluetoothMediaButton(config) {
   let next = config;
   next = withAndroidSourceCopyAndInjection(next);
   next = withIOSSourceCopy(next);
+  next = withIOSCompileSources(next);
   return next;
 }
 

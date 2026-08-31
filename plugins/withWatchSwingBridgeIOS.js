@@ -70,12 +70,32 @@ function withCompileSources(config) {
 
       const targetUuid = proj.getFirstTarget().uuid;
       for (const f of FILES) {
-        const rel = `${groupPath}/${f}`;
+        /**
+         * 2026-08-30 — PASS THE BARE FILENAME, NOT THE FULL PATH.
+         *
+         * This used to pass `${groupPath}/${f}`, and build 16 died with:
+         *
+         *   Build input file cannot be found:
+         *   .../ios/SmartPlayCaddie/WatchBridge/SmartPlayCaddie/WatchBridge/WearSwingBridgeModule.swift
+         *
+         * The prefix appears TWICE. addSourceFile resolves its path relative to the GROUP it is
+         * given, and this group's own path is already `SmartPlayCaddie/WatchBridge` — so handing it
+         * the full path again concatenated the two.
+         *
+         * It stayed hidden because the build never reached compilation: builds 13 and 15 failed at
+         * code signing first. Fixing the signing is what finally let this surface, which is the
+         * usual shape — a latent bug behind an earlier one, revealed in the order they gate.
+         *
+         * Worth noting against this file's own header, which argues for registering sources
+         * explicitly rather than assuming the copy-only pattern works. That argument still holds —
+         * the files DO need registering — but doing it introduced a path bug the simpler siblings
+         * could not have. Being more careful is not the same as being right.
+         */
         // .m compiles; .swift compiles. Both belong to Sources, and both must be skipped if the
         // file is already registered — addSourceFile throws on a duplicate path.
         const already = JSON.stringify(proj.hash.project.objects.PBXBuildFile || {}).includes(f);
         if (already) continue;
-        proj.addSourceFile(rel, { target: targetUuid }, groupKey);
+        proj.addSourceFile(f, { target: targetUuid }, groupKey);
       }
       console.log('[withWatchSwingBridgeIOS] iOS sources registered with the app target');
     } catch (e) {
