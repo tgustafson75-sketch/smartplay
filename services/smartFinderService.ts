@@ -672,7 +672,21 @@ export async function getGreenYardages(holeNumber?: number): Promise<GreenYardag
   // double greens — +40 wrongly clamped those CORRECT live reads to the static card. +100 still
   // catches a geometry mismatch by hundreds/thousands of yards.
   const maxYds = typeof hData.distance === 'number' && hData.distance > 0 ? hData.distance + 100 : 600;
-  if ((yards.middle ?? 0) > maxYds || (yards.front ?? 0) > maxYds || (yards.back ?? 0) > maxYds) {
+  /**
+   * 2026-08-31 (final clean pass) — `implausible()` rather than a bare `>`: **NaN escapes every
+   * comparison.** `NaN > maxYds` is false, so a non-finite yardage sailed through this clamp,
+   * returned with `reason: 'ok'`, and `yardageResolver` accepted it on a `!= null` check and
+   * rendered it as `gps_live` at HIGH confidence — the tier that outranks everything.
+   *
+   * LATENT, NOT LIVE: `isValidGolfCoord` rejects non-finite coordinates at all seven GPS entry
+   * points, and JSON cannot encode NaN so a server response carries null instead. Nothing today can
+   * produce it. It is closed anyway because the cost is one line and the failure mode is the worst
+   * this app has — a confidently wrong number, which is exactly the shape of the "over 7000 yards"
+   * report this clamp was written for. [[smartfinder-tilt-caps-at-50-yards]]
+   */
+  const implausible = (v: number | null | undefined): boolean =>
+    v != null && (!Number.isFinite(v) || v < 0 || v > maxYds);
+  if (implausible(yards.middle) || implausible(yards.front) || implausible(yards.back)) {
     console.log('[smartFinder] yardages out of range (>', maxYds, ') — falling back to scorecard:', yards);
     // 2026-06-01 — Fix GF.2: emit a second calcLog entry with
     // outcome='clamp_fallback' so debug surfaces can see WHICH
@@ -738,7 +752,21 @@ export function getGreenYardagesSync(holeNumber?: number): GreenYardages {
   logYardageCalc(hole, syncFix, { front, middle, back }, yards, source);
   // 2026-07-08 — same hole-yardage-bounded clamp as the async path above (+100 slack). See note.
   const maxYds = typeof hData.distance === 'number' && hData.distance > 0 ? hData.distance + 100 : 600;
-  if ((yards.middle ?? 0) > maxYds || (yards.front ?? 0) > maxYds || (yards.back ?? 0) > maxYds) {
+  /**
+   * 2026-08-31 (final clean pass) — `implausible()` rather than a bare `>`: **NaN escapes every
+   * comparison.** `NaN > maxYds` is false, so a non-finite yardage sailed through this clamp,
+   * returned with `reason: 'ok'`, and `yardageResolver` accepted it on a `!= null` check and
+   * rendered it as `gps_live` at HIGH confidence — the tier that outranks everything.
+   *
+   * LATENT, NOT LIVE: `isValidGolfCoord` rejects non-finite coordinates at all seven GPS entry
+   * points, and JSON cannot encode NaN so a server response carries null instead. Nothing today can
+   * produce it. It is closed anyway because the cost is one line and the failure mode is the worst
+   * this app has — a confidently wrong number, which is exactly the shape of the "over 7000 yards"
+   * report this clamp was written for. [[smartfinder-tilt-caps-at-50-yards]]
+   */
+  const implausible = (v: number | null | undefined): boolean =>
+    v != null && (!Number.isFinite(v) || v < 0 || v > maxYds);
+  if (implausible(yards.middle) || implausible(yards.front) || implausible(yards.back)) {
     console.log('[smartFinder:sync] yardages out of range (>', maxYds, ') — falling back to scorecard:', yards);
     // 2026-06-01 — Fix GF.2: same clamp_fallback log emission as the
     // async path above. See note there.
@@ -758,7 +786,9 @@ export async function distanceToPoint(target: ShotLocation): Promise<number | nu
   // the green-yardage path has, which this tapped-target path was missing. A tapped target
   // beyond 600y means the GPS fix is nowhere near it (a stale/garbage fix); return null so
   // the caller shows "no distance" instead of an absurd number that sends him for the wrong club.
-  if (yards > 600) {
+  // Same reasoning as the green clamp above: `NaN > 600` is false, so a non-finite result would be
+  // returned as a real distance. Non-finite is refused explicitly rather than compared.
+  if (!Number.isFinite(yards) || yards < 0 || yards > 600) {
     console.log('[smartFinder] distanceToPoint out of range — bad fix, returning null:', yards);
     return null;
   }
