@@ -28,6 +28,10 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: "Swing analysis for kids on your family roster is on hold for now. Recording their swings and everything already saved still works — it is only the AI read that is paused while we get the rules right for children's data. It is coming back.",
+  },
+  {
+    when: 'Aug 2026',
     note: 'Serena reacts now. Her face used to stay the same no matter what happened — one photograph for almost every mood. She has eight new expressions, so she looks focused when she is reading your shot, pleased when you pull it off, and sympathetic when you do not.',
   },
   {

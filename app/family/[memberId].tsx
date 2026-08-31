@@ -26,6 +26,7 @@ import { useCageStore } from '../../store/cageStore';
 import {
   getMemberSwingHistory,
   analyzeJuniorSwing,
+  JUNIOR_ANALYSIS_ENABLED,
   type JuniorSwingAnalysis,
 } from '../../services/juniorSwingAnalyzer';
 import {
@@ -233,20 +234,28 @@ export default function FamilyMemberScreen() {
                 {recordingActive ? '■ Stop recording' : `● Record ${member.firstName}'s swing`}
               </Text>
             </Pressable>
-            <Pressable
-              onPress={tryAnalyze}
-              disabled={analyzing}
-              style={[
-                styles.secondaryBtn,
-                { borderColor: colors.accent, opacity: analyzing ? 0.5 : 1 },
-              ]}
-            >
-              {analyzing ? (
-                <ActivityIndicator color={colors.accent} />
-              ) : (
-                <Text style={[styles.secondaryBtnText, { color: colors.accent }]}>Analyze last clip</Text>
-              )}
-            </Pressable>
+            {/* 2026-08-30 (Tim) — junior swing ANALYSIS is out of v1 and deferred to 2.0; it is the
+                one path that sends a child's swing off the device, and that is a children's-data
+                question rather than an engineering one. The control is REMOVED rather than left
+                disabled: a greyed-out button invites a tap and explains nothing, and
+                analyzeJuniorSwing already refuses at the network call so this is the honest surface
+                to match it. Recording and the on-device history below are untouched. */}
+            {JUNIOR_ANALYSIS_ENABLED && (
+              <Pressable
+                onPress={tryAnalyze}
+                disabled={analyzing}
+                style={[
+                  styles.secondaryBtn,
+                  { borderColor: colors.accent, opacity: analyzing ? 0.5 : 1 },
+                ]}
+              >
+                {analyzing ? (
+                  <ActivityIndicator color={colors.accent} />
+                ) : (
+                  <Text style={[styles.secondaryBtnText, { color: colors.accent }]}>Analyze last clip</Text>
+                )}
+              </Pressable>
+            )}
             {/* 2026-05-22 — Caddie Brain compare. Disabled when <2 swings. */}
             {history && history.length >= 2 && (
               <Pressable

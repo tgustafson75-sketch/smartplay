@@ -154,9 +154,39 @@ const apiUrl = (): string => getApiBaseUrl();
  * on transport failure the fallback returns an age-appropriate "let me
  * see that one more time" message so the kid never sees a blank state.
  */
+/**
+ * 2026-08-30 (Tim — "lets remove the childrens swing analysis for now and save for 2.0").
+ *
+ * WHY IT IS OFF. This is the one place in the app where a CHILD'S data leaves the device:
+ * analyzeJuniorSwing POSTs swing frames, the member's serialized profile and their age band to
+ * /api/junior-swing-analysis. The roster carries age bands `tiny` / `junior` / `teen`, and the
+ * ageBand feeds a prompt so the caddie "talks differently to a 6yo" — so this is knowingly
+ * children's data, going to a server, in an app rated 4+.
+ *
+ * That is a compliance and review question (COPPA under 13 in the US, Apple's rules on apps
+ * handling children's data), not an engineering one, and it surfaced the day the App Privacy
+ * questionnaire was published. Tim's call was to take it out of v1 rather than answer it under
+ * submission pressure. Deferred to 2.0.
+ *
+ * THE GATE IS HERE, AT THE NETWORK CALL, DELIBERATELY. Hiding the button would leave the upload one
+ * caller away; gating the function means no surface — tap, voice, deep link or a future one — can
+ * put a child's swing on the wire. Everything else in this file is on-device history and stays,
+ * so existing families keep what they already have. [[no-half-fixes-enforce-every-surface]]
+ *
+ * TO RE-ENABLE FOR 2.0: flip this to true, restore the analyse control in app/family/[memberId].tsx,
+ * and answer the children's-data questions in App Privacy FIRST. A sim LOCK fails the build if the
+ * flag is on, so turning it back on is a deliberate act rather than a drift.
+ */
+export const JUNIOR_ANALYSIS_ENABLED = false;
+
 export async function analyzeJuniorSwing(
   input: JuniorSwingAnalyzeInput,
 ): Promise<JuniorSwingAnalysis | null> {
+  // Off for v1 — see JUNIOR_ANALYSIS_ENABLED above. Returns before ANY member data is read or sent.
+  if (!JUNIOR_ANALYSIS_ENABLED) {
+    devLog('[juniorAnalyzer] disabled for v1 — no child data leaves the device');
+    return null;
+  }
   const family = useFamilyStore.getState();
   const settings = useSettingsStore.getState();
   const member = family.getMember(input.memberId);

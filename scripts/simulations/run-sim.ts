@@ -3835,6 +3835,46 @@ check('LOCK: a denied feature must OFFER the upgrade, never just refuse',
   })(),
   'every !canAccess branch reaches triggerPaywall inside its own block — a refused feature always offers the upgrade rather than dead-ending the player');
 
+check('LOCK: no child swing data leaves the device in v1',
+  /**
+   * 2026-08-30 (Tim — "lets remove the childrens swing analysis for now and save for 2.0").
+   *
+   * `analyzeJuniorSwing` is the ONLY place a child's data leaves the device: it POSTs swing frames,
+   * the member's serialized profile and their age band to /api/junior-swing-analysis. The roster
+   * carries age bands `tiny` / `junior` / `teen` and the band feeds a prompt so the caddie "talks
+   * differently to a 6yo" — knowingly children's data, to a server, in an app rated 4+.
+   *
+   * That is a compliance question (COPPA under 13, Apple's rules on children's data), it surfaced
+   * the day App Privacy was published, and Tim's call was to take it out of v1 rather than answer it
+   * under submission pressure.
+   *
+   * The gate is at the NETWORK CALL, not the button, so no surface — tap, voice, deep link, or one
+   * added later — can put a child's swing on the wire. This asserts the two halves together: the
+   * flag is off, AND the function returns before the fetch. A flag that is off while the early
+   * return has been deleted would pass a naive check and ship the upload.
+   * [[no-half-fixes-enforce-every-surface]]
+   */
+  (() => {
+    const src = readCode('services/juniorSwingAnalyzer.ts');
+    const problems: string[] = [];
+
+    if (!/export const JUNIOR_ANALYSIS_ENABLED = false;/.test(src)) {
+      problems.push('JUNIOR_ANALYSIS_ENABLED is not false — the children\'s-data questions must be answered in App Privacy BEFORE this is turned on');
+    }
+
+    // The early return must come BEFORE the fetch, or the flag protects nothing.
+    const fnAt = src.indexOf('export async function analyzeJuniorSwing(');
+    if (fnAt < 0) { console.log('   analyzeJuniorSwing not found'); return false; }
+    const guardAt = src.indexOf('if (!JUNIOR_ANALYSIS_ENABLED)', fnAt);
+    const fetchAt = src.indexOf('junior-swing-analysis', fnAt);
+    if (guardAt < 0) problems.push('no JUNIOR_ANALYSIS_ENABLED check inside analyzeJuniorSwing');
+    else if (fetchAt >= 0 && guardAt > fetchAt) problems.push('the flag is checked AFTER the upload — it guards nothing');
+
+    if (problems.length) console.log(`   child data gate: ${problems.join(' · ')}`);
+    return problems.length === 0;
+  })(),
+  'analyzeJuniorSwing is disabled for v1 and returns before its POST, so no child swing frames, profile or age band can reach the network from any surface');
+
 check('LOCK: a test-store key can never ship with subscriptions ON',
   /**
    * 2026-08-30 — the Test Store key is in the repo on purpose, and it must not survive the switch.
