@@ -509,6 +509,37 @@ export function getAnchoredHoleLengthYards(holeNumber: number): number | null {
 }
 
 /**
+ * 2026-08-30 (Tim: "Yes — it replaces the scorecard number") — HOW LONG IS THIS HOLE. One answer.
+ *
+ * getAnchoredHoleLengthYards has existed for months and was consumed by nothing. Its own docstring
+ * calls it the payoff of marking both ends: a hole length measured from the tee and green the player
+ * actually marked, which beats the scorecard when the card was measured from a different tee box,
+ * and beats GPS course geometry that may not match the tee being played.
+ *
+ * IT REPLACES RATHER THAN JOINS, and that is the whole design. app/smartvision.tsx read
+ * `courseHoles.find(x => x.hole === holeIndex)?.distance` in THREE separate places — surfacing the
+ * measured value beside them would have created a second answer to one question, the exact defect
+ * class the orphan baseline exists to catch. All three now come here, and here prefers the
+ * measurement.
+ *
+ * Falls back to the scorecard silently and per-hole: a player who marked hole 7 and not hole 8 gets
+ * the measurement on 7 and the card on 8, with no gap and nothing to configure.
+ *
+ * NOT ROUTED, deliberately: app/course-layout.tsx. That screen renders the course's PUBLISHED card
+ * for any course being browsed, including ones the player has never teed off on. It answers "what
+ * does this course's card say", not "how long is the hole I am standing on" — a different question,
+ * not a second answer to this one. Overwriting it with one player's marks would make the app
+ * misreport a course's official yardage, and shift its front/back/total sums with it.
+ */
+export function holeLengthYards(holeNumber: number): number | null {
+  const anchored = getAnchoredHoleLengthYards(holeNumber);
+  if (anchored != null && Number.isFinite(anchored) && anchored > 0) return anchored;
+  const h = resolveHoleDataWithFallback(holeNumber);
+  const d = h?.distance;
+  return typeof d === 'number' && Number.isFinite(d) && d > 0 ? d : null;
+}
+
+/**
  * Returns front/middle/back yardages to the green of `holeNumber` (defaults to
  * the round's current hole). Each is null when either the player's location or
  * that green-point's coordinates are unknown.

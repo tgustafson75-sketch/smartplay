@@ -86,7 +86,7 @@ import { courseDisplayName } from '../services/courseDisplayName';
 // golf apps... Mapbox tiles are commodity; SmartPlay's strategic overlay is proprietary IP", and
 // drawn by nobody for three months. See the OWNER-ONLY block in the SVG below.
 import { computeYardageRings, computeLandingZone, computeLayupSuggestion, computeDangerCarries } from '../services/smartVisionOverlay';
-import { getLastFix, subscribeFixChange, resolveGreenCoords, resolveTeeCoords, setMarkedFix } from '../services/smartFinderService';
+import { getLastFix, subscribeFixChange, resolveGreenCoords, resolveTeeCoords, setMarkedFix, holeLengthYards } from '../services/smartFinderService';
 import { bumpToActive } from '../services/gpsManager';
 import { verifyShotAtLocation, correctShotClub, confirmTrackedShot, type ShotTrackResult } from '../services/shotTracking';
 import ShotTrackedSheet from '../components/round/ShotTrackedSheet';
@@ -1543,7 +1543,9 @@ export default function SmartVisionScreen() {
     // branch below reads the real marker-derived distance as it does
     // today (no change).
     const hasPlacedTarget = !!targetOverride;
-    const fullHoleDistance = courseHoles.find(x => x.hole === holeIndex)?.distance ?? null;
+    // 2026-08-30 — the MEASURED hole length when both ends are marked, else the card. One owner
+    // (smartFinderService.holeLengthYards); this file read the raw scorecard field in three places.
+    const fullHoleDistance = holeLengthYards(holeIndex);
     // 2026-06-23 (SV-2 follow-up) — Owner-reported inconsistency: in the
     // unplaced state we forced MIDDLE to the full hole distance but left
     // FRONT/BACK at their green-relative (position-derived) values, so the
@@ -1627,7 +1629,10 @@ export default function SmartVisionScreen() {
       // 2026-07-20 (pre-ship guard) — coerce a non-finite bundled distance to null so a
       // bad row renders "—" instead of a literal NaN yardage (sibling branches already
       // use `?? null`; this one was missing the guard).
-      const total = h.distance;
+      // Prefer the player's own marked tee->green length over the bundled card: this branch
+      // interpolates the remaining yards along the tee->pin axis, so a truer total makes every
+      // interpolated number truer with it.
+      const total = holeLengthYards(holeIndex) ?? h.distance;
       const middleYd = Number.isFinite(total) ? Math.round((1 - progress) * total) : null;
       if (middleYd == null) {
         return withDefaultMiddle({ front: null as number | null, middle: null as number | null, back: null as number | null });
@@ -1739,7 +1744,7 @@ export default function SmartVisionScreen() {
   // home. Pure planner (utils/layupPlan) keeps the decision out of this render.
   const approachYards = useMemo(() => {
     const h = courseHoles.find(x => x.hole === holeIndex);
-    return h?.distance ?? yardages.middle ?? null;
+    return holeLengthYards(holeIndex) ?? h?.distance ?? yardages.middle ?? null;
   }, [courseHoles, holeIndex, yardages.middle]);
   const aimPlan = useMemo(() => planAimLines(approachYards), [approachYards]);
   const layupCanvas = useMemo(() => {
@@ -2684,7 +2689,7 @@ export default function SmartVisionScreen() {
         {/* 2026-07-28 (Tim — "badge risks covering green") — the green always sits top-center of the
             flyover, so on short/zoomed holes a top-right badge crowds it. Pin the SmartVision badge
             BOTTOM-LEFT (opposite end from the green, by the tee) instead. Rendered LAST → sits on top. */}
-        <HoleBrandBadge course={courseName} hole={holeIndex} distanceYds={courseHoles.find(x => x.hole === holeIndex)?.distance ?? null} style={{ bottom: 8, left: 8, alignItems: 'flex-start' }} />
+        <HoleBrandBadge course={courseName} hole={holeIndex} distanceYds={holeLengthYards(holeIndex)} style={{ bottom: 8, left: 8, alignItems: 'flex-start' }} />
 
         {/* 2026-06-04 — Save-strategy bookmark button removed with HolePlan. */}
       </View>

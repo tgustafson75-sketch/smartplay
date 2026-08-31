@@ -301,13 +301,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
     'PARKED — packages a computed distance into a durable lock record. Belongs with the same '
     + 'SmartFinder decision as REFERENCE_HEIGHTS: there is nothing to persist a lock FOR until the '
     + 'high-confidence read exists.',
-  'services/smartFinderService.ts :: getAnchoredHoleLengthYards':
-    'WIRE — a hole length measured from the players own marked tee and green, which its docstring '
-    + 'calls the payoff of marking both ends: a distance to trust over the scorecard AND over GPS '
-    + 'geometry that may not match the tee actually being played. Genuinely built and consumed by '
-    + 'nothing. Named blocker: which surface shows it, and whether it OVERRIDES the scorecard number '
-    + 'or sits beside it — a second answer to "how long is this hole" is the defect class this '
-    + 'baseline exists to catch, so it must replace rather than join.',
   'services/responseRouter.ts :: fillerForSonnetVision':
     'DO NOT WIRE — Tim approved wiring this on 2026-08-30, on my description of it, and my '
     + 'description was wrong. I said each vision bridge picks its own filler; they pick NONE. '
