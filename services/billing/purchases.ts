@@ -94,8 +94,22 @@ export const ENTITLEMENT_ID = 'smartplay_caddie_pro';
  * build if a `test_` key is ever present while subscriptions are ON, so that combination cannot
  * ship. Replace these with the appl_/goog_ keys before the switch moves. [[cowork-task-list]]
  */
+/**
+ * 2026-08-30, later — iOS now has a REAL App Store key; Android does not yet.
+ *
+ * Cowork created the RevenueCat App Store app config (appf2c54cc4f4, bundle com.smartplaycaddie.app),
+ * imported both products, attached them to entitlement `smartplay_caddie_pro`, and rebuilt the
+ * default offering as $rc_monthly → Full Monthly / $rc_annual → Full Annual. Creating that config
+ * ISSUED A NEW PUBLIC SDK KEY — RevenueCat scopes keys per app config, so the Test Store key no
+ * longer addresses the right store on iOS.
+ *
+ * Android stays on the Test Store key because `goog_` cannot exist yet: it needs a Play app config,
+ * which needs the Play Console account, which is blocked. The LOCK below still applies and is doing
+ * exactly its job — a `test_` key anywhere in this file blocks turning subscriptions ON, so Android
+ * getting its real key is now a precondition for launch rather than a detail someone might forget.
+ */
 const TEST_STORE_KEY = 'test_xTYhIjxcMjCQkAzNExcmQzhFdvA';
-const IOS_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || TEST_STORE_KEY;
+const IOS_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || 'appl_ghJChGpGSaSvMcbTqNwACOIItDt';
 const ANDROID_KEY = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY || TEST_STORE_KEY;
 
 function apiKey(): string {
