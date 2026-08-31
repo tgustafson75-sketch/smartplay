@@ -182,6 +182,16 @@ const NOT_A_COURSE_TYPES = new Set(['indoor_golf_course', 'miniature_golf_course
 const SUB_FEATURE_RE = /\b(no\.?\s*\d+|#\d+|\d+\s*(st|nd|rd|th))\b|\b(tee box|hole)\b|\bgreen\b\s*(\(|$)/i;
 /** Somewhere on the property that is not somewhere you play. */
 const FACILITY_RE = /\b(agronom\w*|maintenance|operations?\s+cent(er|re)|pro\s*shop|clubhouse|academy|learning cent(er|re))\b/i;
+/**
+ * A BUSINESS about golf courses, not a golf course. "Larsen Golf, Inc.: ASGCA, Golf course
+ * architect" came back 2.5km from the Stadium Course and passed every name rule, because it
+ * contains the words "Golf course" — which is exactly what a keyword match is bad at.
+ * Deliberately narrow: real clubs DO incorporate ("THE PLANTATION AT PONTE VEDRA, INC."), so `Inc.`
+ * alone is not evidence of anything and is not matched here.
+ */
+const NOT_A_PLACE_YOU_PLAY_RE = /\b(architects?|designers?|construction|realty|brokerage|supply|distributors?)\b/i;
+/** A bare street address is a pin on a map, not a named course. */
+const STREET_ADDRESS_RE = /^\d+\s+[\w\s.'-]{2,40}\b(dr|drive|rd|road|st|street|ave|avenue|blvd|boulevard|ln|lane|way|hwy|highway|ct|court|pl|place)\.?$/i;
 /** Types that mean "you sleep here". A course on a resort keeps them — its NAME has to say course. */
 const LODGING_TYPES = new Set(['hotel', 'resort_hotel', 'lodging', 'motel', 'guest_house', 'bed_and_breakfast']);
 
@@ -189,6 +199,8 @@ export function isGolfPlace(p: Located): boolean {
   if (NOT_A_COURSE_RE.test(p.name)) return false;
   if (SUB_FEATURE_RE.test(p.name)) return false;
   if (FACILITY_RE.test(p.name)) return false;
+  if (NOT_A_PLACE_YOU_PLAY_RE.test(p.name)) return false;
+  if (STREET_ADDRESS_RE.test(p.name.trim())) return false;
   // An EVENT played at a course is not the course. "Championship Course" survives on its course noun.
   if (/\bchampionship\b/i.test(p.name) && !COURSE_NOUN_RE.test(p.name)) return false;
   // Disqualifying TYPE beats every other signal, including golf_course sitting right beside it.

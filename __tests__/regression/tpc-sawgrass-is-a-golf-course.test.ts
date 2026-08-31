@@ -174,3 +174,16 @@ describe('the new primary path returns pieces of courses, hotels and an event', 
     }
   });
 });
+
+describe('a business about golf courses is not a golf course', () => {
+  it('DROPS the course architect, which contains the words "Golf course"', () => {
+    // Real row, 2.5km from the Stadium Course — exactly what keyword matching is worst at.
+    expect(isGolfPlace(row('Larsen Golf, Inc.: ASGCA, Golf course architect', ['point_of_interest', 'establishment']))).toBe(false);
+  });
+  it('DROPS a bare street address — a pin on a map, not a named course', () => {
+    expect(isGolfPlace(row('2700 17 Mile Dr', ['golf_course', 'establishment']))).toBe(false);
+  });
+  it('KEEPS a real club that happens to be incorporated — "Inc." is not evidence', () => {
+    expect(isGolfPlace(row('THE PLANTATION AT PONTE VEDRA, INC.', ['golf_course', 'sports_club']))).toBe(true);
+  });
+});
