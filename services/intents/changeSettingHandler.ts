@@ -1,5 +1,6 @@
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import { useSettingsStore, type Persona } from '../../store/settingsStore';
+import { ACTIVE_PERSONAS, isActivePersona, getCaddieName } from '../../lib/persona';
 import { useRoundStore } from '../../store/roundStore';
 import { useGhostStore } from '../../store/ghostStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
@@ -20,7 +21,9 @@ export const changeSettingHandler: IntentHandler = {
 
   parameter_schema: {
     setting_name: 'one of: theme, voice_enabled, auto_listen, cart_mode, language, response_mode, round_mode, ghost, caddie_persona, handedness, units, imagery, risk_mode',
-    new_value: 'theme: light|dark|system; voice_enabled/auto_listen/cart_mode: boolean; language: en|es|zh; response_mode: short|neutral|detailed; caddie_persona: kevin|serena|harry; handedness: left|right; units: yards|meters; imagery: satellite|static|auto (SmartVision aerial vs static hole photo)',
+    // Backticked so the persona list is DERIVED. It used to spell out kevin|serena|harry, which is
+    // how the model kept being told a removed caddie was selectable.
+    new_value: `theme: light|dark|system; voice_enabled/auto_listen/cart_mode: boolean; language: en|es|zh; response_mode: short|neutral|detailed; caddie_persona: ${ACTIVE_PERSONAS.join('|')}; handedness: left|right; units: yards|meters; imagery: satellite|static|auto (SmartVision aerial vs static hole photo)`,
   },
 
   examples: [
@@ -201,10 +204,21 @@ export const changeSettingHandler: IntentHandler = {
       case 'caddie_persona':
       case 'caddie':
       case 'persona': {
+        /**
+         * 2026-08-30 — ACTIVE_PERSONAS IS THE ONLY LIST. It was not, and voice undid a migration.
+         *
+         * This hardcoded ['kevin','serena','harry','custom'] alongside settingsStore's v6 migration,
+         * which exists to move persisted Harry assignments to Kevin "so existing users on 'harry'
+         * don't get stuck on a hidden persona". Voice put them straight back on him: Harry is gone
+         * from the settings picker and from ACTIVE_PERSONAS, but "switch to Harry" still worked,
+         * still loaded his portrait and his voice, and the picker then showed nothing selected.
+         *
+         * Two lists owning one question, and the one nobody imported was right.
+         * [[two-owners-is-the-root-cause]]
+         */
         const v = String(rawValue ?? '').toLowerCase();
-        const valid: Persona[] = ['kevin', 'serena', 'harry', 'custom'];
-        if (!valid.includes(v as Persona)) {
-          return clarify('Kevin, Serena, Harry, or your custom caddie?');
+        if (!isActivePersona(v as Persona)) {
+          return clarify(`${personaChoiceList()}?`);
         }
         // 2026-07-30 (Tim — "if you name the caddie you should be able to call them by that name").
         // Activating the CUSTOM caddie must ALSO flip useCustomCaddie (that flag drives the portrait +
@@ -298,6 +312,16 @@ export const changeSettingHandler: IntentHandler = {
 
 function ack(msg: string, side_effects: string[]): IntentResult {
   return { success: true, voice_response: msg, side_effects, follow_up_needed: false };
+}
+
+/**
+ * The caddies a player may actually ask for, spoken as a list — built from ACTIVE_PERSONAS so a
+ * persona added or removed there changes what the clarify question offers, with nothing to remember.
+ */
+function personaChoiceList(): string {
+  const named = ACTIVE_PERSONAS.filter(p => p !== 'custom').map(p => getCaddieName(p));
+  const parts = [...named, 'your custom caddie'];
+  return parts.length <= 1 ? parts[0] : `${parts.slice(0, -1).join(', ')}, or ${parts[parts.length - 1]}`;
 }
 
 function clarify(question: string): IntentResult {

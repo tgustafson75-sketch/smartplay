@@ -235,7 +235,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
   'lib/persona.ts :: getCaddieNameFor': 'TRIAGE',
   'lib/persona.ts :: getCaddieObject': 'TRIAGE',
   'lib/persona.ts :: getCharacterSpecFor': 'TRIAGE',
-  'lib/persona.ts :: isActivePersona': 'TRIAGE',
   'services/acousticImpactDetector.ts :: onStrike': 'TRIAGE',
   'services/caddieRequestBody.ts :: CADDIE_REQUEST_KEYS': 'TRIAGE',
   'services/cage/targetRig.ts :: moveTargetEnd': 'TRIAGE',

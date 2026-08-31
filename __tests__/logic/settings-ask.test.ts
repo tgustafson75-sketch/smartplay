@@ -50,7 +50,14 @@ describe('other settings by voice (offline precheck)', () => {
   it('switches caddie persona (known names + switch verb only)', () => {
     expect(setting('switch to Kevin')).toEqual({ name: 'caddie_persona', value: 'kevin' });
     expect(setting('change my caddie to Serena')).toEqual({ name: 'caddie_persona', value: 'serena' });
-    expect(setting('put Harry in charge')).toEqual({ name: 'caddie_persona', value: 'harry' });
+    // 2026-08-30 — HARRY GETS THE SAME TREATMENT TANK GOT, four days later than he should have.
+    // This line asserted that "put Harry in charge" still switched persona, in the same block whose
+    // next comment says a removed persona must not be reachable by voice. Harry left ACTIVE_PERSONAS
+    // and the settings picker long before Tank did, and settingsStore's v6 migration moves players
+    // off him precisely so nobody is stranded on a hidden persona — but voice handed him straight
+    // back. The rule was written down and applied to exactly one of the two.
+    expect(setting('put Harry in charge')).toBeNull();
+    expect(setting('switch to Harry')).toBeNull();
     // 2026-08-26 — a removed persona must no longer be reachable by voice. Naming it is not a
     // persona switch any more; it falls through to the brain like any other sentence.
     expect(setting('switch to Tank')).toBeNull();

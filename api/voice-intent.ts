@@ -34,7 +34,7 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
-import { getCaddieName, type VoiceGender, type Persona } from '../lib/persona';
+import { getCaddieName, ACTIVE_PERSONAS, type VoiceGender, type Persona } from '../lib/persona';
 import { completeJSON, providerFromHeaderSafe, type StructuredSchema } from './_aiProvider';
 
 // ─── Structured output schema ─────────────────────────────────────────────────
@@ -218,7 +218,7 @@ Available intents:
    - "language" (en/es/zh)
    - "response_mode" (short/neutral/detailed)
    - "round_mode" (break_100/break_90/break_80/free_play) — the player's score-target mode for the round
-   - "caddie_persona" (kevin/serena/harry) — which AI caddie persona is active
+   - "caddie_persona" (${ACTIVE_PERSONAS.join('/')}) — which AI caddie persona is active. Those are the ONLY valid values: if the player asks for a caddie not in that list, do NOT emit a change_setting for it.
    - "cart_mode" (true/false) — riding a cart vs walking ("I'm in a cart", "cart mode on", "we're walking")
    - "ghost" (true/false) — ghost-round comparison overlay ("turn on the ghost", "ghost off")
    - "family_recording" (member name) — record a FAMILY MEMBER's swings ("record Emma's swing", "switch recording to Mike")
@@ -234,10 +234,8 @@ Available intents:
    - "free play" -> { setting_name: "round_mode", new_value: "free_play" }
    - "turn off active listening" / "stop listening to me" / "stop active listening" -> { setting_name: "auto_listen", new_value: false }
    - "turn on active listening" / "active listening on" / "hands-free mode" -> { setting_name: "auto_listen", new_value: true }
-   - "switch to Serena" / "change caddie to Harry" / "put Kevin in" -> { setting_name: "caddie_persona", new_value: "serena" }
    - "switch to Serena" / "I want Serena" -> { setting_name: "caddie_persona", new_value: "serena" }
-   - "switch to Harry" / "let me hear Harry" -> { setting_name: "caddie_persona", new_value: "harry" }
-   - "switch back to Kevin" / "give me Kevin" -> { setting_name: "caddie_persona", new_value: "kevin" }
+   - "switch back to Kevin" / "give me Kevin" / "put Kevin in" -> { setting_name: "caddie_persona", new_value: "kevin" }
 
 3.3 coach_refine — Authorized coach wants to refine the caddie's most recent answer in their own words. Triggered AFTER the caddie has just answered a topic question (definition, mechanics, swing concept). The next utterance the user speaks will be captured as the refinement and ingested into the coach knowledge store; future answers on that topic will lead with the coach's framing.
    parameters: {}

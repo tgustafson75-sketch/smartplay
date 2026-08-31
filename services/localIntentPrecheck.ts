@@ -29,6 +29,7 @@
  */
 
 import type { VoiceIntent } from '../types/voiceIntent';
+import { ACTIVE_PERSONAS, type Persona } from '../lib/persona';
 import { isSmartMotionActive } from './smartMotionRecordBus';
 import { resolveSpokenCourse } from './courseNameResolver';
 
@@ -66,6 +67,19 @@ const scoreHoleParam = (raw: string): Record<string, unknown> => {
 // Ordered list — first match wins. Yardage patterns come before
 // generic "what" patterns so "yardage to front" → green_front,
 // not query_status:hole.
+/**
+ * The selectable base personas as a regex alternation, derived rather than typed out, so removing a
+ * persona from ACTIVE_PERSONAS removes it from voice too. 'custom' is excluded deliberately — it has
+ * its own rule, anchored on the player's own caddie name.
+ */
+const PERSONA_SWITCH_RX = (() => {
+  const names = ACTIVE_PERSONAS.filter((p: Persona) => p !== 'custom').join('|');
+  return new RegExp(
+    String.raw`\b(?:switch|change)(?:\s+(?:my\s+)?caddie)?\s+to\s+(${names})\b|\bput\s+(${names})\s+in\s+charge\b`,
+    'i',
+  );
+})();
+
 const PATTERNS: Pattern[] = [
   // ── GROUND-TRUTH GREEN MARK (must beat the yardage patterns below, since
   //    "I'm on the MIDDLE of the green" otherwise matches green_middle) ──────
@@ -217,9 +231,13 @@ const PATTERNS: Pattern[] = [
   // require the cloud classifier (dead-ended offline). Tight patterns only, so they can't misfire on
   // ordinary talk. changeSettingHandler already applies each of these.
   {
-    // Caddie persona — anchored on a switch verb + one of the 4 KNOWN names, so a guest named e.g.
-    // "Kevin" is never mistaken for a persona switch.
-    rx: /\b(?:switch|change)(?:\s+(?:my\s+)?caddie)?\s+to\s+(kevin|serena|harry)\b|\bput\s+(kevin|serena|harry)\s+in\s+charge\b/i,
+    // Caddie persona — anchored on a switch verb + one of the SELECTABLE names, so a guest named
+    // e.g. "Kevin" is never mistaken for a persona switch.
+    //
+    // 2026-08-30 — derived from ACTIVE_PERSONAS instead of a hardcoded (kevin|serena|harry). Harry
+    // is soft-removed and settingsStore's v6 migration exists to move players OFF him; matching him
+    // here routed straight back to the persona the picker refuses to list.
+    rx: PERSONA_SWITCH_RX,
     build: (raw, m) => intent(raw, 'change_setting', { setting_name: 'caddie_persona', new_value: (m[1] ?? m[2]).toLowerCase() }),
   },
   {
