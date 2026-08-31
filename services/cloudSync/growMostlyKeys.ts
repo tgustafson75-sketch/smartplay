@@ -26,8 +26,10 @@ export const GROW_MOSTLY_KEYS: readonly string[] = [
   // Practice / points / progression
   'practice-points', 'points-store-v1', 'points-baseline', 'workout-store-v1',
   'practice-session-v1', 'practice-store',
-  // Social / relationships / team
-  'family-store-v1', 'guest-profiles-v1', 'relationship-store-v1', 'team-intelligence-store-v1',
+  // 2026-08-31 (Tim) — the four social/relationship stores were REMOVED from the backup entirely
+  // (they hold other people's names and profiles), so there is nothing here to protect from
+  // clobbering. This list must remain a SUBSET of snapshot.ts BACKED_UP_STORE_KEYS; leaving them
+  // here would have guarded keys that are no longer uploaded.
   // Authored / coaching knowledge
   'coach-knowledge-v1', 'coach-lesson-history-v1', 'practice-plan-v1', 'vocabulary-profile-v1',
   // Courses / captures / goals

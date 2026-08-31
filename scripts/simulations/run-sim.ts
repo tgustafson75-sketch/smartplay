@@ -7773,14 +7773,37 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /if \(!hasAcceptedTerms && !hasName\)/.test(read('app/index.tsx')),
     'cold-install users always see the Terms/Privacy consent + profile-capture welcome screen (gate keys on termsAcceptedAt, which only welcome.tsx sets)');
 
-  check('Bug-hunt: backup grow-mostly guards the four accumulating learned stores',
-    // 2026-07-25 (deep audit S2) — the client + server lists were unified into ONE shared constant
-    // (services/cloudSync/growMostlyKeys.ts) so they can't drift. Verify the keys are protected AND
-    // that BOTH the client (snapshot.ts) and server (backup.ts) import that shared source of truth.
-    ['coach-knowledge-v1', 'relationship-store-v1', 'team-intelligence-store-v1', 'practice-store'].every(k => GROW_MOSTLY_KEYS.includes(k)) &&
-      /from '.*growMostlyKeys'/.test(read('services/cloudSync/snapshot.ts')) &&
-      /from '.*growMostlyKeys'/.test(read('api/backup.ts')),
-    'coach-knowledge / relationship / team-intelligence / practice stores are in the SHARED grow-mostly constant that both client + server import — a second emptier device can no longer wipe the cloud copy');
+  check('Bug-hunt: backup grow-mostly guards the accumulating learned stores, and OTHER PEOPLE are not in the backup',
+    /**
+     * 2026-07-25 (deep audit S2) — the client + server lists were unified into ONE shared constant
+     * (services/cloudSync/growMostlyKeys.ts) so they can't drift. Both sides must import it.
+     *
+     * 2026-08-31 (Tim) — this guard CORRECTLY FAILED when the four social stores were removed from
+     * the backup, and that failure is the point: it originally asserted relationship-store-v1 and
+     * team-intelligence-store-v1 were grow-mostly protected. They are not protected any more
+     * because they are no longer UPLOADED — they hold other players' names and profiles, and the
+     * account holder backs up their own data only.
+     *
+     * So the assertion moves rather than being deleted. Two halves now:
+     *   1. the learned stores that ARE still backed up keep their anti-clobber protection, and
+     *   2. the social stores are absent from BOTH lists — excluded from the backup, and therefore
+     *      absent from the guard list too, which must remain a subset.
+     * Half 2 is the one with teeth: re-adding a social store to the backup fails here immediately,
+     * rather than quietly shipping third-party data again.
+     */
+    (() => {
+      const SOCIAL = ['family-store-v1', 'guest-profiles-v1', 'relationship-store-v1', 'team-intelligence-store-v1'];
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { BACKED_UP_STORE_KEYS } = require('../../services/cloudSync/snapshot');
+      const stillProtected = ['coach-knowledge-v1', 'club-stats-v1', 'caddie-memory-v1', 'practice-store']
+        .every(k => GROW_MOSTLY_KEYS.includes(k));
+      const socialGone = SOCIAL.every(k => !GROW_MOSTLY_KEYS.includes(k) && !BACKED_UP_STORE_KEYS.includes(k));
+      const shared = /from '.*growMostlyKeys'/.test(read('services/cloudSync/snapshot.ts')) &&
+        /from '.*growMostlyKeys'/.test(read('api/backup.ts'));
+      if (!socialGone) console.log('   a social/relationship store is back in the backup — that is other people\'s data');
+      return stillProtected && socialGone && shared;
+    })(),
+    'the learned stores that are still backed up keep their anti-clobber protection, both client and server import the one shared list, and no social/relationship store appears in either — other players\' names and profiles do not leave the device');
 
   check('Fault→workout map: curated golf exercises per fault, aliases normalized, honest-empty otherwise', (() => {
     // 2026-07-21 — curated (not AI-generated) fault→exercise table; keys match the analysis fault

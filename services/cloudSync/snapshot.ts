@@ -63,6 +63,25 @@ export const NOT_BACKED_UP_STORE_KEYS: string[] = [
   // On-device diagnostics that are emailed out when they matter; restoring stale reports would
   // resurrect issues the tester already sent and moved past.
   'issue-log-v1',
+  /**
+   * 2026-08-31 (Tim) — OTHER PEOPLE'S DATA. Removed from the backup, not filtered inside it.
+   *
+   * These four hold names and profiles of people who are not the account holder: family members,
+   * guests played with, relationships, and team-mates. Backing up the account holder's own data is
+   * one thing; uploading a roster of third parties who never agreed to it is another, and it is not
+   * something a redaction layer fixes — the fix is to stop collecting them.
+   *
+   * Deleted from BACKED_UP_STORE_KEYS and from GROW_MOSTLY_KEYS (that list must stay a subset).
+   * They still live on the device and still work; they simply do not leave it.
+   *
+   * Existing beta backups DO still contain these keys. applySnapshot iterates what the payload
+   * holds rather than what the allowlist expects, so an old snapshot restores them harmlessly and a
+   * new one omits them — no migration, and no failure either way.
+   */
+  'family-store-v1',
+  'guest-profiles-v1',
+  'relationship-store-v1',
+  'team-intelligence-store-v1',
 ];
 
 export const BACKED_UP_STORE_KEYS: string[] = [
@@ -89,10 +108,7 @@ export const BACKED_UP_STORE_KEYS: string[] = [
   // ── Goals / social / relationships ────────────────────────────
   'tee-goals-v1',
   'tournament-v1',
-  'family-store-v1',
-  'guest-profiles-v1',
-  'relationship-store-v1',
-  'team-intelligence-store-v1',
+
   // ── Learned CNS-adjacent signals (hard to recreate) ───────────
   'vocabulary-profile-v1',   // learned phrase → meaning map (voice)
   // 2026-08-12 (completeness sweep) — the caddie learns from the whole DIALOGUE, not just structured
