@@ -788,7 +788,27 @@ three and fails on a fourth, so the class cannot grow while the decision waits.
 the legacy path is still wanted for anything. Doing neither leaves three pieces of code that read as
 live choices and are not.
 
-## §24 — TIM'S CALL: course-geometry abandons up to 40s of work the server is still doing (2026-08-31)
+## §24 — **DECIDED AND FIXED 2026-08-31.** Wait for the build, stay honest, upgrade on arrival
+
+> **Tim's call:** *"You can wait as long as it needs to load but show accurate load status and load as
+> fast as possible."*
+>
+> Both client fetches raised 30s → **85s**, past the server's own 70s Overpass budget and inside the
+> 90s platform ceiling. The background refresh too — it is stale-while-revalidate, so a heal that
+> always aborts leaves a stale entry stale forever, and nothing waits on it.
+>
+> **The other two asks were already built**, which is exactly why waiting longer is safe rather than a
+> regression: servable geometry returns from cache without touching the network, a failure still
+> falls back to bundled, the MAPPING badge is cleared in a `.finally` so it cannot stick, and a landed
+> build bumps `completions` so every yardage re-derives on the spot. The screen already showed the
+> best thing it had immediately and upgraded on arrival — **the only thing missing was the patience.**
+>
+> **A guard was defending the defect** — `LOCK: geometry fetch outlives a slow server` asserted the
+> literal `AbortSignal.timeout(30_000)`, which cannot outlive 70s. Its title said the right thing and
+> its assertion contradicted it. Now derived from the server constant, plus a second guard requiring
+> both fetches to outlast the budget and the honest-status machinery to remain.
+
+### Original write-up, kept for the reasoning
 
 Found sweeping every client timeout after Tim's Menifee field report. **`course-locate` was the
 clear-cut instance and is FIXED** (client 9s → 20s; it was quitting 6s before the platform, with only
