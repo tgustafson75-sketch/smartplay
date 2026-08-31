@@ -9,19 +9,30 @@
  * "coming soon" placeholder.
  */
 
-export const LEGAL_EFFECTIVE_DATE = 'July 18, 2026';
+/**
+ * 2026-08-30 — the TERMS changed today (sections 1, 10 and 20); the Privacy Policy did not, and
+ * keeps its own July 18 date below. Nothing reads this constant, so it documents rather than drives.
+ *
+ * NOTE FOR WHOEVER DECIDES: there is NO re-consent mechanism. `termsAcceptedAt` is a bare timestamp
+ * that is never compared against this date, so bumping it does not re-prompt anyone who already
+ * accepted. The date is now honest about when the text changed; whether existing users should be
+ * asked again is a product/legal call, not something this line does.
+ */
+export const LEGAL_EFFECTIVE_DATE = 'August 30, 2026';
 
 export const TERMS_OF_SERVICE = `# SmartPlay Caddie Terms of Service
 
-**Effective Date:** July 18, 2026
+**Effective Date:** August 30, 2026
 
 Welcome to SmartPlay Caddie ("SmartPlay Caddie," "we," "our," or "us"). These Terms of Service ("Terms") govern your access to and use of the SmartPlay Caddie mobile application, website, services, software, and related features (collectively, the "Service").
 
-By creating an account, accessing, or using the Service, you agree to be bound by these Terms. If you do not agree, do not use the Service.
+By accessing or using the Service, you agree to be bound by these Terms. If you do not agree, do not use the Service.
 
 ## 1. Eligibility
 
-You must be at least 18 years old, or the age of majority in your jurisdiction, to create an account. If you are under 18, you may only use the Service with the consent and supervision of a parent or legal guardian.
+SmartPlay Caddie does not require you to create an account. If you are under 18, you may use the Service only with the consent and supervision of a parent or legal guardian.
+
+The Family feature lets an adult add other people, including children, to a roster they manage. If you add someone to a roster, you confirm that you are their parent or legal guardian, or that you have that person's permission, and you are responsible for their use of the Service and for the information you enter about them.
 
 ## 2. Description of the Service
 
@@ -118,16 +129,11 @@ These features:
 
 Use them at your own discretion.
 
-## 10. User Accounts
+## 10. Your Information
 
-You agree to:
+SmartPlay Caddie has no accounts and no passwords. Your profile, rounds, swing data and settings are stored on your device.
 
-* provide accurate information
-* maintain the security of your account
-* keep your password confidential
-* notify us of unauthorized use
-
-You are responsible for all activity occurring under your account.
+You agree to provide accurate information where you choose to enter it, and not to enter another person's information without their permission.
 
 ## 11. User Content
 
@@ -197,7 +203,7 @@ You agree to defend, indemnify, and hold harmless SmartPlay AI LLC and its affil
 
 ## 20. Termination
 
-We may suspend or terminate your account if you violate these Terms or misuse the Service.
+We may suspend or discontinue your access to the Service, in whole or in part, if you violate these Terms or misuse the Service.
 
 You may stop using the Service at any time.
 
