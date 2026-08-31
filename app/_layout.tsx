@@ -530,9 +530,23 @@ function AppNavigator() {
        *
        * This effect now only CARRIES OUT the plan. Anything that decides belongs in the module.
        */
+      /**
+       * 2026-08-30 (full audit) — RE-READ THE EMAIL. `profile` is a getState() snapshot taken above,
+       * and the owner mirror a few lines up writes through setEmail — which replaces the state
+       * object rather than mutating this one, so `profile.email` here is still the PRE-MIRROR value
+       * (verified against zustand directly, not assumed).
+       *
+       * The stale read predates today's work and was harmless while the kill-switch granted lifetime
+       * to everyone regardless. It stops being harmless the moment billing turns on: on the first
+       * launch after an install, the mirror and the owner check happen in the same tick, so an owner
+       * whose email came from the OWNER_EMAILS default rather than the env var would be handed a
+       * TRIAL instead of lifetime. It self-heals on the next launch, which is exactly what would
+       * have made it hard to believe as a bug report.
+       */
+      const ownerEmail = usePlayerProfileStore.getState().email;
       const plan = planTrialLifecycle({
         subscriptionsEnabled: SUBSCRIPTIONS_ENABLED,
-        isOwner: isOwnerEmail(profile.email) || (process.env.EXPO_PUBLIC_OWNER_EMAIL ?? '').trim().length > 0,
+        isOwner: isOwnerEmail(ownerEmail) || (process.env.EXPO_PUBLIC_OWNER_EMAIL ?? '').trim().length > 0,
         status: subscription_status,
         promoExpiresAt: profile.promo_expires_at,
         firstOpenedAt: first_opened_at,

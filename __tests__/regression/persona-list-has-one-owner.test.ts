@@ -72,6 +72,41 @@ describe('isActivePersona is the owner, and is actually wired', () => {
   });
 });
 
+describe('the BRAIN tool path obeys the same list', () => {
+  it('validates switch_caddie against ACTIVE_PERSONAS, not its own array', () => {
+    // FOUND BY THE FULL AUDIT, after four other surfaces were already unified. This is the path the
+    // brain drives: a `switch_caddie` tool action checked its own ['kevin','serena','harry','custom']
+    // and called setCaddiePersonality directly — so ASKING the caddie to switch to a removed persona
+    // still worked, while the same words on the intent path were correctly refused. Same words, two
+    // outcomes, depending on which route the utterance happened to take.
+    // [[no-half-fixes-enforce-every-surface]]
+    const src = require('fs').readFileSync(
+      require('path').join(__dirname, '../../services/voice/conversationalToolDispatch.ts'), 'utf8');
+    expect(src).toMatch(/const PERSONAS = ACTIVE_PERSONAS;/);
+    expect(src).not.toMatch(/const PERSONAS = \['kevin'/);
+  });
+
+  it('has no shipped persona validator left that names a retired caddie', () => {
+    // The sweep itself, pinned. Migrations are exempt and must be: repairing old persisted data
+    // REQUIRES naming the old value, which is the same carve-out the Tank guard makes.
+    const { execSync } = require('child_process');
+    const root = require('path').join(__dirname, '../..');
+    const hits = execSync(
+      `grep -rn "\\['kevin'" --include=*.ts --include=*.tsx app services store lib components || true`,
+      { cwd: root, encoding: 'utf8' },
+    )
+      .split('\n')
+      .filter(Boolean)
+      // lib/persona.ts owns both lists by definition.
+      .filter((l: string) => !l.startsWith('lib/persona.ts'))
+      // Comments describing the defect are not validators.
+      .filter((l: string) => !/^\S+:\d+:\s*(\*|\/\/)/.test(l))
+      // Persisted-data migrations must name historical values to migrate away from them.
+      .filter((l: string) => !/settingsStore\.ts|playerProfileStore\.ts|voiceService\.ts/.test(l));
+    expect(hits).toEqual([]);
+  });
+});
+
 describe('the server prompt does not name a removed caddie', () => {
   it('never tells the model to emit a retired persona', () => {
     const src = require('fs').readFileSync(

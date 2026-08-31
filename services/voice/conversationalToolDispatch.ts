@@ -21,8 +21,17 @@ import { router } from 'expo-router';
 import { Linking } from 'react-native';
 import { useSettingsStore } from '../../store/settingsStore';
 import { getScreenContext } from '../screenContext';
+import { ACTIVE_PERSONAS, type Persona } from '../../lib/persona';
 
-const PERSONAS = ['kevin', 'serena', 'harry', 'custom'] as const;
+/*
+ * 2026-08-30 (full audit) — THE FIFTH LIST. Four surfaces were unified onto ACTIVE_PERSONAS earlier
+ * today: the local precheck regex, changeSettingHandler's validator, its parameter schema, and the
+ * server prompt. This one was missed, and it is the one the BRAIN drives — a `switch_caddie` tool
+ * action validated against its own array and called setCaddiePersonality directly, so asking the
+ * caddie to switch to a removed persona still worked through the tool path while the same words
+ * spoken to the intent path were correctly refused. [[no-half-fixes-enforce-every-surface]]
+ */
+const PERSONAS = ACTIVE_PERSONAS;
 
 // 2026-07-30 (Tim — "in the tell-your-caddie mode, caddie keeps opening SwingLab while I'm
 // telling it my faults; the conversation is meant to gather info and build the profile by
@@ -148,7 +157,7 @@ function dispatchOne(a: AnyAction): void {
       if (a.personality && (PERSONAS as readonly string[]).includes(a.personality)) {
         // setCaddiePersonality fires its own spoken handoff intro; sync the
         // custom-caddie flag exactly like the tab cycler does.
-        useSettingsStore.getState().setCaddiePersonality(a.personality as (typeof PERSONAS)[number]);
+        useSettingsStore.getState().setCaddiePersonality(a.personality as Persona);
         try {
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           (require('../../store/playerProfileStore') as typeof import('../../store/playerProfileStore'))
