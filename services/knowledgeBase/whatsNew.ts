@@ -28,6 +28,10 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'Swing analysis comes back quicker. Reading your body — rotation, weight shift, balance — used to wait until the rest of the analysis had finished before it even started. It now runs while I am still reading the swing, so the breakdown is ready sooner. Nothing to change; it is just less waiting.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'Your custom caddie now sounds like the caddie you built, straight away. There were two places to choose their voice — a male/female switch and a "base caddie" picker — and they could disagree, so a caddie you made female could speak in a male voice, or swap over the next time you opened the app. There is one choice now, and it takes effect the moment you make it.',
     howTo: 'My Caddie, Base caddie: Kevin, Serena or Harry. That one picker sets the voice. The old male/female switch is gone, and your existing caddie keeps the voice it already had.',
   },
