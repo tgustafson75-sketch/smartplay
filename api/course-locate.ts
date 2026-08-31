@@ -159,12 +159,49 @@ export /**
  * at a brand name, and it is checked BEFORE the `golf_course` acceptance — these places genuinely
  * carry both tags, so order is the whole point.
  */
-const NOT_A_COURSE_TYPES = new Set(['indoor_golf_course', 'miniature_golf_course', 'golf_shop']);
+const NOT_A_COURSE_TYPES = new Set(['indoor_golf_course', 'miniature_golf_course', 'golf_shop', 'sporting_goods_store']);
+
+/**
+ * 2026-08-31 (adversarial audit A) — THE PLACES-API-(NEW) PATH WENT LIVE AND HAD NEVER BEEN JUDGED.
+ *
+ * Every previous rule here was written against the LEGACY fallback, because New had been 403 on the
+ * key for as long as anyone had measured — `source` was `places_legacy` on every query. The key
+ * restriction was fixed, `source` flipped to `places_new`, and the primary path started serving
+ * traffic for the first time with a classifier that had never seen its output.
+ *
+ * What it returns, all tagged `golf_course` by Google and all previously accepted outright:
+ *   TPC Sawgrass No. 10 Green · 17th Green (Island) · TPC Sawgrass 17th hole tee box  → SUB-FEATURES
+ *   Agronomic Operation Center · Pebble Beach Pro Shop                                → FACILITIES
+ *   THE PLAYERS Championship                                                          → an EVENT
+ *   The Lodge at Pebble Beach · The Inn at Spanish Bay · Ponte Vedra Inn & Club        → HOTELS
+ *
+ * Offering a player "TPC Sawgrass No. 10 Green" as somewhere to play a round is the same defect as
+ * offering them a hotel: a confidently wrong answer that looks like a real one.
+ */
+/** One green, one tee, one hole — a piece OF a course, never a course. */
+const SUB_FEATURE_RE = /\b(no\.?\s*\d+|#\d+|\d+\s*(st|nd|rd|th))\b|\b(tee box|hole)\b|\bgreen\b\s*(\(|$)/i;
+/** Somewhere on the property that is not somewhere you play. */
+const FACILITY_RE = /\b(agronom\w*|maintenance|operations?\s+cent(er|re)|pro\s*shop|clubhouse|academy|learning cent(er|re))\b/i;
+/** Types that mean "you sleep here". A course on a resort keeps them — its NAME has to say course. */
+const LODGING_TYPES = new Set(['hotel', 'resort_hotel', 'lodging', 'motel', 'guest_house', 'bed_and_breakfast']);
 
 export function isGolfPlace(p: Located): boolean {
   if (NOT_A_COURSE_RE.test(p.name)) return false;
+  if (SUB_FEATURE_RE.test(p.name)) return false;
+  if (FACILITY_RE.test(p.name)) return false;
+  // An EVENT played at a course is not the course. "Championship Course" survives on its course noun.
+  if (/\bchampionship\b/i.test(p.name) && !COURSE_NOUN_RE.test(p.name)) return false;
   // Disqualifying TYPE beats every other signal, including golf_course sitting right beside it.
   if (p.types.some((t) => NOT_A_COURSE_TYPES.has(t))) return false;
+
+  /**
+   * A lodging record must NAME itself a course. Google tags the hotel on a golf property
+   * `golf_course`, so "The Lodge at Pebble Beach" and "Pebble Beach Golf Links" arrive with the same
+   * type set and only the name separates them. Checked BEFORE the golf_course acceptance for exactly
+   * that reason — the brand tokens let "TPC Sawgrass" through on its own name.
+   */
+  if (p.types.some((t) => LODGING_TYPES.has(t)) && !COURSE_NOUN_RE.test(p.name) && !/\bTPC\b|\bPGA\b/i.test(p.name)) return false;
+
   // Google TYPED it a course — the Places-API-(New) path, and the only unambiguous signal there is.
   if (p.types.some((t) => t === 'golf_course')) return true;
 

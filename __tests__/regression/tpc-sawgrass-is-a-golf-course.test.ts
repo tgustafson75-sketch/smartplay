@@ -113,3 +113,64 @@ describe('a simulator bay is not somewhere you play eighteen', () => {
     }
   });
 });
+
+/**
+ * 2026-08-31 (adversarial audit A, second finding) — THE PLACES-API-(NEW) PATH WENT LIVE AND HAD
+ * NEVER BEEN JUDGED.
+ *
+ * Every rule above was written against the LEGACY fallback, because New had been 403 on the key for
+ * as long as anyone had measured. The key restriction was fixed, `source` flipped from
+ * `places_legacy` to `places_new`, and the primary path began serving traffic for the first time
+ * through a classifier that had never seen its output.
+ *
+ * Rows below are REAL, captured from production with `debug: true` at Pebble Beach and TPC Sawgrass
+ * on 2026-08-31, types verbatim. Google tags every one of them `golf_course`.
+ */
+describe('the new primary path returns pieces of courses, hotels and an event', () => {
+  it('DROPS a single green, tee box or hole — a piece OF a course is not a course', () => {
+    for (const n of [
+      'TPC Sawgrass No. 10 Green',
+      'TPC Sawgrass No. 9 Green',
+      '17th Green (Island) TPC Sawgrass',
+      'TPC Sawgrass 17th hole tee box',
+    ]) {
+      expect([n, isGolfPlace(row(n, ['golf_course', 'athletic_field', 'point_of_interest']))]).toEqual([n, false]);
+    }
+  });
+
+  it('DROPS the maintenance yard and the pro shop', () => {
+    expect(isGolfPlace(row('Agronomic Operation Center', ['golf_course', 'athletic_field']))).toBe(false);
+    expect(isGolfPlace(row('Pebble Beach Pro Shop', ['golf_course', 'resort_hotel', 'hotel', 'sporting_goods_store']))).toBe(false);
+  });
+
+  it('DROPS the tournament — an event played at a course is not the course', () => {
+    expect(isGolfPlace(row('THE PLAYERS Championship', ['golf_course', 'athletic_field', 'point_of_interest']))).toBe(false);
+    // ...but a course actually NAMED Championship Course survives on its course noun.
+    expect(isGolfPlace(row('The Championship Course', ['golf_course', 'athletic_field']))).toBe(true);
+  });
+
+  it('DROPS the hotel on the property, which Google also tags golf_course', () => {
+    for (const [n, t] of [
+      ['The Lodge at Pebble Beach', ['golf_course', 'resort_hotel', 'hotel', 'athletic_field']],
+      ['The Inn at Spanish Bay', ['hotel', 'golf_course', 'resort_hotel', 'athletic_field']],
+      ['Pebble Beach Resorts', ['golf_course', 'resort_hotel', 'hotel', 'athletic_field']],
+      ['Ponte Vedra Inn & Club', ['resort_hotel', 'wedding_venue', 'hotel', 'lodging']],
+    ] as const) {
+      expect([n, isGolfPlace(row(n, [...t]))]).toEqual([n, false]);
+    }
+  });
+
+  it('KEEPS the real courses that arrive with the SAME hotel types — only the name separates them', () => {
+    for (const [n, t] of [
+      ['Pebble Beach Golf Links', ['golf_course', 'tourist_attraction', 'hiking_area', 'resort_hotel']],
+      ['Spyglass Hill Golf Course', ['golf_course', 'resort_hotel', 'hotel', 'athletic_field']],
+      ['The Links at Spanish Bay', ['golf_course', 'athletic_field', 'point_of_interest']],
+      ['TPC Sawgrass', ['golf_course', 'resort_hotel', 'hotel', 'lodging']],
+      ['Cypress Point Club', ['golf_course', 'tourist_attraction', 'athletic_field']],
+      ['Monterey Peninsula Country Club', ['golf_course', 'athletic_field']],
+      ['Del Monte Golf Course', ['golf_course', 'tourist_attraction', 'athletic_field']],
+    ] as const) {
+      expect([n, isGolfPlace(row(n, [...t]))]).toEqual([n, true]);
+    }
+  });
+});
