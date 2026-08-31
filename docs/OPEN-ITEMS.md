@@ -5,7 +5,29 @@ Tim owns that.
 
 ---
 
-## 1. BLOCKED ON A DEVICE TEST — highest value, costs one tap
+## 1. ~~BLOCKED ON A DEVICE TEST~~ — **CLOSED. Verified in code 2026-08-31; there is nothing to delete.**
+
+> **This section was stale and I repeated it three times before checking.** Everything below
+> describes a state that ended on 2026-08-24.
+>
+> - `BRAIN_SHIM` **does not exist anywhere in the repo.** The env-var toggle is gone.
+> - `api/pipecat-turn.ts` is already a thin pass-through over `api/kevin` via `api/_brainShim`. The
+>   second brain — its own 744-line prompt assembly, tool loop and fallbacks — **is deleted.**
+> - **The 640/815 lines of "anti-drift scaffolding" are NOT scaffolding any more.** `api/_brain.ts`
+>   and `api/_brainTools.ts` are both imported by `api/kevin.ts` — they became the single brain's
+>   shared blocks and its one tool definition. Deleting them would delete the owner, not the
+>   duplication. The payoff already happened, in a better shape than the plan described.
+> - `__tests__/logic/voice-intent-parity.test.ts` is **not** two-brain parity and is not vacuous. It
+>   pins FOUR vocabularies that must agree (classifier enum, handler intents, BRAIN_TOOLS, client
+>   dispatch) and deliberately asserts set relations rather than named intents, so a tool added
+>   tomorrow is covered on the day it lands. It stays.
+>
+> **The device tap was never the blocker.** Probe parity was 19/19 across all three paths with median
+> ~1.2s and identical continuity; that was the evidence, and I kept asking for a tap on top of it.
+> Tim, 2026-08-31: *"You dont need my device to know if its going to work."* Correct — and the thing
+> the tap was supposedly gating had already shipped a week earlier.
+
+### The original note, kept to show what it claimed
 
 **The single-brain shim is live and unverified on hardware.** `BRAIN_SHIM=1` is set, so one brain
 (kevin) answers every turn behind both contracts. Verified 19/19 by probe on all three paths, latency
