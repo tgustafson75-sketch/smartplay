@@ -142,9 +142,42 @@ Done 08-24 (`3d278d0e`): the 27 files referenced by nothing at all (all of `ranc
 `webster-dudley`, whose maps are literally `{}`) were deleted. `assets/courses` is now 459 on disk /
 459 required — a clean 1:1. That was repo weight, not binary weight; those were never bundled.
 
-## 7. UNSWEPT CODE
-`holeGeometryDerivation` and the download/orchestrator path — both network-bound, so device-only
-verification. Everything else on the critical path has had an invariant sweep.
+## 7. UNSWEPT CODE — **SWEPT 2026-08-31.** One live defect, one untested honesty rule
+
+> **`holeGeometryDerivation` came out CLEAN**, which is worth saying plainly rather than padding.
+> Every `Number.isFinite` guard is present, `found_green=false` genuinely returns null, the >800m
+> sanity check on an estimated green holds, and `estimated: true` is force-stamped on write. Derived
+> geometry lives under a PHYSICALLY SEPARATE storage key from real geometry, and both consumers
+> prefer real (`getHoleGeometry(...) ?? getDerivedHoleGeometry(...)`). Its header's claims all held.
+>
+> **But the honesty rule it exists to serve had ZERO test coverage.** `courseDataOrchestrator` was
+> untested, and it asserted the important part in a COMMENT — "which the confidence scorer below
+> down-weights" — the exact shape of claim that has been false repeatedly here. It is TRUE, and now
+> proven: `__tests__/regression/an-ai-guessed-green-is-never-surveyed-truth.test.ts` shows "High
+> confidence" is **unreachable** with an estimated green by maximising every other input across 112
+> combinations, not by sampling one case — while the same hole with real geometry still reaches 80+,
+> so the cap is the estimate rather than a broken scorer. Break-tested red twice.
+>
+> ### The live defect: a server-side fix does not reach a client-side cache
+>
+> `locateNearbyCourses` caches the discovery list and serves it **when the live call fails — on a
+> golf course, the one place it has to work.** Until 2026-08-31 the server matched courses by NAME
+> only, so **every device that located before the fix is holding a poisoned list**: the course the
+> player is standing on missing, and at Sawgrass a hotel offered as the nearest place to play.
+>
+> The cache has **no TTL by design** (courses do not move, and it is only read after a live call has
+> already failed), so the version segment is the ONLY invalidation that exists. Left at `v1`, those
+> devices would keep being handed the wrong club offline **indefinitely, long after the server was
+> right**. Bumped to `course_locate_v2`. [[no-half-fixes-enforce-every-surface]]
+>
+> A guard now pins the version past the poisoned generation, asserts the cache is strictly a
+> post-failure fallback **by code position** (a live answer returns before `readCache` is reached),
+> and that an empty list is never cached — which would pin "no courses here" onto a real place. Its
+> first draft asserted a sentence from a comment and the harness's own prose ratchet rejected it,
+> correctly.
+>
+> **Still device-only (Tier C, Tim):** the actual download path — bytes on disk, resumability, and
+> behaviour on a real flaky course network. Code-traced and invariant-checked; not field-verified.
 
 ## 8. ⚠️ SYSTEMIC — guards that pin defects. **SWEEP RUN 2026-08-31; 2 more found and fixed**
 

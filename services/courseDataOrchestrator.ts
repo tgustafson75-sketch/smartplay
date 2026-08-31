@@ -375,7 +375,12 @@ export function getCourseHeroImagery(
 
 // ─── Confidence scoring ──────────────────────────────────────────────────
 
-function scoreConfidence(input: {
+/**
+ * 2026-08-31 (OPEN-ITEMS §7 sweep) — EXPORTED so the honesty invariant can be TESTED rather than
+ * asserted in a comment. This file had zero test coverage, and what it enforces is the rule that an
+ * AI-guessed green must never be presented as surveyed truth. [[illustration-data-points]]
+ */
+export function scoreConfidence(input: {
   hasTee: boolean;
   hasGreen: boolean;
   hasGreenFrontBack: boolean;
@@ -425,7 +430,7 @@ function scoreConfidence(input: {
   return { geometry, polygons, imagery, vision, overall };
 }
 
-function buildConfidenceLabel(
+export function buildConfidenceLabel(
   c: DataConfidence,
   imagery: CourseHoleView['imagery_source'],
   cached: boolean,

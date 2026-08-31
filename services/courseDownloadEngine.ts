@@ -90,7 +90,25 @@ export async function locateNearbyCourses(
    * two points on the same property. Served ONLY when the live call fails, so a working network
    * always wins and a stale list can never mask a real answer.
    */
-  const cacheKey = `course_locate_v1:${lat.toFixed(2)}:${lng.toFixed(2)}`;
+  /**
+   * 2026-08-31 (OPEN-ITEMS §7 sweep) — BUMPED v1 → v2, and the bump is the point.
+   *
+   * This cache stores whatever the server returned, and until today the server was returning WRONG
+   * discovery results: courses matched by NAME only, so a course branded rather than described
+   * (TPC Sawgrass) was missing entirely, and a hotel on the property was offered as the nearest
+   * place to play. Every device that located courses before the fix is holding a poisoned list.
+   *
+   * Because this cache is served exactly when the network fails — on a course, which is the whole
+   * reason it exists — those devices would keep being handed the wrong club offline, indefinitely,
+   * long after the server was fixed. A server-side fix does not reach a client-side cache.
+   * [[no-half-fixes-enforce-every-surface]]
+   *
+   * There is deliberately NO TTL: courses do not move, and this is only ever read after a live call
+   * has already failed, so a stale list can never mask a real answer. The version segment is the
+   * only invalidation, which is why it has to be bumped whenever the SHAPE OR CORRECTNESS of what
+   * the server returns changes — not just when the type changes.
+   */
+  const cacheKey = `course_locate_v2:${lat.toFixed(2)}:${lng.toFixed(2)}`;
   const readCache = async (): Promise<NearbyCourse[] | null> => {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -106,6 +124,9 @@ export async function locateNearbyCourses(
       if (courses.length === 0) return;
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const AS = (require('@react-native-async-storage/async-storage') as { default: typeof import('@react-native-async-storage/async-storage').default }).default;
+      // `at` is written for diagnostics only — nothing reads it, deliberately (see the no-TTL note
+      // above). Recorded here rather than dropped so a field log can still say how old a served
+      // fallback was, but it is not an expiry and must not be mistaken for one.
       await AS.setItem(cacheKey, JSON.stringify({ courses, at: Date.now() }));
     } catch { /* caching never breaks a working lookup */ }
   };

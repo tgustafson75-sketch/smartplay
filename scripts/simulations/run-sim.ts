@@ -13056,6 +13056,49 @@ check('LOCK: course discovery has ONE budget — the client waits longer than th
   })(),
   'course-locate spends less than the client waits and less than the platform allows, the primary cannot starve the fallback, and the deadline is consulted rather than declared');
 
+check('LOCK: the offline course-locate cache is versioned, and its version moved with the fix',
+  /**
+   * 2026-08-31 (OPEN-ITEMS §7 sweep) — a server-side fix does not reach a client-side cache.
+   *
+   * `locateNearbyCourses` caches the discovery list and serves it when the live call fails — which
+   * is on a golf course, the one place it has to work. Until 2026-08-31 the server returned courses
+   * matched by NAME only, so every device that located before the fix holds a list with the course
+   * it was standing on MISSING and, at Sawgrass, a hotel offered as the nearest place to play.
+   * Without a version bump those devices keep being handed the wrong club offline, indefinitely.
+   * [[no-half-fixes-enforce-every-surface]]
+   *
+   * The cache has NO TTL by design (courses do not move, and it is only read after a live call has
+   * already failed), so the version segment is the ONLY invalidation there is. That makes it a
+   * correctness surface, not a type-versioning convenience: it must move whenever what the server
+   * returns changes in shape OR in correctness.
+   */
+  (() => {
+    const src = read('services/courseDownloadEngine.ts');
+    const m = /const cacheKey = `course_locate_v(\d+):/.exec(src);
+    if (!m) { console.log('   course-locate cache key is unversioned or renamed'); return false; }
+    const version = Number(m[1]);
+    // v1 is the poisoned generation written before the name-matching fix. It may never be served again.
+    if (version < 2) { console.log(`   course_locate cache is still v${version} — v1 holds pre-fix results`); return false; }
+    /**
+     * Asserted against CODE, not prose. The first version of this checked for the sentence
+     * "Served ONLY when the live call fails" — and the harness's own prose ratchet rejected it,
+     * correctly. A comment promising a fallback ordering is not the ordering.
+     * [[strip-comments-before-a-guard-matches]]
+     */
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+    // A successful live answer RETURNS before the cache is ever read...
+    const liveWins = /if \(!out\.failure\) \{[\s\S]{0,120}?writeCache\(out\.courses\);[\s\S]{0,40}?return out;[\s\S]{0,40}?\}/.test(code);
+    // ...and the read happens only after that early return, on the failure path.
+    const readAt = code.indexOf('await readCache()');
+    const returnAt = code.indexOf('return out;');
+    const fallbackOnly = liveWins && readAt > returnAt && returnAt > -1;
+    if (!fallbackOnly) console.log('   the cache is not strictly a post-failure fallback');
+    // An empty list is never cached — that would pin "no courses here" onto a real place.
+    const neverCachesEmpty = /if \(courses\.length === 0\) return;/.test(code);
+    return fallbackOnly && neverCachesEmpty;
+  })(),
+  'the offline discovery cache is versioned past the generation written before the name-matching fix, is only served when the live call fails, and never caches an empty list');
+
 check('LOCK: the ANALYSIS path has one ordered budget too — server < platform < client',
   /**
    * 2026-08-31 (OPEN-ITEMS §8 sweep, magic-literal class).
