@@ -74,6 +74,11 @@ interface SettingsState {
    *  the surface they already see. Tim: don't bury the toggle in
    *  Settings — surfaced in the Caddie-tab expandable actions row. */
   coachModeEnabled: boolean;
+  /**
+   * 2026-08-31 (§22c) — a MIRROR of services/caddieGender.genderForPersona(caddiePersonality),
+   * never a source. It is kept as a field only because ~60 call sites read it synchronously on the
+   * speak path. There is no setter: three writers disagreeing about this is what §22c fixed.
+   */
   voiceGender: 'male' | 'female';
   language: 'en' | 'es' | 'zh';
   /**
@@ -323,9 +328,11 @@ interface SettingsState {
   // Vision/Motion/Play/Settings pill row + Tap-to-Ask pill + manual
   // SHOT RESULT backup entry + caddie advice). Defaults false so Full
   // Mode stays the out-of-box experience for everyone. Pure render-path
-  // switch — voice plumbing is shared with Full Mode (no remount, no
-  // audio interruption when flipped).
-  cockpitMode: boolean;
+  // 2026-08-31 (§22b) — `cockpitMode` DELETED. The store field had ZERO readers:
+  // app/(tabs)/caddie.tsx declares its own local `const cockpitMode = false`, a different
+  // binding entirely, and CockpitCaddieScreen only mentioned it in a comment. It was a
+  // persisted constant with a setter nothing called. Reviving the parked cockpit screen
+  // means adding a setting then, not keeping a dead one now.
 
   // 2026-06-21 — AI provider toggle (Owner Tools). Controls which cloud
   // AI provider drives the caddie brain, intent routing, and reasoning.
@@ -352,7 +359,6 @@ interface SettingsState {
   setLocalMode: (v: boolean) => void;
   setCecilyMode: (v: boolean) => void;
   setContinuousConversationMode: (v: boolean) => void;
-  setVoiceGender: (g: 'male' | 'female') => void;
   setLanguage: (l: 'en' | 'es' | 'zh') => void;
   setResponseMode: (m: 'short' | 'neutral' | 'detailed') => void;
   setCaddiePersonality: (p: Persona) => void;
@@ -394,8 +400,6 @@ interface SettingsState {
   setKevinGreetingEnabled: (v: boolean) => void;
   setSmartVisionImagery: (v: 'curated' | 'gps' | 'auto') => void;
   setYardageMode: (v: 'live' | 'preround') => void;
-  // Phase Cockpit
-  setCockpitMode: (v: boolean) => void;
   setEnvironmentMode: (mode: 'cage' | 'range' | 'course') => void;
   setCageCanvasFeet: (feet: number) => void;
   setCameraBehindFeet: (feet: number) => void;
@@ -416,9 +420,9 @@ interface SettingsState {
   // can set is a constant, and every branch on it is half-dead code that reads as a live choice.
   // The persisted key is simply dropped: nothing reads it, and it leaves storage on the next write
   // because it is no longer in partialize.
-  // URL of the deployed Pipecat server (e.g. https://kevin.up.railway.app)
-  pipecatServerUrl: string;
-  setPipecatServerUrl: (v: string) => void;
+  // 2026-08-31 (§22b) — `pipecatServerUrl` DELETED with its setter. Its only remaining
+  // mention was a comment narrating the WebSocket scaffold removed 2026-08-23. Zero readers,
+  // no setter, and persisted to every device for a value nothing could set or read.
 }
 
 // ─── STORE ────────────────────────────────
@@ -433,7 +437,7 @@ export const useSettingsStore = create<SettingsState>()(
       // rails inside the loop handle bounded sessions, but a hot-mic
       // mode shouldn't surprise testers who didn't request it.
       continuousConversationMode: false,
-      voiceGender: 'male',
+      voiceGender: 'male', // mirror; corrected by setCaddiePersonality + the boot reconcile
       language: 'en',
       responseMode: 'neutral',
       // 2026-05-28 — Fix FS: hydration flag (see onRehydrateStorage below).
@@ -530,7 +534,6 @@ export const useSettingsStore = create<SettingsState>()(
       cameraBehindFeet: 7,
       chipSensitivity: false,
       foamBallMode: false,
-      cockpitMode: false,
       // 2026-05-22 — Ghost Rounds default ON. 95%-case is the player wants
       // to know how they're tracking against their last round at this course.
       ghostAutoActivate: true,
@@ -540,7 +543,6 @@ export const useSettingsStore = create<SettingsState>()(
       aiProvider: 'openai' as const,
       // 2026-06-24 — Usage telemetry OPT-IN, default OFF.
       analyticsOptIn: false,
-      pipecatServerUrl: '',
 
       setVoiceEnabled: (v) => set({ voiceEnabled: v }),
       // 2026-06-04 — Coach Mode toggle setter.
@@ -549,7 +551,6 @@ export const useSettingsStore = create<SettingsState>()(
       setLocalMode: (v) => set({ localMode: v }),
       setCecilyMode: (v) => set({ cecilyMode: v }),
       setContinuousConversationMode: (v) => set({ continuousConversationMode: v }),
-      setVoiceGender: (g) => set({ voiceGender: g }),
       setLanguage: (l) => {
         const prev = get().language;
         set({ language: l });
@@ -586,7 +587,14 @@ export const useSettingsStore = create<SettingsState>()(
         // selection. ElevenLabs voices are keyed by persona directly,
         // but the gender map remains the back-compat fallback.
         const prev = get().caddiePersonality;
-        const gender = p === 'serena' ? 'female' : 'male';
+        /**
+         * 2026-08-31 (§22c) — ONE OWNER. This used to be `p === 'serena' ? 'female' : 'male'`,
+         * which cannot see the custom caddie's base persona and so wrote MALE for every custom
+         * caddie, including a Serena-based one. The boot reconcile then corrected it — so the
+         * caddie's gender changed at the next app restart. Derived in one place now.
+         */
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const gender = (require('../services/caddieGender') as typeof import('../services/caddieGender')).genderForPersona(p);
         // Defensive voice-race guard (sim-202 follow-up): any caller that
         // flips persona without first stopping in-flight TTS would
         // otherwise leak the prior caddie's voice into the new persona's
@@ -779,7 +787,6 @@ export const useSettingsStore = create<SettingsState>()(
           })();
         }
       },
-      setCockpitMode: (v) => set({ cockpitMode: v }),
       setEnvironmentMode: (mode) => set({ environmentMode: mode }),
       setCageCanvasFeet: (feet) => set({ cageCanvasFeet: Math.max(1, Math.round(feet)) }),
       setCameraBehindFeet: (feet) => set({ cameraBehindFeet: Math.max(0, Math.round(feet)) }),
@@ -809,7 +816,6 @@ export const useSettingsStore = create<SettingsState>()(
           } catch { /* ignore */ }
         }
       },
-      setPipecatServerUrl: (v) => set({ pipecatServerUrl: v }),
     }),
     {
       name: 'settings-store-v2',
@@ -966,9 +972,8 @@ export const useSettingsStore = create<SettingsState>()(
         if (version < 13) {
           if (p.aiProvider == null) p.aiProvider = 'gemini';
         }
-        if (version < 14) {
-          if (p.pipecatServerUrl == null) p.pipecatServerUrl = '';
-        }
+        // v14 — 2026-06-22 — seeded `pipecatServerUrl`; that key was deleted 2026-08-31 (§22b).
+        // Persisted copies simply fall out of storage on the next write, as voiceOrchestrator did.
         // v15 — 2026-06-22 — Pipecat became the default brain. The key it seeded
         // (`voiceOrchestrator`) was deleted 2026-08-29; see the type declaration above.
         // v16 — 2026-06-24 — usage telemetry opt-in added. Seed FALSE for
@@ -1028,7 +1033,7 @@ export const useSettingsStore = create<SettingsState>()(
         localMode: s.localMode,
         cecilyMode: s.cecilyMode,
         continuousConversationMode: s.continuousConversationMode,
-        voiceGender: s.voiceGender,
+        voiceGender: s.voiceGender, // mirror, persisted only so a cold read before hydration agrees
         language: s.language,
         responseMode: s.responseMode,
         caddiePersonality: s.caddiePersonality,
@@ -1075,11 +1080,9 @@ export const useSettingsStore = create<SettingsState>()(
         cameraBehindFeet: s.cameraBehindFeet,
         chipSensitivity: s.chipSensitivity,
         foamBallMode: s.foamBallMode,
-        cockpitMode: s.cockpitMode,
         ghostAutoActivate: s.ghostAutoActivate,
         aiProvider: s.aiProvider,
         analyticsOptIn: s.analyticsOptIn,
-        pipecatServerUrl: s.pipecatServerUrl,
         // watchConnected lives in watchStore; not persisted here
       }),
       // 2026-05-28 — Fix FS: post-splash audio race fix. settingsStore

@@ -117,10 +117,14 @@ interface PlayerProfileState {
   customCaddiePortraitB64: string | null;
   useCustomCaddie: boolean;
   // 2026-06-12 (Tim) — the custom caddie keeps its generated FACE but uses a real voice:
-  // this toggle picks the default fallback voice (male → Kevin's onyx, female → Serena's
-  // nova) for any line the user hasn't personally recorded. So a custom caddie always
-  // speaks even with zero recorded clips. Default male.
-  customCaddieGender: 'male' | 'female';
+  // 2026-08-31 (§22c) — `customCaddieGender` DELETED. It picked the custom caddie's fallback
+  // voice (male → Kevin's onyx, female → Serena's nova) — which is exactly what
+  // customCaddieBasePersona has done since 2026-07-30, with Harry as a third option. Two controls
+  // owned one question, and they were free to disagree: the boot reconcile derived the caddie's
+  // gender from THIS field while the voice derived it from the base persona, so the caddie could
+  // speak in one voice and be called "he"/"she" from the other. Migration v3 below folds any
+  // female value into base persona 'serena' so nobody's caddie changes voice.
+  // [[two-owners-is-the-root-cause]]
   // 2026-06-13 — saved pre-round routine (the stretches the caddie gave, captured
   // from the conversation log). Recalled by voice pre-round; null until saved.
   preRoundRoutine: string | null;
@@ -248,7 +252,6 @@ interface PlayerProfileState {
   // source and are nulled once migrateFromProfile() runs. Write via the media
   // store's setSelfieB64 / setCustomCaddiePortraitB64.
   setUseCustomCaddie: (on: boolean) => void;
-  setCustomCaddieGender: (g: 'male' | 'female') => void;
   setPreRoundRoutine: (r: string | null) => void;
   setCustomCaddieName: (name: string | null) => void;
   setCustomCaddieVoice: (voice: string | null) => void;
@@ -313,7 +316,6 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       selfieB64: null,
       customCaddiePortraitB64: null,
       useCustomCaddie: false,
-      customCaddieGender: 'male',
       preRoundRoutine: null,
       // 2026-05-26 — Fix DY default: empty map (no clips recorded yet).
       customCaddieClips: {},
@@ -405,7 +407,6 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       setPersistentPatterns: (p) =>
         set({ persistentPatterns: p, patternsSynthesizedAt: p ? Date.now() : null }),
       setUseCustomCaddie: (on) => set({ useCustomCaddie: on }),
-      setCustomCaddieGender: (g) => set({ customCaddieGender: g === 'female' ? 'female' : 'male' }),
       setPreRoundRoutine: (r) => set({ preRoundRoutine: r && r.trim() ? r.trim() : null }),
       setCustomCaddieVoice: (voice) => set({ customCaddieVoice: voice }),
       setCustomCaddieBasePersona: (p) => set({ customCaddieBasePersona: (['kevin', 'serena', 'harry'] as const).includes(p) ? p : 'kevin' }),
@@ -472,10 +473,20 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       // personality from an earlier build. The union no longer admits it, so a stale blob would
       // otherwise keep feeding that name + voice to the brain. Map it to Kevin, matching the
       // settings v22 migration. Everything else passes through untouched.
-      version: 2,
+      // 2026-08-31 (v3) — `customCaddieGender` is gone (§22c). Anyone who had chosen FEMALE picked
+      // Serena's voice by that control's own label, so fold it into the base persona that now owns
+      // the choice — but only when the base persona is still the untouched default, since an
+      // explicit base persona is the newer and more specific statement of intent. Without this a
+      // female custom caddie would silently become male on the update.
+      version: 3,
       migrate: (s) => {
         const p = s as Record<string, unknown> | null;
         if (p && (p.customCaddieBasePersona as string) === 'tank') p.customCaddieBasePersona = 'kevin';
+        if (p && p.customCaddieGender === 'female'
+            && (p.customCaddieBasePersona == null || p.customCaddieBasePersona === 'kevin')) {
+          p.customCaddieBasePersona = 'serena';
+        }
+        if (p) delete p.customCaddieGender;
         return p as never;
       },
       // 2026-06-08 (audit #2, privacy) — keep the GHIN # OUT of the on-disk

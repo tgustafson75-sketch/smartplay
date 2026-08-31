@@ -28,6 +28,15 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'Your custom caddie now sounds like the caddie you built, straight away. There were two places to choose their voice — a male/female switch and a "base caddie" picker — and they could disagree, so a caddie you made female could speak in a male voice, or swap over the next time you opened the app. There is one choice now, and it takes effect the moment you make it.',
+    howTo: 'My Caddie, Base caddie: Kevin, Serena or Harry. That one picker sets the voice. The old male/female switch is gone, and your existing caddie keeps the voice it already had.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'Your caddie finds the course you are actually standing on. If a course was not named "something Golf Course" it could be missed entirely and you would be offered a different club nearby — then play the round on the wrong scorecard and the wrong yardages. Courses like TPC Sawgrass now come up first, and hotels on the property no longer show up as somewhere to play.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'Quiet mode is finally quiet. If you had your caddie set to Quiet — the one that says tap or type to talk — he was still chiming in about every two minutes, which is exactly as often as he does on the chattiest setting. He now says nothing at all until you ask.',
     howTo: 'Settings, how present your caddie is. Quiet means he waits for you. Active is unchanged.',
   },

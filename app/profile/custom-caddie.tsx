@@ -64,8 +64,6 @@ export default function CustomCaddieScreen() {
     customCaddieName,
     setUseCustomCaddie,
     setCustomCaddieName,
-    customCaddieGender,
-    setCustomCaddieGender,
     customCaddieVoice,
     setCustomCaddieVoice,
     customCaddieBasePersona,
@@ -780,29 +778,12 @@ export default function CustomCaddieScreen() {
             })}
           </View>
 
-          {/* 2026-06-12 (Tim) — default AI voice for any UNRECORDED line. Custom keeps its
-              generated face but always speaks: male → Kevin's voice, female → Serena's. */}
-          <Text style={styles.recorderHelp}>Default voice (for lines you don&apos;t record):</Text>
-          <View style={{ flexDirection: 'row', gap: 8, marginTop: 6, marginBottom: 4 }}>
-            {(['male', 'female'] as const).map(g => {
-              const on = (customCaddieGender ?? 'male') === g;
-              return (
-                <TouchableOpacity
-                  key={g}
-                  onPress={() => setCustomCaddieGender(g)}
-                  style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: on ? '#00C896' : '#374151', backgroundColor: on ? 'rgba(0,200,150,0.14)' : 'transparent' }}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: on }}
-                >
-                  <Ionicons name={g === 'male' ? 'man-outline' : 'woman-outline'} size={16} color={on ? '#00C896' : '#9ca3af'} />
-                  <Text style={{ color: on ? '#00C896' : '#9ca3af', fontWeight: '700', fontSize: 13 }}>
-                    {g === 'male' ? 'Male · Kevin' : 'Female · Serena'}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
+          {/* 2026-08-31 (§22c) — the male/female "Default voice" picker that stood here is GONE.
+              It set customCaddieGender, and its own label — "Male · Kevin" / "Female · Serena" —
+              describes exactly what the Base caddie control below does, with Harry as a third
+              option. Two controls owned one question and could disagree, which is how a custom
+              caddie ended up speaking in one voice and being called "he"/"she" from the other.
+              Existing female picks were folded into base persona 'serena' by playerProfile v3. */}
           {/* 2026-07-30 (Tim — "analyze the photo for my caddie and assign a fitting OpenAI voice").
               Auto-match a speaking voice to the caddie portrait, or pick one. Applies to any line the
               caddie speaks that you haven't recorded yourself. "Auto" = the male/female default above. */}

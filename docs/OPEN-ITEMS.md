@@ -633,30 +633,51 @@ three and fails on a fourth, so the class cannot grow while the decision waits.
 the legacy path is still wanted for anything. Doing neither leaves three pieces of code that read as
 live choices and are not.
 
-## §22b — STILL OPEN: the three dead setters, swept and bounded (2026-08-31)
+## §22b + §22c — **BOTH CLOSED 2026-08-31.** §22 is finished end to end
 
-The original "Related" note said `setVoiceGender`, `setCockpitMode` + `cockpitMode`, and
-`setPipecatServerUrl` are setters nothing calls. **Verified, and now swept exhaustively rather than
-spotted**: all 49 setters in `settingsStore` were checked for callers outside the store itself.
-**Exactly three have none, and they are exactly these three.** The class is bounded — nothing new
-has joined it.
+**§22b — the three dead setters are deleted.** All 49 settingsStore setters were swept for callers
+outside the store; exactly three had none, and they were the three §22 named.
 
-- **`pipecatServerUrl` + `setPipecatServerUrl` — DEAD PAIR, safe to delete.** Zero readers: the only
-  surviving mention is a comment in `hooks/usePipecatVoice.ts:75` narrating the WebSocket scaffold
-  that was deleted 2026-08-23. It is still in `partialize`, so it is persisted to every device for
-  a value nothing can set and nothing reads.
-- **`cockpitMode` + `setCockpitMode` — DEAD PAIR, but PARKED.** The STORE field has zero readers;
-  `app/(tabs)/caddie.tsx:439` declares its own local `const cockpitMode = false`, which is a
-  different binding entirely. Also persisted. Tim parked `CockpitCaddieScreen` ("keep it hidden, may
-  come back"), so this pair is the setting that screen would need.
-- **`setVoiceGender` — dead setter, LIVE field.** Deleting the setter is not just tidying: see §22c,
-  which is the reason it must not be given a caller.
+- `pipecatServerUrl` + `setPipecatServerUrl` — **deleted.** Zero readers; its last mention was a
+  comment narrating the WebSocket scaffold removed 2026-08-23. Persisted copies fall out of storage
+  on the next write, exactly as `voiceOrchestrator` did.
+- `cockpitMode` + `setCockpitMode` — **deleted.** The STORE field had zero readers:
+  `app/(tabs)/caddie.tsx` declares its own local `const cockpitMode = false`, a different binding.
+  Reviving the parked cockpit screen means adding a setting then, not keeping a dead one now.
+- `setVoiceGender` — **deleted.** `voiceGender` is now a derived mirror with no setter at all (§22c).
 
-**The guard forbids the instance, not the shape.** `LOCK: the setting nothing could set is gone, and
-cannot come back` sweeps for the literal string `voiceOrchestrator`. It cannot see the three above,
-which are the same shape. Per [[run-the-second-pass-yourself]] — *guards must forbid the SHAPE, not
-the instance* — the guard worth writing is "no persisted setting may have a setter nothing calls",
-seeded with the two parked pairs as its baseline.
+**The guard now forbids the SHAPE, not the instance.** `LOCK: no persisted setting may have a setter
+nothing calls` sweeps every settingsStore setter for a real caller, with comments stripped so a
+mention is not mistaken for a call. Baseline **EMPTY** and swept. Break-tested red by adding an
+uncalled setter — it names the offender. [[run-the-second-pass-yourself]]
+
+## §22c — CLOSED: `voiceGender` has ONE owner
+
+Three writers answered "what gender is the caddie" and disagreed for the custom caddie. There is now
+`services/caddieGender.ts :: genderForPersona()`, and all three call it:
+`settingsStore.setCaddiePersonality`, `voiceService.speak`, and **both** branches of the
+`app/_layout.tsx` boot reconcile — including the `custom → kevin` branch that used to set the persona
+without the gender, leaving Kevin carrying the custom caddie's.
+
+**The duplicate CONTROL is gone too, which is where this actually started.** `customCaddieGender` was
+a male/female picker labelled "Male · Kevin" / "Female · Serena" — precisely what
+`customCaddieBasePersona` has done since 2026-07-30, with Harry as a third option. Two controls owned
+one question and were free to disagree. The field, its setter and its picker are deleted;
+**playerProfile migration v3** folds an existing female pick into base persona `serena`, so nobody's
+caddie changes voice on the update, and an explicit base persona is never overridden.
+
+Why base persona wins: `voiceService` always sends an explicit `voice` for custom, and `api/voice`
+resolves `clientVoice ?? personaVoice ?? gender` — so the gender argument never reached the custom
+caddie's cloud voice at all. Anything else would let the pronoun and the voice disagree by
+construction.
+
+**Trap hit on the way, worth recording:** the first `caddieGender.ts` re-typed
+`['kevin','serena','harry']` to validate the store value, and a guard rejected it — that would have
+been the **sixth** list owning a persona question, in the same week five lists owning one question
+was the bug being fixed. The type is borrowed from the store now and no list is restated.
+
+Locked by `__tests__/regression/one-owner-of-caddie-gender.test.ts` (13 tests, including the
+migration) and three re-pointed sim guards that had been asserting the old inline ladder.
 
 ## §22c — NEW, needs Tim: `voiceGender` has three owners that disagree for the CUSTOM caddie (2026-08-31)
 

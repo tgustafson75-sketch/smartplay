@@ -1688,19 +1688,23 @@ export const speak = async (
   let customVoice: string | null = null;
   try {
     persona = require('../store/settingsStore').useSettingsStore.getState().caddiePersonality ?? null;
-    if (persona === 'serena') effectiveGender = 'female';
-    else if (persona === 'kevin' || persona === 'harry') effectiveGender = 'male';
-    else if (persona === 'custom') {
+    /**
+     * 2026-08-31 (§22c) — this ladder WAS the second of three disagreeing owners of caddie gender.
+     * It is now the same call every other writer makes, so the pronoun on screen, the device-TTS
+     * fallback and the cloud voice cannot drift apart. The VOICE selection below is unchanged.
+     */
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const cg = require('./caddieGender') as typeof import('./caddieGender');
+    effectiveGender = cg.genderForPersona(persona);
+    if (persona === 'custom') {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const pp = require('../store/playerProfileStore').usePlayerProfileStore.getState();
       // 2026-07-30 (Tim — "tie my custom persona to one of the caddies"). The custom caddie INHERITS its
-      // base persona's voice + gender, so it always has a real, on-character voice instead of a generic
-      // gender default. A photo-matched customCaddieVoice still wins when the user set one.
-      const base = (['kevin', 'serena', 'harry'] as const).includes(pp.customCaddieBasePersona) ? pp.customCaddieBasePersona : 'kevin';
+      // base persona's voice, so it always has a real, on-character voice instead of a generic gender
+      // default. A photo-matched customCaddieVoice still wins when the user set one.
       const BASE_VOICE: Record<string, string> = { kevin: 'onyx', serena: 'nova', harry: 'fable' };
-      effectiveGender = base === 'serena' ? 'female' : 'male';
       if (typeof pp.customCaddieVoice === 'string' && pp.customCaddieVoice) customVoice = pp.customCaddieVoice;
-      else customVoice = BASE_VOICE[base];
+      else customVoice = BASE_VOICE[cg.customBasePersona()];
     }
   } catch { /* ignore */ }
 

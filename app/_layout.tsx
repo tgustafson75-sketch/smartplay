@@ -98,6 +98,7 @@ import GlobalCaddieBar from '../components/GlobalCaddieBar';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 // 2026-05-21 — Consolidation 4: routine status logs gated.
 import { devLog } from '../services/devLog';
+import { genderForPersona } from '../services/caddieGender';
 
 // Phase Y — whenRoundStoreHydrated lives in store/roundStore.ts (was
 // inlined here originally; audit moved it to remove a brittle
@@ -319,7 +320,9 @@ function AppNavigator() {
           // spoken persona-handoff intro (setState, not setCaddiePersonality — this is a silent restore).
           useSettingsStore.setState({
             caddiePersonality: 'custom',
-            voiceGender: profile.customCaddieGender === 'female' ? 'female' : 'male',
+            // 2026-08-31 (§22c) — the THIRD disagreeing owner of gender lived on this line: it read
+            // `customCaddieGender`, while the voice read `customCaddieBasePersona`. One owner now.
+            voiceGender: genderForPersona('custom'),
             caddieAssignments: { round: 'custom', cage: 'custom', drills: 'custom', play: 'custom' },
           });
         } else if (!wantsCustom && settings.caddiePersonality === 'custom') {
@@ -327,6 +330,11 @@ function AppNavigator() {
           // safe default so we never render a broken 'custom' with no identity.
           useSettingsStore.setState({
             caddiePersonality: 'kevin',
+            // 2026-08-31 (§22c) — this branch used to set the persona WITHOUT the gender, four lines
+            // after its sibling set both. So turning off a Serena-based custom caddie left Kevin
+            // carrying her gender: "she" in the vocab banner and tutorials, and a female device-TTS
+            // fallback. The omission was invisible because it self-heals on the next persona change.
+            voiceGender: genderForPersona('kevin'),
             caddieAssignments: { round: 'kevin', cage: 'kevin', drills: 'kevin', play: 'kevin' },
           });
           try { profile.setUseCustomCaddie(false); } catch { /* non-fatal */ }

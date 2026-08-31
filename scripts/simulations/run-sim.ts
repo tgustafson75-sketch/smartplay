@@ -1463,8 +1463,12 @@ check('Custom caddie inherits a chosen base persona voice (Kevin/Serena/Harry/Ta
     return (
       /customCaddieBasePersona:/.test(store) && /setCustomCaddieBasePersona:/.test(store) &&
       /customCaddieBasePersona: 'kevin'/.test(store) &&
-      // voice path inherits the base persona's mapped voice unless a custom voice is set
-      /const base = .*customCaddieBasePersona/.test(vs) && /BASE_VOICE\[base\]/.test(vs) &&
+      // voice path inherits the base persona's mapped voice unless a custom voice is set.
+      // 2026-08-31 (§22c) — the inline `const base = ...customCaddieBasePersona` ladder moved into
+      // services/caddieGender.customBasePersona(), the ONE owner. Assert the relationship (the base
+      // persona still selects the voice) rather than the shape of the ladder that used to do it.
+      /BASE_VOICE\[cg\.customBasePersona\(\)\]/.test(vs) &&
+      /customCaddieBasePersona/.test(read('services/caddieGender.ts')) &&
       // the setup screen exposes the picker
       /setCustomCaddieBasePersona\(p\.id\)/.test(ui)
     );
@@ -2629,18 +2633,34 @@ check('Voice: persona switch never leaks the old voice for a turn (live-persona 
   // 2026-06-13 — wrong-voice-for-a-turn fix. speak() read persona LIVE but defaulted the
   // voice gender to the caller's param (a stale closure value after a mid-flight persona
   // switch), so the in-flight answer spoke the OLD voice once. Now gender is derived from
-  // the LIVE persona too (serena=female; kevin/harry=male; custom keeps its toggle).
+  // the LIVE persona too.
+  //
+  // 2026-08-31 (§22c) — the inline ladder this used to assert was ONE OF THREE disagreeing owners
+  // of caddie gender, and for the custom caddie all three could differ at once. It is now a single
+  // call to genderForPersona. The invariant is unchanged and is what this still guards: the persona
+  // is read LIVE at speak time, and the gender that is sent is derived from THAT read.
   (() => {
     const v = read('services/voiceService.ts');
+    const g = read('services/caddieGender.ts');
     return (
       /persona = require\('\.\.\/store\/settingsStore'\)\.useSettingsStore\.getState\(\)\.caddiePersonality/.test(v) &&
-      /if \(persona === 'serena'\) effectiveGender = 'female'/.test(v) &&
-      /else if \(persona === 'kevin' \|\| persona === 'harry'\) effectiveGender = 'male'/.test(v) &&
-      /else if \(persona === 'custom'\)/.test(v) &&        // custom still uses its own toggle
-      /gender: effectiveGender/.test(v)                     // the live-derived gender is what's sent
+      // derived from the live persona, in one place
+      /effectiveGender = cg\.genderForPersona\(persona\)/.test(v) &&
+      /gender: effectiveGender/.test(v) &&
+      // ...and that one place still answers every persona, custom included
+      /persona === 'serena'\) return 'female'/.test(g) &&
+      /persona === 'custom'\) return customBasePersona\(\) === 'serena' \? 'female' : 'male'/.test(g) &&
+      // No second owner may reappear: the store must not re-derive gender inline.
+      // COMMENTS STRIPPED FIRST — the first version of this line failed on the comment that
+      // NARRATES the deleted ladder ("This used to be `p === 'serena' ? 'female' : 'male'`").
+      // A file describing its own history is not the file doing the thing.
+      // [[a-stale-header-is-a-source-someone-trusts]]
+      !/'serena' \? 'female' : 'male'/.test(
+        read('store/settingsStore.ts').replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' '),
+      )
     );
   })(),
-  'voice gender derives from the LIVE persona (not a stale param), so a mid-flight caddie switch never speaks the old voice for a turn');
+  'voice gender derives from the LIVE persona through ONE owner (genderForPersona), so a mid-flight caddie switch never speaks the old voice and no second writer can disagree with it');
 
 check('Caddie sings: a "sing X" request becomes a playful attempt prompt (Cecily)',
   // 2026-06-13 — Cecily asked if the caddie can sing. TTS can't truly sing, but a sing
@@ -3634,6 +3654,61 @@ check('LOCK: the setting nothing could set is gone, and cannot come back',
     return added.length === 0;
   })(),
   'no shipped file branches on voiceOrchestrator or re-declares it — the setting that could only hold one value is gone, and a new branch on it would be a live-looking choice that cannot vary');
+
+check('LOCK: no persisted setting may have a setter nothing calls',
+  /**
+   * 2026-08-31 (OPEN-ITEMS §22b) — THE SHAPE, not the instance.
+   *
+   * The guard above forbids the literal string `voiceOrchestrator`. It could not see the three
+   * settings that were the SAME SHAPE — a persisted field whose only mutator had no caller, i.e. a
+   * constant wearing a setting's clothes, with live-looking branches hanging off it. Per
+   * [[run-the-second-pass-yourself]]: guards must forbid the SHAPE, not the instance.
+   *
+   * All three are now gone. `setVoiceGender` (voiceGender is a derived mirror — see §22c),
+   * `setCockpitMode` + `cockpitMode`, and `setPipecatServerUrl` + `pipecatServerUrl`.
+   *
+   * The baseline is EMPTY and swept, which is a stronger statement than no guard: a new setter that
+   * nothing calls fails here on the commit that adds it, rather than surviving until someone
+   * branches on the constant it creates.
+   */
+  (() => {
+    const KNOWN: string[] = [];
+    const store = read('store/settingsStore.ts');
+    // Setter implementations live at a known indent inside the store factory.
+    const setters = Array.from(store.matchAll(/^ {6}(set[A-Za-z0-9_]+):/gm)).map((m) => m[1]);
+    if (setters.length < 20) { console.log(`   settingsStore setter scan found only ${setters.length} — the shape changed, fix this guard`); return false; }
+
+    const DIRS = ['services', 'hooks', 'app', 'components', 'lib', 'store'];
+    const walkDir = (dir: string): string[] => {
+      const out: string[] = [];
+      let entries: string[] = [];
+      try { entries = fs.readdirSync(dir); } catch { return out; }
+      for (const e of entries) {
+        const p2 = `${dir}/${e}`;
+        let st;
+        try { st = fs.statSync(p2); } catch { continue; }
+        if (st.isDirectory()) out.push(...walkDir(p2));
+        else if (/\.(ts|tsx)$/.test(e)) out.push(p2);
+      }
+      return out;
+    };
+    const root = path.resolve(__dirname, '../../');
+    const haystack: string[] = [];
+    for (const d of DIRS) {
+      for (const f of walkDir(path.resolve(root, d))) {
+        const rel = f.slice(root.length + 1);
+        if (rel === 'store/settingsStore.ts') continue; // its own declaration is not a caller
+        // Comments stripped: a comment naming a setter is not a call. That exact confusion is what
+        // let getLearnedCarryDistances hide in the orphan sweep. [[orphan-export-sweep-finds-half-builds]]
+        haystack.push(readBulk(f).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' '));
+      }
+    }
+    const joined = haystack.join('\n');
+    const dead = setters.filter((name) => !new RegExp(`\\b${name}\\b`).test(joined)).filter((n) => !KNOWN.includes(n));
+    if (dead.length) console.log(`   settings setters nothing calls (a constant wearing a setting's clothes): ${dead.join(', ')}`);
+    return dead.length === 0;
+  })(),
+  'every settingsStore setter has a real caller — a persisted field whose only mutator is uncalled is a CONSTANT, and every branch on it is half-dead code that reads as a live choice');
 
 check('LOCK: the paywall preview is owner-only',
   /**
@@ -8268,17 +8343,32 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /captureKind: captureKind \?\? 'smart_motion',/.test(read('store/cageStore.ts')),
     'a multi-swing cage reel ingests as N per-swing shots with clip boundaries (library shows all swings, each scrubbing its window); single swings keep the simple path; smart_motion by default, drill when launched from a drill');
 
-  check('Custom caddie always has a voice (male/female default → Kevin/Serena)',
-    // 2026-06-12 (Tim) — custom keeps its generated face but speaks with a real default
-    // voice for any unrecorded line, picked by a male/female toggle. The server falls back
-    // on `gender` for the 'custom' persona, so the client sends customCaddieGender there.
-    /customCaddieGender: 'male' \| 'female'/.test(read('store/playerProfileStore.ts')) &&
-      /setCustomCaddieGender: \(g\) =>/.test(read('store/playerProfileStore.ts')) &&
-      /if \(persona === 'custom'\)/.test(read('services/voiceService.ts')) &&
-      /effectiveGender = g/.test(read('services/voiceService.ts')) &&
-      /gender: effectiveGender/.test(read('services/voiceService.ts')) &&
-      /setCustomCaddieGender\(g\)/.test(read('app/profile/custom-caddie.tsx')),
-    'custom caddie maps its male/female toggle to Kevin (onyx) / Serena (nova) for unrecorded lines — never silent, even with zero recorded clips');
+  check('Custom caddie always has a voice (base persona → Kevin/Serena/Harry)',
+    // 2026-06-12 (Tim) — custom keeps its generated face but speaks with a real default voice for
+    // any unrecorded line, so it is never a silent name-only shell. That invariant is unchanged.
+    //
+    // 2026-08-31 (§22c) — the MECHANISM changed and this guard asserted the old one. The
+    // male/female `customCaddieGender` toggle is deleted: its own label said "Male · Kevin" /
+    // "Female · Serena", which is what customCaddieBasePersona has done since 2026-07-30 with Harry
+    // as a third option. Two controls owned one question and were free to disagree. What must still
+    // hold is only this: for 'custom', a real voice is ALWAYS sent.
+    (() => {
+      const vs = read('services/voiceService.ts');
+      const pp = read('store/playerProfileStore.ts');
+      return (
+        /if \(persona === 'custom'\)/.test(vs) &&
+        // an explicit photo-matched voice wins, otherwise the base persona's mapped voice — one of
+        // the two ALWAYS lands, which is what "never silent" actually means here
+        /customCaddieVoice\) customVoice = pp\.customCaddieVoice;/.test(vs) &&
+        /else customVoice = BASE_VOICE\[cg\.customBasePersona\(\)\]/.test(vs) &&
+        /BASE_VOICE: Record<string, string> = \{ kevin: 'onyx', serena: 'nova', harry: 'fable' \}/.test(vs) &&
+        // the deleted toggle may not come back as a second owner
+        !/customCaddieGender: 'male' \| 'female'/.test(pp) &&
+        // ...and the migration that preserves an existing female caddie's voice must stay
+        /p\.customCaddieBasePersona = 'serena';/.test(pp)
+      );
+    })(),
+    'custom caddie always sends a real voice (photo-matched, else the base persona\'s) — never silent, and the deleted male/female toggle cannot return as a second owner');
 
   check('Library phase 1: additive captureKind classifier (smart_motion / coach / upload)',
     // 2026-06-12 (Tim) — foundation for the library carrying each session's matching
