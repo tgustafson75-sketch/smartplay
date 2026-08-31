@@ -12,6 +12,7 @@ import { usePlayerProfileStore, isOwnerEmail, OWNER_EMAILS } from '../store/play
 import { useOnboardingTourStore } from '../store/onboardingTourStore';
 import { useCustomCaddieMediaStore } from '../store/customCaddieMediaStore';
 import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
+import { planTrialLifecycle } from '../services/billing/trialLifecycle';
 import { refreshEntitlement } from '../services/billing/purchases';
 import { PRICING } from '../lib/pricing';
 import { useSettingsStore } from '../store/settingsStore';
@@ -520,53 +521,29 @@ function AppNavigator() {
       }
 
       /**
-       * 2026-08-30 — AN ACTIVE COMP OUTRANKS BOTH BLANKET GRANTS.
+       * THE DECISION IS IN services/billing/trialLifecycle.ts, and it is pure.
        *
-       * Steps 0 and 1 below re-assert `lifetime` on EVERY boot — step 0 for everyone while the
-       * kill-switch is off, step 1 for owner emails forever. Either would have overwritten a comp
-       * on the next launch, so a 30-day promotion set on Tim's own account would have lasted until
-       * he closed the app. It has to be checked first or it does not exist.
+       * It used to be right here — five rungs of ladder, reading a store and writing through four
+       * setters behind a hydration guard, which meant no test could reach it. On 2026-08-30 that
+       * cost us: the kill-switch rung stamped a persisted 'lifetime' on every launch-period player,
+       * the paid flip then skipped straight over them, and the whole suite stayed green.
        *
-       * An expired comp is cleared and then falls through to the normal ladder, which grants
-       * lifetime again while the kill-switch is off — so running out is visible in the status
-       * without locking anyone out of anything.
-       *
-       * Honest note while SUBSCRIPTIONS_ENABLED is false: canAccess() returns true for every
-       * feature regardless, so a comp does not unlock anything that was locked. What it does is
-       * make the STATE real — status, end date, countdown — which is what there is to look at.
+       * This effect now only CARRIES OUT the plan. Anything that decides belongs in the module.
        */
-      const promoAt = profile.promo_expires_at;
-      if (promoAt != null) {
-        if (promoAt > Date.now()) {
-          if (subscription_status !== 'active') setSubscriptionStatus('active');
-          return true;
-        }
-        profile.clearPromo();
-      }
-
-      // 0) Global kill-switch — make everyone lifetime, skip everything else.
-      if (!SUBSCRIPTIONS_ENABLED) {
-        if (subscription_status !== 'lifetime') grantLifetime();
-        return true;
-      }
-
-      // 1) Lifetime override wins over everything. Re-asserts every boot
-      // so a corrupted/manually-edited status snaps back.
-      const envOwner = (process.env.EXPO_PUBLIC_OWNER_EMAIL ?? '').trim();
-      if (isOwnerEmail(profile.email) || envOwner.length > 0) {
-        if (subscription_status !== 'lifetime') grantLifetime();
-        return true;
-      }
-      // 2) Already lifetime — leave it alone.
-      if (subscription_status === 'lifetime') return true;
-      // 3) Standard trial lifecycle.
-      if (!first_opened_at) {
-        initTrial();
-      } else if (subscription_status === 'trial' && trial_started_at) {
-        if (Date.now() - trial_started_at > TRIAL_DURATION_MS) {
-          setSubscriptionStatus('expired');
-        }
-      }
+      const plan = planTrialLifecycle({
+        subscriptionsEnabled: SUBSCRIPTIONS_ENABLED,
+        isOwner: isOwnerEmail(profile.email) || (process.env.EXPO_PUBLIC_OWNER_EMAIL ?? '').trim().length > 0,
+        status: subscription_status,
+        promoExpiresAt: profile.promo_expires_at,
+        firstOpenedAt: first_opened_at,
+        trialStartedAt: trial_started_at,
+        trialDurationMs: TRIAL_DURATION_MS,
+        now: Date.now(),
+      });
+      if (plan.clearPromo) profile.clearPromo();
+      if (plan.grantLifetime) grantLifetime();
+      if (plan.initTrial) initTrial();
+      if (plan.setStatus) setSubscriptionStatus(plan.setStatus);
       return true;
     };
 

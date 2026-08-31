@@ -361,7 +361,15 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       setDefaultMode: (m) => set({ default_mode: m }),
       initTrial: () => {
         const now = Date.now();
-        set({ first_opened_at: now, trial_started_at: now, subscription_status: 'trial' });
+        // first_opened_at is PRESERVED when it already exists. This is called on a fresh install,
+        // where it is null and becomes now — but also when billing turns on for a player who has
+        // been using the app for weeks (app/_layout.tsx step 3). Clobbering it there would reset
+        // "when did this person start with us" to the day we started charging.
+        set(s => ({
+          first_opened_at: s.first_opened_at ?? now,
+          trial_started_at: now,
+          subscription_status: 'trial',
+        }));
       },
       setSubscriptionStatus: (s) => set({ subscription_status: s }),
       grantPromo: (days) =>

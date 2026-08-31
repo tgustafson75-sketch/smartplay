@@ -1,0 +1,128 @@
+/**
+ * 2026-08-30 — TURNING BILLING ON MUST ACTUALLY TURN BILLING ON.
+ *
+ * The defect this pins was invisible to 1,855 passing tests, because the ladder that carried it
+ * lived inside a boot effect and nothing could call it.
+ *
+ * While SUBSCRIPTIONS_ENABLED is false the kill-switch rung called grantLifetime() on EVERY player.
+ * That grant bought nobody anything — canAccess() already returns true for everything while the
+ * switch is off — but it wrote 'lifetime' into PERSISTED storage, the next rung returns early for
+ * anyone already lifetime, and statusFromCustomerInfo preserves it a second time. Nothing clears it.
+ *
+ * So the OTA that flips the switch to true, sent to phones already in the field, would have started
+ * no trial and shown no paywall to a single person who had ever opened the app. Silently, and with
+ * no way back.
+ *
+ * The mirror-image failure is just as bad and one line away: if the flip merely stops granting, the
+ * launch cohort matches no rung at all, sits at 'free', resolves to the 'lite' edition, and is
+ * locked out of the caddie the moment the update lands.
+ *
+ * Tim's call: the free cohort CONVERTS TO TRIAL. Both failures are pinned below.
+ */
+
+import { planTrialLifecycle, type LifecycleInput } from '../../services/billing/trialLifecycle';
+import { editionFor } from '../../services/featureAccess';
+
+const DAY = 24 * 60 * 60 * 1000;
+const NOW = Date.UTC(2026, 7, 30);
+
+const base: LifecycleInput = {
+  subscriptionsEnabled: false,
+  isOwner: false,
+  status: 'free',
+  promoExpiresAt: null,
+  firstOpenedAt: null,
+  trialStartedAt: null,
+  trialDurationMs: 14 * DAY,
+  now: NOW,
+};
+
+describe('while billing is off, nothing is stamped', () => {
+  it('does not grant lifetime to an ordinary player', () => {
+    // THE REGRESSION. Before the fix this returned { grantLifetime: true } for every user alive.
+    expect(planTrialLifecycle({ ...base, firstOpenedAt: NOW - 30 * DAY })).toEqual({});
+  });
+
+  it('clears a lifetime an earlier build already wrote to disk', () => {
+    // Build 12 and 18 testers carry the old stamp. Declining to write it is not enough.
+    expect(planTrialLifecycle({ ...base, status: 'lifetime', firstOpenedAt: NOW - 30 * DAY }))
+      .toEqual({ setStatus: 'free' });
+  });
+
+  it('leaves the owner alone — clearing his lifetime would lock Tim out of his own app', () => {
+    expect(planTrialLifecycle({ ...base, isOwner: true, status: 'lifetime' })).toEqual({});
+    expect(planTrialLifecycle({ ...base, isOwner: true, status: 'free' }))
+      .toEqual({ grantLifetime: true });
+  });
+});
+
+describe('the flip: a player who installed during the free period', () => {
+  /** Exactly what is on disk for someone who installed in the 1.0 window and never paid. */
+  const launchCohort = { ...base, firstOpenedAt: NOW - 30 * DAY, trialStartedAt: null, status: 'free' as const };
+
+  it('is NOT stranded on free with no trial', () => {
+    const plan = planTrialLifecycle({ ...launchCohort, subscriptionsEnabled: true });
+    expect(plan).toEqual({ initTrial: true });
+  });
+
+  it('gets a full 14 days from the flip, not an expired clock from install day', () => {
+    // initTrial stamps trial_started_at = now. Anchoring to firstOpenedAt instead would hand a
+    // 30-day-old install a trial that ran out a fortnight ago.
+    const started = NOW;
+    const plan = planTrialLifecycle({
+      ...launchCohort, subscriptionsEnabled: true, status: 'trial', trialStartedAt: started,
+      now: started + 13 * DAY,
+    });
+    expect(plan).toEqual({});
+  });
+
+  it('still expires on day 15 like anyone else', () => {
+    const started = NOW;
+    expect(planTrialLifecycle({
+      ...launchCohort, subscriptionsEnabled: true, status: 'trial', trialStartedAt: started,
+      now: started + 15 * DAY,
+    })).toEqual({ setStatus: 'expired' });
+  });
+
+  it('is unlocked today regardless of what its status says', () => {
+    // Why this is asserted rather than the post-flip edition: editionFor() short-circuits to 'pro'
+    // for EVERY status while SUBSCRIPTIONS_ENABLED is false, reading the constant directly, so no
+    // mock of this module can show the flipped behaviour. Trying to assert 'free' -> 'lite' here
+    // failed for exactly that reason.
+    //
+    // Which is the point. Clearing the stale lifetime above changes what is STORED and nothing a
+    // player can see — the free period stays free for everyone, whatever their status field reads.
+    for (const status of ['free', 'lifetime', 'trial', 'expired', 'active'] as const) {
+      expect(editionFor(status)).toBe('pro');
+    }
+  });
+});
+
+describe('a fresh install is unchanged', () => {
+  it('starts a trial when billing is on', () => {
+    expect(planTrialLifecycle({ ...base, subscriptionsEnabled: true })).toEqual({ initTrial: true });
+  });
+  it('is left completely alone when billing is off', () => {
+    expect(planTrialLifecycle(base)).toEqual({});
+  });
+});
+
+describe('an active comp still outranks both blanket grants', () => {
+  it('holds active, and is checked before the owner and kill-switch rungs', () => {
+    expect(planTrialLifecycle({ ...base, promoExpiresAt: NOW + 5 * DAY, status: 'free' }))
+      .toEqual({ setStatus: 'active' });
+    // Even for an owner: a comp set deliberately on Tim's account is the thing being tested.
+    expect(planTrialLifecycle({ ...base, isOwner: true, promoExpiresAt: NOW + 5 * DAY, status: 'active' }))
+      .toEqual({});
+  });
+
+  it('clears when expired and falls through rather than stranding the player on active', () => {
+    const plan = planTrialLifecycle({
+      ...base, subscriptionsEnabled: true, promoExpiresAt: NOW - DAY,
+      status: 'active', firstOpenedAt: NOW - 30 * DAY,
+    });
+    expect(plan.clearPromo).toBe(true);
+    // Falls through to the trial rung rather than leaving a lapsed comp reading as paid.
+    expect(plan).toEqual({ clearPromo: true });
+  });
+});
