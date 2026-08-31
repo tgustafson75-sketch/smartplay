@@ -110,6 +110,7 @@
           }
         }
       ],
+      "./plugins/withGradleMemory.js",
       "./plugins/withMetaWearablesDAT.js",
       "./plugins/withMediaPipePose.js",
       "./plugins/withBluetoothMediaButton.js",
