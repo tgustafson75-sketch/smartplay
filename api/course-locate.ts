@@ -323,8 +323,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body ?? {}) as {
-      lat?: unknown; lng?: unknown; radius_m?: unknown; limit?: unknown;
+      lat?: unknown; lng?: unknown; radius_m?: unknown; limit?: unknown; debug?: unknown;
     };
+    /**
+     * 2026-08-31 — `debug: true` echoes what the golf guard DROPPED, with the place types Google
+     * actually returned. Added because the TPC Sawgrass hunt stalled at exactly the point where the
+     * only remaining question — "was the course never returned, or returned and then filtered out by
+     * us?" — was answerable solely from a server log line nobody could reach. Names and types only;
+     * no key material, no counts that are not already implied by the course list.
+     */
+    const debug = body.debug === true;
     const lat = body.lat, lng = body.lng;
     if (!isNum(lat) || !isNum(lng)) return res.status(400).json({ error: 'lat and lng required' });
     const radius = isNum(body.radius_m) ? Math.min(MAX_RADIUS_M, Math.max(200, Math.round(body.radius_m))) : DEFAULT_RADIUS_M;
@@ -356,7 +364,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (located == null) return res.status(200).json({ courses: [], source: 'places', error: 'places_error' });
 
     // 3) GUARD — golf-only, always, whichever path produced the rows.
-    const rejected = located.filter((p) => !isGolfPlace(p)).length;
+    const droppedRows = located.filter((p) => !isGolfPlace(p));
+    const rejected = droppedRows.length;
     if (rejected > 0) console.log(`[course-locate] golf guard dropped ${rejected} non-course place(s) from ${source}`);
 
     const courses = located
@@ -377,6 +386,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 2026-08-25 — when we served from the fallback, say WHY the primary failed. Silent permanent
     // degradation is how discovery ended up keyword-matching and hiding TPC Sawgrass.
     return res.status(200).json({
+      ...(debug
+        ? {
+            debug_raw: located.map((p) => ({ name: p.name, types: p.types, kept: isGolfPlace(p) })),
+            debug_dropped: droppedRows.map((p) => ({ name: p.name, types: p.types })),
+          }
+        : {}),
       courses,
       source,
       ...(source === 'places_legacy' && lastPrimaryFailure ? { primary_failure: lastPrimaryFailure } : {}),
