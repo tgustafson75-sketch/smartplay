@@ -788,6 +788,39 @@ three and fails on a fourth, so the class cannot grow while the decision waits.
 the legacy path is still wanted for anything. Doing neither leaves three pieces of code that read as
 live choices and are not.
 
+## §24 — TIM'S CALL: course-geometry abandons up to 40s of work the server is still doing (2026-08-31)
+
+Found sweeping every client timeout after Tim's Menifee field report. **`course-locate` was the
+clear-cut instance and is FIXED** (client 9s → 20s; it was quitting 6s before the platform, with only
+2s of margin over the server's own 7s budget — a cold Lambda alone exceeded it). A sim guard was
+asserting the INVERTED ordering and pinning it; corrected, break-tested.
+
+**`course-geometry` is the same shape but is a genuine trade-off, so it is not changed:**
+
+| | |
+|---|---|
+| server budget | **70s** (`OVERPASS_TOTAL_BUDGET_MS`) |
+| platform ceiling | 90s |
+| client gives up | **30s** |
+
+So up to 40 seconds of legitimate server work is abandoned. This is the "green screen" symptom — for
+a course with nothing cached the abort returns `null` and the hole view has nothing to draw.
+
+**Why it was NOT simply fixed either way.** The obvious move — cut the server budget to fit inside
+30s — is wrong: the header records measured live builds where **slow-but-successful runs took ~80s**.
+Cutting it would discard real successes and cause MORE green screens. The other move — raise the
+client past 70s — means a player can wait over a minute before the fallback appears.
+
+**The decision is which failure you prefer**, and it is a product call:
+- **(a) Raise the client to ~75s.** New courses map correctly far more often; a bundled course whose
+  fetch hangs waits a long time before showing its bundled fallback.
+- **(b) Render the fallback IMMEDIATELY and upgrade when the fetch lands.** Strictly the best UX and
+  the real answer, but it is a change to how the hole view loads, not a constant — real work.
+- **(c) Leave it.** Bundled courses are unaffected; only new/discovered courses on a slow Overpass
+  see it.
+
+**(b) is the right end state.** Recommend it post-launch rather than during submission week.
+
 ## §23 — SmartFinder tilt cap: **CLOSED 2026-08-31. The ray math already existed; the CANDIDATES were the gap**
 
 > Tim's call: ray-intersect hole geometry. Building it turned up that **it was already built** —
