@@ -833,6 +833,8 @@ export const useSettingsStore = create<SettingsState>()(
          * threw, and a throwing migration means zustand drops the persisted state entirely: the
          * player's caddie, trust level and every preference silently back to defaults on launch.
          */
+        // {} rather than the value: zustand's merge SPREADS whatever migrate returns, so handing
+        // back a string writes numeric index keys into the store and then to disk, permanently.
         if (persisted != null && typeof persisted !== 'object') persisted = {};
         const p = (persisted ?? {}) as Partial<SettingsState> & {
           caddiePersonality?: Persona;

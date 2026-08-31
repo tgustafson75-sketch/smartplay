@@ -236,8 +236,14 @@ export const useAcousticCalibrationStore = create<AcousticCalibrationState>()(
          * everything: zustand discards the persisted state and the store comes up on defaults,
          * silently, on launch. A truncated or cleared write can hand this a primitive or null
          * rather than the object the cast below assumes, and the cast is a lie in that case.
+         *
+         * RETURNS {} RATHER THAN THE VALUE. Handing the primitive back is worse than throwing:
+         * zustand's default merge spreads it, so a persisted string becomes numeric index keys
+         * ({"0":"a","1":" "…}) sitting alongside the real defaults — and those junk keys are then
+         * written straight back to disk on the next save, permanently. An empty object merges to
+         * clean defaults, which is the honest outcome for a blob we cannot read.
          */
-        if (persisted == null || typeof persisted !== 'object') return persisted as never;
+        if (persisted == null || typeof persisted !== 'object') return {} as never;
         const s = persisted as AcousticCalibrationState;
         // v1 → v2: added targetSamples array
         if (version < 2) { (s as unknown as Record<string, unknown>).targetSamples = []; }

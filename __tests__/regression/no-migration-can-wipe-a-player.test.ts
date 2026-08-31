@@ -61,6 +61,28 @@ describe('no persisted migration can wipe a player', () => {
         for (let v = 0; v <= current; v++) {
           const input = blob && typeof blob === 'object' ? JSON.parse(JSON.stringify(blob)) : blob;
           expect(() => migrate(input, v)).not.toThrow();
+          /**
+           * AN OBJECT IN MUST GIVE AN OBJECT OUT — the realistic case, asserted universally.
+           *
+           * zustand's default merge SPREADS whatever migrate returns, so a returned string becomes
+           * numeric index keys ({"0":"a","1":" "…}) written into the store beside the real defaults
+           * and then persisted to disk on the next save, permanently. That is WORSE than throwing,
+           * which at least leaves clean defaults.
+           *
+           * Scoped to object inputs deliberately. 39 of these migrations hand a primitive straight
+           * back, and a persisted blob that is a bare string or number is pathological — flagging
+           * the whole codebase for it would be noise. The four hardened above return {} even then,
+           * because those are the ones that used to THROW and were being touched anyway.
+           *
+           * This assertion exists because the first version of that hardening returned the primitive
+           * and I only caught it by adversarially re-auditing my own fix.
+           */
+          if (input !== null && typeof input === 'object') {
+            const out = migrate(input, v);
+            if (out !== undefined && out !== null) {
+              expect([`${name}: object in, object out`, typeof out]).toEqual([`${name}: object in, object out`, 'object']);
+            }
+          }
         }
       }
     });

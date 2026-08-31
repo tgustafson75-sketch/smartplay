@@ -25,6 +25,13 @@ import type { Course } from '../types/course';
  * Loaded LAZILY now, inside the handler's existing try/catch, so the three tools that need nothing
  * from it (log_shot, log_score, log_emotional_state) work, and the two that do degrade to the
  * graceful 200 instead of taking the whole function down.
+ *
+ * BE PRECISE ABOUT WHAT THIS DID AND DID NOT FIX. The route no longer crashes, and three of the five
+ * tools now work. `lookup_course` and `lookup_hole` still CANNOT run server-side — the lazy import
+ * fails for the same reason the eager one did — they just fail into the graceful answer instead of a
+ * 500. Making them work needs golfCourseApi split so its course lookup does not drag
+ * expo-file-system in. That is real work and it is not done; it is also not blocking, because the
+ * only caller of this route has never been deployed.
  */
 type CourseApi = typeof import('../services/golfCourseApi');
 const loadCourseApi = (): Promise<CourseApi> => import('../services/golfCourseApi');
