@@ -105,11 +105,20 @@ class WearSwingBridgeModule: RCTEventEmitter {
     }
   }
 
+  /**
+   * 2026-08-30 — `override` REQUIRED. RCTEventEmitter already declares both of these, so declaring
+   * them again without the keyword is a compile error, not a redundancy:
+   *   "overriding declaration requires an 'override' keyword"
+   *
+   * Never caught before because this file had never been compiled — withWatchSwingBridgeIOS wrote
+   * it into the tree with a doubled path, so Xcode could not find it to build it. Same root cause
+   * as the missing `import React` one file over.
+   */
   @objc(addListener:)
-  func addListener(_ eventName: String) { /* required by NativeEventEmitter */ }
+  override func addListener(_ eventName: String) { /* required by NativeEventEmitter */ }
 
   @objc(removeListeners:)
-  func removeListeners(_ count: Double) { /* required by NativeEventEmitter */ }
+  override func removeListeners(_ count: Double) { /* required by NativeEventEmitter */ }
 }
 
 // ── WCSessionDelegate ───────────────────────────────────────────────────────

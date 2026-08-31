@@ -37,6 +37,18 @@
 import Foundation
 import MediaPlayer
 import AVFoundation
+/**
+ * 2026-08-30 — REQUIRED, and its absence proves this file had never been compiled.
+ *
+ * RCTEventEmitter, RCTPromiseResolveBlock and RCTPromiseRejectBlock all live here. Without it the
+ * file cannot build at all — "cannot find type 'RCTPromiseResolveBlock' in scope", twelve times.
+ *
+ * It went unnoticed because withBluetoothMediaButton copied this file into the prebuilt tree and
+ * never registered it with the Xcode target, so nothing ever tried to compile it. Registering it
+ * (same commit) is what surfaced this. The sibling MediaPipePoseModule.swift has always carried
+ * `import React` — it was written by someone who had seen it compile.
+ */
+import React
 
 @objc(BluetoothMediaButton)
 class BluetoothMediaButton: RCTEventEmitter {
