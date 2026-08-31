@@ -320,6 +320,21 @@ const PATTERNS: Pattern[] = [
     build: (raw) => intent(raw, 'open_tool', { tool_name: 'smartplay' }),
   },
   {
+    /**
+     * 2026-08-31 (Tim) — "my card" / "my business card". Matched LOCALLY so it opens instantly
+     * without a cloud round-trip, which is the whole point of handing someone a card.
+     *
+     * Two deliberate narrowings:
+     *   - a POSSESSIVE or the word "business"/"digital"/"contact" is required. A bare "card" mid-round
+     *     means the SCORECARD every time, and this pattern sits BEFORE nothing that would rescue it.
+     *   - "scorecard" and "score card" are excluded outright, so "pull up my score card" cannot be
+     *     dragged in by the `my ... card` shape.
+     * Non-owners reach the route and its own gate refuses them — same shape as the GPS bench.
+     */
+    rx: new RegExp('^' + NOT_ABOUT_TOOL + "(?!.*\\bscore\\s*card\\b)(?=.*\\b(?:my\\s+(?:business|digital|contact)?\\s*card|business\\s+card|digital\\s+card|contact\\s+card)\\b)", 'i'),
+    build: (raw) => intent(raw, 'open_tool', { tool_name: 'my_card' }),
+  },
+  {
     rx: new RegExp('^' + NOT_ABOUT_TOOL + '(?=.*\\b(?:open\\s+smart\\s*finder|smart\\s*finder|rangefinder|range\\s+finder|lock\\s+(?:the\\s+)?distance)\\b)', 'i'),
     build: (raw) => intent(raw, 'open_tool', { tool_name: 'smartfinder' }),
   },

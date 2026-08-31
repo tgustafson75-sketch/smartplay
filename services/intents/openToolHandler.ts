@@ -105,6 +105,18 @@ const ALL_TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; p
   // import_round → parse a played scorecard's SCORES into round history.
   add_course: { type: 'navigate', path: '/add-course' },
   import_round: { type: 'navigate', path: '/import-rounds-list' },
+  /**
+   * 2026-08-31 (Tim) — "my card": the digital business card. Same gating shape as the GPS bench
+   * above — listed here for everyone, refused by the ROUTE's own owner gate, so a non-owner gets
+   * the ordinary "unknown tool" outcome rather than a hint that something exists.
+   *
+   * `card` alone is deliberately NOT an alias: the classifier would have to choose between it and
+   * "scorecard", and a golfer saying "card" mid-round means their scorecard every time.
+   */
+  my_card: { type: 'navigate', path: '/owner-card' },
+  business_card: { type: 'navigate', path: '/owner-card' },
+  digital_card: { type: 'navigate', path: '/owner-card' },
+  contact_card: { type: 'navigate', path: '/owner-card' },
   // 2026-06-08 — Acoustic Test Bench removed (acoustic now lives in
   // SmartMotion calibration); its voice routes deleted with the screen.
   // 2026-05-19 — Owner GPS Test Bench voice intent. Same gating as

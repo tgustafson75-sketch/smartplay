@@ -2056,6 +2056,22 @@ export default function Settings() {
                       authoring tool (capture example pics + narrative for faults
                       like open-face), moved here from the global Tools menu so it's
                       an owner/instructor surface. */}
+                  {/* 2026-08-31 (Tim) — the digital business card, in the app. Owner-gated at the
+                      SCREEN as well as here, because a route can also be reached by voice. */}
+                  <TouchableOpacity
+                    style={styles.resetRow}
+                    onPress={() => router.push('/owner-card' as never)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open my digital business card"
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>My Card</Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                        Your digital business card — QR to the download, tap to call, email or share. Ask the caddie for &quot;my card&quot;.
+                      </Text>
+                    </View>
+                    <Ionicons name="id-card-outline" size={20} color={colors.text_muted} />
+                  </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.resetRow}
                     onPress={() => router.push('/author/reference-assets' as never)}
