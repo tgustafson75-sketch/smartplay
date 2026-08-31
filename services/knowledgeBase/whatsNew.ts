@@ -28,6 +28,38 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'Quiet mode is finally quiet. If you had your caddie set to Quiet — the one that says tap or type to talk — he was still chiming in about every two minutes, which is exactly as often as he does on the chattiest setting. He now says nothing at all until you ask.',
+    howTo: 'Settings, how present your caddie is. Quiet means he waits for you. Active is unchanged.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'Cart or walking sorts itself out. That setting changes how I spot your shots — riding needs a wider, longer look than walking does — so having it wrong meant missed shots or shots that never happened. I now work out which one you are doing and set it myself, quietly, while you play.',
+    howTo: 'Nothing to do. If you set it yourself for this round, I leave your choice alone.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'The hole is as long as you measured it. Mark your tee and mark the green and that becomes the yardage I use for the hole, instead of the scorecard number — which was measured from a tee you might not be playing. Mark one hole or all of them; anything unmarked still reads off the card.',
+    howTo: 'SmartVision, mark the tee and the green on a hole. The hole yardage updates to yours.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'What you said with no signal now reaches me. If you told me something out on a dead patch of the course — "I am pulling everything left" — it was saved but I never actually heard it, so when the bars came back I carried on as if you had said nothing. Now it reaches me and I fold it in without making you repeat yourself.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'Your backup is yours only. Family members and guests you have added were being backed up with your own data. That has stopped, and anything of theirs already stored is cleared the next time you back up. Your rounds, your bag and your history are untouched.',
+    howTo: 'Nothing to do. If you use Backup, it happens on its own.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'Your earbud stops talking over your swing. A tap during a cage recording used to start the caddie mid-swing — into the microphone, so it landed in the recording too. He now waits until the swing is done.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'The TARGET box on the data bar says something again. It had been a dash for months while the aim it was meant to show — left, centre or right — was being worked out and then buried in a sentence. It now shows LT, CTR or RT, and it always matches what I actually tell you to do.',
+  },
+  {
+    when: 'Aug 2026',
     note: "Swing analysis for kids on your family roster is on hold for now. Recording their swings and everything already saved still works — it is only the AI read that is paused while we get the rules right for children's data. It is coming back.",
   },
   {

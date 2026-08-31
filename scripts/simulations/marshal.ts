@@ -264,8 +264,23 @@ export const ISLAND_BASELINE: Record<string, string> = {
    * for exactly that reason). A guard is not a caller. That blind spot is precisely what a
    * FILE-level import-graph check catches and a symbol-level one cannot.
    */
-  'hooks/useLayout.ts': 'TRIAGE — classifyLayout: the single sizing classifier no screen imports',
-  'services/swing/poseMotion.ts': 'TRIAGE — deriveSwingAnchors: pose-first foundation, guard is the only caller',
+  // 2026-08-30 — re-tagged from TRIAGE. Tim asked for no unassessed debt anywhere, and the orphan
+  // baseline reached zero TRIAGE the same night; these two carried the same "not yet looked at" tag
+  // while the paragraph above had already looked at them. The blockers are named, so they are PARKED.
+  'hooks/useLayout.ts':
+    'PARKED — classifyLayout, the single sizing classifier, is imported by no screen. Named blocker: '
+    + 'the whole-app layout freeze (07-29, Tim signed off "BEAUTIFUL"), because wiring it means '
+    + 'touching sizing on EVERY screen. Worth Tim knowing it is still open: this was built in answer '
+    + 'to his own report of "consistent issues with element formatting by screen size" (Fold-Z '
+    + 'folded), and until it is wired every screen still does the ad-hoc math that caused it.',
+  'services/swing/poseMotion.ts':
+    'PARKED — deriveSwingAnchors, the pose-first anchor derivation, has a guard as its only caller. '
+    + 'Named blocker: it would replace the acoustic/segmenter impact anchor that currently ships and '
+    + 'is working, so it is a swing-analysis accuracy change, not a wiring gap. Post-launch. The '
+    + 'wrist-centroid helper in the same file is separately marked DO NOT WIRE in ORPHAN_BASELINE — '
+    + 'the trace is clubhead-or-nothing and that fallback was deliberately removed. Naming it here '
+    + 'in full is what tripped the orphan guard on the first attempt at this very comment: '
+    + 'findOrphanExports counts a MENTION as a reference, exactly as the paragraph above warns.',
 };
 
 export function formatWireIntegrity(w: WireIntegrity): string {
