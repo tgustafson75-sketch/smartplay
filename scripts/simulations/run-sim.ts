@@ -10011,7 +10011,19 @@ check('LOCK: course-locate filters golf via Places(New) includedTypes + BOTH leg
       /NOT_A_COURSE_TYPES/.test(s) &&
       /indoor_golf_course/.test(s) &&
       /miniature_golf_course/.test(s) &&
-      /NOT_A_COURSE_TYPES\.has\(t\)\)\) return false;[\s\S]{0,200}?t === 'golf_course'\)\) return true;/.test(s)
+      // ORDER, asserted by position rather than by a byte window — a window is what broke when the
+      // lodging check was inserted between these two lines. [[three-ways-a-guard-is-worthless]]
+      (() => {
+        const dis = s.indexOf("NOT_A_COURSE_TYPES.has(t))) return false;");
+        const lodge = s.indexOf("LODGING_TYPES.has(t))");
+        const accept = s.indexOf("t === 'golf_course')) return true;");
+        return dis > -1 && lodge > -1 && accept > -1 && dis < accept && lodge < accept;
+      })() &&
+      // the Places-API-(NEW) path went live having never been judged: it returns single greens, tee
+      // boxes, maintenance yards, an event and the hotel, ALL tagged golf_course by Google
+      /SUB_FEATURE_RE/.test(s) &&
+      /FACILITY_RE/.test(s) &&
+      /LODGING_TYPES/.test(s)
     );
   })(),
   'New-API type filter + keyword AND broad legacy sweep merged + double-failure walks keys + classifier admits branded courses and rejects hospitality-only rows');
