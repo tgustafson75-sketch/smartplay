@@ -683,7 +683,14 @@ Build §14 first (circle a region, re-read it — tap-driven): it forces the reg
 against a UI that cannot mis-hear you. Depends on §17's 120fps build — "forward three steps" means
 nothing at 30fps.
 
-## §20 — TIM'S CALL: the earbud's classifier/brain overlap is gone. Buy it back? (2026-08-27)
+## §20 — **DECIDED 2026-08-31: leave it deleted.** (found 2026-08-27)
+
+> Tim's call. Restoring the overlap means firing a brain call BEFORE knowing whether a deterministic
+> handler claims the turn, so every "start my round" / "log a bogey" / "open SmartFinder" pays for an
+> answer it throws away. The 8× prompt-cache cut (08-25) was a far larger latency and cost move than
+> this ever was, and [[speed-is-the-wow]] is already served by it. **Not revisiting without new
+> evidence** — if it ever comes back, `voiceHitRateStore` already records the handler-vs-cloud split
+> and that number is the thing to look at first.
 
 Deleted today: a speculative `/api/kevin` fired in parallel with the classifier on every
 precheck-miss, so the brain's network + LLM time overlapped the classify (~0.7-1s per conversational
@@ -712,7 +719,13 @@ Worth knowing: **the 8× cache cut (08-25) was a bigger latency + cost move than
 `speed-is-the-wow` is still the standing rule. If the answer is "buy it back", do it after launch
 with the history fix, not before.
 
-## §21 — TIM'S CALL: two built-and-tested capabilities nothing imports (2026-08-27)
+## §21 — **DECIDED 2026-08-31: both stay frozen until after launch.** (found 2026-08-27)
+
+> Tim's call. `classifyLayout` is the ONE responsive classifier written to end per-screen breakpoint
+> drift, and wiring it touches sizing on every screen — inside the 07-29 whole-app layout freeze he
+> signed off as "BEAUTIFUL". `deriveSwingAnchors` is plausibly wanted by the 3.0 work. Neither costs
+> anything frozen, and `ISLAND_BASELINE` already stops anything NEW joining them. **Not deleted** —
+> deleting working, tested capability is the other wrong answer.
 
 Found by the new wire-integrity marshal, which sees them where the orphan sweep structurally cannot
 (that one counts any MENTION of a symbol as a reference, so a guard naming an export makes it look
@@ -774,6 +787,30 @@ three and fails on a fourth, so the class cannot grow while the decision waits.
 `brain-consolidation-two-to-one` says this is the payoff of the shim), or restore a real toggle if
 the legacy path is still wanted for anything. Doing neither leaves three pieces of code that read as
 live choices and are not.
+
+## §23 — SmartFinder tilt cap: **CLOSED 2026-08-31. The ray math already existed; the CANDIDATES were the gap**
+
+> Tim's call: ray-intersect hole geometry. Building it turned up that **it was already built** —
+> `services/aimedFeature.featureOnAimLine` has cast the aim ray and measured lateral offset since
+> 2026-08-24, correctly. I started writing a second one and caught it against the existing owner.
+>
+> **The real defect was its INPUT.** The candidate list was built inline in `app/smartfinder.tsx` and
+> held only the green, its front, its back, and the coarse `hazards` array. `geometry.bunkers` and
+> `geometry.water_hazards` — already traced as polygons, already drawn by the map overlay — were
+> **never offered to the aim line.** Point the reticle at the bunker you are trying to carry and the
+> screen said nothing was there, which reads exactly like a broken rangefinder. That is what was
+> reported three times.
+>
+> Now `services/aimCandidates.buildAimCandidates()` — one owner, testable, deduped against the coarse
+> list, preferring the traced green outline over a coarser centre point. The tilt cap itself is
+> untouched because it is physics, not a gate.
+>
+> **Nearest-wins was NOT adopted**, deliberately: `aimedFeature` selects by smallest lateral offset,
+> and its header explains why — nearest-wins would let a bunker permanently shadow the green behind
+> it. My draft had that backwards, which is the second reason not to have shipped a second owner.
+>
+> `REFERENCE_HEIGHTS` stays unwired and is now a deliberate PARK, not an oversight: it needs the
+> player to tap a reference every time, which breaks [[hands-free-zero-setup-is-the-product]].
 
 ## §22b + §22c — **BOTH CLOSED 2026-08-31.** §22 is finished end to end
 

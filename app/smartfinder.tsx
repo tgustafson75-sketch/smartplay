@@ -77,7 +77,8 @@ import { useToastStore } from '../store/toastStore';
 import { getApiBaseUrl } from '../services/apiBase';
 import { ingestCapture } from '../services/courseCaptureIngest';
 import { effectiveEyeHeightM, observeCalibration } from '../services/rangefinderCalibration';
-import { featureOnAimLine, type AimCandidate } from '../services/aimedFeature';
+import { featureOnAimLine } from '../services/aimedFeature';
+import { buildAimCandidates } from '../services/aimCandidates';
 
 const REFRESH_MS = 3_000;
 const CANVAS_W_FRACTION = 0.92;
@@ -1331,17 +1332,16 @@ function TargetCameraOverlay({
    * Tolerances are the honest part: a green is a big target and a bunker is not, so a pot bunker
    * needs a much squarer aim before it may claim the reticle.
    */
-  const aimCandidates = useMemo(() => {
-    const out: AimCandidate[] = [];
-    const g = geometry;
-    if (g?.green) out.push({ label: 'green', location: g.green, toleranceYards: 24 });
-    if (g?.green_front) out.push({ label: 'front of green', location: g.green_front, toleranceYards: 18 });
-    if (g?.green_back) out.push({ label: 'back of green', location: g.green_back, toleranceYards: 18 });
-    for (const h of g?.hazards ?? []) {
-      if (h?.location) out.push({ label: h.label, location: h.location, toleranceYards: 14 });
-    }
-    return out;
-  }, [geometry]);
+  /**
+   * 2026-08-31 (Tim's call) — the candidate list moved to services/aimCandidates.
+   *
+   * It used to be built inline, right here, and it held ONLY the green, its front and back, and the
+   * coarse `hazards` array. `geometry.bunkers` and `geometry.water_hazards` — already traced, already
+   * drawn by the map overlay — were never offered to the aim line, so pointing the reticle at the
+   * bunker you are trying to carry reported nothing there. That reads as a broken rangefinder.
+   * One owner now, and testable. [[two-owners-is-the-root-cause]]
+   */
+  const aimCandidates = useMemo(() => buildAimCandidates(geometry), [geometry]);
   /** What the reticle is currently on, when it is on something we know. Null = nothing mapped there. */
   const [aimedLabel, setAimedLabel] = useState<string | null>(null);
 

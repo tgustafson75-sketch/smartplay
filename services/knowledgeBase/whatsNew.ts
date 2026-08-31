@@ -28,6 +28,11 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'SmartFinder now tells you what you are pointing at, including the bunkers and the water. Swing the reticle onto the bunker you are trying to carry and you get its name and its yardage — before, only the green and its front and back were recognised, so aiming anywhere else read as nothing there. The number comes from the map, so it is right at 150 yards, not just up close.',
+    howTo: 'SmartFinder, move the reticle onto anything on the hole. If it is mapped, it names it and gives you the carry.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'Swing analysis comes back quicker. Reading your body — rotation, weight shift, balance — used to wait until the rest of the analysis had finished before it even started. It now runs while I am still reading the swing, so the breakdown is ready sooner. Nothing to change; it is just less waiting.',
   },
   {
