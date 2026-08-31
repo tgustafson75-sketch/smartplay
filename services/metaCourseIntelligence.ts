@@ -68,6 +68,15 @@ export interface StrategicRecommendation {
   /** Recommended aim point — free text ("two paces left of pin",
    *  "left bunker edge"). */
   aim_point: string;
+  /**
+   * 2026-08-30 — the SIDE of that aim point, as a discrete value.
+   *
+   * buildAimPoint has always computed this (biased away from the player's dominant miss, and away
+   * from flanking bunkers) and then buried it inside prose. The caddie tab's TARGET cell wanted
+   * exactly this and has shown "—" since 2026-06-09, when a frozen 'CENTER' placeholder was removed
+   * for being a fake live value. The value was never missing — only unexposed.
+   */
+  aim_side: AimSide;
   /** Risk band the recommendation lands in. */
   risk: RiskAssessment;
   /** Optional alternative — the "if you're feeling cautious" play. */
@@ -256,7 +265,7 @@ export async function recommendShot(input: MetaIntelInput = {}): Promise<Strateg
   ]);
   const confNote = confidenceNote(confidence);
   const clarify = clarifyingQuestion(confidence);
-  const voice = buildVoiceSummary(caddieName, club, yardsToTarget, shape, aim, rationale, confNote, clarify, playsLikeYards);
+  const voice = buildVoiceSummary(caddieName, club, yardsToTarget, shape, aim.text, rationale, confNote, clarify, playsLikeYards);
   const adaptedVoice = adaptOnCourseVoice(
     voice,
     deriveComplexityLevel(profile),
@@ -271,7 +280,8 @@ export async function recommendShot(input: MetaIntelInput = {}): Promise<Strateg
     yards_to_target: yardsToTarget,
     recommended_club: club,
     shot_shape: shape,
-    aim_point: aim,
+    aim_point: aim.text,
+    aim_side: aim.side,
     risk,
     alternative_play: altPlay,
     rationale,
@@ -408,24 +418,30 @@ function assessRisk(
   return 'go_for_it';
 }
 
+/** Which side of the target the aim point favours. 'center' means straight at it. */
+export type AimSide = 'left' | 'center' | 'right';
+
 function buildAimPoint(
   holeView: CourseHoleView | null,
   shape: ShotShape,
   dominantMiss: string | null,
   risk: RiskAssessment,
-): string {
+): { text: string; side: AimSide } {
   // Aim point biases AWAY from the player's dominant miss + AWAY from
   // hazards on the relevant side when known.
-  const safeSide = dominantMiss === 'right' ? 'left' : dominantMiss === 'left' ? 'right' : 'center';
-  if (risk === 'conservative') return 'middle of the green; favor the fat side';
-  if (risk === 'go_for_it') return 'directly at the pin';
+  const safeSide: AimSide = dominantMiss === 'right' ? 'left' : dominantMiss === 'left' ? 'right' : 'center';
+  // Each branch returns the SIDE it actually describes, so the discrete value and the prose can
+  // never disagree — the whole point of returning them together rather than re-deriving one later.
+  if (risk === 'conservative') return { text: 'middle of the green; favor the fat side', side: 'center' };
+  if (risk === 'go_for_it') return { text: 'directly at the pin', side: 'center' };
   if (holeView?.bunkers && holeView.bunkers.length > 0) {
-    return `${safeSide} edge of the green — bunkers flanking`;
+    return { text: `${safeSide} edge of the green — bunkers flanking`, side: safeSide };
   }
-  if (shape === 'fade') return 'start at the left edge; let it fade to center';
-  if (shape === 'draw') return 'start at the right edge; let it draw to center';
-  if (shape === 'low_punch') return 'low at the front-middle — keep it under';
-  return 'middle of the green';
+  // A fade STARTS left and finishes centre; the aim — where you point — is the left edge.
+  if (shape === 'fade') return { text: 'start at the left edge; let it fade to center', side: 'left' };
+  if (shape === 'draw') return { text: 'start at the right edge; let it draw to center', side: 'right' };
+  if (shape === 'low_punch') return { text: 'low at the front-middle — keep it under', side: 'center' };
+  return { text: 'middle of the green', side: 'center' };
 }
 
 function buildAlternative(

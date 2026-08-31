@@ -830,6 +830,7 @@ async function runShotStrategy(req: ShotStrategyRequest, persona: Persona, ctx: 
       club: result.recommended_club ?? null,
       shape: result.shot_shape ?? null,
       aimPoint: result.aim_point ?? null,
+      aimSide: result.aim_side ?? null,
       // kind 'engine': a real recommendation the player is shown, just authored by the shot-strategy
       // engine rather than spoken by the caddie. Counts as advice for adherence.
       kind: 'engine',

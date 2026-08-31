@@ -518,7 +518,7 @@ interface RoundState {
    *                my club" rate with advice that was never given.
    * Absent on stamps persisted before this change — treated as advice, which is what they were.
    */
-  pendingKevinRec: { club: string | null; shape: string | null; aimPoint: string | null; at?: number; kind?: 'spoken' | 'engine' | 'inferred' } | null;
+  pendingKevinRec: { club: string | null; shape: string | null; aimPoint: string | null; aimSide?: 'left' | 'center' | 'right' | null; at?: number; kind?: 'spoken' | 'engine' | 'inferred' } | null;
 
   roundStartTime: number | null;
   roundNumber: number;
@@ -608,7 +608,7 @@ interface RoundState {
   clearPendingLieAnalysis: () => void;
 
   // FIX M8 — Kevin recommendation adherence tracking.
-  setPendingKevinRec: (rec: { club: string | null; shape: string | null; aimPoint: string | null; at?: number; kind?: 'spoken' | 'engine' | 'inferred' } | null) => void;
+  setPendingKevinRec: (rec: { club: string | null; shape: string | null; aimPoint: string | null; aimSide?: 'left' | 'center' | 'right' | null; at?: number; kind?: 'spoken' | 'engine' | 'inferred' } | null) => void;
   clearPendingKevinRec: () => void;
   setActiveCourseId: (id: string | null) => void;
   setCurrentRoundMode: (mode: RoundMode) => void;

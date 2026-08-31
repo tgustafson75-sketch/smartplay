@@ -3093,11 +3093,25 @@ export default function CaddieTab() {
   // full N) so navigation reaches the real end; roundFirstHole is the low bound (back nine floors at 10).
   const totalHoles = roundLastHole(useRoundStore.getState());
   const firstHole = roundFirstHole(useRoundStore.getState());
-  // targetDirection: there is no aim engine computing a real LEFT/CENTER/RIGHT
-  // target yet, so show "—" rather than a hardcoded "CENTER" that reads like a
-  // live value. Wire to a real aim recommendation before showing a direction.
-  // (2026-06-09 honesty fix — was a frozen 'CENTER' placeholder.)
-  const targetDirection = '—';
+  /**
+   * 2026-08-30 (Tim — "we didnt resolve what goes in target on the data bar? It used to say RT, LT,
+   * CTR") — IT NOW SAYS THEM AGAIN, FROM A REAL SOURCE.
+   *
+   * The 2026-06-09 note here said "there is no aim engine computing a real LEFT/CENTER/RIGHT target
+   * yet", and replaced a frozen 'CENTER' placeholder with a dash. Removing the fake value was right.
+   * The premise was only ever half true: metaCourseIntelligence.buildAimPoint has always computed
+   * the side — biased away from the player's dominant miss and away from flanking bunkers — and
+   * then buried it inside prose like "start at the right edge; let it draw to center". The engine
+   * now returns `aim_side` beside that text, so the value is exposed rather than re-derived, and
+   * the two cannot disagree.
+   *
+   * Still a dash until a shot-strategy read has actually run, because before that there IS no aim
+   * for this shot. That is the same rule FRONT and BACK already follow, and it keeps the 06-09
+   * principle intact: a real value when we have one, nothing when we do not.
+   */
+  const aimSide = useRoundStore(s => s.pendingKevinRec?.aimSide ?? null);
+  const targetDirection =
+    aimSide === 'left' ? 'LT' : aimSide === 'right' ? 'RT' : aimSide === 'center' ? 'CTR' : '—';
 
   const currentStroke = useMemo(() => {
     // 2026-05-19 — STROKE = "the next stroke you're about to hit",
