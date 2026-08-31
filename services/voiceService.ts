@@ -1129,13 +1129,22 @@ async function deviceSpeakFallback(text: string, language: 'en' | 'es' | 'zh', m
   console.log('[voice] cloud voice unavailable — staying silent rather than speaking in a device voice');
 }
 
-// 2026-06-19 (Tim — dead-zone testing: "local mode does nothing, doesn't respond or
-// anything") — speak a failure NOTICE straight through the DEVICE voice (expo-speech),
-// bypassing the cloud /api/voice attempt entirely. Used when we ALREADY KNOW the network
-// is down (transcribe aborted / fetch failed) so the caddie audibly says "no signal"
-// instead of silently rendering a text bubble the user can't see while driving. Honors
-// [[caddie-failsafe-no-walls]]: always SAY something, even with zero signal. No cloud
-// round-trip, so no doomed-fetch wait.
+// 2026-06-19 (Tim — dead-zone testing: "local mode does nothing, doesn't respond or anything") —
+// deliver a failure NOTICE without a cloud round-trip. Used when we ALREADY KNOW the network is down
+// (transcribe aborted / fetch failed), so there is no doomed-fetch wait.
+//
+// ⚠️ 2026-08-31 — THIS HEADER USED TO SAY IT SPEAKS "straight through the DEVICE voice
+// (expo-speech)" and that it "audibly says 'no signal'". BOTH ARE FALSE and have been since the
+// device voice was removed (2026-08-22): `Speech.speak(` appears NOWHERE in this repo, and the
+// deviceSpeakFallback this ends in is a breadcrumb-only no-op that logs and returns.
+//
+// What it actually does: plays the line in the PERSONA'S OWN cached voice when
+// prewarmOfflineVoiceClips has it, and otherwise stays SILENT with a `voice_device_tts_suppressed`
+// breadcrumb, leaving the answer on screen. That is deliberate — [[feels-like-a-real-caddie]] treats
+// a robotic OS voice as a defect, and a guard enforces it. The old header cited
+// [[caddie-failsafe-no-walls]] "always SAY something", which is precisely the behaviour that was
+// removed, so anyone trusting this comment would have concluded the offline path was broken.
+// [[a-stale-header-is-a-source-someone-trusts]]
 export async function speakDeviceNotice(
   text: string,
   language: 'en' | 'es' | 'zh' = 'en',
@@ -1143,8 +1152,9 @@ export async function speakDeviceNotice(
 ): Promise<void> {
   if (!text) return;
   // [[feels-like-a-real-caddie]] — if this fixed offline line was cached in the persona's REAL voice
-  // (warmed while online, see prewarmOfflineVoiceClips), play THAT instead of the robotic device TTS.
-  // Purely additive: a miss or any playback error falls straight through to device TTS (prior behavior).
+  // (warmed while online, see prewarmOfflineVoiceClips), play THAT. A miss falls through to
+  // deviceSpeakFallback, which since 2026-08-22 SPEAKS NOTHING — it logs a breadcrumb and returns.
+  // So a cache miss here means silence with the answer on screen, not a robotic voice.
   try {
     const cache = await import('./offlineVoiceCache');
     // Key by the CURRENT persona so a caddie switch doesn't play the previous caddie's cached clip.
@@ -1155,7 +1165,7 @@ export async function speakDeviceNotice(
       try { await playLocalFile(uri, undefined, { userInitiated: true }); return; }
       catch (e) { console.log('[voice] offline persona clip play failed — device TTS:', e); }
     }
-  } catch { /* cache is additive — fall through to device TTS */ }
+  } catch { /* cache is additive — a miss means the silent breadcrumb path, not device TTS */ }
   currentSpeechId++;
   await deviceSpeakFallback(text, language, currentSpeechId, gender);
 }

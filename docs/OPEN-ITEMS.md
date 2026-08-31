@@ -146,7 +146,45 @@ Done 08-24 (`3d278d0e`): the 27 files referenced by nothing at all (all of `ranc
 `holeGeometryDerivation` and the download/orchestrator path — both network-bound, so device-only
 verification. Everything else on the critical path has had an invariant sweep.
 
-## 8. ⚠️ SYSTEMIC — guards that pin defects
+## 8. ⚠️ SYSTEMIC — guards that pin defects. **SWEEP RUN 2026-08-31; 2 more found and fixed**
+
+> **The sweep OPEN-ITEMS asked for has now been done deliberately rather than by accident.** Two
+> classes were searched across all 230 negative assertions and every count threshold in the harness.
+>
+> **1. A guard that FORBADE its own fix — `api/course-locate` (see §13).** It asserted
+> `!/[?&]type=golf_course/`, calling the legacy type filter "the phantom type". Fixing course
+> discovery turned it RED. It was not merely failing to catch the bug: the wrong belief had been
+> written down as an assertion, and an assertion reads as settled, which is why the bug sat for six
+> days behind a Cloud Console change. Now asserts the relationship, break-tested red twice.
+>
+> **2. A count threshold that REQUIRED the duplication a fix would remove — `Voice: one voice at a
+> time`.** It asserted `Speech.stop()` appears **at least three times** in voiceService. Consolidating
+> those four one-line defensive calls into one owner — exactly the change this codebase makes
+> constantly — would have failed it on a correct fix. It was also asserting the weaker half: what
+> guarantees one voice is that device speech can never START, and `Speech.speak(` was only checked in
+> ONE file when the guarantee must hold repo-wide. It now sweeps every shipped directory, count-free.
+> **Proven both ways:** consolidating 4 copies → 1 now passes, and reintroducing device speech fails
+> red and names the file.
+>
+> **Found alongside it — a header that lied in the direction that costs time.** `speakDeviceNotice`
+> said it speaks "straight through the DEVICE voice (expo-speech)" and "audibly says 'no signal'",
+> citing [[caddie-failsafe-no-walls]]. All false since 2026-08-22: `Speech.speak(` exists nowhere and
+> `deviceSpeakFallback` is a breadcrumb-only no-op. Anyone trusting that comment would have concluded
+> the offline path was broken and "fixed" a deliberate decision.
+>
+> **The real finding of the sweep is a pattern, not a count.** FOUR times in one session a guard was
+> defeated by prose naming the very thing it forbids — the Places guard, the gender guard, §10's
+> duration assertion, and this file's own `no-robot-voice` test (which broke the moment the lying
+> header was corrected to say the token appears nowhere). Every one now strips comments first. That
+> is a systematic weakness in how these guards are written, not four coincidences. **Any new guard
+> that greps source MUST strip comments before matching.**
+>
+> **Still unswept in this class:** guards asserting a magic literal that duplicates a value owned in
+> another file (the `ANALYSIS_WORST_CASE_MS` shape). A first pass over numeric literals produced only
+> coincidental collisions on round numbers — the useful version needs to compare each asserted
+> literal against DERIVED constants, and that pass has not been done.
+
+### Original note
 **Six guards this week were green BECAUSE a bug was present**, and would have gone red on the fix:
 the swing gate, the probe-abort, the persona handoff, "the mic tap re-arms", "earbud 25s
 first try", and — 2026-08-25 — **the analysis hang guard**, which asserted the literal `130_000`

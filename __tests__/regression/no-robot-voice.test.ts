@@ -1,6 +1,16 @@
 import * as fs from 'fs';
 import * as path from 'path';
-const read = (r: string) => fs.readFileSync(path.resolve(__dirname, '../../', r), 'utf-8');
+const readRaw = (r: string) => fs.readFileSync(path.resolve(__dirname, '../../', r), 'utf-8');
+/**
+ * 2026-08-31 — COMMENTS STRIPPED. This file forbids `Speech.speak(` in the source, and it began
+ * failing the moment voiceService's header was corrected to say — in prose — that `Speech.speak(`
+ * appears nowhere. A file's account of what it does not do is not it doing the thing. That was the
+ * FOURTH time in one session a guard here was defeated by prose naming the very token it forbids,
+ * so the strip is the fix rather than rewording the comment.
+ * [[a-stale-header-is-a-source-someone-trusts]] [[break-test-every-guard-you-write]]
+ */
+const read = (r: string) =>
+  readRaw(r).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
 
 /**
  * 2026-08-22 (Tim, after a round at Greenhill) — "fuck local altogether. I don't wanna fucking hear

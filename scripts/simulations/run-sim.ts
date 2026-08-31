@@ -3535,15 +3535,61 @@ check('Voice: get-to-know interview never opens a tool (fault = info, not a comm
   'the get-to-know voice interview builds the profile from what the golfer says — describing a fault is absorbed, never routed to a drill; navigation/open tools are suppressed on the client AND the brain is told not to open or claim it opened anything');
 
 check('Voice: one voice at a time (no racing)',
-  // 2026-06-16 (Tim — "two voices racing"). 2026-08-22: the device side no longer speaks at all, so
-  // the surviving property is that the cloud/mp3 path stops anything in flight before it starts.
-  // The Speech.stop() calls stay as belt-and-braces against a regression.
+  /**
+   * 2026-06-16 (Tim — "two voices racing"). 2026-08-22: the device side no longer speaks at all.
+   *
+   * 2026-08-31 (OPEN-ITEMS §8 sweep) — THIS GUARD REQUIRED THE DUPLICATION IT SHOULD HAVE BEEN
+   * INDIFFERENT TO. It asserted `Speech.stop()` appears **at least three times** in voiceService —
+   * so consolidating four copies of a one-line defensive call into one owner, exactly the change
+   * this codebase makes constantly, would have turned it RED on a correct fix. That is the failure
+   * mode OPEN-ITEMS §8 named: a count threshold that comes to require the duplication a fix removes.
+   * [[three-ways-a-guard-is-worthless]]
+   *
+   * It was also asserting the WEAKER half of the property. `Speech.stop()` cancels device speech;
+   * what actually guarantees one voice is that device speech can never START — and `Speech.speak(`
+   * was only checked in ONE file, while the guarantee has to hold repo-wide. It now sweeps every
+   * shipped directory for it, which is both stronger and count-free.
+   *
+   * The four `Speech.stop()` calls are DELIBERATELY LEFT IN PLACE and no longer counted: device TTS
+   * is parked for a future native build (see the 2026-06-06 emergency-revert note in voiceService),
+   * so they are the cancel half of a path someone intends to restore. This guard simply stops
+   * pinning how many of them there are.
+   */
   (() => {
+    const DIRS = ['services', 'hooks', 'app', 'components', 'lib', 'store'];
+    const walkDir = (dir: string): string[] => {
+      const out: string[] = [];
+      let entries: string[] = [];
+      try { entries = fs.readdirSync(dir); } catch { return out; }
+      for (const e of entries) {
+        const p2 = `${dir}/${e}`;
+        let st;
+        try { st = fs.statSync(p2); } catch { continue; }
+        if (st.isDirectory()) out.push(...walkDir(p2));
+        else if (/\.(ts|tsx)$/.test(e)) out.push(p2);
+      }
+      return out;
+    };
+    const root = path.resolve(__dirname, '../../');
+    const speakers: string[] = [];
+    for (const d of DIRS) {
+      for (const f of walkDir(path.resolve(root, d))) {
+        // Comments stripped — the voiceService header NARRATES that `Speech.speak(` appears nowhere,
+        // and prose describing the forbidden thing must not be mistaken for the forbidden thing.
+        const src = readBulk(f).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+        if (/Speech\.speak\(/.test(src)) speakers.push(f.slice(root.length + 1));
+      }
+    }
+    if (speakers.length) console.log(`   device speech can START in: ${speakers.join(', ')}`);
     const vs = read('services/voiceService.ts');
-    const cloudStopsAnything = (vs.match(/try \{ Speech\.stop\(\); \} catch \{\}/g) || []).length >= 3;
-    return cloudStopsAnything && !/Speech\.speak\(/.test(vs);
+    // The cloud/mp3 path still cancels whatever is in flight before it starts — asserted as a
+    // property (it happens at all), not as a headcount.
+    const cancelsInFlight = /try \{ Speech\.stop\(\); \} catch \{\}/.test(vs);
+    // ...and the fallback that used to speak is still the silent breadcrumb, not a robotic voice.
+    const fallbackStaysSilent = /voice_device_tts_suppressed/.test(vs) && !/Speech\.speak/.test(vs.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' '));
+    return speakers.length === 0 && cancelsInFlight && fallbackStaysSilent;
   })(),
-  'the cloud/mp3 path cancels anything in flight before speaking, and nothing can start a second, device voice');
+  'nothing anywhere in the shipped app can START a device voice, and the cloud/mp3 path still cancels anything in flight — asserted as properties, never as a count of defensive copies');
 
 check('Voice: capture silences the caddie before opening the mic (no self-record)',
   // 2026-06-16 (Tim — "did the speech leak into its mouth") — captureUtterance must
