@@ -370,7 +370,12 @@ export async function purchasePackage(pkg: unknown, current: SubscriptionStatus)
     return { ok: true, status: statusFromCustomerInfo(info, current), trialStartedAt: trialStartFromCustomerInfo(info) };
   } catch (e) {
     const err = e as { userCancelled?: boolean | null; message?: string };
+    // Backing out of Apple's sheet is not an error and must never be reported as one.
     if (err?.userCancelled) return { ok: false, reason: 'cancelled' };
+    // A purchase that genuinely failed is the single most important thing to know about at launch:
+    // the player wanted to pay and could not, and the only other record of it is a toast they see
+    // for three seconds. Reported AFTER the cancel check so the noise stays out.
+    reportSilentFailure(e, { where: 'purchasePackage' });
     return { ok: false, reason: 'failed', message: err?.message };
   }
 }

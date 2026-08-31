@@ -17,6 +17,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { stripNeverSyncKeys } from '../services/cloudSync/neverSyncKeys';
 import { createHash } from 'crypto';
 import { getSmartPlaySupabase } from './_supabase';
 import { hitInMemory } from './_rateLimit';
@@ -205,7 +206,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .maybeSingle();
       if (error) return res.status(200).json({ ok: false, error: error.message });
       if (!data) return res.status(200).json({ ok: true, found: false });
-      return res.status(200).json({ ok: true, found: true, data: data.data, updated_at: data.updated_at });
+      /**
+       * 2026-08-30 — an OLD blob must not re-seed a device with other people's data.
+       *
+       * Rows written before the client stopped uploading these still hold family, guest,
+       * relationship and team stores, and the merge below means omitting a key does not remove it.
+       * Stripping on the way OUT is what makes the fix immediate rather than "after their next
+       * backup", and it protects clients too old to have the client-side guard.
+       */
+      const outgoing = data.data && typeof data.data === 'object'
+        ? stripNeverSyncKeys(data.data as Record<string, unknown>)
+        : data.data;
+      return res.status(200).json({ ok: true, found: true, data: outgoing, updated_at: data.updated_at });
     }
 
     if (req.method === 'POST') {
@@ -241,9 +253,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ ok: false, error: 'read_failed_retry' });
       }
       const incoming = body.data as Record<string, unknown>;
-      const toStore = existing.data?.data && typeof existing.data.data === 'object'
-        ? mergeSnapshots(existing.data.data as Record<string, unknown>, incoming)
-        : incoming;
+      /**
+       * 2026-08-30 — STRIPPED FROM WHAT IS STORED, which is what actually purges it.
+       *
+       * The merge is `{ ...prev, ...next }` on purpose, so a fresh phone holding a near-empty
+       * snapshot cannot wipe the cloud. The consequence is that a key already in the row SURVIVES
+       * every later snapshot that omits it — so removing these from the client's upload list, on
+       * its own, would have left beta backups holding family and guest data indefinitely.
+       *
+       * Applied to the MERGED result rather than to `incoming`, because the data being purged lives
+       * in `prev`.
+       */
+      const toStore = stripNeverSyncKeys(
+        existing.data?.data && typeof existing.data.data === 'object'
+          ? mergeSnapshots(existing.data.data as Record<string, unknown>, incoming)
+          : incoming,
+      );
       const { error } = await db
         .from(TABLE)
         .upsert(
