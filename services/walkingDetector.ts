@@ -183,12 +183,59 @@ export function startActivityTicker(getGpsSpeedMps: () => number): void {
     try {
       _cached = await detectActivity(getGpsSpeedMps());
       useWatchStore.getState().setHealthSnapshot(_cached.healthSnapshot);
+      applyDetectedTransport(_cached);
     } catch (e) {
       console.log('[walkingDetector] tick failed:', e);
     }
   };
   void tick();
   _tickerHandle = setInterval(() => { void tick(); }, TICK_INTERVAL_MS);
+}
+
+/**
+ * 2026-08-30 (Tim — "auto detect, there are distinct behavior differences right?") — YES, AND THEY
+ * WERE BEING APPLIED AGAINST A SETTING NOBODY CORRECTED.
+ *
+ * Cart mode is not a preference, it is a fact about how the player is moving, and it retunes shot
+ * detection: an 8-second stationary window instead of 4, a 12-metre radius instead of 8, and a read
+ * of only the newest speed sample. Wrong mode means missed shots or phantom ones.
+ *
+ * THREE THINGS OWNED THAT FACT and none of them fixed the setting:
+ *   - shotDetectionService senses transport from GPS speed and retunes ITSELF
+ *   - conversationalLoggingOrchestrator asks isEffectiveCartMode() and suppresses auto-logging
+ *   - settings.cartMode, the value every other reader sees, stayed whatever the player last chose
+ *
+ * And isEffectiveCartMode only ever ADDS cart — by design, "we only ADD suppression, never remove
+ * it". So a player who switched cart on and then walked was never corrected in either the setting or
+ * that helper. cartModeSuggestion, which answers exactly this and in both directions, was orphaned.
+ *
+ * SILENTLY, and that is the point: no prompt, no question, nothing to tap. Asking the player to
+ * confirm a fact the phone already measured is the interruption this app is supposed to remove.
+ * [[hands-free-zero-setup-is-the-product]]
+ *
+ * AN EXPLICIT CHOICE IS NEVER OVERRIDDEN. If the player declared how they are getting round,
+ * roundStore.transportMode holds it and this does nothing — the same rule shotDetectionService
+ * already follows, so the two cannot disagree.
+ */
+function applyDetectedTransport(reading: DetectorReading): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const round = require('../store/roundStore') as typeof import('../store/roundStore');
+    const declared = round.useRoundStore.getState().transportMode;
+    if (declared === 'cart' || declared === 'walking') return;
+
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const settings = require('../store/settingsStore').useSettingsStore.getState();
+    const suggestion = cartModeSuggestion(settings.cartMode, reading);
+    if (suggestion === null) return;
+
+    const next = suggestion === 'enable_cart';
+    console.log(`[walkingDetector] transport auto-detected as ${next ? 'CART' : 'WALKING'} — correcting the setting`);
+    settings.setCartMode?.(next);
+  } catch (e) {
+    // Never let a settings write break the tick that feeds shot detection.
+    console.log('[walkingDetector] transport auto-apply failed:', e);
+  }
 }
 
 export function stopActivityTicker(): void {

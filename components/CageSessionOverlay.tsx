@@ -1,4 +1,5 @@
 import { analyzeStrike, toCageContact } from '../services/acousticsAnalyzer';
+import { setSuppressed as setEarbudSuppressed } from '../services/earbudControl';
 import type { ReviewLabels } from '../store/cageStore';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as ScreenOrientation from 'expo-screen-orientation';
@@ -150,13 +151,33 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
   useEffect(() => {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
     // Phase 105 — register cage surface so caddieResolver routes the
-    // cage-pillar caddie (Tank by default) into voice / brain / avatar.
+    // cage-pillar caddie into voice / brain / avatar. (2026-08-30: this said
+    // "Tank by default"; Tank was removed from the app on 08-25.)
     setActiveSurface('cage');
     return () => {
       clearActiveSurface('cage');
       ScreenOrientation.unlockAsync();
     };
   }, []);
+
+  /**
+   * 2026-08-30 (Tim, per-item OK under the voice freeze) — DON'T TALK OVER A SWING.
+   *
+   * earbudControl.setSuppressed has said since it was written that it is "used by Cage Session
+   * screen to silence Kevin during active swing capture so a tap doesn't open TTS over a swing in
+   * progress. Pop on unmount." This screen never called it. So an earbud tap mid-capture opened the
+   * caddie's voice into a swing the player was mid-way through — and the recording carries the
+   * audio, so it lands in the analysis too.
+   *
+   * Suppression is orthogonal to the user's earbud SETTING and must not touch it: this pushes and
+   * pops a surface-level flag, and the cleanup runs on unmount as well as on leaving 'recording',
+   * so an abandoned session can never leave the earbud muted for the rest of the round.
+   */
+  useEffect(() => {
+    if (phase !== 'recording') return;
+    setEarbudSuppressed(true);
+    return () => { setEarbudSuppressed(false); };
+  }, [phase]);
 
   // ─── Permissions ──────────────────────────────────────────────────────────
 

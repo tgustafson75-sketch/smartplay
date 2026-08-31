@@ -171,8 +171,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
     'already owns tap-to-target distance (app/smartvision.tsx measureYards, which also applies the ' +
     'plays-like adjustment this helper does not). Wiring it would create a SECOND answer to "how far ' +
     'to the point I tapped" — the exact defect class fixed five times today. Delete candidate.',
-  'services/walkingDetector.ts :: cartModeSuggestion':
-    'WIRE — detects that the cart-mode setting disagrees with measured activity and offers the flip. Computed, never offered.',
   'services/patternEngine.ts :: getKevinShotResponse':
     'WIRE — caddie-facing language for a logged shot. The engine runs; this half of it speaks to nobody.',
   'services/patternEngine.ts :: getDominantMissLabel':
@@ -257,8 +255,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
     'SURFACE — a synchronous read of the turn buffer for callers outside React.',
   'services/dialogEngine.ts :: listSituations':
     'SURFACE — introspection over the template registry; its own docstring says tests and help-discovery.',
-  'services/earbudControl.ts :: setSuppressed':
-    'WIRE — suppresses earbud taps during swing capture so a tap cannot open TTS over a swing in progress. The Cage session screen it names never called it. Real, small, and it touches the voice path, which is frozen without Tim per-item approval. [[voice-path-change-freeze]]',
   'services/featureAccess.ts :: featuresIn':
     'PARKED — the edition comparison table for the paywall. The paywall ships a written feature list instead, and changing paywall copy is layout-frozen. Revisit when subscriptions turn on; the check against docs/edition-matrix.md belongs to that same pass.',
   'services/fillerLibrary.ts :: getFallbackTextForCategory':
@@ -313,7 +309,12 @@ export const ORPHAN_BASELINE: Record<string, string> = {
     + 'or sits beside it — a second answer to "how long is this hole" is the defect class this '
     + 'baseline exists to catch, so it must replace rather than join.',
   'services/responseRouter.ts :: fillerForSonnetVision':
-    'WIRE — centralises which filler plays during an out-of-band Sonnet call so every bridge shares one vocabulary. Each bridge currently picks its own. Cosmetic divergence, not a defect; touches the voice path, so it needs Tim per-item. [[voice-path-change-freeze]]',
+    'DO NOT WIRE — Tim approved wiring this on 2026-08-30, on my description of it, and my '
+    + 'description was wrong. I said each vision bridge picks its own filler; they pick NONE. '
+    + 'Pre-response conversational filler was REMOVED from the response path on 2026-06-10: a clip '
+    + 'firing at 400ms finished about 2s into a 4-6s brain reply, left dead air, and '
+    + 'double-acknowledged the brain own natural opening. A sim guard asserts it stays gone. Wiring '
+    + 'this reintroduces a fixed defect — the same reason wristCentroid is marked DO NOT WIRE.',
   'services/smartTempo.ts :: tempoTargetFrames':
     'PARKED — frame counts for a replay-at-tempo overlay that has no surface yet.',
   'services/swing/poseMotion.ts :: wristCentroid':
@@ -331,7 +332,14 @@ export const ORPHAN_BASELINE: Record<string, string> = {
   'services/trustLevelService.ts :: defaultWakeWordOn':
     'PARKED — Phase G ships wake-word detection; this stages the per-level default and there is no detector to default yet.',
   'services/trustLevelService.ts :: psychologistEnabled':
-    'PARKED — gates the between-shots walking conversation at L3. conversationalLoggingOrchestrator has no trust-level gate at all, so wiring this would CHANGE shipped behaviour rather than restore it, and needs a product call. Named blocker: the walking-conversation gate design. Its sibling proactiveEnabled was a real defect and was fixed 2026-08-30.',
+    'DUPE — Tim asked on 2026-08-30 to gate the walking conversation to Active. The premise was '
+    + 'mine and it was wrong: there IS no unprompted walking conversation. Psychologist is a ROLE '
+    + 'applied to replies the player asked for — listeningSession.pickOpener infers arena to '
+    + 'psychologist, in-round to caddie, else coach — and it ALREADY gates on trust level there, '
+    + 'giving L1 a terse acknowledgement instead of chat. Gating this would degrade answers the '
+    + 'player REQUESTED rather than reduce interruptions, and unprompted speech is already handled '
+    + 'by proactiveDebounceMs, which returns null at L1. Its sibling proactiveEnabled WAS a real '
+    + 'defect and was fixed the same day.',
   'services/tutorialContext.ts :: buildCompressedPracticeContext':
     'SURFACE — a compressed variant for the tactical prompt; the full builder is the one wired.',
   'services/vocabularyProfileService.ts :: getTotalShotsParsed':
