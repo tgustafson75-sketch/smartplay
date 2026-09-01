@@ -16,12 +16,16 @@ import * as path from 'path';
 const src = fs.readFileSync(path.join(__dirname, '..', '..', 'components/swinglab/SwingBodyOverlay.tsx'), 'utf8');
 const code = src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
 
-/** The shipped maths, mirrored, so the behaviour is exercised rather than grepped. */
-const strokeFor = (shoulderPx: number | null, strokeBase: number) => {
-  const subjectSpan = shoulderPx ?? strokeBase * 0.06;
-  const raw = subjectSpan * 0.04;
-  return Math.min(Math.max(raw, strokeBase * 0.0022), strokeBase * 0.008);
-};
+/**
+ * 2026-08-31, second pass — THE REAL FUNCTION, not a copy of it.
+ *
+ * The first version of this file mirrored the arithmetic here because the component is JSX and the
+ * logic project cannot import it. That test would have passed even if the shipped component said
+ * something different, which is the definition of a test proving nothing. The maths now lives in
+ * services/swing/overlayScale, the component calls it, and so does this.
+ */
+import { strokeForSubject } from '../../services/swing/overlayScale';
+const strokeFor = (shoulderPx: number | null, strokeBase: number) => strokeForSubject(shoulderPx, strokeBase);
 
 describe('the skeleton is drawn at the scale of the player', () => {
   /** strokeBase is max(frameW, frameH) — a portrait 1080x1920 clip. */
@@ -73,7 +77,14 @@ describe('the skeleton is drawn at the scale of the player', () => {
     expect(code).toMatch(/right_shoulder/);
     expect(code).toMatch(/\?\? \(bbox \?/);
     expect(code).toMatch(/\?\? strokeBase \* 0\.06/);
-    expect(code).toMatch(/subjectSpan \* 0\.04/);
+    // The arithmetic itself lives in the shared module the component and this test BOTH call — so
+    // the component must delegate rather than carry its own copy.
+    expect(code).toMatch(/strokeForSubject\(subjectSpan, strokeBase\)/);
+    expect(code).not.toMatch(/subjectSpan \* 0\.0\d/);
+    const scale = fs.readFileSync(path.join(__dirname, '..', '..', 'services/swing/overlayScale.ts'), 'utf8');
+    expect(scale).toMatch(/STROKE_PER_SHOULDER = 0\.04/);
+    // The ceiling is the OLD constant on purpose: never thicker than the line he called too thick.
+    expect(scale).toMatch(/MAX_FRACTION = 0\.008/);
   });
 
   it('joint dots shrink with the lines they sit on', () => {

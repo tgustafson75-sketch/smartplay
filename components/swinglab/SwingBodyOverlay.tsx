@@ -30,6 +30,7 @@ import { View, StyleSheet } from 'react-native';
 import Svg, { Path, Line, Circle, G } from 'react-native-svg';
 import type { PoseFrame, Keypoint } from '../../services/poseAnalysisApi';
 import { cleanArc, catmullRomBezier, catmullRomPoint, type ArcPoint } from '../../services/swing/smoothArc';
+import { strokeForSubject } from '../../services/swing/overlayScale';
 // 2026-08-11 — pose-window interpolation lives in a PURE module so it can be tested (this file
 // imports react-native-svg, which the logic suite cannot load). See poseInterpolate for the fix
 // that stops an address skeleton being drawn over a player who hasn't walked into frame yet.
@@ -403,10 +404,7 @@ export default function SwingBodyOverlay({
    * hairline that disappears. Between them the stroke is a constant fraction of the player, which is
    * what "adjusts to how far away you are" actually means.
    */
-  const swRaw = subjectSpan * 0.04;
-  const swMin = strokeBase * 0.0022;
-  const swMax = strokeBase * 0.008;
-  const sw = Math.min(Math.max(Number.isFinite(swRaw) ? swRaw : strokeBase * 0.006, swMin), swMax);
+  const sw = strokeForSubject(subjectSpan, strokeBase);
   // 2026-06-15 (Tim) — joint dots were too big and overlapped; smaller so the
   // skeleton reads cleanly (joints sit on the lines, not blobs over them).
   // Tied to `sw` so the dots shrink with the player alongside the lines they sit on.

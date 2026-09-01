@@ -12,6 +12,7 @@
  * guard is actually sufficient rather than merely present.
  */
 import { isValidGolfCoord } from '../../utils/coordGuard';
+import { isImplausibleYardage } from '../../utils/yardagePlausibility';
 import { haversineYards, haversineMeters, bearingDegrees, destinationPoint } from '../../utils/geoDistance';
 
 /** Real golf latitudes/longitudes plus the edges the guard still admits. */
@@ -68,9 +69,16 @@ describe('every coordinate the guard accepts yields a usable number', () => {
  */
 describe('a sanity clamp must reject what it cannot compare', () => {
   const maxYds = 500;
-  /** The hardened predicate, mirrored exactly from services/smartFinderService. */
-  const implausible = (v: number | null | undefined): boolean =>
-    v != null && (!Number.isFinite(v) || v < 0 || v > maxYds);
+  /**
+   * 2026-08-31, second pass — THE REAL PREDICATE, not a copy.
+   *
+   * The first version of this mirrored the maths, because smartFinderService pulls in native
+   * modules the logic project cannot load. That test would have passed even if the shipped clamp
+   * said something different — proving nothing about the most consequential number this app shows.
+   * The predicate now lives in utils/yardagePlausibility; smartFinderService calls it at all three
+   * clamps and so does this.
+   */
+  const implausible = (v: number | null | undefined): boolean => isImplausibleYardage(v, maxYds);
 
   it('REJECTS non-finite — the case a bare > silently admits', () => {
     for (const v of [NaN, Infinity, -Infinity]) {
@@ -92,5 +100,16 @@ describe('a sanity clamp must reject what it cannot compare', () => {
   it('leaves null alone — "no reading" is not an implausible reading', () => {
     expect(implausible(null)).toBe(false);
     expect(implausible(undefined)).toBe(false);
+  });
+
+  it('all three shipped clamps call the shared predicate — no local copy survives', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require('fs') as typeof import('fs');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const path = require('path') as typeof import('path');
+    const src = fs.readFileSync(path.join(__dirname, '..', '..', 'services/smartFinderService.ts'), 'utf8');
+    expect((src.match(/isImplausibleYardage\(/g) ?? []).length).toBeGreaterThanOrEqual(3);
+    // The bare comparison that NaN walks through must not come back.
+    expect(src).not.toMatch(/\(yards\.middle \?\? 0\) > maxYds/);
   });
 });

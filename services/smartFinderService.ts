@@ -1,5 +1,6 @@
 import { useRoundStore, type ShotLocation } from '../store/roundStore';
 import { haversineYards } from '../utils/geoDistance';
+import { isImplausibleYardage } from '../utils/yardagePlausibility';
 import {
   getOneShotFix,
   bumpToActive,
@@ -684,8 +685,7 @@ export async function getGreenYardages(holeNumber?: number): Promise<GreenYardag
    * this app has — a confidently wrong number, which is exactly the shape of the "over 7000 yards"
    * report this clamp was written for. [[smartfinder-tilt-caps-at-50-yards]]
    */
-  const implausible = (v: number | null | undefined): boolean =>
-    v != null && (!Number.isFinite(v) || v < 0 || v > maxYds);
+  const implausible = (v: number | null | undefined): boolean => isImplausibleYardage(v, maxYds);
   if (implausible(yards.middle) || implausible(yards.front) || implausible(yards.back)) {
     console.log('[smartFinder] yardages out of range (>', maxYds, ') — falling back to scorecard:', yards);
     // 2026-06-01 — Fix GF.2: emit a second calcLog entry with
@@ -764,8 +764,7 @@ export function getGreenYardagesSync(holeNumber?: number): GreenYardages {
    * this app has — a confidently wrong number, which is exactly the shape of the "over 7000 yards"
    * report this clamp was written for. [[smartfinder-tilt-caps-at-50-yards]]
    */
-  const implausible = (v: number | null | undefined): boolean =>
-    v != null && (!Number.isFinite(v) || v < 0 || v > maxYds);
+  const implausible = (v: number | null | undefined): boolean => isImplausibleYardage(v, maxYds);
   if (implausible(yards.middle) || implausible(yards.front) || implausible(yards.back)) {
     console.log('[smartFinder:sync] yardages out of range (>', maxYds, ') — falling back to scorecard:', yards);
     // 2026-06-01 — Fix GF.2: same clamp_fallback log emission as the
@@ -788,7 +787,7 @@ export async function distanceToPoint(target: ShotLocation): Promise<number | nu
   // the caller shows "no distance" instead of an absurd number that sends him for the wrong club.
   // Same reasoning as the green clamp above: `NaN > 600` is false, so a non-finite result would be
   // returned as a real distance. Non-finite is refused explicitly rather than compared.
-  if (!Number.isFinite(yards) || yards < 0 || yards > 600) {
+  if (isImplausibleYardage(yards, 600)) {
     console.log('[smartFinder] distanceToPoint out of range — bad fix, returning null:', yards);
     return null;
   }
