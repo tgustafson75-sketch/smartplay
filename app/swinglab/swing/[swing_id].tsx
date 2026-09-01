@@ -1582,11 +1582,25 @@ export default function SwingDetail() {
       return;
     }
     try {
-      const perm = await MediaLibrary.requestPermissionsAsync();
-      if (!perm.granted) {
-        Alert.alert('Photos access needed', 'Allow Photos access to save your swing video to your phone.');
-        return;
-      }
+      /**
+       * 2026-08-31 (Tim: "video exports are not working") — ASK FOR THE RIGHT PERMISSION, AND DO NOT
+       * REFUSE ON OUR OWN BEHALF.
+       *
+       * This called `requestPermissionsAsync()` with no argument, which requests FULL READ+WRITE
+       * access to the entire photo library. Saving a file needs none of that. The consequences:
+       *   - iOS: choosing "Limited" or "Add Photos Only" returns granted:false, so the app showed
+       *     "Photos access needed" and never attempted a save that would have SUCCEEDED.
+       *   - Android 13+: full read means READ_MEDIA_IMAGES/VIDEO, a much heavier ask than saving
+       *     warrants, and any refusal killed the export outright.
+       *
+       * `writeOnly` is the permission that matches the action — on iOS it is the soft "Add Photos
+       * Only" prompt. And when it is still not granted we now ATTEMPT the save anyway and let the
+       * platform decide, because the OS refusing is a fact while our prediction of it is a guess.
+       * The real error is logged either way, so a genuine refusal is now legible instead of assumed.
+       */
+      const perm = await MediaLibrary.requestPermissionsAsync(true).catch(() => null);
+      if (!perm?.granted) logExportFailure('save_video_permission', `not granted (${perm?.status ?? 'unknown'}) — attempting anyway`);
+
       const uri = (await resolveClipUri(shot.clipUri)) ?? shot.clipUri;
       await MediaLibrary.saveToLibraryAsync(uri);
       useToastStore.getState().show('Saved to your Photos');
@@ -1619,11 +1633,25 @@ export default function SwingDetail() {
       return;
     }
     try {
-      const perm = await MediaLibrary.requestPermissionsAsync();
-      if (!perm.granted) {
-        Alert.alert('Photos access needed', 'Allow Photos access to save the frame to your phone.');
-        return;
-      }
+      /**
+       * 2026-08-31 (Tim: "video exports are not working") — ASK FOR THE RIGHT PERMISSION, AND DO NOT
+       * REFUSE ON OUR OWN BEHALF.
+       *
+       * This called `requestPermissionsAsync()` with no argument, which requests FULL READ+WRITE
+       * access to the entire photo library. Saving a file needs none of that. The consequences:
+       *   - iOS: choosing "Limited" or "Add Photos Only" returns granted:false, so the app showed
+       *     "Photos access needed" and never attempted a save that would have SUCCEEDED.
+       *   - Android 13+: full read means READ_MEDIA_IMAGES/VIDEO, a much heavier ask than saving
+       *     warrants, and any refusal killed the export outright.
+       *
+       * `writeOnly` is the permission that matches the action — on iOS it is the soft "Add Photos
+       * Only" prompt. And when it is still not granted we now ATTEMPT the save anyway and let the
+       * platform decide, because the OS refusing is a fact while our prediction of it is a guess.
+       * The real error is logged either way, so a genuine refusal is now legible instead of assumed.
+       */
+      const perm = await MediaLibrary.requestPermissionsAsync(true).catch(() => null);
+      if (!perm?.granted) logExportFailure('grab_frame_permission', `not granted (${perm?.status ?? 'unknown'}) — attempting anyway`);
+
       const uri = (await resolveClipUri(shot.clipUri)) ?? shot.clipUri;
       const st = await videoRef.current?.getStatusAsync();
       const timeMs = (st && st.isLoaded ? st.positionMillis : 0) ?? 0;
