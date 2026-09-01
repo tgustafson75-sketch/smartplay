@@ -352,7 +352,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   bannerBtnNo: {
-    color: '#9ca3af',
+    color: '#c2cad4',
     fontSize: 11,
     fontWeight: '900',
     letterSpacing: 0.4,

@@ -113,7 +113,10 @@ export const darkTheme: ThemeTokens = {
     text_secondary:   '#e8f5e9',
     // Phase AA — was '#6b7280' identically in both themes; bumped lighter for
     // dark mode so muted labels are actually readable against #060f09.
-    text_muted:       '#9ca3af',
+    // 2026-09-01 (Tim: "all white text brighten") — was #9ca3af (grey-400). This is a GOLF app: the
+    // screen is read at arm's length, outdoors, in direct sun, often through polarised sunglasses.
+    // Grey-400 on a dark ground is comfortable at a desk and marginal on a tee box.
+    text_muted:       '#c2cad4',
     accent:           '#00C896',
     accent_muted:     '#003d20',
     accent_lime:      '#88F700',

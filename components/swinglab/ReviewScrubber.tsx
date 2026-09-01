@@ -87,7 +87,7 @@ export default function ReviewScrubber({ positionMs, durationMs, moments = [], o
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  time: { color: 'rgba(255,255,255,0.7)', fontSize: 10, fontWeight: '700', minWidth: 28, textAlign: 'center' },
+  time: { color: 'rgba(255,255,255,0.85)', fontSize: 10, fontWeight: '700', minWidth: 28, textAlign: 'center' },
   barArea: { flex: 1, height: 24, justifyContent: 'center' },
   track: { height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.22)' },
   fill: { position: 'absolute', top: 10, height: 4, borderRadius: 2, backgroundColor: '#88F700' },

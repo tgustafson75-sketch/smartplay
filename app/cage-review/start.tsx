@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
   },
   modeCardActive: { borderColor: '#00C896', backgroundColor: '#0a2a1c' },
   modeCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
-  modeTitle: { color: '#9ca3af', fontSize: 15, fontWeight: '800' },
+  modeTitle: { color: '#c2cad4', fontSize: 15, fontWeight: '800' },
   modeTitleActive: { color: '#00C896' },
   modeTime: { color: '#4b5563', fontSize: 11 },
   modeDesc: { color: '#6b7280', fontSize: 13, lineHeight: 18 },

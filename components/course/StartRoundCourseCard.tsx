@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(6,15,9,0.85)',
   },
   heroTitle: { color: '#fff', fontSize: 17, fontWeight: '900' },
-  heroLocation: { color: '#9ca3af', fontSize: 12, marginTop: 2 },
+  heroLocation: { color: '#c2cad4', fontSize: 12, marginTop: 2 },
   infoBtn: { padding: 4, marginLeft: 10 },
   statsStrip: {
     flexDirection: 'row', justifyContent: 'space-around',

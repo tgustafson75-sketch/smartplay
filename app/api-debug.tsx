@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
     borderColor: '#00C89622',
   },
   teeName: { color: '#00C896', fontSize: 12, fontWeight: '700' },
-  holeList: { color: '#a3b8a8', fontSize: 11, lineHeight: 17 },
+  holeList: { color: '#c4d4c8', fontSize: 11, lineHeight: 17 },
   bottomPad: { height: 40 },
   batterySubtitle: { color: '#4b5563', fontSize: 11, marginBottom: 12, fontStyle: 'italic' },
   batteryCard: {
@@ -398,5 +398,5 @@ const styles = StyleSheet.create({
   },
   batteryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   batteryLabel: { color: '#e8f5e9', fontSize: 13, fontWeight: '600', flex: 1, marginRight: 8 },
-  batteryResult: { color: '#9ca3af', fontSize: 12, lineHeight: 19, marginTop: 10, fontStyle: 'italic' },
+  batteryResult: { color: '#c2cad4', fontSize: 12, lineHeight: 19, marginTop: 10, fontStyle: 'italic' },
 });

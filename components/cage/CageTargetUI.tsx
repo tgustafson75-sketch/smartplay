@@ -163,7 +163,7 @@ const s = StyleSheet.create({
     position: 'absolute',
     fontSize: 9,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.22)',
+    color: 'rgba(255,255,255,0.6)',
     letterSpacing: 1,
   },
   canvas: {
@@ -207,7 +207,7 @@ const s = StyleSheet.create({
   disabledText: {
     fontSize: 13,
     fontWeight: '800',
-    color: 'rgba(255,255,255,0.6)',
+    color: 'rgba(255,255,255,0.85)',
     letterSpacing: 1.5,
   },
 });

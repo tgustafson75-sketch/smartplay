@@ -763,7 +763,7 @@ const styles = StyleSheet.create({
     padding: 12, color: '#f8fafc', fontSize: 15,
   },
   modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, alignItems: 'center' },
-  modalCancel: { color: '#94a3b8', fontSize: 13, fontWeight: '700' },
+  modalCancel: { color: '#bcc6d3', fontSize: 13, fontWeight: '700' },
   modalSave: { backgroundColor: '#88F700', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10 },
   modalSaveText: { color: '#0d1a0d', fontSize: 13, fontWeight: '900', letterSpacing: 0.4 },
 });

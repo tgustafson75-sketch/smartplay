@@ -693,7 +693,7 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   storageDumpText: {
-    color: '#9ca3af',
+    color: '#c2cad4',
     fontSize: 10,
     fontFamily: 'monospace',
   },
@@ -794,7 +794,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   sessionStats: {
-    color: '#a3b8a8',
+    color: '#c4d4c8',
     fontSize: 13,
   },
   sessionStatsSub: {
@@ -1057,7 +1057,7 @@ const feelStyles = StyleSheet.create({
     padding: 10,
     marginBottom: 8,
   },
-  tupleMeta: { color: '#9ca3af', fontSize: 10, marginBottom: 6 },
+  tupleMeta: { color: '#c2cad4', fontSize: 10, marginBottom: 6 },
   tupleLabel: { color: '#7dd3a8', fontSize: 9, fontWeight: '800', letterSpacing: 1.2, marginTop: 6 },
   feelBody: { color: '#e8f5e9', fontSize: 12, lineHeight: 17, fontStyle: 'italic', marginTop: 3 },
   readBody: { color: '#e8f5e9', fontSize: 12, lineHeight: 17, marginTop: 3 },
@@ -1068,6 +1068,6 @@ const feelStyles = StyleSheet.create({
     padding: 14,
     alignItems: 'center',
   },
-  emptyTitle: { color: '#9ca3af', fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
+  emptyTitle: { color: '#c2cad4', fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
   emptyBody: { color: '#6b7280', fontSize: 11, textAlign: 'center', marginTop: 6, lineHeight: 16 },
 });

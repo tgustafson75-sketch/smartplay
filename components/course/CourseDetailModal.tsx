@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: '#1e3a28',
   },
   headerTitle: { color: '#fff', fontSize: 17, fontWeight: '900' },
-  headerSub: { color: '#9ca3af', fontSize: 12, marginTop: 2 },
+  headerSub: { color: '#c2cad4', fontSize: 12, marginTop: 2 },
   closeBtn: { padding: 6 },
   scroll: { padding: 16, paddingBottom: 30 },
   sectionLabel: {
@@ -159,6 +159,6 @@ const styles = StyleSheet.create({
   holeBadgeText: { color: '#0d1a0d', fontSize: 10, fontWeight: '900' },
   holeMain: { flex: 1, justifyContent: 'center' },
   holeStat: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  holeNote: { color: '#9ca3af', fontSize: 12, marginTop: 4, lineHeight: 17 },
+  holeNote: { color: '#c2cad4', fontSize: 12, marginTop: 4, lineHeight: 17 },
   holeNoteMuted: { color: '#4b5563', fontSize: 12, marginTop: 4, fontStyle: 'italic' },
 });

@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#003d20',
   },
   chipText: {
-    color: '#9ca3af',
+    color: '#c2cad4',
     fontSize: 14,
     fontWeight: '600',
   },

@@ -44,7 +44,7 @@ export default function GlassesStatusBadge({ onPress, hideWhenUnavailable = true
     if (status.connected) {
       return { label: 'GLASSES PAIRED', color: '#fbbf24', dotColor: '#f59e0b' };
     }
-    return { label: 'GLASSES OFF', color: '#9ca3af', dotColor: '#6b7280' };
+    return { label: 'GLASSES OFF', color: '#c2cad4', dotColor: '#6b7280' };
   })();
 
   const inner = (

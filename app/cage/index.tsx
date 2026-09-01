@@ -353,7 +353,7 @@ const calStyles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: 8, marginTop: 16 },
   btn: { flex: 1, paddingVertical: 12, alignItems: 'center', borderWidth: 1, borderColor: '#1e3a28', borderRadius: 10, backgroundColor: '#0a1e12' },
   btnPrimary: { borderColor: '#00C896', backgroundColor: '#003d20' },
-  btnText: { color: '#9ca3af', fontSize: 13, fontWeight: '700' },
+  btnText: { color: '#c2cad4', fontSize: 13, fontWeight: '700' },
   btnTextPrimary: { color: '#00C896' },
 });
 
@@ -390,7 +390,7 @@ const styles = StyleSheet.create({
   },
   spaceHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   spaceLabel: { color: '#00C896', fontSize: 11, fontWeight: '900', letterSpacing: 1.4, flex: 1 },
-  spaceRescan: { color: '#9ca3af', fontSize: 11, fontWeight: '700' },
+  spaceRescan: { color: '#c2cad4', fontSize: 11, fontWeight: '700' },
   spaceSummary: { color: '#fff', fontSize: 13, lineHeight: 19 },
   spaceRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', marginTop: 4 },
   spaceTag: { color: '#6b7280', fontSize: 10, fontWeight: '900', letterSpacing: 1.2, width: 50, marginTop: 2 },
@@ -402,7 +402,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   scanPromptTitle: { color: '#00C896', fontSize: 13, fontWeight: '800' },
-  scanPromptSub: { color: '#9ca3af', fontSize: 11, marginTop: 2, lineHeight: 16 },
+  scanPromptSub: { color: '#c2cad4', fontSize: 11, marginTop: 2, lineHeight: 16 },
   cameraCard: {
     backgroundColor: '#1a0a00',
     borderRadius: 14,
@@ -537,7 +537,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   lastSessionText: {
-    color: '#9ca3af',
+    color: '#c2cad4',
     fontSize: 13,
   },
   historyBtn: {

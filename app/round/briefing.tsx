@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   ghostBadgeText: {
-    color: '#9ca3af',
+    color: '#c2cad4',
     fontSize: 12,
     fontWeight: '500',
   },

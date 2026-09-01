@@ -546,7 +546,7 @@ const toolCardStyles = StyleSheet.create({
   rowActive: { backgroundColor: 'rgba(136,247,0,0.12)' },
   iconWrap: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
   title: { color: '#ffffff', fontSize: 14, fontWeight: '800' },
-  desc: { color: 'rgba(255,255,255,0.62)', fontSize: 11, marginTop: 1 },
+  desc: { color: 'rgba(255,255,255,0.85)', fontSize: 11, marginTop: 1 },
 });
 
 // ─── screen ──────────────────────────────────────────────────────────
@@ -5590,11 +5590,11 @@ export default function SmartMotion() {
                       accessibilityRole="button"
                       accessibilityLabel={`${c.title}: ${c.value ?? 'not measured'}. Tap for detail.`}
                     >
-                      <Text style={[styles.gridCardLabel, { color: 'rgba(255,255,255,0.55)' }]} numberOfLines={1}>{c.title}</Text>
+                      <Text style={[styles.gridCardLabel, { color: 'rgba(255,255,255,0.75)' }]} numberOfLines={1}>{c.title}</Text>
                       <Text style={[styles.gridCardValue, { color: c.tone ?? '#F1F5F9' }]} numberOfLines={1} adjustsFontSizeToFit>
                         {c.value ?? '—'}
                       </Text>
-                      <Text style={[styles.gridCardNote, { color: 'rgba(255,255,255,0.62)' }]} numberOfLines={2}>{c.note}</Text>
+                      <Text style={[styles.gridCardNote, { color: 'rgba(255,255,255,0.85)' }]} numberOfLines={2}>{c.note}</Text>
                     </Pressable>
                   ))}
                 </View>
@@ -6214,7 +6214,7 @@ const styles = StyleSheet.create({
   dot: { width: 7, height: 7, borderRadius: 4 },
   swingCountOuter: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 6, pointerEvents: 'box-none' },
   swingCountPill: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(6,15,9,0.82)', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
-  swingCountLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: '800', letterSpacing: 1, marginRight: 2 },
+  swingCountLabel: { color: 'rgba(255,255,255,0.75)', fontSize: 10, fontWeight: '800', letterSpacing: 1, marginRight: 2 },
   swingCountChip: { minWidth: 30, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)', alignItems: 'center' },
   swingCountText: { color: '#fff', fontSize: 12, fontWeight: '800' },
   // 2026-06-26 (Tim) — DRILL identity banner. Canonical SmartMotion icon green
@@ -6237,8 +6237,8 @@ const styles = StyleSheet.create({
   metricBadgeImg: { width: 32, height: 32 },
   metricBadgeText: { flex: 1, minWidth: 0 },
   metricBadgeValue: { color: '#88F700', fontSize: 14, fontWeight: '900', letterSpacing: 0.2 },
-  metricBadgeUnit: { color: 'rgba(255,255,255,0.6)', fontSize: 9, fontWeight: '700' },
-  metricBadgeLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 8, fontWeight: '700', letterSpacing: 0.8 },
+  metricBadgeUnit: { color: 'rgba(255,255,255,0.85)', fontSize: 9, fontWeight: '700' },
+  metricBadgeLabel: { color: 'rgba(255,255,255,0.75)', fontSize: 8, fontWeight: '700', letterSpacing: 0.8 },
 
   recPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, zIndex: 6 },
   framingPill: { position: 'absolute', alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, zIndex: 6, maxWidth: '88%' },
@@ -6246,9 +6246,9 @@ const styles = StyleSheet.create({
   aimReadoutDivider: { width: 1, height: 16, backgroundColor: 'rgba(255,255,255,0.2)' },
   // Tempo data pill — vertical, left edge.
   tempoPill: { position: 'absolute', left: 10, zIndex: 6, alignItems: 'center', backgroundColor: 'rgba(6,15,9,0.6)', borderRadius: 14, paddingVertical: 8, paddingHorizontal: 10, gap: 1 },
-  tempoPillLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 9, fontWeight: '800', letterSpacing: 1.5 },
+  tempoPillLabel: { color: 'rgba(255,255,255,0.85)', fontSize: 9, fontWeight: '800', letterSpacing: 1.5 },
   tempoPillValue: { fontSize: 22, fontWeight: '900' },
-  tempoPillUnit: { color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: '700' },
+  tempoPillUnit: { color: 'rgba(255,255,255,0.85)', fontSize: 10, fontWeight: '700' },
   effortPill: { position: 'absolute', left: 10, zIndex: 6, alignItems: 'center', backgroundColor: 'rgba(6,15,9,0.6)', borderRadius: 14, paddingVertical: 8, paddingHorizontal: 10, gap: 1 },
   // Setup tool rail — translucent icon buttons on the right edge.
   toolRail: { position: 'absolute', right: 10, gap: 12, zIndex: 7, alignItems: 'center' },
@@ -6283,7 +6283,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(136,247,0,0.22)', padding: 10, gap: 2,
     shadowColor: '#000', shadowOpacity: 0.6, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 10,
   },
-  toolCardHeader: { color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: '900', letterSpacing: 1.3, marginBottom: 4, marginLeft: 4 },
+  toolCardHeader: { color: 'rgba(255,255,255,0.75)', fontSize: 10, fontWeight: '900', letterSpacing: 1.3, marginBottom: 4, marginLeft: 4 },
   toolCardIcon: { width: 34, height: 34 },
   modeCycleBtn: { width: 50, height: 50, borderRadius: 25, borderWidth: 1.5, borderColor: 'rgba(136,247,0,0.6)', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(6,15,9,0.55)' },
   modeCycleImg: { width: 42, height: 42 },
@@ -6320,14 +6320,14 @@ const styles = StyleSheet.create({
   // three-circle control row (golfer · record · flag), matching the mockup.
   planRow: { flexDirection: 'row', gap: 6 },
   planCard: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 1, backgroundColor: 'rgba(6,15,9,0.82)', borderWidth: 1, borderColor: 'rgba(136,247,0,0.28)', borderRadius: 12, paddingVertical: 6, paddingHorizontal: 8 },
-  planLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 9, fontWeight: '800', letterSpacing: 1 },
+  planLabel: { color: 'rgba(255,255,255,0.75)', fontSize: 9, fontWeight: '800', letterSpacing: 1 },
   planValue: { color: '#88F700', fontSize: 20, fontWeight: '900', letterSpacing: 0.3 },
   planValueText: { fontSize: 15 },
-  planUnit: { color: 'rgba(255,255,255,0.5)', fontSize: 9, fontWeight: '700' },
+  planUnit: { color: 'rgba(255,255,255,0.75)', fontSize: 9, fontWeight: '700' },
   planSeg: { flexDirection: 'row', gap: 2, marginTop: 3 },
   planSegCell: { width: 8, height: 4, borderRadius: 1 },
   swingRow: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', backgroundColor: 'rgba(6,15,9,0.82)', borderRadius: 999, borderWidth: 1, borderColor: 'rgba(136,247,0,0.22)', paddingHorizontal: 12, paddingVertical: 5 },
-  swingRowLabel: { color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginRight: 2 },
+  swingRowLabel: { color: 'rgba(255,255,255,0.75)', fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginRight: 2 },
   swingRowChip: { minWidth: 38, paddingHorizontal: 11, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)', alignItems: 'center' },
   swingRowChipText: { color: '#fff', fontSize: 12, fontWeight: '800' },
   controlsRowTriple: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -6373,7 +6373,7 @@ const styles = StyleSheet.create({
   shotShapeCard: { position: 'absolute', alignSelf: 'center', maxWidth: '88%', backgroundColor: 'rgba(6,15,9,0.86)', borderWidth: 1, borderColor: 'rgba(124,224,79,0.4)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, zIndex: 7 },
   shotShapeTitle: { color: '#fff', fontSize: 12, fontWeight: '900', letterSpacing: 1.2, textAlign: 'center' },
   shotShapeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 6 },
-  shotShapeLeg: { color: '#9ca3af', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  shotShapeLeg: { color: '#c2cad4', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
   shotShapeVal: { color: '#e8f5e9', fontSize: 11, fontWeight: '900' },
   shotShapeFeedback: { color: '#e8f5e9', fontSize: 12, lineHeight: 17, textAlign: 'center', marginTop: 6 },
   traceCaption: { position: 'absolute', alignSelf: 'center', maxWidth: '86%', backgroundColor: 'rgba(6,15,9,0.82)', borderRadius: 9, paddingHorizontal: 11, paddingVertical: 6, zIndex: 7 },

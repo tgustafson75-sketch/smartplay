@@ -129,7 +129,10 @@ export default function SmartFinder() {
    * So the measure stays fully live and the course furniture stands down. Degrade and flag, never go
    * dark. [[overstrict-gate-lens]] [[hands-free-zero-setup-is-the-product]]
    */
-  const offCourse = !geoCourseId;
+  const offCourseSetting = useSmartFinderStore(s => s.offCourse);
+  const setOffCourse = useSmartFinderStore(s => s.setOffCourse);
+  // Explicit setting OR genuinely no course. Either way the course furniture stands down.
+  const offCourse = offCourseSetting || !geoCourseId;
 
   const mode = useSmartFinderStore(s => s.mode);
   const setMode = useSmartFinderStore(s => s.setMode);
@@ -332,7 +335,7 @@ export default function SmartFinder() {
           accessibilityLabel="Switch to putt camera"
         >
           <Ionicons name="golf-outline" size={16} color="#9ca3af" />
-          <Text style={{ color: '#9ca3af', fontSize: 13, fontWeight: '700' }}>Putt</Text>
+          <Text style={{ color: '#c2cad4', fontSize: 13, fontWeight: '700' }}>Putt</Text>
         </TouchableOpacity>
       </View>
 
@@ -381,9 +384,29 @@ export default function SmartFinder() {
         </View>
         )}
         {offCourse && (
-          <Text style={styles.offCourseNote} accessibilityRole="text">
-            Point-to-point measure · no course selected
-          </Text>
+          <TouchableOpacity
+            onPress={() => geoCourseId && setOffCourse(false)}
+            disabled={!geoCourseId}
+            accessibilityRole={geoCourseId ? 'button' : 'text'}
+            accessibilityLabel={geoCourseId
+              ? 'Practice measure on. Tap to go back to the course.'
+              : 'Point-to-point measure, no course selected'}
+          >
+            <Text style={styles.offCourseNote}>
+              {geoCourseId
+                ? 'PRACTICE MEASURE · tap to use the course'
+                : 'POINT-TO-POINT MEASURE · no course selected'}
+            </Text>
+          </TouchableOpacity>
+        )}
+        {!offCourse && (
+          <TouchableOpacity
+            onPress={() => setOffCourse(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Practice measure — measure distances without a hole"
+          >
+            <Text style={styles.practiceToggle}>PRACTICE MEASURE</Text>
+          </TouchableOpacity>
         )}
 
         {/* 2026-05-22 — Refresh GPS / "Where am I?" surface. Shared
@@ -2035,7 +2058,7 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
             <View style={{ position: 'absolute', left: '50%', width: 1.5, height: 14, backgroundColor: 'rgba(255,255,255,0.55)', top: -4, marginLeft: -0.75 }} />
             <View style={{ position: 'absolute', left: `${50 + Math.max(-45, Math.min(45, (liveSlopePct ?? 0) * 5))}%`, width: 12, height: 12, borderRadius: 6, marginLeft: -6, backgroundColor: slopeColor(liveSlopePct) }} />
           </View>
-          <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 9, marginTop: 6, fontWeight: '600' }}>estimate · hold steady over the line</Text>
+          <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 9, marginTop: 6, fontWeight: '600' }}>estimate · hold steady over the line</Text>
         </View>
       </View>
 
@@ -2108,7 +2131,7 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
               <View style={{ marginTop: 10, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#00C896', backgroundColor: 'rgba(0,200,150,0.12)' }}>
                 <Text style={{ color: '#00C896', fontSize: 10, fontWeight: '900', letterSpacing: 1 }}>YOUR READ</Text>
                 <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', marginTop: 3 }}>{puttRead}</Text>
-                <Text style={{ color: 'rgba(255,255,255,0.55)', fontSize: 9, marginTop: 5 }}>estimate from phone tilt — trust your own read too</Text>
+                <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 9, marginTop: 5 }}>estimate from phone tilt — trust your own read too</Text>
               </View>
             ) : null}
             <TouchableOpacity style={styles.clearBtn} onPress={reset}>
@@ -2408,7 +2431,7 @@ return StyleSheet.create({
   // SHOULD fill the wide canvas for the viewfinder, so they're
   // intentionally not maxWidth-capped.
   scroll: { paddingTop: 12, paddingBottom: 32, maxWidth: 720, alignSelf: 'center', width: '100%' },
-  empty: { color: '#9ca3af', fontSize: 13, textAlign: 'center', paddingHorizontal: 24, marginVertical: 24 },
+  empty: { color: '#c2cad4', fontSize: 13, textAlign: 'center', paddingHorizontal: 24, marginVertical: 24 },
 
   // Camera mode container
   cameraContainer: { flex: 1, backgroundColor: '#000' },
@@ -2506,7 +2529,7 @@ return StyleSheet.create({
   brainReadHeadline: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   brainReadClub: { color: '#00C896', fontSize: 22, fontWeight: '900', letterSpacing: 0.3 },
   brainReadNums: { color: '#ffffff', fontSize: 15, fontWeight: '800' },
-  brainReadWhy: { color: 'rgba(255,255,255,0.78)', fontSize: 12, fontWeight: '600', marginTop: 3 },
+  brainReadWhy: { color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '600', marginTop: 3 },
   brainReadTend: { color: '#F0C030', fontSize: 12, fontWeight: '700', marginTop: 2 },
   brainReadPast: { color: '#7CC0FF', fontSize: 12, fontWeight: '700', marginTop: 2 },
   targetIntelTopRow: {
@@ -2516,7 +2539,7 @@ return StyleSheet.create({
   },
   targetIntelMetric: { alignItems: 'center', minWidth: 60 },
   targetIntelLabel: {
-    color: 'rgba(255,255,255,0.65)',
+    color: 'rgba(255,255,255,0.85)',
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1.1,
@@ -2538,7 +2561,7 @@ return StyleSheet.create({
   },
   targetFmbRow: { flexDirection: 'row', justifyContent: 'space-around', alignSelf: 'stretch' },
   targetFmbCol: { alignItems: 'center', minWidth: 70 },
-  targetFmbHeader: { color: 'rgba(255,255,255,0.55)', fontSize: 12, fontWeight: '900', letterSpacing: 1.4 },
+  targetFmbHeader: { color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: '900', letterSpacing: 1.4 },
   targetFmbHeaderMid: { color: '#00C896', fontSize: 12, fontWeight: '900', letterSpacing: 1.4 },
   targetFmbValue: { color: '#fff', fontSize: 18, fontWeight: '800', letterSpacing: 0.4, marginTop: 2 },
   targetFmbValueMid: { color: '#00C896', fontSize: 20, fontWeight: '900', letterSpacing: 0.4, marginTop: 2 },
@@ -2558,14 +2581,14 @@ return StyleSheet.create({
   puttResultRow: { flexDirection: 'row', alignItems: 'center', gap: 24, marginTop: 4 },
   puttResultItem: { alignItems: 'center', minWidth: 80 },
   puttResultValue: { color: '#ffffff', fontSize: 32, fontWeight: '900' },
-  puttResultLabel: { color: '#9ca3af', fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginTop: 2 },
+  puttResultLabel: { color: '#c2cad4', fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginTop: 2 },
   puttDivider: { width: 1, height: 36, backgroundColor: 'rgba(255,255,255,0.15)' },
   puttHint: { color: '#cbd5e1', fontSize: 12, marginTop: 8, textAlign: 'center', paddingHorizontal: 16 },
 
   // Permission gate
   permBox: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   permTitle: { color: '#ffffff', fontSize: 20, fontWeight: '800', marginBottom: 12 },
-  permText: { color: '#9ca3af', fontSize: 15, lineHeight: 22, textAlign: 'center', marginBottom: 28 },
+  permText: { color: '#c2cad4', fontSize: 15, lineHeight: 22, textAlign: 'center', marginBottom: 28 },
   permBtn: { backgroundColor: '#00C896', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 32 },
   permBtnText: { color: c.background, fontSize: 16, fontWeight: '800' },
   backLink: { marginTop: 20 },
@@ -2599,11 +2622,11 @@ return StyleSheet.create({
   playsLike: { color: '#F5A623', fontSize: 12, fontWeight: '700', marginTop: 2 },
 
   canvasWrap: { paddingHorizontal: 16, paddingTop: 12, alignItems: 'center' },
-  canvasHint: { color: '#9ca3af', fontSize: 12, marginBottom: 8 },
+  canvasHint: { color: '#c2cad4', fontSize: 12, marginBottom: 8 },
   tapResult: { color: '#ffffff', fontSize: 16, fontWeight: '800', marginTop: 12 },
   hazardList: { marginTop: 24, alignSelf: 'stretch', paddingHorizontal: 16 },
   hazardHeading: { color: '#00C896', fontSize: 11, fontWeight: '800', letterSpacing: 1.4, marginBottom: 8 },
-  hazardItem: { color: '#9ca3af', fontSize: 13, lineHeight: 19 },
+  hazardItem: { color: '#c2cad4', fontSize: 13, lineHeight: 19 },
   geometryMsgRow: { marginTop: 16, alignSelf: 'stretch', alignItems: 'center', paddingHorizontal: 16 },
   geometryMsgText: { color: '#fbbf24', fontSize: 12, fontWeight: '600', letterSpacing: 0.4, textAlign: 'center' },
   markGreenBtn: {
@@ -2628,7 +2651,10 @@ return StyleSheet.create({
   holeNavLabel: { color: '#ffffff', fontSize: 14, fontWeight: '800', letterSpacing: 1.2 },
   // Sits where the hole navigator would be, so the row does not collapse and the player is TOLD
   // what the screen is doing rather than left with a blank strip.
-  offCourseNote: { color: 'rgba(255,255,255,0.55)', fontSize: 12, fontWeight: '700', letterSpacing: 0.8, textAlign: 'center', paddingVertical: 10 },
+  // The way INTO practice measure while a course is still selected. Deliberately quiet — it sits
+  // under the hole navigator and must not compete with it on a course.
+  practiceToggle: { color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: '700', letterSpacing: 1, textAlign: 'center', paddingBottom: 8 },
+  offCourseNote: { color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: '700', letterSpacing: 0.8, textAlign: 'center', paddingVertical: 10 },
   // 2026-05-22 — Refresh GPS button. Blue accent to differentiate from
   // the green hole-nav pills above; full-width, generous touch target.
   refreshGpsBtn: {
@@ -2664,13 +2690,13 @@ return StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   pickerBtnActive: { backgroundColor: '#003d20', borderColor: '#00C896' },
-  pickerBtnText: { color: '#9ca3af', fontSize: 18, fontWeight: '800' },
+  pickerBtnText: { color: '#c2cad4', fontSize: 18, fontWeight: '800' },
   pickerBtnTextActive: { color: '#00C896' },
   pickerCloseBtn: {
     marginTop: 16, paddingVertical: 10, alignItems: 'center',
     borderWidth: 1, borderColor: c.border, borderRadius: 10,
   },
-  pickerCloseText: { color: '#9ca3af', fontSize: 13, fontWeight: '700' },
+  pickerCloseText: { color: '#c2cad4', fontSize: 13, fontWeight: '700' },
 });
 }
 

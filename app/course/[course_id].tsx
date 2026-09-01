@@ -721,7 +721,7 @@ const styles = StyleSheet.create({
   },
   heroTitle: { color: '#fff', fontSize: 22, fontWeight: '900' },
   heroLocRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  heroLocation: { color: '#9ca3af', fontSize: 13 },
+  heroLocation: { color: '#c2cad4', fontSize: 13 },
 
   statsStrip: {
     flexDirection: 'row', justifyContent: 'space-around',

@@ -151,7 +151,7 @@ export default function HarnessScreen() {
             Scenarios module failed to load. Force-quit + reopen if you just received an OTA. If this
             persists, the error below points at the import that crashed.
           </Text>
-          <Text selectable style={{ color: '#9ca3af', fontSize: 11, marginTop: 16, fontFamily: 'monospace' }}>
+          <Text selectable style={{ color: '#c2cad4', fontSize: 11, marginTop: 16, fontFamily: 'monospace' }}>
             {_scenariosLoadError}
           </Text>
         </ScrollView>
@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
   },
   summaryText: { color: '#d1d5db', fontSize: 13, fontWeight: '600' },
   sectionLabel: {
-    color: '#9ca3af',
+    color: '#c2cad4',
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1.2,
@@ -416,7 +416,7 @@ const styles = StyleSheet.create({
   checkRow: { flexDirection: 'row', alignItems: 'flex-start', marginVertical: 2 },
   checkStatus: { fontSize: 12, width: 16, fontWeight: '700' },
   checkLabel: { color: '#d1d5db', fontSize: 12 },
-  checkDetail: { color: '#9ca3af', fontSize: 11, marginTop: 2 },
+  checkDetail: { color: '#c2cad4', fontSize: 11, marginTop: 2 },
   lockedBody: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  lockedText: { color: '#9ca3af', fontSize: 14, textAlign: 'center', lineHeight: 22 },
+  lockedText: { color: '#c2cad4', fontSize: 14, textAlign: 'center', lineHeight: 22 },
 });

@@ -57,5 +57,5 @@ const styles = StyleSheet.create({
   brandName: { color: '#00C896', fontSize: 16, fontWeight: '800', letterSpacing: 2.5, textTransform: 'uppercase' },
   brandSub: { color: '#ffffff', fontSize: 16, fontWeight: '800', letterSpacing: 2.5, textTransform: 'uppercase' },
   menuBtn: { padding: 8, gap: 3 },
-  dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#9ca3af' },
+  dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#c2cad4' },
 });

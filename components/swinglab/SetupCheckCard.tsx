@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
   },
   keepBlock: { backgroundColor: 'rgba(63,185,80,0.07)', borderLeftColor: '#3FB950' },
   tweakText: { color: '#e8f5e9', fontSize: 14, lineHeight: 20, fontWeight: '600' },
-  evidence: { color: '#9ca3af', fontSize: 11, lineHeight: 16, fontStyle: 'italic', marginTop: 2, marginBottom: 8 },
+  evidence: { color: '#c2cad4', fontSize: 11, lineHeight: 16, fontStyle: 'italic', marginTop: 2, marginBottom: 8 },
   actions: { flexDirection: 'row', gap: 10, marginTop: 8, flexWrap: 'wrap' },
   btn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -102,6 +102,6 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#1e3a28', borderRadius: 10, backgroundColor: '#0a1e12',
   },
   btnPrimary: { borderColor: '#00C896', backgroundColor: '#003d20' },
-  btnText: { color: '#9ca3af', fontSize: 13, fontWeight: '700' },
+  btnText: { color: '#c2cad4', fontSize: 13, fontWeight: '700' },
   btnTextPrimary: { color: '#00C896' },
 });

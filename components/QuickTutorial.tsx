@@ -196,5 +196,5 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   gotItText: { color: '#0d1a0d', fontSize: 14, fontWeight: '900' },
-  skipText: { color: '#9ca3af', fontSize: 12, textAlign: 'center', marginTop: 6 },
+  skipText: { color: '#c2cad4', fontSize: 12, textAlign: 'center', marginTop: 6 },
 });

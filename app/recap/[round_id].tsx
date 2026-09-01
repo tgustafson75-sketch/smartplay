@@ -113,8 +113,8 @@ const sg = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 2 },
   cell: { flex: 1, textAlign: 'center', fontSize: 13, fontVariant: ['tabular-nums'] },
   lab: { flex: 1.5, textAlign: 'left', color: '#6b7280', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
-  head: { color: '#9ca3af', fontSize: 11, fontWeight: '700' },
-  par: { color: '#9ca3af', fontWeight: '600' },
+  head: { color: '#c2cad4', fontSize: 11, fontWeight: '700' },
+  par: { color: '#c2cad4', fontWeight: '600' },
   score: { color: '#e5e7eb', fontSize: 15, fontWeight: '800' },
   totalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#1f2937', paddingTop: 10, marginTop: 2 },
   totalLab: { color: '#6b7280', fontSize: 11, fontWeight: '800', letterSpacing: 1 },
@@ -923,7 +923,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0d2418', borderColor: '#00C896',
   },
   heroHeadline: { color: '#ffffff', fontSize: 20, fontWeight: '900', marginBottom: 4 },
-  heroDetail: { color: '#9ca3af', fontSize: 13, lineHeight: 19 },
+  heroDetail: { color: '#c2cad4', fontSize: 13, lineHeight: 19 },
 
   summaryCard: {
     marginHorizontal: 12, marginBottom: 12,
@@ -976,7 +976,7 @@ const styles = StyleSheet.create({
   keyMomentCardActive: { borderColor: '#00C896', backgroundColor: '#0a2416' },
   keyMomentHole: { color: '#6b7280', fontSize: 10, fontWeight: '700', letterSpacing: 1.2, marginBottom: 2 },
   keyMomentScore: { fontSize: 18, fontWeight: '900', marginBottom: 6 },
-  keyMomentSummary: { color: '#9ca3af', fontSize: 11, lineHeight: 16 },
+  keyMomentSummary: { color: '#c2cad4', fontSize: 11, lineHeight: 16 },
   notesSection: { marginBottom: 16, paddingHorizontal: 12 },
   noteCard: {
     backgroundColor: '#0d2418', borderRadius: 10,

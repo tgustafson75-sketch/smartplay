@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
   fieldWrap: { alignItems: 'center' },
   field: { width: '54%', aspectRatio: 0.6, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(136,247,0,0.25)' },
   gridline: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: 'rgba(255,255,255,0.12)', justifyContent: 'center' },
-  gridLabel: { position: 'absolute', right: 6, bottom: 2, color: 'rgba(255,255,255,0.45)', fontSize: 9, fontWeight: '700' },
+  gridLabel: { position: 'absolute', right: 6, bottom: 2, color: 'rgba(255,255,255,0.75)', fontSize: 9, fontWeight: '700' },
   centerLine: { position: 'absolute', left: '50%', top: '4%', bottom: '6%', width: 1, marginLeft: -0.5, backgroundColor: 'rgba(255,255,255,0.18)' },
   tee: { position: 'absolute', bottom: '3%', left: '50%', marginLeft: -4, width: 8, height: 8, borderRadius: 4, backgroundColor: '#fff', opacity: 0.85 },
   ball: { position: 'absolute', alignItems: 'center', marginLeft: -6 },

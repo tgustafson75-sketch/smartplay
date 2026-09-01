@@ -296,7 +296,7 @@ export default function CageSummary() {
         {/* Phase K — analyzing indicator while pose detection runs */}
         {analyzing && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4, marginBottom: 10 }}>
-            <Text style={{ color: '#9ca3af', fontSize: 12, fontStyle: 'italic' }}>
+            <Text style={{ color: '#c2cad4', fontSize: 12, fontStyle: 'italic' }}>
               Analyzing swings…
             </Text>
           </View>

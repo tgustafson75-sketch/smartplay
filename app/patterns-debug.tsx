@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   stateRow: { color: '#6b7280', fontSize: 12 },
-  stateVal: { color: '#a3b8a8', fontWeight: '600' },
+  stateVal: { color: '#c4d4c8', fontWeight: '600' },
   stateValActive: { color: '#00C896' },
   generateBtn: {
     backgroundColor: '#00C896',
@@ -327,7 +327,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   rawRow: { color: '#6b7280', fontSize: 12 },
-  rawVal: { color: '#a3b8a8', fontWeight: '600' },
+  rawVal: { color: '#c4d4c8', fontWeight: '600' },
   streakGood: { color: '#00C896' },
   streakRough: { color: '#ef4444' },
   generatedAt: { color: '#4b5563', fontSize: 11, marginTop: 4, fontStyle: 'italic' },

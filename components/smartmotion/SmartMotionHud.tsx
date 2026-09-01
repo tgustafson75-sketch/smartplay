@@ -643,7 +643,7 @@ export function FooterChips({
   // (Tim's 08-18 capture). Same class as the fit-profile ladder column and the strike-confirmed line.
   const Chip = ({ label, value, sub }: { label: string; value: string; sub?: string }) => (
     <View style={styles.chip}>
-      <Text style={[styles.chipLabel, { color: 'rgba(255,255,255,0.6)' }]} numberOfLines={1}>
+      <Text style={[styles.chipLabel, { color: 'rgba(255,255,255,0.85)' }]} numberOfLines={1}>
         {label}{sub ? <Text style={{ fontWeight: '600' }}> · {sub}</Text> : null}
       </Text>
       <Text style={[styles.chipValue, { color: '#88F700' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
@@ -655,7 +655,7 @@ export function FooterChips({
     <View style={[styles.footer, { backgroundColor: colors.surface, borderColor: colors.border }, style]}>
       {onClubPress ? (
         <Pressable onPress={onClubPress} style={styles.chip} accessibilityRole="button" accessibilityLabel="Set club">
-          <Text style={[styles.chipLabel, { color: 'rgba(255,255,255,0.6)' }]} numberOfLines={1}>CLUB</Text>
+          <Text style={[styles.chipLabel, { color: 'rgba(255,255,255,0.85)' }]} numberOfLines={1}>CLUB</Text>
           <Text style={[styles.chipValue, { color: club ? '#88F700' : 'rgba(255,255,255,0.55)' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{club ?? 'Tag ▾'}</Text>
         </Pressable>
       ) : (

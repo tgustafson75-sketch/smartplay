@@ -81,7 +81,7 @@ function BundleBadge() {
     : '—';
   return (
     <Text style={{
-      color: '#9ca3af', fontSize: 10, fontFamily: 'monospace',
+      color: '#c2cad4', fontSize: 10, fontFamily: 'monospace',
       paddingHorizontal: 6, paddingVertical: 3,
       backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 4,
       marginBottom: 8, alignSelf: 'flex-start',

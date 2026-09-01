@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
   swingHeader: { color: '#00C896', fontSize: 10, fontWeight: '900', letterSpacing: 1.3 },
   swingRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   swingClub: { color: '#ffffff', fontSize: 14, fontWeight: '800', minWidth: 74 },
-  swingMetric: { color: '#9ca3af', fontSize: 13, fontWeight: '600' },
+  swingMetric: { color: '#c2cad4', fontSize: 13, fontWeight: '600' },
   swingConfirm: { color: '#00C896', fontSize: 12, fontWeight: '700' },
   swingNote: { color: '#6b7280', fontSize: 11, marginTop: 4, lineHeight: 15 },
 });

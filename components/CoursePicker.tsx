@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
   // 2026-06-04 — Optional third line for course_name when it differs
   // from club_name (e.g. "Palms Course" under "Menifee Lakes CC").
   resultCourseName: {
-    color: '#9ca3af',
+    color: '#c2cad4',
     fontSize: 11,
     fontStyle: 'italic',
     marginTop: 1,

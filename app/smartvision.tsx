@@ -2870,7 +2870,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0a0a0a',
   },
   holeBadgeNum: { color: '#ffffff', fontSize: 18, fontWeight: '900' },
-  holeBadgePar: { color: '#9ca3af', fontSize: 10, fontWeight: '700', letterSpacing: 1, marginTop: -2 },
+  holeBadgePar: { color: '#c2cad4', fontSize: 10, fontWeight: '700', letterSpacing: 1, marginTop: -2 },
   estimatedBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 3,
     backgroundColor: '#88F700', borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1,

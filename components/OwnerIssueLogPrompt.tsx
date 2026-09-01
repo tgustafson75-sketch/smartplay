@@ -57,7 +57,7 @@ export function OwnerIssueLogPrompt(): React.ReactElement | null {
           onPress={() => setDismissedAtCount(unsent)}
           disabled={sending}
         >
-          <Text style={{ color: '#9ca3af', fontWeight: '600' }}>Later</Text>
+          <Text style={{ color: '#c2cad4', fontWeight: '600' }}>Later</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={{ flex: 1.4, paddingVertical: 11, borderRadius: 10, alignItems: 'center', backgroundColor: '#f59e0b' }}

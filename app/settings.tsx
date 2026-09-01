@@ -1561,9 +1561,15 @@ export default function Settings() {
             <>
           <View style={rowDivStyle}>
             <View style={styles.rowText}>
-              <Text style={labelStyle}>Ray-Ban Meta temple tap · Blocked</Text>
+              <Text style={labelStyle}>Ray-Ban Meta temple tap · Works</Text>
               <Text style={subStyle}>
-                Meta has not exposed an SDK that lets third-party apps subscribe to the glasses&apos; touchpad / temple-tap events. Until that ships, glasses-as-mic + Active Listening is the path: pair the glasses for Bluetooth audio and the caddie hears you hands-free.
+                2026-09-01 (Tim: "temple tap on meta glasses is working") — this row used to say
+                BLOCKED, on the reasoning that Meta exposes no SDK for touchpad events. That is still
+                true and it never mattered: the glasses pair as a Bluetooth audio device, so a temple
+                tap arrives as an ordinary media-key press and the same bridge that handles an earbud
+                tap picks it up. No Meta SDK is involved. Controlled by the earbud tap-to-talk switch
+                above. Announcing a working feature as blocked is the same stale-claim mistake
+                mediaKeyBridge&apos;s own header warns about.-mic + Active Listening is the path: pair the glasses for Bluetooth audio and the caddie hears you hands-free.
               </Text>
             </View>
           </View>
@@ -3045,7 +3051,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   watchInfoBody: {
-    color: '#9ca3af',
+    color: '#c2cad4',
     fontSize: 12,
     lineHeight: 18,
   },

@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
   btnPrimary: { backgroundColor: '#00C896' },
   btnPrimaryText: { color: '#000', fontWeight: '800', fontSize: 14 },
   btnSecondary: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#1f2937' },
-  btnSecondaryText: { color: '#9ca3af', fontWeight: '600', fontSize: 14 },
+  btnSecondaryText: { color: '#c2cad4', fontWeight: '600', fontSize: 14 },
   card: {
     backgroundColor: '#0f1c14',
     borderRadius: 8,
@@ -221,12 +221,12 @@ const styles = StyleSheet.create({
   },
   handlerName: { color: '#00C896', fontSize: 13, fontWeight: '700', marginBottom: 6 },
   examplesLabel: { color: '#6b7280', fontSize: 11, marginTop: 8, marginBottom: 4 },
-  example: { color: '#9ca3af', fontSize: 12, marginLeft: 4 },
+  example: { color: '#c2cad4', fontSize: 12, marginLeft: 4 },
   historyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
   clearText: { color: '#6b7280', fontSize: 12 },
   empty: { color: '#4b5563', fontSize: 13, fontStyle: 'italic' },
   timestamp: { color: '#4b5563', fontSize: 11, marginBottom: 4 },
   historyText: { color: '#fff', fontSize: 13, marginBottom: 4 },
-  historyMeta: { color: '#9ca3af', fontSize: 12 },
+  historyMeta: { color: '#c2cad4', fontSize: 12 },
   historyResp: { color: '#00C896', fontSize: 12, marginTop: 4, fontStyle: 'italic' },
 });

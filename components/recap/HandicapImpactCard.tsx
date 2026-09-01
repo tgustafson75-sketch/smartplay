@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
   },
   ctaPrimary: { backgroundColor: '#003d20', borderColor: '#00C896' },
   ctaPrimaryText: { color: '#00C896', fontSize: 13, fontWeight: '800' },
-  ctaText: { color: '#9ca3af', fontSize: 13, fontWeight: '700' },
+  ctaText: { color: '#c2cad4', fontSize: 13, fontWeight: '700' },
   posted: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     marginTop: 6, paddingVertical: 8,

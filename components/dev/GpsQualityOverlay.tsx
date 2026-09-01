@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
   },
   // Phase 405 wave 3 — second diagnostic row.
   textSub: {
-    color: '#9ca3af',
+    color: '#c2cad4',
     fontSize: 9,
     fontWeight: '600',
     marginTop: 1,

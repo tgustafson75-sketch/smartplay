@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
   backText: { color: '#00C896', fontSize: 16, fontWeight: '600' },
   title: { color: '#ffffff', fontSize: 18, fontWeight: '800' },
   scroll: { padding: 16, paddingBottom: 32 },
-  subtitle: { color: '#9ca3af', fontSize: 13, marginBottom: 16, textAlign: 'center' },
+  subtitle: { color: '#c2cad4', fontSize: 13, marginBottom: 16, textAlign: 'center' },
   card: {
     backgroundColor: '#0d2418',
     borderRadius: 12,
@@ -203,7 +203,7 @@ const styles = StyleSheet.create({
   cardIcon: { fontSize: 24, width: 32, textAlign: 'center' },
   cardHeaderText: { flex: 1 },
   cardTitle: { color: '#ffffff', fontSize: 15, fontWeight: '800' },
-  cardBlurb: { color: '#9ca3af', fontSize: 12, marginTop: 2 },
+  cardBlurb: { color: '#c2cad4', fontSize: 12, marginTop: 2 },
   chev: { color: '#00C896', fontSize: 22, fontWeight: '300', width: 18, textAlign: 'center' },
   steps: { marginTop: 14, gap: 10 },
   stepRow: { flexDirection: 'row', gap: 10 },

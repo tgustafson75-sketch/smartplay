@@ -675,7 +675,7 @@ const styles = StyleSheet.create({
   },
   playerTrackTee: {
     position: 'absolute',
-    left: 0, top: -2, width: 3, height: 10, backgroundColor: '#9ca3af', borderRadius: 1.5,
+    left: 0, top: -2, width: 3, height: 10, backgroundColor: '#c2cad4', borderRadius: 1.5,
   },
   playerTrackGreen: {
     position: 'absolute',

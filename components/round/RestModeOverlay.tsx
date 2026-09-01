@@ -106,6 +106,6 @@ const styles = StyleSheet.create({
   gpsDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: 'rgba(0,200,150,0.55)' },
   gpsText: { color: 'rgba(0,200,150,0.5)', fontSize: 11, fontWeight: '800', letterSpacing: 1.4 },
   // Dim on purpose — few lit pixels, low power.
-  hole: { color: 'rgba(255,255,255,0.18)', fontSize: 40, fontWeight: '900', letterSpacing: 1 },
-  hint: { color: 'rgba(255,255,255,0.16)', fontSize: 12, fontWeight: '600', letterSpacing: 0.5 },
+  hole: { color: 'rgba(255,255,255,0.6)', fontSize: 40, fontWeight: '900', letterSpacing: 1 },
+  hint: { color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '600', letterSpacing: 0.5 },
 });

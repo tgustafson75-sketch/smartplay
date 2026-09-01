@@ -2639,7 +2639,7 @@ export default function SwingDetail() {
                 <View style={{ ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.8)', padding: 24 }}>
                   <Ionicons name="alert-circle-outline" size={40} color="#F0C030" />
                   <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700', textAlign: 'center', marginTop: 10 }}>{videoError}</Text>
-                  <Text style={{ color: '#9ca3af', fontSize: 11, textAlign: 'center', marginTop: 8 }} numberOfLines={2}>
+                  <Text style={{ color: '#c2cad4', fontSize: 11, textAlign: 'center', marginTop: 8 }} numberOfLines={2}>
                     {(playbackUri ?? shot.clipUri ?? '').slice(-52)}
                   </Text>
                   <TouchableOpacity
@@ -4346,7 +4346,7 @@ const styles = StyleSheet.create({
     borderRadius: 999, borderWidth: 1,
   },
   toggleBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 999 },
-  toggleText: { fontSize: 13, fontWeight: '700', color: '#9ca3af' },
+  toggleText: { fontSize: 13, fontWeight: '700', color: '#c2cad4' },
   card: {
     marginHorizontal: 16, marginTop: 12, padding: 14,
     borderRadius: 14, borderWidth: 1,

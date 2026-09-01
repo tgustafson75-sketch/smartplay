@@ -1006,7 +1006,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#9ca3af',
+    backgroundColor: '#c2cad4',
     alignSelf: 'center',
     marginBottom: 12,
     opacity: 0.5,

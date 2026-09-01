@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0d2418', borderRadius: 10,
     borderWidth: 1, borderColor: '#1e3a28', padding: 12, gap: 4,
   },
-  row: { color: '#9ca3af', fontSize: 13 },
+  row: { color: '#c2cad4', fontSize: 13 },
   val: { color: '#ffffff', fontWeight: '700' },
   empty: { color: '#374151', fontSize: 13 },
   hint: { color: '#4b5563', fontSize: 11, marginBottom: 8, lineHeight: 17 },

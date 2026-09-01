@@ -4081,7 +4081,7 @@ export default function CaddieTab() {
             <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 4 }}>
               No signal — ask me anyway
             </Text>
-            <Text style={{ color: '#9ca3af', fontSize: 13, marginBottom: 6 }}>
+            <Text style={{ color: '#c2cad4', fontSize: 13, marginBottom: 6 }}>
               I can’t hear you without a connection, but I can still answer yardages, club calls and the basics from what’s on your phone.
             </Text>
             {/* 2026-06-28 (Tim) — the keyboard's own dictation mic (Gboard / iOS) is a
@@ -4105,7 +4105,7 @@ export default function CaddieTab() {
                 style={{ flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#374151' }}
                 onPress={() => { setOfflineFallbackText(''); setOfflineFallbackOpen(false); }}
               >
-                <Text style={{ color: '#9ca3af', fontWeight: '600' }}>Close</Text>
+                <Text style={{ color: '#c2cad4', fontWeight: '600' }}>Close</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={{ flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#00C896' }}
@@ -4864,7 +4864,7 @@ return StyleSheet.create({
   },
   ghostRowText: {
     flex: 1,
-    color: '#9ca3af',
+    color: '#c2cad4',
     fontSize: 13,
     fontWeight: '600',
   },
@@ -4950,7 +4950,7 @@ return StyleSheet.create({
   },
   directionBtnIcon: {
     fontSize: 18,
-    color: '#9ca3af',
+    color: '#c2cad4',
   },
   directionBtnText: {
     fontSize: 11,
@@ -4987,7 +4987,7 @@ return StyleSheet.create({
   outcomePillText: {
     fontSize: 10,
     fontWeight: '600' as const,
-    color: '#9ca3af',
+    color: '#c2cad4',
     marginTop: 2,
   },
   rulesChoiceRow: {
@@ -5027,7 +5027,7 @@ return StyleSheet.create({
     paddingHorizontal: 8,
   },
   shotChipText: {
-    color: '#9ca3af',
+    color: '#c2cad4',
     fontSize: 11,
   },
 });

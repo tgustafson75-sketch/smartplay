@@ -291,7 +291,7 @@ function Bullet({ text, muted }: { text: string; muted?: boolean }) {
   return (
     <View style={styles.bulletRow}>
       <View style={[styles.bulletDot, muted && { backgroundColor: '#6b7280' }]} />
-      <Text style={[styles.bulletText, muted && { color: '#9ca3af' }]}>{text}</Text>
+      <Text style={[styles.bulletText, muted && { color: '#c2cad4' }]}>{text}</Text>
     </View>
   );
 }
@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
     borderRadius: 16, padding: 20, alignItems: 'center', gap: 10, marginTop: 8,
   },
   heroTitle: { color: '#fff', fontSize: 18, fontWeight: '900', textAlign: 'center' },
-  heroBody: { color: '#9ca3af', fontSize: 13, lineHeight: 19, textAlign: 'center' },
+  heroBody: { color: '#c2cad4', fontSize: 13, lineHeight: 19, textAlign: 'center' },
 
   primaryBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
     borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4,
   },
   avoidPillText: { color: '#ef4444', fontSize: 11, fontWeight: '700' },
-  avoidReason: { flex: 1, color: '#9ca3af', fontSize: 12, lineHeight: 17 },
+  avoidReason: { flex: 1, color: '#c2cad4', fontSize: 12, lineHeight: 17 },
 
   labelInput: {
     backgroundColor: '#060f09', borderColor: '#1e3a28', borderWidth: 1,

@@ -981,7 +981,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4,
   },
   drillPickerLabel: {
-    color: '#9ca3af', fontSize: 10, fontWeight: '800',
+    color: '#c2cad4', fontSize: 10, fontWeight: '800',
     letterSpacing: 1.2, marginBottom: 6,
   },
   drillPickerRow: {
@@ -999,7 +999,7 @@ const styles = StyleSheet.create({
   drillPickerChipText: { color: '#d1d5db', fontSize: 12, fontWeight: '700' },
   drillPickerChipTextActive: { color: '#0d1a0d', fontSize: 12, fontWeight: '900' },
   drillStripTitle: { color: '#00C896', fontSize: 12, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
-  drillStripStep:  { color: '#9ca3af', fontSize: 12, marginTop: 2, lineHeight: 16 },
+  drillStripStep:  { color: '#c2cad4', fontSize: 12, marginTop: 2, lineHeight: 16 },
   drillStripStepBody: { color: '#d1d5db', fontWeight: '600' },
   drillStripBtn: {
     paddingHorizontal: 12,

@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
     borderRadius: 10, borderWidth: 1, borderColor: '#1e3a28',
   },
   tabBtnActive: { backgroundColor: 'rgba(0,200,150,0.10)', borderColor: '#00C896' },
-  tabLabel: { color: '#9ca3af', fontSize: 13, fontWeight: '700' },
+  tabLabel: { color: '#c2cad4', fontSize: 13, fontWeight: '700' },
   tabLabelActive: { color: '#00C896' },
 
   searchWrap: {
@@ -307,9 +307,9 @@ const styles = StyleSheet.create({
 
   panelScroll: { padding: 16, paddingBottom: 30 },
   panelHeader: { color: '#00C896', fontSize: 14, fontWeight: '800', letterSpacing: 1 },
-  panelSub: { color: '#9ca3af', fontSize: 12, marginTop: 2, marginBottom: 14 },
+  panelSub: { color: '#c2cad4', fontSize: 12, marginTop: 2, marginBottom: 14 },
   fieldRow: { marginBottom: 10 },
-  fieldLabel: { color: '#9ca3af', fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 4 },
+  fieldLabel: { color: '#c2cad4', fontSize: 11, fontWeight: '700', letterSpacing: 0.5, marginBottom: 4 },
   fieldInput: {
     backgroundColor: '#0d1a0d', borderColor: '#1e3a28', borderWidth: 1, borderRadius: 8,
     paddingHorizontal: 12, paddingVertical: 10, color: '#fff', fontSize: 15,
@@ -319,7 +319,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0d1a0d', borderColor: '#00C896', borderWidth: 1, borderRadius: 10,
   },
   outRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 },
-  outLabel: { color: '#9ca3af', fontSize: 13, fontWeight: '600' },
+  outLabel: { color: '#c2cad4', fontSize: 13, fontWeight: '600' },
   outValue: { color: '#fff', fontSize: 16, fontWeight: '900', fontVariant: ['tabular-nums'] },
   savePill: {
     marginTop: 14, alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 18,

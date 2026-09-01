@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
   },
   btnYes: { backgroundColor: '#3a2a08', borderColor: '#fbbf24' },
   btnYesText: { color: '#fbbf24', fontSize: 13, fontWeight: '800' },
-  btnText: { color: '#9ca3af', fontSize: 13, fontWeight: '700' },
+  btnText: { color: '#c2cad4', fontSize: 13, fontWeight: '700' },
   banner: {
     position: 'absolute', left: 16, right: 16, zIndex: 30,
     flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -121,5 +121,5 @@ const styles = StyleSheet.create({
   bannerYes: { backgroundColor: '#3a2a08', borderColor: '#fbbf24', borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   bannerYesText: { color: '#fbbf24', fontSize: 12, fontWeight: '800' },
   bannerNo: { paddingHorizontal: 8, paddingVertical: 6 },
-  bannerNoText: { color: '#9ca3af', fontSize: 12, fontWeight: '700' },
+  bannerNoText: { color: '#c2cad4', fontSize: 12, fontWeight: '700' },
 });

@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#060f09' },
   scroll: { padding: 20, paddingTop: 60, gap: 12 },
   heading: { color: '#ef4444', fontSize: 18, fontWeight: '900' },
-  subheading: { color: '#9ca3af', fontSize: 13, lineHeight: 18, marginBottom: 6 },
+  subheading: { color: '#c2cad4', fontSize: 13, lineHeight: 18, marginBottom: 6 },
   card: {
     backgroundColor: '#0d1a0d',
     borderColor: '#1e3a28',

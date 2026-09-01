@@ -471,7 +471,15 @@ export async function toggle(): Promise<void> {
   // submit" — end the capture early (transcribe what we have) + play the distinct got-it earcon.
   if (state === 'listening') {
     // Swallow the OPEN tap's own ~350ms echo (it lands in 'listening' but isn't a real "done" tap)...
-    if (Date.now() - listeningStartedAt < LISTEN_ENDPOINT_MIN_MS) { swallowedTap('open_tap_echo'); return; }
+    // 2026-09-01 (Tim, on Meta glasses: temple tap starts listening but "does not react as well to a
+    // stop listening tap") — SAY HOW LATE THE TAP WAS. Which guard ate it is already logged; what was
+    // missing is the number that decides whether the window is wrong or the glasses double-fired.
+    // Glasses arrive over Bluetooth AVRCP with more jitter than earbuds, so this is the one figure
+    // that separates "tune the constant" from "de-duplicate the event".
+    if (Date.now() - listeningStartedAt < LISTEN_ENDPOINT_MIN_MS) {
+      swallowedTap('open_tap_echo', { msSinceOpen: Date.now() - listeningStartedAt, windowMs: LISTEN_ENDPOINT_MIN_MS });
+      return;
+    }
     // ...and dedupe THIS endpoint tap's own double-fire (echo window only).
     if (Date.now() - sessionCloseTapAt < TAP_ECHO_SWALLOW_MS) return;
     sessionCloseTapAt = Date.now();

@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 6, right: 8,
     width: 24, height: 24, alignItems: 'center', justifyContent: 'center',
   },
-  closeText: { color: '#9ca3af', fontSize: 16, fontWeight: '700' },
+  closeText: { color: '#c2cad4', fontSize: 16, fontWeight: '700' },
 
   minimizedRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8,

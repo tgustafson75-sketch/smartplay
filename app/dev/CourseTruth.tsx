@@ -301,7 +301,7 @@ const styles = StyleSheet.create({
   scroll: { padding: 18, gap: 14 },
   header: { alignItems: 'center', gap: 6, marginBottom: 6 },
   title: { color: '#ffffff', fontSize: 22, fontWeight: '900', marginTop: 4 },
-  subtitle: { color: '#9ca3af', fontSize: 13, fontWeight: '700' },
+  subtitle: { color: '#c2cad4', fontSize: 13, fontWeight: '700' },
   note: { color: '#6b7280', fontSize: 12, textAlign: 'center', paddingHorizontal: 14, marginTop: 4 },
   section: {
     backgroundColor: '#0d1a0d',
@@ -315,7 +315,7 @@ const styles = StyleSheet.create({
   coordRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   dot: { width: 12, height: 12, borderRadius: 6 },
   coordLabel: { color: '#ffffff', fontSize: 13, fontWeight: '700' },
-  coordValue: { color: '#9ca3af', fontSize: 12, fontFamily: 'monospace', marginTop: 2 },
+  coordValue: { color: '#c2cad4', fontSize: 12, fontFamily: 'monospace', marginTop: 2 },
   coordExtra: { color: '#F5A623', fontSize: 11, fontWeight: '800' },
   diff: { color: '#F5A623', fontSize: 12, fontWeight: '700', marginTop: 4 },
   manualRow: { flexDirection: 'row', gap: 8, marginTop: 6 },

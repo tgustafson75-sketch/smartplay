@@ -929,7 +929,7 @@ const styles = StyleSheet.create({
   },
   backBtn: { padding: 4 },
   title: { color: '#f4f4f4', fontSize: 18, fontWeight: '700', letterSpacing: 0.3 },
-  subtitle: { color: '#9ca3af', fontSize: 13, lineHeight: 19, marginVertical: 12 },
+  subtitle: { color: '#c2cad4', fontSize: 13, lineHeight: 19, marginVertical: 12 },
   row: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -954,7 +954,7 @@ const styles = StyleSheet.create({
   },
   thumb: { width: '100%', height: '100%' },
   rowLabel: { color: '#f4f4f4', fontSize: 15, fontWeight: '700' },
-  rowSub: { color: '#9ca3af', fontSize: 12, lineHeight: 17, marginTop: 4, marginBottom: 10 },
+  rowSub: { color: '#c2cad4', fontSize: 12, lineHeight: 17, marginTop: 4, marginBottom: 10 },
   applyBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#00C896', borderRadius: 12, paddingVertical: 13, paddingHorizontal: 16, marginBottom: 6 },
   applyBtnActive: { backgroundColor: '#88F700' },
   applyBtnDisabled: { backgroundColor: '#1e3a28' },
@@ -978,7 +978,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   secondaryBtnText: { color: '#00C896', fontSize: 13, fontWeight: '600' },
-  sectionLabel: { color: '#9ca3af', fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginTop: 4, marginBottom: 8 },
+  sectionLabel: { color: '#c2cad4', fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginTop: 4, marginBottom: 8 },
   promptInput: {
     backgroundColor: '#0d2418',
     borderWidth: 1,
@@ -1040,7 +1040,7 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 12,
   },
-  recorderHelp: { flex: 1, color: '#9ca3af', fontSize: 12, lineHeight: 17 },
+  recorderHelp: { flex: 1, color: '#c2cad4', fontSize: 12, lineHeight: 17 },
   recorderCatLabel: { color: '#00C896', fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginTop: 4, marginBottom: 6 },
   recorderRow: {
     flexDirection: 'row',

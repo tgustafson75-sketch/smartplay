@@ -320,7 +320,7 @@ const styles = StyleSheet.create({
   lmName: { color: '#ffffff', fontSize: 13, fontWeight: '600' },
   lmMeta: { color: '#6b7280', fontSize: 11, marginTop: 2 },
   removeBtn: { color: '#ef4444', fontSize: 16, paddingLeft: 12 },
-  summaryLine: { color: '#9ca3af', fontSize: 13, marginBottom: 3 },
+  summaryLine: { color: '#c2cad4', fontSize: 13, marginBottom: 3 },
   exportBtn: {
     marginTop: 20, backgroundColor: '#1e3a28', borderRadius: 10,
     paddingVertical: 13, alignItems: 'center',
@@ -331,5 +331,5 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#1e3a28', padding: 10,
   },
   exportLabel: { color: '#6b7280', fontSize: 10, fontWeight: '700', letterSpacing: 1, marginBottom: 6 },
-  exportText: { color: '#9ca3af', fontSize: 11, fontFamily: 'monospace' },
+  exportText: { color: '#c2cad4', fontSize: 11, fontFamily: 'monospace' },
 });

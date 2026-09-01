@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   title: {
-    color: '#9ca3af',
+    color: '#c2cad4',
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 1.4,
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   fb: {
-    color: '#9ca3af',
+    color: '#c2cad4',
     fontSize: 11,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],

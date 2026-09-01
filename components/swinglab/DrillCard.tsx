@@ -76,7 +76,7 @@ const styles = StyleSheet.create({
   placeholderHeader: {
     color: '#6b7280', fontSize: 11, fontWeight: '800', letterSpacing: 1.4, marginBottom: 8,
   },
-  placeholderBody: { color: '#9ca3af', fontSize: 13, lineHeight: 19, fontStyle: 'italic' },
+  placeholderBody: { color: '#c2cad4', fontSize: 13, lineHeight: 19, fontStyle: 'italic' },
   header: { color: '#00C896', fontSize: 11, fontWeight: '800', letterSpacing: 1.4, marginBottom: 6 },
   title: { color: '#ffffff', fontSize: 18, fontWeight: '800', marginBottom: 8 },
   reason: { color: '#e8f5e9', fontSize: 13, lineHeight: 19, marginBottom: 12 },

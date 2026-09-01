@@ -307,12 +307,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
     marginBottom: 8,
   },
-  placeholderBody: { color: '#9ca3af', fontSize: 13, lineHeight: 19, fontStyle: 'italic' },
+  placeholderBody: { color: '#c2cad4', fontSize: 13, lineHeight: 19, fontStyle: 'italic' },
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   categoryIcon: { fontSize: 26, width: 36, textAlign: 'center' },
   titleCol: { flex: 1 },
   title: { color: '#ffffff', fontSize: 16, fontWeight: '800' },
-  occurrence: { color: '#9ca3af', fontSize: 11, marginTop: 4 },
+  occurrence: { color: '#c2cad4', fontSize: 11, marginTop: 4 },
   severityChip: {
     borderWidth: 1, borderRadius: 6,
     paddingHorizontal: 6, paddingVertical: 2,
@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
   inconclusiveBox: {
     backgroundColor: 'rgba(156,163,175,0.06)',
     borderLeftWidth: 3,
-    borderLeftColor: '#9ca3af',
+    borderLeftColor: '#c2cad4',
     paddingHorizontal: 10,
     paddingVertical: 10,
     borderRadius: 4,
@@ -377,11 +377,11 @@ const styles = StyleSheet.create({
   // reads as a citation under the fault headline, not as another
   // actionable section. "Frame N: <cue>" — the proof the fault wasn't
   // a default guess.
-  evidenceLabel: { color: '#9ca3af', marginTop: 8 },
+  evidenceLabel: { color: '#c2cad4', marginTop: 8 },
   evidenceBox: {
     backgroundColor: 'rgba(156,163,175,0.05)',
     borderLeftWidth: 2,
-    borderLeftColor: '#9ca3af',
+    borderLeftColor: '#c2cad4',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 4,

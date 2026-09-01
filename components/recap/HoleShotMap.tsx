@@ -361,7 +361,7 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32,
   },
-  emptyText: { color: '#9ca3af', textAlign: 'center', fontSize: 13, lineHeight: 19 },
+  emptyText: { color: '#c2cad4', textAlign: 'center', fontSize: 13, lineHeight: 19 },
   detailCard: {
     marginHorizontal: 12, marginTop: 10,
     backgroundColor: '#0d2418', borderRadius: 10,
@@ -372,7 +372,7 @@ const styles = StyleSheet.create({
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   detailLabel: { color: '#6b7280', fontSize: 10, fontWeight: '700', letterSpacing: 1.2 },
   detailValue: { color: '#ffffff', fontSize: 13, fontWeight: '600' },
-  utterance: { color: '#9ca3af', fontStyle: 'italic', fontSize: 12, marginTop: 6 },
+  utterance: { color: '#c2cad4', fontStyle: 'italic', fontSize: 12, marginTop: 6 },
   detailHint: { color: '#6b7280', fontSize: 12, fontStyle: 'italic', textAlign: 'center' },
   holeNav: {
     flexDirection: 'row', justifyContent: 'space-between',

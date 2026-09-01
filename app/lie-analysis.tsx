@@ -630,7 +630,7 @@ return StyleSheet.create({
     letterSpacing: 0.3,
   },
   openerSub: {
-    color: 'rgba(255,255,255,0.75)', fontSize: 14, lineHeight: 21,
+    color: 'rgba(255,255,255,0.85)', fontSize: 14, lineHeight: 21,
     textAlign: 'center', maxWidth: 320,
   },
   openerSkipBtn: { marginTop: 32, paddingVertical: 10, paddingHorizontal: 18 },
@@ -704,7 +704,7 @@ return StyleSheet.create({
     color: '#00C896',
   },
   strategyHint: {
-    color: 'rgba(255,255,255,0.7)',
+    color: 'rgba(255,255,255,0.85)',
     backgroundColor: 'rgba(0,0,0,0.55)',
     fontSize: 11, fontWeight: '600',
     paddingHorizontal: 10, paddingVertical: 4,
@@ -732,11 +732,11 @@ return StyleSheet.create({
 
   permBox: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, backgroundColor: c.background },
   permTitle: { color: '#ffffff', fontSize: 20, fontWeight: '800', marginBottom: 12 },
-  permText: { color: '#9ca3af', fontSize: 15, lineHeight: 22, textAlign: 'center', marginBottom: 24 },
+  permText: { color: '#c2cad4', fontSize: 15, lineHeight: 22, textAlign: 'center', marginBottom: 24 },
   permBtn: { backgroundColor: '#00C896', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 32 },
   permBtnText: { color: c.background, fontSize: 16, fontWeight: '800' },
   permLink: { marginTop: 16 },
-  permLinkText: { color: '#9ca3af', fontSize: 14 },
+  permLinkText: { color: '#c2cad4', fontSize: 14 },
 
   errorBox: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, backgroundColor: c.background },
   errorTitle: { color: '#ffffff', fontSize: 20, fontWeight: '800', marginBottom: 12 },
@@ -748,7 +748,7 @@ return StyleSheet.create({
     backgroundColor: '#0a1e12',
   },
   actionBtnPrimary: { borderColor: '#00C896', backgroundColor: '#003d20' },
-  actionBtnText: { color: '#9ca3af', fontSize: 13, fontWeight: '700' },
+  actionBtnText: { color: '#c2cad4', fontSize: 13, fontWeight: '700' },
   actionBtnTextPrimary: { color: '#00C896' },
 });
 }

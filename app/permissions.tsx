@@ -184,7 +184,7 @@ const styles = StyleSheet.create({
   scroll: { padding: 24, gap: 18 },
   header: { alignItems: 'center', gap: 8, marginTop: 12 },
   title: { color: '#ffffff', fontSize: 24, fontWeight: '900', marginTop: 8 },
-  subtitle: { color: '#9ca3af', fontSize: 14, lineHeight: 20, textAlign: 'center', paddingHorizontal: 12 },
+  subtitle: { color: '#c2cad4', fontSize: 14, lineHeight: 20, textAlign: 'center', paddingHorizontal: 12 },
   list: { gap: 12, marginTop: 12 },
   row: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 12,
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   rowLabel: { color: '#ffffff', fontSize: 15, fontWeight: '800' },
-  rowWhy: { color: '#9ca3af', fontSize: 12, marginTop: 4, lineHeight: 17 },
+  rowWhy: { color: '#c2cad4', fontSize: 12, marginTop: 4, lineHeight: 17 },
   warningText: { color: '#FFA500', fontSize: 12, marginBottom: 8, textAlign: 'center' },
   allowBtn: {
     backgroundColor: '#00C896', borderRadius: 14, paddingVertical: 14,
@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
   allowBtnBusy: { opacity: 0.6 },
   allowBtnText: { color: '#0d1a0d', fontSize: 15, fontWeight: '900' },
   skipBtn: { paddingVertical: 12, alignItems: 'center' },
-  skipText: { color: '#9ca3af', fontSize: 13, fontWeight: '700' },
+  skipText: { color: '#c2cad4', fontSize: 13, fontWeight: '700' },
   linkBtn: { paddingVertical: 8, alignItems: 'center' },
   linkText: { color: '#00C896', fontSize: 12, fontWeight: '700' },
   foot: { color: '#6b7280', fontSize: 11, textAlign: 'center', marginTop: 12 },

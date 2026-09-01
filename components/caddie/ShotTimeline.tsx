@@ -69,7 +69,7 @@ function outcomeChip(outcome: ShotResult['outcome'] | null | undefined): {
     case 'lost':
       return { label: 'lost', color: '#ef4444', bg: '#7f1d1d44' };
     default:
-      return { label: String(outcome), color: '#9ca3af', bg: '#37415144' };
+      return { label: String(outcome), color: '#c2cad4', bg: '#37415144' };
   }
 }
 
@@ -163,10 +163,10 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   iconCol: { width: 36, alignItems: 'center' },
-  holeBadge: { color: '#94a3b8', fontSize: 10, fontWeight: '700', marginTop: 2 },
+  holeBadge: { color: '#bcc6d3', fontSize: 10, fontWeight: '700', marginTop: 2 },
   clubCol: { flex: 1 },
   clubLabel: { color: '#f8fafc', fontSize: 13, fontWeight: '600', textTransform: 'capitalize' },
-  dirLabel: { color: '#94a3b8', fontSize: 11, marginTop: 1 },
+  dirLabel: { color: '#bcc6d3', fontSize: 11, marginTop: 1 },
   distCol: { width: 50, alignItems: 'flex-end' },
   distValue: { color: '#f8fafc', fontSize: 15, fontWeight: '700' },
   distUnit: { color: '#64748b', fontSize: 9 },

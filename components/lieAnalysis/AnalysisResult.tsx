@@ -158,7 +158,7 @@ const styles = StyleSheet.create({
   clubValue: { color: '#00C896', fontSize: 22, fontWeight: '900' },
   altBlock: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#1e3a28' },
   altLabel: { color: '#6b7280', fontSize: 10, fontWeight: '800', letterSpacing: 1.4, marginBottom: 6 },
-  altText: { color: '#9ca3af', fontSize: 13, lineHeight: 19 },
+  altText: { color: '#c2cad4', fontSize: 13, lineHeight: 19 },
   goalBlock: {
     marginTop: 14, paddingTop: 14,
     borderTopWidth: 1, borderTopColor: '#1e3a28',
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0a1e12',
   },
   actionBtnPrimary: { borderColor: '#00C896', backgroundColor: '#003d20' },
-  actionBtnText: { color: '#9ca3af', fontSize: 13, fontWeight: '700' },
+  actionBtnText: { color: '#c2cad4', fontSize: 13, fontWeight: '700' },
   actionBtnTextPrimary: { color: '#00C896' },
   // 2026-05-22 — strategy overlay (rendered when enrichedLieAnalysis
   // included a risk_reward call). Distinct from the goal/alt blocks
@@ -189,6 +189,6 @@ const styles = StyleSheet.create({
   bandTagText: { fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
   strategyTradeoff: { color: '#e8f5e9', fontSize: 14, lineHeight: 20, fontWeight: '600' },
   strategyAlt: {
-    color: '#9ca3af', fontSize: 12, lineHeight: 17, marginTop: 6, fontStyle: 'italic',
+    color: '#c2cad4', fontSize: 12, lineHeight: 17, marginTop: 6, fontStyle: 'italic',
   },
 });

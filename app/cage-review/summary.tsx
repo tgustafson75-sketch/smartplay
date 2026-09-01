@@ -258,7 +258,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#1e3a28', padding: 12, marginBottom: 16, gap: 8,
   },
   distRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  distLabel: { color: '#9ca3af', fontSize: 12, fontWeight: '600', width: 68 },
+  distLabel: { color: '#c2cad4', fontSize: 12, fontWeight: '600', width: 68 },
   distBarWrap: { flex: 1, height: 8, backgroundColor: '#1e3a28', borderRadius: 4, overflow: 'hidden' },
   distBar: { height: 8, borderRadius: 4 },
   distCount: { color: '#6b7280', fontSize: 11, width: 20, textAlign: 'right' },

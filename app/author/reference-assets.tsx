@@ -403,7 +403,7 @@ const styles = StyleSheet.create({
   },
   titleWrap: { flex: 1, alignItems: 'center' },
   title: { color: '#ffffff', fontSize: 16, fontWeight: '900', letterSpacing: 0.4 },
-  subtitle: { color: '#9ca3af', fontSize: 11, fontWeight: '700', letterSpacing: 1, marginTop: 1 },
+  subtitle: { color: '#c2cad4', fontSize: 11, fontWeight: '700', letterSpacing: 1, marginTop: 1 },
   iconBtn: {
     width: 44, height: 44,
     alignItems: 'center', justifyContent: 'center',
@@ -416,7 +416,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 10,
     marginBottom: 16,
   },
-  hintText: { color: '#9ca3af', fontSize: 12, lineHeight: 17 },
+  hintText: { color: '#c2cad4', fontSize: 12, lineHeight: 17 },
   card: {
     backgroundColor: '#0a0a0a',
     borderColor: '#1f2937',
@@ -464,7 +464,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(0,200,150,0.3)',
     marginBottom: 10,
   },
-  videoChipText: { color: '#9ca3af', fontSize: 11, flex: 1 },
+  videoChipText: { color: '#c2cad4', fontSize: 11, flex: 1 },
   calloutBlock: { marginBottom: 10 },
   calloutLabel: {
     color: '#6b7280', fontSize: 10, fontWeight: '800', letterSpacing: 1, marginBottom: 4,

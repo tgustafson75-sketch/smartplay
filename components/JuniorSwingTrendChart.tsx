@@ -137,6 +137,6 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', justifyContent: 'center', gap: 2 },
   emptyLabel: { color: '#6b7280', fontSize: 9, fontWeight: '800', letterSpacing: 1.2 },
   emptyText: { color: '#6b7280', fontSize: 11, fontStyle: 'italic' },
-  label: { color: '#9ca3af', fontSize: 9, fontWeight: '900', letterSpacing: 1.3, marginBottom: 2 },
+  label: { color: '#c2cad4', fontSize: 9, fontWeight: '900', letterSpacing: 1.3, marginBottom: 2 },
   rangeText: { color: '#cbd5e1', fontSize: 9, fontWeight: '600' },
 });

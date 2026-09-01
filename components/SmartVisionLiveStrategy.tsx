@@ -87,7 +87,7 @@ export default function SmartVisionLiveStrategy({ onPress, alwaysShow = false }:
           </View>
         ) : null}
         {last && (last.club || last.distanceYards != null) ? (
-          <View style={[styles.signal, { borderColor: '#9ca3af' }]}>
+          <View style={[styles.signal, { borderColor: '#c2cad4' }]}>
             <Text style={[styles.signalText, { color: '#cbd5e1' }]} numberOfLines={1}>
               ← {last.club ?? 'last'}{last.direction ? ` ${last.direction}` : ''}{last.distanceYards != null ? ` (${last.distanceYards}y)` : ''}
             </Text>
