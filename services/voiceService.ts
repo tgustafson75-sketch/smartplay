@@ -803,7 +803,29 @@ const enqueueSpeak = (body: () => Promise<void>): Promise<void> => {
   speakQueue = speakQueue
     .catch(() => { /* drop prior failure */ })
     .then(() => {
-      if (enqueuedAt !== speakGeneration) return; // stopSpeaking fired after enqueue
+      /**
+       * 2026-09-01 (Tim: "play and analyze still clash and messages in green showing but no voice").
+       *
+       * THE MISSING LOG ENTRY IS THE EVIDENCE. This return is correct — a barge-in must drop the
+       * superseded line — but it was SILENT. When two surfaces speak over each other the caption
+       * still renders and the audio simply never plays, which is exactly "green text, no voice", and
+       * there was nothing anywhere to say it had happened or who did it.
+       *
+       * No behaviour change: the line is still dropped. It is now VISIBLE, so the next field report
+       * names the surface that cancelled instead of leaving the symptom unattributable.
+       * [[missing-log-entry-is-the-evidence]] [[voice-one-voice-invariant]]
+       */
+      if (enqueuedAt !== speakGeneration) {
+        try {
+          logVoiceSilentFail('speak_superseded', {
+            source: 'enqueueSpeak',
+            enqueuedAtGeneration: enqueuedAt,
+            currentGeneration: speakGeneration,
+            msSinceLastSpeakStart: lastSpeakStartedAt ? Date.now() - lastSpeakStartedAt : null,
+          });
+        } catch { /* a diagnostic must never break the voice path */ }
+        return; // stopSpeaking fired after enqueue
+      }
       lastSpeakStartedAt = Date.now();
       return body();
     })
@@ -2196,7 +2218,19 @@ export const speakChunked = async (
   }
   const startGen = speakGeneration; // snapshot — a barge-in (stopSpeaking) moves this
   for (let i = 0; i < chunks.length; i++) {
-    if (i > 0 && speakGeneration !== startGen) break; // interrupted → stop the report
+    if (i > 0 && speakGeneration !== startGen) {
+      // Same reasoning as enqueueSpeak: a barge-in legitimately abandons the REST of a long read,
+      // but a report that stops halfway with the text still on screen is indistinguishable from a
+      // broken voice unless it says so.
+      try {
+        logVoiceSilentFail('speak_report_interrupted', {
+          source: 'speakChunked',
+          spokenSentences: i,
+          totalSentences: sentences.length,
+        });
+      } catch { /* never break the read */ }
+      break; // interrupted → stop the report
+    }
     await speak(chunks[i], gender, language, apiUrl, opts);
   }
 };
