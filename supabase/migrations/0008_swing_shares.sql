@@ -56,3 +56,11 @@ create index if not exists swing_shares_creator_idx
 
 alter table smartplay.swing_shares enable row level security;
 -- Deliberately NO policies: the service key bypasses RLS, and nothing else may reach this table.
+
+-- Grants stated EXPLICITLY rather than relying on 0007's default privileges. `alter default
+-- privileges` only applies to tables created afterwards BY THE SAME ROLE, so a table created from the
+-- SQL editor under a different role would silently miss them — the table would exist and every write
+-- would fail, which is the worst of both. Being explicit costs two lines and removes the question.
+grant usage on schema smartplay to service_role;
+grant all on smartplay.swing_shares to service_role;
+revoke all on smartplay.swing_shares from anon, authenticated;
