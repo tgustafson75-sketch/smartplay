@@ -116,6 +116,20 @@ export default function SmartFinder() {
   const pendingStartCourseId = useRoundStore(s => s.pendingStartCourseId);
   const previewCourseId = useRoundStore(s => s.previewCourseId);
   const geoCourseId = activeCourseId ?? pendingStartCourseId ?? previewCourseId;
+  /**
+   * 2026-09-01 (Tim: "SmartFinder not working out of active round like it should" — "it should act
+   * more like a point finder / point to point measure using current location but not tied to a
+   * course or round").
+   *
+   * OFF COURSE, THIS IS JUST A RANGEFINDER. The tilt/height measure is pure trigonometry against the
+   * current GPS fix; it never needed a course. What made the screen look broken away from one was
+   * the course-COUPLED chrome rendering anyway: a hole navigator offering "HOLE 1, Prev/Next" when
+   * there is no course to have holes, above yardages that resolve to nothing.
+   *
+   * So the measure stays fully live and the course furniture stands down. Degrade and flag, never go
+   * dark. [[overstrict-gate-lens]] [[hands-free-zero-setup-is-the-product]]
+   */
+  const offCourse = !geoCourseId;
 
   const mode = useSmartFinderStore(s => s.mode);
   const setMode = useSmartFinderStore(s => s.setMode);
@@ -337,6 +351,7 @@ export default function SmartFinder() {
           shotBearingDeg={shotBearingDeg}
         />
 
+        {!offCourse && (
         <View style={styles.holeNav}>
           <TouchableOpacity
             style={[styles.holeBtn, prevHole == null && styles.holeBtnDisabled]}
@@ -364,6 +379,12 @@ export default function SmartFinder() {
             <Text style={[styles.holeBtnText, nextHole == null && styles.holeBtnTextDisabled]}>Next →</Text>
           </TouchableOpacity>
         </View>
+        )}
+        {offCourse && (
+          <Text style={styles.offCourseNote} accessibilityRole="text">
+            Point-to-point measure · no course selected
+          </Text>
+        )}
 
         {/* 2026-05-22 — Refresh GPS / "Where am I?" surface. Shared
             handler does the haptic + active-bump + force-reconcile +
@@ -2605,6 +2626,9 @@ return StyleSheet.create({
   holeBtnText: { color: '#00C896', fontSize: 13, fontWeight: '700' },
   holeBtnTextDisabled: { color: '#374151' },
   holeNavLabel: { color: '#ffffff', fontSize: 14, fontWeight: '800', letterSpacing: 1.2 },
+  // Sits where the hole navigator would be, so the row does not collapse and the player is TOLD
+  // what the screen is doing rather than left with a blank strip.
+  offCourseNote: { color: 'rgba(255,255,255,0.55)', fontSize: 12, fontWeight: '700', letterSpacing: 0.8, textAlign: 'center', paddingVertical: 10 },
   // 2026-05-22 — Refresh GPS button. Blue accent to differentiate from
   // the green hole-nav pills above; full-width, generous touch target.
   refreshGpsBtn: {

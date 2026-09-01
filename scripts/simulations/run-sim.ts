@@ -11353,6 +11353,21 @@ check('LOCK: we ask for no permission we cannot use, and every purpose string co
      *    something we cannot do, and it directly contradicts Tim's standing "no push nagging,
      *    ever". Removed.
      *
+     *    2026-09-01 — THAT PREMISE WENT STALE AND THIS LOCK ENFORCED THE STALE HALF. The app does
+     *    post a notification: the background location task starts a FOREGROUND SERVICE whose
+     *    ongoing notification says "SmartPlay tracking your round". On Android 13+ that requires
+     *    POST_NOTIFICATIONS — and because it was absent from the manifest, the runtime request
+     *    could never be granted, so the system never even showed the dialog. Tim's issue log
+     *    carried the result twice in one round: `skip_foreground_service — POST_NOTIFICATIONS not
+     *    granted — BG GPS pocket-tracking disabled`, a reason that reads like a user's choice when
+     *    the user was never asked. It is also named in backgroundLocationTask as the root cause of
+     *    the Z Fold "app closes on Start Round" crash.
+     *
+     *    Still not push nagging: it is the ongoing notification Android REQUIRES to keep a
+     *    location service alive while the phone is in a pocket, and it exists only during a round.
+     *    The rule is now the honest one and binds BOTH ways — declare it only if we post a
+     *    notification, and declare it if we do. [[a-stale-header-is-a-source-someone-trusts]]
+     *
      * 2. The purpose strings were NARROWER THAN THE TRUTH. The microphone string said "voice
      *    commands" while SmartMotion also records swing audio to grade the strike; the camera
      *    string said "in the practice cage" while the camera also reads the lie, scans the bag and
@@ -11369,8 +11384,12 @@ check('LOCK: we ask for no permission we cannot use, and every purpose string co
     const info = app.expo.ios?.infoPlist ?? {};
     if (perms.length === 0 || Object.keys(info).length === 0) return false;   // parse failed
 
-    // A permission we cannot possibly exercise must not be asked for.
-    const noNotifications = !perms.includes('android.permission.POST_NOTIFICATIONS');
+    // A permission we cannot possibly exercise must not be asked for — and one we DO exercise must
+    // be declared, or the runtime request is refused before the player ever sees a dialog.
+    const bg = readCode('services/backgroundLocationTask.ts');
+    const postsANotification = /foregroundService:\s*\{[\s\S]{0,400}?notificationTitle:/.test(bg);
+    const declaresNotifications = perms.includes('android.permission.POST_NOTIFICATIONS');
+    const notificationsHonest = postsANotification === declaresNotifications;
 
     // The mic string must name BOTH uses; the camera string must go beyond the cage.
     const mic = info.NSMicrophoneUsageDescription ?? '';
@@ -11383,9 +11402,9 @@ check('LOCK: we ask for no permission we cannot use, and every purpose string co
       .filter(([k]) => k.includes('UsageDescription'))
       .every(([, v]) => typeof v === 'string' && v.trim().length > 40);
 
-    return noNotifications && micCoversBoth && camCoversMore && allMeaningful;
+    return notificationsHonest && micCoversBoth && camCoversMore && allMeaningful;
   })(),
-  'no permission is requested that the app cannot exercise, and the microphone and camera purpose strings name every use the code actually makes');
+  'POST_NOTIFICATIONS is declared if and only if the app actually posts one, and the microphone and camera purpose strings name every use the code actually makes');
 
 check('LOCK: every golf_advice translation key resolves in every locale',
   (() => {
