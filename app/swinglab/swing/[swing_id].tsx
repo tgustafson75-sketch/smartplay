@@ -11,7 +11,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput,
   ActivityIndicator, Animated, Alert, Image, Modal,
-  Pressable, Easing, PanResponder,
+  Pressable, Easing, PanResponder, Share, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -1533,6 +1533,70 @@ export default function SwingDetail() {
     }
   };
 
+  /**
+   * 2026-08-31 (Tim: "I want to be able to send out, even if it's by link form, exactly what you
+   * would get from swing library analysis — the reports, the video playback. Maybe better ways to
+   * have that linkable, instead of exporting PDFs or photos.")
+   *
+   * A LINK, not a file. A PDF cannot move, cannot be corrected, and nobody forwards one. This sends
+   * a URL that shows the swing MOVING with the skeleton on it, the same read the player got, and one
+   * button to get the app — so the thing being shared is also the thing that sells it.
+   *
+   * The frames are sampled across the LOCATED SWING WINDOW, not the whole recording: sampling the
+   * clip would spend most of them on a walk-up, which is the exact bug the analysis sampler had to
+   * fix for itself. Pose rides along ONLY when it lines up frame-for-frame — a skeleton drawn
+   * against the wrong frame is worse than no skeleton. [[illustration-data-points]]
+   */
+  const handleShareLink = async () => {
+    if (!shot?.clipUri) { Alert.alert('Nothing to share', 'This session has no video file.'); return; }
+    useToastStore.getState().show('Building your link…');
+    try {
+      const { createSwingShare } = await import('../../../services/swingShare');
+      const pi = session?.primary_issue ?? null;
+      const startSec = shot.clipStartSeconds ?? null;
+      const endSec = shot.clipEndSeconds ?? null;
+
+      // Only measurements that EXIST travel. An absent tempo is absent on the page, never filled in.
+      const metrics: { label: string; value: string }[] = [];
+      if (typeof activeBiomech?.shoulderTiltDeg === 'number') metrics.push({ label: 'Shoulder tilt', value: `${Math.round(activeBiomech.shoulderTiltDeg)}°` });
+      if (typeof activeBiomech?.weightShiftPct === 'number') metrics.push({ label: 'Weight shift', value: `${Math.round(activeBiomech.weightShiftPct)}%` });
+      if (session?.club) metrics.push({ label: 'Club', value: String(session.club) });
+
+      const r = await createSwingShare({
+        clipUri: shot.clipUri,
+        startSec, endSec,
+        title: pi?.name ? `Swing — ${pi.name}` : 'Swing analysis',
+        player: session?.upload?.swinger ?? null,
+        club: session?.club ? String(session.club) : null,
+        headline: pi?.name ?? null,
+        observation: pi?.mechanical_breakdown ?? null,
+        fault: pi?.primary_fault ?? pi?.issue_id ?? null,
+        fix: pi?.feel_cue ?? null,
+        drill: session?.drill_recommendation?.drill_name ?? null,
+        metrics,
+      });
+
+      if (!r.ok) {
+        const why = r.reason === 'no_frames' ? 'Could not read frames from this clip.'
+          : r.reason === 'too_large' ? 'This swing is too large to share.'
+          : r.reason === 'offline' ? 'No connection — try again when you have signal.'
+          : r.reason === 'no_clip' ? 'The video file is no longer on this device.'
+          : 'The link could not be created.';
+        logExportFailure('share_link', r.reason);
+        Alert.alert('Could not create the link', why);
+        return;
+      }
+      await Share.share(
+        Platform.OS === 'ios'
+          ? { message: `${pi?.name ? `${pi.name} — ` : ''}my swing, read by the SmartPlay Caddie:`, url: r.url }
+          : { message: `${pi?.name ? `${pi.name} — ` : ''}my swing, read by the SmartPlay Caddie: ${r.url}` },
+      ).catch(() => { /* sheet dismissed */ });
+    } catch (e) {
+      logExportFailure('share_link', e instanceof Error ? e.message : String(e));
+      Alert.alert('Could not create the link', 'Something went wrong building the link.');
+    }
+  };
+
   const handleSessionShare = async () => {
     if (!shot?.clipUri) {
       Alert.alert('Nothing to share', 'This session has no video file.');
@@ -1547,9 +1611,12 @@ export default function SwingDetail() {
     if (hasReport) {
       Alert.alert(
         'Share swing',
-        'Send the full analysis report, or just the video?',
+        'Send a link that plays the swing with the analysis, the report as a PDF, or just the video?',
         [
-          { text: 'Analysis report', onPress: () => { void handleExportReport(); } },
+          // 2026-08-31 — the LINK first: it carries the report AND the swing in motion, opens on any
+          // phone without an app, and is the only one of these three that can sell the product.
+          { text: 'Share a link', onPress: () => { void handleShareLink(); } },
+          { text: 'Analysis report (PDF)', onPress: () => { void handleExportReport(); } },
           { text: 'Video only', onPress: () => { void shareSessionVideo(); } },
           { text: 'Cancel', style: 'cancel' },
         ],

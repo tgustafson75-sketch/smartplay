@@ -150,6 +150,13 @@
       }
     },
     {
+      "src": "api/swing-share.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 15
+      }
+    },
+    {
       "src": "api/course-geometry-share.ts",
       "use": "@vercel/node",
       "config": {
@@ -497,6 +504,14 @@
     {
       "src": "/api/course-geometry-share",
       "dest": "/api/course-geometry-share.ts"
+    },
+    {
+      "src": "/api/swing-share",
+      "dest": "/api/swing-share.ts"
+    },
+    {
+      "src": "/s/([A-Za-z0-9_-]+)",
+      "dest": "/api/swing-share.ts?id=$1"
     },
     {
       "src": "/api/issue-report",
