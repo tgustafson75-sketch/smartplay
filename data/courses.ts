@@ -26,13 +26,33 @@ export interface Course {
 
 // ─── HELPER FUNCTIONS ─────────────────────
 
+/**
+ * 2026-09-01 (Tim, from the field: "Menifee Lakes lakes showing as shadow lakes") — AN EXACT ID MUST
+ * BEAT A SUBSTRING NAME.
+ *
+ * The `c.name.includes(name)` test ran BEFORE `c.id === name`, so passing a real course ID still got
+ * whichever course happened to sit earlier in the array with that word in its name. Four bundled
+ * courses contain "Lakes" — Shadow Lakes (line ~2813), Pembroke Lakes, Menifee Lakes Palms and
+ * Menifee Lakes Lakes (~3002) — and callers pass the SLUG: simRound does
+ * `getCourse(courseId.replace(/^local:/, ''))`, which for a round at Menifee is literally
+ * `getCourse('lakes')`. First match wins, Shadow Lakes is declared first, so a player standing on
+ * Menifee's first tee was told he was at Jay's home course 500 miles away.
+ *
+ * Order is now specific -> general: exact id, exact name, then the old substring behaviour as a last
+ * resort so name-based callers are unchanged. [[two-owners-is-the-root-cause]]
+ */
 export const getCourse = (
   name: string
-): Course | null =>
-  COURSES.find(c =>
-    c.name.toLowerCase().includes(name.toLowerCase()) ||
-    c.id === name
-  ) ?? null;
+): Course | null => {
+  const q = name.trim().toLowerCase();
+  if (!q) return null;
+  return (
+    COURSES.find(c => c.id.toLowerCase() === q) ??
+    COURSES.find(c => c.name.toLowerCase() === q || c.fullName?.toLowerCase() === q) ??
+    COURSES.find(c => c.name.toLowerCase().includes(q)) ??
+    null
+  );
+};
 
 /**
  * 2026-05-17 — Resolve a `local:<slug>` courseId (the canonical form used

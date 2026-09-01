@@ -355,6 +355,10 @@ export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug |
   if (c.includes('mariner')) return 'mariners-point';
   // Pembroke MUST precede the generic 'lakes' match below.
   if (c.includes('pembroke')) return 'pembroke-pines';
+  // 2026-09-01 — and so MUST Shadow Lakes, for exactly the same reason. It was declared nowhere here,
+  // so it fell through to the bare 'lakes' rule and resolved to MENIFEE's Lakes course — Jay's home
+  // course rendering another club's aerials, centroid and hole geometry.
+  if (c.includes('shadow')) return 'shadow-lakes';
   if (c.includes('palms')) return 'palms';
   if (c.includes('lakes') && !c.includes('palms')) return 'lakes';
   if (c.includes('rancho')) return 'rancho-california';
@@ -394,7 +398,6 @@ export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug |
   if (c.includes('pruneridge')) return 'pruneridge';
   if (c.includes('wente')) return 'wente-vineyards';
   if (c.includes('yocha')) return 'yocha-dehe';
-  if (c.includes('shadow lake') || c.includes('shadow lakes')) return 'shadow-lakes';
   if (c.includes('crane creek') || c.includes('crane')) return 'crane-creek';
   if (c.includes('manatee')) return 'manatee-cove';
   return null;
@@ -420,6 +423,12 @@ export function getLocalHoleImage(courseName: string | null, holeNumber: number)
   // 2026-08-12 — Doral removed from the bundled set: Golden Palm has no hole GPS in ANY source, so
   // there was nothing honest to render. A Doral round now falls through to live satellite geometry.
   if (c.includes('pembroke')) return PEMBROKE_PINES_HOLE_IMAGES[holeNumber] ?? null;
+  // 2026-09-01 — Shadow Lakes must precede the generic 'lakes' match for the same reason Pembroke
+  // does. It had NO guard here at all, so Jay's home course rendered Menifee's hole aerials. This
+  // file's own header promises both functions resolve identically from the same courseName; they
+  // did not. Shadow Lakes is scorecard-only (no bundled hole imagery), so the honest answer is null
+  // and the caller falls through to live satellite geometry. [[illustration-data-points]]
+  if (c.includes('shadow')) return null;
   // "palms" check must follow "lakes" handling — Tim's home-course label
   // is often "Menifee Lakes — Palms" which contains both words. Without
   // anchoring on "palms" appearing in the suffix, a Crystal Springs round

@@ -51,3 +51,27 @@ export function shareTextFor(c: OwnerCard = CARD): string {
 export function telUriFor(c: OwnerCard = CARD): string {
   return `tel:+1${c.phone.replace(/\D/g, '')}`;
 }
+
+/**
+ * 2026-09-01 (Tim, on a Galaxy Z Fold: "qr code doesn't size on fold z") — THE QR IS SIZED IN
+ * PIXELS, NOT PERCENT.
+ *
+ * It was `width: '100%'` on an Image inside a ScrollView contentContainer that ALSO declared
+ * `width: '100%'`. When that percentage fails to resolve the Image falls back to the asset's
+ * intrinsic size, so the code rendered several times the screen width and was cropped. A cropped QR
+ * will not scan, and this screen exists to be scanned by a stranger.
+ *
+ * A foldable also CHANGES WIDTH while open; useWindowDimensions re-renders on that, a percentage
+ * resolved once at mount does not. Lives here rather than in the screen so it is testable without
+ * pulling React Native into Jest. [[two-owners-is-the-root-cause]]
+ */
+export const CARD_MAX_W = 460;
+export const CARD_H_PAD = 22;
+export const PLATE_PAD = 14;
+
+/** The plate hugs the QR: card width minus the paddings, floored so the code stays scannable. */
+export function qrSizeFor(windowWidth: number): number {
+  const w = Number.isFinite(windowWidth) ? windowWidth : 0;
+  const cardW = Math.min(w, CARD_MAX_W);
+  return Math.max(140, Math.round(cardW - CARD_H_PAD * 2 - PLATE_PAD * 2));
+}

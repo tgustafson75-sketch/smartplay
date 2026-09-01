@@ -16,12 +16,12 @@
  * link, or by typing it, so the gate has to live where the render is.
  */
 import React, { useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Image, Linking, Share, Platform } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Image, Linking, Share, Platform, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore';
-import { CARD, shareTextFor, telUriFor } from '../services/ownerCard';
+import { CARD, shareTextFor, telUriFor, qrSizeFor, CARD_MAX_W, CARD_H_PAD, PLATE_PAD } from '../services/ownerCard';
 
 /** The card's own palette — a committed look, independent of the app theme, exactly as designed. */
 const INK = '#080E0B';
@@ -33,6 +33,8 @@ const MUTED = '#8FA79A';
 
 export default function OwnerCard() {
   const router = useRouter();
+  const { width: windowWidth } = useWindowDimensions();
+  const qrSize = qrSizeFor(windowWidth);
   const email = usePlayerProfileStore((s) => s.email);
   const isOwner = isOwnerEmail(email);
 
@@ -98,7 +100,7 @@ export default function OwnerCard() {
         <View style={styles.qrWrap}>
           <Image
             source={require('../assets/images/owner-card-qr.png')}
-            style={styles.qr}
+            style={[styles.qr, { width: qrSize, height: qrSize }]}
             resizeMode="contain"
             accessibilityLabel="QR code to download SmartPlay Caddie"
           />
@@ -127,13 +129,13 @@ export default function OwnerCard() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: INK },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 },
-  card: { paddingHorizontal: 22, paddingBottom: 44, gap: 22, maxWidth: 460, width: '100%', alignSelf: 'center' },
+  card: { paddingHorizontal: CARD_H_PAD, paddingBottom: 44, gap: 22, maxWidth: CARD_MAX_W, alignSelf: 'center' },
   top: { alignItems: 'center', gap: 2 },
   name: { color: FG, fontSize: 27, fontWeight: '800', letterSpacing: -0.5 },
   role: { color: MUTED, fontSize: 15 },
   co: { color: GREEN, fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', marginTop: 8, fontWeight: '600' },
-  qrWrap: { backgroundColor: '#fff', borderRadius: 18, padding: 14 },
-  qr: { width: '100%', aspectRatio: 1, borderRadius: 6 },
+  qrWrap: { backgroundColor: '#fff', borderRadius: 18, padding: PLATE_PAD, alignSelf: 'center' },
+  qr: { borderRadius: 6 },
   scan: { color: MUTED, fontSize: 13, textAlign: 'center', marginTop: -10 },
   pitch: { gap: 6 },
   pitchTitle: { color: FG, fontSize: 18, fontWeight: '700' },

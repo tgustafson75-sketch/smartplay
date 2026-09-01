@@ -168,6 +168,27 @@ function notifyFixChange(fix: LastFix): void {
   }
 }
 
+/**
+ * 2026-09-01 (Tim, from the field: "SmartFinder not working out of active round like it should") —
+ * ONE OWNER FOR "WHICH COURSE IS THE PLAYER AT".
+ *
+ * This expression already existed three times in this file and once in courseCaptureIngest, and it
+ * is deliberately NOT gated on isRoundActive: a player who has picked a course, or is standing on
+ * one before pressing start, is still at that course and still loses balls there.
+ *
+ * The SCREEN disagreed. app/smartfinder.tsx resolved `isRoundActive ? activeCourseId : null`, so
+ * off-round it handed the ray-intersect a null course, which means no geometry, which means the
+ * feature that is supposed to work anywhere only worked mid-round. Four callers agreed and the one
+ * the player actually touches did not. [[two-owners-is-the-root-cause]]
+ */
+export function resolveSmartFinderCourseId(round: {
+  activeCourseId?: string | null;
+  pendingStartCourseId?: string | null;
+  previewCourseId?: string | null;
+}): string | null {
+  return round.activeCourseId ?? round.pendingStartCourseId ?? round.previewCourseId ?? null;
+}
+
 export function subscribeFixChange(cb: FixChangeListener): () => void {
   fixChangeListeners.add(cb);
   return () => { fixChangeListeners.delete(cb); };
@@ -359,7 +380,7 @@ export function resolveGreenCoords(holeNumber: number): {
   source: 'truth' | 'override' | 'golfbert' | 'courseHoles' | 'geometryCache' | 'none';
 } {
   const round = useRoundStore.getState();
-  const courseId = round.activeCourseId ?? round.pendingStartCourseId ?? round.previewCourseId ?? null;
+  const courseId = resolveSmartFinderCourseId(round);
   // 2026-08-10 (logic-universality fix #4) — TWICE-AROUND: the player's marked/surveyed green from loop 1
   // is stored under the physical hole (1-9). On loop 2 (holes 10-18) look those personal sources up under
   // hole-9 so a green you marked on the front nine still resolves on the back nine (the geometry cache
@@ -452,7 +473,7 @@ export function resolveTeeCoords(holeNumber: number): {
   source: 'override' | 'golfbert' | 'courseHoles' | 'none';
 } {
   const round = useRoundStore.getState();
-  const courseId = round.activeCourseId ?? round.pendingStartCourseId ?? round.previewCourseId ?? null;
+  const courseId = resolveSmartFinderCourseId(round);
   // 2026-08-10 (logic-universality fix #4) — twice-around: personal marks (tee override / golfbert) live
   // under the physical hole 1-9; wrap on loop 2 so a marked tee resolves on the back nine too.
   const personalHole = (round.twiceAround === true && holeNumber >= 10) ? holeNumber - 9 : holeNumber;
@@ -496,7 +517,7 @@ export function resolveTeeCoords(holeNumber: number): {
  */
 export function getAnchoredHoleLengthYards(holeNumber: number): number | null {
   const round = useRoundStore.getState();
-  const courseId = round.activeCourseId ?? round.pendingStartCourseId ?? round.previewCourseId ?? null;
+  const courseId = resolveSmartFinderCourseId(round);
   if (!courseId) return null;
   const teeOv = getTeeOverride(courseId, holeNumber);
   const greenOv = getGreenOverride(courseId, holeNumber);
@@ -557,7 +578,7 @@ function resolveHoleDataWithFallback(hole: number): import('../store/roundStore'
   if (live) return live;
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { getBundledHoles } = require('../data/courses') as typeof import('../data/courses');
-  const courseId = round.activeCourseId ?? round.pendingStartCourseId ?? round.previewCourseId ?? null;
+  const courseId = resolveSmartFinderCourseId(round);
   const bundled = getBundledHoles(courseId);
   return bundled.find(h => h.hole === hole) ?? null;
 }

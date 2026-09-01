@@ -159,7 +159,31 @@ export /**
  * at a brand name, and it is checked BEFORE the `golf_course` acceptance — these places genuinely
  * carry both tags, so order is the whole point.
  */
-const NOT_A_COURSE_TYPES = new Set(['indoor_golf_course', 'miniature_golf_course', 'golf_shop', 'sporting_goods_store']);
+/**
+ * 2026-09-01 (Tim, from the field at Menifee) — SPLIT, BECAUSE THE RETAIL TYPES WERE KILLING REAL
+ * COURSES. The version above shipped 08-31 with all four types as outright disqualifiers, and a live
+ * sweep of Tim's own area showed what that cost:
+ *
+ *   The Golf Club at Rancho California   DROPPED  <- sporting_goods_store
+ *   Canyon Lake Golf & Country Club      DROPPED  <- sporting_goods_store
+ *
+ * Both are real 18-hole courses. They carry a retail type because THEY HAVE A PRO SHOP, which is
+ * true of most decent clubs — so a rule aimed at simulator bars was quietly deleting the good half
+ * of the list. It is the over-strict-gate failure again: the gate went dark instead of degrading,
+ * and it did it silently, which is why it took a player standing in Menifee to find it.
+ * [[overstrict-gate-lens]]
+ *
+ * HARD types genuinely mean "the golf played here is not a round of golf" — a simulator bay, a
+ * putt-putt course. Nothing named on the property changes that, so they disqualify outright.
+ */
+const NOT_A_COURSE_TYPES = new Set(['indoor_golf_course', 'miniature_golf_course']);
+/**
+ * RETAIL types mean "you can buy something here", which is equally true of Golf Galaxy and of
+ * Pebble Beach. They disqualify ONLY when the name does not assert a course — so a shop stays out
+ * and a club with a pro shop stays in. Five Iron Golf and Puttery, the places the original rule was
+ * written for, are still caught by the HARD list above.
+ */
+const RETAIL_TYPES = new Set(['golf_shop', 'sporting_goods_store']);
 
 /**
  * 2026-08-31 (adversarial audit A) — THE PLACES-API-(NEW) PATH WENT LIVE AND HAD NEVER BEEN JUDGED.
@@ -205,6 +229,10 @@ export function isGolfPlace(p: Located): boolean {
   if (/\bchampionship\b/i.test(p.name) && !COURSE_NOUN_RE.test(p.name)) return false;
   // Disqualifying TYPE beats every other signal, including golf_course sitting right beside it.
   if (p.types.some((t) => NOT_A_COURSE_TYPES.has(t))) return false;
+  // Retail is only disqualifying when the name does not claim to be somewhere you play.
+  // Deliberately NOT GOLF_BRAND_RE here — it matches a bare "golf", which every golf shop on earth
+  // has in its name. A course noun, or the TPC/PGA tokens, the same pair the lodging rule trusts.
+  if (p.types.some((t) => RETAIL_TYPES.has(t)) && !COURSE_NOUN_RE.test(p.name) && !/\bTPC\b|\bPGA\b/i.test(p.name)) return false;
 
   /**
    * A lodging record must NAME itself a course. Google tags the hotel on a golf property
