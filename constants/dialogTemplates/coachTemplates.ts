@@ -30,6 +30,7 @@ export type CoachSituation =
   | 'primary_issue_summary_engaged'
   | 'earbud_open'
   | 'session_done'
+  | 'session_done_brief'
   | 'framed_up'
   | 'window_closing'
   | 'club_recognised'
@@ -159,12 +160,39 @@ const TEMPLATES: Record<CoachSituation, string[]> = {
    * line he speaks. The invitation follows the per-swing summary, so it stays short — he has
    * already talked; this is the door held open.
    */
+  /**
+   * 2026-08-31 (Tim, after an on-course session: "we still have that canned speech when you hit
+   * stop recording") — THIS POOL IS NOW TAUGHT, NOT REPEATED.
+   *
+   * The 08-24 pass added five variants to stop the line being identical, and it still read as
+   * canned, because the variation was cosmetic: every one of them is the same SHAPE — a menu recited
+   * aloud, "say run it back and I'll start it, or name a club". Rephrasing an instruction manual
+   * five ways does not stop it being an instruction manual.
+   *
+   * These now play only for the first couple of sessions, while the commands are genuinely news
+   * (voiceHintsStore.go_again_taught_count). After that the caddie uses session_done_brief and then
+   * simply waits with the mic open — which is what a person does once you know how it works.
+   */
   session_done: [
     "Want another set? Say run it back and I'll start it — or name a club and I'll set that up.",
     "Go again? Tell me to run it back, or give me a club or a drill and it's ready.",
     "Another one? Say run it back — or name what you want to work on and I'll line it up.",
     "Want to keep going? Run it back and I'll roll, or call a club and we'll switch.",
     "One more? Say run it back — or tell me a club or drill and I'll set it up instead.",
+  ],
+
+  /**
+   * What a caddie actually says once you know the drill: almost nothing. The mic is already open
+   * behind these, so the invitation is the SILENCE as much as the words. Kept short on purpose —
+   * anything longer starts explaining again.
+   */
+  session_done_brief: [
+    'Go again?',
+    'Ready when you are.',
+    'Another?',
+    "Say the word and I'll roll.",
+    'Whenever you are.',
+    'One more?',
   ],
 
   /**

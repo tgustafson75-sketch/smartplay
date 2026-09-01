@@ -24,7 +24,19 @@ interface VoiceHintsState {
   voice_logged_shot_count: number;
   // Configurable banner threshold (no code change to tune)
   vocab_banner_threshold: number;
+  /**
+   * 2026-08-31 (Tim, after an on-course session: "we still have that canned speech when you hit
+   * stop recording") — how many times the caddie has TAUGHT the go-again commands.
+   *
+   * The line was not wrong, it was repeated. All five of its variants are the same shape — a menu
+   * read aloud: "Say run it back and I'll start it, or name a club." That is an instruction manual,
+   * and reciting it after every single set is what makes a caddie sound like a recording. A person
+   * tells you how it works once and then just waits. [[feels-like-a-real-caddie]]
+   */
+  go_again_taught_count: number;
 
+  /** Count one teaching of the go-again commands. Saturates — it only ever needs to go up. */
+  noteGoAgainTaught: () => void;
   markMeetKevinCompleted: () => void;
   markMeetKevinSkipped: () => void;
   markFirstTeeShown: () => void;
@@ -50,7 +62,9 @@ export const useVoiceHintsStore = create<VoiceHintsState>()(
       mic_permission_granted_at: null,
       voice_logged_shot_count: 0,
       vocab_banner_threshold: 5,
+      go_again_taught_count: 0,
 
+      noteGoAgainTaught: () => set((st) => ({ go_again_taught_count: (st.go_again_taught_count ?? 0) + 1 })),
       markMeetKevinCompleted: () => set({ meet_kevin_completed: true }),
       markMeetKevinSkipped: () => set({ meet_kevin_skipped: true }),
       markFirstTeeShown: () => set({ first_tee_shown: true }),

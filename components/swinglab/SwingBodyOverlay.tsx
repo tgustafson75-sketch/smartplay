@@ -357,13 +357,60 @@ export default function SwingBodyOverlay({
     par = 'xMidYMid meet';
     strokeBase = Math.max(bbox.w, bbox.h);
   }
-  // Stroke widths derived from the draw space so the overlay stays readable.
-  // 2026-06-29 (Tim) — thinner, cleaner skeleton to match the brand/marketing look
-  // (fine neon-green lines, not heavy strokes).
-  const sw = strokeBase * 0.008;
+  /**
+   * 2026-08-31 (Tim, after an on-course analysis: "the lines for body mechanics are a little thick —
+   * they don't adjust to the size of the person or how far away you are") — SCALE TO THE PLAYER,
+   * NOT THE FRAME.
+   *
+   * `strokeBase` is the FRAME's larger dimension, so the stroke was a fixed 0.8% of the video no
+   * matter how much of it the player occupied. Filmed close, that reads as a fine line. Filmed from
+   * six or eight feet — which is where a swing actually gets recorded — the player is half the size
+   * and the line is unchanged, so it stops tracing the body and starts covering it. The thickness
+   * was never wrong; it was measured against the wrong thing.
+   *
+   * The honest reference is the SUBJECT's apparent size. Shoulder width is the best available proxy
+   * for distance: it is nearly constant through a swing (unlike a bounding box, which grows the
+   * moment the arms and club go overhead) and it shrinks exactly as the player moves away.
+   */
+  const shoulderSpan = ((): number | null => {
+    if (!live) return null;
+    const ls = getKp(live, 'left_shoulder');
+    const rs = getKp(live, 'right_shoulder');
+    if (!ls || !rs) return null;
+    const dx = (ls.x - rs.x) * sx;
+    const dy = (ls.y - rs.y) * sy;
+    const d = Math.hypot(dx, dy);
+    return Number.isFinite(d) && d > 0 ? d : null;
+  })();
+  /** Fallback ladder: shoulders → the pose bbox → the old frame-relative value. */
+  const subjectSpan =
+    shoulderSpan
+    ?? (bbox ? Math.max(bbox.w * sx, bbox.h * sy) * 0.25 : null)  // bbox → a shoulder-like span
+    ?? strokeBase * 0.06;
+  /**
+   * 4% of shoulder width, and the numbers were calibrated against real framing rather than picked.
+   * On a portrait 1080x1920 clip (strokeBase 1920) the old fixed stroke was 15.4px at every
+   * distance. Now:
+   *
+   *     very close (shoulder ~500px)  15.4px   — the cap; never THICKER than before
+   *     typical    (~300px)           12.0px
+   *     ~six feet  (~200px)            8.0px
+   *     ~eight feet(~150px)            6.0px   — the case Tim reported, was 15.4
+   *     far        (~90px)             4.2px   — the floor; still visible
+   *
+   * The CEILING is deliberately the old constant: whatever else changes, the skeleton can never come
+   * back thicker than the line he called too thick. The FLOOR keeps a bad pose read from producing a
+   * hairline that disappears. Between them the stroke is a constant fraction of the player, which is
+   * what "adjusts to how far away you are" actually means.
+   */
+  const swRaw = subjectSpan * 0.04;
+  const swMin = strokeBase * 0.0022;
+  const swMax = strokeBase * 0.008;
+  const sw = Math.min(Math.max(Number.isFinite(swRaw) ? swRaw : strokeBase * 0.006, swMin), swMax);
   // 2026-06-15 (Tim) — joint dots were too big and overlapped; smaller so the
   // skeleton reads cleanly (joints sit on the lines, not blobs over them).
-  const dotR = strokeBase * 0.008;
+  // Tied to `sw` so the dots shrink with the player alongside the lines they sit on.
+  const dotR = sw;
 
   // 2026-07-27 (Tim) — the BLUE club: a shaft from the grip (wrist midpoint) to the live clubhead + a
   // blue clubhead dot, drawn ON TOP so it reads as the club extending off the hands. Only when a real

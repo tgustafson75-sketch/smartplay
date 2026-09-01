@@ -36,6 +36,7 @@ import { PermissionBanner } from '../../components/PermissionBanner';
 import { useRoundStore, roundLastHole, roundFirstHole } from '../../store/roundStore';
 import type { ShotLocation, ShotResult } from '../../store/roundStore';
 import { useSettingsStore } from '../../store/settingsStore';
+import { useVoiceHintsStore } from '../../store/voiceHintsStore';
 import { getDialog } from '../../services/dialogEngine';
 // Phase Cockpit — alternate Caddie tab layout (v3-style). Gated by
 // useSettingsStore.cockpitMode; off by default. Voice/avatar code
@@ -1095,11 +1096,28 @@ export default function CaddieTab() {
         // back" fires record_swing → beginNextRecording (auto-saves the finished set,
         // camera rolling). Naming a club/drill reconfigures first (SESSION_DONE_FOCUS).
         /**
-         * 2026-08-24 (Tim) — was ONE hardcoded sentence, identical every set. The dialog engine has
-         * existed for exactly this and every other spoken line goes through it; this one did not.
-         * The summary is his, the invitation now varies like a person's would.
+         * 2026-08-24 (Tim) — was ONE hardcoded sentence, identical every set. Routed through the
+         * dialog engine so the invitation varied.
+         *
+         * 2026-08-31 (Tim, after an on-course session: "we still have that canned speech when you
+         * hit stop recording") — VARYING IT WAS NOT ENOUGH, and the reason is worth keeping.
+         *
+         * All five variants are the same SHAPE: a menu recited aloud — "say run it back and I'll
+         * start it, or name a club". Five phrasings of one instruction manual is still an
+         * instruction manual, and hearing it after every single set is what makes a caddie sound
+         * like a recording rather than a person. The defect was never the wording; it was that the
+         * commands were being TAUGHT to someone who already knew them.
+         *
+         * So the manual plays while it is genuinely news — the first couple of sessions — and after
+         * that he gets the summary, a few words, and an open mic. The invitation becomes the SILENCE.
+         * The summary is unchanged either way: that part is his own data and it is the valuable half.
+         * [[feels-like-a-real-caddie]]
          */
-        const line = `${event.summary} ${getDialog('coach', 'session_done')}`;
+        const hints = useVoiceHintsStore.getState();
+        const teaching = (hints.go_again_taught_count ?? 0) < 2;
+        if (teaching) hints.noteGoAgainTaught();
+        const invite = getDialog('coach', teaching ? 'session_done' : 'session_done_brief');
+        const line = `${event.summary} ${invite}`;
         configureAudioForSpeech()
           .then(() => speak(line, vg, lang, apiUrl, { userInitiated: true }))
           .then(() => new Promise<void>((r) => setTimeout(r, 500)))

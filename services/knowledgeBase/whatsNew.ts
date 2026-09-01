@@ -28,6 +28,15 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'The body-mechanics lines fit the player now. They used to be the same thickness no matter how much of the frame you filled, so filming from six or eight feet away drew heavy lines over a small figure and covered the swing you were trying to see. They scale with you now — further away, finer lines.',
+  },
+  {
+    when: 'Aug 2026',
+    note: 'Your caddie stops reading you the menu after every set. He used to finish a set by explaining how to go again, every single time, however many sets you had already done. He tells you once, then just gives you the read and waits with the mic open — say the word whenever you are ready.',
+    howTo: 'Nothing changed in how it works. After a set, just talk: "run it back", or name a club or a drill.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'SmartFinder now tells you what you are pointing at, including the bunkers and the water. Swing the reticle onto the bunker you are trying to carry and you get its name and its yardage — before, only the green and its front and back were recognised, so aiming anywhere else read as nothing there. The number comes from the map, so it is right at 150 yards, not just up close.',
     howTo: 'SmartFinder, move the reticle onto anything on the hole. If it is mapped, it names it and gives you the carry.',
   },
