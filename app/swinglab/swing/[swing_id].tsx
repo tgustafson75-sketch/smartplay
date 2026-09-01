@@ -8,6 +8,7 @@
  */
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { impactAnchorMs, narrowClubPathWindow } from '../../../services/swing/clubPathWindow';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput,
   ActivityIndicator, Animated, Alert, Image, Modal,
@@ -556,6 +557,18 @@ export default function SwingDetail() {
 
   const poseFrames = activeBiomech?.frames ?? [];
   const hasPose = poseFrames.length >= 2;
+  /**
+   * 2026-08-31 — A MEASURED IMPACT TIME, for when no microphone heard one.
+   *
+   * The pose pipeline labels a keyframe `P6_impact` and every frame carries the millisecond it was
+   * sampled from the source video. That is a time DERIVED FROM THE PICTURE, not a guess: it is the
+   * only honest impact anchor available on a range or uploaded swing, where there is no acoustic
+   * strike to hear. The club-path narrowing below uses it as its second choice. [[illustration-data-points]]
+   */
+  const poseImpactMs = useMemo(() => {
+    const f = poseFrames.find((p) => p.position === 'P6_impact');
+    return typeof f?.timestampMs === 'number' && Number.isFinite(f.timestampMs) ? f.timestampMs : null;
+  }, [poseFrames]);
   // 2026-07-21 (Tim — "buttons to go to those stages would be dope") — the pose pipeline already
   // labels the key swing positions (address/top/impact/finish) on the frames; the SmartMotion review
   // has jump-to-stage chips but the library detail didn't. Surface them here too, reusing scrubTo.
@@ -658,19 +671,21 @@ export default function SwingDetail() {
      * club path was hunting a clubhead across eleven seconds of walk-up, waggle and follow-through,
      * and the arc it drew was assembled from whatever it found in all of it.
      *
-     * When the window is implausibly wide for a swing, re-centre it on the best strike estimate we
-     * have using the SAME pre/post the segmenter uses — one rule, not a second opinion. With no
-     * strike either, the window is left alone: a smeared arc still beats no arc, and inventing a
-     * centre would be a guess drawn confidently. [[two-owners-is-the-root-cause]]
+     * When the window is implausibly wide for a swing, re-centre it on the best HONEST anchor —
+     * a heard strike, else the pose-labelled impact frame — using the SAME pre/post the segmenter
+     * uses. The rule, the tiers and the numbers live in services/swing/clubPathWindow.ts so this
+     * screen and its test cannot drift apart; read that file for why a 'manual' shot's stored
+     * offset is refused. With no anchor the window is left alone: a smeared arc beats an invented
+     * centre. [[two-owners-is-the-root-cause]]
      */
-    const MAX_SWING_WINDOW_MS = 6000;   // 4,000 segment + headroom for a slow, wide capture
-    const PRE_MS = 2500, POST_MS = 1500;
-    const strikeMs = typeof shot.detectionOffsetSeconds === 'number' && shot.detectionOffsetSeconds > 0
-      ? shot.detectionOffsetSeconds * 1000
-      : null;
-    const tooWide = rawEndMs - rawStartMs > MAX_SWING_WINDOW_MS;
-    const startMs = tooWide && strikeMs != null ? Math.max(rawStartMs, strikeMs - PRE_MS) : rawStartMs;
-    const endMs = tooWide && strikeMs != null ? Math.min(rawEndMs, strikeMs + POST_MS) : rawEndMs;
+    const anchorMs = impactAnchorMs({
+      detectionMethod: shot.detectionMethod,
+      detectionOffsetSeconds: shot.detectionOffsetSeconds,
+      poseImpactMs,
+      rawStartMs,
+      rawEndMs,
+    });
+    const { startMs, endMs } = narrowClubPathWindow(rawStartMs, rawEndMs, anchorMs);
     if (!(endMs > startMs)) { setClubArcPoints(null); return; }
     // Dedupe: a stable window (uri+start+end) that SUCCEEDED runs once. The key is set only after a
     // real result below, so an extraction aborted by playback retries the next time we're paused.
@@ -760,7 +775,7 @@ export default function SwingDetail() {
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasPose, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, duration, showSkeleton, showTrace, isPlaying, session?.club_arc, shot?.club_arc, selectedShotIdx]);
+  }, [hasPose, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, shot?.detectionMethod, shot?.detectionOffsetSeconds, poseImpactMs, duration, showSkeleton, showTrace, isPlaying, session?.club_arc, shot?.club_arc, selectedShotIdx]);
 
   // 2026-07-06 (Tim carry-over #2) — bake the overlay INTO an exported still.
   // Same fault joints / severity the live overlay uses (see the SwingBodyOverlay

@@ -75,8 +75,10 @@ export interface SwingSegment {
 // A full swing fits comfortably here: ~2.5s back through the strike,
 // ~1.5s of follow-through after. Tuned for a phone clip; clamped to the
 // clip and to neighbouring strikes so two close swings don't overlap.
-const PRE_STRIKE_MS = 2500;
-const POST_STRIKE_MS = 1500;
+// Exported 2026-08-31: the club-path window narrowing re-centres on a strike and must use THESE
+// numbers rather than its own copy of them, so "how long is a swing" is answered in one place.
+export const PRE_STRIKE_MS = 2500;
+export const POST_STRIKE_MS = 1500;
 
 export interface SegmentOptions {
   preStrikeMs?: number;

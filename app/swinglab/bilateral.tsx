@@ -36,7 +36,15 @@ function toInput(s: CageSession): BilateralSwingInput {
     label: `${club} · ${fmtDate(s.date)}`,
     // The acoustic impact anchor lives on the shot (detectionOffsetSeconds); use the
     // first shot's offset as this swing's impact for cross-angle alignment.
-    impactSec: typeof s.shots?.[0]?.detectionOffsetSeconds === 'number' ? s.shots[0].detectionOffsetSeconds : null,
+    // 2026-08-31 (SmartMotion walk) — and ONLY when it was actually heard. A shot with no detected
+    // swing carries a synthesized `0.6 x duration` placeholder in the same field, and bilateralMerge
+    // reads a value in BOTH angles as `alignedAtImpact` — so two placeholders would have the merge
+    // announce that face-on and down-the-line are synchronised at impact when nothing had been
+    // measured on either one. Unheard now yields null, and the merge falls back to its unaligned
+    // path honestly. [[smartmotion-contact-honesty]]
+    impactSec: s.shots?.[0]?.detectionMethod === 'audio_transient' && typeof s.shots?.[0]?.detectionOffsetSeconds === 'number'
+      ? s.shots[0].detectionOffsetSeconds
+      : null,
     faultName,
     category,
     breakdown: pi?.mechanical_breakdown ?? null,

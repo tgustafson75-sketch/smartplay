@@ -215,7 +215,23 @@ export default function SmartTempoScreen() {
     //     (~5), usually < the 4-clean-samples the apex finder needs, so pose
     //     auto-detect commonly returns nothing → honest manual marking.
     // If a swing carries neither, every phase is manual. Never blocks.
+    /**
+     * 2026-08-31 (SmartMotion walk) — ONLY AN ACOUSTIC STRIKE MAY SEED IMPACT.
+     *
+     * `detectionOffsetSeconds` is not always a measurement. When SmartMotion detects no swing it
+     * synthesizes a whole-clip segment whose strike is `0.6 x duration` — a placeholder that exists
+     * so the analysis can run bounded — and that value is persisted onto the shot like any other.
+     * Seeding it here marked the impact line AUTO, so the trainer presented a guess as a detected
+     * position and computed a tempo RATIO from it. A wrong ratio is worse than no ratio: it is the
+     * number the player is trying to improve.
+     *
+     * `detectionMethod` carries the distinction the shot writer already recorded — 'audio_transient'
+     * is a heard strike, 'manual' is video-located or synthesized. With no heard strike the impact
+     * seed is dropped and detectTempoPhases falls back to POSE, then to honest manual marking, which
+     * is what the comment above already promised. [[smartmotion-contact-honesty]]
+     */
     const impactMs =
+      shot?.detectionMethod === 'audio_transient' &&
       typeof shot?.detectionOffsetSeconds === 'number' && Number.isFinite(shot.detectionOffsetSeconds)
         ? shot.detectionOffsetSeconds * 1000
         : null;
@@ -238,7 +254,7 @@ export default function SmartTempoScreen() {
       const firstMissing = (['backswingStartSec', 'topSec', 'impactSec'] as PhaseKey[]).find(k => seeded[k] == null);
       if (firstMissing) setActivePhase(firstMissing);
     }
-  }, [sourceClipUri, swingId, shot?.detectionOffsetSeconds, session?.biomechanics?.frames, tempoMode]);
+  }, [sourceClipUri, swingId, shot?.detectionOffsetSeconds, shot?.detectionMethod, session?.biomechanics?.frames, tempoMode]);
 
   // ── Playback status ──────────────────────────────────────────────────
   // 2026-08-07 (Tim — the swing-crash class, swept). useCallback (stable identity) + change-guards so this
