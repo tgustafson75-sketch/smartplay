@@ -1573,6 +1573,7 @@ export default function SwingDetail() {
         fault: pi?.primary_fault ?? pi?.issue_id ?? null,
         fix: pi?.feel_cue ?? null,
         drill: session?.drill_recommendation?.drill_name ?? null,
+        feel: session?.feel_note ?? null,
         metrics,
       });
 
@@ -1848,6 +1849,9 @@ export default function SwingDetail() {
         evidence: pi.evidence ?? null,
       } : null,
       coachNote: session.coach_note ?? null,
+      // 2026-08-31 — the player's own words travel with the coach's. Captured and displayed since
+      // June, dropped at the one boundary where another human actually reads the swing.
+      feelNote: session.feel_note ?? null,
       // Named practice drills WITH steps from the catalog for the diagnosed issue — a real practice
       // plan instead of a one-line drill name. Falls back to the one-liner when the issue isn't mapped.
       practicePlan: (() => {

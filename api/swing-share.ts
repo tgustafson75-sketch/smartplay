@@ -69,6 +69,9 @@ type SharePayload = {
   fault?: string;
   fix?: string;
   drill?: string;
+  /** The player's own words about the swing. Rendered as ITS OWN section, never merged with the
+   *  analysis prose — a felt sensation is evidence, not a measurement. */
+  feel?: string;
   /** Measured numbers. Anything absent is RENDERED absent, never guessed. */
   metrics?: { label: string; value: string }[];
 };
@@ -124,6 +127,7 @@ function sanitize(input: unknown): SharePayload | null {
     fault: str(p.fault, 120),
     fix: str(p.fix, 1200),
     drill: str(p.drill, 200),
+    feel: str(p.feel, 600),
     metrics,
   };
 }
@@ -300,6 +304,7 @@ function sharePage(p: SharePayload, id: string): string {
     ${card('The read', p.headline)}
     ${card('What happened', p.observation)}
     ${card('The fix', p.fix)}
+    ${card('What the player felt', p.feel)}
     ${card('Drill', p.drill)}
     ${metrics}
     <a class="cta" href="${SITE}/download">Get SmartPlay Caddie</a>

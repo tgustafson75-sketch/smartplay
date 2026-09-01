@@ -46,6 +46,20 @@ export interface CoachReportInput {
     evidence?: string | null;
   } | null;
   coachNote: string | null;
+  /**
+   * 2026-08-31 (Tim: "at least make sure what we have is wired completely") — WHAT THE PLAYER FELT.
+   *
+   * The report carried the coach's note and not the player's. For a document whose whole purpose is
+   * to be read by a coach, that leaves out half the diagnosis: "it felt like I came over the top"
+   * and "it felt fine" are different swings even when the frames are identical, and the camera
+   * cannot see the difference. The feel was captured, stored and shown in the app, and then dropped
+   * at the one boundary where another human reads it.
+   *
+   * Rendered as its own section in the player's own words, never merged into the analysis prose —
+   * a felt sensation is evidence, not a measurement, and the report must not blur the two.
+   * [[orphans-are-live-bugs-not-dead-code]]
+   */
+  feelNote?: string | null;
   /** Named practice drills with steps (from the drill catalog for the diagnosed issue). */
   practicePlan?: { name: string; steps: string }[] | null;
 }
@@ -196,6 +210,7 @@ export async function exportCoachReport(input: CoachReportInput): Promise<{ ok: 
             ? `<div class="card accent"><div class="label">Practice Plan</div>${input.practicePlan.map(d =>
                 `<div class="drill"><div class="dn">${esc(d.name)}</div><div class="ds">${esc(d.steps)}</div></div>`).join('')}</div>`
             : section('Drill', a.drill)}
+          ${section('What The Player Felt', input.feelNote ?? null)}
           ${section(`${instructor.split(' ')[0]}'s Note`, input.coachNote, true)}
           <div class="foot">SmartPlay Caddie · Swing Analysis Report — real measurements and observed mechanics only, honestly analyzed.</div>
         </body>

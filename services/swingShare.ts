@@ -45,6 +45,8 @@ export type ShareInput = {
   fault?: string | null;
   fix?: string | null;
   drill?: string | null;
+  /** The player's own words. Travels beside the analysis, never merged into it. */
+  feel?: string | null;
   metrics?: { label: string; value: string }[];
   /** Pose keypoints per extracted frame, ALREADY normalized 0..1. Optional — no pose, no overlay. */
   pose?: ShareKeypoint[][];
@@ -110,6 +112,7 @@ export async function createSwingShare(input: ShareInput): Promise<ShareResult> 
     fault: input.fault ?? undefined,
     fix: input.fix ?? undefined,
     drill: input.drill ?? undefined,
+    feel: input.feel ?? undefined,
     metrics: (input.metrics ?? []).filter((m) => m?.label && m?.value),
   };
 

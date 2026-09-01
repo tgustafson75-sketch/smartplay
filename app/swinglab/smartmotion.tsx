@@ -2216,6 +2216,27 @@ export default function SmartMotion() {
             first_name: profile.firstName ?? null,
           },
           tier: 'quick' as const,
+          /**
+           * 2026-08-31 (Tim: "if we are not going to [do talk-about-the-swing] until 2.0, at least
+           * make sure what we have is wired completely") — THE NOTES REACH THE MODEL ON THIS PATH TOO.
+           *
+           * api/swing-analysis has read `coach_note` and `feel_note` all along, the context type
+           * declares both, and services/videoUpload sends both — but the LIVE capture path, the one
+           * used on a range and on course, sent NEITHER. So a feel the player had already written,
+           * and a coach's note in Coach Mode, were stored, shown on screen and used for mishit
+           * detection while the model that actually reads the swing never saw them.
+           *
+           * On a first analysis these are usually empty and the spread omits them, which costs
+           * nothing. On a RE-ANALYZE after a feel is written — and in Coach Mode, where the note is
+           * often there first — they travel, and "it felt like I came over the top" is exactly the
+           * signal the frames cannot carry. This is the substrate 2.0's "talk about the swing" needs,
+           * so it should be connected before then rather than discovered missing later.
+           * [[orphans-are-live-bugs-not-dead-code]]
+           */
+          ...(coachNote.trim() ? { coach_note: coachNote.trim().slice(0, 600) } : {}),
+          ...((feelText.trim() || (cageSession?.feel_note ?? '').trim())
+            ? { feel_note: (feelText.trim() || (cageSession?.feel_note ?? '').trim()).slice(0, 600) }
+            : {}),
           ball_area_norm: draftBallRef.current ?? ballAreaRef.current ?? null,
           target_norm: targetPointRef.current ?? null,
           drill_focus: isDrill && typeof drillFocus === 'string' && drillFocus.trim() ? drillFocus.trim() : undefined,
