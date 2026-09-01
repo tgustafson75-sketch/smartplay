@@ -28,6 +28,10 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Aug 2026',
+    note: 'The swing trace follows the swing. On range and uploaded clips it used to search the whole recording — the walk-up, the waggle, the follow-through — and drew an arc out of all of it. It now finds the moment of impact in the video and traces the few seconds around it. If it cannot find impact honestly, it says nothing rather than drawing a line in the wrong place.',
+  },
+  {
+    when: 'Aug 2026',
     note: 'The body-mechanics lines fit the player now. They used to be the same thickness no matter how much of the frame you filled, so filming from six or eight feet away drew heavy lines over a small figure and covered the swing you were trying to see. They scale with you now — further away, finer lines.',
   },
   {
