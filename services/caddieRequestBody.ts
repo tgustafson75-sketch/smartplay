@@ -361,6 +361,22 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * inconsistency in miniature.
      */
     riskMode: safe(() => r.riskMode ?? 'normal', 'normal'),
+    /**
+     * 2026-08-31 (Tim: "check if note input on play tab does the same thing") — IT DID, IN THE
+     * MIDDLE.
+     *
+     * The pre-round note the player writes on the Play tab was wired at both ENDS and missing from
+     * the whole round between them: api/briefing renders it as "Player's focus for today", and
+     * api/recap renders it as "Pre-round focus (user wrote) — treat as a coaching contract". The
+     * LIVE caddie never saw it. So a player writes "working on tempo today", hears nothing about it
+     * for eighteen holes, and is then graded against it at the end. The one place a coaching
+     * contract actually matters is while you are playing.
+     *
+     * Stable for a whole round by construction — set once at round start, and the only editor is the
+     * round-notes field — which is why it is safe inside the cached prompt block. That stability is
+     * stated here because the cache ratchet requires it to be.
+     */
+    roundNotes: safe(() => (r.roundNotes ?? '').trim().slice(0, 400) || null, null),
     /** Which tee he is actually playing, so advice matches the card he is on. */
     currentTeeBox: safe(() => r.currentTeeBox ?? null, null),
     /** A 9-hole round is a different shape of round; "you're halfway" is wrong at hole 5 of 9. */

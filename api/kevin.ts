@@ -315,6 +315,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       isRoundActive = false,
       isCompetition = false,
       mentalState = 'neutral',
+      // 2026-08-31 — the player's pre-round focus, written on the Play tab. See the prompt block.
+      roundNotes = null,
       consecutiveBadHoles = 0,
       isSpiralRisk = false,
       topObservations = [],
@@ -1167,6 +1169,20 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
         : '',
       mentalState === 'tight' ? 'Mental state is tight. Keep it simple.'
         : mentalState === 'confident' ? 'Mental state is confident. Match that briefly.' : '',
+      /**
+       * 2026-08-31 — WHAT THEY SAID THEY WANTED TO WORK ON TODAY.
+       *
+       * The pre-round note was already rendered by api/briefing at the start ("Player's focus for
+       * today") and by api/recap at the end ("treat as a coaching contract"). The caddie holding
+       * that contract for the eighteen holes IN BETWEEN is the only place it can actually change
+       * anything, and it was the one place it never arrived.
+       *
+       * Deliberately framed as a standing intention rather than an instruction to bring up: a caddie
+       * who mentions your stated focus on every shot is worse than one who never does.
+       */
+      typeof roundNotes === 'string' && roundNotes.trim()
+        ? `Before the round the player wrote what they want to work on: "${roundNotes.trim()}". Hold it as a standing intention — let it colour the club and the coaching when it is genuinely relevant, and say nothing about it when it is not.`
+        : '',
     ].filter(Boolean).join('\n\n');
 
     const roundFactsBlock = isRoundActive
