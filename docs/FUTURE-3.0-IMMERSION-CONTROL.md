@@ -125,3 +125,66 @@ Two properties matter more than fidelity:
 
 **The one thing not to do in the meantime:** commission the remaining ten Serena expressions, or a
 full 22 for Tank. That is spending on the stand-in.
+
+---
+
+# 2.0 — "TALK ABOUT THE SWING": one dialogue instead of two comment boxes (Tim, 2026-08-31)
+
+> *"We have a point where you have the coach feedback, and then the player's or swinger's feedback. I
+> think we need to combine this into, like, talk about the swing — where you dialogue with the caddie
+> about the swing, and we go through feel and feedback. And that would lend itself to parsing out
+> what the caddie would suggest next, whether it's doing a drill or feeling a motion or just trying a
+> stretch, etc. This is a perfect preface for the Coach Caddie AI in 2.0."*
+>
+> *"Only in coach setting, where the user of the app is coach, would we then have the coach comments."*
+
+## What is there today, and why it is two things
+
+The swing detail screen collects feedback in two separate, static places:
+- **the player's FEEL** — what the swing felt like, captured as a note
+- **the COACH's note** — what an instructor wrote about it
+
+They are two text fields that never meet. The analysis reads the swing; the human reads the analysis;
+whatever they say lands in a box and stops there. Nothing asks a second question, and nothing turns
+either one into what to do next.
+
+## What it becomes
+
+**One conversation with the caddie about that swing.** Not a form — a back-and-forth that goes through
+feel and feedback, and comes out the other side with a NEXT ACTION: a drill, a feel to rehearse, a
+stretch, or simply "hit five more and we'll look again".
+
+Why this is the right shape and not just nicer UI:
+
+- **Feel is diagnostic data the camera cannot see.** "It felt like I came over the top" and "it felt
+  fine" are different swings even when the frames look identical, and today that signal dies in a
+  text box. In a dialogue the caddie can ASK — "did that feel like the last one?" — which is how a
+  real coach narrows a fault in two questions instead of guessing from pixels.
+- **It closes the loop the ethos is built on.** OBSERVE → INTERPRET → ADVISE → OBSERVE THE OUTCOME →
+  LEARN. Feel + feedback is the missing INTERPRET step performed *with* the player rather than at
+  them. [[smartplay-core-ethos]]
+- **It produces the next action rather than a record.** Parsing "what should we do about this" out of
+  a conversation is something the brain already does everywhere else in the app; the swing screen is
+  the one surface where a human types into a box and nothing happens.
+- **It is the honest preface to Coach Caddie AI.** A coaching AI that has never held a conversation
+  about a single swing has nothing to coach from. This is where that corpus comes from.
+
+## The scoping decision Tim made in the same breath
+
+**Coach comments appear ONLY when the app user IS a coach.** For a player, there is one dialogue —
+theirs and the caddie's. The coach lane is not a second box bolted onto every player's screen; it
+appears when the person holding the phone is coaching someone else, which the app already knows
+(Family/Coach mode, `resolvePlayerName`, `perspective: 'watching_someone'`).
+
+That keeps the player's surface to exactly one conversation, which is the entire point of merging them.
+
+## Why 2.0 and not now
+
+It replaces a shipped surface with a conversational one during submission week, and it needs the
+dialogue to reliably produce a STRUCTURED next action rather than pleasant chat — the same bar the
+tool dispatch had to clear. It is also worth building on top of the focused-second-pass work above
+(§14): "talk about the swing" and "circle the shoulders" are the same conversation.
+
+**Substrate that already exists and must not be dismantled:** the feel-capture pipeline
+(`feel_narration_transcript`), `drillFocusRead`, the drill/stretch catalogues, and the tool dispatch
+that can already start a drill or a recording by voice.
