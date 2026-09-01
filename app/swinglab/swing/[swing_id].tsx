@@ -646,8 +646,31 @@ export default function SwingDetail() {
     // swing without a stored arc showed NO trace while playing (the "trace never works" case). Extraction
     // now starts regardless of playback; isPlaying stays in the deps so an aborted run retries on a
     // play/pause flip, and the runKey below dedupes after the first real success.
-    const startMs = (shot.clipStartSeconds ?? 0) * 1000;
-    const endMs = (shot.clipEndSeconds ?? duration ?? 0) * 1000;
+    const rawStartMs = (shot.clipStartSeconds ?? 0) * 1000;
+    const rawEndMs = (shot.clipEndSeconds ?? duration ?? 0) * 1000;
+    /**
+     * 2026-08-31 (Tim, from the field: "swing trace is a little off", logged alongside
+     * windowMs: 11640) — NARROW AN UNBOUNDED WINDOW AROUND THE STRIKE.
+     *
+     * A detected swing segment is 4,000ms — 2,500 before the strike and 1,500 after
+     * (swingSegmentation PRE/POST_STRIKE_MS). His was ELEVEN AND A HALF SECONDS, because with no
+     * segment `clipEndSeconds` is null and this falls through to the whole clip duration. So the
+     * club path was hunting a clubhead across eleven seconds of walk-up, waggle and follow-through,
+     * and the arc it drew was assembled from whatever it found in all of it.
+     *
+     * When the window is implausibly wide for a swing, re-centre it on the best strike estimate we
+     * have using the SAME pre/post the segmenter uses — one rule, not a second opinion. With no
+     * strike either, the window is left alone: a smeared arc still beats no arc, and inventing a
+     * centre would be a guess drawn confidently. [[two-owners-is-the-root-cause]]
+     */
+    const MAX_SWING_WINDOW_MS = 6000;   // 4,000 segment + headroom for a slow, wide capture
+    const PRE_MS = 2500, POST_MS = 1500;
+    const strikeMs = typeof shot.detectionOffsetSeconds === 'number' && shot.detectionOffsetSeconds > 0
+      ? shot.detectionOffsetSeconds * 1000
+      : null;
+    const tooWide = rawEndMs - rawStartMs > MAX_SWING_WINDOW_MS;
+    const startMs = tooWide && strikeMs != null ? Math.max(rawStartMs, strikeMs - PRE_MS) : rawStartMs;
+    const endMs = tooWide && strikeMs != null ? Math.min(rawEndMs, strikeMs + POST_MS) : rawEndMs;
     if (!(endMs > startMs)) { setClubArcPoints(null); return; }
     // Dedupe: a stable window (uri+start+end) that SUCCEEDED runs once. The key is set only after a
     // real result below, so an extraction aborted by playback retries the next time we're paused.
