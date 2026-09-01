@@ -50,6 +50,9 @@
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_MEDIA_VIDEO",
         "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.health.READ_STEPS",
         "android.permission.health.READ_DISTANCE",
         "android.permission.health.READ_HEART_RATE",
@@ -63,6 +66,14 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "SmartPlay Caddie needs access to your photos so you can bring an existing swing video in to analyze.",
+          "savePhotosPermission": "SmartPlay Caddie saves your swing videos and analysis frames to your photos so you can keep and share them.",
+          "preventAutomaticLimitedAccessAlert": true
+        }
+      ],
       "expo-router",
       "expo-screen-orientation",
       "expo-camera",

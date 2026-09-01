@@ -1559,6 +1559,20 @@ export default function SwingDetail() {
     await shareSessionVideo();
   };
 
+  /**
+   * 2026-08-31 — one breadcrumb per failed export, in the issue log, carrying the REAL reason.
+   * Exports are the highest-visibility thing this app produces — a shared swing is marketing — so a
+   * silent failure costs more here than almost anywhere else. Never throws.
+   */
+  const logExportFailure = (stage: string, reason: string, extra?: Record<string, unknown>) => {
+    console.log(`[swing-detail] ${stage} failed`, reason);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      (require('../../../store/issueLogStore') as typeof import('../../../store/issueLogStore')).useIssueLogStore
+        .getState().addAppEvent('export_failed', { stage, reason: reason.slice(0, 200), ...extra }, 'analysis_error');
+    } catch { /* telemetry must never break the export path */ }
+  };
+
   // 2026-06-29 (Tim) — SAVE THE CLIP TO PHONE PHOTOS (with permission) so the player
   // can pull it up later and re-analyze. Saves the RAW recording (the overlays render
   // separately, so the saved video is clean — no skeleton/markup baked in).
@@ -1577,8 +1591,18 @@ export default function SwingDetail() {
       await MediaLibrary.saveToLibraryAsync(uri);
       useToastStore.getState().show('Saved to your Photos');
     } catch (e) {
-      console.log('[swing-detail] save to photos failed', e);
-      Alert.alert('Save failed', 'Could not save the video — the file may no longer be on this device.');
+      /**
+       * 2026-08-31 (Tim: "video exports are not working") — SAY WHY, WHERE IT CAN BE READ.
+       *
+       * This swallowed the real error into console.log — invisible on a phone — and showed one
+       * generic sentence that BLAMES A MISSING FILE. So a permission refusal, a MediaStore rejection
+       * and a genuinely deleted clip all looked identical, and the one guess the message offered was
+       * usually the wrong one. Neither Tim nor I could say why an export failed.
+       * [[missing-log-entry-is-the-evidence]]
+       */
+      const reason = e instanceof Error ? e.message : String(e);
+      logExportFailure('save_video', reason, { hasClip: !!shot?.clipUri });
+      Alert.alert('Save failed', `Could not save the video. ${reason.slice(0, 120)}`);
     }
   };
 
@@ -1622,8 +1646,9 @@ export default function SwingDetail() {
       await MediaLibrary.saveToLibraryAsync(outUri);
       useToastStore.getState().show(overlayOn && outUri ? 'Frame + overlay saved to your Photos' : 'Frame saved to your Photos');
     } catch (e) {
-      console.log('[swing-detail] grab frame failed', e);
-      Alert.alert('Capture failed', 'Could not grab this frame — try pausing on it first.');
+      const reason = e instanceof Error ? e.message : String(e);
+      logExportFailure('grab_frame', reason, { hasClip: !!shot?.clipUri });
+      Alert.alert('Capture failed', `Could not grab this frame. ${reason.slice(0, 120)}`);
     }
   };
 
