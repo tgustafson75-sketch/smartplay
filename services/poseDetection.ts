@@ -213,6 +213,39 @@ const V6 = (msg: string, data?: Record<string, unknown>): void => {
   else console.log('[V6-DIAG] ' + msg);
 };
 
+/**
+ * 2026-08-31 (Tim: "hard to show a wow factor when you have to wait probably more than a minute") —
+ * WHERE THE MINUTE GOES, ON A REAL DEVICE.
+ *
+ * Every stage of this pipeline was already timed, into `console.log`, which is invisible on a phone
+ * on a golf course. So the honest answer to "why did that take a minute" was nobody's to give —
+ * not Tim's, and not mine. Reasoning about it from constants is exactly the kind of guessing that
+ * has been wrong repeatedly. [[missing-log-entry-is-the-evidence]] [[my-measurement-is-the-least-reliable-part]]
+ *
+ * One breadcrumb per analysis, as `diag` so it reads as information rather than a fault, carrying
+ * the elapsed milliseconds of each stage and which path was taken. The next on-course run names its
+ * own long pole.
+ */
+export type AnalysisTiming = {
+  probe_ms?: number;
+  locate_ms?: number;
+  extract_ms?: number;
+  request_ms?: number;
+  total_ms: number;
+  /** Whether the caller already knew the swing window — the branch that skips probe AND locate. */
+  bounded: boolean;
+  frames: number;
+  tier: string;
+};
+
+function logAnalysisTiming(t: AnalysisTiming): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('../store/issueLogStore') as typeof import('../store/issueLogStore')).useIssueLogStore
+      .getState().addAppEvent('swing_analysis_timing', t as unknown as Record<string, unknown>, 'diag');
+  } catch { /* telemetry is never allowed to break an analysis */ }
+}
+
 // Phase AF — re-targeted toward impact zone. Prior fractions
 // [0.05, 0.30, 0.55, 0.80, 0.95] sampled too sparsely around impact (the
 // most diagnostic moment for face/path/attack-angle reads) and the 0.80
@@ -235,7 +268,57 @@ export type Frame = { b64: string; media_type: string; time_sec: number; fractio
 // same duration-probe path (Audio.Sound primary, VT.getThumbnailAsync
 // upper-bound fallback) instead of relying on caller-provided
 // durationMs which often arrives null / wrong on uploaded clips.
+/**
+ * 2026-08-31 (Tim: "make it as rapid as reasonable — hard to show a wow factor when you have to wait
+ * more than a minute") — A CLIP'S DURATION CANNOT CHANGE, SO PROBE IT ONCE.
+ *
+ * The same clip was probed repeatedly in a single analysis: the locate pass probes it, extractKeyFrames
+ * probes it again when the caller has no duration to hand, and the pose warm added on 2026-08-31 probes
+ * it a third time. Each probe has an 8-SECOND ceiling and every one of them goes through
+ * `serializeMediaRead` — the global media chain — so they do not merely repeat, they QUEUE, behind
+ * each other and behind every frame decode in flight.
+ *
+ * The in-flight promise is shared as well as the result. Without that, two callers starting at the
+ * same moment (the warm and the extract, which is exactly the pair this session created) both probe
+ * and the second still waits for the first through the chain.
+ *
+ * Only a POSITIVE result is remembered: a failed probe returns 0, and caching 0 would make one bad
+ * read permanent for that clip.
+ */
+const durationCache = new Map<string, number>();
+const durationInflight = new Map<string, Promise<number>>();
+/** Bounded so a long library session cannot grow this without limit. */
+const DURATION_CACHE_MAX = 64;
+
+/**
+ * No invalidation helper is exported on purpose. A recording writes a NEW uri every time, so a stale
+ * duration for a reused path is not a real scenario — and an export nothing calls is the orphan class
+ * this repo keeps finding as live bugs. The bounded LRU is the only eviction there is.
+ * [[orphans-are-live-bugs-not-dead-code]]
+ */
+
 export async function probeDurationMs(clipUri: string): Promise<number> {
+  const cached = durationCache.get(clipUri);
+  if (cached != null && cached > 0) return cached;
+  const pending = durationInflight.get(clipUri);
+  if (pending) return pending;
+  const run = probeDurationUncached(clipUri)
+    .then((ms) => {
+      if (ms > 0) {
+        if (durationCache.size >= DURATION_CACHE_MAX) {
+          const oldest = durationCache.keys().next().value;
+          if (oldest != null) durationCache.delete(oldest);
+        }
+        durationCache.set(clipUri, ms);
+      }
+      return ms;
+    })
+    .finally(() => { durationInflight.delete(clipUri); });
+  durationInflight.set(clipUri, run);
+  return run;
+}
+
+async function probeDurationUncached(clipUri: string): Promise<number> {
   // 2026-06-10 — Overall timeout so a problem clip (slow audio-track load or a
   // stalling MediaMetadataRetriever on Android) can NEVER hang re-analysis on an
   // infinite spinner. If probing doesn't finish in time, fall back to the
@@ -1125,12 +1208,20 @@ export async function analyzeSwing(
   let locateDegraded: 'dead_host' | 'ceiling' | 'unknown' | null = null;
   let effectiveBoundaries = boundaries;
   let probedDurMs = 0; // 2026-06-11 (audit) — reused by extractKeyFrames below
+  // 2026-08-31 — stage clocks. See logAnalysisTiming: the whole pipeline was timed into console.log,
+  // which is unreadable on a phone, so nobody could say which stage cost the minute.
+  const tStart = Date.now();
+  let probeMs = 0, locateMs = 0, extractMs = 0, requestMs = 0;
   if (!effectiveBoundaries) {
+    const tProbe = Date.now();
     probedDurMs = await probeDurationMs(clipUri).catch(() => 0);
+    probeMs = Date.now() - tProbe;
     if (probedDurMs >= LOCATE_MIN_CLIP_MS) {
+      const tLocate = Date.now();
       const located = await locateSwingWindow(clipUri, probedDurMs, {
         onAbort: (cause) => { locateDegraded = cause; },
       });
+      locateMs = Date.now() - tLocate;
       if (located) {
         effectiveBoundaries = located;
         V6('STAGE 2 — using located swing window as boundaries', located);
@@ -1144,7 +1235,16 @@ export async function analyzeSwing(
   }
   // Pass the already-probed duration so extractKeyFrames' unbounded branch
   // doesn't probe the same clip a second time (no-op when boundaries are set).
-  const frames = await extractKeyFrames(clipUri, effectiveBoundaries, quickTier, probedDurMs || undefined);
+  const tExtract = Date.now();
+  /**
+   * 2026-08-31 — `probedDurMs` is 0 whenever the caller supplied boundaries, so this passed
+   * `undefined` on the FAST path and extractKeyFrames probed the clip all over again. The probe is
+   * memoized now, so asking for it here is free when anything already asked — and it removes a
+   * duration probe from the one path that was supposed to be the quick one.
+   */
+  const durForExtract = probedDurMs || (await probeDurationMs(clipUri).catch(() => 0)) || undefined;
+  const frames = await extractKeyFrames(clipUri, effectiveBoundaries, quickTier, durForExtract);
+  extractMs = Date.now() - tExtract;
   /**
    * 2026-08-25 (Tim — "I've actually never waited for the analysis") — report what the frame cache
    * saved on this analysis. Decodes are serialized app-wide, so a decode avoided is wall-clock the
@@ -1223,6 +1323,7 @@ export async function analyzeSwing(
     };
     let res = await tryFetch(1);
     let elapsedMs = Date.now() - t0;
+    requestMs = elapsedMs;
     V6('STAGE 4 — /api/swing-analysis response', {
       status: res.status,
       elapsed_ms: elapsedMs,
@@ -1410,6 +1511,18 @@ export async function analyzeSwing(
     // Success — clear the breaker window + mark online.
     recordSuccess('swing-analysis');
     reportOnline();
+    // 2026-08-31 — one breadcrumb naming the long pole. Emitted on the SUCCESS path because a
+    // timing for a run that failed says more about the failure than about the speed.
+    logAnalysisTiming({
+      probe_ms: probeMs || undefined,
+      locate_ms: locateMs || undefined,
+      extract_ms: extractMs || undefined,
+      request_ms: requestMs || undefined,
+      total_ms: Date.now() - tStart,
+      bounded: boundaries != null,
+      frames: frames.length,
+      tier: context.tier ?? 'full',
+    });
     return {
       kind: 'ok',
       analysis: data,

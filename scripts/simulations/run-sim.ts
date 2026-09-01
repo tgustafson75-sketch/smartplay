@@ -8554,10 +8554,26 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /prewarmSwingAnalysis\(\{ force: true \}\)/.test(smA),
     'opening Smart Motion forces a warmup (bypasses the 60s dedupe) so the first analysis hits a hot Lambda');
 
-  check('Swing analysis: no double duration-probe on unbounded clips (perf)',
+  /**
+   * 2026-08-31 — STRENGTHENED, after this guard went red on a fix that made the thing it guards
+   * strictly better. It asserted the literal expression `probedDurMs || undefined`, which was the
+   * 2026-06 mechanism for threading a duration into extractKeyFrames. That expression is 0 whenever
+   * the caller supplied boundaries — so on the FAST path it passed undefined and extractKeyFrames
+   * probed the clip all over again, and the guard was satisfied.
+   *
+   * The property is "a clip is probed ONCE", so that is what is asserted now: the threading still
+   * happens, AND probeDurationMs is memoized with a shared in-flight promise, which is what makes it
+   * true for concurrent callers rather than just sequential ones. Assert the relationship, not the
+   * expression. [[three-ways-a-guard-is-worthless]]
+   */
+  check('Swing analysis: a clip is duration-probed ONCE, however many callers ask (perf)',
     /knownDurationMs\?: number/.test(poseSrc2) &&
-      /extractKeyFrames\(clipUri, effectiveBoundaries, quickTier, probedDurMs \|\| undefined\)/.test(poseSrc2),
-    'analyzeSwing threads its probed duration into extractKeyFrames so the same clip is not probeDurationMs-ed twice on a short/locate-failed upload');
+      /const durForExtract = probedDurMs \|\| \(await probeDurationMs\(clipUri\)/.test(poseSrc2) &&
+      /durationCache\.get\(clipUri\)/.test(poseSrc2) &&
+      /durationInflight\.get\(clipUri\)/.test(poseSrc2) &&
+      /if \(pending\) return pending;/.test(poseSrc2) &&
+      /if \(ms > 0\) \{/.test(poseSrc2),
+    'analyzeSwing threads its duration into extractKeyFrames AND probeDurationMs is memoized with a shared in-flight promise, so one clip costs one probe even when the warm and the extract ask at the same moment');
 
   check('Swing analysis: next swing is prefetched (depth 1, single in-flight)',
     /const prefetchInFlightRef = useRef\(false\)/.test(smA) &&
