@@ -91,8 +91,25 @@ export const useVoiceHintsStore = create<VoiceHintsState>()(
       // 2026-05-26 Fix BZ — __BZ_baseline__ version + passthrough migrate so future
       // version bumps don't wipe state. Replace `as never` with the real
       // state type when adding actual migration logic.
-      version: 1,
-      migrate: (s) => s as never,
+      /**
+       * 2026-08-31 (v2) — AN EXISTING PLAYER HAS ALREADY BEEN TAUGHT.
+       *
+       * `go_again_taught_count` was added today to stop the caddie reciting the go-again commands
+       * after every set. It defaults to 0 — correct for a new install, WRONG for everyone already
+       * using the app, who would have been taught the menu two more times before it went quiet. Tim
+       * has heard that line a hundred times; hearing it twice more is not a fix.
+       *
+       * A persisted voice-hints blob only exists for someone who has already used the app, so its
+       * presence IS the evidence. Seeded to the threshold so they go straight to the short form.
+       * New installs have no blob, migrate never runs, and they get taught properly.
+       */
+      version: 2,
+      migrate: (s, version) => {
+        if (!s || typeof s !== 'object') return s as never;
+        const p = s as Record<string, unknown>;
+        if (version < 2 && p.go_again_taught_count == null) p.go_again_taught_count = 2;
+        return p as never;
+      },
       storage: createJSONStorage(() => getPersistStorage()),
     },
   ),

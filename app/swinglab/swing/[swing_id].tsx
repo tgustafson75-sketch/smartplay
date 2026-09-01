@@ -702,11 +702,32 @@ export default function SwingDetail() {
           try {
             // eslint-disable-next-line @typescript-eslint/no-require-imports
             (require('../../../store/issueLogStore') as typeof import('../../../store/issueLogStore'))
-              .useIssueLogStore.getState().addAppEvent('clubpath_arc_too_sparse', {
-                points: r?.points.length ?? 0,
-                aborted: !r,
-                windowMs: Math.max(0, endMs - startMs),
-              }, 'analysis_error');
+              .useIssueLogStore.getState().addAppEvent(
+                r ? 'clubpath_arc_too_sparse' : 'clubpath_superseded',
+                {
+                  points: r?.points.length ?? 0,
+                  aborted: !r,
+                  windowMs: Math.max(0, endMs - startMs),
+                },
+                /**
+                 * 2026-08-31 — AN ABORTED RUN IS NOT A FAILURE, and calling it one cost Tim a
+                 * false alarm from the field.
+                 *
+                 * `shouldAbort` is the effect's own cancellation flag, and `isPlaying` is in its
+                 * deps precisely so a play/pause flip RETRIES the extraction. The video autoplays
+                 * on arrival, so the first run is routinely superseded a moment after it starts —
+                 * which is the system working. It was logged as `analysis_error` with
+                 * `points: 0`, indistinguishable from a genuine mis-detection, and read exactly
+                 * like the club trace had broken.
+                 *
+                 * Two different events now. A real arc that came back too sparse to draw is still
+                 * an analysis_error and still worth chasing. A superseded run is `diag`: visible
+                 * if someone goes looking, silent in the report Tim receives.
+                 * [[missing-log-entry-is-the-evidence]] cuts both ways — a log that cries wolf
+                 * hides the entries that matter.
+                 */
+                r ? 'analysis_error' : 'diag',
+              );
           } catch { /* best-effort */ }
           console.log('[swing-detail] club arc not drawn —', r ? `${r.points.length} point(s), need 3` : 'no result (aborted or none)');
         }

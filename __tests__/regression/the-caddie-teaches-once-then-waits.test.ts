@@ -11,6 +11,7 @@
  * So the manual plays only while it is genuinely news, and after that the caddie says a few words
  * and waits with the mic open.
  */
+import { useVoiceHintsStore } from '../../store/voiceHintsStore';
 import { _allCoachTemplates } from '../../constants/dialogTemplates/coachTemplates';
 const COACH_TEMPLATES = _allCoachTemplates();
 import * as fs from 'fs';
@@ -57,5 +58,43 @@ describe('the go-again line is taught, not repeated', () => {
     expect(store).toMatch(/noteGoAgainTaught: \(\) => set/);
     // voiceHintsStore is a persisted store — that is the whole reason this lives there.
     expect(store).toMatch(/persist\(/);
+  });
+});
+
+/**
+ * 2026-08-31, second pass — A NEW FIELD DEFAULTS TO ZERO FOR EVERYONE, INCLUDING PEOPLE WHO HAVE
+ * ALREADY HEARD IT A HUNDRED TIMES.
+ *
+ * `go_again_taught_count` shipped defaulting to 0, which is right for a new install and wrong for
+ * every existing player: they would have been taught the menu twice MORE before it went quiet. Tim
+ * reported still hearing it; hearing it twice more is not a fix.
+ *
+ * A persisted voice-hints blob only exists for someone who has already used the app, so its presence
+ * is the evidence. This is the same shape as the customCaddieGender migration earlier today —
+ * deleting or adding a persisted field is never just a default.
+ */
+describe('an existing player is not re-taught what they already know', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const migrate = (useVoiceHintsStore as any).persist.getOptions().migrate as (s: unknown, v: number) => Record<string, unknown>;
+
+  it('seeds an existing blob straight to the short form', () => {
+    const out = migrate({ meet_kevin_completed: true, first_tee_shown: true }, 1);
+    expect(out.go_again_taught_count).toBe(2);
+  });
+
+  it('never overwrites a count that is already there', () => {
+    expect(migrate({ go_again_taught_count: 0 }, 1).go_again_taught_count).toBe(0);
+    expect(migrate({ go_again_taught_count: 1 }, 1).go_again_taught_count).toBe(1);
+  });
+
+  it('survives a hostile blob rather than wiping the player', () => {
+    for (const bad of [null, undefined, 'x', 0, []]) {
+      expect(() => migrate(bad, 1)).not.toThrow();
+    }
+  });
+
+  it('a NEW install still gets taught — migrate never runs for it', () => {
+    // No persisted blob means no migrate call, so the store default stands.
+    expect((useVoiceHintsStore.getState() as { go_again_taught_count?: number }).go_again_taught_count).toBe(0);
   });
 });
