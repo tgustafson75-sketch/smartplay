@@ -41,21 +41,29 @@ const TABLE = 'swing_shares';
 const MAX_PAYLOAD_BYTES = 1_500_000;
 const MAX_FRAMES = 12;
 /**
- * TWO HOSTS, TWO JOBS — and using one constant for both shipped a dead link.
+ * SHARE_HOST is where a shared link SENDS someone. It is the bare brand domain, which is what a
+ * link should look like when it arrives in a text message.
  *
- * 2026-08-31, caught by actually opening the URL rather than trusting the 200 on create: the share
- * POST succeeded and returned `https://smartplaycaddie.com/s/<id>`, which 404s. That domain is the
- * GoDaddy marketing site; the Vercel routes — including /s/ — live on api.smartplaycaddie.com. The
- * share was stored correctly and the page rendered correctly, and the only broken thing was the URL
- * we handed the player.
+ * 2026-08-31, in three steps, and the middle one is the lesson:
  *
- * SHARE_HOST is where the page actually is. SITE is the marketing site, which is the right target
- * for the download button and wrong for everything else here.
+ *   1. This was `smartplaycaddie.com` and every share 404'd. That domain served the marketing site
+ *      and the Vercel routes — including /s/ — lived only on api.smartplaycaddie.com. The row stored
+ *      correctly and the page rendered correctly; the ONLY broken thing was the URL handed back.
+ *      Caught by opening the link rather than trusting the 200 on create, which proved the write
+ *      succeeded and said nothing whatever about whether the link worked.
+ *   2. Pointed at api.smartplaycaddie.com so it worked, while reading like an internal hostname.
+ *   3. Tim added a rewrite in the marketing site's vercel.json proxying /s/:id through to
+ *      api.smartplaycaddie.com/s/:id, so the bare domain now serves the real page. Verified before
+ *      this change: both hosts return 200 and 12,546 BYTE-IDENTICAL bytes for the same share.
  *
- * Worth moving later: pointing smartplaycaddie.com/s/* at Vercel would make shared links wear the
- * bare brand domain, which reads better in a text message. That is a DNS change, not a code one.
+ * So this is a rewrite, NOT a DNS change — an earlier version of this comment said DNS and was
+ * wrong. The proxy lives in the marketing site's config, which means it is a dependency this file
+ * cannot see: if /s/ ever 404s on the bare domain again, that rewrite is the first thing to check,
+ * and api.smartplaycaddie.com/s/<id> is the direct route that bypasses it.
+ *
+ * SITE stays the marketing site and is the right target for the download button.
  */
-const SHARE_HOST = 'https://api.smartplaycaddie.com';
+const SHARE_HOST = 'https://smartplaycaddie.com';
 const SITE = 'https://smartplaycaddie.com';
 
 /** URL-safe, unguessable, and short enough to read aloud if someone has to. */

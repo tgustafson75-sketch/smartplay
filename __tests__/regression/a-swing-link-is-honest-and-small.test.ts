@@ -108,13 +108,18 @@ describe('the link is unguessable and bounded', () => {
  * the link worked. [[verification-claim-discipline]]
  */
 describe('the link points where the page actually is', () => {
-  it('the share URL uses the host that serves /s/', () => {
-    expect(api).toMatch(/const SHARE_HOST = 'https:\/\/api\.smartplaycaddie\.com'/);
+  it('the share URL is built from SHARE_HOST, never hardcoded', () => {
+    // 2026-08-31 — SHARE_HOST is the BARE brand domain now: the marketing site's vercel.json
+    // rewrites /s/:id through to api.smartplaycaddie.com/s/:id (verified byte-identical). A link
+    // should look like the brand when it lands in someone's messages.
+    expect(api).toMatch(/const SHARE_HOST = 'https:\/\/smartplaycaddie\.com'/);
     expect(api).toMatch(/url: `\$\{SHARE_HOST\}\/s\/\$\{id\}`/);
+    // Never a literal — the whole 404 happened because two hosts were conflated by hand.
+    expect(api).not.toMatch(/url: `https:\/\//);
   });
 
-  it('no share URL is ever built from the marketing domain', () => {
-    expect(api).not.toMatch(/\$\{SITE\}\/s\//);
+  it('the canonical points at the same place the link does', () => {
+    expect(api).toMatch(/canonical" href="\$\{SHARE_HOST\}\/s\//);
   });
 
   it('but the DOWNLOAD button still goes to the marketing site — that is its job', () => {
