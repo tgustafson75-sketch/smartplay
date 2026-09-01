@@ -1737,7 +1737,11 @@ check('Caddie report-read lag: warmVoice prewarm + speakChunked fast-first-word'
     /lastVoiceWarmAt < 45_000/.test(voiceSrc) &&
     /export const speakChunked = async/.test(voiceSrc) &&
     /trimmed\.length <= CHUNK_MIN_CHARS/.test(voiceSrc) && // short text → single shot
-    /speakGeneration !== startGen\) break/.test(voiceSrc) && // barge-in cancels the rest
+    // 2026-09-01 — was /speakGeneration !== startGen\) break/, which matched the LAYOUT of the line
+    // rather than the behaviour. Adding a silent-fail log before the break moved `break` onto its own
+    // line and failed a guard whose invariant — a barge-in abandons the rest of the report — was never
+    // in question. Now matches the condition and the break it guards, whatever sits between them.
+    /i > 0 && speakGeneration !== startGen\)[\s\S]{0,500}?break;/.test(voiceSrc) && // barge-in cancels the rest
     // Wired at the report-read flows: swing detail + scorecard recap + cage summary.
     /warmVoice\(apiUrl\)/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
     /speakChunked\(/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
