@@ -40,6 +40,22 @@ const TABLE = 'swing_shares';
 /** Frames are base64 JPEGs; this bounds one share to roughly a megabyte and a half of JSON. */
 const MAX_PAYLOAD_BYTES = 1_500_000;
 const MAX_FRAMES = 12;
+/**
+ * TWO HOSTS, TWO JOBS — and using one constant for both shipped a dead link.
+ *
+ * 2026-08-31, caught by actually opening the URL rather than trusting the 200 on create: the share
+ * POST succeeded and returned `https://smartplaycaddie.com/s/<id>`, which 404s. That domain is the
+ * GoDaddy marketing site; the Vercel routes — including /s/ — live on api.smartplaycaddie.com. The
+ * share was stored correctly and the page rendered correctly, and the only broken thing was the URL
+ * we handed the player.
+ *
+ * SHARE_HOST is where the page actually is. SITE is the marketing site, which is the right target
+ * for the download button and wrong for everything else here.
+ *
+ * Worth moving later: pointing smartplaycaddie.com/s/* at Vercel would make shared links wear the
+ * bare brand domain, which reads better in a text message. That is a DNS change, not a code one.
+ */
+const SHARE_HOST = 'https://api.smartplaycaddie.com';
 const SITE = 'https://smartplaycaddie.com';
 
 /** URL-safe, unguessable, and short enough to read aloud if someone has to. */
@@ -171,7 +187,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('[swing-share] insert failed:', error.message);
     return res.status(200).json({ ok: false, error: 'store_failed' });
   }
-  return res.status(200).json({ ok: true, id, url: `${SITE}/s/${id}` });
+  return res.status(200).json({ ok: true, id, url: `${SHARE_HOST}/s/${id}` });
 }
 
 async function handleGet(req: VercelRequest, res: VercelResponse) {
@@ -338,5 +354,5 @@ function sharePage(p: SharePayload, id: string): string {
     </script>`;
 
   const desc = p.headline || `A swing read by the SmartPlay Caddie${who ? ' — ' + who : ''}.`;
-  return SHELL(`${title} · SmartPlay Caddie`, body, desc).replace('</head>', `<link rel="canonical" href="${SITE}/s/${esc(id)}"></head>`);
+  return SHELL(`${title} · SmartPlay Caddie`, body, desc).replace('</head>', `<link rel="canonical" href="${SHARE_HOST}/s/${esc(id)}"></head>`);
 }

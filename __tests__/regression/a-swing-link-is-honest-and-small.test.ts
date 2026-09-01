@@ -97,3 +97,27 @@ describe('the link is unguessable and bounded', () => {
     expect(api).toMatch(/Full Swing Ahead/);
   });
 });
+
+/**
+ * 2026-08-31 — THE LINK POINTED AT THE WRONG HOST, and only opening it revealed that.
+ *
+ * The POST returned ok:true with a real id, and the page rendered perfectly — on
+ * api.smartplaycaddie.com. The URL handed back pointed at smartplaycaddie.com, which is the GoDaddy
+ * MARKETING site, not Vercel, so every share link 404'd. Two hosts doing two different jobs, one
+ * constant used for both. A 200 on create proved the storage worked and said nothing about whether
+ * the link worked. [[verification-claim-discipline]]
+ */
+describe('the link points where the page actually is', () => {
+  it('the share URL uses the host that serves /s/', () => {
+    expect(api).toMatch(/const SHARE_HOST = 'https:\/\/api\.smartplaycaddie\.com'/);
+    expect(api).toMatch(/url: `\$\{SHARE_HOST\}\/s\/\$\{id\}`/);
+  });
+
+  it('no share URL is ever built from the marketing domain', () => {
+    expect(api).not.toMatch(/\$\{SITE\}\/s\//);
+  });
+
+  it('but the DOWNLOAD button still goes to the marketing site — that is its job', () => {
+    expect(api).toMatch(/href="\$\{SITE\}\/download"/);
+  });
+});
