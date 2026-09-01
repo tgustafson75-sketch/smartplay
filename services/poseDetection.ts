@@ -1134,6 +1134,19 @@ export async function analyzeSwing(
     // the existing library / Cage upload behavior — Gemini → OpenAI
     // escalation chain.
     tier?: 'quick' | 'full';
+    /**
+     * 2026-08-31 — FIRED THE INSTANT THIS FUNCTION IS DONE DECODING.
+     *
+     * The pose warm added this morning was started by the caller as soon as the request was built,
+     * which is BEFORE analyzeSwing has probed, located and extracted. Every frame decode in this app
+     * goes through one serialized media chain, so the warm's 5-8 decodes did not fill idle time —
+     * they QUEUED IN FRONT OF the extraction the analysis was waiting on, and made the wait longer.
+     * A latency fix that added latency.
+     *
+     * Only this function knows when its own decoding ends and the network wait starts. That is the
+     * moment the decoder is genuinely idle, so that is when the caller is told.
+     */
+    onFramesReady?: () => void;
     // 2026-05-28 — Fix FP: spoken-audio transcript from the same clip
     // (Whisper via /api/transcribe, written to shot.commentary_transcript
     // by swingCommentaryService). When present, the analyzer prompt
@@ -1245,6 +1258,8 @@ export async function analyzeSwing(
   const durForExtract = probedDurMs || (await probeDurationMs(clipUri).catch(() => 0)) || undefined;
   const frames = await extractKeyFrames(clipUri, effectiveBoundaries, quickTier, durForExtract);
   extractMs = Date.now() - tExtract;
+  // Decoding is finished; everything from here is network. Safe for the caller to use the decoder.
+  try { context.onFramesReady?.(); } catch { /* a warm must never affect the analysis */ }
   /**
    * 2026-08-25 (Tim — "I've actually never waited for the analysis") — report what the frame cache
    * saved on this analysis. Decodes are serialized app-wide, so a decode avoided is wall-clock the

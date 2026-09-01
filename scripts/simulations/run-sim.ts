@@ -3733,12 +3733,30 @@ check('LOCK: the pose warm starts INSIDE the network wait, and both paths key it
     const helper = read('services/swing/poseExtractKey.ts')
       .replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
 
-    const warmAt = sm.indexOf('WARM THE POSE FRAMES INSIDE THE NETWORK WAIT');
-    const awaitAt = sm.indexOf('await analysisP!');
-    const createAt = sm.indexOf('const analysisP:');
-    if (warmAt < 0 || awaitAt < 0 || createAt < 0) { console.log('   pose warm / analysisP anchors missing'); return false; }
-    // Started after the POST is in flight, and before the verdict is awaited.
-    if (!(createAt < warmAt && warmAt < awaitAt)) { console.log(`   pose warm is out of order (create=${createAt} warm=${warmAt} await=${awaitAt})`); return false; }
+    /**
+     * 2026-08-31, corrected the same day it was written. This asserted the warm sat BETWEEN
+     * `const analysisP:` and `await analysisP!` in the file — position as a proxy for timing. That
+     * proxy was wrong in the way that mattered: analyzeSwing does its own probing, locating and
+     * extracting INSIDE that span, and every decode in this app runs through one serialized media
+     * chain. So a warm started there queued its 5-8 decodes IN FRONT OF the extraction the analysis
+     * was waiting on. A latency fix that added latency, and this guard called it correct.
+     *
+     * The real property is TIMING, and only analyzeSwing knows it: it fires `onFramesReady` the
+     * instant its decoding ends and the network wait begins. So that is what is asserted — the warm
+     * is invoked by that callback and by nothing else, and the callback is raised after extraction
+     * and before the response is awaited. Assert the relationship, not the byte offset.
+     * [[three-ways-a-guard-is-worthless]]
+     */
+    const pose = readCode('services/poseDetection.ts');
+    const extractAt = pose.indexOf('extractMs = Date.now() - tExtract;');
+    const signalAt = pose.indexOf('context.onFramesReady?.()');
+    const respAt = pose.indexOf('let res = await tryFetch(1);');
+    if (extractAt < 0 || signalAt < 0 || respAt < 0) { console.log('   onFramesReady anchors missing'); return false; }
+    if (!(extractAt < signalAt && signalAt < respAt)) { console.log('   the decoder-free signal is not between extraction and the response'); return false; }
+    // The screen must start the warm ONLY from that callback — never eagerly beside the request.
+    if (!/onFramesReady: startPoseWarm/.test(sm)) { console.log('   the screen does not hand analyzeSwing its warm'); return false; }
+    if (/^\s*startPoseWarm\(\);/m.test(sm)) { console.log('   the warm is still invoked directly — it would race the extraction again'); return false; }
+    if (!/let warmStarted = false;/.test(sm) || !/if \(warmStarted\) return;/.test(sm)) { console.log('   the warm is not guarded against running twice'); return false; }
 
     return (
       // both paths import the ONE key owner

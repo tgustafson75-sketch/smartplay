@@ -2201,6 +2201,43 @@ export default function SmartMotion() {
       // budgets inside analyzeSwing, so the slowest run that could still SUCCEED was being killed
       // and reported as "Analysis timed out". See ANALYSIS_WORST_CASE_MS for the breakdown.
       const hangGuardMs = ANALYSIS_WORST_CASE_MS;
+      let uri = rawUri;
+      /**
+       * 2026-08-31 — WARM THE POSE FRAMES, BUT ONLY ONCE THE DECODER IS ACTUALLY FREE.
+       *
+       * This started as soon as the request was built, which is BEFORE analyzeSwing probes, locates
+       * and extracts. Every decode in this app runs through ONE serialized media chain, so these 5-8
+       * decodes did not fill idle time — they queued in front of the extraction the analysis was
+       * waiting on. A latency fix that added latency, live from 07:27 this morning and implicated in
+       * the stall Tim reported twice.
+       *
+       * analyzeSwing now calls `onFramesReady` the instant its own decoding ends and the network
+       * wait begins. That is the only moment the decoder is genuinely idle, and it is the only
+       * moment this may run. Still not awaited, still swallows everything: a failed warm must cost
+       * the analysis nothing.
+       */
+      let warmStarted = false;
+      const startPoseWarm = () => {
+        if (warmStarted) return;
+        warmStarted = true;
+        void (async () => {
+        try {
+          const { poseWindow, acousticImpactMs } = poseExtractInputsFor(segmentsRef.current, selectedSwingRef.current);
+          const warmKey = poseExtractKeyFor({
+            clipUri: uri, poseWindow, selectedSwing: selectedSwingRef.current,
+            handedness: swingerHandedness, acousticImpactMs,
+          });
+          if (poseExtractCacheRef.current?.key === warmKey) return; // already warm — never decode twice
+          const durMs = await probeDurationMs(uri).catch(() => 0);
+          if (!durMs || durMs <= 0) return;
+          const frames = await extractPoseFramesFromVideo(uri, durMs, true, poseWindow, acousticImpactMs);
+          // Only publish if nothing better landed while we decoded, and only for THIS session.
+          if (myRun !== sessionRunRef.current) return;
+          if (poseExtractCacheRef.current?.key === warmKey) return;
+          poseExtractCacheRef.current = { key: warmKey, frames };
+        } catch { /* the warm is an optimisation; the review-phase extract still runs */ }
+      })();
+      };
       const analysisP: Promise<Awaited<ReturnType<typeof analyzeSwing>>> | null = isPutt ? null : Promise.race([
         analyzeSwing(rawUri, {
           club: clubRef.current ? clubIdToServerKey(clubRef.current) : 'unknown',
@@ -2216,6 +2253,7 @@ export default function SmartMotion() {
             first_name: profile.firstName ?? null,
           },
           tier: 'quick' as const,
+          onFramesReady: startPoseWarm,
           /**
            * 2026-08-31 (Tim: "if we are not going to [do talk-about-the-swing] until 2.0, at least
            * make sure what we have is wired completely") — THE NOTES REACH THE MODEL ON THIS PATH TOO.
@@ -2257,7 +2295,6 @@ export default function SmartMotion() {
           setTimeout(() => resolve({ kind: 'error', message: 'Analysis timed out' }), hangGuardMs)),
       ]);
       // Persist the durable copy in PARALLEL with the in-flight read above.
-      let uri = rawUri;
       try {
         const { persistClipToDocuments } = await import('../../services/videoUpload');
         uri = await persistClipToDocuments(rawUri);
@@ -2265,44 +2302,6 @@ export default function SmartMotion() {
         if (uri !== rawUri) setClipUri(uri);
       } catch { /* use rawUri */ }
 
-      /**
-       * 2026-08-31 (OPEN-ITEMS §10) — WARM THE POSE FRAMES INSIDE THE NETWORK WAIT.
-       *
-       * `analysisP` is already in flight above, and the vision round-trip is the long pole. Until
-       * now the decoder sat idle for all of it and the body read did not start until the phase
-       * flipped to 'review'. Starting the IDENTICAL extraction here moves that decode inside the
-       * wait; the review-phase effect then finds `poseExtractCacheRef` already populated and
-       * computes biomech immediately instead of decoding the clip a second time.
-       *
-       * Deliberately started AFTER the durable copy is resolved: the review effect reads the
-       * PERSISTED `uri`, so warming on `rawUri` would key on a path the review never asks for —
-       * a guaranteed miss that pays for a decode twice. This is exactly why the key has one owner.
-       *
-       * Additive and non-blocking by construction: it is not awaited, it writes only the cache, and
-       * every failure is swallowed. If it is slow, never finishes, or throws, the review effect
-       * simply extracts as it does today. Nothing downstream can tell the difference except in time.
-       *
-       * Duration: the review path uses the player's onLoad value, which does not exist yet here (and
-       * waiting on it was itself a shipped latency defect — "the tap was loading the video"). Probe
-       * it from the file instead. It is NOT part of the cache key — see poseExtractKeyFor.
-       */
-      void (async () => {
-        try {
-          const { poseWindow, acousticImpactMs } = poseExtractInputsFor(segmentsRef.current, selectedSwingRef.current);
-          const warmKey = poseExtractKeyFor({
-            clipUri: uri, poseWindow, selectedSwing: selectedSwingRef.current,
-            handedness: swingerHandedness, acousticImpactMs,
-          });
-          if (poseExtractCacheRef.current?.key === warmKey) return; // already warm — never decode twice
-          const durMs = await probeDurationMs(uri).catch(() => 0);
-          if (!durMs || durMs <= 0) return;
-          const frames = await extractPoseFramesFromVideo(uri, durMs, true, poseWindow, acousticImpactMs);
-          // Only publish if nothing better landed while we decoded, and only for THIS session.
-          if (myRun !== sessionRunRef.current) return;
-          if (poseExtractCacheRef.current?.key === warmKey) return;
-          poseExtractCacheRef.current = { key: warmKey, frames };
-        } catch { /* the warm is an optimisation; the review-phase extract still runs */ }
-      })();
 
       try {
         // Coach Mode attribution: when a family member is active (coach
