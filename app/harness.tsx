@@ -344,6 +344,32 @@ function Row({ scenario, state, onRun }: { scenario: Scenario; state: RowState; 
             {failedChecks.length === 0 && state.report.checks.length === 0 && !errored && (
               <Text style={styles.checkDetail}>No asserts ran.</Text>
             )}
+
+            {/* 2026-09-01 — THE DEVICE'S OWN ACCOUNT. Everything above is what the harness asserted;
+                this is what the app actually did underneath it. A scenario can pass every check while
+                the JS thread stalled for a second or a catch swallowed an error — both show here and
+                neither showed anywhere before. [[missing-log-entry-is-the-evidence]] */}
+            {state.report.trace?.maxLagMs ? (
+              <Text style={styles.traceStall}>
+                {`⚠ JS thread blocked ${state.report.trace.maxLagMs}ms during this scenario`}
+              </Text>
+            ) : null}
+            {state.report.trace?.flow?.length ? (
+              <View style={styles.traceBlock}>
+                <Text style={styles.traceHead}>FLOW · what the app logged, in order</Text>
+                {state.report.trace.flow.map((f, i) => (
+                  <Text key={`f${i}`} style={styles.traceLine}>{safeText(f, 220)}</Text>
+                ))}
+              </View>
+            ) : null}
+            {state.report.trace?.logs?.length ? (
+              <View style={styles.traceBlock}>
+                <Text style={styles.traceHead}>SWALLOWED · console errors during the run</Text>
+                {state.report.trace.logs.map((l, i) => (
+                  <Text key={`l${i}`} style={styles.traceErr}>{safeText(l, 220)}</Text>
+                ))}
+              </View>
+            ) : null}
           </View>
         </HarnessRowBoundary>
       )}
@@ -432,6 +458,11 @@ const styles = StyleSheet.create({
   checkLabel: { color: '#d1d5db', fontSize: 12 },
   checkTiming: { color: '#F0C030', fontWeight: '700' },
   checkAt: { color: 'rgba(255,255,255,0.6)', fontSize: 11 },
+  traceBlock: { marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.12)' },
+  traceHead: { color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: '700', letterSpacing: 0.4, marginBottom: 4 },
+  traceLine: { color: 'rgba(255,255,255,0.82)', fontSize: 11, lineHeight: 16 },
+  traceErr: { color: '#FF8A7A', fontSize: 11, lineHeight: 16 },
+  traceStall: { color: '#F0C030', fontSize: 12, fontWeight: '700', marginTop: 10 },
   checkDetail: { color: '#c2cad4', fontSize: 11, marginTop: 2 },
   lockedBody: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   lockedText: { color: '#c2cad4', fontSize: 14, textAlign: 'center', lineHeight: 22 },

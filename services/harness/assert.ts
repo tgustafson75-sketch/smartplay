@@ -35,6 +35,13 @@ export interface ScenarioReport {
   checks: Check[];
   /** Final error if the scenario threw before its asserts ran. */
   error?: string;
+  /**
+   * 2026-09-01 — what the DEVICE did while this scenario ran, from services/harness/probe.ts:
+   * swallowed console errors, the app's own issue-log breadcrumbs in order, and the worst JS-thread
+   * stall. None of it is asserted on directly; all of it is the context that makes a failure legible
+   * — and a green scenario carrying five console errors is itself a finding.
+   */
+  trace?: import('./probe').ProbeTrace;
 }
 
 export class AssertCtx {
@@ -162,6 +169,11 @@ export function logScenarioToIssueLog(report: ScenarioReport): void {
         // The labels are the whole diagnosis — they say WHICH assertion broke, in words.
         checks: failed.slice(0, 8).map((c) => (c.detail ? `${c.label} — ${c.detail}` : c.label)),
         ...(report.error ? { error: report.error } : {}),
+        // The device's own account of the run. `flow` is the app's real progress, in order — it is
+        // frequently the thing that explains a failure the check labels only describe.
+        ...(report.trace?.flow?.length ? { flow: report.trace.flow.slice(0, 10) } : {}),
+        ...(report.trace?.logs?.length ? { errors: report.trace.logs.slice(0, 6) } : {}),
+        ...(report.trace?.maxLagMs ? { jsThreadStallMs: report.trace.maxLagMs } : {}),
       },
       'app_error',
     );
@@ -220,6 +232,21 @@ export async function logRunSummaryToIssueLog(reports: ScenarioReport[]): Promis
       env.apiBase = getApiBaseUrl() || null;
     } catch { /* ignore */ }
 
+    // A run where every assertion passed can still be a bad run. These two are the reason the summary
+    // is written on PASS as well: a stalled thread and a swallowed error both leave the checks green.
+    // The self-test causes its own error and its own stall on purpose; counting them would make every
+    // run look dirty and the two signals worthless. Failures from it still count — a self-test that
+    // FAILS means the probes stopped seeing the device, which is the loudest thing in this file.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { SELFTEST_SCENARIO_ID } = require('./probe') as typeof import('./probe');
+    const observed = reports.filter((r) => r.id !== SELFTEST_SCENARIO_ID);
+    const stalls = observed
+      .filter((r) => (r.trace?.maxLagMs ?? 0) > 0)
+      .sort((a, b) => (b.trace?.maxLagMs ?? 0) - (a.trace?.maxLagMs ?? 0))
+      .slice(0, 4)
+      .map((r) => `${r.id} ${r.trace?.maxLagMs}ms`);
+    const consoleErrors = observed.flatMap((r) => (r.trace?.logs ?? []).map((l) => `${r.id} ${l}`)).slice(0, 6);
+
     useIssueLogStore.getState().addAppEvent('harness_run', {
       scenarios: reports.length,
       failed: failed.length,
@@ -227,7 +254,10 @@ export async function logRunSummaryToIssueLog(reports: ScenarioReport[]): Promis
       totalMs: reports.reduce((n, r) => n + r.durationMs, 0),
       slowestScenario: [...reports].sort((a, b) => b.durationMs - a.durationMs)[0]?.id ?? null,
       slowestSteps: slowest,
+      ...(stalls.length ? { jsThreadStalls: stalls } : {}),
+      ...(consoleErrors.length ? { consoleErrors } : {}),
       ...env,
-    }, failed.length > 0 ? 'app_error' : 'diag');
+      // A clean run is only clean if nothing was swallowed and nothing blocked the thread.
+    }, failed.length > 0 || consoleErrors.length > 0 || stalls.length > 0 ? 'app_error' : 'diag');
   } catch { /* a summary must never break a run */ }
 }

@@ -7475,7 +7475,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'ambiguous scribbles and tiny ticks are left as raw freehand, never force-fit');
 
   // The overlay actually wires the classifier into the freehand commit path.
-  const overlaySrc = fs.readFileSync(path.resolve(__dirname, '../../components/swinglab/VideoAnnotationOverlay.tsx'), 'utf-8');
+  const overlaySrc = read('components/swinglab/VideoAnnotationOverlay.tsx');
   check('Smart freehand: overlay routes freehand release through classifyStroke',
     /classifyStroke\(d\)/.test(overlaySrc) &&
       /cls\.kind === 'line'/.test(overlaySrc) &&
@@ -7536,9 +7536,9 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   // guards: (1) startRound falls a back-nine start back to the front nine when the course can't fit a full
   // nine from there (a 9-hole course has no back nine → phantom holes 10-17); (2) the "Which nine" pill is
   // gated on an 18-hole course; (3) the cockpit minus stepper floors on the round's first hole, not 1.
-  const roundStoreSrcBN = fs.readFileSync(path.resolve(__dirname, '../../store/roundStore.ts'), 'utf-8');
-  const caddieTabSrcBN = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/caddie.tsx'), 'utf-8');
-  const stepperSrcBN = fs.readFileSync(path.resolve(__dirname, '../../components/caddie/cockpit/StepperPair.tsx'), 'utf-8');
+  const roundStoreSrcBN = read('store/roundStore.ts');
+  const caddieTabSrcBN = read('app/(tabs)/caddie.tsx');
+  const stepperSrcBN = read('components/caddie/cockpit/StepperPair.tsx');
   check('Back nine: a short course cannot start a corrupt phantom-hole round',
     /options\.nineHole && startHoleResolved > 1 && startHoleResolved \+ 8 > nHoles/.test(roundStoreSrcBN) &&
       /getCourseHoleCount\(selectedPickedCourse\?\.id, 18\) >= 18/.test(caddieTabSrcBN) &&
@@ -7546,7 +7546,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'a back-nine start with no full nine ahead falls back to the front nine (data-layer guard), the nine-picker pill only shows on an 18-hole course, and the cockpit stepper floors on the round first hole');
 
   // The OCR endpoint actually supports the list mode this pipeline calls.
-  const importApiSrc = fs.readFileSync(path.resolve(__dirname, '../../api/round-import.ts'), 'utf-8');
+  const importApiSrc = read('api/round-import.ts');
   check('Bulk import: round-import API has a list mode',
     /mode === 'list'/.test(importApiSrc) && /LIST_SYSTEM_PROMPT/.test(importApiSrc) && /rounds:/.test(importApiSrc),
     "/api/round-import branches on mode:'list' with a dedicated prompt + {rounds[]} response");
@@ -7561,12 +7561,12 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'a null/undefined row in the OCR result is skipped without throwing; valid rows still ingest');
 
   // #1: bulk path suppresses per-round handicap math (the single rebuild owns it).
-  const roundStoreSrc = fs.readFileSync(path.resolve(__dirname, '../../store/roundStore.ts'), 'utf-8');
+  const roundStoreSrc = read('store/roundStore.ts');
   check('Bulk import: addImportedRound honors updateHandicap flag (audit #1)',
     /updateHandicap\?: boolean/.test(roundStoreSrc) &&
       /\(input\.updateHandicap \?\? true\) &&/.test(roundStoreSrc),
     'addImportedRound gates the per-round differential/index work on updateHandicap (default true; bulk passes false)');
-  const listScreenSrc = fs.readFileSync(path.resolve(__dirname, '../../app/import-rounds-list.tsx'), 'utf-8');
+  const listScreenSrc = read('app/import-rounds-list.tsx');
   check('Bulk import: bulk caller passes updateHandicap:false + counts real adds (audit #1)',
     /updateHandicap: false/.test(listScreenSrc) && /roundHistory\.length - before/.test(listScreenSrc),
     'the bulk importer suppresses per-round handicap math and counts adds via the history-length delta (dedupe-aware)');
@@ -7583,9 +7583,9 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
 // /recap/<id>, the ONE path that skipped the save/discard choice every on-screen path enforces — and
 // that divergent immediate path crashed. These guards lock the single-source flow in place.
 {
-  const endFlowSrc = fs.readFileSync(path.resolve(__dirname, '../../services/round/endRoundFlow.ts'), 'utf-8');
-  const endHandlerSrc = fs.readFileSync(path.resolve(__dirname, '../../services/intents/endRoundHandler.ts'), 'utf-8');
-  const toolsMenuSrc = fs.readFileSync(path.resolve(__dirname, '../../components/tools/GlobalToolsMenu.tsx'), 'utf-8');
+  const endFlowSrc = read('services/round/endRoundFlow.ts');
+  const endHandlerSrc = read('services/intents/endRoundHandler.ts');
+  const toolsMenuSrc = read('components/tools/GlobalToolsMenu.tsx');
 
   // The shared flow offers Save AND Discard, and routes Save through feelings — never a
   // navigate_replace straight to the recap.
@@ -7682,7 +7682,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   // 2026-08-24 — this looped over BOTH brains. api/pipecat-turn is a pass-through to kevin now, with
   // no prompt of its own, so asserting the gate there would be asserting the second brain returned.
   // The behaviour is unchanged and still asserted, at the one place that builds a prompt.
-  const kevinApiSrc = fs.readFileSync(path.resolve(__dirname, '../../api/kevin.ts'), 'utf-8');
+  const kevinApiSrc = read('api/kevin.ts');
   for (const [label, src] of [['kevin', kevinApiSrc]] as const) {
     /**
      * 2026-08-25 — THE GATE IS GONE ON PURPOSE, AND THIS GUARD NOW ASSERTS WHY.
@@ -7722,8 +7722,8 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   const jargon = WHATS_NEW.filter(e => /\.tsx?\b|api\/|services\/|store\/|useState|zustand/.test(e.note));
   check("What's New: entries are player-facing (no file names / code jargon)",
     jargon.length === 0, jargon.length === 0 ? 'all clean' : `JARGON in ${jargon.length} entries`);
-  const whatsNewScreenSrc = fs.readFileSync(path.resolve(__dirname, '../../app/whats-new.tsx'), 'utf-8');
-  const whatsNewStoreSrc = fs.readFileSync(path.resolve(__dirname, '../../store/whatsNewStore.ts'), 'utf-8');
+  const whatsNewScreenSrc = read('app/whats-new.tsx');
+  const whatsNewStoreSrc = read('store/whatsNewStore.ts');
   check("What's New: screen + badge store both read the one WHATS_NEW source",
     /WHATS_NEW/.test(whatsNewScreenSrc) && /WHATS_NEW/.test(whatsNewStoreSrc) && /unseenWhatsNewCount/.test(whatsNewStoreSrc),
     'app/whats-new.tsx renders WHATS_NEW and store/whatsNewStore exposes unseenWhatsNewCount off the same array');
@@ -7742,7 +7742,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
 // future edit trips the harness instead of silently regressing the look or the first-turn voice.
 {
   // 1) DEFAULT THEME = dark + high contrast, with the v21 migration for existing testers.
-  const settingsSrc = fs.readFileSync(path.resolve(__dirname, '../../store/settingsStore.ts'), 'utf-8');
+  const settingsSrc = read('store/settingsStore.ts');
   check('LOCK theme: default is dark + high contrast',
     /theme_preference:\s*'dark' as const/.test(settingsSrc) && /highContrast:\s*true/.test(settingsSrc),
     'settingsStore ships theme_preference=dark + highContrast=true as the default state');
@@ -7755,20 +7755,20 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       return v >= 21 && /version < 21/.test(settingsSrc) && /p\.theme_preference = 'dark'/.test(settingsSrc);
     })(),
     'persist bumped to v21 and migrates a never-customized (system-default) install to dark + high contrast');
-  const themeCtxSrc = fs.readFileSync(path.resolve(__dirname, '../../contexts/ThemeContext.tsx'), 'utf-8');
+  const themeCtxSrc = read('contexts/ThemeContext.tsx');
   check('LOCK theme: dark is the resolved fallback in ThemeContext',
     /darkTheme/.test(themeCtxSrc) && /highContrast/.test(themeCtxSrc),
     'ThemeContext resolves darkTheme by default and wires highContrast through');
 
   // 2) TOOLS PILL pinned to the upper-right corner on the Caddie tab (was dropped into the data zone).
-  const caddieSrc = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/caddie.tsx'), 'utf-8');
+  const caddieSrc = read('app/(tabs)/caddie.tsx');
   check('LOCK layout: Caddie tools pill sits in the upper-right corner (marginTop 0, not dropped)',
-    /just inside the upper-right corner/.test(caddieSrc) &&
-      /flexDirection: 'row', gap: 6, marginTop: 0 \}\}>/.test(caddieSrc),
+    // 2026-09-01 — the prose clause matched only the comment. The style IS the assertion.
+    /flexDirection: 'row', gap: 6, marginTop: 0 \}\}>/.test(readCode('app/(tabs)/caddie.tsx')),
     'the tools-pill row is flush with the back chevron (marginTop: 0) so it never overlaps the SmartVision data');
 
   // 3) FIRST-VOICE cold invariants — the first turn must land, never fast-fail on a slow cold handshake.
-  const vcSrc = fs.readFileSync(path.resolve(__dirname, '../../hooks/useVoiceCaddie.ts'), 'utf-8');
+  const vcSrc = read('hooks/useVoiceCaddie.ts');
   // 2026-08-20 — these assert the BUDGET RULE, not which boolean carries it. Warmth is now tracked
   // per Lambda (kevin answering says nothing about transcribe being awake), which is the fix for
   // "fails the first time"; the invariant that a COLD transcribe gets the long budget is unchanged.
@@ -7791,11 +7791,11 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('LOCK voice: markConnectionWarmed after a successful transcribe (fast path thereafter)',
     /markEndpointWarmed\('\/api\/transcribe'\)/.test(vcSrc),
     'a successful cloud transcribe flips the warmed flag so subsequent turns take the fast path');
-  const lsSrc = fs.readFileSync(path.resolve(__dirname, '../../services/listeningSession.ts'), 'utf-8');
+  const lsSrc = read('services/listeningSession.ts');
   check('LOCK voice: the earbud classify races a hedge — a 22s wait is not "cold-aware"',
     /const CLASSIFY_HEDGE_MS = 2_500;/.test(lsSrc) && /Promise\.any\(\[primary, hedged\]\)/.test(lsSrc),
     'the intent classify opens a second connection after 2.5s rather than betting 22 seconds on the first — the old guard asserted that 22s wait as if it were the feature, and it was the hang');
-  const vsSrc = fs.readFileSync(path.resolve(__dirname, '../../services/voiceService.ts'), 'utf-8');
+  const vsSrc = read('services/voiceService.ts');
   check('LOCK voice: the earbud transcribe races a hedge instead of waiting out a hung socket',
     /const raceOnce = async \(budgetMs: number\)/.test(vsSrc) && /Promise\.any\(\[primary, hedged\]\)/.test(vsSrc)
       && !/doFetch\(25_000\)/.test(vsSrc),
@@ -7835,10 +7835,10 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
 
 // ─── Watch companion wiring (Tim 2026-07-29: watch WORKS; "wired optimally?" + connected indicator) ──
 {
-  const swingBr = fs.readFileSync(path.resolve(__dirname, '../../services/watchSwingBridge.ts'), 'utf-8');
-  const caddieBr = fs.readFileSync(path.resolve(__dirname, '../../services/watchCaddieBridge.ts'), 'utf-8');
-  const layout = fs.readFileSync(path.resolve(__dirname, '../../app/_layout.tsx'), 'utf-8');
-  const metrics = fs.readFileSync(path.resolve(__dirname, '../../services/swingMetricsService.ts'), 'utf-8');
+  const swingBr = read('services/watchSwingBridge.ts');
+  const caddieBr = read('services/watchCaddieBridge.ts');
+  const layout = read('app/_layout.tsx');
+  const metrics = read('services/swingMetricsService.ts');
 
   // Both bridges start at boot (not only from the Settings toggle) so the watch works out of the box.
   check('Watch: both bridges initialize at app boot',
@@ -7879,7 +7879,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   // Drill feedback: after a captured swing, the phone pushes a per-swing readout back to the watch
   // (swipeable metric cards). Payload is club-tagged + normalized here so the wrist shows what the
   // phone logs.
-  const bridge = fs.readFileSync(path.resolve(__dirname, '../../services/watchBridge.ts'), 'utf-8');
+  const bridge = read('services/watchBridge.ts');
   check('Watch: drill swing-feedback push exists (phone → watch)',
     /kind: 'swing_feedback'/.test(bridge) && /export async function sendSwingFeedback/.test(bridge) &&
       /sendSwingFeedback\(/.test(swingBr),
@@ -7888,7 +7888,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   // Lead/trail: a persistent wrist setting (default lead, toggle to trail) tags every swing + drives a
   // per-wrist interpretation. The wrist tag flows into recordSwing + the feedback push.
   check('Watch: wrist setting exists (default lead) + tags every swing',
-    /watchWrist: 'lead' as const/.test(settingsSrc) && /wrist\?: 'lead' \| 'trail'/.test(fs.readFileSync(path.resolve(__dirname, '../../store/watchStore.ts'), 'utf-8')) &&
+    /watchWrist: 'lead' as const/.test(settingsSrc) && /wrist\?: 'lead' \| 'trail'/.test(read('store/watchStore.ts')) &&
       /watchWrist \?\? 'lead'/.test(swingBr) && /\bwrist,/.test(swingBr),
     'settingsStore.watchWrist defaults lead; watchStore SwingMetrics carries wrist; watchSwingBridge tags each swing + feedback with it');
   // Interpretation is honest + wrist-aware: TRAIL wrist surfaces casting/early-release; club-speed
@@ -7903,8 +7903,8 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     `lead confidence = ${leadSmooth.clubSpeedConfidence} (vs trail 'rough')`);
 
   // Per-axis RAW capture (for a future calibrated casting/face model — captured, NOT interpreted).
-  const watchStoreSrc = fs.readFileSync(path.resolve(__dirname, '../../store/watchStore.ts'), 'utf-8');
-  const nativeMod = fs.readFileSync(path.resolve(__dirname, '../../android-native/WearSwingBridgeModule.kt'), 'utf-8');
+  const watchStoreSrc = read('store/watchStore.ts');
+  const nativeMod = read('android-native/WearSwingBridgeModule.kt');
   check('Watch per-axis: capture flows watch → native → JS store (raw, in-memory only)',
     /axisCapture\?:/.test(watchStoreSrc) && /peakGyro/.test(watchStoreSrc) &&        // store field
       /peakGyro\?:/.test(swingBr) && /axisCapture:/.test(swingBr) &&                  // bridge maps it
@@ -7914,10 +7914,10 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
 
 // ─── Custom caddie: photo → OpenAI voice (Tim 2026-07-30) ───────────────────────
 {
-  const profileSrc = fs.readFileSync(path.resolve(__dirname, '../../store/playerProfileStore.ts'), 'utf-8');
-  const voiceApiSrc = fs.readFileSync(path.resolve(__dirname, '../../api/voice.ts'), 'utf-8');
-  const voiceSvcSrc = fs.readFileSync(path.resolve(__dirname, '../../services/voiceService.ts'), 'utf-8');
-  const vercelSrc = fs.readFileSync(path.resolve(__dirname, '../../vercel.json'), 'utf-8');
+  const profileSrc = read('store/playerProfileStore.ts');
+  const voiceApiSrc = read('api/voice.ts');
+  const voiceSvcSrc = read('services/voiceService.ts');
+  const vercelSrc = read('vercel.json');
   const endpointExists = fs.existsSync(path.resolve(__dirname, '../../api/caddie-voice.ts'));
   const matchExists = fs.existsSync(path.resolve(__dirname, '../../services/caddieVoiceMatch.ts'));
 
@@ -7935,7 +7935,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
 
 // ─── Whole-app audit fixes (pre-SmartMotion-test-day) ───────────────────────────
 {
-  const smSrc2 = fs.readFileSync(path.resolve(__dirname, '../../app/swinglab/smartmotion.tsx'), 'utf-8');
+  const smSrc2 = read('app/swinglab/smartmotion.tsx');
   check('SmartMotion: cage falls back to video locator when acoustics under-detect',
     /else if \(stopMode === 'sim' && detectedSegments\.length <= 1\) \{/.test(smSrc2) &&
       /worthVideo/.test(smSrc2),
@@ -7971,12 +7971,12 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   // 2026-06-11 — cage-test fix: 4 swings all returned the SAME fault. Per-swing
   // analysis now hands the analyzer the distinct faults already read this session,
   // and the server (on swing 2+) pushes for a genuinely distinct secondary fault.
-  const swingApiSrc = fs.readFileSync(path.resolve(__dirname, '../../api/swing-analysis.ts'), 'utf-8');
+  const swingApiSrc = read('api/swing-analysis.ts');
   // 2026-06-11 — drag-to-anchor ball/target. The recorded clip's FOV is a tighter
   // crop than the live preview (Samsung video crop), so a setup-placed box can land
   // off on playback. Box is now draggable in setup AND review; review = the actual
   // recorded frame, so dragging there is guaranteed-faithful and sticks to the session.
-  const targetingSrc = fs.readFileSync(path.resolve(__dirname, '../../components/swinglab/PracticeTargetingCard.tsx'), 'utf-8');
+  const targetingSrc = read('components/swinglab/PracticeTargetingCard.tsx');
   // 2026-06-11 — Framing Coach (Tim's "Golf Fix knows when you're in frame" idea).
   // On-device pose → evaluateFraming reads head+feet+centring from one frame.
   {
@@ -8522,7 +8522,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     })(),
     'the mode control is Full swing / Putting only; the angle is inferred live from the framing pose and finally from the swing frames, with no user flag able to suppress the correction');
 
-  const settingsSrc2 = fs.readFileSync(path.resolve(__dirname, '../../store/settingsStore.ts'), 'utf-8');
+  const settingsSrc2 = read('store/settingsStore.ts');
   check('LOCK: the persona handoff SAYS the words it SHOWS',
     (() => {
       /**
@@ -8579,37 +8579,37 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     })(),
     'the splash/greeting shows on every cold launch (warmup mask + tap-to-talk handoff restored), and a disabled greeting resolves the completion signal so the opener fires immediately instead of after a 10s dead wait');
 
-  const seqSrc = fs.readFileSync(path.resolve(__dirname, '../../services/intents/sequenceHandler.ts'), 'utf-8');
+  const seqSrc = read('services/intents/sequenceHandler.ts');
   check('Voice: chained commands forward a navigating step\'s tool_action (audit 4a)',
     /lastToolAction = result\.tool_action/.test(seqSrc) && /tool_action: lastToolAction/.test(seqSrc),
     '"open Smart Motion and switch to quiet mode" now actually navigates — the sequence handler forwards the step tool_action instead of dropping it');
 
   // 4c — custom-caddie base64 blobs moved off the hot-write profile store.
-  const mediaStoreSrc = fs.readFileSync(path.resolve(__dirname, '../../store/customCaddieMediaStore.ts'), 'utf-8');
+  const mediaStoreSrc = read('store/customCaddieMediaStore.ts');
   check('Storage 4c: custom-caddie media store exists with an idempotent migration',
     /custom-caddie-media-v1/.test(mediaStoreSrc) && /migrateFromProfile/.test(mediaStoreSrc) &&
       /_migratedFromProfile/.test(mediaStoreSrc) && /selfieB64: null,\s*\n\s*customCaddiePortraitB64: null,/.test(mediaStoreSrc),
     'the two base64 blobs live in their own persisted store; migrateFromProfile copies legacy values then nulls the profile fields (idempotent via _migratedFromProfile)');
 
-  const profileStoreSrc = fs.readFileSync(path.resolve(__dirname, '../../store/playerProfileStore.ts'), 'utf-8');
+  const profileStoreSrc = read('store/playerProfileStore.ts');
   check('Storage 4c: profile store no longer writes the base64 blobs',
     !/setSelfieB64: \(b\) => set/.test(profileStoreSrc) && !/setCustomCaddiePortraitB64: \(b\) => set/.test(profileStoreSrc),
     'the profile-store setters that wrote the heavy base64 fields are removed — writes go to the media store, so the profile blob stops re-serializing them on every handicap/profile change');
 
-  const layoutSrc = fs.readFileSync(path.resolve(__dirname, '../../app/_layout.tsx'), 'utf-8');
+  const layoutSrc = read('app/_layout.tsx');
   check('Storage 4c: migration runs once both stores have hydrated',
     /migrateFromProfile\(\)/.test(layoutSrc) &&
       /usePlayerProfileStore\.persist\.hasHydrated\(\) && useCustomCaddieMediaStore\.persist\.hasHydrated\(\)/.test(layoutSrc),
     'the one-time migration is gated on both stores being hydrated so the legacy values are present to copy');
 
-  const caddieSrc = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/caddie.tsx'), 'utf-8');
+  const caddieSrc = read('app/(tabs)/caddie.tsx');
   check('Storage 4c: avatar read falls back to legacy until migration completes',
     /mediaPortrait \?\? customCaddiePortraitB64/.test(caddieSrc),
     'the caddie avatar reads the media store first and falls back to the legacy profile field, so it never flickers/disappears during migration');
 
   // ── Swing-analysis triple-check fixes ──
-  const smA = fs.readFileSync(path.resolve(__dirname, '../../app/swinglab/smartmotion.tsx'), 'utf-8');
-  const poseSrc2 = fs.readFileSync(path.resolve(__dirname, '../../services/poseDetection.ts'), 'utf-8');
+  const smA = read('app/swinglab/smartmotion.tsx');
+  const poseSrc2 = read('services/poseDetection.ts');
 
   check('Swing analysis: per-swing result is dropped if the reel moved on (stale guard)',
     /if \(selectedSwingRef\.current === idx\) \{/.test(smA) &&
@@ -8622,7 +8622,9 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /clipUriParam && phase === 'analyzing'[\s\S]{0,400}?setBallSpeed\(null\);\s*\n\s*setBallDeparture\(null\);\s*\n\s*let cancelled = false;/.test(smA) &&
       // ...and runAnalysis explicitly does NOT clear it (would wipe the acoustic
       // ball speed the cage record path measures just before calling runAnalysis).
-      /ball speed\/departure are intentionally NOT cleared here/.test(smA),
+      // 2026-09-01 — was a comment match. Assert the SHAPE instead: the clear happens on the
+      // upload/re-analyze path (above) and runAnalysis must contain no setBallSpeed(null) of its own.
+      !/const runAnalysis = useCallback\([\s\S]{0,4000}?setBallSpeed\(null\)/.test(readCode('app/swinglab/smartmotion.tsx')),
     'the upload/re-analyze path (no acoustics) clears stale ball speed; runAnalysis does NOT, so a cage swing keeps the acoustic ball speed it just measured (audit-fixed regression)');
 
   check('Swing analysis: cached per-swing select clears the analyzing spinner (no stuck spinner)',
@@ -8700,7 +8702,8 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /const durMs = meteredDurationMs \?\? await pose\.probeDurationMs/.test(smA) &&
       // Lambda warmed at record-start (60s window = free warm time), and ball speed is
       // off the critical path.
-      /warm the fault-read Lambda the MOMENT recording starts/.test(smA) &&
+      // 2026-09-01 — was a comment match; assert the warm CALL at record start.
+      /prewarmSwingAnalysis\(\{ force: true \}\)/.test(readCode('app/swinglab/smartmotion.tsx')) &&
       /void detectBallSpeed\(\{[\s\S]{0,200}\}\)\.then\(\(speed\) => \{ if \(speed\) setBallSpeed/.test(smA),
     'short cage clips take the fast BOUNDED path (no cold locate), duration is reused (no re-probe), the Lambda is warmed at record-start, and ball speed runs in parallel — kills the 30-70s first-try NO READ');
 
@@ -8820,21 +8823,21 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'cage mode used at an open range (acoustics heard ≤1 strike for many swings) cross-checks the video locator and uses it when it finds MORE swings — never reduces the count');
 
   // Tempo Trainer (Tour Tempo) — Tank's idea, v1.
-  const tempoSrc = fs.readFileSync(path.resolve(__dirname, '../../app/swinglab/tempo-trainer.tsx'), 'utf-8');
+  const tempoSrc = read('app/swinglab/tempo-trainer.tsx');
   check('Tempo Trainer: Tour-Tempo 3:1 metronome (tick·tick·tock) exists',
     /frames: '24\/8'/.test(tempoSrc) && /tick\.mp3/.test(tempoSrc) && /tock\.mp3/.test(tempoSrc) &&
       /scheduleCycle/.test(tempoSrc) && /back \+ down/.test(tempoSrc),
     'a standalone audio metronome plays tick (takeaway) · tick (top) · tock (strike) at a 3:1 ratio across selectable tempos, looped with a rest');
-  const swinglabSrc2 = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/swinglab.tsx'), 'utf-8');
-  const enJ = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../i18n/locales/en.json'), 'utf-8'));
-  const esJ = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../i18n/locales/es.json'), 'utf-8'));
-  const zhJ = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../i18n/locales/zh.json'), 'utf-8'));
+  const swinglabSrc2 = read('app/(tabs)/swinglab.tsx');
+  const enJ = JSON.parse(read('i18n/locales/en.json'));
+  const esJ = JSON.parse(read('i18n/locales/es.json'));
+  const zhJ = JSON.parse(read('i18n/locales/zh.json'));
   check('Tempo Trainer: SwingLab launcher card + i18n in all locales',
     /key: 'tempo'/.test(swinglabSrc2) && /\/swinglab\/tempo-trainer/.test(swinglabSrc2) &&
       !!enJ.swinglab?.card_tempo_title && !!esJ.swinglab?.card_tempo_title && !!zhJ.swinglab?.card_tempo_title,
     'Tempo Trainer is reachable from a SwingLab card, with translated title/sub in en/es/zh');
 
-  const swingApiSrc2 = fs.readFileSync(path.resolve(__dirname, '../../api/swing-analysis.ts'), 'utf-8');
+  const swingApiSrc2 = read('api/swing-analysis.ts');
   check('Swing analysis: output token caps bounded (Gemini 800 / OpenAI 1000)',
     // 2026-06-27 — refreshed to current caps (post provider-migration the main
     // analysis runs Gemini maxOutputTokens 800 + OpenAI max_tokens 1000; the old
@@ -8842,7 +8845,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /maxOutputTokens: 800/.test(swingApiSrc2) && /max_tokens: 1000/.test(swingApiSrc2),
     'the swing-analysis model calls cap output (Gemini 800, OpenAI 1000) — bounded cost; the JSON-only one-sentence schema keeps real usage well under the cap');
 
-  const listenSrc = fs.readFileSync(path.resolve(__dirname, '../../services/listeningSession.ts'), 'utf-8');
+  const listenSrc = read('services/listeningSession.ts');
   check('Voice: hands-free paths dispatch EVERY tool_action through the full dispatcher',
     // 2026-07-04 (clean-audit C1/C2/H4) — dispatch centralized: listeningSession routes
     // every handler tool_action + every brain toolActions[] through the ONE full
@@ -8903,22 +8906,22 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     })(),
     'a narrated Palms sim exercises SmartFinder/brain/voice/advance end-to-end on simulated GPS, and the SIM-tagged record never touches handicap, points, CNS, longest drive, or the learned bag');
 
-  const dashSrc2 = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/dashboard.tsx'), 'utf-8');
+  const dashSrc2 = read('app/(tabs)/dashboard.tsx');
   check('Dashboard: quick-score placeholder shots excluded from lifetime stats',
     /!s\.id\?\.startsWith\('qs-'\)/.test(dashSrc2),
     'qs- placeholder shots no longer inflate lifetime fairway% / shot count');
 
-  const scoreSrc2 = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/scorecard.tsx'), 'utf-8');
+  const scoreSrc2 = read('app/(tabs)/scorecard.tsx');
   check('Scorecard: quick-score does NOT fabricate 2 putts/hole',
     !/logPutts\(hole, 2\)/.test(scoreSrc2),
     'a bare score tap no longer writes a fake 2-putt that corrupted GIR%/avg-putts and persisted to history');
 
-  const vadSrc = fs.readFileSync(path.resolve(__dirname, '../../hooks/useVoiceActivityDetection.ts'), 'utf-8');
+  const vadSrc = read('hooks/useVoiceActivityDetection.ts');
   check('Voice: denied mic permission turns Auto-Listen toggle OFF',
     /setAutoListenEnabled\(false\)/.test(vadSrc),
     'the toggle stops lying — a denied mic flips Auto-Listen off instead of showing ON while nothing listens');
 
-  const cageDbgSrc = fs.readFileSync(path.resolve(__dirname, '../../app/swing-sessions-debug.tsx'), 'utf-8');
+  const cageDbgSrc = read('app/swing-sessions-debug.tsx');
   check('Stores: swing-sessions-debug Feel Capture viewer no longer uses a fresh-array selector',
     /useSwingSessionStore\(\(s\) => s\.activeSession\)/.test(cageDbgSrc) &&
       /return listFeelCaptureTuples\(50\)/.test(cageDbgSrc) &&
@@ -8926,7 +8929,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'the last render-loop crash-class instance is closed (raw store fields selected; the array is built in useMemo, not returned fresh from a selector)');
 
   // ─── On-device pose: analyzePoseFromUri → existing MediaPipe service ──────
-  const poseApiSrc = fs.readFileSync(path.resolve(__dirname, '../../services/poseAnalysisApi.ts'), 'utf-8');
+  const poseApiSrc = read('services/poseAnalysisApi.ts');
   check('Pose: analyzePoseFromUri runs on-device MediaPipe BEFORE the cloud proxy',
     /import\('\.\/mediaPipePoseService'\)[\s\S]*?detectPoseFromUri\(imageUri, undefined, timestampMs\)[\s\S]*?if \(onDevice\) \{[\s\S]*?return onDevice;[\s\S]*?await fetch\(`\$\{apiUrl\(\)\}\/api\/pose-analysis`/.test(poseApiSrc),
     'the choke point SmartMotion tempo/biomech use directly now routes to the already-built MediaPipe module first (model + native ship via withMediaPipePose), cloud only as fallback');
@@ -8935,7 +8938,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     !/detectOnDevice|onDevicePose|MlkitPose/.test(poseApiSrc),
     'the duplicate ML Kit backend was removed once the audit found the existing MediaPipe pose path — no second pose native dependency bloating the build');
 
-  const mpSrc = fs.readFileSync(path.resolve(__dirname, '../../services/mediaPipePoseService.ts'), 'utf-8');
+  const mpSrc = read('services/mediaPipePoseService.ts');
   check('Pose: MediaPipe service projects BlazePose→COCO-17 for tempo+biomech joints',
     /detectPoseFromUri/.test(mpSrc) &&
       ['left_wrist', 'right_wrist', 'left_shoulder', 'right_shoulder', 'left_hip', 'right_hip'].every(j => mpSrc.includes(`'${j}'`)),
@@ -8971,7 +8974,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     `expected a monotonic, ~10-13 value at HI 18; got ${expectedNineDifferential(18)}`);
 
   // ─── GPS: weighted smoothing + canonical confidence (no-regression) ──────
-  const gpsSrc = fs.readFileSync(path.resolve(__dirname, '../../services/gpsManager.ts'), 'utf-8');
+  const gpsSrc = read('services/gpsManager.ts');
   check('GPS: outlier gate stays at 90m (NOT lowered — would refreeze yardages)',
     /OUTLIER_ACCURACY_M = 90\b/.test(gpsSrc),
     'the gate was hardened 15→60→90 for real tree/canopy play; re-tightening brings back "no signal / frozen yardage" — guard against the stale-doc regression');
@@ -8993,7 +8996,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'confidence derived from accuracy at classifyAccuracy thresholds (5m/15m), no import cycle — set on every emit path');
 
   // ─── On-course GPS dot (LiveGpsDot, Option A global mount) ───────────────
-  const liveDotSrc = fs.readFileSync(path.resolve(__dirname, '../../components/LiveGpsDot.tsx'), 'utf-8');
+  const liveDotSrc = read('components/LiveGpsDot.tsx');
   check('GPS dot: fed by REAL gpsManager data (no placeholder), gated on active round',
     /subscribe, getLastFix.*from '\.\.\/services\/gpsManager'/.test(liveDotSrc) &&
       /classifyAccuracy\(f\?\.accuracy_m/.test(liveDotSrc) &&
@@ -9004,7 +9007,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /export function GlobalGpsDotOverlay/.test(liveDotSrc) && /pointerEvents="none"/.test(liveDotSrc),
     'the root mount can never intercept a tap — purely visual, the answer to "the pill blocks things"');
 
-  const rootLayoutSrc = fs.readFileSync(path.resolve(__dirname, '../../app/_layout.tsx'), 'utf-8');
+  const rootLayoutSrc = read('app/_layout.tsx');
   check('GPS dot: mounted once in the root layout (persists across on-course screens)',
     /<GlobalGpsDotOverlay \/>/.test(rootLayoutSrc) && /import \{ GlobalGpsDotOverlay \}/.test(rootLayoutSrc),
     'single global mount inside SafeAreaProvider so the dot is the same on caddie / hole-view / smartfinder');
@@ -9044,7 +9047,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'sciatica/arthritis/surgery/nerve flag mobility-aware coaching; "no injuries"/"no pain"/"fully recovered"/"none"/"healthy" correctly do NOT (the deterministic path matches the LLM via physicalLimitation context)');
 
   // ─── Elevation → plays-like (infra; call-site wiring is the next step) ──────
-  const elevSrc = fs.readFileSync(path.resolve(__dirname, '../../services/elevationService.ts'), 'utf-8');
+  const elevSrc = read('services/elevationService.ts');
   check('Elevation: client service caches successes + fails safe to flat (0)',
     /const cache = new Map/.test(elevSrc) &&
       /getPlaysLikeElevationDeltaFeet/.test(elevSrc) &&
@@ -9052,38 +9055,38 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /return \{ deltaFeet: Math\.round\(\(t - p\)/.test(elevSrc),
     'elevation cached per ~11m cell; a missing lookup returns 0 (flat) so it can never block/corrupt a yardage — target−player matches playsLike uphill-positive');
 
-  const elevApiSrc = fs.readFileSync(path.resolve(__dirname, '../../api/elevation.ts'), 'utf-8');
+  const elevApiSrc = read('api/elevation.ts');
   check('Elevation: /api/elevation proxies Open-Topo-Data + returns feet, 200+null on failure',
     /api\.opentopodata\.org/.test(elevApiSrc) && /elevation_ft/.test(elevApiSrc) &&
       /status\(200\)\.json\(\{ elevation_ft: null/.test(elevApiSrc),
     'keyless server proxy converts meters→feet; failures return 200 + null so the client falls back to flat, never an error path');
 
-  const vercelSrc = fs.readFileSync(path.resolve(__dirname, '../../vercel.json'), 'utf-8');
+  const vercelSrc = read('vercel.json');
   check('Elevation: /api/elevation route registered in vercel.json allowlist',
     /"\/api\/elevation"/.test(vercelSrc),
     'explicit route exists before the SPA fallback, so /api/elevation returns JSON not index.html (deploy-mechanics gotcha)');
 
-  const hookSrc = fs.readFileSync(path.resolve(__dirname, '../../hooks/useElevationDelta.ts'), 'utf-8');
+  const hookSrc = read('hooks/useElevationDelta.ts');
   check('Elevation: useElevationDelta is safe — 0/flat until both points resolve, gridded deps',
     /useElevationDeltaStatus/.test(hookSrc) && /getPlaysLikeElevation\b/.test(hookSrc) && // refreshed: status hook + getPlaysLikeElevation
       /setState\(\{ deltaFeet: 0, hasData: false \}\);\s*\n\s*return;/.test(hookSrc) &&
       /Math\.round\(v \* 1e4\)/.test(hookSrc),
     'safe to pass straight to playsLikeDistance — never blocks a yardage; deps gridded to the ~11m cache cell so GPS jitter does not thrash the effect');
 
-  const sfSrc = fs.readFileSync(path.resolve(__dirname, '../../app/smartfinder.tsx'), 'utf-8');
+  const sfSrc = read('app/smartfinder.tsx');
   check('Elevation: SmartFinder reticle plays-like now factors real elevation',
     /useElevationDeltaStatus\(elevPlayer, elevTarget\)/.test(sfSrc) && // refreshed: status hook variant
       /playsLikeDistance\(targetYards, weather, targetBearing \?\? shotBearingDeg, elevationDeltaFeet\)/.test(sfSrc),
     'the interactive aim-point plays-like passes the cached elevation delta — uphill/downhill is live (was always flat); other surfaces remain flat-safe follow-ups');
 
-  const qsSrc = fs.readFileSync(path.resolve(__dirname, '../../services/intents/queryStatusHandler.ts'), 'utf-8');
+  const qsSrc = read('services/intents/queryStatusHandler.ts');
   check('Elevation: voice "plays like" answer factors elevation (flat-safe)',
     /getPlaysLikeElevationDeltaFeet\(here, green\)/.test(qsSrc) &&
       /playsLikeDistance\(actual, w, bearing, elevationDeltaFeet\)/.test(qsSrc),
     'the spoken plays-like answer includes uphill/downhill via the cached elevation service; 0/flat on any miss so it never blocks the answer');
 
   // ─── SmartMotion cage-test fixes (face-on launch-line checked above) ──────
-  const swingDetailSrc2 = fs.readFileSync(path.resolve(__dirname, '../../app/swinglab/swing/[swing_id].tsx'), 'utf-8');
+  const swingDetailSrc2 = read('app/swinglab/swing/[swing_id].tsx');
   // 2026-06-11 — tap the video to play/pause (Tim: intuitive, not hunting for the
   // button). Single-tap via ZoomableView, composed UNDER double-tap-reset + pinch/pan
   // so zoom/annotation stay intact; native controls off, a tap-to-seek bar replaces
@@ -14283,6 +14286,90 @@ check(
     staleIslands.length === 0
       ? `all ${knownIslands.size} baseline entries are still genuinely unimported`
       : `FIXED — delete these from ISLAND_BASELINE so the list can only get shorter:\n    ${staleIslands.join('\n    ')}`,
+  );
+}
+
+/**
+ * ─── 2026-09-01 — THE HARNESS PROBES CANNOT BE UNPLUGGED ─────────────────────────────────────────
+ *
+ * Tim asked for a device harness that surfaces "timestamps, flow issues, bottlenecks... as close to
+ * the actual progress on the device as possible". The three probes in services/harness/probe.ts are
+ * what deliver that, and they are wired in ONE place — runWithAsserts — precisely so no scenario can
+ * be written without them.
+ *
+ * That single wiring point is also the single thing that can silently remove them from all 24
+ * scenarios at once, and nothing would go red: every check would still pass, the reports would just
+ * quietly stop carrying the device's side of the story. That is the failure this guards.
+ */
+{
+  const scen = readCode('services/harness/scenarios.ts');
+  const runner = /async function runWithAsserts\([\s\S]*?\n}/.exec(scen)?.[0] ?? '';
+  check(
+    'HARNESS: every scenario runs inside the three device probes',
+    /new ConsoleProbe\(\)/.test(runner) &&
+      /new IssueEventProbe\(\)/.test(runner) &&
+      /new LoopLagProbe\(\)/.test(runner) &&
+      /consoleProbe\.start\(\)/.test(runner) &&
+      /flowProbe\.start\(\)/.test(runner) &&
+      /lagProbe\.start\(\)/.test(runner),
+    'runWithAsserts constructs and starts all three probes, so a scenario cannot be written without them',
+  );
+  check(
+    'HARNESS: the probes are stopped in finally, so a throwing scenario still yields its trace',
+    /\}\s*finally\s*\{[\s\S]{0,600}?consoleProbe\.stop\(\)[\s\S]{0,600}?flowProbe\.stop\(\)[\s\S]{0,600}?lagProbe\.stop\(\)/.test(runner),
+    'a scenario that throws is the one that most needs its trace — and a leaked console patch would follow the app out of the harness',
+  );
+  check(
+    'HARNESS: the trace reaches the report the UI and the issue log read',
+    /report\.trace = trace/.test(runner),
+    'without this the probes observe the device and then throw the observation away',
+  );
+
+  const assertSrc = readCode('services/harness/assert.ts');
+  check(
+    'HARNESS: a failing scenario carries its flow, its errors and its stall into the issue log',
+    /report\.trace\?\.flow\?\.length \? \{ flow:/.test(assertSrc) &&
+      /report\.trace\?\.logs\?\.length \? \{ errors:/.test(assertSrc) &&
+      /report\.trace\?\.maxLagMs \? \{ jsThreadStallMs:/.test(assertSrc),
+    'the issue log is the only channel that survives the screen; a trace that stops there is a trace Tim never sees',
+  );
+  check(
+    'HARNESS: a run that passes every check is still flagged when the device misbehaved',
+    /failed\.length > 0 \|\| consoleErrors\.length > 0 \|\| stalls\.length > 0 \? 'app_error' : 'diag'/.test(assertSrc),
+    'a swallowed console error and a blocked JS thread both leave every assertion green — they must not leave the run green too',
+  );
+  check(
+    'HARNESS: the self-test\'s DELIBERATE noise is excluded from the run summary',
+    /const observed = reports\.filter\(\(r\) => r\.id !== SELFTEST_SCENARIO_ID\)/.test(assertSrc) &&
+      /const stalls = observed/.test(assertSrc) &&
+      /const consoleErrors = observed\.flatMap/.test(assertSrc),
+    'C24 causes an error and a stall on purpose to prove the probes see them; counting those would make both signals worthless',
+  );
+
+  const probeSrc = readCode('services/harness/probe.ts');
+  check(
+    'HARNESS: the lag probe measures BLOCKING, not elapsed time',
+    /const drift = now - this\.last - LAG_SAMPLE_MS;/.test(probeSrc) &&
+      /this\.max > LAG_NOISE_FLOOR_MS \? this\.max : 0/.test(probeSrc),
+    'drift past the sample interval is thread unavailability; a plain elapsed-time reading would fire on every slow-but-yielding await',
+  );
+  check(
+    'HARNESS: the console probe always restores the console it patched',
+    /stop\(\): string\[\] \{[\s\S]{0,200}?this\.restore\?\.\(\);[\s\S]{0,120}?this\.restore = null;/.test(probeSrc),
+    'a patch left installed would outlive the harness and follow the app',
+  );
+  check(
+    'HARNESS: the flow trace reads oldest-first',
+    /\.reverse\(\)/.test(probeSrc),
+    'the issue log stores newest-first; a flow read in that order is not a flow',
+  );
+
+  // The self-test itself has to stay registered, or all of the above guards a runner nobody proves.
+  check(
+    'HARNESS: the probe self-test is registered and runs on the device',
+    /const SCEN_24: Scenario = \{[\s\S]{0,200}?id: SELFTEST_SCENARIO_ID/.test(scen) &&
+      /SCEN_21, SCEN_22, SCEN_23, SCEN_24,/.test(scen),
+    'C24 causes a console error, an app breadcrumb and a real thread block, and asserts each probe caught it',
   );
 }
 

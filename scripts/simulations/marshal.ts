@@ -218,7 +218,20 @@ export function computeWireIntegrity(input: {
  * never met by anything; nothing about the guards changed; only the counting did. Any future move
  * of this number that is not accompanied by a change to what is MEASURED is the other thing.
  */
-export const MARSHAL_F1_FLOOR = 0.91;
+/**
+ * 2026-09-01 — RAISED to 0.92, and this one IS the bar moving up.
+ *
+ * 65 guards were reading source through raw `fs.readFileSync(path.resolve(__dirname, ...))` instead
+ * of the tracked `read()` helper. They were real guards on real files the whole time; the marshal
+ * simply could not see them, so those files counted as unguarded. Converting them to `read()` moved
+ * recall 84.6% -> 85.5% and F1 91.7% -> 92.1% with no guard weakened.
+ *
+ * It also handed those 65 to the prose-assertion ratchet for the first time, which immediately found
+ * three that matched ONLY a comment (a tools-pill position, a "not cleared here" note, and a Lambda
+ * warm). All three were re-aimed at code. That is the second reason this floor goes up: the guards
+ * behind it are now measured AND break-tested, not just counted.
+ */
+export const MARSHAL_F1_FLOOR = 0.92;
 export const MARSHAL_TOLERANCE = 0.01;
 
 /**

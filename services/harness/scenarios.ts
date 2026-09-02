@@ -11,6 +11,7 @@
 
 import i18n from '../../i18n';
 import { AssertCtx, type ScenarioReport, rollupStatus } from './assert';
+import { ConsoleProbe, IssueEventProbe, LoopLagProbe, LAG_NOISE_FLOOR_MS, SELFTEST_SCENARIO_ID, type ProbeTrace } from './probe';
 import * as M from './mocks';
 import { dispatchVoiceIntent } from './dispatch';
 import { useSwingSessionStore } from '../../store/swingSessionStore';
@@ -32,19 +33,48 @@ export interface Scenario {
   run: () => Promise<ScenarioReport>;
 }
 
+/**
+ * EVERY scenario runs inside the three device probes (services/harness/probe.ts) — console errors,
+ * the app's own issue-log flow, and JS-thread stalls. They wrap here rather than being opted into by
+ * individual scenarios on purpose: a probe you have to remember to add is a probe that is missing
+ * from exactly the scenario that needed it.
+ *
+ * The probes are stopped in `finally` because a scenario that throws is the case that most needs its
+ * trace read — and because a ConsoleProbe left patched would follow the app out of the harness.
+ */
 async function runWithAsserts(id: string, title: string, body: (a: AssertCtx) => Promise<void>): Promise<ScenarioReport> {
   const t0 = Date.now();
   const a = new AssertCtx(id);
+  const consoleProbe = new ConsoleProbe();
+  const flowProbe = new IssueEventProbe();
+  const lagProbe = new LoopLagProbe();
   let error: string | undefined;
+  let trace: ProbeTrace = {};
   try {
+    consoleProbe.start();
+    flowProbe.start();
+    lagProbe.start();
     await body(a);
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
     console.log(`[harness ${id}] THROW ${error}`);
+  } finally {
+    const logs = consoleProbe.stop();
+    const flow = flowProbe.stop();
+    const maxLagMs = lagProbe.stop();
+    trace = {
+      ...(logs.length ? { logs } : {}),
+      ...(flow.length ? { flow } : {}),
+      ...(maxLagMs ? { maxLagMs } : {}),
+    };
+    if (flow.length) console.log(`[harness ${id}] FLOW  ${flow.join('  |  ')}`);
+    if (logs.length) console.log(`[harness ${id}] LOGS  ${logs.join('  |  ')}`);
+    if (maxLagMs) console.log(`[harness ${id}] STALL js thread blocked ${maxLagMs}ms`);
   }
   const durationMs = Date.now() - t0;
   const report: ScenarioReport = { id, title, status: 'pass', durationMs, checks: a.checks, error };
   report.status = rollupStatus(report);
+  if (Object.keys(trace).length) report.trace = trace;
   return report;
 }
 
@@ -722,12 +752,85 @@ const SCEN_23: Scenario = {
   }),
 };
 
+/**
+ * SCEN_24 — THE PROBES THEMSELVES, BREAK-TESTED ON THE DEVICE.
+ *
+ * 2026-09-01. Every other scenario now runs inside three probes, and its report is only as honest as
+ * they are. A probe that silently stopped observing would not fail anything — it would just quietly
+ * report a clean device forever, which is the worst failure mode a diagnostic can have.
+ *
+ * So this scenario CAUSES each of the three conditions and asserts the probe caught it: a console
+ * error, an app breadcrumb, and a blocked JS thread. It is the only scenario whose noise is
+ * deliberate, which is why probe.ts excludes SELFTEST_SCENARIO_ID from the run summary.
+ * [[break-test-every-guard-you-write]]
+ */
+const SCEN_24: Scenario = {
+  id: SELFTEST_SCENARIO_ID,
+  title: 'Harness self-test: the probes actually see errors, flow and stalls',
+  category: 'critical',
+  run: () => runWithAsserts(SELFTEST_SCENARIO_ID, 'Harness self-test: probes observe the device', async (a) => {
+    // 1) ERRORS — a swallowed console.error must not escape the probe.
+    const cp = new ConsoleProbe(true);
+    cp.start();
+    console.error('[harness selftest] deliberate error, ignore');
+    const caught = cp.stop();
+    a.expect(
+      'ConsoleProbe captures a console.error',
+      caught.some((l) => l.includes('deliberate error')),
+      `captured ${caught.length} line(s)`,
+    );
+    // The restore check has to PROVE the patch is gone, not inspect it. `console.error.name` is ''
+    // either way (the patch is an anonymous arrow), so that would have passed with the patch still
+    // installed — a leaked patch is the failure that would follow the app out of the harness.
+    console.error('[harness selftest] after stop, must NOT be captured');
+    a.expect(
+      'ConsoleProbe restores console.error after stop',
+      !cp.stop().some((l) => l.includes('after stop')),
+      `${caught.length} line(s) at stop, unchanged after`,
+    );
+
+    // 2) FLOW — the app's own issue-log breadcrumbs must show up, in order.
+    const fp = new IssueEventProbe(true);
+    fp.start();
+    try {
+      const { useIssueLogStore } = await import('../../store/issueLogStore');
+      useIssueLogStore.getState().addAppEvent('harness_selftest', { probe: 'flow' }, 'diag');
+    } catch { /* the assert below reports it */ }
+    const flow = fp.stop();
+    a.expect(
+      'IssueEventProbe sees an event the app wrote during the scenario',
+      flow.some((f) => f.includes('harness_selftest')),
+      flow.length ? flow.join(' | ').slice(0, 160) : 'no flow captured',
+    );
+
+    // 3) BOTTLENECK — a genuinely blocked thread must be measured, not missed.
+    const lp = new LoopLagProbe();
+    lp.start();
+    // A busy loop is the point: setTimeout would YIELD, and a yielding wait is exactly the thing a
+    // lag probe must NOT report. Only real blocking counts. Kept just over the noise floor.
+    const blockUntil = Date.now() + (LAG_NOISE_FLOOR_MS + 180);
+    while (Date.now() < blockUntil) { /* deliberately blocking the JS thread */ }
+    // The sampler needs one tick after the block to observe the drift it caused.
+    await new Promise((r) => setTimeout(r, 260));
+    const lag = lp.stop();
+    a.expect('LoopLagProbe measures a real JS-thread stall', lag > 0, `maxLagMs=${lag}`);
+    a.note('measured stall', `${lag}ms for a ~${LAG_NOISE_FLOOR_MS + 180}ms block`);
+
+    // 4) And the quiet case: no block, no stall reported. A probe that always fires is noise.
+    const quiet = new LoopLagProbe();
+    quiet.start();
+    await new Promise((r) => setTimeout(r, 300));
+    const quietLag = quiet.stop();
+    a.expect('LoopLagProbe stays silent on a responsive thread', quietLag === 0, `maxLagMs=${quietLag}`);
+  }),
+};
+
 export const ALL_SCENARIOS: readonly Scenario[] = [
   SCEN_1, SCEN_2, SCEN_3, SCEN_4, SCEN_5, SCEN_6, SCEN_7, SCEN_8, SCEN_9,
   SCEN_10, SCEN_11, SCEN_12, SCEN_13, SCEN_14,
   SCEN_15, SCEN_16, SCEN_17,
   SCEN_18, SCEN_19, SCEN_20,
-  SCEN_21, SCEN_22, SCEN_23,
+  SCEN_21, SCEN_22, SCEN_23, SCEN_24,
 ] as const;
 
 // Suppress unused-import false positive (i18n must be imported to ensure
