@@ -1,5 +1,15 @@
 # SmartPlay Caddie — Application Model
 
+> ## ⚠️ HISTORICAL SNAPSHOT — parts of this are no longer true
+> Written before the brain unification. Since then: **`api/pipecat-turn`, `api/_brainShim` and
+> `api/pipecat-tool` are DELETED**, the Expo Router dev-twin routes are gone, and every surface posts
+> ONE payload to `/api/kevin`. The environment modes are `course` / `range` / `sim` — `cage` no longer
+> exists. `store/cageStore` is now `store/swingSessionStore`.
+>
+> Treat this file as a record of what the app looked like on its generation date, not as a map of what
+> it is. **The code is the map.**
+
+
 > Living model built by the autonomous QA system. Regenerate/append each run.
 > **Repo root:** `/Users/timothyg/smartplay` (the `smartplaycaddie` dir is an empty stub — do not use it.)
 > Last full pass: 2026-07-21
