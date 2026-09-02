@@ -3160,21 +3160,40 @@ check('Smart Motion: pipeline narration has a per-run cancel token (no cross-ses
   })(),
   'a stale pipeline bails via its run token — no wrong-swing narration after a fast record-again');
 
-check('Voice: explicit tap forces a warmup (bypasses dedupe) for the cold first tap',
-  // 2026-06-16 (deep latency walk) — a tap to talk forces a fresh warm even if a
-  // passive warmup ran recently, so a borderline-cold chain heats up during the
-  // user's speech. Boot/foreground warms stay passive (deduped).
+check('Voice: a tap RELEASES the warmup pool instead of forcing another warm',
+  /**
+   * 2026-09-01 (adversarial audit) — THIS LOCK PROMISED THE OPPOSITE OF WHAT SHIPS, AND COULD NOT FAIL.
+   *
+   * It was written 2026-06-16 as "an explicit tap forces a fresh warm", and asserted that by looking
+   * for `prewarmVoice(true)` in listeningSession and useVoiceCaddie. That call was DELETED on
+   * 2026-08-12 — firing five warmup POSTs at tap time saturated the per-host connection pool at
+   * exactly the moment the earbud turn needed it, so the tap now calls abortVoiceWarmup() and
+   * RELEASES them. useVoiceCaddie warms passively, deduped, on mount and foreground.
+   *
+   * The lock stayed green for three weeks because both files still MENTION `prewarmVoice(true)` — in
+   * the comments explaining its removal. A guard that reads prose cannot fail, and this one was also
+   * asserting a behaviour the codebase had deliberately reversed, which is worse than no guard: it
+   * was evidence for a claim that had become false. Now read through readCode (comments stripped) and
+   * asserts what actually ships. [[strip-comments-before-a-guard-matches]] [[grep-guards-cant-see-dead-code]]
+   */
   (() => {
-    const w = read('services/voiceWarmup.ts');
-    const ls = read('services/listeningSession.ts');
-    const vc = read('hooks/useVoiceCaddie.ts');
+    const w = readCode('services/voiceWarmup.ts');
+    const ls = readCode('services/listeningSession.ts');
+    const vc = readCode('hooks/useVoiceCaddie.ts');
     return (
+      // the dedupe + force parameter still exist, so a forced warm remains POSSIBLE
       /export function prewarmVoice\(force = false\)/.test(w) &&
       /if \(!force && now - lastWarmupAt < WARMUP_DEDUPE_MS\) return/.test(w) &&
-      /prewarmVoice\(true\)/.test(ls) && /prewarmVoice\(true\)/.test(vc)
+      /export function abortVoiceWarmup/.test(w) &&
+      // ...but the tap path releases rather than forces
+      /abortVoiceWarmup\(\);/.test(ls) &&
+      !/prewarmVoice\(true\)/.test(ls) &&
+      // ...and the surface warm stays passive and deduped
+      /prewarmVoice\(\);/.test(vc) &&
+      !/prewarmVoice\(true\)/.test(vc)
     );
   })(),
-  'tap-to-talk forces a fresh warm; cold-first-tap chain heats during the speech window');
+  'a tap aborts in-flight warmups so the turn owns the connection pool; surface warms stay passive');
 
 // 2026-07-28 (Tim — "make sure the early warm-up is set and locked; no failures or robot voice").
 // LOCK the launch warm-up so it can't silently regress: the app pre-warms all voice endpoints + the

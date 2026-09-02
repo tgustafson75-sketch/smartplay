@@ -146,7 +146,5 @@ export const PROSE_ASSERTION_BASELINE: readonly string[] = [
   "Swing review: controls stay persistently visible (functional :: app/swinglab/swing/[swing_id].tsx :: /Clean-grab fade dropped — functional controls win/",
   "Tempo: accel+gyro fusion refines the through-swing but safel :: app/swinglab/indoor.tsx :: /\\/\\* accel is a bonus — gyro tempo works without it \\*\\//",
   "TightLie: analysis failure shows a human caddie line, never  :: app/lie-analysis.tsx :: /Never surface a raw JS error/",
-  "Voice: explicit tap forces a warmup (bypasses dedupe) for th :: hooks/useVoiceCaddie.ts :: /prewarmVoice\\(true\\)/",
-  "Voice: explicit tap forces a warmup (bypasses dedupe) for th :: services/listeningSession.ts :: /prewarmVoice\\(true\\)/",
   "Voice: greetings/check-ins route to the BRAIN (no canned poo :: services/intents/index.ts :: /\\/\\/ voiceCommandRouter\\.registerHandler\\(socialGreetingHandler\\);/",
 ];
