@@ -35,7 +35,7 @@ import type { SimilarMatch } from '../../services/swingDatabase';
 const FILTERS: { id: LibraryFilter; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'uploads', label: 'Uploads' },
-  { id: 'cage', label: 'Cage' },
+  { id: 'practice', label: 'Practice' },
 ];
 
 type DateFilter = 'all' | '7d' | '30d';

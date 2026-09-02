@@ -302,7 +302,7 @@ export function GlobalToolsMenu() {
             <Row
               icon="golf-outline"
               label="SwingLab"
-              sub="Cage Mode · SmartMotion · drills · library"
+              sub="SmartMotion · drills · library"
               onPress={() => nav('/(tabs)/swinglab')}
               colors={colors}
             />

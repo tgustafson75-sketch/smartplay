@@ -165,7 +165,7 @@ export async function requestCapture(req: CaptureRequest): Promise<CapturedMedia
  * Surface (CageSessionOverlay / CaptureOverlay) calls this when the
  * recording finishes to fill in the URI. Persists to:
  *   - cageStore.sessionHistory via ingestUploadedSwing (all kinds, with
- *     tag distinguishing 'cage' vs 'course'). Surfaces in /swinglab/library.
+ *     tag distinguishing 'indoor' vs 'course'). Surfaces in /swinglab/library.
  *   - roundStore.shots back-reference for kind='shot'/'highlight' during
  *     an active round (sets clip_uri + is_highlight on the most recent
  *     shot of the current hole so recap can render the clip with the shot).
@@ -192,7 +192,7 @@ export function commitCapture(
   // member with perspective='watching_someone'. Previously this path
   // wrote with no swinger field at all, so library entries from voice
   // captures had no attribution.
-  const tag: 'cage' | 'course' = c.kind === 'swing' ? 'cage' : 'course';
+  const tag: 'indoor' | 'course' = c.kind === 'swing' ? 'indoor' : 'course';
   try {
     const famState = useFamilyStore.getState();
     const activeMember = famState.active_member_id

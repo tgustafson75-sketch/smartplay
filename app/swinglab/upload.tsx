@@ -29,7 +29,6 @@ import { getApiBaseUrl } from '../../services/apiBase';
 const CLUBS = ['Driver', '3W', '5W', 'Hybrid', '4i', '5i', '6i', '7i', '8i', '9i', 'PW', 'GW', 'SW', 'LW', 'Putter'];
 const TAGS: { id: SwingTag; label: string }[] = [
   { id: 'range', label: 'Range' },
-  { id: 'cage', label: 'Cage' },
   { id: 'indoor', label: 'Indoor' },
   { id: 'course', label: 'Course' },
   { id: 'putt', label: 'Putt' },

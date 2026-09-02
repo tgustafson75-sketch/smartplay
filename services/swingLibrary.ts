@@ -9,7 +9,9 @@
 
 import { useCageStore, type CageSession, type SwingSource, type CaptureKind } from '../store/cageStore';
 
-export type LibraryFilter = 'all' | 'uploads' | 'cage';
+// 2026-09-01 — 'cage' renamed to 'practice'. This is a LOCAL filter id (CaptureKind never carried
+// 'cage'), so nothing persisted has to move; the label the player reads changes with it.
+export type LibraryFilter = 'all' | 'uploads' | 'practice';
 
 export interface LibraryEntry {
   session: CageSession;
@@ -116,7 +118,7 @@ export function getLibrary(filter: LibraryFilter = 'all'): LibraryEntry[] {
     .filter(s => {
       if (filter === 'all') return true;
       if (filter === 'uploads') return s.source === 'uploaded_video';
-      return s.source !== 'uploaded_video'; // 'cage' includes legacy entries with no source
+      return s.source !== 'uploaded_video'; // 'practice' includes legacy entries with no source
     })
     .map<LibraryEntry>(session => {
       const primaryThumb = session.primary_issue?.visual_reference_path ?? null;

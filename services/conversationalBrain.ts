@@ -70,7 +70,7 @@ export async function conversationalBrainTurn(utterance: string, opts?: { timeou
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const roundActive = (require('../store/roundStore') as typeof import('../store/roundStore')).useRoundStore.getState().isRoundActive;
       const pillar = roundActive ? 'round' as const
-        : surf === 'cage' || surf === 'swing_library' || surf === 'swing_detail' ? 'cage' as const
+        : surf === 'cage' || surf === 'swing_library' || surf === 'swing_detail' ? 'practice' as const
         : surf === 'drill_detail' || surf === 'drill_session' ? 'drills' as const
         : 'play' as const;
       ti.evaluateUserExplicitStuck(pillar);

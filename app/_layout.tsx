@@ -334,7 +334,7 @@ function AppNavigator() {
             // 2026-08-31 (§22c) — the THIRD disagreeing owner of gender lived on this line: it read
             // `customCaddieGender`, while the voice read `customCaddieBasePersona`. One owner now.
             voiceGender: genderForPersona('custom'),
-            caddieAssignments: { round: 'custom', cage: 'custom', drills: 'custom', play: 'custom' },
+            caddieAssignments: { round: 'custom', practice: 'custom', drills: 'custom', play: 'custom' },
           });
         } else if (!wantsCustom && settings.caddiePersonality === 'custom') {
           // Persona says custom but the custom caddie isn't set up (or was turned off) — resolve to the
@@ -346,7 +346,7 @@ function AppNavigator() {
             // carrying her gender: "she" in the vocab banner and tutorials, and a female device-TTS
             // fallback. The omission was invisible because it self-heals on the next persona change.
             voiceGender: genderForPersona('kevin'),
-            caddieAssignments: { round: 'kevin', cage: 'kevin', drills: 'kevin', play: 'kevin' },
+            caddieAssignments: { round: 'kevin', practice: 'kevin', drills: 'kevin', play: 'kevin' },
           });
           try { profile.setUseCustomCaddie(false); } catch { /* non-fatal */ }
         }

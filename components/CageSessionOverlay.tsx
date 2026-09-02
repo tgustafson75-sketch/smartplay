@@ -440,7 +440,7 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
           has_audio: true,
           duration_sec: durationSeconds,
           swinger,
-          tag: 'cage' as const,
+          tag: 'indoor' as const,
           notes: `${swingCount} swing${swingCount !== 1 ? 's' : ''} detected`,
           perspective,
         };

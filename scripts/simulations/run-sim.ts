@@ -10038,7 +10038,8 @@ check('Logic universal: voice yardage + putts + swing-caddie match every other p
       /awaitingPuttsHole\(\) \?\? voicePuttsHole\(rs\)/.test(vc) &&
       // ...and the answer is intercepted on EVERY surface before anything can read it as a score.
       /isAwaitingPutts\(\)/.test(vc) && /isAwaitingPutts\(\)/.test(read('services/listeningSession.ts')) &&
-      /getActiveCaddieForPillar\('cage'\)/.test(sm) &&                          // #3 narration = active caddie
+      // 2026-09-01 — the 'cage' pillar is now 'practice'. It covers ALL swing work, not a venue.
+      /getActiveCaddieForPillar\('practice'\)/.test(sm) &&                      // #3 narration = active caddie
       /caddie_name: analysisCaddie/.test(sm) && !/caddie_name: caddiePersonality/.test(sm)
     );
   })(),

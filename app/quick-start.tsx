@@ -61,7 +61,7 @@ const CARDS: Card[] = [
     title: 'Three Pillars',
     named: [
       { name: 'ROUND — Play on the course',  body: 'GPS yardages, hole graphics, voice flow through earbuds, shot tracking.' },
-      { name: 'PRACTICE — Get better',       body: 'Cage Mode for swing analysis. Drill library. Tutorial integration.' },
+      { name: 'PRACTICE — Get better',       body: 'SmartMotion for swing analysis. Drill library. Tutorial integration.' },
       { name: 'PLAY — Have fun',             body: 'Games and growth modes (expanding in future updates).' },
     ],
   },
@@ -74,7 +74,7 @@ const CARDS: Card[] = [
       '3. Connect Bluetooth earbuds if you want hands-free voice',
       '4. Tap Play tab → select a course → start a round',
     ],
-    footer: 'For practice: SwingLab tab → Cage Mode → set up phone → record swings.',
+    footer: 'For practice: SwingLab tab → SmartMotion → set up phone → record swings.',
   },
   {
     icon: 'mic-outline',

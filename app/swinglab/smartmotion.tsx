@@ -642,7 +642,7 @@ export default function SmartMotion() {
   const analysisCaddie = React.useMemo(() => {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      return (require('../../services/caddieResolver') as typeof import('../../services/caddieResolver')).getActiveCaddieForPillar('cage');
+      return (require('../../services/caddieResolver') as typeof import('../../services/caddieResolver')).getActiveCaddieForPillar('practice');
     } catch { return caddiePersonality; }
   }, [caddiePersonality]);
   const language = useSettingsStore((s) => s.language);

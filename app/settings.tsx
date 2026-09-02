@@ -1025,13 +1025,13 @@ export default function Settings() {
           />
 
           <PillRow
-            label="Cage Mode  ·  default Serena"
+            label="Practice  ·  default Serena"
             options={[
               { label: 'Serena', value: 'serena' },
               { label: 'Kevin', value: 'kevin' },
             ]}
-            value={caddieAssignments.cage}
-            onSelect={(v) => setCaddieForPillar('cage', v as 'kevin' | 'serena' | 'harry')}
+            value={caddieAssignments.practice}
+            onSelect={(v) => setCaddieForPillar('practice', v as 'kevin' | 'serena' | 'harry')}
           />
 
           <PillRow
@@ -2232,7 +2232,7 @@ export default function Settings() {
                       tutorialsSeen flag so the standardized 3-line
                       first-run tutorial replays on next entry of
                       every feature screen (Caddie / SwingLab /
-                      SmartMotion / Quick Record / Cage / Coach).
+                      SmartMotion / Quick Record / Practice / Coach).
                       Owner test path for the QuickTutorial system. */}
                   <TouchableOpacity
                     style={styles.resetRow}
@@ -2306,7 +2306,7 @@ export default function Settings() {
                     accessibilityLabel="Open cage debug hub"
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Cage Debug</Text>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Swing Sessions Debug</Text>
                       <Text style={[styles.rowSub, { color: colors.text_muted }]}>
                         Debug hub — captured cage tuples + links to the other debug screens.
                       </Text>
@@ -2314,7 +2314,7 @@ export default function Settings() {
                     <Ionicons name="construct-outline" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
                   {/* 2026-08-30 (Tim: "I am not seeing subscription debug in my owners tools") —
-                      it WAS reachable, but only as Owner Tools → Cage Debug → Subscription Debug:
+                      it WAS reachable, but only as Owner Tools → Swing Sessions Debug → Subscription Debug:
                       two levels deep, behind a hub named after the cage. Nobody looks for
                       subscription state there, and Owner Tools itself listed only swing-analysis,
                       native-modules and cage-debug. Buried is not the same as missing, but for the

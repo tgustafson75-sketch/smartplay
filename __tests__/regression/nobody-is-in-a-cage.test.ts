@@ -77,3 +77,48 @@ describe('the environment modes are course, range and practice', () => {
     expect((sm.match(/effectiveMode === 'practice'/g) ?? []).length).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe('the word is gone from everything a player can see', () => {
+  const screens = ['app/settings.tsx', 'app/permissions.tsx', 'app/paywall.tsx', 'app/quick-start.tsx',
+                   'app/swinglab/library.tsx', 'app/swinglab/upload.tsx', 'components/tools/GlobalToolsMenu.tsx'];
+
+  it('no rendered label, title or description says Cage', () => {
+    const offenders: string[] = [];
+    for (const f of screens) {
+      const src = read(f);
+      for (const m of src.matchAll(/(?:label|title|body|sub|why|footer|name)[:=] ?['"]([^'"]*Cage[^'"]*)['"]/g)) {
+        offenders.push(`${f} :: ${m[1]}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('the caddie PILLAR is practice — it covers all swing work, not a venue', () => {
+    expect(read('store/settingsStore.ts')).toMatch(/CaddiePillar = 'round' \| 'practice' \| 'drills' \| 'play'/);
+    expect(read('services/caddieResolver.ts')).not.toMatch(/return 'cage';/);
+  });
+
+  it('a persisted pillar assignment MOVES with the rename rather than being lost', () => {
+    const s = read('store/settingsStore.ts');
+    expect(s).toMatch(/a\.cage !== undefined && a\.practice === undefined/);
+    expect(s).toMatch(/delete a\.cage;/);
+  });
+
+  it('the redundant swing TAG is collapsed, not renamed — indoor already meant it', () => {
+    const cs = read('store/cageStore.ts');
+    expect(cs).toMatch(/SwingTag = 'range' \| 'indoor' \| 'course' \| 'putt' \| 'chip' \| 'other'/);
+    // and every persisted 'cage' tag becomes 'indoor'
+    expect(cs).toMatch(/shot\.tag === 'cage'\) shot\.tag = 'indoor'/);
+    expect(cs).toMatch(/version: 2,/);
+  });
+
+  it('that migration refuses a primitive rather than spreading it', () => {
+    expect(read('store/cageStore.ts')).toMatch(/typeof persisted !== 'object' \|\| persisted === null \|\| Array\.isArray\(persisted\)\) return \{\} as never/);
+  });
+
+  it('nothing WRITES the retired tag any more', () => {
+    for (const f of ['components/CageSessionOverlay.tsx', 'services/mediaCapture.ts']) {
+      expect(read(f)).not.toMatch(/tag: 'cage'/);
+    }
+  });
+});

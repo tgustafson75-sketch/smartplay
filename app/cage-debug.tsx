@@ -276,7 +276,7 @@ export default function CageDebug() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Text style={styles.backBtnText}>‹ Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Cage Sessions</Text>
+        <Text style={styles.headerTitle}>Swing Sessions</Text>
         <TouchableOpacity style={styles.apiDebugBtn} onPress={() => router.push('/api-debug' as never)}>
           <Text style={styles.apiDebugBtnText}>Course API</Text>
         </TouchableOpacity>

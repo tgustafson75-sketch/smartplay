@@ -30,12 +30,12 @@ const PERMISSIONS = [
   {
     icon: 'camera-outline' as const,
     label: 'Camera',
-    why: 'For SmartVision hole reads, swing recordings in Cage Mode, lie analysis, SmartFinder, and round photos.',
+    why: 'For SmartVision hole reads, swing recordings in SmartMotion, lie analysis, SmartFinder, and round photos.',
   },
   {
     icon: 'mic-outline' as const,
     label: 'Microphone',
-    why: 'For voice-mode caddie conversations and auto-detecting swings in Cage Mode.',
+    why: 'For voice-mode caddie conversations and auto-detecting swings in SmartMotion.',
   },
   {
     icon: 'location-outline' as const,

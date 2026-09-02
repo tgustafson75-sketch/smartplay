@@ -16,13 +16,15 @@ let personaHandoffTimer: ReturnType<typeof setTimeout> | null = null;
 // existing intent-handler imports that already pull Persona from
 // settingsStore.
 export type Persona = 'kevin' | 'serena' | 'harry' | 'custom';
-export type CaddiePillar = 'round' | 'cage' | 'drills' | 'play';
+// 2026-09-01 — the 'cage' pillar is now 'practice', for the same reason the environment mode is:
+// it names a venue nobody chose. The pillar covers ALL swing work — range, net, drills — not a cage.
+export type CaddiePillar = 'round' | 'practice' | 'drills' | 'play';
 
 // Per-pillar default assignments. The user can override any pillar in Settings.
 // Defaults reflect each caddie's natural fit.
 export const DEFAULT_CADDIE_ASSIGNMENTS: Record<CaddiePillar, Persona> = {
   round: 'kevin',   // steady conversational companion on the course
-  cage: 'serena',   // measured professional for cage practice
+  practice: 'serena',   // measured professional for swing work
   drills: 'serena', // measured professional for technical drill work
   play: 'kevin',    // balanced companion for Arena / fun gameplay
 };
@@ -627,7 +629,7 @@ export const useSettingsStore = create<SettingsState>()(
         set({
           caddiePersonality: p,
           voiceGender: gender,
-          caddieAssignments: { round: p, cage: p, drills: p, play: p },
+          caddieAssignments: { round: p, practice: p, drills: p, play: p },
         });
         // 2026-05-19 — Persona handoff welcome. When the active caddie
         // changes (manual or via team handoff), the new persona briefly
@@ -890,6 +892,19 @@ export const useSettingsStore = create<SettingsState>()(
          * carrying it to the indoor mode would preserve the assumption instead of clearing it, and
          * Tim's rule is that off-round defaults to range.
          */
+        /**
+         * 2026-09-01 v24 — the per-pillar caddie map is keyed by pillar name, so retiring the 'cage'
+         * pillar has to move the player's assignment with it or they silently lose the caddie they
+         * picked for their swing work.
+         */
+        try {
+          const pa = persisted as { caddieAssignments?: Record<string, unknown> } | null;
+          if (pa && typeof pa === 'object' && pa.caddieAssignments && typeof pa.caddieAssignments === 'object') {
+            const a = pa.caddieAssignments as Record<string, unknown>;
+            if (a.cage !== undefined && a.practice === undefined) { a.practice = a.cage; }
+            delete a.cage;
+          }
+        } catch { /* never throw from a migration */ }
         try {
           const pe = persisted as { environmentMode?: string } | null;
           if (pe && typeof pe === 'object' && pe.environmentMode === 'cage') pe.environmentMode = 'range';
@@ -912,7 +927,7 @@ export const useSettingsStore = create<SettingsState>()(
           const prior: Persona = p.caddiePersonality ?? 'kevin';
           p.caddieAssignments = {
             round: prior,
-            cage: prior,
+            practice: prior,
             drills: prior,
             play: prior,
           };

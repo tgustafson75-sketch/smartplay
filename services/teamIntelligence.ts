@@ -169,8 +169,8 @@ export function evaluateCageEnd(): void {
   if (dominantIssues.length !== DETECTION_THRESHOLDS.drillPlateauSessionCount) return;
   const allSame = dominantIssues.every((l) => l === dominantIssues[0]);
   if (!allSame) return;
-  const cagePersona = getActiveCaddieForPillar('cage');
-  offer('drill_plateau', cagePersona, 'cage');
+  const cagePersona = getActiveCaddieForPillar('practice');
+  offer('drill_plateau', cagePersona, 'practice');
 }
 
 // Called per cage shot OR at end-of-session. Tracks consecutive bad
@@ -179,8 +179,8 @@ export function evaluateCageEnd(): void {
 export function evaluateCageShotStreak(consecutiveBadShots: number): void {
   if (consecutiveBadShots < DETECTION_THRESHOLDS.cageFrustrationConsecutiveBadShots) return;
   if (!canOffer('cage_frustration')) return;
-  const cagePersona = getActiveCaddieForPillar('cage');
-  offer('cage_frustration', cagePersona, 'cage');
+  const cagePersona = getActiveCaddieForPillar('practice');
+  offer('cage_frustration', cagePersona, 'practice');
 }
 
 // Called periodically during a round (e.g. every hole-change). Reads the

@@ -147,7 +147,10 @@ export type SwingSource = 'live_cage' | 'uploaded_video';
 // a SmartMotion capture (cage / range / course), coach = a Coach Mode lesson (gets the
 // instructor report), upload = a plain phone video. Legacy sessions infer it from source.
 export type CaptureKind = 'smart_motion' | 'coach' | 'upload' | 'drill';
-export type SwingTag = 'range' | 'cage' | 'indoor' | 'course' | 'putt' | 'chip' | 'other';
+// 2026-09-01 — 'cage' REMOVED rather than renamed: 'indoor' already meant the same thing and both
+// were offered side by side, which is the concept confusion in miniature. Persisted 'cage' tags
+// migrate to 'indoor' below.
+export type SwingTag = 'range' | 'indoor' | 'course' | 'putt' | 'chip' | 'other';
 
 export interface UploadMetadata {
   uploaded_at: number;
@@ -1855,8 +1858,24 @@ export const useCageStore = create<CageState>()(
       // analysis_status added across phases) without bumping the persist
       // version. v1 = current shape; bump + add migrate when changing
       // CageSession / CageShot type shape going forward.
-      version: 1,
-      migrate: (persisted) => persisted as CageState,
+      version: 2,
+      /**
+       * 2026-09-01 v2 — fold the retired 'cage' SwingTag into 'indoor'. The two were redundant tag
+       * choices for the same thing. Never throws, and a non-object blob returns {} rather than being
+       * spread back into the store.
+       */
+      migrate: (persisted) => {
+        if (typeof persisted !== 'object' || persisted === null || Array.isArray(persisted)) return {} as never;
+        try {
+          const p = persisted as { sessionHistory?: { shots?: { tag?: string | null }[] }[] };
+          for (const sess of p.sessionHistory ?? []) {
+            for (const shot of sess?.shots ?? []) {
+              if (shot && shot.tag === 'cage') shot.tag = 'indoor';
+            }
+          }
+        } catch { /* a migration must never throw — the whole swing library rides on it */ }
+        return persisted as never;
+      },
       partialize: (s) => ({
         // activeSession NOT persisted — in-flight session lost on crash is acceptable
         // 2026-06-30 (Tim — Greenhill: SQLITE_FULL crash, dashboard "exceeds maximum limit")

@@ -35,7 +35,7 @@ export function mapSurfaceToPillar(surface: ActiveSurface): CaddiePillar {
     case 'cage':
     case 'swing_library':
     case 'swing_detail':
-      return 'cage';
+      return 'practice';
     case 'arena':
       return 'play';
     case 'caddie':

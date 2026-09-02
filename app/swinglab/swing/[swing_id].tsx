@@ -1253,7 +1253,7 @@ export default function SwingDetail() {
         context: {
           // 2026-08-10 (logic-universality fix #3) — the spoken failure line speaks as the ACTIVE
           // per-pillar caddie (cage), not the raw global pick, matching every other swing surface.
-          persona: (() => { try { return (require('../../../services/caddieResolver') as typeof import('../../../services/caddieResolver')).getActiveCaddieForPillar('cage'); } catch { return caddiePersonality; } })(),
+          persona: (() => { try { return (require('../../../services/caddieResolver') as typeof import('../../../services/caddieResolver')).getActiveCaddieForPillar('practice'); } catch { return caddiePersonality; } })(),
           club: session?.club ?? null,
           swingTitle: session?.upload?.notes ?? null,
         },
