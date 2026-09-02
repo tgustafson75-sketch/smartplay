@@ -17,7 +17,7 @@ import { useRelationshipStore } from '../../store/relationshipStore';
 import { useWatchStore } from '../../store/watchStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePointsStore } from '../../store/pointsStore';
-import { analyzeSession } from '../../services/patternEngine';
+import { analyzeSession, getDominantMissLabel } from '../../services/patternEngine';
 import { speak, speakChunked, warmVoice, configureAudioForSpeech } from '../../services/voiceService';
 import KevinCoachBox from '../../components/swinglab/KevinCoachBox';
 import PrimaryIssueCard from '../../components/swinglab/PrimaryIssueCard';
@@ -420,8 +420,7 @@ export default function CageSummary() {
           <View style={styles.missCard}>
             <Text style={styles.missLabel}>DOMINANT MISS</Text>
             <Text style={styles.missValue}>
-              {(session.dominantMiss ?? '').charAt(0).toUpperCase() +
-               (session.dominantMiss ?? '').slice(1)}
+              {getDominantMissLabel(session.dominantMiss ?? null)}
             </Text>
           </View>
         )}

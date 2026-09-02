@@ -219,53 +219,35 @@ export const analyzeSession = (
   };
 };
 
-export const getKevinShotResponse = (
-  feel: string,
-  shape: string | null,
-  shotNumber: number,
-  pattern: PatternResult,
-  club: string,
-): string => {
-  if (pattern.streakInfo && (feel === 'flush' || feel === 'solid')) {
-    return pattern.streakInfo;
-  }
+/**
+ * 2026-09-01 — getKevinShotResponse DELETED, not wired.
+ *
+ * It returned a canned line per shot feel ("That's one.", "Heavy. Ball first next one.", "Next
+ * one."), selected by a switch over rate thresholds. Nothing had called it, and wiring it would have
+ * been the wrong fix: a fixed string chosen by a lookup table is precisely the robotic moment the
+ * north star calls a defect, and Tim reported one of these as a bug in the field ("a canned speech in
+ * Serena at startup"). The caddie speaks through the brain, which has the session, the pattern and
+ * the player in front of it. [[feels-like-a-real-caddie]] [[learning-layer-must-not-intercept]]
+ *
+ * The PatternResult fields it read (flushRate, fatRate, streakInfo, …) are unchanged and still reach
+ * the brain — what is gone is the shortcut that would have answered the player without asking it.
+ */
 
-  if (shotNumber === 1) {
-    if (feel === 'flush' || feel === 'solid') return 'Good start.';
-    return 'One shot. Keep going.';
-  }
-
-  switch (feel) {
-    case 'flush':
-    case 'solid':
-      if (shotNumber <= 3) return "That's one.";
-      return pattern.flushRate >= 70 ? 'Consistent.' : "That's the feeling.";
-
-    case 'fat':
-      return pattern.fatRate >= 40
-        ? 'Still hitting behind it. Feel the ground after the ball — not before.'
-        : 'Heavy. Ball first next one.';
-
-    case 'thin':
-      return pattern.thinRate >= 40
-        ? 'Keep coming up through it. Stay down — see the divot.'
-        : 'Thin. Stay down through impact.';
-
-    case 'heel':
-      return pattern.heelRate >= 30
-        ? 'Still in the heel. Move a touch closer to the ball at address.'
-        : 'Heel. Check your distance to the ball.';
-
-    case 'toe':
-      return pattern.toeRate >= 30
-        ? 'Still off the toe. Stand one inch back from where you are.'
-        : 'Toe. Just a touch back from the ball.';
-
-    default:
-      return 'Next one.';
-  }
-};
-
+/**
+ * The display label for a session's dominant shape. ONE owner, because two practice screens were
+ * each spelling it `miss.charAt(0).toUpperCase() + miss.slice(1)` by hand.
+ *
+ * SCOPE, deliberately narrow: this labels the SHAPE TAG vocabulary (SwingActionSheet SHAPE_OPTIONS:
+ * draw / straight / fade / hook / slice). It is NOT the labeller for
+ * caddieMemoryStore.tendencies.dominantMiss, which holds FAULT IDS ('over_the_top') from a different
+ * vocabulary and is rendered by the dashboard with its own underscore rule. Same field name, two
+ * value spaces — folding them together would be a worse defect than the duplication it removed.
+ *
+ * 'push' / 'pull' are not in the current SHAPE_OPTIONS and are kept for shots tagged before it
+ * narrowed: a persisted value must still render, and "Push Right" says more to a player than "Push".
+ * The fallback title-cases anything unknown, so a legacy or underscored value reads as words rather
+ * than as the raw identifier the hand-rolled version would have shown.
+ */
 export const getDominantMissLabel = (miss: string | null): string => {
   if (!miss) return 'Straight';
   const labels: Record<string, string> = {
@@ -277,5 +259,9 @@ export const getDominantMissLabel = (miss: string | null): string => {
     'push':     'Push Right',
     'pull':     'Pull Left',
   };
-  return labels[miss] ?? miss;
+  return labels[miss] ?? miss
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
 };

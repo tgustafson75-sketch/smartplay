@@ -14461,6 +14461,44 @@ check(
   );
 }
 
+/**
+ * ─── 2026-09-01 — THE CAMERA ANGLE IS JUDGED AT ADDRESS ─────────────────────────────────────────
+ *
+ * Tim: "the club arc shows up sporadically and mostly incorrect… it may get the direction right, but
+ * it looks like it's behind the user. I think our down-the-line versus face-on guards may be weak."
+ *
+ * They were. The classifier took the MAX shoulder-span ratio across the WHOLE swing, and a
+ * down-the-line FINISH is one of the widest frames in the clip — the chest faces the target, so the
+ * shoulder line turns square to the camera's view axis. Every real DTL swing therefore cleared the
+ * 0.60 face-on edge: `down_the_line` was unreachable for a recorded swing.
+ *
+ * There is no human backstop any more — the DTL/face-on toggle was removed on 08-19 in favour of
+ * exactly this detector, so it is the only source of the angle. The live preview read it correctly
+ * at address and the post-recording read overwrote that with face_on.
+ */
+{
+  const infer = readCode('services/cameraAngleInference.ts');
+  check(
+    'ANGLE: a labelled swing is judged on the setup side, never on its finish',
+    /const setupSide = frames\.filter\(\(f\) => f\.position === 'P1_address' \|\| f\.position === 'P2_takeaway'\);/.test(infer) &&
+      /const pool = setupSide\.length >= 2 \? setupSide : frames\.some\(\(f\) => f\.position\) \? setupSide : frames;/.test(infer) &&
+      /for \(const f of pool\)/.test(infer),
+    'address is the only moment the two angles are unambiguous; every later position rotates and stops discriminating',
+  );
+  check(
+    'ANGLE: unlabelled frames (the live preview, all at address) still judge on the whole pool',
+    /: frames;/.test(infer),
+    'the live loop samples while the player stands at address and has no position labels — it must not be starved of frames by the swing-clip rule',
+  );
+  // The consumer half: the inference is not advisory, it OVERRIDES. That is only safe now that it
+  // reads the discriminating moment, and it is the reason this guard names both files.
+  check(
+    'ANGLE: biomechanics still self-corrects from the frames, and glasses_pov is never overridden',
+    /if \(angle == null\) \{[\s\S]{0,120}?angle = inferCameraAngle\(frames\);[\s\S]{0,60}?\} else if \(angle === 'down_the_line' \|\| angle === 'face_on'\) \{/.test(readCode('services/poseAnalysisApi.ts')),
+    'a first-person source the frames cannot reveal is never inferred away',
+  );
+}
+
 const total = results.length;
 const passed = results.filter((r) => r.passed).length;
 const failed = results.filter((r) => !r.passed);

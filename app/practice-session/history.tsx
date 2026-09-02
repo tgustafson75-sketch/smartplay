@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useSwingSessionStore } from '../../store/swingSessionStore';
-import { analyzeSession } from '../../services/patternEngine';
+import { analyzeSession, getDominantMissLabel } from '../../services/patternEngine';
 
 export default function CageHistory() {
   const router = useRouter();
@@ -158,8 +158,7 @@ export default function CageHistory() {
                     {pattern.dominantMiss && (
                       <View style={styles.detailStat}>
                         <Text style={[styles.detailValue, { fontSize: 13 }]}>
-                          {pattern.dominantMiss.charAt(0).toUpperCase() +
-                           pattern.dominantMiss.slice(1)}
+                          {getDominantMissLabel(pattern.dominantMiss)}
                         </Text>
                         <Text style={styles.detailLabel}>Miss</Text>
                       </View>

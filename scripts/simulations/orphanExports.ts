@@ -171,10 +171,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
     'already owns tap-to-target distance (app/smartvision.tsx measureYards, which also applies the ' +
     'plays-like adjustment this helper does not). Wiring it would create a SECOND answer to "how far ' +
     'to the point I tapped" — the exact defect class fixed five times today. Delete candidate.',
-  'services/patternEngine.ts :: getKevinShotResponse':
-    'WIRE — caddie-facing language for a logged shot. The engine runs; this half of it speaks to nobody.',
-  'services/patternEngine.ts :: getDominantMissLabel':
-    'WIRE — dominantMiss reaches the brain as a raw value; this is the human label for it.',
   'services/puttingAnalysisService.ts :: speakPuttingAnalysis':
     'PARKED — the RENDERED-BUT-NEVER-SPOKEN defect is FIXED (2026-08-25): the camera putt path now calls the shared speakPuttRead, so the caddie says the read out loud. What remains orphaned is this SPOKEN-READ entry point — analyzePutt({ spoken_read }) for a player who says their own read aloud ("downhill, left to right"). That flow has no surface yet. Wire it when the green-side voice ask exists; do not delete, it is the other half of the same feature.',
   'services/coachLesson.ts :: planById':

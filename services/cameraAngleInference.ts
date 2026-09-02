@@ -26,9 +26,49 @@ function kp(frame: PoseFrame, name: string): Keypoint | null {
  * source the frames can't reveal — that stays an explicit caller flag).
  */
 export function inferCameraAngle(frames: PoseFrame[]): 'face_on' | 'down_the_line' | null {
+  /**
+   * 2026-09-01 (Tim — "the club arc shows up sporadically and mostly incorrect… it may get the
+   * direction right, but it looks like it's behind the user. I think our down-the-line versus
+   * face-on guards may be weak") — HE WAS RIGHT, AND DOWN-THE-LINE WAS EFFECTIVELY UNREACHABLE.
+   *
+   * The classifier took the MAX shoulder-span ratio ACROSS THE WHOLE SWING, on the reasoning that
+   * "face-on shoulders foreshorten as the body rotates to the top, so the WIDEST frame best reveals
+   * true face-on-ness; DTL stays narrow in every frame."
+   *
+   * The last clause is false, and it is false at exactly one position: THE FINISH. A down-the-line
+   * camera sits behind the player looking along the target line. At address the shoulder line is
+   * parallel to that line — stacked in depth, narrow in x, which is what the detector expects. At the
+   * finish the player's chest faces the TARGET, so the shoulder line is now perpendicular to the
+   * camera's view axis and spans its full real width. A DTL finish is one of the WIDEST frames in the
+   * clip.
+   *
+   * Because the sampler always includes P10_finish, maxRatio for a real down-the-line swing landed
+   * above the 0.60 face-on edge, so `down_the_line` could essentially never be returned for a
+   * recorded swing — a branch that reads as a working classifier and cannot fire.
+   *
+   * AND THERE IS NO LONGER A HUMAN BACKSTOP. The DTL/face-on toggle was removed on 08-19 (Tim:
+   * "having to add face on versus down the line is going to mess people up… is it viable to just make
+   * it auto detect every time and take out the settings?"), precisely because this detector reads a
+   * fact rather than a preference. So this function is now the ONLY source of the angle. The live
+   * preview loop gets it RIGHT — it samples while the player is standing at address, which is exactly
+   * the discriminating moment — and then the post-recording read, taken over the whole swing,
+   * overwrote that correct answer with face_on.
+   *
+   * Downstream that is the club arc Tim is describing: the path read is DTL-only, and the swing was
+   * being scored with face-on geometry. [[a-guard-can-enforce-a-stale-premise]]
+   *
+   * THE FIX IS THE POSITION, NOT THE THRESHOLD. Address is the only moment where the two angles are
+   * unambiguous and stable: face-on the chest is square to the camera (wide), down-the-line it is
+   * edge-on (narrow). Every later position rotates and stops discriminating. So when the frames carry
+   * swing-position labels, judge on the SETUP SIDE only. Live-preview frames carry no labels and are
+   * all at address anyway, so they fall through unchanged.
+   */
+  const setupSide = frames.filter((f) => f.position === 'P1_address' || f.position === 'P2_takeaway');
+  const pool = setupSide.length >= 2 ? setupSide : frames.some((f) => f.position) ? setupSide : frames;
+
   let maxRatio = 0;
   let sampled = 0;
-  for (const f of frames) {
+  for (const f of pool) {
     const ls = kp(f, 'left_shoulder');
     const rs = kp(f, 'right_shoulder');
     const lh = kp(f, 'left_hip');
