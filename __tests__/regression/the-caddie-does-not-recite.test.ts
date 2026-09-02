@@ -90,13 +90,16 @@ describe('proactive lines are composed, not recited', () => {
 describe('the persona switch introduces itself in its own words', () => {
   const settings = read('store/settingsStore.ts');
 
-  it('asks the brain, short-fused so a switch still feels immediate', () => {
-    expect(settings).toMatch(/generateProactiveLine\(/);
+  it('asks for a composed line, short-fused so a switch still feels immediate', () => {
+    // Asked through proactiveLineRegistry, not the brain module: a store that imports the brain
+    // closes a store -> brain -> store cycle. See a-store-does-not-import-the-brain.test.ts.
+    expect(settings).toMatch(/composeProactiveLine\(/);
     expect(settings).toMatch(/timeoutMs: 3_500/);
+    expect(settings).not.toMatch(/conversationalBrain/);
   });
 
   it('falls back to the pre-rendered clip rather than stalling on the network', () => {
-    expect(settings).toMatch(/keep the fixed line — a switch must never stall on the network/);
+    expect(settings).toMatch(/if \(composed\) spokenText = composed;/);
     expect(settings).toMatch(/resolveCachedOfflineClipUri/);
   });
 

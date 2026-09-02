@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { composeProactiveLine } from '../services/proactiveLineRegistry';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
 
@@ -706,15 +707,15 @@ export const useSettingsStore = create<SettingsState>()(
                * attempt, then degrade. [[caddie-failsafe-no-walls]]
                */
               let spokenText = text;
-              try {
-                const brainMod = require('../services/conversationalBrain') as typeof import('../services/conversationalBrain');
-                const line = await brainMod.generateProactiveLine(
-                  `The player just switched their caddie to ${p}. Introduce yourself as ${p} in one short sentence, ` +
-                  `in your own voice — you are taking over the bag. No preamble, no question.`,
-                  { timeoutMs: 3_500 },
-                );
-                if (line.text) spokenText = line.text;
-              } catch { /* keep the fixed line — a switch must never stall on the network */ }
+              // Asked through the registry, not the brain module: a store that imports the brain
+              // closes a store -> brain -> store loop, because the brain reads stores to build its
+              // context. See services/proactiveLineRegistry.
+              const composed = await composeProactiveLine(
+                `The player just switched their caddie to ${p}. Introduce yourself as ${p} in one short sentence, ` +
+                `in your own voice — you are taking over the bag. No preamble, no question.`,
+                { timeoutMs: 3_500 },
+              );
+              if (composed) spokenText = composed;
               if (spokenText !== text) {
                 voiceMod.speak?.(spokenText, gender, get().language ?? 'en', undefined, { userInitiated: true })
                   ?.catch?.(() => { voiceMod.flashCaption?.(spokenText); });
