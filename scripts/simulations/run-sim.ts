@@ -3306,7 +3306,10 @@ check('Swing review: controls stay persistently visible (functional > clean-grab
   (() => {
     const f = read('app/swinglab/swing/[swing_id].tsx');
     return (
-      /Clean-grab fade dropped — functional controls win/.test(f) &&
+      // 2026-09-01 — the prose clause here matched only the comment recording the 06-23 decision.
+      // The three code clauses below already prove the CURRENT design, which is what a lock should
+      // assert; a design DECISION belongs in the header, not in an assertion. Removed.
+
       /const \[controlsHidden, setControlsHidden\] = useState\(false\)/.test(f) &&
       /pointerEvents=\{controlsHidden \? 'none' : 'box-none'\}/.test(f) &&
       /await v\.playAsync\(\)/.test(f)
@@ -5878,7 +5881,9 @@ check('Chunk honesty propagates to every swing-judge (not just the live badge)',
       /recordSwingFault\(\{ fault: learnedFault/.test(smSrc) &&
       /contactMishitFaultId\(contact\.reportedMishit\)/.test(smSrc) &&
       // Multi-swing report re-persists over the COMPLETE cache (was swing-0 only).
-      /F2\b/.test(smSrc) &&
+      // 2026-09-01 — was /F2\b/, which matched only the comment naming the fix. Assert the
+      // re-classification over the COMPLETE cache instead.
+      /\.map\(\(\[idx2, an\]\) => \(\{ swing_id: `smresolve-swing-\$\{idx2\}`/.test(readCode('app/swinglab/smartmotion.tsx')) &&
       // Spoken narration + summary carry per-swing contact so they match the badge.
       /deriveVerdict\(a, false, deriveContact\(a\)\)/.test(smSrc) &&
       // Drill Check never grades a mishit 'got_it'.
@@ -7271,8 +7276,9 @@ const memStoreSrc = read('store/caddieMemoryStore.ts');
 const retrSrc = read('services/caddieMemoryRetrieval.ts');
 check('Caddie CNS Phase 3: durable round reflections (baseline + recap enrichment, deduped)',
   // 2026-06-13 (audit G1 fix) — the baseline reflection now runs course-LESS too.
-  /Player-level REFLECTION/.test(roundSrc) &&
-    /recordReflection\(\{/.test(roundSrc) &&
+  // 2026-09-01 — was a comment match; the course-LESS claim is proved by the null-tolerant field.
+  /course_id: s\.activeCourseId \?\? null/.test(readCode('store/roundStore.ts')) &&
+    /recordReflection\(\{/.test(readCode('store/roundStore.ts')) &&
     /CNS Phase 3 — enrich the round's durable reflection/.test(read('services/recapGenerator.ts')) &&
     /p\.reflections\.filter\(\(r\) => r\.round_id !== round_id\)/.test(memStoreSrc),
   'round end writes an honest baseline reflection (course-less rounds too); the recap LLM summary enriches it; recordReflection dedupes by round');
