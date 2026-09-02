@@ -392,11 +392,32 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
       confidence: 0.65,
       estimateNote: 'acoustic (single-mic impact, club-typical)',
     });
-  } else if (clubSpeed.value != null && clubKey !== 'unknown') {
-    // 2026-06-09 (honesty) — only derive ball speed when we know the club.
-    // ball = club_speed × typical_smash[club]; with an untagged club the
-    // smash ratio would be a generic guess, so we'd be inventing a number.
-    // Show '—' instead and let the user tag the club to unlock it.
+  } else if (clubSpeed.value != null) {
+    /**
+     * 2026-09-02 (Tim, on the N16 harness failure) — "we weren't saying fabricated number. We were
+     * just saying lower the guard a bit so we could get an estimate... We were supposed to put
+     * guards by element."
+     *
+     * The 06-09 pass read the untagged case as an invented number and NULLED it. That was one guard
+     * too blunt. An untagged club does not make the estimate dishonest — it makes it WIDER, and this
+     * file already has the machinery to say so per element: `confidence` picks the bucket, the bucket
+     * picks the range, and the UI renders the estimate marker off `source`. Withholding the number
+     * entirely throws away a real signal (we DO know the club speed) to avoid a presentation problem
+     * that presentation already solves.
+     *
+     * So the guard moves from "is there a number?" to "how sure is it?":
+     *   • club TAGGED   → its own smash ratio, confidence ≤ 0.45 ('med')  → ~±18%
+     *   • club UNTAGGED → the generic 1.36,    confidence ≤ 0.30 ('low')  → ~±25%, and the note says why
+     *
+     * The elements downstream keep their OWN guards rather than inheriting this one — which is the
+     * point. Smash factor stays suppressed in both cases: it is ball ÷ club, so against a ball speed
+     * derived from an assumed ratio it would just hand back the constant with no per-swing signal.
+     * Two independent gates below already enforce that (the `eitherLow` gate and the
+     * 'club speed × typical smash' estimateNote gate), and the untagged note keeps that prefix
+     * deliberately so both still fire. Carry is unaffected — it comes from the club+effort estimate
+     * or the player's profile, never from ball speed. [[illustration-data-points]]
+     */
+    const tagged = clubKey !== 'unknown';
     const typicalSmash = TYPICAL_SMASH_BY_CLUB[clubKey] ?? TYPICAL_SMASH_BY_CLUB.unknown;
     ballSpeed = finalize({
       value: Math.round(clubSpeed.value * typicalSmash),
@@ -406,8 +427,10 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
       // measured). When the parent is truth-grade, the derived ball
       // speed still inherits the assumed-ratio uncertainty.
       source: isTruthGrade(clubSpeed.source) ? 'pose' : clubSpeed.source,
-      confidence: Math.min(clubSpeed.confidence, 0.45),
-      estimateNote: 'club speed × typical smash for ' + clubKey,
+      confidence: Math.min(clubSpeed.confidence, tagged ? 0.45 : 0.30),
+      estimateNote: tagged
+        ? 'club speed × typical smash for ' + clubKey
+        : 'club speed × typical smash (club not tagged — tag it to sharpen)',
     });
   } else {
     ballSpeed = nullMetric('mph');
