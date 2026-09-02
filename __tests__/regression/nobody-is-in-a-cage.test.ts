@@ -70,7 +70,7 @@ describe('the environment modes are course, range and practice', () => {
     // Practice trusts acoustics as final segmentation; range/course wait for video confirmation.
     expect(sm).toMatch(/if \(meterMode === 'practice'\) \{/);
     expect(sm).toMatch(/stopMode === 'practice' && detectedSegments\.length <= 1/);
-    expect(sm).toMatch(/const isCage = effectiveMode === 'practice';/);
+    expect(sm).toMatch(/const isPractice = effectiveMode === 'practice';/);
   });
 
   it('rig geometry is still recorded only indoors, on BOTH commit paths', () => {
@@ -164,5 +164,25 @@ describe('the store renamed without abandoning the data', () => {
   it('the backup allowlist still sees this store — a rename must not hide it', () => {
     const snap = read('services/cloudSync/snapshot.ts');
     expect(snap).toMatch(/cage-store-v1/);
+  });
+});
+
+describe('the rig measurement survived its own rename', () => {
+  const settings = read('store/settingsStore.ts');
+
+  it('the field is renamed', () => {
+    expect(settings).toMatch(/practiceCanvasFeet: number;/);
+    expect(settings).toMatch(/setPracticeCanvasFeet:/);
+  });
+
+  it('THE VALUE IS CARRIED — a player measured this by hand', () => {
+    // Renaming a persisted field drops it unless carried, and silently resetting to the 14ft default
+    // would put their rig geometry wrong with no sign anything happened.
+    expect(settings).toMatch(/pc\.practiceCanvasFeet = pc\.cageCanvasFeet/);
+  });
+
+  it('and the carry cannot throw or clobber an existing value', () => {
+    expect(settings).toMatch(/pc\.practiceCanvasFeet === undefined/);
+    expect(settings).toMatch(/typeof pc\.cageCanvasFeet === 'number'/);
   });
 });

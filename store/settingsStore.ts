@@ -316,7 +316,7 @@ interface SettingsState {
   // bullseye canvas, and how far the camera sits behind the player. Together they give
   // the true ball→canvas throw distance the cage shot-map (page 3) reasons over, tied
   // to the acoustic strike. User-entered + persisted (no fabricated geometry).
-  cageCanvasFeet: number;
+  practiceCanvasFeet: number;
   cameraBehindFeet: number;
   // 2026-06-11 — chip/short-game sensitivity. A chip's impact is ~half the energy
   // of a full strike (Tim's cage test: clear sound, but the detector missed it),
@@ -416,7 +416,7 @@ interface SettingsState {
   setSmartVisionImagery: (v: 'curated' | 'gps' | 'auto') => void;
   setYardageMode: (v: 'live' | 'preround') => void;
   setEnvironmentMode: (mode: 'course' | 'range' | 'practice') => void;
-  setCageCanvasFeet: (feet: number) => void;
+  setPracticeCanvasFeet: (feet: number) => void;
   setCameraBehindFeet: (feet: number) => void;
   setChipSensitivity: (on: boolean) => void;
   setFoamBallMode: (on: boolean) => void;
@@ -545,7 +545,7 @@ export const useSettingsStore = create<SettingsState>()(
       smartVisionImagery: 'auto' as const,
       yardageMode: 'live' as const,
       environmentMode: 'range' as const,   // never a venue the player did not choose
-      cageCanvasFeet: 14,
+      practiceCanvasFeet: 14,
       cameraBehindFeet: 7,
       chipSensitivity: false,
       foamBallMode: false,
@@ -847,7 +847,7 @@ export const useSettingsStore = create<SettingsState>()(
         }
       },
       setEnvironmentMode: (mode) => set({ environmentMode: mode }),
-      setCageCanvasFeet: (feet) => set({ cageCanvasFeet: Math.max(1, Math.round(feet)) }),
+      setPracticeCanvasFeet: (feet) => set({ practiceCanvasFeet: Math.max(1, Math.round(feet)) }),
       setCameraBehindFeet: (feet) => set({ cameraBehindFeet: Math.max(0, Math.round(feet)) }),
       setChipSensitivity: (on) => set({ chipSensitivity: on }),
       setFoamBallMode: (on) => set({ foamBallMode: on }),
@@ -897,6 +897,18 @@ export const useSettingsStore = create<SettingsState>()(
          * pillar has to move the player's assignment with it or they silently lose the caddie they
          * picked for their swing work.
          */
+        /**
+         * 2026-09-01 v24 — cageCanvasFeet -> practiceCanvasFeet. A rename of a PERSISTED field drops
+         * the value unless it is carried, and this one is a measured distance the player entered by
+         * hand; silently resetting it to the 14ft default would put their rig geometry wrong with no
+         * sign anything happened.
+         */
+        try {
+          const pc = persisted as { cageCanvasFeet?: number; practiceCanvasFeet?: number } | null;
+          if (pc && typeof pc === 'object' && typeof pc.cageCanvasFeet === 'number' && pc.practiceCanvasFeet === undefined) {
+            pc.practiceCanvasFeet = pc.cageCanvasFeet;
+          }
+        } catch { /* never throw from a migration */ }
         try {
           const pa = persisted as { caddieAssignments?: Record<string, unknown> } | null;
           if (pa && typeof pa === 'object' && pa.caddieAssignments && typeof pa.caddieAssignments === 'object') {
@@ -1168,7 +1180,7 @@ export const useSettingsStore = create<SettingsState>()(
         smartVisionImagery: s.smartVisionImagery,
         yardageMode: s.yardageMode,
         environmentMode: s.environmentMode,
-        cageCanvasFeet: s.cageCanvasFeet,
+        practiceCanvasFeet: s.practiceCanvasFeet,
         cameraBehindFeet: s.cameraBehindFeet,
         chipSensitivity: s.chipSensitivity,
         foamBallMode: s.foamBallMode,

@@ -8026,7 +8026,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /const pageCount = showShotMap \? 3 : 2/.test(smSrc2) &&
       /\{shotMapPage\}/.test(smSrc2) &&
       /Array\.from\(\{ length: pageCount \}\)/.test(smSrc2) &&            // dots are dynamic
-      /cageCanvasFeet: number/.test(read('store/settingsStore.ts')) &&    // confirmed geometry persisted
+      /practiceCanvasFeet: number/.test(read('store/settingsStore.ts')) &&    // confirmed geometry persisted
       /cameraBehindFeet: s\.cameraBehindFeet/.test(read('store/settingsStore.ts')) &&
       // honest: course marker only when an effort-carry estimate exists; cage impact is preview-labeled.
       /const has = estCarry != null;/.test(read('components/smartmotion/ShotMapPage.tsx')) &&
@@ -10540,14 +10540,14 @@ check('LOCK: cage rig geometry (canvas/camera-behind) is recorded ONLY in cage m
     const sm = read('app/swinglab/smartmotion.tsx');
     // BOTH write sites must be gated — the save-time write and the live-commit mirror. Fixing one
     // leaves "Canvas 14 ft" reappearing on course via whichever path commits last.
-    const gated = /const isCage = effectiveMode === 'practice';/.test(sm) &&
-      /const isCageLive = effectiveMode === 'practice';/.test(sm) &&
-      (sm.match(/canvasFeet: isCage(?:Live)? \? \(cageCanvasFeet \?\? null\) : null,/g) ?? []).length === 2 &&
-      (sm.match(/cameraBehindFeet: isCage(?:Live)? \? \(cameraBehindFeet \?\? null\) : null,/g) ?? []).length === 2;
+    const gated = /const isPractice = effectiveMode === 'practice';/.test(sm) &&
+      /const isPracticeLive = effectiveMode === 'practice';/.test(sm) &&
+      (sm.match(/canvasFeet: isPractice(?:Live)? \? \(practiceCanvasFeet \?\? null\) : null,/g) ?? []).length === 2 &&
+      (sm.match(/cameraBehindFeet: isPractice(?:Live)? \? \(cameraBehindFeet \?\? null\) : null,/g) ?? []).length === 2;
     // an active round must force course mode, or the gate reads the stale manual setting
     const roundForcesCourse = /effectiveMode: 'course' \| 'range' \| 'practice' = isRoundActive \? 'course' : environmentMode/.test(sm);
     // and the unconditional write must not come back
-    const noUnconditional = !/canvasFeet: cageCanvasFeet \?\? null,/.test(sm);
+    const noUnconditional = !/canvasFeet: practiceCanvasFeet \?\? null,/.test(sm);
     return gated && roundForcesCourse && noUnconditional;
   })(),
   'canvas/camera-behind only in cage mode; an active round forces course; no unconditional write');

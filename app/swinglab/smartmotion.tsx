@@ -662,8 +662,8 @@ export default function SmartMotion() {
    */
   const environmentMode = useSettingsStore((s) => s.environmentMode);
   const setEnvironmentMode = useSettingsStore((s) => s.setEnvironmentMode);
-  const cageCanvasFeet = useSettingsStore((s) => s.cageCanvasFeet);
-  const setCageCanvasFeet = useSettingsStore((s) => s.setCageCanvasFeet);
+  const practiceCanvasFeet = useSettingsStore((s) => s.practiceCanvasFeet);
+  const setPracticeCanvasFeet = useSettingsStore((s) => s.setPracticeCanvasFeet);
   const cameraBehindFeet = useSettingsStore((s) => s.cameraBehindFeet);
   const setCameraBehindFeet = useSettingsStore((s) => s.setCameraBehindFeet);
   const chipSensitivity = useSettingsStore((s) => s.chipSensitivity);
@@ -4541,14 +4541,14 @@ export default function SmartMotion() {
          * rig geometry is now recorded ONLY in practice mode. Everywhere else it stays null and the card
          * simply omits the line — no fabricated context. ([[environment-mode]])
          */
-        const isCage = effectiveMode === 'practice';   // rig geometry only means something indoors
-        if (estCarry != null || effortPct != null || ballTrace || (isCage && cageCanvasFeet != null) || tempo || biomech) {
+        const isPractice = effectiveMode === 'practice';   // rig geometry only means something indoors
+        if (estCarry != null || effortPct != null || ballTrace || (isPractice && practiceCanvasFeet != null) || tempo || biomech) {
           store.setSessionShotMap(sid, {
             estCarry: estCarry ?? null,
             effortPct: effortPct ?? null,
             trace: ballTrace ? { side: ballTrace.side, divergenceDeg: ballTrace.divergenceDeg } : null,
-            canvasFeet: isCage ? (cageCanvasFeet ?? null) : null,
-            cameraBehindFeet: isCage ? (cameraBehindFeet ?? null) : null,
+            canvasFeet: isPractice ? (practiceCanvasFeet ?? null) : null,
+            cameraBehindFeet: isPractice ? (cameraBehindFeet ?? null) : null,
             angle,
             club: club ?? null,
             tempo: tempo ? {
@@ -4610,7 +4610,7 @@ export default function SmartMotion() {
     }
     useToastStore.getState().show(navigate ? savedMsg : `${savedMsg} — fresh set rolling`);
     if (navigate) router.push('/swinglab/library' as never);
-  }, [coachNote, feelText, router, isDrill, drillId, drillName, drillShotCount, tempo, biomech, estCarry, effortPct, ballTrace, cageCanvasFeet, cameraBehindFeet, angle, club, isPutt, bodyItems]);
+  }, [coachNote, feelText, router, isDrill, drillId, drillName, drillShotCount, tempo, biomech, estCarry, effortPct, ballTrace, practiceCanvasFeet, cameraBehindFeet, angle, club, isPutt, bodyItems]);
   const confirmSave = useCallback(() => persistReviewToLibrary(true), [persistReviewToLibrary]);
   persistReviewRef.current = persistReviewToLibrary;
 
@@ -4628,15 +4628,15 @@ export default function SmartMotion() {
     // 2026-08-10 — SECOND write site for the same shot map (the live-commit mirror of the save-time
     // write above). Cage rig geometry has to be gated here too; fixing only one of the two would
     // leave "Canvas 14 ft" reappearing on course via whichever path committed last.
-    const isCageLive = effectiveMode === 'practice';
-    if (!(estCarry != null || effortPct != null || ballTrace || (isCageLive && cageCanvasFeet != null) || tempo || biomech)) return;
+    const isPracticeLive = effectiveMode === 'practice';
+    if (!(estCarry != null || effortPct != null || ballTrace || (isPracticeLive && practiceCanvasFeet != null) || tempo || biomech)) return;
     try {
       useSwingSessionStore.getState().setSessionShotMap(sid, {
         estCarry: estCarry ?? null,
         effortPct: effortPct ?? null,
         trace: ballTrace ? { side: ballTrace.side, divergenceDeg: ballTrace.divergenceDeg } : null,
-        canvasFeet: isCageLive ? (cageCanvasFeet ?? null) : null,
-        cameraBehindFeet: isCageLive ? (cameraBehindFeet ?? null) : null,
+        canvasFeet: isPracticeLive ? (practiceCanvasFeet ?? null) : null,
+        cameraBehindFeet: isPracticeLive ? (cameraBehindFeet ?? null) : null,
         angle,
         club: club ?? null,
         tempo: tempo ? {
@@ -4648,7 +4648,7 @@ export default function SmartMotion() {
         bodyItems: bodyItems.map((b) => ({ key: b.key, label: b.label, tone: b.tone, icon: typeof b.icon === 'string' ? b.icon : undefined })),
       });
     } catch { /* non-fatal */ }
-  }, [phase, selectedSwing, estCarry, effortPct, ballTrace, cageCanvasFeet, cameraBehindFeet, angle, club, tempo, biomech, bodyItems]);
+  }, [phase, selectedSwing, estCarry, effortPct, ballTrace, practiceCanvasFeet, cameraBehindFeet, angle, club, tempo, biomech, bodyItems]);
   // Slow-mo cycle for swing review (rate prop on the Video — safe, declarative).
   const cycleSpeed = useCallback(() => {
     setPlaybackRate((r) => (r === 1 ? 0.5 : r === 0.5 ? 0.25 : 1));
@@ -6261,9 +6261,9 @@ export default function SmartMotion() {
       estCarry={estCarry}
       effortPct={effortPct}
       trace={ballTrace ? { side: ballTrace.side, divergenceDeg: ballTrace.divergenceDeg } : null}
-      canvasFeet={cageCanvasFeet}
+      canvasFeet={practiceCanvasFeet}
       cameraBehindFeet={cameraBehindFeet}
-      onChangeCanvasFeet={setCageCanvasFeet}
+      onChangeCanvasFeet={setPracticeCanvasFeet}
       onChangeCameraBehindFeet={setCameraBehindFeet}
       colors={colors}
       isDark={isDark}
