@@ -52,6 +52,12 @@ function simLog(detail: string, extra?: Record<string, unknown>): void {
   } catch { /* persistence is best-effort */ }
 }
 
+/** The simulator's authoritative position — the auto sim reads it to measure what a shot actually
+ *  moved, rather than trusting the distance it asked for. */
+export function getSimPosition(): { lat: number; lng: number } | null {
+  return simPos ? { ...simPos } : null;
+}
+
 export function isVoiceSimRoundActive(): boolean {
   return simActive || useRoundStore.getState().isSimRound;
 }
@@ -70,7 +76,7 @@ function placeAtTee(holeNumber: number): void {
  * Start a narrated sim round. Defaults to Menifee Palms, 9 holes.
  * Returns a short spoken confirmation (or an honest failure line).
  */
-export function startVoiceSimRound(opts?: { courseId?: string; nineHoles?: boolean }): { ok: boolean; say: string } {
+export function startVoiceSimRound(opts?: { courseId?: string; nineHoles?: boolean; silent?: boolean }): { ok: boolean; say: string } {
   const courseId = opts?.courseId ?? 'local:palms';
   const nineHoles = opts?.nineHoles ?? true;
   const round = useRoundStore.getState();
@@ -88,7 +94,11 @@ export function startVoiceSimRound(opts?: { courseId?: string; nineHoles?: boole
   // BEFORE the round fires, so the first spoken turn is hot. The sim launcher bypassed all of it, so
   // the sim's first turn paid the full cold DNS+TLS+Lambda+SDK path on the custom domain, compounded
   // by the cold-boot patience budget. Prewarm the same things the moment a sim round starts.
-  try {
+  // 2026-09-02 — `silent` is the AUTO sim round (services/simRoundAuto.ts): nobody is listening, so
+  // warming the briefing Lambda and the TTS endpoint would burn a cold start and a paid call on
+  // speech that is never produced. Everything BELOW this block is the real pipeline and runs
+  // identically either way — the only thing silence removes is the voice.
+  if (!opts?.silent) try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('./apiBase') as typeof import('./apiBase')).warmBackendConnection().catch(() => {});
     // eslint-disable-next-line @typescript-eslint/no-require-imports

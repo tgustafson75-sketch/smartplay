@@ -1559,8 +1559,8 @@ export default function Settings() {
             <View style={styles.rowText}>
               <Text style={labelStyle}>Ray-Ban Meta temple tap · Works</Text>
               <Text style={subStyle}>
-                2026-09-01 (Tim: "temple tap on meta glasses is working", and "yes they do have an
-                SDK and we have it already") — this row said BLOCKED because Meta exposed no SDK.
+                2026-09-01 (Tim: &quot;temple tap on meta glasses is working&quot;, and &quot;yes they do have an
+                SDK and we have it already&quot;) — this row said BLOCKED because Meta exposed no SDK.
                 Wrong on both halves. Meta ships the Device Access Toolkit and it is INTEGRATED here
                 (MetaWearablesFrameModule + metaWearablesBridge, POV frames into the caddie brain);
                 it needs the glasses build profile, not permission from Meta. And the temple tap does
@@ -2183,6 +2183,25 @@ export default function Settings() {
                       </Text>
                     </View>
                     <Ionicons name="game-controller-outline" size={20} color={colors.text_muted} />
+                  </TouchableOpacity>
+                  {/* 2026-09-02 (Tim — "a second option for owner tools sim round that is non
+                      voice and goes by user tendencies and data... watch hole transition, scoring").
+                      The narrated round above needs him to speak every shot, which is the wrong tool
+                      for hunting a scorecard bug. This one plays itself through the same pipeline in
+                      seconds, on his own bag and miss, and exports a per-hole report. */}
+                  <TouchableOpacity
+                    style={styles.resetRow}
+                    onPress={() => router.push('/simround-auto' as never)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Auto sim round, silent"
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Auto Sim Round (silent)</Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                        Plays a full round by itself — no voice — using your learned club distances and miss tendency. Watches hole advance, scoring and yardages, then exports the report. Never touches your handicap or learned data.
+                      </Text>
+                    </View>
+                    <Ionicons name="play-forward-outline" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
                   {/* 2026-07-04 (elite-clean audit, menu finding #10) — the coach
                       tutorial manager (curate + upload instruction videos) was an

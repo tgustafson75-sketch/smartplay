@@ -10,7 +10,7 @@
  */
 
 import i18n from '../../i18n';
-import { AssertCtx, type ScenarioReport, rollupStatus } from './assert';
+import { AssertCtx, runWithAsserts, type ScenarioReport } from './assert';
 import { ConsoleProbe, IssueEventProbe, LoopLagProbe, LAG_NOISE_FLOOR_MS, SELFTEST_SCENARIO_ID, type ProbeTrace } from './probe';
 import * as M from './mocks';
 import { dispatchVoiceIntent } from './dispatch';
@@ -42,42 +42,6 @@ export interface Scenario {
  * The probes are stopped in `finally` because a scenario that throws is the case that most needs its
  * trace read — and because a ConsoleProbe left patched would follow the app out of the harness.
  */
-async function runWithAsserts(id: string, title: string, body: (a: AssertCtx) => Promise<void>): Promise<ScenarioReport> {
-  const t0 = Date.now();
-  const a = new AssertCtx(id);
-  const consoleProbe = new ConsoleProbe();
-  const flowProbe = new IssueEventProbe();
-  const lagProbe = new LoopLagProbe();
-  let error: string | undefined;
-  let trace: ProbeTrace = {};
-  try {
-    consoleProbe.start();
-    flowProbe.start();
-    lagProbe.start();
-    await body(a);
-  } catch (e) {
-    error = e instanceof Error ? e.message : String(e);
-    console.log(`[harness ${id}] THROW ${error}`);
-  } finally {
-    const logs = consoleProbe.stop();
-    const flow = flowProbe.stop();
-    const maxLagMs = lagProbe.stop();
-    trace = {
-      ...(logs.length ? { logs } : {}),
-      ...(flow.length ? { flow } : {}),
-      ...(maxLagMs ? { maxLagMs } : {}),
-    };
-    if (flow.length) console.log(`[harness ${id}] FLOW  ${flow.join('  |  ')}`);
-    if (logs.length) console.log(`[harness ${id}] LOGS  ${logs.join('  |  ')}`);
-    if (maxLagMs) console.log(`[harness ${id}] STALL js thread blocked ${maxLagMs}ms`);
-  }
-  const durationMs = Date.now() - t0;
-  const report: ScenarioReport = { id, title, status: 'pass', durationMs, checks: a.checks, error };
-  report.status = rollupStatus(report);
-  if (Object.keys(trace).length) report.trace = trace;
-  return report;
-}
-
 // ─── Critical (9) ───────────────────────────────────────────────────
 
 const SCEN_1: Scenario = {

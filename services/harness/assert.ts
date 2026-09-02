@@ -140,6 +140,58 @@ export function rollupStatus(report: ScenarioReport): 'pass' | 'fail' | 'skip' {
 }
 
 /**
+ * Run one scenario body with the full device-observation kit around it: swallowed console errors,
+ * the app's own issue-log breadcrumbs in order, and the worst JS-thread stall. A body that throws
+ * becomes a failing report rather than an exception the caller has to handle.
+ *
+ * 2026-09-02 — lifted out of scenarios.ts (where it was private) so the auto sim round can build its
+ * per-hole reports with the SAME probes and flow into the SAME export. A second runner with its own
+ * half-copy of this is exactly how two accounts of one device start disagreeing.
+ * [[two-owners-is-the-root-cause]]
+ */
+export async function runWithAsserts(
+  id: string,
+  title: string,
+  body: (a: AssertCtx) => Promise<void>,
+): Promise<ScenarioReport> {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { ConsoleProbe, IssueEventProbe, LoopLagProbe } = require('./probe') as typeof import('./probe');
+  const t0 = Date.now();
+  const a = new AssertCtx(id);
+  const consoleProbe = new ConsoleProbe();
+  const flowProbe = new IssueEventProbe();
+  const lagProbe = new LoopLagProbe();
+  let error: string | undefined;
+  let trace: import('./probe').ProbeTrace = {};
+  try {
+    consoleProbe.start();
+    flowProbe.start();
+    lagProbe.start();
+    await body(a);
+  } catch (e) {
+    error = e instanceof Error ? e.message : String(e);
+    console.log(`[harness ${id}] THROW ${error}`);
+  } finally {
+    const logs = consoleProbe.stop();
+    const flow = flowProbe.stop();
+    const maxLagMs = lagProbe.stop();
+    trace = {
+      ...(logs.length ? { logs } : {}),
+      ...(flow.length ? { flow } : {}),
+      ...(maxLagMs ? { maxLagMs } : {}),
+    };
+    if (flow.length) console.log(`[harness ${id}] FLOW  ${flow.join('  |  ')}`);
+    if (logs.length) console.log(`[harness ${id}] LOGS  ${logs.join('  |  ')}`);
+    if (maxLagMs) console.log(`[harness ${id}] STALL js thread blocked ${maxLagMs}ms`);
+  }
+  const durationMs = Date.now() - t0;
+  const report: ScenarioReport = { id, title, status: 'pass', durationMs, checks: a.checks, error };
+  report.status = rollupStatus(report);
+  if (Object.keys(trace).length) report.trace = trace;
+  return report;
+}
+
+/**
  * 2026-09-01 (Tim) — "anything you'd otherwise ask me to verify should go in the harness, so the SIM
  * can run on the phone and the issue log carries the result."
  *
