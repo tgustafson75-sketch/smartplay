@@ -279,7 +279,18 @@ const APPROACH_MS = 900;
 /** Just past the ball — enough to show the exit, short of the finish. */
 const TAIL_MS = 450;
 
-export function clubPathSampleOffsets(startMs: number, endMs: number, impactMs: number | null): number[] {
+export function clubPathSampleOffsets(
+  startMs: number,
+  endMs: number,
+  impactMs: number | null,
+  /**
+   * 2026-09-01 — how wrong the anchor could be, from clubPathWindow.anchorToleranceMs. A thin
+   * acoustic pickup still says roughly when the ball was struck, and roughly beats a fraction of the
+   * clip; we simply spread the same frames over a window wide enough to absorb the error rather than
+   * clustering tightly on a time we are not sure of.
+   */
+  toleranceMs = 0,
+): number[] {
   const offsets: number[] = [];
   const span = endMs - startMs;
   if (!(span > 0)) return offsets;
@@ -290,8 +301,9 @@ export function clubPathSampleOffsets(startMs: number, endMs: number, impactMs: 
       : null;
 
   if (anchor != null) {
-    const leadIn = Math.max(startMs, anchor - APPROACH_MS);
-    const tailEnd = Math.min(endMs, anchor + TAIL_MS);
+    const slop = Math.max(0, toleranceMs);
+    const leadIn = Math.max(startMs, anchor - APPROACH_MS - slop);
+    const tailEnd = Math.min(endMs, anchor + TAIL_MS + slop);
     const nEarly = Math.max(2, Math.round(SAMPLE_COUNT * 0.2));  // where the arc comes from
     const nTail = Math.max(2, Math.round(SAMPLE_COUNT * 0.2));   // where it exits
     const nCore = Math.max(2, SAMPLE_COUNT - nEarly - nTail);    // the downswing through the ball
@@ -341,6 +353,8 @@ export async function detectClubPath(args: {
    * [[a-field-that-is-sometimes-a-placeholder]]
    */
   impactMs?: number | null;
+  /** How wrong `impactMs` could be — see clubPathWindow.anchorToleranceMs. Widens the dense band. */
+  toleranceMs?: number | null;
 }): Promise<ClubPathResult | null> {
   const base = apiUrl();
   if (!base) return null;
@@ -356,7 +370,7 @@ export async function detectClubPath(args: {
   // so it could be tested, and the band it used to compute inline is what put the arc behind the
   // player. The ceiling is still the source frame rate: past that, closer offsets return the same
   // decoded frame.
-  const offsets = clubPathSampleOffsets(startMs, endMs, args.impactMs ?? null);
+  const offsets = clubPathSampleOffsets(startMs, endMs, args.impactMs ?? null, args.toleranceMs ?? 0);
 
   // 2026-07-24 (Tim — WHITE-SCREEN crash in the swing library AFTER analysis, ROOT CAUSE) — the
   // frame-extraction retriever and ExoPlayer must never touch the SAME file. The isPlaying/

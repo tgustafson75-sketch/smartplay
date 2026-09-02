@@ -28,6 +28,14 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Sep 2026',
+    note: 'The swing read now spends its frames where the swing happens. It was sampling evenly from two seconds before the ball to just after, so most frames landed on your slow backswing and only two on the downswing that actually decides the shot. When the strike is heard, the frames cluster there instead.',
+  },
+  {
+    when: 'Sep 2026',
+    note: 'A quiet strike still counts. A faint microphone pickup used to be thrown out, which left the analysis guessing where impact was — and on the course a quiet reading usually just means you are outdoors, not that it caught someone else. It now trusts the strike and widens its search a little, and trusts it more when you are on a course than in a bay.',
+  },
+  {
+    when: 'Sep 2026',
     note: 'The club arc is drawn through the ball instead of behind you. It was sampling frames evenly across the whole swing window, so most of what it found was your follow-through — the club up over your shoulder, which is a real club in a real place and completely the wrong part of the swing. It now concentrates on the downswing and the strike.',
   },
   {

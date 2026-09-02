@@ -108,6 +108,7 @@ import { canAccess } from '../../services/featureAccess';
 import { triggerPaywall } from '../../services/paywallGuard';
 import { usePracticePointsStore } from '../../store/practicePointsStore';
 import { useSettingsStore } from '../../store/settingsStore';
+import { anchorToleranceMs } from '../../services/swing/clubPathWindow';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
 import { useRoundStore } from '../../store/roundStore';
 import {
@@ -1868,8 +1869,25 @@ export default function SmartMotion() {
      * refused here exactly as the placeholder offset is refused in clubPathWindow.
      * [[a-field-that-is-sometimes-a-placeholder]] [[no-half-fixes-enforce-every-surface]]
      */
-    const segStrikeMs = (seg.peakDb ?? 0) !== 0 && typeof seg.strikeMs === 'number' ? seg.strikeMs : null;
-    void detectClubPath({ videoUri: clipUri, startMs: seg.startMs, endMs: seg.endMs, impactMs: segStrikeMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(poseFrames) })
+    const segStrikeMs = (seg.peakDb ?? 0) !== 0 && typeof seg.strikeMs === 'number' && !seg.synthesized
+      ? seg.strikeMs
+      : null;
+    /**
+     * 2026-09-01 (Tim — "a strike confirmation or acoustic pickup can help confirm… it's just a
+     * silent, thin confirmation level of that strike point, and you can work around that", then
+     * "on the course, even a low detection is probably accurate because you're not standing close
+     * to anyone").
+     *
+     * A LOW-confidence strike is still an anchor — it is enormously better than a fraction of the
+     * clip, which is the only alternative — so instead of discarding it we widen the sampling around
+     * it by however wrong it could be. And WHERE the player is standing changes that: the reason a
+     * thin transient is distrusted is that it might be the next bay's, which cannot happen alone in
+     * a fairway. The rule and the numbers live in clubPathWindow.anchorToleranceMs.
+     */
+    // effectiveMode, not environmentMode: it is forced to 'course' during a round, which is
+    // exactly the case Tim is describing — alone in a fairway, nobody else's ball near the mic.
+    const segToleranceMs = anchorToleranceMs(seg.confidence, effectiveMode);
+    void detectClubPath({ videoUri: clipUri, startMs: seg.startMs, endMs: seg.endMs, impactMs: segStrikeMs, toleranceMs: segToleranceMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(poseFrames) })
       .then((r) => {
         if (cancelled) return;
         // 2026-07-22 (Tim) — require a validated arc (>= 4 points; detectClubPath returns [] for a
@@ -2793,9 +2811,13 @@ export default function SmartMotion() {
                   // frame is the honest centre for a persisted swing, and is what stops the dense
                   // samples running into the follow-through. Absent → the sampler spreads as before.
                   const { impactAnchorMs } = await import('../../services/swing/clubPathWindow');
-                  const poseImpactMs = frames?.find((f) => f.position === 'P6_impact')?.timestampMs ?? null;
+                  const impactFrame = frames?.find((f) => f.position === 'P6_impact') ?? null;
                   const anchorMs = impactAnchorMs({
-                    poseImpactMs,
+                    poseImpactMs: impactFrame?.timestampMs ?? null,
+                    // 2026-09-01 — a P6_impact placed at 0.65 of the window is a FRACTION, not an
+                    // impact. Passing its provenance lets impactAnchorMs refuse it, the same way it
+                    // refuses the synthesized 0.6*duration strike offset.
+                    poseImpactSource: impactFrame?.positionSource ?? null,
                     rawStartMs: poseWindow.startMs,
                     rawEndMs: poseWindow.endMs,
                   });

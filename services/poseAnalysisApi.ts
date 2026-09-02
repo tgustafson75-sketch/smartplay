@@ -48,6 +48,23 @@ export interface PoseFrame {
   timestampMs: number;
   /** Position label if the frame matches a canonical PGA swing position. */
   position?: 'P1_address' | 'P2_takeaway' | 'P4_top' | 'P6_impact' | 'P10_finish';
+  /**
+   * 2026-09-01 (Tim — "make sure we have dialed in being able to find the different important parts
+   * of the swing in the analysis") — HOW THE LABEL ABOVE WAS ARRIVED AT.
+   *
+   *   'strike'    — anchored to a heard strike. P6_impact IS the impact; the rest sit at swing-physics
+   *                 offsets around it. This is a measurement.
+   *   'estimated' — placed at a FIXED FRACTION of the clip or window (P6_impact at 0.65, P4_top at
+   *                 0.50). Nothing was detected. The label names where impact USUALLY falls, which on
+   *                 any given swing can be hundreds of milliseconds off.
+   *
+   * The two were indistinguishable, and that is a live defect rather than a documentation gap: a
+   * consumer reading `frames.find(f => f.position === 'P6_impact').timestampMs` and treating it as an
+   * impact time is trusting a fraction. clubPathWindow refuses the synthesized 0.6*duration strike
+   * offset for exactly this reason and was accepting the pose label — the same fabrication wearing a
+   * different name. [[a-field-that-is-sometimes-a-placeholder]] [[illustration-data-points]]
+   */
+  positionSource?: 'strike' | 'estimated';
   keypoints: Keypoint[];
   /** Source frame pixel dimensions (from the extracted thumbnail). Lets the
    *  overlay build a viewBox at the TRUE frame aspect ratio so joints land
@@ -1027,7 +1044,8 @@ export async function extractPoseFramesFromVideo(
   }
   workUri = sharedCopy.uri;
 
-  let positionTimes: { key: PoseFrame['position']; timeMs: number }[];
+  // 2026-09-01 — `source` travels WITH the time, so a fraction can never be read back as a strike.
+  let positionTimes: { key: PoseFrame['position']; timeMs: number; source: 'strike' | 'estimated' }[];
 
   // 2026-07-07 (biomech audit #2) — STRIKE-ANCHORED sampling. The fixed window
   // fractions put "P4_top" mid-backswing and "P6_impact" 100ms past the ball (or,
@@ -1040,11 +1058,11 @@ export async function extractPoseFramesFromVideo(
     const hi = window ? window.endMs : durationMs > 500 ? durationMs : Number.MAX_SAFE_INTEGER;
     const clamp = (t: number) => Math.round(Math.max(lo, Math.min(hi, t)));
     positionTimes = [
-      { key: 'P1_address' as const, timeMs: clamp(impactMs - 2000) },
-      { key: 'P2_takeaway' as const, timeMs: clamp(impactMs - 1200) },
-      { key: 'P4_top' as const, timeMs: clamp(impactMs - 320) },
-      { key: 'P6_impact' as const, timeMs: clamp(impactMs) },
-      { key: 'P10_finish' as const, timeMs: clamp(impactMs + 700) },
+      { key: 'P1_address' as const, timeMs: clamp(impactMs - 2000), source: 'strike' as const },
+      { key: 'P2_takeaway' as const, timeMs: clamp(impactMs - 1200), source: 'strike' as const },
+      { key: 'P4_top' as const, timeMs: clamp(impactMs - 320), source: 'strike' as const },
+      { key: 'P6_impact' as const, timeMs: clamp(impactMs), source: 'strike' as const },
+      { key: 'P10_finish' as const, timeMs: clamp(impactMs + 700), source: 'strike' as const },
     ];
     console.log('[pose] strike-anchored sampling', { impact_ms: impactMs });
   } else if (window && window.endMs - window.startMs >= 500) {
@@ -1052,6 +1070,7 @@ export async function extractPoseFramesFromVideo(
     positionTimes = SWING_POSITIONS.map(p => ({
       key: p.key,
       timeMs: Math.round(window.startMs + span * p.fraction),
+      source: 'estimated' as const,   // a fraction of the window, not a detected position
     }));
     console.log('[pose] windowed swing sampling', { start_ms: window.startMs, end_ms: window.endMs });
   } else {
@@ -1101,6 +1120,7 @@ export async function extractPoseFramesFromVideo(
       positionTimes = LONG_CLIP_POSITIONS.map(p => ({
         key: p.key,
         timeMs: Math.round(effectiveDurationMs * p.fraction),
+        source: 'estimated' as const,
       }));
       console.log('[pose] long-clip wide-spread sampling', { duration_ms: effectiveDurationMs });
     } else if (effectiveDurationMs > MEDIUM_CLIP_THRESHOLD_MS) {
@@ -1111,12 +1131,14 @@ export async function extractPoseFramesFromVideo(
       positionTimes = SWING_POSITIONS.map(p => ({
         key: p.key,
         timeMs: windowStartMs + Math.round(windowMs * p.fraction),
+        source: 'estimated' as const,
       }));
       console.log('[pose] medium-clip back-window sampling', { duration_ms: effectiveDurationMs, window_start_ms: windowStartMs });
     } else {
       positionTimes = SWING_POSITIONS.map(p => ({
         key: p.key,
         timeMs: Math.round(effectiveDurationMs * p.fraction),
+        source: 'estimated' as const,
       }));
     }
   }
@@ -1130,7 +1152,8 @@ export async function extractPoseFramesFromVideo(
   // installs keep the 5-frame behavior (5-15s/frame makes density unaffordable);
   // the native build is what unlocks this. compactPoseFramesForPersist already
   // keeps up to 28 frames, so the dense set persists intact.
-  let sampleTimes: { key: PoseFrame['position'] | undefined; timeMs: number }[] = [...positionTimes];
+  let sampleTimes: { key: PoseFrame['position'] | undefined; timeMs: number; source?: 'strike' | 'estimated' }[] =
+    [...positionTimes];
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mp = require('./mediaPipePoseService') as { isMediaPipeAvailable: () => boolean };
@@ -1141,14 +1164,53 @@ export async function extractPoseFramesFromVideo(
       const spanEnd = Math.max(...anchorTimes);
       const extra = DENSE_TARGET - positionTimes.length;
       if (spanEnd - spanStart > 300 && extra > 0) {
-        for (let i = 1; i <= extra; i++) {
-          const t = Math.round(spanStart + ((spanEnd - spanStart) * i) / (extra + 1));
-          if (sampleTimes.every(p => Math.abs(p.timeMs - t) > 40)) {
-            sampleTimes.push({ key: undefined, timeMs: t });
+        /**
+         * 2026-09-01 (Tim — "are we sampling enough frames to be accurate on this?") — NOT WHERE IT
+         * MATTERED, AND THE ARITHMETIC IS BLUNT.
+         *
+         * The extra frames were spread EVENLY across the anchor span. Strike-anchored, that span runs
+         * impact-2000ms to impact+700ms — 2,700ms — so 20 frames sit 135ms apart, and they land:
+         *
+         *     backswing  P1 -> P4   1,680ms   12.4 frames
+         *     DOWNSWING  P4 -> P6     320ms    2.4 frames   <- the part that decides the shot
+         *     follow     P6 -> P10    700ms    5.2 frames
+         *
+         * Twelve frames on the slowest part of the swing and two on the fastest. At impact the
+         * clubhead is moving ~40m/s, so consecutive frames are metres apart in clubhead terms. Every
+         * read that depends on the downswing — the top, the transition, the impact pose, anything
+         * that wants to FIND a position rather than assume one — was being asked to work from two
+         * samples. Same shape as the club-path sampler fixed earlier today: dense where the body is
+         * barely moving, sparse where everything happens.
+         *
+         * So weight the extra frames toward the strike when we HAVE a strike. The backswing keeps
+         * enough to show the shape; the transition-through-impact window gets the bulk. With an
+         * estimated anchor there is no honest centre to weight toward, so the even spread stands —
+         * clustering on a fraction would concentrate the samples on the wrong 300ms with confidence.
+         */
+        const strikeAnchor = positionTimes.find(p => p.key === 'P6_impact' && p.source === 'strike');
+        const push = (t: number) => {
+          if (t > spanStart && t < spanEnd && sampleTimes.every(p => Math.abs(p.timeMs - t) > 40)) {
+            sampleTimes.push({ key: undefined, timeMs: Math.round(t) });
           }
+        };
+        if (strikeAnchor) {
+          // The window the swing actually happens in: late transition through early follow-through.
+          const coreStart = Math.max(spanStart, strikeAnchor.timeMs - 420);
+          const coreEnd = Math.min(spanEnd, strikeAnchor.timeMs + 260);
+          const nCore = Math.round(extra * 0.65);
+          const nRest = extra - nCore;
+          for (let i = 1; i <= nCore; i++) push(coreStart + ((coreEnd - coreStart) * i) / (nCore + 1));
+          // The remainder still covers the approach so the swing reads as one motion, not a stub.
+          for (let i = 1; i <= nRest; i++) push(spanStart + ((coreStart - spanStart) * i) / (nRest + 1));
+        } else {
+          for (let i = 1; i <= extra; i++) push(spanStart + ((spanEnd - spanStart) * i) / (extra + 1));
         }
         sampleTimes.sort((a, b) => a.timeMs - b.timeMs);
-        console.log('[pose] on-device densification', { anchors: positionTimes.length, total: sampleTimes.length });
+        console.log('[pose] on-device densification', {
+          anchors: positionTimes.length,
+          total: sampleTimes.length,
+          weighted: !!strikeAnchor,
+        });
       }
     }
   } catch (e) {
@@ -1161,10 +1223,12 @@ export async function extractPoseFramesFromVideo(
   // (workUri = the private copy made at the top of this function; NEVER the playing original.)
   const frames: PoseFrame[] = [];
   try {
-    for (const { key, timeMs } of sampleTimes) {
+    for (const { key, timeMs, source } of sampleTimes) {
       if (shouldAbort?.()) { console.log('[pose] aborted between frames — playback active'); break; }
       const f = await poseAtTime(workUri, timeMs, key);
-      if (f) frames.push(f);
+      // 2026-09-01 — carry HOW the label was arrived at onto the frame itself. A consumer that reads
+      // back `position === 'P6_impact'` must be able to tell a heard strike from a fraction of a clip.
+      if (f) frames.push(key && source ? { ...f, positionSource: source } : f);
     }
   } finally {
     sharedCopy.release();

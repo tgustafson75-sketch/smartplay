@@ -25,6 +25,20 @@ export type ImpactAnchorInput = {
   detectionOffsetSeconds?: number | null;
   /** timestampMs of the pose frame labelled P6_impact, if the pose pipeline labelled one. */
   poseImpactMs?: number | null;
+  /**
+   * 2026-09-01 — HOW that P6_impact label was arrived at (PoseFrame.positionSource).
+   *
+   * 'strike' means the pose sampler anchored the phases to a heard strike, so the label IS an impact
+   * time. 'estimated' means it was placed at a fixed FRACTION of the clip or window — P6_impact at
+   * 0.65 — and nothing was detected at all.
+   *
+   * This tier existed to be "the only anchor a range or uploaded swing can have… measured from the
+   * picture". For a strike-anchored read that is true. For a fraction it is not measured from
+   * anything, and accepting it re-admits by another name the exact fabrication the tier below
+   * refuses: the synthesized 0.6*duration offset. Two placeholders, one rule.
+   * [[a-field-that-is-sometimes-a-placeholder]]
+   */
+  poseImpactSource?: 'strike' | 'estimated' | null;
   rawStartMs: number;
   rawEndMs: number;
 };
@@ -59,6 +73,8 @@ export function impactAnchorMs(input: ImpactAnchorInput): number | null {
       ? detectionOffsetSeconds * 1000
       : null;
   if (heard != null) return heard;
+  // A pose label placed at a fraction of the clip is not a measurement — see poseImpactSource.
+  if (input.poseImpactSource === 'estimated') return null;
   if (
     typeof poseImpactMs === 'number' &&
     Number.isFinite(poseImpactMs) &&
@@ -68,6 +84,50 @@ export function impactAnchorMs(input: ImpactAnchorInput): number | null {
     return poseImpactMs;
   }
   return null;
+}
+
+/**
+ * 2026-09-01 (Tim — "a strike confirmation or kind of acoustic pickup can help confirm. It's just a
+ * silent, thin confirmation level of that strike point, and you can work around that. Right?") —
+ * HOW MUCH TO TRUST THE STRIKE WE HEARD.
+ *
+ * Right, and it is the difference between two usable anchors and one. The strike detector already
+ * grades every hit `high | medium | low` from its headroom over the local floor and its attack time
+ * (services/swing/strikeDetector.ts), and that grade was being thrown away: everything downstream
+ * asked only "was there a strike, yes or no".
+ *
+ * Treating a low-confidence pickup as no strike at all is the expensive half of that. A thin
+ * transient still says the ball was struck at ROUGHLY this moment, and roughly is a great deal better
+ * than a fraction of the clip — which is the only alternative. So it stays an anchor and the samplers
+ * WIDEN around it: the same frames, spread over a window big enough to absorb how wrong the timing
+ * could be.
+ *
+ * The numbers are the detector's own error, not a guess about golf: a high-confidence transient has a
+ * sharp attack and lands within a frame or two of the real strike; a low one can be a scuff, a
+ * neighbouring bay or a late reflection and is worth ~a quarter second either side.
+ *
+ * WHERE YOU ARE STANDING CHANGES WHAT 'LOW' MEANS. Tim: "on the course, even a low detection is
+ * probably accurate because you're not standing close to anyone."
+ *
+ * That is the whole reason a low grade is distrusted. The detector marks a transient down for thin
+ * headroom over the local floor — and the reason a thin transient is dangerous is that it might be
+ * SOMEBODY ELSE'S: the next bay over, a mat behind you, a reflection off a sim enclosure. On a
+ * course, alone in a fairway, that entire failure mode is absent. The only ball being struck near the
+ * microphone is yours, and a quiet reading means a quiet strike — distance, wind, a soft contact —
+ * not a foreign one. Same number out of the detector, materially different meaning.
+ *
+ * So COURSE keeps a low grade close to the strike; RANGE and SIM, where the neighbouring-bay problem
+ * is real, keep the wide window. This is 'context matters' doing actual work rather than sitting in a
+ * principles list. [[nobody-chose-cage-the-default-did]] — modes are course / range / sim.
+ */
+export function anchorToleranceMs(
+  confidence: 'high' | 'medium' | 'low' | null | undefined,
+  environment?: 'course' | 'range' | 'sim' | null,
+): number {
+  if (confidence === 'high') return 0;
+  if (confidence === 'medium') return environment === 'course' ? 40 : 80;
+  // 'low', or an ungraded anchor whose provenance we cannot see from here.
+  return environment === 'course' ? 90 : 240;
 }
 
 /**

@@ -588,9 +588,16 @@ export default function SwingDetail() {
     return deriveSwingAnchors(samples);
   }, [poseFrames]);
 
+  /**
+   * 2026-09-01 — a P6_impact label is only an impact time when the sampler anchored it to a heard
+   * strike. Placed at a FRACTION of the clip (positionSource 'estimated') it is a placeholder, and
+   * falls through to the motion-derived anchor below — which actually looks at the swing.
+   */
   const poseImpactMs = useMemo(() => {
     const f = poseFrames.find((p) => p.position === 'P6_impact');
-    if (typeof f?.timestampMs === 'number' && Number.isFinite(f.timestampMs)) return f.timestampMs;
+    if (f?.positionSource !== 'estimated' && typeof f?.timestampMs === 'number' && Number.isFinite(f.timestampMs)) {
+      return f.timestampMs;
+    }
     /**
      * 2026-09-01 (adversarial audit; Tim's call: "timing only, never geometry") — DERIVE IMPACT FROM
      * THE MOTION WHEN NOTHING LABELLED IT.

@@ -14550,8 +14550,10 @@ check(
   const cp = readCode('services/swing/clubPath.ts');
   check(
     'CLUB ARC: the sample schedule is pure, exported and centred on the strike',
-    /export function clubPathSampleOffsets\(startMs: number, endMs: number, impactMs: number \| null\)/.test(cp) &&
-      /const offsets = clubPathSampleOffsets\(startMs, endMs, args\.impactMs \?\? null\);/.test(cp),
+    // 2026-09-01 — asserts the SHAPE, not the parameter list: adding toleranceMs the same day broke
+    // the first version of this guard, which is the stale-premise class one more time.
+    /export function clubPathSampleOffsets\(/.test(cp) &&
+      /const offsets = clubPathSampleOffsets\(startMs, endMs, args\.impactMs \?\? null/.test(cp),
     'detectClubPath does native + network work a unit test cannot reach, which is how the schedule stayed unexamined',
   );
   check(
@@ -14580,9 +14582,66 @@ check(
   );
   check(
     'CLUB ARC: a video-located swing is refused as an anchor on the live screen',
-    /const segStrikeMs = \(seg\.peakDb \?\? 0\) !== 0 && typeof seg\.strikeMs === 'number' \? seg\.strikeMs : null;/
+    /const segStrikeMs = \(seg\.peakDb \?\? 0\) !== 0 && typeof seg\.strikeMs === 'number' && !seg\.synthesized/
       .test(readCode('app/swinglab/smartmotion.tsx')),
-    'peakDb === 0 marks a video-located swing, only ~±1s accurate — too loose to cluster on, same rule the ball-departure path uses',
+    'peakDb === 0 marks a video-located swing and synthesized marks the whole-clip 0.6*duration guess — neither is a strike to cluster on',
+  );
+}
+
+/**
+ * ─── 2026-09-01 — FINDING THE PARTS OF THE SWING, AND SAYING WHICH ONES WE FOUND ────────────────
+ *
+ * Tim: "make sure we have dialed in being able to find the different important parts of the swing in
+ * the analysis, and being able to reference it", then "are we sampling enough frames to be accurate
+ * on this?"
+ *
+ * We were not, and worse, a label placed at a FRACTION was indistinguishable from one found at a
+ * heard strike. P6_impact is the real impact when the sampler is strike-anchored, and 0.65 x the
+ * window otherwise — and consumers were reading `position === 'P6_impact'` as an impact time either
+ * way, which re-admitted under another name the same fabrication clubPathWindow already refused.
+ */
+{
+  const pose = readCode('services/poseAnalysisApi.ts');
+  check(
+    'SWING POSITIONS: a label carries how it was arrived at',
+    /positionSource\?: 'strike' \| 'estimated';/.test(pose) &&
+      (pose.match(/source: 'estimated' as const/g) ?? []).length >= 4 &&
+      /source: 'strike' as const/.test(pose),
+    'every fraction-based branch is tagged estimated and the strike-anchored branch tagged strike, so a fraction can never be read back as a measurement',
+  );
+  check(
+    'SWING POSITIONS: the source rides onto the frame, not just the sampler',
+    /frames\.push\(key && source \? \{ \.\.\.f, positionSource: source \} : f\)/.test(pose),
+    'a consumer reads frames, not the sampler\'s local array — provenance that stops at the sampler protects nobody',
+  );
+  check(
+    'SWING POSITIONS: extra frames go where the swing happens, when we know where that is',
+    /const strikeAnchor = positionTimes\.find\(p => p\.key === 'P6_impact' && p\.source === 'strike'\)/.test(pose) &&
+      /const nCore = Math\.round\(extra \* 0\.65\)/.test(pose),
+    'uniform density over a 2,700ms span gave the 320ms downswing ~2 frames and the slow backswing ~12',
+  );
+  check(
+    'SWING POSITIONS: an ESTIMATED anchor gets the even spread, never the cluster',
+    /\} else \{\s*for \(let i = 1; i <= extra; i\+\+\) push\(spanStart \+ \(\(spanEnd - spanStart\) \* i\) \/ \(extra \+ 1\)\);/.test(pose),
+    'clustering on a fraction would concentrate every frame on the wrong 300ms, with confidence',
+  );
+
+  const win = readCode('services/swing/clubPathWindow.ts');
+  check(
+    'ANCHOR: a pose label placed by fraction is refused as an impact time',
+    /if \(input\.poseImpactSource === 'estimated'\) return null;/.test(win),
+    'the pose tier exists for a MEASURED impact; a fraction is the synthesized-offset fabrication wearing a different name',
+  );
+  check(
+    'ANCHOR: a thin acoustic pickup still anchors — the window widens instead',
+    /export function anchorToleranceMs\(/.test(win) &&
+      /confidence === 'high'\) return 0;/.test(win),
+    'discarding a low-confidence strike falls back to a fraction of the clip, which is strictly worse than a roughly-known strike',
+  );
+  check(
+    'ANCHOR: a low detection is trusted more on the COURSE than in a bay',
+    /return environment === 'course' \? 90 : 240;/.test(win),
+    'the neighbouring-bay false positive is the whole reason a thin transient is distrusted, and it cannot happen alone in a fairway',
   );
 }
 
