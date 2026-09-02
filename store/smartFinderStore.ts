@@ -62,6 +62,11 @@ export const useSmartFinderStore = create<SmartFinderState>()(
       // state simply has no flag, and `false` is the correct default for an existing player.
       version: 4,
       migrate: (s) => {
+        // 2026-09-01 (adversarial audit) — a persisted PRIMITIVE must not be returned. zustand's
+        // merge spreads the return value, so 'abc' becomes {0:'a',1:'b',2:'c'} and is persisted that
+        // way — corrupting the store permanently rather than losing it once. Same class fixed across
+        // the other stores on 08-31.
+        if (typeof s !== 'object' || s === null || Array.isArray(s)) return {} as never;
         const prev = (s ?? {}) as Partial<SmartFinderState>;
         if (prev.mode === 'standard' || (prev.mode as string) === 'measure') {
           return { ...prev, mode: 'target' } as never;

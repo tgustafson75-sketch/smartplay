@@ -363,6 +363,11 @@ export const useClubStatsStore = create<ClubStatsState>()(
       // so it belongs in the `total` ladder (not carry). Carry starts empty and fills from real airtime
       // carries + My Bag going forward. Manual (stated carry) + reps carry over untouched.
       migrate: (persisted: unknown, version: number) => {
+        // 2026-09-01 (adversarial audit) — a persisted PRIMITIVE must not be returned. zustand's
+        // merge spreads the return value, so 'abc' becomes {0:'a',1:'b',2:'c'} and is persisted that
+        // way — corrupting the store permanently rather than losing it once. Same class fixed across
+        // the other stores on 08-31.
+        if (typeof persisted !== 'object' || persisted === null || Array.isArray(persisted)) return {} as never;
         const s = (persisted ?? {}) as { stats?: Partial<Record<ClubName, ClubStat>>; total?: Partial<Record<ClubName, ClubStat>>; carry?: Partial<Record<ClubName, ClubStat>>; manual?: unknown; reps?: unknown };
         if (version < 2 && s.stats && !s.total) {
           return { ...s, total: s.stats, carry: {}, stats: undefined } as never;

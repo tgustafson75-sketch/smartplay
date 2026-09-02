@@ -416,6 +416,15 @@ export const useIssueLogStore = create<IssueLogState>()(
          * silently, on launch. A truncated or cleared write can hand this a primitive or null
          * rather than the object the cast below assumes, and the cast is a lie in that case.
          */
+        /**
+         * 2026-09-01 (adversarial audit) — AND IT MUST BE AN OBJECT. The guard below checks
+         * `entries`, but `s` itself can be a primitive after a truncated or cleared write, and the
+         * cast says otherwise. Returning a string from here is WORSE than throwing: zustand's merge
+         * SPREADS the return value, so 'abc' becomes {0:'a',1:'b',2:'c'} and is persisted that way —
+         * the log is not lost once, it is corrupted permanently. Same defect fixed in the other
+         * stores on 08-31; this one was missed. Return {} so the store comes up on defaults.
+         */
+        if (typeof s !== 'object' || s === null || Array.isArray(s)) return {} as never;
         const state = s as { entries?: IssueLogEntry[] } | undefined;
         // Array.isArray, not truthiness: a persisted `entries` that is not an array (a bare [] blob,
         // or a shape change) reached .map() and threw, taking the whole issue log with it.
