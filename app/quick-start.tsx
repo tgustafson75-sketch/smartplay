@@ -97,7 +97,7 @@ const CARDS: Card[] = [
       'Voice recognition occasionally mishears',
       'Some courses have incomplete data (caddie will say so honestly)',
       'Auto club detection works best with light-colored irons in good lighting',
-      'Some features are deeper than others — round play and cage practice are most developed',
+      'Some features are deeper than others — round play and practice are most developed',
     ],
   },
   {

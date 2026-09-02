@@ -1372,7 +1372,7 @@ function AppNavigator() {
           options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen
-          name="cage"
+          name="practice-session"
           options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen
@@ -1587,7 +1587,7 @@ function AppNavigator() {
           options={{ animation: 'slide_from_right', headerShown: false }}
         />
         <Stack.Screen
-          name="cage/target-calibration"
+          name="practice-session/target-calibration"
           options={{ animation: 'slide_from_right', headerShown: false }}
         />
       </Stack>

@@ -2096,7 +2096,7 @@ export default function Settings() {
                     <Ionicons name="school-outline" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
                   {/* 2026-05-24 — Feel Capture toggle. When ON, every
-                      cage swing's clip audio is transcribed via
+                      practice swing's clip audio is transcribed via
                       Whisper and stored as feel_narration_transcript
                       paired with perShotAnalysis. Owner-only dataset
                       for future feel-vs-real calibration. Doubly
@@ -2303,19 +2303,19 @@ export default function Settings() {
                     style={styles.resetRow}
                     onPress={() => router.push('/swing-sessions-debug' as never)}
                     accessibilityRole="button"
-                    accessibilityLabel="Open cage debug hub"
+                    accessibilityLabel="Open swing sessions debug hub"
                   >
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Swing Sessions Debug</Text>
                       <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        Debug hub — captured cage tuples + links to the other debug screens.
+                        Debug hub — captured swing tuples + links to the other debug screens.
                       </Text>
                     </View>
                     <Ionicons name="construct-outline" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
                   {/* 2026-08-30 (Tim: "I am not seeing subscription debug in my owners tools") —
                       it WAS reachable, but only as Owner Tools → Swing Sessions Debug → Subscription Debug:
-                      two levels deep, behind a hub named after the cage. Nobody looks for
+                      two levels deep, behind a hub named after the rig. Nobody looks for
                       subscription state there, and Owner Tools itself listed only swing-analysis,
                       native-modules and swing-sessions-debug. Buried is not the same as missing, but for the
                       person trying to find it the difference does not matter. Direct row, because
@@ -2380,7 +2380,7 @@ export default function Settings() {
             onPress={() => {
               Alert.alert(
                 'Reset App Data',
-                'This clears your profile, round history, settings, cage sessions, and saved swings. Your installed app stays — you start fresh on next open. Continue?',
+                'This clears your profile, round history, settings, practice sessions, and saved swings. Your installed app stays — you start fresh on next open. Continue?',
                 [
                   { text: 'Cancel', style: 'cancel' },
                   {
@@ -2715,7 +2715,7 @@ function FeelCaptureRow({ colors }: { colors: ThemeColors }) {
         </Text>
         {feelCaptureEnabled && (
           <Text style={[styles.rowSub, { color: colors.accent, marginTop: 6 }]}>
-            ✓ Active — capturing on every cage swing
+            ✓ Active — capturing on every practice swing
           </Text>
         )}
       </View>
