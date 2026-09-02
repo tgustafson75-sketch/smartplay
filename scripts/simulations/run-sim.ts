@@ -13365,8 +13365,13 @@ check('LOCK: an aborted swing locate SAYS WHO ABORTED IT',
      */
     const pd = read('services/poseDetection.ts');
     // The guard reports its probe verdict instead of silently aborting.
-    const guardReports = /onFired: \(probes: \{ probe1Ok: boolean; probe2Ok: boolean; firedAfterMs: number \}\) => void/.test(pd) &&
-      /onFired\(\{ probe1Ok, probe2Ok, firedAfterMs: Date\.now\(\) - armedAt \}\)/.test(pd);
+    // 2026-09-01 — a THIRD, patient probe was added (the 09-01 dead_host false-aborts: the guard was
+    // reading its own starvation by the request it guards). The invariant is unchanged — the guard
+    // reports every probe it took — so this now requires all three rather than pinning two.
+    const guardReports = /onFired: \(probes: \{ probe1Ok: boolean; probe2Ok: boolean; probe3Ok: boolean; firedAfterMs: number \}\) => void/.test(pd) &&
+      /onFired\(\{ probe1Ok, probe2Ok, probe3Ok, firedAfterMs: Date\.now\(\) - armedAt \}\)/.test(pd) &&
+      // and it must actually WAIT on that third probe before aborting
+      /const probe3Ok = await probe\(12_000\);\s*\n\s*if \(probe3Ok\) return;/.test(pd);
     // Both abort sites, on BOTH paths, stamp a cause.
     const causes = (pd.match(/abortCause = abortCause \?\? 'ceiling';/g) ?? []).length >= 1 &&
       (pd.match(/abortCause = abortCause \?\? 'dead_host';/g) ?? []).length >= 1 &&

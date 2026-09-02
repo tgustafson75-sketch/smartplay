@@ -724,7 +724,7 @@ export const ANALYSIS_WORST_CASE_MS =
 function armDeadHostGuard(
   apiUrl: string,
   controller: AbortController,
-  onFired: (probes: { probe1Ok: boolean; probe2Ok: boolean; firedAfterMs: number }) => void,
+  onFired: (probes: { probe1Ok: boolean; probe2Ok: boolean; probe3Ok: boolean; firedAfterMs: number }) => void,
 ): { cancel: () => void } {
   let cancelled = false;
   const armedAt = Date.now();
@@ -747,9 +747,28 @@ function armDeadHostGuard(
     const probe2Ok = await probe(6000);
     if (probe2Ok) return;
     if (cancelled) return;
-    // Both probes silent. Record the verdict BEFORE aborting, so the catch can name the cause
+    /**
+     * 2026-09-01 (Tim's log, Sep 1 16:17 and 17:29 — swing_locate_fallback, cause dead_host,
+     * probe1Ok:false probe2Ok:false, fired at 9s, TWICE) — A THIRD, PATIENT PROBE.
+     *
+     * The host was not dead. /api/health?lite=1 answers in ~230ms and the analysis endpoint was up
+     * both times. What this guard cannot see is that it competes with the very request it is
+     * guarding: eight coarse frames are POSTing to the SAME ORIGIN while these probes try to GET it,
+     * so on a phone uplink the small request queues behind the large body and times out. The guard
+     * then reads its own starvation as a dead host and kills a request the 35s ceiling would have
+     * let finish — 26 seconds of headroom thrown away, twice in one afternoon.
+     *
+     * A dead host stays silent no matter how long you wait; a starved probe eventually gets through.
+     * So the third probe is deliberately generous. Total budget ~21s still leaves 14s under the
+     * ceiling, which is the only thing this guard exists to save.
+     * [[the-client-must-be-the-last-to-give-up]]
+     */
+    const probe3Ok = await probe(12_000);
+    if (probe3Ok) return;
+    if (cancelled) return;
+    // All three silent. Record the verdict BEFORE aborting, so the catch can name the cause
     // rather than reporting a bare "Aborted" that proves nothing.
-    try { onFired({ probe1Ok, probe2Ok, firedAfterMs: Date.now() - armedAt }); } catch { /* no-op */ }
+    try { onFired({ probe1Ok, probe2Ok, probe3Ok, firedAfterMs: Date.now() - armedAt }); } catch { /* no-op */ }
     try { controller.abort(); } catch { /* no-op */ }
   })();
   return { cancel: () => { cancelled = true; } };
@@ -856,7 +875,7 @@ export async function locateSwingWindow(
    */
   const startedAt = Date.now();
   let abortCause: 'dead_host' | 'ceiling' | null = null;
-  let probeVerdict: { probe1Ok: boolean; probe2Ok: boolean; firedAfterMs: number } | null = null;
+  let probeVerdict: { probe1Ok: boolean; probe2Ok: boolean; probe3Ok: boolean; firedAfterMs: number } | null = null;
   try {
     // 2026-08-08 — dead-host guard (see armDeadHostGuard): a provably-dead network aborts in ~3-9s
     // instead of hanging the full 35s ceiling per swing.
@@ -981,7 +1000,7 @@ export async function locateSwings(
   // Tim's 7:30-7:34 PM aborts came from, so the ambiguity mattered here too.
   const rangeStartedAt = Date.now();
   let rangeAbortCause: 'dead_host' | 'ceiling' | null = null;
-  let rangeProbeVerdict: { probe1Ok: boolean; probe2Ok: boolean; firedAfterMs: number } | null = null;
+  let rangeProbeVerdict: { probe1Ok: boolean; probe2Ok: boolean; probe3Ok: boolean; firedAfterMs: number } | null = null;
   try {
     // 2026-08-08 — same dead-host guard as the single locate: flaky network degrades in ~3-9s, not 30s+.
     const rangeCtl = new AbortController();
