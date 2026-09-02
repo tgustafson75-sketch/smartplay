@@ -142,23 +142,48 @@ export function selectablePersonas(_legacyFlag?: boolean): readonly Persona[] {
   return ACTIVE_PERSONAS;
 }
 
-// Audit 101 / B4 — server-side request body persona resolver. Prefer the
-// newer `persona` field; fall back to the legacy `voiceGender` field. This
-// closes the F13 server-side gap where ~20 api/* routes called
-// getCaddieName(voiceGender) and collapsed Tank/Harry to Kevin in their
-// system prompts and responses, even when the client sent persona='tank'.
-export function getCaddieNameFor(body: { persona?: unknown; voiceGender?: unknown } | null | undefined): string {
-  if (!body) return getCaddieName(null);
-  const personaLike = (typeof body.persona === 'string' ? body.persona : body.voiceGender) as
-    Persona | VoiceGender | undefined;
-  return getCaddieName(personaLike);
+/**
+ * Audit 101 / B4 — server-side request body persona resolver. Prefer the newer `persona` field; fall
+ * back to the legacy `voiceGender` field. This closes the F13 server-side gap where api/* routes
+ * called getCaddieName(voiceGender) and collapsed a non-Serena persona to Kevin in their system
+ * prompts, even when the client sent persona='harry'.
+ *
+ * 2026-09-01 — THE EXTRACTION IS NOW OWNED HERE, and this is the point of the function.
+ *
+ * Fourteen call sites across twelve routes each wrote the same three lines by hand:
+ *
+ *     const voiceGender: VoiceGender = (body.voiceGender as VoiceGender | undefined) ?? 'male';
+ *     const personaInput = (typeof body.persona === 'string' ? (body.persona as string) : voiceGender)
+ *       as Persona | VoiceGender;
+ *
+ * Every one of them happened to be correct — this was audited on 09-01 and no route was dropping
+ * `persona`. That is the argument FOR consolidating, not against it: correctness that depends on
+ * fourteen independent copies staying identical is correctness on loan. The next route to be written
+ * copies whichever neighbour its author happened to open, and the failure is silent — the caddie
+ * simply answers as Kevin, in Kevin's voice, and nobody files a bug about a caddie that spoke.
+ * [[two-owners-is-the-root-cause]]
+ *
+ * Precedence note, since it is the whole behaviour: a `persona` STRING wins, whatever it says —
+ * an unrecognised one resolves to Kevin inside resolvePersona rather than falling through to
+ * voiceGender, because a client that sent a persona field has stated an intent, and silently
+ * reinterpreting it as a gender is how 'tank' became Kevin-with-Serena's-voice once already.
+ */
+export function personaInputFrom(
+  body: { persona?: unknown; voiceGender?: unknown } | null | undefined,
+): Persona | VoiceGender | undefined {
+  if (!body) return undefined;
+  return (typeof body.persona === 'string' ? body.persona : body.voiceGender) as
+    | Persona
+    | VoiceGender
+    | undefined;
 }
 
-// Same shape, returns the character spec string. Used by api/* routes that
-// embed the Persona's voice/style spec into the system prompt.
+/** The caddie's NAME for a request body. Prefer this over getCaddieName(personaInputFrom(body)). */
+export function getCaddieNameFor(body: { persona?: unknown; voiceGender?: unknown } | null | undefined): string {
+  return getCaddieName(personaInputFrom(body));
+}
+
+/** The character spec for a request body — what api/* routes embed in the system prompt. */
 export function getCharacterSpecFor(body: { persona?: unknown; voiceGender?: unknown } | null | undefined): string {
-  if (!body) return getCharacterSpec(null);
-  const personaLike = (typeof body.persona === 'string' ? body.persona : body.voiceGender) as
-    Persona | VoiceGender | undefined;
-  return getCharacterSpec(personaLike);
+  return getCharacterSpec(personaInputFrom(body));
 }

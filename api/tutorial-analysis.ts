@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getCaddieName, type VoiceGender, type Persona } from '../lib/persona';
+import { getCaddieName, type VoiceGender, type Persona, personaInputFrom } from '../lib/persona';
 import { allowInference } from './_inferLimit';
 import { completeVision, providerFromHeaderSafe, type AiImageInput, type StructuredSchema } from './_aiProvider';
 import { CLUB_SNAP_ORDER } from '../services/clubBagReconcile';
@@ -148,9 +148,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'title (string) is required' });
     }
     const voiceGender: VoiceGender = (body.voiceGender as VoiceGender | undefined) ?? 'male';
-    // Audit 101 / B4 — prefer body.persona; fall back to voiceGender.
-    const personaInput: Persona | VoiceGender =
-      (typeof body.persona === 'string' ? (body.persona as string) : voiceGender) as Persona | VoiceGender;
+    // 2026-09-01 — extraction owned by lib/persona.ts personaInputFrom; this was one of 14
+    // hand-rolled copies of the same three lines. `?? voiceGender` preserves the legacy
+    // 'male' default for a body that carries neither field.
+    const personaInput: Persona | VoiceGender = personaInputFrom(body) ?? voiceGender;
 
     const inputLines: string[] = [];
     inputLines.push(`Title: ${title}`);

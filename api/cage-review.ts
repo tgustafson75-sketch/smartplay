@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getCaddieName, type VoiceGender } from '../lib/persona';
+import { getCaddieName, type VoiceGender, getCaddieNameFor } from '../lib/persona';
 import { allowInference } from './_inferLimit';
 import { completeText, completeJSON, providerFromHeaderSafe, type AiProvider } from './_aiProvider';
 
@@ -21,7 +21,7 @@ async function handleQuestion(body: Record<string, unknown>, provider: AiProvide
     persona = null,
   } = body;
   // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
-  const caddieName = getCaddieName(typeof persona === 'string' ? persona : (voiceGender as VoiceGender));
+  const caddieName = getCaddieNameFor({ persona, voiceGender });
 
   const shotNum = (clip_index as number) + 1;
   const positionStr = position === 'early' ? 'early in the session' : position === 'late' ? 'late in the session' : 'mid-session';
@@ -129,11 +129,7 @@ async function handleVocab(body: Record<string, unknown>, provider: AiProvider):
   const transcripts = rawTranscripts.slice(0, 20).map(t => String(t).slice(0, 200));
   const total_reviewed = Number(body.total_reviewed ?? rawTranscripts.length);
   // Audit 101 / B4 — prefer body.persona; fall back to body.voiceGender for legacy.
-  const caddieName = getCaddieName(
-    typeof body.persona === 'string'
-      ? (body.persona as string)
-      : ((body.voiceGender as VoiceGender | undefined) ?? 'male'),
-  );
+  const caddieName = getCaddieNameFor(body);
 
   if (transcripts.length === 0) {
     return {

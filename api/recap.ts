@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
-import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona } from '../lib/persona';
+import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona, personaInputFrom } from '../lib/persona';
 import { completeJSON, providerFromHeaderSafe, type StructuredSchema } from './_aiProvider';
 
 const RECAP_SCHEMA: StructuredSchema = {
@@ -251,8 +251,7 @@ Write per-hole summaries and an overall summary. Respond only with valid JSON as
     console.log('[recap] generating for', body.course_name, body.mode, body.holes_played, 'holes');
 
     // Audit 101 / B4 — prefer body.persona; fall back to voiceGender.
-    const personaInput: Persona | VoiceGender =
-      (typeof body.persona === 'string' ? body.persona : (body.voiceGender ?? 'male')) as Persona | VoiceGender;
+    const personaInput: Persona | VoiceGender = (personaInputFrom(body) ?? 'male') as Persona | VoiceGender;
     const provider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
     const rawText = await completeJSON(provider, 'quality', buildRecapSystem(personaInput), [{ role: 'user', content: userMessage }], { maxTokens: 1200, schema: RECAP_SCHEMA });
 

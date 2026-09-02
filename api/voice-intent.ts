@@ -34,7 +34,7 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
-import { getCaddieName, ACTIVE_PERSONAS, type VoiceGender, type Persona } from '../lib/persona';
+import { getCaddieName, ACTIVE_PERSONAS, type VoiceGender, type Persona, personaInputFrom } from '../lib/persona';
 import { completeJSON, providerFromHeaderSafe, type StructuredSchema } from './_aiProvider';
 
 // ─── Structured output schema ─────────────────────────────────────────────────
@@ -705,9 +705,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const text = String(body?.text ?? '').trim().slice(0, 2000);
     const context = body?.context ?? {};
     const voiceGender: VoiceGender = (body?.voiceGender as VoiceGender | undefined) ?? 'male';
-    // Audit 101 / B4 — prefer body.persona; fall back to voiceGender.
-    const personaInput: Persona | VoiceGender =
-      (typeof body?.persona === 'string' ? (body.persona as string) : voiceGender) as Persona | VoiceGender;
+    // 2026-09-01 — extraction owned by lib/persona.ts personaInputFrom; this was one of 14
+    // hand-rolled copies of the same three lines. `?? voiceGender` preserves the legacy
+    // 'male' default for a body that carries neither field.
+    const personaInput: Persona | VoiceGender = personaInputFrom(body) ?? voiceGender;
 
     if (!text) {
       return res.status(200).json({

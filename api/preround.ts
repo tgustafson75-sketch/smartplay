@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 import OpenAI from 'openai';
-import { getCaddieName, getCharacterSpec } from '../lib/persona';
+import { getCaddieName, getCharacterSpec, personaInputFrom } from '../lib/persona';
 
 // 2026-09-01 (adversarial audit) — maxRetries 0: A RETRY THAT CANNOT FIT IS WORSE THAN NO RETRY.
 // The SDK's retry starts AFTER the first attempt's timeout, and this route's provider budget is
@@ -41,8 +41,8 @@ export default async function handler(
       persona = null,
     } = req.body;
 
-    // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
-    const personaInput = (typeof persona === 'string' ? persona : voiceGender);
+    // 2026-09-01 — extraction owned by lib/persona.ts personaInputFrom (was hand-rolled here).
+    const personaInput = personaInputFrom({ persona, voiceGender });
     const caddieName = getCaddieName(personaInput);
     const characterSpec = getCharacterSpec(personaInput);
 

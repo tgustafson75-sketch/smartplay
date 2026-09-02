@@ -508,13 +508,20 @@ for (const f of apiFiles) {
   const src = fs.readFileSync(path.join(apiDir, f), 'utf-8');
   if (!src.includes('getCaddieName')) continue;
   serverPersonaTotal++;
-  // The Phase 100 / B4 sweep made every getCaddieName call site accept
-  // either persona or voiceGender. Recognize BOTH canonical styles:
-  //   (a) typeof body.persona === 'string'         (most routes)
-  //   (b) body.persona ?? body.voiceGender ?? ...   (junior/putting)
-  // 2026-06-08 — added (b): the regex was stale and flagged two
-  // already-persona-aware routes as failing (harness-vs-reality drift).
+  // The Phase 100 / B4 sweep made every getCaddieName call site accept either persona or
+  // voiceGender. Recognize the canonical styles:
+  //   (a) personaInputFrom(...) / getCaddieNameFor / getCharacterSpecFor  (the OWNER, 2026-09-01)
+  //   (b) typeof body.persona === 'string'                               (legacy hand-roll)
+  //   (c) body.persona ?? body.voiceGender ?? ...                        (junior/putting)
+  //
+  // 2026-06-08 — added (c): the regex was stale and flagged two already-persona-aware routes.
+  // 2026-09-01 — added (a) FIRST, and it is now the only style a new route should use. This guard
+  // asserted the hand-rolled TEXT, so consolidating twelve routes onto lib/persona.ts personaInputFrom
+  // turned all of them red while the behaviour was strictly better. A guard that fails when its
+  // subject is FIXED is enforcing a stale premise — the property is "this route resolves persona",
+  // never "this route contains these characters". [[a-guard-can-enforce-a-stale-premise]]
   const ok =
+    /personaInputFrom\(|getCaddieNameFor\(|getCharacterSpecFor\(/.test(src) ||
     /typeof\s+(?:body\??\.)?persona\s*===\s*['"]string['"]/.test(src) ||
     /body\??\.persona\s*\?\?/.test(src);
   if (ok) serverPersonaOk++;
@@ -9945,8 +9952,11 @@ check('LOCK: no endpoint hardcodes WHICH caddie it is — identity comes from th
     const noHardcodedIdentity = files.every((f) => !/You are (Kevin|Serena|Harry|Tank)\b/.test(read(f)));
     // and the read that was broken must resolve the name the same way recap.ts does, from the body
     const kr = read('api/kevin-read.ts');
+    // 2026-09-01 — the second clause used to spell out the hand-rolled extraction. That text moved
+    // to lib/persona.ts personaInputFrom, so asserting it here made a CONSOLIDATION look like a
+    // regression. The property is "kevin-read takes its identity from the request body"; assert that.
     const resolves = /getCaddieName\(personaInput\)/.test(kr) &&
-      /body\.persona === 'string' \? body\.persona : \(body\.voiceGender \?\? 'male'\)/.test(kr);
+      /personaInputFrom\(body\)/.test(kr);
     // a server that accepts a persona nobody sends is still broken — the client must send it, and it
     // must send caddiePersonality (voiceGender folds Tank and Harry back into Kevin).
     const clientSends = /persona: useSettingsStore\.getState\(\)\.caddiePersonality/.test(read('services/kevinReadService.ts'));
@@ -14370,6 +14380,52 @@ check(
     /const SCEN_24: Scenario = \{[\s\S]{0,200}?id: SELFTEST_SCENARIO_ID/.test(scen) &&
       /SCEN_21, SCEN_22, SCEN_23, SCEN_24,/.test(scen),
     'C24 causes a console error, an app breadcrumb and a real thread block, and asserts each probe caught it',
+  );
+}
+
+/**
+ * ─── 2026-09-01 — PERSONA EXTRACTION HAS ONE OWNER ──────────────────────────────────────────────
+ *
+ * Fourteen call sites across twelve routes each hand-rolled `typeof body.persona === 'string' ?
+ * body.persona : voiceGender`. Every one was CORRECT when audited — which is the reason to guard it,
+ * not the reason to leave it. Fourteen independent copies staying identical is correctness on loan,
+ * and the failure mode is silent: the caddie just answers as Kevin and nobody reports a caddie that
+ * spoke. lib/persona.ts personaInputFrom now owns the rule; this stops a fifteenth copy appearing.
+ *
+ * api/voice.ts is exempt: its `typeof persona === 'string'` is a TTS voice-key lookup
+ * (OPENAI_VOICES_BY_PERSONA), not persona resolution — a different question with a different answer.
+ */
+{
+  const personaLib = readCode('lib/persona.ts');
+  check(
+    'PERSONA: one owner for request-body persona extraction',
+    /export function personaInputFrom\(/.test(personaLib) &&
+      /return \(typeof body\.persona === 'string' \? body\.persona : body\.voiceGender\)/.test(personaLib),
+    'personaInputFrom is the single place that decides persona-vs-voiceGender precedence',
+  );
+  check(
+    'PERSONA: the name/spec helpers delegate rather than re-deciding',
+    /export function getCaddieNameFor\([\s\S]{0,220}?return getCaddieName\(personaInputFrom\(body\)\);/.test(personaLib) &&
+      /export function getCharacterSpecFor\([\s\S]{0,240}?return getCharacterSpec\(personaInputFrom\(body\)\);/.test(personaLib),
+    'a second copy of the precedence rule inside the helpers would defeat the point of having them',
+  );
+
+  // The teeth: no api/* route may decide this for itself again.
+  const apiDir = path.resolve(__dirname, '../../api');
+  const offenders: string[] = [];
+  for (const f of fs.readdirSync(apiDir).filter((n) => n.endsWith('.ts'))) {
+    if (f === 'voice.ts') continue;  // TTS voice-key lookup, not persona resolution — see above
+    // readBulk, not read(): this is a sweep proving ONE property, not per-file coverage. Counting a
+    // sweep as coverage is how the marshal's first run reported a fictional 98.8%.
+    const src = readBulk(path.join(apiDir, f)).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+    if (/typeof\s+(?:body\??\.)?persona\s*===\s*'string'\s*\?/.test(src)) offenders.push(`api/${f}`);
+  }
+  check(
+    'PERSONA: no api route hand-rolls the persona/voiceGender precedence',
+    offenders.length === 0,
+    offenders.length === 0
+      ? 'every route resolves persona through personaInputFrom / getCaddieNameFor / getCharacterSpecFor'
+      : `A SECOND OWNER IS BACK — these routes decide persona precedence themselves, so a fix to lib/persona.ts will not reach them:\n    ${offenders.join('\n    ')}`,
   );
 }
 

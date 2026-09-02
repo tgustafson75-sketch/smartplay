@@ -237,12 +237,8 @@ export const ORPHAN_BASELINE: Record<string, string> = {
   // Where a tag says PARKED it names the blocker; "later" is still not a reason.
   'components/smartmotion/SmartMotionHud.tsx :: MetricRail':
     'SURFACE — a presentational sibling of MetricCard, exported so the HUD can be composed differently. Rendering it nowhere costs nothing.',
-  'lib/persona.ts :: getCaddieNameFor':
-    'DUPE — built for api/* to resolve persona from a request body, and adopted by none of them: 14 routes each hand-roll the identical `body.persona ?? voiceGender` line instead. Behaviourally equivalent, so this is duplication and not a defect. Collapsing 14 live routes onto it needs a Vercel deploy and is post-freeze work, not a 1.0 change.',
   'lib/persona.ts :: getCaddieObject':
     'SURFACE — the object pronoun in the same set as getCaddieSubject/getCaddiePossessive, which ARE used. A pronoun set with a hole in it is worse than an unused export.',
-  'lib/persona.ts :: getCharacterSpecFor':
-    'DUPE — see getCaddieNameFor. Same shape, same 14 routes, same post-freeze consolidation.',
   'services/acousticImpactDetector.ts :: onStrike':
     'SURFACE — a subscribe/unsubscribe API for React effects. No subscriber today; the detector is driven by its own polling path.',
   'services/caddieRequestBody.ts :: CADDIE_REQUEST_KEYS':

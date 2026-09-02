@@ -21,7 +21,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 import { completeText, providerFromHeaderSafe } from './_aiProvider';
-import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona } from '../lib/persona';
+import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona, personaInputFrom } from '../lib/persona';
 
 /**
  * 2026-08-13 (one-voice pass) — the identity here used to be hardcoded to one caddie by name.
@@ -174,8 +174,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const provider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
     // Prefer body.persona; fall back to voiceGender, which folds male → Kevin. Same resolution order
     // as api/recap.ts so the two can't answer as different caddies for the same player.
-    const personaInput: Persona | VoiceGender =
-      (typeof body.persona === 'string' ? body.persona : (body.voiceGender ?? 'male')) as Persona | VoiceGender;
+    const personaInput: Persona | VoiceGender = (personaInputFrom(body) ?? 'male') as Persona | VoiceGender;
     const caddieName = getCaddieName(personaInput);
     const systemPrompt = systemPromptFor(caddieName, getCharacterSpec(personaInput));
     const text = await completeText(provider, 'fast', systemPrompt, [{ role: 'user', content: userPrompt }], { maxTokens: 200 });

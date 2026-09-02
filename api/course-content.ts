@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
 import Anthropic from '@anthropic-ai/sdk';
-import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona } from '../lib/persona';
+import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona, personaInputFrom } from '../lib/persona';
 
 // 2026-09-01 (adversarial audit) — maxRetries 0: A RETRY THAT CANNOT FIT IS WORSE THAN NO RETRY.
 // The SDK's retry starts AFTER the first attempt's timeout, and this route's provider budget is
@@ -148,9 +148,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // cost/DoS + prompt-bloat vector. No real course exceeds 27 holes of content here.
     const holesInput = ((body.holes ?? []) as HoleInput[]).slice(0, 27);
     const voiceGender: VoiceGender = (body.voiceGender as VoiceGender | undefined) ?? 'male';
-    // Audit 101 / B4 — prefer body.persona; fall back to voiceGender.
-    const personaInput: Persona | VoiceGender =
-      (typeof body.persona === 'string' ? (body.persona as string) : voiceGender) as Persona | VoiceGender;
+    // 2026-09-01 — extraction owned by lib/persona.ts personaInputFrom; this was one of 14
+    // hand-rolled copies of the same three lines. `?? voiceGender` preserves the legacy
+    // 'male' default for a body that carries neither field.
+    const personaInput: Persona | VoiceGender = personaInputFrom(body) ?? voiceGender;
 
     if (!courseId || !courseName || !Array.isArray(holesInput) || holesInput.length === 0) {
       return res.status(400).json({ error: 'courseId, courseName, and non-empty holes array required' });

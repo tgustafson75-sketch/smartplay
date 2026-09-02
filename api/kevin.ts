@@ -9,7 +9,7 @@ import { allowInference } from './_inferLimit';
 // 2026-06-04 — ElevenLabs path removed. OpenAI gpt-4o-mini-tts is
 // the only TTS path. Per-persona voice mapping retained below
 // (nova for Serena, onyx for the rest).
-import { getCaddieName, getCharacterSpec } from '../lib/persona';
+import { getCaddieName, getCharacterSpec, personaInputFrom } from '../lib/persona';
 import { getHoleContextBlock, getKnownCoursesBlock, detectCourseInText, detectHoleInText } from '../services/holeContextResolver';
 // 2026-06-24 — APP-FEATURE CATALOG. Makes the caddie aware of the app's real
 // tools/cards/drills (e.g. Smart Tempo) so they can name them and open them via
@@ -547,8 +547,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const _unifiedContextBlock: string | null = capOrNull(unified_context_block, 2000);
 
-    // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
-    const rawPersona = (typeof persona === 'string' ? persona : voiceGender);
+    // 2026-09-01 — extraction owned by lib/persona.ts personaInputFrom. The brain resolves 'custom'
+    // to a base persona below, which the other routes do not, but the persona-vs-voiceGender
+    // PRECEDENCE is the same question everywhere and is answered in one place now.
+    // `?? voiceGender` keeps the destructured 'male' default, so rawPersona stays a string exactly
+    // as the hand-rolled expression produced.
+    const rawPersona = personaInputFrom({ persona, voiceGender }) ?? voiceGender;
     // 2026-07-30 (voice/brain audit H2) — resolve a CUSTOM caddie to its chosen base persona for the
     // character spec + server-TTS voice (both derive from personaInput below), but keep the custom NAME.
     const customBase = ['kevin', 'serena', 'harry'].includes(String(customCaddieBasePersona))

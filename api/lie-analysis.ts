@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
 import { GoogleGenAI, Type } from '@google/genai';
-import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona } from '../lib/persona';
+import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona, personaInputFrom } from '../lib/persona';
 import { providerFromHeader } from './_aiProvider';
 import { allowInference } from './_inferLimit';
 
@@ -187,9 +187,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       contextLines.push("GPS distance unavailable — open with a brief 'can't see exact distances right now' acknowledgement, then read the lie and recommend.");
     }
     const voiceGender: VoiceGender = (body.voiceGender as VoiceGender | undefined) ?? 'male';
-    // Audit 101 / B4 — prefer body.persona; fall back to voiceGender.
-    const personaInput: Persona | VoiceGender =
-      (typeof body.persona === 'string' ? (body.persona as string) : voiceGender) as Persona | VoiceGender;
+    // 2026-09-01 — extraction owned by lib/persona.ts personaInputFrom; this was one of 14
+    // hand-rolled copies of the same three lines. `?? voiceGender` preserves the legacy
+    // 'male' default for a body that carries neither field.
+    const personaInput: Persona | VoiceGender = personaInputFrom(body) ?? voiceGender;
     if (ctx.weather) {
       const w = ctx.weather as Record<string, unknown>;
       const parts: string[] = [];

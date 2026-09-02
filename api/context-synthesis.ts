@@ -22,7 +22,7 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
-import { getCaddieName, type VoiceGender } from '../lib/persona';
+import { type VoiceGender, getCaddieNameFor } from '../lib/persona';
 import { completeText, providerFromHeaderSafe } from './_aiProvider';
 
 type SynthesisType = 'onboarding' | 'cage_session' | 'round' | 'patterns';
@@ -112,9 +112,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const type = body.type;
     const payload = body.payload ?? {};
     // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
-    const caddieName = getCaddieName(
-      typeof body.persona === 'string' ? body.persona : (body.voiceGender ?? 'male'),
-    );
+    const caddieName = getCaddieNameFor(body);
 
     if (!type || !PROMPT_BY_TYPE[type]) {
       return res.status(400).json({ error: 'invalid type' });

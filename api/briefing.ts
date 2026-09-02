@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { allowInference } from './_inferLimit';
-import { getCaddieName, getCharacterSpec } from '../lib/persona';
+import { getCaddieName, getCharacterSpec, personaInputFrom } from '../lib/persona';
 import { completeText, providerFromHeaderSafe } from './_aiProvider';
 
 const MODE_DESCRIPTIONS: Record<string, string> = {
@@ -68,8 +68,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       recentReflection = null,
     } = req.body;
 
-    // Audit 101 / B4 — prefer persona; fall back to voiceGender for legacy.
-    const personaInput = (typeof persona === 'string' ? persona : voiceGender);
+    // 2026-09-01 — extraction owned by lib/persona.ts personaInputFrom (was hand-rolled here).
+    const personaInput = personaInputFrom({ persona, voiceGender });
     const caddieName = getCaddieName(personaInput);
     const characterSpec = getCharacterSpec(personaInput);
 
