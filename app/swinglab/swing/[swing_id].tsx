@@ -9,6 +9,7 @@
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { impactAnchorMs, narrowClubPathWindow } from '../../../services/swing/clubPathWindow';
+import { wristCentroid, deriveSwingAnchors } from '../../../services/swing/poseMotion';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput,
   ActivityIndicator, Animated, Alert, Image, Modal,
@@ -567,7 +568,35 @@ export default function SwingDetail() {
    */
   const poseImpactMs = useMemo(() => {
     const f = poseFrames.find((p) => p.position === 'P6_impact');
-    return typeof f?.timestampMs === 'number' && Number.isFinite(f.timestampMs) ? f.timestampMs : null;
+    if (typeof f?.timestampMs === 'number' && Number.isFinite(f.timestampMs)) return f.timestampMs;
+    /**
+     * 2026-09-01 (adversarial audit; Tim's call: "timing only, never geometry") — DERIVE IMPACT FROM
+     * THE MOTION WHEN NOTHING LABELLED IT.
+     *
+     * `P6_impact` exists only if the pose pipeline labelled a frame, and on the swings that need an
+     * anchor most it often has not: Tim's log shows the network locate aborting twice in one
+     * afternoon (dead_host), which drops the analysis to a whole-clip fallback with no labelled
+     * positions — precisely when the club path is left searching blind.
+     *
+     * poseMotion.deriveSwingAnchors has found impact from the hand-speed PEAK since 07-21: pure,
+     * unit-tested, no audio, no network, no labels. Impact is the fastest moment of a swing, so the
+     * peak is a measurement rather than a guess.
+     *
+     * THE LINE THAT MUST NOT MOVE: this is a TIME, never a POSITION. The trace stays
+     * clubhead-or-nothing — a wrist path drawn as if it were the clubhead is the defect that was
+     * deliberately removed, and nothing here feeds arc geometry. All this decides is WHICH four
+     * seconds the clubhead detector searches; if it finds no clubhead there, the answer is still
+     * nothing. Guarded by the-wrist-informs-timing-never-geometry test.
+     * [[smartmotion-clubhead-trace-root-cause]] [[orphans-are-live-bugs-not-dead-code]]
+     */
+    const samples = poseFrames
+      .map((fr) => {
+        const c = wristCentroid(fr);
+        return c && Number.isFinite(fr.timestampMs) ? { tMs: fr.timestampMs, x: c.x, y: c.y } : null;
+      })
+      .filter((v): v is { tMs: number; x: number; y: number } => v !== null);
+    const anchors = deriveSwingAnchors(samples);
+    return anchors && Number.isFinite(anchors.impactMs) ? anchors.impactMs : null;
   }, [poseFrames]);
   // 2026-07-21 (Tim — "buttons to go to those stages would be dope") — the pose pipeline already
   // labels the key swing positions (address/top/impact/finish) on the frames; the SmartMotion review

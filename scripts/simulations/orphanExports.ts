@@ -310,10 +310,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
     + 'this reintroduces a fixed defect — the same reason wristCentroid is marked DO NOT WIRE.',
   'services/smartTempo.ts :: tempoTargetFrames':
     'PARKED — frame counts for a replay-at-tempo overlay that has no surface yet.',
-  'services/swing/poseMotion.ts :: wristCentroid':
-    'DO NOT WIRE — the trace is clubhead-or-nothing and a wrist fallback was deliberately removed. '
-    + 'Wiring this would reintroduce a fixed defect. Kept only because the file is shared. '
-    + '[[smartmotion-clubhead-trace-root-cause]]',
   'services/swingComparisonEngine.ts :: annotateWithGolferModel':
     'PARKED — folds the learned miss into a comparison; the comparison surface renders the raw read today.',
   'services/swingDatabase.ts :: listReferences':
