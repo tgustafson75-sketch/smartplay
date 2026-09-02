@@ -4135,7 +4135,39 @@ export default function SmartMotion() {
         // bounded window is ALWAYS better than going unbounded: the 30 s
         // watchdog is sufficient, and extractKeyFrames samples proportionally.
         if (durMs > 0) {
-          firstSeg = { index: 1, strikeMs: Math.round(durMs * 0.6), startMs: 0, endMs: durMs, confidence: 'low', peakDb: 0, confirmed: false, synthesized: true };
+          /**
+           * 2026-09-01 — MEASURE THE WINDOW BEFORE FALLING BACK TO GUESSING IT.
+           *
+           * The whole-clip segment below carries `strikeMs = 0.6 * duration`, an explicit placeholder,
+           * and everything downstream has had to learn to refuse it: tempo skips it, the club path
+           * refuses to re-centre on it, bilateral will not align on it. It exists because going
+           * UNBOUNDED was worse — but a third option now exists that neither guesses nor waits on a
+           * cold Lambda. A swing is the fastest thing in the clip; on-device pose reads that in
+           * seconds, offline.
+           *
+           * Only the WINDOW and the impact TIME come from it. peakDb stays 0 and detectionMethod
+           * still resolves to 'manual', so nothing here claims a strike was heard — the segment is
+           * video-located, exactly as if the network locator had found it. `synthesized` is FALSE
+           * when it is measured, which is what re-enables tempo and the club-path anchor for a swing
+           * that previously got neither. [[illustration-data-points]]
+           */
+          let located: { startSec: number; endSec: number; swingTimeSec: number } | null = null;
+          try {
+            const { locateSwingWindowOnDevice } = await import('../../services/swing/onDeviceLocate');
+            located = await locateSwingWindowOnDevice(recorded.uri, durMs);
+          } catch { /* best-effort — the synthesized window below is the fallback */ }
+          firstSeg = located
+            ? {
+                index: 1,
+                strikeMs: Math.round(located.swingTimeSec * 1000),
+                startMs: Math.round(located.startSec * 1000),
+                endMs: Math.round(located.endSec * 1000),
+                confidence: 'low',
+                peakDb: 0,
+                confirmed: false,
+                synthesized: false,
+              }
+            : { index: 1, strikeMs: Math.round(durMs * 0.6), startMs: 0, endMs: durMs, confidence: 'low', peakDb: 0, confirmed: false, synthesized: true };
           // 2026-06-14 (audit fix) — surface the synthesized whole-clip segment to
           // state too, so the review's per-swing effects see segments[0] instead of
           // []. 2026-08-09 (pass-2 P4) — it carries synthesized:true; its strikeMs is a 0.6·duration

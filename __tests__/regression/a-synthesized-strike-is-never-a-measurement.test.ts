@@ -75,3 +75,30 @@ describe('the readers that were already honest stay honest', () => {
     expect(sm).toMatch(/videoLocated\s*\n?\s*\? \(r && r\.departed && r\.confidence !== 'low' && r\.ball_present_before \? r : null\)/);
   });
 });
+
+describe('the capture path measures the window before it guesses one (2026-09-01)', () => {
+  const sm = read('app/swinglab/smartmotion.tsx');
+
+  it('on-device locate runs BEFORE the 0.6*duration placeholder', () => {
+    const onDev = sm.indexOf('locateSwingWindowOnDevice(recorded.uri, durMs)');
+    const guess = sm.indexOf('strikeMs: Math.round(durMs * 0.6)');
+    expect(onDev).toBeGreaterThan(-1);
+    expect(guess).toBeGreaterThan(-1);
+    expect(onDev).toBeLessThan(guess);
+  });
+
+  it('a MEASURED window is not marked synthesized — that is what re-enables tempo and the anchor', () => {
+    const measured = sm.slice(sm.indexOf('strikeMs: Math.round(located.swingTimeSec * 1000)'), sm.indexOf('strikeMs: Math.round(located.swingTimeSec * 1000)') + 400);
+    expect(measured).toMatch(/synthesized: false/);
+  });
+
+  it('but it still claims NO acoustic strike — peakDb stays 0 on both branches', () => {
+    const block = sm.slice(sm.indexOf('let located:'), sm.indexOf('let located:') + 1400);
+    expect((block.match(/peakDb: 0/g) ?? []).length).toBe(2);
+    expect(block).not.toMatch(/audio_transient/);
+  });
+
+  it('the guess survives as the fallback — a bounded window must always exist', () => {
+    expect(sm).toMatch(/: \{ index: 1, strikeMs: Math\.round\(durMs \* 0\.6\), startMs: 0, endMs: durMs/);
+  });
+});

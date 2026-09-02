@@ -8610,7 +8610,12 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     // unbounded locate path. locateSwings is gated to long clips; a whole-clip bounded
     // window is synthesized so analyzeSwing goes bounded + fast.
     /const worthVideo = durMs > 12_000 && \(detectedSegments\.length === 0 \|\| durMs > 20_000\)/.test(smA) &&
-      /firstSeg = \{ index: 1, strikeMs: Math\.round\(durMs \* 0\.6\), startMs: 0, endMs: durMs/.test(smA) &&
+      // 2026-09-01 — the window is now MEASURED on-device first and only synthesized when that
+      // returns nothing. The invariant this clause protects is that a bounded window always exists
+      // (never the unbounded path), so it asserts BOTH branches: the measured one and the fallback.
+      /locateSwingWindowOnDevice\(recorded\.uri, durMs\)/.test(smA) &&
+      /strikeMs: Math\.round\(located\.swingTimeSec \* 1000\)/.test(smA) &&
+      /: \{ index: 1, strikeMs: Math\.round\(durMs \* 0\.6\), startMs: 0, endMs: durMs/.test(smA) &&
       /void runAnalysis\(recorded\.uri, firstSeg\)/.test(smA) &&
       // duration is reused from the metered recorder (no 2-3x re-probe)
       /let meteredDurationMs: number \| null = null;/.test(smA) &&
