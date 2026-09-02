@@ -310,8 +310,16 @@ interface SettingsState {
    *
    * Whether a session is indoors is something to INFER from what the mic and camera actually see,
    * not something to ask the player and then assume on their behalf.
+   *
+   * 2026-09-01 (Tim, from user feedback) — the third mode is 'sim', not 'practice'. Nobody says
+   * "practice mode"; they say they are going to an indoor BAY. It covers a simulator bay and a home
+   * net equally, which is the same acoustic situation: a close strike in a small room.
+   *
+   * NOT the same thing as isSimRound, which is the narrated simulated ROUND. This is where the player
+   * physically is; that is a game they are playing. The label reads "Sim Bay" to keep the two apart
+   * on screen.
    */
-  environmentMode: 'course' | 'range' | 'practice';
+  environmentMode: 'course' | 'range' | 'sim';
   // 2026-06-12 — CAGE geometry the user CONFIRMS (Tim): distance from the ball to the
   // bullseye canvas, and how far the camera sits behind the player. Together they give
   // the true ball→canvas throw distance the cage shot-map (page 3) reasons over, tied
@@ -415,7 +423,7 @@ interface SettingsState {
   setKevinGreetingEnabled: (v: boolean) => void;
   setSmartVisionImagery: (v: 'curated' | 'gps' | 'auto') => void;
   setYardageMode: (v: 'live' | 'preround') => void;
-  setEnvironmentMode: (mode: 'course' | 'range' | 'practice') => void;
+  setEnvironmentMode: (mode: 'course' | 'range' | 'sim') => void;
   setPracticeCanvasFeet: (feet: number) => void;
   setCameraBehindFeet: (feet: number) => void;
   setChipSensitivity: (on: boolean) => void;
@@ -920,6 +928,10 @@ export const useSettingsStore = create<SettingsState>()(
         try {
           const pe = persisted as { environmentMode?: string } | null;
           if (pe && typeof pe === 'object' && pe.environmentMode === 'cage') pe.environmentMode = 'range';
+          // 2026-09-01 — and 'practice' became 'sim'. Tim's user feedback: nobody says "practice mode",
+          // they say they are going to an indoor BAY. Shipped as 'practice' for part of one day, so a
+          // handful of OTA installs can carry it.
+          if (pe && typeof pe === 'object' && pe.environmentMode === 'practice') pe.environmentMode = 'sim';
         } catch { /* a migration must never throw — see the note below */ }
 
         /**

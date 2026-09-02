@@ -23,10 +23,10 @@ const read = (rel: string) => fs.readFileSync(path.join(root, rel), 'utf8');
 const settings = read('store/settingsStore.ts');
 const sm = read('app/swinglab/smartmotion.tsx');
 
-describe('the environment modes are course, range and practice', () => {
+describe('the environment modes are course, range and sim', () => {
   it("'cage' is not a mode any more", () => {
-    expect(settings).toMatch(/environmentMode: 'course' \| 'range' \| 'practice'/);
-    expect(settings).toMatch(/setEnvironmentMode: \(mode: 'course' \| 'range' \| 'practice'\)/);
+    expect(settings).toMatch(/environmentMode: 'course' \| 'range' \| 'sim'/);
+    expect(settings).toMatch(/setEnvironmentMode: \(mode: 'course' \| 'range' \| 'sim'\)/);
   });
 
   it('THE DEFAULT is range — never a venue the player did not choose', () => {
@@ -35,9 +35,9 @@ describe('the environment modes are course, range and practice', () => {
   });
 
   it('a live round forces course, and course cannot be chosen by hand', () => {
-    expect(sm).toMatch(/effectiveMode: 'course' \| 'range' \| 'practice' = isRoundActive \? 'course' : environmentMode/);
+    expect(sm).toMatch(/effectiveMode: 'course' \| 'range' \| 'sim' = isRoundActive \? 'course' : environmentMode/);
     // the toggle cycles range <-> practice only
-    expect(sm).toMatch(/setEnvironmentMode\(environmentMode === 'range' \? 'practice' : 'range'\)/);
+    expect(sm).toMatch(/setEnvironmentMode\(environmentMode === 'range' \? 'sim' : 'range'\)/);
     expect(sm).not.toMatch(/setEnvironmentMode\([^)]*'course'/);
   });
 
@@ -68,13 +68,13 @@ describe('the environment modes are course, range and practice', () => {
 
   it('the indoor branch still exists — it is renamed, not deleted', () => {
     // Practice trusts acoustics as final segmentation; range/course wait for video confirmation.
-    expect(sm).toMatch(/if \(meterMode === 'practice'\) \{/);
-    expect(sm).toMatch(/stopMode === 'practice' && detectedSegments\.length <= 1/);
-    expect(sm).toMatch(/const isPractice = effectiveMode === 'practice';/);
+    expect(sm).toMatch(/if \(meterMode === 'sim'\) \{/);
+    expect(sm).toMatch(/stopMode === 'sim' && detectedSegments\.length <= 1/);
+    expect(sm).toMatch(/const isPractice = effectiveMode === 'sim';/);
   });
 
   it('rig geometry is still recorded only indoors, on BOTH commit paths', () => {
-    expect((sm.match(/effectiveMode === 'practice'/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    expect((sm.match(/effectiveMode === 'sim'/g) ?? []).length).toBeGreaterThanOrEqual(2);
   });
 });
 

@@ -7137,16 +7137,16 @@ const smEnvSrc = read('app/swinglab/smartmotion.tsx');
 // handled by the earbud tap-stop + VAD gates. The old "course off" assertion locked the old behavior.
 check('Environment mode phase 1: range window + metering gating (cage+range+course on; course video-primary)',
   // 2026-09-01 — 'cage' renamed to 'practice' (Tim: nobody chose cage, it was the DEFAULT). Same behaviour, honest name.
-  /environmentMode: 'course' \| 'range' \| 'practice'/.test(read('store/settingsStore.ts')) &&
+  /environmentMode: 'course' \| 'range' \| 'sim'/.test(read('store/settingsStore.ts')) &&
     // and the default is RANGE — never a venue the player did not choose
     /environmentMode: 'range' as const/.test(read('store/settingsStore.ts')) &&
     /RANGE_RECORDING_MAX_SECONDS = 120/.test(smEnvSrc) &&
     /captureMode === 'range' \? RANGE_RECORDING_MAX_SECONDS : RECORDING_MAX_SECONDS/.test(smEnvSrc) &&
-    /\? \(captureMode === 'practice' \|\| captureMode === 'course'\)/.test(smEnvSrc) &&   // chip: practice+course
+    /\? \(captureMode === 'sim' \|\| captureMode === 'course'\)/.test(smEnvSrc) &&   // chip: practice+course
     // default branch used to list all three modes; every mode meters, so it is now plainly `true`
     /: true;   \/\/ every mode meters/.test(smEnvSrc) &&
-    /const effectiveMode: 'course' \| 'range' \| 'practice' = isRoundActive \? 'course' : environmentMode/.test(smEnvSrc) && // live round forces COURSE
-    /setEnvironmentMode\(environmentMode === 'range' \? 'practice' : 'range'\)/.test(smEnvSrc),   // toggle cycles range<->practice; course is round-only
+    /const effectiveMode: 'course' \| 'range' \| 'sim' = isRoundActive \? 'course' : environmentMode/.test(smEnvSrc) && // live round forces COURSE
+    /setEnvironmentMode\(environmentMode === 'range' \? 'sim' : 'range'\)/.test(smEnvSrc),   // toggle cycles range<->practice; course is round-only
   'a live round forces COURSE mode with the metered acoustic track ON (video-primary segmentation, acoustics confirmatory) — the on-course easy-flow default');
 
 // 2026-06-11 — Environment mode phase 2: RANGE correlates acoustics with video.
@@ -7859,7 +7859,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
 {
   const smSrc2 = fs.readFileSync(path.resolve(__dirname, '../../app/swinglab/smartmotion.tsx'), 'utf-8');
   check('SmartMotion: cage falls back to video locator when acoustics under-detect',
-    /else if \(stopMode === 'practice' && detectedSegments\.length <= 1\) \{/.test(smSrc2) &&
+    /else if \(stopMode === 'sim' && detectedSegments\.length <= 1\) \{/.test(smSrc2) &&
       /worthVideo/.test(smSrc2),
     'cage acoustics that zero out (loud bay) OR find ≤1 strike in a long clip (cage mode at an open range) cross-check the video locator and use it when it finds more — working multi-strike acoustic captures are untouched');
 
@@ -8381,7 +8381,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       // 2026-07-08 (cage audit #1) — the calibration branch is now env-gated (calOk).
       /const thresholdDb = chipOn \? CHIP_STRIKE_THRESHOLD_DB : \(calOk \? appliedCalibration\?\.transientThresholdDb : undefined\)/.test(smSrc2) &&
       // 2026-08-08 (Tim — course acoustics in-round): chip → cage+course (INCLUDING in-round), NOT range.
-      /chipOnStart\s*\n?\s*\? \(captureMode === 'practice' \|\| captureMode === 'course'\)/.test(smSrc2) &&
+      /chipOnStart\s*\n?\s*\? \(captureMode === 'sim' \|\| captureMode === 'course'\)/.test(smSrc2) &&
       // course+chip single-shot anchor
       /else if \(meterMode === 'course'\) \{/.test(smSrc2) &&
       // unmistakable toggle feedback: filled ON state + a toast
@@ -8737,7 +8737,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'the multi-swing locator samples ~2.5s apart (capped 24) — validated on Tim\'s real 60s clip: 5s spacing over-detected (9 for 6 real swings), 2.5s nailed 6');
 
   check('Smart Motion: cage cross-checks video when acoustics under-detect',
-    /stopMode === 'practice' && detectedSegments\.length <= 1/.test(smA) &&
+    /stopMode === 'sim' && detectedSegments\.length <= 1/.test(smA) &&
       /swings\.length > segsForAnalysis\.length/.test(smA),
     'cage mode used at an open range (acoustics heard ≤1 strike for many swings) cross-checks the video locator and uses it when it finds MORE swings — never reduces the count');
 
@@ -10540,12 +10540,12 @@ check('LOCK: cage rig geometry (canvas/camera-behind) is recorded ONLY in cage m
     const sm = read('app/swinglab/smartmotion.tsx');
     // BOTH write sites must be gated — the save-time write and the live-commit mirror. Fixing one
     // leaves "Canvas 14 ft" reappearing on course via whichever path commits last.
-    const gated = /const isPractice = effectiveMode === 'practice';/.test(sm) &&
-      /const isPracticeLive = effectiveMode === 'practice';/.test(sm) &&
+    const gated = /const isPractice = effectiveMode === 'sim';/.test(sm) &&
+      /const isPracticeLive = effectiveMode === 'sim';/.test(sm) &&
       (sm.match(/canvasFeet: isPractice(?:Live)? \? \(practiceCanvasFeet \?\? null\) : null,/g) ?? []).length === 2 &&
       (sm.match(/cameraBehindFeet: isPractice(?:Live)? \? \(cameraBehindFeet \?\? null\) : null,/g) ?? []).length === 2;
     // an active round must force course mode, or the gate reads the stale manual setting
-    const roundForcesCourse = /effectiveMode: 'course' \| 'range' \| 'practice' = isRoundActive \? 'course' : environmentMode/.test(sm);
+    const roundForcesCourse = /effectiveMode: 'course' \| 'range' \| 'sim' = isRoundActive \? 'course' : environmentMode/.test(sm);
     // and the unconditional write must not come back
     const noUnconditional = !/canvasFeet: practiceCanvasFeet \?\? null,/.test(sm);
     return gated && roundForcesCourse && noUnconditional;
@@ -12108,7 +12108,7 @@ check('LOCK: NO surface drops a located swing before the evidence for it has arr
     //
     // CAGE: adopt on the RAW video count (the gate used to shrink the number the go/no-go compared, so
     // the whole video pass was discarded rather than trimmed), fuse, then gate the fused segments.
-    const cage = sm.slice(sm.indexOf("stopMode === 'practice'"), sm.indexOf('// 2026-06-12 (analysis speed) — NEVER send a short clip'));
+    const cage = sm.slice(sm.indexOf("stopMode === 'sim'"), sm.indexOf('// 2026-06-12 (analysis speed) — NEVER send a short clip'));
     const cageNoPreGate = !/const conf = swings\.filter\(\(sw\) => sw\.confidence !== 'low'\)/.test(cage);
     const cageRawCountGate = /if \(swings\.length > segsForAnalysis\.length\)/.test(cage);
     const cageGateAfterFusion = (() => {
