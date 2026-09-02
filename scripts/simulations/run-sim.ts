@@ -3166,6 +3166,32 @@ check('Smart Motion: pipeline narration has a per-run cancel token (no cross-ses
   })(),
   'a stale pipeline bails via its run token — no wrong-swing narration after a fast record-again');
 
+check('Tempo trainer: a ratio only ever comes from three real marks',
+  /**
+   * 2026-09-01 (marshal recall) — app/swinglab/smart-tempo is 981 lines and carried no guard, and it
+   * was changed on 09-01: it used to seed the impact line from `detectionOffsetSeconds` whenever the
+   * field was finite, marking it AUTO. That field is not always a measurement — SmartMotion writes a
+   * `0.6 x duration` placeholder into it when no swing was detected — so the trainer presented a guess
+   * as a detected position and computed the tempo RATIO from it.
+   *
+   * A wrong ratio is worse than no ratio: it is the number the player is training.
+   */
+  (() => {
+    const t = readCode('app/swinglab/smart-tempo.tsx');
+    return (
+      // only a HEARD strike may seed the impact mark
+      /shot\?\.detectionMethod === 'audio_transient' &&/.test(t) &&
+      // a ratio needs all three marks — no partial, no default
+      /const allMarked = marks\.backswingStartSec != null && marks\.topSec != null && marks\.impactSec != null;/.test(t) &&
+      /if \(!allMarked\) return null;/.test(t) &&
+      // marks out of order produce NO result rather than a nonsense ratio
+      /const outOfOrder = allMarked && result == null;/.test(t) &&
+      // the metronome cannot outlive the screen or keep playing a stale rhythm
+      /return \(\) => \{ void m\?\.dispose\(\); \};/.test(t)
+    );
+  })(),
+  'the tempo ratio comes from three real marks and a heard strike, never from a placeholder or a partial set');
+
 check('The caddie can only offer to open screens that exist',
   /**
    * 2026-09-01 (marshal recall) — appCatalog's own header promises "EVERY route below is verified
