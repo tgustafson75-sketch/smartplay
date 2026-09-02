@@ -751,10 +751,13 @@ const SCEN_22: Scenario = {
         const buildingNow = Object.entries(useGeometryStatusStore.getState().building)
           .filter(([, v]) => v)
           .map(([k]) => k);
+        const { geometryBuildLoad } = await import('../courseGeometryService');
+        const load = geometryBuildLoad();
         a.note('same-origin course-geometry builds in flight',
           buildingNow.length
-            ? `${buildingNow.length} — ${buildingNow.join(', ')} (each holds a request to this SAME origin for up to 85s)`
-            : '0 — nothing of ours was building, so the queue is not ours');
+            ? `${buildingNow.length} — ${buildingNow.join(', ')} · pool: ${load.active} active / ` +
+              `${load.queued} queued (cap ${load.max}); each active build holds a request to this SAME origin for up to 85s`
+            : `0 building · pool: ${load.active} active / ${load.queued} queued (cap ${load.max}) — nothing of ours was building, so the queue is not ours`);
 
         // Give our own traffic a bounded chance to drain, then ask the host one more time. This is
         // the discriminator: the same URL, the same device, seconds later, with the pool free.

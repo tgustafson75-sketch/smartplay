@@ -688,6 +688,52 @@ function deriveCentroidFromActiveCourseLocation(
  */
 const inflight: Map<string, Promise<CourseGeometry | null>> = new Map();
 
+/**
+ * 2026-09-02 (Tim's harness run, C22) — A GLOBAL CAP, BECAUSE `inflight` ONLY DEDUPES ONE COURSE.
+ *
+ * The 08-10 anti-race above solved several surfaces asking for the SAME course. It does nothing
+ * about several DIFFERENT courses building at once, and that is the normal case: the release model
+ * pulls 3-5 nearby courses on demand, so opening the app can start that many builds together. Each
+ * one holds a request against OUR OWN ORIGIN with an 85-second budget, and Android's HTTP client
+ * keeps only a handful of connections per host and queues everything else.
+ *
+ * The bill lands on the foreground. On Tim's device a bare GET of /api/health?lite=1 — a static
+ * return that answers in ~0.2s off-device — took 71 seconds and then, once things drained, 301ms.
+ * `armDeadHostGuard` in services/poseDetection.ts probes that exact URL to decide whether to abort a
+ * swing analysis, so background map-building could kill the swing the player just recorded. A
+ * background nicety must never be able to starve the path the player is waiting on.
+ *
+ * Two at a time. Builds still all happen and the MAPPING badge still tells the truth while they
+ * queue (a queued course is genuinely in progress from the player's side) — they simply stop
+ * saturating the pool. The slot is held only for the fetch; dedupe, cache reads and cache writes are
+ * untouched. [[a-budget-must-fit-what-runs-inside-it]] [[speed-is-the-wow]]
+ */
+const MAX_CONCURRENT_BUILDS = 2;
+let activeBuilds = 0;
+const waitingForSlot: (() => void)[] = [];
+
+async function acquireBuildSlot(): Promise<void> {
+  if (activeBuilds < MAX_CONCURRENT_BUILDS) {
+    activeBuilds++;
+    return;
+  }
+  // Hand-off, not a re-check: releaseBuildSlot passes the slot straight to the next waiter, so
+  // `activeBuilds` already accounts for this build by the time the promise resolves. That closes the
+  // window where two waiters could both wake and see a free slot.
+  await new Promise<void>((resolve) => { waitingForSlot.push(resolve); });
+}
+
+function releaseBuildSlot(): void {
+  const next = waitingForSlot.shift();
+  if (next) next();
+  else activeBuilds = Math.max(0, activeBuilds - 1);
+}
+
+/** Owner diagnostics (harness C22): how much of the connection pool our own map-building is holding. */
+export function geometryBuildLoad(): { active: number; queued: number; max: number } {
+  return { active: activeBuilds, queued: waitingForSlot.length, max: MAX_CONCURRENT_BUILDS };
+}
+
 /** Max persisted course entries to keep. A heavy user plays a handful of courses; this is generous. */
 const MAX_CACHED_COURSES = 40;
 
@@ -758,6 +804,10 @@ export async function purgeCourseGeometry(courseId?: string): Promise<void> {
     }
     memCache.clear();
     inflight.clear();
+    // Clearing `inflight` orphans any build waiting on a slot — its release would then never come and
+    // the cap would be permanently down two. Wake the waiters and reset the count with it.
+    while (waitingForSlot.length) waitingForSlot.shift()?.();
+    activeBuilds = 0;
     const keys = (await AsyncStorage.getAllKeys()).filter(k => k.startsWith(CACHE_KEY_PREFIX));
     if (keys.length) await AsyncStorage.multiRemove(keys).catch(() => undefined);
     console.log('[courseGeometry] purged ALL course geometry —', keys.length, 'entries');
@@ -783,7 +833,16 @@ export async function fetchCourseGeometry(
   // 2026-08-13 — `inflight` still owns dedupe; it now also PUBLISHES so the UI can see the build.
   // Deleting from a module-level Map told nobody, which is why a finished build never lifted the
   // STATIC badge or re-ran the yardage resolver. See store/geometryStatusStore.ts.
-  const run = fetchCourseGeometryInner(courseId, options).finally(() => {
+  // The slot is taken INSIDE the promise, not before it, so the caller still gets one promise per
+  // course immediately and the dedupe above keeps working while this build waits its turn.
+  const run = (async () => {
+    await acquireBuildSlot();
+    try {
+      return await fetchCourseGeometryInner(courseId, options);
+    } finally {
+      releaseBuildSlot();
+    }
+  })().finally(() => {
     inflight.delete(courseId);
     geometryStatus().markDone(courseId);
   });
