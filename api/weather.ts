@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { allowInference } from './_inferLimit';
 
 /**
  * Phase C — OpenWeatherMap proxy.
@@ -14,6 +15,12 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 const TIMEOUT_MS = 8_000;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  /**
+   * 2026-09-01 (adversarial audit) — RATE LIMIT: proxies a third-party weather API on OUR key — an abuse loop exhausts the quota and takes weather out for every real player.
+   * Nothing bounded the request COUNT. Placed first so a flood is refused before it costs
+   * us an upstream call. Same primitive as the brain route. [[overstrict-gate-lens]]
+   */
+  if (!allowInference(req, res, 'weather', 60)) return;
   const lat = req.query.lat as string | undefined;
   const lng = req.query.lng as string | undefined;
   if (!lat || !lng) {

@@ -21,6 +21,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { allowInference } from './_inferLimit';
 import { getSmartPlaySupabase } from './_supabase';
 
 const MAX_BATCH = 50;
@@ -56,6 +57,11 @@ function sanitizeEvent(
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  /**
+   * 2026-09-01 (adversarial audit) — RATE LIMIT: this INSERTS usage rows. Telemetry is legitimately chatty, so the limit is generous — it exists to bound table growth from a loop, not to shape normal traffic.
+   * Payload shape was validated; request COUNT was not. [[overstrict-gate-lens]]
+   */
+  if (!allowInference(req, res, 'usage', 120)) return;
   // POST only — anything else is a no-op for telemetry.
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');

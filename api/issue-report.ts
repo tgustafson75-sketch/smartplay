@@ -14,6 +14,7 @@
  * duplicates). App-key gated like the other consented endpoints. Requires migration 0006.
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { allowInference } from './_inferLimit';
 import { createHash } from 'crypto';
 import { applyCors } from './_cors';
 import { getSmartPlaySupabase } from './_supabase';
@@ -35,6 +36,14 @@ type Entry = {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'method_not_allowed' });
+
+  /**
+   * 2026-09-01 (adversarial audit) — RATE LIMIT: each accepted report EMAILS the owner via Resend, so an unthrottled loop floods Tim's inbox and burns the Resend quota. 10/min is far above a human sending bug reports.
+   * Payload caps already bound one request's SIZE; nothing bounded the COUNT. Same primitive
+   * and reasoning as the brain route (the app key ships in the bundle, so a key gate protects
+   * nothing and would 401 real users mid-rollout). [[overstrict-gate-lens]]
+   */
+  if (!allowInference(req, res, 'issue_report', 10)) return;
 
   const provided = norm(req.headers['x-app-key']);
   const ok = provided.length === APP_KEY.length &&

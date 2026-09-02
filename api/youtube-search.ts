@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { allowInference } from './_inferLimit';
 
 /**
  * 2026-06-13 — YouTube song search for the clean in-app music portal (Tim/Cecily).
@@ -19,6 +20,12 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 const TIMEOUT_MS = 8_000;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  /**
+   * 2026-09-01 (adversarial audit) — RATE LIMIT: proxies the YouTube Data API on OUR key, which has a hard DAILY quota — exhausting it is an outage, not a bill.
+   * Nothing bounded the request COUNT. Placed first so a flood is refused before it costs
+   * us an upstream call. Same primitive as the brain route. [[overstrict-gate-lens]]
+   */
+  if (!allowInference(req, res, 'youtube_search', 30)) return;
   const q = (req.query.q as string | undefined)?.trim();
   if (!q) return res.status(400).json({ error: 'q required' });
 

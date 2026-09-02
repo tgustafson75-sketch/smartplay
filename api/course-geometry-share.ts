@@ -17,6 +17,7 @@
  * Rows live in smartplay.course_geometry* (service-key only). Requires migration 0006.
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { allowInference } from './_inferLimit';
 import { createHash } from 'crypto';
 import { applyCors } from './_cors';
 import { getSmartPlaySupabase } from './_supabase';
@@ -35,6 +36,14 @@ function norm(v: unknown): string {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'method_not_allowed' });
+
+  /**
+   * 2026-09-01 (adversarial audit) — RATE LIMIT: this WRITES into the crowd-sourced geometry other players read, so an unthrottled loop is both a storage bill and a data-integrity attack on the course book.
+   * Payload caps already bound one request's SIZE; nothing bounded the COUNT. Same primitive
+   * and reasoning as the brain route (the app key ships in the bundle, so a key gate protects
+   * nothing and would 401 real users mid-rollout). [[overstrict-gate-lens]]
+   */
+  if (!allowInference(req, res, 'geometry_share', 20)) return;
 
   // App-key gate — constant-time compare so a wrong key can't be timed out.
   const provided = norm(req.headers['x-app-key']);

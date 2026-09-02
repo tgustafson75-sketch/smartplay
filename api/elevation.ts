@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { allowInference } from './_inferLimit';
 
 /**
  * Elevation proxy — feeds utils/playsLike.ts's (previously dormant) uphill/
@@ -19,6 +20,12 @@ const DATASET = 'mapzen';
 const METERS_TO_FEET = 3.28084;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  /**
+   * 2026-09-01 (adversarial audit) — RATE LIMIT: proxies Google Elevation on OUR key; same quota-exhaustion shape as weather.
+   * Nothing bounded the request COUNT. Placed first so a flood is refused before it costs
+   * us an upstream call. Same primitive as the brain route. [[overstrict-gate-lens]]
+   */
+  if (!allowInference(req, res, 'elevation', 60)) return;
   const lat = req.query.lat as string | undefined;
   const lng = req.query.lng as string | undefined;
   if (!lat || !lng) {

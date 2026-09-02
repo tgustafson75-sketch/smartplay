@@ -11,6 +11,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { allowInference } from './_inferLimit';
 import { getSmartPlaySupabase } from './_supabase';
 import { getMessagingServerKey, keysMatch } from '../services/appAuth';
 
@@ -31,6 +32,11 @@ const ALLOWED_EMAILS = new Set(
 const emailAllowed = (e: string): boolean => ALLOWED_EMAILS.size === 0 || ALLOWED_EMAILS.has(e);
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  /**
+   * 2026-09-01 (adversarial audit) — RATE LIMIT: this INSERTS a row carrying arbitrary from/to addresses and body text. Unthrottled that is both a spam vector and unbounded table growth.
+   * Payload shape was validated; request COUNT was not. [[overstrict-gate-lens]]
+   */
+  if (!allowInference(req, res, 'messages', 30)) return;
   const sb = getSmartPlaySupabase();
   if (!sb) return res.status(200).json({ ok: false, reason: 'messaging_unconfigured', messages: [] });
 
