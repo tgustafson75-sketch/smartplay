@@ -359,6 +359,97 @@ const ALL_APP_FEATURES: AppFeature[] = [
     blurb: 'Short how-to walkthroughs of the app\'s features',
     whenToUse: 'they want a guided tutorial / walkthrough of the app',
   },
+
+  /**
+   * ── 2026-09-02 (Tim's 1.0 wiring audit — "does the single brain have a presence of every feature,
+   * context, and does it all feed into a unified vision?") — EIGHT PLAYER FEATURES THE BRAIN COULD
+   * NOT NAME.
+   *
+   * The catalog held 35 features against 103 shipped screens. Most of that gap is correct — owner
+   * tools, dev screens, legal, permissions, paywall, and mid-flow steps like /mark-green or
+   * /recap/feelings, none of which are destinations a player would ask for. But these eight are real,
+   * reachable, player-facing surfaces, and their absence had a specific consequence: catalogForPrompt
+   * builds the feature list the brain sees, so asking the caddie to open Messages, resume a practice
+   * session or import a round produced a caddie that did not know they existed. It is the
+   * "connected but not KNOWN" inverse of the orphan class. [[self-growing-agent-architecture]]
+   *
+   * Deliberately still absent: /course-layout (smartFinderService documents it as NOT ROUTED on
+   * purpose — it answers "what does this course's card say", a different question), /diagnostic-card
+   * and /recap/feelings (outcomes the app pushes you to, not places you ask for), and /drill-video
+   * (only meaningful with the params a card supplies).
+   */
+  {
+    id: 'messages',
+    name: 'Messages',
+    aliases: ['messages', 'my messages', 'message my group', 'text my foursome', 'message my coach'],
+    route: '/messages',
+    category: 'data',
+    blurb: 'Message your golfers — foursome, coach, family',
+    whenToUse: 'they want to send or read a message to the people they play with',
+  },
+  {
+    id: 'practice-session',
+    name: 'Practice Session',
+    aliases: ['practice session', 'my practice', 'practice summary', 'last practice', 'practice history'],
+    route: '/practice-session',
+    category: 'practice',
+    blurb: 'The practice engine: run a session, review the last one, see the history',
+    whenToUse: 'they ask about practice sessions generally, or want to see how the last one went',
+  },
+  {
+    id: 'round-briefing',
+    name: 'Round Briefing',
+    aliases: ['briefing', 'round briefing', 'pre round briefing', 'brief me', 'what should i know before i play'],
+    route: '/round/briefing',
+    category: 'prepare',
+    blurb: 'A pre-round read on the course, your game and the plan',
+    whenToUse: 'they are about to play and want the plan before they tee off',
+  },
+  {
+    id: 'custom-caddie',
+    name: 'Build Your Caddie',
+    aliases: ['custom caddie', 'build my caddie', 'my own caddie', 'make a caddie', 'change my caddie'],
+    route: '/profile/custom-caddie',
+    category: 'caddie',
+    blurb: 'Create your own caddie — name, portrait and voice',
+    whenToUse: 'they want to create or edit their own custom caddie',
+  },
+  {
+    id: 'roster',
+    name: 'My Golfers',
+    aliases: ['my golfers', 'roster', 'family', 'my group', 'the people i play with'],
+    route: '/family/roster',
+    category: 'data',
+    blurb: 'The golfers you share with — family, friends, the people you play with',
+    whenToUse: 'they ask about the other golfers on their account',
+  },
+  {
+    id: 'import-round',
+    name: 'Import a Round',
+    aliases: ['import a round', 'import round', 'add a past round', 'scorecard photo', 'import my scorecard'],
+    route: '/import-round',
+    category: 'data',
+    blurb: 'Bring in a past round — including from a photo of the scorecard',
+    whenToUse: 'they want to add a round they already played',
+  },
+  {
+    id: 'quick-start',
+    name: 'Quick Start',
+    aliases: ['quick start', 'get started', 'how do i start', 'show me around'],
+    route: '/quick-start',
+    category: 'data',
+    blurb: 'The fastest path into the app — what to do first',
+    whenToUse: 'they are new, or ask where to begin',
+  },
+  {
+    id: 'shot-log',
+    name: 'Shot Log',
+    aliases: ['shot log', 'my shots', 'shot history', 'every shot i have hit'],
+    route: '/shot-log',
+    category: 'data',
+    blurb: 'Every logged shot, with club and result',
+    whenToUse: 'they want to look back at their logged shots',
+  },
 ];
 
 // ── FAULT DRILLS (voice-addressable) ─────────────────────────────────────────

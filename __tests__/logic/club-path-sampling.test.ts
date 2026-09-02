@@ -70,6 +70,33 @@ describe('clubPathSampleOffsets', () => {
     expect(clubPathSampleOffsets(2000, 1000, 1500)).toEqual([]);
   });
 
+  /**
+   * 2026-09-02 (adversarial pass over the previous day's own work) — THE BUDGET IS ALWAYS SPENT.
+   *
+   * The first version allocated a fixed count per range and skipped any range that had collapsed, so
+   * an anchor near an edge — or a LOW-CONFIDENCE strike whose tolerance widened the core past one —
+   * silently returned 11 or 8 frames instead of 14. Exactly backwards: those are the hardest reads,
+   * and a sparser arc looks like a hard-to-track swing rather than like a bug. [[overstrict-gate-lens]]
+   */
+  it('spends the full frame budget wherever the anchor sits and however wide the tolerance', () => {
+    const cases: [number, number, number | null, number][] = [
+      [0, 4000, 2500, 0],      // centred, confident
+      [0, 4000, 120, 0],       // anchor hard against the start
+      [0, 4000, 3900, 0],      // anchor hard against the end
+      [0, 600, 300, 0],        // window shorter than the core band
+      [0, 4000, 2500, 5000],   // tolerance wider than the whole window
+      [0, 4000, 2500, 240],    // a thin range/sim pickup
+      [0, 4000, null, 0],      // no anchor at all
+    ];
+    const budget = clubPathSampleOffsets(0, 4000, 2500, 0).length;
+    expect(budget).toBeGreaterThan(8);
+    for (const [a, b, imp, tol] of cases) {
+      const off = clubPathSampleOffsets(a, b, imp, tol);
+      expect(off).toHaveLength(budget);          // never fewer where the read is hardest
+      expect(new Set(off).size).toBe(budget);    // and never a duplicated frame padding the count
+    }
+  });
+
   it('is monotonic — the frames are read in time order', () => {
     const off = clubPathSampleOffsets(START, END, IMPACT);
     for (let i = 1; i < off.length; i++) expect(off[i]).toBeGreaterThanOrEqual(off[i - 1]);

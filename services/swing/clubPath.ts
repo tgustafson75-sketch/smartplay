@@ -304,16 +304,43 @@ export function clubPathSampleOffsets(
     const slop = Math.max(0, toleranceMs);
     const leadIn = Math.max(startMs, anchor - APPROACH_MS - slop);
     const tailEnd = Math.min(endMs, anchor + TAIL_MS + slop);
-    const nEarly = Math.max(2, Math.round(SAMPLE_COUNT * 0.2));  // where the arc comes from
-    const nTail = Math.max(2, Math.round(SAMPLE_COUNT * 0.2));   // where it exits
-    const nCore = Math.max(2, SAMPLE_COUNT - nEarly - nTail);    // the downswing through the ball
-    const push = (from: number, to: number, n: number) => {
-      if (!(to > from) || n <= 0) return;
-      for (let i = 0; i < n; i++) offsets.push(Math.round(from + ((to - from) * i) / n));
-    };
-    push(startMs, leadIn, nEarly);
-    push(leadIn, tailEnd, nCore);
-    push(tailEnd, endMs, nTail);
+
+    /**
+     * 2026-09-02 (adversarial pass over the previous day's own work) — SPEND THE WHOLE FRAME BUDGET.
+     *
+     * The first version allocated a fixed count to each of the three ranges and skipped any range
+     * that had collapsed to nothing. So when the anchor sat near the start or end of the window — or
+     * when a LOW-CONFIDENCE strike widened the core past an edge — a whole group was dropped and the
+     * sampler quietly returned 11 or 8 frames instead of 14.
+     *
+     * That is exactly backwards. Those are the reads that are already hardest: an anchor at the edge
+     * is an uncertain one, and a wide tolerance means a thin acoustic pickup. Handing them FEWER
+     * frames than a clean, centred strike gets is the opposite of degrading gracefully — and it is
+     * invisible, because a sparser arc looks like a harder swing to track rather than like a bug.
+     * [[overstrict-gate-lens]]
+     *
+     * The budget is now distributed across whichever ranges actually exist, by weight, always summing
+     * to SAMPLE_COUNT. A collapsed range gives its share to its neighbours instead of to nobody.
+     */
+    const ranges = [
+      { from: startMs, to: leadIn, weight: 0.2 },   // where the arc comes from
+      { from: leadIn, to: tailEnd, weight: 0.6 },   // the downswing through the ball
+      { from: tailEnd, to: endMs, weight: 0.2 },    // where it exits
+    ].filter((r) => r.to > r.from);
+    if (ranges.length === 0) return offsets;
+
+    const totalWeight = ranges.reduce((n, r) => n + r.weight, 0);
+    // Largest-remainder allocation so the counts sum to EXACTLY the budget, never 13 or 15.
+    const raw = ranges.map((r) => (SAMPLE_COUNT * r.weight) / totalWeight);
+    const counts = raw.map((x) => Math.floor(x));
+    let left = SAMPLE_COUNT - counts.reduce((n, x) => n + x, 0);
+    const order = raw.map((x, i) => ({ i, frac: x - Math.floor(x) })).sort((a, b) => b.frac - a.frac);
+    for (let k = 0; left > 0; k++, left--) counts[order[k % order.length]!.i]! += 1;
+
+    ranges.forEach((r, i) => {
+      const n = counts[i]!;
+      for (let j = 0; j < n; j++) offsets.push(Math.round(r.from + ((r.to - r.from) * j) / n));
+    });
     return offsets;
   }
 

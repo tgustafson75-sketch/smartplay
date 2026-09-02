@@ -14619,8 +14619,13 @@ check(
   );
   check(
     'SWING POSITIONS: extra frames go where the swing happens, when we know where that is',
+    // 2026-09-02 — the allocation gained a collapsed-range branch, so the literal `const nCore =
+    // Math.round(extra * 0.65)` moved. Assert the PROPERTY: a strike anchor drives a weighted core,
+    // and the core widens by the anchor's own tolerance.
     /const strikeAnchor = positionTimes\.find\(p => p\.key === 'P6_impact' && p\.source === 'strike'\)/.test(pose) &&
-      /const nCore = Math\.round\(extra \* 0\.65\)/.test(pose),
+      /Math\.round\(extra \* 0\.65\)/.test(pose) &&
+      /const slop = Math\.max\(0, impactToleranceMs\);/.test(pose) &&
+      /strikeAnchor\.timeMs - 420 - slop/.test(pose),
     'uniform density over a 2,700ms span gave the 320ms downswing ~2 frames and the slow backswing ~12',
   );
   check(
@@ -14729,6 +14734,109 @@ check(
     /!isShelved\('\/swinglab\/coach-lesson'\) && lastLessonSession/.test(dash) &&
       /useCoachLessonStore\(\(s\) => s\.sessions\[0\] \?\? null\)/.test(dash),
     'Coach Caddie is shelved today, so for a player this card does not exist; un-shelving is one deleted line in releaseSurface.ts',
+  );
+}
+
+/**
+ * ─── 2026-09-02 — THE 1.0 WIRING AUDIT: BRAIN PRESENCE + ACTION REACH ──────────────────────────
+ *
+ * Tim: "can they take multilateral steps by user request, both typing and voice, to open something,
+ * close something, record, stop, of all the features within the app, and does the single brain have
+ * a presence of every feature, context, and does it all feed into a unified vision?"
+ *
+ * The audit found the action side sound and the AWARENESS side short: the catalog held 35 features
+ * against 103 shipped screens, and eight of the missing ones were real player surfaces. Everything
+ * below is the wiring that answer depends on, locked so it cannot quietly come apart.
+ */
+{
+  // ── 1. TYPING AND VOICE ARE THE SAME PATH ──────────────────────────────────────────────────
+  // The typed bar and the microphone must not be two pipelines. If they diverge, every capability
+  // has to be built twice and one of them silently rots — and the typed one is the quiet one.
+  const bar = readCode('components/caddie/CaddieBottomBar.tsx');
+  check(
+    'REACH: the typed bar enters the SAME pipeline as the microphone',
+    /void handleTranscribedUtterance\(q\)/.test(bar),
+    'typed text and speech both land on handleTranscribedUtterance → classifier → voiceCommandRouter → brain',
+  );
+  check(
+    'REACH: that bar is mounted once at the app root, so typing works on every screen',
+    /<CaddieBottomBar \/>/.test(readCode('components/GlobalCaddieBar.tsx')),
+    'a per-screen text box would make "type to your caddie" true only where somebody remembered it',
+  );
+  const listen = readCode('services/listeningSession.ts');
+  check(
+    'REACH: an unrecognised utterance falls through to the brain, never to silence',
+    // SCOPED to the no-handler branch. `conversationalBrainTurn(text, ...)` appears TWICE in this
+    // file, so an unscoped match survived deleting the one that matters — the guard proved nothing
+    // until it was break-tested. [[three-ways-a-guard-is-worthless]]
+    /if \(!handler\) \{[\s\S]{0,900}?conversationalBrainTurn\(text, \{ timeoutMs: kevinTimeout\(\) \}\)/.test(listen) &&
+      /const handler = voiceCommandRouter\.getHandler\(intent\.intent_type\);/.test(listen),
+    'no tool handler is a reason to ASK THE BRAIN, not a reason to say nothing',
+  );
+
+  // ── 2. THE FOUR VERBS TIM NAMED ────────────────────────────────────────────────────────────
+  const nav = readCode('services/intents/navigateHandler.ts');
+  const media = readCode('services/intents/mediaHandlers.ts');
+  check(
+    'REACH: open / close / record / stop are all reachable by request',
+    /lookupFeature\(toolName\) \?\? lookupFeature\(intent\.raw_text \?\? ''\)/.test(readCode('services/intents/openToolHandler.ts')) &&
+      /case 'close'/.test(nav) && /case 'back'/.test(nav) &&
+      // Match the ALTERNATION, not the surrounding word-boundary escapes: `\b` written here
+      // collapses to an actual boundary assertion, and there is none after the closing paren.
+      /stop\|done\|finish\|wrap\|enough\|that'\?s it/.test(media) &&
+      /start\|record\|go\|begin\|rolling\|capture\|watch\|hit/.test(media) &&
+      /emitSmartMotionCommand\(cmd\)/.test(media),
+    'open falls back to the catalog so any catalogued feature opens by name; close/back live in navigate; record/stop drive the OPEN capture window rather than opening a new one',
+  );
+
+  // ── 3. EVERY HANDLER THAT EXISTS IS REGISTERED ─────────────────────────────────────────────
+  // A handler file nobody registers is a capability that exists and can never fire — the orphan
+  // class, one layer up. [[orphans-are-live-bugs-not-dead-code]]
+  {
+    const dir = path.resolve(__dirname, '../../services/intents');
+    const files = fs.readdirSync(dir).filter((n) => /Handler\.ts$/.test(n)).map((n) => n.replace(/\.ts$/, ''));
+    const index = readBulk(path.join(dir, 'index.ts'));
+    // Match the IMPORT of the file, not the bare name anywhere in it: `includes('undoHandler')` is
+    // satisfied by a comment, by a longer identifier that merely contains it, or by a stale mention
+    // left behind after the registration was removed. The import is the thing that wires it.
+    const unregistered = files.filter((f) => !new RegExp(`from '\\./${f}'`).test(index));
+    check(
+      'REACH: every intent handler file is registered in the router',
+      unregistered.length === 0,
+      unregistered.length === 0
+        ? `all ${files.length} handler files are wired into services/intents/index.ts`
+        : `BUILT AND UNREACHABLE — these handlers can never fire:\n    ${unregistered.join('\n    ')}`,
+    );
+  }
+
+  // ── 4. EVERY DESTINATION THE CADDIE CAN NAME IS A REAL SCREEN ──────────────────────────────
+  // A route that 404s is worse than a missing feature: the caddie confidently says it is taking you
+  // somewhere and nothing happens.
+  {
+    const tool = readBulk(path.resolve(__dirname, '../../services/intents/openToolHandler.ts'));
+    const paths = [...tool.matchAll(/path: '(\/[^']*)'/g)].map((m) => m[1]!.split('?')[0]!);
+    const appDir = path.resolve(__dirname, '../../app');
+    const missing = [...new Set(paths)].filter(
+      (r) => !fs.existsSync(path.join(appDir, `${r}.tsx`)) && !fs.existsSync(path.join(appDir, r, 'index.tsx')),
+    );
+    check(
+      'REACH: every route the tool router can open is a real screen',
+      missing.length === 0,
+      missing.length === 0
+        ? `all ${new Set(paths).size} navigable routes resolve to a screen file`
+        : `THE CADDIE WOULD SAY IT IS OPENING A SCREEN THAT DOES NOT EXIST:\n    ${missing.join('\n    ')}`,
+    );
+  }
+
+  // ── 5. THE BRAIN IS TOLD WHAT EXISTS, EVERY TURN ───────────────────────────────────────────
+  check(
+    'PRESENCE: the feature catalog is injected into the brain prompt unconditionally',
+    // Assert the CODE. `void appHelp;` with its explanatory comment was the first version of this
+    // clause and matched only the comment — caught by the prose ratchet, one guard after I wrote it.
+    /const \{ catalogForPrompt \} = await import\('\.\.\/services\/knowledgeBase\/appCatalog'\)/.test(readCode('api/kevin.ts')) &&
+      /stableCatalogBlock =\s*`\\n\\nAPP FEATURES YOU KNOW/.test(readCode('api/kevin.ts')) &&
+      /void appHelp;/.test(readCode('api/kevin.ts')),
+    'gating the catalog on "is this an app question" made the cached block volatile AND left the caddie unable to name its own features on a normal turn',
   );
 }
 

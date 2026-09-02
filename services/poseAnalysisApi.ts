@@ -928,8 +928,12 @@ export async function analyzeSwingFromVideo(
   window?: { startMs: number; endMs: number } | null,
   impactMs?: number | null,
   handedness?: 'right' | 'left' | null,
+  /** How wrong `impactMs` could be — see clubPathWindow.anchorToleranceMs. 0 = treat it as exact. */
+  impactToleranceMs = 0,
 ): Promise<SwingBiomechanics | null> {
-  const frames = await extractPoseFramesFromVideo(videoUri, durationMs, trustDuration, window, impactMs);
+  const frames = await extractPoseFramesFromVideo(
+    videoUri, durationMs, trustDuration, window, impactMs, undefined, impactToleranceMs,
+  );
   if (!frames) return null;
   return computeBiomechanics(frames, angle, handedness);
 }
@@ -955,6 +959,13 @@ export async function extractPoseFramesFromVideo(
   // 2026-07-29 — optional "stop if the video is playing" guard (e.g. () => !videoPaused). The review
   // surface loops the clip; a retriever decoding the file ExoPlayer is playing = native SIGSEGV.
   shouldAbort?: () => boolean,
+  /**
+   * 2026-09-02 — how wrong `impactMs` could be, from clubPathWindow.anchorToleranceMs. Widens the
+   * window the extra on-device frames cluster into, so a THIN acoustic pickup is not treated as a
+   * frame-accurate one. Defaults to 0: a caller that does not know the strike's confidence gets
+   * exactly the previous behaviour.
+   */
+  impactToleranceMs = 0,
 ): Promise<PoseFrame[] | null> {
   try { require('./routeBreadcrumb').breadcrumb('pose:extract:start', { durMs: Math.round(durationMs), windowed: !!window }); } catch { /* non-fatal */ }
 
@@ -1194,14 +1205,40 @@ export async function extractPoseFramesFromVideo(
           }
         };
         if (strikeAnchor) {
-          // The window the swing actually happens in: late transition through early follow-through.
-          const coreStart = Math.max(spanStart, strikeAnchor.timeMs - 420);
-          const coreEnd = Math.min(spanEnd, strikeAnchor.timeMs + 260);
-          const nCore = Math.round(extra * 0.65);
+          /**
+           * 2026-09-02 (adversarial pass over the previous day's own work) — TWO FAULTS, BOTH THE
+           * SAME SHAPE AS ONE FOUND IN THE CLUB-PATH SAMPLER.
+           *
+           * 1. The core window was FIXED at -420/+260 around the strike and ignored how good that
+           *    strike was. A thin acoustic pickup can be a couple of hundred milliseconds out (see
+           *    clubPathWindow.anchorToleranceMs), so clustering tightly on it aims the extra frames
+           *    confidently at the wrong moment — the failure the tolerance exists to prevent, left
+           *    in place here while the club-path sampler was taught to widen.
+           *
+           * 2. When the anchor sat near the START of the span, `coreStart` collapsed onto
+           *    `spanStart` and the entire approach allocation was pushed into a zero-width range and
+           *    silently discarded — fewer frames on exactly the swings that are hardest to read.
+           *
+           * Both are fixed the same way the sampler's were: widen by the anchor's own tolerance, and
+           * give a collapsed range's share to its neighbour rather than to nobody.
+           */
+          const slop = Math.max(0, impactToleranceMs);
+          const coreStart = Math.max(spanStart, strikeAnchor.timeMs - 420 - slop);
+          const coreEnd = Math.min(spanEnd, strikeAnchor.timeMs + 260 + slop);
+          const coreWide = coreEnd > coreStart;
+          const approachWide = coreStart > spanStart;
+          // Whatever ranges survive share the whole budget; a collapsed one gives its share away.
+          const nCore = !approachWide ? extra : coreWide ? Math.round(extra * 0.65) : 0;
           const nRest = extra - nCore;
-          for (let i = 1; i <= nCore; i++) push(coreStart + ((coreEnd - coreStart) * i) / (nCore + 1));
+          if (coreWide) {
+            for (let i = 1; i <= nCore; i++) push(coreStart + ((coreEnd - coreStart) * i) / (nCore + 1));
+          }
           // The remainder still covers the approach so the swing reads as one motion, not a stub.
-          for (let i = 1; i <= nRest; i++) push(spanStart + ((coreStart - spanStart) * i) / (nRest + 1));
+          if (approachWide) {
+            for (let i = 1; i <= nRest; i++) push(spanStart + ((coreStart - spanStart) * i) / (nRest + 1));
+          } else if (!coreWide) {
+            for (let i = 1; i <= extra; i++) push(spanStart + ((spanEnd - spanStart) * i) / (extra + 1));
+          }
         } else {
           for (let i = 1; i <= extra; i++) push(spanStart + ((spanEnd - spanStart) * i) / (extra + 1));
         }
