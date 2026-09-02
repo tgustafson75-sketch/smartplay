@@ -4182,7 +4182,23 @@ export default function SmartMotion() {
                 confidence: 'low',
                 peakDb: 0,
                 confirmed: false,
-                synthesized: false,
+                /**
+                 * STAYS TRUE, even though the window is measured.
+                 *
+                 * `synthesized` is overloaded: it means both "this swing was never really found" AND
+                 * "this impact time is not precise", and three consumers read it for the second
+                 * meaning. Flipping it to false because the WINDOW is now measured would have handed
+                 * a coarse anchor to two things that must not have one:
+                 *   tempo does `downswingMs = impactMs - topMs` and does not refine the anchor, and a
+                 *     downswing is ~250ms — the same order as this anchor's tolerance, so the RATIO
+                 *     the player trains would simply be wrong;
+                 *   poseExtractKey treats a non-synthesized strikeMs as an ACOUSTIC impact and
+                 *     anchors frame extraction on it.
+                 * The win here is the WINDOW (startMs/endMs), which is real and is what speeds the
+                 * read up. The impact is a centre, not a measurement, and every consumer that needs
+                 * precision must keep refusing it. [[a-field-that-is-sometimes-a-placeholder]]
+                 */
+                synthesized: true,
               }
             : { index: 1, strikeMs: Math.round(durMs * 0.6), startMs: 0, endMs: durMs, confidence: 'low', peakDb: 0, confirmed: false, synthesized: true };
           // 2026-06-14 (audit fix) — surface the synthesized whole-clip segment to

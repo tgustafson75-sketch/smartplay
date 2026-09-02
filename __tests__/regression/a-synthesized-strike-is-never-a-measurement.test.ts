@@ -87,13 +87,23 @@ describe('the capture path measures the window before it guesses one (2026-09-01
     expect(onDev).toBeLessThan(guess);
   });
 
-  it('a MEASURED window is not marked synthesized — that is what re-enables tempo and the anchor', () => {
-    const measured = sm.slice(sm.indexOf('strikeMs: Math.round(located.swingTimeSec * 1000)'), sm.indexOf('strikeMs: Math.round(located.swingTimeSec * 1000)') + 400);
-    expect(measured).toMatch(/synthesized: false/);
+  it('a measured WINDOW still carries synthesized:true — the impact is a centre, not a measurement', () => {
+    // The flag is overloaded: it also means "this impact is not precise", and three consumers read it
+    // that way. tempo does downswingMs = impactMs - topMs WITHOUT refining, and a downswing is ~250ms
+    // — the same order as this anchor's tolerance — so flipping it would make the RATIO wrong.
+    const i = sm.indexOf('strikeMs: Math.round(located.swingTimeSec * 1000)');
+    const measured = sm.slice(i, i + 1600);
+    expect(measured).toMatch(/synthesized: true/);
+    expect(measured).not.toMatch(/synthesized: false/);
+  });
+
+  it('so tempo still refuses it, and frame extraction still calls it non-acoustic', () => {
+    expect(sm).toMatch(/seg\.strikeMs == null \|\| seg\.synthesized\) \{ setTempo\(null\); return; \}/);
+    expect(read('services/swing/poseExtractKey.ts')).toMatch(/!seg\.synthesized \? seg\.strikeMs : null/);
   });
 
   it('but it still claims NO acoustic strike — peakDb stays 0 on both branches', () => {
-    const block = sm.slice(sm.indexOf('let located:'), sm.indexOf('let located:') + 1400);
+    const block = sm.slice(sm.indexOf('let located:'), sm.indexOf('let located:') + 3200);
     expect((block.match(/peakDb: 0/g) ?? []).length).toBe(2);
     expect(block).not.toMatch(/audio_transient/);
   });
