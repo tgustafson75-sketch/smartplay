@@ -126,3 +126,38 @@ describe('an active comp still outranks both blanket grants', () => {
     expect(plan).toEqual({ clearPromo: true });
   });
 });
+
+describe('a stale lifetime cannot survive the flip (2026-09-01 audit)', () => {
+  const base = {
+    subscriptionsEnabled: true,
+    isOwner: false,
+    promoExpiresAt: null,
+    firstOpenedAt: 1_000,
+    trialStartedAt: null,
+    trialDurationMs: 14 * 24 * 60 * 60 * 1000,
+    now: 2_000_000,
+  };
+
+  it('THE GAP: a non-owner lifetime is converted, not honoured', () => {
+    // There is no lifetime PRODUCT — purchases.ts says so plainly: it is an owner grant from the
+    // allow-list, and owners return at rung 2. So any lifetime reaching rung 4 is a leftover from the
+    // kill-switch period that stamped it on everybody. Rung 3 clears exactly this while billing is
+    // OFF; the gap was a player who never opens the app between that remediation and the flip.
+    expect(planTrialLifecycle({ ...base, status: 'lifetime' })).toEqual({ initTrial: true });
+  });
+
+  it('converts to a TRIAL, never to free — free would strand them on lite for a session', () => {
+    const plan = planTrialLifecycle({ ...base, status: 'lifetime' });
+    expect(plan.setStatus).toBeUndefined();
+    expect(plan.initTrial).toBe(true);
+  });
+
+  it('an OWNER keeps lifetime — rung 2 still returns before this', () => {
+    expect(planTrialLifecycle({ ...base, isOwner: true, status: 'lifetime' })).toEqual({});
+  });
+
+  it('and while billing is OFF the old rung still clears it', () => {
+    expect(planTrialLifecycle({ ...base, subscriptionsEnabled: false, status: 'lifetime' }))
+      .toEqual({ setStatus: 'free' });
+  });
+});

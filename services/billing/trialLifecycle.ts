@@ -71,8 +71,29 @@ export function planTrialLifecycle(input: LifecycleInput): LifecyclePlan {
     return status === 'lifetime' ? { setStatus: 'free' } : {};
   }
 
-  // 4) A lifetime that survived to here is real (owner accounts returned above).
-  if (status === 'lifetime') return {};
+  /**
+   * 4) A lifetime that survived to here CANNOT be real, so it is cleared rather than honoured.
+   *
+   * 2026-09-01 (adversarial audit) — this rung used to return {} on the reasoning that owner accounts
+   * already returned at rung 2, so anything left must be a genuine grant. But there is no lifetime
+   * PRODUCT: purchases.ts states it plainly — 'lifetime' is an owner grant from the allow-list, not
+   * something the store sells. So a non-owner cannot legitimately hold one, and every one that
+   * reaches here is a leftover from the kill-switch period that stamped it on everybody.
+   *
+   * Rung 3 already clears exactly this while billing is OFF. The gap was a player who does not open
+   * the app between that remediation and the flip: their stale grant survives, rung 4 honours it, and
+   * they have the app free forever with no way back. Same population, same staleness, opposite
+   * answer — the two rungs now agree, and the cleared player falls through to the trial below.
+   *
+   * A mis-detected owner is no new risk: rung 3 has stripped that same player every launch since
+   * 08-30, so this changes when the correction happens, not whether.
+   *
+   * Converted straight to a TRIAL rather than to 'free'. initTrial sets the status itself, so this is
+   * one write; setting 'free' would have left them on the `lite` edition until the NEXT launch, which
+   * is the same stranding this file's own tests were written to prevent. Tim's rule stands: the
+   * cohort that was here first converts to trial, never to locked out.
+   */
+  if (status === 'lifetime') return { initTrial: true };
 
   // 5) The trial.
   if (!firstOpenedAt) return { initTrial: true };
