@@ -6434,8 +6434,16 @@ check('Cage multi-swing: per-swing trace + noisy-bay degrade (no lost swings)',
       !/firstStrikeMsRef\.current == null \|\| ballDeparture\) return/.test(sm) &&
       // cache cleared on new capture (reset + startRecording)
       (sm.match(/ballDepartureCacheRef\.current = \{\}/g) || []).length >= 2;
+    /**
+     * 2026-09-01 — this pinned `&& meterMode === 'cage'`, which was the 06-14 fix's ONE surface.
+     * Coverage was cage (this degrade), range (noisyFloorDb 0, cannot bail) and course (neither) —
+     * and course is the mode used whenever a round is active, i.e. outdoors, where wind and traffic
+     * routinely lift the floor past -30dB. The degrade now applies to every mode, so the assertion
+     * requires the mode condition to be ABSENT and forbids it coming back.
+     */
     const noisyDegrade =
-      /if \(res\.kind === 'noisy-environment' && meterMode === 'cage'\)/.test(sm) &&
+      /if \(res\.kind === 'noisy-environment'\) \{/.test(sm) &&
+      !/res\.kind === 'noisy-environment' && meterMode/.test(sm) &&
       /detectStrikes\(samples, \{ thresholdDb, noisyFloorDb: Number\.POSITIVE_INFINITY \}\)/.test(sm);
     return perSwingTrace && noisyDegrade;
   })(),

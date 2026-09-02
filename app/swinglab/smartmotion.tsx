@@ -3691,9 +3691,63 @@ export default function SmartMotion() {
         // be ~30 dB ABOVE the floor) still gates fabrication, so on a noisy-floor bail
         // re-run cage detection with the absolute floor gate disabled (degrade + flag)
         // rather than losing every swing. [[overstrict-gate-lens]]
-        if (res.kind === 'noisy-environment' && meterMode === 'cage') {
-          console.log('[smartmotion] cage noisy floor', res.floorDb, '— degrading to relative-threshold detection (keep swings)');
+        /**
+         * 2026-09-01 (deep SmartMotion pass) — THE DEGRADE NOW COVERS EVERY MODE, NOT JUST CAGE.
+         *
+         * The 06-14 fix was right and was applied to one surface. Coverage was:
+         *   cage    strict floor + this degrade                      protected
+         *   range   noisyFloorDb 0 above, so it can never bail       protected
+         *   course  strict -30 floor and NO degrade                  unprotected
+         *
+         * meterMode is 'course' whenever a round is active — outdoors, where wind, a cart, a road or
+         * playing partners routinely lift the floor past -30dB. So the ONE mode that runs on an actual
+         * golf course was the one that bailed to zero strikes, and a bail is not a small loss: no
+         * strikes means no segments, which means a synthesized whole-clip window, which means the
+         * UNBOUNDED analysis path with a network locate — the same locate that aborted twice in Tim's
+         * log on 09-01 and left the club path with nothing to search. One missing branch is the head
+         * of that entire chain.
+         *
+         * Fabrication is still gated: the relative rule (a strike must clear its LOCAL floor by
+         * ~30dB) is untouched, and that is what actually distinguishes a strike from a loud room.
+         * The absolute floor only ever meant "this room is too loud to bother", which is a judgement
+         * about the room, not evidence about the swing. [[overstrict-gate-lens]] [[no-half-fixes-enforce-every-surface]]
+         */
+        if (res.kind === 'noisy-environment') {
+          console.log(`[smartmotion] noisy floor ${res.floorDb} in ${meterMode} — degrading to relative-threshold detection (keep swings)`);
           res = detectStrikes(samples, { thresholdDb, noisyFloorDb: Number.POSITIVE_INFINITY });
+        }
+        /**
+         * 2026-09-01 (deep SmartMotion pass) — WHY THE MIC HEARD NOTHING, IN NUMBERS.
+         *
+         * Zero strikes is the head of the slow path: no segments -> synthesized whole-clip window ->
+         * unbounded analysis -> network locate. Tim hit that twice on 09-01 in CAGE mode, which
+         * already had the noisy-floor degrade, so the absolute floor was not what stopped it — the
+         * RELATIVE rule was, and nothing recorded by how much.
+         *
+         * `bestMarginDb` is the whole answer: the loudest sample measured against the floor, versus
+         * the threshold it had to clear. A margin just under the threshold means the threshold is
+         * wrong for this setup and should be tuned or calibrated. A margin far under it means the mic
+         * is not hearing the strike at all — a placement or hardware problem no constant can fix.
+         * Retuning a detection constant without that number is guessing.
+         * [[missing-log-entry-is-the-evidence]] [[my-measurement-is-the-least-reliable-part]]
+         */
+        if (res.kind !== 'ok' || res.strikes.length === 0) {
+          try {
+            const peak = samples.reduce((m, sm) => (sm.dB > m ? sm.dB : m), -160);
+            const { useIssueLogStore: ils } = require('../../store/issueLogStore') as typeof import('../../store/issueLogStore');
+            ils.getState().addAppEvent('acoustic_no_strike', {
+              mode: meterMode,
+              kind: res.kind,
+              floorDb: Math.round(res.floorDb),
+              peakDb: Math.round(peak),
+              bestMarginDb: Math.round(peak - res.floorDb),
+              thresholdDb: thresholdDb ?? 30,
+              chipSensitivity: chipOn,
+              calibrationApplied: !!thresholdDb,
+              samples: samples.length,
+            }, 'diag');
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+          } catch { /* a diagnostic must never break a recording */ }
         }
         if (res.kind === 'ok' && res.strikes.length > 0) {
           acousticStrikes = res.strikes;
