@@ -36,6 +36,30 @@
 
 // 2026-05-21 — Consolidation 4: track-player-loader notes gated.
 import { devLog } from './devLog';
+import { shouldForwardTap, classifyTapDevice, type TapDevice } from './tapCoalescer';
+
+/** Shared by BOTH remote listeners — they are one button, so they must share one clock. */
+let lastTapForwardedAt: number | null = null;
+
+/**
+ * Which device is producing the key, resolved at press time rather than cached: a player puts
+ * earbuds in mid-round and the answer changes. Both lookups are defensive — on a build without the
+ * glasses module, or before audio routing has a reading, this still returns a usable class.
+ */
+function currentTapDevice(): TapDevice {
+  let glassesConnected = false;
+  let route: 'phone_speaker' | 'wired' | 'bluetooth' | 'unknown' | undefined;
+  try {
+    const meta = require('./metaWearablesBridge') as typeof import('./metaWearablesBridge');
+    glassesConnected = meta.getGlassesStatusSync?.()?.connected === true;
+  } catch { /* no glasses module on this build */ }
+  try {
+    const audio = require('./audioRoutingService') as typeof import('./audioRoutingService');
+    route = audio.getCurrentRoute?.();
+  } catch { /* routing unavailable — fall through to 'unknown' */ }
+  return classifyTapDevice({ glassesConnected, route });
+}
+
 
 let TrackPlayer: any = null;
 let Event: any = null;
@@ -130,14 +154,32 @@ export async function activateMediaSession(): Promise<void> {
     // playback state — treat both as a single "tap" signal.
     const { notifyEarbudTap } = require('./earbudControl') as typeof import('./earbudControl');
 
-    unsubRemotePlay = TrackPlayer.addEventListener(Event.RemotePlay, () => {
-      console.log('[audit:earbud] media key fired (RemotePlay/Pause)');
+    /**
+     * 2026-09-01 — ONE PRESS, ONE TAP. See services/tapCoalescer.
+     *
+     * These two listeners are the SAME physical button. A press toggles the transport state, so a
+     * device may emit RemotePlay, RemotePause, or both — and this forwarded a tap from each, sending
+     * two taps downstream from one press. listeningSession's 600ms echo guard absorbed that when
+     * STARTING (the duplicate looked like an echo) and not when STOPPING (a duplicate landing just
+     * outside the window is honoured as a fresh tap and reopens the mic that was just closed).
+     *
+     * Coalesced here instead, gated by what is actually producing the key, because glasses, earbuds
+     * and a wire have very different jitter. Both listeners now share one clock.
+     */
+    const onMediaKey = (which: 'play' | 'pause') => {
+      const now = Date.now();
+      const device = currentTapDevice();
+      if (!shouldForwardTap(now, lastTapForwardedAt, device)) {
+        console.log(`[audit:earbud] media key (${which}) coalesced — same press on ${device}, ${now - (lastTapForwardedAt ?? now)}ms after the last`);
+        return;
+      }
+      lastTapForwardedAt = now;
+      console.log(`[audit:earbud] media key fired (${which}) device=${device}`);
       try { notifyEarbudTap(); } catch (e) { console.log('[mediaKeyBridge] tap fwd err', e); }
-    });
-    unsubRemotePause = TrackPlayer.addEventListener(Event.RemotePause, () => {
-      console.log('[audit:earbud] media key fired (RemotePlay/Pause)');
-      try { notifyEarbudTap(); } catch (e) { console.log('[mediaKeyBridge] tap fwd err', e); }
-    });
+    };
+
+    unsubRemotePlay = TrackPlayer.addEventListener(Event.RemotePlay, () => onMediaKey('play'));
+    unsubRemotePause = TrackPlayer.addEventListener(Event.RemotePause, () => onMediaKey('pause'));
 
     isRegistered = true;
   } catch (e) {
