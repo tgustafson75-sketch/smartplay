@@ -64,7 +64,7 @@ export function ShotMapPage({
   width,
   style,
 }: {
-  mode: 'cage' | 'range' | 'course';
+  mode: 'course' | 'range' | 'practice';
   club: ClubId | null;
   handicap: number | null;
   learnedCarry: number | null;
@@ -118,7 +118,7 @@ export function ShotMapPage({
         </Pressable>
       </View>
 
-      {mode === 'cage' ? (
+      {mode === 'practice' ? (
         <CageBullseye
           lateral={lateral}
           dirLabel={dirLabel}

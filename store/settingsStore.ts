@@ -297,7 +297,19 @@ interface SettingsState {
   //   course — GPS distance to green; acoustic mostly off (wind); single-shot
   // Replaces the scattered SpaceType label that was detected but never drove
   // behavior. Smart-defaulted at read time (course when a GPS round is active).
-  environmentMode: 'cage' | 'range' | 'course';
+  /**
+   * 2026-09-01 (Tim) — "If you're not in a round, default that shit to range. If you are in a round,
+   * default that shit to course, period."
+   *
+   * 'cage' is gone. It was a venue nobody selected — it was the DEFAULT, so every player who never
+   * opened this setting was labelled a cage user, and detection thresholds, calibration matching and
+   * five branches in SmartMotion all keyed off that label. Reading it back as if the player had
+   * chosen it is what sent this audit down the wrong path.
+   *
+   * Whether a session is indoors is something to INFER from what the mic and camera actually see,
+   * not something to ask the player and then assume on their behalf.
+   */
+  environmentMode: 'course' | 'range' | 'practice';
   // 2026-06-12 — CAGE geometry the user CONFIRMS (Tim): distance from the ball to the
   // bullseye canvas, and how far the camera sits behind the player. Together they give
   // the true ball→canvas throw distance the cage shot-map (page 3) reasons over, tied
@@ -401,7 +413,7 @@ interface SettingsState {
   setKevinGreetingEnabled: (v: boolean) => void;
   setSmartVisionImagery: (v: 'curated' | 'gps' | 'auto') => void;
   setYardageMode: (v: 'live' | 'preround') => void;
-  setEnvironmentMode: (mode: 'cage' | 'range' | 'course') => void;
+  setEnvironmentMode: (mode: 'course' | 'range' | 'practice') => void;
   setCageCanvasFeet: (feet: number) => void;
   setCameraBehindFeet: (feet: number) => void;
   setChipSensitivity: (on: boolean) => void;
@@ -530,7 +542,7 @@ export const useSettingsStore = create<SettingsState>()(
       kevinGreetingEnabled: true,
       smartVisionImagery: 'auto' as const,
       yardageMode: 'live' as const,
-      environmentMode: 'cage' as const,
+      environmentMode: 'range' as const,   // never a venue the player did not choose
       cageCanvasFeet: 14,
       cameraBehindFeet: 7,
       chipSensitivity: false,
@@ -870,8 +882,19 @@ export const useSettingsStore = create<SettingsState>()(
       // four pillars to that prior single value so the user's preference
       // is preserved across the restructure. After migration the user
       // can customize per pillar in Settings.
-      version: 23,
+      version: 24,
       migrate: (persisted, version) => {
+        /**
+         * 2026-09-01 v24 — RETIRE 'cage'. It was the default, so a persisted 'cage' is almost always
+         * a value nobody picked. Mapped to 'range' rather than to 'practice' for exactly that reason:
+         * carrying it to the indoor mode would preserve the assumption instead of clearing it, and
+         * Tim's rule is that off-round defaults to range.
+         */
+        try {
+          const pe = persisted as { environmentMode?: string } | null;
+          if (pe && typeof pe === 'object' && pe.environmentMode === 'cage') pe.environmentMode = 'range';
+        } catch { /* a migration must never throw — see the note below */ }
+
         /**
          * 2026-08-31 (full-app break test) — `?? {}` catches null and undefined but NOT a primitive.
          * A persisted blob that is a string or a number reached `p.caddieAssignments = …` below and

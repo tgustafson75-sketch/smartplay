@@ -195,7 +195,8 @@ const ICON_ANGLE = {
   putt: require('../../assets/icons/smartmotion/angle-putt.png'),
 } as const;
 const ICON_ENV = {
-  cage: require('../../assets/icons/smartmotion/env-cage.png'),
+  // asset filename kept — it is the same picture; only the MODE was renamed.
+  practice: require('../../assets/icons/smartmotion/env-cage.png'),
   range: require('../../assets/icons/smartmotion/env-range.png'),
   course: require('../../assets/icons/smartmotion/env-course.png'),
 } as const;
@@ -645,10 +646,20 @@ export default function SmartMotion() {
     } catch { return caddiePersonality; }
   }, [caddiePersonality]);
   const language = useSettingsStore((s) => s.language);
-  // 2026-06-10 — Environment mode (cage/range/course). Default 'cage' keeps every
-  // existing path byte-for-byte; 'range' is an additive branch (longer window,
-  // acoustics off, video segmentation). 'course' = single shot, acoustics off
-  // (wind), GPS-side distance is the on-course caddie's job.
+  /**
+   * Environment mode — course / range / practice.
+   *
+   * 2026-09-01 (Tim) — "If you're not in a round, default that shit to range. If you are in a round,
+   * default that shit to course, period." 'cage' is retired: it was the DEFAULT, so every player who
+   * never opened the setting was labelled a cage user, and five branches here plus the detection
+   * thresholds and the calibration match all keyed off that label. The 06-10 note this replaces said
+   * the default "keeps every existing path byte-for-byte", which was true and was exactly the
+   * problem — it made an assumption about where someone was standing and then acted on it.
+   *
+   * RANGE waits for video confirmation of each strike; PRACTICE (indoor net/mat) trusts acoustics as
+   * the final segmentation because the strike is close and the room is small; COURSE is forced by a
+   * live round and is never selectable by hand.
+   */
   const environmentMode = useSettingsStore((s) => s.environmentMode);
   const setEnvironmentMode = useSettingsStore((s) => s.setEnvironmentMode);
   const cageCanvasFeet = useSettingsStore((s) => s.cageCanvasFeet);
@@ -663,7 +674,9 @@ export default function SmartMotion() {
   // single shot) regardless of the practice toggle: you don't want neighbor/
   // wind acoustic detection on the course. Off-round, the toggle wins.
   const isRoundActive = useRoundStore((s) => s.isRoundActive);
-  const effectiveMode: 'cage' | 'range' | 'course' = isRoundActive ? 'course' : environmentMode;
+  // 2026-09-01 (Tim) — in a round it is COURSE, period; otherwise whatever the player set, which
+  // now defaults to RANGE rather than to a venue nobody chose.
+  const effectiveMode: 'course' | 'range' | 'practice' = isRoundActive ? 'course' : environmentMode;
   const recordingMaxSeconds = effectiveMode === 'range' ? RANGE_RECORDING_MAX_SECONDS : RECORDING_MAX_SECONDS;
   const appliedCalibration = useAcousticCalibrationStore((s) => s.appliedCalibration);
   const calibrated = !!appliedCalibration;
@@ -3578,8 +3591,8 @@ export default function SmartMotion() {
     const useMetering = foamOnStart
       ? false
       : chipOnStart
-        ? (captureMode === 'cage' || captureMode === 'course')
-        : (captureMode === 'cage' || captureMode === 'range' || captureMode === 'course');
+        ? (captureMode === 'practice' || captureMode === 'course')
+        : true;   // every mode meters; the old list named all three
     if (useMetering) {
       // Parallel metered audio track for multi-strike detection.
       try {
@@ -3773,7 +3786,9 @@ export default function SmartMotion() {
           } catch { /* grading is additive — never let it break segmentation */ }
           // CAGE: trust acoustics as the final segmentation here. RANGE waits for
           // video confirmation (correlateStrikesWithVideo) in the clip branch.
-          if (meterMode === 'cage') {
+          // PRACTICE (indoor net/mat): acoustics are the final segmentation here, because the
+          // strike is close and the room is small. RANGE and COURSE wait for video confirmation.
+          if (meterMode === 'practice') {
             // 2026-07-08 (segmentation audit #3) — drop rebound thuds (net/floor
             // 0.5–2.5s after the true strike) so a 3-swing set never reads as 4.
             const real = filterReboundStrikes(res.strikes);
@@ -4013,7 +4028,7 @@ export default function SmartMotion() {
         } catch (e) {
           console.log('[smartmotion] range correlation failed (non-fatal):', e);
         }
-      } else if (stopMode === 'cage' && detectedSegments.length <= 1) {
+      } else if (stopMode === 'practice' && detectedSegments.length <= 1) {
         try {
           const pose = await import('../../services/poseDetection');
           // Use the metered duration (no re-probe); only probe as a last resort.
@@ -4461,7 +4476,7 @@ export default function SmartMotion() {
          * rig geometry is now recorded ONLY in cage mode. Everywhere else it stays null and the card
          * simply omits the line — no fabricated context. ([[environment-mode]])
          */
-        const isCage = effectiveMode === 'cage';
+        const isCage = effectiveMode === 'practice';   // rig geometry only means something indoors
         if (estCarry != null || effortPct != null || ballTrace || (isCage && cageCanvasFeet != null) || tempo || biomech) {
           store.setSessionShotMap(sid, {
             estCarry: estCarry ?? null,
@@ -4548,7 +4563,7 @@ export default function SmartMotion() {
     // 2026-08-10 — SECOND write site for the same shot map (the live-commit mirror of the save-time
     // write above). Cage rig geometry has to be gated here too; fixing only one of the two would
     // leave "Canvas 14 ft" reappearing on course via whichever path committed last.
-    const isCageLive = effectiveMode === 'cage';
+    const isCageLive = effectiveMode === 'practice';
     if (!(estCarry != null || effortPct != null || ballTrace || (isCageLive && cageCanvasFeet != null) || tempo || biomech)) return;
     try {
       useCageStore.getState().setSessionShotMap(sid, {
@@ -5308,10 +5323,13 @@ export default function SmartMotion() {
                 />
                 <ToolCardRow
                   icon={<Image source={ICON_ENV[effectiveMode]} style={styles.toolCardIcon} resizeMode="contain" />}
-                  title={isRoundActive ? 'Course (round)' : effectiveMode === 'cage' ? 'Cage' : effectiveMode === 'range' ? 'Range' : 'Course'}
+                  title={isRoundActive ? 'Course (round)' : effectiveMode === 'practice' ? 'Practice' : effectiveMode === 'range' ? 'Range' : 'Course'}
                   desc={isRoundActive ? 'Locked to your live round' : 'Where you are — tap to switch'}
                   disabled={isRoundActive}
-                  onPress={() => { if (!isRoundActive) setEnvironmentMode(environmentMode === 'cage' ? 'range' : environmentMode === 'range' ? 'course' : 'cage'); }}
+                  // Cycle RANGE -> PRACTICE -> RANGE. 'course' is not offered by hand: a round sets
+                  // it and locks this row, so letting someone pick it off-round only ever produced a
+                  // mode that contradicted where they actually were.
+                  onPress={() => { if (!isRoundActive) setEnvironmentMode(environmentMode === 'range' ? 'practice' : 'range'); }}
                 />
                 <ToolCardRow
                   icon={<Image source={ICON_RAIL.selfie} style={styles.toolCardIcon} resizeMode="contain" />}

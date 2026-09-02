@@ -33,9 +33,11 @@ export interface CalibrationSession {
   corrected: DetectedStrike[];
   sampleCount: number;
   notes?: string | null;
-  /** 2026-07-08 (cage audit #1) — the environment this was captured in ('cage' /
-   *  'range' / 'course'), so a calibration is only trusted when it matches where the
-   *  user is now. A home-cage calibration must not silently under-detect at a facility. */
+  /** The environment this was captured in ('practice' / 'range' / 'course'), so a calibration is only
+   *  trusted when it matches where the user is now — an indoor calibration must not silently
+   *  under-detect at a facility. 2026-09-01: 'cage' was renamed to 'practice'; a calibration
+   *  persisted under the old name still classifies as indoor, which is the same answer it always
+   *  gave, so stored calibrations keep working untouched. */
   env?: string | null;
 }
 
