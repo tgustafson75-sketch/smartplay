@@ -644,12 +644,90 @@ const SCEN_22: Scenario = {
   }),
 };
 
+
+/**
+ * SCEN_23 — THE HONESTY GATES, WITH REAL STATE IN THE STORE.
+ *
+ * 2026-09-01. Every fix on 09-01 rests on one rule: a MEASURED thing may narrow a search, and a
+ * PLACEHOLDER may never be presented as a measurement. The desktop sim proves the rule is written in
+ * the code. Only a device with a real store can prove it still holds once a session exists.
+ *
+ * The specific trap: SmartMotion synthesizes a whole-clip segment whose strike is a placeholder when
+ * no swing is detected, and three consumers must refuse it — tempo (which subtracts the anchor without
+ * refining it, so a coarse one makes the RATIO wrong), the club-path window, and frame extraction.
+ * The flag that carries this is `synthesized`, and it is overloaded: it also means "not a real swing".
+ * Flipping it on a measured WINDOW looked correct and would have broken tempo — that happened during
+ * this very session and was caught by following the consumers.
+ */
+const SCEN_23: Scenario = {
+  id: 'C23',
+  title: 'Honesty: a placeholder strike is never treated as a measurement',
+  category: 'critical',
+  run: () => runWithAsserts('C23', 'Honesty: placeholder strike is refused', async (a) => {
+    const { impactAnchorMs, narrowClubPathWindow } = await import('../swing/clubPathWindow');
+    const { poseExtractInputsFor } = await import('../swing/poseExtractKey');
+
+    // 1) A 'manual' shot's stored offset is the 0.6*duration placeholder. Re-centring the club path
+    //    on it points the trace confidently at the wrong four seconds.
+    const fabricated = impactAnchorMs({
+      detectionMethod: 'manual',
+      detectionOffsetSeconds: (11_640 * 0.6) / 1000,
+      rawStartMs: 0, rawEndMs: 11_640,
+    });
+    a.expect('a manual shot offset is refused as an anchor', fabricated === null, `got ${fabricated}`);
+
+    // 2) A HEARD strike is frame-accurate and must be used.
+    const heard = impactAnchorMs({
+      detectionMethod: 'audio_transient', detectionOffsetSeconds: 7,
+      rawStartMs: 0, rawEndMs: 11_640,
+    });
+    a.expect('a heard strike anchors the window', heard === 7000, `got ${heard}`);
+    const win = narrowClubPathWindow(0, 11_640, heard);
+    a.expect('and narrows an 11.6s window to a swing',
+      win.endMs - win.startMs === 4000, `${win.startMs}-${win.endMs}`);
+
+    // 3) A pose-measured impact is accepted, but only INSIDE the window — a per-shot biomech read on
+    //    a carved session can be on a different clock, and that must be self-detecting.
+    a.expect('a pose impact inside the window is accepted',
+      impactAnchorMs({ detectionMethod: 'manual', poseImpactMs: 7000, rawStartMs: 0, rawEndMs: 11_640 }) === 7000);
+    a.expect('a pose impact on a different clock is refused',
+      impactAnchorMs({ detectionMethod: 'manual', poseImpactMs: 25_000, rawStartMs: 3_000, rawEndMs: 20_000 }) === null);
+
+    // 4) Frame extraction must not treat a synthesized strike as acoustic. This is the second consumer
+    //    of the overloaded flag, and the one with no visible symptom when it is wrong.
+    const synth = poseExtractInputsFor(
+      [{ index: 1, strikeMs: 6984, startMs: 0, endMs: 11_640, confidence: 'low', peakDb: 0, confirmed: false, synthesized: true }] as never,
+      0,
+    );
+    a.expect('a synthesized strike is not an acoustic anchor',
+      synth.acousticImpactMs === null, `got ${synth.acousticImpactMs}`);
+    const real = poseExtractInputsFor(
+      [{ index: 1, strikeMs: 7000, startMs: 4500, endMs: 8500, confidence: 'high', peakDb: -22, confirmed: true, synthesized: false }] as never,
+      0,
+    );
+    a.expect('a real strike IS an acoustic anchor', real.acousticImpactMs === 7000, `got ${real.acousticImpactMs}`);
+
+    // 5) The drill verdict must never grade a chunked rep "got it". Contact honesty outranks the
+    //    motion classification, and this is the surface a player reads as "the drill worked".
+    const { deriveDrillVerdict } = await import('../drillVerdict');
+    const chunked = deriveDrillVerdict({
+      drillId: 'over_the_top', drillName: 'Gate', issueId: 'none', issueName: null,
+      severity: null, confidence: 'high', contactMishit: 'fat', ballLaunched: false,
+    });
+    a.expect('the drill verdict resolves', !!chunked, chunked ? 'ok' : 'null');
+    if (chunked) {
+      a.expect('a fat rep is never graded got_it', chunked.grade !== 'got_it', `grade=${chunked.grade}`);
+      a.note('fat-rep verdict', chunked.line);
+    }
+  }),
+};
+
 export const ALL_SCENARIOS: readonly Scenario[] = [
   SCEN_1, SCEN_2, SCEN_3, SCEN_4, SCEN_5, SCEN_6, SCEN_7, SCEN_8, SCEN_9,
   SCEN_10, SCEN_11, SCEN_12, SCEN_13, SCEN_14,
   SCEN_15, SCEN_16, SCEN_17,
   SCEN_18, SCEN_19, SCEN_20,
-  SCEN_21, SCEN_22,
+  SCEN_21, SCEN_22, SCEN_23,
 ] as const;
 
 // Suppress unused-import false positive (i18n must be imported to ensure

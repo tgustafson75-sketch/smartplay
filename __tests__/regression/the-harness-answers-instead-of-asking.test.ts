@@ -126,3 +126,32 @@ describe('one log tells the whole story', () => {
     expect(scen).toMatch(/the issue log accepts entries/);
   });
 });
+
+describe('the device re-proves the honesty gates with real state', () => {
+  const scen = read('services/harness/scenarios.ts');
+
+  it('SCEN_23 exists and is critical', () => {
+    expect(scen).toMatch(/id: 'C23'/);
+    expect(scen).toMatch(/Honesty: a placeholder strike is never treated as a measurement/);
+  });
+
+  it('it refuses the 0.6*duration placeholder and accepts a heard strike', () => {
+    expect(scen).toMatch(/a manual shot offset is refused as an anchor/);
+    expect(scen).toMatch(/a heard strike anchors the window/);
+  });
+
+  it('it covers the SECOND consumer of the overloaded flag — the one with no visible symptom', () => {
+    // Frame extraction treats a non-synthesized strike as ACOUSTIC. Getting this wrong shows nothing
+    // on screen, which is exactly why it needs a check rather than an eye.
+    expect(scen).toMatch(/a synthesized strike is not an acoustic anchor/);
+    expect(scen).toMatch(/a real strike IS an acoustic anchor/);
+  });
+
+  it('and the drill surface a player reads as "it worked"', () => {
+    expect(scen).toMatch(/a fat rep is never graded got_it/);
+  });
+
+  it('the different-clock case is covered — it is what makes a bad window self-detecting', () => {
+    expect(scen).toMatch(/a pose impact on a different clock is refused/);
+  });
+});
