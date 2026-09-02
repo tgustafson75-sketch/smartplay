@@ -37,6 +37,13 @@ const HEAD_TRIM = 0.04;
 const TAIL_TRIM = 0.04;
 /** deriveSwingAnchors needs 5; below that its answer is not worth having. */
 const MIN_USABLE_SAMPLES = 5;
+/**
+ * A budget, because this replaced a slow thing and must never BECOME one. On-device pose is
+ * 100-300ms a frame, so twelve frames is ~2-4s; a device far slower than that is a device where the
+ * network locate is the better bet. Stop sampling when the budget is spent and answer from what has
+ * been collected, which is why MIN_USABLE_SAMPLES is a floor rather than a requirement to finish.
+ */
+const BUDGET_MS = 6_000;
 
 /** Evenly spaced sample times across the usable body of the clip. Exported for the test. */
 export function sampleTimesMs(durationMs: number, count: number = LOCATE_FRAME_COUNT): number[] {
@@ -75,7 +82,9 @@ export async function locateSwingWindowOnDevice(
 
   const samples: MotionSample[] = [];
   let consecutiveMisses = 0;
+  const deadline = Date.now() + BUDGET_MS;
   for (const tMs of times) {
+    if (Date.now() > deadline) break;   // spend what is left on the answer, not on more frames
     // Serial on purpose: concurrent thumbnail reads on one file are the SIGSEGV class this app has
     // already been bitten by, and the media chain serializes them anyway.
     let frame = null;

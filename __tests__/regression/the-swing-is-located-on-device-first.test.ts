@@ -103,6 +103,13 @@ describe('it produces timing, never evidence', () => {
     expect(src).toMatch(/if \(!status\?\.available\) return null/);
   });
 
+  it('has a BUDGET — it replaced a slow thing and must not become one', () => {
+    expect(src).toMatch(/const BUDGET_MS = 6_000/);
+    expect(src).toMatch(/if \(Date\.now\(\) > deadline\) break/);
+    // and it answers from what it collected rather than discarding the work
+    expect(src).toMatch(/samples\.length < MIN_USABLE_SAMPLES\) return null/);
+  });
+
   it('bails early instead of paying for a dozen hopeless decodes', () => {
     expect(src).toMatch(/consecutiveMisses >= 3 && samples\.length === 0\) return null/);
   });
