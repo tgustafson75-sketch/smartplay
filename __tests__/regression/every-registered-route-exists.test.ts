@@ -94,3 +94,45 @@ describe('every route the app NAVIGATES to exists', () => {
     expect([...pushed].filter((r) => !resolves(r)).sort()).toEqual([]);
   });
 });
+
+describe('every dynamic module path resolves', () => {
+  /**
+   * The third string surface, and the one today's renames were most likely to break: this codebase
+   * uses `require('../x')` and `await import('./y')` deliberately, to break import cycles. Those paths
+   * are strings, so moving a file past one leaves a require that compiles and throws at runtime — in
+   * a catch block, which is where several of these live, meaning it would fail SILENTLY.
+   *
+   * The store rename alone moved a module imported by 49 files.
+   */
+  function sourceFiles(dir: string, out: string[] = []): string[] {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (['node_modules', '.git', '.expo', 'ios', 'android', '__tests__'].includes(e.name)) continue;
+      const f = path.join(dir, e.name);
+      if (e.isDirectory()) sourceFiles(f, out);
+      else if (/\.tsx?$/.test(e.name)) out.push(f);
+    }
+    return out;
+  }
+
+  const unresolved: string[] = [];
+  let checked = 0;
+  for (const f of sourceFiles(root)) {
+    const dir = path.dirname(f);
+    for (const m of fs.readFileSync(f, 'utf8').matchAll(/(?:require|await import)\(\s*'(\.[^']+)'\s*\)/g)) {
+      const rel = m[1];
+      if (rel.includes('<') || rel.includes('...')) continue; // doc placeholders, not real paths
+      checked++;
+      const base = path.resolve(dir, rel);
+      const hit = ['.ts', '.tsx', '.js', '.json', '/index.ts', '/index.tsx', ''].some((e) => fs.existsSync(base + e));
+      if (!hit) unresolved.push(`${path.relative(root, f)} -> ${rel}`);
+    }
+  }
+
+  it('the sweep sees the real dynamic-import surface', () => {
+    expect(checked).toBeGreaterThan(300);
+  });
+
+  it('THE CLASS: no dynamic require or import points at a file that moved', () => {
+    expect(unresolved).toEqual([]);
+  });
+});
