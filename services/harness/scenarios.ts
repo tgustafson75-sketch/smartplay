@@ -424,33 +424,65 @@ const SCEN_15: Scenario = {
 
 const SCEN_16: Scenario = {
   id: 'N16',
-  title: 'Club wiring downstream (TYPICAL_SMASH_BY_CLUB.driver vs unknown)',
+  title: 'Club wiring downstream + the untagged club is an ESTIMATE, guarded per element',
   category: 'nice',
+  /**
+   * 2026-09-02 — Tim's device run failed this: "unknown ball speed = 100x1.36 = 136 - expected 136,
+   * got null". The scenario was right and the CODE had drifted.
+   *
+   * The 06-09 honesty pass read the untagged club as an invented number and nulled ball speed
+   * outright. Tim's correction: "we weren't saying fabricated number... lower the guard a bit so we
+   * could get an estimate. We were supposed to put guards BY ELEMENT." An untagged club does not make
+   * the estimate dishonest, it makes it wider - and the fix is confidence + range, not suppression.
+   * Fixed in services/swingMetricsService.ts; these checks now hold the shape of that rule so the
+   * next honesty pass tightens the right knob.
+   *
+   * What "by element" means, asserted element by element: ball speed DOWNGRADES (a low bucket and a
+   * wide range), while smash factor SUPPRESSES - because smash is ball over club, and against a ball
+   * speed derived from an assumed ratio it would only ever hand back the constant.
+   */
   run: () => runWithAsserts('N16', 'Club wiring downstream', async (a) => {
-    // synthesizeSwingMetrics derives ball speed from clubSpeed × typical
-    // smash factor for the club. Driver = 1.48 vs unknown = 1.36.
-    const m1 = synthesizeSwingMetrics({
-      measuredClubSpeedMph: 100,
-      club: 'driver',
-    });
-    const m2 = synthesizeSwingMetrics({
-      measuredClubSpeedMph: 100,
-      club: null,
-    });
-    a.expectEqual('driver ball speed = 100×1.48 = 148', m1.ball_speed.value, 148);
-    a.expectEqual('unknown ball speed = 100×1.36 = 136', m2.ball_speed.value, 136);
-    a.expect('driver ≠ unknown — club wiring is live', m1.ball_speed.value !== m2.ball_speed.value);
+    // 1) THE CLUB TAG REACHES THE DERIVATION. Two clubs that are both KNOWN, with different typical
+    //    smash ratios - if the tag were ignored these would be identical.
+    const m1 = synthesizeSwingMetrics({ measuredClubSpeedMph: 100, club: 'driver' });
+    const m8i = synthesizeSwingMetrics({ measuredClubSpeedMph: 100, club: '8I' });
+    a.expectEqual('driver ball speed = 100x1.48 = 148', m1.ball_speed.value, 148);
+    a.expectEqual('8i ball speed = 100x1.36 = 136', m8i.ball_speed.value, 136);
+    a.expect('driver != 8i - the club tag reaches the derivation', m1.ball_speed.value !== m8i.ball_speed.value);
 
-    // 2026-08-06 (Tim — "smash + speed factors we can derive from... impact... acoustics when they can be
+    // 2) THE UNTAGGED CLUB STILL GETS ITS ESTIMATE - the generic 1.36, not a withheld dash.
+    const m2 = synthesizeSwingMetrics({ measuredClubSpeedMph: 100, club: null });
+    a.expectEqual('unknown ball speed = 100x1.36 = 136', m2.ball_speed.value, 136);
+
+    // 3) ...AND IT IS GUARDED AS AN ESTIMATE, not presented as a reading. This is the half that makes
+    //    check 2 honest: a low bucket, a visible range, and a note saying what to do about it.
+    a.expectEqual('untagged ball speed is LOW confidence', m2.ball_speed.confidenceLabel, 'low');
+    a.expect('untagged ball speed carries a range, not a bare number',
+      Array.isArray(m2.ball_speed.range), `range=${JSON.stringify(m2.ball_speed.range)}`);
+    a.expect('the note says the club is untagged', (m2.ball_speed.estimateNote ?? '').includes('not tagged'),
+      m2.ball_speed.estimateNote ?? '(none)');
+    // A TAGGED club must stay sharper than an untagged one, or the downgrade is cosmetic.
+    a.expect('tagged is more confident than untagged', m8i.ball_speed.confidence > m2.ball_speed.confidence,
+      `8i ${m8i.ball_speed.confidence} vs untagged ${m2.ball_speed.confidence}`);
+
+    // 4) THE NEXT ELEMENT GUARDS ITSELF. Smash is ball over club; against a ball speed that came from
+    //    an assumed ratio it is that constant every swing, so it stays suppressed in BOTH cases - the
+    //    lowered ball-speed guard must not leak into it.
+    a.expect('untagged -> smash still suppressed (would be the constant)', m2.smash_factor.value == null,
+      `got ${JSON.stringify(m2.smash_factor.value)}`);
+    a.expect('tagged-but-derived -> smash still suppressed', m8i.smash_factor.value == null,
+      `got ${JSON.stringify(m8i.smash_factor.value)}`);
+
+    // 2026-08-06 (Tim - "smash + speed factors we can derive from... impact... acoustics when they can be
     // picked up"). A real ACOUSTIC ball speed against a club-speed estimate yields a per-swing SMASH
     // ESTIMATE (previously suppressed). It's an estimate (source 'pose', not truth-grade), and it VARIES
-    // with the acoustic ball reading — so it's a real per-swing signal, not the circular typical constant.
+    // with the acoustic ball reading - so it's a real per-swing signal, not the circular typical constant.
     const m3 = synthesizeSwingMetrics({ measuredClubSpeedMph: 100, measuredBallSpeedMph: 140, club: 'driver' });
     a.expectEqual('acoustic smash = 140/100 = 1.40', m3.smash_factor.value, 1.4);
     a.expectEqual('smash is estimate-grade (source pose), not measured', m3.smash_factor.source, 'pose');
     // Without an acoustic ball reading, smash stays SUPPRESSED (no circular constant / fabricated number).
     const m4 = synthesizeSwingMetrics({ measuredClubSpeedMph: 100, club: 'driver' });
-    a.expect('no acoustic → smash null (no fabricated constant)', m4.smash_factor.value == null);
+    a.expect('no acoustic -> smash null (no fabricated constant)', m4.smash_factor.value == null);
   }),
 };
 
@@ -622,11 +654,77 @@ const SCEN_22: Scenario = {
     // 1) REACHABILITY, and what it costs. The dead-host guard aborts a real analysis on two failed
     //    probes, so the probe's own latency is the thing that decides whether a good read survives.
     if (base) {
-      await a.within('health probe answers quickly', 3_000, async () => {
-        const r = await fetch(`${base.replace(/\/+$/, '')}/api/health?lite=1`, { method: 'GET' });
-        a.note('health status', String(r.status));
-        return r.ok;
-      });
+      /**
+       * 2026-09-02 (Tim's device run, TWICE: "health probe answers quickly — 71423ms (budget 3000ms)"
+       * and, an hour earlier, "threw after 126099ms: Network request failed").
+       *
+       * TWO DEFECTS, one line. The first is this check's own: `fetch` had no signal, so a step
+       * budgeted at 3 seconds ran for 126 — 96% of a 131-second run — and the number it produced,
+       * "126099ms", is a duration the app would never wait. An unbounded probe inside a bounded
+       * budget measures something that does not happen in the product.
+       *
+       * The second is the finding underneath it, and it is the one that matters. /api/health?lite=1
+       * is a static JSON return with no probes and no upstream calls; it answers in ~0.2s. So the
+       * host is not slow — the path from THIS device to it is, by two orders of magnitude, twice in
+       * twelve minutes. That has a direct product consequence: `armDeadHostGuard` in
+       * services/poseDetection.ts decides whether to abort a real swing analysis by probing this
+       * exact URL on a 3s → 6s → 12s ladder. A single elapsed number cannot say whether that guard
+       * would have survived; the ladder can, so the harness now runs the ladder.
+       *
+       * Each rung is bounded and reported. The verdict is the user-visible sentence: if all three
+       * rungs time out here, a real swing analysis on this network is aborted as `dead_host`, and
+       * that is a swing Tim loses — which is precisely the log line from 09-01 that bought the third
+       * probe. [[the-client-must-be-the-last-to-give-up]] [[a-budget-must-fit-what-runs-inside-it]]
+       */
+      const url = `${base.replace(/\/+$/, '')}/api/health?lite=1`;
+      // Bounded exactly like the real guard's rung — an abort here is the app's own behaviour, not a
+      // harness artefact.
+      const rung = async (ms: number): Promise<{ ok: boolean; tookMs: number; note: string }> => {
+        const t0 = Date.now();
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), ms);
+        try {
+          const r = await fetch(url, { method: 'GET', signal: ctrl.signal });
+          return { ok: r.ok, tookMs: Date.now() - t0, note: `HTTP ${r.status}` };
+        } catch (e) {
+          const msg = e instanceof Error ? e.message.slice(0, 80) : String(e).slice(0, 80);
+          // An abort at the budget and a hard network error are different diagnoses: one is a host
+          // that is merely slower than the rung, the other is a path that is not working at all.
+          return { ok: false, tookMs: Date.now() - t0, note: ctrl.signal.aborted ? `timed out at ${ms}ms` : msg };
+        } finally {
+          clearTimeout(timer);
+        }
+      };
+
+      const p1 = await rung(3_000);
+      a.expect('health probe answers within the guard\'s first rung (3s)', p1.ok, `${p1.tookMs}ms · ${p1.note}`);
+
+      // Only walk the rest of the ladder when the first rung failed — on a healthy network this costs
+      // nothing, and on a sick one it produces the whole verdict in one run.
+      let p2 = p1, p3 = p1;
+      if (!p1.ok) {
+        p2 = await rung(6_000);
+        a.expect('…or the second rung (6s)', p2.ok, `${p2.tookMs}ms · ${p2.note}`);
+        if (!p2.ok) {
+          p3 = await rung(12_000);
+          a.expect('…or the patient third rung (12s)', p3.ok, `${p3.tookMs}ms · ${p3.note}`);
+        }
+      }
+
+      // THE VERDICT, in the words of the consequence rather than the measurement.
+      const guardWouldFire = !p1.ok && !p2.ok && !p3.ok;
+      a.expect('the dead-host guard would NOT abort a real swing analysis here', !guardWouldFire,
+        guardWouldFire
+          ? 'all three rungs silent → a real locate is aborted as dead_host and the swing is lost, ' +
+            'even though /api/health?lite=1 is a static return that answers in ~0.2s off-device'
+          : `first answer after ${(p1.ok ? p1 : p2.ok ? p2 : p3).tookMs}ms`);
+
+      // A SECOND probe once the connection is warm. A slow first and a fast second is connection
+      // setup (DNS / TCP / TLS); two slow ones are the path itself — different problems, different fixes.
+      if (p1.ok || p2.ok || p3.ok) {
+        const warm = await rung(3_000);
+        a.note('warm probe', `${warm.tookMs}ms · ${warm.note} (cold was ${p1.tookMs}ms — a fast warm probe means connection setup, not the path)`);
+      }
     } else {
       a.expect('health probe answers quickly', false, 'no API base URL — every network stage will fail');
     }
