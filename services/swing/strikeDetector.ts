@@ -195,7 +195,7 @@ export function detectStrikes(samples: MeterSample[], opts?: DetectStrikesOption
 
   // Fourth pass: debounce. Walk in time order; when two sharp peaks are within
   // minDebounceMs (default MIN_DEBOUNCE_MS), keep the EARLIEST.
-  // 2026-07-08 (segmentation audit #5) — was keep-the-LOUDER: in a cage the ball
+  // 2026-07-08 (segmentation audit #5) — was keep-the-LOUDER: in a practice the ball
   // reaches the net 50-150ms after impact, and when the phone sits nearer the net
   // the net hit meters louder — the collapsed strike's timestamp snapped to the NET
   // hit, inflating tempo's downswing by the flight time and sliding the departure

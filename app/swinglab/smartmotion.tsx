@@ -145,13 +145,13 @@ import { ShotMapPage } from '../../components/smartmotion/ShotMapPage';
 import { getApiBaseUrl } from '../../services/apiBase';
 import { drillFocusRead } from '../../services/swing/drillFocusRead';
 
-const RECORDING_MAX_SECONDS = 60; // cage / course — open window, player swings freely
+const RECORDING_MAX_SECONDS = 60; // practice / course — open window, player swings freely
 const RANGE_RECORDING_MAX_SECONDS = 120; // range — longer window for a multi-swing session
 // Default ball-box position (normalized). Lower-center of the frame, where a
 // teed/placed ball typically sits in a down-the-line or face-on setup. Shown
 // by default so the user just lines their ball up to it — confirmatory only.
 // 2026-06-11 — lower-CENTER default on the DTL dashed center line. Grounded in Tim's
-// real cage clip (Downloads 7790): in his framing the ball at address sits ~mid-to-
+// real practice clip (Downloads 7790): in his framing the ball at address sits ~mid-to-
 // lower frame (≈0.45–0.6 depending on how tight the DTL crop is), NOT at the very
 // bottom — a box "anchored to the bottom" (0.8) lands in the leaves below the mat,
 // further from the ball. So the static default is a sane lower-center; the REAL
@@ -170,7 +170,7 @@ const REVIEW_CARD_TITLES: Record<ReviewCardKey, string> = {
 };
 // 2026-06-11 — chip/short-game strike threshold (dB above the noise floor). A chip's
 // impact is ~half a full strike's energy, so the default ~30dB misses it; ~18dB lets
-// the quieter pitch/chip register. Used only when chipSensitivity is on (cage = alone,
+// the quieter pitch/chip register. Used only when chipSensitivity is on (practice = alone,
 // so the few extra candidates it admits are harmless; range still vision-confirms).
 const CHIP_STRIKE_THRESHOLD_DB = 18;
 /** 2026-08-17 — how recent a watch swing must be to stand in for a missing camera tempo read.
@@ -651,7 +651,7 @@ export default function SmartMotion() {
    *
    * 2026-09-01 (Tim) — "If you're not in a round, default that shit to range. If you are in a round,
    * default that shit to course, period." 'cage' is retired: it was the DEFAULT, so every player who
-   * never opened the setting was labelled a cage user, and five branches here plus the detection
+   * never opened the setting was labelled a practice user, and five branches here plus the detection
    * thresholds and the calibration match all keyed off that label. The 06-10 note this replaces said
    * the default "keeps every existing path byte-for-byte", which was true and was exactly the
    * problem — it made an assumption about where someone was standing and then acted on it.
@@ -775,7 +775,7 @@ export default function SmartMotion() {
   const [meteringActive, setMeteringActive] = useState(false);
   const [segments, setSegments] = useState<SwingSegment[]>([]);
   // 2026-06-12 (phase 1b) — mirror so runAnalysis (a useCallback) can read the FULL set
-  // of detected swings without a stale closure, to carve a multi-swing cage clip into N
+  // of detected swings without a stale closure, to carve a multi-swing practice clip into N
   // per-swing library shots instead of collapsing it to one.
   const segmentsRef = useRef<SwingSegment[]>([]);
   useEffect(() => { segmentsRef.current = segments; }, [segments]);
@@ -3021,7 +3021,7 @@ export default function SmartMotion() {
           /**
            * 2026-08-19 — the gate that used to stand here is GONE, not reordered.
            *
-           * On the range and in the cage it could be moved below strike/video fusion, because a
+           * On the range and in practice it could be moved below strike/video fusion, because a
            * microphone was there to vouch for a swing the camera was unsure about. A library or
            * uploaded clip carries NO acoustics at all (that is the whole reason this path segments
            * from video), so there is no second signal arriving later and nothing to reorder. The gate
@@ -3571,11 +3571,14 @@ export default function SmartMotion() {
     const roundActive = useRoundStore.getState().isRoundActive;
     const captureMode = roundActive ? 'course' : useSettingsStore.getState().environmentMode;
     const maxSec = captureMode === 'range' ? RANGE_RECORDING_MAX_SECONDS : RECORDING_MAX_SECONDS;
-    // 2026-06-11 — mode-aware metering (Tim): a chip's strike is too quiet to read over
-    // a noisy RANGE, so CHIP mode shuts range acoustics off (video-only) and instead
-    // enables them for the QUIET spots — cage + course (off-round; during a live round
-    // the mic belongs to voice listening, so course stays silent then). Default (no
-    // chip): cage (acoustic multi-swing) + range (acoustic candidates + vision).
+    // 2026-06-11 — mode-aware metering (Tim): a chip's strike is too quiet to read over a noisy
+    // RANGE, so CHIP mode shuts range acoustics off (video-only) and enables them for the quiet
+    // spots — practice + course.
+    // 2026-09-01 — corrected. This used to end "during a live round the mic belongs to voice
+    // listening, so course stays silent then", which the 08-08 note twenty lines below already
+    // contradicted and the code has not done since: course meters during a live round too. A
+    // comment that disagrees with the comment under it is worse than no comment — it is the class
+    // that sent this audit down a wrong path today. [[a-stale-header-is-a-source-someone-trusts]]
     const chipOnStart = useSettingsStore.getState().chipSensitivity;
     // 2026-08-01 (Tim — foam/no-ball mode). No audible strike to hear → don't run the metered audio
     // track at all; swings come from the VIDEO locator instead (see the segmentation branch below).
@@ -3798,7 +3801,7 @@ export default function SmartMotion() {
             }));
             setHeardStrikeCount(filterReboundStrikes(res.strikes).length);
           } catch { /* grading is additive — never let it break segmentation */ }
-          // CAGE: trust acoustics as the final segmentation here. RANGE waits for
+          // PRACTICE: trust acoustics as the final segmentation here. RANGE waits for
           // video confirmation (correlateStrikesWithVideo) in the clip branch.
           // PRACTICE (indoor net/mat): acoustics are the final segmentation here, because the
           // strike is close and the room is small. RANGE and COURSE wait for video confirmation.
@@ -3907,7 +3910,7 @@ export default function SmartMotion() {
       // agree. Degrades cleanly: video-only if nothing was heard, acoustic-only if
       // the locator came up empty. COURSE (incl. any live round) stays single-shot
       // and falls through to single-swing localization (runAnalysis, no segment).
-      // CAGE: trust the acoustic segments, but cross-check the video locator when
+      // PRACTICE: trust the acoustic segments, but cross-check the video locator when
       // ≤1 strike (audit C1 — a loud/open bay zeroes the detector; don't collapse a
       // 6-swing reel to "1 of 1"). That fallback only ADDS missed swings, never reduces.
       const rawStopMode = useRoundStore.getState().isRoundActive
@@ -4061,7 +4064,7 @@ export default function SmartMotion() {
           if (durMs > 0) setVideoDurationMs(durMs);
           // 2026-06-12 (analysis speed) — locateSwings is a cold-Lambda network call
           // (≤30s). It's only worth it on a LONG clip where the swing's position is
-          // genuinely unknown. A SHORT cage clip basically IS the swing — skip the locate
+          // genuinely unknown. A SHORT practice clip basically IS the swing — skip the locate
           // and let the synthesized whole-clip window (below) drive a fast BOUNDED read.
           // This is the single biggest first-try-NO-READ fix: a missed strike used to
           // collapse the fast path into locateSwings + an unbounded re-locate (30-70s).
@@ -4519,7 +4522,7 @@ export default function SmartMotion() {
          * on course, where the ball flies to a real target.
          *
          * `effectiveMode` already resolves this correctly (an active round forces 'course'), so the
-         * rig geometry is now recorded ONLY in cage mode. Everywhere else it stays null and the card
+         * rig geometry is now recorded ONLY in practice mode. Everywhere else it stays null and the card
          * simply omits the line — no fabricated context. ([[environment-mode]])
          */
         const isCage = effectiveMode === 'practice';   // rig geometry only means something indoors

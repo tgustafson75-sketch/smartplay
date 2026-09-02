@@ -993,7 +993,7 @@ export default function SwingDetail() {
     if (session?.biomechanics !== undefined) return;
     if (poseBackfillRef.current === swing_id) return;
     // 2026-06-11 (cage test) — state-aware: do NOT full-clip-backfill biomech on
-    // a cage multi-swing session. Its clip is a ~60s recording with several
+    // a practice multi-swing session. Its clip is a ~60s recording with several
     // swings, so analyzeSwingFromVideo would "watch the whole minute" as one
     // swing — the 1-min-stuck Tim hit in the library. Cage biomech is computed
     // per-swing by SmartMotion's Motion step; this backfill is only for legacy
@@ -1015,7 +1015,7 @@ export default function SwingDetail() {
      * question; knowing where the swing is becomes the question, which is the thing that actually
      * mattered all along.
      *
-     * The live_cage skip stays for now — a cage clip is genuinely several swings, and the answer to
+     * The live_cage skip stays for now — a practice clip is genuinely several swings, and the answer to
      * that is partitioning, not a longer window. That is the next step, kept separate so this one
      * stays verifiable.
      */

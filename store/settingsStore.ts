@@ -304,7 +304,7 @@ interface SettingsState {
    * default that shit to course, period."
    *
    * 'cage' is gone. It was a venue nobody selected — it was the DEFAULT, so every player who never
-   * opened this setting was labelled a cage user, and detection thresholds, calibration matching and
+   * opened this setting was labelled a practice user, and detection thresholds, calibration matching and
    * five branches in SmartMotion all keyed off that label. Reading it back as if the player had
    * chosen it is what sent this audit down the wrong path.
    *
@@ -321,7 +321,7 @@ interface SettingsState {
   // 2026-06-11 — chip/short-game sensitivity. A chip's impact is ~half the energy
   // of a full strike (Tim's cage test: clear sound, but the detector missed it),
   // so when ON we drop the strike threshold so quiet pitch/chip strikes register.
-  // Trades a few more false candidates for not missing the shot — fine in the cage.
+  // Trades a few more false candidates for not missing the shot — fine in practice.
   chipSensitivity: boolean;
 
   // 2026-08-01 (Tim — "turn off acoustic detection so you can analyze with no ball strike or foam

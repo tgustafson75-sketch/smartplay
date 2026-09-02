@@ -127,7 +127,7 @@ export interface SwingShot {
 //   vision:        camera read the number stamped on the club sole
 export type ClubSwitchSource = 'session_start' | 'manual' | 'voice' | 'vision';
 
-// Phase BL — one entry per club segment within a cage session. The user
+// Phase BL — one entry per club segment within a practice session. The user
 // can switch clubs mid-session; each segment records when the switch
 // happened, which shots belong to it, and how the switch was triggered.
 // Old sessions without segments still render correctly (consumers fall
@@ -488,7 +488,7 @@ interface SwingSessionState {
   }>;
   cameraAlignment: CameraAlignment | null;
   // Phase AQ — rolling window of synthesized practice insights. Each entry
-  // is a one-paragraph Sonnet summary of a cage session (what to remember
+  // is a one-paragraph Sonnet summary of a practice session (what to remember
   // for next round). Last 5 retained. Injected into pre-round briefing.
   recentInsights: { session_id: string; club: string; insight: string; created_at: number }[];
   // Phase BL — UI signal: when true, the active cage session screen
