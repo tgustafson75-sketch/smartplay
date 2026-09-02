@@ -1052,7 +1052,7 @@ export const useRoundStore = create<RoundState>()(
         // this one. Best-effort; never blocks the round from starting.
         try {
           // eslint-disable-next-line @typescript-eslint/no-require-imports
-          require('../services/voice/pipecatHistory').clearPipecatHistory();
+          require('../services/voice/conversationHistory').clearConversationHistory();
         } catch { /* voice history is additive */ }
         // FIX B5 — explicitly bind selectedTee and transportMode from opts so
         // they are never sourced from ambient store state. prev.selectedTee /

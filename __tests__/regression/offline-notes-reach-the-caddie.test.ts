@@ -1,7 +1,7 @@
 /**
  * 2026-08-30 — WHAT THE PLAYER SAID WITH NO SIGNAL HAS TO REACH THE CADDIE.
  *
- * The capture half shipped 2026-07-04: usePipecatVoice calls captureOfflineStatement whenever a turn
+ * The capture half shipped 2026-07-04: useCaddieTabMic calls captureOfflineStatement whenever a turn
  * cannot reach the brain, and roundStore calls markRoundNotesIngested at round end. The READ half
  * never connected. peekOfflineNotesBlock — the function whose entire job is handing those notes to
  * the live caddie once signal returns — had zero callers anywhere in the app.

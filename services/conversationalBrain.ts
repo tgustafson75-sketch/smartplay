@@ -31,7 +31,7 @@
 
 import { askCaddie } from './caddieBrain';
 import { mayTalkToCaddie } from './featureAccess';
-import { setPipecatHistory, clearPipecatHistory } from './voice/pipecatHistory';
+import { setConversationHistory, clearConversationHistory } from './voice/conversationHistory';
 import { useSettingsStore } from '../store/settingsStore';
 
 export interface BrainReply {
@@ -45,7 +45,7 @@ export interface BrainReply {
 
 const NO_ANSWER: BrainReply = { text: null, audioBase64: null, toolActions: [], source: 'none' };
 
-export function clearConversationalHistory(): void { clearPipecatHistory(); }
+export function clearConversationalHistory(): void { clearConversationHistory(); }
 
 /**
  * Route a conversational utterance to the caddie.
@@ -129,7 +129,7 @@ export async function generateProactiveLine(
     overrides: { is_proactive: true, isRoundActive: false },
   });
   if (!turn?.text) return NO_ANSWER;
-  if (opts?.seedHistory) setPipecatHistory([{ role: 'assistant', content: turn.text }]);
+  if (opts?.seedHistory) setConversationHistory([{ role: 'assistant', content: turn.text }]);
   return { text: turn.text, audioBase64: turn.audioBase64, toolActions: turn.toolActions, source: 'kevin' };
 }
 
@@ -148,6 +148,6 @@ export async function generateProactiveOpener(opts?: { timeoutMs?: number }): Pr
    * never said that sentence, and leaving it in makes the caddie answer the instruction instead of
    * the person.
    */
-  setPipecatHistory([{ role: 'assistant', content: turn.text }]);
+  setConversationHistory([{ role: 'assistant', content: turn.text }]);
   return { text: turn.text, audioBase64: turn.audioBase64, toolActions: turn.toolActions, source: 'kevin' };
 }

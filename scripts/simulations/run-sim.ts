@@ -12357,7 +12357,7 @@ check('LOCK: the glasses consent round trip can actually come home',
 
 check('LOCK: BOTH audio paths are cold-aware and neither can fail silently',
   (() => {
-    const pipe = read('hooks/usePipecatVoice.ts');
+    const pipe = read('hooks/useCaddieTabMic.ts');
     const tap = read('hooks/useVoiceCaddie.ts');
     // 2026-08-19 (Tim, testing live: "it's going straight to failure state… I'm also not seeing any
     // text when he talks", then "eventually it did work"). Two audio entries existed and only ONE
@@ -12680,7 +12680,7 @@ check('LOCK: every mic entry point fails the same way — tap, earbud and text b
 check('LOCK: every path that uploads audio gets a SECOND attempt before it gives up',
   (() => {
     const vc = read('hooks/useVoiceCaddie.ts');
-    const pc = read('hooks/usePipecatVoice.ts');
+    const pc = read('hooks/useCaddieTabMic.ts');
     const vs = read('services/voiceService.ts');
     /**
      * 2026-08-20 (adversarial audit of the same day's voice work — "check work", assume the fix is
@@ -12688,7 +12688,7 @@ check('LOCK: every path that uploads audio gets a SECOND attempt before it gives
      *
      * Three separate places upload recorded audio to /api/transcribe: the tap path
      * (useVoiceCaddie), the earbud/hands-free path (voiceService.captureUtterance) and the pipecat
-     * brain path (usePipecatVoice). Two of them retried a failed attempt. The pipecat path fired a
+     * brain path (useCaddieTabMic). Two of them retried a failed attempt. The pipecat path fired a
      * SINGLE fetch and, on the first AbortError, went straight to speakDeadEnd('transcribe_timeout')
      * — which is precisely the "goes straight to failure state" Tim reported, on precisely the turn
      * (first, cold) where one attempt is least likely to land.

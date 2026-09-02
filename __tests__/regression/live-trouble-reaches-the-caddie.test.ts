@@ -98,7 +98,7 @@ describe('it reaches the brain through the ONE shared block', () => {
       'services/listeningSession.ts',
       'services/conversationalBrain.ts',
       'services/intents/inRoundDiagnosticHandler.ts',
-      'hooks/usePipecatVoice.ts',
+      'hooks/useCaddieTabMic.ts',
     ]) {
       const src = read(f);
       const composesItself = /getCaddieContext\(/.test(src);

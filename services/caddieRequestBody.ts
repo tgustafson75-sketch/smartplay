@@ -153,7 +153,7 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     /**
      * 2026-08-30 (orphan sweep) — WHAT THE PLAYER SAID WITH NO SIGNAL, which no brain ever heard.
      *
-     * voiceLogService has captured offline statements since 07-04 (usePipecatVoice calls it when a
+     * voiceLogService has captured offline statements since 07-04 (useCaddieTabMic calls it when a
      * turn can't reach the brain) and roundStore marks them "ingested" at round end. Nothing ever
      * INGESTED them: peekOfflineNotesBlock — the function whose whole job is handing them to the
      * live caddie once signal returns — had zero callers. Notes were collected, carried all round,
@@ -524,7 +524,7 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * getting all the generics out."
      *
      * The 08-22 unification joined the mic (useVoiceCaddie) and the text box (useKevin). It did NOT
-     * join the other two: the caddie-tab voice hook (usePipecatVoice) and the earbud/watch path
+     * join the other two: the caddie-tab voice hook (useCaddieTabMic) and the earbud/watch path
      * (listeningSession → conversationalBrain) both built a SECOND payload — services/pipecatContext
      * — and posted it to a SECOND brain. So the split he could hear was still live on the two
      * surfaces he actually uses hands-free.
@@ -701,7 +701,7 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       return screenContextForPrompt();
     }, null),
     /**
-     * ONE conversation, whichever mic. Every path already writes to services/voice/pipecatHistory;
+     * ONE conversation, whichever mic. Every path already writes to services/voice/conversationHistory;
      * only the pipecat paths ever READ it back into a request, so a turn taken on the earbud was
      * invisible to the next turn typed — the caddie forgot mid-conversation when he changed surface.
      */
@@ -709,7 +709,7 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       /**
        * 2026-08-23 — THE UNION OF BOTH HISTORIES, because there are two.
        *
-       * `services/voice/pipecatHistory` is written by every turn that goes through caddieBrain (the
+       * `services/voice/conversationHistory` is written by every turn that goes through caddieBrain (the
        * earbud, the caddie-tab mic, the diagnostic). `services/conversationState` is written by
        * useVoiceCaddie — SIXTEEN call sites — and by nothing else. Neither can see the other's
        * turns, so the caddie's memory of the conversation depended on which surface you last used:
@@ -721,11 +721,11 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
        * job from feeding the prompt.
        */
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { getPipecatHistory } = require('./voice/pipecatHistory') as typeof import('./voice/pipecatHistory');
+      const { getConversationHistory } = require('./voice/conversationHistory') as typeof import('./voice/conversationHistory');
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { getRecentTurns } = require('./conversationState') as typeof import('./conversationState');
 
-      const fromPipecat = (getPipecatHistory() ?? []).map(
+      const fromPipecat = (getConversationHistory() ?? []).map(
         (m: { role: string; content: string }) => ({ role: m.role === 'assistant' ? 'kevin' : 'user', text: m.content }),
       );
       const fromBuffer = (getRecentTurns() ?? []).map((t) => ({ role: t.role as 'user' | 'kevin', text: t.text }));

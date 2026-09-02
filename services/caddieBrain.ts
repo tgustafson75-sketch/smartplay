@@ -7,7 +7,7 @@
  *
  * On 08-22 the mic (useVoiceCaddie) and the text box (useKevin) were joined onto one payload
  * builder. That was half the job, and he could still hear the other half: the caddie-tab voice hook
- * (usePipecatVoice) and the earbud / watch / badge path (listeningSession → conversationalBrain)
+ * (useCaddieTabMic) and the earbud / watch / badge path (listeningSession → conversationalBrain)
  * were still building a SECOND payload — services/pipecatContext, a differently-shaped nested object
  * — and posting it to a SECOND brain at /api/pipecat-turn.
  *
@@ -30,7 +30,7 @@
 import { getApiBaseUrl } from './apiBase';
 import { mayTalkToCaddie } from './featureAccess';
 import { buildCaddieRequestBody, type CaddieRequestExtras } from './caddieRequestBody';
-import { appendPipecatTurn } from './voice/pipecatHistory';
+import { appendConversationTurn } from './voice/conversationHistory';
 import type { ToolAction } from '../types/toolAction';
 
 export interface CaddieTurn {
@@ -102,7 +102,7 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
 
     // ONE conversation, whichever surface asked. Written here so no caller can forget it — the
     // reason the caddie used to lose the thread when the player switched from earbud to typing.
-    appendPipecatTurn(extras.message, text);
+    appendConversationTurn(extras.message, text);
 
     return { text, audioBase64: raw.audioBase64 ?? null, toolActions };
   } catch {

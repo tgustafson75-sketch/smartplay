@@ -1484,16 +1484,16 @@ async function openSession() {
               });
               chatSpoken = true;
             }
-          } catch (e) { console.log('[listeningSession] pipecat conversational failed → kevin', e); }
+          } catch (e) { console.log('[listeningSession] conversational turn failed', e); }
           /**
            * ONE RETRY, SAME QUESTION, SAME CADDIE — not a ladder to a lesser one.
            *
            * 2026-08-27 — this was a raw /api/kevin fetch with its own hand-built body, its own
            * timeout, its own response-shape parsing and its own error handling: the last brain
            * transport in this file that did not go through askCaddie. It also never wrote the turn
-           * to the shared conversation history, because appendPipecatTurn has exactly ONE caller
+           * to the shared conversation history, because appendConversationTurn has exactly ONE caller
            * (caddieBrain), so any turn this block answered was invisible to the NEXT one — the very
-           * amnesia services/voice/pipecatHistory was created to end.
+           * amnesia services/voice/conversationHistory was created to end.
            *
            * caddieBrain's own header says the fallback ladder was deleted on 08-23 ("four different
            * caddies, each thinner than the last, and the player could not tell which one had

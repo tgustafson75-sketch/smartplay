@@ -20,7 +20,7 @@ export type BrainSettings = {
   continuousConversationMode: boolean;
   responseMode: 'short' | 'neutral' | 'detailed';
   cecilyMode: boolean;
-  /** The ACTIVE persona's 0–100 intensity dial (pipecat-turn / kevin.ts scale cadence off this). */
+  /** The ACTIVE persona's 0–100 intensity dial (kevin.ts scales cadence off this). */
   personaIntensity: number;
 };
 

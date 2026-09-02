@@ -1,10 +1,13 @@
 /**
- * Pipecat voice orchestrator hook.
+ * THE CADDIE-TAB MIC — one voice turn, end to end.
  *
- * Phase 2 (active): text-in / text+tools-out via POST /turn.
- *   Audio: expo-av → Whisper STT (unchanged) → transcript
- *   Brain: Pipecat /turn → Claude claude-sonnet-4-6 tool_use → response + tool_actions
- *   TTS: existing speak() path
+ * 2026-09-01 — renamed off "pipecat". The route that word named is deleted, and the header below
+ * described a pipeline this hook has not used since the unification: it posts the ONE payload to
+ * /api/kevin through askCaddie, like every other surface.
+ *
+ *   Audio: expo-av → Whisper STT (/api/transcribe) → transcript
+ *   Brain: askCaddie → /api/kevin (tools + reply, persona TTS already rendered server-side)
+ *   TTS:   the existing speak() path
  *
  * Phase 3 (future): real-time audio streaming via WebSocket.
  *   openSession() / connect() / pushGpsUpdate() / closeSession() are scaffold for Phase 3.
@@ -20,7 +23,7 @@ import { getApiBaseUrl, markEndpointWarmed, isEndpointWarmed } from '../services
 import { devLog } from '../services/devLog';
 // 2026-07-01 (audit — MIC CONVERGENCE) — the ONE shared pipecat history, so this
 // mic and the earbud/badge path keep the same conversation + reset together.
-import { clearPipecatHistory } from '../services/voice/pipecatHistory';
+import { clearConversationHistory } from '../services/voice/conversationHistory';
 import { useConversationLog } from '../store/conversationLogStore';
 import type { ToolAction } from '../types/toolAction';
 
@@ -41,7 +44,7 @@ import type { ToolAction } from '../types/toolAction';
 // client abort before the server's graceful reply lands. 35s keeps the client budget
 // strictly above the server cascade so we never cancel a turn that's about to answer.
 const TURN_TIMEOUT_MS = 35_000;
-// History cap now lives in services/voice/pipecatHistory.ts (the shared history).
+// History cap now lives in services/voice/conversationHistory.ts (the shared history).
 
 interface UsePipecatVoiceOpts {
   // 2026-08-23 — onUIEvent / onStateChange are gone with the Phase-3 WebSocket scaffold. Both were
@@ -54,7 +57,7 @@ interface UsePipecatVoiceOpts {
   onReadyToListen?: () => void;
 }
 
-export function usePipecatVoice({
+export function useCaddieTabMic({
   onKevinSpoke,
   onToolAction,
   onVoiceStateChange,
@@ -84,7 +87,7 @@ export function usePipecatVoice({
 
   /** Clear conversation history (call on round end or new session). */
   const clearHistory = useCallback(() => {
-    clearPipecatHistory();
+    clearConversationHistory();
   }, []);
 
   /**

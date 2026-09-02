@@ -1,8 +1,12 @@
 /**
- * Shared pipecat conversation history.
+ * THE conversation history — one rolling thread every mic path reads and writes.
+ *
+ * 2026-09-01 — renamed off "pipecat". The route that word came from is deleted; this module was
+ * never pipecat-specific, it is simply the caddie's memory of the current conversation, and leaving
+ * the old name on it kept implying a second path that no longer exists.
  *
  * 2026-07-01 (audit — MIC CONVERGENCE) — there used to be TWO disjoint pipecat
- * histories: usePipecatVoice.historyRef (caddie-tab mic) and
+ * histories: useCaddieTabMic.historyRef (caddie-tab mic) and
  * conversationalBrain.pipecatHistory (earbud / badge / watch). They never shared,
  * so the caddie "forgot" the conversation when you switched mics, and NEITHER was
  * ever cleared → context leaked across rounds/sessions forever.
@@ -11,7 +15,7 @@
  * boundaries (roundStore.startRound) so each round is a fresh conversation.
  */
 
-export interface PipecatMessage {
+export interface ConversationMessage {
   role: string;
   content: string;
 }
@@ -19,19 +23,19 @@ export interface PipecatMessage {
 /** Keep the last ~6 exchanges (12 messages) — matches the old per-path caps. */
 const MAX_MESSAGES = 12;
 
-let history: PipecatMessage[] = [];
+let history: ConversationMessage[] = [];
 
-export function getPipecatHistory(): PipecatMessage[] {
+export function getConversationHistory(): ConversationMessage[] {
   return history;
 }
 
 /** Replace the whole history (e.g. from the server's updated_history), capped. */
-export function setPipecatHistory(next: PipecatMessage[] | undefined | null): void {
+export function setConversationHistory(next: ConversationMessage[] | undefined | null): void {
   history = Array.isArray(next) ? next.slice(-MAX_MESSAGES) : [];
 }
 
 /** Append one user+assistant exchange when the server didn't return a full history. */
-export function appendPipecatTurn(userText: string, assistantText: string): void {
+export function appendConversationTurn(userText: string, assistantText: string): void {
   history = [
     ...history,
     { role: 'user', content: userText },
@@ -40,6 +44,6 @@ export function appendPipecatTurn(userText: string, assistantText: string): void
 }
 
 /** Wipe the shared history (round boundary / explicit reset). */
-export function clearPipecatHistory(): void {
+export function clearConversationHistory(): void {
   history = [];
 }

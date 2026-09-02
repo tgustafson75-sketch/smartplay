@@ -66,7 +66,7 @@ import { buildFullPracticeContext } from '../../services/tutorialContext';
 import { generatePatternInsights } from '../../services/patternDetection';
 import { useGhostStore } from '../../store/ghostStore';
 import { useVoiceCaddie } from '../../hooks/useVoiceCaddie';
-import { usePipecatVoice } from '../../hooks/usePipecatVoice';
+import { useCaddieTabMic } from '../../hooks/useCaddieTabMic';
 import type { ToolAction } from '../../types/toolAction';
 import { useKevinPresence } from '../../contexts/KevinPresenceContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -2098,7 +2098,7 @@ export default function CaddieTab() {
          *     the Caddie tab confirmed out loud and wrote nothing.
          *
          * Neither was a typed error: recommend_club isn't in the ToolAction union (types/toolAction.ts)
-         * and usePipecatVoice casts `raw as ToolAction`, so the compiler had nothing to say. The sim
+         * and useCaddieTabMic casts `raw as ToolAction`, so the compiler had nothing to say. The sim
          * guard for recommend_club only asserts the SERVICE dispatcher, so it passed throughout.
          *
          * Delegating the default (rather than adding two cases) fixes the SHAPE: any tool the shared
@@ -2232,7 +2232,7 @@ export default function CaddieTab() {
   }, [showShotCard]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Pipecat voice orchestrator (Phase 2) ─
-  const pipecatVoice = usePipecatVoice({
+  const caddieTabMic = useCaddieTabMic({
     // 2026-08-23 — onUIEvent removed. It only ever fired from the Phase-3 WebSocket handler, and
     // that socket could never open (no server URL is settable anywhere in the app), so this
     // callback has been unreachable since it was written. Tool actions arrive on onToolAction.
@@ -2274,7 +2274,7 @@ export default function CaddieTab() {
     // change and the v15 migration force-set, so the `undefined` arm (legacy in-hook processing)
     // could never be chosen. This guard was found by the sim sweep, not by hand — the argument for
     // sweeping every directory instead of checking the two files already known. [[run-the-second-pass-yourself]]
-    processTranscriptOverride: pipecatVoice.processTurn,
+    processTranscriptOverride: caddieTabMic.processTurn,
   });
 
   // 2026-06-29 (Tim — "single brain everywhere") — the SmartMotion screen's mic
@@ -2282,8 +2282,8 @@ export default function CaddieTab() {
   // speaks the reply (dialogue-first prompt intact) AND dispatches tools through the
   // normal handleToolAction path (record_swing → SmartMotion bus, configure_drill,
   // navigate, switch_caddie). One brain, one TTS pipeline — no second voice instance.
-  const smProcessTurnRef = useRef(pipecatVoice.processTurn);
-  useEffect(() => { smProcessTurnRef.current = pipecatVoice.processTurn; }, [pipecatVoice.processTurn]);
+  const smProcessTurnRef = useRef(caddieTabMic.processTurn);
+  useEffect(() => { smProcessTurnRef.current = caddieTabMic.processTurn; }, [caddieTabMic.processTurn]);
   useEffect(() => {
     return subscribeSmartMotionUtterance((text) => {
       const t = (text ?? '').trim();

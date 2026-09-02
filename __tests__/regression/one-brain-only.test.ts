@@ -111,6 +111,15 @@ describe('there is a fixed, shrinking set of answering brains', () => {
      */
     expect(fs.existsSync(path.join(API, '_brainShim.ts'))).toBe(false);
     expect(fs.existsSync(path.join(API, 'pipecat-turn.ts'))).toBe(false);
+    /**
+     * api/pipecat-tool went with them. It was the bridge a PYTHON Pipecat server called to run data
+     * tools — and that server has not fronted the brain since the unification. Three things agreed it
+     * was dead: no client or sim guard touched it, QA/model/voice-flow records its shared secret as
+     * "effectively unenforced in prod", and it returned FUNCTION_INVOCATION_FAILED on EVERY call for
+     * months without anyone reporting a broken feature. An unauthenticated endpoint that writes shots
+     * and scores, which nothing calls and which never worked, is not something to carry into a release.
+     */
+    expect(fs.existsSync(path.join(API, 'pipecat-tool.ts'))).toBe(false);
   });
 
   it('and no client can still be pointing at the retired route', () => {

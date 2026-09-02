@@ -4,7 +4,7 @@
  * A COMPARTMENTALIZED guided-lesson engine. The Caddie names ONE focus, the golfer makes a swing,
  * we analyze it, and the Caddie gives feedback scoped to THAT focus — then the next rep. This
  * module is pure content + verdict logic: no camera, no TTS, and CRITICALLY no imports of the
- * frozen live-voice loop (useVoiceCaddie / usePipecatVoice / VAD). The screen composes it with the
+ * frozen live-voice loop (useVoiceCaddie / useCaddieTabMic / VAD). The screen composes it with the
  * existing standalone primitives (SmartMotion analysis + voiceService.speak), exactly like
  * juniorSwingAnalyzer / puttingAnalysisService already do.
  *

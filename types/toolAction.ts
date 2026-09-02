@@ -4,7 +4,7 @@
  * 2026-08-13 (Tim: "no fucking way you just fixed that… I'll bet you find shit you missed.") — he
  * was right, and this was the miss. `ToolAction` lived inside app/api/kevin+api.ts, the DEPRECATED
  * Expo dev-server twin of the canonical brain, and the three live voice hooks (useVoiceCaddie,
- * useKevin, usePipecatVoice) all imported it from there.
+ * useKevin, useCaddieTabMic) all imported it from there.
  *
  * So the shipping client was typed against a brain it never talks to. The twin's own header listed
  * six ways it had drifted from canonical since 2026-05-26 — including a tool the real brain does not
@@ -85,7 +85,7 @@ export type ToolAction =
    *     the brain that answers it.
    *
    * Every one of those was invisible to the compiler for the same reason — the payload had no type,
-   * so `raw as ToolAction` in usePipecatVoice cast an unknown shape into the union and every
+   * so `raw as ToolAction` in useCaddieTabMic cast an unknown shape into the union and every
    * consumer read `a.club` off a member that did not exist. A missing case in a switch over an
    * untyped member is not an error anyone can see.
    *

@@ -34,7 +34,7 @@ describe('there is one way to ask the caddie to speak unprompted', () => {
   });
 
   it('history is seeded only when asked — an aside must not pollute the thread', () => {
-    expect(brain).toMatch(/if \(opts\?\.seedHistory\) setPipecatHistory/);
+    expect(brain).toMatch(/if \(opts\?\.seedHistory\) setConversationHistory/);
   });
 });
 
