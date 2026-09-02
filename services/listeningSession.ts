@@ -525,6 +525,29 @@ export async function toggle(): Promise<void> {
   // constant here meant a genuine shush tap at a fast-responding caddie was eaten for a full 1.5s
   // after every "I'm done" endpoint tap.
   if (Date.now() - sessionCloseTapAt < TAP_ECHO_SWALLOW_MS) { swallowedTap('close_tap_echo'); return; }
+  /**
+   * 2026-09-01 (Tim, on the glasses: "I think it just mirrors earbud behavior... this is why it
+   * works") — HE IS RIGHT, AND IT PREDICTS THE STOP-TAP BUG.
+   *
+   * The glasses are a Bluetooth audio device, so a temple tap is an ordinary media key on the earbud
+   * path. But AVRCP from glasses jitters more than from earbuds, so a tap's SECOND event can land
+   * just OUTSIDE the echo window above — honoured as a fresh tap, reopening the mic the player just
+   * closed. That reads exactly as "doesn't react well to a stop tap".
+   *
+   * Not retuning the window on a hunch: this only RECORDS a reopen that follows a close closely
+   * enough to be suspicious. If the field log shows these clustered just past the window, the
+   * constant is wrong; if it shows nothing, the stop tap is being lost somewhere else.
+   */
+  {
+    const sinceClose = Date.now() - sessionCloseTapAt;
+    if (sessionCloseTapAt > 0 && sinceClose < TAP_ECHO_SWALLOW_MS * 4) {
+      try {
+        logVoiceSilentFail('tap_reopen_after_close', {
+          source: 'listeningSession', msSinceClose: sinceClose, echoWindowMs: TAP_ECHO_SWALLOW_MS, sessionState: state,
+        });
+      } catch { /* never throw from a diagnostic */ }
+    }
+  }
   if (state === 'idle') {
     sessionInFlight = true;
     sessionOpenTapAt = Date.now();
