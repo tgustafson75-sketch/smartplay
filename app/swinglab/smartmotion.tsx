@@ -2384,7 +2384,7 @@ export default function SmartMotion() {
               clipUri: uri,
               club: clubRef.current ? clubIdToServerKey(clubRef.current) : 'unknown',
               upload: uploadMeta,
-              source: 'live_cage',
+              source: 'live_capture',
               captureKind: isDrill ? 'drill' : 'smart_motion',
             });
         ingestedSessionIdRef.current = sessionId;

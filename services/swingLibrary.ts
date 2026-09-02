@@ -126,7 +126,7 @@ export function getLibrary(filter: LibraryFilter = 'all'): LibraryEntry[] {
         ?.perShotAnalysis?.visual_reference_path ?? null;
       return {
         session,
-        source: session.source ?? 'live_cage',
+        source: session.source ?? 'live_capture',
         captureKind: getCaptureKind(session),
         date_ms: session.date,
         primary_issue_name: session.primary_issue?.name ?? null,

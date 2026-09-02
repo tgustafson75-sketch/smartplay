@@ -397,7 +397,7 @@ export default function PracticeSessionOverlay({ onComplete, onCancel, drill }: 
     // Previously the cage flow only wrote to filesystem (cageStorage) and
     // routed to /swing-sessions-debug; the swing library never saw these sessions.
     // Now: ingest the master video as a one-shot SwingSession with source
-    // 'live_cage', then fire Phase K analysis in the background. The
+    // 'live_capture', then fire Phase K analysis in the background. The
     // swing detail screen subscribes to the analysis_status transitions
     // so the user sees "Watching the swing…" → "ok" naturally.
     //
@@ -407,7 +407,7 @@ export default function PracticeSessionOverlay({ onComplete, onCancel, drill }: 
     // a follow-up phase wires BL into the recording start step.
     let libraryEntryId: string | null = null;
     if (masterVideoPath) {
-      practiceLog('library-bridge-start', 'ok', { source: 'live_cage', clipUri: masterVideoPath });
+      practiceLog('library-bridge-start', 'ok', { source: 'live_capture', clipUri: masterVideoPath });
       try {
         // Phase BW — read finalized clip metadata from cageStorage and
         // build per-swing CageShots, each with clipBoundaries pointing
@@ -474,7 +474,7 @@ export default function PracticeSessionOverlay({ onComplete, onCancel, drill }: 
             clipUri: masterVideoPath,
             club: activeClub,
             upload,
-            source: 'live_cage',
+            source: 'live_capture',
           });
           practiceLog('library-bridge', 'partial', {
             library_entry_id: libraryEntryId,

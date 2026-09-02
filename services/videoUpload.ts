@@ -457,7 +457,7 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
     swings.length === 1 &&
     swings[0].clipStartSeconds == null &&
     swings[0].clipUri &&
-    session.source !== 'live_cage'
+    session.source !== 'live_capture'
   ) {
     try {
       const pose = await import('./poseDetection');
@@ -517,7 +517,7 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
   }
 
   V6('STAGE 0 — session loaded', {
-    source: session.source ?? 'live_cage',
+    source: session.source ?? 'live_capture',
     club: session.club,
     shotCount: session.shots.length,
     usableShotCount: swings.length,

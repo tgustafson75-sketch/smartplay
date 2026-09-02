@@ -1019,7 +1019,7 @@ export default function SwingDetail() {
      * that is partitioning, not a longer window. That is the next step, kept separate so this one
      * stays verifiable.
      */
-    if (session?.source === 'live_cage') return;
+    if (session?.source === 'live_capture') return;
     poseBackfillRef.current = swing_id;
     void (async () => {
       try {

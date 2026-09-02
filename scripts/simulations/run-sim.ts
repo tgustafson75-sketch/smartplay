@@ -8599,7 +8599,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     // sessions via getCaptureKind. Phase 2 renders the interface off it.
     /export type CaptureKind = 'smart_motion' \| 'coach' \| 'upload'/.test(read('store/swingSessionStore.ts')) &&
       /captureKind\?: CaptureKind;/.test(read('store/swingSessionStore.ts')) &&
-      /const resolvedCaptureKind: CaptureKind = captureKind \?\? \(resolvedSource === 'live_cage' \? 'smart_motion' : 'upload'\)/.test(read('store/swingSessionStore.ts')) &&
+      /const resolvedCaptureKind: CaptureKind = captureKind \?\? \(resolvedSource === 'live_capture' \? 'smart_motion' : 'upload'\)/.test(read('store/swingSessionStore.ts')) &&
       /captureKind: resolvedCaptureKind,/.test(read('store/swingSessionStore.ts')) &&
       /export function getCaptureKind\(session: SwingSession\): CaptureKind/.test(read('services/swingLibrary.ts')) &&
       /captureKind: getCaptureKind\(session\)/.test(read('services/swingLibrary.ts')),
@@ -9020,7 +9020,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
 
   /**
    * 2026-08-14 — re-pointed. This asserted the literal gate
-   * `source === 'live_cage' || durationMs > 20_000`, and the 20s half of it was scar tissue: it was
+   * `source === 'live_capture' || durationMs > 20_000`, and the 20s half of it was scar tissue: it was
    * added when the backfill sampled the WHOLE clip by fixed fractions, and stayed in front of the
    * swing-window (07-25) and located-impact (08-09) fixes that made it unnecessary. Tim: a single
    * swing with a pre-shot routine "can get to twenty six seconds", so the cap refused ordinary swings.
@@ -9032,7 +9032,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
    */
   check('Swing Library: never analyses a clip whole — locates the swing, and still skips cage multi-swing',
     (() => {
-      const skipsCage = /if \(session\?\.source === 'live_cage'\) return;/.test(swingDetailSrc2);
+      const skipsCage = /if \(session\?\.source === 'live_capture'\) return;/.test(swingDetailSrc2);
       // and it must LOCATE a window rather than falling through to the fraction spread
       const locatesWindow = /const \{ locateSwingWindow \} = await import\('\.\.\/\.\.\/\.\.\/services\/poseDetection'\);/.test(swingDetailSrc2) &&
         /if \(!swingWindow\) \{/.test(swingDetailSrc2);

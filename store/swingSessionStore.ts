@@ -141,7 +141,7 @@ export interface ClubSegment {
   confidence?: 'high' | 'medium' | 'low';
 }
 
-export type SwingSource = 'live_cage' | 'uploaded_video';
+export type SwingSource = 'live_capture' | 'uploaded_video';
 // 2026-06-12 — how a session was captured, used to pick the library interface/reporting.
 // Additive classifier layered ON TOP of `source` (not a replacement): smart_motion =
 // a SmartMotion capture (cage / range / course), coach = a Coach Mode lesson (gets the
@@ -248,7 +248,7 @@ export interface SwingSession {
   roundCourseId?: string | null;
   roundHole?: number | null;
   starred?: boolean;
-  // Phase R — source kind. 'live_cage' is the original Phase J flow; an
+  // Phase R — source kind. 'live_capture' is the original Phase J flow; an
   // 'uploaded_video' session wraps a single uploaded swing (one SwingShot)
   // with upload metadata so it browses uniformly in the swing library.
   source?: SwingSource;
@@ -538,7 +538,7 @@ interface SwingSessionState {
    *  surface and Phase K analysis can attach to it. */
   /** Phase R / cage-live bridge — ingest a single video as a one-shot
    *  SwingSession. Used by the upload flow (source defaults to
-   *  'uploaded_video') and the live cage flow (pass source: 'live_cage'
+   *  'uploaded_video') and the live cage flow (pass source: 'live_capture'
    *  so the My Swing Library can render the entry with the right kind
    *  treatment). */
   ingestUploadedSwing: (input: {
@@ -1118,7 +1118,7 @@ export const useSwingSessionStore = create<SwingSessionState>()(
         const resolvedSource: SwingSource = source ?? 'uploaded_video';
         // Default the capture classifier from the source when not given explicitly
         // (live cage = SmartMotion; an upload = a plain phone video).
-        const resolvedCaptureKind: CaptureKind = captureKind ?? (resolvedSource === 'live_cage' ? 'smart_motion' : 'upload');
+        const resolvedCaptureKind: CaptureKind = captureKind ?? (resolvedSource === 'live_capture' ? 'smart_motion' : 'upload');
         // 2026-06-05 — Dedupe. Network glitches that retry the same
         // upload (or rapid double-tap on the "Analyze" button) used to
         // double-ingest, bloating the library with phantom duplicates
@@ -1136,14 +1136,14 @@ export const useSwingSessionStore = create<SwingSessionState>()(
           });
           return existing.id;
         }
-        const sessionId = uid(resolvedSource === 'live_cage' ? 'cage' : 'upload');
+        const sessionId = uid(resolvedSource === 'live_capture' ? 'cage' : 'upload');
         practiceLog('ingest-uploaded-swing', 'ok', {
           session_id: sessionId,
           source: resolvedSource,
           club,
           clipUri_length: clipUri.length,
         });
-        const shotId = uid(`${resolvedSource === 'live_cage' ? 'cage' : 'uploaded'}_shot`);
+        const shotId = uid(`${resolvedSource === 'live_capture' ? 'cage' : 'uploaded'}_shot`);
         const session: SwingSession = {
           id: sessionId,
           date: upload.taken_at ?? upload.uploaded_at,
@@ -1228,7 +1228,7 @@ export const useSwingSessionStore = create<SwingSessionState>()(
           dominantMiss: null,
           rootCause: null,
           summary: null,
-          source: 'live_cage',
+          source: 'live_capture',
           captureKind: captureKind ?? 'smart_motion',
           ...roundContextStamp(),
           upload,
@@ -1874,8 +1874,14 @@ export const useSwingSessionStore = create<SwingSessionState>()(
       migrate: (persisted) => {
         if (typeof persisted !== 'object' || persisted === null || Array.isArray(persisted)) return {} as never;
         try {
-          const p = persisted as { sessionHistory?: { shots?: { tag?: string | null }[] }[] };
+          const p = persisted as {
+            sessionHistory?: { source?: string | null; shots?: { tag?: string | null }[] }[];
+          };
           for (const sess of p.sessionHistory ?? []) {
+            // 2026-09-01 — the SwingSource value 'live_cage' became 'live_capture'. It is stored on
+            // every session ever recorded, and eighteen places compare against it, so the value has
+            // to move with the code or every past session reads as an unknown source.
+            if (sess && sess.source === 'live_cage') sess.source = 'live_capture';
             for (const shot of sess?.shots ?? []) {
               if (shot && shot.tag === 'cage') shot.tag = 'indoor';
             }

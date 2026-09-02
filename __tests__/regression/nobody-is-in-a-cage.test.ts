@@ -104,6 +104,16 @@ describe('the word is gone from everything a player can see', () => {
     expect(s).toMatch(/delete a\.cage;/);
   });
 
+  it('the SwingSource value moved, and every stored session moves with it', () => {
+    const cs = read('store/swingSessionStore.ts');
+    expect(cs).toMatch(/SwingSource = 'live_capture' \| 'uploaded_video'/);
+    expect(cs).toMatch(/sess\.source === 'live_cage'\) sess\.source = 'live_capture'/);
+    // and nothing still compares against the old value
+    for (const f of ['app/swinglab/smartmotion.tsx', 'services/videoUpload.ts', 'app/swinglab/swing/[swing_id].tsx']) {
+      expect(read(f)).not.toMatch(/'live_cage'/);
+    }
+  });
+
   it('the redundant swing TAG is collapsed, not renamed — indoor already meant it', () => {
     const cs = read('store/swingSessionStore.ts');
     expect(cs).toMatch(/SwingTag = 'range' \| 'indoor' \| 'course' \| 'putt' \| 'chip' \| 'other'/);
