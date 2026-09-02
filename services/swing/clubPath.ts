@@ -250,6 +250,71 @@ async function cleanup(frames: (Frame | null)[], tempCopy?: string | null): Prom
  * network failure). An empty `points` array is a valid honest result meaning "ran, but
  * never clearly saw the head" — the caller draws NO trace (clubhead-or-nothing).
  */
+/**
+ * 2026-09-01 (Tim — "I've only seen it show up sporadically and mostly incorrect, where it doesn't
+ * anchor on the ball box. It may get the direction right, but it looks like it's BEHIND the user")
+ * — WHICH FRAMES INSIDE THE WINDOW GET SAMPLED.
+ *
+ * THE OLD SCHEDULE RAN OFF THE END OF THE SWING. It put 70% of the samples in the LAST 55% of the
+ * window by fraction. The segmenter cuts 2,500ms before the strike and 1,500ms after, so that dense
+ * half started around the transition and ran to the very last frame — and everything past roughly
+ * 400ms after impact is FOLLOW-THROUGH, where the clubhead is back up over the player's shoulder.
+ * Those points are real detections of a real clubhead. They are also exactly the ones that draw an
+ * arc sitting behind the golfer instead of sweeping through the ball.
+ *
+ * Meanwhile the downswing itself — the ~250ms that actually shapes the arc through the ball — was
+ * getting one or two frames out of fourteen. Sparse where it matters, dense where it misleads.
+ *
+ * WITH AN ANCHOR, sample around it: a few points to establish where the arc comes from, the bulk
+ * through the downswing and the strike, and a short tail into the early follow-through so the arc has
+ * somewhere to exit. WITHOUT ONE, nothing changes — the old fraction band is still the best guess
+ * available, and inventing a centre is worse than spreading wide.
+ * [[a-field-that-is-sometimes-a-placeholder]]
+ *
+ * Pure and exported so the schedule can be tested directly; detectClubPath does native + network work
+ * that a unit test cannot reach, which is how this stayed unexamined for as long as it did.
+ */
+/** Late backswing + transition: gives the arc its top and its shape. */
+const APPROACH_MS = 900;
+/** Just past the ball — enough to show the exit, short of the finish. */
+const TAIL_MS = 450;
+
+export function clubPathSampleOffsets(startMs: number, endMs: number, impactMs: number | null): number[] {
+  const offsets: number[] = [];
+  const span = endMs - startMs;
+  if (!(span > 0)) return offsets;
+
+  const anchor =
+    typeof impactMs === 'number' && Number.isFinite(impactMs) && impactMs > startMs && impactMs < endMs
+      ? impactMs
+      : null;
+
+  if (anchor != null) {
+    const leadIn = Math.max(startMs, anchor - APPROACH_MS);
+    const tailEnd = Math.min(endMs, anchor + TAIL_MS);
+    const nEarly = Math.max(2, Math.round(SAMPLE_COUNT * 0.2));  // where the arc comes from
+    const nTail = Math.max(2, Math.round(SAMPLE_COUNT * 0.2));   // where it exits
+    const nCore = Math.max(2, SAMPLE_COUNT - nEarly - nTail);    // the downswing through the ball
+    const push = (from: number, to: number, n: number) => {
+      if (!(to > from) || n <= 0) return;
+      for (let i = 0; i < n; i++) offsets.push(Math.round(from + ((to - from) * i) / n));
+    };
+    push(startMs, leadIn, nEarly);
+    push(leadIn, tailEnd, nCore);
+    push(tailEnd, endMs, nTail);
+    return offsets;
+  }
+
+  const BAND = 0.45; // address/backswing gets the first 45% of the timeline but only ~30% of the samples
+  const early = Math.max(2, Math.round(SAMPLE_COUNT * 0.3));
+  const late = SAMPLE_COUNT - early;
+  for (let i = 0; i < early; i++) offsets.push(Math.round(startMs + span * ((i / early) * BAND)));
+  for (let i = 0; i < late; i++) {
+    offsets.push(Math.round(startMs + span * (BAND + ((1 - BAND) * i) / (late - 1))));
+  }
+  return offsets;
+}
+
 export async function detectClubPath(args: {
   videoUri: string;
   startMs: number | null;
@@ -266,6 +331,16 @@ export async function detectClubPath(args: {
    * than ~6px. Omit it and behavior is exactly as before.
    */
   bodyBounds?: { minX: number; minY: number; maxX: number; maxY: number } | null;
+  /**
+   * 2026-09-01 — the HONEST impact time inside [startMs, endMs], from
+   * services/swing/clubPathWindow.impactAnchorMs (a heard strike, else the pose-labelled impact
+   * frame). Omit it and sampling falls back to the fixed band below, exactly as before.
+   *
+   * Never pass a synthesized 0.6*duration placeholder here: impactAnchorMs refuses it on purpose,
+   * and clustering the samples on an invented centre is worse than spreading them wide.
+   * [[a-field-that-is-sometimes-a-placeholder]]
+   */
+  impactMs?: number | null;
 }): Promise<ClubPathResult | null> {
   const base = apiUrl();
   if (!base) return null;
@@ -276,22 +351,12 @@ export async function detectClubPath(args: {
   if (shouldAbort?.()) return null; // don't even start if already playing
 
   // 2026-07-25 (Tim's hypothesis — "offset passes to get the in-between frames near impact for better
-  // analysis"). Done as ONE adaptive-density pass (same benefit, no extra native retriever passes that
-  // risk the SIGSEGV/battery cost): cluster the samples in the DOWNSWING→IMPACT→early-follow-through band
-  // (~0.45–1.0 of the swing) where the clubhead moves fastest and the arc is most informative; sparse
-  // through the slow address/backswing. A few early samples still anchor the arc's start. The ceiling is
-  // the source frame rate — past that, closer offsets return the same decoded frame (device-tune later).
-  const offsets: number[] = [];
-  const span = endMs - startMs;
-  const BAND = 0.45; // address/backswing gets the first 45% of the timeline but only ~30% of the samples
-  const early = Math.max(2, Math.round(SAMPLE_COUNT * 0.3));
-  const late = SAMPLE_COUNT - early;
-  for (let i = 0; i < early; i++) {
-    offsets.push(Math.round(startMs + span * ((i / early) * BAND)));
-  }
-  for (let i = 0; i < late; i++) {
-    offsets.push(Math.round(startMs + span * (BAND + ((1 - BAND) * i) / (late - 1))));
-  }
+  // analysis"). One adaptive-density pass rather than extra native retriever passes. The schedule and
+  // the reasoning behind it now live in clubPathSampleOffsets above — 2026-09-01 moved it out of here
+  // so it could be tested, and the band it used to compute inline is what put the arc behind the
+  // player. The ceiling is still the source frame rate: past that, closer offsets return the same
+  // decoded frame.
+  const offsets = clubPathSampleOffsets(startMs, endMs, args.impactMs ?? null);
 
   // 2026-07-24 (Tim — WHITE-SCREEN crash in the swing library AFTER analysis, ROOT CAUSE) — the
   // frame-extraction retriever and ExoPlayer must never touch the SAME file. The isPlaying/

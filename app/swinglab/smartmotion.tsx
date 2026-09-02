@@ -1856,7 +1856,20 @@ export default function SmartMotion() {
     // 2026-08-10 — hand the pose-derived body box in so the tracker ZOOMS to the player (see
     // clubPath.roiFromBodyBounds). On an on-course clip shot from well back this is the difference
     // between a detectable clubhead and a 6-pixel smudge.
-    void detectClubPath({ videoUri: clipUri, startMs: seg.startMs, endMs: seg.endMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(poseFrames) })
+    /**
+     * 2026-09-01 (Tim — the arc "looks like it's behind the user") — HAND THE SAMPLER THE STRIKE.
+     *
+     * The window is right; the samples inside it were not. Without an anchor the sampler spreads its
+     * dense band across the whole back half, which for a 2,500/1,500 segment runs deep into the
+     * follow-through — real clubhead detections, over the player's shoulder, drawn as the arc.
+     *
+     * `seg.strikeMs` is the segmenter's own strike. peakDb === 0 marks a VIDEO-LOCATED swing (see the
+     * ball-departure path above), which is only ~+/-1s accurate — too loose to cluster on, so it is
+     * refused here exactly as the placeholder offset is refused in clubPathWindow.
+     * [[a-field-that-is-sometimes-a-placeholder]] [[no-half-fixes-enforce-every-surface]]
+     */
+    const segStrikeMs = (seg.peakDb ?? 0) !== 0 && typeof seg.strikeMs === 'number' ? seg.strikeMs : null;
+    void detectClubPath({ videoUri: clipUri, startMs: seg.startMs, endMs: seg.endMs, impactMs: segStrikeMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(poseFrames) })
       .then((r) => {
         if (cancelled) return;
         // 2026-07-22 (Tim) — require a validated arc (>= 4 points; detectClubPath returns [] for a
@@ -2776,7 +2789,17 @@ export default function SmartMotion() {
               void (async () => {
                 try {
                   const { detectClubPath } = await import('../../services/swing/clubPath');
-                  const arc = await detectClubPath({ videoUri: clipUri, startMs: poseWindow.startMs, endMs: poseWindow.endMs, shouldAbort: () => false });
+                  // 2026-09-01 — same anchor rule as the review path: the pose-labelled impact
+                  // frame is the honest centre for a persisted swing, and is what stops the dense
+                  // samples running into the follow-through. Absent → the sampler spreads as before.
+                  const { impactAnchorMs } = await import('../../services/swing/clubPathWindow');
+                  const poseImpactMs = frames?.find((f) => f.position === 'P6_impact')?.timestampMs ?? null;
+                  const anchorMs = impactAnchorMs({
+                    poseImpactMs,
+                    rawStartMs: poseWindow.startMs,
+                    rawEndMs: poseWindow.endMs,
+                  });
+                  const arc = await detectClubPath({ videoUri: clipUri, startMs: poseWindow.startMs, endMs: poseWindow.endMs, impactMs: anchorMs, shouldAbort: () => false });
                   const store = useSwingSessionStore.getState();
                   if (arc && arc.points.length >= 3) {
                     store.setSessionClubArc(sessionId, arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + poseWindow.startMs })), { w: arc.frameW ?? null, h: arc.frameH ?? null });

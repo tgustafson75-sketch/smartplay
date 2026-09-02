@@ -14532,6 +14532,60 @@ check(
   );
 }
 
+/**
+ * ─── 2026-09-01 — THE CLUB ARC IS SAMPLED AROUND THE STRIKE, AT EVERY SURFACE ──────────────────
+ *
+ * Tim: "the club arc… may get the direction right, but it looks like it's behind the user."
+ *
+ * The window was right; the samples inside it were not. The schedule put 70% of them in the last 55%
+ * of the window BY FRACTION, and the segmenter cuts 2,500ms before the strike and 1,500ms after — so
+ * the dense half ran to the last frame, and past ~400ms after impact the clubhead is back over the
+ * player's shoulder. Real detections of a real clubhead, drawn as an arc behind the golfer.
+ *
+ * The narrowing helper existed since 08-31 and was wired into the SAVED-swing screen only. Neither
+ * call site on the live SmartMotion screen — the one Tim actually records on — used it. A fix at one
+ * of four surfaces is not a fix. [[no-half-fixes-enforce-every-surface]]
+ */
+{
+  const cp = readCode('services/swing/clubPath.ts');
+  check(
+    'CLUB ARC: the sample schedule is pure, exported and centred on the strike',
+    /export function clubPathSampleOffsets\(startMs: number, endMs: number, impactMs: number \| null\)/.test(cp) &&
+      /const offsets = clubPathSampleOffsets\(startMs, endMs, args\.impactMs \?\? null\);/.test(cp),
+    'detectClubPath does native + network work a unit test cannot reach, which is how the schedule stayed unexamined',
+  );
+  check(
+    'CLUB ARC: an anchor outside the window is refused, not clustered on',
+    /impactMs > startMs && impactMs < endMs/.test(cp) && /Number\.isFinite\(impactMs\)/.test(cp),
+    'inventing a centre points the sampler with total confidence at the wrong frames — worse than spreading wide',
+  );
+
+  // EVERY surface, not just the one that got the first fix.
+  const arcSurfaces = [
+    'app/swinglab/smartmotion.tsx',
+    'app/swinglab/swing/[swing_id].tsx',
+  ];
+  const unanchored: string[] = [];
+  for (const f of arcSurfaces) {
+    const src = readCode(f);
+    const calls = src.match(/detectClubPath\(\{[^}]*\}/g) ?? [];
+    for (const c of calls) if (!/impactMs:/.test(c)) unanchored.push(`${f} :: ${c.slice(0, 90)}…`);
+  }
+  check(
+    'CLUB ARC: every detectClubPath call site passes an impact anchor',
+    unanchored.length === 0,
+    unanchored.length === 0
+      ? 'all club-path call sites centre their samples on an honest strike'
+      : `A SURFACE IS STILL SPREADING ITS SAMPLES INTO THE FOLLOW-THROUGH:\n    ${unanchored.join('\n    ')}`,
+  );
+  check(
+    'CLUB ARC: a video-located swing is refused as an anchor on the live screen',
+    /const segStrikeMs = \(seg\.peakDb \?\? 0\) !== 0 && typeof seg\.strikeMs === 'number' \? seg\.strikeMs : null;/
+      .test(readCode('app/swinglab/smartmotion.tsx')),
+    'peakDb === 0 marks a video-located swing, only ~±1s accurate — too loose to cluster on, same rule the ball-departure path uses',
+  );
+}
+
 const total = results.length;
 const passed = results.filter((r) => r.passed).length;
 const failed = results.filter((r) => !r.passed);

@@ -28,6 +28,10 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Sep 2026',
+    note: 'The club arc is drawn through the ball instead of behind you. It was sampling frames evenly across the whole swing window, so most of what it found was your follow-through — the club up over your shoulder, which is a real club in a real place and completely the wrong part of the swing. It now concentrates on the downswing and the strike.',
+  },
+  {
+    when: 'Sep 2026',
     note: 'Shot-shape practice teaches the shot before it grades it. Tap a flop, a pitch-and-run, a bump-and-run and you get when you would actually play it on a hole, the club to try, the setup, and the one feel that matters — then you record. Already own the shot? Skip straight to recording.',
     howTo: 'Practice → Shot Shapes → tap any shot.',
   },

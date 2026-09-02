@@ -778,7 +778,10 @@ export default function SwingDetail() {
         // playback starts" guard was the crash-era workaround and, since the review surface auto-plays, it
         // aborted the arc mid-swing on every open (→ no club trace / partial read). Only abort on genuine
         // cancellation (unmount / swing change) now; the private copy makes concurrent playback safe.
-        const r = await detectClubPath({ videoUri: uri, startMs, endMs, shouldAbort: () => cancelled });
+        // 2026-09-01 — the anchor that CHOSE this window is also the right centre for the samples
+        // inside it. Passing it stops the dense band running into the follow-through, where a real
+        // clubhead sits behind the player's shoulder and draws an arc that looks wrong.
+        const r = await detectClubPath({ videoUri: uri, startMs, endMs, impactMs: anchorMs, shouldAbort: () => cancelled });
         if (cancelled) return;
         // 2026-07-22 (Tim) — require a real arc (>= 3 validated points from detectClubPath, which
         // now returns [] for a clustered mis-detection) before drawing the club. A sparse/degenerate
@@ -1156,7 +1159,15 @@ export default function SwingDetail() {
            * call site at the top of this file had this same stale guard removed on 08-08; this one
            * was missed. Playback is not a reason to stop analysing — leaving the screen is.
            */
-          const arc = await detectClubPath({ videoUri: analyzeUri, startMs: wStart, endMs: wEnd, shouldAbort: () => cancelled });
+          // 2026-09-01 — same honest anchor rule as the sibling call site above; without it the
+          // sampler spreads its dense band across the whole back half of the window.
+          const arcAnchorMs = impactAnchorMs({
+            detectionMethod: selShot.detectionMethod,
+            detectionOffsetSeconds: selShot.detectionOffsetSeconds,
+            rawStartMs: wStart,
+            rawEndMs: wEnd,
+          });
+          const arc = await detectClubPath({ videoUri: analyzeUri, startMs: wStart, endMs: wEnd, impactMs: arcAnchorMs, shouldAbort: () => cancelled });
           // 2026-08-06 (audit) — >= 3 to match the loosened MIN_ARC_POINTS everywhere else; the old >= 4 here
           // would drop a valid 3-point arc and persist []. (Dead today under LIBRARY_AUTO_PROCESS=false, but
           // keep it consistent so flipping that flag can't silently lose 3-point arcs.)
