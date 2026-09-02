@@ -297,13 +297,6 @@
       }
     },
     {
-      "src": "api/pipecat-turn.ts",
-      "use": "@vercel/node",
-      "config": {
-        "maxDuration": 30
-      }
-    },
-    {
       "src": "api/pipecat-tool.ts",
       "use": "@vercel/node",
       "config": {
@@ -419,10 +412,6 @@
     {
       "src": "/api/voice-intent",
       "dest": "/api/voice-intent.ts"
-    },
-    {
-      "src": "/api/pipecat-turn",
-      "dest": "/api/pipecat-turn.ts"
     },
     {
       "src": "/api/pipecat-tool",

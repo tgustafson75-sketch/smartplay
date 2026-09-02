@@ -41,8 +41,15 @@ const read = (rel: string) => fs.readFileSync(path.resolve(__dirname, '../../', 
  *     which is why the marker for them is asserted against the CNS below.
  */
 const ctx = read('services/caddieRequestBody.ts');
-const shim = read('api/_brainShim.ts');
 const cns = read('services/caddieMemoryRetrieval.ts');
+/**
+ * 2026-09-01 — api/_brainShim is deleted with api/pipecat-turn (no callers since 08-23). These
+ * markers were the PIPECAT-contract rendering of each fact; the live path has always built its own,
+ * which is what caddieRequestBody means by "so every path". So the assertion moves to where the wire
+ * is actually assembled — the client builders plus the one brain — rather than to an adapter that no
+ * longer exists. Verified before deleting: every marker below resolves in one of these three.
+ */
+const wire = read('services/caddieRequestBody.ts') + cns + read('api/kevin.ts');
 
 /** What the caddie must know, and the marker proving it is assembled for the brain. */
 const MUST_REACH: Array<{ what: string; why: string; inContext: RegExp; inShim?: RegExp }> = [
@@ -55,7 +62,7 @@ const MUST_REACH: Array<{ what: string; why: string; inContext: RegExp; inShim?:
     what: 'measured hazards',
     why: 'computer vision found them and geometry measured the carry — "clears the bunker" beats "158 yards"',
     // Composed into the shared context block, so the CNS is where it must appear.
-    inContext: /getCaddieContext/, inShim: /MEASURED TROUBLE ON THIS SHOT/,
+    inContext: /getCaddieContext/, inShim: /TROUBLE ON THIS SHOT/,
   },
   {
     what: 'the golfer model',
@@ -100,10 +107,10 @@ describe('every sense the app has reaches the brain that answers', () => {
   });
 
   it.each(MUST_REACH.filter(m => m.inShim).map(m => [m.what, m] as const))(
-    '%s survives the translation to the one brain', (_label, m) => {
-      // A field present in the context and dropped by the adapter is the same bug one layer down —
-      // exactly how the golfer model reached the on-screen path and not the primary one.
-      expect(shim).toMatch(m.inShim!);
+    '%s is actually rendered onto the wire, not just collected', (_label, m) => {
+      // Collected into a context object and never written into the payload is the same bug one layer
+      // down — exactly how the golfer model reached the on-screen path and not the primary one.
+      expect(wire).toMatch(m.inShim!);
     });
 
   it('the advice calibration the caddie learns about ITSELF still reaches it', () => {

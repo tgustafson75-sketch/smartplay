@@ -23,9 +23,17 @@ const FACTS = [
   'pendingLieAnalysis',
 ];
 
-describe('both brain routes carry the same facts', () => {
+/**
+ * 2026-09-01 — THERE IS ONLY ONE ROUTE NOW. api/pipecat-turn and api/_brainShim were deleted: nothing
+ * had called that route since 08-23, so the adapter was serving a contract with no callers.
+ *
+ * The property this file was written to protect SURVIVES and gets simpler. It was never really "both
+ * routes agree" — it was "every fact the caddie needs reaches the brain". With one builder and one
+ * brain, that is two assertions instead of three, and the class of bug it caught (a field added to
+ * one payload and not the other) is now structurally impossible rather than merely tested.
+ */
+describe('every fact reaches the one brain', () => {
   const kevin = R('api/kevin.ts');
-  const shim = R('api/_brainShim.ts');
   const body = R('services/caddieRequestBody.ts');
 
   it.each(FACTS)('kevin destructures %s', (f) => {
@@ -47,9 +55,11 @@ describe('both brain routes carry the same facts', () => {
    * which is the only way the split could come back.
    */
 
-  it.each(FACTS)('the shim forwards %s to kevin', (f) => {
-    expect(shim).toMatch(new RegExp(`\\b${f}\\s*:`));
-  });
+  /**
+   * 2026-09-01 — the "shim forwards it" leg is GONE with the shim. There is no adapter left to drop a
+   * field in transit: the one builder writes the payload and the one brain reads it. The two legs
+   * that remain (kevin destructures it, the builder sends it) are the whole chain now.
+   */
 
   it('kevin RENDERS them, not just destructures — sent-and-ignored is the same bug', () => {
     for (const marker of ['HOW THIS ROUND IS GOING', 'PLAYING THEIR STROKE', 'Getting around:',

@@ -94,20 +94,50 @@ describe('there is a fixed, shrinking set of answering brains', () => {
     expect(brains.filter(f => !adapters.includes(f)).sort()).toEqual([...ALLOWED_BRAINS].sort());
   });
 
-  it('the shim stays an adapter — it may never grow a model call of its own', () => {
-    // The consolidation only works if there is ONE implementation. A shim that starts answering
-    // turns itself would recreate the divergence it exists to remove, and would do it somewhere
-    // nobody is looking.
-    const shim = read('api/_brainShim.ts');
-    expect(shim).not.toMatch(/runAgenticLoop\(|completeText\(|\.chat\.completions|generateContent/);
-    // It delegates, and the thing it delegates to is the surviving brain.
-    expect(shim).toMatch(/kevinHandler/);
+  it('the SHIM IS GONE — the adapter outlived the divergence it was bridging', () => {
+    /**
+     * 2026-09-01 (Tim: "I believe we deleted the shim because it was just a Band Aid between
+     * different paths, but double check that"). It had NOT been deleted, and he was right that it
+     * should have been.
+     *
+     * api/_brainShim translated the pipecat request/response contract onto kevin, and api/pipecat-turn
+     * was a 118-line pass-through using it. Nothing had called that route since 08-23 —
+     * services/voiceWarmup says so in its own comment, and a sweep of the client found only comments
+     * mentioning it. So 373 lines existed to serve a contract with no callers, while making every
+     * reader (me included, twice this session) reason about "two brains" that no longer existed.
+     *
+     * This guard used to say the shim may never grow a model call. The stronger statement is that it
+     * is not there at all.
+     */
+    expect(fs.existsSync(path.join(API, '_brainShim.ts'))).toBe(false);
+    expect(fs.existsSync(path.join(API, 'pipecat-turn.ts'))).toBe(false);
+  });
+
+  it('and no client can still be pointing at the retired route', () => {
+    const offenders: string[] = [];
+    for (const dir of ['services', 'app', 'store', 'components']) {
+      const walk = (d: string) => {
+        const abs = path.resolve(__dirname, '../../', d);
+        if (!fs.existsSync(abs)) return;
+        for (const e of fs.readdirSync(abs, { withFileTypes: true })) {
+          const rel = `${d}/${e.name}`;
+          if (e.isDirectory()) walk(rel);
+          else if (/\.tsx?$/.test(e.name)) {
+            const code = read(rel).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+            if (/pipecat-turn/.test(code)) offenders.push(rel);
+          }
+        }
+      };
+      walk(dir);
+    }
+    expect(offenders).toEqual([]);
   });
 
   it('the count only ever goes DOWN — this is the whole point', () => {
     // Two brains is the CURRENT state, not the target. When one is deleted, drop it from
     // ALLOWED_BRAINS and this number with it. It must never be edited upward.
-    expect(ALLOWED_BRAINS.length).toBeLessThanOrEqual(2);
+    // 2026-09-01 — was <= 2 while the shim's route still existed. One brain, one entry.
+    expect(ALLOWED_BRAINS.length).toBe(1);
   });
 
   /**

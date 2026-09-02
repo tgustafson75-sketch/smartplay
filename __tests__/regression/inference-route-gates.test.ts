@@ -11,7 +11,7 @@ const API_DIR = join(__dirname, '..', '..', 'api');
 
 // Every paid-inference route that must carry a cost gate.
 const GATED_ROUTES = [
-  'pipecat-turn', 'voice', 'transcribe', 'owner-triage', 'kevin-read', 'kevin', 'recap', 'briefing',
+  /* 2026-09-01 — pipecat-turn deleted with the shim (no callers since 08-23). */ 'voice', 'transcribe', 'owner-triage', 'kevin-read', 'kevin', 'recap', 'briefing',
   'context-synthesis', 'course-import', 'round-import', 'toptracer-parse', 'workout-import',
   'voice-intent', 'meta-voice', 'parse-shot', 'preround', 'swing-question', 'course-content',
   'course-intelligence', 'narrative-extract', 'course-ai-search',

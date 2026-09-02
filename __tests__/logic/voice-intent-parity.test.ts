@@ -93,13 +93,18 @@ describe('brain tool contract has exactly one owner', () => {
    */
   const BRAINS = ['api/kevin.ts'];
 
-  it('api/pipecat-turn.ts has NO brain of its own — it is a pass-through', () => {
-    const code = read('api/pipecat-turn.ts')
-      .replace(/\/\*[\s\S]*?\*\//g, ' ')
-      .replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
-    expect(code).not.toMatch(/BRAIN_TOOLS/);
-    expect(code).not.toMatch(/runAgenticLoop/);
-    expect(code).toMatch(/callKevin\(/);
+  it('api/pipecat-turn.ts is GONE — a pass-through with no callers is not a route', () => {
+    /**
+     * 2026-09-01 — this used to assert the route had no brain of its own. It no longer has anything
+     * of its own: nothing had called it since 08-23, so it and api/_brainShim (373 lines between
+     * them) were deleted. The strongest form of "it is only a pass-through" is that it is not there.
+     */
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fsm = require('fs') as typeof import('fs');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pth = require('path') as typeof import('path');
+    expect(fsm.existsSync(pth.resolve(__dirname, '../../api/pipecat-turn.ts'))).toBe(false);
+    expect(fsm.existsSync(pth.resolve(__dirname, '../../api/_brainShim.ts'))).toBe(false);
   });
 
   // The 2026-08-19 defect in one assertion. Both brains hand-maintained their own
@@ -153,7 +158,6 @@ describe('no vocabulary doc points at a deleted file', () => {
   const SOURCES = [
     'api/voice-intent.ts',
     'api/kevin.ts',
-    'api/pipecat-turn.ts',
     'api/_brainTools.ts',
     'docs/VOICE-INTENT-REGISTRY.md',
     'docs/voice-intent-parity.md',

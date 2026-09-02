@@ -1191,7 +1191,6 @@ check('Handicap differentials use the REAL course par/rating (no par-36 assumpti
 check('Bag-by-voice: registrar seam + brain tool + offline set + interview exemption all wired',
   (() => {
     const reg = read('services/bagVoiceRegistration.ts');
-    const turn = read('api/pipecat-turn.ts');
     const tools = read('api/_brainTools.ts');
     const disp = read('services/voice/conversationalToolDispatch.ts');
     const pre = read('services/localIntentPrecheck.ts');
@@ -1212,7 +1211,9 @@ check('Bag-by-voice: registrar seam + brain tool + offline set + interview exemp
       // → the caddie verbally confirmed a bag it never recorded and THIS guard stayed green. Require
       // register_bag in the UI_TOOLS dispatch set so the action actually reaches the client.
       /UI_TOOLS = new Set\(\[[\s\S]*?'register_bag'[\s\S]*?\]\)/.test(tools) &&   // server DISPATCHES it
-      /register_bag stays ON/.test(turn) &&                                         // interview exemption
+      // 2026-09-01 — was read from api/pipecat-turn, which is deleted. The prompt lives in kevin,
+      // the one brain, so the assertion now reads the file that actually owns the behaviour.
+      /register_bag stays ON/.test(read('api/kevin.ts')) &&                          // interview exemption
       /case 'register_bag':/.test(disp) &&                                          // client dispatch
       !/NAV_OPEN_ACTIONS = new Set\(\[[^\]]*register_bag/.test(disp) &&             // not suppressed in interview
       /'set_club_distance', \{ club_phrase/.test(pre) &&                            // offline declarative form
@@ -3598,7 +3599,6 @@ check('Voice: get-to-know interview never opens a tool (fault = info, not a comm
   (() => {
     const dispatch = read('services/voice/conversationalToolDispatch.ts');
     const caddie = read('app/(tabs)/caddie.tsx');
-    const brain = read('api/pipecat-turn.ts');
     return (
       // shared guard: get-to-know screen + a nav/open action set that includes open_swinglab
       /getting to know the golfer/.test(dispatch) &&
@@ -3610,8 +3610,9 @@ check('Voice: get-to-know interview never opens a tool (fault = info, not a comm
       // tab dispatcher applies the same guard at the top of handleToolAction
       /isSuppressedInGetToKnow\(action\.type\)\)\s*\{\s*\n\s*return;/.test(caddie) &&
       // brain-prompt honesty layer: don't open AND don't say you opened
-      /GET-TO-KNOW INTERVIEW MODE/.test(brain) &&
-      /do NOT say you are opening or pulling up anything/.test(brain)
+      // 2026-09-01 — re-aimed off the deleted api/pipecat-turn onto kevin, the one brain.
+      /GET-TO-KNOW INTERVIEW MODE/.test(read('api/kevin.ts')) &&
+      /do NOT say you are opening or pulling up anything/.test(read('api/kevin.ts'))
     );
   })(),
   'the get-to-know voice interview builds the profile from what the golfer says — describing a fault is absorbed, never routed to a drill; navigation/open tools are suppressed on the client AND the brain is told not to open or claim it opened anything');
@@ -9910,7 +9911,7 @@ check('LOCK: no endpoint hardcodes WHICH caddie it is — identity comes from th
   (() => {
     const files = [
       'api/kevin-read.ts', 'api/recap.ts', 'api/briefing.ts', 'api/lie-analysis.ts',
-      'api/swing-question.ts', 'api/kevin.ts', 'api/pipecat-turn.ts', 'api/meta-voice.ts',
+      'api/swing-question.ts', 'api/kevin.ts', 'api/meta-voice.ts',
     ];
     const noHardcodedIdentity = files.every((f) => !/You are (Kevin|Serena|Harry|Tank)\b/.test(read(f)));
     // and the read that was broken must resolve the name the same way recap.ts does, from the body
@@ -12622,17 +12623,21 @@ check('LOCK: the intelligence loop CLOSES — the caddie learns whether its own 
      * it. Asserting the chain across the shim is the same property — the finding REACHES the prompt
      * — checked where the code actually lives.
      */
-    const shim = read('api/_brainShim.ts');
-    const pipecatRenders = /unified_context_block: context\.memory \?\? null,/.test(shim)
-      && /\$\{_unifiedContextBlock \?/.test(brain);   // kevin interpolates it as a ternary
-    // (a third clause asserting pipecat's own `memoryBlock` variable was dropped with the second
-    //  brain — the two lines above assert the same hop where the code now lives.)
+    /**
+     * 2026-09-01 — api/_brainShim is DELETED along with api/pipecat-turn. The shim existed only to
+     * translate the pipecat contract onto kevin, and nothing had called that route since 08-23, so
+     * the last structural trace of the two-brain era is gone.
+     *
+     * The property this guard protects is unchanged and now has one hop instead of two: the CNS
+     * block has to reach the prompt. kevin interpolates it, and kevin is the brain.
+     */
+    const brainRenders = /\$\{_unifiedContextBlock \?/.test(read('api/kevin.ts'));
     // The client half of hop 5: the block has to be BUILT into the request before any prompt can
     // render it. One builder, so this cannot be true on one surface and false on another.
     const builderCarries = /unified_context_block,/.test(builder)
       && /mergeMemoryIntoContext\(/.test(builder);
-    const reachesBothBrains = kevinRenders && pipecatRenders;
-    return recorded && paired && judgesDecisionNotResult && feedsContext && builderCarries && reachesBothBrains;
+    const reachesTheBrain = kevinRenders && brainRenders;
+    return recorded && paired && judgesDecisionNotResult && feedsContext && builderCarries && reachesTheBrain;
   })(),
   'a club the caddie called is recorded, paired with what was played, judged ONLY on clean strikes, turned into a calibration finding, and delivered into the next prompt — the full loop, asserted as a chain rather than as parts');
 
