@@ -21,8 +21,8 @@ const screen = fs.readFileSync(path.join(root, 'app/swinglab/swing/[swing_id].ts
 
 describe('the wrist may inform timing', () => {
   it('impact falls back to the motion-derived anchor when nothing is labelled', () => {
-    expect(screen).toMatch(/deriveSwingAnchors\(samples\)/);
-    expect(screen).toMatch(/anchors && Number\.isFinite\(anchors\.impactMs\) \? anchors\.impactMs : null/);
+    expect(screen).toMatch(/return deriveSwingAnchors\(samples\);/);
+    expect(screen).toMatch(/motionAnchors && Number\.isFinite\(motionAnchors\.impactMs\) \? motionAnchors\.impactMs : null/);
   });
 
   it('and only after the labelled P6_impact frame is tried first', () => {
@@ -30,19 +30,50 @@ describe('the wrist may inform timing', () => {
     expect(memo.indexOf("position === 'P6_impact'")).toBeLessThan(memo.indexOf('deriveSwingAnchors'));
   });
 
-  it('it produces a NUMBER of milliseconds, nothing else', () => {
-    const memo = screen.slice(screen.indexOf('const poseImpactMs'), screen.indexOf('const poseImpactMs') + 2200);
-    expect(memo).toMatch(/tMs: fr\.timestampMs, x: c\.x, y: c\.y/); // x/y go IN
-    expect(memo).toMatch(/anchors\.impactMs/);                       // only a time comes OUT
+  it('it produces NUMBERS of milliseconds, nothing else', () => {
+    // x/y go IN to the anchor derivation; only times come OUT of it.
+    const memo = screen.slice(screen.indexOf('const motionAnchors'), screen.indexOf('const motionAnchors') + 1400);
+    expect(memo).toMatch(/tMs: fr\.timestampMs, x: c\.x, y: c\.y/);
+    expect(screen).toMatch(/motionAnchors\.impactMs/);
+    expect(screen).toMatch(/motionAnchors\?\.topMs/);
+  });
+});
+
+describe('the swing-position chips always find their points', () => {
+  it('THE REPORT (Tim, on a coach app that gets this right): a chip no longer needs a LABEL', () => {
+    // They used to render only for positions the pose pipeline had tagged, so on a swing it did not
+    // tag — most of them, once the network locate aborts to a whole-clip fallback — the buttons were
+    // missing or covered two of four stages.
+    expect(screen).toMatch(/P1_address: motionAnchors\?\.startMs/);
+    expect(screen).toMatch(/P4_top: motionAnchors\?\.topMs/);
+    expect(screen).toMatch(/P6_impact: motionAnchors\?\.impactMs/);
+    expect(screen).toMatch(/P10_finish: motionAnchors\?\.endMs/);
+  });
+
+  it('a LABELLED frame still wins — the pipeline’s own answer outranks the derivation', () => {
+    const chips = screen.slice(screen.indexOf('const swingStageChips'), screen.indexOf('const swingStageChips') + 2600);
+    expect(chips.indexOf('poseFrames.find')).toBeLessThan(chips.indexOf('derived[s.pos]'));
+  });
+
+  it('a stage with neither a label nor an anchor is omitted, never faked', () => {
+    const chips = screen.slice(screen.indexOf('const swingStageChips'), screen.indexOf('const swingStageChips') + 2600);
+    expect(chips).toMatch(/Number\.isFinite\(d\) \? \{ label: s\.label, ms: d \} : null/);
+    expect(chips).toMatch(/\.filter\(\(c\): c is \{ label: string; ms: number \} => c != null\)/);
+  });
+
+  it('both consumers share ONE anchor computation, so they name the same instant', () => {
+    expect(screen).toMatch(/const motionAnchors = useMemo\(/);
+    expect((screen.match(/deriveSwingAnchors\(/g) ?? []).length).toBe(1);
   });
 });
 
 describe('the wrist may NEVER become geometry', () => {
-  it('THE PROHIBITION: wrist data is used in exactly one place — the impact anchor', () => {
+  it('THE PROHIBITION: wrist data is used in exactly one place — the anchor derivation', () => {
     const uses = [...screen.matchAll(/wristCentroid\(/g)];
     expect(uses.length).toBe(1);
-    const memoStart = screen.indexOf('const poseImpactMs');
+    const memoStart = screen.indexOf('const motionAnchors = useMemo(');
     const memoEnd = screen.indexOf('}, [poseFrames]);', memoStart);
+    expect(memoStart).toBeGreaterThan(-1);
     expect(uses[0].index!).toBeGreaterThan(memoStart);
     expect(uses[0].index!).toBeLessThan(memoEnd);
   });
