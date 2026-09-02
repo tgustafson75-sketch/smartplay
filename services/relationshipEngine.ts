@@ -10,7 +10,7 @@
  */
 
 import { useRelationshipStore } from '../store/relationshipStore';
-import type { PrimaryIssue } from '../store/cageStore';
+import type { PrimaryIssue } from '../store/swingSessionStore';
 
 const DEDUPE_WINDOW_MS = 60 * 60 * 1000;             // 1h
 const REPEAT_THRESHOLD = 3;                          // 3rd occurrence escalates copy

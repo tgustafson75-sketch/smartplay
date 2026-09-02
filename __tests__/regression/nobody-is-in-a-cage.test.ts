@@ -105,7 +105,7 @@ describe('the word is gone from everything a player can see', () => {
   });
 
   it('the redundant swing TAG is collapsed, not renamed — indoor already meant it', () => {
-    const cs = read('store/cageStore.ts');
+    const cs = read('store/swingSessionStore.ts');
     expect(cs).toMatch(/SwingTag = 'range' \| 'indoor' \| 'course' \| 'putt' \| 'chip' \| 'other'/);
     // and every persisted 'cage' tag becomes 'indoor'
     expect(cs).toMatch(/shot\.tag === 'cage'\) shot\.tag = 'indoor'/);
@@ -113,12 +113,56 @@ describe('the word is gone from everything a player can see', () => {
   });
 
   it('that migration refuses a primitive rather than spreading it', () => {
-    expect(read('store/cageStore.ts')).toMatch(/typeof persisted !== 'object' \|\| persisted === null \|\| Array\.isArray\(persisted\)\) return \{\} as never/);
+    expect(read('store/swingSessionStore.ts')).toMatch(/typeof persisted !== 'object' \|\| persisted === null \|\| Array\.isArray\(persisted\)\) return \{\} as never/);
   });
 
   it('nothing WRITES the retired tag any more', () => {
     for (const f of ['components/CageSessionOverlay.tsx', 'services/mediaCapture.ts']) {
       expect(read(f)).not.toMatch(/tag: 'cage'/);
     }
+  });
+});
+
+describe('the store renamed without abandoning the data', () => {
+  const store = read('store/swingSessionStore.ts');
+
+  it('THE THING THAT MUST NOT MOVE: the AsyncStorage key is unchanged', () => {
+    // Renaming a persist key does not migrate data, it abandons it — the player opens the app to an
+    // empty swing library, with no error and no way back. The file, the hook and the types all moved
+    // off "cage"; the key deliberately did not.
+    expect(store).toMatch(/name: 'cage-store-v1'/);
+    expect(store).toMatch(/DO NOT RENAME/);
+  });
+
+  it('the store, hook and types no longer say cage', () => {
+    expect(fs.existsSync(path.join(root, 'store/cageStore.ts'))).toBe(false);
+    expect(fs.existsSync(path.join(root, 'store/swingSessionStore.ts'))).toBe(true);
+    expect(store).toMatch(/export const useSwingSessionStore/);
+    expect(store).toMatch(/export interface SwingShot/);
+    expect(store).toMatch(/export interface SwingSession/);
+  });
+
+  it('nothing imports the old module path', () => {
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (['node_modules', '.git', '.expo', 'ios', 'android'].includes(e.name)) continue;
+        const f = path.join(dir, e.name);
+        if (e.isDirectory()) walk(f);
+        else if (/\.tsx?$/.test(e.name)) {
+          const src = fs.readFileSync(f, 'utf8');
+          if (/from '[^']*\/cageStore'/.test(src) || /\buseCageStore\b/.test(src)) {
+            offenders.push(path.relative(root, f));
+          }
+        }
+      }
+    };
+    walk(root);
+    expect(offenders).toEqual([]);
+  });
+
+  it('the backup allowlist still sees this store — a rename must not hide it', () => {
+    const snap = read('services/cloudSync/snapshot.ts');
+    expect(snap).toMatch(/cage-store-v1/);
   });
 });

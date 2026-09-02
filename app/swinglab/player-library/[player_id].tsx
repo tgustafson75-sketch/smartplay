@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
-import { useCageStore } from '../../../store/cageStore';
+import { useSwingSessionStore } from '../../../store/swingSessionStore';
 import { useFamilyStore } from '../../../store/familyStore';
 import { useResolvedImageUri } from '../../../hooks/useResolvedImageUri';
 
@@ -32,8 +32,8 @@ export default function PlayerLibraryScreen() {
   const params = useLocalSearchParams<{ player_id?: string }>();
   const playerId = typeof params.player_id === 'string' ? params.player_id : '';
 
-  const hasHydrated = useCageStore(s => s.hasHydrated);
-  const sessions = useCageStore(s => s.sessionHistory);
+  const hasHydrated = useSwingSessionStore(s => s.hasHydrated);
+  const sessions = useSwingSessionStore(s => s.sessionHistory);
   const members = useFamilyStore(s => s.members);
   const member = useMemo(() => members.find(m => m.id === playerId) ?? null, [members, playerId]);
 

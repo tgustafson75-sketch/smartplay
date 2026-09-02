@@ -20,7 +20,7 @@ import type { VoiceIntent, AppContext, IntentResult } from '../../types/voiceInt
 import { useRoundStore } from '../../store/roundStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
-import { useCageStore } from '../../store/cageStore';
+import { useSwingSessionStore } from '../../store/swingSessionStore';
 
 /** Build an AppContext snapshot from current store state. Matches the
  *  shape voiceCommandRouter callers in the live app construct.
@@ -107,5 +107,5 @@ export function simulateAnalysisCompletion(opts: {
     visual_reference_path?: string | null;
   };
 }): void {
-  useCageStore.getState().setShotAnalysis(opts.sessionId, opts.shotId, opts.analysis);
+  useSwingSessionStore.getState().setShotAnalysis(opts.sessionId, opts.shotId, opts.analysis);
 }

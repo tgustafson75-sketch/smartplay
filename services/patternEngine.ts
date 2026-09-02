@@ -1,4 +1,4 @@
-import { CageShot } from '../store/cageStore';
+import { SwingShot } from '../store/swingSessionStore';
 
 export interface PatternResult {
   dominantMiss: string | null;
@@ -31,7 +31,7 @@ const rate = (n: number, total: number): number =>
   total === 0 ? 0 : Math.round((n / total) * 100);
 
 export const analyzeSession = (
-  shots: CageShot[],
+  shots: SwingShot[],
   club: string,
 ): PatternResult => {
 

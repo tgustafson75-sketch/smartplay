@@ -13,7 +13,7 @@ import { Modal, TextInput ,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
-import { useCageStore } from '../../store/cageStore';
+import { useSwingSessionStore } from '../../store/swingSessionStore';
 // 2026-05-21 — Consolidation 1 / Merge C: watch-connected state moved
 // from settingsStore to watchStore (the dedicated watch store) so
 // there's one source of truth when the native SDK lands.
@@ -56,7 +56,7 @@ export default function CageIndex() {
   useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   const router = useRouter();
 
-  const { startSession, cameraAlignment, sessionHistory, setDistanceCalibration } = useCageStore();
+  const { startSession, cameraAlignment, sessionHistory, setDistanceCalibration } = useSwingSessionStore();
   const [calibrationOpen, setCalibrationOpen] = useState(false);
   const [calibrationInput, setCalibrationInput] = useState('');
   const watchConnected = useWatchStore((s) => s.isConnected);

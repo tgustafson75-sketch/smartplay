@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import type { PrimaryIssue } from '../../store/cageStore';
+import type { PrimaryIssue } from '../../store/swingSessionStore';
 
 /**
  * Phase J — Primary Issue Card.

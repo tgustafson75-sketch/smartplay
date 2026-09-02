@@ -44,7 +44,7 @@ import { useFamilyStore, type FamilyMember } from '../../store/familyStore';
 import { useToastStore } from '../../store/toastStore';
 import { GolferAvatar } from '../../components/GolferAvatar';
 import { captureGolferSelfie, stylizeGolferSelfie } from '../../services/golferAvatar';
-import { useCageStore } from '../../store/cageStore';
+import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speak } from '../../services/voiceService';
 import { getCaddieName } from '../../lib/persona';
@@ -108,8 +108,8 @@ export default function CoachMode() {
   // Coach Mode v1 filters by upload.swinger === activeMember.firstName.
   // Robust against renames is a follow-up (tag a coached_member_id at
   // ingest time, filter by that). For now: name-match.
-  const sessionHistory = useCageStore(s => s.sessionHistory);
-  const hasHydrated = useCageStore(s => s.hasHydrated);
+  const sessionHistory = useSwingSessionStore(s => s.sessionHistory);
+  const hasHydrated = useSwingSessionStore(s => s.hasHydrated);
   const playerSwings = useMemo(() => {
     if (!activeMember) return [];
     // 2026-07-10 (audit FD2) — member swings recorded via SmartMotion are stored keyed by

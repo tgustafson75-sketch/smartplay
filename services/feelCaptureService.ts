@@ -35,7 +35,7 @@
  * straight to OpenAI Whisper which extracts the audio internally.
  */
 
-import { useCageStore, type CageShot, type CageSession } from '../store/cageStore';
+import { useSwingSessionStore, type SwingShot, type SwingSession } from '../store/swingSessionStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
 import { track } from './analytics';
@@ -53,7 +53,7 @@ const done = new Set<string>();
  * Non-throwing: failures are logged and skipped (the empty transcript
  * stays empty; another swing's capture isn't blocked by this one).
  */
-async function transcribeShotClip(sessionId: string, shot: CageShot): Promise<void> {
+async function transcribeShotClip(sessionId: string, shot: SwingShot): Promise<void> {
   if (!shot.clipUri) return;
   if (inflight.has(shot.id) || done.has(shot.id)) return;
   if ((shot.feel_narration_transcript ?? '').trim().length > 0) {
@@ -95,7 +95,7 @@ async function transcribeShotClip(sessionId: string, shot: CageShot): Promise<vo
       track('feel_capture_transcribe_empty');
       return;
     }
-    useCageStore.getState().setShotFeelTranscript(sessionId, shot.id, text);
+    useSwingSessionStore.getState().setShotFeelTranscript(sessionId, shot.id, text);
     done.add(shot.id);
     track('feel_capture_transcribe_ok', { chars: text.length });
     console.log(`[feelCapture] ok shot=${shot.id} chars=${text.length}`);
@@ -113,13 +113,13 @@ async function transcribeShotClip(sessionId: string, shot: CageShot): Promise<vo
  * mutation by the subscribe wire below.
  */
 function processPendingShots(): void {
-  const cage = useCageStore.getState();
-  const sessions: { sessionId: string; shot: CageShot }[] = [];
+  const cage = useSwingSessionStore.getState();
+  const sessions: { sessionId: string; shot: SwingShot }[] = [];
   const active = cage.activeSession;
   if (active) {
     for (const shot of active.shots) sessions.push({ sessionId: active.id, shot });
   }
-  for (const sess of cage.sessionHistory as CageSession[]) {
+  for (const sess of cage.sessionHistory as SwingSession[]) {
     for (const shot of sess.shots) sessions.push({ sessionId: sess.id, shot });
   }
   for (const { sessionId, shot } of sessions) {
@@ -161,7 +161,7 @@ export function initFeelCapture(): () => void {
     processPendingShots();
   }
 
-  const unsubCage = useCageStore.subscribe(() => {
+  const unsubCage = useSwingSessionStore.subscribe(() => {
     if (!isEnabled()) return;
     processPendingShots();
   });
@@ -190,9 +190,9 @@ export interface FeelCaptureTuple {
   severity: string | null;
 }
 export function listFeelCaptureTuples(limit = 50): FeelCaptureTuple[] {
-  const cage = useCageStore.getState();
+  const cage = useSwingSessionStore.getState();
   const out: FeelCaptureTuple[] = [];
-  const push = (sessionId: string, sess: CageSession) => {
+  const push = (sessionId: string, sess: SwingSession) => {
     for (const shot of sess.shots) {
       const transcript = (shot.feel_narration_transcript ?? '').trim();
       if (transcript.length === 0) continue;
@@ -210,7 +210,7 @@ export function listFeelCaptureTuples(limit = 50): FeelCaptureTuple[] {
     }
   };
   if (cage.activeSession) push(cage.activeSession.id, cage.activeSession);
-  for (const sess of cage.sessionHistory as CageSession[]) push(sess.id, sess);
+  for (const sess of cage.sessionHistory as SwingSession[]) push(sess.id, sess);
   out.sort((a, b) => b.date - a.date);
   return out.slice(0, limit);
 }

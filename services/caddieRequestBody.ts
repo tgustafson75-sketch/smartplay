@@ -466,7 +466,7 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     recentHeroMoments: safe(() => rel.getRecentHeroMoments?.(2) ?? null, null),
     recentCageSessions: safe(() => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const c = require('../store/cageStore').useCageStore.getState();
+      const c = require('../store/swingSessionStore').useSwingSessionStore.getState();
       // 2026-08-26 — Array.isArray, not `?? []`. A malformed persisted session whose `shots` is a
       // string or an object does not throw on `.length`; it silently reports a character count or
       // undefined, and the caddie is told a number that means nothing. This is the shape check the
@@ -674,7 +674,7 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     }, null),
     recentCageInsights: safe(() => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      return (require('../store/cageStore').useCageStore.getState().recentInsights ?? []).slice(-3);
+      return (require('../store/swingSessionStore').useSwingSessionStore.getState().recentInsights ?? []).slice(-3);
     }, []),
     recentRoundInsights: safe(() => (r.recentInsights ?? []).slice(-3), []),
 

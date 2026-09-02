@@ -1,6 +1,6 @@
-import type { ReviewLabels } from '../store/cageStore';
+import type { ReviewLabels } from '../store/swingSessionStore';
 import * as FileSystem from 'expo-file-system/legacy';
-import type { CageSession, CageClip } from '../types/cage';
+import type { SwingSession, CageClip } from '../types/cage';
 import { cageLog } from './cageTelemetry';
 
 function uuid(): string {
@@ -21,19 +21,19 @@ async function ensureBase(): Promise<void> {
   }
 }
 
-async function readIndex(): Promise<CageSession[]> {
+async function readIndex(): Promise<SwingSession[]> {
   await ensureBase();
   const info = await FileSystem.getInfoAsync(INDEX_PATH);
   if (!info.exists) return [];
   try {
     const raw = await FileSystem.readAsStringAsync(INDEX_PATH);
-    return JSON.parse(raw) as CageSession[];
+    return JSON.parse(raw) as SwingSession[];
   } catch {
     return [];
   }
 }
 
-async function writeIndex(sessions: CageSession[]): Promise<void> {
+async function writeIndex(sessions: SwingSession[]): Promise<void> {
   await ensureBase();
   await FileSystem.writeAsStringAsync(INDEX_PATH, JSON.stringify(sessions));
 }
@@ -49,7 +49,7 @@ async function writeIndex(sessions: CageSession[]): Promise<void> {
 let _indexChain: Promise<unknown> = Promise.resolve();
 
 function mutateIndex<T>(
-  mutator: (sessions: CageSession[]) => { sessions: CageSession[]; result: T },
+  mutator: (sessions: SwingSession[]) => { sessions: SwingSession[]; result: T },
 ): Promise<T> {
   const run = async (): Promise<T> => {
     const current = await readIndex();
@@ -74,9 +74,9 @@ const _pendingEvents = new Map<
   Array<{ offset: number; method: 'audio_transient' | 'manual'; acoustic: AcousticLabels | null }>
 >();
 
-export async function createSession(): Promise<CageSession> {
+export async function createSession(): Promise<SwingSession> {
   const id = uuid();
-  const session: CageSession = {
+  const session: SwingSession = {
     id,
     player_id: 'primary',
     started_at: Date.now(),
@@ -185,11 +185,11 @@ export async function finalizeClips(
   }
 }
 
-export async function listSessions(): Promise<CageSession[]> {
+export async function listSessions(): Promise<SwingSession[]> {
   return readIndex();
 }
 
-export async function getSession(session_id: string): Promise<CageSession | null> {
+export async function getSession(session_id: string): Promise<SwingSession | null> {
   const sessions = await readIndex();
   return sessions.find((s) => s.id === session_id) ?? null;
 }
@@ -227,7 +227,7 @@ export async function getSessionDir(session_id: string): Promise<string> {
   return dir;
 }
 
-export async function createSyntheticSession(): Promise<CageSession> {
+export async function createSyntheticSession(): Promise<SwingSession> {
   const id = uuid();
   const now = Date.now();
   const clips: CageClip[] = [
@@ -237,7 +237,7 @@ export async function createSyntheticSession(): Promise<CageSession> {
     { id: uuid(), session_id: id, detected_at_session_offset_seconds: 61, detection_method: 'audio_transient', start_time_seconds: 59, end_time_seconds: 64, speaker_id: 'primary', labels: {}, raw_transcript: null },
     { id: uuid(), session_id: id, detected_at_session_offset_seconds: 88, detection_method: 'audio_transient', start_time_seconds: 86, end_time_seconds: 91, speaker_id: 'primary', labels: {}, raw_transcript: null },
   ];
-  const session: CageSession = {
+  const session: SwingSession = {
     id,
     player_id: 'primary',
     started_at: now - 120_000,

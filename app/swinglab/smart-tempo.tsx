@@ -35,7 +35,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Video, ResizeMode, type AVPlaybackStatus, type AVPlaybackStatusSuccess } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useCageStore } from '../../store/cageStore';
+import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { useToastStore } from '../../store/toastStore';
 import { resolveClipUri } from '../../services/videoUpload';
 import { getLibrary } from '../../services/swingLibrary';
@@ -94,8 +94,8 @@ export default function SmartTempoScreen() {
   const [swingId, setSwingId] = useState<string | null>(params.swing_id ?? null);
   const [rawClipUri, setRawClipUri] = useState<string | null>(params.clipUri ?? null);
 
-  const hasHydrated = useCageStore(s => s.hasHydrated);
-  const session = useCageStore(s =>
+  const hasHydrated = useSwingSessionStore(s => s.hasHydrated);
+  const session = useSwingSessionStore(s =>
     swingId ? s.sessionHistory.find(x => x.id === swingId) ?? null : null,
   );
   const shot = session?.shots[0];
@@ -417,7 +417,7 @@ export default function SmartTempoScreen() {
         // a library entry first, then attach the tempo. Reuses ingestUploadedSwing.
         const clip = playbackUri ?? rawClipUri ?? sourceClipUri;
         if (clip) {
-          targetId = useCageStore.getState().ingestUploadedSwing({
+          targetId = useSwingSessionStore.getState().ingestUploadedSwing({
             clipUri: clip,
             club: 'Swing',
             source: 'uploaded_video',
@@ -436,7 +436,7 @@ export default function SmartTempoScreen() {
       // display name is unchanged — the store has no session-rename setter, and
       // the name field here is only for newly-created entries).
       if (targetId) {
-        useCageStore.getState().setSessionTempo(targetId, result);
+        useSwingSessionStore.getState().setSessionTempo(targetId, result);
         useToastStore.getState().show('Tempo saved to your library.');
       }
       setSaveOpen(false);

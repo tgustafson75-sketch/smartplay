@@ -17,8 +17,8 @@ import {
   deleteSession,
   createSyntheticSession,
 } from '../services/cageStorage';
-import type { CageSession, CageClip } from '../types/cage';
-import { useCageStore } from '../store/cageStore';
+import type { SwingSession, CageClip } from '../types/cage';
+import { useSwingSessionStore } from '../store/swingSessionStore';
 import { getCurrentProfile, clearProfile } from '../services/vocabularyProfile';
 import { listReviewSessions } from '../services/cageReview';
 import type { VocabularyProfile } from '../types/vocabulary';
@@ -61,13 +61,13 @@ export default function CageDebug() {
   const router = useRouter();
   const { sessionId: focusSessionId } = useLocalSearchParams<{ sessionId?: string }>();
 
-  const [sessions, setSessions] = useState<CageSession[]>([]);
+  const [sessions, setSessions] = useState<SwingSession[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(focusSessionId ?? null);
-  const [selectedClip, setSelectedClip] = useState<{ clip: CageClip; session: CageSession } | null>(null);
+  const [selectedClip, setSelectedClip] = useState<{ clip: CageClip; session: SwingSession } | null>(null);
   const [loading, setLoading] = useState(true);
 
   // ── Cage Review debug state ────────────────────────────────────────────────
-  const { sessionHistory } = useCageStore();
+  const { sessionHistory } = useSwingSessionStore();
   const [vocabProfile, setVocabProfile] = useState<VocabularyProfile | null>(null);
   const [reviewSessions, setReviewSessions] = useState<ReviewSession[]>([]);
   const [reviewDebugLoading, setReviewDebugLoading] = useState(false);
@@ -80,7 +80,7 @@ export default function CageDebug() {
   const [fillerGenerating, setFillerGenerating] = useState(false);
   const [fillerPlayingCategory, setFillerPlayingCategory] = useState<FillerCategory | null>(null);
 
-  void useCageStore; // keep store referenced for viewer subscription
+  void useSwingSessionStore; // keep store referenced for viewer subscription
   // 2026-05-24 — AsyncStorage dump for hands-free verification (Batch 2
   // QA). Static snapshot read by tapping "Dump AsyncStorage" below;
   // renders the parsed JSON inline so persistence of round-store-v1,
@@ -191,7 +191,7 @@ export default function CageDebug() {
     setExpandedId(s.id);
   }, [reload]);
 
-  const handlePlayClip = useCallback(async (clip: CageClip, session: CageSession) => {
+  const handlePlayClip = useCallback(async (clip: CageClip, session: SwingSession) => {
     if (!session.master_video_path) {
       Alert.alert('Synthetic session', 'No video file — this is a test session with reference data only.');
       return;
@@ -221,7 +221,7 @@ export default function CageDebug() {
     setReviewDebugLoading(true);
     const apiUrl = getApiBaseUrl();
     const mockTranscripts = ['heel, came up short', 'pure, right at it', 'fat, didn\'t transfer', 'thin, rushed it', 'solid', 'pulled it left'];
-    const { useCageStore: cageStoreHook } = await import('../store/cageStore');
+    const { useSwingSessionStore: cageStoreHook } = await import('../store/swingSessionStore');
     const updateShotLabels = cageStoreHook.getState().updateShotLabels;
     const shots = session.shots.slice(0, 6);
     for (let i = 0; i < shots.length; i++) {
@@ -1003,8 +1003,8 @@ function FeelCaptureViewer() {
   // loop, the same crash class fixed in the family screens. Subscribe to the
   // raw store fields (stable refs) and compute the array in useMemo so the
   // reference only changes when the underlying data does.
-  const activeSession = useCageStore((s) => s.activeSession);
-  const sessionHistory = useCageStore((s) => s.sessionHistory);
+  const activeSession = useSwingSessionStore((s) => s.activeSession);
+  const sessionHistory = useSwingSessionStore((s) => s.sessionHistory);
   const tuples = useMemo(() => {
     // deps drive recompute; listFeelCaptureTuples reads the store internally.
     void activeSession; void sessionHistory;

@@ -1,5 +1,5 @@
 import type { CanonicalIssue, SwingAnalysis } from './poseDetection';
-import type { PrimaryIssue } from '../store/cageStore';
+import type { PrimaryIssue } from '../store/swingSessionStore';
 import { rankFaults } from './knowledgeBase/causalEngine';
 
 /**

@@ -27,7 +27,7 @@ import * as VideoThumbnails from '../../../utils/videoThumbnail';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
 import SwingAnalysisSteps from '../../../components/swinglab/SwingAnalysisSteps';
-import { useCageStore, OTHER_PLAYER_ID, type AnalysisStatus, type CageShot, type CageSession } from '../../../store/cageStore';
+import { useSwingSessionStore, OTHER_PLAYER_ID, type AnalysisStatus, type SwingShot, type SwingSession } from '../../../store/swingSessionStore';
 import { useToastStore } from '../../../store/toastStore';
 import { usePlayerProfileStore } from '../../../store/playerProfileStore';
 import { useFamilyStore } from '../../../store/familyStore';
@@ -132,7 +132,7 @@ export default function SwingDetail() {
   // when Phase K transitions analysis_status / populates primary_issue.
   // The previous static getSession() call returned a snapshot and never
   // updated past the initial mount.
-  const session = useCageStore(s =>
+  const session = useSwingSessionStore(s =>
     swing_id ? s.sessionHistory.find(x => x.id === swing_id) ?? null : null,
   );
   // Coach report export is an instructor tool — gate the button so a
@@ -144,7 +144,7 @@ export default function SwingDetail() {
   // Without this, deep-linking to a swing detail before hydration
   // renders "Swing not found." even though the data IS in storage.
   // Library hydration race fix — same pattern as app/swinglab/library.tsx.
-  const hasHydrated = useCageStore(s => s.hasHydrated);
+  const hasHydrated = useSwingSessionStore(s => s.hasHydrated);
   // 2026-08-01 (Tim — per-swing breakdown). A multi-swing reel can now be reviewed swing-by-swing:
   // tapping a shot in the per-shot reel selects it, and the video window + skeleton + arc + numbers all
   // follow. Defaults to 0, so the single-swing / primary experience is UNCHANGED (activeBiomech falls
@@ -197,7 +197,7 @@ export default function SwingDetail() {
   );
   const assignGolfer = useCallback((playerId: string) => {
     if (!swing_id) return;
-    useCageStore.getState().setSessionPlayer(swing_id, playerId);
+    useSwingSessionStore.getState().setSessionPlayer(swing_id, playerId);
     setGolferSheetOpen(false);
     setAddGolferOpen(false);
     setNewGolferName('');
@@ -219,10 +219,10 @@ export default function SwingDetail() {
   const assignAngle = useCallback((angle: 'down_the_line' | 'face_on') => {
     if (!swing_id) return;
     setAngleSheetOpen(false);
-    const cur = useCageStore.getState().sessionHistory.find(s => s.id === swing_id);
+    const cur = useSwingSessionStore.getState().sessionHistory.find(s => s.id === swing_id);
     if (!cur?.upload) return; // upload-less session — the chip is hidden, but never half-commit
     if ((cur.upload.angleOverride ?? null) === angle) return;
-    useCageStore.getState().patchSessionUpload(swing_id, { angleOverride: angle });
+    useSwingSessionStore.getState().patchSessionUpload(swing_id, { angleOverride: angle });
     useToastStore.getState().show(angle === 'face_on' ? 'Face-on — re-reading…' : 'Down-the-line — re-reading…');
     onReanalyzeRef.current?.();
   }, [swing_id]);
@@ -303,7 +303,7 @@ export default function SwingDetail() {
   // 2026-06-14 (Tim — bilateral) — link a SECOND ANGLE of the same swing. Picks
   // another library swing → opens the bilateral read (one DTL + one face-on).
   const [linkPickerOpen, setLinkPickerOpen] = useState(false);
-  const allSessions = useCageStore(s => s.sessionHistory);
+  const allSessions = useSwingSessionStore(s => s.sessionHistory);
   const otherSessions = useMemo(
     () => allSessions.filter(x => x.id !== swing_id).slice(0, 30),
     [allSessions, swing_id],
@@ -1071,14 +1071,14 @@ export default function SwingDetail() {
           ? shot.locatedImpactSec * 1000
           : locatedImpactMs;
         const biomech = await poseMod.analyzeSwingFromVideo(analyzeUri, durationMs, session?.upload?.angleOverride ?? null, false, swingWindow, backfillImpactMs, resolveSwingerHandedness());
-        useCageStore.getState().setSessionBiomechanics(swing_id, biomech);
+        useSwingSessionStore.getState().setSessionBiomechanics(swing_id, biomech);
       } catch (e) {
         console.log('[swing-detail] pose backfill failed', e);
         // 2026-06-11 — mark the backfill ATTEMPTED (null, not undefined) so the
         // slow full-clip analysis does NOT re-run on every re-open of a saved
         // swing (Tim: "we only need it done once, then it's saved"). null trips
         // the `biomechanics !== undefined` guard above on the next open.
-        try { useCageStore.getState().setSessionBiomechanics(swing_id, null); } catch { /* non-fatal */ }
+        try { useSwingSessionStore.getState().setSessionBiomechanics(swing_id, null); } catch { /* non-fatal */ }
       }
     })();
   }, [swing_id, shot?.clipUri, session?.biomechanics, session?.upload?.duration_sec, session?.source]);
@@ -1118,7 +1118,7 @@ export default function SwingDetail() {
         const biomech = await poseMod.analyzeSwingFromVideo(
           analyzeUri, clipDurMs, session?.upload?.angleOverride ?? null, false, { startMs: wStart, endMs: wEnd }, shotImpactMs, resolveSwingerHandedness(),
         );
-        useCageStore.getState().setShotBiomechanics(swing_id, selShot.id, biomech);
+        useSwingSessionStore.getState().setShotBiomechanics(swing_id, selShot.id, biomech);
         try {
           const { detectClubPath } = await import('../../../services/swing/clubPath');
           /**
@@ -1141,14 +1141,14 @@ export default function SwingDetail() {
           // would drop a valid 3-point arc and persist []. (Dead today under LIBRARY_AUTO_PROCESS=false, but
           // keep it consistent so flipping that flag can't silently lose 3-point arcs.)
           if (arc && arc.points.length >= 3) {
-            useCageStore.getState().setShotClubArc(swing_id, selShot.id, arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + wStart })), { w: arc.frameW ?? null, h: arc.frameH ?? null });
+            useSwingSessionStore.getState().setShotClubArc(swing_id, selShot.id, arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + wStart })), { w: arc.frameW ?? null, h: arc.frameH ?? null });
           } else {
-            useCageStore.getState().setShotClubArc(swing_id, selShot.id, [], null);
+            useSwingSessionStore.getState().setShotClubArc(swing_id, selShot.id, [], null);
           }
         } catch { /* arc best-effort */ }
       } catch (e) {
         console.log('[swing-detail] per-shot backfill failed', e);
-        try { useCageStore.getState().setShotBiomechanics(swing_id, selShot.id, null); } catch { /* non-fatal */ }
+        try { useSwingSessionStore.getState().setShotBiomechanics(swing_id, selShot.id, null); } catch { /* non-fatal */ }
       }
     })();
     // Without this the `cancelled` flag above never flips and the abort is inert — which would have
@@ -1294,7 +1294,7 @@ export default function SwingDetail() {
         const { persistClipToDocuments } = await import('../../../services/videoUpload');
         const durable = await persistClipToDocuments(uri, `${swing_id}_${shotId}`);
         if (durable && durable !== uri) {
-          useCageStore.getState().setShotClipUri(swing_id, shotId, durable);
+          useSwingSessionStore.getState().setShotClipUri(swing_id, shotId, durable);
           uploadLog('legacy-clip-rescued', { from_scheme: uri.split(':')[0] }, swing_id);
         }
       } catch { /* best-effort — original uri stays, onReanalyze handles gone */ }
@@ -1376,7 +1376,7 @@ export default function SwingDetail() {
     ) {
       watchFiredRef.current = true;
       uploadLog('watch-then-analyze-fire', { from_status: analysisStatus }, swing_id);
-      useCageStore.getState().setSessionAnalysisStatus(swing_id, 'pending');
+      useSwingSessionStore.getState().setSessionAnalysisStatus(swing_id, 'pending');
       void runPhaseKOnSession(swing_id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1533,7 +1533,7 @@ export default function SwingDetail() {
     if (watchFiredRef.current) return;
     const timer = setTimeout(() => {
       if (watchFiredRef.current) return;
-      if (useCageStore.getState().sessionHistory.find(s => s.id === swing_id)?.analysis_status !== 'pending') return;
+      if (useSwingSessionStore.getState().sessionHistory.find(s => s.id === swing_id)?.analysis_status !== 'pending') return;
       watchFiredRef.current = true;
       // 2026-05-25 — bumped 25s → 60s per Tim's request. Longer clips
       // (uploaded coach lessons, multi-swing demos) need more time
@@ -1541,7 +1541,7 @@ export default function SwingDetail() {
       // the watchdog. 60s still bounds the worst-case "stuck on
       // Kevin is reviewing forever" UX.
       uploadLog('watch-then-analyze-watchdog-fire', { reason: 'pending_60s' }, swing_id);
-      useCageStore.getState().setSessionAnalysisStatus(swing_id, 'pending');
+      useSwingSessionStore.getState().setSessionAnalysisStatus(swing_id, 'pending');
       void runPhaseKOnSession(swing_id);
     }, 60_000);
     return () => clearTimeout(timer);
@@ -1574,9 +1574,9 @@ export default function SwingDetail() {
       st === 'pending' || st === 'analyzing_frames' || st === 'analyzing_pose' || st === 'analyzing_pattern';
     if (!nonTerminal(analysisStatus)) return;
     const timer = setTimeout(() => {
-      const cur = useCageStore.getState().sessionHistory.find(s => s.id === swing_id)?.analysis_status;
+      const cur = useSwingSessionStore.getState().sessionHistory.find(s => s.id === swing_id)?.analysis_status;
       if (nonTerminal(cur)) {
-        useCageStore.getState().setSessionAnalysisStatus(swing_id, 'failed', "Analysis didn't finish — tap Re-analyze to try again.");
+        useSwingSessionStore.getState().setSessionAnalysisStatus(swing_id, 'failed', "Analysis didn't finish — tap Re-analyze to try again.");
       }
     }, 150_000);
     return () => clearTimeout(timer);
@@ -1585,7 +1585,7 @@ export default function SwingDetail() {
   // Phase BZ-v1 — when in compare-picker mode, tapping a row picks the
   // right-pane swing instead of scrubbing the main video. Otherwise
   // scrubs as before.
-  const handleRowTap = async (s: CageShot) => {
+  const handleRowTap = async (s: SwingShot) => {
     if (isPickingCompareTarget) {
       if (s.id === leftCompareShotId) return; // can't compare with itself
       setRightCompareShotId(s.id);
@@ -1880,7 +1880,7 @@ export default function SwingDetail() {
     const profile = usePlayerProfileStore.getState();
     const pi = session.primary_issue ?? null;
     const swinger = session.upload?.swinger ?? null;
-    const history = useCageStore.getState().sessionHistory;
+    const history = useSwingSessionStore.getState().sessionHistory;
     const sameStudent = swinger ? history.filter(h => (h.upload?.swinger ?? null) === swinger) : [];
     useToastStore.getState().show('Building report…');
     // 2026-06-23 (RP-3b) — the fault frame is an IMAGE asset under smartmotion/
@@ -2051,7 +2051,7 @@ export default function SwingDetail() {
         startSec = Math.max(0, center - 2.5);
         endSec = Math.min(duration, center + 3);
       }
-      useCageStore.getState().setShotClipBoundaries(swing_id, shot.id, startSec, endSec, locatedImpactSec);
+      useSwingSessionStore.getState().setShotClipBoundaries(swing_id, shot.id, startSec, endSec, locatedImpactSec);
       useToastStore.getState().show(
         located ? 'Found your swing — analyzing…' : 'Analyzing your swing… scrub + re-analyze to fine-tune.',
       );
@@ -2094,7 +2094,7 @@ export default function SwingDetail() {
             onPress={() => {
               Alert.alert('Delete this swing?', 'The metadata will be removed. You can re-upload the clip later.', [
                 { text: 'Cancel', style: 'cancel' },
-                { text: 'Delete', style: 'destructive', onPress: () => { useCageStore.getState().deleteSession(swing_id); router.back(); } },
+                { text: 'Delete', style: 'destructive', onPress: () => { useSwingSessionStore.getState().deleteSession(swing_id); router.back(); } },
               ]);
             }}
             style={{ marginBottom: 12, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: colors.surface, borderRadius: 8, borderWidth: 1, borderColor: colors.border }}
@@ -2192,7 +2192,7 @@ export default function SwingDetail() {
     // 2026-08-09 (C1) — the frame the user scrubbed to IS their declared swing moment: use it as the
     // impact anchor (user-supplied signal, not a fabricated fraction). The old path windowed around it
     // and then sampled "impact" at 65% of that window — 1.1s after the very frame they pointed at.
-    useCageStore.getState().setShotClipBoundaries(swing_id, shot.id, startSec, endSec, center);
+    useSwingSessionStore.getState().setShotClipBoundaries(swing_id, shot.id, startSec, endSec, center);
     useToastStore.getState().show(`Analyzing the swing at 0:${Math.floor(center).toString().padStart(2, '0')}…`);
     onReanalyze();
   };
@@ -2228,9 +2228,9 @@ export default function SwingDetail() {
             // "not on device" failure when the healed path is ALSO gone.
             const resolved = await resolveClipUri(clip);
             if (resolved && resolved !== clip && shot?.id) {
-              useCageStore.getState().setShotClipUri(swing_id, shot.id, resolved);
+              useSwingSessionStore.getState().setShotClipUri(swing_id, shot.id, resolved);
             } else if (!resolved) {
-              useCageStore.getState().setSessionAnalysisStatus(
+              useSwingSessionStore.getState().setSessionAnalysisStatus(
                 swing_id,
                 'failed',
                 "The original video isn't on this device anymore, so I can't re-watch it. Re-upload the clip and I'll analyze it fresh.",
@@ -2240,7 +2240,7 @@ export default function SwingDetail() {
           }
         }
       } catch { /* fall through — let analysis try */ }
-      useCageStore.getState().setSessionAnalysisStatus(swing_id, 'pending');
+      useSwingSessionStore.getState().setSessionAnalysisStatus(swing_id, 'pending');
       spokenForRef.current = null; // cleared after analysis commits, not before
       // 2026-07-29 (Tim — "analyze twice then it's dead") — the in-flight lock was released ONLY by the
       // terminal-status effect, so a locate that STALLED or was Aborted (device log: swing_locate —
@@ -2255,9 +2255,9 @@ export default function SwingDetail() {
         uploadLog('reanalyze-error', { error: String(e) }, swing_id);
         // The run threw (e.g. an aborted/timed-out locate) — surface a RETRYABLE failure instead of a
         // stuck spinner. Never clobber a result that already committed 'ok' (don't harm a good analysis).
-        const st = useCageStore.getState().sessionHistory.find((s) => s.id === swing_id)?.analysis_status;
+        const st = useSwingSessionStore.getState().sessionHistory.find((s) => s.id === swing_id)?.analysis_status;
         if (st !== 'ok') {
-          useCageStore.getState().setSessionAnalysisStatus(swing_id, 'failed', "Analysis hit a snag — tap Analyze to try again.");
+          useSwingSessionStore.getState().setSessionAnalysisStatus(swing_id, 'failed', "Analysis hit a snag — tap Analyze to try again.");
         }
       } finally {
         // ALWAYS release the lock — success, abort, throw, or early-return — so Analyze never dies
@@ -2362,8 +2362,8 @@ export default function SwingDetail() {
   // 2026-07-27 (Tim — cross-date compare) — diff THIS swing's biomechanics against an EARLIER swing of
   // the player's (picked by date), on every metric the engine tracks (tempo, hip slide, head drift,
   // coil, tilt) → better/worse/same. Mirrors onCompareToSelect but builds the reference from a real
-  // CageSession instead of the reference DB. Reuses the same self_vs_self engine + ComparisonResultSheet.
-  const compareToSession = (os: CageSession) => {
+  // SwingSession instead of the reference DB. Reuses the same self_vs_self engine + ComparisonResultSheet.
+  const compareToSession = (os: SwingSession) => {
     const bio = os.biomechanics;
     if (!currentPoseForCompare || !bio) {
       useToastStore.getState().show("That swing doesn't have mechanics yet — analyze it first.");
@@ -2485,7 +2485,7 @@ export default function SwingDetail() {
                 captured on-course (carries a roundId), starring saves it to that
                 round's scorecard + recap. */}
             <TouchableOpacity
-              onPress={() => { useCageStore.getState().toggleSessionStarred(session.id); }}
+              onPress={() => { useSwingSessionStore.getState().toggleSessionStarred(session.id); }}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               accessibilityRole="button"
               accessibilityLabel={session.starred ? 'Unstar this swing' : 'Star this swing — saves it to the round scorecard'}
@@ -3224,7 +3224,7 @@ export default function SwingDetail() {
                 // 'watching_someone' BEFORE it checks the tag (set when a family member was
                 // active at upload). So flip perspective to pov_self too, or re-tagging as a
                 // putt silently no-ops and re-runs the swing analyzer again.
-                useCageStore.getState().patchSessionUpload(swing_id, { tag: 'putt', perspective: 'pov_self' });
+                useSwingSessionStore.getState().patchSessionUpload(swing_id, { tag: 'putt', perspective: 'pov_self' });
                 useToastStore.getState().show('Reading this as a putt…');
                 onReanalyze();
               }}
@@ -3958,10 +3958,10 @@ export default function SwingDetail() {
  * fails (no ball found, server error), we just leave the area unset
  * and the user can tap-place manually.
  */
-function CageTargetingSlot({ session }: { session: import('../../../store/cageStore').CageSession }) {
+function CageTargetingSlot({ session }: { session: import('../../../store/swingSessionStore').SwingSession }) {
   const { colors } = useTheme();
-  const setBallArea = useCageStore(s => s.setSessionBallArea);
-  const setTarget = useCageStore(s => s.setSessionTarget);
+  const setBallArea = useSwingSessionStore(s => s.setSessionBallArea);
+  const setTarget = useSwingSessionStore(s => s.setSessionTarget);
   const [autoDetecting, setAutoDetecting] = React.useState(false);
 
   // Address frame source — fault frame is the best available shot of
@@ -4040,7 +4040,7 @@ function CageTargetingSlot({ session }: { session: import('../../../store/cageSt
  */
 function FeelNoteCard({ sessionId, initialNote }: { sessionId: string; initialNote: string | null }) {
   const { colors } = useTheme();
-  const setSessionFeel = useCageStore(s => s.setSessionFeel);
+  const setSessionFeel = useSwingSessionStore(s => s.setSessionFeel);
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(initialNote ?? '');
 
@@ -4119,7 +4119,7 @@ function FeelNoteCard({ sessionId, initialNote }: { sessionId: string; initialNo
 
 function CoachNoteCard({ sessionId, initialNote }: { sessionId: string; initialNote: string | null }) {
   const { colors } = useTheme();
-  const setSessionCoachNote = useCageStore(s => s.setSessionCoachNote);
+  const setSessionCoachNote = useSwingSessionStore(s => s.setSessionCoachNote);
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState(initialNote ?? '');
   // 2026-05-25 — Voice capture state. The mic button starts a

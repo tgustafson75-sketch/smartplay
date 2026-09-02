@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
-import { useCageStore } from '../../store/cageStore';
+import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { useSettingsStore, getEffectiveSimpleBriefing } from '../../store/settingsStore';
 import { speak, stopSpeaking, configureAudioForSpeech } from '../../services/voiceService';
 import { generateBriefing } from '../../services/briefingGenerator';
@@ -132,7 +132,7 @@ export default function BriefingScreen() {
 
       // Phase V.7+ — last 3 cage sessions so the first-tee briefing can
       // reference recent practice naturally instead of starting cold.
-      const recentCageSessions = useCageStore.getState()
+      const recentCageSessions = useSwingSessionStore.getState()
         .sessionHistory
         .slice(-3)
         .reverse()

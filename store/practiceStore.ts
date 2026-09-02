@@ -5,7 +5,7 @@
  * tendencies, consumed by the Golf Father Tank rules (services/intents/
  * askGolfFatherHandler.ts) to make "driver or 3-wood" / "flag or center"
  * style answers context-aware. Fed by mediaHandlers' swing-analysis
- * subscriber on every analyzed CageShot.
+ * subscriber on every analyzed SwingShot.
  *
  * Field origins:
  *   - swingCount, lastSessionDate: incremented per analyzed swing

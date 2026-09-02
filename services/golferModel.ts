@@ -39,7 +39,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRoundStore, type RoundRecord, type ShotResult } from '../store/roundStore';
-import { useCageStore, type CageSession } from '../store/cageStore';
+import { useSwingSessionStore, type SwingSession } from '../store/swingSessionStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { getRecentAnalyses } from './smartAnalysisEngine';
 import { devLog } from './devLog';
@@ -156,7 +156,7 @@ export function buildGolferModel(force = false): GolferModel {
     return memoSnapshot;
   }
   const round = useRoundStore.getState();
-  const cage = useCageStore.getState();
+  const cage = useSwingSessionStore.getState();
   const profile = usePlayerProfileStore.getState();
 
   // 2026-07-30 (audit #5 — SIM CONTAMINATION) — exclude simulated rounds; their narrated shots would

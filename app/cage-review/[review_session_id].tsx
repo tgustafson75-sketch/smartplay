@@ -18,11 +18,11 @@ import {
   nextUnreviewedShot,
 } from '../../services/cageReview';
 import { saveGeneratedProfile } from '../../services/vocabularyProfile';
-import { useCageStore } from '../../store/cageStore';
+import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speak, configureAudioForSpeech, configureAudioForRecording, stopSpeaking } from '../../services/voiceService';
 import type { ReviewSession } from '../../types/cageReview';
-import type { CageShot } from '../../store/cageStore';
+import type { SwingShot } from '../../store/swingSessionStore';
 import { getApiBaseUrl } from '../../services/apiBase';
 
 const RECORDING_OPTIONS: Audio.RecordingOptions = {
@@ -59,7 +59,7 @@ type ScreenState =
 export default function CageReviewInterview() {
   const { review_session_id } = useLocalSearchParams<{ review_session_id: string }>();
   const router = useRouter();
-  const { sessionHistory, updateShotLabels } = useCageStore();
+  const { sessionHistory, updateShotLabels } = useSwingSessionStore();
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
   // 2026-05-22 — Fix Q follow-up audit. Thread persona on every
   // /api/cage-review fetch below so responses stay in the active
@@ -68,8 +68,8 @@ export default function CageReviewInterview() {
   const apiUrl = getApiBaseUrl();
 
   const [review, setReview] = useState<ReviewSession | null>(null);
-  const [eligibleShots, setEligibleShots] = useState<CageShot[]>([]);
-  const [currentShot, setCurrentShot] = useState<CageShot | null>(null);
+  const [eligibleShots, setEligibleShots] = useState<SwingShot[]>([]);
+  const [currentShot, setCurrentShot] = useState<SwingShot | null>(null);
   const [question, setQuestion] = useState<string>('');
   const [transcript, setTranscript] = useState<string>('');
   const [screenState, setScreenState] = useState<ScreenState>('loading');
@@ -144,7 +144,7 @@ export default function CageReviewInterview() {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  const shotPosition = (shot: CageShot, shots: CageShot[]): 'early' | 'middle' | 'late' => {
+  const shotPosition = (shot: SwingShot, shots: SwingShot[]): 'early' | 'middle' | 'late' => {
     const idx = shots.findIndex(s => s.id === shot.id);
     const pct = shots.length > 1 ? idx / (shots.length - 1) : 0;
     if (pct < 0.33) return 'early';
@@ -154,8 +154,8 @@ export default function CageReviewInterview() {
 
   const loadQuestion = useCallback(async (
     r: ReviewSession,
-    shots: CageShot[],
-    shot: CageShot,
+    shots: SwingShot[],
+    shot: SwingShot,
   ) => {
     setScreenState('loading');
     setQuestion('');

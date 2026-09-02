@@ -12,7 +12,7 @@
  */
 
 import { usePlayerProfileStore } from '../store/playerProfileStore';
-import { useCageStore } from '../store/cageStore';
+import { useSwingSessionStore } from '../store/swingSessionStore';
 import { useRoundStore, type RoundRecord } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { getApiBaseUrl } from './apiBase';
@@ -93,7 +93,7 @@ export async function synthesizeCageInsight(args: {
     dominantMiss: args.dominantMiss,
   });
   if (summary) {
-    useCageStore.getState().addCageInsight(args.sessionId, args.club, summary);
+    useSwingSessionStore.getState().addCageInsight(args.sessionId, args.club, summary);
     console.log('[path3:cage] insight synthesized chars=' + summary.length);
   }
 }
@@ -124,7 +124,7 @@ export async function maybeSynthesizePatterns(): Promise<void> {
   const now = Date.now();
   const due = !profile.patternsSynthesizedAt || (now - profile.patternsSynthesizedAt) > SEVEN_DAYS_MS;
   if (!due) return;
-  const cageInsights = useCageStore.getState().recentInsights;
+  const cageInsights = useSwingSessionStore.getState().recentInsights;
   const roundInsights = useRoundStore.getState().recentInsights;
   if (cageInsights.length < 3 && roundInsights.length < 5) return;
   const summary = await callSynthesis('patterns', {

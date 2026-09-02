@@ -188,7 +188,7 @@ export function analyzeStrike(input: AcousticAnalysisInput): AcousticAnalysis {
 }
 
 /**
- * Convenience: fold an AcousticAnalysis back into a CageShot-shaped
+ * Convenience: fold an AcousticAnalysis back into a SwingShot-shaped
  * tuple so existing per-shot writers can consume the result without
  * reshaping. Returns the (contact, strike_location, contact_quality)
  * tuple matching cageStore.AcousticContact + AcousticAnalysis fields.

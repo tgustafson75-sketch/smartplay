@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import type { DrillRecommendation } from '../../store/cageStore';
+import type { DrillRecommendation } from '../../store/swingSessionStore';
 
 /**
  * Phase J — Drill recommendation card paired with PrimaryIssueCard.

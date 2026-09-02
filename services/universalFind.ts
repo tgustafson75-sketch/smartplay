@@ -8,7 +8,7 @@
  * open_course intent; scorecard-photo ingest is a separate flow — this is the find/open backbone.
  */
 import { useRoundStore } from '../store/roundStore';
-import { useCageStore } from '../store/cageStore';
+import { useSwingSessionStore } from '../store/swingSessionStore';
 
 export type FindKind = 'round' | 'swing';
 
@@ -66,7 +66,7 @@ export function universalFind(rawQuery: string, limit = 6): FindResult[] {
     }
   }
 
-  const sessions = safe(() => useCageStore.getState().sessionHistory) ?? [];
+  const sessions = safe(() => useSwingSessionStore.getState().sessionHistory) ?? [];
   for (const s of sessions) {
     const dateStr = fmtDate(s.date);
     const hay = `${s.club} swing ${s.captureKind ?? ''} ${dateStr}`.toLowerCase();

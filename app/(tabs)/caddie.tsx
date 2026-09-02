@@ -49,7 +49,7 @@ import { useFamilyStore } from '../../store/familyStore';
 import { useShallow } from 'zustand/react/shallow';
 import { getCaddieName, ACTIVE_PERSONAS, type Persona } from '../../lib/persona';
 import { useRelationshipStore } from '../../store/relationshipStore';
-import { useCageStore } from '../../store/cageStore';
+import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { usePointsStore } from '../../store/pointsStore';
 import { getCourseList, getCourse, getCourseHoleCount, getBundledHoles } from '../../data/courses';
 import { useCustomCourseStore } from '../../store/customCourseStore';
@@ -2515,7 +2515,7 @@ export default function CaddieTab() {
       // stale issues. Cage data drives the "your work on X is showing" honesty
       // bar in the Sonnet recap prompt.
       const cageContext = (() => {
-        const cs = useCageStore.getState();
+        const cs = useSwingSessionStore.getState();
         const cutoff = Date.now() - 14 * 24 * 60 * 60 * 1000;
         const recent = cs.sessionHistory.filter(s => s.date >= cutoff);
         if (recent.length === 0) return null;

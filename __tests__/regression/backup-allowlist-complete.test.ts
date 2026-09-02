@@ -22,8 +22,13 @@ function persistedStoreKeys(): { key: string; file: string }[] {
   const out: { key: string; file: string }[] = [];
   for (const f of fs.readdirSync(storeDir)) {
     if (!f.endsWith('.ts')) continue;
-    const src = fs.readFileSync(path.join(storeDir, f), 'utf8');
-    if (!src.includes('persist(')) continue;
+    const raw = fs.readFileSync(path.join(storeDir, f), 'utf8');
+    if (!raw.includes('persist(')) continue;
+    // 2026-09-01 — strip comments before matching. The pattern below requires `{` immediately before
+    // `name:`, so a doc comment written above the key made the store INVISIBLE to this sweep — and an
+    // invisible store reads as "not persisted" rather than as an error. That is the same failure this
+    // guard exists to prevent, arriving through the guard itself.
+    const src = raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
     const m = /\{\s*name:\s*'([^']+)'/.exec(src);
     if (m) out.push({ key: m[1], file: f });
   }

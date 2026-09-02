@@ -50,7 +50,7 @@ import { useClubBagStore } from '../../store/clubBagStore';
 import { computePointsPerformance } from '../../services/practice/pointsPerformance';
 import { computeWorkoutPerformance } from '../../services/practice/workoutPerformance';
 import { computeWarmupPerformance } from '../../services/practice/warmupPerformance';
-import { useCageStore, resolvePlayerName } from '../../store/cageStore';
+import { useSwingSessionStore, resolvePlayerName } from '../../store/swingSessionStore';
 import { exercisesForFault } from '../../services/swing/faultWorkouts';
 import { usePointsBaselineStore } from '../../store/pointsBaselineStore';
 import { useWorkoutStore } from '../../store/workoutStore';
@@ -223,7 +223,7 @@ export default function Dashboard() {
   // graph) — every library capture is practice that never earned points; estimate
   // them (conservative, labeled) and pair points/week vs score-vs-par. Honest first
   // version: association, never causation. [[points-practice-correlation]]
-  const libraryHistory = useCageStore((s) => s.sessionHistory);
+  const libraryHistory = useSwingSessionStore((s) => s.sessionHistory);
   // 2026-06-15 (Tim) — run LIVE from a clean baseline so the graph builds up as new
   // practice lands; re-estimate the historical start later (setBaseline). Set once.
   const pointsBaselineMs = usePointsBaselineStore((s) => s.baselineMs);

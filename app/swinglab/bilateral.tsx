@@ -11,7 +11,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useCageStore, type CageSession } from '../../store/cageStore';
+import { useSwingSessionStore, type SwingSession } from '../../store/swingSessionStore';
 import { mergeBilateral, type BilateralSwingInput, type BilateralAngleRead } from '../../services/swing/bilateralMerge';
 import { useResolvedImageUri } from '../../hooks/useResolvedImageUri';
 
@@ -19,7 +19,7 @@ function fmtDate(ms: number): string {
   try { return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; }
 }
 
-function toInput(s: CageSession): BilateralSwingInput {
+function toInput(s: SwingSession): BilateralSwingInput {
   const pi = s.primary_issue ?? null;
   const club = s.currentClub ?? s.club ?? 'swing';
   const faultName = pi?.name ?? (pi as { primary_fault?: string } | null)?.primary_fault ?? null;
@@ -56,7 +56,7 @@ function toInput(s: CageSession): BilateralSwingInput {
 
 /** Best representative frame for the side-by-side: library thumbnail, else the
  *  server's wire-quality fault frame. Null ⇒ render a placeholder tile. */
-function frameUri(s: CageSession | null): string | null {
+function frameUri(s: SwingSession | null): string | null {
   if (!s) return null;
   return s.thumbnailUri ?? s.primary_issue?.visual_reference_path ?? null;
 }
@@ -77,7 +77,7 @@ function frameUri(s: CageSession | null): string | null {
  *
  * Reads its own theme rather than closing over the parent's, which is what makes hoisting safe.
  */
-function FrameTile({ session, fallbackLabel }: { session: CageSession | null; fallbackLabel: string }) {
+function FrameTile({ session, fallbackLabel }: { session: SwingSession | null; fallbackLabel: string }) {
   const { colors } = useTheme();
   // 2026-07-06 (elite audit) — thumbnails/fault frames are persisted as ABSOLUTE file:// paths and
   // iOS regenerates the container UUID on every native build, so re-anchor at read instead of
@@ -104,7 +104,7 @@ export default function BilateralReview() {
   const router = useRouter();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const history = useCageStore((s) => s.sessionHistory);
+  const history = useSwingSessionStore((s) => s.sessionHistory);
 
   const sa = useMemo(() => history.find((s) => s.id === a) ?? null, [history, a]);
   const sb = useMemo(() => history.find((s) => s.id === b) ?? null, [history, b]);

@@ -22,7 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useFamilyStore, ageBand, type AgeBand } from '../../store/familyStore';
-import { useCageStore } from '../../store/cageStore';
+import { useSwingSessionStore } from '../../store/swingSessionStore';
 import {
   getMemberSwingHistory,
   analyzeJuniorSwing,
@@ -60,7 +60,7 @@ export default function FamilyMemberScreen() {
   // member via SmartMotion / Coach Mode land in cageStore keyed by player_id, NOT in the
   // junior-analysis history this screen shows. Surface that count so the primary Family
   // entry point bridges to the real library instead of looking empty.
-  const recordedCount = useCageStore((s) => {
+  const recordedCount = useSwingSessionStore((s) => {
     const id = member?.id;
     return id ? s.sessionHistory.filter((x) => x.player_id === id).length : 0;
   });

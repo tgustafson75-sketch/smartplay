@@ -9,14 +9,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCageStore } from '../../store/cageStore';
+import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { startReviewSession , getShotsForReview } from '../../services/cageReview';
 import { REVIEW_MODES, type ReviewSession } from '../../types/cageReview';
 
 export default function CageReviewStart() {
   const router = useRouter();
   const { session_id } = useLocalSearchParams<{ session_id: string }>();
-  const { sessionHistory } = useCageStore();
+  const { sessionHistory } = useSwingSessionStore();
   const [selectedMode, setSelectedMode] = useState<ReviewSession['mode'] | null>(null);
   const [starting, setStarting] = useState(false);
 

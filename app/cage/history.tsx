@@ -9,17 +9,17 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useCageStore } from '../../store/cageStore';
+import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { analyzeSession } from '../../services/patternEngine';
 
 export default function CageHistory() {
   const router = useRouter();
-  const { sessionHistory } = useCageStore();
+  const { sessionHistory } = useSwingSessionStore();
   // 2026-05-23 — Hydration guard. Same pattern as library.tsx — wait
   // for persist middleware to load sessionHistory from AsyncStorage
   // before rendering the "No sessions yet" empty state, otherwise the
   // cold-launch path shows it for a frame even when sessions exist.
-  const hasHydrated = useCageStore(s => s.hasHydrated);
+  const hasHydrated = useSwingSessionStore(s => s.hasHydrated);
 
   const [expanded, setExpanded] = useState<string | null>(null);
 

@@ -22,7 +22,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
-import { derivePlayerId } from './cageStore';
+import { derivePlayerId } from './swingSessionStore';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

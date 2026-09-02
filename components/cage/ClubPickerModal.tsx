@@ -20,7 +20,7 @@
 import React from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useCageStore } from '../../store/cageStore';
+import { useSwingSessionStore } from '../../store/swingSessionStore';
 import type { ClubId } from '../../services/clubRecognition';
 
 type ClubOption = { label: string; value: ClubId };
@@ -70,10 +70,10 @@ interface ClubPickerModalProps {
 }
 
 export default function ClubPickerModal(props: ClubPickerModalProps = {}) {
-  const clubMenuOpen = useCageStore(s => s.clubMenuOpen);
-  const setClubMenuOpen = useCageStore(s => s.setClubMenuOpen);
-  const setActiveClub = useCageStore(s => s.setActiveClub);
-  const cageCurrentClub = useCageStore(s => s.activeSession?.currentClub ?? s.activeSession?.club);
+  const clubMenuOpen = useSwingSessionStore(s => s.clubMenuOpen);
+  const setClubMenuOpen = useSwingSessionStore(s => s.setClubMenuOpen);
+  const setActiveClub = useSwingSessionStore(s => s.setActiveClub);
+  const cageCurrentClub = useSwingSessionStore(s => s.activeSession?.currentClub ?? s.activeSession?.club);
 
   const visible = props.open !== undefined ? props.open : clubMenuOpen;
   const handleClose = props.onClose ?? (() => setClubMenuOpen(false));

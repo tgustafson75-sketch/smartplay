@@ -216,9 +216,9 @@ export const useFamilyStore = create<FamilyState>()(
         // library. Reassigning to '__other__' keeps them labeled "Other".
         try {
           // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const cage = require('./cageStore') as typeof import('./cageStore');
-          for (const sess of cage.useCageStore.getState().sessionHistory) {
-            if (sess.player_id === id) cage.useCageStore.getState().setSessionPlayer(sess.id, cage.OTHER_PLAYER_ID);
+          const cage = require('./swingSessionStore') as typeof import('./swingSessionStore');
+          for (const sess of cage.useSwingSessionStore.getState().sessionHistory) {
+            if (sess.player_id === id) cage.useSwingSessionStore.getState().setSessionPlayer(sess.id, cage.OTHER_PLAYER_ID);
           }
         } catch (e) { console.log('[familyStore] reassign-on-remove failed:', e); }
         set((s) => ({

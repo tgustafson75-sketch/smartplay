@@ -988,7 +988,7 @@ check('Clubhead arc is computed at ANALYSIS time + persisted (not re-extracted o
   // stored points (works even while the clip plays), live-extracting only for legacy swings (club_arc
   // undefined).
   (() => {
-    const store = read('store/cageStore.ts');
+    const store = read('store/swingSessionStore.ts');
     const upload = read('services/videoUpload.ts');
     const sm = read('app/swinglab/smartmotion.tsx');
     const detail = read('app/swinglab/swing/[swing_id].tsx');
@@ -1228,7 +1228,7 @@ check('Bag-by-voice: registrar seam + brain tool + offline set + interview exemp
 // and re-analyzes with the correct metric set.
 check('Upload files the swing under the PICKED golfer (swinger→player_id), not always the account holder',
   (() => {
-    const cs = read('store/cageStore.ts');
+    const cs = read('store/swingSessionStore.ts');
     const vu = read('services/videoUpload.ts');
     return (
       /export function resolveSwingerToPlayerId/.test(cs) &&
@@ -1857,7 +1857,7 @@ check('Drill engine: drill card → Smart Motion drill session (#5)',
     const cat = read('data/drillCatalog.ts');
     const detail = read('app/drills/[issue].tsx');
     const sm = read('app/swinglab/smartmotion.tsx');
-    const store = read('store/cageStore.ts');
+    const store = read('store/swingSessionStore.ts');
     const lib = read('app/swinglab/swing/[swing_id].tsx');
     const idx = read('app/drills/index.tsx');
     return (
@@ -3275,7 +3275,7 @@ check('GolfFix: in-flight session analysis lands on the LIVE activeSession (C3 f
   // missed it and activeSession.primary_issue (fix/drill) stayed null. Now both
   // setters dual-update activeSession + history, like the sibling shot setters.
   (() => {
-    const cs = read('store/cageStore.ts');
+    const cs = read('store/swingSessionStore.ts');
     const dualWired =
       /setSessionAnalysis: \(sessionId, primary_issue, drill_recommendation\) =>[\s\S]*?apply\(s\.activeSession\)[\s\S]*?sessionHistory: s\.sessionHistory\.map\(apply\)/.test(cs) &&
       /setSessionAnalysisStatus: \(sessionId, status, error\) =>[\s\S]*?apply\(s\.activeSession\)[\s\S]*?sessionHistory: s\.sessionHistory\.map\(apply\)/.test(cs);
@@ -5194,7 +5194,7 @@ check('Highlight swings: star an on-course SM swing → shows on the round score
   // capture + has a starred flag + toggle. (2) the swing detail has a star toggle.
   // (3) the scorecard surfaces starred swings stamped with THIS round → tap → review.
   (() => {
-    const store = read('store/cageStore.ts');
+    const store = read('store/swingSessionStore.ts');
     const detail = read('app/swinglab/swing/[swing_id].tsx');
     const sc = read('app/(tabs)/scorecard.tsx');
     return (
@@ -5596,7 +5596,7 @@ check('Library: a multi-swing reel is reviewable SWING-BY-SWING (own skeleton + 
   // ANALYSIS numbers all follow. Non-primary swings backfill their biomech LAZILY (bounded to the swing
   // window). Shot 0 / single-swing view is unchanged (activeBiomech falls back to session-level).
   (() => {
-    const store = read('store/cageStore.ts');
+    const store = read('store/swingSessionStore.ts');
     const sm = read('app/swinglab/smartmotion.tsx');
     const detail = read('app/swinglab/swing/[swing_id].tsx');
     return (
@@ -5604,7 +5604,7 @@ check('Library: a multi-swing reel is reviewable SWING-BY-SWING (own skeleton + 
       /biomechanics\?: import\('\.\.\/services\/poseAnalysisApi'\)\.SwingBiomechanics/.test(store) &&
       /setShotBiomechanics:/.test(store) && /setShotClubArc:/.test(store) &&
       // capture stores this swing's biomech on its shot
-      /useCageStore\.getState\(\)\.setShotBiomechanics\(sessionId, shotId, bio\)/.test(sm) &&
+      /useSwingSessionStore\.getState\(\)\.setShotBiomechanics\(sessionId, shotId, bio\)/.test(sm) &&
       // detail: selection + active biomech + shot follows selection + lazy backfill (bounded window)
       /const \[selectedShotIdx, setSelectedShotIdx\] = useState\(0\)/.test(detail) &&
       /const shot = session\?\.shots\[selectedShotIdx\]/.test(detail) &&
@@ -5999,7 +5999,7 @@ check('Owner tools restorable: hotmail allow-listed + settings email input',
 check('Feels engine wired (capture → caddie brain reconcile)',
   exists('services/swing/feelReconcile.ts') &&
     /reconcileFeel/.test(smSrc) && /submitFeel/.test(smSrc) &&
-    /setSessionFeel/.test(read('store/cageStore.ts')) &&
+    /setSessionFeel/.test(read('store/swingSessionStore.ts')) &&
     /\/api\/swing-question/.test(read('services/swing/feelReconcile.ts')),
   "player feel → swing-question reconciles it with the real read + coaches back");
 
@@ -6457,7 +6457,7 @@ check('Upload angle picker: imported clip read at its true angle (DTL vs face-on
   (() => {
     const screen = read('app/swinglab/upload.tsx');
     const svc = read('services/videoUpload.ts');
-    const store = read('store/cageStore.ts');
+    const store = read('store/swingSessionStore.ts');
     const uiOk =
       /const \[angle, setAngle\] = useState<'down_the_line' \| 'face_on'>\('down_the_line'\)/.test(screen) &&
       /CAMERA ANGLE/.test(screen) &&
@@ -7075,7 +7075,7 @@ check('Captured clips persisted to documents (survive OS cache eviction)',
 const swingDetailSrc = read('app/swinglab/swing/[swing_id].tsx');
 check('Re-analyze hardening: content:// persisted, legacy clips rescued on open, honest no-frames copy',
   /uri\.startsWith\('file:'\) \|\| uri\.startsWith\('content:'\)/.test(uploadSrc) &&  // content:// now persisted
-    /setShotClipUri:/.test(read('store/cageStore.ts')) &&                            // repoint action exists
+    /setShotClipUri:/.test(read('store/swingSessionStore.ts')) &&                            // repoint action exists
     /legacy-clip-rescued/.test(swingDetailSrc) &&                                    // rescue effect wired
     /setShotClipUri\(swing_id, shotId, durable\)/.test(swingDetailSrc) &&
     !/better lighting and a wider angle/.test(uploadSrc) &&                          // misleading copy gone
@@ -7210,7 +7210,7 @@ check('Environment mode phase 3: course is video-primary single-shot with confir
 // swings gets one per-swing card, not "1 of 1".
 const uploadSrc2 = read('services/videoUpload.ts');
 check('Multi-swing UPLOAD expansion (long upload → one analysis per swing)',
-  /expandUploadIntoSwings/.test(read('store/cageStore.ts')) &&
+  /expandUploadIntoSwings/.test(read('store/swingSessionStore.ts')) &&
     /MULTI_SWING_UPLOAD_MIN_MS/.test(uploadSrc2) &&
     /pose\.locateSwings\(swings\[0\]\.clipUri, durMs\)/.test(uploadSrc2) &&
     /store\.expandUploadIntoSwings\(sessionId/.test(uploadSrc2) &&
@@ -7788,7 +7788,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   // normalized to the canonical name so it merges with the Arccos-fed bag — NOT hardcoded 'unknown'.
   check('Watch: swings tag the selected club (normalized), not a hardcoded unknown',
     /const club = resolveSelectedClub\(\)/.test(swingBr) &&
-      /useClubSelectionStore/.test(swingBr) && /useCageStore/.test(swingBr) && /normalizeClub\(/.test(swingBr) &&
+      /useClubSelectionStore/.test(swingBr) && /useSwingSessionStore/.test(swingBr) && /normalizeClub\(/.test(swingBr) &&
       /\bclub,/.test(swingBr) && !/club: 'unknown',/.test(swingBr),
     'onWatchSwing tags club via resolveSelectedClub (cage currentClub → clubSelectionStore.lastClub → normalized), so watch speed/tempo lands on the same per-club profile as Arccos carries');
   check("Watch: club speed from the watch is a truth-grade 'watch' source",
@@ -8034,7 +8034,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     // Every library card gets a thumbnail — fall back past the analysis fault frame to a
     // lazily-generated frame screenshot, persisted on the session.
     /thumbnail_uri: primaryThumb \?\? perShotThumb \?\? session\.fault_frame_uri \?\? session\.thumbnailUri \?\? null/.test(read('services/swingLibrary.ts')) &&
-      /setSessionThumbnail: \(sessionId: string, uri: string \| null\) => void/.test(read('store/cageStore.ts')) &&
+      /setSessionThumbnail: \(sessionId: string, uri: string \| null\) => void/.test(read('store/swingSessionStore.ts')) &&
       /await VT\.getThumbnailAsync\(playableUri/.test(read('app/swinglab/library.tsx')) && // refreshed: re-anchored playableUri (was clipUri)
       // BALL SPEED badge is honest: a CLEAN number (no "~" marker) AND gated on isSwingDerived.
       // 2026-07-20 (bug-hunt fix) — the badge must ONLY show a value that is actually
@@ -8559,7 +8559,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /segs\.length > 1[\s\S]{0,120}ingestLiveCageSession\(\{/.test(smA) &&
       /clipStartSeconds: s\.startMs \/ 1000,/.test(smA) &&
       // live-cage session defaults to smart_motion, or 'drill' when a drill passes it through (#5)
-      /captureKind: captureKind \?\? 'smart_motion',/.test(read('store/cageStore.ts')),
+      /captureKind: captureKind \?\? 'smart_motion',/.test(read('store/swingSessionStore.ts')),
     'a multi-swing cage reel ingests as N per-swing shots with clip boundaries (library shows all swings, each scrubbing its window); single swings keep the simple path; smart_motion by default, drill when launched from a drill');
 
   check('Custom caddie always has a voice (base persona → Kevin/Serena/Harry)',
@@ -8594,11 +8594,11 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     // interface. ADDITIVE: the source enum is untouched; captureKind is a new classifier,
     // defaulted at ingest (live_cage → smart_motion, else upload) and inferred for legacy
     // sessions via getCaptureKind. Phase 2 renders the interface off it.
-    /export type CaptureKind = 'smart_motion' \| 'coach' \| 'upload'/.test(read('store/cageStore.ts')) &&
-      /captureKind\?: CaptureKind;/.test(read('store/cageStore.ts')) &&
-      /const resolvedCaptureKind: CaptureKind = captureKind \?\? \(resolvedSource === 'live_cage' \? 'smart_motion' : 'upload'\)/.test(read('store/cageStore.ts')) &&
-      /captureKind: resolvedCaptureKind,/.test(read('store/cageStore.ts')) &&
-      /export function getCaptureKind\(session: CageSession\): CaptureKind/.test(read('services/swingLibrary.ts')) &&
+    /export type CaptureKind = 'smart_motion' \| 'coach' \| 'upload'/.test(read('store/swingSessionStore.ts')) &&
+      /captureKind\?: CaptureKind;/.test(read('store/swingSessionStore.ts')) &&
+      /const resolvedCaptureKind: CaptureKind = captureKind \?\? \(resolvedSource === 'live_cage' \? 'smart_motion' : 'upload'\)/.test(read('store/swingSessionStore.ts')) &&
+      /captureKind: resolvedCaptureKind,/.test(read('store/swingSessionStore.ts')) &&
+      /export function getCaptureKind\(session: SwingSession\): CaptureKind/.test(read('services/swingLibrary.ts')) &&
       /captureKind: getCaptureKind\(session\)/.test(read('services/swingLibrary.ts')),
     'sessions carry an additive captureKind (SmartMotion captures default smart_motion, uploads default upload); legacy sessions infer it; the source enum + its consumers are unchanged');
 
@@ -8834,9 +8834,9 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
 
   const cageDbgSrc = fs.readFileSync(path.resolve(__dirname, '../../app/cage-debug.tsx'), 'utf-8');
   check('Stores: cage-debug Feel Capture viewer no longer uses a fresh-array selector',
-    /useCageStore\(\(s\) => s\.activeSession\)/.test(cageDbgSrc) &&
+    /useSwingSessionStore\(\(s\) => s\.activeSession\)/.test(cageDbgSrc) &&
       /return listFeelCaptureTuples\(50\)/.test(cageDbgSrc) &&
-      !/useCageStore\(\(s\) => \{[\s\S]*?return listFeelCaptureTuples/.test(cageDbgSrc),
+      !/useSwingSessionStore\(\(s\) => \{[\s\S]*?return listFeelCaptureTuples/.test(cageDbgSrc),
     'the last render-loop crash-class instance is closed (raw store fields selected; the array is built in useMemo, not returned fresh from a selector)');
 
   // ─── On-device pose: analyzePoseFromUri → existing MediaPipe service ──────
@@ -9320,7 +9320,7 @@ console.log('\n=== Beta-wrap deep-audit LOCK ===');
     'SEV-2/4: autoSendIssues() runs at launch so a crash that killed the process before its debounced send still reaches the team');
 
   // ANALYSIS/SMARTMOTION crash + persistence
-  const cageSrc = read('store/cageStore.ts');
+  const cageSrc = read('store/swingSessionStore.ts');
   check('cageStore: per-shot pose frames are compacted on persist (SQLITE_FULL)',
     /biomechanics:\s*compactBio\(sh\.biomechanics\)/.test(cageSrc) && /biomechanics:\s*compactBio\(sess\.biomechanics\)/.test(cageSrc),
     'P1: partialize compacts BOTH session- and shot-level biomechanics.frames so per-swing analysis can\'t re-bloat the row past Android\'s ~2MB limit');
@@ -10620,7 +10620,7 @@ check('LOCK: mental state is DERIVED from the scorecard at the one seam, never a
 // lands nowhere; this guard checks the setter REPORTS, and that every child surface handles it.
 check('LOCK: a coach note can never be silently dropped — setter reports, every surface handles it',
   (() => {
-    const store = read('store/cageStore.ts');
+    const store = read('store/swingSessionStore.ts');
     const detail = read('app/swinglab/swing/[swing_id].tsx');
     const sm = read('app/swinglab/smartmotion.tsx');
     // writes to BOTH activeSession and history, and returns whether it landed
@@ -10645,7 +10645,7 @@ check('LOCK: a coach note can never be silently dropped — setter reports, ever
 // gets missed when only the reported instance is fixed.
 check('LOCK: the player\'s own feel is capturable in the library, and its setter reports like the coach note',
   (() => {
-    const store = read('store/cageStore.ts');
+    const store = read('store/swingSessionStore.ts');
     const detail = read('app/swinglab/swing/[swing_id].tsx');
     // the twin setter must have the SAME fix, not just the reported one
     const twinFixed = /setSessionFeel: \(sessionId: string, note: string \| null\) => boolean;/.test(store) &&
@@ -10945,7 +10945,7 @@ check('LOCK: scorecard layout diagrams are read AND injected where the caddie re
 check('LOCK: adversarial-audit fixes — 5th club producer, mental-state overwrite, twin setters, inline component',
   (() => {
     const lsr = read('services/localStatusResponder.ts');
-    const cage = read('store/cageStore.ts');
+    const cage = read('store/swingSessionStore.ts');
     const bil = read('app/swinglab/bilateral.tsx');
     const rs = read('store/roundStore.ts');
 

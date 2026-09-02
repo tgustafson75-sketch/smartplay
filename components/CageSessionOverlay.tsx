@@ -1,6 +1,6 @@
 import { analyzeStrike, toCageContact } from '../services/acousticsAnalyzer';
 import { setSuppressed as setEarbudSuppressed } from '../services/earbudControl';
-import type { ReviewLabels } from '../store/cageStore';
+import type { ReviewLabels } from '../store/swingSessionStore';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import {
@@ -24,8 +24,8 @@ import {
   getSession,
   getSessionDir,
 } from '../services/cageStorage';
-import type { CageSession } from '../types/cage';
-import { useCageStore } from '../store/cageStore';
+import type { SwingSession } from '../types/cage';
+import { useSwingSessionStore } from '../store/swingSessionStore';
 import { useFamilyStore } from '../store/familyStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { runPhaseKOnSession } from '../services/videoUpload';
@@ -138,7 +138,7 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
   // first render (which meant a mid-record unmount never stopped the camera).
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
-  const sessionRef = useRef<CageSession | null>(null);
+  const sessionRef = useRef<SwingSession | null>(null);
   const sessionStartRef = useRef<number>(0);
   const videoPromiseRef = useRef<Promise<{ uri: string } | undefined> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -204,7 +204,7 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
       if (!isMountedRef.current) return;
       if (!micResult.granted) {
         // Can continue without metering; manual-only
-        console.warn('[CageSession] Microphone permission denied — manual detection only');
+        console.warn('[SwingSession] Microphone permission denied — manual detection only');
         cageLog('mic-perm-deny', 'partial', { mode: 'manual-only' });
         setMeterAvailable(false);
       } else {
@@ -320,10 +320,10 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
       // Start camera recording (video + audio)
       videoPromiseRef.current = cameraRef.current.recordAsync() as Promise<{ uri: string } | undefined>;
 
-      console.log('[CageSession] Recording started, session:', session.id);
+      console.log('[SwingSession] Recording started, session:', session.id);
       cageLog('recording-begin', 'ok', { session_id: session.id });
     } catch (e) {
-      console.error('[CageSession] Failed to start session:', e);
+      console.error('[SwingSession] Failed to start session:', e);
       cageLog('session-start', 'fail', { error: e instanceof Error ? e.message : String(e) });
       if (isMountedRef.current) setPhase('preview');
     }
@@ -336,7 +336,7 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
     const offset = (Date.now() - sessionStartRef.current) / 1000;
     addClipEvent(sessionRef.current.id, offset, 'manual');
     setSwingCount((c) => c + 1);
-    console.log(`[CageSession] Manual swing logged @ ${offset.toFixed(1)}s`);
+    console.log(`[SwingSession] Manual swing logged @ ${offset.toFixed(1)}s`);
     cageLog('swing-detected', 'ok', {
       method: 'manual',
       offset_seconds: Number(offset.toFixed(2)),
@@ -376,7 +376,7 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
         cageLog('master-video-saved', 'fail', { reason: 'no-result-uri' });
       }
     } catch (e) {
-      console.error('[CageSession] Error saving master video:', e);
+      console.error('[SwingSession] Error saving master video:', e);
       cageLog('master-video-saved', 'fail', { error: e instanceof Error ? e.message : String(e) });
     }
 
@@ -389,14 +389,14 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
     await finalizeClips(session.id, durationSeconds);
     cageLog('clips-finalized', 'ok', { session_id: session.id, swing_count: swingCount });
 
-    console.log(`[CageSession] Session ended. Duration: ${durationSeconds}s, Swings: ${swingCount}, Video: ${masterVideoPath}`);
+    console.log(`[SwingSession] Session ended. Duration: ${durationSeconds}s, Swings: ${swingCount}, Video: ${masterVideoPath}`);
     cageLog('session-end', 'ok', { session_id: session.id, duration_seconds: durationSeconds, swing_count: swingCount });
 
     // Phase BS-followup Issue G — bridge the cage live session into the
     // Zustand cageStore.sessionHistory so My Swing Library renders it.
     // Previously the cage flow only wrote to filesystem (cageStorage) and
     // routed to /cage-debug; the swing library never saw these sessions.
-    // Now: ingest the master video as a one-shot CageSession with source
+    // Now: ingest the master video as a one-shot SwingSession with source
     // 'live_cage', then fire Phase K analysis in the background. The
     // swing detail screen subscribes to the analysis_status transitions
     // so the user sees "Watching the swing…" → "ok" naturally.
@@ -414,7 +414,7 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
         // into the master video. Phase K then samples frames from the
         // swing's window only (not the whole 6-minute master). Falls
         // back to single-shot ingestUploadedSwing if no detections were
-        // recorded (zero-swing recording → keep one CageShot pointing
+        // recorded (zero-swing recording → keep one SwingShot pointing
         // at the master so the library entry still exists).
         const storageSession = await getSession(session.id);
         const clipMetadata = storageSession?.clips ?? [];
@@ -448,9 +448,9 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
         // cage setup screen (startSession(selectedClub)) AND any mid-session change via the
         // Phase-402 chip both live on cageStore.activeSession.club. This ingest hardcoded
         // 'unknown', so every saved cage session lost the club. Read the live value.
-        const activeClub = useCageStore.getState().activeSession?.club || 'unknown';
+        const activeClub = useSwingSessionStore.getState().activeSession?.club || 'unknown';
         if (clipMetadata.length > 0) {
-          libraryEntryId = useCageStore.getState().ingestLiveCageSession({
+          libraryEntryId = useSwingSessionStore.getState().ingestLiveCageSession({
             masterVideoPath,
             club: activeClub,
             upload,
@@ -470,7 +470,7 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
         } else {
           // Zero detections — fall back to one shot pointing at the master
           // so the library still has an entry the user can review.
-          libraryEntryId = useCageStore.getState().ingestUploadedSwing({
+          libraryEntryId = useSwingSessionStore.getState().ingestUploadedSwing({
             clipUri: masterVideoPath,
             club: activeClub,
             upload,
@@ -482,17 +482,17 @@ export default function CageSessionOverlay({ onComplete, onCancel, drill }: Prop
             reason: 'no_detections',
           });
         }
-        console.log(`[CageSession] Bridged to swing library as ${libraryEntryId}`);
+        console.log(`[SwingSession] Bridged to swing library as ${libraryEntryId}`);
         // Fire-and-forget Phase K. With per-swing clipBoundaries the
         // analysis runs on each swing's window separately, producing
         // per-shot results that the review UI surfaces as per-swing cards.
         cageLog('phase-k-invoke', 'ok', { library_entry_id: libraryEntryId, mode: 'background' });
         void runPhaseKOnSession(libraryEntryId).catch(e => {
-          console.log('[CageSession] Phase K background error', e);
+          console.log('[SwingSession] Phase K background error', e);
           cageLog('phase-k-invoke', 'fail', { error: e instanceof Error ? e.message : String(e) });
         });
       } catch (e) {
-        console.error('[CageSession] Bridge to swing library failed:', e);
+        console.error('[SwingSession] Bridge to swing library failed:', e);
         cageLog('library-bridge', 'fail', { error: e instanceof Error ? e.message : String(e) });
       }
     }

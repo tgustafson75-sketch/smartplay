@@ -1,7 +1,7 @@
 /**
  * 2026-05-22 — Putting Analysis Card.
  *
- * Renders the PuttingAnalysis attached to a CageSession when the
+ * Renders the PuttingAnalysis attached to a SwingSession when the
  * analyzer-router classified the session as putting (glasses POV, putt/
  * chip tag). Sibling to PrimaryIssueCard + DrillCard but for the
  * putting structure shipped in services/puttingAnalysisService.ts.

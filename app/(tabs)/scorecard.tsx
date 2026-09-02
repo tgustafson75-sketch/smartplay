@@ -20,7 +20,7 @@ import { useRoundStore, roundFirstHole, roundLastHole } from '../../store/roundS
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useClubStatsStore } from '../../store/clubStatsStore';
 import { normalizeClub } from '../../services/clubNormalize';
-import { useCageStore } from '../../store/cageStore';
+import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { useGuestProfileStore } from '../../store/guestProfileStore';
 import { useSettingsStore } from '../../store/settingsStore';import { GreenHeatCard } from '../../components/GreenHeatCard';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -109,7 +109,7 @@ export default function Scorecard() {
   // 2026-06-13 (Tim) — highlight swings: Smart Motion swings captured on-course and
   // starred for THIS round (roundId stamped at capture). Surfaced on the scorecard,
   // tap → the swing's full review.
-  const cageSessions = useCageStore(s => s.sessionHistory);
+  const cageSessions = useSwingSessionStore(s => s.sessionHistory);
   const highlightSwings = useMemo(
     () => (viewingRoundId ? cageSessions.filter(x => x.starred && x.roundId === viewingRoundId) : []),
     [cageSessions, viewingRoundId],

@@ -26,7 +26,7 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-import { useCageStore } from '../../store/cageStore';
+import { useSwingSessionStore } from '../../store/swingSessionStore';
 import {
   recognizeClubFromUri,
   clubLabel,
@@ -50,9 +50,9 @@ type LowConfState = {
 };
 
 export default function ClubIdentifyControls() {
-  const activeSession = useCageStore(s => s.activeSession);
-  const setActiveClub = useCageStore(s => s.setActiveClub);
-  const setClubMenuOpen = useCageStore(s => s.setClubMenuOpen);
+  const activeSession = useSwingSessionStore(s => s.activeSession);
+  const setActiveClub = useSwingSessionStore(s => s.setActiveClub);
+  const setClubMenuOpen = useSwingSessionStore(s => s.setClubMenuOpen);
 
   const currentClub = activeSession?.currentClub ?? activeSession?.club ?? null;
 

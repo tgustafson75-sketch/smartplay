@@ -7,14 +7,14 @@
  * call these helpers without coupling to the store internals.
  */
 
-import { useCageStore, type CageSession, type SwingSource, type CaptureKind } from '../store/cageStore';
+import { useSwingSessionStore, type SwingSession, type SwingSource, type CaptureKind } from '../store/swingSessionStore';
 
 // 2026-09-01 — 'cage' renamed to 'practice'. This is a LOCAL filter id (CaptureKind never carried
 // 'cage'), so nothing persisted has to move; the label the player reads changes with it.
 export type LibraryFilter = 'all' | 'uploads' | 'practice';
 
 export interface LibraryEntry {
-  session: CageSession;
+  session: SwingSession;
   source: SwingSource;
   /** 2026-06-12 — which interface to render (smart_motion / coach / upload). */
   captureKind: CaptureKind;
@@ -58,7 +58,7 @@ export interface LibraryEntry {
  */
 export type AnalyzerKind = 'putting' | 'swing';
 
-export function getAnalyzerKind(session: CageSession): AnalyzerKind {
+export function getAnalyzerKind(session: SwingSession): AnalyzerKind {
   const tag = session.upload?.tag;
   const perspective = session.upload?.perspective;
 
@@ -77,7 +77,7 @@ export function getAnalyzerKind(session: CageSession): AnalyzerKind {
 
 /** True when the session should be rendered with the PuttingLab card
  *  shape (not the full-body swing biomechanics card). */
-export function isPuttingSession(session: CageSession): boolean {
+export function isPuttingSession(session: SwingSession): boolean {
   return getAnalyzerKind(session) === 'putting';
 }
 
@@ -85,12 +85,12 @@ export function isPuttingSession(session: CageSession): boolean {
  *  Prefers the stored captureKind; falls back to inferring from `source` for legacy
  *  sessions (uploaded_video → upload; everything else, incl. live_cage → smart_motion).
  *  Coach sessions are only ever the explicit 'coach' kind. */
-export function getCaptureKind(session: CageSession): CaptureKind {
+export function getCaptureKind(session: SwingSession): CaptureKind {
   if (session.captureKind) return session.captureKind;
   return session.source === 'uploaded_video' ? 'upload' : 'smart_motion';
 }
 
-function describe(session: CageSession): string {
+function describe(session: SwingSession): string {
   if (session.source === 'uploaded_video' && session.upload?.notes) {
     return session.upload.notes.slice(0, 60);
   }
@@ -113,7 +113,7 @@ function describe(session: CageSession): string {
 
 /** Read all sessions, newest first, optionally filtered. */
 export function getLibrary(filter: LibraryFilter = 'all'): LibraryEntry[] {
-  const sessions = useCageStore.getState().sessionHistory;
+  const sessions = useSwingSessionStore.getState().sessionHistory;
   return sessions
     .filter(s => {
       if (filter === 'all') return true;
@@ -142,17 +142,17 @@ export function getLibrary(filter: LibraryFilter = 'all'): LibraryEntry[] {
 }
 
 /** Find a session by id. Returns null if not found. */
-export function getSession(sessionId: string): CageSession | null {
-  return useCageStore.getState().sessionHistory.find(s => s.id === sessionId) ?? null;
+export function getSession(sessionId: string): SwingSession | null {
+  return useSwingSessionStore.getState().sessionHistory.find(s => s.id === sessionId) ?? null;
 }
 
 /**
  * Find the most recent session whose date matches a relative phrase.
  * Used by voice queries like "look at last Tuesday's swing".
  */
-export function findSessionByRelativeDate(phrase: string, now: Date = new Date()): CageSession | null {
+export function findSessionByRelativeDate(phrase: string, now: Date = new Date()): SwingSession | null {
   const t = phrase.toLowerCase();
-  const sessions = useCageStore.getState().sessionHistory;
+  const sessions = useSwingSessionStore.getState().sessionHistory;
   if (sessions.length === 0) return null;
 
   // "today" / "this morning" / "earlier"
@@ -188,18 +188,18 @@ export function findSessionByRelativeDate(phrase: string, now: Date = new Date()
   return sessions[sessions.length - 1] ?? null;
 }
 
-function latestSince(sessions: CageSession[], sinceMs: number): CageSession | null {
+function latestSince(sessions: SwingSession[], sinceMs: number): SwingSession | null {
   const matches = sessions.filter(s => s.date >= sinceMs);
   return matches.length ? matches[matches.length - 1] : null;
 }
 
-function latestBetween(sessions: CageSession[], startMs: number, endMs: number): CageSession | null {
+function latestBetween(sessions: SwingSession[], startMs: number, endMs: number): SwingSession | null {
   const matches = sessions.filter(s => s.date >= startMs && s.date <= endMs);
   return matches.length ? matches[matches.length - 1] : null;
 }
 
 /** Format a session for a brief voice summary. */
-export function formatSessionSummary(session: CageSession): string {
+export function formatSessionSummary(session: SwingSession): string {
   const dateStr = new Date(session.date).toLocaleDateString();
   const sourceStr = session.source === 'uploaded_video' ? 'uploaded swing' : `${session.club} session`;
   if (session.primary_issue) {

@@ -26,7 +26,7 @@
  * Never throws; best-effort like the rest of the clip-persistence layer.
  */
 import * as FileSystem from 'expo-file-system/legacy';
-import { useCageStore } from '../store/cageStore';
+import { useSwingSessionStore } from '../store/swingSessionStore';
 import { useRelationshipStore } from '../store/relationshipStore';
 
 /** Subdirectories under documentDirectory that hold GC-managed clip files. */
@@ -46,7 +46,7 @@ export async function gcOrphanClips(): Promise<number> {
     // Guard 1 — never sweep against an unhydrated (empty) store. cageStore
     // exposes an explicit flag flipped by onRehydrateStorage; relationshipStore
     // uses the standard persist hydration API.
-    const cageHydrated = useCageStore.getState().hasHydrated === true;
+    const cageHydrated = useSwingSessionStore.getState().hasHydrated === true;
     const relHydrated = useRelationshipStore.persist?.hasHydrated?.() ?? false;
     if (!cageHydrated || !relHydrated) return 0;
 
@@ -57,7 +57,7 @@ export async function gcOrphanClips(): Promise<number> {
       if (b) referenced.add(b);
     };
 
-    const cage = useCageStore.getState();
+    const cage = useSwingSessionStore.getState();
     const sessions = [...cage.sessionHistory];
     if (cage.activeSession) sessions.push(cage.activeSession); // in-flight, not yet in history
     for (const s of sessions) {

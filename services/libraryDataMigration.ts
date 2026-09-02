@@ -12,7 +12,7 @@
  * Guarded by an AsyncStorage flag → runs exactly once. Never throws.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useCageStore } from '../store/cageStore';
+import { useSwingSessionStore } from '../store/swingSessionStore';
 import { useFamilyStore } from '../store/familyStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { usePracticePointsStore } from '../store/practicePointsStore';
@@ -34,7 +34,7 @@ export async function runLibraryDataMigration(): Promise<void> {
     // 1) "it" → the owner.
     const itMember = fam.members.find((m) => (m.firstName ?? '').trim().toLowerCase() === 'it');
     if (itMember) {
-      const cage = useCageStore.getState();
+      const cage = useSwingSessionStore.getState();
       for (const s of cage.sessionHistory) {
         if (s.player_id === itMember.id) cage.setSessionPlayer(s.id, accountHolderId);
       }
@@ -45,7 +45,7 @@ export async function runLibraryDataMigration(): Promise<void> {
     // 2) Backfill practice credit for recent un-credited recorded sessions.
     const now = Date.now();
     let credited = 0;
-    for (const s of useCageStore.getState().sessionHistory) {
+    for (const s of useSwingSessionStore.getState().sessionHistory) {
       if (s.creditedPractice) continue;
       if (s.source === 'uploaded_video') continue;           // uploads aren't practice
       if (typeof s.date === 'number' && now - s.date > BACKFILL_WINDOW_MS) continue;
@@ -57,7 +57,7 @@ export async function runLibraryDataMigration(): Promise<void> {
       usePracticeSessionStore.getState().recordCompletedSession({
         kind: 'open_range', focus: clubKey, label: clubKey, swingCount: swings,
       });
-      useCageStore.getState().setSessionCreditedPractice(s.id, true);
+      useSwingSessionStore.getState().setSessionCreditedPractice(s.id, true);
       credited++;
     }
     if (credited > 0) console.log(`[libMigration] backfilled practice credit for ${credited} session(s)`);

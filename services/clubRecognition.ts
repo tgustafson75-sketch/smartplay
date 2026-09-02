@@ -301,7 +301,7 @@ export function parseSpokenClub(phrase: string): { club_id: ClubId; club_type: C
 
 /**
  * Friendly label for TTS / UI ("6-iron", "Pitching Wedge", "Driver").
- * Accepts string rather than ClubId so legacy CageSession.club values
+ * Accepts string rather than ClubId so legacy SwingSession.club values
  * (which are arbitrary strings from the manual selector grid) render too.
  */
 export function clubLabel(club_id: string): string {

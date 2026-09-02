@@ -97,7 +97,7 @@ import { analyzeStrike, type AcousticAnalysis } from '../../services/acousticsAn
 import { segmentsFromStrikes, segmentsFromVideoSwings, correlateStrikesWithVideo, filterReboundStrikes, type SwingSegment } from '../../services/swing/swingSegmentation';
 import { poseExtractInputsFor, poseExtractKeyFor } from '../../services/swing/poseExtractKey';
 import { detectBallSpeed, type BallSpeedResult } from '../../services/acousticDetectApi';
-import { useCageStore, type PrimaryIssue } from '../../store/cageStore';
+import { useSwingSessionStore, type PrimaryIssue } from '../../store/swingSessionStore';
 import { deriveDrillVerdict } from '../../services/drillVerdict';
 import { useClubBagStore } from '../../store/clubBagStore';
 import { MIN_TRACE_FPS } from '../../services/capture/captureFlags';
@@ -848,7 +848,7 @@ export default function SmartMotion() {
   const [feelText, setFeelText] = useState('');
   const [feelReply, setFeelReply] = useState<string | null>(null);
   const [feelLoading, setFeelLoading] = useState(false);
-  const setSessionFeel = useCageStore((s) => s.setSessionFeel);
+  const setSessionFeel = useSwingSessionStore((s) => s.setSessionFeel);
   // 2026-06-12 — cycling mode toggle: a quick fade-away label on each mode change
   // (one golfer icon you tap to cycle DTL → FO → PUTT, keeping the screen clear).
   const modeFadeOpacity = useRef(new Animated.Value(0)).current;
@@ -1321,11 +1321,11 @@ export default function SmartMotion() {
   // overlays render live, plus the persisted setters. Reuses the same
   // store + components as the swing-detail screen; isolated from the
   // strike/pose/verdict pipelines.
-  const cageSession = useCageStore(s =>
+  const cageSession = useSwingSessionStore(s =>
     sessionId ? s.sessionHistory.find(x => x.id === sessionId) ?? null : null,
   );
-  const setSessionBallArea = useCageStore(s => s.setSessionBallArea);
-  const setSessionTarget = useCageStore(s => s.setSessionTarget);
+  const setSessionBallArea = useSwingSessionStore(s => s.setSessionBallArea);
+  const setSessionTarget = useSwingSessionStore(s => s.setSessionTarget);
   const ballArea = cageSession?.ball_area_norm ?? null;
   const targetPoint = cageSession?.target_norm ?? null;
 
@@ -1745,7 +1745,7 @@ export default function SmartMotion() {
             const sessionId = ingestedSessionIdRef.current;
             const shotIdx = Math.max(0, (seg?.index ?? selectedSwing + 1) - 1);
             if (sessionId) {
-              const store = useCageStore.getState();
+              const store = useSwingSessionStore.getState();
               const sess = store.sessionHistory.find((s) => s.id === sessionId);
               const persistShot = sess?.shots[shotIdx] ?? null;
               const existingCr = persistShot?.perShotAnalysis?.contact_read;
@@ -2363,7 +2363,7 @@ export default function SmartMotion() {
         const allSegs = segmentsRef.current;
         const segs = isDrill && drillShotCount ? allSegs.slice(0, drillShotCount) : allSegs;
         const sessionId = segs.length > 1
-          ? useCageStore.getState().ingestLiveCageSession({
+          ? useSwingSessionStore.getState().ingestLiveCageSession({
               masterVideoPath: uri,
               // 2026-06-30 (audit C8) — was hardcoded 'unknown', so multi-swing library
               // sessions lost the selected club → per-club practice points + bag learning
@@ -2380,7 +2380,7 @@ export default function SmartMotion() {
               })),
               captureKind: isDrill ? 'drill' : 'smart_motion',
             })
-          : useCageStore.getState().ingestUploadedSwing({
+          : useSwingSessionStore.getState().ingestUploadedSwing({
               clipUri: uri,
               club: clubRef.current ? clubIdToServerKey(clubRef.current) : 'unknown',
               upload: uploadMeta,
@@ -2391,7 +2391,7 @@ export default function SmartMotion() {
         // 2026-08-10 — flush a note the user typed before this session existed.
         if (pendingCoachNoteRef.current != null) {
           try {
-            useCageStore.getState().setSessionCoachNote(sessionId, pendingCoachNoteRef.current);
+            useSwingSessionStore.getState().setSessionCoachNote(sessionId, pendingCoachNoteRef.current);
             console.log('[smartMotion] attached held coach note to session', sessionId);
           } catch { /* non-fatal */ }
           pendingCoachNoteRef.current = null;
@@ -2451,7 +2451,7 @@ export default function SmartMotion() {
             const frames = await extractFramesB64(uri, puttDurMs, puttFractions).catch(() => [] as string[]);
             const sid = ingestedSessionIdRef.current;
             const ballAreaNow = sid
-              ? (useCageStore.getState().sessionHistory.find((x) => x.id === sid)?.ball_area_norm ?? null)
+              ? (useSwingSessionStore.getState().sessionHistory.find((x) => x.id === sid)?.ball_area_norm ?? null)
               : null;
             return analyzePutt({
               video_url: uri,
@@ -2477,16 +2477,16 @@ export default function SmartMotion() {
               .then((m) => m.speakPuttRead(putt))
               .catch(() => { /* non-fatal — the card still stands */ });
             const sid = ingestedSessionIdRef.current;
-            if (sid) { try { useCageStore.getState().addPuttingAnalysis(sid, putt); } catch { /* non-fatal */ } }
+            if (sid) { try { useSwingSessionStore.getState().addPuttingAnalysis(sid, putt); } catch { /* non-fatal */ } }
           } else {
             const msg = 'Putt analysis timed out';
             setAnalysisError(msg);
-            try { const sid = ingestedSessionIdRef.current; if (sid) useCageStore.getState().setSessionAnalysisStatus(sid, 'failed', msg); } catch {}
+            try { const sid = ingestedSessionIdRef.current; if (sid) useSwingSessionStore.getState().setSessionAnalysisStatus(sid, 'failed', msg); } catch {}
           }
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           setAnalysisError(msg);
-          try { const sid = ingestedSessionIdRef.current; if (sid) useCageStore.getState().setSessionAnalysisStatus(sid, 'failed', msg); } catch {}
+          try { const sid = ingestedSessionIdRef.current; if (sid) useSwingSessionStore.getState().setSessionAnalysisStatus(sid, 'failed', msg); } catch {}
         }
         return;
       }
@@ -2596,25 +2596,25 @@ export default function SmartMotion() {
               // read can't see); otherwise keep the measured read as the headline and let the cloud enrich
               // per-shot below. When pose hasn't committed, the cloud verdict lands as before.
               if (contactPi || poseVerdictSessionRef.current !== sessionId) {
-                useCageStore.getState().setSessionAnalysis(sessionId, primaryIssue, null);
+                useSwingSessionStore.getState().setSessionAnalysis(sessionId, primaryIssue, null);
                 // 2026-08-06 (analysis audit) — a real contact mishit is the ONE cloud read the on-device
                 // pose can't see; lock it so the tempo re-commit (pose-verdict effect) never overwrites it.
                 if (contactPi) cloudMishitRef.current = sessionId;
               }
-              useCageStore.getState().setSessionAnalysisStatus(sessionId, 'ok');
+              useSwingSessionStore.getState().setSessionAnalysisStatus(sessionId, 'ok');
               // 2026-07-09 (audit BACKLOG #1) — LIVE capture previously wrote only the
               // SESSION analysis, never the PER-SHOT row, so a live-recorded swing showed an
               // empty per-shot diagnostic in the review reel while the same swing UPLOADED
               // (videoUpload.ts:772) showed the full read. Mirror that write here, mapping
               // this segment's index → the matching session shot id.
-              const sess = useCageStore.getState().sessionHistory.find((s) => s.id === sessionId);
+              const sess = useSwingSessionStore.getState().sessionHistory.find((s) => s.id === sessionId);
               const shotIdx = Math.max(0, (segment?.index ?? 1) - 1);
               // 2026-07-10 (audit SM4) — if the segment index doesn't map to a real shot, SKIP
               // (null) rather than falling back to shots[0]: that fallback stamped THIS swing's
               // read onto shot #1, mislabeling another swing's diagnosis.
               const shotId = sess?.shots[shotIdx]?.id ?? null;
               if (shotId) {
-                useCageStore.getState().setShotAnalysis(sessionId, shotId, {
+                useSwingSessionStore.getState().setShotAnalysis(sessionId, shotId, {
                   detected_issue: a.detected_issue,
                   primary_fault: a.primary_fault ?? null,
                   severity: a.severity,
@@ -2645,11 +2645,11 @@ export default function SmartMotion() {
           // the pose-verdict effect will still upgrade 'failed'→'ok' when biomech arrives.)
           const sid = ingestedSessionIdRef.current;
           const alreadyOk = !!sid && (poseVerdictSessionRef.current === sid
-            || useCageStore.getState().sessionHistory.find((s) => s.id === sid)?.analysis_status === 'ok');
+            || useSwingSessionStore.getState().sessionHistory.find((s) => s.id === sid)?.analysis_status === 'ok');
           if (!alreadyOk) {
             const msg = `Analysis ${result.kind.replace('_', ' ')}`;
             setAnalysisError(msg);
-            try { if (sid) useCageStore.getState().setSessionAnalysisStatus(sid, 'failed', msg); } catch {}
+            try { if (sid) useSwingSessionStore.getState().setSessionAnalysisStatus(sid, 'failed', msg); } catch {}
           }
         }
       } catch (e) {
@@ -2659,11 +2659,11 @@ export default function SmartMotion() {
         if (sessionRunRef.current === myRun) {
           const sid = ingestedSessionIdRef.current;
           const alreadyOk = !!sid && (poseVerdictSessionRef.current === sid
-            || useCageStore.getState().sessionHistory.find((s) => s.id === sid)?.analysis_status === 'ok');
+            || useSwingSessionStore.getState().sessionHistory.find((s) => s.id === sid)?.analysis_status === 'ok');
           if (!alreadyOk) {
             const msg = e instanceof Error ? e.message : String(e);
             setAnalysisError(msg);
-            try { if (sid) useCageStore.getState().setSessionAnalysisStatus(sid, 'failed', msg); } catch {}
+            try { if (sid) useSwingSessionStore.getState().setSessionAnalysisStatus(sid, 'failed', msg); } catch {}
           }
         }
       }
@@ -2765,7 +2765,7 @@ export default function SmartMotion() {
           // detail + coach report then rendered the wrong swing's skeleton/numbers. The live
           // review UI still updates via setBiomech(bio) above.
           if (sessionId && selectedSwing === 0) {
-            try { useCageStore.getState().setSessionBiomechanics(sessionId, bio); } catch { /* non-fatal */ }
+            try { useSwingSessionStore.getState().setSessionBiomechanics(sessionId, bio); } catch { /* non-fatal */ }
             // 2026-07-30 (Tim — "no clubhead arc path" + "video auto-plays on open"): persist the
             // clubhead arc HERE, at analysis time, so the swing-detail screen draws the stored points
             // instead of re-extracting frames against an autoplaying clip (that race is why the arc
@@ -2777,7 +2777,7 @@ export default function SmartMotion() {
                 try {
                   const { detectClubPath } = await import('../../services/swing/clubPath');
                   const arc = await detectClubPath({ videoUri: clipUri, startMs: poseWindow.startMs, endMs: poseWindow.endMs, shouldAbort: () => false });
-                  const store = useCageStore.getState();
+                  const store = useSwingSessionStore.getState();
                   if (arc && arc.points.length >= 3) {
                     store.setSessionClubArc(sessionId, arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + poseWindow.startMs })), { w: arc.frameW ?? null, h: arc.frameH ?? null });
                   } else {
@@ -2793,9 +2793,9 @@ export default function SmartMotion() {
           // arc is left to a LAZY library backfill so capture stays fast — no N extra detectClubPath runs.)
           if (sessionId) {
             try {
-              const sess = useCageStore.getState().sessionHistory.find((sx) => sx.id === sessionId);
+              const sess = useSwingSessionStore.getState().sessionHistory.find((sx) => sx.id === sessionId);
               const shotId = sess?.shots[selectedSwing]?.id ?? null;
-              if (shotId) useCageStore.getState().setShotBiomechanics(sessionId, shotId, bio);
+              if (shotId) useSwingSessionStore.getState().setShotBiomechanics(sessionId, shotId, bio);
             } catch { /* per-shot biomech is best-effort */ }
           }
         }
@@ -2824,7 +2824,7 @@ export default function SmartMotion() {
     // Committed once already but tempo STILL isn't here → wait for it (or the cloud); don't re-run pointlessly.
     if (poseVerdictSessionRef.current === sessionId && !tempo) return;
     try {
-      const store = useCageStore.getState();
+      const store = useSwingSessionStore.getState();
       const sess = store.sessionHistory.find((s) => s.id === sessionId);
       if (!sess) return;
       // Cloud landed 'ok' independently (we never committed a pose verdict) — it's richer; don't override.
@@ -3160,7 +3160,7 @@ export default function SmartMotion() {
       return;
     }
     try {
-      const landed = useCageStore.getState().setSessionCoachNote(sid, coachNote);
+      const landed = useSwingSessionStore.getState().setSessionCoachNote(sid, coachNote);
       if (!landed) pendingCoachNoteRef.current = coachNote;
     } catch { pendingCoachNoteRef.current = coachNote; }
   }, [coachNote]);
@@ -3372,11 +3372,11 @@ export default function SmartMotion() {
           try {
             const sessionId = ingestedSessionIdRef.current;
             if (sessionId) {
-              const sess = useCageStore.getState().sessionHistory.find((sx) => sx.id === sessionId);
+              const sess = useSwingSessionStore.getState().sessionHistory.find((sx) => sx.id === sessionId);
               const shotIdx = Math.max(0, (segs[idx]?.index ?? idx + 1) - 1);
               const shotId = sess?.shots[shotIdx]?.id ?? null;
               if (shotId) {
-                useCageStore.getState().setShotAnalysis(sessionId, shotId, {
+                useSwingSessionStore.getState().setShotAnalysis(sessionId, shotId, {
                   detected_issue: a.detected_issue,
                   primary_fault: a.primary_fault ?? null,
                   severity: a.severity,
@@ -3414,8 +3414,8 @@ export default function SmartMotion() {
             }
             const primaryIssue = contactIssue({ ballLaunched: null, reportedMishit: sessionMishit }) ?? rolled;
             if (primaryIssue) {
-              useCageStore.getState().setSessionAnalysis(sessionId, primaryIssue, null);
-              useCageStore.getState().setSessionAnalysisStatus(sessionId, 'ok');
+              useSwingSessionStore.getState().setSessionAnalysis(sessionId, primaryIssue, null);
+              useSwingSessionStore.getState().setSessionAnalysisStatus(sessionId, 'ok');
             }
           }
         } catch { /* re-persist is best-effort */ }
@@ -4445,13 +4445,13 @@ export default function SmartMotion() {
   const persistReviewToLibrary = useCallback((navigate: boolean) => {
     const sid = ingestedSessionIdRef.current;
     if (sid && coachNote.trim()) {
-      try { useCageStore.getState().setSessionCoachNote(sid, coachNote); } catch { /* non-fatal */ }
+      try { useSwingSessionStore.getState().setSessionCoachNote(sid, coachNote); } catch { /* non-fatal */ }
     }
     // 2026-06-12 (persistence fix) — also persist the typed/dictated FEEL on Save.
     // Previously feel only reached the store via the separate "Run it by your caddie"
     // button, so a user who spoke/typed how it felt and tapped Save lost it.
     if (sid && feelText.trim()) {
-      try { useCageStore.getState().setSessionFeel(sid, feelText.trim()); } catch { /* non-fatal */ }
+      try { useSwingSessionStore.getState().setSessionFeel(sid, feelText.trim()); } catch { /* non-fatal */ }
     }
     // 2026-06-29 (Tim — "Save loses the report") — FLUSH the full in-memory review
     // report onto the session so the saved library swing mirrors SmartMotion: tempo,
@@ -4459,7 +4459,7 @@ export default function SmartMotion() {
     // review effect; this is belt-and-braces in case the user saves the instant it lands.)
     if (sid) {
       try {
-        const store = useCageStore.getState();
+        const store = useSwingSessionStore.getState();
         if (biomech) store.setSessionBiomechanics(sid, biomech);
         /**
          * 2026-08-10 (Tim — "I put this as course mode, but it's based on Canvas. It says Canvas
@@ -4516,7 +4516,7 @@ export default function SmartMotion() {
         // calls persistReviewRef). The session already carries a creditedPractice flag (set at the end
         // of this block) but it was never READ, so the same swings were counted twice — inflating
         // total points + session count. Skip the award if this session was already credited.
-        const alreadyCredited = useCageStore.getState().sessionHistory.find((x) => x.id === sid)?.creditedPractice === true;
+        const alreadyCredited = useSwingSessionStore.getState().sessionHistory.find((x) => x.id === sid)?.creditedPractice === true;
         if (!sessionActive && !alreadyCredited) {
           if (isDrill && drillId) {
             // 2026-06-14 (Tim) — drill-launched: award + record under the drill's focus.
@@ -4537,7 +4537,7 @@ export default function SmartMotion() {
         }
         // Mark credited so the one-time backfill never double-counts this session — whether
         // the points came from here (no session) or from endSession (session active).
-        useCageStore.getState().setSessionCreditedPractice(sid, true);
+        useSwingSessionStore.getState().setSessionCreditedPractice(sid, true);
         // 2026-07-07 — samples were credited with THIS set; clear so a go-again set
         // doesn't re-stamp them (the accumulate-across-loop design predates per-set saves).
         practiceSwingSamplesRef.current = [];
@@ -4566,7 +4566,7 @@ export default function SmartMotion() {
     const isCageLive = effectiveMode === 'practice';
     if (!(estCarry != null || effortPct != null || ballTrace || (isCageLive && cageCanvasFeet != null) || tempo || biomech)) return;
     try {
-      useCageStore.getState().setSessionShotMap(sid, {
+      useSwingSessionStore.getState().setSessionShotMap(sid, {
         estCarry: estCarry ?? null,
         effortPct: effortPct ?? null,
         trace: ballTrace ? { side: ballTrace.side, divergenceDeg: ballTrace.divergenceDeg } : null,
@@ -4590,7 +4590,7 @@ export default function SmartMotion() {
   }, []);
   const discardSwing = useCallback(() => {
     const sid = ingestedSessionIdRef.current;
-    if (sid) { try { useCageStore.getState().deleteSession(sid); } catch { /* non-fatal */ } }
+    if (sid) { try { useSwingSessionStore.getState().deleteSession(sid); } catch { /* non-fatal */ } }
     useToastStore.getState().show('Swing discarded');
     reset();
   }, [reset]);

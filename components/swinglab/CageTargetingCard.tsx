@@ -12,7 +12,7 @@
  *      pin / wall target). User-placed only; there's no reliable visual
  *      signal for "where the user is AIMING" without explicit input.
  *
- * Both are stored on the CageSession as normalized 0-1 coordinates so
+ * Both are stored on the SwingSession as normalized 0-1 coordinates so
  * they survive playback at any video size + future re-renders on
  * different devices.
  *

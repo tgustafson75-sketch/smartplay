@@ -12,7 +12,7 @@
  * 2026-05-24 — Built per the harness expansion sketch.
  */
 
-import { useCageStore, type PrimaryIssue } from '../../store/cageStore';
+import { useSwingSessionStore, type PrimaryIssue } from '../../store/swingSessionStore';
 import { useRoundStore } from '../../store/roundStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePracticeStore } from '../../store/practiceStore';
@@ -37,9 +37,9 @@ export function seedCageSession(opts: {
   let sessionId = '';
   let shotId = '';
   try {
-    const store = useCageStore.getState();
+    const store = useSwingSessionStore.getState();
     store.startSession(opts.club ?? 'driver');
-    sessionId = useCageStore.getState().activeSession?.id ?? '';
+    sessionId = useSwingSessionStore.getState().activeSession?.id ?? '';
     store.addShot({
       club: opts.club ?? 'driver',
       feel: opts.shot?.feel ?? null,
@@ -50,7 +50,7 @@ export function seedCageSession(opts: {
       acousticContact: null,
       aiAnalysis: null,
     });
-    shotId = useCageStore.getState().activeSession?.shots[0]?.id ?? '';
+    shotId = useSwingSessionStore.getState().activeSession?.shots[0]?.id ?? '';
   } catch (e) {
     console.log('[harness mocks] seedCageSession failed:', e);
   }
@@ -63,7 +63,7 @@ export function seedCageSession(opts: {
       // session tracking is a separate concern; we never want a
       // harness teardown to push fake state into the user's library.
       try {
-        useCageStore.setState({ activeSession: null });
+        useSwingSessionStore.setState({ activeSession: null });
       } catch (e) {
         console.log('[harness mocks] seedCageSession teardown noise:', e);
       }
@@ -116,12 +116,12 @@ export function injectPerShotAnalysis(
     visual_reference_path?: string | null;
   },
 ): void {
-  useCageStore.getState().setShotAnalysis(sessionId, shotId, analysis);
+  useSwingSessionStore.getState().setShotAnalysis(sessionId, shotId, analysis);
 }
 
 /** Apply a session-level PrimaryIssue (GolfFix structured payload). */
 export function injectSessionAnalysis(sessionId: string, issue: PrimaryIssue | null): void {
-  useCageStore.getState().setSessionAnalysis(sessionId, issue, null);
+  useSwingSessionStore.getState().setSessionAnalysis(sessionId, issue, null);
 }
 
 // ─── Course truth + round state ─────────────────────────────────────

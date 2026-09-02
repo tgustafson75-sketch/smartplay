@@ -953,8 +953,8 @@ function AppNavigator() {
   useEffect(() => {
     void (async () => {
       try {
-        const mod = await import('../store/cageStore');
-        const count = mod.useCageStore.getState().purgeStaleAnalyses();
+        const mod = await import('../store/swingSessionStore');
+        const count = mod.useSwingSessionStore.getState().purgeStaleAnalyses();
         if (count > 0) {
           devLog('[boot-guard] purged ' + count + ' orphan analyses');
         }
@@ -983,12 +983,12 @@ function AppNavigator() {
     void (async () => {
       try {
         const [cageMod, relMod, gcMod] = await Promise.all([
-          import('../store/cageStore'),
+          import('../store/swingSessionStore'),
           import('../store/relationshipStore'),
           import('../services/clipStorageGc'),
         ]);
         await Promise.all([
-          whenHydrated(cageMod.useCageStore),
+          whenHydrated(cageMod.useSwingSessionStore),
           whenHydrated(relMod.useRelationshipStore),
         ]);
         if (cancelled) return;

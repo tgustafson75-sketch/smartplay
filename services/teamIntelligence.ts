@@ -24,7 +24,7 @@
 
 import type { Persona, CaddiePillar } from '../store/settingsStore';
 import { useSettingsStore } from '../store/settingsStore';
-import { useCageStore } from '../store/cageStore';
+import { useSwingSessionStore } from '../store/swingSessionStore';
 import { useRoundStore } from '../store/roundStore';
 import {
   useTeamIntelligenceStore,
@@ -144,7 +144,7 @@ function offer(trigger: SuggestionTrigger, fromPersona: Persona, pillar: CaddieP
 // improvement, suggest the alternate caddie for technique-fix variation.
 export function evaluateCageEnd(): void {
   if (!canOffer('drill_plateau')) return;
-  const cage = useCageStore.getState();
+  const cage = useSwingSessionStore.getState();
   // Read the last N sessions. If every recent session's most-frequent
   // detected swing issue is the same, that's a plateau signal — the
   // player keeps hitting the same fault despite practice. Time to vary

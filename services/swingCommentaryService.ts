@@ -30,7 +30,7 @@
  * upload-vs-cage-vs-glasses entry points all trigger naturally.
  */
 
-import { useCageStore, type CageShot } from '../store/cageStore';
+import { useSwingSessionStore, type SwingShot } from '../store/swingSessionStore';
 import { track } from './analytics';
 import { detectCue } from './metaGlassesCueRouter';
 import { transcribeVideoAudio, transcribeVideoAudioDetailed } from './videoTranscription';
@@ -58,7 +58,7 @@ export function getTranscriptionStatus(shotId: string): 'inflight' | 'done' | 'p
   return 'pending';
 }
 
-async function transcribeShotCommentary(sessionId: string, shot: CageShot): Promise<void> {
+async function transcribeShotCommentary(sessionId: string, shot: SwingShot): Promise<void> {
   if (!shot.clipUri) return;
   if (inflight.has(shot.id) || done.has(shot.id)) return;
   // Idempotent — if already populated, mark done so we don't retry.
@@ -88,7 +88,7 @@ async function transcribeShotCommentary(sessionId: string, shot: CageShot): Prom
       track('swing_commentary_transcribe_skip_or_empty');
       return;
     }
-    useCageStore.getState().setShotCommentaryTranscript(sessionId, shot.id, text);
+    useSwingSessionStore.getState().setShotCommentaryTranscript(sessionId, shot.id, text);
     done.add(shot.id);
     track('swing_commentary_transcribe_ok', { chars: text.length });
     console.log(`[swingCommentary] ok shot=${shot.id} chars=${text.length}`);
@@ -107,7 +107,7 @@ async function transcribeShotCommentary(sessionId: string, shot: CageShot): Prom
       const cue = detectCue(text);
       if (cue) {
         const session = (() => {
-          const cage = useCageStore.getState();
+          const cage = useSwingSessionStore.getState();
           if (cage.activeSession?.id === sessionId) return cage.activeSession;
           return cage.sessionHistory.find(x => x.id === sessionId) ?? null;
         })();
@@ -117,7 +117,7 @@ async function transcribeShotCommentary(sessionId: string, shot: CageShot): Prom
           if (upload.tag == null && cue.tag != null) patch.tag = cue.tag;
           if (upload.perspective == null) patch.perspective = cue.perspective;
           if (Object.keys(patch).length > 0) {
-            useCageStore.getState().patchSessionUpload(sessionId, patch);
+            useSwingSessionStore.getState().patchSessionUpload(sessionId, patch);
             console.log(
               `[metaGlassesCue] matched="${cue.matched_phrase}" → session=${sessionId} `
               + `tag=${patch.tag ?? '(unchanged)'} perspective=${patch.perspective ?? '(unchanged)'}`,
@@ -146,14 +146,14 @@ async function transcribeShotCommentary(sessionId: string, shot: CageShot): Prom
 // utterance onto the swing it belongs to (the swing whose window-start most recently
 // precedes the utterance — "that was good" lands on the swing just hit). Single-swing
 // sessions keep the existing per-shot path (which also does the Meta-glasses cue route).
-async function transcribeMultiSwingCommentary(sessionId: string, clipUri: string, shots: CageShot[]): Promise<void> {
+async function transcribeMultiSwingCommentary(sessionId: string, clipUri: string, shots: SwingShot[]): Promise<void> {
   if (inflight.has(clipUri) || done.has(clipUri)) return;
   inflight.add(clipUri);
   try {
     const language = useSettingsStore.getState().language;
     const detailed = await transcribeVideoAudioDetailed(clipUri, { language });
     if (!detailed) { shots.forEach((s) => done.add(s.id)); done.add(clipUri); track('swing_commentary_multi_skip_or_empty'); return; }
-    const store = useCageStore.getState();
+    const store = useSwingSessionStore.getState();
     if (detailed.utterances.length === 0) {
       // No timestamps — honest fallback: put the whole transcript on the first swing.
       if (detailed.text) store.setShotCommentaryTranscript(sessionId, shots[0].id, detailed.text);
@@ -192,8 +192,8 @@ async function transcribeMultiSwingCommentary(sessionId: string, clipUri: string
 }
 
 function processPendingShots(): void {
-  const cage = useCageStore.getState();
-  const sessions: { id: string; shots: CageShot[] }[] = [];
+  const cage = useSwingSessionStore.getState();
+  const sessions: { id: string; shots: SwingShot[] }[] = [];
   if (cage.activeSession) sessions.push({ id: cage.activeSession.id, shots: cage.activeSession.shots });
   for (const s of cage.sessionHistory) sessions.push({ id: s.id, shots: s.shots });
 
@@ -201,7 +201,7 @@ function processPendingShots(): void {
     const pending = session.shots.filter((sh) => sh.clipUri && !(sh.commentary_transcript ?? '').trim());
     if (pending.length === 0) continue;
     // Group pending shots by the clip they share.
-    const byClip = new Map<string, CageShot[]>();
+    const byClip = new Map<string, SwingShot[]>();
     for (const sh of pending) {
       const k = sh.clipUri as string;
       const arr = byClip.get(k) ?? [];
@@ -227,7 +227,7 @@ export function startSwingCommentarySubscription(): void {
   subscribed = true;
   // Initial sweep — handles shots that landed before this service mounted.
   processPendingShots();
-  useCageStore.subscribe(() => {
+  useSwingSessionStore.subscribe(() => {
     processPendingShots();
   });
 }

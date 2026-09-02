@@ -1,4 +1,4 @@
-import type { ReviewLabels } from '../store/cageStore';
+import type { ReviewLabels } from '../store/swingSessionStore';
 
 export type { ReviewLabels };
 

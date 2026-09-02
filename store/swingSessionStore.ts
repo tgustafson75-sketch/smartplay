@@ -20,7 +20,7 @@ export interface ReviewLabels {
   notable_phrases: string[];
 }
 
-export interface CageShot {
+export interface SwingShot {
   id: string;
   club: string;
   feel: string | null;
@@ -131,7 +131,7 @@ export type ClubSwitchSource = 'session_start' | 'manual' | 'voice' | 'vision';
 // can switch clubs mid-session; each segment records when the switch
 // happened, which shots belong to it, and how the switch was triggered.
 // Old sessions without segments still render correctly (consumers fall
-// back to CageSession.club + the full shots list).
+// back to SwingSession.club + the full shots list).
 export interface ClubSegment {
   club_id: string;
   startedAt: number;
@@ -209,14 +209,14 @@ export interface SmartMotionShotMap {
   bodyItems?: { key: string; label: string; tone: 'good' | 'warn' | 'bad' | 'neutral'; icon?: string }[] | null;
 }
 
-export interface CageSession {
+export interface SwingSession {
   id: string;
   date: number;
   /** Initial club at session start. Existing field — back-compat. New
    *  consumers prefer `currentClub` for the live read and `clubSegments`
    *  for historical analysis. */
   club: string;
-  shots: CageShot[];
+  shots: SwingShot[];
   /** Phase BL — club currently being hit. Defaults to `club` for sessions
    *  predating BL. Updated when the user switches via vision / voice /
    *  manual selector. New shots are auto-tagged with this value. */
@@ -249,7 +249,7 @@ export interface CageSession {
   roundHole?: number | null;
   starred?: boolean;
   // Phase R — source kind. 'live_cage' is the original Phase J flow; an
-  // 'uploaded_video' session wraps a single uploaded swing (one CageShot)
+  // 'uploaded_video' session wraps a single uploaded swing (one SwingShot)
   // with upload metadata so it browses uniformly in the swing library.
   source?: SwingSource;
   upload?: UploadMetadata | null;
@@ -477,9 +477,9 @@ export interface CameraAlignment {
 
 // ─── STATE ────────────────────────────────
 
-interface CageState {
-  activeSession: CageSession | null; // NOT persisted
-  sessionHistory: CageSession[];
+interface SwingSessionState {
+  activeSession: SwingSession | null; // NOT persisted
+  sessionHistory: SwingSession[];
   clubProfiles: Record<string, {
     dominantMiss: string | null;
     missRate: number;
@@ -525,7 +525,7 @@ interface CageState {
    *  persist middleware's onRehydrateStorage hook; UI code subscribes
    *  to `hasHydrated` and shouldn't call this directly. */
   setHasHydrated: (b: boolean) => void;
-  addShot: (shot: Omit<CageShot, 'id' | 'timestamp'>) => void;
+  addShot: (shot: Omit<SwingShot, 'id' | 'timestamp'>) => void;
   endSession: (summary: {
     dominantMiss: string | null;
     rootCause: string | null;
@@ -533,11 +533,11 @@ interface CageState {
   }) => void;
   setCameraAlignment: (x: number, y: number) => void;
   clearCameraAlignment: () => void;
-  /** Phase R — ingest a single uploaded video as a one-shot CageSession.
+  /** Phase R — ingest a single uploaded video as a one-shot SwingSession.
    *  Returns the new session id so the caller can navigate to its detail
    *  surface and Phase K analysis can attach to it. */
   /** Phase R / cage-live bridge — ingest a single video as a one-shot
-   *  CageSession. Used by the upload flow (source defaults to
+   *  SwingSession. Used by the upload flow (source defaults to
    *  'uploaded_video') and the live cage flow (pass source: 'live_cage'
    *  so the My Swing Library can render the entry with the right kind
    *  treatment). */
@@ -554,7 +554,7 @@ interface CageState {
   }) => string;
   /** Phase BW — ingest a live cage session with N detected swings, each
    *  with its own clip boundaries pointing into the master video.
-   *  Creates one CageSession with N CageShots. Returns the new session
+   *  Creates one SwingSession with N CageShots. Returns the new session
    *  id. Each shot's clipUri is the master video URI; clipStart/EndSeconds
    *  + correlationId distinguish them so Phase K can sample the right
    *  window per swing. */
@@ -662,7 +662,7 @@ interface CageState {
   /** Pose-API biomechanics result. Fire-and-forget after Phase K, so
    *  this commits independently from setSessionAnalysis. */
   setSessionBiomechanics: (sessionId: string, biomechanics: import('../services/poseAnalysisApi').SwingBiomechanics | null) => void;
-  /** Persist the clubhead arc detected during the analysis pass (see CageSession.club_arc). */
+  /** Persist the clubhead arc detected during the analysis pass (see SwingSession.club_arc). */
   setSessionClubArc: (sessionId: string, arc: import('../services/swing/clubPath').ClubPathPoint[] | null, frame?: { w: number | null; h: number | null } | null) => void;
   /** Per-SHOT biomech + clubhead arc (lazy per-swing review in the library). */
   setShotBiomechanics: (sessionId: string, shotId: string, biomechanics: import('../services/poseAnalysisApi').SwingBiomechanics | null) => void;
@@ -721,11 +721,11 @@ interface CageState {
   /** Phase J — set the distance calibration for the current cage. Pass yards.
    *  Optional cage_id defaults to 'home' when omitted. */
   setDistanceCalibration: (yards: number, cageId?: string) => void;
-  getClubProfile: (club: string) => CageState['clubProfiles'][string] | null;
+  getClubProfile: (club: string) => SwingSessionState['clubProfiles'][string] | null;
   updateShotLabels: (sessionId: string, shotId: string, labels: ReviewLabels, transcript: string) => void;
   /** 2026-06-23 (Tim — "always able to TOUCH and correct who hit this swing")
    *  — reassign a session's golfer attribution. Immutably sets the
-   *  session's player_id (the only record that carries it — CageShot has
+   *  session's player_id (the only record that carries it — SwingShot has
    *  no player_id, so there's nothing per-shot to mirror). Pass the same
    *  value derivePlayerId() would yield for the chosen golfer: a family
    *  member id, the account holder's lowercased email, or 'account_holder'.
@@ -858,7 +858,7 @@ export function resolveSwingerToPlayerId(swinger: string | null | undefined): st
  * and the predicate reading one source. Case-insensitive on the resolved name
  * so a roster rename / casing drift can't split a golfer into two chips.
  */
-export function playerMatchesFilter(session: CageSession, filterName: string): boolean {
+export function playerMatchesFilter(session: SwingSession, filterName: string): boolean {
   if (filterName === 'all') return true;
   const resolved = resolvePlayerName(session.player_id);
   return resolved.toLowerCase() === filterName.toLowerCase();
@@ -910,7 +910,7 @@ function guardedCageStorage() {
   };
 }
 
-export const useCageStore = create<CageState>()(
+export const useSwingSessionStore = create<SwingSessionState>()(
   persist(
     (set, get) => ({
       activeSession: null,
@@ -1021,7 +1021,7 @@ export const useCageStore = create<CageState>()(
           // caller explicitly passed one (preserves test/manual paths).
           const inferredClub =
             shot.club || s.activeSession.currentClub || s.activeSession.club;
-          const newShot: CageShot = {
+          const newShot: SwingShot = {
             ...shot,
             club: inferredClub,
             id: uid('shot'),
@@ -1067,7 +1067,7 @@ export const useCageStore = create<CageState>()(
               )
             : segments;
 
-          const completed: CageSession = {
+          const completed: SwingSession = {
             ...s.activeSession,
             ...summary,
             ...(closedSegments ? { clubSegments: closedSegments } : {}),
@@ -1144,7 +1144,7 @@ export const useCageStore = create<CageState>()(
           clipUri_length: clipUri.length,
         });
         const shotId = uid(`${resolvedSource === 'live_cage' ? 'cage' : 'uploaded'}_shot`);
-        const session: CageSession = {
+        const session: SwingSession = {
           id: sessionId,
           date: upload.taken_at ?? upload.uploaded_at,
           club,
@@ -1202,7 +1202,7 @@ export const useCageStore = create<CageState>()(
           masterVideoPath_length: masterVideoPath.length,
         });
         const baseTs = upload.taken_at ?? upload.uploaded_at;
-        const cageShots: CageShot[] = shots.map((evt, i) => ({
+        const cageShots: SwingShot[] = shots.map((evt, i) => ({
           id: `${sessionId}_shot_${i}`,
           club,
           feel: null,
@@ -1220,7 +1220,7 @@ export const useCageStore = create<CageState>()(
           correlationId: evt.correlationId,
           perShotAnalysis: null,
         }));
-        const session: CageSession = {
+        const session: SwingSession = {
           id: sessionId,
           date: baseTs,
           club,
@@ -1250,7 +1250,7 @@ export const useCageStore = create<CageState>()(
         set(s => {
           const trim = (transcript ?? '').trim();
           if (!trim) return s;
-          const updateShots = (shots: CageShot[]): CageShot[] =>
+          const updateShots = (shots: SwingShot[]): SwingShot[] =>
             shots.map(shot => shot.id !== shotId ? shot : { ...shot, feel_narration_transcript: trim });
           return {
             ...s,
@@ -1269,7 +1269,7 @@ export const useCageStore = create<CageState>()(
         set(s => {
           const trim = (transcript ?? '').trim();
           if (!trim) return s;
-          const updateShots = (shots: CageShot[]): CageShot[] =>
+          const updateShots = (shots: SwingShot[]): SwingShot[] =>
             shots.map(shot => shot.id !== shotId ? shot : { ...shot, commentary_transcript: trim });
           return {
             ...s,
@@ -1293,7 +1293,7 @@ export const useCageStore = create<CageState>()(
       // upload metadata for those).
       patchSessionUpload: (sessionId, patch) =>
         set(s => {
-          const apply = (session: CageSession): CageSession => {
+          const apply = (session: SwingSession): SwingSession => {
             if (session.id !== sessionId) return session;
             if (!session.upload) return session;
             return { ...session, upload: { ...session.upload, ...patch } };
@@ -1413,7 +1413,7 @@ export const useCageStore = create<CageState>()(
       // Patch BOTH, exactly like the sibling shot setters above.
       setSessionAnalysis: (sessionId, primary_issue, drill_recommendation) =>
         set(s => {
-          const apply = (session: CageSession): CageSession =>
+          const apply = (session: SwingSession): SwingSession =>
             session.id !== sessionId ? session : {
               ...session, primary_issue, drill_recommendation,
               analysis_status: 'ok' as AnalysisStatus, analysis_error: null,
@@ -1610,7 +1610,7 @@ export const useCageStore = create<CageState>()(
         // wipe). Same "don't downgrade good→empty" rule the arc setters already carry.
         set(s => {
           const hasFrames = (b: typeof biomechanics | undefined) => !!(b && Array.isArray(b.frames) && b.frames.length > 0);
-          const apply = (session: CageSession): CageSession => {
+          const apply = (session: SwingSession): SwingSession => {
             if (session.id !== sessionId) return session;
             if (!hasFrames(biomechanics) && hasFrames(session.biomechanics)) return session; // keep the good read
             return { ...session, biomechanics };
@@ -1623,7 +1623,7 @@ export const useCageStore = create<CageState>()(
 
       setSessionClubArc: (sessionId, arc, frame) =>
         set(s => {
-          const apply = (session: CageSession): CageSession => {
+          const apply = (session: SwingSession): SwingSession => {
             if (session.id !== sessionId) return session;
             // 2026-07-30 (analysis audit P6) — a failed re-run yields too few points; never overwrite a
             // previously-good arc with an empty/short one. Keep the good arc + its frame.
@@ -1650,7 +1650,7 @@ export const useCageStore = create<CageState>()(
         set(s => {
           // 2026-07-30 (audit #3) — don't overwrite a present per-shot biomech with a null/empty re-run.
           const hasFrames = (b: typeof biomechanics | undefined) => !!(b && Array.isArray(b.frames) && b.frames.length > 0);
-          const apply = (session: CageSession): CageSession =>
+          const apply = (session: SwingSession): SwingSession =>
             session.id !== sessionId ? session : {
               ...session,
               shots: session.shots.map(sh => {
@@ -1667,7 +1667,7 @@ export const useCageStore = create<CageState>()(
 
       setShotClubArc: (sessionId, shotId, arc, frame) =>
         set(s => {
-          const apply = (session: CageSession): CageSession => {
+          const apply = (session: SwingSession): SwingSession => {
             if (session.id !== sessionId) return session;
             return {
               ...session,
@@ -1692,7 +1692,7 @@ export const useCageStore = create<CageState>()(
       // live GolfFix card must see it too — not just the saved history entry.
       setSessionAnalysisStatus: (sessionId, status, error) =>
         set(s => {
-          const apply = (session: CageSession): CageSession =>
+          const apply = (session: SwingSession): SwingSession =>
             session.id !== sessionId ? session : {
               ...session,
               analysis_status: status,
@@ -1787,7 +1787,7 @@ export const useCageStore = create<CageState>()(
             if (session.id !== sessionId) return session;
             const base = session.shots[0];
             if (!base || windows.length < 2) return session; // nothing to expand
-            const shots: CageShot[] = windows.map((w, i) => ({
+            const shots: SwingShot[] = windows.map((w, i) => ({
               ...base, // inherit clipUri, club, etc. from the single uploaded shot
               id: `${sessionId}_shot_${i}`,
               clipStartSeconds: w.startSec,
@@ -1824,12 +1824,12 @@ export const useCageStore = create<CageState>()(
         })),
 
       // 2026-06-23 (Tim) — reassign golfer attribution. player_id lives ONLY on
-      // CageSession (CageShot has none), so this patches the session and there's
+      // SwingSession (SwingShot has none), so this patches the session and there's
       // nothing per-shot to update. Dual-update activeSession + history like the
       // other session setters above.
       setSessionPlayer: (sessionId, playerId) =>
         set(s => {
-          const apply = (session: CageSession): CageSession =>
+          const apply = (session: SwingSession): SwingSession =>
             session.id !== sessionId ? session : { ...session, player_id: playerId };
           return {
             activeSession:
@@ -1841,7 +1841,7 @@ export const useCageStore = create<CageState>()(
         }),
       setSessionCreditedPractice: (sessionId, credited) =>
         set(s => {
-          const apply = (session: CageSession): CageSession =>
+          const apply = (session: SwingSession): SwingSession =>
             session.id !== sessionId ? session : { ...session, creditedPractice: credited };
           return {
             activeSession:
@@ -1851,13 +1851,20 @@ export const useCageStore = create<CageState>()(
         }),
     }),
     {
+      /**
+       * DO NOT RENAME. This is the AsyncStorage key holding every player's swing library — sessions,
+       * shots, analyses, biomechanics. The store, its file and its types were renamed off "cage" on
+       * 2026-09-01 because the word made the app assume a venue; the STORAGE KEY deliberately did not
+       * move, because changing it does not migrate data, it abandons it. A player would open the app
+       * to an empty library with no error and no way back.
+       */
       name: 'cage-store-v1',
       storage: createJSONStorage(guardedCageStorage), // A2: corrupt-read guard blocks a wipe-over-write
       // Audit follow-up — explicit version + migrate added defensively.
       // Cage session schemas have evolved (clubSegments, primary_issue,
       // analysis_status added across phases) without bumping the persist
       // version. v1 = current shape; bump + add migrate when changing
-      // CageSession / CageShot type shape going forward.
+      // SwingSession / SwingShot type shape going forward.
       version: 2,
       /**
        * 2026-09-01 v2 — fold the retired 'cage' SwingTag into 'indoor'. The two were redundant tag
@@ -1923,7 +1930,7 @@ export const useCageStore = create<CageState>()(
         if (error) {
           console.log('[cageStore] rehydrate error (treating as empty):', error);
         }
-        useCageStore.getState().setHasHydrated(true);
+        useSwingSessionStore.getState().setHasHydrated(true);
       },
     },
   ),

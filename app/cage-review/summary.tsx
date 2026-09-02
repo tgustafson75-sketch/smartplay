@@ -11,18 +11,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { getReviewSession } from '../../services/cageReview';
 import { getCurrentProfile } from '../../services/vocabularyProfile';
-import { useCageStore } from '../../store/cageStore';
+import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speakChunked, configureAudioForSpeech } from '../../services/voiceService';
 import type { ReviewSession } from '../../types/cageReview';
 import type { VocabularyProfile } from '../../types/vocabulary';
-import type { ReviewLabels } from '../../store/cageStore';
+import type { ReviewLabels } from '../../store/swingSessionStore';
 import { getApiBaseUrl } from '../../services/apiBase';
 
 export default function CageReviewSummary() {
   const { review_session_id } = useLocalSearchParams<{ review_session_id: string }>();
   const router = useRouter();
-  const { sessionHistory } = useCageStore();
+  const { sessionHistory } = useSwingSessionStore();
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
   const apiUrl = getApiBaseUrl();
 

@@ -12,7 +12,7 @@
  */
 
 import type { IntentHandler, IntentResult } from '../../types/voiceIntent';
-import { useCageStore } from '../../store/cageStore';
+import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { useRoundStore } from '../../store/roundStore';
 import { parseSpokenClub, clubLabel } from '../clubRecognition';
 import { useClubSelectionStore } from '../../store/clubSelectionStore';
@@ -181,7 +181,7 @@ export const clubChangeHandler: IntentHandler = {
       };
     }
 
-    const cage = useCageStore.getState();
+    const cage = useSwingSessionStore.getState();
     if (!cage.activeSession) {
       return noActiveSession();
     }
@@ -226,7 +226,7 @@ export const clubQueryHandler: IntentHandler = {
   ],
 
   async execute(): Promise<IntentResult> {
-    const cage = useCageStore.getState();
+    const cage = useSwingSessionStore.getState();
     if (!cage.activeSession) {
       return noActiveSession();
     }
@@ -255,7 +255,7 @@ export const clubMenuHandler: IntentHandler = {
   ],
 
   async execute(): Promise<IntentResult> {
-    const cage = useCageStore.getState();
+    const cage = useSwingSessionStore.getState();
     if (!cage.activeSession) {
       return noActiveSession();
     }

@@ -1,4 +1,4 @@
-export interface CageSession {
+export interface SwingSession {
   id: string;
   player_id: string;
   started_at: number; // unix ms

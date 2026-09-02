@@ -20,7 +20,7 @@
  */
 
 import { useRoundStore } from '../store/roundStore';
-import { useCageStore } from '../store/cageStore';
+import { useSwingSessionStore } from '../store/swingSessionStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { useFamilyStore } from '../store/familyStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
@@ -203,7 +203,7 @@ export function commitCapture(
       ?? null;
     const perspective: 'pov_self' | 'watching_someone' =
       activeMember ? 'watching_someone' : 'pov_self';
-    useCageStore.getState().ingestUploadedSwing({
+    useSwingSessionStore.getState().ingestUploadedSwing({
       source: 'uploaded_video',
       clipUri: uri,
       club: 'unknown',

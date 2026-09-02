@@ -23,7 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useCageStore, resolvePlayerName, playerMatchesFilter } from '../../store/cageStore';
+import { useSwingSessionStore, resolvePlayerName, playerMatchesFilter } from '../../store/swingSessionStore';
 import { useFamilyStore } from '../../store/familyStore';
 import { useToastStore } from '../../store/toastStore';
 import { getLibrary, type LibraryFilter } from '../../services/swingLibrary';
@@ -50,15 +50,15 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export default function SwingLibrary() {
   const router = useRouter();
   const { colors } = useTheme();
-  const sessionHistory = useCageStore(s => s.sessionHistory);
-  const deleteSession = useCageStore(s => s.deleteSession);
+  const sessionHistory = useSwingSessionStore(s => s.sessionHistory);
+  const deleteSession = useSwingSessionStore(s => s.deleteSession);
   // 2026-05-23 — hydration guard. AsyncStorage rehydration is async,
   // so sessionHistory starts as [] before the persist middleware
   // hydrates. Without this, the cold-launch path renders the "No
   // swings yet" empty state for a frame even when swings ARE in
   // storage — which Tim hit on the new build and assumed his library
   // had been wiped. Wait for hasHydrated before deciding "empty."
-  const hasHydrated = useCageStore(s => s.hasHydrated);
+  const hasHydrated = useSwingSessionStore(s => s.hasHydrated);
   // 2026-06-24 — subscribe to the family roster so the swinger filter chips +
   // predicate re-resolve player_id→name when a golfer is added/renamed/archived
   // (resolvePlayerName reads familyStore under the hood; the subscription is
@@ -207,7 +207,7 @@ export default function SwingLibrary() {
               if (resolved && resolved !== clipUri && healShotId && !healedRef.current.has(healShotId)) {
                 healedRef.current.add(healShotId);
                 try {
-                  useCageStore.getState().setShotClipUri(entry.session.id, healShotId, resolved);
+                  useSwingSessionStore.getState().setShotClipUri(entry.session.id, healShotId, resolved);
                 } catch { /* non-fatal — re-anchor still works at read time next pass */ }
               }
             } catch { videoOk = false; }
@@ -244,7 +244,7 @@ export default function SwingLibrary() {
                 let finalUri = tmp;
                 const dest = `${FS.documentDirectory}swing-thumb-${entry.session.id}.jpg`;
                 try { await FS.copyAsync({ from: tmp, to: dest }); finalUri = dest; } catch { /* keep tmp */ }
-                useCageStore.getState().setSessionThumbnail(entry.session.id, finalUri);
+                useSwingSessionStore.getState().setSessionThumbnail(entry.session.id, finalUri);
                 thumbOk = true;
               }
             } catch { /* generation failed — card shows the placeholder, no crash */ }

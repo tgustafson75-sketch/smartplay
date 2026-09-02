@@ -15,11 +15,11 @@ export function updateClubConfidenceFromCage(club: string | null | undefined): v
   if (!club || club === 'unknown') return;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const cage = require('../store/cageStore') as typeof import('../store/cageStore');
+    const cage = require('../store/swingSessionStore') as typeof import('../store/swingSessionStore');
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const rel = require('../store/relationshipStore') as typeof import('../store/relationshipStore');
 
-    const sessions = cage.useCageStore.getState().sessionHistory;
+    const sessions = cage.useSwingSessionStore.getState().sessionHistory;
     const contacts: string[] = [];
     for (let i = sessions.length - 1; i >= 0 && contacts.length < WINDOW; i--) {
       const s = sessions[i];

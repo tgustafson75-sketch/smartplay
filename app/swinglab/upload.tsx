@@ -20,7 +20,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
 import { pickVideo, probeVideo, ingestVideoFromPick, MAX_FILE_SIZE_MB } from '../../services/videoUpload';
 import { uploadLog } from '../../services/uploadDiagnostic';
-import { useCageStore, type SwingTag } from '../../store/cageStore';
+import { useSwingSessionStore, type SwingTag } from '../../store/swingSessionStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useFamilyStore } from '../../store/familyStore';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
@@ -64,7 +64,7 @@ export default function UploadSwing() {
     s.active_member_id ? s.members.find(m => m.id === s.active_member_id) : null,
   );
   const familyMembers = useFamilyStore(s => s.members);
-  const sessionHistory = useCageStore(s => s.sessionHistory);
+  const sessionHistory = useSwingSessionStore(s => s.sessionHistory);
   const [swinger, setSwinger] = useState(activeMember?.firstName ?? 'Me');
 
   // 2026-05-25 — Fix AS: swinger autocomplete chips. Tim's ask was

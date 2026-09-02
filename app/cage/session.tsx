@@ -27,7 +27,7 @@ import { useRouter } from 'expo-router';
 import CageSessionOverlay from '../../components/CageSessionOverlay';
 import { cageLog } from '../../services/cageTelemetry';
 
-export default function CageSession() {
+export default function SwingSession() {
   const router = useRouter();
 
   return (

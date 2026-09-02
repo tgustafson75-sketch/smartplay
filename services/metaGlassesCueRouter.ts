@@ -37,7 +37,7 @@
  *      Phase K full-body swing analyzer picks it up.
  */
 
-import type { SwingTag } from '../store/cageStore';
+import type { SwingTag } from '../store/swingSessionStore';
 
 export interface CueResult {
   tag: SwingTag | null;

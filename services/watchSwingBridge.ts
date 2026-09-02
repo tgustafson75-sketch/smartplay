@@ -20,7 +20,7 @@ import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
 import { watchDeviceLabel } from './watchBridge';
 import { useWatchStore } from '../store/watchStore';
 import { useClubSelectionStore } from '../store/clubSelectionStore';
-import { useCageStore } from '../store/cageStore';
+import { useSwingSessionStore } from '../store/swingSessionStore';
 import { normalizeClub } from './clubNormalize';
 import { sendSwingFeedback } from './watchBridge';
 import { useSettingsStore } from '../store/settingsStore';
@@ -36,7 +36,7 @@ import { interpretWristSwing } from './watchWristInterpretation';
  */
 function resolveSelectedClub(): string {
   try {
-    const cageClub = useCageStore.getState().activeSession?.currentClub;
+    const cageClub = useSwingSessionStore.getState().activeSession?.currentClub;
     const raw = cageClub ?? useClubSelectionStore.getState().lastClub ?? null;
     return normalizeClub(raw ? String(raw) : null) ?? 'unknown';
   } catch {

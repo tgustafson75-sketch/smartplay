@@ -33,7 +33,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSettingsStore } from '../../store/settingsStore';
-import type { CageSession } from '../../store/cageStore';
+import type { SwingSession } from '../../store/swingSessionStore';
 import { getCaddieName } from '../../lib/persona';
 import {
   captureUtterance, speak, configureAudioForSpeech, stopSpeaking,
@@ -42,7 +42,7 @@ import { getApiBaseUrl } from '../../services/apiBase';
 import { useResolvedImageUri } from '../../hooks/useResolvedImageUri';
 
 interface Props {
-  session: CageSession;
+  session: SwingSession;
 }
 
 interface AskResponse {
@@ -56,7 +56,7 @@ interface AskResponse {
 // value would keep hitting the dead host (see services/apiBase.ts — "call at
 // fetch time; don't cache"). Every call site below reads it fresh.
 
-function resolveFrameUri(session: CageSession): string | null {
+function resolveFrameUri(session: SwingSession): string | null {
   if (session.primary_issue?.visual_reference_path) {
     return session.primary_issue.visual_reference_path;
   }

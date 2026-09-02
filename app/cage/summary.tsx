@@ -12,7 +12,7 @@ import {
 import { kevinText as kevinTextStyle } from '../../styles/typography';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useCageStore } from '../../store/cageStore';
+import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useWatchStore } from '../../store/watchStore';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -28,7 +28,7 @@ import { classifySession } from '../../services/swingIssueClassifier';
 import { recommendDrill } from '../../services/drillRecommendation';
 import { processSwingAnalysis } from '../../services/relationshipEngine';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
-import type { PrimaryIssue, DrillRecommendation } from '../../store/cageStore';
+import type { PrimaryIssue, DrillRecommendation } from '../../store/swingSessionStore';
 import { activateMediaSession, deactivateMediaSession } from '../../services/mediaKeyBridge';
 import { cageLog } from '../../services/cageTelemetry';
 import { getApiBaseUrl } from '../../services/apiBase';
@@ -41,7 +41,7 @@ export default function CageSummary() {
   const [drillRec, setDrillRec] = useState<DrillRecommendation | null>(null);
   const [analysisStatus, setAnalysisStatus] = useState<'pending' | 'no_frames' | 'no_data' | 'done' | 'error'>('pending');
 
-  const { sessionHistory } = useCageStore();
+  const { sessionHistory } = useSwingSessionStore();
   const { addPoints } = usePointsStore();
   const { voiceGender, voiceEnabled, language } = useSettingsStore();
   const { incrementSessions } = useRelationshipStore();
@@ -143,7 +143,7 @@ export default function CageSummary() {
             // this producer was silently losing cage sessions their one real moment).
             const faultIdx = r.analysis.fault_frame_index;
             const faultTs = faultIdx != null && faultIdx >= 0 ? r.frame_timestamps_sec[faultIdx] : undefined;
-            useCageStore.getState().setShotIssueTimestamps(session.id, swing.id, typeof faultTs === 'number' ? [faultTs] : []);
+            useSwingSessionStore.getState().setShotIssueTimestamps(session.id, swing.id, typeof faultTs === 'number' ? [faultTs] : []);
           }
           if (r.kind === 'no_frames') anyNoFrames = true;
         }
@@ -171,7 +171,7 @@ export default function CageSummary() {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const ti = require('../../services/teamIntelligence') as typeof import('../../services/teamIntelligence');
         ti.evaluateCageEnd();
-        const fresh = useCageStore.getState().sessionHistory.find((x) => x.id === session.id);
+        const fresh = useSwingSessionStore.getState().sessionHistory.find((x) => x.id === session.id);
         let streak = 0; let maxStreak = 0;
         for (const sh of fresh?.shots ?? []) {
           const contact = sh.perShotAnalysis?.contact_read;
@@ -190,7 +190,7 @@ export default function CageSummary() {
       // Phase R — persist analysis onto the session record so it surfaces in
       // the unified swing library browse.
       if (session) {
-        useCageStore.getState().setSessionAnalysis(session.id, issue, drill);
+        useSwingSessionStore.getState().setSessionAnalysis(session.id, issue, drill);
         // Phase V.7+ — feed Kevin's relationship engine so technical
         // observations accumulate across cage sessions too.
         if (issue) {

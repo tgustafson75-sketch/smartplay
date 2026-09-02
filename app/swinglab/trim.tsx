@@ -33,7 +33,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Video, ResizeMode, type AVPlaybackStatus, type AVPlaybackStatusSuccess } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useCageStore } from '../../store/cageStore';
+import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { runPhaseKOnSession } from '../../services/videoUpload';
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
 
@@ -47,7 +47,7 @@ export default function TrimScreen() {
   const { isWide } = useDeviceLayout();
   const { session_id } = useLocalSearchParams<{ session_id: string }>();
 
-  const session = useCageStore(s => s.sessionHistory.find(x => x.id === session_id));
+  const session = useSwingSessionStore(s => s.sessionHistory.find(x => x.id === session_id));
   const shot = session?.shots[0] ?? null;
   const clipUri = shot?.clipUri ?? null;
   // 2026-07-27 (deep audit — same FATAL as the swing player) — memoize the Video source. An inline
@@ -104,11 +104,11 @@ export default function TrimScreen() {
     if (withBoundaries) {
       // 2026-08-09 (C1) — a hand-trimmed window invalidates any vision-located impact anchor: clear it
       // so the pose pass re-derives honestly instead of anchoring to a point outside the new window.
-      useCageStore.getState().setShotClipBoundaries(session_id, shot.id, startSec, endSec, null);
+      useSwingSessionStore.getState().setShotClipBoundaries(session_id, shot.id, startSec, endSec, null);
     } else {
-      useCageStore.getState().setShotClipBoundaries(session_id, shot.id, null, null, null);
+      useSwingSessionStore.getState().setShotClipBoundaries(session_id, shot.id, null, null, null);
     }
-    useCageStore.getState().setSessionAnalysisStatus(session_id, 'pending');
+    useSwingSessionStore.getState().setSessionAnalysisStatus(session_id, 'pending');
     // Fire-and-forget; detail screen renders the analyzing card.
     void runPhaseKOnSession(session_id);
     router.replace(`/swinglab/swing/${session_id}` as never);

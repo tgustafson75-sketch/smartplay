@@ -873,8 +873,8 @@ export const queryStatusHandler: IntentHandler = {
         // store directly to avoid circular import. If no active session,
         // gracefully decline.
         try {
-          const { useCageStore } = await import('../../store/cageStore');
-          const cage = useCageStore.getState();
+          const { useSwingSessionStore } = await import('../../store/swingSessionStore');
+          const cage = useSwingSessionStore.getState();
           if (!cage.activeSession) {
             return {
               success: true,
@@ -907,8 +907,8 @@ export const queryStatusHandler: IntentHandler = {
         // Phase K — replay primary issue observation from the most recent
         // session.
         try {
-          const { useCageStore } = await import('../../store/cageStore');
-          const last = useCageStore.getState().sessionHistory.slice(-1)[0];
+          const { useSwingSessionStore } = await import('../../store/swingSessionStore');
+          const last = useSwingSessionStore.getState().sessionHistory.slice(-1)[0];
           if (last?.primary_issue) {
             return {
               success: true,
@@ -932,8 +932,8 @@ export const queryStatusHandler: IntentHandler = {
         // Phase K — expanded analysis. Plays the feel cue + drill recommendation
         // reason if both are populated.
         try {
-          const { useCageStore } = await import('../../store/cageStore');
-          const last = useCageStore.getState().sessionHistory.slice(-1)[0];
+          const { useSwingSessionStore } = await import('../../store/swingSessionStore');
+          const last = useSwingSessionStore.getState().sessionHistory.slice(-1)[0];
           if (last?.primary_issue) {
             const feel = last.primary_issue.feel_cue;
             const drill = last.drill_recommendation?.reason ?? '';
@@ -960,8 +960,8 @@ export const queryStatusHandler: IntentHandler = {
         // populated on the most recent session, summarize it. Otherwise
         // honest placeholder.
         try {
-          const { useCageStore } = await import('../../store/cageStore');
-          const cage = useCageStore.getState();
+          const { useSwingSessionStore } = await import('../../store/swingSessionStore');
+          const cage = useSwingSessionStore.getState();
           const last = cage.sessionHistory[cage.sessionHistory.length - 1];
           if (last?.primary_issue) {
             const issue = last.primary_issue;

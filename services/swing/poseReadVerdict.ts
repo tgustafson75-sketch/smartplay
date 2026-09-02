@@ -6,7 +6,7 @@
  * without waiting on the cold cloud vision call. Returns null when the read isn't usable (no measurable
  * dimensions) so the cloud/observation path still owns that case. [[pose-first-analysis-rearchitecture]]
  */
-import type { PrimaryIssue } from '../../store/cageStore';
+import type { PrimaryIssue } from '../../store/swingSessionStore';
 import type { PoseSwingRead, PoseFault } from './poseSwingRead';
 
 const POSE_FAULT_CATEGORY: Record<PoseFault['key'], PrimaryIssue['category']> = {

@@ -13,7 +13,7 @@ import i18n from '../../i18n';
 import { AssertCtx, type ScenarioReport, rollupStatus } from './assert';
 import * as M from './mocks';
 import { dispatchVoiceIntent } from './dispatch';
-import { useCageStore } from '../../store/cageStore';
+import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePracticeStore } from '../../store/practiceStore';
 import { resolveGreenCoords } from '../smartFinderService';
@@ -65,7 +65,7 @@ const SCEN_1: Scenario = {
       shotIds: [seed.shotId],
     });
     M.injectSessionAnalysis(seed.sessionId, issue);
-    const stored = useCageStore.getState().activeSession?.primary_issue;
+    const stored = useSwingSessionStore.getState().activeSession?.primary_issue;
     a.expect('Session primary_issue persisted', !!stored);
     a.expectEqual('primary_fault round-trips', stored?.primary_fault, 'over_the_top');
     a.expect('cause populated', !!stored?.cause);
@@ -87,7 +87,7 @@ const SCEN_2: Scenario = {
       shotIds: [seed.shotId],
     });
     M.injectSessionAnalysis(seed.sessionId, issue);
-    const stored = useCageStore.getState().activeSession?.primary_issue;
+    const stored = useSwingSessionStore.getState().activeSession?.primary_issue;
     a.expectEqual('primary_fault === inconclusive', stored?.primary_fault, 'inconclusive');
     a.expect('no fix/drill required on inconclusive', stored?.fix === undefined && stored?.drill === undefined);
     await seed.teardown();
@@ -108,7 +108,7 @@ const SCEN_3: Scenario = {
       shotIds: [seed.shotId],
     });
     M.injectSessionAnalysis(seed.sessionId, issue);
-    const stored = useCageStore.getState().activeSession?.primary_issue;
+    const stored = useSwingSessionStore.getState().activeSession?.primary_issue;
     a.expectEqual('primary_fault === no_dominant_fault', stored?.primary_fault, 'no_dominant_fault');
     a.expect('fix populated for no_dominant_fault', !!stored?.fix);
     a.expect('drill populated for no_dominant_fault', !!stored?.drill);
@@ -318,8 +318,8 @@ const SCEN_12: Scenario = {
     // Inject a known transcript directly — this exercises the WRITE
     // half of the feel-capture pipeline (setShotFeelTranscript). The
     // Whisper round-trip is network-dependent and out of harness scope.
-    useCageStore.getState().setShotFeelTranscript(seed.sessionId, seed.shotId, 'felt blocky, came over the top');
-    const shot = useCageStore.getState().activeSession?.shots.find(s => s.id === seed.shotId);
+    useSwingSessionStore.getState().setShotFeelTranscript(seed.sessionId, seed.shotId, 'felt blocky, came over the top');
+    const shot = useSwingSessionStore.getState().activeSession?.shots.find(s => s.id === seed.shotId);
     a.expectContains('transcript persisted on shot', shot?.feel_narration_transcript ?? '', 'over the top');
     await seed.teardown();
   }),

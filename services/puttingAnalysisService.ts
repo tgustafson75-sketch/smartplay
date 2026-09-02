@@ -297,7 +297,7 @@ export function synthesizePrimaryIssueFromPutting(
   analysis: PuttingAnalysis,
   detectedShotId: string | null,
   thumbnailPath: string | null = null,
-): import('../store/cageStore').PrimaryIssue {
+): import('../store/swingSessionStore').PrimaryIssue {
   const score = analysis.overallScore ?? 50;
   const severity: 'minor' | 'moderate' | 'significant' =
     score >= 75 ? 'minor' : score >= 50 ? 'moderate' : 'significant';
@@ -311,7 +311,7 @@ export function synthesizePrimaryIssueFromPutting(
   // tee than a green-read coaching note). If everything is solid
   // (>= 75 on the lowest), fall through to a generic "fundamentals" label.
   let name: string;
-  let category: import('../store/cageStore').PrimaryIssue['category'];
+  let category: import('../store/swingSessionStore').PrimaryIssue['category'];
   let issueId: string;
 
   const allHigh = strokeQ >= 75 && setupQ >= 75 && readConf >= 75;

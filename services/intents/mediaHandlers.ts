@@ -21,7 +21,7 @@ import {
 import { track } from '../analytics';
 import { isSmartMotionActive, emitSmartMotionCommand } from '../smartMotionRecordBus';
 import { getActiveSurface } from '../activeSurfaceRegistry';
-import { useCageStore } from '../../store/cageStore';
+import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speak, playLocalFile } from '../voiceService';
 import { usePracticeStore } from '../../store/practiceStore';
@@ -43,7 +43,7 @@ const SWING_CAPTURE_EARCON_MS = 180;
 // stuck pipeline from leaving a dangling subscriber. No-op when there's
 // no active cage session at subscription time.
 function watchAndSpeakNextSwingAnalysis(): void {
-  const snapshotShotsCount = useCageStore.getState().activeSession?.shots.length ?? -1;
+  const snapshotShotsCount = useSwingSessionStore.getState().activeSession?.shots.length ?? -1;
   if (snapshotShotsCount < 0) {
     // No active cage session — auto-speak path doesn't apply here.
     return;
@@ -51,7 +51,7 @@ function watchAndSpeakNextSwingAnalysis(): void {
 
   let spoke = false;
 
-  const unsub = useCageStore.subscribe((s) => {
+  const unsub = useSwingSessionStore.subscribe((s) => {
     if (spoke) return;
     const shots = s.activeSession?.shots ?? [];
     // Trigger on either a new shot landing OR the latest shot getting

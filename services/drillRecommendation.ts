@@ -1,5 +1,5 @@
 import type { CanonicalIssue } from './poseDetection';
-import type { DrillRecommendation } from '../store/cageStore';
+import type { DrillRecommendation } from '../store/swingSessionStore';
 
 /**
  * Phase K — Map a detected swing fault to a drill from the SwingLab library

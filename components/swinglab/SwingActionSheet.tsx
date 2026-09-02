@@ -32,11 +32,11 @@ import {
 import * as Sharing from 'expo-sharing';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useCageStore, type CageShot } from '../../store/cageStore';
+import { useSwingSessionStore, type SwingShot } from '../../store/swingSessionStore';
 
 interface Props {
   visible: boolean;
-  shot: CageShot | null;
+  shot: SwingShot | null;
   sessionId: string | null;
   onClose: () => void;
   /** When called, the parent enters compare mode with this shot as the
@@ -65,10 +65,10 @@ export default function SwingActionSheet({
   multiShotSessionAvailable,
 }: Props) {
   const { colors } = useTheme();
-  const updateShotTags = useCageStore(s => s.updateShotTags);
-  const markShotGoodRep = useCageStore(s => s.markShotGoodRep);
-  const setShotNotes = useCageStore(s => s.setShotNotes);
-  const deleteShot = useCageStore(s => s.deleteShot);
+  const updateShotTags = useSwingSessionStore(s => s.updateShotTags);
+  const markShotGoodRep = useSwingSessionStore(s => s.markShotGoodRep);
+  const setShotNotes = useSwingSessionStore(s => s.setShotNotes);
+  const deleteShot = useSwingSessionStore(s => s.deleteShot);
 
   const [mode, setMode] = useState<Mode>('main');
   const [noteDraft, setNoteDraft] = useState('');

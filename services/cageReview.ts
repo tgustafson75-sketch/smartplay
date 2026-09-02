@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ReviewSession } from '../types/cageReview';
-import type { CageShot } from '../store/cageStore';
+import type { SwingShot } from '../store/swingSessionStore';
 
 const STORAGE_KEY = 'cage_review_sessions_v1';
 
@@ -95,8 +95,8 @@ export async function listReviewSessions(): Promise<ReviewSession[]> {
 
 export function getShotsForReview(
   mode: ReviewSession['mode'],
-  shots: CageShot[],
-): CageShot[] {
+  shots: SwingShot[],
+): SwingShot[] {
   if (shots.length === 0) return [];
 
   switch (mode) {
@@ -121,7 +121,7 @@ export function getShotsForReview(
 
 export function nextUnreviewedShot(
   review: ReviewSession,
-  eligibleShots: CageShot[],
-): CageShot | null {
+  eligibleShots: SwingShot[],
+): SwingShot | null {
   return eligibleShots.find(s => !review.shots_reviewed.includes(s.id)) ?? null;
 }
