@@ -1705,7 +1705,8 @@ check('SmartMotion bottom panel is a translucent fade, not an opaque block',
 // longer ride on it.
 check('Motion (pose skeleton) OFF by default — but it no longer gates the ball reads',
   /const \[showSkeleton, setShowSkeleton\] = useState\(false\)/.test(smSrc) &&
-    /Motion overlay/.test(smSrc) &&
+    // 2026-09-01 (adversarial audit) — was a COMMENT match; asserts the code that proves it.
+  /const \[showSkeleton, setShowSkeleton\] = useState\(false\)/.test(readCode('app/swinglab/smartmotion.tsx')) &&
     /\{showSkeleton \? \(/.test(smSrc) &&
     // the ball reads run for any DTL non-putt swing, skeleton or not
     !/if \(!showSkeleton \|\| !clipUri \|\| !ballArea\) return;/.test(smSrc) &&
@@ -4978,7 +4979,8 @@ check('TightLie: analysis failure shows a human caddie line, never a raw JS erro
     const l = read('app/lie-analysis.tsx');
     return (
       !/setErrorMessage\(e instanceof Error \? e\.message/.test(l) && // raw e.message leak removed
-      /Never surface a raw JS error/.test(l) &&
+      // was a comment match. The real proof is that NO branch puts a raw error on screen.
+      !/setErrorMessage\(String\(e\)/.test(readCode('app/lie-analysis.tsx')) &&
       /Couldn't get a read/.test(l)                                   // warm caddie copy
     );
   })(),
@@ -5116,7 +5118,9 @@ check('Round history surfaces on the dashboard (Tim: "it doesn\'t go anywhere")'
   (() => {
     const dash = read('app/(tabs)/dashboard.tsx');
     return (
-      /Recent Rounds/.test(dash) &&
+      // The RENDERED label, case-exact. /Recent Rounds/ matched only a comment, so a renamed
+      // section heading could never have failed this.
+      /RECENT ROUNDS/.test(readCode('app/(tabs)/dashboard.tsx')) &&
       /\[\.\.\.roundHistory\]\.reverse\(\)\.slice\(0, 6\)/.test(dash) &&
       /router\.push\(`\/recap\/\$\{r\.id\}`/.test(dash) &&      // tap → recap
       /r\.scoreVsPar === 0 \? 'E'/.test(dash) &&                // vs-par display
@@ -6967,15 +6971,22 @@ check('Caddie brain is warmed whenever the tab is open (not only in a round)',
 check('Analysis providers: Gemini primary + OpenAI gpt-4o escalation (Anthropic pulled from normal escalation)',
   // 2026-06-27 — refreshed: the analysis chain migrated OFF Anthropic to
   // Gemini-primary → OpenAI-escalation. (Was: Anthropic spine + Gemini fallback.)
-  /Gemini 2\.5 Flash = speed primary/.test(swingApiSrc) &&
-    /OpenAI gpt-4o = quality escalation/.test(swingApiSrc) &&
-    /new OpenAI\(/.test(swingApiSrc) &&
-    /escalating to OpenAI gpt-4o/.test(swingApiSrc),
+  // 2026-09-01 (adversarial audit) — was proved by two COMMENT strings ("Gemini 2.5 Flash = speed
+  // primary" / "OpenAI gpt-4o = quality escalation"). Both claims are true, but a header cannot fail
+  // when the model constant underneath it changes — which is the one thing this lock exists to catch.
+  // Assert the model identifiers themselves, through comment-stripped source.
+  /model: 'gemini-2\.5-flash'/.test(readCode('api/swing-analysis.ts')) &&
+    /model: 'gpt-4o'/.test(readCode('api/swing-analysis.ts')) &&
+    /new OpenAI\(/.test(readCode('api/swing-analysis.ts')) &&
+    // Anthropic may exist as a LAST-RESORT third provider, but never inside the normal escalation.
+    !/escalate[\s\S]{0,80}?anthropic/i.test(readCode('api/swing-analysis.ts')),
   'swing analysis runs Gemini 2.5 Flash as the speed primary and escalates to OpenAI gpt-4o for quality; Anthropic is no longer in the normal escalation chain');
 
 check('SmartMotion warms the analyzer on open (warm first analysis)',
-  /prewarmSwingAnalysis\(\{ force: true \}\)/.test(smSrc) &&
-    /Warm \/api\/swing-analysis the moment SmartMotion opens/.test(smSrc),
+  // 2026-09-01 (adversarial audit) — the second clause read a COMMENT. The call is real, so assert
+  // the call: a forced warm AND the passive one on entering setup/recording, in code.
+  /prewarmSwingAnalysis\(\{ force: true \}\)/.test(readCode('app/swinglab/smartmotion.tsx')) &&
+    /prewarmSwingAnalysis\(\)/.test(readCode('app/swinglab/smartmotion.tsx')),
   'opening SmartMotion FORCE pre-warms /api/swing-analysis (bypasses the 60s dedupe) so the first recording analyzes fast even if another screen warmed recently');
 
 // 2026-06-10 — Ball area threaded into the SWING read (was putt-only).

@@ -138,13 +138,11 @@ export const PROSE_ASSERTION_BASELINE: readonly string[] = [
   "LOCK: geometry fetch outlives a slow server, and a raw cours :: app/smartvision.tsx :: /return ''; \\/\\/ never the raw id/",
   "LOCK: the smarter ball box can only ever improve on the feet :: services/swing/ballDeparture.ts :: /catch \\{\\s*\\n\\s*return null; \\/\\/ offline \\/ blocked host — the feet proxy stands/",
   "Perf: setLocationContext only persists on a real location tr :: store/roundStore.ts :: /s\\.currentTeeBox\\?\\.hole === hole\\.hole\\s*\\n\\s*\\) return; \\/\\/ no change/",
-  "Round history surfaces on the dashboard (Tim: \"it doesn\\ :: app/(tabs)/dashboard.tsx :: /Recent Rounds/",
   "Segmentation: rebounds filtered, sessions can\\ :: services/swing/strikeDetector.ts :: /same strike group — the earlier peak \\(impact\\) already kept/",
   "SmartFinder: a double-tap magnifies the aim point without st :: app/smartfinder.tsx :: /baseZoomRef\\.current = next; \\/\\/ keep pinch continuing/",
   "SmartMotion review opens PAUSED (no autoplay-vs-analysis cra :: app/swinglab/smartmotion.tsx :: /useState\\(true\\); \\/\\/ review play\\/pause — starts PAUSED/",
   "SmartPump third rail: workout import → TRAINING → PERFORMANC :: app/(tabs)/dashboard.tsx :: /TRAINING → PERFORMANCE/",
   "Swing review: controls stay persistently visible (functional :: app/swinglab/swing/[swing_id].tsx :: /Clean-grab fade dropped — functional controls win/",
   "Tempo: accel+gyro fusion refines the through-swing but safel :: app/swinglab/indoor.tsx :: /\\/\\* accel is a bonus — gyro tempo works without it \\*\\//",
-  "TightLie: analysis failure shows a human caddie line, never  :: app/lie-analysis.tsx :: /Never surface a raw JS error/",
   "Voice: greetings/check-ins route to the BRAIN (no canned poo :: services/intents/index.ts :: /\\/\\/ voiceCommandRouter\\.registerHandler\\(socialGreetingHandler\\);/",
 ];
