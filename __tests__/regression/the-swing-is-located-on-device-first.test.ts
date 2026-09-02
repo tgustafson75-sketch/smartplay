@@ -94,7 +94,7 @@ describe('it produces timing, never evidence', () => {
 
 describe('EVERY surface that asks where the swing is asks the device first', () => {
   it('the review path and the upload path both try on-device before the network', () => {
-    for (const f of ['app/swinglab/swing/[swing_id].tsx', 'services/videoUpload.ts']) {
+    for (const f of ['app/swinglab/swing/[swing_id].tsx', 'services/videoUpload.ts', 'services/poseDetection.ts']) {
       const src = read(f);
       const onDev = src.indexOf('locateSwingWindowOnDevice');
       const net = src.indexOf('locateSwingWindow(');
@@ -107,5 +107,33 @@ describe('EVERY surface that asks where the swing is asks the device first', () 
   it('and both still fall back to it — the network locate is removed nowhere', () => {
     expect(read('services/videoUpload.ts')).toMatch(/if \(!loc\) loc = await locateSwingWindow\(/);
     expect(read('app/swinglab/swing/[swing_id].tsx')).toMatch(/const loc = await locateSwingWindow\(analyzeUri, durationMs\)/);
+  });
+});
+
+describe('the analysis itself locates on-device — every caller benefits', () => {
+  const pose = read('services/poseDetection.ts');
+
+  it('analyzeSwing tries the device before the cold Lambda', () => {
+    expect(pose).toMatch(/locateSwingWindowOnDevice\(clipUri, probedDurMs\)/);
+    expect(pose).toMatch(/if \(!located\) located = await locateSwingWindow\(clipUri, probedDurMs/);
+  });
+
+  it('the abort reason is still reported when the network locate DOES run', () => {
+    // locateDegraded is what tells the player the read is rough rather than clean.
+    expect(pose).toMatch(/onAbort: \(cause\) => \{ locateDegraded = cause; \}/);
+  });
+
+  it('it is a DYNAMIC import — a static edge here would be a needless cycle', () => {
+    expect(pose).toMatch(/await import\('\.\/swing\/onDeviceLocate'\)/);
+  });
+
+  it('NO surface calls the network locate without trying the device first', () => {
+    const surfaces = ['app/swinglab/swing/[swing_id].tsx', 'services/videoUpload.ts', 'services/poseDetection.ts'];
+    for (const f of surfaces) {
+      const src = read(f);
+      const netCalls = (src.match(/await locateSwingWindow\(/g) ?? []).length;
+      const onDevCalls = (src.match(/locateSwingWindowOnDevice\(/g) ?? []).length;
+      expect(onDevCalls).toBeGreaterThanOrEqual(netCalls);
+    }
   });
 });

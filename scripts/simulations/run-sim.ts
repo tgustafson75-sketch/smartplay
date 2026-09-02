@@ -6127,7 +6127,10 @@ const breakerSrc = read('services/voiceCircuitBreaker.ts');
 check('Swing localizer: locate_swing API mode + client locator wired into analyzeSwing',
   /mode === 'locate_swing'/.test(apiSrc) && /swing_time_sec/.test(apiSrc) &&
     /export async function locateSwingWindow/.test(poseSrc) &&
-    /const located = await locateSwingWindow/.test(poseSrc) &&
+    // 2026-09-01 — analyzeSwing now tries the ON-DEVICE locate first and falls back to this one, so
+    // the assertion is that the network locate is still WIRED as the fallback, not that it is first.
+    /if \(!located\) located = await locateSwingWindow/.test(poseSrc) &&
+    /locateSwingWindowOnDevice\(clipUri, probedDurMs\)/.test(poseSrc) &&
     /effectiveBoundaries = located/.test(poseSrc),
   'unbounded long uploads run an AI locate pass (find the swing) then analyze a tight window around it — no acoustics, no manual marking');
 

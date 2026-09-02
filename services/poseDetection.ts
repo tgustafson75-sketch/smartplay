@@ -1250,7 +1250,25 @@ export async function analyzeSwing(
     probeMs = Date.now() - tProbe;
     if (probedDurMs >= LOCATE_MIN_CLIP_MS) {
       const tLocate = Date.now();
-      const located = await locateSwingWindow(clipUri, probedDurMs, {
+      /**
+       * 2026-09-01 — ON DEVICE FIRST, in the analysis itself, so EVERY caller benefits rather than
+       * the two screens I wired by hand.
+       *
+       * This is the locate that produced Tim's 09-01 `swing_locate_fallback · dead_host` twice in an
+       * afternoon: a cold-Lambda vision call whose abort drops the whole read to sampling the entire
+       * clip. A swing is the fastest thing in the clip, so a dozen thumbnails through on-device pose
+       * answer the same question in seconds and offline.
+       *
+       * Dynamic import: onDeviceLocate reaches poseAnalysisApi, which this module does not otherwise
+       * import, and a static edge here would be a needless cycle.
+       * [[speed-is-the-wow]] [[the-client-must-be-the-last-to-give-up]]
+       */
+      let located: { startSec: number; endSec: number; swingTimeSec: number } | null = null;
+      try {
+        const { locateSwingWindowOnDevice } = await import('./swing/onDeviceLocate');
+        located = await locateSwingWindowOnDevice(clipUri, probedDurMs);
+      } catch { /* on-device is best-effort — the network locate below is the fallback */ }
+      if (!located) located = await locateSwingWindow(clipUri, probedDurMs, {
         onAbort: (cause) => { locateDegraded = cause; },
       });
       locateMs = Date.now() - tLocate;

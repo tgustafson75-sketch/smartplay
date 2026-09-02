@@ -2053,8 +2053,12 @@ export default function SwingDetail() {
       let locatedImpactSec: number | null = null;
       let located = false;
       try {
+        // 2026-09-01 — on-device first here too; see services/swing/onDeviceLocate. Same question,
+        // same answer in seconds instead of a cold-Lambda vision call.
         const { locateSwingWindow } = await import('../../../services/poseDetection');
-        const win = await locateSwingWindow(shot.clipUri!, duration * 1000);
+        const { locateSwingWindowOnDevice } = await import('../../../services/swing/onDeviceLocate');
+        const win = (await locateSwingWindowOnDevice(shot.clipUri!, duration * 1000).catch(() => null))
+          ?? await locateSwingWindow(shot.clipUri!, duration * 1000);
         if (win && win.endSec > win.startSec) {
           // Pad the located window a touch so P1/P10 aren't clipped.
           startSec = Math.max(0, win.startSec - 0.5);
