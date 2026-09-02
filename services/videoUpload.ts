@@ -1256,7 +1256,22 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
             try {
               const { locateSwingWindow, probeDurationMs } = await import('./poseDetection');
               const durMs = await probeDurationMs(firstClipSwing.clipUri!).catch(() => durationSec * 1000);
-              const loc = durMs && durMs > 0 ? await locateSwingWindow(firstClipSwing.clipUri!, durMs) : null;
+              /**
+               * 2026-09-01 — ON DEVICE FIRST, same as the review path. A swing is the fastest thing
+               * in the clip, so a dozen thumbnails through on-device pose answer "where is the swing"
+               * in seconds; locateSwingWindow is a cold-Lambda vision call with a 25s budget that
+               * aborted twice in Tim's 09-01 log. Fixing only the review path would have left the
+               * upload path paying the old cost for the same question.
+               * [[no-half-fixes-enforce-every-surface]] [[speed-is-the-wow]]
+               */
+              let loc: { startSec: number; endSec: number; swingTimeSec: number } | null = null;
+              if (durMs && durMs > 0) {
+                try {
+                  const { locateSwingWindowOnDevice } = await import('./swing/onDeviceLocate');
+                  loc = await locateSwingWindowOnDevice(firstClipSwing.clipUri!, durMs);
+                } catch { /* on-device is best-effort; the network locate below is the fallback */ }
+                if (!loc) loc = await locateSwingWindow(firstClipSwing.clipUri!, durMs);
+              }
               if (loc && loc.endSec > loc.startSec) {
                 if (!poseWindow) {
                   poseWindow = { startMs: loc.startSec * 1000, endMs: loc.endSec * 1000 };

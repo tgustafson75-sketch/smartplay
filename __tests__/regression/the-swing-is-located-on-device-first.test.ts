@@ -91,3 +91,21 @@ describe('it produces timing, never evidence', () => {
     expect(src).not.toMatch(/Promise\.all\(/);
   });
 });
+
+describe('EVERY surface that asks where the swing is asks the device first', () => {
+  it('the review path and the upload path both try on-device before the network', () => {
+    for (const f of ['app/swinglab/swing/[swing_id].tsx', 'services/videoUpload.ts']) {
+      const src = read(f);
+      const onDev = src.indexOf('locateSwingWindowOnDevice');
+      const net = src.indexOf('locateSwingWindow(');
+      expect(onDev).toBeGreaterThan(-1);
+      expect(onDev).toBeLessThan(src.lastIndexOf('await locateSwingWindow('));
+      expect(net).toBeGreaterThan(-1);
+    }
+  });
+
+  it('and both still fall back to it — the network locate is removed nowhere', () => {
+    expect(read('services/videoUpload.ts')).toMatch(/if \(!loc\) loc = await locateSwingWindow\(/);
+    expect(read('app/swinglab/swing/[swing_id].tsx')).toMatch(/const loc = await locateSwingWindow\(analyzeUri, durationMs\)/);
+  });
+});
