@@ -3510,6 +3510,21 @@ export default function SmartMotion() {
     ballDepartureCacheRef.current = {}; // 2026-06-14 — new recording → drop per-swing trace cache
     ballPathCacheRef.current = {};
     clubPathCacheRef.current = {};
+    /**
+     * 2026-09-01 (adversarial audit) — AND THE ANALYSIS CACHE, which was the one omission here.
+     *
+     * The three trace caches above were dropped on every new recording; analysisCacheRef was not.
+     * It is keyed by SWING INDEX, and a new recording starts back at index 0 — so selectSwing(0) in
+     * the next review found the PREVIOUS swing's entry and served it as a cache hit, displaying
+     * swing A's fault verdict on swing B. selectSwing's own staleness guard cannot catch this: it
+     * compares the index, and the index is identical.
+     *
+     * It matters most in the voice loop, which re-enters through startRecording rather than reset —
+     * and reset is the only other place this cache was cleared. Exactly the "no stale data in loop"
+     * this function's own comment promises three lines below.
+     * [[smartmotion-contact-honesty]] [[orphans-are-live-bugs-not-dead-code]]
+     */
+    analysisCacheRef.current = {};
     setBallPathPoints(null);
     // Clear the prior swing's results so the next minute starts clean (the
     // voice loop uses startRecording, not reset).

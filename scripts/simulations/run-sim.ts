@@ -6071,6 +6071,13 @@ check('startRecording clears prior-swing results (no stale data in loop)',
       'setFeelReply(null)',
       'setSegments([])',
       'setSelectedSwing(0)',
+      // 2026-09-01 — the CACHES too. analysisCacheRef was the omission: keyed by swing index, and a
+      // new recording restarts at index 0, so the next review served the previous swing's verdict as
+      // a cache hit. selectSwing's staleness guard compares the index, which is identical.
+      'ballDepartureCacheRef.current = {}',
+      'ballPathCacheRef.current = {}',
+      'clubPathCacheRef.current = {}',
+      'analysisCacheRef.current = {}',
     ].every((call) => body.includes(call));
   })(),
   'analysis/putt/feel/tempo/segments are all cleared on each new recording — asserted as calls, not as a comment');
