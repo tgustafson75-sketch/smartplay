@@ -670,7 +670,7 @@ export const useSettingsStore = create<SettingsState>()(
           const introSrc = (require('../services/offlineVoiceCache') as typeof import('../services/offlineVoiceCache')).PERSONA_HANDOFF_INTROS;
           const text = introSrc[p] ?? `${p} stepping in.`;
           if (personaHandoffTimer) clearTimeout(personaHandoffTimer);
-          personaHandoffTimer = setTimeout(() => {
+          personaHandoffTimer = setTimeout(() => { void (async () => {
             personaHandoffTimer = null;
             try {
               /**
@@ -692,6 +692,34 @@ export const useSettingsStore = create<SettingsState>()(
               const voiceMod = require('../services/voiceService');
               const cacheMod = require('../services/offlineVoiceCache');
               const gender = get().voiceGender === 'female' ? 'female' : 'male';
+              /**
+               * 2026-09-01 (Tim's call: "make it a real brain line") — THE NEW CADDIE INTRODUCES
+               * ITSELF IN ITS OWN WORDS.
+               *
+               * `text` below is a fixed per-persona sentence. Said in a real voice it is convincing
+               * once and hollow the second time, which is the same objection Tim has now raised
+               * three separate times about canned speech.
+               *
+               * Deliberately SHORT-FUSED (3.5s, against the brain's usual 12): a persona switch has
+               * to feel immediate, and the pre-rendered clip below is already instant. So this is an
+               * upgrade when the network allows and costs nothing noticeable when it does not —
+               * attempt, then degrade. [[caddie-failsafe-no-walls]]
+               */
+              let spokenText = text;
+              try {
+                const brainMod = require('../services/conversationalBrain') as typeof import('../services/conversationalBrain');
+                const line = await brainMod.generateProactiveLine(
+                  `The player just switched their caddie to ${p}. Introduce yourself as ${p} in one short sentence, ` +
+                  `in your own voice — you are taking over the bag. No preamble, no question.`,
+                  { timeoutMs: 3_500 },
+                );
+                if (line.text) spokenText = line.text;
+              } catch { /* keep the fixed line — a switch must never stall on the network */ }
+              if (spokenText !== text) {
+                voiceMod.speak?.(spokenText, gender, get().language ?? 'en', undefined, { userInitiated: true })
+                  ?.catch?.(() => { voiceMod.flashCaption?.(spokenText); });
+                return;
+              }
               // FAST PATH — the same line, pre-rendered in this persona's voice during warmup.
               const cached = cacheMod.resolveCachedOfflineClipUri?.(text, gender, p);
               if (cached) {
@@ -711,7 +739,7 @@ export const useSettingsStore = create<SettingsState>()(
             } catch (e) {
               console.log('[persona-handoff] setup failed', e);
             }
-          }, 500);
+          })(); }, 500);
         }
         // Persona switch invalidates the persona-keyed audio caches so
         // the user doesn't keep hearing the prior caddie's filler clips

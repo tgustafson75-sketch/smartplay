@@ -100,6 +100,39 @@ export async function conversationalBrainTurn(utterance: string, opts?: { timeou
  * Best-effort: text:null on any failure and the caller stays silent. There is no canned fallback —
  * a canned opener was the whole problem.
  */
+/**
+ * 2026-09-01 (Tim: "a canned speech in Serena at startup and delayed", and his call on the fix —
+ * "make it a real brain line") — ONE WAY TO ASK THE CADDIE TO SAY SOMETHING UNPROMPTED.
+ *
+ * generateProactiveOpener already did exactly this for the app-open greeting; two other moments were
+ * still reading fixed strings off a constant and speaking them in the persona's voice:
+ *
+ *   • the get-to-know interview opener — a hardcoded two-sentence SPEECH on a 1400ms timer, which is
+ *     the one Tim actually heard at startup,
+ *   • the persona handoff intro ("Hi, Serena here. Let's read this together.").
+ *
+ * A fixed sentence spoken in a real voice is the uncanny half of this product: it sounds like a
+ * person for exactly as long as it takes to hear it twice. [[feels-like-a-real-caddie]]
+ *
+ * `seedHistory` is the difference between an opener (which starts a conversation the player will
+ * answer, so the caddie must remember saying it) and an aside like a persona switch (which should
+ * not pollute the thread).
+ */
+export async function generateProactiveLine(
+  directive: string,
+  opts?: { timeoutMs?: number; seedHistory?: boolean },
+): Promise<BrainReply> {
+  const turn = await askCaddie({
+    message: directive,
+    language: useSettingsStore.getState().language ?? 'en',
+    timeoutMs: opts?.timeoutMs ?? 12_000,
+    overrides: { is_proactive: true, isRoundActive: false },
+  });
+  if (!turn?.text) return NO_ANSWER;
+  if (opts?.seedHistory) setPipecatHistory([{ role: 'assistant', content: turn.text }]);
+  return { text: turn.text, audioBase64: turn.audioBase64, toolActions: turn.toolActions, source: 'kevin' };
+}
+
 export async function generateProactiveOpener(opts?: { timeoutMs?: number }): Promise<BrainReply> {
   const turn = await askCaddie({
     // A directive, NOT a player utterance — is_proactive tells the brain the player didn't ask.

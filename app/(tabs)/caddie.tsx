@@ -82,7 +82,7 @@ import { Asset } from 'expo-asset';
 // 2026-07-25 (Tim) — the canned mp3 opener is gone; the opener is now a real brain turn that seeds
 // conversation history (generateProactiveOpener), so replies keep context. getOpenerAssetForPersona
 // (bundled-mp3 opener) is no longer used.
-import { generateProactiveOpener } from '../../services/conversationalBrain';
+import { generateProactiveOpener, generateProactiveLine } from '../../services/conversationalBrain';
 import { awaitGreetingComplete } from '../greeting';
 import { isOpenerClaimed, claimOpenerSlot } from '../../services/openerGuard';
 import { TourOverlay, type TourStep } from '../../components/onboarding/TourOverlay';
@@ -868,10 +868,37 @@ export default function CaddieTab() {
       // interview mic already opened, cutting off the player's captured answer.
       openerPlayedThisProcess = true;
       claimOpenerSlot();
-      const opener =
+      /**
+       * 2026-09-01 (Tim: "a canned speech in Serena at startup and delayed") — THIS WAS IT.
+       *
+       * A hardcoded two-sentence SPEECH, spoken in the active persona's real voice on a 1400ms
+       * timer at cold launch. It is the same sentence every time, and hearing a person say an
+       * identical paragraph twice is what makes the caddie stop sounding like one.
+       *
+       * Now a real brain turn (Tim's call: "make it a real brain line"). The caddie is told what
+       * this moment IS and writes its own way in, so the interview opens differently for a player
+       * who has three rounds logged than for one who has none.
+       *
+       * The fixed text survives ONLY as the offline fallback. This screen must never sit silent —
+       * it is an interview that then opens the mic, so a mute caddie leaves the player staring at a
+       * card with nothing asked. Attempt, then degrade; never a wall.
+       * [[caddie-failsafe-no-walls]] [[feels-like-a-real-caddie]]
+       */
+      const OPENER_FALLBACK =
         "Alright — let's actually get to know your game. No wrong answers, just us talking. " +
         "To start: how'd you get into golf, and how much time do you really have to play and practice these days?";
       const t = setTimeout(() => {
+        void (async () => {
+        let opener = OPENER_FALLBACK;
+        try {
+          const brain = await generateProactiveLine(
+            "The player just opened the app onto the 'getting to know your game' card. Open the interview: " +
+            "warm, natural, in your own words, no preamble. Ask ONE question to start — how they got into golf " +
+            "and how much time they realistically have to play and practise. Two sentences at most.",
+            { timeoutMs: 9_000, seedHistory: true },
+          );
+          if (brain.text) opener = brain.text;
+        } catch { /* fall through to the fixed line — the interview must still ask something */ }
         setCaddieResponse(opener);
         const { voiceEnabled, voiceGender: vg, language: lang } = useSettingsStore.getState();
         if (voiceEnabled) {
@@ -885,6 +912,7 @@ export default function CaddieTab() {
               try { handleMicPressRef.current(); } catch { /* best-effort */ }
             });
         }
+        })();
       }, 1400);
       return () => { clearTimeout(t); getToKnowOpenedRef.current = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
