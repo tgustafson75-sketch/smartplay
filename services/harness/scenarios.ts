@@ -567,12 +567,89 @@ const SCEN_21: Scenario = {
   }),
 };
 
+
+/**
+ * SCEN_22 — WHERE THE TIME ACTUALLY GOES, ON THIS PHONE.
+ *
+ * 2026-09-01 (Tim): the harness should throw on "timestamps, flow issues, bottlenecks... as close to
+ * the actual progress on the device as possible."
+ *
+ * Correctness scenarios cannot see slowness — a step that still returns the right answer in nine
+ * seconds passes every assertion in this file. His complaint was never that the read was wrong; it
+ * was "hard to show a wow factor when you have to wait probably more than a minute." So the budgets
+ * ARE the assertions here, and each one is set to what the path is supposed to cost, not to what it
+ * currently costs — a budget fitted to today's number can never detect a regression.
+ */
+const SCEN_22: Scenario = {
+  id: 'C22',
+  title: 'Speed: the analysis path costs what it should on THIS device',
+  category: 'critical',
+  run: () => runWithAsserts('C22', 'Speed: the analysis path on this device', async (a) => {
+    const { getApiBaseUrl } = await import('../apiBase');
+    const base = getApiBaseUrl();
+    a.note('api base', base || '(none — offline or unresolved)');
+
+    // 1) REACHABILITY, and what it costs. The dead-host guard aborts a real analysis on two failed
+    //    probes, so the probe's own latency is the thing that decides whether a good read survives.
+    if (base) {
+      await a.within('health probe answers quickly', 3_000, async () => {
+        const r = await fetch(`${base.replace(/\/+$/, '')}/api/health?lite=1`, { method: 'GET' });
+        a.note('health status', String(r.status));
+        return r.ok;
+      });
+    } else {
+      a.expect('health probe answers quickly', false, 'no API base URL — every network stage will fail');
+    }
+
+    // 2) THE ON-DEVICE POSE COST. This is the number the whole 09-01 speed fix rests on: twelve
+    //    frames at 100-300ms is the assumption that made replacing a cold-Lambda locate worth it.
+    //    If a frame costs a second here, the locate is the new bottleneck and its 6s budget will be
+    //    spent before it finds a swing.
+    const mp = await import('../mediaPipePoseService');
+    const status = await mp.getMediaPipeStatus().catch(() => null);
+    a.expect('on-device pose is linked', status?.available === true,
+      status ? `available=${status.available} modelLoaded=${status.modelLoaded}` : 'probe threw');
+    a.note('pose model', status ? `loaded=${status.modelLoaded} quality=${status.loadedQuality} lastInference=${status.lastInferenceMs}ms` : 'unknown');
+
+    // 3) THE STORES. A slow hydrate delays every screen behind it, and a store that never hydrates
+    //    reads as "no data" rather than as an error — the failure mode that looks like an empty app.
+    await a.within('swing library hydrated', 1_500, async () => {
+      const { useSwingSessionStore } = await import('../../store/swingSessionStore');
+      const st = useSwingSessionStore.getState();
+      a.note('sessions in library', String(st.sessionHistory?.length ?? 0));
+      return true;
+    });
+
+    // 4) THE PURE MATHS, timed. It runs inside the locate budget on every swing; if it is slow here
+    //    it is slow there, and no amount of network improvement will help.
+    const { deriveSwingAnchors } = await import('../swing/poseMotion');
+    const samples = Array.from({ length: 33 }, (_, i) => {
+      const t = i * 50;
+      let x: number, y: number;
+      if (t <= 400) { x = 0.50; y = 0.60; }
+      else if (t <= 900) { const f = (t - 400) / 500; y = 0.60 - 0.25 * f; x = 0.50 - 0.08 * f; }
+      else if (t <= 1150) { const f = (t - 900) / 250; y = 0.35 + 0.27 * f * f; x = 0.42 + 0.08 * f; }
+      else { const f = (t - 1150) / 450; y = 0.62 - 0.30 * f; x = 0.50 + 0.10 * f; }
+      return { tMs: t, x, y };
+    });
+    await a.within('anchor derivation is instant', 50, async () => deriveSwingAnchors(samples));
+
+    // 5) THE ISSUE LOG ITSELF. Everything above is only useful if the log can carry it off the
+    //    device — a diagnostic channel that quietly stopped working takes every other finding with it.
+    const { useIssueLogStore } = await import('../../store/issueLogStore');
+    const before = useIssueLogStore.getState().entries?.length ?? 0;
+    useIssueLogStore.getState().addAppEvent('harness_selftest', { probe: true }, 'diag');
+    const after = useIssueLogStore.getState().entries?.length ?? 0;
+    a.expect('the issue log accepts entries', after > before, `entries ${before} -> ${after}`);
+  }),
+};
+
 export const ALL_SCENARIOS: readonly Scenario[] = [
   SCEN_1, SCEN_2, SCEN_3, SCEN_4, SCEN_5, SCEN_6, SCEN_7, SCEN_8, SCEN_9,
   SCEN_10, SCEN_11, SCEN_12, SCEN_13, SCEN_14,
   SCEN_15, SCEN_16, SCEN_17,
   SCEN_18, SCEN_19, SCEN_20,
-  SCEN_21,
+  SCEN_21, SCEN_22,
 ] as const;
 
 // Suppress unused-import false positive (i18n must be imported to ensure

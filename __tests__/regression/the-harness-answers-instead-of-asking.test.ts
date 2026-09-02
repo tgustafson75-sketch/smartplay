@@ -65,3 +65,64 @@ describe('the device answers what the desktop sim cannot', () => {
     expect(scen).toMatch(/category: 'critical'/);
   });
 });
+
+describe('the harness can see time, not just correctness', () => {
+  const assertSrc = read('services/harness/assert.ts');
+  const scen = read('services/harness/scenarios.ts');
+
+  it('every check carries WHEN it ran and, when measured, how long it took', () => {
+    expect(assertSrc).toMatch(/ms\?: number;/);
+    expect(assertSrc).toMatch(/atMs\?: number;/);
+    expect(assertSrc).toMatch(/atMs: Date\.now\(\) - this\.startedAt/);
+  });
+
+  it('THE BOTTLENECK DETECTOR: a budget is part of the assertion', () => {
+    // A step that still returns the right answer in nine seconds passes every correctness check in
+    // the suite. Tim's complaint was never that the read was wrong.
+    expect(assertSrc).toMatch(/async within<T>\(label: string, budgetMs: number/);
+    expect(assertSrc).toMatch(/took <= budgetMs/);
+    expect(assertSrc).toMatch(/\$\{took\}ms \(budget \$\{budgetMs\}ms\)/);
+  });
+
+  it('a step that THREW is reported as a failure with its elapsed time, not swallowed', () => {
+    expect(assertSrc).toMatch(/threw after \$\{took\}ms/);
+  });
+
+  it('notes record context without a pass/fail opinion', () => {
+    expect(assertSrc).toMatch(/note\(label: string, detail: string\)/);
+  });
+});
+
+describe('one log tells the whole story', () => {
+  const assertSrc = read('services/harness/assert.ts');
+  const runner = read('app/harness.tsx');
+  const scen = read('services/harness/scenarios.ts');
+
+  it('a run summary is logged EVERY run — it is the context, not the alarm', () => {
+    expect(assertSrc).toMatch(/export async function logRunSummaryToIssueLog/);
+    expect(assertSrc).toMatch(/'harness_run'/);
+    expect(runner).toMatch(/logRunSummaryToIssueLog\(collected\)/);
+  });
+
+  it('it names the device, the build and whether pose is linked', () => {
+    for (const k of ['env.os', 'env.runtime', 'env.updateId', 'env.poseAvailable', 'env.apiBase']) {
+      expect(assertSrc).toContain(k);
+    }
+  });
+
+  it('and where the time went, pass or fail', () => {
+    expect(assertSrc).toMatch(/slowestSteps/);
+    expect(assertSrc).toMatch(/slowestScenario/);
+    // sorted by cost regardless of status — a slow PASS is the finding
+    expect(assertSrc).toMatch(/\.sort\(\(a, b\) => \(b\.ms \?\? 0\) - \(a\.ms \?\? 0\)\)/);
+  });
+
+  it('the speed scenario budgets the real path and self-tests the log channel', () => {
+    expect(scen).toMatch(/id: 'C22'/);
+    expect(scen).toMatch(/health probe answers quickly/);
+    expect(scen).toMatch(/on-device pose is linked/);
+    expect(scen).toMatch(/anchor derivation is instant/);
+    // if the log itself is broken, every other finding dies with it
+    expect(scen).toMatch(/the issue log accepts entries/);
+  });
+});

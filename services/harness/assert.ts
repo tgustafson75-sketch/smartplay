@@ -16,6 +16,15 @@ export interface Check {
   label: string;
   status: CheckStatus;
   detail?: string;
+  /**
+   * 2026-09-01 (Tim: the harness should surface "timestamps, flow issues, bottlenecks... as close to
+   * the actual progress on the device as possible"). How long this step took, when it measured
+   * something. A pass/fail alone cannot show a bottleneck — a check that passes in 4 seconds is a
+   * finding, and without this it looked identical to one that passed in 4ms.
+   */
+  ms?: number;
+  /** Milliseconds since the scenario started, so the ORDER and the gaps are readable. */
+  atMs?: number;
 }
 
 export interface ScenarioReport {
@@ -31,6 +40,9 @@ export interface ScenarioReport {
 export class AssertCtx {
   readonly checks: Check[] = [];
   private readonly scenarioId: string;
+  private readonly startedAt = Date.now();
+  /** Set by time()/timeAsync so the check it wraps carries its own duration. */
+  private pendingMs: number | null = null;
 
   constructor(scenarioId: string) {
     this.scenarioId = scenarioId;
@@ -38,11 +50,46 @@ export class AssertCtx {
 
   expect(label: string, predicate: boolean, detail?: string): void {
     const status: CheckStatus = predicate ? 'pass' : 'fail';
-    const row: Check = { label, status, detail };
+    const ms = this.pendingMs;
+    this.pendingMs = null;
+    const row: Check = { label, status, detail, atMs: Date.now() - this.startedAt, ...(ms != null ? { ms } : {}) };
     this.checks.push(row);
     const tag = status === 'pass' ? 'PASS' : 'FAIL';
     const tail = detail ? `  ↳ ${detail}` : '';
-    console.log(`[harness ${this.scenarioId}] ${tag}  ${label}${tail}`);
+    const dur = ms != null ? ` (${ms}ms)` : '';
+    console.log(`[harness ${this.scenarioId}] +${row.atMs}ms ${tag}${dur}  ${label}${tail}`);
+  }
+
+  /**
+   * Measure an async step and assert on how long it took. This is the bottleneck detector: the
+   * budget is part of the assertion, so a step that still WORKS but got slow fails loudly instead of
+   * passing quietly. Returns the value so the caller can keep using it.
+   */
+  async within<T>(label: string, budgetMs: number, fn: () => Promise<T>): Promise<T | null> {
+    const t0 = Date.now();
+    let value: T | null = null;
+    let threw: string | null = null;
+    try {
+      value = await fn();
+    } catch (e) {
+      threw = e instanceof Error ? e.message.slice(0, 140) : String(e).slice(0, 140);
+    }
+    const took = Date.now() - t0;
+    this.pendingMs = took;
+    if (threw) {
+      this.expect(label, false, `threw after ${took}ms: ${threw}`);
+      return null;
+    }
+    this.pendingMs = took;
+    this.expect(label, took <= budgetMs, `${took}ms (budget ${budgetMs}ms)`);
+    return value;
+  }
+
+  /** Record a measurement without a pass/fail opinion — context the reader needs to interpret the rest. */
+  note(label: string, detail: string): void {
+    const row: Check = { label, status: 'skip', detail, atMs: Date.now() - this.startedAt };
+    this.checks.push(row);
+    console.log(`[harness ${this.scenarioId}] +${row.atMs}ms NOTE  ${label}  ↳ ${detail}`);
   }
 
   /** Convenience: equality check with a useful detail line on failure. */
@@ -119,4 +166,68 @@ export function logScenarioToIssueLog(report: ScenarioReport): void {
       'app_error',
     );
   } catch { /* telemetry must never break a harness run */ }
+}
+
+
+/**
+ * 2026-09-01 (Tim: "give me as much diagnostic data as we need for this to be a useful exercise").
+ *
+ * THE RUN SUMMARY. Per-scenario failures say what broke; this says what the device was while it
+ * broke, and where the time went. Both halves are needed to read a log cold: a failure without the
+ * build, the runtime and whether pose is even linked is a puzzle, and a run where everything passes
+ * but one step took nine seconds is a finding that no pass/fail row would ever show.
+ *
+ * Logged for EVERY run, pass or fail — this one is the context, not the alarm.
+ */
+export async function logRunSummaryToIssueLog(reports: ScenarioReport[]): Promise<void> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { useIssueLogStore } = require('../../store/issueLogStore') as typeof import('../../store/issueLogStore');
+
+    const failed = reports.filter((r) => r.status === 'fail');
+    const allChecks = reports.flatMap((r) => r.checks.map((c) => ({ ...c, scenario: r.id })));
+    // The bottleneck view: what actually cost time, regardless of whether it passed.
+    const slowest = allChecks
+      .filter((c) => typeof c.ms === 'number')
+      .sort((a, b) => (b.ms ?? 0) - (a.ms ?? 0))
+      .slice(0, 6)
+      .map((c) => `${c.scenario}:${c.label} ${c.ms}ms${c.status === 'fail' ? ' FAIL' : ''}`);
+
+    // What this device IS. Every one of these has silently changed an outcome at least once.
+    const env: Record<string, unknown> = {};
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { Platform } = require('react-native') as typeof import('react-native');
+      env.os = `${Platform.OS} ${String(Platform.Version)}`;
+    } catch { /* context is best-effort */ }
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Updates = require('expo-updates') as typeof import('expo-updates');
+      env.runtime = Updates.runtimeVersion ?? null;
+      env.updateId = Updates.updateId ?? 'embedded';
+      env.channel = Updates.channel ?? null;
+    } catch { /* bare/dev builds have no updates module */ }
+    try {
+      const mp = await import('../mediaPipePoseService');
+      const st = await mp.getMediaPipeStatus();
+      // The single most consequential device fact: without this, every on-device locate silently
+      // falls back to the network call it was built to replace.
+      env.poseAvailable = st.available;
+      env.poseModelLoaded = st.modelLoaded;
+    } catch { env.poseAvailable = 'probe_failed'; }
+    try {
+      const { getApiBaseUrl } = await import('../apiBase');
+      env.apiBase = getApiBaseUrl() || null;
+    } catch { /* ignore */ }
+
+    useIssueLogStore.getState().addAppEvent('harness_run', {
+      scenarios: reports.length,
+      failed: failed.length,
+      failedIds: failed.map((r) => r.id),
+      totalMs: reports.reduce((n, r) => n + r.durationMs, 0),
+      slowestScenario: [...reports].sort((a, b) => b.durationMs - a.durationMs)[0]?.id ?? null,
+      slowestSteps: slowest,
+      ...env,
+    }, failed.length > 0 ? 'app_error' : 'diag');
+  } catch { /* a summary must never break a run */ }
 }

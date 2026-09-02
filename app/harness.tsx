@@ -19,7 +19,7 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { logScenarioToIssueLog } from '../services/harness/assert';
+import { logScenarioToIssueLog, logRunSummaryToIssueLog } from '../services/harness/assert';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator,
 } from 'react-native';
@@ -195,9 +195,11 @@ export default function HarnessScreen() {
   const runAll = async () => {
     setRunning(true);
     console.log('[harness] === Run All begin ===');
+    const collected: ScenarioReport[] = [];
     for (const s of ALL_SCENARIOS) {
       try {
-        await runOne(s);
+        const r = await runOne(s);
+        if (r) collected.push(r);
       } catch (e) {
         // Last-resort guard — runOne already wraps. A throw here means
         // something escaped both layers; log and continue so one bad
@@ -206,6 +208,9 @@ export default function HarnessScreen() {
       }
     }
     console.log('[harness] === Run All done ===');
+    // One tap has to be enough: the summary carries the device, the build and where the time went,
+    // so a log read cold does not need a follow-up question.
+    void logRunSummaryToIssueLog(collected);
     setRunning(false);
   };
 
