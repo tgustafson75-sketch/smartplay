@@ -81,6 +81,7 @@ const GET_TO_KNOW_FOCUS =
 import { generateKevinRead } from '../../services/kevinReadService';
 import { useTheme } from '../../contexts/ThemeContext';
 import { isShelved } from '../../services/releaseSurface';
+import { useCoachLessonStore } from '../../store/coachLessonStore';
 import { detectPatternShift } from '../../services/patternDetection';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
@@ -259,6 +260,8 @@ export default function Dashboard() {
   // analysis primary_fault via caddieMemoryStore) → curated golf exercises that help it. Honest:
   // only shows when we have a real fault AND a vetted exercise set for it. [[fault-to-workout-export]]
   const swingFault = useCaddieMemoryStore((s) => s.getPlayer().tendencies.dominantMiss);
+  // The most recent lesson SESSION (coachLessonStore.sessions), for the Lessons card below.
+  const lastLessonSession = useCoachLessonStore((s) => s.sessions[0] ?? null);
   const faultWorkouts = useMemo(() => exercisesForFault(swingFault), [swingFault]);
   const faultLabel = useMemo(() => (swingFault ? swingFault.replace(/_/g, ' ') : ''), [swingFault]);
   const onExportWorkouts = useCallback(() => {
@@ -848,6 +851,46 @@ export default function Dashboard() {
           <AppIcon name="chevron-forward" size={18} color={colors.text_muted} />
         </TouchableOpacity>
         )}
+
+        {/**
+          * 2026-09-01 (Tim — "make sure that those lessons have a store, not the swing library,
+          * probably more appropriate card in the dashboard") — WHERE A LESSON LIVES.
+          *
+          * A lesson is a SESSION — a plan, its focuses, the reps that were read — not a clip. Filing
+          * it in the swing library would bury it among every practice ball ever hit and lose the
+          * shape of the lesson entirely, so it has its own store (coachLessonStore.sessions) and its
+          * own card here, on the screen the player actually sees.
+          *
+          * Gated on isShelved: Coach Caddie is in SHELVED_ROUTES today, so for a player this card
+          * does not exist. If the 1.0 decision goes the other way, deleting that one line in
+          * releaseSurface.ts is the whole change — the card, the store and the route come with it.
+          */}
+        {!isShelved('/swinglab/coach-lesson') && lastLessonSession ? (
+          <TouchableOpacity
+            style={[styles.sharedCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}
+            onPress={() => router.push('/swinglab/coach-lesson' as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Open Coach Caddie lessons"
+          >
+            <View style={styles.sharedHeader}>
+              <View style={{ width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent_muted }}>
+                <AppIcon name="school-outline" size={22} color={colors.accent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.sharedLabel, { color: colors.text_muted }]}>LESSONS</Text>
+                <Text style={[styles.sharedTitle, { color: colors.text_primary }]} numberOfLines={1}>
+                  {lastLessonSession.label}
+                </Text>
+                {/* Honest: reps READ, never reps attempted, and 'good' only where a verdict said so. */}
+                <Text style={[styles.sharedMeta, { color: colors.text_muted }]} numberOfLines={1}>
+                  {`${lastLessonSession.repsGood} of ${lastLessonSession.repsRead} swing${lastLessonSession.repsRead === 1 ? '' : 's'} on plan`}
+                  {lastLessonSession.completed ? ' · finished' : ' · ended early'}
+                </Text>
+              </View>
+              <AppIcon name="chevron-forward" size={18} color={colors.text_muted} />
+            </View>
+          </TouchableOpacity>
+        ) : null}
 
         {coachModeEnabled && coachableRoster.length > 0 && (
           <View style={[styles.sharedCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>

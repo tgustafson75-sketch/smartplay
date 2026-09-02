@@ -27,6 +27,7 @@ import { MESSAGING_ENABLED } from '../constants/featureFlags';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useSettingsStore } from '../store/settingsStore';
+import { displayCaddieName } from '../services/caddieResolver';
 // 2026-05-21 — Consolidation 1 / Merge C: watch-connected display
 // reads from the dedicated watchStore so all three call sites
 // (cage-mode, cage/summary, settings) share one source of truth.
@@ -1103,12 +1104,8 @@ export default function Settings() {
               { label: 'Kevin', value: 'kevin' },
               { label: 'Serena', value: 'serena' },
               {
-                label: (() => {
-                  try {
-                    const n = usePlayerProfileStore.getState().customCaddieName;
-                    return n && n.trim() ? n.trim() : 'My Caddie';
-                  } catch { return 'My Caddie'; }
-                })(),
+                // 2026-09-01 — one owner for "what do we call this caddie" (caddieResolver).
+                label: displayCaddieName('custom'),
                 value: 'custom',
               },
             ]}
@@ -1400,10 +1397,7 @@ export default function Settings() {
             // here instead of the static "My Caddie" fallback. Also
             // belt-and-suspenders `?? 100` for personaIntensity reads
             // in case a hydrated payload missed the v11 seed.
-            const customName = p === 'custom'
-              ? (usePlayerProfileStore.getState().customCaddieName ?? 'My Caddie')
-              : null;
-            const displayName = customName ?? getCaddieName(p);
+            const displayName = displayCaddieName(p);
             const intensityVal = personaIntensity[p] ?? 100;
             return (
             <View

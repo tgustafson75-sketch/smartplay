@@ -3078,7 +3078,10 @@ check('Biomech honesty is automatic: angle inferred when unknown + handedness th
       // the Coach lesson (both live-camera + picker paths) threads handedness. 2026-07-24: the
       // camera-first rebuild renamed the window const RECORD_WINDOW_SEC → WINDOW_SEC; honesty (angle
       // null → inferred, handedness threaded) is unchanged.
-      /analyzeSwingFromVideo\(uri, WINDOW_SEC \* 1000, null, false, null, null, resolveSwingerHandedness\(\)\)/.test(coach) &&
+      // 2026-09-01 — this pinned the literal `null, false, null, null` argument list, so giving the
+      // coach a LOCATED window and a real impact (a strict improvement) read as a regression. The
+      // property is: angle stays null so it is inferred, and handedness is threaded.
+      /analyzeSwingFromVideo\(uri, WINDOW_SEC \* 1000, null, false, window, impactMs, resolveSwingerHandedness\(\)\)/.test(coach) &&
       /analyzeSwingFromVideo\(asset\.uri, durationMs, null, false, null, null, resolveSwingerHandedness\(\)\)/.test(coach) &&
       // the raw-frame poseEstimator path threads lefty; the MIRROR path must NOT
       // (adjustFrames already flips lefty→righty — double-correcting would re-invert).
@@ -14642,6 +14645,90 @@ check(
     'ANCHOR: a low detection is trusted more on the COURSE than in a bay',
     /return environment === 'course' \? 90 : 240;/.test(win),
     'the neighbouring-bay false positive is the whole reason a thin transient is distrusted, and it cannot happen alone in a fairway',
+  );
+}
+
+/**
+ * ─── 2026-09-01 — COACH CADDIE READS A LOCATED SWING, NOT A TEN-SECOND GUESS ───────────────────
+ *
+ * Tim: "we should reconsider whether Coach Caddie should be a WOW for 1.0."
+ *
+ * It is shelved for 2.0 today (releaseSurface.SHELVED_ROUTES). Whatever that decision becomes, the
+ * screen was reading a 10s clip with NO window and NO impact, so the pose sampler took its
+ * medium-clip branch and placed "impact" at a fixed fraction of the last five seconds. Every number
+ * the coach spoke was measured wherever the body happened to be at that arithmetic point.
+ */
+{
+  const coach = readCode('app/swinglab/coach-lesson.tsx');
+  check(
+    'COACH CADDIE: the swing is located before it is read',
+    /locateSwingWindowOnDevice\(uri, WINDOW_SEC \* 1000\)/.test(coach) &&
+      /analyzeSwingFromVideo\(uri, WINDOW_SEC \* 1000, null, false, window, impactMs, resolveSwingerHandedness\(\)\)/.test(coach),
+    'a window AND an impact switch the pose sampler to its strike-anchored branch, so the positions are measurements rather than fractions of a ten-second recording',
+  );
+  check(
+    'COACH CADDIE: a failed locate degrades, it does not fabricate',
+    // Assert the CODE, not the comment beside it: both values start null and are assigned only
+    // inside `if (found)`, so a locate that fails or throws leaves the previous behaviour intact.
+    /let window: \{ startMs: number; endMs: number \} \| null = null;/.test(coach) &&
+      /let impactMs: number \| null = null;/.test(coach) &&
+      /if \(found\) \{[\s\S]{0,260}?impactMs = Math\.round\(found\.swingTimeSec \* 1000\);/.test(coach),
+    'null window + null impact is exactly the previous behaviour — honest and merely coarse',
+  );
+}
+
+/**
+ * ─── 2026-09-01 — A LESSON IS A SESSION, AND IT HAS A HOME ──────────────────────────────────────
+ *
+ * Tim: "make sure that those lessons have a store, not the swing library, probably more appropriate
+ * card in the dashboard."
+ *
+ * Only the diagnosis path wrote to coachLessonStore, so a player could work three focuses, hear
+ * "nice session — take those feels to the course", and the app would remember nothing.
+ */
+{
+  const store = readCode('store/coachLessonStore.ts');
+  check(
+    'LESSONS: a session history that is separate from the swing library',
+    /export interface SessionRecord \{/.test(store) &&
+      /recordSession: \(r: Omit<SessionRecord, 'at'>, nowMs: number\) => void;/.test(store) &&
+      /sessions: SessionRecord\[\];/.test(store),
+    'a lesson is a plan + its focuses + the reps read; filing it as clips would bury it among every practice ball ever hit',
+  );
+  check(
+    'LESSONS: the persist key is unchanged and v1 blobs get their sessions array',
+    /name: 'coach-lesson-history-v1'/.test(store) &&
+      /version: 2,/.test(store) &&
+      /return \{ \.\.\.st, sessions: \[\] \} as CoachLessonState;/.test(store),
+    'every tester already holds a v1 blob with no sessions key — an unmigrated read would crash the dashboard on first launch after the update',
+  );
+
+  const coach = readCode('app/swinglab/coach-lesson.tsx');
+  check(
+    'LESSONS: a finished session is filed before the screen tears down',
+    /useCoachLessonStore\.getState\(\)\.recordSession\(\{/.test(coach) &&
+      /completed: opts\?\.completed === true,/.test(coach),
+    'recorded whether or not the plan completed — a session ended early is still a session the player did',
+  );
+  check(
+    'LESSONS: reps counted are reps the coach actually READ',
+    /sessionRepsRef\.current\.read \+= 1;/.test(coach) &&
+      /if \(fb\.verdict === 'good'\) sessionRepsRef\.current\.good \+= 1;/.test(coach) &&
+      /if \(reps\.read > 0 && \(p \|\| f\)\)/.test(coach),
+    'a session spent failing to get a readable window records as nothing, rather than inflating the count with camera trouble',
+  );
+  check(
+    'LESSONS: the End button cannot pass a touch event as options',
+    !/onPress=\{endSession\}/.test(coach) && /onPress=\{\(\) => endSession\(\)\}/.test(coach),
+    'endSession takes { completed }; a bare handler hands it a GestureResponderEvent',
+  );
+
+  const dash = readCode('app/(tabs)/dashboard.tsx');
+  check(
+    'LESSONS: the dashboard card exists and cannot leak a shelved route',
+    /!isShelved\('\/swinglab\/coach-lesson'\) && lastLessonSession/.test(dash) &&
+      /useCoachLessonStore\(\(s\) => s\.sessions\[0\] \?\? null\)/.test(dash),
+    'Coach Caddie is shelved today, so for a player this card does not exist; un-shelving is one deleted line in releaseSurface.ts',
   );
 }
 

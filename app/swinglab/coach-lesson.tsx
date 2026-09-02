@@ -36,6 +36,7 @@ import { CoachSwingCamera, type CoachCameraHandle } from '../../components/coach
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useCoachLessonStore } from '../../store/coachLessonStore';
+import { displayCaddieName } from '../../services/caddieResolver';
 import { getApiBaseUrl } from '../../services/apiBase';
 
 // Best-effort spoken line. Uses the standalone one-voice-safe speak(); never throws / blocks.
@@ -79,6 +80,16 @@ export default function CoachLessonScreen() {
   const [feedback, setFeedback] = useState<FocusFeedback | null>(null);
   const [rep, setRep] = useState(0);
   const [plan, setPlan] = useState<LessonPlan | null>(null);
+  /**
+   * 2026-09-01 (Tim — "make sure that those lessons have a store") — WHAT THE SESSION ACTUALLY DID.
+   *
+   * Counted as it happens rather than reconstructed at the end: `rep` is reset per focus, so by the
+   * time the plan finishes there is nothing left to total. Reps counted here are reps that produced a
+   * VERDICT — a swing the coach actually read — not swings attempted, so a session spent failing to
+   * get a readable window records honestly as a session with no reps.
+   */
+  const sessionRepsRef = useRef({ read: 0, good: 0 });
+  const sessionFocusIdsRef = useRef<string[]>([]);
   const [planStep, setPlanStep] = useState(0);
   const [repsOnFocus, setRepsOnFocus] = useState(0);
   // Mirror the fast-changing plan state into refs so the async loop reads current values (no stale closures).
@@ -138,9 +149,40 @@ export default function CoachLessonScreen() {
     if (!uri) return { ok: false, m: null };
     setPhase('reading'); setCaption('Reading that one…');
     try {
+      /**
+       * 2026-09-01 (Tim — "we should reconsider whether Coach Caddie should be a WOW for 1.0") —
+       * FIND THE SWING FIRST. This is the difference between a lesson and a guess.
+       *
+       * The clip is a TEN SECOND window the coach paces you inside, and this passed neither a window
+       * nor an impact time. On a clip that long the pose sampler takes its medium-clip branch: it
+       * assumes the swing is in the last five seconds and places P1/P4/P6/P10 at fixed FRACTIONS of
+       * it — P6_impact at 0.65. So "impact" was a point in time chosen by arithmetic over a ten-second
+       * recording in which the golfer could have swung at any moment, and every number the coach then
+       * spoke — turn, weight shift, sequencing — was measured at whatever the body happened to be
+       * doing there. Confident coaching, computed from the wrong frames, with nothing on screen to
+       * suggest anything was wrong. [[a-field-that-is-sometimes-a-placeholder]]
+       *
+       * locateSwingWindowOnDevice is the same locate SmartMotion and the swing library already use.
+       * It runs native pose only, returns null rather than guessing, and costs no network call. With
+       * a window AND a swing time the sampler switches to its STRIKE-ANCHORED branch: the positions
+       * become measurements rather than fractions (PoseFrame.positionSource 'strike'), and the
+       * densification weights its frames into the downswing instead of spreading them across the
+       * backswing. Null → exactly the previous behaviour, which is honest and merely coarse.
+       */
+      let window: { startMs: number; endMs: number } | null = null;
+      let impactMs: number | null = null;
+      try {
+        const { locateSwingWindowOnDevice } = await import('../../services/swing/onDeviceLocate');
+        const found = await locateSwingWindowOnDevice(uri, WINDOW_SEC * 1000);
+        if (found) {
+          window = { startMs: Math.round(found.startSec * 1000), endMs: Math.round(found.endSec * 1000) };
+          impactMs = Math.round(found.swingTimeSec * 1000);
+        }
+      } catch { /* locate is an improvement, never a requirement */ }
+
       // angle null → computeBiomechanics infers it from pose geometry (nulls DTL-invalid metrics so the
       // caddie never speaks a wrong number); handedness threaded so lefties read correctly.
-      const m = await analyzeSwingFromVideo(uri, WINDOW_SEC * 1000, null, false, null, null, resolveSwingerHandedness());
+      const m = await analyzeSwingFromVideo(uri, WINDOW_SEC * 1000, null, false, window, impactMs, resolveSwingerHandedness());
       return { ok: true, m };
     } catch {
       return { ok: true, m: null };
@@ -206,6 +248,9 @@ export default function CoachLessonScreen() {
   // Apply a read swing to the focus/plan state: feedback caption + speech, then advance or re-arm.
   const applyFocusResult = useCallback((f: LessonFocus, m: SwingBiomechanics) => {
     const fb = composeFocusFeedback(f.id, m);
+    sessionRepsRef.current.read += 1;
+    if (fb.verdict === 'good') sessionRepsRef.current.good += 1;
+    if (!sessionFocusIdsRef.current.includes(f.id)) sessionFocusIdsRef.current.push(f.id);
     setFeedback(fb); setRep((n) => n + 1);
     const repsNow = repsOnFocusRef.current + 1;
     setRepsOnFocus(repsNow);
@@ -218,7 +263,7 @@ export default function CoachLessonScreen() {
       const nextStep = step + 1;
       if (nextStep >= p.focusIds.length) {
         // Plan complete — wrap up and end the session after the win line is heard.
-        scheduleRearm(() => { say(sessionSummaryLine(p.label)); endSession(); }, 2600);
+        scheduleRearm(() => { say(sessionSummaryLine(p.label)); endSession({ completed: true }); }, 2600);
         return;
       }
       const next = focusById(p.focusIds[nextStep]);
@@ -294,7 +339,37 @@ export default function CoachLessonScreen() {
     });
   }, [clearRearm, scheduleRearm, focusRep]);
 
-  const endSession = useCallback(() => {
+  const endSession = useCallback((opts?: { completed?: boolean }) => {
+    /**
+     * 2026-09-01 (Tim) — FILE THE SESSION BEFORE TEARING IT DOWN.
+     *
+     * A finished lesson used to leave no trace: only the diagnosis path wrote to the store, so a
+     * player could work three focuses, be told "nice session — take those feels to the course", and
+     * the app would remember nothing. A coach who does not remember the last lesson is not a coach.
+     *
+     * Recorded whether or not the plan completed, with `completed` saying which — a session ended
+     * early is still a session the player did, and pretending otherwise would make the card lie in
+     * the flattering direction. Sessions with no read reps are skipped: nothing was coached, and a
+     * row for it would inflate the count with camera trouble. [[illustration-data-points]]
+     */
+    try {
+      const reps = sessionRepsRef.current;
+      const p = planRef.current;
+      const f = focusRef.current;
+      if (reps.read > 0 && (p || f)) {
+        useCoachLessonStore.getState().recordSession({
+          planId: p?.id ?? null,
+          label: p?.label ?? f?.label ?? 'Lesson',
+          focusIds: [...sessionFocusIdsRef.current],
+          repsRead: reps.read,
+          repsGood: reps.good,
+          completed: opts?.completed === true,
+        }, Date.now());
+      }
+    } catch { /* a lesson must never fail because its history did */ }
+    sessionRepsRef.current = { read: 0, good: 0 };
+    sessionFocusIdsRef.current = [];
+
     loopGenRef.current++;
     clearRearm(); clearProgressTimer();
     coachCamRef.current?.stop();
@@ -405,7 +480,23 @@ export default function CoachLessonScreen() {
           <TouchableOpacity onPress={() => safeBack()} style={s.headerBtn} accessibilityRole="button" accessibilityLabel="Back">
             <Ionicons name="chevron-back" size={24} color={colors.text_primary} />
           </TouchableOpacity>
-          <Text style={s.title}>Coach Caddie</Text>
+          {/**
+            * 2026-09-01 (Tim — "to start, whoever is currently selected would be the coach. We might
+            * in 2.0 have a completely separate, really more elite, stepped-up, capable entity") —
+            * NAME THE COACH.
+            *
+            * The lesson already SPEAKS as the selected caddie: voiceService.speak reads the live
+            * persona and overrides the caller's gender, so a Serena player has always heard Serena.
+            * The screen still said "Coach Caddie", so the one place a player looks to see WHO is
+            * teaching them named nobody — the same lesson, from a generic product feature rather
+            * than from their caddie. That gap is the whole difference Tim is describing between a
+            * tool and a coach. [[feels-like-a-real-caddie]]
+            *
+            * displayCaddieName resolves a custom caddie to the name the player CHOSE, not the static
+            * "My Caddie" fallback — addressing someone's own caddie as "My Caddie" is exactly the
+            * moment it stops feeling like theirs.
+            */}
+          <Text style={s.title}>{`Coach ${displayCaddieName()}`}</Text>
           <View style={s.headerBtn} />
         </View>
         <ScrollView contentContainerStyle={{ padding: 16 }}>
@@ -450,7 +541,7 @@ export default function CoachLessonScreen() {
 
       {/* Header over the camera. */}
       <View style={s.headerOverlay}>
-        <TouchableOpacity onPress={endSession} style={s.headerBtn} accessibilityRole="button" accessibilityLabel="End lesson">
+        <TouchableOpacity onPress={() => endSession()} style={s.headerBtn} accessibilityRole="button" accessibilityLabel="End lesson">
           <Ionicons name="chevron-back" size={24} color="#fff" />
         </TouchableOpacity>
         <View style={s.livePill}>
@@ -499,10 +590,10 @@ export default function CoachLessonScreen() {
               </>
             )}
             {dxStage === 'homework' && (
-              <TouchableOpacity style={s.ctrlPrimary} onPress={endSession}><Ionicons name="flag" size={18} color="#0d1a0d" /><Text style={s.ctrlPrimaryText}>Got it — end lesson</Text></TouchableOpacity>
+              <TouchableOpacity style={s.ctrlPrimary} onPress={() => endSession()}><Ionicons name="flag" size={18} color="#0d1a0d" /><Text style={s.ctrlPrimaryText}>Got it — end lesson</Text></TouchableOpacity>
             )}
             {(dxStage === 'intro' || dxStage === 'reps') && (
-              <TouchableOpacity style={s.ctrlGhost} onPress={endSession}><Text style={s.ctrlGhostText}>End lesson</Text></TouchableOpacity>
+              <TouchableOpacity style={s.ctrlGhost} onPress={() => endSession()}><Text style={s.ctrlGhostText}>End lesson</Text></TouchableOpacity>
             )}
           </>
         ) : (
@@ -512,7 +603,7 @@ export default function CoachLessonScreen() {
               <Ionicons name={paused ? 'play' : 'pause'} size={16} color="#fff" />
               <Text style={s.ctrlGhostText}>{paused ? 'Resume' : 'Pause'}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={s.ctrlGhost} onPress={endSession}>
+            <TouchableOpacity style={s.ctrlGhost} onPress={() => endSession()}>
               <Text style={s.ctrlGhostText}>{plan ? 'End session' : 'End'}</Text>
             </TouchableOpacity>
           </>

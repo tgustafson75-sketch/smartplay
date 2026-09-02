@@ -174,7 +174,11 @@ export const ORPHAN_BASELINE: Record<string, string> = {
   'services/puttingAnalysisService.ts :: speakPuttingAnalysis':
     'PARKED — the RENDERED-BUT-NEVER-SPOKEN defect is FIXED (2026-08-25): the camera putt path now calls the shared speakPuttRead, so the caddie says the read out loud. What remains orphaned is this SPOKEN-READ entry point — analyzePutt({ spoken_read }) for a player who says their own read aloud ("downhill, left to right"). That flow has no surface yet. Wire it when the green-side voice ask exists; do not delete, it is the other half of the same feature.',
   'services/coachLesson.ts :: planById':
-    'WIRE — three lesson plans exist and nothing can select one by id.',
+    'PARKED (2.0) — was tagged WIRE, which reads as a live defect, and it is not one. The screen '
+    + 'picks a plan by tapping a card and passes the OBJECT, so nothing needs an id lookup today. '
+    + 'Selecting a plan BY NAME is what a voice-driven Coach Caddie needs, and Coach Caddie is '
+    + 'explicitly 2.0: releaseSurface.SHELVED_ROUTES already holds /swinglab/coach-lesson, and Tim '
+    + 'named it as THE 2.0 feature on 09-01. Named blocker, not "later".',
 
   // ── WIRE — the club seam, all of it feeding docs/NEXT-CLUB-LOGIC-SWEEP.md ──────
 
