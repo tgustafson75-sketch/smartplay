@@ -27,6 +27,15 @@ export interface WhatsNewEntry {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    when: 'Sep 2026',
+    note: 'Shot-shape practice teaches the shot before it grades it. Tap a flop, a pitch-and-run, a bump-and-run and you get when you would actually play it on a hole, the club to try, the setup, and the one feel that matters — then you record. Already own the shot? Skip straight to recording.',
+    howTo: 'Practice → Shot Shapes → tap any shot.',
+  },
+  {
+    when: 'Sep 2026',
+    note: 'Swings filmed down-the-line are read that way again. The angle detector judged the whole swing, and at the finish your chest faces the target — from behind you, that looks face-on. So down-the-line swings got face-on geometry, which is what put the club arc in the wrong place. It decides at address now.',
+  },
+  {
     when: 'Aug 2026',
     note: 'The swing trace follows the swing. On range and uploaded clips it used to search the whole recording — the walk-up, the waggle, the follow-through — and drew an arc out of all of it. It now finds the moment of impact in the video and traces the few seconds around it. If it cannot find impact honestly, it says nothing rather than drawing a line in the wrong place.',
   },

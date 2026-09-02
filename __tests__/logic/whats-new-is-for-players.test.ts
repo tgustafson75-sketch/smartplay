@@ -50,6 +50,27 @@ describe('every entry speaks to a golfer, not an engineer', () => {
 
   it('newest first — the card shows the top of this list', () => {
     // The hero card slices from the TOP as "unseen". Appending to the end would surface nothing.
-    expect(WHATS_NEW[0].when).toMatch(/Aug 2026/);
+    //
+    // 2026-09-01 — this asserted the literal string 'Aug 2026', so it failed the moment a September
+    // entry was added CORRECTLY, at the top. A test that has to be edited every month to keep
+    // passing is a test that will eventually be edited without being read.
+    // [[a-guard-can-enforce-a-stale-premise]]
+    //
+    // The property is the ORDERING, so assert the ordering: parse every `when` and prove the list
+    // never gets newer as it goes down.
+    const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const stamp = (when: string): number => {
+      const m = /([A-Z][a-z]{2})\w*\s+(\d{4})/.exec(when);
+      expect(m).not.toBeNull();          // every entry must carry a readable month + year
+      const monthIdx = MONTHS.indexOf(m![1]);
+      expect(monthIdx).toBeGreaterThanOrEqual(0);
+      return Number(m![2]) * 12 + monthIdx;
+    };
+    const stamps = WHATS_NEW.map((e) => stamp(e.when));
+    for (let i = 1; i < stamps.length; i++) {
+      expect(stamps[i]).toBeLessThanOrEqual(stamps[i - 1]);
+    }
+    // ...and the top entry is genuinely the newest, which is the thing the card depends on.
+    expect(stamps[0]).toBe(Math.max(...stamps));
   });
 });

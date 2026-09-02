@@ -14499,6 +14499,39 @@ check(
   );
 }
 
+/**
+ * ─── 2026-09-01 — THE SHOT-SHAPE DRILL TEACHES BEFORE IT GRADES ────────────────────────────────
+ *
+ * Tim: "our shot shape drill shouldn't be here. I'll watch you do shot shape drills. It should FIRST
+ * teach you how to do different shot shapes and why, in terms that users can understand."
+ *
+ * The picker named a shot and started recording. For a golfer who already owns the shot that is a
+ * drill; for the one this app is built for it is a test with no lesson, and the verdict that comes
+ * back ("that came out more like a running chip") reads as a mark rather than as coaching.
+ */
+{
+  const screen = readCode('app/practice/shot-shapes.tsx');
+  check(
+    'SHOT SHAPES: a tile opens the lesson, and RECORD is the second tap',
+    /onPress=\{\(\) => setTeaching\(s\)\}/.test(screen) &&
+      !/onPress=\{\(\) => pick\(s\)\}/.test(screen) &&
+      /Record 3 of these/.test(screen),
+    'tapping a shot no longer starts a recording of a skill the app never taught',
+  );
+  check(
+    'SHOT SHAPES: the lesson is a step, not a gate',
+    /I know this one — just record/.test(screen),
+    'a golfer who already has the shot must never be made to sit through the lesson twice',
+  );
+  const defs = readCode('services/practice/shotShapes.ts');
+  check(
+    'SHOT SHAPES: every shot carries when-to-play-it, how-to-hit-it and a club',
+    /why: string;/.test(defs) && /how: string\[\];/.test(defs) && /club: string;/.test(defs) &&
+      (defs.match(/^    why: '/gm) ?? []).length === (defs.match(/\{ id: '/g) ?? []).length,
+    'the count of lessons equals the count of shots — a shot added without one would ship a tile that still only grades',
+  );
+}
+
 const total = results.length;
 const passed = results.filter((r) => r.passed).length;
 const failed = results.filter((r) => !r.passed);

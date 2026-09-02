@@ -24,19 +24,112 @@ export interface ShotShapeDef {
   intendedHeight: LaunchHeight;
   intendedRoll: ShotRoll;  // the INTENDED roll (display only — not measured in v1)
   blurb: string;           // the intended shape, in plain words
+  /**
+   * 2026-09-01 (Tim — "our shot shape drill shouldn't be here. I'll watch you do shot shape drills.
+   * It should FIRST teach you how to do different shot shapes and why, in terms that users can
+   * understand.") — THE DRILL GRADED A SKILL IT NEVER TAUGHT.
+   *
+   * The picker named a shot and went straight to recording. That is a fine drill for someone who
+   * already knows what a flop shot is and how to hit one. For the golfer this app is actually for —
+   * busy, self-taught, no lessons — it is a test with no lesson before it, and the grade that comes
+   * back ("that came out more like a running chip") lands as a verdict instead of as coaching.
+   * [[time-constrained-golfer-lens]] [[feels-like-a-real-caddie]]
+   *
+   * So every shot now carries the two things a player needs BEFORE the camera runs. Both are written
+   * in situations and feels, never in swing jargon, and neither quotes a number the app cannot back
+   * up — no launch angles, no spin, no carry yardages. [[illustration-data-points]]
+   */
+  /** WHEN you'd actually reach for this, described as a situation on a real hole. */
+  why: string;
+  /** HOW to hit it: setup first, then the one feel that matters. */
+  how: string[];
+  /** The club to try it with first. A starting point, not a rule. */
+  club: string;
 }
 
 // The mockup's grid (Tank's short-game set). Putting is intentionally excluded —
 // it's a ground roll, not a launch, so the origin→departure launch read doesn't apply.
 export const SHOT_SHAPES: ShotShapeDef[] = [
-  { id: 'flop',         name: 'Flop Shot',    icon: 'arrow-up-outline',       intendedHeight: 'high',   intendedRoll: 'check',   blurb: 'High and soft — lands steep, stops fast.' },
-  { id: 'lob',          name: 'Lob Shot',     icon: 'arrow-up-outline',       intendedHeight: 'high',   intendedRoll: 'check',   blurb: 'Maximum height, minimal roll.' },
-  { id: 'bunker',       name: 'Bunker Shot',  icon: 'sunny-outline',          intendedHeight: 'high',   intendedRoll: 'check',   blurb: 'Up steep out of the sand, soft landing.' },
-  { id: 'pitch',        name: 'Pitch',        icon: 'trending-up-outline',    intendedHeight: 'high',   intendedRoll: 'medium',  blurb: 'Carries most of the way, a little release.' },
-  { id: 'pitch_run',    name: 'Pitch & Run',  icon: 'trending-up-outline',    intendedHeight: 'medium', intendedRoll: 'release', blurb: 'Medium flight, then runs to the hole.' },
-  { id: 'chip',         name: 'Chip',         icon: 'remove-outline',         intendedHeight: 'medium', intendedRoll: 'release', blurb: 'Short carry, lots of roll.' },
-  { id: 'low_chip',     name: 'Low Chip',     icon: 'remove-outline',         intendedHeight: 'low',    intendedRoll: 'release', blurb: 'Low and skipping, releases out.' },
-  { id: 'running_chip', name: 'Running Chip', icon: 'arrow-forward-outline',  intendedHeight: 'low',    intendedRoll: 'release', blurb: 'Bump-and-run — low line, long roll.' },
+  { id: 'flop',         name: 'Flop Shot',    icon: 'arrow-up-outline',       intendedHeight: 'high',   intendedRoll: 'check',   blurb: 'High and soft — lands steep, stops fast.',
+    why: 'You\'re short-sided — the pin is close to your edge of the green with a bunker or thick rough in between, and the ball has to stop almost where it lands.',
+    how: [
+      'Open the clubface FIRST, then take your grip — twisting your hands instead just aims you right.',
+      'Ball forward, off your front heel. Widen your stance and keep the shaft straight up, not leaning forward.',
+      'Swing along your toe line and keep the face pointing at the sky through the ball.',
+      'The feel: slide the club UNDER the ball. Commit — a decelerating flop is the one you thin across the green.',
+    ],
+    club: 'Your most lofted wedge',
+  },
+  { id: 'lob',          name: 'Lob Shot',     icon: 'arrow-up-outline',       intendedHeight: 'high',   intendedRoll: 'check',   blurb: 'Maximum height, minimal roll.',
+    why: 'A short carry over something you can\'t run the ball through — a bunker lip, a swale, a sprinkler line — with very little green to work with.',
+    how: [
+      'Same open face as the flop, but a narrower stance and a shorter swing.',
+      'Ball just forward of centre, weight even on both feet and steady.',
+      'Take the club up steeply and let it drop. The height comes from the loft, not from lifting.',
+      'The feel: soft and unhurried, and it finishes. Never a jab.',
+    ],
+    club: 'Your most lofted wedge',
+  },
+  { id: 'bunker',       name: 'Bunker Shot',  icon: 'sunny-outline',          intendedHeight: 'high',   intendedRoll: 'check',   blurb: 'Up steep out of the sand, soft landing.',
+    why: 'Any greenside sand. This is the one shot in golf where you deliberately miss the ball.',
+    how: [
+      'Dig your feet in for a base — that also sets you slightly below the ball.',
+      'Open the face, ball forward, weight favouring your front foot.',
+      'Pick a spot about two inches BEHIND the ball and hit the sand there.',
+      'The feel: splash a slice of sand onto the green and let it carry the ball out. Keep swinging — sand is heavy, and slowing down is what leaves it in.',
+    ],
+    club: 'Sand wedge',
+  },
+  { id: 'pitch',        name: 'Pitch',        icon: 'trending-up-outline',    intendedHeight: 'high',   intendedRoll: 'medium',  blurb: 'Carries most of the way, a little release.',
+    why: 'Twenty to sixty yards with enough green to work with — the everyday shot when you\'re too close for a full swing.',
+    how: [
+      'Narrow your stance and grip down a little for control.',
+      'Ball centre, weight slightly forward, and it STAYS there through the shot.',
+      'Distance comes from the LENGTH of the swing, not from hitting harder.',
+      'The feel: chest and arms turning together, brushing the grass after the ball.',
+    ],
+    club: 'Pitching or gap wedge',
+  },
+  { id: 'pitch_run',    name: 'Pitch & Run',  icon: 'trending-up-outline',    intendedHeight: 'medium', intendedRoll: 'release', blurb: 'Medium flight, then runs to the hole.',
+    why: 'A middle-distance chip with plenty of green between you and the hole — you\'d rather let the ground do half the work than fly it all the way there.',
+    how: [
+      'Ball centre, feet close together, hands slightly ahead.',
+      'Rock your shoulders with just a small wrist hinge — this is a stroke, not a hit.',
+      'Pick a LANDING SPOT about a third of the way to the hole and aim at that, not the flag.',
+      'The feel: quiet legs, and the same tempo back and through.',
+    ],
+    club: 'Gap wedge or 9-iron',
+  },
+  { id: 'chip',         name: 'Chip',         icon: 'remove-outline',         intendedHeight: 'medium', intendedRoll: 'release', blurb: 'Short carry, lots of roll.',
+    why: 'The ball is just off the green, sitting cleanly, with room to run. The lowest-risk shot in golf — and the one most golfers make far harder than it needs to be.',
+    how: [
+      'Feet close together, most of your weight on the front foot, and it stays there.',
+      'Ball back of centre, hands ahead of it, shaft leaning toward the target.',
+      'No wrists. Rock your shoulders like a long putt.',
+      'The feel: brush the grass and let the ball come out low. Trust the loft — don\'t help it up.',
+    ],
+    club: '9-iron or pitching wedge',
+  },
+  { id: 'low_chip',     name: 'Low Chip',     icon: 'remove-outline',         intendedHeight: 'low',    intendedRoll: 'release', blurb: 'Low and skipping, releases out.',
+    why: 'Into the wind, under a branch, or to a back pin with a lot of green in front of you — you want it down and running.',
+    how: [
+      'Ball back in your stance, hands well ahead, weight forward.',
+      'Grip down on the club for control.',
+      'Short back, short through, and keep your hands low afterwards.',
+      'The feel: cover the ball and finish LOW. A high finish is what pops it up.',
+    ],
+    club: '8- or 9-iron',
+  },
+  { id: 'running_chip', name: 'Running Chip', icon: 'arrow-forward-outline',  intendedHeight: 'low',    intendedRoll: 'release', blurb: 'Bump-and-run — low line, long roll.',
+    why: 'A tight lie just off the green with a long flat run to the hole — the bump-and-run. Near the green, when in doubt, this is usually the smart shot.',
+    how: [
+      'Set up almost like a putt: narrow stance, ball back, hands ahead.',
+      'Use a straighter-faced club. Less loft means less that can go wrong.',
+      'Make a putting stroke — the ball should be rolling within a few feet of landing.',
+      'The feel: you\'re putting with a lofted club. Land it on the front edge and let it run.',
+    ],
+    club: '7- or 8-iron',
+  },
 ];
 
 export function getShotShape(id: string | null | undefined): ShotShapeDef | null {
