@@ -3165,6 +3165,57 @@ check('Smart Motion: pipeline narration has a per-run cancel token (no cross-ses
   })(),
   'a stale pipeline bails via its run token — no wrong-swing narration after a fast record-again');
 
+check('The caddie can only offer to open screens that exist',
+  /**
+   * 2026-09-01 (marshal recall) — appCatalog's own header promises "EVERY route below is verified
+   * against the app/ tree... if it's not a real screen, it's not here." That promise was enforced by
+   * whoever last edited the file, which is not enforcement.
+   *
+   * It backs two things: the compact feature list injected into the caddie's system prompt, and the
+   * DETERMINISTIC voice routing behind "open smart tempo". A stale route there means the caddie
+   * confidently offers a screen and the tap goes nowhere — the exact failure a rename produces, and
+   * six screens were renamed the day this was written.
+   */
+  (() => {
+    const cat = readCode('services/knowledgeBase/appCatalog.ts');
+    const routes = [...cat.matchAll(/route:\s*'([^']+)'/g)].map((m) => m[1]);
+    if (routes.length < 20) return false;   // the sweep must actually see the catalog
+    const resolves = (r: string): boolean => {
+      const n = r.replace(/^\//, '').split('?')[0];
+      return [`app/${n}.tsx`, `app/${n}.ts`, `app/${n}/index.tsx`, `app/(tabs)/${n}.tsx`]
+        .some((rel) => exists(rel));
+    };
+    return routes.every(resolves);
+  })(),
+  'every route the caddie can name resolves to a real screen — a renamed screen cannot leave the voice router pointing at nothing');
+
+check('First run: the welcome gate cannot be walked past without consent',
+  /**
+   * 2026-09-01 (marshal recall) — app/welcome.tsx is the FIRST screen every new player sees and it
+   * carried no guard at all. It is also where legal acceptance happens, which is the one thing on it
+   * that must not be bypassable: the CTA is visually disabled until the box is ticked, and the
+   * handler double-checks because a visual gate can be defeated by accessibility services.
+   */
+  (() => {
+    const w = readCode('app/welcome.tsx');
+    return (
+      // consent is enforced in the HANDLER, not only in the styling
+      /if \(!termsAccepted\) \{/.test(w) &&
+      /Alert\.alert\(/.test(w) &&
+      // ...and the button itself reports its state to assistive tech rather than looking dead
+      /accessibilityState=\{\{ disabled: !termsAccepted \}\}/.test(w) &&
+      /disabled=\{!termsAccepted\}/.test(w) &&
+      // a blocked CTA says why, instead of being indistinguishable from a broken one
+      /blocked reason=terms_not_accepted/.test(w) &&
+      // and the only way out of this screen is forward into the app
+      /router\.replace\('\/\(tabs\)\/caddie' as never\)/.test(w) &&
+      // the legal documents are real in-app routes, not dead links
+      /router\.push\('\/legal\?doc=terms' as never\)/.test(w) &&
+      /router\.push\('\/legal\?doc=privacy' as never\)/.test(w)
+    );
+  })(),
+  'the first screen cannot be passed without consent, says why when it blocks, and its legal links are real routes');
+
 check('Voice: a tap RELEASES the warmup pool instead of forcing another warm',
   /**
    * 2026-09-01 (adversarial audit) — THIS LOCK PROMISED THE OPPOSITE OF WHAT SHIPS, AND COULD NOT FAIL.
