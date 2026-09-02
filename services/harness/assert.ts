@@ -206,38 +206,10 @@ export async function logRunSummaryToIssueLog(reports: ScenarioReport[]): Promis
       .map((c) => `${c.scenario}:${c.label} ${c.ms}ms${c.status === 'fail' ? ' FAIL' : ''}`);
 
     // What this device IS. Every one of these has silently changed an outcome at least once.
-    const env: Record<string, unknown> = {};
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { Platform } = require('react-native') as typeof import('react-native');
-      env.os = `${Platform.OS} ${String(Platform.Version)}`;
-    } catch { /* context is best-effort */ }
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const Updates = require('expo-updates') as typeof import('expo-updates');
-      env.runtime = Updates.runtimeVersion ?? null;
-      env.updateId = Updates.updateId ?? 'embedded';
-      env.channel = Updates.channel ?? null;
-    } catch { /* bare/dev builds have no updates module */ }
-    try {
-      const mp = await import('../mediaPipePoseService');
-      const st = await mp.getMediaPipeStatus();
-      // The single most consequential device fact: without this, every on-device locate silently
-      // falls back to the network call it was built to replace.
-      env.poseAvailable = st.available;
-      env.poseModelLoaded = st.modelLoaded;
-    } catch { env.poseAvailable = 'probe_failed'; }
-    try {
-      // What pose ACTUALLY did most recently, as opposed to whether it could. `available` says the
-      // module linked; this says which engine served the last call and how long it took — the
-      // difference between "pose is installed" and "pose is working, at this speed, on this device".
-      const { describePoseTelemetry } = await import('../poseTelemetry');
-      Object.assign(env, describePoseTelemetry() ?? {});
-    } catch { /* telemetry is context, never a requirement */ }
-    try {
-      const { getApiBaseUrl } = await import('../apiBase');
-      env.apiBase = getApiBaseUrl() || null;
-    } catch { /* ignore */ }
+    // 2026-09-02 — the gathering moved to services/harness/report.ts so the MAILED summary and the
+    // SHARED run report answer "what device was this?" from one place. [[two-owners-is-the-root-cause]]
+    const { collectRunEnv } = await import('./report');
+    const env = await collectRunEnv();
 
     // A run where every assertion passed can still be a bad run. These two are the reason the summary
     // is written on PASS as well: a stalled thread and a swallowed error both leave the checks green.

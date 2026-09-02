@@ -104,10 +104,35 @@ describe('one log tells the whole story', () => {
     expect(runner).toMatch(/logRunSummaryToIssueLog\(collected\)/);
   });
 
+  // 2026-09-02 — the device facts moved to services/harness/report.ts (collectRunEnv) so the mailed
+  // summary and the shared export cannot drift. The guard follows the code: it asserts the facts are
+  // still gathered AND that the summary still calls the one gatherer — an invariant that fails if
+  // either half is dropped, rather than one that passes because it is pointed at an island.
+  // [[three-ways-a-guard-is-worthless]]
   it('it names the device, the build and whether pose is linked', () => {
+    const reportSrc = read('services/harness/report.ts');
     for (const k of ['env.os', 'env.runtime', 'env.updateId', 'env.poseAvailable', 'env.apiBase']) {
-      expect(assertSrc).toContain(k);
+      expect(reportSrc).toContain(k);
     }
+    expect(reportSrc).toMatch(/export async function collectRunEnv/);
+    expect(assertSrc).toMatch(/collectRunEnv\(\)/);
+  });
+
+  /**
+   * 2026-09-02 (Tim: "we didn't export the findings from the harness so that I can share it with
+   * you"). The log only carries FAILURES; a green-but-slow run is a finding with no way off the
+   * phone. The Export button is that way off, and it must stay wired to the real run.
+   */
+  it('the whole run can leave the device, not just the failures', () => {
+    const reportSrc = read('services/harness/report.ts');
+    expect(reportSrc).toMatch(/export function formatRunReport/);
+    // a partial run must never read as a clean sweep
+    expect(reportSrc).toMatch(/NOT RUN/);
+    // and a slow PASS has to survive into the export
+    expect(reportSrc).toMatch(/SLOWEST STEPS/);
+    expect(runner).toMatch(/formatRunReport\(ran, env, notRun\)/);
+    expect(runner).toMatch(/Share\.share\(/);
+    expect(runner).toMatch(/onPress=\{exportRun\}/);
   });
 
   it('and where the time went, pass or fail', () => {

@@ -21,8 +21,9 @@
 import React, { useMemo, useState } from 'react';
 import { logScenarioToIssueLog, logRunSummaryToIssueLog } from '../services/harness/assert';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Share, Alert,
 } from 'react-native';
+import { formatRunReport, collectRunEnv } from '../services/harness/report';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore';
@@ -119,6 +120,7 @@ export default function HarnessScreen() {
   const ALL_SCENARIOS = _allScenariosCache ?? [];
   const [states, setStates] = useState<Record<string, RowState>>({});
   const [running, setRunning] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Declared with all hooks, before any early return — rules-of-hooks.
   const summary = useMemo(() => {
@@ -214,6 +216,48 @@ export default function HarnessScreen() {
     setRunning(false);
   };
 
+  /**
+   * 2026-09-02 (Tim: "we didn't export the findings from the harness so that I can share it with
+   * you") — THE RUN LEAVES THE PHONE.
+   *
+   * Everything above this point produced pixels. `logScenarioToIssueLog` mails FAILURES, by design,
+   * so the half of the run that is a finding without being a failure — a step that passed in four
+   * seconds, a flow that ran out of order, a swallowed error under green checks — had no way out of
+   * the device at all. This puts the whole run into the share sheet as text.
+   *
+   * Deliberately NOT gated on the issue log: this is the owner exporting his own run on demand, it
+   * carries no tester PII, and it must work on a clean sweep (where the log is correctly silent).
+   * Scenarios that were never run are named in the report, so a partial export cannot be misread as
+   * a full pass. [[missing-log-entry-is-the-evidence]]
+   */
+  const exportRun = async () => {
+    const ran = ALL_SCENARIOS
+      .map(s => states[s.id])
+      .filter((rs): rs is Extract<RowState, { kind: 'done' }> => rs?.kind === 'done')
+      .map(rs => rs.report);
+    if (ran.length === 0) {
+      Alert.alert('Nothing to export', 'Run at least one scenario first.');
+      return;
+    }
+    setExporting(true);
+    try {
+      const ranIds = new Set(ran.map(r => r.id));
+      const notRun = ALL_SCENARIOS.filter(s => !ranIds.has(s.id)).map(s => s.id);
+      // The env probe is async and best-effort; a device fact we cannot read must not cost the
+      // report it was only decorating.
+      const env = await collectRunEnv().catch(() => ({}));
+      const text = formatRunReport(ran, env, notRun);
+      console.log('[harness] export', text.length, 'chars,', ran.length, 'scenarios');
+      await Share.share({ message: text, title: 'SmartPlay Caddie — harness run' });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.log('[harness] export failed:', msg);
+      Alert.alert('Export failed', msg);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   if (!isOwner) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
@@ -241,13 +285,22 @@ export default function HarnessScreen() {
           <Text style={styles.back}>‹ Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Scenario Harness</Text>
-        <TouchableOpacity
-          onPress={runAll}
-          disabled={running}
-          style={[styles.runAllBtn, running && { opacity: 0.5 }]}
-        >
-          <Text style={styles.runAllText}>{running ? 'Running…' : 'Run All'}</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            onPress={exportRun}
+            disabled={running || exporting || summary.total === 0}
+            style={[styles.exportBtn, (running || exporting || summary.total === 0) && { opacity: 0.4 }]}
+          >
+            <Text style={styles.exportText}>{exporting ? '…' : 'Export'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={runAll}
+            disabled={running}
+            style={[styles.runAllBtn, running && { opacity: 0.5 }]}
+          >
+            <Text style={styles.runAllText}>{running ? 'Running…' : 'Run All'}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {summary.total > 0 && (
@@ -390,6 +443,17 @@ const styles = StyleSheet.create({
   },
   back: { color: '#00C896', fontSize: 16, width: 60 },
   title: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  headerActions: { flexDirection: 'row', alignItems: 'center' },
+  exportBtn: {
+    borderWidth: 1,
+    borderColor: '#00C896',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    marginRight: 8,
+    alignItems: 'center',
+  },
+  exportText: { color: '#00C896', fontWeight: '700', fontSize: 13 },
   runAllBtn: {
     backgroundColor: '#00C896',
     paddingHorizontal: 12,
