@@ -673,6 +673,22 @@ export const useSettingsStore = create<SettingsState>()(
           personaHandoffTimer = setTimeout(() => {
             personaHandoffTimer = null;
             try {
+              /**
+               * 2026-09-01 (Tim: "a canned speech in Serena at startup and delayed") — SAY WHO SPOKE.
+               *
+               * This is the only canned, persona-voiced, DELAYED line in the app (500ms timer), and
+               * its Serena text is "Hi, Serena here. Let's read this together." It fires only on a
+               * persona CHANGE — so if it is being heard at startup, something is changing persona
+               * during boot, and that is the actual bug rather than the line itself.
+               *
+               * Logged with the from/to pair so the next field report names the switch instead of
+               * leaving us to guess which of eight callers moved it.
+               * [[missing-log-entry-is-the-evidence]] [[feels-like-a-real-caddie]]
+               */
+              try {
+                const { logVoiceSilentFail } = require('../services/voiceErrorLog') as typeof import('../services/voiceErrorLog');
+                logVoiceSilentFail('persona_handoff_intro', { source: 'setCaddiePersonality', from: prev, to: p, line: text });
+              } catch { /* a diagnostic must never break the switch */ }
               const voiceMod = require('../services/voiceService');
               const cacheMod = require('../services/offlineVoiceCache');
               const gender = get().voiceGender === 'female' ? 'female' : 'male';

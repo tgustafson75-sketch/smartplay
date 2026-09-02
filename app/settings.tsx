@@ -1552,9 +1552,11 @@ export default function Settings() {
           {/*
             2026-08-25 (Tim) — "Meta glasses don't have to go in 1.0, but the watch functionality
             does." All three glasses rows hide together: the temple-tap notice, the live POV stream
-            and the voice-log import. They depend on Meta developer mode, a paired Meta account and
-            an SDK that still does not expose temple-tap events — a reviewer who toggles this without
-            any of that sees a failure that reads as our bug. The code stays; the controls go.
+            and the voice-log import. Corrected 2026-09-01: the reason is the BUILD, not the SDK —
+            Meta's DAT is integrated already, and the temple tap does not use it (it arrives as a
+            Bluetooth media key, works today, and is not shelved). The DAT paths need the `glasses`
+            EAS profile, which build 21 is not, so a player who toggles POV streaming on a standard
+            build sees a failure that reads as our bug. The code stays; those three controls go.
             One owner: services/releaseSurface.
           */}
           {!isFeatureShelved('meta_glasses') ? (
@@ -1563,13 +1565,14 @@ export default function Settings() {
             <View style={styles.rowText}>
               <Text style={labelStyle}>Ray-Ban Meta temple tap · Works</Text>
               <Text style={subStyle}>
-                2026-09-01 (Tim: "temple tap on meta glasses is working") — this row used to say
-                BLOCKED, on the reasoning that Meta exposes no SDK for touchpad events. That is still
-                true and it never mattered: the glasses pair as a Bluetooth audio device, so a temple
-                tap arrives as an ordinary media-key press and the same bridge that handles an earbud
-                tap picks it up. No Meta SDK is involved. Controlled by the earbud tap-to-talk switch
-                above. Announcing a working feature as blocked is the same stale-claim mistake
-                mediaKeyBridge&apos;s own header warns about.-mic + Active Listening is the path: pair the glasses for Bluetooth audio and the caddie hears you hands-free.
+                2026-09-01 (Tim: "temple tap on meta glasses is working", and "yes they do have an
+                SDK and we have it already") — this row said BLOCKED because Meta exposed no SDK.
+                Wrong on both halves. Meta ships the Device Access Toolkit and it is INTEGRATED here
+                (MetaWearablesFrameModule + metaWearablesBridge, POV frames into the caddie brain);
+                it needs the glasses build profile, not permission from Meta. And the temple tap does
+                not depend on it at all: the glasses pair as a Bluetooth audio device, so a tap
+                arrives as an ordinary media-key press and the earbud bridge already handles it,
+                which is why it works today. Controlled by the earbud tap-to-talk switch above.-mic + Active Listening is the path: pair the glasses for Bluetooth audio and the caddie hears you hands-free.
               </Text>
             </View>
           </View>

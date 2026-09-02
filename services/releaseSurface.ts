@@ -93,10 +93,23 @@ export const SHELVED_BADGE = 'OWNER · 2.0';
  * stream, voice-log import, media-ingest setup), so the route list above cannot express them.
  * Same rule, different key: the code stays, the player-facing control goes.
  *
- * The glasses are the clearest case for holding: they depend on Meta's developer mode, a paired
- * account, and an SDK that still does not expose temple-tap events. A reviewer who toggles it
- * without any of that sees a failure that looks like our bug. The WATCH is the opposite call and
- * ships in 1.0 — it runs on-device today.
+ * WHY THE GLASSES HOLD — corrected 2026-09-01 (Tim: "yes they do have an SDK and we have it
+ * already"). The old reason given here was "an SDK that still does not expose temple-tap events".
+ * That was wrong twice over and it was the justification for shelving, so it is worth being exact:
+ *
+ *   • Meta ships the Device Access Toolkit and it IS integrated (MetaWearablesFrameModule +
+ *     metaWearablesBridge, POV frames into the caddie brain). Nothing is waiting on Meta.
+ *   • The temple tap never needed that SDK. The glasses pair as a Bluetooth audio device, so a tap
+ *     arrives as a media-key press the earbud bridge already handles — it works TODAY, on the
+ *     shipped build, and is NOT shelved. It rides the earbud tap-to-talk switch.
+ *
+ * The REAL reason to hold is the build, not the capability: the DAT paths need the `glasses` EAS
+ * profile (and a GITHUB_TOKEN for the Android package), and build 21 is not that profile. A player
+ * on a standard build who toggles POV streaming gets a failure that reads as our bug.
+ *
+ * So what is shelved is the three DAT-dependent SETTINGS ROWS, not glasses support as a concept.
+ * The WATCH is the opposite call and ships in 1.0 — it runs on-device today.
+ * [[a-stale-header-is-a-source-someone-trusts]]
  */
 export type ShelvedFeature = 'meta_glasses';
 
