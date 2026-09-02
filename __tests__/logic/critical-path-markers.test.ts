@@ -67,7 +67,7 @@ const DOC = fs.readFileSync(path.join(ROOT, 'docs', 'critical-paths.md'), 'utf8'
 const PATHS: Array<{ prefix: string; minMarkers: number; note: string }> = [
   { prefix: 'path1:onboard',   minMarkers: 3, note: 'route decision, welcome shown, complete' },
   { prefix: 'path2:round',     minMarkers: 6, note: 'start, transitions, shots, anchors, end' },
-  { prefix: 'path3:cage',      minMarkers: 5, note: 'emitted as [path3:cage:STAGE] via cageLog()' },
+  { prefix: 'path3:cage',      minMarkers: 5, note: 'emitted as [path3:cage:STAGE] via practiceLog()' },
   { prefix: 'path4:voice',     minMarkers: 6, note: 'tap, capture, intent, response, close' },
   { prefix: 'path5:gps',       minMarkers: 3, note: 'permission, watch_started, first_fix' },
   { prefix: 'path6:scorecard', minMarkers: 2, note: 'score_write, round_persisted' },
@@ -81,10 +81,10 @@ describe('every critical path is actually instrumented', () => {
     const found = new Set<string>();
     for (const m of ALL_SOURCE.matchAll(bracketed)) found.add(m[1]);
     for (const m of ALL_SOURCE.matchAll(colonised)) found.add(m[1]);
-    // cageLog(stage) builds its marker at runtime, so the literal never appears
+    // practiceLog(stage) builds its marker at runtime, so the literal never appears
     // in source — count the call sites' stage arguments instead.
     if (prefix === 'path3:cage') {
-      for (const m of ALL_SOURCE.matchAll(/cageLog\('([a-z-]+)'/g)) found.add(m[1]);
+      for (const m of ALL_SOURCE.matchAll(/practiceLog\('([a-z-]+)'/g)) found.add(m[1]);
     }
     expect(found.size).toBeGreaterThanOrEqual(minMarkers);
   });

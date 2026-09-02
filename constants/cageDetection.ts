@@ -2,7 +2,7 @@
  * Phase BY-quick — Cage swing detection thresholds.
  *
  * Tunable constants for the audio-based swing detection in
- * components/CageSessionOverlay.tsx. Adjusted as a unit; calibration
+ * components/PracticeSessionOverlay.tsx. Adjusted as a unit; calibration
  * notes in docs/cage-detection-tuning.md.
  *
  * Algorithm summary:

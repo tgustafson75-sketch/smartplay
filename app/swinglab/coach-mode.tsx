@@ -6,7 +6,7 @@
  * swing, and get the full AI swing analysis routed correctly (Phase K
  * full-body, not putting). Rides on Fix #7 (perspective threading): on
  * entry to a player, this screen sets familyStore.active_member_id —
- * the SmartMotion / Cage Mode / mediaCapture / CageSessionOverlay
+ * the SmartMotion / Cage Mode / mediaCapture / PracticeSessionOverlay
  * record paths all already read that store and set perspective +
  * swinger correctly on ingest.
  *

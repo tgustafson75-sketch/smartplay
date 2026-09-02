@@ -11,7 +11,7 @@
  *   aspect > 1.4   → 'landscape'     (Fold inner-open; phone rotated; landscape tablet)
  *
  * `isFoldOpen` is a legacy convenience-flag many existing surfaces
- * (CageSessionOverlay, swing-detail, smartvision) already use. Kept
+ * (PracticeSessionOverlay, swing-detail, smartvision) already use. Kept
  * in sync with the new aspect classification: true whenever width is
  * >540 dp AND aspect is near-square or landscape.
  */

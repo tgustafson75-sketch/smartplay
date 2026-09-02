@@ -16,13 +16,13 @@ import {
   listSessions,
   deleteSession,
   createSyntheticSession,
-} from '../services/cageStorage';
-import type { SwingSession, CageClip } from '../types/cage';
+} from '../services/practiceStorage';
+import type { SwingSession, CageClip } from '../types/practiceSession';
 import { useSwingSessionStore } from '../store/swingSessionStore';
 import { getCurrentProfile, clearProfile } from '../services/vocabularyProfile';
 import { listReviewSessions } from '../services/cageReview';
 import type { VocabularyProfile } from '../types/vocabulary';
-import type { ReviewSession } from '../types/cageReview';
+import type { ReviewSession } from '../types/practiceReview';
 import {
   getLibraryInfo,
   isLibraryGenerating,
@@ -221,8 +221,8 @@ export default function CageDebug() {
     setReviewDebugLoading(true);
     const apiUrl = getApiBaseUrl();
     const mockTranscripts = ['heel, came up short', 'pure, right at it', 'fat, didn\'t transfer', 'thin, rushed it', 'solid', 'pulled it left'];
-    const { useSwingSessionStore: cageStoreHook } = await import('../store/swingSessionStore');
-    const updateShotLabels = cageStoreHook.getState().updateShotLabels;
+    const { useSwingSessionStore } = await import('../store/swingSessionStore');
+    const updateShotLabels = useSwingSessionStore.getState().updateShotLabels;
     const shots = session.shots.slice(0, 6);
     for (let i = 0; i < shots.length; i++) {
       const transcript = mockTranscripts[i % mockTranscripts.length];

@@ -25,8 +25,8 @@ import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
-import { CageTargetUI } from '../../components/cage/CageTargetUI';
-import type { HitPosition } from '../../components/cage/CageTargetUI';
+import { PracticeTargetUI } from '../../components/practice/PracticeTargetUI';
+import type { HitPosition } from '../../components/practice/PracticeTargetUI';
 import {
   startImpactRecording,
   stopAndDetectImpact,
@@ -234,7 +234,7 @@ export default function CageTargetCalibration() {
 
         {/* Target UI */}
         <View style={styles.targetWrap}>
-          <CageTargetUI
+          <PracticeTargetUI
             onHit={handleTargetTap}
             disabled={phase !== 'confirming'}
             size={260}

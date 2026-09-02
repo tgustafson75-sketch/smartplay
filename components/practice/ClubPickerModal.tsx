@@ -11,8 +11,8 @@
  * which closes the prior ClubSegment and opens a new one. Cancel just
  * closes the modal without changing the active club.
  *
- * Catalog mirrors app/cage/index.tsx's CLUBS array — kept here so the
- * modal can mount inside CageSessionOverlay without pulling a screen
+ * Catalog mirrors app/practice-session/index.tsx's CLUBS array — kept here so the
+ * modal can mount inside PracticeSessionOverlay without pulling a screen
  * import. When the bag-onboarding flow lands, this list will be
  * replaced by the user's actual configured bag.
  */

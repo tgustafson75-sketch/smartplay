@@ -836,7 +836,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Server asks Anthropic Haiku 4.5 to locate the golf ball in the
     // frame and return normalized x/y/r coords. Lightweight prompt,
     // tight JSON contract, ~2s typical roundtrip on Haiku. Used by
-    // the CageTargetingCard's "Auto-detect ball" button to prefill
+    // the PracticeTargetingCard's "Auto-detect ball" button to prefill
     // the ball area marker without the user having to tap-place it.
     if (body.mode === 'detect_ball') {
       const detectFrames = (body.frames ?? []) as { b64: string; media_type?: string }[];

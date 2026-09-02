@@ -9,7 +9,7 @@
  *   4. Calls commitCapture(id, uri) so playback paths see the URI
  *   5. Auto-dismisses
  *
- * NOT for cage 'swing' captures — those are owned by CageSessionOverlay's
+ * NOT for cage 'swing' captures — those are owned by PracticeSessionOverlay's
  * existing session recording flow. mediaCapture's subscriber registration
  * is kind-aware so the routing is clean.
  *

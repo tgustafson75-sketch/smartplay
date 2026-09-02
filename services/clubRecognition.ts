@@ -24,7 +24,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { track } from './analytics';
 
-// Catalog matches the legacy CLUBS array in app/cage/index.tsx so values
+// Catalog matches the legacy CLUBS array in app/practice-session/index.tsx so values
 // stored in cageStore.activeSession.club / clubSegments[].club_id line up
 // with what the manual selector grid writes today. New tokens added for
 // woods (7W) and hybrids (2H-5H) per BL scope.

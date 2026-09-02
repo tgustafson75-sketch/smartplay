@@ -54,7 +54,7 @@ interface Props {
 
 type PlacementMode = null | 'ball' | 'target';
 
-export default function CageTargetingCard({
+export default function PracticeTargetingCard({
   colors, frameUri, ballArea, target, onChangeBallArea, onChangeTarget,
   onAutoDetectBall, autoDetecting,
 }: Props) {

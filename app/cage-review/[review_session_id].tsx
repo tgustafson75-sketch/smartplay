@@ -21,7 +21,7 @@ import { saveGeneratedProfile } from '../../services/vocabularyProfile';
 import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speak, configureAudioForSpeech, configureAudioForRecording, stopSpeaking } from '../../services/voiceService';
-import type { ReviewSession } from '../../types/cageReview';
+import type { ReviewSession } from '../../types/practiceReview';
 import type { SwingShot } from '../../store/swingSessionStore';
 import { getApiBaseUrl } from '../../services/apiBase';
 
@@ -352,7 +352,7 @@ export default function CageReviewInterview() {
         params: { review_session_id: r.id },
       } as never);
     } catch {
-      router.replace('/cage' as never);
+      router.replace('/practice-session' as never);
     }
   }, [apiUrl, router, caddiePersonality, voiceGender]);
 
@@ -369,7 +369,7 @@ export default function CageReviewInterview() {
       <SafeAreaView style={styles.container}>
         <View style={styles.emptyState}>
           <Text style={styles.emptyTitle}>{errorMsg ?? 'Review complete'}</Text>
-          <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/cage' as never)}>
+          <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/practice-session' as never)}>
             <Text style={styles.doneBtnText}>Back to Sessions</Text>
           </TouchableOpacity>
         </View>

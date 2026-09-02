@@ -11,7 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { startReviewSession , getShotsForReview } from '../../services/cageReview';
-import { REVIEW_MODES, type ReviewSession } from '../../types/cageReview';
+import { REVIEW_MODES, type ReviewSession } from '../../types/practiceReview';
 
 export default function CageReviewStart() {
   const router = useRouter();

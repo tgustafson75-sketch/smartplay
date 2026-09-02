@@ -198,7 +198,7 @@ export default function FamilyMemberScreen() {
         </View>
 
         {/* 2026-07-09 — bridge to the member's REAL recorded-swing library (SmartMotion /
-            Coach Mode swings, stored in cageStore by player_id). Without this the parent
+            Coach Mode swings, stored in the swing session store by player_id). Without this the parent
             couldn't reach the swings they actually recorded from the Family entry point. */}
         {recordedCount > 0 && (
           <Pressable

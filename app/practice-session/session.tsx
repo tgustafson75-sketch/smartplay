@@ -7,33 +7,33 @@
  * cage UIs, root cause of the "buttons jumbled" symptom Tim observed in
  * the studio session.
  *
- * Phase BV reconciles to a single canonical UI: components/CageSessionOverlay.tsx.
- * This route (/cage/session) now thin-wraps the overlay so every cage
+ * Phase BV reconciles to a single canonical UI: components/PracticeSessionOverlay.tsx.
+ * This route (/practice-session/session) now thin-wraps the overlay so every cage
  * entry point converges on the same component:
  *
  *   - SwingLab tab Cage Mode card → inline overlay (existing path)
- *   - SwingLab tab Cage Setup card → /cage → /cage/session (this file → overlay)
- *   - Caddie Tools menu Cage Mode → /cage → /cage/session (this file → overlay)
+ *   - SwingLab tab Cage Setup card → /cage → /practice-session/session (this file → overlay)
+ *   - Caddie Tools menu Cage Mode → /cage → /practice-session/session (this file → overlay)
  *
  * Feature migration decisions documented in docs/phase-BV-migration.md.
  *
- * The cageLog [path3:cage] markers in the overlay carry the trace; this
+ * The practiceLog [path3:cage] markers in the overlay carry the trace; this
  * wrapper adds one boundary marker so the route handoff is visible in
  * logcat for verification recipes (see docs/cage-telemetry-map.md).
  */
 
 import React from 'react';
 import { useRouter } from 'expo-router';
-import CageSessionOverlay from '../../components/CageSessionOverlay';
-import { cageLog } from '../../services/cageTelemetry';
+import PracticeSessionOverlay from '../../components/PracticeSessionOverlay';
+import { practiceLog } from '../../services/practiceTelemetry';
 
 export default function SwingSession() {
   const router = useRouter();
 
   return (
-    <CageSessionOverlay
+    <PracticeSessionOverlay
       onComplete={(sessionId) => {
-        cageLog('route-session-complete', 'ok', { library_entry_id: sessionId });
+        practiceLog('route-session-complete', 'ok', { library_entry_id: sessionId });
         if (sessionId) {
           router.replace(`/swinglab/swing/${sessionId}` as never);
         } else {
@@ -41,8 +41,8 @@ export default function SwingSession() {
         }
       }}
       onCancel={() => {
-        cageLog('route-session-cancel', 'ok');
-        router.replace('/cage' as never);
+        practiceLog('route-session-cancel', 'ok');
+        router.replace('/practice-session' as never);
       }}
     />
   );

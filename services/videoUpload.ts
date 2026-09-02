@@ -8,7 +8,7 @@
  *   4. Hand off to cageStore.ingestUploadedSwing — surfaces it in the swing
  *      library as a one-shot SwingSession with source: 'uploaded_video'
  *   5. Background Phase K analysis via runPhaseKOnSession (parallel to the
- *      live cage post-session pipeline in app/cage/summary.tsx)
+ *      live cage post-session pipeline in app/practice-session/summary.tsx)
  *
  * Storage: clipUri stays as the picker-returned local URI. No cloud upload
  * in v1.0. Cloud sync is 1.x.
@@ -24,7 +24,7 @@ import { recommendDrill } from './drillRecommendation';
 import { processSwingAnalysis } from './relationshipEngine';
 import { synthesizeCageInsight } from './contextSynthesizer';
 import { uploadLog, uploadAdoptSessionKey, uploadResetTiming } from './uploadDiagnostic';
-import { cageLog } from './cageTelemetry';
+import { practiceLog } from './practiceTelemetry';
 
 export const MAX_FILE_SIZE_MB = 200;
 
@@ -271,7 +271,7 @@ export async function probeVideo(uri: string): Promise<{ has_audio: boolean; dur
 
 /**
  * Run Phase K analysis on a freshly-ingested upload session. Parallel to
- * the post-cage-session flow in app/cage/summary.tsx.
+ * the post-cage-session flow in app/practice-session/summary.tsx.
  *
  * Phase V — emits analysis-status transitions throughout so the swing
  * detail surface can render real progress copy and surface failures.
@@ -282,13 +282,13 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
 }> {
   uploadLog('phase-k-enter', { session_id: sessionId }, sessionId);
   V6('STAGE 0 — runPhaseKOnSession enter', { sessionId });
-  cageLog('phase-k-enter', 'ok', { session_id: sessionId });
+  practiceLog('phase-k-enter', 'ok', { session_id: sessionId });
   const store = useSwingSessionStore.getState();
   let session = store.sessionHistory.find(s => s.id === sessionId);
   if (!session) {
     uploadLog('phase-k-abort', { status: 'failed', reason: 'session_not_in_store' }, sessionId);
     V6('STAGE 0 ABORT — session not in store', { sessionId });
-    cageLog('phase-k-result', 'fail', { session_id: sessionId, reason: 'session_not_in_store' });
+    practiceLog('phase-k-result', 'fail', { session_id: sessionId, reason: 'session_not_in_store' });
     return { primary_issue: null, drill_recommendation: null };
   }
 
@@ -545,7 +545,7 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
   if (swings.length === 0) {
     uploadLog('phase-k-no-swings', { status: 'failed', reason: 'no_usable_swings' }, sessionId);
     V6('STAGE 6 FINAL — failed: no usable swings');
-    cageLog('phase-k-result', 'fail', { session_id: sessionId, reason: 'no_usable_swings', shot_count: session.shots.length });
+    practiceLog('phase-k-result', 'fail', { session_id: sessionId, reason: 'no_usable_swings', shot_count: session.shots.length });
     store.setSessionAnalysisStatus(sessionId, 'failed', 'No usable swing in the upload.');
     return { primary_issue: null, drill_recommendation: null };
   }
@@ -683,7 +683,7 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
     // in batches of USE_PARALLEL_BATCH_SIZE. Sequential 10-shot
     // session = ~150s (10 × ~15s) and routinely hit the client's 55s
     // abort. Batched concurrency 3 brings it to ~50s (3-4 batches ×
-    // ~15s). All side effects (uploadLog/cageLog/V6/store writes)
+    // ~15s). All side effects (uploadLog/practiceLog/V6/store writes)
     // stay per-swing inside the closure; results land in indexed
     // slots so output order matches input order regardless of when
     // each batch member completes.
@@ -719,7 +719,7 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         club: swing.club,
         bounded: boundaries != null,
       });
-      cageLog('phase-k-per-shot-start', 'ok', {
+      practiceLog('phase-k-per-shot-start', 'ok', {
         session_id: sessionId,
         shot_id: swing.id,
         index: i,
@@ -812,7 +812,7 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
         kind: r.kind,
         detail: r.kind === 'error' ? r.message : (r.kind === 'ok' ? r.analysis.detected_issue : undefined),
       });
-      cageLog('phase-k-per-shot-result', r.kind === 'ok' ? 'ok' : 'fail', {
+      practiceLog('phase-k-per-shot-result', r.kind === 'ok' ? 'ok' : 'fail', {
         session_id: sessionId,
         shot_id: swing.id,
         index: i,

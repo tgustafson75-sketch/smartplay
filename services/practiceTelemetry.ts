@@ -2,7 +2,7 @@
  * Phase BX — Cage pipeline telemetry helper.
  *
  * Single source of truth for the [path3:cage] log format. Every stage
- * transition in the cage pipeline calls cageLog(stage, status, metadata)
+ * transition in the cage pipeline calls practiceLog(stage, status, metadata)
  * so logcat | grep "path3:cage" returns a complete trace.
  *
  * Format:
@@ -16,7 +16,7 @@
 
 export type CageStageStatus = 'ok' | 'fail' | 'partial';
 
-export function cageLog(
+export function practiceLog(
   stage: string,
   status: CageStageStatus = 'ok',
   metadata: Record<string, unknown> = {},

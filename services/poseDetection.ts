@@ -1136,7 +1136,7 @@ export async function analyzeSwing(
     language?: 'en' | 'es' | 'zh';
     // 2026-05-27 — Fix ES (Phase 2.5): cage targeting context. When
     // the user has set up a ball area + target on the session via
-    // CageTargetingCard, this gets threaded into the vision prompt
+    // PracticeTargetingCard, this gets threaded into the vision prompt
     // as an anchor: "the ball is sitting at normalized x,y within
     // radius r — confirm by looking at the first frame; impact is
     // the moment the ball leaves that area." Strong prior reduces

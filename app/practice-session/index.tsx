@@ -23,7 +23,7 @@ import KevinCoachBox from '../../components/swinglab/KevinCoachBox';
 import AppIcon from '../../components/AppIcon';
 import { getDialog } from '../../services/dialogEngine';
 import { getMostRecentSpaceConfiguration, type SpaceConfiguration } from '../../services/spaceAssessment';
-import { cageLog } from '../../services/cageTelemetry';
+import { practiceLog } from '../../services/practiceTelemetry';
 
 // Phase I — short club label for the Coach intro template
 const CLUB_LABELS: Record<string, string> = {
@@ -80,13 +80,13 @@ export default function CageIndex() {
 
   const handleStart = () => {
     if (!selectedClub) {
-      cageLog('cage-index-start', 'fail', { reason: 'no-club-selected' });
+      practiceLog('cage-index-start', 'fail', { reason: 'no-club-selected' });
       Alert.alert('Select a club', 'Pick a club before starting.');
       return;
     }
-    cageLog('cage-index-start', 'ok', { club: selectedClub, route: '/cage/session' });
+    practiceLog('cage-index-start', 'ok', { club: selectedClub, route: '/practice-session/session' });
     startSession(selectedClub);
-    router.push('/cage/session' as never);
+    router.push('/practice-session/session' as never);
   };
 
   const clubConfidence = confidenceByClub[selectedClub];
@@ -261,7 +261,7 @@ export default function CageIndex() {
         {sessionHistory.length > 0 && (
           <TouchableOpacity
             style={styles.historyBtn}
-            onPress={() => router.push('/cage/history' as never)}
+            onPress={() => router.push('/practice-session/history' as never)}
           >
             <Text style={styles.historyBtnText}>View Session History →</Text>
           </TouchableOpacity>
@@ -275,7 +275,7 @@ export default function CageIndex() {
         {/* TARGET CALIBRATION — acoustic dataset builder */}
         <TouchableOpacity
           style={styles.calibrateTargetBtn}
-          onPress={() => router.push('/cage/target-calibration' as never)}
+          onPress={() => router.push('/practice-session/target-calibration' as never)}
           activeOpacity={0.8}
         >
           <AppIcon name="radio-button-on-outline" size={18} color="#6b7280" />

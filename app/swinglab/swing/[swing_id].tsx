@@ -58,7 +58,7 @@ import AskYourSwingCard from '../../../components/swinglab/AskYourSwingCard';
 import ZoomableView from '../../../components/swinglab/ZoomableView';
 import VideoAnnotationOverlay from '../../../components/swinglab/VideoAnnotationOverlay';
 // 2026-05-27 — Fix EO: cage targeting card + overlay.
-import CageTargetingCard, { CageTargetingOverlay } from '../../../components/swinglab/CageTargetingCard';
+import PracticeTargetingCard, { CageTargetingOverlay } from '../../../components/swinglab/PracticeTargetingCard';
 // 2026-05-27 — Fix EP: send-to-Tank stub.
 import DrillCard from '../../../components/swinglab/DrillCard';
 import PuttingAnalysisCard from '../../../components/swinglab/PuttingAnalysisCard';
@@ -3550,14 +3550,14 @@ export default function SwingDetail() {
                   analysis (PrimaryIssue / Putting / Biomechanics) so
                   the coach's own observation reads side-by-side with
                   Kevin's read. Persisted via setSessionCoachNote on
-                  cageStore; appears on the Coach Mode player swing
+                  the swing session store; appears on the Coach Mode player swing
                   list too. Tank's "hips stalled at impact" lives
                   here. Visible on every swing detail — POV self
                   swings get it too if the user wants to journal. */}
               {/* 2026-05-27 — Fix EO: cage targeting card. Lets the
                   user mark where the ball sat and where they were
                   aiming, with optional one-tap auto-detect for the
-                  ball position. Both flow through cageStore as
+                  ball position. Both flow through the swing session store as
                   normalized coords; the overlay above the video
                   renders them on playback.
                   2026-08-06 (Tim — "why is there cage targeting on the reports?"). Targeting is a
@@ -4030,7 +4030,7 @@ function CageTargetingSlot({ session }: { session: import('../../../store/swingS
   };
 
   return (
-    <CageTargetingCard
+    <PracticeTargetingCard
       colors={colors}
       frameUri={frameUri}
       ballArea={session.ball_area_norm ?? null}

@@ -117,7 +117,7 @@ describe('the word is gone from everything a player can see', () => {
   });
 
   it('nothing WRITES the retired tag any more', () => {
-    for (const f of ['components/CageSessionOverlay.tsx', 'services/mediaCapture.ts']) {
+    for (const f of ['components/PracticeSessionOverlay.tsx', 'services/mediaCapture.ts']) {
       expect(read(f)).not.toMatch(/tag: 'cage'/);
     }
   });

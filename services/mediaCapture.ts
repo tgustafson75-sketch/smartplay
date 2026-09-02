@@ -4,7 +4,7 @@
  * Voice-triggered video capture for on-course shots, full swings, and
  * highlight moments. This module is the orchestration boundary —
  * concrete camera + recording lifecycle is delegated to the existing
- * cage-camera path (CageSessionOverlay knows how to drive expo-camera
+ * cage-camera path (PracticeSessionOverlay knows how to drive expo-camera
  * on Z Fold) and to a future shotCaptureOverlay component for the
  * round-active path.
  *
@@ -162,7 +162,7 @@ export async function requestCapture(req: CaptureRequest): Promise<CapturedMedia
 }
 
 /**
- * Surface (CageSessionOverlay / CaptureOverlay) calls this when the
+ * Surface (PracticeSessionOverlay / CaptureOverlay) calls this when the
  * recording finishes to fill in the URI. Persists to:
  *   - cageStore.sessionHistory via ingestUploadedSwing (all kinds, with
  *     tag distinguishing 'indoor' vs 'course'). Surfaces in /swinglab/library.
@@ -288,7 +288,7 @@ export function canCapture(kind: CaptureKind): { ok: boolean; reason?: string } 
     return { ok: false, reason: "You're not in a round yet — start one and I'll record your shots." };
   }
   // Camera permission check is delegated to the surface that actually
-  // drives the camera (CageSessionOverlay already has permission
+  // drives the camera (PracticeSessionOverlay already has permission
   // handling). No camera-permission probe at the orchestration level.
   return { ok: true };
 }

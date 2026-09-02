@@ -14,7 +14,7 @@ import { getCurrentProfile } from '../../services/vocabularyProfile';
 import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speakChunked, configureAudioForSpeech } from '../../services/voiceService';
-import type { ReviewSession } from '../../types/cageReview';
+import type { ReviewSession } from '../../types/practiceReview';
 import type { VocabularyProfile } from '../../types/vocabulary';
 import type { ReviewLabels } from '../../store/swingSessionStore';
 import { getApiBaseUrl } from '../../services/apiBase';

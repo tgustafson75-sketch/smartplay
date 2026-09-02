@@ -23,7 +23,7 @@ import { CLUB_SNAP_ORDER, CLUB_TYPES } from '../services/clubBagReconcile';
  * club catalog don't risk regressing swing analysis.
  */
 
-// Catalog matches the legacy CLUBS array in app/cage/index.tsx so values
+// Catalog matches the legacy CLUBS array in app/practice-session/index.tsx so values
 // passed back to the client align with what's already stored in cageStore.
 const VALID_CLUB_IDS = CLUB_SNAP_ORDER; // one catalog — services/clubBagReconcile
 

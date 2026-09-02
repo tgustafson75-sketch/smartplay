@@ -866,7 +866,7 @@ check('SmartMotion passes real club into metrics + acoustic',
   'synthesize + detectBallSpeed receive the tagged club');
 
 check('clubIdToServerKey maps to acoustic-detect keys',
-  /export function clubIdToServerKey/.test(read('components/cage/ClubPickerModal.tsx')),
+  /export function clubIdToServerKey/.test(read('components/practice/ClubPickerModal.tsx')),
   'ClubId → server CLUB_TYPICAL key mapper present');
 
 check('Acoustic meter is driven by live dB, not hardcoded steps',
@@ -896,7 +896,7 @@ check('Hard-to-see issues (path/face/attack) gated behind a cited cue',
     'components/smartmotion/SmartMotionHud.tsx',
     'app/(tabs)/caddie.tsx',
     'components/CaddieDataStrip.tsx',
-    'components/swinglab/CageTargetingCard.tsx',
+    'components/swinglab/PracticeTargetingCard.tsx',
   ];
   // Narrow, intent-revealing markers — NOT generic words like "fake"/"placeholder"
   // that appear in honest comments or RN props.
@@ -919,7 +919,7 @@ check('SmartMotion: dragging the ball/target box does not page the card carousel
   // horizontal recognizer was stealing the drag. Fix: the drag PanResponders claim the gesture in the
   // CAPTURE phase AND signal onDragActiveChange(true) so the pager freezes (scrollEnabled off) mid-drag.
   (() => {
-    const card = read('components/swinglab/CageTargetingCard.tsx');
+    const card = read('components/swinglab/PracticeTargetingCard.tsx');
     const sm = read('app/swinglab/smartmotion.tsx');
     return (
       /onDragActiveChange\?: \(active: boolean\) => void/.test(card) &&
@@ -1522,7 +1522,7 @@ check('Mental-game tone reading is ALWAYS-ON, from ONE owner the brain imports',
   })(),
   'the caddie reads the golfer\'s tone/emotional state on EVERY turn — from one shared block the brain imports, with no inline copy');
 
-const targetOverlaySrc = read('components/swinglab/CageTargetingCard.tsx');
+const targetOverlaySrc = read('components/swinglab/PracticeTargetingCard.tsx');
 check('Ball/target overlay matches the design reference',
   // 2026-06-16 — the BALL/TARGET/LAUNCH text pills were intentionally removed
   // (commit 4c9dabb "remove BALL/TARGET/LAUNCH pills"); the green perspective
@@ -1748,7 +1748,7 @@ check('Caddie report-read lag: warmVoice prewarm + speakChunked fast-first-word'
     /speakChunked\(/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
     /warmVoice\(apiUrl\)/.test(read('app/(tabs)/scorecard.tsx')) &&
     /speakChunked\(recap\.overall_kevin_summary/.test(read('app/(tabs)/scorecard.tsx')) &&
-    /speakChunked\(/.test(read('app/cage/summary.tsx')) &&
+    /speakChunked\(/.test(read('app/practice-session/summary.tsx')) &&
     /warmVoice\(getApiBaseUrl\(\)\)/.test(smSrc), // smartmotion warms at analysis start
   'report reads start near-instantly: hot endpoint + first sentence plays without waiting for the whole clip');
 
@@ -6106,7 +6106,7 @@ check('Face-on: NO launch/trace line on review (false from the front); framing g
   // with launchDir={null} internally (no false face-on launch line).
   /<EditableCageTargets/.test(smSrc) &&
     !/launchDir=\{angle === 'face_on'/.test(smSrc) &&
-    /launchDir=\{null\}/.test(read('components/swinglab/CageTargetingCard.tsx')) &&
+    /launchDir=\{null\}/.test(read('components/swinglab/PracticeTargetingCard.tsx')) &&
     // No launch line during live capture either (declutter line-up). 2026-06-12 — putt
     // now also shows a target (the CUP flag), so the gate dropped `&& !isPutt` and adds
     // targetKind; still launchDir={null} (no false launch line in any mode).
@@ -6939,7 +6939,7 @@ check('Perf: golfbert holes served from cache (no per-hole refetch)',
 check('Lifecycle: cage-review + cage-overlay release mic/camera on unmount',
   (() => {
     const cr = read('app/cage-review/[review_session_id].tsx');
-    const co = read('components/CageSessionOverlay.tsx');
+    const co = read('components/PracticeSessionOverlay.tsx');
     return (
       // cage-review: []-effect stops+unloads the in-flight recording and hands the
       // audio session back to playback so the next caddie line isn't silent.
@@ -7898,7 +7898,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   // crop than the live preview (Samsung video crop), so a setup-placed box can land
   // off on playback. Box is now draggable in setup AND review; review = the actual
   // recorded frame, so dragging there is guaranteed-faithful and sticks to the session.
-  const targetingSrc = fs.readFileSync(path.resolve(__dirname, '../../components/swinglab/CageTargetingCard.tsx'), 'utf-8');
+  const targetingSrc = fs.readFileSync(path.resolve(__dirname, '../../components/swinglab/PracticeTargetingCard.tsx'), 'utf-8');
   // 2026-06-11 — Framing Coach (Tim's "Golf Fix knows when you're in frame" idea).
   // On-device pose → evaluateFraming reads head+feet+centring from one frame.
   {
@@ -7992,8 +7992,8 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     // BELOW the real read on page 2 so "what we can't do yet" never sits on top.
     !/PUTT MODE<\/Text>/.test(smSrc2) &&
       /targetKind=\{isPutt \? 'cup' : 'aim'\}/.test(smSrc2) &&
-      /targetKind\?: 'aim' \| 'cup'/.test(read('components/swinglab/CageTargetingCard.tsx')) &&
-      /targetKind === 'cup'/.test(read('components/swinglab/CageTargetingCard.tsx')) &&
+      /targetKind\?: 'aim' \| 'cup'/.test(read('components/swinglab/PracticeTargetingCard.tsx')) &&
+      /targetKind === 'cup'/.test(read('components/swinglab/PracticeTargetingCard.tsx')) &&
       // COMING SOON now appears AFTER the feels-engine block (bottom of the page),
       // i.e. after "HOW'D IT FEEL?" in source order.
       smSrc2.indexOf('>COMING SOON<') > smSrc2.indexOf('HOW&apos;D IT FEEL?') &&
@@ -8840,8 +8840,8 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /setAutoListenEnabled\(false\)/.test(vadSrc),
     'the toggle stops lying — a denied mic flips Auto-Listen off instead of showing ON while nothing listens');
 
-  const cageDbgSrc = fs.readFileSync(path.resolve(__dirname, '../../app/cage-debug.tsx'), 'utf-8');
-  check('Stores: cage-debug Feel Capture viewer no longer uses a fresh-array selector',
+  const cageDbgSrc = fs.readFileSync(path.resolve(__dirname, '../../app/swing-sessions-debug.tsx'), 'utf-8');
+  check('Stores: swing-sessions-debug Feel Capture viewer no longer uses a fresh-array selector',
     /useSwingSessionStore\(\(s\) => s\.activeSession\)/.test(cageDbgSrc) &&
       /return listFeelCaptureTuples\(50\)/.test(cageDbgSrc) &&
       !/useSwingSessionStore\(\(s\) => \{[\s\S]*?return listFeelCaptureTuples/.test(cageDbgSrc),
@@ -9529,7 +9529,7 @@ check('Swing points: upload pose pass is impact-anchored + honest moments/tempo 
       // summary persisted raw sample times (then the legacy guard hid cage sessions' real moment
       // entirely), and SmartMotion's re-analyze path ran locateSwings with no practice gate.
       (() => {
-        const cage = read('app/cage/summary.tsx');
+        const cage = read('app/practice-session/summary.tsx');
         const sm = read('app/swinglab/smartmotion.tsx');
         return (
           !/setShotIssueTimestamps\(session\.id, swing\.id, r\.frame_timestamps_sec\)/.test(cage) &&
@@ -9605,7 +9605,7 @@ check('Club attribution: advised club becomes the shot club when un-overridden, 
 // dead since Phase 106. REACHABILITY lock: every evaluator must keep a real caller.
 check('Team intelligence: ALL four triggers reachable (cage end, shot streak, round progress, explicit stuck)',
   (() => {
-    const cage = read('app/cage/summary.tsx');
+    const cage = read('app/practice-session/summary.tsx');
     const cad = read('app/(tabs)/caddie.tsx');
     const brain = read('services/conversationalBrain.ts');
     return (
@@ -9787,7 +9787,7 @@ check('LOCK: the pump drill has ONE rep protocol, imported — never five',
     const proto = read('data/drillProtocols.ts');
     const owner = /export const PUMP_DRILL: DrillProtocol/.test(proto) && /pumps: 3/.test(proto);
     const consumers = [
-      'components/CageSessionOverlay.tsx',
+      'components/PracticeSessionOverlay.tsx',
       'services/coachKnowledge.ts',
       'services/knowledgeBase/modules/drills.ts',
       'data/drillCatalog.ts',
@@ -9795,7 +9795,7 @@ check('LOCK: the pump drill has ONE rep protocol, imported — never five',
     // The five counts that were simultaneously live must not reappear. Restating the protocol is the
     // failure mode, so the guard forbids the STRINGS, not just a missing import.
     const noRelapse = [
-      'components/CageSessionOverlay.tsx',
+      'components/PracticeSessionOverlay.tsx',
       'services/coachKnowledge.ts',
       'services/knowledgeBase/modules/drills.ts',
       'data/drillCatalog.ts',
@@ -9880,7 +9880,7 @@ check('LOCK: no endpoint hardcodes WHICH caddie it is — identity comes from th
 check('LOCK: speed training is runnable, and its copy never claims radar',
   (() => {
     const cat = read('data/drillCatalog.ts');
-    const overlay = read('components/CageSessionOverlay.tsx');
+    const overlay = read('components/PracticeSessionOverlay.tsx');
     const idx = read('app/drills/index.tsx');
     // reachable: in the catalog, a real practice descriptor, and NOT hidden from the grid
     const inCatalog = /id: 'driver_speed'/.test(cat) && /focus: 'speed'/.test(cat);

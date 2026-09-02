@@ -13,7 +13,7 @@
  *       align with the player's felt experience).
  *
  * No user-facing UI today. The only consumer surface is the owner
- * debug panel at /cage-debug. NO extraction / NLP — store the raw
+ * debug panel at /swing-sessions-debug. NO extraction / NLP — store the raw
  * transcript exactly as Whisper returns it.
  *
  * Gating (defense-in-depth):
@@ -176,7 +176,7 @@ export function initFeelCapture(): () => void {
 
 /** Owner-debug accessor — returns every shot with a non-empty
  *  transcript, paired with its session id + analysis + clip URI for
- *  the /cage-debug review surface. Cheap, no allocation in the
+ *  the /swing-sessions-debug review surface. Cheap, no allocation in the
  *  fast path (returns [] when feel capture has produced nothing). */
 export interface FeelCaptureTuple {
   sessionId: string;

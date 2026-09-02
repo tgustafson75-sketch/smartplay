@@ -30,7 +30,7 @@ import { processSwingAnalysis } from '../../services/relationshipEngine';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
 import type { PrimaryIssue, DrillRecommendation } from '../../store/swingSessionStore';
 import { activateMediaSession, deactivateMediaSession } from '../../services/mediaKeyBridge';
-import { cageLog } from '../../services/cageTelemetry';
+import { practiceLog } from '../../services/practiceTelemetry';
 import { getApiBaseUrl } from '../../services/apiBase';
 
 export default function CageSummary() {
@@ -93,21 +93,21 @@ export default function CageSummary() {
       // the spinner instead of a permanent "analyzing…".
       try {
       const swingsWithClips = session.shots.filter(s => s.clipUri);
-      cageLog('summary-mount', 'ok', {
+      practiceLog('summary-mount', 'ok', {
         session_id: session.id,
         shots_total: session.shots.length,
         shots_with_clip: swingsWithClips.length,
       });
       if (swingsWithClips.length === 0) {
         if (!cancelled) setAnalysisStatus('no_data');
-        cageLog('summary-phase-k-skip', 'fail', {
+        practiceLog('summary-phase-k-skip', 'fail', {
           session_id: session.id,
           reason: 'no_clipUri_on_shots',
         });
         return;
       }
       setAnalyzing(true);
-      cageLog('summary-phase-k-start', 'ok', {
+      practiceLog('summary-phase-k-start', 'ok', {
         session_id: session.id,
         swings_to_analyze: swingsWithClips.length,
       });
@@ -152,7 +152,7 @@ export default function CageSummary() {
       setAnalyzing(false);
       if (results.length === 0) {
         setAnalysisStatus(anyNoFrames ? 'no_frames' : 'no_data');
-        cageLog('summary-phase-k-result', 'fail', {
+        practiceLog('summary-phase-k-result', 'fail', {
           session_id: session.id,
           reason: anyNoFrames ? 'no_frames' : 'no_data',
         });
@@ -181,7 +181,7 @@ export default function CageSummary() {
         }
         ti.evaluateCageShotStreak(maxStreak);
       } catch { /* suggestions are best-effort — never block the summary */ }
-      cageLog('summary-phase-k-result', issue ? 'ok' : 'partial', {
+      practiceLog('summary-phase-k-result', issue ? 'ok' : 'partial', {
         session_id: session.id,
         results_count: results.length,
         primary_issue: issue?.issue_id ?? null,
@@ -204,7 +204,7 @@ export default function CageSummary() {
       setAnalysisStatus('done');
       } catch (e) {
         if (!cancelled) { setAnalyzing(false); setAnalysisStatus('error'); }
-        cageLog('summary-phase-k-error', 'fail', { session_id: session?.id ?? null, error: e instanceof Error ? e.message : String(e) });
+        practiceLog('summary-phase-k-error', 'fail', { session_id: session?.id ?? null, error: e instanceof Error ? e.message : String(e) });
       }
     })();
     return () => { cancelled = true; };
@@ -224,7 +224,7 @@ export default function CageSummary() {
 
   useEffect(() => {
     if (!session) {
-      router.replace('/cage' as never);
+      router.replace('/practice-session' as never);
       return;
     }
     clearWatchSession();
@@ -455,14 +455,14 @@ export default function CageSummary() {
 
         <TouchableOpacity
           style={styles.goAgainBtn}
-          onPress={() => router.replace('/cage' as never)}
+          onPress={() => router.replace('/practice-session' as never)}
         >
           <Text style={styles.goAgainText}>Go Again</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.historyBtn}
-          onPress={() => router.replace('/cage/history' as never)}
+          onPress={() => router.replace('/practice-session/history' as never)}
         >
           <Text style={styles.historyBtnText}>View All Sessions</Text>
         </TouchableOpacity>

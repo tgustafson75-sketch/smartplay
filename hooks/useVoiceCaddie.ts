@@ -725,7 +725,7 @@ export const useVoiceCaddie = ({
   // 2026-08-07 (audit) — the per-boot generateLibrary REGEN (which TTS-renders the whole filler pool via
   // /api/voice on every launch) was removed: the live voice path switched fillers → an earcon (tick.mp3),
   // so nothing plays these clips on the main path anymore. Regenerating them every boot was wasted API +
-  // boot work for audio that never surfaces. initFillerLibrary stays (cheap; still serves the cage-debug
+  // boot work for audio that never surfaces. initFillerLibrary stays (cheap; still serves the swing-sessions-debug
   // dev screen). If a persona-voiced filler pool is ever brought back, restore the guarded regen here.
   useEffect(() => {
     void (async () => {

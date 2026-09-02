@@ -885,7 +885,7 @@ export const queryStatusHandler: IntentHandler = {
           }
           cage.endSession({ dominantMiss: null, rootCause: null, summary: null });
           const { router } = await import('expo-router');
-          router.push('/cage/summary' as never);
+          router.push('/practice-session/summary' as never);
           return {
             success: true,
             voice_response: "Session ended. Let me take a look.",

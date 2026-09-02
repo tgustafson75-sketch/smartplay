@@ -49,7 +49,7 @@ import VideoAnnotationOverlay from '../../components/swinglab/VideoAnnotationOve
 import { QuickTutorial } from '../../components/QuickTutorial';
 import { SCREEN_HELP } from '../../services/screenHelp';
 import SwingBodyOverlay, { faultJointsFor } from '../../components/swinglab/SwingBodyOverlay';
-import { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay, MultiPointTraceOverlay } from '../../components/swinglab/CageTargetingCard';
+import { CageTargetingOverlay, EditableCageTargets, BallTraceOverlay, MultiPointTraceOverlay } from '../../components/swinglab/PracticeTargetingCard';
 import SwingAnalysisSteps from '../../components/swinglab/SwingAnalysisSteps';
 import ReviewScrubber, { ScrubMoment } from '../../components/swinglab/ReviewScrubber';
 import { defaultDtlRig } from '../../services/cage/targetRig';
@@ -128,7 +128,7 @@ import {
   SwingBreakdownCard,
 } from '../../components/smartmotion/SmartMotionHud';
 import { CaddieStatusStrip } from '../../components/caddie/CaddieStatusStrip';
-import ClubPickerModal, { clubIdToSmashKey, clubIdToServerKey, clubIdLabel } from '../../components/cage/ClubPickerModal';
+import ClubPickerModal, { clubIdToSmashKey, clubIdToServerKey, clubIdLabel } from '../../components/practice/ClubPickerModal';
 import { recognizeClubFromBase64, clubLabel, type ClubId } from '../../services/clubRecognition';
 import { useClubStatsStore, clubIdToClubName, CLUB_ORDER, type ClubName } from '../../store/clubStatsStore';
 import { speak, warmVoice, stopSpeaking, configureAudioForSpeech, captureUtterance, endCaptureEarly } from '../../services/voiceService';
@@ -2985,7 +2985,7 @@ export default function SmartMotion() {
   // the start of the selected swing (or ~12% into a single clip) where
   // the ball is sitting at address.
   // 2026-08-06 (audit) — the address-frame extraction effect + autoDetectBall + targetFrameUri/
-  // autoDetectingBall state were removed here: their ONLY consumer was the CageTargetingCard on the review
+  // autoDetectingBall state were removed here: their ONLY consumer was the PracticeTargetingCard on the review
   // report, which was removed (Tim — "why is there cage targeting on the reports?"). The effect was still
   // doing a real per-review-open copyAsync + thumbnail extraction feeding nothing. Ball/target placement
   // lives in the SETUP phase (the deck flag + EditableCageTargets), which is untouched.

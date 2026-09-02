@@ -1,7 +1,7 @@
 import type { ReviewLabels } from '../store/swingSessionStore';
 import * as FileSystem from 'expo-file-system/legacy';
-import type { SwingSession, CageClip } from '../types/cage';
-import { cageLog } from './cageTelemetry';
+import type { SwingSession, CageClip } from '../types/practiceSession';
+import { practiceLog } from './practiceTelemetry';
 
 function uuid(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -93,7 +93,7 @@ export async function createSession(): Promise<SwingSession> {
     return { sessions, result: session };
   });
   _pendingEvents.set(id, []);
-  cageLog('storage-create-session', 'ok', { session_id: id });
+  practiceLog('storage-create-session', 'ok', { session_id: id });
   return created;
 }
 
@@ -104,7 +104,7 @@ export async function endSession(
   const duration = await mutateIndex((sessions) => {
     const idx = sessions.findIndex((s) => s.id === session_id);
     if (idx === -1) {
-      cageLog('storage-end-session', 'fail', { session_id, reason: 'not-found-in-index' });
+      practiceLog('storage-end-session', 'fail', { session_id, reason: 'not-found-in-index' });
       return { sessions, result: null as number | null };
     }
     const now = Date.now();
@@ -114,7 +114,7 @@ export async function endSession(
     return { sessions, result: sessions[idx].duration_seconds };
   });
   if (duration !== null) {
-    cageLog('storage-end-session', 'ok', {
+    practiceLog('storage-end-session', 'ok', {
       session_id,
       duration_seconds: duration,
       has_master_video: master_video_path.length > 0,
@@ -141,7 +141,7 @@ export function addClipEvent(
   const events = _pendingEvents.get(session_id) ?? [];
   events.push({ offset: offset_seconds, method, acoustic: acoustic ?? null });
   _pendingEvents.set(session_id, events);
-  cageLog('storage-add-clip-event', 'ok', {
+  practiceLog('storage-add-clip-event', 'ok', {
     session_id,
     method,
     offset_seconds: Number(offset_seconds.toFixed(2)),
@@ -157,7 +157,7 @@ export async function finalizeClips(
   const ok = await mutateIndex((sessions) => {
     const idx = sessions.findIndex((s) => s.id === session_id);
     if (idx === -1) {
-      cageLog('storage-finalize-clips', 'fail', { session_id, reason: 'not-found-in-index' });
+      practiceLog('storage-finalize-clips', 'fail', { session_id, reason: 'not-found-in-index' });
       return { sessions, result: false };
     }
     sessions[idx].clips = events.map((ev) => ({
@@ -177,7 +177,7 @@ export async function finalizeClips(
   });
   if (ok) {
     _pendingEvents.delete(session_id);
-    cageLog('storage-finalize-clips', 'ok', {
+    practiceLog('storage-finalize-clips', 'ok', {
       session_id,
       clip_count: events.length,
       duration_seconds,

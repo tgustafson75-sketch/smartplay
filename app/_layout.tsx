@@ -157,7 +157,7 @@ const DEBUG_ROUTES: ReadonlySet<string> = new Set([
   '/gps-test',
   '/api-debug',
   '/battery-debug',
-  '/cage-debug',
+  '/swing-sessions-debug',
   '/ghost-debug',
   '/patterns-debug',
   '/smartfinder-debug',
@@ -167,7 +167,7 @@ const DEBUG_ROUTES: ReadonlySet<string> = new Set([
   // surfaces added for centralised gating. Each was reachable today
   // — /author/reference-assets via the Tools menu "Reference
   // Authoring" row (no row-level isOwnerEmail check), /landmark-curate
-  // only from cage-debug (transitively gated but defence-in-depth).
+  // only from swing-sessions-debug (transitively gated but defence-in-depth).
   '/author/reference-assets',
   '/landmark-curate',
   // 2026-07-10 (audit N1) — /owner-logs REMOVED from this gate. The Issue Log is an
@@ -1452,7 +1452,7 @@ function AppNavigator() {
           options={{ animation: 'slide_from_right', headerShown: false }}
         />
         <Stack.Screen
-          name="cage-debug"
+          name="swing-sessions-debug"
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />
         <Stack.Screen

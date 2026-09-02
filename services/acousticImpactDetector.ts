@@ -282,7 +282,7 @@ export async function startImpactRecording(opts?: {
             emitStrike({ source: 'single-shot', offset_ms: offset, peak_db: db, timestamp: Date.now() });
           }
         } else {
-          // ─── Multi-shot pipeline (ported from CageSessionOverlay) ─
+          // ─── Multi-shot pipeline (ported from PracticeSessionOverlay) ─
           // 1. Verify any pending peak from prior sample. Sharp decay +
           //    not-still-loud = real golf strike. Else reject.
           const pending = state.pendingPeak;

@@ -1,5 +1,5 @@
 /**
- * CageTargetUI — visual tap-to-label target for cage acoustic calibration.
+ * PracticeTargetUI — visual tap-to-label target for cage acoustic calibration.
  *
  * Renders a 10×10 cage back wall (green netting) with a 3×3 canvas square
  * centered on it (white, taut). A classic bullseye sits inside the canvas.
@@ -36,7 +36,7 @@ interface Props {
 
 const CANVAS_ZONE_THRESHOLD = 0.35; // within this radius of center = canvas_center
 
-export function CageTargetUI({
+export function PracticeTargetUI({
   onHit,
   disabled = false,
   size = 280,

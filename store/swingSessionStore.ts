@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
-import { cageLog } from '../services/cageTelemetry';
+import { practiceLog } from '../services/practiceTelemetry';
 
 // ─── TYPES ────────────────────────────────
 
@@ -105,7 +105,7 @@ export interface SwingShot {
   // for THIS clip is transcribed via Whisper and stored here PAIRED
   // with the existing perShotAnalysis. Forms labeled tuples
   // {clip, transcript, analysis} for future feel-vs-real calibration.
-  // No user surface — only owner debug at /cage-debug surfaces it.
+  // No user surface — only owner debug at /swing-sessions-debug surfaces it.
   // Empty / absent on every production user (transcription gated off).
   feel_narration_transcript?: string;
   // 2026-05-25 — Fix AJ Phase 2: spoken commentary captured during
@@ -596,7 +596,7 @@ interface SwingSessionState {
     },
   ) => void;
   /** Phase R — patch Phase K analysis onto an existing session, used both
-   *  by the live cage post-session pipeline (already in app/cage/summary.tsx)
+   *  by the live cage post-session pipeline (already in app/practice-session/summary.tsx)
    *  and by the upload analysis pipeline. */
   setSessionAnalysis: (sessionId: string, primary_issue: PrimaryIssue | null, drill_recommendation: DrillRecommendation | null) => void;
   /** 2026-05-24 — Feel-capture dataset writer (owner-only). Whisper
@@ -927,7 +927,7 @@ export const useSwingSessionStore = create<SwingSessionState>()(
 
       startSession: (club) => {
         const id = uid('cage');
-        cageLog('zustand-session-start', 'ok', { session_id: id, club });
+        practiceLog('zustand-session-start', 'ok', { session_id: id, club });
         set({
           activeSession: {
             id,
@@ -1050,7 +1050,7 @@ export const useSwingSessionStore = create<SwingSessionState>()(
       endSession: (summary) =>
         set(s => {
           if (!s.activeSession) {
-            cageLog('zustand-session-end', 'fail', { reason: 'no-active-session' });
+            practiceLog('zustand-session-end', 'fail', { reason: 'no-active-session' });
             return s;
           }
           const sessionId = s.activeSession.id;
@@ -1072,7 +1072,7 @@ export const useSwingSessionStore = create<SwingSessionState>()(
             ...summary,
             ...(closedSegments ? { clubSegments: closedSegments } : {}),
           };
-          cageLog('zustand-session-end', 'ok', {
+          practiceLog('zustand-session-end', 'ok', {
             session_id: sessionId,
             shot_count: completed.shots.length,
             history_length: s.sessionHistory.length + 1,
@@ -1130,14 +1130,14 @@ export const useSwingSessionStore = create<SwingSessionState>()(
           s => `${s.shots[0]?.clipUri ?? ''}::${s.upload?.uploaded_at ?? 0}` === dedupeKey,
         );
         if (existing) {
-          cageLog('ingest-uploaded-swing', 'ok', {
+          practiceLog('ingest-uploaded-swing', 'ok', {
             session_id: existing.id,
             note: 'deduped',
           });
           return existing.id;
         }
         const sessionId = uid(resolvedSource === 'live_cage' ? 'cage' : 'upload');
-        cageLog('ingest-uploaded-swing', 'ok', {
+        practiceLog('ingest-uploaded-swing', 'ok', {
           session_id: sessionId,
           source: resolvedSource,
           club,
@@ -1188,14 +1188,14 @@ export const useSwingSessionStore = create<SwingSessionState>()(
           return `${sPath}::${sCorr}` === dedupeKey;
         });
         if (existing) {
-          cageLog('ingest-live-cage-session', 'ok', {
+          practiceLog('ingest-live-cage-session', 'ok', {
             session_id: existing.id,
             note: 'deduped',
           });
           return existing.id;
         }
         const sessionId = uid('cage');
-        cageLog('ingest-live-cage-session', 'ok', {
+        practiceLog('ingest-live-cage-session', 'ok', {
           session_id: sessionId,
           club,
           shot_count: shots.length,

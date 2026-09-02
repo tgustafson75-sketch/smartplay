@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { ReviewSession } from '../types/cageReview';
+import type { ReviewSession } from '../types/practiceReview';
 import type { SwingShot } from '../store/swingSessionStore';
 
 const STORAGE_KEY = 'cage_review_sessions_v1';

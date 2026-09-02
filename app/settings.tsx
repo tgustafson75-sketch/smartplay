@@ -2101,7 +2101,7 @@ export default function Settings() {
                       paired with perShotAnalysis. Owner-only dataset
                       for future feel-vs-real calibration. Doubly
                       gated (flag + isOwnerEmail) — never fires for
-                      production users. Review tuples at /cage-debug. */}
+                      production users. Review tuples at /swing-sessions-debug. */}
                   <FeelCaptureRow colors={colors} />
                   <VoiceHitRateRow colors={colors} />
                   {/* 2026-08-22 (Tim — "owner only is me seeing it graphically... not a text line.
@@ -2296,12 +2296,12 @@ export default function Settings() {
                     </View>
                     <Ionicons name="hardware-chip-outline" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
-                  {/* 2026-07-06 (elite audit) — /cage-debug is the hub that
+                  {/* 2026-07-06 (elite audit) — /swing-sessions-debug is the hub that
                       links out to the other debug screens but was itself
                       unreachable from any menu. */}
                   <TouchableOpacity
                     style={styles.resetRow}
-                    onPress={() => router.push('/cage-debug' as never)}
+                    onPress={() => router.push('/swing-sessions-debug' as never)}
                     accessibilityRole="button"
                     accessibilityLabel="Open cage debug hub"
                   >
@@ -2317,7 +2317,7 @@ export default function Settings() {
                       it WAS reachable, but only as Owner Tools → Swing Sessions Debug → Subscription Debug:
                       two levels deep, behind a hub named after the cage. Nobody looks for
                       subscription state there, and Owner Tools itself listed only swing-analysis,
-                      native-modules and cage-debug. Buried is not the same as missing, but for the
+                      native-modules and swing-sessions-debug. Buried is not the same as missing, but for the
                       person trying to find it the difference does not matter. Direct row, because
                       this is now the screen that reads subscription state, runs the 30-day
                       promotion, and forces the paywall for the App Store review screenshot. */}
@@ -2659,7 +2659,7 @@ function GlassesModeRow({ colors }: { colors: ThemeColors }) {
  * the shot as `feel_narration_transcript`, paired with the existing
  * perShotAnalysis. Forms labeled tuples {clip, transcript, analysis}
  * for future feel-vs-real calibration. No user surface — only the
- * /cage-debug viewer surfaces the captured data.
+ * /swing-sessions-debug viewer surfaces the captured data.
  *
  * Defense-in-depth: the service ALSO checks isOwnerEmail at the call
  * site, so a leaked persisted flag from a previous account doesn't
@@ -2711,7 +2711,7 @@ function FeelCaptureRow({ colors }: { colors: ThemeColors }) {
       <View style={{ flex: 1 }}>
         <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Feel Capture (dev)</Text>
         <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-          Transcribe each swing&apos;s clip audio + pair with the analysis. Owner-only — never fires on production users. Review tuples at /cage-debug.
+          Transcribe each swing&apos;s clip audio + pair with the analysis. Owner-only — never fires on production users. Review tuples at /swing-sessions-debug.
         </Text>
         {feelCaptureEnabled && (
           <Text style={[styles.rowSub, { color: colors.accent, marginTop: 6 }]}>
