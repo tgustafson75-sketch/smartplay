@@ -183,7 +183,7 @@ export default function CageHistory() {
                   <TouchableOpacity
                     style={styles.reviewBtn}
                     onPress={() => router.push({
-                      pathname: '/cage-review/start',
+                      pathname: '/swing-review/start',
                       params: { session_id: session.id },
                     } as never)}
                   >

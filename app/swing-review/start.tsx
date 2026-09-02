@@ -60,7 +60,7 @@ export default function CageReviewStart() {
     try {
       const reviewSession = await startReviewSession(session.id, selectedMode);
       router.replace({
-        pathname: '/cage-review/[review_session_id]',
+        pathname: '/swing-review/[review_session_id]',
         params: { review_session_id: reviewSession.id },
       } as never);
     } catch {

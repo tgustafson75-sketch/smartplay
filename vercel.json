@@ -402,7 +402,7 @@
       "dest": "/api/course-proxy.ts"
     },
     {
-      "src": "/api/cage-review",
+      "src": "/api/(cage-review|swing-review)",
       "dest": "/api/cage-review.ts"
     },
     {

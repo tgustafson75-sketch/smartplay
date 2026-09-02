@@ -227,7 +227,7 @@ export default function CageDebug() {
     for (let i = 0; i < shots.length; i++) {
       const transcript = mockTranscripts[i % mockTranscripts.length];
       try {
-        const res = await fetch(apiUrl + '/api/cage-review', {
+        const res = await fetch(apiUrl + '/api/swing-review', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'extract', transcript }),
           // 2026-07-06 (audit) — bound the wait (~1.5× the route's 45s maxDuration).
@@ -238,7 +238,7 @@ export default function CageDebug() {
       } catch { /* continue */ }
     }
     try {
-      const vocabRes = await fetch(apiUrl + '/api/cage-review', {
+      const vocabRes = await fetch(apiUrl + '/api/swing-review', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'vocab', transcripts: mockTranscripts.slice(0, shots.length), total_reviewed: shots.length }),
         // 2026-07-06 (audit) — bound the wait (~1.5× the route's 45s maxDuration).
@@ -509,7 +509,7 @@ export default function CageDebug() {
             <TouchableOpacity
               style={styles.reviewActionBtn}
               onPress={() => router.push({
-                pathname: '/cage-review/start',
+                pathname: '/swing-review/start',
                 params: { session_id: sessionHistory[sessionHistory.length - 1].id },
               } as never)}
             >

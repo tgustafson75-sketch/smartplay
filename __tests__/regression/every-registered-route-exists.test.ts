@@ -50,10 +50,20 @@ describe('every registered route resolves to a real screen', () => {
     expect(layout).not.toMatch(/name="cage\/target-calibration"/);
   });
 
-  it('and the route that KEPT its name is still registered', () => {
-    // cage-review is a server-contract name that was deliberately not renamed.
-    expect(names).toContain('cage-review');
-    expect(existsAsRoute('cage-review')).toBe(true);
+  it('the review screen moved too, and its server path is ALIASED rather than broken', () => {
+    /**
+     * 2026-09-01 — the earlier decision was to leave /api/cage-review alone because phones already on
+     * an OTA call that exact path. Tim's steer: build for the RELEASE, just do not break what they
+     * have. An alias does both — vercel routes BOTH names to the same handler, so old installs keep
+     * working while the app and the screen use the clean one.
+     */
+    expect(names).toContain('swing-review');
+    expect(existsAsRoute('swing-review')).toBe(true);
+    const vercel = fs.readFileSync(path.join(root, 'vercel.json'), 'utf8');
+    expect(vercel).toMatch(/"src": "\/api\/\(cage-review\|swing-review\)"/);
+    // and no client still calls the old path
+    expect(fs.readFileSync(path.join(root, 'app/swing-review/[review_session_id].tsx'), 'utf8'))
+      .not.toMatch(/'\/api\/cage-review'/);
   });
 });
 

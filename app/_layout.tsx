@@ -1472,7 +1472,7 @@ function AppNavigator() {
           options={{ animation: 'slide_from_bottom', headerShown: false }}
         />
         <Stack.Screen
-          name="cage-review"
+          name="swing-review"
           options={{ animation: 'slide_from_right', headerShown: false }}
         />
         <Stack.Screen

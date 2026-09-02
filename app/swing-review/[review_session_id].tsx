@@ -167,7 +167,7 @@ export default function CageReviewInterview() {
         ? new Date(cageSession.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
         : 'unknown';
 
-      const res = await fetch(apiUrl + '/api/cage-review', {
+      const res = await fetch(apiUrl + '/api/swing-review', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -248,7 +248,7 @@ export default function CageReviewInterview() {
     if (!review || !currentShot) return;
     setScreenState('extracting');
     try {
-      const res = await fetch(apiUrl + '/api/cage-review', {
+      const res = await fetch(apiUrl + '/api/swing-review', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -325,7 +325,7 @@ export default function CageReviewInterview() {
     try {
       const completed = await endReviewSession(r.id);
       if (completed.vocabulary_observations.length > 0) {
-        const res = await fetch(apiUrl + '/api/cage-review', {
+        const res = await fetch(apiUrl + '/api/swing-review', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -348,7 +348,7 @@ export default function CageReviewInterview() {
         await saveGeneratedProfile(data);
       }
       router.replace({
-        pathname: '/cage-review/summary',
+        pathname: '/swing-review/summary',
         params: { review_session_id: r.id },
       } as never);
     } catch {

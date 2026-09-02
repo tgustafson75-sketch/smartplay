@@ -6393,7 +6393,7 @@ check('Audit fix: end-of-round summary credits points + opens recap even if TTS 
 
 check('Audit fix: cage-review stops caddie TTS on unmount (no cross-screen audio bleed)',
   (() => {
-    const cr = read('app/cage-review/[review_session_id].tsx');
+    const cr = read('app/swing-review/[review_session_id].tsx');
     return /import \{[^}]*stopSpeaking[^}]*\} from '\.\.\/\.\.\/services\/voiceService'/.test(cr) &&
       /void stopSpeaking\(\)\.catch\(\(\) => undefined\)/.test(cr);
   })(),
@@ -6938,7 +6938,7 @@ check('Perf: golfbert holes served from cache (no per-hole refetch)',
 // phaseRef so the []-dep unmount sees the CURRENT phase, not the stale first render.
 check('Lifecycle: cage-review + cage-overlay release mic/camera on unmount',
   (() => {
-    const cr = read('app/cage-review/[review_session_id].tsx');
+    const cr = read('app/swing-review/[review_session_id].tsx');
     const co = read('components/PracticeSessionOverlay.tsx');
     return (
       // cage-review: []-effect stops+unloads the in-flight recording and hands the
