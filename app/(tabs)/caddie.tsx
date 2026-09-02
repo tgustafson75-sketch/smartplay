@@ -166,6 +166,24 @@ import { buildRoundEndSummary } from '../../services/roundEndSummary';
 const NULL_HUD = { hole: null, par: null, yards: null, wind: null, playsLike: null };
 
 // 2026-06-06 — Module-level once-per-process flag for the post-splash
+
+/**
+ * 2026-09-01 (Tim: the statement after the on-course brief, "I'm here for whatever you want to work
+ * on" — and "if everything is coded as all smart brain calls that's the consistent play").
+ *
+ * proactiveKevin decides WHEN the caddie speaks unprompted; it no longer decides WHAT. Each trigger
+ * carries a directive, the caddie writes the line, and the fixed `message` is the offline fallback
+ * so a proactive moment never goes silent. [[feels-like-a-real-caddie]] [[caddie-failsafe-no-walls]]
+ */
+async function proactiveLineFor(trigger: { directive: string; message: string }): Promise<string> {
+  try {
+    const r = await generateProactiveLine(trigger.directive, { timeoutMs: 8_000 });
+    return r.text || trigger.message;
+  } catch {
+    return trigger.message;
+  }
+}
+
 // opener. Set true AFTER playLocalFile resolves successfully (Lesson
 // from prior 6 failed attempts: setting it BEFORE play meant silent
 // failures stuck the opener as "spoken" with no recovery).
@@ -808,16 +826,19 @@ export default function CaddieTab() {
           });
           if (trigger) {
             markProactiveFired(trigger.id);
-            setCaddieResponse(trigger.message);
+            void (async () => {
+            const line = await proactiveLineFor(trigger);
+            setCaddieResponse(line);
             setVoiceState('proactive');
             const { voiceEnabled, voiceGender: vg, language: lang } = useSettingsStore.getState();
             if (voiceEnabled) {
-              speak(trigger.message, vg, lang, apiUrl)
+              speak(line, vg, lang, apiUrl)
                 .catch(() => {})
                 .finally(() => setVoiceState('idle'));
             } else {
               setTimeout(() => setVoiceState('idle'), 3000);
             }
+            })();
           }
         }, 2500);
         return () => {
@@ -1315,16 +1336,19 @@ export default function CaddieTab() {
     });
     if (trigger) {
       markProactiveFired(trigger.id);
-      setCaddieResponse(trigger.message);
+      void (async () => {
+      const line = await proactiveLineFor(trigger);
+      setCaddieResponse(line);
       setVoiceState('proactive');
       const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
       if (ve) {
-        speak(trigger.message, vg, lang, apiUrl)
+        speak(line, vg, lang, apiUrl)
           .catch(() => {})
           .finally(() => setVoiceState('idle'));
       } else {
         setTimeout(() => setVoiceState('idle'), 3000);
       }
+      })();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [_scores, isRoundActive, _proactive_kevin_enabled, localMode, apiUrl]);
@@ -1366,16 +1390,19 @@ export default function CaddieTab() {
     // Only act on the front-nine milestone here (no per-hole transition auto-fire anymore).
     if (trigger && trigger.id === 'front_9_summary') {
       markProactiveFired(trigger.id);
-      setCaddieResponse(trigger.message);
+      void (async () => {
+      const line = await proactiveLineFor(trigger);
+      setCaddieResponse(line);
       setVoiceState('proactive');
       const { voiceEnabled: ve, voiceGender: vg, language: lang } = useSettingsStore.getState();
       if (ve) {
-        speak(trigger.message, vg, lang, apiUrl)
+        speak(line, vg, lang, apiUrl)
           .catch(() => {})
           .finally(() => setVoiceState('idle'));
       } else {
         setTimeout(() => setVoiceState('idle'), 3000);
       }
+      })();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentHole, isRoundActive, _proactive_kevin_enabled, localMode, apiUrl]);

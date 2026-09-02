@@ -58,6 +58,35 @@ describe('the interview opener composes itself', () => {
   });
 });
 
+describe('proactive lines are composed, not recited', () => {
+  const pk = read('services/proactiveKevin.ts');
+  const caddie = read('app/(tabs)/caddie.tsx');
+
+  it('THE REPORT: the round-start line after the brief is no longer fixed', () => {
+    // "Alright <name>. Course is yours. Let's go." fired on hole 1, right after the on-course brief.
+    expect(pk).toMatch(/directive: string;/);
+    expect(pk).toMatch(/round_start_handoff',\s*\n\s*directive:/);
+  });
+
+  it('EVERY trigger carries a directive — the file owns WHEN, not WHAT', () => {
+    // Count only the trigger OBJECTS (indented inside the returns), not the interface field.
+    const ids = (pk.match(/^\s{8}id: '\w+',$/gm) ?? []).length;
+    const directives = (pk.match(/^\s{8}directive: /gm) ?? []).length;
+    expect(ids).toBe(6);
+    expect(directives).toBe(ids);
+  });
+
+  it('the screen speaks the composed line, never trigger.message directly', () => {
+    expect(caddie).toMatch(/async function proactiveLineFor/);
+    expect(caddie).not.toMatch(/speak\(trigger\.message/);
+    expect(caddie).not.toMatch(/setCaddieResponse\(trigger\.message\)/);
+  });
+
+  it('and falls back to the fixed line rather than going silent', () => {
+    expect(caddie).toMatch(/return r\.text \|\| trigger\.message;/);
+  });
+});
+
 describe('the persona switch introduces itself in its own words', () => {
   const settings = read('store/settingsStore.ts');
 

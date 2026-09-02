@@ -11,7 +11,17 @@ export type ProactiveTriggerType =
 
 export interface ProactiveTrigger {
   id: ProactiveTriggerType;
+  /** Offline fallback ONLY. The caddie composes the real line from `directive`. */
   message: string;
+  /**
+   * 2026-09-01 (Tim, on the line that follows the on-course brief: "then a statement after like
+   * I'm here for whatever you want to work on" — and his call, "if everything is coded as all smart
+   * brain calls that's the consistent play").
+   *
+   * This file owns WHEN the caddie speaks unprompted. It should never have owned WHAT it says: a
+   * fixed sentence at a recurring moment is heard twice by the second round.
+   */
+  directive: string;
   is_proactive: true;
 }
 
@@ -60,6 +70,7 @@ export function shouldFireProactive(ctx: TriggerContext): ProactiveTrigger | nul
     if (!lastFiredAt.round_start_handoff) {
       return {
         id: 'round_start_handoff',
+        directive: `The round is starting on hole 1${ctx.firstName ? ` and the player is ${ctx.firstName}` : ''}. Hand them the round in one short sentence — you are their caddie and you are ready. No question, no menu of options, no offer to help with anything.`,
         message: `Alright${ctx.firstName ? ' ' + ctx.firstName : ''}. Course is yours. Let's go.`,
         is_proactive: true,
       };
@@ -72,6 +83,7 @@ export function shouldFireProactive(ctx: TriggerContext): ProactiveTrigger | nul
     if (!lastFiredAt.good_streak_3 || now - (lastFiredAt.good_streak_3 ?? 0) > cooldown) {
       return {
         id: 'good_streak_3',
+        directive: 'The player has just gone three straight holes at or under par. Say one short thing that keeps them in it without jinxing it. No question.',
         message: 'Three straight at or under. Trust what you\'re doing right now.',
         is_proactive: true,
       };
@@ -88,6 +100,7 @@ export function shouldFireProactive(ctx: TriggerContext): ProactiveTrigger | nul
       const ghostBehind = ctx.ghostDelta != null && ctx.ghostDelta < 0;
       return {
         id: 'miss_streak_3',
+        directive: `The player has missed three greens in a row${ghostBehind ? ' and is behind their own past round' : ''}. One short, steadying line — a caddie who has seen this before. No question.`,
         message: ghostBehind
           ? `Past ${name} got through this stretch. So can current ${name}. One shot.`
           : 'Forget the last three. One shot at a time — that\'s the whole job right now.',
@@ -107,6 +120,7 @@ export function shouldFireProactive(ctx: TriggerContext): ProactiveTrigger | nul
       const ghostBehind = ctx.ghostDelta != null && ctx.ghostDelta < 0;
       return {
         id: 'rough_streak_3',
+        directive: `The player has been in trouble three holes running${ghostBehind ? ' and is behind their past round' : ''}. One short line to settle them and simplify the next shot. No question.`,
         message: ghostBehind
           ? 'Past you saved holes worse than this. Reset. Just this one.'
           : 'Reset. Just this hole. Nothing before it counts.',
@@ -125,6 +139,7 @@ export function shouldFireProactive(ctx: TriggerContext): ProactiveTrigger | nul
       const lead = delta === 1 ? 'one' : delta === 2 ? 'two' : `${delta}`;
       return {
         id: 'ghost_lead_swing',
+        directive: `The player's past-self round is ahead by ${lead}. One short line: this is the moment to go get it. No question.`,
         message: `Past you is up by ${lead}. This is the moment — swing through it.`,
         is_proactive: true,
       };
@@ -141,6 +156,7 @@ export function shouldFireProactive(ctx: TriggerContext): ProactiveTrigger | nul
         'Back nine. Let\'s build on it.';
       return {
         id: 'front_9_summary',
+        directive: `The front nine is done. ${modeNote} Sum it up in one short sentence and point them at the back nine. No question.`,
         message: `Front nine done. ${modeNote}`,
         is_proactive: true,
       };
