@@ -3678,6 +3678,20 @@ export default function SmartMotion() {
         ]);
         meteringRef.current = null;
         meteredDurationMs = durationMs && durationMs > 0 ? durationMs : null;
+        /**
+         * 2026-09-01 — SEED THE DURATION HERE, FOR EVERY PATH.
+         *
+         * The body/biomech effect is gated on videoDurationMs, and the ONLY other thing that sets it
+         * is the review player's onLoad — which is the tap in Tim's "two stages where you get partial
+         * then I tap the screen and it populates more data".
+         *
+         * That was fixed on 08-24, but in three BRANCHES: range, practice-with-one-swing, and the
+         * no-segment fallback. It was never seeded on the multi-swing practice path or on ANY course
+         * capture, so the two commonest successful captures still waited for a tap. The duration is
+         * known right here, free, from metering — before any branch runs and before the player is
+         * mounted. [[no-half-fixes-enforce-every-surface]]
+         */
+        if (meteredDurationMs) setVideoDurationMs(meteredDurationMs);
         audioUriRef.current = uri;
         const meterMode = useRoundStore.getState().isRoundActive
           ? 'course'
