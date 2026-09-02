@@ -56,3 +56,41 @@ describe('every registered route resolves to a real screen', () => {
     expect(existsAsRoute('cage-review')).toBe(true);
   });
 });
+
+describe('every route the app NAVIGATES to exists', () => {
+  /**
+   * The sibling blind spot. router.push('/somewhere') is a string too, so a renamed screen leaves a
+   * dead push that compiles, bundles, and fails only when a player taps the thing. The rename that
+   * prompted this touched six screens and every path that reached them.
+   */
+  function sourceFiles(dir: string, out: string[] = []): string[] {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (['node_modules', '.git', '.expo', 'ios', 'android', '__tests__'].includes(e.name)) continue;
+      const f = path.join(dir, e.name);
+      if (e.isDirectory()) sourceFiles(f, out);
+      else if (/\.tsx?$/.test(e.name)) out.push(f);
+    }
+    return out;
+  }
+
+  const pushed = new Set<string>();
+  for (const f of sourceFiles(root)) {
+    for (const m of fs.readFileSync(f, 'utf8').matchAll(/router\.(?:push|replace)\(\s*'(\/[a-z0-9\-/]+)'/g)) {
+      pushed.add(m[1]);
+    }
+  }
+
+  const resolves = (route: string) => {
+    const n = route.replace(/^\//, '');
+    return [`app/${n}.tsx`, `app/${n}.ts`, `app/${n}/index.tsx`, `app/(tabs)/${n}.tsx`]
+      .some((p) => fs.existsSync(path.join(root, p)));
+  };
+
+  it('the sweep finds real navigation — not vacuous', () => {
+    expect(pushed.size).toBeGreaterThan(30);
+  });
+
+  it('THE CLASS: no literal router.push targets a screen that does not exist', () => {
+    expect([...pushed].filter((r) => !resolves(r)).sort()).toEqual([]);
+  });
+});
