@@ -15,7 +15,7 @@
  * WHAT IT COSTS HERE. A swing is the fastest thing in the clip. poseMotion.deriveSwingAnchors has
  * read start/top/impact/end off the hand-speed signal since 07-21 — pure, unit-tested, no audio, no
  * labels — and the missing half was only ever the I/O: something to turn a video into pose samples.
- * poseAtTime already does exactly that (thumbnail -> on-device MediaPipe, ~100-300ms a frame). So
+ * expo-video-thumbnails plus MediaPipe's detectPoseFromUri do exactly that, ~100-300ms a frame. So
  * the locate is a dozen thumbnails and some arithmetic: seconds, offline, and free.
  *
  * HONESTY. This returns a WINDOW and an impact TIME — never a claimed strike. Nothing here sets
@@ -24,7 +24,7 @@
  * measured timing may narrow a search, and may never manufacture evidence.
  * [[smartmotion-clubhead-trace-root-cause]] [[speed-is-the-wow]]
  */
-import { poseAtTime } from '../poseAnalysisApi';
+import * as VideoThumbnails from 'expo-video-thumbnails';
 import { wristCentroid, deriveSwingAnchors, type MotionSample } from './poseMotion';
 
 /** Enough to resolve a swing's shape; few enough to stay inside a couple of seconds. */
@@ -62,17 +62,36 @@ export async function locateSwingWindowOnDevice(
   const times = sampleTimesMs(durationMs);
   if (times.length === 0) return null;
 
+  /**
+   * ON-DEVICE ONLY, DELIBERATELY. The obvious helper here is poseAnalysisApi.poseAtTime, and using it
+   * would have been a bug: when the native module is missing it FALLS THROUGH TO A CLOUD PROXY, so a
+   * "locate without the network" would have quietly fired a dozen network calls and been slower than
+   * the single vision call it replaced. detectPoseFromUri is the native path and nothing else — it
+   * returns null rather than reaching for a server.
+   */
+  const mp = await import('../mediaPipePoseService');
+  const status = await mp.getMediaPipeStatus().catch(() => null);
+  if (!status?.available) return null;   // pre-build / unlinked: fall back to the network locate
+
   const samples: MotionSample[] = [];
+  let consecutiveMisses = 0;
   for (const tMs of times) {
     // Serial on purpose: concurrent thumbnail reads on one file are the SIGSEGV class this app has
     // already been bitten by, and the media chain serializes them anyway.
     let frame = null;
     try {
-      frame = await poseAtTime(clipUri, tMs, undefined);
+      const thumb = await VideoThumbnails.getThumbnailAsync(clipUri, { time: tMs, quality: 0.6 });
+      frame = await mp.detectPoseFromUri(thumb.uri, undefined, tMs);
     } catch {
-      continue; // one unreadable frame is a shorter signal, not a failed locate
+      frame = null; // one unreadable frame is a shorter signal, not a failed locate
     }
-    if (!frame) continue;
+    if (!frame) {
+      // Bail early rather than paying for a dozen decodes that are clearly going nowhere — the
+      // caller's network locate is a better use of the time than finishing a hopeless sweep.
+      if (++consecutiveMisses >= 3 && samples.length === 0) return null;
+      continue;
+    }
+    consecutiveMisses = 0;
     const c = wristCentroid(frame);
     if (c) samples.push({ tMs, x: c.x, y: c.y });
   }

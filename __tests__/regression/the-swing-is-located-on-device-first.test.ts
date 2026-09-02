@@ -67,7 +67,10 @@ describe('it is tried BEFORE the network, and never replaces it', () => {
 });
 
 describe('it produces timing, never evidence', () => {
-  const src = read('services/swing/onDeviceLocate.ts');
+  const raw = read('services/swing/onDeviceLocate.ts');
+  // Strip comments before asserting — the header legitimately NAMES the helper it refuses to use,
+  // and matching that is the prose-guard mistake this suite exists to avoid.
+  const src = raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
 
   it('returns only a window and an impact time', () => {
     expect(src).toMatch(/startSec: .*\n\s*endSec: .*\n\s*swingTimeSec:/);
@@ -83,7 +86,25 @@ describe('it produces timing, never evidence', () => {
   });
 
   it('never throws — one unreadable frame is a shorter signal, not a failure', () => {
-    expect(src).toMatch(/catch \{\s*\n\s*continue;/);
+    expect(src).toMatch(/catch \{\s*\n?\s*frame = null;/);
+  });
+
+  it('THE TRAP: it never touches the helper that falls through to a cloud proxy', () => {
+    // poseAnalysisApi.poseAtTime is the obvious helper and would have been a bug: when the native
+    // module is missing it reaches /api/pose-analysis, so a "locate without the network" would have
+    // fired a dozen network calls and been SLOWER than the single vision call it replaced.
+    expect(src).not.toMatch(/poseAtTime/);
+    expect(src).not.toMatch(/poseAnalysisApi/);
+    expect(src).toMatch(/detectPoseFromUri/);
+  });
+
+  it('checks the native module is actually there before decoding anything', () => {
+    expect(src).toMatch(/getMediaPipeStatus\(\)/);
+    expect(src).toMatch(/if \(!status\?\.available\) return null/);
+  });
+
+  it('bails early instead of paying for a dozen hopeless decodes', () => {
+    expect(src).toMatch(/consecutiveMisses >= 3 && samples\.length === 0\) return null/);
   });
 
   it('reads frames serially — concurrent reads on one file are the SIGSEGV class', () => {
