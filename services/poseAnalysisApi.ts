@@ -389,7 +389,8 @@ const MEDIUM_CLIP_BACK_WINDOW_MS = 5_000;
  */
 let lastFrameFailure: string | null = null;
 
-async function poseAtTime(videoUri: string, timeMs: number, position: PoseFrame['position']): Promise<PoseFrame | null> {
+/** Exported 2026-09-01 for the on-device swing locate (services/swing/onDeviceLocate). */
+export async function poseAtTime(videoUri: string, timeMs: number, position: PoseFrame['position']): Promise<PoseFrame | null> {
   try {
     let uri: string; let width: number | undefined; let height: number | undefined;
     try {

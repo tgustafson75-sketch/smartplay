@@ -1056,6 +1056,26 @@ export default function SwingDetail() {
          * the swing" the same way instead of two of them guessing.
          */
         if (!swingWindow) {
+          /**
+           * 2026-09-01 — ON DEVICE FIRST. The network locate below is a cold-Lambda vision call with a
+           * 25s client budget; Tim's log on 09-01 shows it aborting twice in an afternoon (dead_host,
+           * ~9s each), and each abort drops the read to sampling the whole clip. On-device costs a
+           * dozen thumbnails and some arithmetic — seconds, offline, and free — because a swing is
+           * the fastest thing in the clip and poseMotion has been able to read that since 07-21.
+           *
+           * Null here is cheap: the network locate still runs exactly as before. So this can only
+           * make the path faster, never less capable. [[speed-is-the-wow]]
+           */
+          try {
+            const { locateSwingWindowOnDevice } = await import('../../../services/swing/onDeviceLocate');
+            const onDev = await locateSwingWindowOnDevice(analyzeUri, durationMs);
+            if (onDev && onDev.endSec > onDev.startSec) {
+              swingWindow = { startMs: Math.round(onDev.startSec * 1000), endMs: Math.round(onDev.endSec * 1000) };
+              locatedImpactMs = Math.round(onDev.swingTimeSec * 1000);
+            }
+          } catch { /* on-device is best-effort — the network locate below is the fallback */ }
+        }
+        if (!swingWindow) {
           try {
             const { locateSwingWindow } = await import('../../../services/poseDetection');
             const loc = await locateSwingWindow(analyzeUri, durationMs);
