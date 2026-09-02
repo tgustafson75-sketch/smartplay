@@ -14429,6 +14429,38 @@ check(
   );
 }
 
+/**
+ * ─── 2026-09-01 — A POSE DIAGNOSTIC MUST NAME THE ENGINE THAT SERVED IT ─────────────────────────
+ *
+ * recordPoseTelemetry has fired on every pose call since 05-23 and nothing read it — the badge its
+ * docstring describes was never built. So every pose failure in the field logged how many frames
+ * came back and why, and never WHICH ENGINE produced them: on-device MediaPipe finishing in 40ms and
+ * a cloud proxy timing out wrote the same sentence. Two failures with nothing in common but the
+ * words describing them, which is how an investigation goes down the wrong path for a week.
+ */
+{
+  const tele = readCode('services/poseTelemetry.ts');
+  check(
+    'POSE: the telemetry bus has a reader that stays honest about staleness',
+    /export function describePoseTelemetry\(\)/.test(tele) &&
+      /const t = getLatestPoseTelemetry\(\);/.test(tele) &&
+      /if \(t\.at === 0\) return null;/.test(tele) &&
+      /poseReadingAgeMs: Date\.now\(\) - t\.at/.test(tele),
+    'nothing-has-run reports nothing rather than backend "none", and every reading carries its age — it is the LAST pose call, not necessarily this one',
+  );
+  const poseApi = readCode('services/poseAnalysisApi.ts');
+  check(
+    'POSE: every pose diagnostic carries the backend and inference time',
+    /const logPose = \([\s\S]{0,900}?describePoseTelemetry\(\)[\s\S]{0,400}?addAppEvent\(stage, \{ \.\.\.\(pose \?\? \{\}\), \.\.\.details \}, kind\)/.test(poseApi),
+    'the decorator is INSIDE logPose, so it reaches every call site — and explicit details win on key collision, because a caller that measured something knows more than the shared bus',
+  );
+  check(
+    'POSE: the harness run summary reports what pose DID, not only whether it could',
+    /describePoseTelemetry/.test(readCode('services/harness/assert.ts')),
+    '"available" says the module linked; the telemetry says which engine served the last call and how fast',
+  );
+}
+
 const total = results.length;
 const passed = results.filter((r) => r.passed).length;
 const failed = results.filter((r) => !r.passed);

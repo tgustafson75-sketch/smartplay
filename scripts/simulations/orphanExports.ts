@@ -183,8 +183,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
   // ── WIRE — the club seam, all of it feeding docs/NEXT-CLUB-LOGIC-SWEEP.md ──────
 
   // ── WIRE — the learn-loop seam ────────────────────────────────────────────────
-  'services/poseTelemetry.ts :: getLatestPoseTelemetry':
-    'WIRE — recordPoseTelemetry IS called; nothing ever reads the bus it writes to.',
   'services/mediaCapture.ts :: getRecentCaptures':
     'WIRE — the in-flight capture buffer, never read for playback.',
   'services/courseTruth.ts :: getCourseTruth':

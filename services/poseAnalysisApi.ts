@@ -1000,8 +1000,15 @@ export async function extractPoseFramesFromVideo(
    */
   const logPose = (stage: string, details: Record<string, unknown>, kind: 'analysis_error' | 'diag' = 'analysis_error') => {
     try {
+      // 2026-09-01 — every pose diagnostic carries WHICH ENGINE served it and how fast. Without this
+      // "pose returned nothing" reads identically whether MediaPipe ran on-device in 40ms or the
+      // cloud proxy was called and timed out. The explicit details win on key collision — a caller
+      // that measured something itself knows more than the shared bus does.
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      require('../store/issueLogStore').useIssueLogStore.getState().addAppEvent(stage, details, kind);
+      const pose = require('./poseTelemetry').describePoseTelemetry() as Record<string, unknown> | null;
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require('../store/issueLogStore').useIssueLogStore.getState()
+        .addAppEvent(stage, { ...(pose ?? {}), ...details }, kind);
     } catch { /* best-effort */ }
   };
 

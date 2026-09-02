@@ -48,6 +48,40 @@ export function getLatestPoseTelemetry(): PoseTelemetry {
   return latest;
 }
 
+/**
+ * 2026-09-01 — THE BUS HAD NO READER, AND THAT WAS THE BUG.
+ *
+ * recordPoseTelemetry has fired on every pose call since 05-23; getLatestPoseTelemetry was read by
+ * nobody. The docstring at the top of this file describes an "On-device • 47ms" badge that does not
+ * exist, so every one of those writes went into a variable and stopped there.
+ *
+ * That is not merely wasted work — it is a diagnostic hole in the exact place the app is hardest to
+ * debug. When a pose read fails on Tim's device, the issue-log entry could say how many frames came
+ * back and why, but not WHICH ENGINE PRODUCED THEM. "Pose returned nothing" reads identically
+ * whether MediaPipe ran on-device in 40ms or the cloud proxy was called and timed out — two failures
+ * with nothing in common except the sentence describing them. [[orphans-are-live-bugs-not-dead-code]]
+ *
+ * So the reader is a LOG DECORATOR rather than a badge: every pose diagnostic now carries the backend
+ * that served it and how long inference took. No layout changes, no new surface, and the answer to
+ * "was this device even running pose locally?" stops being a guess. [[missing-log-entry-is-the-evidence]]
+ *
+ * `ageMs` is included deliberately and is the field that keeps this honest: this is the LAST pose
+ * call, not necessarily THIS one. A reading from four minutes ago describes a different attempt, and
+ * a log line that presented it as current would be worse than no line at all.
+ */
+export function describePoseTelemetry(): Record<string, unknown> | null {
+  // Reads through the accessor rather than the module variable so there is ONE way to get the
+  // current value — the alternative is a second reader that drifts the day the accessor grows a rule.
+  const t = getLatestPoseTelemetry();
+  if (t.at === 0) return null;   // nothing has run — say nothing rather than report 'none'
+  return {
+    poseBackend: t.backend,
+    ...(t.inferenceMs != null ? { poseInferenceMs: Math.round(t.inferenceMs) } : {}),
+    poseConfidence: Math.round(t.confidence),
+    poseReadingAgeMs: Date.now() - t.at,
+  };
+}
+
 export function subscribePoseTelemetry(cb: (t: PoseTelemetry) => void): () => void {
   listeners.add(cb);
   return () => listeners.delete(cb);

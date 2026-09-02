@@ -228,6 +228,13 @@ export async function logRunSummaryToIssueLog(reports: ScenarioReport[]): Promis
       env.poseModelLoaded = st.modelLoaded;
     } catch { env.poseAvailable = 'probe_failed'; }
     try {
+      // What pose ACTUALLY did most recently, as opposed to whether it could. `available` says the
+      // module linked; this says which engine served the last call and how long it took — the
+      // difference between "pose is installed" and "pose is working, at this speed, on this device".
+      const { describePoseTelemetry } = await import('../poseTelemetry');
+      Object.assign(env, describePoseTelemetry() ?? {});
+    } catch { /* telemetry is context, never a requirement */ }
+    try {
       const { getApiBaseUrl } = await import('../apiBase');
       env.apiBase = getApiBaseUrl() || null;
     } catch { /* ignore */ }
