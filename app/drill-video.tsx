@@ -61,7 +61,7 @@ export default function DrillVideo() {
   const params = useLocalSearchParams<{
     url?: string; videoId?: string; title?: string; instructor?: string;
     drillId?: string; drillName?: string; drillShots?: string; drillFocus?: string;
-    drillShotType?: string; angle?: string;
+    drillShotType?: string; angle?: string; drillSwingPercents?: string;
   }>();
   const videoId = params.videoId || extractVideoId(params.url);
   const W = Dimensions.get('window').width;
@@ -106,6 +106,19 @@ export default function DrillVideo() {
         drillFocus: params.drillFocus ?? '',
         drillShotType: params.drillShotType ?? 'full',
         angle: params.angle ?? 'face_on',
+        /**
+         * 2026-09-01 — THE LADDER WAS DROPPED ON THIS ROUTE.
+         *
+         * The Drills screen forwards drillSwingPercents because of a 07-09 audit: "flagship
+         * TEMPO x SWING% drill dropped its ladder". That fix went onto the "Practice in Smart Motion"
+         * button and not onto this one, so a player who watched the pro video FIRST — the whole point
+         * of the video-to-drill loop — practised the flagship drill with no 50/75/100 reps and no
+         * sign anything was missing.
+         *
+         * The comment at the top of this file already claimed it handed off "with the same params the
+         * Drills screen" uses. It now does. [[no-half-fixes-enforce-every-surface]]
+         */
+        drillSwingPercents: params.drillSwingPercents ?? '',
       },
     });
   };

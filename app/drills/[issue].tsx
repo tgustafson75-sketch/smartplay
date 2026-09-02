@@ -227,6 +227,8 @@ export default function DrillDetail() {
                 drillShots: String(entry.practice.shotCount),
                 drillFocus: entry.practice.focus,
                 drillShotType: entry.practice.shotType,
+                // 2026-09-01 — the ladder travels through the video route too; drill-video forwards it on.
+                drillSwingPercents: entry.practice.swingPercents?.join(',') ?? '',
                 angle: entry.practice.angle,
               } : {}),
             },
