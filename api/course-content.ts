@@ -3,7 +3,12 @@ import { allowInference } from './_inferLimit';
 import Anthropic from '@anthropic-ai/sdk';
 import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona } from '../lib/persona';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 });
+// 2026-09-01 (adversarial audit) — maxRetries 0: A RETRY THAT CANNOT FIT IS WORSE THAN NO RETRY.
+// The SDK's retry starts AFTER the first attempt's timeout, and this route's provider budget is
+// already most of its platform ceiling — so a retry is killed mid-flight and the caller gets nothing
+// instead of either an answer or a clean error. Tim's `clubpath_arc_too_sparse points: 0` was this
+// shape. Fail once, honestly, inside the budget. [[the-client-must-be-the-last-to-give-up]]
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 0 });
 
 /**
  * Phase D-1 — Course Detail content generation.

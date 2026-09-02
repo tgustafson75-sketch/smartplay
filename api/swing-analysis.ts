@@ -13,7 +13,12 @@ const gemini = process.env.GOOGLE_API_KEY
   : null;
 // 30 s: Gemini exhausts its 13 s cap, retry fires, then OpenAI picks up the
 // rest of the budget. 22 s left barely enough; 30 s gives real headroom.
-const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 30_000, maxRetries: 1 });
+// 2026-09-01 (adversarial audit) — maxRetries 0: A RETRY THAT CANNOT FIT IS WORSE THAN NO RETRY.
+// The SDK's retry starts AFTER the first attempt's timeout, and this route's provider budget is
+// already most of its platform ceiling — so a retry is killed mid-flight and the caller gets nothing
+// instead of either an answer or a clean error. Tim's `clubpath_arc_too_sparse points: 0` was this
+// shape. Fail once, honestly, inside the budget. [[the-client-must-be-the-last-to-give-up]]
+const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 30_000, maxRetries: 0 });
 // Phase 5 LAST-RESORT 3rd provider: Claude (Anthropic) fires ONLY when neither
 // Gemini nor OpenAI produced a parse — a rare safety net, NOT a routine
 // escalation. Anthropic was deliberately pulled from normal escalation for

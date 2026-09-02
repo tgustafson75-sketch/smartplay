@@ -30,8 +30,13 @@ import Anthropic from '@anthropic-ai/sdk';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
-  timeout: 30_000,
-  maxRetries: 1,
+  timeout: 24_000 /* < 30s platform ceiling: a provider budget EQUAL to the ceiling cannot finish, because the response still has to be read and written */,
+// 2026-09-01 (adversarial audit) — maxRetries 0: A RETRY THAT CANNOT FIT IS WORSE THAN NO RETRY.
+// The SDK's retry starts AFTER the first attempt's timeout, and this route's provider budget is
+// already most of its platform ceiling — so a retry is killed mid-flight and the caller gets nothing
+// instead of either an answer or a clean error. Tim's `clubpath_arc_too_sparse points: 0` was this
+// shape. Fail once, honestly, inside the budget. [[the-client-must-be-the-last-to-give-up]]
+  maxRetries: 0,
 });
 
 const SYSTEM_PROMPT = `You are a senior React Native / Expo / TypeScript engineer triaging a bug report from inside the SmartPlay Caddie Pro app.

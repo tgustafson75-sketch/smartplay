@@ -153,7 +153,7 @@
       "src": "api/swing-share.ts",
       "use": "@vercel/node",
       "config": {
-        "maxDuration": 15
+        "maxDuration": 30
       }
     },
     {

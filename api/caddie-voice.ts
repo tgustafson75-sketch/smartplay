@@ -11,7 +11,12 @@ import OpenAI from 'openai';
 import { allowInference } from './_inferLimit';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 20_000, maxRetries: 1 });
+// 2026-09-01 (adversarial audit) — maxRetries 0: A RETRY THAT CANNOT FIT IS WORSE THAN NO RETRY.
+// The SDK's retry starts AFTER the first attempt's timeout, and this route's provider budget is
+// already most of its platform ceiling — so a retry is killed mid-flight and the caller gets nothing
+// instead of either an answer or a clean error. Tim's `clubpath_arc_too_sparse points: 0` was this
+// shape. Fail once, honestly, inside the budget. [[the-client-must-be-the-last-to-give-up]]
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 20_000, maxRetries: 0 });
 
 // The gpt-4o-mini-tts voices, with a short character note to steer the pick.
 const VOICES: { id: string; desc: string }[] = [
