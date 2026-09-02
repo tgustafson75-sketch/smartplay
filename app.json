@@ -59,7 +59,7 @@
         "android.permission.health.READ_HEART_RATE",
         "android.permission.health.READ_ACTIVE_CALORIES_BURNED"
       ],
-      "versionCode": 1
+      "versionCode": 21
     },
     "web": {
       "output": "server",

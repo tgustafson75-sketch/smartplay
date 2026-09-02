@@ -41,6 +41,7 @@
       "channel": "preview"
     },
     "production": {
+      "autoIncrement": true,
       "credentialsSource": "remote",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.smartplaycaddie.com",
@@ -71,6 +72,7 @@
       "channel": "preview"
     },
     "production-apk": {
+      "autoIncrement": true,
       "distribution": "internal",
       "developmentClient": false,
       "env": {
