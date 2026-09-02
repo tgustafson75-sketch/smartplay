@@ -785,6 +785,13 @@ const SCEN_22: Scenario = {
     const status = await mp.getMediaPipeStatus().catch(() => null);
     a.expect('on-device pose is linked', status?.available === true,
       status ? `available=${status.available} modelLoaded=${status.modelLoaded}` : 'probe threw');
+    // 2026-09-02 — `available=true, modelLoaded=false, lastInference=0ms` is BOTH the healthy
+    // not-yet-loaded shape and the shape getMediaPipeStatus() returns when the native call throws.
+    // Tim's export showed exactly that and could not say which. Now it can, and a throw is a failure:
+    // pose is the speed premise, and a locate that silently falls back to the network is the bug the
+    // on-device path exists to prevent. [[a-field-that-is-sometimes-a-placeholder]]
+    a.expect('the pose status is a real reading, not a probe failure', !status?.statusError,
+      status?.statusError ? `getStatus() threw: ${status.statusError}` : 'native getStatus answered');
     a.note('pose model', status ? `loaded=${status.modelLoaded} quality=${status.loadedQuality} lastInference=${status.lastInferenceMs}ms` : 'unknown');
 
     // 3) THE STORES. A slow hydrate delays every screen behind it, and a store that never hydrates

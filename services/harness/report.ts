@@ -66,6 +66,8 @@ export async function collectRunEnv(): Promise<Record<string, unknown>> {
     // falls back to the network call it was built to replace.
     env.poseAvailable = st.available;
     env.poseModelLoaded = st.modelLoaded;
+    // Present only when the native probe THREW — otherwise the two failure shapes are identical.
+    if (st.statusError) env.poseStatusError = st.statusError;
   } catch { env.poseAvailable = 'probe_failed'; }
   try {
     // What pose ACTUALLY did most recently, as opposed to whether it could.

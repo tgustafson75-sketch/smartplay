@@ -64,6 +64,21 @@ export interface MediaPipeStatus {
   modelLoaded: boolean;
   loadedQuality: MPQuality;
   lastInferenceMs: number;
+  /**
+   * 2026-09-02 — SET ONLY WHEN THE NATIVE PROBE ITSELF FAILED.
+   *
+   * The catch below used to return `{ available: true, modelLoaded: false, loadedQuality: 'full',
+   * lastInferenceMs: 0 }` — which is byte-for-byte what a healthy module reports before its first
+   * inference. So a module whose getStatus() THREW and a module that simply has not loaded the
+   * model yet were indistinguishable, and Tim's harness export read `available=true
+   * modelLoaded=false ... lastInference=0ms` with no way to tell which one it was looking at.
+   *
+   * On-device pose is the whole speed premise — without it every locate silently falls back to the
+   * network call it was built to replace — so "we asked and could not tell" must not be reported as
+   * "asked and answered". Absent means the status is a real reading.
+   * [[a-field-that-is-sometimes-a-placeholder]] [[illustration-data-points]]
+   */
+  statusError?: string;
 }
 
 interface DetectOptions {
@@ -130,7 +145,13 @@ export async function getMediaPipeStatus(): Promise<MediaPipeStatus> {
     return await NativeMod.getStatus();
   } catch (e) {
     devLog('[mediaPipe] getStatus failed: ' + String(e));
-    return { available: true, modelLoaded: false, loadedQuality: 'full', lastInferenceMs: 0 };
+    return {
+      available: true,
+      modelLoaded: false,
+      loadedQuality: 'full',
+      lastInferenceMs: 0,
+      statusError: (e instanceof Error ? e.message : String(e)).slice(0, 120),
+    };
   }
 }
 
