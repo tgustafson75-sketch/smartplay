@@ -28,6 +28,11 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Sep 2026',
+    note: 'Ball speed shows up even when you have not tagged the club. It used to be blank, because without knowing the club we could not be precise about it — but blank is not more honest than an estimate, it is just less useful. You now get the number with a wider range around it, and tagging the club tightens it.',
+    howTo: 'Tag the club on a swing to narrow the ball speed range from a rough estimate to a close one.',
+  },
+  {
+    when: 'Sep 2026',
     note: 'The swing read now spends its frames where the swing happens. It was sampling evenly from two seconds before the ball to just after, so most frames landed on your slow backswing and only two on the downswing that actually decides the shot. When the strike is heard, the frames cluster there instead.',
   },
   {
