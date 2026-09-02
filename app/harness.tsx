@@ -329,7 +329,13 @@ function Row({ scenario, state, onRun }: { scenario: Scenario; state: RowState; 
                     {glyph}
                   </Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.checkLabel}>{safeText(c.label, 300)}</Text>
+                    <Text style={styles.checkLabel}>
+                      {safeText(c.label, 300)}
+                      {/* 2026-09-01 — the timings belong ON SCREEN too, not only in the log. A slow
+                          PASS is a finding, and it looked identical to a fast one until now. */}
+                      {typeof c.ms === 'number' ? <Text style={styles.checkTiming}>{`  ${c.ms}ms`}</Text> : null}
+                      {typeof c.atMs === 'number' ? <Text style={styles.checkAt}>{`  @${c.atMs}ms`}</Text> : null}
+                    </Text>
                     {c.detail ? <Text style={styles.checkDetail}>↳ {safeText(c.detail, 500)}</Text> : null}
                   </View>
                 </View>
@@ -424,6 +430,8 @@ const styles = StyleSheet.create({
   checkRow: { flexDirection: 'row', alignItems: 'flex-start', marginVertical: 2 },
   checkStatus: { fontSize: 12, width: 16, fontWeight: '700' },
   checkLabel: { color: '#d1d5db', fontSize: 12 },
+  checkTiming: { color: '#F0C030', fontWeight: '700' },
+  checkAt: { color: 'rgba(255,255,255,0.6)', fontSize: 11 },
   checkDetail: { color: '#c2cad4', fontSize: 11, marginTop: 2 },
   lockedBody: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   lockedText: { color: '#c2cad4', fontSize: 14, textAlign: 'center', lineHeight: 22 },
