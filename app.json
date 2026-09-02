@@ -24,7 +24,7 @@
         ],
         "ITSAppUsesNonExemptEncryption": false
       },
-      "buildNumber": "21",
+      "buildNumber": "22",
       "appleTeamId": "B6KTPCWF7A"
     },
     "android": {
@@ -59,7 +59,7 @@
         "android.permission.health.READ_HEART_RATE",
         "android.permission.health.READ_ACTIVE_CALORIES_BURNED"
       ],
-      "versionCode": 21
+      "versionCode": 22
     },
     "web": {
       "output": "server",
