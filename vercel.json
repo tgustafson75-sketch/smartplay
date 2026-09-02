@@ -332,6 +332,13 @@
       }
     },
     {
+      "src": "api/swing-review.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 45
+      }
+    },
+    {
       "src": "api/usage.ts",
       "use": "@vercel/node",
       "config": {
@@ -407,7 +414,7 @@
     },
     {
       "src": "/api/swing-review",
-      "dest": "/api/cage-review.ts"
+      "dest": "/api/swing-review.ts"
     },
     {
       "src": "/api/voice-intent",

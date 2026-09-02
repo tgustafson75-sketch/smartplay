@@ -60,7 +60,12 @@ describe('every registered route resolves to a real screen', () => {
     expect(names).toContain('swing-review');
     expect(existsAsRoute('swing-review')).toBe(true);
     const vercel = fs.readFileSync(path.join(root, 'vercel.json'), 'utf8');
-    expect(vercel).toMatch(/"src": "\/api\/\(cage-review\|swing-review\)"/);
+    // Two EXPLICIT entries, not a regex alternation: the alternation form deployed and still 404'd
+    // the new path, which the live probe caught.
+    expect(vercel).toMatch(/"src": "\/api\/cage-review"/);
+    expect(vercel).toMatch(/"src": "\/api\/swing-review"/);
+    // both are REAL routes with their own file, not an alias with none
+    expect(fs.existsSync(path.join(root, 'api/swing-review.ts'))).toBe(true);
     // and no client still calls the old path
     expect(fs.readFileSync(path.join(root, 'app/swing-review/[review_session_id].tsx'), 'utf8'))
       .not.toMatch(/'\/api\/cage-review'/);

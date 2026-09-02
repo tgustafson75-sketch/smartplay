@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { fetchSwingReview } from '../services/swingReviewEndpoint';
 import {
   View,
   Text,
@@ -227,7 +228,7 @@ export default function CageDebug() {
     for (let i = 0; i < shots.length; i++) {
       const transcript = mockTranscripts[i % mockTranscripts.length];
       try {
-        const res = await fetch(apiUrl + '/api/swing-review', {
+        const res = await fetchSwingReview(apiUrl, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'extract', transcript }),
           // 2026-07-06 (audit) — bound the wait (~1.5× the route's 45s maxDuration).
@@ -238,7 +239,7 @@ export default function CageDebug() {
       } catch { /* continue */ }
     }
     try {
-      const vocabRes = await fetch(apiUrl + '/api/swing-review', {
+      const vocabRes = await fetchSwingReview(apiUrl, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'vocab', transcripts: mockTranscripts.slice(0, shots.length), total_reviewed: shots.length }),
         // 2026-07-06 (audit) — bound the wait (~1.5× the route's 45s maxDuration).

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { fetchSwingReview } from '../../services/swingReviewEndpoint';
 import {
   View,
   Text,
@@ -167,7 +168,7 @@ export default function CageReviewInterview() {
         ? new Date(cageSession.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
         : 'unknown';
 
-      const res = await fetch(apiUrl + '/api/swing-review', {
+      const res = await fetchSwingReview(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -248,7 +249,7 @@ export default function CageReviewInterview() {
     if (!review || !currentShot) return;
     setScreenState('extracting');
     try {
-      const res = await fetch(apiUrl + '/api/swing-review', {
+      const res = await fetchSwingReview(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -325,7 +326,7 @@ export default function CageReviewInterview() {
     try {
       const completed = await endReviewSession(r.id);
       if (completed.vocabulary_observations.length > 0) {
-        const res = await fetch(apiUrl + '/api/swing-review', {
+        const res = await fetchSwingReview(apiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
