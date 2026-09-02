@@ -4,7 +4,7 @@
     "slug": "smartplay-caddie",
     "version": "1.0.0",
     "orientation": "default",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/icon-1024-appstore.png",
     "scheme": "smartplay",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
