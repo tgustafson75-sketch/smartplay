@@ -84,3 +84,39 @@ export function rollupStatus(report: ScenarioReport): 'pass' | 'fail' | 'skip' {
   if (report.checks.every(c => c.status === 'skip')) return 'skip';
   return 'pass';
 }
+
+/**
+ * 2026-09-01 (Tim) — "anything you'd otherwise ask me to verify should go in the harness, so the SIM
+ * can run on the phone and the issue log carries the result."
+ *
+ * Exactly right, and it closes the loop the harness was missing. It has always PRINTED its rows on
+ * screen, which means the result only exists while someone is looking at it — so verifying anything
+ * still meant me writing "Tim, please open X and check Y", and him reading rows back to me.
+ *
+ * A failing scenario now writes itself into the issue log, which he already emails with one tap. The
+ * device becomes the thing that answers the question instead of the person holding it.
+ *
+ * Only FAILURES and errors are logged, with the failing check labels. A pass is not news, and filling
+ * the log with green would bury the entries that matter. [[do-the-work-dont-delegate-to-tim]]
+ */
+export function logScenarioToIssueLog(report: ScenarioReport): void {
+  if (report.status !== 'fail') return;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { useIssueLogStore } = require('../../store/issueLogStore') as typeof import('../../store/issueLogStore');
+    const failed = report.checks.filter((c) => c.status === 'fail');
+    useIssueLogStore.getState().addAppEvent(
+      `harness_fail:${report.id}`,
+      {
+        title: report.title,
+        failed: failed.length,
+        of: report.checks.length,
+        durationMs: report.durationMs,
+        // The labels are the whole diagnosis — they say WHICH assertion broke, in words.
+        checks: failed.slice(0, 8).map((c) => (c.detail ? `${c.label} — ${c.detail}` : c.label)),
+        ...(report.error ? { error: report.error } : {}),
+      },
+      'app_error',
+    );
+  } catch { /* telemetry must never break a harness run */ }
+}

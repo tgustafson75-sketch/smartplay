@@ -494,11 +494,85 @@ const SCEN_20: Scenario = {
 
 // ─── Registry ───────────────────────────────────────────────────────
 
+
+/**
+ * SCEN_21 — THE SWING-LOCATE CHAIN, ON THE DEVICE THAT HAS TO DO IT.
+ *
+ * 2026-09-01 (Tim): "anything you'd otherwise ask me to verify should go in the harness, so the SIM
+ * can run on the phone and the issue log carries the result."
+ *
+ * Everything the desktop sim can check about this chain, it already checks. What it CANNOT check is
+ * the half that only exists on a handset: whether MediaPipe is actually linked in this build, and
+ * whether the pure anchor maths agrees with itself on a real device's clock. Those are the two things
+ * I would otherwise have had to ask him to confirm from a screenshot.
+ *
+ * A swing is the fastest thing in a clip. deriveSwingAnchors reads start/top/impact/end off the
+ * hand-speed signal, and the whole 09-01 speed fix — on-device locate replacing a cold-Lambda vision
+ * call on four surfaces — rests on it being available AND correct here.
+ */
+const SCEN_21: Scenario = {
+  id: 'C21',
+  title: 'Swing locate works on THIS device (pose available + anchors correct)',
+  category: 'critical',
+  run: () => runWithAsserts('C21', 'Swing locate works on THIS device', async (a) => {
+    const { getMediaPipeStatus } = await import('../mediaPipePoseService');
+    const { deriveSwingAnchors, wristCentroid } = await import('../swing/poseMotion');
+    const { sampleTimesMs, LOCATE_FRAME_COUNT } = await import('../swing/onDeviceLocate');
+
+    // 1) Is the native pose module actually in THIS build? A desktop test can never answer this, and
+    //    when it is absent every locate silently falls back to the network call it was replacing.
+    const status = await getMediaPipeStatus().catch(() => null);
+    a.expect(
+      'on-device pose is available in this build',
+      status?.available === true,
+      status ? `available=${status.available} modelLoaded=${status.modelLoaded}` : 'status probe threw',
+    );
+
+    // 2) The sample plan must stay inside a real clip. Off-by-one here reads frames that do not exist.
+    const times = sampleTimesMs(11_640);
+    a.expect('locate samples the clip', times.length === LOCATE_FRAME_COUNT, `${times.length} times`);
+    a.expect(
+      'no sample falls outside the clip',
+      times.every((t) => t > 0 && t < 11_640),
+      `first=${times[0]} last=${times[times.length - 1]}`,
+    );
+
+    // 3) The maths, on this device's clock. A synthetic swing: settle, backswing to a high slow top,
+    //    fast downswing to impact at 1150ms, follow-through.
+    const samples: { tMs: number; x: number; y: number }[] = [];
+    for (let t = 0; t <= 1600; t += 50) {
+      let x: number, y: number;
+      if (t <= 400) { x = 0.50; y = 0.60; }
+      else if (t <= 900) { const f = (t - 400) / 500; y = 0.60 - 0.25 * f; x = 0.50 - 0.08 * f; }
+      else if (t <= 1150) { const f = (t - 900) / 250; y = 0.35 + 0.27 * f * f; x = 0.42 + 0.08 * f; }
+      else { const f = (t - 1150) / 450; y = 0.62 - 0.30 * f; x = 0.50 + 0.10 * f; }
+      samples.push({ tMs: t, x, y });
+    }
+    const anchors = deriveSwingAnchors(samples);
+    a.expect('anchors resolve for a clean swing', !!anchors, anchors ? 'ok' : 'null');
+    if (anchors) {
+      a.expect('impact lands on the downswing', Math.abs(anchors.impactMs - 1150) <= 100, `impactMs=${anchors.impactMs}`);
+      a.expect('top precedes impact', anchors.topMs < anchors.impactMs, `top=${anchors.topMs}`);
+      a.expect(
+        'the window brackets the swing',
+        anchors.startMs < anchors.topMs && anchors.endMs > anchors.impactMs,
+        `start=${anchors.startMs} end=${anchors.endMs}`,
+      );
+    }
+
+    // 4) The wrist reader only speaks when it can see a wrist — this is what keeps "wrist informs
+    //    timing" from quietly becoming "whatever keypoint was handy informs timing".
+    const noWrist = wristCentroid({ timestampMs: 0, keypoints: [] } as never);
+    a.expect('no wrist means no answer', noWrist === null, `got ${JSON.stringify(noWrist)}`);
+  }),
+};
+
 export const ALL_SCENARIOS: readonly Scenario[] = [
   SCEN_1, SCEN_2, SCEN_3, SCEN_4, SCEN_5, SCEN_6, SCEN_7, SCEN_8, SCEN_9,
   SCEN_10, SCEN_11, SCEN_12, SCEN_13, SCEN_14,
   SCEN_15, SCEN_16, SCEN_17,
   SCEN_18, SCEN_19, SCEN_20,
+  SCEN_21,
 ] as const;
 
 // Suppress unused-import false positive (i18n must be imported to ensure

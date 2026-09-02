@@ -19,6 +19,7 @@
  */
 
 import React, { useMemo, useState } from 'react';
+import { logScenarioToIssueLog } from '../services/harness/assert';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator,
 } from 'react-native';
@@ -165,6 +166,7 @@ export default function HarnessScreen() {
     try {
       const report = await s.run();
       console.log(`[harness ${s.id}] DONE  status=${report.status} duration=${report.durationMs}ms checks=${report.checks.length}`);
+      logScenarioToIssueLog(report);   // a failure has to survive the screen it printed on
       setStates(prev => ({ ...prev, [s.id]: { kind: 'done', report } }));
       return report;
     } catch (e) {
@@ -184,6 +186,7 @@ export default function HarnessScreen() {
         checks: [{ label: 'Scenario threw outside the assert harness', status: 'fail' as const, detail: msg }],
         error: msg,
       };
+      logScenarioToIssueLog(fallback);
       setStates(prev => ({ ...prev, [s.id]: { kind: 'done', report: fallback } }));
       return fallback;
     }
