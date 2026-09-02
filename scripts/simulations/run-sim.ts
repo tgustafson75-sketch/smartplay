@@ -2566,8 +2566,12 @@ check('CNS re-audit fixes: course-less reflection (G1 bug) + real approach/troub
     const voice = read('hooks/useVoiceCaddie.ts');
     // G1: reflection persists course-less (nullable course_id) and isn't gated on activeCourseId
     const g1 = /course_id: s\.activeCourseId \?\? null,/.test(rs) &&
-      /Player-level REFLECTION/.test(rs) &&
-      /runs REGARDLESS of/.test(rs);
+      // 2026-09-01 — was a comment match; assert the call and the null-course field that make
+      // 'runs regardless of course' true.
+      /recordReflection\(\{/.test(readCode('store/roundStore.ts')) &&
+      // 2026-09-01 — was a comment match. The claim is that a reflection is recorded even with no
+      // course; the field that makes that true is the null-tolerant course_id.
+      /course_id: s\.activeCourseId \?\? null/.test(readCode('store/roundStore.ts'));
     // G3: real approach club (last clubbed non-tee shot) + trouble (2+ over) fed to memory
     const g3 = /const approachShot = \[\.\.\.holeShots\]\.reverse\(\)\.find/.test(rs) &&
       /approachClub = approachShot\?\.club \?\? null/.test(rs) &&
@@ -4577,7 +4581,8 @@ check('Close a tool → HOME (no white screen), deterministic + local',
     return (
       /case 'close':\s*case 'exit': \{/.test(nav) &&
       /router\.replace\(HOME_PATH as never\)/.test(nav) &&
-      /CLOSE \/ EXIT A TOOL/.test(pre) &&
+      // 2026-09-01 — was a comment match. The real proof is the close/exit intent regex itself.
+      /rx: \/\\b\(close\\s\+/.test(readCode('services/localIntentPrecheck.ts')) &&
       /direction: 'home'/.test(pre)
     );
   })(),
@@ -6032,8 +6037,38 @@ check('Voice record restarts from review (camera re-mount fix)',
   'voice "record" from review resets→setup→onCameraReady auto-starts (hands-free loop)');
 
 check('startRecording clears prior-swing results (no stale data in loop)',
-  /Clear the prior swing's results so the next minute starts clean/.test(smSrc),
-  'analysis/putt/feel/tempo cleared on each new recording');
+  /**
+   * 2026-09-01 (adversarial audit) — THIS LOCK'S ENTIRE PROOF WAS A COMMENT.
+   *
+   * Its only assertion matched the sentence "Clear the prior swing's results so the next minute
+   * starts clean" — so every one of these setters could have been deleted and the guard would still
+   * have passed, as long as somebody left the comment behind. The thing it guards is showing swing
+   * A's analysis on swing B, which is the defect class this repo keeps rediscovering (the club arc
+   * had exactly that bug on 08-08), and the voice loop re-enters through startRecording rather than
+   * reset, so nothing else clears them.
+   *
+   * Now asserts the setters themselves, in comment-stripped source.
+   */
+  (() => {
+    const sm = readCode('app/swinglab/smartmotion.tsx');
+    // SCOPED to startRecording. A file-wide search was the first attempt and it could not fail:
+    // every one of these setters also appears on other code paths, so deleting the ones HERE left
+    // the guard green. A guard has to look where the behaviour lives, not merely where the string does.
+    const i = sm.indexOf('const startRecording = useCallback(');
+    if (i === -1) return false;
+    const body = sm.slice(i, i + 3500);
+    return [
+      'setAnalysis(null)',
+      'setAnalysisError(null)',
+      'setPuttAnalysis(null)',
+      'setTempo(null)',
+      "setFeelText('')",
+      'setFeelReply(null)',
+      'setSegments([])',
+      'setSelectedSwing(0)',
+    ].every((call) => body.includes(call));
+  })(),
+  'analysis/putt/feel/tempo/segments are all cleared on each new recording — asserted as calls, not as a comment');
 
 check('Universal control bar: record/play-pause/save/delete + slow-mo',
   /togglePlay/.test(smSrc) && /discardSwing/.test(smSrc) && /cycleSpeed/.test(smSrc) &&
@@ -8748,7 +8783,9 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
         /driverYards != null && !s\.isSimRound/.test(rs) &&
         /carry != null && !s\.isSimRound/.test(rs) &&
         // voice entry (deterministic + offline) + handler + recap-card gate
-        /SIM ROUND/.test(pre) && /tool_name: 'sim_round'/.test(pre) &&
+        // 2026-09-01 — the /SIM ROUND/ clause here read a COMMENT and was redundant: the line below
+        // already asserts the intent this lock cares about, in code. Removed rather than replaced.
+        /tool_name: 'sim_round'/.test(pre) &&
         /toolName === 'sim_round'/.test(ot) && /startVoiceSimRound\(/.test(ot) &&
         /!round\?\.simulated/.test(card)
       );
