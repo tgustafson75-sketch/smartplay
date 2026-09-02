@@ -725,6 +725,54 @@ const SCEN_22: Scenario = {
         const warm = await rung(3_000);
         a.note('warm probe', `${warm.tookMs}ms · ${warm.note} (cold was ${p1.tookMs}ms — a fast warm probe means connection setup, not the path)`);
       }
+
+      /**
+       * 2026-09-02 — WHO ELSE IS TALKING TO THIS ORIGIN?
+       *
+       * Tim's 20:19 run is the reason this exists. The health GET took 71 seconds and returned
+       * HTTP 200 — the host answered, it just answered late — and then, two scenarios later, a
+       * DIFFERENT request to the SAME origin (course-geometry) came back in 301ms. A dead host does
+       * not do that. A saturated one does.
+       *
+       * `fetchCourseGeometry` dedupes per courseId, so several DIFFERENT courses build at once, and
+       * each build holds a request open with an 85-second budget against our own origin — while
+       * Android's HTTP client will only keep a handful of connections per host and queues the rest.
+       * A tiny GET behind four 85-second builds is not a reachability problem, it is our own
+       * background work starving the foreground path. That is the same shape as the note already in
+       * armDeadHostGuard: the guard competes with the very request it is guarding.
+       *
+       * So the harness stops guessing and reads the device: how many builds were in flight, and does
+       * the probe recover once they finish. Slow-then-fast is starvation by our own traffic;
+       * slow-then-still-slow is the network path. Only runs when the ladder already failed, so a
+       * healthy device pays nothing. [[a-budget-must-fit-what-runs-inside-it]] [[echo-what-the-code-threw-away]]
+       */
+      if (guardWouldFire) {
+        const { useGeometryStatusStore } = await import('../../store/geometryStatusStore');
+        const buildingNow = Object.entries(useGeometryStatusStore.getState().building)
+          .filter(([, v]) => v)
+          .map(([k]) => k);
+        a.note('same-origin course-geometry builds in flight',
+          buildingNow.length
+            ? `${buildingNow.length} — ${buildingNow.join(', ')} (each holds a request to this SAME origin for up to 85s)`
+            : '0 — nothing of ours was building, so the queue is not ours');
+
+        // Give our own traffic a bounded chance to drain, then ask the host one more time. This is
+        // the discriminator: the same URL, the same device, seconds later, with the pool free.
+        const settleStart = Date.now();
+        while (Date.now() - settleStart < 15_000) {
+          const stillBuilding = Object.values(useGeometryStatusStore.getState().building).some(Boolean);
+          if (!stillBuilding) break;
+          await new Promise((r) => setTimeout(r, 500));
+        }
+        const settleMs = Date.now() - settleStart;
+        const after = await rung(3_000);
+        a.expect('the host answers once our own background work has drained', after.ok,
+          after.ok
+            ? `${after.tookMs}ms after waiting ${settleMs}ms — the host was fine; OUR OWN same-origin ` +
+              'traffic was starving the probe, so the dead-host verdict above is a false positive'
+            : `${after.tookMs}ms · ${after.note} (waited ${settleMs}ms) — still silent with the pool ` +
+              'free, so this is the network path to the host, not our own traffic');
+      }
     } else {
       a.expect('health probe answers quickly', false, 'no API base URL — every network stage will fail');
     }
