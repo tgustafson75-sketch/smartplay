@@ -41,7 +41,6 @@
       "channel": "preview"
     },
     "production": {
-      "autoIncrement": true,
       "credentialsSource": "remote",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.smartplaycaddie.com",
@@ -49,14 +48,12 @@
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       },
       "android": {
-        "buildType": "app-bundle",
-        "autoIncrement": "versionCode"
+        "buildType": "app-bundle"
       },
       "ios": {
         "distribution": "store",
         "simulator": false,
-        "resourceClass": "m-medium",
-        "autoIncrement": "buildNumber"
+        "resourceClass": "m-medium"
       },
       "channel": "production"
     },
