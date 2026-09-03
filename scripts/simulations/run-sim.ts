@@ -15027,6 +15027,40 @@ check(
 }
 
 /**
+ * ─── 2026-09-03 — THE CARD MUST SHOW WHAT THE ROUND POSTS ──────────────────────────────────────
+ *
+ * The recap's handicap card computed its own differential with a hardcoded neutral 72/113 while the
+ * Index posting path used the round's REAL rating and slope. Its own comment said the card exists
+ * to display the differential the round posts, and that they matched "by construction". They did
+ * not — on a slope-131 course rated 71.4, an AGS of 92 posts 17.8 and the card showed 20.0. The
+ * card overstated the number on every course harder than neutral, so the player read a worse figure
+ * than the one that moved their Index.
+ *
+ * Two copies of a formula stay identical exactly as long as nobody edits one.
+ */
+{
+  const hc = readCode('services/handicapCalculator.ts');
+  const card = readCode('components/recap/HandicapImpactCard.tsx');
+  check(
+    'HANDICAP: the posted differential has ONE owner',
+    /export function postedDifferentialFor\(r: PostingInputs, handicapIndex: number\): number/.test(hc) &&
+      /diffs = eligible\.map\(r => postedDifferentialFor\(r, hi\)\);/.test(hc),
+    'rebuildDifferentialsFromHistory must go through the shared helper, or the Index path and the card can drift again',
+  );
+  check(
+    'HANDICAP: the recap card asks that owner instead of re-deriving',
+    /postedDifferentialFor\(posting, handicapIndex\)/.test(card) &&
+      !/computeScoreDifferential\((?:cappedGross|[A-Za-z.]+), (?:72|36), 113\)/.test(card),
+    'a hardcoded 72/113 in the card is the exact defect: it displays a neutral-course differential for a round played on a real one',
+  );
+  check(
+    'HANDICAP: the card feeds the round’s real rating and slope in',
+    /rating: tee2\?\.course_rating \?\? null,/.test(card) && /slope: tee2\?\.slope_rating \?\? null,/.test(card),
+    'passing nulls where the tee is unknown lets postingInputsFor fall back the SAME way the posting path does, rather than the card inventing its own neutral',
+  );
+}
+
+/**
  * ─── 2026-09-01 — THE CAMERA ANGLE IS JUDGED AT ADDRESS ─────────────────────────────────────────
  *
  * Tim: "the club arc shows up sporadically and mostly incorrect… it may get the direction right, but

@@ -17,7 +17,7 @@ import { useRouter } from 'expo-router';
 import AppIcon from '../AppIcon';
 import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
-import { computeRoundHandicap, estimateNewIndex, computeScoreDifferential, expectedNineDifferential } from '../../services/handicapCalculator';
+import { postingInputsFor, postedDifferentialFor, computeRoundHandicap, estimateNewIndex, computeScoreDifferential, expectedNineDifferential } from '../../services/handicapCalculator';
 import { getBundledHoles } from '../../data/courses';
 
 /**
@@ -156,10 +156,35 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
     // expectedNineDifferential for 9-hole). The 9-hole branch previously used the freshly-recomputed
     // out.adjusted_gross_score, whose course handicap is derived differently → could diverge from what
     // actually moved the Index on a 9-hole blow-up/pickup round.
-    const cappedGross = round.handicapAgs ?? out.adjusted_gross_score;
-    const perRoundDiff = is9Hole
-      ? Math.round((computeScoreDifferential(cappedGross, 36, 113) + expectedNineDifferential(handicapIndex)) * 10) / 10
-      : Math.round(computeScoreDifferential(cappedGross, 72, 113) * 10) / 10;
+    /**
+     * 2026-09-03 — ASK THE POSTING PATH, don't re-derive.
+     *
+     * This block used to call computeScoreDifferential with a hardcoded neutral 72/113 while the
+     * Index posting path used the round's REAL rating and slope. The comment above says the card
+     * exists to display the differential the round posts and that they match "by construction" —
+     * they did not. On a slope-131 course rated 71.4, an AGS of 92 posts 17.8 and this card showed
+     * 20.0, so the number the player read was WORSE than the one that moved their Index, on every
+     * course harder than neutral.
+     *
+     * postingInputsFor / postedDifferentialFor are the posting path's own two functions, so the
+     * agreement is now structural. Falls back to the freshly-derived AGS only when the round has no
+     * postable shape at all, which is the same condition that stops it posting.
+     * [[two-owners-is-the-root-cause]]
+     */
+    const posting = postingInputsFor({
+      totalScore: round.totalScore,
+      handicapAgs: round.handicapAgs ?? out.adjusted_gross_score,
+      handicapHoles: round.handicapHoles,
+      holesPlayed: round.holesPlayed,
+      holePars: round.holePars ?? null,
+      scores: round.scores ?? null,
+      courseId: round.courseId ?? null,
+      rating: tee2?.course_rating ?? null,
+      slope: tee2?.slope_rating ?? null,
+    });
+    const perRoundDiff = posting
+      ? Math.round(postedDifferentialFor(posting, handicapIndex) * 10) / 10
+      : Math.round(computeScoreDifferential(round.handicapAgs ?? out.adjusted_gross_score, rating, slope) * 10) / 10;
     return {
       ...out,
       adjusted_gross_score: is9Hole ? out.adjusted_gross_score * 2 : out.adjusted_gross_score,

@@ -26,6 +26,8 @@
  */
 
 const NEUTRAL_SLOPE = 113;
+/** Neutral 9-hole course rating (half of 72). Used only when a round carries no real rating. */
+const NINE_HOLE_CR = 36;
 
 /**
  * Course Handicap = Index × (Slope / 113) + (Course Rating − Par)
@@ -235,6 +237,59 @@ const MIN_STROKES_PER_HOLE = 3;
  * when the round has a bundled courseId. Bundled ratings are 18-HOLE ratings (the card standard), so a
  * 9-hole posting halves the rating; slope is length-independent. Lazy-required so no import cycle.
  */
+/**
+ * 2026-09-03 — THE POSTED DIFFERENTIAL, IN ONE PLACE.
+ *
+ * The recap's handicap card computed its own differential with `computeScoreDifferential(gross, 72,
+ * 113)` — hardcoded NEUTRAL rating and slope — while the Index posting path used the round's REAL
+ * baseRating and baseSlope. Its comment said the card exists to "DISPLAY the same differential the
+ * round posts" and that the two matched "by construction". They did not: on a slope-131 course
+ * rated 71.4, an AGS of 92 posts (113/131)x(92-71.4) = 17.8 and the card showed
+ * (113/113)x(92-72) = 20.0. The card OVERSTATED the differential on any course harder than neutral,
+ * so the player read a worse number than the one that actually moved their Index.
+ *
+ * Two copies of a formula stay identical exactly as long as nobody edits one. These are the copies,
+ * merged — the card and rebuildDifferentialsFromHistory now call the same two functions, so they
+ * agree by construction rather than by comment. [[two-owners-is-the-root-cause]]
+ */
+export type PostingInputs = { score: number; posted: 9 | 18; baseRating: number | null; baseSlope: number };
+
+/** Normalize a round record into what the posting path actually feeds the differential. */
+export function postingInputsFor(r: {
+  totalScore: number;
+  handicapAgs?: number | null;
+  handicapHoles?: 9 | 18;
+  holesPlayed: number;
+  holePars?: Record<number, number> | null;
+  scores?: Record<number, number> | null;
+  courseId?: string | null;
+  rating?: number | null;
+  slope?: number | null;
+  parTotal?: number | null;
+}): PostingInputs | null {
+  const posted: 9 | 18 | null = r.handicapHoles ?? (r.holesPlayed === 9 ? 9 : r.holesPlayed === 18 ? 18 : null);
+  if (posted == null) return null;
+  // The CAPPED Adjusted Gross Score when the round has posted; the raw total is only a fallback.
+  const score = r.handicapAgs ?? r.totalScore;
+  if (!(score > 0)) return null;
+  const derived = (r.rating == null && r.parTotal == null && (r.holePars || r.courseId))
+    ? postingBaseline(r)
+    : { parTotal: r.parTotal ?? null, rating: r.rating ?? null, slope: r.slope ?? null };
+  const baseRating = (typeof derived.rating === 'number' && derived.rating > 0)
+    ? derived.rating
+    : (typeof derived.parTotal === 'number' && derived.parTotal > 0) ? derived.parTotal : null;
+  const baseSlope = (typeof derived.slope === 'number' && derived.slope > 0) ? derived.slope : NEUTRAL_SLOPE;
+  return { score, posted, baseRating, baseSlope };
+}
+
+/** The differential this round contributes to the Index. `handicapIndex` is used only for the
+ *  9-hole expected-second-nine term. */
+export function postedDifferentialFor(r: PostingInputs, handicapIndex: number): number {
+  return r.posted === 9
+    ? Math.round((computeScoreDifferential(r.score, r.baseRating ?? NINE_HOLE_CR, r.baseSlope) + expectedNineDifferential(handicapIndex)) * 10) / 10
+    : computeScoreDifferential(r.score, r.baseRating ?? 72.0, r.baseSlope);
+}
+
 export function postingBaseline(r: {
   holesPlayed: number;
   handicapHoles?: 9 | 18;
@@ -304,7 +359,6 @@ export function rebuildDifferentialsFromHistory(rounds: {
   scores?: Record<number, number> | null;
   courseId?: string | null;
 }[]): number[] {
-  const NINE_HOLE_CR = 36; // neutral 9-hole course rating (half of 72)
   const normalized = rounds.map(r => {
     const posted: 9 | 18 | null = r.handicapHoles ?? (r.holesPlayed === 9 ? 9 : r.holesPlayed === 18 ? 18 : null);
     const score = r.handicapAgs ?? r.totalScore;
@@ -336,11 +390,7 @@ export function rebuildDifferentialsFromHistory(rounds: {
   let hi = 14;
   let diffs: number[] = [];
   for (let pass = 0; pass < 8; pass++) {
-    diffs = eligible.map(r =>
-      r.posted === 9
-        ? Math.round((computeScoreDifferential(r.score, r.baseRating ?? NINE_HOLE_CR, r.baseSlope) + expectedNineDifferential(hi)) * 10) / 10
-        : computeScoreDifferential(r.score, r.baseRating ?? 72.0, r.baseSlope),
-    );
+    diffs = eligible.map(r => postedDifferentialFor(r, hi));
     const est = estimateNewIndex(diffs);
     if (est.newIndex == null) break;
     const converged = Math.abs(est.newIndex - hi) < 0.05;
