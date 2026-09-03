@@ -51,6 +51,10 @@ async function ingest(newUserTurns: ConversationTurn[]): Promise<boolean> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
+      // Bounded for the same reason as the voice cache: background work must never hold a
+      // connection slot open indefinitely. The route's own budget is shorter than this, so the
+      // server still gets to answer first. [[the-client-must-be-the-last-to-give-up]]
+      signal: AbortSignal.timeout(20_000),
     });
     if (!res.ok) return false; // server error → keep the watermark so we retry these turns
     const json = (await res.json().catch(() => ({}))) as { facts?: Record<string, unknown>; configured?: boolean };

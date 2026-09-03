@@ -15201,6 +15201,55 @@ check(
 }
 
 /**
+ * ─── 2026-09-03 — A DROPPED CONNECTION IS THE EXPECTED CONDITION ───────────────────────────────
+ *
+ * Tim: "don't build error states. Make it work."
+ *
+ * The cloud backup POST and the restore GET had NO TIMEOUT. React Native's fetch has no default
+ * one, so on a marginal course connection the promise never settled — and CloudBackupCard does
+ * setServerBusy(true), await, setServerBusy(false), so the button spun forever with no outcome
+ * either way, on the screen a player opens when they are anxious about their data. The try/catch
+ * did not mean it could not fail; it meant it could hang instead.
+ *
+ * Bounding it was necessary but not the answer. The first version reported the timeout in nicer
+ * words, which describes not having done the job. Three attempts with backoff on TRANSIENT failures
+ * gets the data up; a wrong passphrase or an over-cap payload is a real answer and returns at once.
+ * 35s per attempt because api/backup's own budget is 30s — the server should always give up first.
+ * [[the-client-must-be-the-last-to-give-up]]
+ */
+{
+  const sb = readCode('services/cloudSync/serverBackup.ts');
+  check(
+    'BACKUP: neither call can hang forever',
+    (sb.match(/signal: AbortSignal\.timeout\(REQUEST_TIMEOUT_MS\)/g) ?? []).length === 2 &&
+      /const REQUEST_TIMEOUT_MS = 35_000;/.test(sb),
+    'an unbounded fetch on a golf course does not fail, it hangs — and the card awaits it between two setServerBusy calls',
+  );
+  check(
+    'BACKUP: a blip is RETRIED, not reported',
+    /const MAX_ATTEMPTS = 3;/.test(sb) &&
+      /return withRetry\(\(\) => serverBackupAttempt\(opts\)\)/.test(sb) &&
+      /return withRetry\(\(\) => serverRestoreAttempt\(keyOverride, secretOverride\)\)/.test(sb),
+    'both entry points go through the retry, or the manual button and the auto-backup behave differently on the same connection',
+  );
+  check(
+    'BACKUP: a real answer is not hammered',
+    /if \(!isTransient\(last\.reason \?\? ''\)\) return last;/.test(sb),
+    'retrying a wrong passphrase or an over-cap payload helps nobody and costs three round trips to say so',
+  );
+
+  // Background traffic must not hold a connection slot open either — this app has already starved
+  // its own foreground that way. [[our-own-traffic-starves-the-foreground]]
+  const unbounded = ['services/offlineVoiceCache.ts', 'services/narrativeIngest.ts']
+    .filter((f) => !/signal: AbortSignal\.timeout/.test(readCode(f)));
+  check(
+    'BACKUP: background uploads are bounded too',
+    unbounded.length === 0,
+    unbounded.length ? `unbounded background fetch in ${unbounded.join(', ')}` : 'the offline voice cache and narrative ingest both bound their requests',
+  );
+}
+
+/**
  * ─── 2026-09-03 — CONSENT BEFORE THE PERMISSION PROMPTS ────────────────────────────────────────
  *
  * The first-run order was intro → PERMISSIONS → welcome, so a brand-new install asked for CAMERA,

@@ -200,6 +200,12 @@ export function ensureOfflineClipsCached(gender: Gender, persona: string): Promi
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: line.text, gender, language: line.language, persona }),
+          // 2026-09-03 — bounded. This runs in a loop with no user waiting on it, so an unbounded
+          // request does not hang a screen — it holds a connection slot indefinitely, which is the
+          // documented way this app starves its own foreground: concurrent background traffic
+          // saturating the origin pool until the dead-host guard aborts a real swing.
+          // [[our-own-traffic-starves-the-foreground]]
+          signal: AbortSignal.timeout(20_000),
         });
         if (!resp.ok) continue;
         const buf = await resp.arrayBuffer();
