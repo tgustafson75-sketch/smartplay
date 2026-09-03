@@ -337,8 +337,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
     'SURFACE — a registration read for diagnostics.',
   'services/watchWristInterpretation.ts :: estimateClubSpeedMph':
     'PARKED — wrist-peak to clubhead speed. Shipping the number needs the calibration surface; the watch reports tempo and impact today.',
-  'services/youtubeLinks.ts :: openYouTubeSearch':
-    'PARKED — the YouTube portal needs an API key that is not provisioned.',
   'store/caddieMemoryStore.ts :: caddieMemorySnapshot':
     'SURFACE — a whole-store read for diagnostics and export.',
   'store/geometryStatusStore.ts :: isBuildingSnapshot':

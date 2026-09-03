@@ -20,6 +20,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
+import { youtubePlayerHtml, parsePlayerMessage, isEmbedBlocked } from '../services/youtubeEmbed';
+import { openYouTubeSearch } from '../services/youtubeLinks';
 import * as WebBrowser from 'expo-web-browser';
 import { useTheme } from '../contexts/ThemeContext';
 import { usePracticePointsStore } from '../store/practicePointsStore';
@@ -35,25 +37,6 @@ function extractVideoId(u: string | undefined): string | null {
 }
 
 /** IFrame-API player HTML — fires postMessage('ended') on state 0 (ENDED). */
-function playerHtml(videoId: string): string {
-  return `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}#p{width:100%;height:100%}</style></head>
-<body><div id="p"></div>
-<script src="https://www.youtube.com/iframe_api"></script>
-<script>
-  var post = function(m){ if(window.ReactNativeWebView) window.ReactNativeWebView.postMessage(m); };
-  function onYouTubeIframeAPIReady(){
-    new YT.Player('p', {
-      videoId: '${videoId}',
-      playerVars: { rel:0, modestbranding:1, playsinline:1, autoplay:1, fs:1 },
-      events: {
-        onReady: function(){ post('ready'); },
-        onStateChange: function(e){ if(e.data === 0){ post('ended'); } }
-      }
-    });
-  }
-</script></body></html>`;
-}
 
 export default function DrillVideo() {
   const router = useRouter();
@@ -67,6 +50,7 @@ export default function DrillVideo() {
   const W = Dimensions.get('window').width;
   const playerH = Math.round((W * 9) / 16);
   const [finished, setFinished] = useState(false);
+  const [playerError, setPlayerError] = useState<{ code: number; reason: string } | null>(null);
 
   // No native player → open the clean embed in the in-app browser (can't detect
   // completion there, so no watch points), then pop back.
@@ -90,8 +74,22 @@ export default function DrillVideo() {
     }
   };
 
+  /**
+   * 2026-09-03 — the player now reports FAILURE, not just completion.
+   *
+   * There was no onError on the YT.Player, so codes 100 (removed/private) and 101/150 (owner
+   * disallows embedding) rendered YouTube's own error inside the WebView, posted nothing, and left
+   * the screen on a black rectangle. The drill videos are hardcoded ids nothing filters for
+   * embeddability, so a rights-holder flipping that switch would have looked like our bug.
+   */
   const onMessage = (e: WebViewMessageEvent) => {
-    if (e.nativeEvent.data === 'ended') onFinished();
+    const msg = parsePlayerMessage(e.nativeEvent.data);
+    if (!msg) return;
+    if (msg.kind === 'ended') { onFinished(); return; }
+    if (msg.kind === 'error') {
+      console.log('[drill-video] player error', msg.code, msg.reason);
+      setPlayerError(msg);
+    }
   };
 
   const tryDrill = () => {
@@ -133,10 +131,27 @@ export default function DrillVideo() {
         <View style={{ width: 28 }} />
       </View>
 
-      {videoId && HAS_NATIVE_WEBVIEW ? (
+      {videoId && HAS_NATIVE_WEBVIEW && playerError ? (
+        /* The video exists but will not play here. Say which of those it is, and hand the player
+           somewhere that works — the drill CTA below stays available either way. */
+        <View style={styles.empty}>
+          <Ionicons name="alert-circle-outline" size={40} color={colors.text_muted} />
+          <Text style={[styles.emptyText, { color: colors.text_secondary }]}>{playerError.reason}</Text>
+          {isEmbedBlocked(playerError.code) && (
+            <TouchableOpacity
+              style={styles.errorAction}
+              onPress={() => { void openYouTubeSearch(params.title || 'golf drill'); }}
+              accessibilityRole="button"
+            >
+              <Ionicons name="logo-youtube" size={18} color="#88F700" />
+              <Text style={styles.errorActionText}>Find it on YouTube</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : videoId && HAS_NATIVE_WEBVIEW ? (
         <View style={{ width: W, height: playerH, backgroundColor: '#000' }}>
           <WebView
-            source={{ html: playerHtml(videoId), baseUrl: 'https://www.youtube.com' }}
+            source={{ html: youtubePlayerHtml(videoId), baseUrl: 'https://www.youtube.com' }}
             style={{ flex: 1, backgroundColor: '#000' }}
             originWhitelist={['*']}
             allowsInlineMediaPlayback
@@ -215,6 +230,12 @@ const styles = StyleSheet.create({
   tryBtnText: { fontSize: 15, fontWeight: '800' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 },
   emptyText: { fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  errorAction: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16,
+    borderWidth: 1, borderColor: '#88F700', borderRadius: 999,
+    paddingVertical: 10, paddingHorizontal: 16,
+  },
+  errorActionText: { color: '#88F700', fontSize: 14, fontWeight: '700' },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14, marginTop: 'auto' },
   footerText: { color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
 });

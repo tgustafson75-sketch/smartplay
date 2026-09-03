@@ -15061,6 +15061,108 @@ check(
 }
 
 /**
+ * ─── 2026-09-03 — AN EMBEDDED VIDEO THAT FAILS MUST SAY SO ─────────────────────────────────────
+ *
+ * Tim: "make sure the YouTube requests for videos and stuff works correctly, and there's no
+ * glitches."
+ *
+ * The search route is fine — the key is configured, it enforces safeSearch strict and
+ * videoEmbeddable, and it answered live in under a second. The PLAYERS were the problem.
+ * drill-video built an IFrame-API player with onReady and onStateChange but NO onError, so YouTube
+ * codes 100 (removed/private) and 101/150 (owner disallows embedding) rendered YouTube's own error
+ * inside the WebView, posted nothing back, and left the screen on a black rectangle the player had
+ * to back out of. jukebox loaded the raw embed URL, so error events were not unhandled — they were
+ * impossible.
+ *
+ * The 19 drill and instructor video ids are HARDCODED and nothing filters them for embeddability.
+ * All 19 were playable when checked on 2026-09-03, which is a fact about that day and not a
+ * property of the code: a rights-holder can disable embedding whenever they like.
+ */
+{
+  const emb = readCode('services/youtubeEmbed.ts');
+  check(
+    'YOUTUBE: the embedded player reports failure, not just completion',
+    /onError: function\(e\)\{ ready = true; post\('error:' \+/.test(emb) &&
+      /setTimeout\(function\(\)\{ if\(!ready\) post\('error:5'\); \}, 12000\)/.test(emb),
+    'without onError a removed or embed-blocked video is a black rectangle; without the timeout an IFrame API that never loads is the same thing forever',
+  );
+  check(
+    'YOUTUBE: the video id is stripped before it enters a <script>',
+    /replace\(\/\[\^A-Za-z0-9_-\]\/g, ''\)/.test(emb),
+    'the id is interpolated into a script tag, so it is filtered rather than trusted; a mangled id then fails as code 2, which has a message',
+  );
+  const dv = readCode('app/drill-video.tsx');
+  const jb = readCode('app/jukebox.tsx');
+  check(
+    'YOUTUBE: BOTH players use the one builder and handle its errors',
+    /youtubePlayerHtml\(videoId\)/.test(dv) && /parsePlayerMessage\(e\.nativeEvent\.data\)/.test(dv) &&
+      /youtubePlayerHtml\(videoId as string\)/.test(jb) && /parsePlayerMessage\(e\.nativeEvent\.data\)/.test(jb),
+    'jukebox previously loaded source={{uri}} with no IFrame API at all — two copies that had already drifted into different failure modes',
+  );
+  check(
+    'YOUTUBE: an embed-blocked video offers YouTube itself',
+    /isEmbedBlocked\(playerError\.code\)/.test(dv) && /isEmbedBlocked\(playerError\.code\)/.test(jb),
+    'codes 101/150 mean the video exists and the owner will not let us play it — the honest move is to hand the player somewhere it works, and a removed video (100) gets no such offer',
+  );
+}
+
+/**
+ * ─── 2026-09-03 — "PLAY [SONG]" ON THE FIRST THING YOU SAY ─────────────────────────────────────
+ *
+ * Tim, describing his own pre-round: "I like opening the app and I'll say, okay Kevin, play Sail by
+ * Awolnation on YouTube. And it'll kind of pull up and tell me the link is. I have to push into the
+ * link." Having to tap a link is the exact opposite of this product.
+ *
+ * The detector and the portal were both fine. tryPlaySong was called from ONE place —
+ * useVoiceCaddie.sendToBrain — and that function's own comment says it "survives only for the
+ * follow-up listen loop". A first utterance goes to processTranscriptOverride and straight to the
+ * brain, which answers conversationally with a URL. So the song portal worked as a follow-up and
+ * never as the opening request, which is why it read as intermittent instead of broken.
+ *
+ * It now runs on the MAIN path, after the intent router so every deterministic golf command still
+ * gets first refusal, and it stays in sendToBrain because the follow-up loop is a real path too.
+ * [[hands-free-zero-setup-is-the-product]] [[learning-layer-must-not-intercept]]
+ */
+{
+  const vc = readCode('hooks/useVoiceCaddie.ts');
+  const mainPath = /const song = await ps\.tryPlaySong\(transcript\);[\s\S]{0,700}?await speakResponse\(song\.spoken\);/.test(vc);
+  check(
+    'SONG: "play [song]" is handled on the FIRST utterance, not only as a follow-up',
+    mainPath && (vc.match(/tryPlaySong\(/g) ?? []).length >= 2,
+    'reachable only from sendToBrain means reachable only from the follow-up loop — the opening request goes to the brain and comes back as a link to tap',
+  );
+  check(
+    'SONG: it runs AFTER the intent router, so golf commands keep priority',
+    vc.indexOf('voiceCommandRouter.route(transcript') < vc.indexOf('ps.tryPlaySong(transcript)'),
+    'a song request must never outrank a deterministic on-course command',
+  );
+
+  const flow = readCode('services/playSongFlow.ts');
+  check(
+    'SONG: the routine offer is made once, not every time he plays it',
+    /alreadySaved = existing\.includes\(match\.title\.toLowerCase\(\)\)/.test(flow) &&
+      /alreadySaved\s*\n?\s*\?/.test(flow),
+    'repeating the offer every time he plays his own pre-round song is nagging, and this app does not nag',
+  );
+  check(
+    'SONG: the routine candidate expires rather than lingering',
+    /const CANDIDATE_TTL_MS = 10 \* 60 \* 1000;/.test(flow),
+    'one curious search must not be sitting in his pre-round routine an hour later',
+  );
+
+  const qs = readCode('services/intents/queryStatusHandler.ts');
+  check(
+    'SONG: saving a song APPENDS to the routine instead of replacing it',
+    // Matched up to the join rather than through it: the newline is an escape inside a
+    // template literal, and counting backslashes through two layers of quoting is how a guard
+    // ends up asserting nothing. [[strip-comments-before-a-guard-matches]]
+    /setPreRoundRoutine\(existing \? `\$\{existing\}/.test(qs) &&
+      /: cand\.text\);/.test(qs),
+    'setPreRoundRoutine replaces, so saving a song would silently delete the stretches saved last week — Tim said "ingest that TO the routine", which is additive',
+  );
+}
+
+/**
  * ─── 2026-09-01 — THE CAMERA ANGLE IS JUDGED AT ADDRESS ─────────────────────────────────────────
  *
  * Tim: "the club arc shows up sporadically and mostly incorrect… it may get the direction right, but

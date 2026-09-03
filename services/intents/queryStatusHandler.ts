@@ -151,6 +151,43 @@ export const queryStatusHandler: IntentHandler = {
       // INDEPENDENT on purpose — you save and recall it off the course, so it sits above the
       // round-active gate.
       case 'routine_save': {
+        /**
+         * 2026-09-03 (Tim) — a song he just put on is a routine item, and it APPENDS.
+         *
+         * Two problems with saving the raw last-caddie-line here. It would store "Pulling up Sail.
+         * 🎵", which is a confirmation rather than a routine; and setPreRoundRoutine REPLACES, so
+         * saving a song would silently delete the stretches he saved last week. His words were
+         * "ingest that TO the pre-shot routine" — additive.
+         *
+         * A fresh song candidate (playSongFlow, 10-minute window) therefore wins over the caddie
+         * line and is appended to whatever is already there, de-duplicated.
+         */
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const ps = require('../playSongFlow') as typeof import('../playSongFlow');
+          const cand = ps.takeSongRoutineCandidate();
+          if (cand) {
+            const prof = usePlayerProfileStore.getState();
+            const existing = (prof.preRoundRoutine ?? '').trim();
+            if (existing.toLowerCase().includes(cand.title.toLowerCase())) {
+              return {
+                success: true,
+                voice_response: `${cand.title} is already in your pre-round.`,
+                side_effects: ['query:routine_save'],
+                follow_up_needed: false,
+              };
+            }
+            prof.setPreRoundRoutine(existing ? `${existing}\n${cand.text}` : cand.text);
+            return {
+              success: true,
+              voice_response: existing
+                ? `Added ${cand.title} to your pre-round.`
+                : `Saved — ${cand.title} is your pre-round now.`,
+              side_effects: ['query:routine_save'],
+              follow_up_needed: false,
+            };
+          }
+        } catch { /* fall through to the caddie-line behaviour below */ }
         const last = useConversationLog.getState().lastCaddieText();
         if (!last) {
           return {

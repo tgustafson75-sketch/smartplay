@@ -2513,6 +2513,42 @@ export const useVoiceCaddie = ({
         // Fall through to brain on routing errors — never get stuck.
       }
 
+      /**
+       * 2026-09-03 (Tim) — "play [song]" HAS TO WORK ON THE FIRST THING YOU SAY.
+       *
+       * Tim's actual pre-round: open the app, "Kevin, play Sail by Awolnation on YouTube", and let
+       * it play while he gets his tempo right. What he got instead was the caddie reading him a
+       * link he had to tap — which is the opposite of the product.
+       *
+       * The cause was placement, not detection. tryPlaySong lived inside sendToBrain, and
+       * sendToBrain "survives only for the follow-up listen loop" (see the comment below): a FIRST
+       * utterance goes to processTranscriptOverride and straight to the brain, which answers
+       * conversationally with a URL. So the song portal worked only as a follow-up — which is why
+       * it looked intermittent rather than broken, and why it never got pinned down.
+       *
+       * Placed here, after the intent router, so every deterministic golf command still gets first
+       * refusal and only a genuine song request short-circuits. detectPlaySongRequest is already
+       * narrow about golf "play" phrases (play a round / play it safe / play through / play my last
+       * swing), so nothing on-course is hijacked. It stays in sendToBrain too — the follow-up loop
+       * is a real path and must keep working. [[hands-free-zero-setup-is-the-product]]
+       */
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const ps = require('../services/playSongFlow') as typeof import('../services/playSongFlow');
+        const song = await ps.tryPlaySong(transcript);
+        if (song) {
+          // Same shape the intent-router branch above uses for a deterministic reply: surface the
+          // line, record the turn so the caddie remembers it said this, speak it, then idle.
+          onResponseReceived(song.spoken);
+          recordKevinTurn(song.spoken);
+          wrappedOnVoiceStateChange('speaking');
+          await speakResponse(song.spoken);
+          wrappedOnVoiceStateChange('idle');
+          isProcessingRef.current = false;
+          return;
+        }
+      } catch (e) { console.log('[voice] song portal error (non-fatal):', e); }
+
       // ── Conversational turn → the pipecat BRAIN ───────────────────────────
       // Only a CONVERSATIONAL / unknown turn reaches here (the router above already
       // handled + returned for any deterministic command). The pipecat brain owns it:
