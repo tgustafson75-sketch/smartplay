@@ -167,8 +167,18 @@ export async function requestCapture(req: CaptureRequest): Promise<CapturedMedia
  *   - cageStore.sessionHistory via ingestUploadedSwing (all kinds, with
  *     tag distinguishing 'indoor' vs 'course'). Surfaces in /swinglab/library.
  *   - roundStore.shots back-reference for kind='shot'/'highlight' during
- *     an active round (sets clip_uri + is_highlight on the most recent
- *     shot of the current hole so recap can render the clip with the shot).
+ *     an active round: sets clip_uri on the most recent shot of the current hole.
+ *
+ * 2026-09-03 — CORRECTED. This used to read "sets clip_uri + is_highlight … so recap can render
+ * the clip with the shot", and two thirds of that sentence were untrue:
+ *   • `is_highlight` is never set, here or anywhere. It exists only as an optional field on the
+ *     RoundShot type and has no writer and no reader.
+ *   • the recap does NOT render the clip. clip_uri is written (below) and read by nothing, so
+ *     every in-round capture attaches a file reference to a shot that no surface ever opens.
+ * The write is left in place — it is the only record tying a clip to the shot that produced it,
+ * and deleting it would make the eventual playback surface impossible to build. But the comment
+ * described a feature rather than the code, and a stale header is a source someone trusts.
+ * [[a-stale-header-is-a-source-someone-trusts]] [[orphans-are-live-bugs-not-dead-code]]
  */
 export function commitCapture(
   id: string,

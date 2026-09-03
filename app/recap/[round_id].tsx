@@ -297,6 +297,23 @@ export default function RecapScreen() {
   // Phase R — pull round photos from the persisted RoundRecord (recap api
   // returns a different shape — photos live on the local roundStore).
   const roundPhotos = useRoundStore(s => s.roundHistory.find(r => r.id === round_id)?.round_photos ?? EMPTY_PHOTOS);
+  /**
+   * 2026-09-03 — THE TEMPO STORY HAD NO READER.
+   *
+   * roundStore computes it at round end from the watch's in-memory session swings, freezes it onto
+   * the record because that is the last moment it can be captured, and carries it to Supabase inside
+   * the round-store backup. Nothing has ever displayed it. The write site's own comment says to
+   * "route it to the CADDIE, not just the recap card" — the caddie half genuinely works, the
+   * observation reaches the brain prompt, but the recap card it contrasts itself against was never
+   * built. Same shape as the Health Connect block fixed this morning: measured, persisted, shipped
+   * off-device, read by nobody. [[orphans-are-live-bugs-not-dead-code]]
+   *
+   * Read straight off the RECORD rather than through RoundRecap, deliberately: mergeRecap spreads
+   * whichever side has more hole rows, so anything routed through the recap object needs an explicit
+   * carry or it vanishes on exactly the rounds with the richest archive. The record has no such
+   * hazard. [[no-half-fixes-enforce-every-surface]]
+   */
+  const tempoStory = useRoundStore(s => s.roundHistory.find(r => r.id === round_id)?.tempoStory ?? null);
   const deleteRound = useRoundStore(s => s.deleteRound);
   // 2026-07-04 (Tim — offline log "stored for the round, ingested later") — anything
   // the player said with no signal this round, so it's reviewable here. Stable-selector
@@ -739,6 +756,29 @@ export default function RecapScreen() {
               </View>
             )}
 
+            {/* 2026-09-03 — TEMPO. Only when a watch was worn AND the read had something to say;
+                roundTempoStory returns enough:false rather than manufacturing an insight, and the
+                store already stores null in that case. Sits beside THE WALK because both answer
+                "what did the round do to you" rather than "what did you score". */}
+            {tempoStory?.headline && (
+              <View style={styles.effortCard}>
+                <Text style={styles.effortLabel}>TEMPO</Text>
+                <Text style={styles.tempoHeadline}>{tempoStory.headline}</Text>
+                {(tempoStory.earlyAvg != null && tempoStory.lateAvg != null) && (
+                  <View style={styles.effortRow}>
+                    <View style={styles.effortItem}>
+                      <Text style={styles.effortValue}>{tempoStory.earlyAvg.toFixed(1)}</Text>
+                      <Text style={styles.effortUnit}>EARLY</Text>
+                    </View>
+                    <View style={styles.effortItem}>
+                      <Text style={styles.effortValue}>{tempoStory.lateAvg.toFixed(1)}</Text>
+                      <Text style={styles.effortUnit}>CLOSING</Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+            )}
+
             <View style={styles.kevinCard}>
               <Text style={styles.kevinLabel}>{caddieName.toUpperCase()}</Text>
               <Text style={styles.kevinOverall}>{recap.overall_kevin_summary}</Text>
@@ -991,6 +1031,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: '#1f3242', padding: 12,
   },
   effortLabel: { color: '#6b7280', fontSize: 9, fontWeight: '800', letterSpacing: 2, marginBottom: 8 },
+  tempoHeadline: { color: '#e5e7eb', fontSize: 14, lineHeight: 20, fontWeight: '600', marginBottom: 10 },
   effortRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-start' },
   effortItem: { alignItems: 'center', flex: 1 },
   effortValue: { color: '#ffffff', fontSize: 20, fontWeight: '900' },

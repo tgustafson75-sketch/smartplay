@@ -14970,6 +14970,39 @@ check(
 }
 
 /**
+ * ─── 2026-09-03 — THE TEMPO STORY HAD NO READER ────────────────────────────────────────────────
+ *
+ * roundStore computes the watch tempo story at round end, freezes it onto the record because the
+ * session swings live only in memory, and carries it to Supabase inside the round-store backup.
+ * Nothing displayed it. The write site's own comment says to route it to the CADDIE "not just the
+ * recap card" — the caddie half works, the observation reaches the brain prompt, but the recap card
+ * it contrasts itself against was never built.
+ *
+ * Third instance of this exact shape in one day: Health Connect measured and never read, clip_uri
+ * written onto shots and never rendered, and this. Measured, persisted, shipped off-device, read by
+ * nobody. [[orphans-are-live-bugs-not-dead-code]]
+ */
+{
+  const recap = readCode('app/recap/[round_id].tsx');
+  check(
+    'TEMPO: the round tempo story reaches a screen',
+    /roundHistory\.find\(r => r\.id === round_id\)\?\.tempoStory \?\? null/.test(recap) &&
+      /\{tempoStory\?\.headline && \(/.test(recap),
+    'a story computed at round end, frozen onto the record and backed up off-device, with nothing that renders it, is the Health Connect defect wearing a different name',
+  );
+  check(
+    'TEMPO: it is read off the RECORD, not routed through RoundRecap',
+    !/effort: .*tempoStory|tempoStory: (synth|archive)/.test(recap),
+    'mergeRecap spreads whichever side has more hole rows, so anything routed through the recap object needs an explicit carry or it vanishes on the richest rounds — the record has no such hazard',
+  );
+  check(
+    'TEMPO: nothing is shown when the read had nothing to say',
+    /tempoStory\?\.headline &&/.test(recap),
+    'roundTempoStory returns enough:false rather than manufacturing an insight, and a card that rendered anyway would invent one',
+  );
+}
+
+/**
  * ─── 2026-09-01 — THE CAMERA ANGLE IS JUDGED AT ADDRESS ─────────────────────────────────────────
  *
  * Tim: "the club arc shows up sporadically and mostly incorrect… it may get the direction right, but
