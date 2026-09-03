@@ -26,7 +26,7 @@
         "NSMotionUsageDescription": "SmartPlay Caddie reads your phone's motion sensors to measure your swing tempo and to steady SmartFinder's aim when you point the phone at a target.",
         "NSLocationAlwaysUsageDescription": "SmartPlay Caddie tracks your round in the background so hole transitions, shot tracking, and yardages keep working when your phone is in your pocket."
       },
-      "buildNumber": "22",
+      "buildNumber": "23",
       "appleTeamId": "B6KTPCWF7A"
     },
     "android": {
@@ -52,13 +52,9 @@
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_MEDIA_VIDEO",
         "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
-        "android.permission.MODIFY_AUDIO_SETTINGS",
-        "android.permission.health.READ_STEPS",
-        "android.permission.health.READ_DISTANCE",
-        "android.permission.health.READ_HEART_RATE",
-        "android.permission.health.READ_ACTIVE_CALORIES_BURNED"
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
-      "versionCode": 22,
+      "versionCode": 23,
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
@@ -121,8 +117,6 @@
           "project": "smartplay-caddie-mobile"
         }
       ],
-      "react-native-health-connect",
-      "./plugins/withHealthConnectRationale.js",
       [
         "expo-build-properties",
         {

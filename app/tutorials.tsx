@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import AppIcon, { type IconName } from '../components/AppIcon';
 import { useSettingsStore } from '../store/settingsStore';
 import { getCaddieName } from '../lib/persona';
-import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
+import { SUBSCRIPTIONS_ENABLED, HEALTH_CONNECT_ENABLED } from '../services/featureAccess';
 
 /**
  * Tutorials surface — selectable cards by app function. Tap a card to expand
@@ -188,7 +188,11 @@ const buildTutorials = (caddieName: string, pronoun: string): Tutorial[] => {
     ],
   },
   ];
-  return all.filter((t) => t.id !== 'trial' || SUBSCRIPTIONS_ENABLED);
+  return all
+    .filter((t) => t.id !== 'trial' || SUBSCRIPTIONS_ENABLED)
+    // 'The Walk' explains how to connect Health Connect. Without the permissions in this
+    // build there is nothing to connect, so the card would be instructions for a dead end.
+    .filter((t) => t.id !== 'walk' || HEALTH_CONNECT_ENABLED);
 };
 
 export default function TutorialsScreen() {

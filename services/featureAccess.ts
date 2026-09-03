@@ -77,6 +77,28 @@ export type Edition = 'lite' | 'pro';
 export const SUBSCRIPTIONS_ENABLED = false;
 
 /**
+ * 2026-09-03 (Tim, final build) — HEALTH CONNECT IS OUT OF 1.0.
+ *
+ * The Play Health declaration filed for this release says the app has no health features. The
+ * binary must match that exactly: undeclared health-data collection is a hard rejection, and the
+ * Health Connect data-access declaration is the slowest review item there is. So the four
+ * android.permission.health.* entries, the react-native-health-connect plugin and the API-34
+ * rationale plugin are all removed from app.json for this build.
+ *
+ * The CODE stays. services/healthData, the round-effort reader and the recap "THE WALK" card were
+ * all built today and are correct; without the permissions they simply never see data —
+ * describeRoundEffort already returns null for a round with no watch reading, which is the common
+ * case anyway. Nothing is orphaned in the sense this project means it: the reader has a caller, the
+ * caller has a surface, and the surface renders when there is something to render.
+ *
+ * This flag exists so a SURFACE THAT PROMISES the feature can be hidden alongside it. A tutorial
+ * card explaining how to connect Health Connect, in a build that cannot, is the app lying to
+ * someone who went looking for help — the same reason the free-trial card is gated.
+ * Flip to true in 1.1 together with the app.json entries and the filed declaration.
+ */
+export const HEALTH_CONNECT_ENABLED = false;
+
+/**
  * Which edition each feature requires.
  *
  * Exhaustively typed on FeatureKey on purpose: adding a feature to FeatureKey

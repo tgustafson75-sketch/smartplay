@@ -14799,8 +14799,12 @@ check(
   const tut = readCode('app/tutorials.tsx');
   check(
     'TUTORIAL: the free-trial card exists only when there IS a trial',
-    /import \{ SUBSCRIPTIONS_ENABLED \} from '\.\.\/services\/featureAccess';/.test(tut) &&
-      /return all\.filter\(\(t\) => t\.id !== 'trial' \|\| SUBSCRIPTIONS_ENABLED\);/.test(tut),
+    // 2026-09-03: was pinned to the single-filter spelling `return all.filter(...)`. A second gate
+    // (Health Connect) was chained beside it and this went red over a property it still satisfies.
+    // Match the FILTER, not the statement it happens to sit in. Eighth guard today caught pinning a
+    // spelling rather than a behaviour. [[break-test-every-guard-you-write]]
+    /SUBSCRIPTIONS_ENABLED/.test(tut) &&
+      /t\.id !== 'trial' \|\| SUBSCRIPTIONS_ENABLED/.test(tut),
     'with the paywall off there is no trial to extend, and a tutorial promising the extension describes a feature the build cannot reach',
   );
 }
@@ -15315,6 +15319,43 @@ check(
     'BACKUP: background uploads are bounded too',
     unbounded.length === 0,
     unbounded.length ? `unbounded background fetch in ${unbounded.join(', ')}` : 'the offline voice cache and narrative ingest both bound their requests',
+  );
+}
+
+/**
+ * ─── 2026-09-03 — THE 1.0 BINARY MATCHES THE DECLARATIONS THAT WERE FILED ──────────────────────
+ *
+ * The Play console work is done, and two of its declarations contradicted the binary:
+ *   • the Health declaration says the app has NO health features, while app.json declared four
+ *     android.permission.health.* entries and shipped the Health Connect plugin;
+ *   • the listing and the Purchase-history declaration assume a paid app.
+ *
+ * Undeclared health-data collection is a hard rejection, so the permissions came OUT for 1.0 and
+ * HEALTH_CONNECT_ENABLED exists to hide any surface that PROMISES the feature — a tutorial card
+ * explaining how to connect Health Connect, in a build that cannot, is the app lying to someone who
+ * went looking for help. The code stays; only the manifest entries and the promise are gone.
+ */
+{
+  const aj = read('app.json');
+  const cfg = JSON.parse(aj) as { expo: { android: { permissions: string[] }; plugins: unknown[] } };
+  const healthPerms = cfg.expo.android.permissions.filter((p) => p.includes('.health.'));
+  const healthPlugin = JSON.stringify(cfg.expo.plugins).includes('react-native-health-connect');
+  const access = readCode('services/featureAccess.ts');
+  const flagOff = /export const HEALTH_CONNECT_ENABLED = false;/.test(access);
+  check(
+    'RELEASE 1.0: the binary claims no health features, exactly as declared',
+    (healthPerms.length === 0 && !healthPlugin && flagOff) ||
+      (healthPerms.length === 4 && healthPlugin && /HEALTH_CONNECT_ENABLED = true/.test(access)),
+    healthPerms.length || healthPlugin
+      ? `Health declaration says none, but app.json still has ${healthPerms.length} permission(s)${healthPlugin ? ' and the plugin' : ''}`
+      : 'permissions, plugin and the feature flag agree — and they must move together, or a surface promises what the manifest cannot deliver',
+  );
+  const tut = readCode('app/tutorials.tsx');
+  check(
+    'RELEASE 1.0: no tutorial explains a feature this build cannot reach',
+    /t\.id !== 'walk' \|\| HEALTH_CONNECT_ENABLED/.test(tut) &&
+      /t\.id !== 'trial' \|\| SUBSCRIPTIONS_ENABLED/.test(tut),
+    'both cards teach a flow that does not exist when its feature is off — instructions for a dead end are worse than no card',
   );
 }
 

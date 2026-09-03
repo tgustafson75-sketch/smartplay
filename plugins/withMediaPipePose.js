@@ -417,9 +417,34 @@ function withMediaPipePose(config) {
   next = withAndroidGradleDeps(next);
   next = withAndroidCameraPermission(next);
   next = withAndroidSourceCopyAndPackageReg(next);
-  // iOS — pod deferred: MediaPipeTasksVision version/deployment-target
-  // conflicts with EAS build environment. iOS falls back to cloud pose API
-  // (NativeModules.MediaPipePose is null → services/poseEstimator.ts cloud path).
+  /**
+   * iOS — DEFERRED, and the reason is bigger than the original comment said.
+   *
+   * 2026-09-03 (Tim, final build) — Tim chose to attempt enabling this. I enabled it, ran a real
+   * prebuild, and STOPPED on the evidence, because the framing I gave him was wrong. This is not a
+   * working iOS path that was switched off. It is an UNFINISHED one:
+   *
+   *   • withIOSPodfile adds `pod 'MediaPipeTasksVision', '~> 0.10.14'`      ✓ verified in ios/Podfile
+   *   • withIOSSourceCopyAndModel copies the Swift/ObjC and the 9.4 MB
+   *     model into ios/SmartPlayCaddie/{MediaPipe,Resources}               ✓ verified on disk
+   *   • NOTHING registers those sources in the Xcode Sources build phase.  ✗ 0 references in
+   *     project.pbxproj, against 4 for BluetoothMediaButton — this plugin has no
+   *     withIOSCompileSources step at all.
+   *
+   * So uncommenting these three lines adds a CocoaPods dependency and ships a 9.4 MB model that
+   * nothing compiles against. NativeModules.MediaPipePose stays null on iOS exactly as before —
+   * every iOS swing still goes to the cloud — while the build carries new pod-resolution risk and
+   * new binary weight for no behaviour change. All of the risk, none of the benefit.
+   *
+   * That is the same defect withBluetoothMediaButton documents at :184-201: sources copied into the
+   * tree but never added to the target, so "this native module has never been in the binary". It
+   * cost build 16. Finishing this properly means writing the registration step AND proving the pod
+   * resolves — real native work whose only true verification is a completed EAS build, which is the
+   * thing we get one of.
+   *
+   * TO FINISH IT LATER: copy withIOSCompileSources from withBluetoothMediaButton.js (note the
+   * bare-filename requirement — a doubled path is what failed build 16), then re-enable all four.
+   */
   // next = withIOSInfoPlist(next);  // camera perm already set by expo-camera
   // next = withIOSPodfile(next);
   // next = withIOSSourceCopyAndModel(next);
