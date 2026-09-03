@@ -45,7 +45,7 @@
 
 import { runWithAsserts, type ScenarioReport, type AssertCtx } from './harness/assert';
 import { startVoiceSimRound, getSimPosition } from './simRound';
-import { simShot, simPutt, lieFor, liePenalty, missBiasFor, type SimLie } from './simGame';
+import { simShot, simPutt, lieFor, liePenalty, missBiasFor, puttFeetFrom, type SimLie } from './simGame';
 import type { IndoorRep } from './indoorSwing';
 import { bagDistances } from './shotStrategy';
 // 2026-09-02 — roundFirstHole/roundLastHole are the round's OWN definition of which holes are in
@@ -95,7 +95,8 @@ export interface AutoSimPlayer {
 }
 
 const GREEN_YDS = 18;          // inside this, we're putting (matches simGame's lieFor)
-const YDS_PER_FT = 1 / 3;
+// 2026-09-03 — YDS_PER_FT removed: the yards→feet conversion now has one owner in simGame
+// (puttFeetFrom), because the three copies of it did not agree and the SHIPPED one was the wrong one.
 
 /**
  * Read the player. Every number here is THEIRS — an empty bag is reported as a skip rather than
@@ -249,7 +250,7 @@ async function playHole(
 
   // ── Putting ──
   let putts = 0;
-  let distanceFt = Math.max(1, remaining / YDS_PER_FT);
+  let distanceFt = puttFeetFrom(remaining);
   while (putts < 6) {
     const p = simPutt({ distanceFt, rep: synthesizeRep(player, rng, true), rng });
     putts++;
@@ -257,7 +258,7 @@ async function playHole(
     if (p.holed) break;
     distanceFt = p.remainingFt;
   }
-  a.expect('the ball went in', putts < 6, `${putts} putts from ${Math.round(remaining / YDS_PER_FT)}ft`);
+  a.expect('the ball went in', putts < 6, `${putts} putts from ${puttFeetFrom(remaining)}ft`);
   a.note('scored', `${strokes} on a par ${par} (${putts} putts)`);
 
   // ── THE SCORECARD + THE ADVANCE: the two things this whole runner exists to watch ──

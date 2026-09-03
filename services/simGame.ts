@@ -79,6 +79,29 @@ export function restingDistanceYds(remainingBeforeYds: number, carryYds: number,
   return Math.hypot(along, lateralYds);
 }
 
+/**
+ * 2026-09-03 — YARDS TO PUTT FEET, in one place, because the three copies did not agree.
+ *
+ * A yard is THREE feet. The two harnesses had it right (`remaining * 3`, and `/ YDS_PER_FT` where
+ * YDS_PER_FT = 1/3). The SHIPPED on-device screen — app/swinglab/simround — used `* 1.6`, so every
+ * putt in SwingSim was reported at roughly HALF its true length. A thirty-foot putt came up as
+ * sixteen, which reads as makeable, and the engine then holed it far more often than it should.
+ *
+ * It also added `Math.abs(out.lateralYds)` — a YARDS value — onto that FEET value. That was a crude
+ * stand-in from when `newRemaining` ignored lateral entirely; once restingDistanceYds started
+ * folding lateral into the hypotenuse this morning, the same line began double-counting it. A fix
+ * upstream turned an approximation into a compounding error, which is the argument for one owner
+ * rather than three: the harnesses were never going to catch a bug that only existed on the screen.
+ * [[two-owners-is-the-root-cause]]
+ */
+export const FEET_PER_YARD = 3;
+
+/** Distance-to-pin in yards → the putt length in feet. Floored at a tap-in, never zero. */
+export function puttFeetFrom(remainingYards: number): number {
+  const y = Number.isFinite(remainingYards) ? Math.max(0, remainingYards) : 0;
+  return Math.max(1, Math.round(y * FEET_PER_YARD));
+}
+
 export type SimLie = 'tee' | 'fairway' | 'rough' | 'trees' | 'green' | 'holed';
 
 /** Corridor lie model: how far offline you are when the ball stops. */

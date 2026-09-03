@@ -21,7 +21,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { IndoorRep } from '../../services/indoorSwing';
-import { simShot, simPutt, lieFor, liePenalty, missBiasFor, scoreName, restingDistanceYds, type SimLie } from '../../services/simGame';
+import { simShot, simPutt, lieFor, liePenalty, missBiasFor, scoreName, restingDistanceYds, puttFeetFrom, type SimLie } from '../../services/simGame';
 
 // ─── Args ────────────────────────────────────────────────────────────────────
 const argv = process.argv.slice(2);
@@ -124,7 +124,7 @@ function playHole(par: number, yards: number): { strokes: number; log: ShotLog[]
   }
 
   // Putting phase: convert the leftover (yards) to feet and roll it in.
-  let feet = Math.max(2, Math.round(remaining * 3));
+  let feet = puttFeetFrom(remaining);
   let putts = 0;
   while (feet > 0 && putts < 4 && strokes < MAX_STROKES + 2) {
     const rep = drawRep(true);

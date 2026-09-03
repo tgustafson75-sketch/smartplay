@@ -15305,6 +15305,44 @@ check(
 }
 
 /**
+ * ─── 2026-09-03 — A YARD IS THREE FEET, IN ONE PLACE ───────────────────────────────────────────
+ *
+ * SwingSim reported every putt at about HALF its true length. The yards→feet conversion had three
+ * owners: both harnesses were right (`remaining * 3`, and `/ YDS_PER_FT` where YDS_PER_FT = 1/3)
+ * and the SHIPPED on-device screen used `* 1.6`. A thirty-foot putt came up as sixteen, which reads
+ * as makeable, and the engine then holed it far more often than it should.
+ *
+ * The screen also added Math.abs(out.lateralYds) — a YARDS value — onto that FEET value. It was a
+ * stand-in from when the remaining distance ignored lateral entirely; once restingDistanceYds began
+ * folding lateral into the hypotenuse EARLIER THE SAME DAY, that line started double-counting it. A
+ * correct fix upstream turned an approximation into a compounding error, and no harness could have
+ * caught it, because the harnesses held the two copies that were right.
+ */
+{
+  const sg = readCode('services/simGame.ts');
+  check(
+    'PUTT FEET: the conversion has one owner and it knows a yard is three feet',
+    /export const FEET_PER_YARD = 3;/.test(sg) &&
+      /export function puttFeetFrom\(remainingYards: number\): number/.test(sg),
+    'three copies disagreed and the shipped one was the wrong one — the harnesses could never have caught that',
+  );
+  const consumers = ['app/swinglab/simround.tsx', 'services/simRoundAuto.ts', 'scripts/simulations/sim-auto-round.ts'];
+  const notUsing = consumers.filter((f) => !/puttFeetFrom\(/.test(readCode(f)));
+  check(
+    'PUTT FEET: every consumer asks the owner',
+    notUsing.length === 0,
+    notUsing.length ? `still converting on its own: ${notUsing.join(', ')}` : 'the screen and both harnesses share one conversion',
+  );
+  check(
+    'PUTT FEET: no second conversion survives beside it',
+    !/\* 1\.6/.test(readCode('app/swinglab/simround.tsx')) &&
+      !/YDS_PER_FT/.test(readCode('services/simRoundAuto.ts')) &&
+      !/Math\.abs\(out\.lateralYds\)\)\)/.test(readCode('app/swinglab/simround.tsx')),
+    'the lateral term double-counted once restingDistanceYds folded lateral into the hypotenuse — a yards value added onto a feet value',
+  );
+}
+
+/**
  * ─── 2026-09-03 — A PROVIDER OUTAGE IS NOT A 500 ───────────────────────────────────────────────
  *
  * Production alert: "All 63 requests to the course-content function returned 5xx, and this window

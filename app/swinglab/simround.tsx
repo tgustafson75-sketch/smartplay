@@ -21,7 +21,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { IndoorRepDetector, type IndoorRep } from '../../services/indoorSwing';
 import { RepDedupe } from '../../services/swing/watchRep';
 import { useWatchReps } from '../../hooks/useWatchReps';
-import { simShot, simPutt, lieFor, liePenalty, missBiasFor, scoreName, simOpponentScorecard, restingDistanceYds, type SimLie } from '../../services/simGame';
+import { simShot, simPutt, lieFor, liePenalty, missBiasFor, scoreName, simOpponentScorecard, restingDistanceYds, puttFeetFrom, type SimLie } from '../../services/simGame';
 import { useFamilyStore } from '../../store/familyStore';
 import { COURSES } from '../../data/courses';
 import { getLocalHoleImageById } from '../../data/localCourseImages';
@@ -270,7 +270,11 @@ export default function SwingSimScreen() {
     setLie(newLie);
 
     if (newLie === 'green') {
-      const ft = Math.max(3, Math.round((newRemaining || 6) * 1.6 + Math.abs(out.lateralYds)));
+      // 2026-09-03 — was `* 1.6 + Math.abs(out.lateralYds)`: a yard is THREE feet, so every putt
+      // read at about half its true length, and the lateral term added YARDS onto a FEET value.
+      // That term was a stand-in from when newRemaining ignored lateral; restingDistanceYds now
+      // folds it into the hypotenuse, so adding it again double-counted it. One owner in simGame.
+      const ft = puttFeetFrom(newRemaining);
       setPuttFt(ft);
       setBanner({ title: `ON IN ${s}`, sub: `${out.carryYds}y ${out.flushed ? '— FLUSHED' : ''} · ${ft}ft for ${scoreName(s + 1, hole.par).toLowerCase()}`, tone: 'good' });
       setStage('putt');
