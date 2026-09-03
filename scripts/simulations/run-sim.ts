@@ -15232,15 +15232,26 @@ check(
   );
   check(
     'BACKUP: a blip is RETRIED, not reported',
-    /const MAX_ATTEMPTS = 3;/.test(sb) &&
+    // 2026-09-03: was pinned to `MAX_ATTEMPTS = 3`, a literal replaced an hour later when the count
+    // became RETRY_BACKOFF_MS.length + 1 so the schedule has one owner. Seventh guard today caught
+    // pinning a spelling rather than a behaviour, and the first one I did to myself — what this
+    // cares about is that BOTH entry points retry, not what the number is written as.
+    /const MAX_ATTEMPTS = /.test(sb) &&
       /return withRetry\(\(\) => serverBackupAttempt\(opts\)\)/.test(sb) &&
       /return withRetry\(\(\) => serverRestoreAttempt\(keyOverride, secretOverride\)\)/.test(sb),
     'both entry points go through the retry, or the manual button and the auto-backup behave differently on the same connection',
   );
   check(
     'BACKUP: a real answer is not hammered',
-    /if \(!isTransient\(last\.reason \?\? ''\)\) return last;/.test(sb),
+    /if \(!isTransientFailure\(last\.reason\)\) return last;/.test(sb),
     'retrying a wrong passphrase or an over-cap payload helps nobody and costs three round trips to say so',
+  );
+  check(
+    'BACKUP: the retry policy has ONE owner, shared with the swing-review path',
+    /from '\.\.\/\.\.\/utils\/transientRetry'/.test(sb) &&
+      /const MAX_ATTEMPTS = RETRY_BACKOFF_MS\.length \+ 1;/.test(sb) &&
+      !/function isTransient\(/.test(sb),
+    'the policy was duplicated here for about an hour, which is exactly long enough for two copies to disagree the first time one is tightened — and the attempt count is DERIVED from the shared schedule rather than restated beside it',
   );
 
   // Background traffic must not hold a connection slot open either — this app has already starved

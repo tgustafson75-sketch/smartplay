@@ -10,7 +10,10 @@
  * connection on a golf course is the expected condition, not an exception, and the job is to get the
  * data up anyway. These pin the retry policy — transient failures are retried, real answers are not.
  */
-import { _isTransientForTest as isTransient } from '../../services/cloudSync/serverBackup';
+// 2026-09-03 — points at the SHARED policy (utils/transientRetry), not a seam in serverBackup.
+// The policy moved there because three unrelated surfaces need it and three copies disagree three
+// ways the first time one is tightened. Testing the copy would have proved nothing about the owner.
+import { isTransientFailure as isTransient } from '../../utils/transientRetry';
 
 describe('backup retry policy', () => {
   it('retries the connection giving out', () => {

@@ -11,6 +11,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../ssrSafeStorage';
 import { getApiBaseUrl } from '../apiBase';
+import { isTransientFailure, waitMs, RETRY_BACKOFF_MS } from '../../utils/transientRetry';
 import { gatherSnapshot, applySnapshot, snapshotFingerprint } from './snapshot';
 
 interface ServerBackupState {
@@ -86,33 +87,28 @@ function failureReason(e: unknown): string {
  * 2026-09-03 (Tim: "don't build error states, make it work") — RETRY, don't report.
  *
  * The first version of this fix bounded the request and then wrote the player a nicer message about
- * having failed. That is the wrong instinct: a dropped connection on a golf course is the expected
- * condition here, not an exception, and the app's job is to get the data up anyway rather than to
- * describe not having done so.
+ * having failed. Wrong instinct: a dropped connection on a golf course is the EXPECTED condition
+ * here, not an exception, and the job is to get the data up anyway rather than to describe not
+ * having done so.
  *
- * Three attempts with a short backoff, on transient failures only — a wrong passphrase or a payload
- * over the cap is a real answer and is returned immediately rather than hammered. The player sees a
- * single spinner that usually just succeeds.
+ * The policy itself now lives in utils/transientRetry, shared with the swing-review path. It was
+ * duplicated here for about an hour, which is exactly long enough for two copies to disagree the
+ * first time one is tightened — the defect this session has fixed in the privacy policy, the
+ * handicap differential and the YouTube player already. The BROAD status form is right for this
+ * call specifically: a backup POST is small and idempotent, so a handler 500 is worth one more go,
+ * unlike a 45-second analysis route where repeating it just triples the cost.
+ * [[two-owners-is-the-root-cause]]
  */
-const MAX_ATTEMPTS = 3;
-const RETRY_BACKOFF_MS = [800, 2400];
-
-/** Exported under an underscore purely so the retry POLICY is testable without a network. */
-export const _isTransientForTest = (reason: string): boolean => isTransient(reason);
-
-function isTransient(reason: string): boolean {
-  return reason === 'timed_out'
-    || /network|fetch failed|econnreset|socket hang up|timeout|aborted|http_5\d\d|http_429/i.test(reason);
-}
-
-const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-
 /** Run an attempt up to MAX_ATTEMPTS times while the failure looks like the connection, not the request. */
+// Attempts are DERIVED from the shared backoff schedule rather than restated, so tightening the
+// schedule in one place cannot leave a second constant disagreeing about how many tries there are.
+const MAX_ATTEMPTS = RETRY_BACKOFF_MS.length + 1;
+
 async function withRetry<T extends { ok: boolean; reason?: string }>(attempt: () => Promise<T>): Promise<T> {
   let last = await attempt();
   for (let i = 0; last.ok !== true && i < MAX_ATTEMPTS - 1; i++) {
-    if (!isTransient(last.reason ?? '')) return last;
-    await wait(RETRY_BACKOFF_MS[i] ?? 2400);
+    if (!isTransientFailure(last.reason)) return last;
+    await waitMs(RETRY_BACKOFF_MS[i] ?? 2400);
     last = await attempt();
   }
   return last;
