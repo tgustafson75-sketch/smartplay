@@ -111,7 +111,9 @@ If two sessions are going to work at once, one should move to a git worktree.
 
 ## Repo state
 
-`main` @ `2e8aae9b` · ts-check clean · jest **222 suites / 2493 tests** · sim **926/926**
+`main` @ `2a7f10eb` · ts-check clean · jest **222 suites / 2493 tests** · sim **928/928**
+
+*Independently re-verified 2026-09-03 by Claude Code (session `smartplaycaddie`) against the combined tree — both sessions' commits together, since we share one working tree and neither had run the gates over the other's work. The sim count here read 926; it is 928.*
 
 Shipped 2026-09-03: target API 36 · Health Connect reader + disclosure in all three policy copies ·
 light-use trial extension · referral system · SwingSim 1-D-course fix · SmartVision layup inversion ·
