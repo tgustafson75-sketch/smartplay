@@ -838,7 +838,11 @@ export default function Settings() {
             </Text>
           </TouchableOpacity>
           <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -4, marginBottom: 8 }]}>
-            Uses the WHS best-8-of-20 average across your last 20 rounds (live + imported). Treats every course as 72.0 rating / 113 slope — close to GHIN but not exact.
+            {/* 2026-09-03 — the old copy said "treats every course as 72.0 rating / 113 slope", which
+                has been untrue since rebuildDifferentialsFromHistory started reading each round's
+                own baseRating and baseSlope. It understated the app's own accuracy to the player, on
+                the screen that explains how their handicap is worked out. */}
+            Uses the WHS best-8-of-20 average across your last 20 rounds (live + imported). Uses each course&apos;s real rating and slope where we have them, and a neutral 72.0 / 113 where we don&apos;t — close to GHIN but not official.
           </Text>
 
           {/* 2026-05-26 — Fix AB Phase 1: GHIN # capture. We store the
