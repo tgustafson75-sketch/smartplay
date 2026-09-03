@@ -1005,7 +1005,8 @@ let currentAbortController: AbortController | null = null;
  * ordering, timing or preemption behaviour changes. It is the ONLY place that increments, which is
  * what stops a sixth call site appearing later with no reason attached. [[voice-path-change-freeze]]
  */
-type SpeechIdReason = 'speak' | 'stop' | 'device_notice' | 'prewarm' | 'base64' | 'unknown';
+type SpeechIdReason = 'speak' | 'stop' | 'route_change' | 'device_notice' | 'prewarm' | 'base64' | 'unknown';
+const SPEECH_ID_REASONS: readonly SpeechIdReason[] = ['speak', 'stop', 'route_change', 'device_notice', 'prewarm', 'base64', 'unknown'];
 const speechIdReasons = new Map<number, SpeechIdReason>();
 const SPEECH_ID_REASON_MEMORY = 24;
 
@@ -1090,8 +1091,26 @@ export const subscribeToCaption = (
 
 // ─── STOP ─────────────────────────────────
 
-export const stopSpeaking = async (): Promise<void> => {
-  claimSpeechId('stop');
+/**
+ * 2026-09-03 — `why` exists so a preempt report can name the CALLER, not just the mechanism.
+ *
+ * Adding preemptedBy earlier today distinguished "a newer speak took over" from "stopSpeaking
+ * cancelled it", which is the difference between the player hearing the new line and hearing
+ * nothing. But there are ~95 references to stopSpeaking and every one of them stamped the same
+ * literal 'stop', while the open theory accuses exactly ONE of them: the route-change guard in
+ * _layout, whose 2s grace is measured from before the TTS fetch and so expires while the utterance
+ * is still silent. A report saying 'stop' cannot confirm or kill that.
+ *
+ * Optional with a default, so every existing call site keeps working untouched and only the site
+ * under suspicion says so. Validated rather than trusted: nothing passes stopSpeaking as a bare
+ * callback today (checked), but a future `onPress={stopSpeaking}` would hand it a press event, and
+ * a diagnostic that records "[object Object]" as the reason is worse than one that records 'stop'.
+ *
+ * Still diagnostic-only — no ordering, timing or preemption behaviour changes.
+ * [[missing-log-entry-is-the-evidence]] [[voice-path-change-freeze]]
+ */
+export const stopSpeaking = async (why: SpeechIdReason = 'stop'): Promise<void> => {
+  claimSpeechId(SPEECH_ID_REASONS.includes(why) ? why : 'stop');
   speakGeneration++;
   if (currentAbortController) {
     currentAbortController.abort();

@@ -4529,7 +4529,11 @@ check('Voice: stale speech cleared on navigation (no carry-over), with speak-the
       /export const getLastSpeakStartedAt = \(\): number => lastSpeakStartedAt;/.test(vs) &&
       /lastSpeakStartedAt = Date\.now\(\);/.test(vs) &&
       /Date\.now\(\) - getLastSpeakStartedAt\(\) > 2000/.test(layout) &&
-      /void stopSpeaking\(\)\.catch/.test(layout)
+      // 2026-09-03: was /void stopSpeaking\(\)\.catch/, i.e. pinned to the call taking NO argument.
+      // It went red when the call gained a diagnostic reason that changed nothing it cares about.
+      // What this scenario is actually about is that the route change STOPS the stale line, so it
+      // now matches the call with or without a reason. [[break-test-every-guard-you-write]]
+      /void stopSpeaking\((?:'[a-z_]+')?\)\.catch/.test(layout)
     );
   })(),
   'route change stops stale prior-step speech; 2s grace protects speak-then-navigate');
@@ -14729,6 +14733,23 @@ check(
     'VOICE: the reason ledger cannot grow without bound across a round',
     /while \(speechIdReasons\.size > SPEECH_ID_REASON_MEMORY\)/.test(claim),
     'a diagnostic that leaks memory during an 18-hole round is a worse bug than the one it diagnoses',
+  );
+  /**
+   * 2026-09-03 — the ONE caller under suspicion has to identify itself.
+   *
+   * preemptedBy already separates "a newer speak took over" (player heard the new line) from
+   * "stopSpeaking cancelled it" (player heard nothing). But ~95 references to stopSpeaking all
+   * stamped the same literal 'stop', and the open theory accuses exactly one of them — the
+   * route-change guard, whose 2s grace runs from before the TTS fetch and so expires while the
+   * utterance is still silent. Without a distinct reason the field report says 'stop' and settles
+   * nothing.
+   */
+  check(
+    'VOICE: the route-change guard names itself when it cancels a line',
+    /export const stopSpeaking = async \(why: SpeechIdReason = 'stop'\)/.test(vs) &&
+      /claimSpeechId\(SPEECH_ID_REASONS\.includes\(why\) \? why : 'stop'\)/.test(vs) &&
+      /void stopSpeaking\('route_change'\)/.test(readCode('app/_layout.tsx')),
+    'a report reading preemptedBy: route_change is the proof for the lastSpeakStartedAt theory; one reading speak kills it — and validating `why` stops a future onPress={stopSpeaking} recording a press event as the reason',
   );
 }
 

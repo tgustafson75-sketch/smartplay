@@ -280,7 +280,12 @@ function AppNavigator() {
     // Pure tab↔tab navigation → keep the caddie talking (total presence).
     if (isMainTab(prev) && isMainTab(pathname)) return;
     if (Date.now() - getLastSpeakStartedAt() > 2000) {
-      void stopSpeaking().catch(() => {});
+      // 2026-09-03 — tagged so a field report can name THIS guard. It is the leading suspect for
+      // Tim's speechId 9 → 11 silent turn: getLastSpeakStartedAt() is stamped before the TTS fetch,
+      // not when audio starts, so this 2s grace expires while the utterance is still silent and a
+      // navigation can cut a line that has not made a sound yet. A report carrying
+      // preemptedBy: 'route_change' is the proof; one carrying 'speak' rules it out.
+      void stopSpeaking('route_change').catch(() => {});
     }
   }, [pathname]);
 
