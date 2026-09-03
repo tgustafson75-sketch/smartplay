@@ -250,7 +250,13 @@ const TYPICAL_SMASH_BY_CLUB: Record<string, number> = {
   driver: 1.48,
   '3w':   1.46,
   '5w':   1.44,
+  // 2026-09-03 — 7w / 2i / 3i were MISSING while the normalizer happily produced them, so they hit
+  // the `?? unknown` fallback below and were presented as club-specific at 'med'. On the ladder the
+  // rest of this table already walks (irons step 0.01, woods 0.02).
+  '7w':   1.43,
   hybrid: 1.42,
+  '2i':   1.42,
+  '3i':   1.41,
   '4i':   1.40,
   '5i':   1.39,
   '6i':   1.38,
@@ -286,7 +292,11 @@ function normalizeClub(c: string | null | undefined): string {
   if (lc.includes('driver') || lc === '1w') return 'driver';
   if (lc === '3w' || lc.includes('3wood')) return '3w';
   if (lc === '5w' || lc.includes('5wood')) return '5w';
-  if (lc.includes('hybrid') || lc.match(/^[3-7]h$/)) return 'hybrid';
+  // 2026-09-03 — 7W and 2H are real slots in CLUB_ORDER and neither resolved here: a 7-wood matched
+  // nothing and a 2-hybrid fell outside [3-7], so both landed on 'unknown' and a player who HAD
+  // tagged their club was told "club not tagged — tag it to sharpen". Advice you cannot act on.
+  if (lc === '7w' || lc.includes('7wood')) return '7w';
+  if (lc.includes('hybrid') || lc.match(/^[2-7]h$/)) return 'hybrid';
   const ironMatch = lc.match(/^(\d)i(ron)?$/) || lc.match(/^(\d)(iron)?$/);
   if (ironMatch) return `${ironMatch[1]}i`;
   if (lc === 'pw' || lc.includes('pitching')) return 'pw';
@@ -417,8 +427,23 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
      * deliberately so both still fire. Carry is unaffected — it comes from the club+effort estimate
      * or the player's profile, never from ball speed. [[illustration-data-points]]
      */
-    const tagged = clubKey !== 'unknown';
-    const typicalSmash = TYPICAL_SMASH_BY_CLUB[clubKey] ?? TYPICAL_SMASH_BY_CLUB.unknown;
+    /**
+     * 2026-09-03 — `tagged` USED TO MEAN "the normalizer recognised the string", and that is not the
+     * same question as "do we have a ratio for this club".
+     *
+     * A 3-iron normalised to '3i', which this table did not contain, so it fell through the `??` to
+     * the generic 1.36 and was then presented as `typical smash for 3i` at 'med' confidence — the
+     * generic number wearing a club-specific label. The tell was physical: a 3I read 136 while a 4I
+     * read 140, a longer club returning a slower ball. Meanwhile 7W and 2H normalised to 'unknown'
+     * and told a player who HAD tagged their club to "tag it to sharpen".
+     *
+     * Both are the same mistake as the one this branch was written to fix, pointed the other way:
+     * confidence has to follow what we actually know. Three honest states now, and an unmapped club
+     * degrades to the generic ratio at LOW rather than borrowing 'med' from a lookup that missed.
+     * [[guards-by-element-not-blanket-suppression]] [[illustration-data-points]]
+     */
+    const knownRatio = clubKey === 'unknown' ? undefined : TYPICAL_SMASH_BY_CLUB[clubKey];
+    const typicalSmash = knownRatio ?? TYPICAL_SMASH_BY_CLUB.unknown;
     ballSpeed = finalize({
       value: Math.round(clubSpeed.value * typicalSmash),
       unit: 'mph',
@@ -427,10 +452,12 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
       // measured). When the parent is truth-grade, the derived ball
       // speed still inherits the assumed-ratio uncertainty.
       source: isTruthGrade(clubSpeed.source) ? 'pose' : clubSpeed.source,
-      confidence: Math.min(clubSpeed.confidence, tagged ? 0.45 : 0.30),
-      estimateNote: tagged
+      confidence: Math.min(clubSpeed.confidence, knownRatio != null ? 0.45 : 0.30),
+      estimateNote: knownRatio != null
         ? 'club speed × typical smash for ' + clubKey
-        : 'club speed × typical smash (club not tagged — tag it to sharpen)',
+        : clubKey === 'unknown'
+          ? 'club speed × typical smash (club not tagged — tag it to sharpen)'
+          : `club speed × generic smash (no ${clubKey} ratio yet)`,
     });
   } else {
     ballSpeed = nullMetric('mph');

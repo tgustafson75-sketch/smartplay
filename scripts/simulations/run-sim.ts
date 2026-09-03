@@ -864,11 +864,27 @@ check('Ball speed no longer silently assumes a 7-iron',
 // deleting the estimate throws away a club speed we genuinely measured. So the invariant is now
 // the DOWNGRADE, and this checks the downgrade is intact rather than that the number is gone.
 // [[guards-by-element-not-blanket-suppression]]
-check('Pose ball speed for an untagged club is downgraded, not deleted',
-  /const tagged = clubKey !== 'unknown';/.test(read('services/swingMetricsService.ts')) &&
-    /confidence: Math\.min\(clubSpeed\.confidence, tagged \? 0\.45 : 0\.30\)/.test(read('services/swingMetricsService.ts')) &&
-    /club not tagged — tag it to sharpen/.test(read('services/swingMetricsService.ts')),
-  'untagged → generic 1.36 at confidence 0.30 with a note saying why; tagged → its own ratio at 0.45');
+// 2026-09-03 — this guard went red the moment the rule gained its THIRD state, which is the guard
+// doing its job. `tagged` (did the normalizer recognise the string?) was the wrong question: a 3I
+// normalised to '3i', which the smash table did not contain, so it took the generic 1.36 and was
+// presented as "typical smash for 3i" at MED — the generic number wearing a club-specific label.
+// The condition is now whether a RATIO EXISTS, and there are three honest outcomes.
+check('Pose ball speed follows the RATIO we have, not the string we recognised',
+  /const knownRatio = clubKey === 'unknown' \? undefined : TYPICAL_SMASH_BY_CLUB\[clubKey\];/.test(read('services/swingMetricsService.ts')) &&
+    /confidence: Math\.min\(clubSpeed\.confidence, knownRatio != null \? 0\.45 : 0\.30\)/.test(read('services/swingMetricsService.ts')) &&
+    /club not tagged — tag it to sharpen/.test(read('services/swingMetricsService.ts')) &&
+    /no \$\{clubKey\} ratio yet/.test(read('services/swingMetricsService.ts')),
+  'ratio known → its own ratio at 0.45; recognised but unmapped → generic at 0.30 saying so; untagged → generic at 0.30 saying to tag it');
+
+// The two owners of one fact: CLUB_ORDER says which clubs exist, TYPICAL_SMASH_BY_CLUB says what each
+// is worth. 7W and 2H were in the bag and in neither the normalizer nor the table, so a player who
+// HAD tagged their club was told to tag it. [[an-invariant-has-three-homes]]
+check('Every club slot in the bag reaches the smash table',
+  /if \(lc === '7w' \|\| lc\.includes\('7wood'\)\) return '7w';/.test(read('services/swingMetricsService.ts')) &&
+    /lc\.match\(\/\^\[2-7\]h\$\/\)/.test(read('services/swingMetricsService.ts')) &&
+    /'7w':   1\.43,/.test(read('services/swingMetricsService.ts')) &&
+    /'3i':   1\.41,/.test(read('services/swingMetricsService.ts')),
+  '7W / 2H normalize, and 7w / 2i / 3i have ratios — no CLUB_ORDER slot falls through to generic');
 
 const smSrc = read('app/swinglab/smartmotion.tsx');
 check('SmartMotion has a club selector wired',
