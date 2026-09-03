@@ -24,8 +24,21 @@ const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 3
 // escalation. Anthropic was deliberately pulled from normal escalation for
 // cost/latency (see line 2 comment); this re-adds it as a no-dropped-connection
 // floor at ~zero added cost in the normal case.
+//
+// 2026-09-03 (pre-release audit) — maxRetries 1 → 0, AND the per-call timeout is now clamped to the
+// budget that is actually left (see tryAnthropic). THE SAME DEFECT THE 09-01 AUDIT FIXED ON OPENAI,
+// left standing here on the one path that only ever runs when things have already gone wrong.
+//
+// The arithmetic: stage 3 admitted the call with 10s left of a 48s orchestration budget, so it could
+// begin at t≈38s. This client would then spend up to 25s, twice — 50s — for a worst case of 88s
+// against the route's 60s platform ceiling. Even a single un-retried attempt overran it: 38 + 25 =
+// 63s. Vercel kills the function mid-flight, so the player gets a DROPPED CONNECTION instead of the
+// 502-with-diagnostics that this last-resort stage exists to produce. A safety net that fires only
+// during an outage, and whose own budget cannot fit, makes the outage look like our bug.
+// [[a-budget-must-fit-what-runs-inside-it]] [[the-client-must-be-the-last-to-give-up]]
+const ANTHROPIC_MAX_MS = 25_000;
 const anthropicClient = process.env.ANTHROPIC_API_KEY
-  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 1 })
+  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: ANTHROPIC_MAX_MS, maxRetries: 0 })
   : null;
 
 function geminiWithTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
@@ -1423,7 +1436,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Only invoked when neither Gemini nor OpenAI produced a parse (see wiring
     // below) — a rare safety net so a read never drops a connection. NOT a
     // routine escalation: ~zero added cost in the normal case.
-    const tryAnthropic = async (): Promise<AttemptResult> => {
+    // `budgetMs` is what the orchestration has LEFT, not what Anthropic would like. Passing it makes
+    // the request fit inside the platform ceiling by construction rather than by hoping the stage is
+    // entered early enough.
+    const tryAnthropic = async (budgetMs: number): Promise<AttemptResult> => {
       const t0 = Date.now();
       if (!anthropicClient) {
         return { provider: 'anthropic', parsed: null, rawText: '', error: 'ANTHROPIC_API_KEY not configured', elapsedMs: 0 };
@@ -1446,6 +1462,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           messages: [
             { role: 'user', content: [...imageContent, { type: 'text' as const, text: userText }] },
           ],
+        }, {
+          // Per-request override wins over the client default. Leave 2s for parsing and the
+          // response write — a request that uses the last millisecond of the budget still loses.
+          timeout: Math.max(6_000, Math.min(ANTHROPIC_MAX_MS, budgetMs - 2_000)),
+          maxRetries: 0,
         });
         const rawText = msg.content
           .filter((b): b is Anthropic.TextBlock => b.type === 'text')
@@ -1548,9 +1569,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // (winner.parsed is still null) — so a single-provider outage never drops
     // the read. Claude runs only when it's the difference between an answer and
     // a 502; "we have 3 AI agents, no excuse for dropped connections."
-    if (!winner.parsed && budgetRemaining() >= 10_000) {
+    // 2026-09-03 — the gate must admit only what can FINISH. 10_000 let the stage start with 10s
+    // left and then spend 25s (or 50s with the old retry), overrunning the platform ceiling and
+    // turning a recoverable outage into a dropped connection. 8s is the floor a useful Haiku read
+    // needs, and tryAnthropic is handed the remainder so it can never outlive it.
+    if (!winner.parsed && budgetRemaining() >= 8_000) {
       console.log('[swing-analysis] LAST-RESORT Anthropic safety net; budget_ms:', budgetRemaining());
-      const anthropicAttempt = await tryAnthropic();
+      const anthropicAttempt = await tryAnthropic(budgetRemaining());
       attempts.push(anthropicAttempt);
       if (scoreAttempt(anthropicAttempt.parsed) > scoreAttempt(winner.parsed)) {
         winner = anthropicAttempt;

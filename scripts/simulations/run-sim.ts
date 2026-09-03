@@ -14628,6 +14628,43 @@ check(
 }
 
 /**
+ * ─── 2026-09-03 — THE LAST RESORT MUST FIT INSIDE WHAT IS LEFT ─────────────────────────────────
+ *
+ * swing-analysis stage 3 (Anthropic) is the safety net that turns a two-provider outage into an
+ * answer instead of a 502. It admitted itself with 10s left of a 48s orchestration budget and then
+ * ran a client configured `timeout: 25_000, maxRetries: 1` — up to 50s of work started at t≈38s,
+ * for a worst case of 88s against the route's 60s platform ceiling. Even one un-retried attempt
+ * overran it. Vercel kills the function mid-flight, so the player gets a dropped connection rather
+ * than the diagnosed 502 the stage exists to produce — the safety net making the outage look like
+ * our bug.
+ *
+ * This is the SAME defect the 09-01 audit fixed on the OpenAI client, left standing on the one path
+ * that only ever runs when things have already gone wrong. Guarded here so the third provider can
+ * never again be admitted on a budget smaller than the work it starts.
+ * [[a-budget-must-fit-what-runs-inside-it]]
+ */
+{
+  const sa = readCode('api/swing-analysis.ts');
+  check(
+    'BUDGET: no provider client in swing-analysis carries a retry it cannot afford',
+    !/maxRetries: [1-9]/.test(sa),
+    'the SDK retry starts AFTER the first attempt times out, so any non-zero retry doubles a budget already sized to the ceiling',
+  );
+  check(
+    'BUDGET: the last-resort call is clamped to the budget that is LEFT, not to what it would like',
+    /const tryAnthropic = async \(budgetMs: number\)/.test(sa) &&
+      /timeout: Math\.max\(6_000, Math\.min\(ANTHROPIC_MAX_MS, budgetMs - 2_000\)\)/.test(sa) &&
+      /await tryAnthropic\(budgetRemaining\(\)\)/.test(sa),
+    'a static per-client timeout cannot know how much of the orchestration budget the first two providers already spent',
+  );
+  check(
+    'BUDGET: stage 3 is admitted only when a real attempt can finish',
+    /if \(!winner\.parsed && budgetRemaining\(\) >= 8_000\)/.test(sa),
+    'the gate has to be at least the floor the clamp will hand out, or the stage starts work it cannot complete',
+  );
+}
+
+/**
  * ─── 2026-09-01 — THE CAMERA ANGLE IS JUDGED AT ADDRESS ─────────────────────────────────────────
  *
  * Tim: "the club arc shows up sporadically and mostly incorrect… it may get the direction right, but
