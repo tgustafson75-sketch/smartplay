@@ -585,6 +585,33 @@ function AppNavigator() {
     return () => { unsub?.(); };
   }, []);
 
+  /**
+   * 2026-09-03 — bank referral rewards earned since last launch.
+   *
+   * GATED ON SUBSCRIPTIONS_ENABLED, and that is the whole subtlety. promo_expires_at is an ABSOLUTE
+   * time, so redeeming 30 days while 1.0 has the paywall off would burn all thirty against a period
+   * the player already had for free. The server keeps unredeemed rows indefinitely, so not calling
+   * this is exactly how the days wait for the build that can spend them.
+   *
+   * extendPromo, not grantPromo: a second referral arriving while days remain must ADD to them. And
+   * the redeem is fire-and-forget — a growth feature never delays a launch. [[caddie-failsafe-no-walls]]
+   */
+  useEffect(() => {
+    if (!SUBSCRIPTIONS_ENABLED) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { redeemReferralRewards } = await import('../services/billing/referral');
+        const days = await redeemReferralRewards();
+        if (!cancelled && days > 0) {
+          usePlayerProfileStore.getState().extendPromo(days);
+          console.log('[referral] banked', days, 'days');
+        }
+      } catch { /* referrals are additive; never surface a launch error for one */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   // Pre-beta — boot battery discipline lifecycles. Both are idempotent.
   useEffect(() => {
     initAudioLifecycle();

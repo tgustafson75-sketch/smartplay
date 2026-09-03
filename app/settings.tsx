@@ -1765,6 +1765,12 @@ export default function Settings() {
             value={shareDiagnostics}
             onValueChange={confirmToggle('Issue report sharing', setShareDiagnostics)}
           />
+          {/* 2026-09-03 — invite a friend (app/invite.tsx). Sits here rather than in Help because it
+              is a thing the player DOES, not a thing they read. */}
+          <TouchableOpacity style={[rowDivStyle, { alignItems: 'center' }]} onPress={() => router.push('/invite' as never)} accessibilityRole="button" accessibilityLabel="Invite a friend">
+            <View style={styles.rowText}><Text style={labelStyle}>Invite a friend</Text></View>
+            <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+          </TouchableOpacity>
           {/* 2026-07-18 — real in-app legal documents (app/legal.tsx). */}
           <TouchableOpacity style={[rowDivStyle, { alignItems: 'center' }]} onPress={() => router.push('/legal?doc=privacy' as never)} accessibilityRole="button">
             <View style={styles.rowText}><Text style={labelStyle}>Privacy Policy</Text></View>

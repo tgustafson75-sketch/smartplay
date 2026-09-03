@@ -14725,6 +14725,102 @@ check(
 }
 
 /**
+ * ─── 2026-09-03 — REFERRALS: THE FOUR WAYS THIS PAYS THE WRONG PERSON ──────────────────────────
+ *
+ * Tim: "a referral link. If a friend signs up, user gets 30 days."
+ *
+ * This app has no accounts, so every part of a referral has to be built out of things that are not
+ * an identity. Four properties hold it together and none of them fail loudly:
+ *
+ *   1. THE SALT IS SERVER-ONLY. A salt shipped in the bundle is not a salt — anyone could mint codes
+ *      for guessed install ids, or walk a code back to the install id printed on diagnostic reports,
+ *      joining the growth feature to the support channel.
+ *   2. REDEMPTION IS GATED ON THE PAYWALL. promo_expires_at is an ABSOLUTE time, so redeeming while
+ *      1.0 has subscriptions off would burn thirty days against a period the player already has for
+ *      free. Not calling redeem is how the server holds them until a build can spend them.
+ *   3. DAYS STACK. grantPromo overwrites; a second referral arriving while days remain must ADD.
+ *   4. THE ROUTE MUST BE ROUTED. vercel.json's `builds` sets the budget but `routes` decides
+ *      reachability — an api file with no route entry falls through to the SPA catch-all and answers
+ *      HTML to a client expecting JSON, which fails as a parse error a long way from the cause.
+ */
+{
+  const client = readCode('services/billing/referral.ts');
+  check(
+    'REFERRAL: the client never derives its own code',
+    !/createHash|sha256|REFERRAL_SALT/.test(client) && /post\('code'\)/.test(client),
+    'the salt is server-only; a client that could compute codes could mint them for install ids it guessed, and could walk a code back to the id on diagnostic reports',
+  );
+  check(
+    'REFERRAL: every call is best-effort and cannot block a round',
+    /signal: AbortSignal\.timeout\(8000\)/.test(client) && /return null;\s*\n\s*\}\s*\n\}/.test(client),
+    'a growth feature that can throw on the round-start path is a worse bug than no growth feature',
+  );
+
+  const layout = readCode('app/_layout.tsx');
+  /**
+   * ISOLATE THE EFFECT FIRST, then assert inside it.
+   *
+   * Not written in response to a failure — the plain non-greedy window was measured and does NOT
+   * bridge today. It is written because _layout contains TWO effects whose first three lines are
+   * character-for-character identical:
+   *
+   *     useEffect(() => {
+   *       if (!SUBSCRIPTIONS_ENABLED) return;
+   *       let cancelled = false;
+   *
+   * A window anchored on that opening is one refactor away from matching the wrong one, and readCode
+   * strips comments, so the ~130 mostly-commented lines between them are far shorter to a regex than
+   * they look in the file. Isolating on `redeemReferralRewards` and forbidding the window from
+   * crossing another `useEffect(` makes the block this effect and nothing else, whatever moves.
+   *
+   * That duplicate opening also cost three wrong break-tests here: a `replace(old, new, 1)` keyed on
+   * those three lines silently patched the OTHER effect every time, and the guard was reported as
+   * unbreakable when it was the test that was broken. Break-test anchors must be asserted UNIQUE.
+   * [[three-ways-a-guard-is-worthless]] [[my-measurement-is-the-least-reliable-part]]
+   */
+  const redeemBlock = /useEffect\(\(\) => \{(?:(?!useEffect\()[\s\S])*?redeemReferralRewards(?:(?!useEffect\()[\s\S])*?\}, \[\]\);/.exec(layout)?.[0] ?? '';
+  const redeemEffect =
+    /if \(!SUBSCRIPTIONS_ENABLED\) return;/.test(redeemBlock) &&
+    /extendPromo\(days\)/.test(redeemBlock);
+  check(
+    'REFERRAL: days are not redeemed while the app is already free, and they STACK when they are',
+    redeemEffect,
+    'promo_expires_at is absolute — redeeming during the paywall-off period spends thirty days the player already had; and grantPromo would overwrite a comp instead of adding to it',
+  );
+
+  const profile = readCode('store/playerProfileStore.ts');
+  check(
+    'REFERRAL: extendPromo adds to a live comp and restarts from now on a dead one',
+    /const from = st\.promo_expires_at != null && st\.promo_expires_at > now \? st\.promo_expires_at : now;/.test(profile),
+    'extending from a stale expiry back-dates the grant and quietly spends part of it before the player sees it',
+  );
+
+  check(
+    'REFERRAL: a friend qualifies by PLAYING, at both real-use surfaces',
+    /reportReferralQualifyingActivity\(\)/.test(readCode('store/roundStore.ts')) &&
+      /reportReferralQualifyingActivity\(\)/.test(readCode('store/swingSessionStore.ts')),
+    'an install is a tap an emulator can farm; a round and a range session are the events that mean somebody actually became a player',
+  );
+
+  const server = readCode('api/referral.ts');
+  check(
+    'REFERRAL: the server refuses self-referral and marks rows redeemed BEFORE answering',
+    /if \(code === myCode\) return res\.status\(200\)\.json\(\{ ok: false, error: 'self_referral' \}\);/.test(server) &&
+      server.indexOf("update({ redeemed_at") < server.indexOf('const days = due.reduce'),
+    'answering first and marking after pays twice whenever a response is lost — the wrong direction for a grant nobody can claw back',
+  );
+
+  const vj = read('vercel.json');
+  check(
+    'REFERRAL: the endpoint is both BUILT and ROUTED',
+    /"src": "api\/referral\.ts"/.test(vj) &&
+      /"dest": "\/api\/referral\.ts"/.test(vj) &&
+      /"src": "\/r\/\(\[A-Za-z0-9\]\+\)"/.test(vj),
+    'a builds entry sets the budget; without a routes entry the path falls through to the SPA catch-all and returns HTML, which surfaces as a JSON parse error nowhere near the cause',
+  );
+}
+
+/**
  * ─── 2026-09-01 — THE CAMERA ANGLE IS JUDGED AT ADDRESS ─────────────────────────────────────────
  *
  * Tim: "the club arc shows up sporadically and mostly incorrect… it may get the direction right, but

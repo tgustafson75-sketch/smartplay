@@ -928,6 +928,13 @@ export const useSwingSessionStore = create<SwingSessionState>()(
       startSession: (club) => {
         const id = uid('cage');
         practiceLog('zustand-session-start', 'ok', { session_id: id, club });
+        // The other half of "the friend actually played" — a range session counts as much as a
+        // round. Fire-and-forget and self-limiting; see startRound in roundStore for the reasoning.
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          void (require('../services/billing/referral') as typeof import('../services/billing/referral'))
+            .reportReferralQualifyingActivity();
+        } catch { /* a growth feature never blocks a swing */ }
         set({
           activeSession: {
             id,

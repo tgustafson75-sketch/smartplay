@@ -346,6 +346,13 @@
       }
     },
     {
+      "src": "api/referral.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 15
+      }
+    },
+    {
       "src": "api/*.ts",
       "use": "@vercel/node"
     },
@@ -501,6 +508,14 @@
     {
       "src": "/s/([A-Za-z0-9_-]+)",
       "dest": "/api/swing-share.ts?id=$1"
+    },
+    {
+      "src": "/api/referral",
+      "dest": "/api/referral.ts"
+    },
+    {
+      "src": "/r/([A-Za-z0-9]+)",
+      "dest": "/api/referral.ts?code=$1"
     },
     {
       "src": "/api/issue-report",

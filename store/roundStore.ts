@@ -1033,6 +1033,20 @@ export const useRoundStore = create<RoundState>()(
           rt.startRoundTrace(course || 'round');
           rt.trace('round', 'start', { course, holes: holes?.length ?? 0, nineHole: !!options?.nineHole });
         } catch { /* tracing never blocks a round */ }
+        /**
+         * 2026-09-03 — a round IS the "signs up" event for a referral.
+         *
+         * This app has no sign-up, so a referral cannot settle on an account being created. Starting
+         * a round is the moment a friend became a player rather than a download, and it is what makes
+         * the reward hard to farm: a fake install has to go and play golf. Fire-and-forget, no await,
+         * self-limiting to one call per install — a referral must never delay a round.
+         * See services/billing/referral.ts. [[hands-free-zero-setup-is-the-product]]
+         */
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          void (require('../services/billing/referral') as typeof import('../services/billing/referral'))
+            .reportReferralQualifyingActivity();
+        } catch { /* a growth feature never blocks a round */ }
         const courseId = options.courseId ?? null;
         const courseLocation = options.courseLocation ?? null;
         // 2026-08-06 (tester Matt Abid) — resolve the starting hole (front nine = 1, back nine = 10),

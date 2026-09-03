@@ -139,6 +139,24 @@ const buildTutorials = (caddieName: string, pronoun: string): Tutorial[] => {
   },
   {
     /**
+     * 2026-09-03 — invite a friend. A tutorial rather than a changelog line because there IS a step:
+     * the code has to be typed. Deferred deep linking does not exist without a third-party SDK, so
+     * a friend who taps the link and installs arrives with no memory of it — the code is the part
+     * that actually works, and a player who does not know to enter it never gets credited.
+     */
+    id: 'invite',
+    icon: 'people-outline',
+    title: 'Invite a friend',
+    blurb: 'They play, you get rewarded.',
+    steps: [
+      'Settings → Invite a friend has your code and a Share button.',
+      'Send the link. It shows your friend the code and points them at the right app store.',
+      'After they install, they enter that code under Settings → Invite a friend → Got a code?',
+      'You are credited once they actually play a round — an install on its own does not count.',
+    ],
+  },
+  {
+    /**
      * 2026-09-03 — a HIGHLIGHT, not an instruction: there is no step to perform. It is here because
      * a player who does not know the offer exists cannot count on it, and the whole point is that
      * they should feel free to take their time.

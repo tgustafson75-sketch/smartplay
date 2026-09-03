@@ -242,6 +242,16 @@ interface PlayerProfileState {
    */
   grantTrialExtension: (days: number) => void;
   /**
+   * 2026-09-03 — ADD days to a comp instead of replacing it.
+   *
+   * grantPromo sets promo_expires_at to `now + days`, which is right for a one-off grant and wrong
+   * for referrals: a player who earns a second 30 days while 20 remain would be reset to 30 and
+   * silently LOSE 20 they had already been given. Rewards that can arrive more than once have to
+   * accumulate. Extends from whichever is later — the existing expiry or now — so an expired comp
+   * restarts cleanly rather than back-dating.
+   */
+  extendPromo: (days: number) => void;
+  /**
    * 2026-08-29 — set the trial start from the STORE's clock rather than from first app open.
    * initTrial() stamps the moment the app was first opened, which was correct while the trial was
    * ours to run; under IAP the trial begins when the player buys. See services/billing/purchases.ts
@@ -396,6 +406,15 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
           subscription_status: 'active',
         }),
       clearPromo: () => set({ promo_expires_at: null }),
+      extendPromo: (days) =>
+        set((st) => {
+          const now = Date.now();
+          const from = st.promo_expires_at != null && st.promo_expires_at > now ? st.promo_expires_at : now;
+          return {
+            promo_expires_at: from + Math.max(1, Math.floor(days)) * 24 * 60 * 60 * 1000,
+            subscription_status: 'active',
+          };
+        }),
       grantTrialExtension: (days) => {
         const now = Date.now();
         set({
