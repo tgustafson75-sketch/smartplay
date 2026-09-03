@@ -13,7 +13,7 @@ the other's side, so this file is where they meet.
 (`docs/LAUNCH-STATUS.md` → pencil icon → commit to `main`). Put your name and the date in the row
 you touch.
 
-**Last updated:** 2026-09-03 · Claude Code (session `smartplaycaddie-fd`) — OTA shipped both channels; privacy policy LIVE
+**Last updated:** 2026-09-03 · Claude Code (session `smartplaycaddie-fd`) — policy LIVE; OTA shipped; 5 fixes since the OTA are NOT yet on a device (see Deployment)
 
 ---
 
@@ -138,16 +138,47 @@ a device is API 35 with the old permission set.
 clones. Branch state is fine, but either session can stage or publish the other's in-progress edits.
 If two sessions are going to work at once, one should move to a git worktree.
 
+## 🚚 Deployment — what is actually ON A DEVICE
+
+**Committed is not deployed, and the gap is currently five commits.** The last OTA went out at
+`a20c4031`. Everything after it is on `main` and on nobody's phone:
+
+| Commit | What is stranded |
+|---|---|
+| `6c545ac6` | route-change tag on the voice preempt diagnostic |
+| `583a45b2` | 3-iron reading slower than a 4-iron; tagged 7W told to tag itself |
+| `983bdd63` | recap tempo card (the tempo story's first reader) |
+| `18f84572` | recap YOUR CLIPS row (clip_uri's first reader) |
+| `0db45e23` | handicap card showing a differential the round never posted |
+
+**The background-location video IS filmable** — `2e8aae9b` (the prominent disclosure) is an ancestor
+of the OTA commit, so it is on testers' devices now. Force-close and reopen first. Verified with
+`git merge-base --is-ancestor`, not assumed.
+
+Everything above is JS and can go OTA at any time. The NATIVE half — target API 36, the removed
+storage permissions, Health Connect — cannot, and still needs the EAS build in row 8.
+
 ## Repo state
 
-`main` @ `2a7f10eb` · ts-check clean · jest **222 suites / 2493 tests** · sim **928/928**
+`main` @ `0db45e23` · ts-check clean · jest **223 suites / 2505 tests** · sim **939/939**
+
+Gates run in an isolated worktree (`/Users/timothyg/smartplay-launch`, branch `launch-prep`, pushed
+with `git push origin launch-prep:main`). A jest run counts only when it prints a `Tests:` line —
+on 2026-09-03 node_modules was destroyed and jest exited 194 with ZERO output while `tsc` stayed
+green, so "ts-check clean" alone is not evidence the suite ran.
 
 *Independently re-verified 2026-09-03 by Claude Code (session `smartplaycaddie`) against the combined tree — both sessions' commits together, since we share one working tree and neither had run the gates over the other's work. The sim count here read 926; it is 928.*
 
-Shipped 2026-09-03: target API 36 · Health Connect reader + disclosure in all three policy copies ·
+Shipped 2026-09-03: target API 36 · Health Connect reader + disclosure in all four policy copies ·
 light-use trial extension · referral system · SwingSim 1-D-course fix · SmartVision layup inversion ·
-SmartFinder clamp honesty · SmartMotion budget overrun · voice preempt diagnostic · launch changelog
-seeding · background-location prominent disclosure.
+SmartFinder clamp shown as a confident measurement · SmartMotion last-resort provider overrunning
+its ceiling · voice preempt diagnostic + route-change tag · launch changelog seeding ·
+background-location prominent disclosure · recap tempo card · recap clip playback · handicap
+differential single-owner.
+
+**Four orphans of one shape found today** — measured, persisted, shipped off-device, read by nobody:
+Health Connect, the watch tempo story, in-round `clip_uri`, and `is_highlight` (residue of a capture
+kind deleted in May, removed rather than wired).
 
 ## Known-dormant by design — not bugs, do not "fix"
 
