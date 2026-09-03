@@ -210,7 +210,10 @@ export interface ShotResult {
   // "record this shot"). Back-written by mediaCapture.commitCapture when
   // the user records a shot on this hole. Optional; null when no clip.
   clip_uri?: string | null;
-  is_highlight?: boolean;
+  // 2026-09-03 — `is_highlight` REMOVED. It was residue of the 'highlight' (hero shot) capture kind
+  // that was deleted on 2026-05-17: CaptureKind has been 'shot' | 'swing' ever since, so nothing
+  // could ever set it and nothing read it. Giving it a writer would have resurrected a concept that
+  // was deliberately cut. [[orphans-are-live-bugs-not-dead-code]]
   // FIX M8 — Kevin's recommendation at the time this shot was taken.
   // Stamped by log_shot handlers from pendingKevinRec; null when Kevin
   // hadn't given a club call before this shot was logged.

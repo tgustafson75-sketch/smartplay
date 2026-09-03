@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Alert,
   BackHandler,
+  Modal,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -130,6 +131,8 @@ import { checkContent } from '../../services/contentGuardrail';
 import { useSettingsStore } from '../../store/settingsStore';
 import { getCaddieName } from '../../lib/persona';
 import { useRoundStore } from '../../store/roundStore';
+import { Video, ResizeMode } from 'expo-av';
+import { resolveClipUri } from '../../services/videoUpload';
 import { useVoiceLogStore } from '../../store/voiceLogStore';
 import { useIssueLogStore } from '../../store/issueLogStore';
 import PhotoCollage from '../../components/recap/PhotoCollage';
@@ -314,6 +317,44 @@ export default function RecapScreen() {
    * hazard. [[no-half-fixes-enforce-every-surface]]
    */
   const tempoStory = useRoundStore(s => s.roundHistory.find(r => r.id === round_id)?.tempoStory ?? null);
+  /**
+   * 2026-09-03 — CLIPS. mediaCapture back-writes clip_uri onto the last shot of the hole whenever
+   * the player says "record this shot" mid-round. Nothing had ever rendered it, so every in-round
+   * capture attached a video to a shot no screen could open — the same measured-and-never-read shape
+   * as Health Connect and the tempo story. [[orphans-are-live-bugs-not-dead-code]]
+   *
+   * Read off the RECORD, like tempoStory, so mergeRecap cannot drop it on the rounds with the
+   * richest archive.
+   */
+  const clipShots = useRoundStore(useCallback((st: ReturnType<typeof useRoundStore.getState>) => {
+    const rec = st.roundHistory.find((r) => r.id === round_id);
+    return (rec?.shots ?? []).filter((sh) => !!sh.clip_uri);
+  }, [round_id]));
+  const [openClip, setOpenClip] = useState<{ uri: string; label: string } | null>(null);
+  const [clipLoading, setClipLoading] = useState(false);
+
+  /**
+   * Resolve on OPEN, never on render. Clips are stored as absolute paths under the app container,
+   * and iOS regenerates that container UUID on every reinstall — resolveClipUri re-anchors the
+   * basename under the current Documents rather than trusting the stored prefix. It returns null
+   * only when the file is genuinely gone, which is a real outcome worth saying plainly rather than
+   * opening a player onto a black rectangle. [[illustration-data-points]]
+   */
+  const openShotClip = useCallback(async (stored: string, label: string) => {
+    setClipLoading(true);
+    try {
+      const uri = await resolveClipUri(stored);
+      if (!uri) {
+        Alert.alert('Clip not on this device', 'That video was recorded on a previous install and is no longer stored here. The shot and its stats are still yours.');
+        return;
+      }
+      setOpenClip({ uri, label });
+    } catch {
+      Alert.alert('Could not open that clip', 'Something went wrong reading the video file.');
+    } finally {
+      setClipLoading(false);
+    }
+  }, []);
   const deleteRound = useRoundStore(s => s.deleteRound);
   // 2026-07-04 (Tim — offline log "stored for the round, ingested later") — anything
   // the player said with no signal this round, so it's reviewable here. Stable-selector
@@ -779,6 +820,33 @@ export default function RecapScreen() {
               </View>
             )}
 
+            {/* 2026-09-03 — CLIPS. One chip per shot the player recorded during the round; tapping
+                opens it. Renders nothing when no clip was captured, which is most rounds. */}
+            {clipShots.length > 0 && (
+              <View style={styles.effortCard}>
+                <Text style={styles.effortLabel}>YOUR CLIPS</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.clipRow}>
+                  {clipShots.map((sh) => {
+                    const hole = sh.hole_number ?? sh.hole;
+                    const label = `Hole ${hole}${sh.club ? ` · ${sh.club}` : ''}`;
+                    return (
+                      <TouchableOpacity
+                        key={sh.id}
+                        style={styles.clipChip}
+                        disabled={clipLoading}
+                        onPress={() => { void openShotClip(sh.clip_uri as string, label); }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Play your clip from ${label}`}
+                      >
+                        <Ionicons name="play-circle" size={22} color="#00C896" />
+                        <Text style={styles.clipChipText}>{label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            )}
+
             <View style={styles.kevinCard}>
               <Text style={styles.kevinLabel}>{caddieName.toUpperCase()}</Text>
               <Text style={styles.kevinOverall}>{recap.overall_kevin_summary}</Text>
@@ -959,6 +1027,41 @@ export default function RecapScreen() {
         ListFooterComponent={<View style={{ height: 48 }} />}
       />
 
+      {/* 2026-09-03 — the clip player. ONE Modal for the whole screen rather than one per chip:
+          mounting a Video per shot would hold a decoder open for every clip in the round. */}
+      <Modal
+        visible={openClip != null}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setOpenClip(null)}
+        supportedOrientations={['portrait', 'landscape-left', 'landscape-right']}
+      >
+        <View style={styles.clipBackdrop}>
+          <View style={styles.clipHeader}>
+            <Text style={styles.clipTitle} numberOfLines={1}>{openClip?.label ?? ''}</Text>
+            <TouchableOpacity onPress={() => setOpenClip(null)} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close clip">
+              <Ionicons name="close" size={28} color="#e5e7eb" />
+            </TouchableOpacity>
+          </View>
+          {openClip && (
+            <Video
+              source={{ uri: openClip.uri }}
+              style={styles.clipVideo}
+              useNativeControls
+              isLooping
+              shouldPlay
+              resizeMode={ResizeMode.CONTAIN}
+              onError={() => {
+                // The file resolved but the decoder refused it. Say so and close, rather than
+                // leaving a black rectangle the player has to guess about.
+                setOpenClip(null);
+                Alert.alert('Could not play that clip', 'The file is there but this device could not decode it.');
+              }}
+            />
+          )}
+        </View>
+      </Modal>
+
       {/* Hidden share card — rendered offscreen for captureRef */}
       {/* 2026-08-08 (wave-2 audit) — pass REAL pars so the hero stat never fabricates vs-par. */}
       <View style={styles.offscreen} pointerEvents="none">
@@ -1032,6 +1135,21 @@ const styles = StyleSheet.create({
   },
   effortLabel: { color: '#6b7280', fontSize: 9, fontWeight: '800', letterSpacing: 2, marginBottom: 8 },
   tempoHeadline: { color: '#e5e7eb', fontSize: 14, lineHeight: 20, fontWeight: '600', marginBottom: 10 },
+  clipRow: { gap: 8, paddingRight: 4 },
+  clipChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 7,
+    backgroundColor: '#0b1f16', borderWidth: 1, borderColor: '#1f3242',
+    borderRadius: 999, paddingVertical: 8, paddingHorizontal: 12,
+  },
+  clipChipText: { color: '#e5e7eb', fontSize: 13, fontWeight: '700' },
+  clipBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.94)', justifyContent: 'center' },
+  clipHeader: {
+    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 2,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingTop: 52, paddingBottom: 12, gap: 12,
+  },
+  clipTitle: { color: '#e5e7eb', fontSize: 15, fontWeight: '800', flex: 1 },
+  clipVideo: { width: '100%', aspectRatio: 9 / 16, alignSelf: 'center' },
   effortRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-start' },
   effortItem: { alignItems: 'center', flex: 1 },
   effortValue: { color: '#ffffff', fontSize: 20, fontWeight: '900' },

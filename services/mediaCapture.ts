@@ -169,16 +169,14 @@ export async function requestCapture(req: CaptureRequest): Promise<CapturedMedia
  *   - roundStore.shots back-reference for kind='shot'/'highlight' during
  *     an active round: sets clip_uri on the most recent shot of the current hole.
  *
- * 2026-09-03 — CORRECTED. This used to read "sets clip_uri + is_highlight … so recap can render
- * the clip with the shot", and two thirds of that sentence were untrue:
- *   • `is_highlight` is never set, here or anywhere. It exists only as an optional field on the
- *     RoundShot type and has no writer and no reader.
- *   • the recap does NOT render the clip. clip_uri is written (below) and read by nothing, so
- *     every in-round capture attaches a file reference to a shot that no surface ever opens.
- * The write is left in place — it is the only record tying a clip to the shot that produced it,
- * and deleting it would make the eventual playback surface impossible to build. But the comment
- * described a feature rather than the code, and a stale header is a source someone trusts.
- * [[a-stale-header-is-a-source-someone-trusts]] [[orphans-are-live-bugs-not-dead-code]]
+ * 2026-09-03 — CORRECTED, then RESOLVED. This used to read "sets clip_uri + is_highlight … so
+ * recap can render the clip with the shot", and two thirds of that sentence were untrue:
+ *   • `is_highlight` was never set, here or anywhere — residue of the 'highlight' capture kind
+ *     deleted on 2026-05-17. The field has been removed from RoundShot rather than given a writer.
+ *   • the recap did NOT render the clip. It does now (app/recap → CLIPS strip), so the write below
+ *     finally has a reader instead of attaching a file to a shot no surface ever opened.
+ * `kind === 'shot'` is correct and not a narrowing: CaptureKind is 'shot' | 'swing', and a 'swing'
+ * belongs to the library rather than to a hole. [[a-stale-header-is-a-source-someone-trusts]]
  */
 export function commitCapture(
   id: string,

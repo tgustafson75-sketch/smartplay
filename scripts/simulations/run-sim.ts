@@ -14995,6 +14995,30 @@ check(
     !/effort: .*tempoStory|tempoStory: (synth|archive)/.test(recap),
     'mergeRecap spreads whichever side has more hole rows, so anything routed through the recap object needs an explicit carry or it vanishes on the richest rounds — the record has no such hazard',
   );
+  /**
+   * clip_uri was the SECOND orphan of the day and the last one outstanding. mediaCapture back-writes
+   * it onto the last shot of the hole whenever the player says "record this shot" mid-round, and
+   * nothing rendered it — so every in-round capture attached a video file to a shot no screen could
+   * open. Its own header claimed "recap can render the clip with the shot"; the recap could not.
+   */
+  check(
+    'CLIPS: a shot clip recorded in a round can be opened from the recap',
+    /\(rec\?\.shots \?\? \[\]\)\.filter\(\(sh\) => !!sh\.clip_uri\)/.test(recap) &&
+      /openShotClip\(sh\.clip_uri as string, label\)/.test(recap) &&
+      /<Video/.test(recap),
+    'the write has existed since Phase 110 with no reader — a video attached to a shot nobody can watch is the measured-and-never-read shape all over again',
+  );
+  check(
+    'CLIPS: the uri is re-anchored at OPEN, and a missing file is said plainly',
+    /const uri = await resolveClipUri\(stored\);/.test(recap) &&
+      /if \(!uri\) \{[\s\S]{0,260}?Alert\.alert\('Clip not on this device'/.test(recap),
+    'iOS regenerates the app container UUID on reinstall, so a stored absolute path is stale — resolveClipUri re-anchors it, and null means genuinely gone, which is worth saying rather than opening a player onto a black rectangle',
+  );
+  check(
+    'CLIPS: one player for the screen, not one per shot',
+    (readCode('app/recap/[round_id].tsx').match(/<Video/g) ?? []).length === 1,
+    'a Video mounted per chip would hold a decoder open for every clip in the round',
+  );
   check(
     'TEMPO: nothing is shown when the read had nothing to say',
     /tempoStory\?\.headline &&/.test(recap),
