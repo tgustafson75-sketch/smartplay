@@ -166,10 +166,18 @@ export default function WelcomeScreen() {
         ` persona=${savedPersona ?? 'kevin'}` +
         ` terms_at=${saved.termsAcceptedAt != null}` +
         ` first_opened=${saved.first_opened_at != null}` +
-        ` -> /(tabs)/caddie`,
+        ` -> / (router re-evaluates: permissions next)`,
       );
     }
-    router.replace('/(tabs)/caddie' as never);
+    /**
+     * 2026-09-03 — back to the ROUTER, not straight to the caddie.
+     *
+     * Consent now runs before the core-permissions pre-flight, and this screen jumping directly to
+     * the caddie tab would skip that pre-flight entirely — the permissions would never be asked for
+     * at all. app/permissions.tsx already uses exactly this pattern (replace('/') and let index
+     * re-evaluate), which is what makes the sequence re-entrant rather than a hand-wired chain.
+     */
+    router.replace('/' as never);
   };
 
   return (

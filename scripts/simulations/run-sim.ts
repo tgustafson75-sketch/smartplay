@@ -3267,8 +3267,14 @@ check('First run: the welcome gate cannot be walked past without consent',
       /disabled=\{!termsAccepted\}/.test(w) &&
       // a blocked CTA says why, instead of being indistinguishable from a broken one
       /blocked reason=terms_not_accepted/.test(w) &&
-      // and the only way out of this screen is forward into the app
-      /router\.replace\('\/\(tabs\)\/caddie' as never\)/.test(w) &&
+      // and the only way out of this screen is FORWARD, via replace so it cannot be swiped back into
+      // 2026-09-03: was pinned to the literal '/(tabs)/caddie'. Consent now runs BEFORE the
+      // core-permissions pre-flight, so welcome hands back to the router ('/') and index routes on
+      // to permissions — jumping straight to the tab would have skipped the permission prompts
+      // entirely. Still forward, still a replace; the destination was never what this cared about.
+      // [[break-test-every-guard-you-write]]
+      /router\.replace\('\/(?:\(tabs\)\/caddie)?' as never\)/.test(w) &&
+      !/router\.back\(\)/.test(w) &&
       // the legal documents are real in-app routes, not dead links
       /router\.push\('\/legal\?doc=terms' as never\)/.test(w) &&
       /router\.push\('\/legal\?doc=privacy' as never\)/.test(w)
@@ -15191,6 +15197,73 @@ check(
     /setPreRoundRoutine\(existing \? `\$\{existing\}/.test(qs) &&
       /: cand\.text\);/.test(qs),
     'setPreRoundRoutine replaces, so saving a song would silently delete the stretches saved last week — Tim said "ingest that TO the routine", which is additive',
+  );
+}
+
+/**
+ * ─── 2026-09-03 — CONSENT BEFORE THE PERMISSION PROMPTS ────────────────────────────────────────
+ *
+ * The first-run order was intro → PERMISSIONS → welcome, so a brand-new install asked for CAMERA,
+ * MICROPHONE and LOCATION before the player had been told what the app does or agreed to anything.
+ * app/welcome.tsx is the only place the Terms/Privacy consent lives, and it ran afterwards.
+ *
+ * Wrong on two counts. Both stores expect disclosure and consent to precede access to sensitive
+ * data, and a reviewer meets that ordering on the very first launch. And as product it is the
+ * highest-friction possible opening — three system dialogs before a word of explanation is the
+ * worst possible moment to ask, which costs grant rates on the permissions the whole app runs on.
+ *
+ * The trap in fixing it: welcome used to jump straight to the caddie tab, so simply reordering the
+ * gates would have skipped the pre-flight entirely and never asked for the permissions at all.
+ */
+{
+  const idx = readCode('app/index.tsx');
+  const w = readCode('app/welcome.tsx');
+  const welcomeAt = idx.indexOf("Redirect href={'/welcome' as never} />;\n  }\n");
+  const permsAt = idx.indexOf("Redirect href={'/permissions' as never}");
+  check(
+    'FIRST RUN: consent is gated BEFORE the core-permissions pre-flight',
+    welcomeAt > 0 && permsAt > 0 && welcomeAt < permsAt,
+    'asking for camera, microphone and location before the player has agreed to anything is backwards for review and for grant rates',
+  );
+  check(
+    'FIRST RUN: welcome hands back to the router so the pre-flight still runs',
+    /router\.replace\('\/' as never\)/.test(w) && !/router\.replace\('\/\(tabs\)\/caddie'/.test(w),
+    'jumping straight to the caddie tab would skip the permissions screen entirely — permissions.tsx already uses replace("/") for exactly this reason, which is what makes the sequence re-entrant',
+  );
+}
+
+/**
+ * ─── 2026-09-03 — A PROVIDER OUTAGE IS NOT A 500 ───────────────────────────────────────────────
+ *
+ * Production alert: "All 63 requests to the course-content function returned 5xx, and this window
+ * closely correlates with a spike of upstream failures to a third-party API." Correlated rather than
+ * proven, because a 500 cannot distinguish their outage from our bug — so a healthy route failing
+ * over a provider blip pages exactly like a regression in the file.
+ *
+ * Two defects behind that. The route was single-provider with a 25s timeout inside a 30s platform
+ * budget, so a retry could not fit and none was attempted — and Anthropic's transient 429/529
+ * "overloaded" is the commonest failure there is and usually clears seconds later. And every
+ * failure, transient or not, came back as 500.
+ */
+{
+  const cc = readCode('api/course-content.ts');
+  check(
+    'COURSE CONTENT: a transient upstream blip gets one retry that FITS the budget',
+    /const ATTEMPT_TIMEOUT_MS = 12_000;/.test(cc) &&
+      /timeout: ATTEMPT_TIMEOUT_MS, maxRetries: 1/.test(cc),
+    'provider x (retries+1) must fit under the platform ceiling — 25s with maxRetries 0 left no room to retry, so one bad window took out every request in it',
+  );
+  check(
+    'COURSE CONTENT: an upstream outage answers 503, not 500',
+    /function isUpstreamOutage\(e: unknown\): boolean/.test(cc) &&
+      /if \(isUpstreamOutage\(e\)\) \{/.test(cc) &&
+      /return res\.status\(503\)\.json\(\{ error: 'upstream_unavailable'/.test(cc),
+    'the alert said "correlated" precisely because 500 conflates their outage with our bug; the client already degrades on any non-ok, so this costs the player nothing and makes the page actionable',
+  );
+  check(
+    'COURSE CONTENT: a genuine internal error is still a 500',
+    /console\.error\('\[course-content\] exception:', msg\);\s*\n\s*return res\.status\(500\)/.test(cc),
+    'downgrading everything to 503 would hide a real regression behind "try again later" — the split is the point',
   );
 }
 

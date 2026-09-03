@@ -96,17 +96,6 @@ export default function Index() {
     return <Redirect href={'/intro-video' as never} />;
   }
 
-  // One-time core permissions pre-flight — runs after intro, before
-  // onboarding. Asks for camera/mic/location in one batch so individual
-  // tools never need to prompt again. Defensive: any failure inside
-  // the screen exits cleanly with the flag set, so a crash here can't
-  // strand the user. Tools fall back to per-call permission UX if the
-  // user skipped or denied during pre-flight.
-  const corePermsAsked = !!tutorialsSeen['core_permissions_requested'];
-  if (!corePermsAsked) {
-    return <Redirect href={'/permissions' as never} />;
-  }
-
   // 2026-05-17 — Onboarding subtree removed (was dead per the
   // standing "has_completed_onboarding=true default" rule). The
   // welcome screen below handles the single-screen first-launch
@@ -148,6 +137,27 @@ export default function Index() {
   if (!hasAcceptedTerms && !hasName) {
     return <Redirect href={'/welcome' as never} />;
   }
+
+  /**
+   * 2026-09-03 — CONSENT COMES BEFORE THE PERMISSION PROMPTS. This block used to sit ABOVE the
+   * welcome gate, so a brand-new install asked for CAMERA, MICROPHONE and LOCATION before the
+   * player had been told what the app does or agreed to anything. The welcome screen is the only
+   * place the Terms/Privacy consent lives, and it ran afterwards.
+   *
+   * Wrong on two counts. Both stores expect the disclosure and consent to precede access to
+   * sensitive data, and a reviewer meets that ordering on the very first launch. And as product it
+   * is the highest-friction possible opening: three system dialogs before a word of explanation is
+   * the worst moment to ask, which costs grant rates on the permissions the whole app runs on.
+   *
+   * Order is now intro → welcome (consent) → permissions → greeting → caddie. Denying is still
+   * fine: the screen sets its flag on Skip as well as Allow, and tools fall back to per-call
+   * permission UX. [[hands-free-zero-setup-is-the-product]]
+   */
+  const corePermsAsked = !!tutorialsSeen['core_permissions_requested'];
+  if (!corePermsAsked) {
+    return <Redirect href={'/permissions' as never} />;
+  }
+
 
   // Cold-launch greeting hop — happens once per process. Warm starts (Index
   // re-renders) hit the flag and route straight to caddie.

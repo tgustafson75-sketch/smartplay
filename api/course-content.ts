@@ -8,7 +8,37 @@ import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona, person
 // already most of its platform ceiling — so a retry is killed mid-flight and the caller gets nothing
 // instead of either an answer or a clean error. Tim's `clubpath_arc_too_sparse points: 0` was this
 // shape. Fail once, honestly, inside the budget. [[the-client-must-be-the-last-to-give-up]]
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 25_000, maxRetries: 0 });
+/**
+ * 2026-09-03 (production alert — "all 63 requests to course-content returned 5xx, correlated with
+ * upstream third-party API failures") — ONE BOUNDED RETRY, AND AN HONEST STATUS.
+ *
+ * The route was single-provider with a 25s timeout inside a 30s platform budget, so there was no
+ * room for a retry and none was attempted. Anthropic's transient 429/529 "overloaded" is the most
+ * common failure there is and it usually clears on a second try seconds later — instead, one bad
+ * upstream window took out every request in it.
+ *
+ * Two attempts at 12s fit the same 30s ceiling with room for the response write, which is the same
+ * arithmetic that governs swing-analysis: provider x (retries+1) must fit under the ceiling.
+ * [[a-budget-must-fit-what-runs-inside-it]]
+ */
+const ATTEMPT_TIMEOUT_MS = 12_000;
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: ATTEMPT_TIMEOUT_MS, maxRetries: 1 });
+
+/**
+ * Is this THEIR outage or OUR bug? The alert Tim received said "5xx correlated with upstream
+ * failures" — correlated, because a 500 cannot tell those apart, so a healthy route failing over a
+ * provider blip looks identical to a defect in this file. 503 says "try later", which is both true
+ * and actionable; the client already treats any non-ok as a degrade and renders the course without
+ * generated content. [[guards-by-element-not-blanket-suppression]]
+ */
+function isUpstreamOutage(e: unknown): boolean {
+  const status = (e as { status?: number })?.status;
+  if (typeof status === 'number' && (status === 429 || status === 529 || status >= 500)) return true;
+  const name = (e as { name?: string })?.name ?? '';
+  const msg = (e instanceof Error ? e.message : String(e ?? '')).toLowerCase();
+  return name === 'APIConnectionTimeoutError'
+    || /overloaded|rate.?limit|timeout|timed out|econnreset|socket hang up|fetch failed/.test(msg);
+}
 
 /**
  * Phase D-1 — Course Detail content generation.
@@ -238,6 +268,13 @@ Generate the JSON.`;
     return res.status(200).json({ ...parsed, cached: false });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Unknown error';
+    if (isUpstreamOutage(e)) {
+      // Their outage, not ours. 503 + Retry-After so monitoring can separate a provider window from
+      // a regression in this route, and the client degrades exactly as it already did on any non-ok.
+      console.warn('[course-content] upstream unavailable:', msg);
+      res.setHeader('Retry-After', '60');
+      return res.status(503).json({ error: 'upstream_unavailable', detail: msg });
+    }
     console.error('[course-content] exception:', msg);
     return res.status(500).json({ error: msg });
   }
