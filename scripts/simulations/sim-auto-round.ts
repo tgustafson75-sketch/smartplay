@@ -21,7 +21,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { IndoorRep } from '../../services/indoorSwing';
-import { simShot, simPutt, lieFor, liePenalty, missBiasFor, scoreName, type SimLie } from '../../services/simGame';
+import { simShot, simPutt, lieFor, liePenalty, missBiasFor, scoreName, restingDistanceYds, type SimLie } from '../../services/simGame';
 
 // ─── Args ────────────────────────────────────────────────────────────────────
 const argv = process.argv.slice(2);
@@ -114,7 +114,9 @@ function playHole(par: number, yards: number): { strokes: number; log: ShotLog[]
     const out = simShot({ clubCarry: targetCarry * lieMult, rep, missBias, rng });
     strokes++;
     // New distance to target: overshoot is possible (abs). Lateral is this shot's offline.
-    remaining = Math.abs(remaining - out.carryYds);
+    // The pin is a point: how far short/long, against how far offline. See restingDistanceYds —
+    // the old `Math.abs(remaining - carry)` scored every offline approach as a stone-dead one.
+    remaining = restingDistanceYds(remaining, out.carryYds, out.lateralYds);
     const lie = lieFor(Math.abs(out.lateralYds), remaining);
     log.push({ hole: 0, stroke: strokes, club: club.name, carry: out.carryYds, lateral: out.lateralYds, lie, remaining: Math.round(remaining) });
     lieMult = liePenalty(lie);
@@ -184,9 +186,25 @@ console.log('-'.repeat(64));
 console.log(`TOTAL  ${totalStrokes}  (par ${totalPar}, ${vsPar > 0 ? '+' + vsPar : vsPar === 0 ? 'E' : vsPar})`);
 console.log(`scores: ${Object.entries(scoreCounts).map(([k, v]) => `${v}× ${k}`).join(', ')}`);
 
-// Sanity guards so this doubles as a harness check (non-zero exit on absurd output).
+/**
+ * Sanity guards so this doubles as a harness check (non-zero exit on absurd output).
+ *
+ * 2026-09-03 — THE OLD BAND COULD NOT FAIL. It accepted par-18 through par+108, i.e. anything from
+ * 54 to 180 on a par 72. It printed "✓ plausible" over a mid-handicap player averaging 72.6 and
+ * going under par in 8 of 20 seeded rounds — which is how the one-dimensional distance bug survived
+ * in the engine for two months with a green harness on top of it. A check that only proves the
+ * total is a number reads exactly like a check that proves the total is right.
+ *
+ * The band now brackets golf. Nobody of any skill shoots 10 under in this engine, and a scoring
+ * average past +3/hole means the shot model has stopped converging rather than that the player is
+ * bad. Both edges are reachable, which is the whole point. [[break-test-every-guard-you-write]]
+ */
 let ok = true;
-if (totalStrokes < totalPar - 18 || totalStrokes > totalPar + holes.length * 6) {
+// Skill-aware at the low end: SKILL 1.0 means a flawless rep on every swing, and a 60 for that
+// player is a legitimate outcome rather than a broken engine. A flat floor called that a defect.
+// A mid rep (0.62) is bracketed near -10, which the fixed engine does not come close to.
+const lowFloor = totalPar - Math.round(4 + SKILL * 10);
+if (totalStrokes < lowFloor || totalStrokes > totalPar + holes.length * 3) {
   console.log(`\n✗ IMPLAUSIBLE TOTAL for skill ${SKILL} — engine or wiring off`); ok = false;
 }
 console.log(ok ? '\n✓ Round complete (plausible).' : '\n✗ Round produced implausible output.');

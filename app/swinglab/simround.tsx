@@ -21,7 +21,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { IndoorRepDetector, type IndoorRep } from '../../services/indoorSwing';
 import { RepDedupe } from '../../services/swing/watchRep';
 import { useWatchReps } from '../../hooks/useWatchReps';
-import { simShot, simPutt, lieFor, liePenalty, missBiasFor, scoreName, simOpponentScorecard, type SimLie } from '../../services/simGame';
+import { simShot, simPutt, lieFor, liePenalty, missBiasFor, scoreName, simOpponentScorecard, restingDistanceYds, type SimLie } from '../../services/simGame';
 import { useFamilyStore } from '../../store/familyStore';
 import { COURSES } from '../../data/courses';
 import { getLocalHoleImageById } from '../../data/localCourseImages';
@@ -256,7 +256,10 @@ export default function SwingSimScreen() {
     const out = simShot({ clubCarry: effCarry, rep, missBias });
     const s = strokes + 1;
     setStrokes(s);
-    const newRemaining = Math.max(0, Math.round(remaining - out.carryYds));
+    // 2026-09-03 — the pin is a point, not a line. This used to be `remaining - out.carryYds`, so a
+    // shot that flew the right distance but finished 20y right was recorded as ZERO yards out and
+    // the player putted from two feet for a block. [[illustration-data-points]]
+    const newRemaining = Math.max(0, Math.round(restingDistanceYds(remaining, out.carryYds, out.lateralYds)));
     const newLie = lieFor(Math.abs(out.lateralYds), newRemaining);
     // Advance the tracer on the aerial: progress along the hole = y, lateral = x.
     const progress = 1 - newRemaining / hole.distance;
