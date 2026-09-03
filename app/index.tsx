@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Redirect } from 'expo-router';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
+import { decideFirstRunRoute } from '../services/firstRunRoute';
 import { useSettingsStore } from '../store/settingsStore';
 import { recordLaunch } from '../services/kevinGreeting';
 import { signalGreetingComplete } from './greeting';
@@ -79,85 +80,39 @@ export default function Index() {
 
   if (!hydrated) return null;
 
-  const isDone = has_completed_onboarding || isSetupComplete;
-
-  // First-launch intro video — plays once per install, before the
-  // welcome / greeting flow. tutorialsSeen.intro_video flag gates it
-  // permanently after the first view (or skip / error). Defensive:
-  // any failure inside the intro screen self-routes to the next step,
-  // so a corrupt video file or codec issue can never strand the user.
-  const tutorialsSeen = useSettingsStore.getState().tutorialsSeen ?? {};
-  const introVideoSeen = !!tutorialsSeen['intro_video'];
-  if (!introVideoSeen) {
-    // expo-router's typed routes are generated from the filesystem at
-    // build time; new routes need an `as never` cast until the type
-    // regeneration catches up. Same workaround used elsewhere in the
-    // codebase for new screens.
-    return <Redirect href={'/intro-video' as never} />;
-  }
-
-  // 2026-05-17 — Onboarding subtree removed (was dead per the
-  // standing "has_completed_onboarding=true default" rule). The
-  // welcome screen below handles the single-screen first-launch
-  // capture; if a user somehow lands here without isDone=true,
-  // route to /welcome instead.
-  if (!isDone) return <Redirect href={'/welcome' as never} />;
-
-  // Phase 410 — first-launch welcome gate. The legacy multi-step
-  // onboarding is intentionally bypassed (per Tim's "get rid of that
-  // whole stupid onboarding nonsense" rule and the
-  // has_completed_onboarding=true default). But fresh installs with no
-  // captured profile (no first_opened_at AND no name) are dropped on
-  // the Caddie tab with no "welcome to your app" moment — the gap
-  // the beta-tester audit flagged. This single-screen welcome closes
-  // that gap. The check is intentionally narrow: only routes when
-  // BOTH first_opened_at is null AND no name has been set. Returning
-  // users skip it. Owner-email override already mirrors email into
-  // the profile during _layout.tsx's lifetime grant, so the welcome
-  // doesn't pester admins.
-  // 2026-07-20 (bug-hunt fix) — anchor this gate on termsAcceptedAt (consent), NOT
-  // first_opened_at. On a cold TestFlight install the boot trial-lifecycle in _layout.tsx
-  // (SUBSCRIPTIONS_ENABLED=false → grantLifetime) stamps first_opened_at during hydration,
-  // BEFORE this gate runs — so the old `!first_opened_at` test was already false and the
-  // welcome screen (the ONLY place the required Terms/Privacy consent checkbox + name/caddie
-  // capture live) was silently skipped on real installs. termsAcceptedAt is set ONLY by
-  // welcome.tsx's acceptTerms, so consent is now the source of truth. Returning users with a
-  // captured name still skip it; welcome sets termsAcceptedAt before it navigates on, so no loop.
-  const profileSnap = usePlayerProfileStore.getState();
-  const hasAcceptedTerms = profileSnap.termsAcceptedAt != null;
-  const hasName = (profileSnap.name ?? '').trim().length > 0;
-  // 2026-08-19 (critical-path audit) — PATH 1 instrumentation. docs/critical-paths.md documented
-  // seven [path1:onboard] markers across an app/onboarding/ subtree; that subtree was deleted in
-  // 2026-05-17 and exactly ONE marker existed anywhere in the app, in contextSynthesizer, not on
-  // this flow at all. So the Path 1 MIN VERIFY — grep logcat for [path1:onboard] — returned
-  // nothing on a healthy run and nothing on a broken one. The gate was unrunnable. These markers
-  // trace the flow that actually exists: this routing decision, the single welcome screen, and the
-  // handoff to the caddie tab.
-  console.log(`[path1:onboard] route_decision terms_accepted=${hasAcceptedTerms} name_set=${hasName} -> ${(!hasAcceptedTerms && !hasName) ? 'welcome' : 'caddie'}`);
-  if (!hasAcceptedTerms && !hasName) {
-    return <Redirect href={'/welcome' as never} />;
-  }
+  /**
+   * 2026-09-03 — the `!isDone → /welcome` redirect that used to live here is GONE, and it was
+   * genuinely unreachable: both isSetupComplete and has_completed_onboarding default to TRUE and
+   * nothing anywhere sets either to false (completeOnboarding only ever sets true). Its own comment
+   * said as much — "was dead per the standing has_completed_onboarding=true default rule". The live
+   * welcome gate is the consent check inside decideFirstRunRoute, which is anchored on
+   * termsAcceptedAt precisely because these two flags cannot express first-run state.
+   * [[orphans-are-live-bugs-not-dead-code]]
+   */
 
   /**
-   * 2026-09-03 — CONSENT COMES BEFORE THE PERMISSION PROMPTS. This block used to sit ABOVE the
-   * welcome gate, so a brand-new install asked for CAMERA, MICROPHONE and LOCATION before the
-   * player had been told what the app does or agreed to anything. The welcome screen is the only
-   * place the Terms/Privacy consent lives, and it ran afterwards.
+   * First-run gates — order lives in services/firstRunRoute so it can be tested.
    *
-   * Wrong on two counts. Both stores expect the disclosure and consent to precede access to
-   * sensitive data, and a reviewer meets that ordering on the very first launch. And as product it
-   * is the highest-friction possible opening: three system dialogs before a word of explanation is
-   * the worst moment to ask, which costs grant rates on the permissions the whole app runs on.
-   *
-   * Order is now intro → welcome (consent) → permissions → greeting → caddie. Denying is still
-   * fine: the screen sets its flag on Skip as well as Allow, and tools fall back to per-call
-   * permission UX. [[hands-free-zero-setup-is-the-product]]
+   * It was a chain of early <Redirect> returns: readable, and impossible to verify. The order IS
+   * the behaviour, every new install depends on it, and it was wrong until today — permissions were
+   * requested before the consent screen. See that file for the reasoning behind each step.
    */
-  const corePermsAsked = !!tutorialsSeen['core_permissions_requested'];
-  if (!corePermsAsked) {
-    return <Redirect href={'/permissions' as never} />;
-  }
-
+  const tutorialsSeen = useSettingsStore.getState().tutorialsSeen ?? {};
+  const profileSnap = usePlayerProfileStore.getState();
+  const firstRun = decideFirstRunRoute({
+    introVideoSeen: !!tutorialsSeen['intro_video'],
+    corePermissionsAsked: !!tutorialsSeen['core_permissions_requested'],
+    termsAccepted: profileSnap.termsAcceptedAt != null,
+    hasName: (profileSnap.name ?? '').trim().length > 0,
+  });
+  // 2026-08-19 (critical-path audit) — PATH 1 instrumentation. The seven [path1:onboard] markers
+  // docs/critical-paths.md promised were on a subtree deleted in May, so the MIN VERIFY (grep
+  // logcat for [path1:onboard]) returned nothing on a healthy run AND on a broken one. This traces
+  // the flow that actually exists.
+  console.log(`[path1:onboard] route_decision intro=${!!tutorialsSeen['intro_video']} terms=${profileSnap.termsAcceptedAt != null} name=${(profileSnap.name ?? '').trim().length > 0} perms=${!!tutorialsSeen['core_permissions_requested']} -> ${firstRun ?? 'app'}`);
+  // expo-router's typed routes are generated from the filesystem at build time; new routes need an
+  // `as never` cast until the type regeneration catches up.
+  if (firstRun) return <Redirect href={firstRun as never} />;
 
   // Cold-launch greeting hop — happens once per process. Warm starts (Index
   // re-renders) hit the flag and route straight to caddie.

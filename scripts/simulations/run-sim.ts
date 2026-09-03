@@ -8197,8 +8197,13 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
   check('Bug-hunt: first-launch consent gate is anchored on termsAcceptedAt, not first_opened_at',
     // the boot trial-lifecycle stamps first_opened_at during hydration, so the welcome/consent
     // screen was silently skipped on cold installs — the gate now keys on the consent field.
-    /const hasAcceptedTerms = profileSnap\.termsAcceptedAt != null;/.test(read('app/index.tsx')) &&
-      /if \(!hasAcceptedTerms && !hasName\)/.test(read('app/index.tsx')),
+    // 2026-09-03: the gate moved into services/firstRunRoute so the ORDER could be tested, so this
+    // follows it. The property is unchanged and is the whole point — consent is read from
+    // termsAcceptedAt, which ONLY welcome.tsx sets, never from first_opened_at, which the boot
+    // trial-lifecycle stamps during hydration and which therefore silently skipped the screen.
+    /termsAccepted: profileSnap\.termsAcceptedAt != null,/.test(read('app/index.tsx')) &&
+      !/first_opened_at/.test(readCode('services/firstRunRoute.ts')) &&
+      /if \(!s\.termsAccepted && !s\.hasName\) return '\/welcome';/.test(readCode('services/firstRunRoute.ts')),
     'cold-install users always see the Terms/Privacy consent + profile-capture welcome screen (gate keys on termsAcceptedAt, which only welcome.tsx sets)');
 
   check('Bug-hunt: backup grow-mostly guards the accumulating learned stores, and OTHER PEOPLE are not in the backup',
@@ -15267,12 +15272,19 @@ check(
 {
   const idx = readCode('app/index.tsx');
   const w = readCode('app/welcome.tsx');
-  const welcomeAt = idx.indexOf("Redirect href={'/welcome' as never} />;\n  }\n");
-  const permsAt = idx.indexOf("Redirect href={'/permissions' as never}");
+  const fr = readCode('services/firstRunRoute.ts');
+  /**
+   * 2026-09-03 — the order moved OUT of index.tsx into a pure function, so this guard follows it.
+   * The chain of early <Redirect> returns was readable and unverifiable; the order is the whole
+   * behaviour and every new install depends on it. It is now enumerable in a test as well.
+   */
+  const welcomeAt = fr.indexOf("return '/welcome'");
+  const permsAt = fr.indexOf("return '/permissions'");
   check(
     'FIRST RUN: consent is gated BEFORE the core-permissions pre-flight',
-    welcomeAt > 0 && permsAt > 0 && welcomeAt < permsAt,
-    'asking for camera, microphone and location before the player has agreed to anything is backwards for review and for grant rates',
+    welcomeAt > 0 && permsAt > 0 && welcomeAt < permsAt &&
+      /if \(firstRun\) return <Redirect href=\{firstRun as never\} \/>;/.test(idx),
+    'asking for camera, microphone and location before the player has agreed to anything is backwards for review and for grant rates — and the screen must actually ASK the function rather than keeping its own copy of the order',
   );
   check(
     'FIRST RUN: welcome hands back to the router so the pre-flight still runs',
