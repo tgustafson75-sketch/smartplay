@@ -1385,8 +1385,25 @@ export const useRoundStore = create<RoundState>()(
             // non-fatal — foreground-service notification on Android
             // still keeps the subsystem warm; iOS just won't track
             // when truly backgrounded.
+            /**
+             * 2026-09-03 — the PROMINENT DISCLOSURE has to come first.
+             *
+             * Play requires an in-app screen naming the data, saying plainly that it is collected
+             * when the app is closed or not in use, and requiring an affirmative action — BEFORE the
+             * system dialog. The just-in-time timing here was already right; the disclosure was
+             * simply missing, so the OS prompt appeared out of nowhere and the declaration video had
+             * no disclosure step to film.
+             *
+             * Declining skips the request entirely rather than asking anyway. The round is
+             * unaffected either way: foreground GPS is already running by this point, and on Android
+             * the foreground-service notification keeps the subsystem warm.
+             * See services/backgroundLocationDisclosure.ts.
+             */
             try {
-              await Location.requestBackgroundPermissionsAsync();
+              const { ensureBackgroundLocationDisclosure } = await import('../services/backgroundLocationDisclosure');
+              if (await ensureBackgroundLocationDisclosure()) {
+                await Location.requestBackgroundPermissionsAsync();
+              }
             } catch (e) {
               console.log('[roundStore] background permission request skipped:', e);
             }

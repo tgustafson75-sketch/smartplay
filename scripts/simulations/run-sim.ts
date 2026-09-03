@@ -14848,6 +14848,57 @@ check(
 }
 
 /**
+ * ─── 2026-09-03 — THE DISCLOSURE MUST COME BEFORE THE PROMPT ───────────────────────────────────
+ *
+ * Google Play's background-location declaration is settled by a VIDEO, and the video must show an
+ * in-app prominent disclosure — naming the data, saying plainly it is collected when the app is
+ * closed or not in use, and requiring an affirmative action — BEFORE the system dialog. The OS
+ * prompt does not count as the disclosure, and neither does the privacy policy.
+ *
+ * The app had the timing right and the disclosure missing. roundStore called
+ * requestBackgroundPermissionsAsync() directly at round start, so the OS dialog appeared out of
+ * nowhere; app/permissions.tsx even documents the just-in-time move. Just-in-time is HALF the
+ * requirement. A truthful recording would have shown exactly the flow the form exists to catch.
+ *
+ * ORDER IS THE COMPLIANCE, which is why it is guarded rather than merely written down. A refactor
+ * that hoists the request above the disclosure, or adds a second ungated call site, breaks the
+ * declaration without breaking anything a person would notice.
+ */
+{
+  const rs = readCode('store/roundStore.ts');
+  check(
+    'BG LOCATION: the system prompt is gated behind the in-app disclosure',
+    /if \(await ensureBackgroundLocationDisclosure\(\)\) \{\s*await Location\.requestBackgroundPermissionsAsync\(\);/.test(rs),
+    'the disclosure has to PRECEDE and GATE the prompt — asking anyway after a decline is the same violation as not disclosing at all',
+  );
+  check(
+    'BG LOCATION: nothing else asks for it behind the disclosure’s back',
+    (rs.match(/requestBackgroundPermissionsAsync/g) ?? []).length === 1 &&
+      ['app/permissions.tsx', 'services/permissionsManager.ts', 'services/gpsManager.ts', 'app/_layout.tsx']
+        .every((f) => !/requestBackgroundPermissionsAsync/.test(readCode(f))),
+    'one call site is what makes the ordering provable; a second one is a second flow nobody filmed',
+  );
+
+  const disc = readCode('services/backgroundLocationDisclosure.ts');
+  check(
+    'BG LOCATION: the copy still says the part the declaration turns on',
+    /when the app is closed or not in use/.test(read('services/backgroundLocationDisclosure.ts')),
+    '"background" is jargon; Play asks for words a person understands, and this exact sentence is what a reviewer looks for in the video',
+  );
+  check(
+    'BG LOCATION: a dismissed dialog is a DECLINE, not a grant',
+    /onDismiss: \(\) => resolve\(false\)/.test(disc),
+    'without it Android’s hardware back leaves the promise unsettled and round-start waits forever — a compliance fix that hangs the round is a worse bug than the one it fixes',
+  );
+  check(
+    'BG LOCATION: it never re-asks someone who already granted or permanently refused',
+    /if \(current\?\.granted\) return false;/.test(disc) &&
+      /canAskAgain === false\) return false;/.test(disc),
+    'a disclosure in front of a prompt that cannot appear is pure friction, and nagging is a defect here',
+  );
+}
+
+/**
  * ─── 2026-09-01 — THE CAMERA ANGLE IS JUDGED AT ADDRESS ─────────────────────────────────────────
  *
  * Tim: "the club arc shows up sporadically and mostly incorrect… it may get the direction right, but
