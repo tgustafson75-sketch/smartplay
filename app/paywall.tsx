@@ -28,6 +28,8 @@ import {
   restorePurchases,
   billingAvailable,
 } from '../services/billing/purchases';
+import { currentTrialExtensionOffer } from '../services/billing/trialExtensionOffer';
+import { describeTrialExtension, TRIAL_EXTENSION_DAYS } from '../services/billing/trialUsage';
 
 export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
@@ -35,7 +37,17 @@ export default function PaywallScreen() {
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
   const apiUrl = getApiBaseUrl();
-  const { subscription_status, setSubscriptionStatus, setTrialStartedAt, email } = usePlayerProfileStore();
+  const { subscription_status, setSubscriptionStatus, setTrialStartedAt, email, grantTrialExtension } = usePlayerProfileStore();
+  /**
+   * 2026-09-03 (Tim) — the light-use extension.
+   *
+   * Evaluated ONCE on mount, deliberately. It reads the round and swing histories, and it must not
+   * re-decide underneath the player: a card that appears or vanishes while they are reading it is
+   * worse than either answer on its own. The eligibility rule itself lives in trialUsage.
+   */
+  const [extension] = useState(() => {
+    try { return currentTrialExtensionOffer(); } catch { return null; }
+  });
   const [busy, setBusy] = useState(false);
   /**
    * 2026-08-30 — OWNER PREVIEW, so this screen can be photographed.
@@ -236,6 +248,30 @@ export default function PaywallScreen() {
             {PRICING.trialDays}-day free trial. Cancel anytime.
           </Text>
 
+          {/* The player who never got out. Placed ahead of the price on purpose: the offer is the
+              point of this screen for them, and a week of golf is the thing being decided, not a
+              subscription. Falls through to the normal paywall for everyone else. */}
+          {extension?.eligible && (
+            <View style={styles.extensionCard}>
+              <Text style={styles.extensionLabel}>ON THE HOUSE</Text>
+              <Text style={styles.extensionBody}>{describeTrialExtension(extension.activeDays)}</Text>
+              <TouchableOpacity
+                style={styles.extensionBtn}
+                activeOpacity={0.88}
+                disabled={busy}
+                onPress={() => {
+                  // One call: the comp and the once-only stamp land in the same write.
+                  grantTrialExtension(TRIAL_EXTENSION_DAYS);
+                  track('trial_extension_accepted', { activeDays: extension.activeDays, days: TRIAL_EXTENSION_DAYS });
+                  safeBack();
+                }}
+              >
+                <Text style={styles.extensionBtnText}>Give me another {TRIAL_EXTENSION_DAYS} days</Text>
+              </TouchableOpacity>
+              <Text style={styles.extensionFootnote}>No card, no charge. Subscribe whenever you're ready.</Text>
+            </View>
+          )}
+
           <View style={styles.featureList}>
             {FEATURES.map(f => (
               <View key={f.label} style={styles.featureRow}>
@@ -396,6 +432,19 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: 13,
   },
+  extensionCard: {
+    marginHorizontal: 4, marginBottom: 18, padding: 16,
+    backgroundColor: '#0d2418', borderRadius: 12,
+    borderWidth: 1.5, borderColor: '#00C896',
+  },
+  extensionLabel: { color: '#00C896', fontSize: 10, fontWeight: '800', letterSpacing: 2, marginBottom: 8 },
+  extensionBody: { color: '#e5e7eb', fontSize: 15, lineHeight: 21, fontWeight: '600', marginBottom: 14 },
+  extensionBtn: {
+    backgroundColor: '#00C896', borderRadius: 10,
+    paddingVertical: 13, alignItems: 'center',
+  },
+  extensionBtnText: { color: '#04140d', fontSize: 15, fontWeight: '800' },
+  extensionFootnote: { color: '#6b7280', fontSize: 11, textAlign: 'center', marginTop: 9 },
   ctaBtn: {
     width: '100%',
     backgroundColor: '#00C896',

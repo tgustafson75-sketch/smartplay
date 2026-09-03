@@ -14558,6 +14558,76 @@ check(
 }
 
 /**
+ * ─── 2026-09-03 — A MISSED TRIAL IS NOT A REJECTION ────────────────────────────────────────────
+ *
+ * Tim: "in the free period, where a user has not used it 3 times in that period, they are offered a
+ * 7 day extension to play more."
+ *
+ * Golf is weather, daylight and a tee time you could not get. A fortnight can pass without a round
+ * through no fault of the product, and charging that player on day 14 asks them to buy something
+ * they never saw. The week costs nothing: they are not a lost sale, they are a sale that has not had
+ * its chance yet.
+ *
+ * Three things can quietly break this and none of them fail loudly:
+ *   • counting APP OPENS instead of real use, which disqualifies the exact player it is for;
+ *   • granting the comp without stamping it, which re-offers on every launch and ends the trial
+ *     never;
+ *   • re-deciding eligibility on every render, so the card appears and vanishes under the player.
+ */
+{
+  const usage = readCode('services/billing/trialUsage.ts');
+  check(
+    'TRIAL EXT: the rule is pure — now is passed in, no store reaches into it',
+    /export function planTrialExtension\(input: TrialExtensionInput\): TrialExtensionOffer/.test(usage) &&
+      !/getState\(\)/.test(usage) && !/Date\.now\(\)/.test(usage),
+    'a rule that reads the clock or a store itself cannot be table-tested, which is how the last billing ladder shipped a defect nothing could see',
+  );
+  check(
+    'TRIAL EXT: a use is a DAY the player did something, deduped',
+    /export function countActiveDays/.test(usage) &&
+      /const days = new Set<string>\(\);/.test(usage) &&
+      /if \(!Number\.isFinite\(t\) \|\| t < start \|\| t > end\) continue;/.test(usage),
+    'three rounds on one Saturday is one day of use; and a round played BEFORE the trial is not trial usage — counting it disqualifies the returning player this is for',
+  );
+  check(
+    'TRIAL EXT: it is offered once, and that is checked before anything else',
+    /if \(extensionGrantedAt != null\) return no\('already_granted'\);/.test(usage) &&
+      usage.indexOf("already_granted") < usage.indexOf("not_on_trial"),
+    'grantTrialExtension sets status active, so a status check first would mask the real reason — and a standing offer is a discount, not a gesture',
+  );
+
+  const gather = readCode('services/billing/trialExtensionOffer.ts');
+  check(
+    'TRIAL EXT: usage is gathered from real activity, never from app opens',
+    /useRoundStore\.getState\(\)\.roundHistory/.test(gather) &&
+      /useSwingSessionStore\.getState\(\)\.sessionHistory/.test(gather) &&
+      /PRICING\.trialDays \* MS_PER_DAY/.test(gather),
+    'rounds and swings are use; opening the app in a car park is not. The trial LENGTH is read from PRICING and never restated',
+  );
+
+  const profile = readCode('store/playerProfileStore.ts');
+  check(
+    'TRIAL EXT: the comp and its one-time stamp land in the SAME write',
+    /grantTrialExtension: \(days\) => \{[\s\S]{0,700}?trial_extension_granted_at: now,[\s\S]{0,120}?\}\);/.test(profile),
+    'two writes can interleave with the boot lifecycle pass and leave a comp with no stamp behind it — which re-offers the week on every launch',
+  );
+
+  const paywall = readCode('app/paywall.tsx');
+  check(
+    'TRIAL EXT: the offer is decided ONCE on mount, not on every render',
+    /const \[extension\] = useState\(\(\) => \{/.test(paywall),
+    'a card that appears and vanishes while the player reads it is worse than either answer alone',
+  );
+  check(
+    'TRIAL EXT: the paywall shows it and takes the one-call grant',
+    /extension\?\.eligible && \(/.test(paywall) &&
+      /grantTrialExtension\(TRIAL_EXTENSION_DAYS\);/.test(paywall) &&
+      /describeTrialExtension\(extension\.activeDays\)/.test(paywall),
+    'the sentence comes from the same owner as the rule, so the card cannot claim a different number of rounds than the one that qualified them',
+  );
+}
+
+/**
  * ─── 2026-09-01 — THE CAMERA ANGLE IS JUDGED AT ADDRESS ─────────────────────────────────────────
  *
  * Tim: "the club arc shows up sporadically and mostly incorrect… it may get the direction right, but
