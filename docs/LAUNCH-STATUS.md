@@ -13,7 +13,7 @@ the other's side, so this file is where they meet.
 (`docs/LAUNCH-STATUS.md` → pencil icon → commit to `main`). Put your name and the date in the row
 you touch.
 
-**Last updated:** 2026-09-03 · Claude Code (session `smartplaycaddie-fd`) — policy LIVE; OTA shipped; 5 fixes since the OTA are NOT yet on a device (see Deployment)
+**Last updated:** 2026-09-03 · Claude Code (session `smartplaycaddie-fd`) — **BUILDS ARE DONE AND iOS IS SUBMITTED.** Billing is ON, Health Connect is OUT of 1.0, versionCode is **23**. Several rows below were rewritten today; the Health rows reversed direction, so re-read them before filling any form.
 
 ---
 
@@ -25,11 +25,11 @@ you touch.
 | 2 | Run `supabase/migrations/0009_referrals.sql` against the `smartplay` schema | **Cowork** | ☐ not started |
 | 3 | ~~Publish the September 3 privacy policy~~ | ~~Cowork~~ → **Code** | ✅ **DONE 2026-09-03** — live and verified at `smartplaycaddie.com/privacy` (19,426 bytes, health disclosure + address present, "cage" gone). See the note below: this was never a dashboard task. |
 | 4 | Create the Play Console app (`com.smartplaycaddie.app`) | **Cowork** | ☐ not started |
-| 5 | Health Connect declaration form | **Cowork** | ☐ not started |
+| 5 | ~~Health Connect declaration form~~ | ~~Cowork~~ | ✅ **NOT NEEDED for 1.0** — health is out of the build entirely. The four `health.READ_*` permissions, the `react-native-health-connect` plugin and the API-34 rationale alias are all gone from `app.json`; a prebuild on 2026-09-03 confirms **zero** `permission.health` entries in the manifest. Filing this declaration would describe a feature the binary does not have. Comes back in 1.1 with the permissions. |
 | 6 | Background location declaration form | **Cowork** | ☐ not started |
 | 7 | Background location **video** (screen recording — see recipe below) | **Tim** | ✅ **UNBLOCKED** — OTA shipped 2026-09-03 to production + preview from `a20c4031`. Force-close and reopen the app to pick it up, then film. |
-| 8 | Fresh EAS native build (API 36 + permission changes). **None of today's manifest work is live without it** — it is native config, not OTA. | **Code** | ⏸ holding until #4 exists (Tim's call) |
-| 9 | Decision: ship 1.0 with `SUBSCRIPTIONS_ENABLED` false, or flip it | **Tim** | ☐ leaning false |
+| 8 | Fresh EAS native build (API 36 + permission changes) | **Code** | ✅ **DONE 2026-09-03** — both platforms, `production` profile/channel, 1.0.0 build **23**. Android AAB `6abd67e6-3948-4ced-b566-2a856984a050`, iOS IPA `3b04e18d-2940-4c9a-b1d5-fd70eac098dc`. iOS **submitted to App Store Connect**; Android AAB built but **not** submitted (no Play service account key yet). |
+| 9 | Decision: ship 1.0 with `SUBSCRIPTIONS_ENABLED` false, or flip it | **Tim** | ✅ **FLIPPED TRUE 2026-09-03.** The listing and the Play Purchase-history declaration both describe a paid app, so the binary had to match the paperwork. Both real RevenueCat public keys are in; the test-store key is deleted. **Consequence: the paywall is live, so the store products must exist or testers meet an empty paywall.** |
 
 ## 🟡 Needed before submit, not blocking each other
 
@@ -72,7 +72,7 @@ repositories. Change the policy in both, or the guard passes while the web lies.
 
 ## Facts the console forms need — take these from here, not from memory
 
-**Package** `com.smartplaycaddie.app` · **version** 1.0.0 · **versionCode** 22
+**Package** `com.smartplaycaddie.app` · **version** 1.0.0 · **versionCode** 23
 **Target API** 36 (was 35; Play rejects below 36 for new apps as of 2026-08-31)
 **minSdk** 29 · **Entity** SmartPlay AI LLC, 29003 Navigator Way, Menifee, CA 92585
 
@@ -87,8 +87,11 @@ ACCESS_FINE_LOCATION · ACCESS_COARSE_LOCATION · ACCESS_BACKGROUND_LOCATION
 VIBRATE · MODIFY_AUDIO_SETTINGS · POST_NOTIFICATIONS · INTERNET
 FOREGROUND_SERVICE · FOREGROUND_SERVICE_LOCATION
 READ_MEDIA_IMAGES · READ_MEDIA_VIDEO · READ_MEDIA_VISUAL_USER_SELECTED
-health.READ_STEPS · health.READ_DISTANCE · health.READ_HEART_RATE · health.READ_ACTIVE_CALORIES_BURNED
 ```
+
+**14 permissions, and NO health permissions.** Re-verified from a clean prebuild on 2026-09-03
+after the build that was actually submitted. `grep -c permission.health` on the generated manifest
+returns **0**.
 
 ⚠️ **CORRECTION to what this file said earlier.** It previously claimed READ_EXTERNAL_STORAGE and
 WRITE_EXTERNAL_STORAGE "were REMOVED — do not declare them". Deleting them from `app.json` did
@@ -114,12 +117,16 @@ expo-location's, covered by `FOREGROUND_SERVICE_LOCATION`.
 
 ### Data safety — the answers that are easy to get wrong
 
-- **Health & fitness: YES, collected.** Four Health Connect read permissions, and the Health Data
-  toggle defaults **ON**. Used for the post-round recap "THE WALK" card and the caddie's narration.
-  Read-only — the app never writes back to Health Connect.
-- **Health data IS included in cloud backup.** Health readings hang off the round they were measured
-  during, and `round-store-v1` is in the backup allowlist, so step/distance/heart-rate/calorie
-  figures reach Supabase when backup is on. The published policy now says so explicitly.
+- **Health & fitness: NO — not collected in 1.0.** ⚠️ **THIS ROW REVERSED on 2026-09-03.** It
+  previously read "YES, collected", and answering YES now would declare a data type the binary
+  cannot access. The Health Connect permissions and plugin were removed before the submitted build;
+  the reader code stays but never sees data. Answer **No** to Health & fitness on Data safety, and
+  do **not** file the Health Connect declaration.
+- **Health data in cloud backup: not applicable in 1.0.** The plumbing exists — health readings hang
+  off their round and `round-store-v1` is in the backup allowlist — but with no health permissions
+  there is nothing to put in it. The published privacy policy still describes the feature, which is
+  correct and harmless: a policy may describe more than the current build collects. It must never
+  describe less.
 - **Location: collected, including in the background**, only during an active round.
 - **Audio and video: collected**, sent to processors for the duration of a request, not retained.
 - **No accounts, no sign-in.** Cloud backup identity is `sha256(email::passphrase)`; the email itself
@@ -182,7 +189,7 @@ storage permissions, Health Connect — cannot, and still needs the EAS build in
 
 ## Repo state
 
-`main` @ `0db45e23` · ts-check clean · jest **223 suites / 2505 tests** · sim **939/939**
+`main` @ `507623f0` · ts-check clean · jest **230 suites / 2546 tests** · sim **969/969** · user-sim 100 players, 0 issues
 
 Gates run in an isolated worktree (`/Users/timothyg/smartplay-launch`, branch `launch-prep`, pushed
 with `git push origin launch-prep:main`). A jest run counts only when it prints a `Tests:` line —
@@ -203,6 +210,10 @@ Health Connect, the watch tempo story, in-round `clip_uri`, and `is_highlight` (
 kind deleted in May, removed rather than wired).
 
 ## Known-dormant by design — not bugs, do not "fix"
+
+> ⚠️ **BOTH ITEMS BELOW WENT LIVE on 2026-09-03** when `SUBSCRIPTIONS_ENABLED` flipped to true.
+> They are no longer dormant. Referral rewards now redeem and the light-use trial extension now
+> fires. Kept here because the reasoning explains what they do.
 
 - **Referral rewards do not redeem while `SUBSCRIPTIONS_ENABLED` is false.** `promo_expires_at` is an
   absolute time, so redeeming now would burn 30 days against a period that is already free. The
