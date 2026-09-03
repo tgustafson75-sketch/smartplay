@@ -21,6 +21,11 @@ export const OWNER_EMAILS: readonly string[] = [
   't.gustafson@hotmail.com',
   // 2026-08-06 (Tim) — the second owner was REMOVED. They stayed a beta tester (records + auto-sends
   // his issue log like everyone else) but no longer has Owner Tools / owner-gated debug surfaces.
+  // 2026-09-03 — Google Play / App Review access. Declared in Play Console
+  // → App content → Sign in details. Do not remove without updating that
+  // declaration; review uses these to reach paid features.
+  'support@smartplaycaddie.com',
+  'tim@smartplaycaddie.com',
 ];
 
 export function isOwnerEmail(email: string | null | undefined): boolean {
