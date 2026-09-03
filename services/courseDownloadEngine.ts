@@ -186,12 +186,32 @@ export async function locateNearbyCourses(
   return out;
 }
 
+/**
+ * Stages that are a DECISION, not a failure. These are the engine working correctly and saying so.
+ *
+ * 2026-09-03 — a real tester's phone mailed Tim `analysis_error: course_prefetch_skipped ·
+ * reason: connection` this morning. Nothing was wrong: the connection gate declined to pull courses
+ * over a metered or unmeasured link, which is exactly what it is for and exactly what we want it to
+ * do on someone else's data plan. But `analysis_error` is in the emailed set, so correct behaviour
+ * arrived in his inbox wearing the word "error".
+ *
+ * That matters more on launch day than it did with four testers. An alert channel that fires on
+ * healthy behaviour trains its reader to ignore it, and the cost is paid the day a real failure
+ * arrives in the same inbox and gets skimmed past. Classify by what happened, not by defaulting
+ * everything that is not a retry to an error. [[guards-by-element-not-blanket-suppression]]
+ */
+const LOCATE_DIAGNOSTIC_STAGES = new Set([
+  'course_locate_retry',
+  // The connection gate declining is the gate succeeding.
+  'course_prefetch_skipped',
+]);
+
 /** Best-effort issue-log breadcrumb — discovery failures were previously invisible. Never throws. */
 function logLocate(stage: string, details: Record<string, unknown>): void {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('../store/issueLogStore').useIssueLogStore.getState()
-      .addAppEvent(stage, details, stage === 'course_locate_retry' ? 'diag' : 'analysis_error');
+      .addAppEvent(stage, details, LOCATE_DIAGNOSTIC_STAGES.has(stage) ? 'diag' : 'analysis_error');
   } catch { /* best-effort */ }
 }
 
