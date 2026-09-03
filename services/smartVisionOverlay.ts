@@ -92,15 +92,40 @@ export function computeLayupSuggestion(
   carries: DangerCarry[],
 ): StrategicAnnotation | null {
   if (geometry.par < 4) return null;
-  const hazardInRange = carries.find(c => c.in_range);
+  /**
+   * 2026-09-03 (pre-release audit) — THE NEAREST hazard in range, not an arbitrary one.
+   *
+   * `carries.find(c => c.in_range)` returned whichever reachable hazard happened to come first in
+   * the geometry's array. Laying up short of a bunker at 260 is no help at all when there is a creek
+   * at 210 the player will reach first.
+   */
+  const hazardInRange = carries
+    .filter(c => c.in_range)
+    .sort((a, b) => a.distance_yards - b.distance_yards)[0];
   if (!hazardInRange) return null;
   if (!geometry.tee || !geometry.green) return null;
 
-  // Lay-up target: a point on the tee→green axis, at a distance from the
-  // green that leaves a comfortable wedge (typically 100-110 yards).
   const totalDist = haversineYards(geometry.tee, geometry.green);
   if (!(totalDist > 0)) return null; // 2026-07-18 (audit) — degenerate tee≈green → NaN position
-  const targetDistFromTee = Math.max(hazardInRange.distance_yards - 30, totalDist - 110);
+  /**
+   * 2026-09-03 — THIS WAS Math.max, WHICH AIMED THE PLAYER PAST THE HAZARD.
+   *
+   * The two candidates are "30 yards short of the hazard" and "far enough down to leave a 110-yard
+   * approach". Taking the MAX picks whichever is farther from the tee, so on a 400-yard hole with a
+   * reachable hazard at 250 it produced 290 — forty yards BEYOND the hazard — under a label reading
+   * "Lay up short of the {hazard}". The screen drew an LU marker in the water it was warning about.
+   *
+   * Not an edge case: it fires whenever totalDist > hazard + 80, which is nearly every par 4 and
+   * essentially every par 5. The layup marker has been inverted for most holes it appeared on.
+   *
+   * Staying short of the hazard is the CONSTRAINT, so the binding choice is the min. That is also
+   * right at the other end: a hazard at 350 on a 400-yard hole leaves 290 (a comfortable wedge, and
+   * still short of it) rather than creeping up to 320 for no gain.
+   */
+  const targetDistFromTee = Math.min(hazardInRange.distance_yards - 30, totalDist - 110);
+  // A hazard close to the tee can drive this to zero or negative; there is no layup to suggest
+  // there, and a marker at or behind the tee is worse than none. [[illustration-data-points]]
+  if (!(targetDistFromTee > 0)) return null;
   const t = targetDistFromTee / totalDist;
 
   return {
