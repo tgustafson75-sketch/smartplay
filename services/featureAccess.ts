@@ -74,7 +74,22 @@ export type Edition = 'lite' | 'pro';
  * no-op. Flip to true only alongside a real IAP integration (RevenueCat is the
  * standard wrapper) — and only when Tim says the clock may start.
  */
-export const SUBSCRIPTIONS_ENABLED = false;
+/**
+ * 2026-09-03 (Tim, launch build) — THE CLOCK STARTS.
+ *
+ * Flipped to true because the store listing and the Play Purchase-history declaration both describe
+ * a paid app, and the binary has to match the paperwork that was filed. Both stores now hold their
+ * real RevenueCat keys — the test-store key that gated this is deleted, not commented out.
+ *
+ * What changes for a player: a fresh install gets a 14-day TRIAL, which grants Pro, so nobody meets
+ * a paywall on day one. Starting a round stays lite forever — the front door is never walled. On
+ * expiry a player drops to lite and loses SmartVision, SmartFinder and advanced voice, but keeps
+ * every round, every stat and their bag; we do not hold a player's own data hostage.
+ *
+ * Two features built today stop being dormant with this line: referral rewards now redeem, and the
+ * light-use trial extension can fire. Both were written knowing this switch was coming.
+ */
+export const SUBSCRIPTIONS_ENABLED = true;
 
 /**
  * 2026-09-03 (Tim, final build) — HEALTH CONNECT IS OUT OF 1.0.

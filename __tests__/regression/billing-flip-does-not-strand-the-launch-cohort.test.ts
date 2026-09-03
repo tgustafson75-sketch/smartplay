@@ -84,17 +84,20 @@ describe('the flip: a player who installed during the free period', () => {
     })).toEqual({ setStatus: 'expired' });
   });
 
-  it('is unlocked today regardless of what its status says', () => {
-    // Why this is asserted rather than the post-flip edition: editionFor() short-circuits to 'pro'
-    // for EVERY status while SUBSCRIPTIONS_ENABLED is false, reading the constant directly, so no
-    // mock of this module can show the flipped behaviour. Trying to assert 'free' -> 'lite' here
-    // failed for exactly that reason.
+  it('after the flip, the trial it was converted to actually grants Pro', () => {
+    // 2026-09-03. This used to read: for every status, editionFor() === 'pro'. That was true only
+    // because SUBSCRIPTIONS_ENABLED was false and editionFor short-circuited — the comment here
+    // said the post-flip mapping could not be asserted for exactly that reason.
     //
-    // Which is the point. Clearing the stale lifetime above changes what is STORED and nothing a
-    // player can see — the free period stays free for everyone, whatever their status field reads.
-    for (const status of ['free', 'lifetime', 'trial', 'expired', 'active'] as const) {
-      expect(editionFor(status)).toBe('pro');
-    }
+    // The switch is now on, so it can be, and it is the half that closes the loop. The tests above
+    // prove the stored PLAN converts this cohort to a trial. This proves that plan is worth
+    // something: that 'trial' resolves to Pro, and that the two states the cohort could have been
+    // stranded in resolve to lite — they keep their rounds, their stats and their bag either way.
+    expect(editionFor('trial')).toBe('pro');
+    expect(editionFor('active')).toBe('pro');
+    expect(editionFor('lifetime')).toBe('pro');
+    expect(editionFor('free')).toBe('lite');
+    expect(editionFor('expired')).toBe('lite');
   });
 });
 

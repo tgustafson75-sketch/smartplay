@@ -90,39 +90,29 @@ export const ENTITLEMENT_ID = 'smartplay_caddie_pro';
  * carries whatever the binary was built with. The fallback is what actually runs in the field.
  */
 /**
- * 2026-08-30 — the TEST STORE key, deliberately, and it must not reach a paid launch.
+ * 2026-09-03 (Tim, launch build) — BOTH STORES NOW HAVE THEIR REAL KEYS, AND THE TEST KEY IS GONE.
  *
- * RevenueCat's key prefixes say which store is behind them: `appl_` is App Store, `goog_` is Play,
- * and `test_` is RevenueCat's own Test Store. Tim supplied one `test_` value for BOTH platforms,
- * which is the tell — real platform keys always differ.
+ * RevenueCat's prefixes say which store is behind a key: `appl_` is the App Store, `goog_` is Play,
+ * and `test_` is RevenueCat's own Test Store. Keys are scoped PER APP CONFIG, so the two platforms
+ * necessarily differ — one value used for both was always the tell that neither was real.
  *
- * It is here on purpose. Apple sandbox purchases need the Paid Applications agreement to be active,
- * that needs banking and tax, and that is blocked on an EIN. The Test Store is the only way to
- * exercise a real purchase, restore and trial before then, so the flow can be proven rather than
- * assumed while the paperwork clears.
+ * The Test Store key lived here deliberately from 2026-08-30: Apple sandbox purchases need the Paid
+ * Applications agreement, which needs banking and tax, which was blocked on an EIN. It was the only
+ * way to exercise a real purchase, restore and trial flow while the paperwork cleared.
  *
- * It is also a launch-breaking mistake waiting to happen: flip SUBSCRIPTIONS_ENABLED with this in
- * place and every player transacts against a test store instead of Apple. A sim LOCK fails the
- * build if a `test_` key is ever present while subscriptions are ON, so that combination cannot
- * ship. Replace these with the appl_/goog_ keys before the switch moves. [[cowork-task-list]]
+ * It is DELETED rather than commented out, because the failure it invited was total and silent:
+ * with a `test_` key live, every purchase transacts against a test store, appears to succeed, and
+ * no money moves. Nothing errors. A sim LOCK fails the build if a `test_` literal exists anywhere
+ * in this file while SUBSCRIPTIONS_ENABLED is true — that lock is what made the Android key a
+ * precondition for launch rather than a detail someone might forget, and it did its job.
+ *
+ * Android's `goog_` could not exist until a Play app config existed, which needed the Play Console
+ * account. Both are now in place. The env vars still win where set, so a key can be rotated from
+ * EAS without a rebuild; the literals are the shipped default and are PUBLIC SDK keys — safe in the
+ * repo, unlike the secret keys, which must never be here. [[no-half-fixes-enforce-every-surface]]
  */
-/**
- * 2026-08-30, later — iOS now has a REAL App Store key; Android does not yet.
- *
- * Cowork created the RevenueCat App Store app config (appf2c54cc4f4, bundle com.smartplaycaddie.app),
- * imported both products, attached them to entitlement `smartplay_caddie_pro`, and rebuilt the
- * default offering as $rc_monthly → Full Monthly / $rc_annual → Full Annual. Creating that config
- * ISSUED A NEW PUBLIC SDK KEY — RevenueCat scopes keys per app config, so the Test Store key no
- * longer addresses the right store on iOS.
- *
- * Android stays on the Test Store key because `goog_` cannot exist yet: it needs a Play app config,
- * which needs the Play Console account, which is blocked. The LOCK below still applies and is doing
- * exactly its job — a `test_` key anywhere in this file blocks turning subscriptions ON, so Android
- * getting its real key is now a precondition for launch rather than a detail someone might forget.
- */
-const TEST_STORE_KEY = 'test_xTYhIjxcMjCQkAzNExcmQzhFdvA';
 const IOS_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || 'appl_ghJChGpGSaSvMcbTqNwACOIItDt';
-const ANDROID_KEY = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY || TEST_STORE_KEY;
+const ANDROID_KEY = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY || 'goog_kCwVvXLNobNgsZMjKvsRRkmYBPJ';
 
 function apiKey(): string {
   return Platform.OS === 'ios' ? IOS_KEY : ANDROID_KEY;
