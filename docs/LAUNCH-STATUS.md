@@ -13,7 +13,7 @@ the other's side, so this file is where they meet.
 (`docs/LAUNCH-STATUS.md` → pencil icon → commit to `main`). Put your name and the date in the row
 you touch.
 
-**Last updated:** 2026-09-03 · Claude Code (session `smartplaycaddie-fd`) — OTA shipped, both channels
+**Last updated:** 2026-09-03 · Claude Code (session `smartplaycaddie-fd`) — OTA shipped both channels; privacy policy LIVE
 
 ---
 
@@ -23,7 +23,7 @@ you touch.
 |---|---|---|---|
 | 1 | `REFERRAL_SALT` env var set on Vercel (any long random string; never rotate once live — rotating invalidates every existing referral code) | **Cowork** | ☐ not started |
 | 2 | Run `supabase/migrations/0009_referrals.sql` against the `smartplay` schema | **Cowork** | ☐ not started |
-| 3 | Publish the legal site so `smartplaycaddie.com/privacy` serves the **September 3** policy. Source of truth: `docs/legal-site/privacy.html` + `privacy-embed.html`. **The live site is still serving August 25** — no health disclosure, no address. Data safety cannot be submitted against the old one. | **Cowork** | ☐ not started |
+| 3 | ~~Publish the September 3 privacy policy~~ | ~~Cowork~~ → **Code** | ✅ **DONE 2026-09-03** — live and verified at `smartplaycaddie.com/privacy` (19,426 bytes, health disclosure + address present, "cage" gone). See the note below: this was never a dashboard task. |
 | 4 | Create the Play Console app (`com.smartplaycaddie.app`) | **Cowork** | ☐ not started |
 | 5 | Health Connect declaration form | **Cowork** | ☐ not started |
 | 6 | Background location declaration form | **Cowork** | ☐ not started |
@@ -45,6 +45,30 @@ you touch.
 | Tier C device verification — invite screen, recap "THE WALK" card, background-location disclosure | **Tim** | ☐ WiFi-only iPad: no GPS or Watch verification possible on iOS |
 
 ---
+
+## 📍 Where the public site actually lives — this was wrong on the first draft of this file
+
+`smartplaycaddie.com` is a **git repo**, not a hosting dashboard: `/Users/timothyg/smartplaycaddie`,
+remote `smartplaycaddie.git`, Vercel auto-deploys on push to `main`. `privacy.html` and `terms.html`
+are in it. **Publishing a legal page is a commit, not a console task.**
+
+This file originally listed it as Cowork's, on the assumption the site sat behind a login. It did
+not — and the app repo's `docs/legal-site/*` copies are *drafts*, not the published artifact, so
+updating them changed nothing a reviewer could see. The live policy stayed stale for a day because
+of that mistake.
+
+The misleading part has been fixed at the source: that folder's `CLAUDE.md` used to open with "this
+folder is an empty stub with no code and no commits", which reads as *nothing here, go away*. It now
+says what the folder is. Note the local checkout can genuinely look empty — local `main` may have no
+commits while `origin/main` carries the whole site; `git fetch origin && git checkout -B main
+origin/main` before concluding anything is missing.
+
+**Four copies of the privacy policy now exist.** The published one is
+`smartplaycaddie/privacy.html`. The others — `smartplay/docs/privacy-policy.html`,
+`docs/legal-site/privacy.html`, `docs/legal-site/privacy-embed.html` — plus the in-app
+`constants/legalText.ts`, are all in step as of 2026-09-03. A sim guard fails if any of the app-repo
+copies drifts, but **nothing guards the published one from the app repo**; they are different
+repositories. Change the policy in both, or the guard passes while the web lies.
 
 ## Facts the console forms need — take these from here, not from memory
 
