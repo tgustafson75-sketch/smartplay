@@ -187,7 +187,25 @@ export default function Scorecard() {
   // mid-round view of an 18-hole round, totalPar=72, totalScore=12,
   // scoreVsPar=-60 — misleading "60 under" reading. Sum par for HOLES
   // SCORED only (and only first 9 in nine-hole mode for safety).
-  const scoredHoleNums = new Set(Object.keys(viewScores).map(n => Number(n)));
+  /**
+   * 2026-09-03 — SCORED means score > 0, the same as the store.
+   *
+   * roundStore defends against a 0-score hole in three separate places — getHolesPlayed
+   * ("a 0-score in-progress hole must not inflate the count"), getScoreVsPar, and the round-record
+   * builder — and this screen defended in none. Any hole present with a score of 0 was counted as
+   * played AND had its par added to totalPar while contributing nothing to totalScore, so vs-par
+   * read one par WORSE per such hole. That is the same family as the "-60 under" and "+41 vs par"
+   * bugs the two comments above were written for.
+   *
+   * I could not produce a 0 on the live path today: the stepper guards `score > 1` and undo DELETES
+   * the key rather than writing 0. But the import path filters on `typeof h.score === 'number'`,
+   * which 0 satisfies, and the store's authors clearly believed 0 occurs. Two computations of the
+   * same number disagreeing is the defect regardless of which one is reachable first.
+   * [[two-owners-is-the-root-cause]]
+   */
+  const scoredHoleNums = new Set(
+    Object.entries(viewScores).filter(([, v]) => (v as number) > 0).map(([n]) => Number(n)),
+  );
   // 2026-08-08 (2-week audit O1 — back nine): the `h.hole <= 9` nine-hole filter excluded EVERY scored
   // back-nine hole (10-18) → totalPar 0 → "+41 vs par" nonsense. Scored-holes-only is the real guard;
   // any scored hole in the rendered rows counts its par.
@@ -195,7 +213,7 @@ export default function Scorecard() {
     .filter(h => scoredHoleNums.has(h.hole))
     .reduce((a, h) => a + h.par, 0);
   const scoreVsPar = totalScore - totalPar;
-  const holesPlayed = Object.keys(viewScores).length;
+  const holesPlayed = scoredHoleNums.size;
 
   // 2026-05-25 — Fix AM: scorecard breakdown stats. Putts, fairways
   // hit %, greens in regulation %. Uses viewShots (per-shot detail)

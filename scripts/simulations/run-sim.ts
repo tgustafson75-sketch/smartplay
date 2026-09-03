@@ -15305,6 +15305,27 @@ check(
 }
 
 /**
+ * ─── 2026-09-03 — "PLAYED" MUST MEAN THE SAME THING ON BOTH SIDES ──────────────────────────────
+ *
+ * roundStore guards against a 0-score hole in three separate places — getHolesPlayed ("a 0-score
+ * in-progress hole must not inflate the count"), getScoreVsPar, and the round-record builder. The
+ * scorecard screen guarded in NONE: it counted Object.keys(viewScores), so a hole present with a
+ * score of 0 counted as played AND added its par to totalPar while adding nothing to totalScore.
+ * vs-par then read one par WORSE per such hole — the same family as the "-60 under" and "+41 vs
+ * par" bugs whose fixes are commented directly above it.
+ */
+{
+  const sc = readCode('app/(tabs)/scorecard.tsx');
+  check(
+    'SCORECARD: only holes with a real score count as played',
+    /Object\.entries\(viewScores\)\.filter\(\(\[, v\]\) => \(v as number\) > 0\)/.test(sc) &&
+      /const holesPlayed = scoredHoleNums\.size;/.test(sc) &&
+      !/const holesPlayed = Object\.keys\(viewScores\)\.length;/.test(sc),
+    'a 0-score hole adding its par to totalPar but nothing to totalScore reads as a par better than reality, on the screen a player checks against their own card',
+  );
+}
+
+/**
  * ─── 2026-09-03 — A YARD IS THREE FEET, IN ONE PLACE ───────────────────────────────────────────
  *
  * SwingSim reported every putt at about HALF its true length. The yards→feet conversion had three
