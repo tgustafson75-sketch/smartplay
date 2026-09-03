@@ -231,6 +231,19 @@ export interface HeightRangeOutput {
   confidence: 'high' | 'medium' | 'low';
   /** True when the taps coincide / height is non-positive → nothing to measure. */
   unmeasurable: boolean;
+  /**
+   * 2026-09-03 — set when the computed distance fell OUTSIDE the measurable band and was clamped to
+   * its edge. 'near' = closer than MIN_YARDS, 'far' = beyond MAX_YARDS, null = a real reading.
+   *
+   * computeDistance has been hardened twice against exactly this — a 250yd sentinel, then a 10yd one
+   * — each time because a failure encoded as a distance is indistinguishable from a measurement.
+   * This sibling function still clamped silently. The far edge was already screened off by the
+   * low-confidence filter (a tiny angular height reads as low), but the NEAR edge was not: a
+   * flagstick close enough to fill the frame has a large angular height, which scores HIGH, so
+   * standing inside ten yards produced a confident "10 yards" that was a clamp, not a measurement —
+   * in the range where a golfer needs the number most. [[no-half-fixes-enforce-every-surface]]
+   */
+  clamped: 'near' | 'far' | null;
 }
 
 /** Angle (radians, positive = above frame centre) of a normalized vertical position
@@ -250,12 +263,15 @@ export function computeHeightRangedDistance(input: HeightRangeInput): HeightRang
   const angularHeightDeg = (theta * 180) / Math.PI;
 
   if (!(theta > 1e-5) || !(input.real_height_m > 0)) {
-    return { distance_yards: 0, distance_meters: 0, angular_height_deg: angularHeightDeg, confidence: 'low', unmeasurable: true };
+    return { distance_yards: 0, distance_meters: 0, angular_height_deg: angularHeightDeg, confidence: 'low', unmeasurable: true, clamped: null };
   }
 
   const distanceM = input.real_height_m / (2 * Math.tan(theta / 2));
   const clampedM = Math.max(MIN_YARDS * 0.9144, Math.min(MAX_YARDS * 0.9144, distanceM));
   const distYards = clampedM / 0.9144;
+  // Which edge we landed on, if any — the difference between a measurement and the end of the band.
+  const clamped: 'near' | 'far' | null =
+    distanceM < MIN_YARDS * 0.9144 ? 'near' : distanceM > MAX_YARDS * 0.9144 ? 'far' : null;
 
   // Confidence scales with the target's angular size: a bigger span in the frame means
   // tap error is a smaller fraction of the measurement. Below ~0.8° the read is tap-noise
@@ -264,6 +280,11 @@ export function computeHeightRangedDistance(input: HeightRangeInput): HeightRang
   if (angularHeightDeg >= 2.5) confidence = 'high';
   else if (angularHeightDeg >= 0.8) confidence = 'medium';
   else confidence = 'low';
+  // A clamped value is the edge of what this method can express, not a reading of the target, so it
+  // cannot carry the angular size's confidence. Reporting 'low' is what makes the SmartFinder screen
+  // decline it — the screen already refuses low reads rather than showing a confident wrong number,
+  // so the honest classification is the whole fix. [[guards-by-element-not-blanket-suppression]]
+  if (clamped) confidence = 'low';
 
   return {
     distance_yards: Math.round(distYards),
@@ -271,6 +292,7 @@ export function computeHeightRangedDistance(input: HeightRangeInput): HeightRang
     angular_height_deg: angularHeightDeg,
     confidence,
     unmeasurable: false,
+    clamped,
   };
 }
 
