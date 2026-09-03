@@ -859,9 +859,16 @@ check('Ball speed no longer silently assumes a 7-iron',
   /club: args\.club \?\? 'unknown'/.test(read('services/acousticDetectApi.ts')),
   "detectBallSpeed defaults club to 'unknown' (→ null), not '7I'");
 
-check('Pose ball speed suppressed for untagged club',
-  /clubSpeed\.value != null && clubKey !== 'unknown'/.test(read('services/swingMetricsService.ts')),
-  'unknown club → ball speed —, not club×generic-smash');
+// 157c9f85 REVERSED this scenario's original demand. It used to require that an untagged club
+// produce NO ball speed at all; Tim's rule is that honesty is confidence + range, not a blank —
+// deleting the estimate throws away a club speed we genuinely measured. So the invariant is now
+// the DOWNGRADE, and this checks the downgrade is intact rather than that the number is gone.
+// [[guards-by-element-not-blanket-suppression]]
+check('Pose ball speed for an untagged club is downgraded, not deleted',
+  /const tagged = clubKey !== 'unknown';/.test(read('services/swingMetricsService.ts')) &&
+    /confidence: Math\.min\(clubSpeed\.confidence, tagged \? 0\.45 : 0\.30\)/.test(read('services/swingMetricsService.ts')) &&
+    /club not tagged — tag it to sharpen/.test(read('services/swingMetricsService.ts')),
+  'untagged → generic 1.36 at confidence 0.30 with a note saying why; tagged → its own ratio at 0.45');
 
 const smSrc = read('app/swinglab/smartmotion.tsx');
 check('SmartMotion has a club selector wired',
@@ -14315,8 +14322,14 @@ check(
  * quietly stop carrying the device's side of the story. That is the failure this guards.
  */
 {
+  // Two different files answer two different questions here, and one `scen` covering both is how
+  // this block broke. The RUNNER is defined in assert.ts (scenarios.ts only imports it), so reading
+  // the registry for it made `runner` the empty string and failed three checks against code that
+  // was correct the whole time — a guard pointed at an island. The REGISTRY is still scenarios.ts,
+  // which is where SCEN_24 has to stay registered. [[three-ways-a-guard-is-worthless]]
   const scen = readCode('services/harness/scenarios.ts');
-  const runner = /async function runWithAsserts\([\s\S]*?\n}/.exec(scen)?.[0] ?? '';
+  const runnerSrc = readCode('services/harness/assert.ts');
+  const runner = /async function runWithAsserts\([\s\S]*?\n}/.exec(runnerSrc)?.[0] ?? '';
   check(
     'HARNESS: every scenario runs inside the three device probes',
     /new ConsoleProbe\(\)/.test(runner) &&
@@ -14459,7 +14472,10 @@ check(
   );
   check(
     'POSE: the harness run summary reports what pose DID, not only whether it could',
-    /describePoseTelemetry/.test(readCode('services/harness/assert.ts')),
+    // The run SUMMARY is built in report.ts — that is where the telemetry is folded into `env`.
+    // A bare name test would pass on an import that nothing calls, so this requires the MERGE:
+    // importing describePoseTelemetry and never spreading it into env reports exactly nothing.
+    /Object\.assign\(env, describePoseTelemetry\(\) \?\? \{\}\)/.test(readCode('services/harness/report.ts')),
     '"available" says the module linked; the telemetry says which engine served the last call and how fast',
   );
 }
