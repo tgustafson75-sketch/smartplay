@@ -13,7 +13,7 @@ the other's side, so this file is where they meet.
 (`docs/LAUNCH-STATUS.md` → pencil icon → commit to `main`). Put your name and the date in the row
 you touch.
 
-**Last updated:** 2026-09-03 · Claude Code (session `smartplaycaddie-fd`)
+**Last updated:** 2026-09-03 · Claude Code (session `smartplaycaddie-fd`) — OTA shipped, both channels
 
 ---
 
@@ -27,7 +27,7 @@ you touch.
 | 4 | Create the Play Console app (`com.smartplaycaddie.app`) | **Cowork** | ☐ not started |
 | 5 | Health Connect declaration form | **Cowork** | ☐ not started |
 | 6 | Background location declaration form | **Cowork** | ☐ not started |
-| 7 | Background location **video** (screen recording — see recipe below) | **Tim** | ⛔ code ready (`2e8aae9b`) but NOT on any device — needs an OTA or the EAS build first |
+| 7 | Background location **video** (screen recording — see recipe below) | **Tim** | ✅ **UNBLOCKED** — OTA shipped 2026-09-03 to production + preview from `a20c4031`. Force-close and reopen the app to pick it up, then film. |
 | 8 | Fresh EAS native build (API 36 + permission changes). **None of today's manifest work is live without it** — it is native config, not OTA. | **Code** | ⏸ holding until #4 exists (Tim's call) |
 | 9 | Decision: ship 1.0 with `SUBSCRIPTIONS_ENABLED` false, or flip it | **Tim** | ☐ leaning false |
 
@@ -98,12 +98,17 @@ guidance asks for the non-consent flow too.
 
 ## ⚠️ Two hazards discovered 2026-09-03 via the cross-session bridge
 
-**Committed ≠ on anyone's device.** The most recent production OTA (`5b1d4289`) was published from
-`237dc013` — *before* every commit listed below. So the referral flow, the launch-day changelog fix,
-the SwingSim and SmartVision fixes and the background-location disclosure are all on `main` and on
-**nobody's phone**. The native half (target 36, removed storage perms, Health Connect) genuinely
-needs the EAS build; the JS half could go OTA at any time. **The background-location video cannot be
-filmed until one of those two ships.**
+**Committed ≠ on anyone's device — RESOLVED for the JS half.** Production OTA had been sitting on
+`237dc013`, before every commit from 2026-09-03, so a day of fixes was on `main` and on nobody's
+phone. Republished to **production and preview** from `a20c4031` (sequentially, never in parallel),
+runtime `1.0.0`, which matches the frozen TestFlight build so it actually reaches testers.
+
+The NATIVE half is still pending and cannot go OTA: target API 36, the removed storage permissions,
+and the Health Connect manifest entries all need the EAS build (row 8). Until that runs, the app on
+a device is API 35 with the old permission set.
+
+- production · `fdaaf626-a0de-4ac0-a082-789ff7d4c4cd`
+- preview · `15d5ed53-7c1c-4c7a-9106-7bada5878216`
 
 **Two Claude Code sessions share ONE working tree** (`/Users/timothyg/smartplay`), not separate
 clones. Branch state is fine, but either session can stage or publish the other's in-progress edits.
