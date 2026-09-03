@@ -4645,7 +4645,11 @@ check('Voice: dead-zone failures SPEAK via device TTS (not just a silent text bu
     const vc = read('hooks/useVoiceCaddie.ts');
     return (
       /export async function speakDeviceNotice/.test(vs) &&
-      /await deviceSpeakFallback\(text, language, currentSpeechId, gender\)/.test(vs) &&
+      // 2026-09-03: was pinned to the literal `currentSpeechId` argument, which broke when the
+      // generation counter grew a single named claimer. The INTENT is that the notice claims the
+      // voice and then speaks under that same claim — assert the pair, which is stronger than the
+      // name it used to match. [[break-test-every-guard-you-write]]
+      /const noticeId = claimSpeechId\('device_notice'\);\s*await deviceSpeakFallback\(text, language, noticeId, gender\)/.test(vs) &&
       /if \(voiceEnabled\) void speakDeviceNotice\(/.test(vc) &&
       /(can't reach|not reaching|lost) the network/i.test(vc) // refreshed: message reworded (Phase A offline-degrade); feature intact
     );
@@ -14661,6 +14665,62 @@ check(
     'BUDGET: stage 3 is admitted only when a real attempt can finish',
     /if \(!winner\.parsed && budgetRemaining\(\) >= 8_000\)/.test(sa),
     'the gate has to be at least the floor the clamp will hand out, or the stage starts work it cannot complete',
+  );
+}
+
+/**
+ * ─── 2026-09-03 — A PREEMPT LOG THAT CANNOT SAY WHETHER ANYONE HEARD ANYTHING ──────────────────
+ *
+ * A tester's phone mailed `voice_silent_fail: speak_preempted_after_file_write · speechId 9 ·
+ * currentSpeechId 11`. The audio was fetched, written to disk and dropped, and the entry cannot say
+ * whether that was fine or catastrophic — because stopSpeaking() bumps the same counter a new
+ * speak() does. A newer utterance taking over means the player HEARD the newer line; a stop means
+ * the player heard NOTHING. Same log line, opposite outcomes, and the silent caddie is the worst
+ * bug this subsystem has.
+ *
+ * The generation counter now has exactly ONE incrementer, which records why it was claimed. Both
+ * halves are guarded: a sixth call site that bumps the raw counter would silently reintroduce the
+ * ambiguity, and a preempt log that drops the field puts the inbox back where it started.
+ * [[missing-log-entry-is-the-evidence]] [[voice-path-change-freeze]]
+ */
+{
+  const vs = readCode('services/voiceService.ts');
+  const claim = /function claimSpeechId\(reason: SpeechIdReason\): number \{[\s\S]*?\n\}/.exec(vs)?.[0] ?? '';
+  check(
+    'VOICE: exactly one place increments the speech generation, and it records why',
+    /speechIdReasons\.set\(currentSpeechId, reason\)/.test(claim) &&
+      (vs.match(/currentSpeechId\+\+/g) ?? []).length === 1 &&
+      /currentSpeechId\+\+/.test(claim),
+    'a second raw increment would claim the voice with no reason attached, which is exactly the ambiguity the field report could not resolve',
+  );
+  check(
+    'VOICE: every preempt log names who took the voice',
+    (vs.match(/preemptedBy: speechIdReason\(currentSpeechId\)/g) ?? []).length === 3,
+    'all three bail points (after fetch, after arrayBuffer, after file-write) must distinguish a newer speak from a stop — one of those means the player heard nothing',
+  );
+  check(
+    'VOICE: the reason ledger cannot grow without bound across a round',
+    /while \(speechIdReasons\.size > SPEECH_ID_REASON_MEMORY\)/.test(claim),
+    'a diagnostic that leaks memory during an 18-hole round is a worse bug than the one it diagnoses',
+  );
+}
+
+/**
+ * ─── 2026-09-03 — A TUTORIAL MUST NOT DESCRIBE A FEATURE THE BUILD CANNOT REACH ────────────────
+ *
+ * 1.0 ships with SUBSCRIPTIONS_ENABLED false — paywall off, nothing restricted, so Play review needs
+ * no bypass account and "no sign-in required" is simply true. planTrialExtension then correctly
+ * answers 'not_on_trial' and the light-use offer never fires. Correct, but it would have left a
+ * tutorial card telling the player "if your trial runs out we add another week" about a trial that
+ * does not exist in their build — the app lying to someone who went looking for help.
+ */
+{
+  const tut = readCode('app/tutorials.tsx');
+  check(
+    'TUTORIAL: the free-trial card exists only when there IS a trial',
+    /import \{ SUBSCRIPTIONS_ENABLED \} from '\.\.\/services\/featureAccess';/.test(tut) &&
+      /return all\.filter\(\(t\) => t\.id !== 'trial' \|\| SUBSCRIPTIONS_ENABLED\);/.test(tut),
+    'with the paywall off there is no trial to extend, and a tutorial promising the extension describes a feature the build cannot reach',
   );
 }
 

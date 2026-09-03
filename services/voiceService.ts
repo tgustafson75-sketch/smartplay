@@ -985,6 +985,47 @@ let currentSound: Audio.Sound | null = null;
 let currentSpeechId = 0;
 let currentAbortController: AbortController | null = null;
 
+/**
+ * 2026-09-03 (field report — iOS tester, hole 1) — WHO BUMPED THE GENERATION.
+ *
+ * The phone mailed `voice_silent_fail: speak_preempted_after_file_write · speechId 9 ·
+ * currentSpeechId 11`: the audio was fetched, written to disk, and then dropped because a newer
+ * generation had claimed the voice. That entry is unactionable as it stands, because
+ * `stopSpeaking()` bumps the same counter that a new `speak()` does. So an identical log line is
+ * written for two opposite outcomes:
+ *
+ *   • a newer speak() took over  → the player HEARD the newer line. Working as designed.
+ *   • stopSpeaking() cancelled it → the player heard NOTHING. A real silent caddie.
+ *
+ * One of those is the worst bug this subsystem has, the other is the mechanism working, and the
+ * inbox could not tell them apart. Recording WHY each generation was claimed is what makes the
+ * report answer its own question. [[missing-log-entry-is-the-evidence]]
+ *
+ * Purely diagnostic: claimSpeechId increments and returns exactly as the bare increment did, so no
+ * ordering, timing or preemption behaviour changes. It is the ONLY place that increments, which is
+ * what stops a sixth call site appearing later with no reason attached. [[voice-path-change-freeze]]
+ */
+type SpeechIdReason = 'speak' | 'stop' | 'device_notice' | 'prewarm' | 'base64' | 'unknown';
+const speechIdReasons = new Map<number, SpeechIdReason>();
+const SPEECH_ID_REASON_MEMORY = 24;
+
+function claimSpeechId(reason: SpeechIdReason): number {
+  currentSpeechId++;
+  speechIdReasons.set(currentSpeechId, reason);
+  // Only recent generations can be asked about; a long round must not grow this without bound.
+  while (speechIdReasons.size > SPEECH_ID_REASON_MEMORY) {
+    const oldest = speechIdReasons.keys().next();
+    if (oldest.done) break;
+    speechIdReasons.delete(oldest.value);
+  }
+  return currentSpeechId;
+}
+
+/** Why the generation holding the voice right now claimed it. 'unknown' once it ages out. */
+function speechIdReason(id: number): SpeechIdReason {
+  return speechIdReasons.get(id) ?? 'unknown';
+}
+
 const speechSubscribers = new Set<(speaking: boolean) => void>();
 
 const notifySpeaking = (speaking: boolean) =>
@@ -1050,7 +1091,7 @@ export const subscribeToCaption = (
 // ─── STOP ─────────────────────────────────
 
 export const stopSpeaking = async (): Promise<void> => {
-  currentSpeechId++;
+  claimSpeechId('stop');
   speakGeneration++;
   if (currentAbortController) {
     currentAbortController.abort();
@@ -1188,8 +1229,8 @@ export async function speakDeviceNotice(
       catch (e) { console.log('[voice] offline persona clip play failed — device TTS:', e); }
     }
   } catch { /* cache is additive — a miss means the silent breadcrumb path, not device TTS */ }
-  currentSpeechId++;
-  await deviceSpeakFallback(text, language, currentSpeechId, gender);
+  const noticeId = claimSpeechId('device_notice');
+  await deviceSpeakFallback(text, language, noticeId, gender);
 }
 
 /**
@@ -1220,8 +1261,7 @@ export const playLocalFile = async (
   // play when voice is disabled or routed to the phone speaker.
   if (!isVoiceAllowed(opts)) return;
 
-  currentSpeechId++;
-  const myId = currentSpeechId;
+  const myId = claimSpeechId('prewarm');
 
   if (currentAbortController) {
     currentAbortController.abort();
@@ -1366,8 +1406,7 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
   // and yields to any real speak that starts meanwhile.
   if (!isVoiceAllowed(opts)) { if (opts?.caption) flashCaption(opts.caption, 6500); return; }
 
-  currentSpeechId++;
-  const myId = currentSpeechId;
+  const myId = claimSpeechId('base64');
 
   if (currentAbortController) {
     currentAbortController.abort();
@@ -1597,8 +1636,7 @@ export const speak = async (
   if (!isVoiceAllowed(opts)) { flashCaption(text, 6500); return; }
 
   // Claim ownership: bump speechId and cancel anything in-flight.
-  currentSpeechId++;
-  const myId = currentSpeechId;
+  const myId = claimSpeechId('speak');
 
   if (currentAbortController) {
     currentAbortController.abort();
@@ -1838,7 +1876,7 @@ export const speak = async (
     // exactly which generation got bumped — diagnosable in one log line.
     if (myId !== currentSpeechId) {
       console.log('[voice] speak preempted after fetch — myId=', myId, 'currentSpeechId=', currentSpeechId, 'text=', text.slice(0, 60));
-      logVoiceSilentFail('speak_preempted_after_fetch', { speechId: myId, currentSpeechId, textHead: text.slice(0, 60) });
+      logVoiceSilentFail('speak_preempted_after_fetch', { speechId: myId, currentSpeechId, textHead: text.slice(0, 60), preemptedBy: speechIdReason(currentSpeechId) });
       notifyCaption(null);
       notifySpeaking(false);
       return;
@@ -1865,7 +1903,7 @@ export const speak = async (
     const arrayBuffer = await response.arrayBuffer();
     if (myId !== currentSpeechId) {
       console.log('[voice] speak preempted after arrayBuffer — myId=', myId, 'currentSpeechId=', currentSpeechId);
-      logVoiceSilentFail('speak_preempted_after_arraybuffer', { speechId: myId, currentSpeechId });
+      logVoiceSilentFail('speak_preempted_after_arraybuffer', { speechId: myId, currentSpeechId, preemptedBy: speechIdReason(currentSpeechId) });
       notifyCaption(null);
       notifySpeaking(false);
       return;
@@ -1900,7 +1938,7 @@ export const speak = async (
 
     if (myId !== currentSpeechId) {
       console.log('[voice] speak preempted after file-write — myId=', myId, 'currentSpeechId=', currentSpeechId);
-      logVoiceSilentFail('speak_preempted_after_file_write', { speechId: myId, currentSpeechId });
+      logVoiceSilentFail('speak_preempted_after_file_write', { speechId: myId, currentSpeechId, preemptedBy: speechIdReason(currentSpeechId) });
       notifyCaption(null);
       notifySpeaking(false);
       return;
