@@ -14899,6 +14899,40 @@ check(
 }
 
 /**
+ * ─── 2026-09-03 — THE BRIDGE DOC IS A SOURCE SOMEBODY WILL TRUST ───────────────────────────────
+ *
+ * docs/LAUNCH-STATUS.md is what Cowork reads to fill in Play Console's Data safety form, because
+ * Cowork cannot see this repo and Code cannot see the consoles. That makes its permission list a
+ * DECLARATION, not documentation: if app.json gains or loses a permission and the doc does not, the
+ * form gets filled from a stale list and the mismatch between the manifest and Data safety is the
+ * single most common cause of rejection.
+ *
+ * A stale header is a source someone trusts. This one is trusted by a person filling a legal form
+ * in another window, so it gets a guard rather than a good intention.
+ * [[a-stale-header-is-a-source-someone-trusts]]
+ */
+{
+  const doc = read('docs/LAUNCH-STATUS.md');
+  const manifest = read('app.json');
+  const declared = (manifest.match(/"android\.permission\.([A-Za-z_.]+)"/g) ?? [])
+    .map((m) => m.replace(/"/g, '').replace('android.permission.', ''));
+  const undocumented = declared.filter((p) => !doc.includes(p));
+  check(
+    'BRIDGE: every permission app.json declares is listed in LAUNCH-STATUS.md',
+    undocumented.length === 0,
+    undocumented.length
+      ? `Cowork fills Data safety from this doc — these are declared but missing from it: ${undocumented.join(', ')}`
+      : `all ${declared.length} declared permissions are in the doc Cowork reads`,
+  );
+  check(
+    'BRIDGE: the doc does not tell Cowork to declare permissions we removed',
+    !/READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE/.test(manifest) &&
+      /were REMOVED on 2026-09-03/.test(doc),
+    'the legacy storage perms were dropped; a doc that still listed them would have Cowork declare data access the app does not have',
+  );
+}
+
+/**
  * ─── 2026-09-01 — THE CAMERA ANGLE IS JUDGED AT ADDRESS ─────────────────────────────────────────
  *
  * Tim: "the club arc shows up sporadically and mostly incorrect… it may get the direction right, but
