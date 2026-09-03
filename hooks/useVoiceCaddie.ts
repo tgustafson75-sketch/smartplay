@@ -2514,6 +2514,34 @@ export const useVoiceCaddie = ({
       }
 
       /**
+       * 2026-09-03 — "how do I use this" HAS TO WORK ON THE FIRST THING YOU SAY, TOO.
+       *
+       * Found by sweeping for siblings of the play-song defect: every handler reachable ONLY from
+       * sendToBrain works as a follow-up and never as an opening request. detectHelpRequest was one.
+       * Asking "how does SmartFinder work" first thing went to the brain instead of the curated
+       * SCREEN_HELP copy the tutorials use — a worse answer, from a slower path, for the question a
+       * new player is most likely to open with.
+       *
+       * Checked BEFORE the song handler, deliberately, preserving the order sendToBrain documents:
+       * "how do I play this" is a help question, not a request for a song called "this".
+       */
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const sh = require('../services/screenHelp') as typeof import('../services/screenHelp');
+        const help = sh.detectHelpRequest(transcript);
+        const h = help ? sh.getScreenHelp(help.key) : null;
+        if (h) {
+          onResponseReceived(h.spoken);
+          recordKevinTurn(h.spoken);
+          wrappedOnVoiceStateChange('speaking');
+          await speakResponse(h.spoken);
+          wrappedOnVoiceStateChange('idle');
+          isProcessingRef.current = false;
+          return;
+        }
+      } catch (e) { console.log('[voice] screen help error (non-fatal):', e); }
+
+      /**
        * 2026-09-03 (Tim) — "play [song]" HAS TO WORK ON THE FIRST THING YOU SAY.
        *
        * Tim's actual pre-round: open the app, "Kevin, play Sail by Awolnation on YouTube", and let
@@ -2559,6 +2587,31 @@ export const useVoiceCaddie = ({
       // survives only for the follow-up listen loop (processFollowUp). New brain-bound
       // settings go through services/voice/brainSettings.ts (buildPipecatContext →
       // api/pipecat-turn), NOT here.
+      /**
+       * 2026-09-03 — the two RESHAPES were follow-up-only as well.
+       *
+       * Unlike help and songs these do not short-circuit; they rewrite what the brain is asked, and
+       * both were applied only inside sendToBrain. So "sing me happy birthday" first thing reached
+       * the brain unshaped and came back as a refusal or a flat answer instead of the playful
+       * attempt Cecily's feature exists for, and "explain that simply" was silently ignored on the
+       * one turn a new player is most likely to say it.
+       *
+       * Applied to the transcript handed to the brain, not to the transcript we matched on, so the
+       * detectors above still see what the player actually said.
+       */
+      let brainTranscript = transcript;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const sa = require('../services/singAttempt') as typeof import('../services/singAttempt');
+        const sing = sa.detectSingRequest(brainTranscript);
+        if (sing) brainTranscript = sa.buildSingMessage(sing.song);
+      } catch { /* non-fatal — the literal transcript is a fine fallback */ }
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const pl = require('../services/plainSpeak') as typeof import('../services/plainSpeak');
+        if (pl.detectPlainSpeakRequest(brainTranscript)) brainTranscript = pl.buildPlainSpeakPrefix() + brainTranscript;
+      } catch { /* non-fatal */ }
+
       if (processTranscriptOverride) {
         wrappedOnVoiceStateChange('thinking');
         // Pipecat owns the turn (its own re-entrancy + end state). Release
@@ -2567,7 +2620,7 @@ export const useVoiceCaddie = ({
         // — processTurn sets the final state.
         isProcessingRef.current = false;
         try {
-          await processTranscriptOverride(transcript);
+          await processTranscriptOverride(brainTranscript);
         } catch (e) {
           console.log('[voice] pipecat override error:', e);
           wrappedOnVoiceStateChange('idle');

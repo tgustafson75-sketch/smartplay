@@ -7244,7 +7244,13 @@ check('Voice warmup fires on voice-surface mount + app foreground (not just gree
 check('Pre-response conversational filler removed from the main voice path',
   !/FILLER_DELAY_MS/.test(vcWarmSrc) &&
     !/getClipForCategory\(classifyQuery/.test(vcWarmSrc) &&
-    /await processTranscriptOverride\(transcript\)/.test(vcWarmSrc),
+    // 2026-09-03: was pinned to the literal argument name `transcript`, which went red when the
+    // brain-bound message became `brainTranscript` (the sing / plain-speak reshapes now apply on the
+    // first utterance, not only as a follow-up). What this scenario is about is that the turn is
+    // handed STRAIGHT to the brain with no filler in front of it — so it matches the call, not the
+    // name of the thing passed to it. Fourth guard today pinned to a spelling rather than a
+    // behaviour. [[break-test-every-guard-you-write]]
+    /await processTranscriptOverride\(\w+\)/.test(vcWarmSrc),
   "the 'Let me see...' bridge no longer fires before the reply (it conflicted with the now-fast brain that already opens conversationally); the conversational turn is handed straight to the pipecat brain (processTranscriptOverride) — the legacy /api/kevin fallthrough was deleted 2026-07-23");
 
 // 2026-06-11 — Environment mode phase 1: range gets a longer window AND now keeps
@@ -15126,6 +15132,32 @@ check(
 {
   const vc = readCode('hooks/useVoiceCaddie.ts');
   const mainPath = /const song = await ps\.tryPlaySong\(transcript\);[\s\S]{0,700}?await speakResponse\(song\.spoken\);/.test(vc);
+  /**
+   * THE SIBLINGS. Sweeping for other handlers reachable ONLY from sendToBrain found three more,
+   * every one of them user-facing and every one of them working as a follow-up but never as an
+   * opening request: the screen-help answer, the caddie's sing attempt, and the plain-speak reshape.
+   * A player asking "how does SmartFinder work" or "sing me happy birthday" first thing got the
+   * brain's generic answer instead of the feature.
+   */
+  check(
+    'VOICE: screen help answers the FIRST question, and still outranks the song handler',
+    /const help = sh\.detectHelpRequest\(transcript\);/.test(vc) &&
+      vc.indexOf('sh.detectHelpRequest(transcript)') < vc.indexOf('ps.tryPlaySong(transcript)'),
+    '"how do I play this" is a help question, not a request for a song called "this" — sendToBrain documents that order and the main path has to keep it',
+  );
+  check(
+    'VOICE: the sing and plain-speak reshapes reach the brain on a first utterance',
+    /let brainTranscript = transcript;/.test(vc) &&
+      /brainTranscript = sa\.buildSingMessage\(sing\.song\)/.test(vc) &&
+      /brainTranscript = pl\.buildPlainSpeakPrefix\(\) \+ brainTranscript/.test(vc) &&
+      /await processTranscriptOverride\(brainTranscript\)/.test(vc),
+    'these rewrite what the brain is ASKED rather than short-circuiting, so applying them only in sendToBrain meant an unshaped first turn — a refusal instead of the playful attempt, and plain-speak silently ignored',
+  );
+  check(
+    'VOICE: the reshape does not corrupt what the detectors matched on',
+    !/transcript = sa\.buildSingMessage/.test(vc) && !/transcript = pl\.buildPlainSpeakPrefix/.test(vc),
+    'rewriting `transcript` itself would feed a prompt preamble back into anything that later reads what the player said',
+  );
   check(
     'SONG: "play [song]" is handled on the FIRST utterance, not only as a follow-up',
     mainPath && (vc.match(/tryPlaySong\(/g) ?? []).length >= 2,
