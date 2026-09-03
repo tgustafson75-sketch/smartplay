@@ -76,19 +76,41 @@ repositories. Change the policy in both, or the guard passes while the web lies.
 **Target API** 36 (was 35; Play rejects below 36 for new apps as of 2026-08-31)
 **minSdk** 29 · **Entity** SmartPlay AI LLC, 29003 Navigator Way, Menifee, CA 92585
 
-### Permissions actually declared (`app.json`, verified 2026-09-03)
+### Permissions the APK will actually contain — VERIFIED, not inferred
+
+Generated with `npx expo prebuild --clean --platform android` on 2026-09-03 and read out of
+`android/app/src/main/AndroidManifest.xml`. **Take this list, not app.json.**
 
 ```
 RECORD_AUDIO · CAMERA
 ACCESS_FINE_LOCATION · ACCESS_COARSE_LOCATION · ACCESS_BACKGROUND_LOCATION
-VIBRATE · MODIFY_AUDIO_SETTINGS · POST_NOTIFICATIONS
-FOREGROUND_SERVICE · FOREGROUND_SERVICE_MEDIA_PLAYBACK · FOREGROUND_SERVICE_LOCATION
+VIBRATE · MODIFY_AUDIO_SETTINGS · POST_NOTIFICATIONS · INTERNET
+FOREGROUND_SERVICE · FOREGROUND_SERVICE_LOCATION
 READ_MEDIA_IMAGES · READ_MEDIA_VIDEO · READ_MEDIA_VISUAL_USER_SELECTED
 health.READ_STEPS · health.READ_DISTANCE · health.READ_HEART_RATE · health.READ_ACTIVE_CALORIES_BURNED
 ```
 
-⚠️ **`READ_EXTERNAL_STORAGE` and `WRITE_EXTERNAL_STORAGE` were REMOVED on 2026-09-03.** Do not
-declare them. They had zero code references and are superseded by `READ_MEDIA_*` at minSdk 29.
+⚠️ **CORRECTION to what this file said earlier.** It previously claimed READ_EXTERNAL_STORAGE and
+WRITE_EXTERNAL_STORAGE "were REMOVED — do not declare them". Deleting them from `app.json` did
+**nothing**: Expo's permission merge is purely additive, and `expo-file-system`, `expo-media-library`
+and `expo-image-picker` each contribute them from their own manifests. A prebuild proved they were
+still in the manifest. They are now genuinely stripped, via `android.blockedPermissions`, which
+writes `tools:node="remove"` and removes them at the Gradle merge.
+
+**Blocked — present in the manifest with `tools:node="remove"`, absent from the APK. Do NOT declare
+any of these:**
+
+| Permission | Where it came from | Why it is blocked |
+|---|---|---|
+| `READ_EXTERNAL_STORAGE` | expo-file-system, expo-media-library, expo-image-picker | The app only SAVES to the library; reading is not needed and triggers Play's Photo & Video Permissions policy |
+| `WRITE_EXTERNAL_STORAGE` | same three | Legacy, superseded by scoped storage at minSdk 29 |
+| `READ_MEDIA_AUDIO` | expo-media-library's default `granularPermissions` (photo+video+**audio**) | No conceivable justification for a golf app. Also narrowed at source to `['photo','video']` |
+| `ACTIVITY_RECOGNITION` | expo-sensors' own manifest | A dangerous runtime permission ("Physical activity"). Nothing uses Pedometer |
+| `SYSTEM_ALERT_WINDOW` | expo-dev-client | "Display over other apps" — a dev-menu overlay with no place in a store build |
+
+`FOREGROUND_SERVICE_MEDIA_PLAYBACK` was **removed from app.json** (not blocked — nothing else
+contributes it). No service in the build declares that type; the only foreground service is
+expo-location's, covered by `FOREGROUND_SERVICE_LOCATION`.
 
 ### Data safety — the answers that are easy to get wrong
 

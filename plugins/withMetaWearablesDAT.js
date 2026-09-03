@@ -698,12 +698,26 @@ function withMetaWearablesDAT(config) {
   }
 
   // ── iOS ── The iOS SDK (facebook/meta-wearables-dat-ios) is a PUBLIC Swift Package
-  // of XCFrameworks — no token needed. Always apply the Info.plist (BT/camera strings +
-  // the MWDAT attestation dict). Add the SPM package + Swift sources only when
+  // of XCFrameworks — no token needed. The Info.plist mods (BT strings + the MWDAT attestation
+  // dict), the SPM package and the Swift sources are ALL applied only when
   // MWDAT_IOS_ENABLED=1, so a normal iOS build (no glasses) still builds without the
   // SPM dependency and CANNOT be affected by this wiring.
-  next = withIOSInfoPlist(next, ENV_FALLBACK);
+  /**
+   * 2026-09-03 (pre-build audit) — the Bluetooth purpose strings are now gated with the FEATURE.
+   *
+   * withIOSInfoPlist ran unconditionally, so a store build shipped
+   * NSBluetoothAlwaysUsageDescription / NSBluetoothPeripheralUsageDescription naming Ray-Ban Meta
+   * glasses — for an integration the binary does not contain, because the SPM package and the Swift
+   * sources are behind MWDAT_IOS_ENABLED. Verified in a real prebuild: both strings were present in
+   * ios/SmartPlayCaddie/Info.plist on the production config.
+   *
+   * An unused purpose string prompts nobody and crashes nothing. The cost is App Review reading a
+   * plist that promises another company's hardware, in an app whose 1.0 cannot talk to it — a
+   * reviewer question we do not need to answer on a one-build budget. The strings come back
+   * automatically with the feature in 2.0.
+   */
   if (process.env.MWDAT_IOS_ENABLED === '1') {
+    next = withIOSInfoPlist(next, ENV_FALLBACK);
     next = withIOSSwiftPackage(next);
     next = withSwiftSourceCopy(next);
     // Claim api.smartplaycaddie.com so the universal-link callback reaches the app (see note above).

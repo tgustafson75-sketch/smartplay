@@ -1,5 +1,5 @@
 diff --git a/node_modules/@bacons/apple-targets/build/configuration-list.js b/node_modules/@bacons/apple-targets/build/configuration-list.js
-index 3a2a4c1..1d7d7fa 100644
+index 3a2a4c1..6839f9a 100644
 --- a/node_modules/@bacons/apple-targets/build/configuration-list.js
 +++ b/node_modules/@bacons/apple-targets/build/configuration-list.js
 @@ -274,7 +274,7 @@ function createWatchAppConfigurationList(project, { name, displayName, cwd, bund
@@ -11,3 +11,12 @@ index 3a2a4c1..1d7d7fa 100644
          CURRENT_PROJECT_VERSION: currentProjectVersion,
          ENABLE_PREVIEWS: "YES",
          GCC_C_LANGUAGE_STANDARD: "gnu11",
+@@ -286,7 +286,7 @@ function createWatchAppConfigurationList(project, { name, displayName, cwd, bund
+         // INFOPLIST_KEY_WKCompanionAppBundleIdentifier: "$(BUNDLE_IDENTIFIER)",
+         // INFOPLIST_KEY_WKCompanionAppBundleIdentifier: rootBundleId,
+         LD_RUNPATH_SEARCH_PATHS: ["$(inherited)", "@executable_path/Frameworks"],
+-        MARKETING_VERSION: "1.0",
++        MARKETING_VERSION: "1.0.0",
+         MTL_FAST_MATH: "YES",
+         PRODUCT_BUNDLE_IDENTIFIER: bundleId,
+         PRODUCT_NAME: "$(TARGET_NAME)",

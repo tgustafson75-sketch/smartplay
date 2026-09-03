@@ -14967,10 +14967,38 @@ check(
  */
 {
   const doc = read('docs/LAUNCH-STATUS.md');
-  const manifest = read('app.json');
-  const declared = (manifest.match(/"android\.permission\.([A-Za-z_.]+)"/g) ?? [])
-    .map((m) => m.replace(/"/g, '').replace('android.permission.', ''));
+  /**
+   * 2026-09-03 — DECLARED and BLOCKED are different lists, and this guard conflated them.
+   *
+   * app.json gained `android.blockedPermissions`, which is the ONLY subtractive lever Expo has:
+   * removing a permission from `permissions` does nothing, because the manifest merge is purely
+   * additive and dependency manifests (expo-file-system, expo-media-library, expo-sensors,
+   * expo-dev-client) contribute their own. A blocked entry is written into the manifest as
+   * `tools:node="remove"` and stripped at the Gradle merge — VERIFIED in a real prebuild.
+   *
+   * So a blocked permission must NOT appear on the Data-safety list, and this was flagging all five
+   * as undocumented. Parse the two arrays separately and hold each to its own rule.
+   */
+  const manifestJson = JSON.parse(read('app.json')) as {
+    expo: { android: { permissions: string[]; blockedPermissions?: string[] } };
+  };
+  const short = (p: string) => p.replace('android.permission.', '');
+  const declared = manifestJson.expo.android.permissions.map(short);
+  const blocked = (manifestJson.expo.android.blockedPermissions ?? []).map(short);
   const undocumented = declared.filter((p) => !doc.includes(p));
+  /**
+   * Scoped to the FENCED BLOCK Cowork copies from, not the whole document. The doc also carries a
+   * "do NOT declare these" table naming every blocked permission on purpose — checking the whole
+   * file flagged that table as the defect it exists to prevent.
+   */
+  const declareBlock = /### Permissions the APK will actually contain[\s\S]*?```([\s\S]*?)```/.exec(doc)?.[1] ?? '';
+  const wronglyListed = blocked.filter((p) => new RegExp(`\\b${p}\\b`).test(declareBlock));
+  check(
+    'BRIDGE: the declare list is the one a prebuild produced, not app.json',
+    declareBlock.length > 0 && /VERIFIED, not inferred/.test(doc) && /blockedPermissions/.test(doc),
+    'app.json is not the APK: the merge is additive and dependency manifests contribute their own permissions, so the list Cowork fills Data safety from has to come from a generated manifest',
+  );
+
   check(
     'BRIDGE: every permission app.json declares is listed in LAUNCH-STATUS.md',
     undocumented.length === 0,
@@ -14978,11 +15006,36 @@ check(
       ? `Cowork fills Data safety from this doc — these are declared but missing from it: ${undocumented.join(', ')}`
       : `all ${declared.length} declared permissions are in the doc Cowork reads`,
   );
+  /**
+   * The five contaminants, by name. Each is contributed by a DEPENDENCY manifest, not by app.json,
+   * so deleting it from `permissions` does nothing — only blockedPermissions removes it, and only a
+   * generated manifest proves it. Named individually because "the list is non-empty" would not
+   * notice one of them quietly coming back, which is exactly how they got here.
+   */
+  const MUST_BLOCK = [
+    'READ_EXTERNAL_STORAGE',      // expo-file-system + expo-media-library + expo-image-picker
+    'WRITE_EXTERNAL_STORAGE',     // same three
+    'READ_MEDIA_AUDIO',           // expo-media-library's default granularPermissions
+    'ACTIVITY_RECOGNITION',       // expo-sensors' own manifest — a dangerous runtime permission
+    'SYSTEM_ALERT_WINDOW',        // expo-dev-client's dev-menu overlay
+  ];
+  const unblocked = MUST_BLOCK.filter((p) => !blocked.includes(p));
   check(
-    'BRIDGE: the doc does not tell Cowork to declare permissions we removed',
-    !/READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE/.test(manifest) &&
-      /were REMOVED on 2026-09-03/.test(doc),
-    'the legacy storage perms were dropped; a doc that still listed them would have Cowork declare data access the app does not have',
+    'BRIDGE: every dependency-contributed permission we do not want stays blocked',
+    unblocked.length === 0,
+    unblocked.length
+      ? `back in the APK — a dependency contributes these and only blockedPermissions removes them: ${unblocked.join(', ')}`
+      : 'all five dependency-contributed permissions are stripped at the manifest merge',
+  );
+
+  check(
+    'BRIDGE: a BLOCKED permission is never on the Data-safety list',
+    blocked.length > 0 && wronglyListed.length === 0,
+    blocked.length === 0
+      ? 'nothing is blocked — blockedPermissions is the only lever that actually removes a dependency-contributed permission'
+      : wronglyListed.length
+        ? `stripped from the APK but still listed for Cowork to declare: ${wronglyListed.join(', ')}`
+        : `${blocked.length} permissions blocked with tools:node="remove" and correctly absent from the declare list`,
   );
 }
 

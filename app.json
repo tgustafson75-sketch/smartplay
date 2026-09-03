@@ -22,7 +22,9 @@
           "audio",
           "location"
         ],
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSMotionUsageDescription": "SmartPlay Caddie reads your phone's motion sensors to measure your swing tempo and to steady SmartFinder's aim when you point the phone at a target.",
+        "NSLocationAlwaysUsageDescription": "SmartPlay Caddie tracks your round in the background so hole transitions, shot tracking, and yardages keep working when your phone is in your pocket."
       },
       "buildNumber": "22",
       "appleTeamId": "B6KTPCWF7A"
@@ -45,19 +47,25 @@
         "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.VIBRATE",
         "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
         "android.permission.FOREGROUND_SERVICE_LOCATION",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_MEDIA_VIDEO",
-            "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.health.READ_STEPS",
         "android.permission.health.READ_DISTANCE",
         "android.permission.health.READ_HEART_RATE",
         "android.permission.health.READ_ACTIVE_CALORIES_BURNED"
       ],
-      "versionCode": 22
+      "versionCode": 22,
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.ACTIVITY_RECOGNITION",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ]
     },
     "web": {
       "output": "server",
@@ -70,7 +78,11 @@
         {
           "photosPermission": "SmartPlay Caddie needs access to your photos so you can bring an existing swing video in to analyze.",
           "savePhotosPermission": "SmartPlay Caddie saves your swing videos and analysis frames to your photos so you can keep and share them.",
-          "preventAutomaticLimitedAccessAlert": true
+          "preventAutomaticLimitedAccessAlert": true,
+          "granularPermissions": [
+            "photo",
+            "video"
+          ]
         }
       ],
       "expo-router",
@@ -110,6 +122,7 @@
         }
       ],
       "react-native-health-connect",
+      "./plugins/withHealthConnectRationale.js",
       [
         "expo-build-properties",
         {
@@ -166,7 +179,7 @@
     "runtimeVersion": "1.0.0",
     "updates": {
       "url": "https://u.expo.dev/60b7ee0e-0165-4971-a9c8-219960fed645",
-      "fallbackToCacheTimeout": 10000
+      "fallbackToCacheTimeout": 0
     }
   }
 }
