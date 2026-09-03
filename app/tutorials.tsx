@@ -106,6 +106,43 @@ const buildTutorials = (caddieName: string, pronoun: string): Tutorial[] => [
     ],
   },
   {
+    /**
+     * 2026-09-03 (Tim — "it's not what's new, it's what is part of the tutorial and highlights").
+     *
+     * The round-effort card needs a tutorial rather than a changelog line for two reasons: it is
+     * Android-only, and it does nothing until the player grants Health Connect. A feature the
+     * player cannot find is experienced as a feature that does not work.
+     */
+    id: 'walk',
+    icon: 'walk-outline',
+    title: 'The Walk',
+    blurb: 'What the round cost you, on your recap.',
+    steps: [
+      'Your recap can show miles walked, steps, average heart rate, and calories for the round.',
+      `${caddieName} mentions it when he walks you through the round, so you hear it as well as see it.`,
+      'Android only, and it needs Health Connect: Settings → Health Data, then grant access when asked.',
+      'Nothing to do during the round — it reads the window between your first tee shot and End Round.',
+      'No watch, no card. It shows nothing rather than a row of zeroes.',
+    ],
+  },
+  {
+    /**
+     * 2026-09-03 — a HIGHLIGHT, not an instruction: there is no step to perform. It is here because
+     * a player who does not know the offer exists cannot count on it, and the whole point is that
+     * they should feel free to take their time.
+     */
+    id: 'trial',
+    icon: 'gift-outline',
+    title: 'Your free trial',
+    blurb: 'Miss it and we extend it.',
+    steps: [
+      `Every new player gets a full free trial of everything — no card up front.`,
+      'If it runs out and you never really got a chance to play, we add another week instead of a bill.',
+      'It offers itself: fewer than three days out with the app and the card appears. One tap, no charge.',
+      'Weather, daylight and tee times are not your fault. A trial you never got to use is not a trial.',
+    ],
+  },
+  {
     // 2026-07-04 (elite-clean audit, menu finding #14) — this card described the
     // PRE-rebuild menu (Cast Mode, "Open Practice / Cage", a Recap entry — none
     // exist). Rewritten to match the live GlobalToolsMenu.

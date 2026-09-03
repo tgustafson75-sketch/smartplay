@@ -28,15 +28,6 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Sep 2026',
-    note: 'If your free trial runs out and you never really got a chance to play, we will hand you another week rather than a bill. Weather, daylight and tee times are not your fault, and a trial you never got to use is not a trial. Fewer than three days out with the app and the offer shows up on its own — one tap, no card, no charge.',
-  },
-  {
-    when: 'Sep 2026',
-    note: 'Your recap now shows what the round actually cost you: miles walked, steps, average heart rate and calories, and your caddie mentions it when he walks you through the round. Android only, and only if you connect Health Connect and leave Health Data on in Settings.',
-    howTo: 'Settings → Health Data, then grant Health Connect access. The card appears on your next round recap under THE WALK.',
-  },
-  {
-    when: 'Sep 2026',
     note: 'Ball speed shows up even when you have not tagged the club. It used to be blank, because without knowing the club we could not be precise about it — but blank is not more honest than an estimate, it is just less useful. You now get the number with a wider range around it, and tagging the club tightens it.',
     howTo: 'Tag the club on a swing to narrow the ball speed range from a rough estimate to a close one.',
   },
