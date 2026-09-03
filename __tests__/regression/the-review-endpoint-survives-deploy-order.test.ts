@@ -52,14 +52,35 @@ describe('the client does not depend on which server it is talking to', () => {
     expect(calls.filter((c) => c.endsWith('/api/swing-review'))).toHaveLength(1);
   });
 
-  it('does NOT retry anything but a 404 — other statuses are the handler talking', async () => {
-    for (const status of [400, 401, 429, 500]) {
+  /**
+   * 2026-09-03 — 429 MOVED OUT of this list, deliberately, and 500 stayed in.
+   *
+   * The requests here became bounded + retrying (they were unbounded, and RN's fetch has no default
+   * timeout, so a bad connection hung rather than failed). Tim's rule for that work is "don't build
+   * error states, make it work", so the connection is retried — but only where the request never
+   * reached a working handler. 429 means "retry after a wait" by definition, so it is now retried.
+   *
+   * 500 is still NOT retried, and this test still guards that, because this module's original
+   * reasoning holds: a handler that threw on this payload will throw on it again, and on a 45-second
+   * analysis route that is three times the server cost for nothing. The rule did not get looser, it
+   * got more precise: infrastructure saying "try again" vs the handler saying something.
+   */
+  it('does NOT retry anything but a 404 — a handler status is the handler talking', async () => {
+    for (const status of [400, 401, 500]) {
       mockFetch({ 'https://h/api/swing-review': status });
       const res = await freshModule().fetchSwingReview('https://h', {});
       expect(calls).toEqual(['https://h/api/swing-review']);
       expect(res.status).toBe(status);
     }
   });
+
+  it('DOES retry a 429 — that one means "try again", by definition', async () => {
+    let n = 0;
+    global.fetch = jest.fn(async () => { n++; return { ok: n >= 2, status: n < 2 ? 429 : 200, json: async () => ({}) } as Response; }) as unknown as typeof fetch;
+    const res = await freshModule().fetchSwingReview('https://h', {});
+    expect(res.status).toBe(200);
+    expect(n).toBe(2);
+  }, 15_000);
 
   it('never loops — a 404 from the old path is returned, not retried again', async () => {
     mockFetch({ 'https://h/api/swing-review': 404, 'https://h/api/cage-review': 404 });

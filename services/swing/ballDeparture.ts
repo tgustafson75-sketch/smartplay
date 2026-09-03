@@ -16,6 +16,10 @@ import * as VideoThumbnails from '../../utils/videoThumbnail'; // serialized wra
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import { getApiBaseUrl } from '../apiBase';
+import { isTransientStatus, attemptSignal, waitMs, RETRY_BACKOFF_MS } from '../../utils/transientRetry';
+
+/** One owner for what a ball-departure call costs. Server ceiling is 30s (vercel.json). */
+const BALL_DEPARTURE_TIMEOUT_MS = 20_000;
 
 const apiUrl = (): string => getApiBaseUrl();
 
@@ -176,7 +180,7 @@ export async function detectBallDeparture(args: {
       }),
       // Bound the wait so a stalled server can't hang the swing flow; this is
       // a best-effort verifier and the catch below returns null gracefully.
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(BALL_DEPARTURE_TIMEOUT_MS),
     });
     if (!res.ok) return null;
     const data = (await res.json()) as Partial<BallDepartureResult> & {
@@ -226,13 +230,40 @@ export async function detectBallDeparture(args: {
  */
 export async function locateBallInSetupFrame(base64Jpeg: string): Promise<{ x: number; y: number } | null> {
   if (!base64Jpeg) return null;
+  /**
+   * 2026-09-03 — this one was UNBOUNDED. Its sibling above carries AbortSignal.timeout(20_000); this
+   * call, added later for the locate mode, never got one, and React Native's fetch has no default
+   * timeout. The try/catch below made it look safe — it cannot crash — but an unbounded request does
+   * not fail, it HANGS: the promise never settles, the caller's feet proxy is never upgraded, and it
+   * holds a connection to our own origin for as long as the network stays bad.
+   *
+   * That last part is the reason it matters more than "an optional upgrade didn't land". A held
+   * connection to this origin is exactly what starves armDeadHostGuard's probe, and the guard then
+   * reads a starved origin as a dead one and aborts a REAL swing analysis — the interaction capped in
+   * d418853e. An optional feature must never be able to cost the player a swing.
+   *
+   * Same 20s bound as its sibling (one owner for what this route costs, server ceiling 30s), and one
+   * retry on a fast transient failure per Tim's "make it work". A timeout is not retried: this is a
+   * best-effort upgrade and the feet proxy is a good answer. [[a-budget-must-fit-what-runs-inside-it]]
+   */
   try {
-    const res = await fetch(apiUrl() + '/api/ball-departure', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'locate', setup_frame: base64Jpeg, media_type: 'image/jpeg' }),
-    });
-    if (!res.ok) return null;
+    let res: Response | null = null;
+    for (let i = 0; i < 2; i++) {
+      if (i > 0) await waitMs(RETRY_BACKOFF_MS[0]);
+      const { signal, done } = attemptSignal(BALL_DEPARTURE_TIMEOUT_MS, null);
+      try {
+        res = await fetch(apiUrl() + '/api/ball-departure', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'locate', setup_frame: base64Jpeg, media_type: 'image/jpeg' }),
+          signal,
+        });
+      } finally {
+        done();
+      }
+      if (!isTransientStatus(res.status)) break;   // a real answer, including a refusal
+    }
+    if (!res || !res.ok) return null;
     const data = (await res.json()) as { found?: boolean; ball_norm?: { x: number; y: number } | null; configured?: boolean };
     if (data.configured === false || data.found !== true || !data.ball_norm) return null;
     const { x, y } = data.ball_norm;
