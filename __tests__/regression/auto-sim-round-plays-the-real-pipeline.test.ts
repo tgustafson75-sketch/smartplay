@@ -7,6 +7,32 @@
  * built to surface. So these prove the runner runs — a real SIM round, a real scorecard, a real
  * advance — and that it leaves the app exactly as it found it.
  */
+/**
+ * 2026-09-03 — STUB THE PREFETCH CHAIN. Starting a real round fires roundPrefetch, which is
+ * fire-and-forget and keeps running long after the test that triggered it returns — jest reported
+ * "Cannot log after tests are done" and, once, a one-off failure elsewhere in the full suite that did
+ * not reproduce in isolation. A leaked background chain making an unrelated suite flaky is worse than
+ * a missing assertion, because it teaches everyone to re-run rather than to look.
+ *
+ * These tests are about the scoring / hole-advance pipeline; the prefetch is network-shaped warmup
+ * that has nothing to say about it. Stubbed so the round starts and stops cleanly.
+ */
+jest.mock('../../services/roundPrefetch', () => ({
+  prefetchRoundData: jest.fn(async () => undefined),
+  prefetchCourseImagery: jest.fn(async () => undefined),
+}));
+// endRound() generates and saves a recap, which reaches for the network and outlives the test the
+// same way. The teardown itself is still the REAL endRound — only the recap it fans out to is stubbed.
+jest.mock('../../services/recapGenerator', () => ({
+  generateRecap: jest.fn(async () => null),
+}));
+// startRound pre-warms course geometry, which reaches Overpass. The auto sim is bundled-Palms only
+// and never needs a build; leaving it live is a network call that outlives the test.
+jest.mock('../../services/courseGeometryService', () => {
+  const actual = jest.requireActual('../../services/courseGeometryService');
+  return { ...actual, fetchCourseGeometry: jest.fn(async () => null) };
+});
+
 import { runAutoSimRound, readAutoSimPlayer } from '../../services/simRoundAuto';
 import { useRoundStore } from '../../store/roundStore';
 import { useSettingsStore } from '../../store/settingsStore';

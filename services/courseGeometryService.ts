@@ -712,6 +712,34 @@ const MAX_CONCURRENT_BUILDS = 2;
 let activeBuilds = 0;
 const waitingForSlot: (() => void)[] = [];
 
+/**
+ * The round's own course is the foreground this cap exists to protect, so it never queues behind a
+ * background build of a course nobody is playing. At most one course can be the active one, so this
+ * adds at most a single concurrent build — nothing like the 3-5 simultaneous 85s requests that
+ * saturated the origin in the first place. Lazy require: roundStore imports this module.
+ */
+function isActiveRoundCourse(courseId: string): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { useRoundStore } = require('../store/roundStore') as typeof import('../store/roundStore');
+    const st = useRoundStore.getState();
+    return !!st.isRoundActive && st.activeCourseId === courseId;
+  } catch {
+    return false; // never let a store read decide whether geometry can be fetched at all
+  }
+}
+
+/** Run the network portion of a build under the concurrency cap. Cache reads never come through here. */
+async function withBuildSlot<T>(courseId: string, fn: () => Promise<T>): Promise<T> {
+  if (isActiveRoundCourse(courseId)) return fn();
+  await acquireBuildSlot();
+  try {
+    return await fn();
+  } finally {
+    releaseBuildSlot();
+  }
+}
+
 async function acquireBuildSlot(): Promise<void> {
   if (activeBuilds < MAX_CONCURRENT_BUILDS) {
     activeBuilds++;
@@ -833,16 +861,19 @@ export async function fetchCourseGeometry(
   // 2026-08-13 — `inflight` still owns dedupe; it now also PUBLISHES so the UI can see the build.
   // Deleting from a module-level Map told nobody, which is why a finished build never lifted the
   // STATIC badge or re-ran the yardage resolver. See store/geometryStatusStore.ts.
-  // The slot is taken INSIDE the promise, not before it, so the caller still gets one promise per
-  // course immediately and the dedupe above keeps working while this build waits its turn.
-  const run = (async () => {
-    await acquireBuildSlot();
-    try {
-      return await fetchCourseGeometryInner(courseId, options);
-    } finally {
-      releaseBuildSlot();
-    }
-  })().finally(() => {
+  /**
+   * 2026-09-03 — THE SLOT MOVED DOWN TO THE NETWORK CALL, where it always belonged.
+   *
+   * This wrapper used to acquire it, which meant the whole of fetchCourseGeometryInner ran inside
+   * the cap — INCLUDING the memCache hit and the persisted read. `holeDetection` calls this for the
+   * active course on every GPS fix, so during a round a CACHED read could sit behind two 85-second
+   * network builds of courses nobody is playing. The cap was written to stop background work
+   * starving the foreground and, held at this level, it did exactly that instead.
+   *
+   * The commit that introduced it claimed the slot was "held only for the fetch". It wasn't. It is
+   * now — see withBuildSlot() around the two fetch() calls below. Cache reads never queue.
+   */
+  const run = fetchCourseGeometryInner(courseId, options).finally(() => {
     inflight.delete(courseId);
     geometryStatus().markDone(courseId);
   });
@@ -1149,7 +1180,7 @@ async function fetchCourseGeometryInner(
      *   - when the real build lands it bumps `completions`, and every yardage re-derives on the spot
      * So the screen shows the best thing it has IMMEDIATELY and upgrades the moment better arrives.
      */
-    const res = await fetch(url, { signal: AbortSignal.timeout(85_000) });
+    const res = await withBuildSlot(courseId, () => fetch(url, { signal: AbortSignal.timeout(85_000) }));
     if (!res.ok) {
       console.warn('[courseGeometry] fetch failed:', res.status);
       // 2026-08-11 — if we bypassed bundled coords to try the engine and the engine failed, fall
@@ -1313,7 +1344,7 @@ async function refreshGeometryInBackground(courseId: string): Promise<void> {
      * geometry on screen and this only replaces it when something better arrives. So the longer
      * ceiling costs no wait at all — it just lets the heal actually finish.
      */
-    const res = await fetch(url, { signal: AbortSignal.timeout(85_000) });
+    const res = await withBuildSlot(courseId, () => fetch(url, { signal: AbortSignal.timeout(85_000) }));
     if (!res.ok) {
       console.warn('[courseGeometry] background refresh failed:', res.status, courseId);
       return;

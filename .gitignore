@@ -1,7 +1,13 @@
 # Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
 # dependencies
-node_modules/
+# 2026-09-03 — NO TRAILING SLASH, DELIBERATELY.
+# `node_modules/` matches DIRECTORIES ONLY. A symlink named node_modules is a FILE, so it slipped
+# past this pattern and got committed (6c545ac6) as a 120000 entry whose content was
+# "/Users/timothyg/smartplay/node_modules" — a symlink pointing at itself. Every checkout, pull or
+# rebase then MATERIALISED it over the real directory and killed the install for both worktrees.
+# Without the slash, both the directory and any symlink of that name are ignored.
+node_modules
 
 # Expo
 .expo/
