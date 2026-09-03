@@ -95,6 +95,9 @@
         "ascAppId": "6772344465",
         "appleTeamId": "B6KTPCWF7A",
         "language": "en-US"
+      },
+      "android": {
+        "track": "internal"
       }
     },
     "production": {
@@ -103,6 +106,9 @@
         "ascAppId": "6772344465",
         "appleTeamId": "B6KTPCWF7A",
         "language": "en-US"
+      },
+      "android": {
+        "track": "internal"
       }
     }
   }
