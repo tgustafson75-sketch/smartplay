@@ -20,10 +20,10 @@ max-width:46rem;margin:0 auto;padding:1rem .25rem 2rem;text-align:left;}
 </style>
 <div class="spl-legal">
 <h1>SmartPlay Caddie — Privacy Policy</h1>
-<p class="dates"><strong>Effective date:</strong> August 25, 2026 &nbsp;·&nbsp; <strong>Last updated:</strong> August 25, 2026</p>
+<p class="dates"><strong>Effective date:</strong> September 3, 2026 &nbsp;·&nbsp; <strong>Last updated:</strong> September 3, 2026</p>
 
 <h2>1. Who we are</h2>
-<p>SmartPlay Caddie ("the App", "we", "us") is a golf companion mobile application operated by <strong>SmartPlay AI LLC</strong>. You can contact us at <a href="mailto:support@smartplaycaddie.com">support@smartplaycaddie.com</a> for any privacy-related question, request, or complaint.</p>
+<p>SmartPlay Caddie ("the App", "we", "us") is a golf companion mobile application operated by <strong>SmartPlay AI LLC</strong>, 29003 Navigator Way, Menifee, CA 92585. You can contact us at <a href="mailto:support@smartplaycaddie.com">support@smartplaycaddie.com</a> for any privacy-related question, request, or complaint.</p>
 <p>This policy explains what personal data we collect, why we collect it, who we share it with, how long we keep it, and the rights you have over it.</p>
 
 <h2>2. Data we collect</h2>
@@ -34,10 +34,11 @@ max-width:46rem;margin:0 auto;padding:1rem .25rem 2rem;text-align:left;}
 <tr><td><strong>Profile data</strong></td><td>Name, golf handicap, home course, preferences</td><td>Personalize your caddie's advice and surface your stats</td><td>You enter this during onboarding and in Settings</td></tr>
 <tr><td><strong>Location (GPS)</strong></td><td>Coarse and precise device location while the App is open or during an active round in the background</td><td>Find courses near you, compute yardages to greens and hazards, detect hole transitions during a round</td><td>Only after you grant permission, and only while the App or an active round needs it</td></tr>
 <tr><td><strong>Audio (voice)</strong></td><td>Recordings of your spoken queries to your caddie</td><td>Transcribe your question and route it to a response</td><td>Only while a listening session is open; recordings are not retained after transcription</td></tr>
-<tr><td><strong>Audio (practice / cage)</strong></td><td>Microphone capture during practice sessions</td><td>Acoustic strike detection and ball-speed estimation</td><td>Only while a practice session is recording</td></tr>
+<tr><td><strong>Audio (practice)</strong></td><td>Microphone capture during practice sessions</td><td>Acoustic strike detection and ball-speed estimation</td><td>Only while a practice session is recording</td></tr>
 <tr><td><strong>Video</strong></td><td>Camera capture during swing recording, lie analysis, and SmartFinder</td><td>Swing analysis, lie and turf analysis, on-course distance assistance</td><td>Only while you are actively in those features; videos save locally to your device unless you choose to upload</td></tr>
 <tr><td><strong>Round data</strong></td><td>Shot-by-shot history, per-club statistics, scoring, hole-by-hole performance</td><td>Generate your scorecard, recap, and long-term trends</td><td>Created during rounds you start in the App</td></tr>
 <tr><td><strong>Practice data</strong></td><td>Practice session results, swing analyses, drill recommendations</td><td>Track practice performance and detect patterns over time</td><td>Created when you use the practice and swing-analysis features</td></tr>
+<tr><td><strong>Health &amp; fitness (Android only)</strong></td><td>Step count, distance walked, average and maximum heart rate, and active calories for the duration of a round, read from Health Connect</td><td>Show you what the round cost you physically in your post-round recap, and let your caddie mention it when he walks you through the round</td><td>Android only, only if you grant Health Connect access and leave Health Data on in Settings, and only for the window between the start and end of a round you played in the App. We never read your health data outside a round.</td></tr>
 <tr><td><strong>Backup identifier</strong></td><td>An email address and a passphrase you choose, used only in hashed form</td><td>Identify your backup so you can restore it on a new device</td><td>Only if you turn on optional cloud backup</td></tr>
 <tr><td><strong>Device data</strong></td><td>Operating system, app version, device model, language, timezone</td><td>Diagnostic context for crash reports and feature compatibility</td><td>At app start and on crash</td></tr>
 <tr><td><strong>Crash and diagnostic data</strong></td><td>Stack traces and breadcrumb logs</td><td>Debugging and stability</td><td>When a crash or error occurs</td></tr>
@@ -58,7 +59,7 @@ max-width:46rem;margin:0 auto;padding:1rem .25rem 2rem;text-align:left;}
 <tr><th>Where</th><th>What's stored</th><th>How long</th></tr>
 <tr><td><strong>On your device</strong></td><td>All profile data, round history, practice history, and swing videos saved locally</td><td>Until you uninstall the App or clear app data; you can also delete specific items in-app</td></tr>
 <tr><td><strong>Our backend (Vercel-hosted serverless API)</strong></td><td>Transient request and response state for AI features. Logs may include redacted timing data and error messages</td><td>API request logs ≤ 30 days; no user content beyond the duration of the request</td></tr>
-<tr><td><strong>Cloud backup (optional, opt-in)</strong></td><td>If you turn on cloud backup, a snapshot of your on-device data (rounds, practice history, settings) is stored in our Supabase database</td><td>Until you overwrite it with a newer backup or ask us to delete it</td></tr>
+<tr><td><strong>Cloud backup (optional, opt-in)</strong></td><td>If you turn on cloud backup, a snapshot of your on-device data (rounds, practice history, settings) is stored in our Supabase database. Because health readings are attached to the round they were measured during, a round’s step, distance, heart-rate and calorie figures are included in that snapshot. Turning off Health Data in Settings stops new readings being attached; deleting a round removes its readings from the next backup</td><td>Until you overwrite it with a newer backup or ask us to delete it</td></tr>
 <tr><td><strong>Third-party processors (see §4)</strong></td><td>Your audio, video, or text is sent to the relevant provider only for the duration of the request</td><td>Processor retention varies; see §4</td></tr>
 </table>
 </div>
@@ -121,6 +122,7 @@ max-width:46rem;margin:0 auto;padding:1rem .25rem 2rem;text-align:left;}
 <li><strong>Microphone</strong> — voice queries to your caddie and practice-session strike detection.</li>
 <li><strong>Camera</strong> — swing recording, lie analysis, and SmartFinder distance assistance.</li>
 <li><strong>Location (when in use, and in the background during an active round)</strong> — find courses, compute yardages, and detect hole transitions while your phone is in your pocket. Background location is used only while a round is in progress and stops when the round ends.</li>
+<li><strong>Health Connect (Android only)</strong> — read step count, distance, heart rate, and active calories for a round you played, so your recap can show what the walk cost you. Read-only: we never write anything back to Health Connect, and we never share this data with a third party or use it for advertising.</li>
 <li><strong>Photo library</strong> — save your swing videos and round share-cards.</li>
 <li><strong>Bluetooth media-key access</strong> — earbud tap to engage your caddie hands-free.</li>
 </ul>

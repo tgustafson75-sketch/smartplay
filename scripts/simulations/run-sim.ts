@@ -14543,16 +14543,43 @@ check(
   // ── The disclosure half. Read the PROSE (not readCode) — this is what a player sees.
   const manifest = read('app.json');
   const healthPerms = (manifest.match(/android\.permission\.health\.READ_[A-Z_]+/g) ?? []);
-  const published = read('docs/privacy-policy.html');
+  /**
+   * 2026-09-03 — EVERY published copy, not the one whoever wrote this happened to open.
+   *
+   * The first version of this guard read only docs/privacy-policy.html, so it went green while the
+   * two files that are ACTUALLY published — docs/legal-site/* — still carried the August policy with
+   * no health disclosure, no registered address and the word "cage" the app no longer uses. The live
+   * site served that stale copy for hours with a passing guard on top of it. Three files holding one
+   * document is the defect; a guard that checks one of them is the defect wearing a badge.
+   * [[two-owners-is-the-root-cause]] [[no-half-fixes-enforce-every-surface]]
+   */
+  const POLICY_FILES = [
+    'docs/privacy-policy.html',
+    'docs/legal-site/privacy.html',
+    'docs/legal-site/privacy-embed.html',
+  ];
+  const policies = POLICY_FILES.map((f) => ({ file: f, text: read(f) }));
+  const published = policies.map((x) => x.text).join('\n');
+  const missingHealth = policies.filter((x) => !/Health Connect/.test(x.text) || !/Health &amp; fitness/.test(x.text));
+  const staleCage = policies.filter((x) => /\bcage\b/i.test(x.text));
   const inApp = read('constants/legalText.ts');
   check(
-    'HEALTH: every health permission we declare is disclosed in BOTH policies',
+    'HEALTH: every health permission we declare is disclosed in EVERY policy copy',
     healthPerms.length === 0 ||
-      (/Health Connect/.test(published) && /Health &amp; fitness/.test(published) &&
+      (missingHealth.length === 0 &&
        /Health Connect/.test(inApp) && /Health & fitness/.test(inApp)),
     healthPerms.length === 0
       ? 'no health permissions declared, so nothing to disclose'
-      : `${healthPerms.length} health permissions declared — the published policy and the in-app policy must both name Health Connect and carry a health & fitness category`,
+      : missingHealth.length
+        ? `${healthPerms.length} health permissions declared, but these copies do not disclose them: ${missingHealth.map((x) => x.file).join(', ')}`
+        : `${healthPerms.length} health permissions declared — the in-app policy must also name Health Connect and carry a health & fitness category`,
+  );
+  check(
+    'POLICY: no published copy still says "cage"',
+    staleCage.length === 0,
+    staleCage.length
+      ? `the app has no cage anywhere — mode, store, screen or label — but these still tell the player it does: ${staleCage.map((x) => x.file).join(', ')}`
+      : 'every policy copy uses the language the app actually ships',
   );
   check(
     'HEALTH: the policy says the readings ride along in cloud backup',
