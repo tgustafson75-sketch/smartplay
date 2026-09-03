@@ -13,6 +13,8 @@
 
 import type { RoundRecap, HoleComparison } from '../types/plan';
 import type { RoundRecord } from '../store/roundStore';
+// Pure, types-only itself — importing it keeps this module synchronously callable on render.
+import { describeRoundEffort } from './roundEffort';
 
 export function synthesizeRecapFromRecord(record: RoundRecord): RoundRecap {
   const holes = Object.keys(record.scores ?? {})
@@ -37,5 +39,7 @@ export function synthesizeRecapFromRecord(record: RoundRecord): RoundRecap {
     hole_comparisons,
     overall_kevin_summary: record.summary ?? null,
     ghost_match: null,
+    // The record is the ONLY source of this — an archived recap never carries it.
+    effort: describeRoundEffort(record.health),
   };
 }

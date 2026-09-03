@@ -14481,6 +14481,83 @@ check(
 }
 
 /**
+ * ─── 2026-09-03 — A PERMISSION WITH NO READER AND NO DISCLOSURE ─────────────────────────────────
+ *
+ * Phase 413 (May) requested four Health Connect permissions — Steps, Distance, HeartRate,
+ * ActiveCaloriesBurned — read them at round end, wrote them onto roundHistory[].health, and carried
+ * them to Supabase inside the `round-store-v1` backup. Nothing ever read them back. `hasWatchData`
+ * appeared in exactly ONE file, the writer, for three and a half months. The field's own header
+ * claimed the recap "can incorporate them", which was true only in the sense that nothing stopped
+ * it. Neither privacy policy mentioned health data at all.
+ *
+ * That is the worst state a permission can be in, and it is invisible: no test fails, no screen
+ * looks wrong, and the app keeps asking for heart rate every round. Google's Health Connect review
+ * asks which user-facing feature justifies each type requested, so the dead end was also the thing
+ * most likely to fail submission.
+ *
+ * Two properties keep it closed. The data must have a READER, and every sensitive permission the
+ * manifest declares must be DISCLOSED in the documents a player can actually read.
+ * [[orphans-are-live-bugs-not-dead-code]]
+ */
+{
+  const effort = readCode('services/roundEffort.ts');
+  check(
+    'HEALTH: the round-health block has exactly one reader, and it is a real one',
+    /export function describeRoundEffort\(health: RoundRecord\['health'\]\): RoundEffort \| null/.test(effort) &&
+      /if \(!health \|\| !health\.hasWatchData\) return null;/.test(effort),
+    'a reader that cannot say "no watch, nothing to report" would put a zeroed card on most rounds',
+  );
+  check(
+    'HEALTH: a sample that landed empty is still nothing to report',
+    /const hasAnything = steps > 0 \|\| distanceMeters > 0 \|\| activeCalories > 0 \|\| heartRateAvg != null;/.test(effort) &&
+      /if \(!hasAnything\) return null;/.test(effort),
+    'hasWatchData means a sample ARRIVED, not that it carried anything — a grant revoked mid-round lands here all zeroes',
+  );
+  check(
+    'HEALTH: the recap is built with the effort on it',
+    /effort: describeRoundEffort\(record\.health\)/.test(readCode('services/recapSynth.ts')),
+    'the RoundRecord is the only source of this — if the synth does not attach it, nothing else can',
+  );
+  check(
+    'HEALTH: the card survives a round that HAS an archived recap',
+    /effort: synth\.effort \?\? archive\.effort \?\? null,/.test(readCode('app/recap/[round_id].tsx')),
+    'mergeRecap spreads structureFrom, which is the ARCHIVE when it has more hole rows — and an archive never carries effort, so without this line the card vanishes on exactly the richest rounds',
+  );
+  check(
+    'HEALTH: the caddie says the same numbers the card shows',
+    /if \(recap\.effort\?\.headline\)/.test(readCode('services/recapNarration.ts')) &&
+      /audio_text: recap\.effort\.headline/.test(readCode('services/recapNarration.ts')),
+    'the headline comes from the one owner, so Kevin cannot say 6.2 miles over a card reading 6.3',
+  );
+  check(
+    'HEALTH: the recap screen actually renders it',
+    /\{recap\.effort && \(/.test(readCode('app/recap/[round_id].tsx')) &&
+      /THE WALK/.test(read('app/recap/[round_id].tsx')),
+    'a reader nothing renders is the same orphan wearing a different name',
+  );
+
+  // ── The disclosure half. Read the PROSE (not readCode) — this is what a player sees.
+  const manifest = read('app.json');
+  const healthPerms = (manifest.match(/android\.permission\.health\.READ_[A-Z_]+/g) ?? []);
+  const published = read('docs/privacy-policy.html');
+  const inApp = read('constants/legalText.ts');
+  check(
+    'HEALTH: every health permission we declare is disclosed in BOTH policies',
+    healthPerms.length === 0 ||
+      (/Health Connect/.test(published) && /Health &amp; fitness/.test(published) &&
+       /Health Connect/.test(inApp) && /Health & fitness/.test(inApp)),
+    healthPerms.length === 0
+      ? 'no health permissions declared, so nothing to disclose'
+      : `${healthPerms.length} health permissions declared — the published policy and the in-app policy must both name Health Connect and carry a health & fitness category`,
+  );
+  check(
+    'HEALTH: the policy says the readings ride along in cloud backup',
+    /heart-rate/.test(published) && /included in that snapshot/.test(published),
+    'roundHistory[].health sits inside round-store-v1, which IS in BACKED_UP_STORE_KEYS — a policy that describes the backup without naming heart rate is describing a different product',
+  );
+}
+
+/**
  * ─── 2026-09-01 — THE CAMERA ANGLE IS JUDGED AT ADDRESS ─────────────────────────────────────────
  *
  * Tim: "the club arc shows up sporadically and mostly incorrect… it may get the direction right, but

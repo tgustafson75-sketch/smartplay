@@ -50,6 +50,11 @@ function mergeRecap(synth: RoundRecap | null, archive: RoundRecap | null): Round
       return a?.kevin_summary ? { ...h, kevin_summary: a.kevin_summary, matched_shots: a.matched_shots?.length ? a.matched_shots : h.matched_shots } : h;
     }),
     ghost_match: structureFrom.ghost_match ?? archive.ghost_match,
+    // 2026-09-03 — effort is derived from the stored RoundRecord, so only the synthesized side can
+    // ever have it. When the archive wins on structure, spreading structureFrom drops it silently
+    // and the card vanishes on exactly the rounds with the richest archive. Carried explicitly, the
+    // same way ghost_match is. [[no-half-fixes-enforce-every-surface]]
+    effort: synth.effort ?? archive.effort ?? null,
   };
 }
 
@@ -698,6 +703,42 @@ export default function RecapScreen() {
               </View>
             )}
 
+            {/* 2026-09-03 — THE WALK. Renders only when a watch actually measured the round, which
+                is a minority of them; describeRoundEffort returns null for everything else rather
+                than a row of zeroes. This is the reader that was missing for Phase 413's four
+                Health Connect permissions — without it we were collecting heart rate for nobody. */}
+            {recap.effort && (
+              <View style={styles.effortCard}>
+                <Text style={styles.effortLabel}>THE WALK</Text>
+                <View style={styles.effortRow}>
+                  {recap.effort.distanceMiles >= 0.1 && (
+                    <View style={styles.effortItem}>
+                      <Text style={styles.effortValue}>{recap.effort.distanceMiles}</Text>
+                      <Text style={styles.effortUnit}>MILES</Text>
+                    </View>
+                  )}
+                  {recap.effort.steps > 0 && (
+                    <View style={styles.effortItem}>
+                      <Text style={styles.effortValue}>{recap.effort.steps.toLocaleString('en-US')}</Text>
+                      <Text style={styles.effortUnit}>STEPS</Text>
+                    </View>
+                  )}
+                  {recap.effort.heartRateAvg != null && (
+                    <View style={styles.effortItem}>
+                      <Text style={styles.effortValue}>{recap.effort.heartRateAvg}</Text>
+                      <Text style={styles.effortUnit}>AVG BPM</Text>
+                    </View>
+                  )}
+                  {recap.effort.activeCalories > 0 && (
+                    <View style={styles.effortItem}>
+                      <Text style={styles.effortValue}>{recap.effort.activeCalories.toLocaleString('en-US')}</Text>
+                      <Text style={styles.effortUnit}>CALORIES</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            )}
+
             <View style={styles.kevinCard}>
               <Text style={styles.kevinLabel}>{caddieName.toUpperCase()}</Text>
               <Text style={styles.kevinOverall}>{recap.overall_kevin_summary}</Text>
@@ -944,6 +985,16 @@ const styles = StyleSheet.create({
   ghostBannerLabel: { color: '#6b7280', fontSize: 9, fontWeight: '800', letterSpacing: 2, marginBottom: 2 },
   ghostBannerName: { color: '#ffffff', fontSize: 13, fontWeight: '700', marginBottom: 4 },
   ghostBannerDelta: { fontSize: 20, fontWeight: '900' },
+  effortCard: {
+    marginHorizontal: 12, marginBottom: 12,
+    backgroundColor: '#0d1a25', borderRadius: 10,
+    borderWidth: 1.5, borderColor: '#1f3242', padding: 12,
+  },
+  effortLabel: { color: '#6b7280', fontSize: 9, fontWeight: '800', letterSpacing: 2, marginBottom: 8 },
+  effortRow: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'flex-start' },
+  effortItem: { alignItems: 'center', flex: 1 },
+  effortValue: { color: '#ffffff', fontSize: 20, fontWeight: '900' },
+  effortUnit: { color: '#6b7280', fontSize: 9, fontWeight: '700', letterSpacing: 1.2, marginTop: 2 },
   kevinCard: {
     marginHorizontal: 12, marginBottom: 16,
     backgroundColor: '#0d2418', borderLeftWidth: 3, borderLeftColor: '#00C896',

@@ -10,8 +10,14 @@
  */
 
 /**
- * 2026-08-30 — the TERMS changed today (sections 1, 10 and 20); the Privacy Policy did not, and
- * keeps its own July 18 date below. Nothing reads this constant, so it documents rather than drives.
+ * 2026-09-03 — the PRIVACY POLICY changed today and now carries its own September 3 date below:
+ * health & fitness data was disclosed for the first time (Phase 413 has been reading Steps,
+ * Distance, HeartRate and ActiveCaloriesBurned from Health Connect since May without a word of it
+ * appearing here), the registered address was filled in, and 'cage' — a term the app no longer uses
+ * anywhere — was replaced with 'practice' in the two places players could still read it.
+ *
+ * 2026-08-30 — the TERMS changed (sections 1, 10 and 20). Nothing reads this constant, so it
+ * documents rather than drives.
  *
  * NOTE FOR WHOEVER DECIDES: there is NO re-consent mechanism. `termsAcceptedAt` is a bare timestamp
  * that is never compared against this date, so bumping it does not re-prompt anyone who already
@@ -231,9 +237,9 @@ Questions regarding these Terms may be directed to the contact information above
 
 export const PRIVACY_POLICY = `# SmartPlay Caddie Privacy Policy
 
-**Effective Date:** July 18, 2026
+**Effective Date:** September 3, 2026
 
-SmartPlay Caddie ("the App", "we", "us") is a golf companion mobile application operated by SmartPlay AI LLC. You can contact us at **support@smartplaycaddie.com** for any privacy-related question, request, or complaint.
+SmartPlay Caddie ("the App", "we", "us") is a golf companion mobile application operated by SmartPlay AI LLC, 29003 Navigator Way, Menifee, CA 92585. You can contact us at **support@smartplaycaddie.com** for any privacy-related question, request, or complaint.
 
 This policy explains what personal data we collect, why we collect it, who we share it with, how long we keep it, and the rights you have over it.
 
@@ -244,9 +250,10 @@ We collect the minimum needed to make each feature work, and we tell you in the 
 * **Profile data** — name, golf handicap, home course, preferences. Used to personalize your caddie advice and stats. You enter this in the App.
 * **Location (GPS)** — coarse and precise device location while the App is open or during an active round. Used to find courses near you, compute yardages, and detect hole transitions. Only after you grant permission.
 * **Audio (voice)** — recordings of your spoken queries to the caddie. Used to transcribe your question and respond. Recordings are not retained after transcription.
-* **Audio (cage / swing)** — microphone capture during practice sessions, for acoustic strike detection and estimation. Only while a session is recording.
+* **Audio (practice / swing)** — microphone capture during practice sessions, for acoustic strike detection and estimation. Only while a session is recording.
 * **Video** — camera capture during swing recording, lie analysis, and SmartFinder. Videos save locally to your device unless you choose to upload.
 * **Round & practice data** — shot history, per-club stats, scoring, swing analyses. Used to generate your scorecard, recap, and trends.
+* **Health & fitness (Android only)** — step count, distance walked, average and maximum heart rate, and active calories for the duration of a round, read from Health Connect. Used to show what the round cost you physically in your recap and to let your caddie mention it. Only with your Health Connect grant and the Health Data toggle on, and only for the window of a round you played. Read-only, never shared, never used for advertising.
 * **Device & crash data** — OS, app version, device model, language, timezone, and (when enabled) crash logs, for diagnostics.
 
 ### What we do NOT collect
@@ -298,10 +305,11 @@ We use industry-standard transport encryption (HTTPS / TLS) for all communicatio
 
 The App requests these device permissions, each with a specific reason shown in the OS prompt:
 
-* **Microphone** — voice queries and cage-session strike detection.
+* **Microphone** — voice queries and practice-session strike detection.
 * **Camera** — swing recording, lie analysis, SmartFinder distance assistance.
 * **Location (while in use)** — find courses, compute yardages, detect hole transitions.
 * **Location (background)** — only if you enable it, so yardages keep updating with your screen off during a round.
+* **Health Connect (Android only)** — read steps, distance, heart rate, and active calories for a round, so your recap can show the walk. Read-only; we never write back.
 * **Photos** — save your hero-moment shots and share-cards.
 * **Bluetooth** — earbud / glasses tap-to-engage the caddie.
 

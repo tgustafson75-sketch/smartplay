@@ -31,6 +31,14 @@ export function buildNarrationScript(recap: RoundRecap): NarrationSegment[] {
     }
   }
 
+  // 2026-09-03 — the walk, when a watch measured it. Placed after the holes and before the ghost
+  // result: it closes out the round as a physical event rather than competing with the scoring
+  // narrative. The sentence comes from services/roundEffort, the same owner the recap card reads,
+  // so Kevin cannot say 6.2 miles over a card that says 6.3.
+  if (recap.effort?.headline) {
+    segments.push({ audio_text: recap.effort.headline, hole_to_highlight: null });
+  }
+
   // Ghost result if applicable
   if (recap.ghost_match?.overall_delta != null) {
     const d = recap.ghost_match.overall_delta;

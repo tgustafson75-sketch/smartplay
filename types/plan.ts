@@ -27,6 +27,8 @@ export interface HoleComparison {
 
 // ─── RoundRecap (archived) ──────────────────────────────────────────────────
 
+import type { RoundEffort } from '../services/roundEffort';
+
 export interface RoundRecap {
   round_id: string;
   course_id: string;
@@ -38,4 +40,11 @@ export interface RoundRecap {
   hole_comparisons: HoleComparison[];
   overall_kevin_summary: string | null;
   ghost_match?: GhostMatchSnapshot | null;
+  /**
+   * 2026-09-03 — what the round cost physically, when a watch was there to measure it. Derived
+   * from the record's Health Connect block by services/roundEffort; null on the overwhelming
+   * majority of rounds (no watch, or iOS). Never present on an ARCHIVED recap — the server has
+   * never seen this data — so mergeRecap carries it across from the synthesized side explicitly.
+   */
+  effort?: RoundEffort | null;
 }
