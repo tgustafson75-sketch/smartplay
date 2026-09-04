@@ -82,3 +82,12 @@ SmartPlay_VO_*.mp3
 # git repos nested inside this project; never track them as content or
 # submodule references in the parent.
 .claude/worktrees/
+
+# 2026-09-04 — Cowork <-> Claude Code shared scratch channel. Local only;
+# never committed, never deployed, never read by the app at runtime.
+#
+# No trailing slash, deliberately. "_handoff/" would match the DIRECTORY only, and a symlink
+# named _handoff is a file — it would not be ignored, and `git add -A` would commit it. That
+# is exactly how node_modules got committed as a self-symlink on 2026-09-03 and destroyed
+# itself on every checkout for two sessions.
+_handoff
