@@ -100,7 +100,8 @@
         "language": "en-US"
       },
       "android": {
-        "track": "internal"
+        "track": "internal",
+        "serviceAccountKeyPath": "/Users/timothyg/.config/smartplay/play-service-account.json"
       }
     },
     "production": {
@@ -111,7 +112,8 @@
         "language": "en-US"
       },
       "android": {
-        "track": "internal"
+        "track": "internal",
+        "serviceAccountKeyPath": "/Users/timothyg/.config/smartplay/play-service-account.json"
       }
     }
   }
