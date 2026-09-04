@@ -62,7 +62,34 @@ const fs = require('fs');
 const path = require('path');
 
 // ─── Constants ───────────────────────────────────────────────────────
-const MP_VERSION = '0.10.14'; // current stable as of 2026-05
+/**
+ * 2026-09-04 — BUMPED 0.10.14 -> 0.10.29 FOR 16 KB PAGE SIZES.
+ *
+ * Google Play rejected bundle 25 at the review step: "Your app does not support 16 KB memory page
+ * sizes." Apps targeting Android 15+ must ship 64-bit native libraries whose PT_LOAD segments are
+ * aligned to 16384 bytes; on a device using 16 KB pages an unaligned library can fail to load.
+ *
+ * Measured rather than guessed. Every 64-bit .so in bundle 25 was read out of the AAB and its ELF
+ * program headers parsed: 56 libraries aligned to 16384, and exactly ONE at 4096 —
+ * libmediapipe_tasks_vision_jni.so, from this dependency. Nothing else in the app was at fault.
+ *
+ * Then the candidate versions were checked the same way, by downloading each AAR and reading the
+ * header, instead of trusting a release note:
+ *
+ *     0.10.14    align 4096   <- what we shipped
+ *     0.10.21    align 4096
+ *     0.10.26.1  align 16384
+ *     0.10.29    align 16384  <- chosen
+ *     0.10.35    ships no arm64-v8a library at all — avoided deliberately
+ *
+ * The APIs this app uses (PoseLandmarker, PoseLandmarkerResult, BaseOptions, Delegate, RunningMode,
+ * BitmapImageBuilder, MPImage) are unchanged across the range.
+ *
+ * ANDROID ONLY in effect. The iOS mod below writes a `pod 'MediaPipeTasksVision'` line, but that pod
+ * is not present in the generated Podfile and the iOS pose path was never finished (its sources are
+ * not registered with the Xcode target), so no iOS binary is affected by this number.
+ */
+const MP_VERSION = '0.10.29';
 const MP_MODEL_ASSET_RELPATH = 'mediapipe/pose_landmarker_full.task';
 // 2026-05-23 — All variants the JS service may load. The plugin
 // copies every one that's present in assets/mediapipe/. Missing
