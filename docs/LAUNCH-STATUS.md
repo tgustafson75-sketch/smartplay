@@ -21,12 +21,12 @@ you touch.
 
 | # | Item | Owner | Status |
 |---|---|---|---|
-| 1 | `REFERRAL_SALT` env var set on Vercel (any long random string; never rotate once live — rotating invalidates every existing referral code) | **Cowork** | ☐ not started |
-| 2 | Run `supabase/migrations/0009_referrals.sql` against the `smartplay` schema | **Cowork** | ☐ not started |
+| 1 | `REFERRAL_SALT` env var set on Vercel (any long random string; never rotate once live — rotating invalidates every existing referral code) | **Cowork** | ☐ **STILL OPEN** |
+| 2 | Run `supabase/migrations/0009_referrals.sql` against the `smartplay` schema | **Cowork** | ☐ **STILL OPEN** |
 | 3 | ~~Publish the September 3 privacy policy~~ | ~~Cowork~~ → **Code** | ✅ **DONE 2026-09-03** — live and verified at `smartplaycaddie.com/privacy` (19,426 bytes, health disclosure + address present, "cage" gone). See the note below: this was never a dashboard task. |
-| 4 | Create the Play Console app (`com.smartplaycaddie.app`) | **Cowork** | ☐ not started |
-| 5 | ~~Health Connect declaration form~~ | ~~Cowork~~ | ✅ **NOT NEEDED for 1.0** — health is out of the build entirely. The four `health.READ_*` permissions, the `react-native-health-connect` plugin and the API-34 rationale alias are all gone from `app.json`; a prebuild on 2026-09-03 confirms **zero** `permission.health` entries in the manifest. Filing this declaration would describe a feature the binary does not have. Comes back in 1.1 with the permissions. |
-| 6 | Background location declaration form | **Cowork** | ☐ not started |
+| 4 | Create the Play Console app (`com.smartplaycaddie.app`) | **Cowork** | ✅ **DONE 2026-09-03 (Cowork)** — Play app ID `4973574947441812809`. RevenueCat Play app `appdf3a1c0d56` also created. |
+| 5 | ~~Health Connect declaration form~~ ✅ *Cowork confirms 2026-09-03: filed as "no health features", matching the binary.* | ~~Cowork~~ | ✅ **NOT NEEDED for 1.0** — health is out of the build entirely. The four `health.READ_*` permissions, the `react-native-health-connect` plugin and the API-34 rationale alias are all gone from `app.json`; a prebuild on 2026-09-03 confirms **zero** `permission.health` entries in the manifest. Filing this declaration would describe a feature the binary does not have. Comes back in 1.1 with the permissions. |
+| 6 | Background location declaration form | **Cowork** | ⚠️ **REPORTED CLEAR, RE-CHECK AFTER THE FIRST AAB UPLOAD.** Cowork 2026-09-03: App content shows "You're all caught up", zero declarations pending. But **no AAB has been uploaded to Play yet** (the Android submit is still blocked on the service account key), and Play surfaces the background-location declaration off the permissions it finds in an uploaded bundle. Expect it to appear once versionCode 23 lands on the internal track. Not a contradiction of Cowork's check — a different moment in time. |
 | 7 | Background location **video** (screen recording — see recipe below) | **Tim** | ✅ **UNBLOCKED** — OTA shipped 2026-09-03 to production + preview from `a20c4031`. Force-close and reopen the app to pick it up, then film. |
 | 8 | Fresh EAS native build (API 36 + permission changes) | **Code** | ✅ **DONE 2026-09-03** — both platforms, `production` profile/channel, 1.0.0 build **23**. Android AAB `6abd67e6-3948-4ced-b566-2a856984a050`, iOS IPA `3b04e18d-2940-4c9a-b1d5-fd70eac098dc`. iOS **submitted to App Store Connect**; Android AAB built but **not** submitted (no Play service account key yet). |
 | 9 | Decision: ship 1.0 with `SUBSCRIPTIONS_ENABLED` false, or flip it | **Tim** | ✅ **FLIPPED TRUE 2026-09-03.** The listing and the Play Purchase-history declaration both describe a paid app, so the binary had to match the paperwork. Both real RevenueCat public keys are in; the test-store key is deleted. **Consequence: the paywall is live, so the store products must exist or testers meet an empty paywall.** |
@@ -35,13 +35,16 @@ you touch.
 
 | Item | Owner | Status |
 |---|---|---|
-| Store listing, screenshots, Target audience, Content rating questionnaire, pricing & countries | **Cowork** | ☐ |
+| Store listing, screenshots, Target audience, Content rating questionnaire, pricing | **Cowork** | ✅ **DONE 2026-09-03 (Cowork)** — icon, feature graphic, 8 phone + 8× 7" + 8× 10" tablet screenshots; Target audience 18+; content rating complete; app price **Free** (subscriptions are IAP, so free-to-install is correct). |
+| **Play subscription products** — create them and attach to RevenueCat entitlement `smartplay_caddie_pro` | **Cowork** | ☐ **STILL OPEN — this is the one that matters.** The RevenueCat Play *app* exists (`appdf3a1c0d56`), which is not the same as the *products*. `SUBSCRIPTIONS_ENABLED` is true in the shipped binary, so with no products the paywall renders empty. |
+| Countries / availability, and tax setup | **Cowork** | ☐ |
 | Cut the pricing block from the Play description if `SUBSCRIPTIONS_ENABLED` stays false — the listing must match the build | **Cowork** | 🔄 in progress (Tim, 09-03) |
 | Sign in details → name `support@smartplaycaddie.com` / `tim@smartplaycaddie.com` | **Cowork** | ☐ — code side DONE (`e9f7dda9`) |
-| App Store Connect app record → get the iOS **App ID** | **Cowork** | ☐ |
-| Replace the placeholder store URLs in the referral landing page once the App ID exists (`api/referral.ts`, currently `id0000000000`) | **Code** | ⛔ blocked on the App ID |
-| App Store Connect: IAP products, Small Business Program | **Cowork** | ☐ |
-| RevenueCat entitlement `full` | **Cowork** | ☐ |
+| **Play service account key** — Google Cloud IAM → JSON key → invite into Play Console → grant Release. Hand the JSON to Code. | **Cowork** | 🔴 **THE ONLY THING BLOCKING THE ANDROID SUBMIT.** `eas submit` fails with "Google Service Account Keys cannot be set up in --non-interactive mode." Target track is **internal**. |
+| App Store Connect app record → get the iOS **App ID** | **Cowork** | ✅ **DONE** — `6772344465`. Used for the referral landing page's App Store link in `7811cff5`; the `id0000000000` placeholder is gone. |
+| Replace the placeholder store URLs in the referral landing page | **Code** | ✅ **DONE `7811cff5`** — real ASC id `6772344465`. |
+| App Store Connect: IAP products, Small Business Program | **Cowork** | ☐ **STILL OPEN** — same empty-paywall consequence as the Play products. |
+| RevenueCat entitlement — the code reads **`smartplay_caddie_pro`**, not `full` | **Cowork** | ☐ **STILL OPEN.** This row used to say `full`; that is the old name. Both stores' products must attach to `smartplay_caddie_pro` or entitlements never resolve. |
 | Tier C device verification — invite screen, recap "THE WALK" card, background-location disclosure | **Tim** | ☐ WiFi-only iPad: no GPS or Watch verification possible on iOS |
 
 ---
