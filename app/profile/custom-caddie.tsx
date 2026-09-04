@@ -270,7 +270,12 @@ export default function CustomCaddieScreen() {
       // not the share sheet. Fall back to the share sheet only if the photo
       // permission is denied, so the image is never lost.
       const ML = await import('expo-media-library');
-      const perm = await ML.requestPermissionsAsync();
+      // 2026-09-04 — writeOnly. This was the one call site of three that asked for FULL
+      // library access when all it ever does is saveToLibraryAsync on the next line. The
+      // read half triggered the Android photo-picker prompt and put READ_MEDIA_IMAGES /
+      // READ_MEDIA_VIDEO in the manifest, which in turn forced Play's "Photo and video
+      // permissions" declaration. Both swinglab call sites already passed true.
+      const perm = await ML.requestPermissionsAsync(true);
       if (perm.granted || perm.accessPrivileges === 'limited') {
         await ML.saveToLibraryAsync(file.uri);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

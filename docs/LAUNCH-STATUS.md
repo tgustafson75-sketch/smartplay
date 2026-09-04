@@ -89,12 +89,21 @@ RECORD_AUDIO · CAMERA
 ACCESS_FINE_LOCATION · ACCESS_COARSE_LOCATION · ACCESS_BACKGROUND_LOCATION
 VIBRATE · MODIFY_AUDIO_SETTINGS · POST_NOTIFICATIONS · INTERNET
 FOREGROUND_SERVICE · FOREGROUND_SERVICE_LOCATION
-READ_MEDIA_IMAGES · READ_MEDIA_VIDEO · READ_MEDIA_VISUAL_USER_SELECTED
 ```
 
-**14 permissions, and NO health permissions.** Re-verified from a clean prebuild on 2026-09-03
-after the build that was actually submitted. `grep -c permission.health` on the generated manifest
+**11 permissions. No health permissions, and as of build 24 no media-READ permissions.**
+Re-verified from a clean prebuild on 2026-09-04. On the generated manifest,
+`grep -c permission.health` returns **0**, and READ_MEDIA lines not carrying `tools:node="remove"`
 returns **0**.
+
+⚠️ **Verifying `blockedPermissions` — read this before checking.** A blocked permission is still
+*written into* the prebuild manifest, carrying `tools:node="remove"`; Gradle strips it at merge
+time. So `grep -c READ_MEDIA` returns 4, not 0, and that is CORRECT. The check that means anything
+is the count of matches **without** the remove attribute:
+
+```
+grep 'READ_MEDIA' android/app/src/main/AndroidManifest.xml | grep -vc 'tools:node="remove"'   -> 0
+```
 
 ⚠️ **CORRECTION to what this file said earlier.** It previously claimed READ_EXTERNAL_STORAGE and
 WRITE_EXTERNAL_STORAGE "were REMOVED — do not declare them". Deleting them from `app.json` did
@@ -113,6 +122,9 @@ any of these:**
 | `READ_MEDIA_AUDIO` | expo-media-library's default `granularPermissions` (photo+video+**audio**) | No conceivable justification for a golf app. Also narrowed at source to `['photo','video']` |
 | `ACTIVITY_RECOGNITION` | expo-sensors' own manifest | A dangerous runtime permission ("Physical activity"). Nothing uses Pedometer |
 | `SYSTEM_ALERT_WINDOW` | expo-dev-client | "Display over other apps" — a dev-menu overlay with no place in a store build |
+| `READ_MEDIA_IMAGES` | app.json permissions array + expo-media-library `granularPermissions` | **Added to this table 2026-09-04 (build 24).** Nothing in the app READS the photo library — all three call sites only `saveToLibraryAsync`. Asking for read forced Play's "Photo and video permissions" declaration for a capability the app does not use |
+| `READ_MEDIA_VIDEO` | same | same |
+| `READ_MEDIA_VISUAL_USER_SELECTED` | same | same |
 
 `FOREGROUND_SERVICE_MEDIA_PLAYBACK` was **removed from app.json** (not blocked — nothing else
 contributes it). No service in the build declares that type; the only foreground service is
