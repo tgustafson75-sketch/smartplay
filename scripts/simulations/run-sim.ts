@@ -11271,8 +11271,20 @@ check('LOCK: "Didn\'t catch that" is spoken ONLY when the mic actually heard not
       /micNeverOpened \? micTroubleFor\(lang\) : CADDIE_NOTICE_DIDNT_CATCH/.test(ls) &&
       /transcribeFailed[\s\S]{0,200}?speakHonestFailure\(/.test(ls);
     // A deliberate cancel is not a failure and must not mail Tim.
-    const cancelQuiet = /if \(!silentBail\) logVoiceSilentFail\('listen_no_transcript'/.test(ls);
-    return typed && logged && honest && cancelQuiet;
+    //
+    // 2026-09-04 — REPOINTED FROM THE SPELLING TO THE BEHAVIOUR. This matched the literal text
+    // `if (!silentBail) logVoiceSilentFail('listen_no_transcript'`, so it went red the moment the
+    // logger became conditional — while the property it exists to protect (a cancel logs nothing
+    // at all) was never touched. What matters is that the !silentBail gate still stands in front
+    // of the log, not which function is on the other side of it.
+    const cancelQuiet = /if \(!silentBail\)[\s\S]{0,160}?'listen_no_transcript'/.test(ls);
+    // …and the same failure is not mailed twice. When capture bails with transcribe_failed, the
+    // real cause was already logged upstream as transcribe_error; this entry is its consequence and
+    // goes to 'diag' so the inbox carries one bullet per defect, not two.
+    const cascadeNotDoubleMailed =
+      /alreadyReportedUpstream = bail === 'transcribe_failed'/.test(ls) &&
+      /alreadyReportedUpstream \? logVoiceDiag : logVoiceSilentFail/.test(ls);
+    return typed && logged && honest && cancelQuiet && cascadeNotDoubleMailed;
   })(),
   'capture reports WHY it came back empty; mic failures are owned, transcribe failures named, cancels stay silent');
 

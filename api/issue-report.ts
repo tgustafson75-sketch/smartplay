@@ -154,9 +154,33 @@ async function emailIssuesToOwner(rows: StoredRow[]): Promise<boolean> {
   const block = (r: StoredRow) => {
     const ctx = (r.context ?? {}) as { route?: string; persona?: string; isRoundActive?: boolean; currentHole?: number; courseId?: string };
     const where = ctx.isRoundActive ? `hole ${ctx.currentHole ?? '?'} @ ${ctx.courseId ?? '?'}` : 'no round';
-    const det = r.details && typeof r.details === 'object' && Object.keys(r.details).length
-      ? '\n  ' + Object.entries(r.details as Record<string, unknown>).map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join(' · ')
-      : '';
+    /**
+     * 2026-09-04 — a STRING details used to render as nothing.
+     *
+     * This tested `typeof r.details === 'object'` and silently produced '' for anything else.
+     * services/roundTrace sent the entire formatted round trace as a bare string, so every ROUND
+     * TRACE email arrived carrying its title and none of its content — the diagnostic was
+     * delivered with the payload dropped, and nothing anywhere said so.
+     *
+     * The sender now passes an object, but this stays defensive on purpose: the next caller to
+     * pass a string should get its text through, not silence. A long multi-line value (a trace)
+     * is printed on its own lines rather than joined with ' · ', which is for short key/value
+     * pairs and turns a timeline into an unreadable ribbon. [[echo-what-the-code-threw-away]]
+     */
+    const det = (() => {
+      if (!r.details) return '';
+      if (typeof r.details === 'string') return r.details.trim() ? `\n${r.details}` : '';
+      if (typeof r.details !== 'object') return `\n  ${String(r.details)}`;
+      const pairs = Object.entries(r.details as Record<string, unknown>);
+      if (!pairs.length) return '';
+      const long = pairs.filter(([, v]) => typeof v === 'string' && (v.includes('\n') || v.length > 200));
+      const short = pairs.filter(([, v]) => !(typeof v === 'string' && (v.includes('\n') || v.length > 200)));
+      const shortLine = short.length
+        ? '\n  ' + short.map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join(' · ')
+        : '';
+      const longBlock = long.map(([k, v]) => `\n\n  ${k}:\n${String(v)}`).join('');
+      return `${shortLine}${longBlock}`;
+    })();
     return `• ${r.text}\n  [${r.reported_at ?? ''} · ${ctx.persona ?? '—'} · ${ctx.route ?? '—'} · ${where}]${det}`;
   };
   const text = `Reporter: ${reporter}\nInstall: ${installId ?? 'unknown (pre-2026-08-13 build)'}\nNew entries: ${rows.length}\nPlatform: ${rows[0]?.platform ?? '—'}\n\n${rows.map(block).join('\n\n')}\n\n— Auto-forwarded from the SmartPlay issue log`;

@@ -3,7 +3,7 @@ import { mayTalkToCaddie } from './featureAccess';
 import { BRAIN_FETCH_TIMEOUT_MS as KEVIN_FETCH_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { endsAsQuestion } from './voice/endsAsQuestion';
 import { speak, speakFromBase64, stopSpeaking, captureUtteranceDetailed, releaseExternalMic, playLocalFile, stopCapture, endCaptureEarly, flashCaption, getLastSpokenLine, type CaptureBail, type CaptureResult } from './voiceService';
-import { logVoiceSilentFail, describeError } from './voiceErrorLog';
+import { logVoiceSilentFail, logVoiceDiag, describeError } from './voiceErrorLog';
 import { responseForCaptureBail, shouldRetryCapture } from './voice/captureBail';
 import { conversationalBrainTurn } from './conversationalBrain';
 import { askCaddie } from './caddieBrain';
@@ -1020,7 +1020,25 @@ async function openSession() {
     // 2026-08-17 — a deliberate cancel is the user doing exactly what they meant to; it is not a
     // failure and must never reach the issue log (voice_silent_fail schedules an auto-send, so
     // logging cancels here would have mailed Tim every time he shushed the caddie).
-    if (!silentBail) logVoiceSilentFail('listen_no_transcript', {
+    /**
+     * 2026-09-04 (Tim — three emails in five minutes, each carrying the SAME failure twice) —
+     * DON'T REPORT THE CONSEQUENCE AS A SECOND FAILURE.
+     *
+     * When `bail` is 'transcribe_failed', captureUtterance has ALREADY logged the real cause a few
+     * milliseconds earlier — `transcribe_error: transcribe_http, status: 504`. This line then
+     * reported the downstream effect of that same event as an independent problem, so every
+     * transcribe outage arrived as two bullets: the cause, and the fact that the cause had an
+     * effect. Two entries, one defect, and the email twice as long for no extra information.
+     *
+     * Still logged, as 'diag' — on-device it is genuinely useful, because heardSpeech and
+     * durationMs say whether the mic was open and whether the player actually spoke, which the
+     * transcribe error alone cannot tell you. It just stops being mailed as its own issue.
+     *
+     * Every other bail reason still reports normally: those have no upstream entry, so this line
+     * is the only record that the turn died. [[missing-log-entry-is-the-evidence]]
+     */
+    const alreadyReportedUpstream = bail === 'transcribe_failed';
+    if (!silentBail) (alreadyReportedUpstream ? logVoiceDiag : logVoiceSilentFail)('listen_no_transcript', {
       source: 'listeningSession',
       bail,
       // 2026-08-17 — lets a field report tell "the mic was open and the player said nothing" from

@@ -146,11 +146,62 @@ export function logVoiceError(
   write('voice_error', stage, { error: describeError(error), ...extra });
 }
 
+/**
+ * 2026-09-04 (Tim — "strip all the nonissue reporting issues to the issue log") — STAGES THAT ARE
+ * NOT FAILURES.
+ *
+ * `voice_silent_fail` is in REPORTABLE_KINDS, so every stage logged through it is auto-forwarded to
+ * the owner inbox as a problem. Several of these stages record the OPPOSITE of a problem:
+ *
+ *   local_responder_hit    the local responder ANSWERED — the fast path working
+ *   ondevice_stt_hit       on-device speech recognition succeeded, no network needed
+ *   local_responder_miss   nothing local matched, so it fell through to the brain. By design.
+ *   persona_handoff_intro  a persona change spoke its intro line. Not an error in any sense.
+ *
+ * They were logged through this helper because it was the convenient way to get a structured voice
+ * event with turn context attached, not because anyone judged them failures. The result is an inbox
+ * where successes outnumber defects and the real ones stop being read — the exact failure the 'diag'
+ * kind was introduced for on 2026-08-19, when the pose locator's SUCCESS breadcrumbs were being
+ * mailed as analysis errors.
+ *
+ * Downgraded, not deleted. Every one of these still lands in the store and still shows in
+ * /owner-logs, because on-device they are genuinely useful — knowing the local responder handled a
+ * turn is how we tell a fast answer from a missing one. They simply stop being mailed as problems.
+ * [[guards-by-element-not-blanket-suppression]]
+ *
+ * Deliberately NOT included: the speak_preempted_* family. A preempt is usually by design, but it
+ * was also the symptom that exposed a speculative brain call fired and discarded on every turn for
+ * eight weeks. Those stay reportable until someone has a reason beyond noise to silence them.
+ */
+const NON_FAILURE_STAGES: ReadonlySet<string> = new Set([
+  'local_responder_hit',
+  'local_responder_miss',
+  'ondevice_stt_hit',
+  'persona_handoff_intro',
+]);
+
+/** True when a stage records normal behaviour rather than a failure. Exported for the guard. */
+export function isNonFailureStage(stage: string): boolean {
+  return NON_FAILURE_STAGES.has(stage);
+}
+
 export function logVoiceSilentFail(
   stage: string,
   extra?: Record<string, unknown>,
 ): void {
-  write('voice_silent_fail', stage, extra);
+  write(isNonFailureStage(stage) ? 'diag' : 'voice_silent_fail', stage, extra);
+}
+
+/**
+ * A voice event worth KEEPING on the device and worth nothing in an inbox. Same store, same
+ * /owner-logs visibility, but 'diag' is not in REPORTABLE_KINDS so it is never auto-forwarded.
+ * Use it for the happy path, and for the downstream effect of a failure already reported upstream.
+ */
+export function logVoiceDiag(
+  stage: string,
+  extra?: Record<string, unknown>,
+): void {
+  write('diag', stage, extra);
 }
 
 export function logTranscribeError(

@@ -99,6 +99,35 @@ export function formatRoundTrace(): string {
 }
 
 /**
+ * 2026-09-04 — ONE SEND PER ROUND, however many times this is called.
+ *
+ * Tim received SEVEN identical "ROUND TRACE — Menifee Lakes Palms" emails stamped within 400ms of
+ * each other, then seven more three minutes later for the next round. Each said "New entries: 1",
+ * so the batching was working exactly as documented — the function was simply invoked seven times.
+ *
+ * The call sits in an IIFE spread into the RoundRecord literal in roundStore.endRound. Whatever
+ * makes that literal evaluate more than once (a double-tapped End Round, a re-entrant save), the
+ * fix does not belong in the caller: a fire-and-forget diagnostic must not depend on the discipline
+ * of the code that fires it. A guard here is correct for every caller, present and future.
+ *
+ * Deduped on label + a 60s window rather than a plain in-flight flag, because the seven calls were
+ * near-simultaneous AND the first would have completed before the last arrived. Both shapes are
+ * covered: concurrent calls share the in-flight promise, later ones inside the window are dropped.
+ * A genuinely new round more than a minute later still sends. [[a-call-nobody-asked-should-exist]]
+ */
+let inFlight: Promise<boolean> | null = null;
+let lastSentKey: string | null = null;
+let lastSentAt = 0;
+const TRACE_DEDUPE_MS = 60_000;
+
+/** Test seam — the guard is module state and would otherwise leak between cases. */
+export function _resetRoundTraceSendGuard(): void {
+  inFlight = null;
+  lastSentKey = null;
+  lastSentAt = 0;
+}
+
+/**
  * Mail the finished trace, then clear it.
  *
  * Reuses /api/issue-report — the transport already wired to reach Tim's inbox — rather than adding a
@@ -113,6 +142,17 @@ export function formatRoundTrace(): string {
 export async function sendRoundTrace(reporter: string): Promise<boolean> {
   const store = useRoundTraceStore.getState();
   if (store.rows.length === 0) { store.clear(); return false; }
+
+  const key = store.label ?? 'round';
+  if (inFlight) return inFlight;
+  if (lastSentKey === key && Date.now() - lastSentAt < TRACE_DEDUPE_MS) return false;
+
+  inFlight = sendRoundTraceOnce(reporter, key);
+  try { return await inFlight; } finally { inFlight = null; }
+}
+
+async function sendRoundTraceOnce(reporter: string, key: string): Promise<boolean> {
+  const store = useRoundTraceStore.getState();
   const body = formatRoundTrace();
   const label = store.label ?? 'round';
   store.stop();
@@ -135,13 +175,26 @@ export async function sendRoundTrace(reporter: string): Promise<boolean> {
           reporter,
           platform: Platform.OS,
           context: { kind: 'round_trace' },
-          details: body,
+          /**
+           * 2026-09-04 — WAS `details: body`, a bare string, and the whole trace was discarded.
+           *
+           * api/issue-report's renderer prints details only when `typeof r.details === 'object'`.
+           * A string fails that test, so `det` came out empty and every ROUND TRACE email Tim
+           * received contained one line — the title — and none of the timeline it exists to carry.
+           * The diagnostic was mailed and its entire contents thrown away.
+           */
+          details: { trace: body },
           timestamp: Date.now(),
         }],
       }),
       signal: AbortSignal.timeout(20_000),
     });
-    if (res.ok) { store.clear(); return true; }
+    if (res.ok) {
+      lastSentKey = key;
+      lastSentAt = Date.now();
+      store.clear();
+      return true;
+    }
     return false;
   } catch {
     return false; // walking off the course with no signal is the normal failure here
