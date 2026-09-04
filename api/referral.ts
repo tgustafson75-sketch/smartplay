@@ -224,7 +224,7 @@ a.alt{background:transparent;color:#9ca3af;border:1px solid #1f3242}
 <p>A friend thinks you'd get on with SmartPlay Caddie — a golf caddie that actually watches your swing.</p>
 ${code ? `<div class="code">${code}</div>
 <p class="hint">Install the app, then enter this code in Settings → Invite a friend. Your friend gets rewarded once you've played a round.</p>` : ''}
-<a class="btn" href="https://apps.apple.com/app/smartplay-caddie/id0000000000">Get it on iPhone</a>
+<a class="btn" href="https://apps.apple.com/app/smartplay-caddie/id6772344465">Get it on iPhone</a>
 <a class="btn alt" href="https://play.google.com/store/apps/details?id=com.smartplaycaddie.app">Get it on Android</a>
 </div></body></html>`);
 }
