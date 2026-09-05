@@ -714,6 +714,79 @@ export default function SmartVisionScreen() {
     // flash this guard was written to prevent.
     setImageUri(null);
     setGeometry(null);
+
+    /**
+     * 2026-09-05 (Tim — "I did see the cart location move today in the primary caddie tab view but
+     * when I tapped SmartVision got the loading green screen delay") — SYNCHRONOUS FAST PATH.
+     *
+     * Everything below this point is async, and `loading` did not clear until ALL of it finished:
+     * a cold geometry fetch, an AsyncStorage read of derived greens, and — the expensive one — a
+     * live api/hole-scan vision derive for any hole whose geometry has no green. That derive is a
+     * network round-trip to a vision model, and the player sat on the loading canvas for the whole
+     * of it, on a screen the caddie tab had ALREADY been rendering a moving cart on.
+     *
+     * The information was in memory the entire time. getHoleGeometry is a synchronous read of the
+     * warm cache the caddie tab populated, getCenteredImageryUrl only builds a URL string, and the
+     * curated lookups are bundled-asset reads. None of them need to wait for anything.
+     *
+     * So render what we already have, immediately, and let the async work below REFINE it. A tile
+     * that sharpens a moment later is invisible; a green screen is not.
+     * [[speed-is-the-wow]] [[hands-free-zero-setup-is-the-product]]
+     */
+    {
+      const warmGeo = courseId ? getHoleGeometry(courseId, holeIndex) : null;
+      if (warmGeo) setGeometry(warmGeo);
+
+      const warmCurated =
+        getLocalHoleImageById(courseId, holeIndex) ?? getLocalHoleImage(courseName, holeIndex);
+
+      const bundled = courseHoles.find(x => x.hole === holeIndex);
+      const ok = (la?: number, ln?: number) =>
+        la != null && ln != null && la !== 0 && ln !== 0 && Math.abs(la) <= 90 && Math.abs(ln) <= 180;
+      const warmGreen =
+        warmGeo?.green ??
+        (bundled && ok(bundled.middleLat, bundled.middleLng)
+          ? { lat: bundled.middleLat, lng: bundled.middleLng }
+          : null);
+
+      /**
+       * CLEARING `loading` EARLY IS GATED ON REAL GEOMETRY, and that is not a detail.
+       *
+       * The `{!loading && ...}` marker gate below exists because of Fix DJ (2026-05-26): without it
+       * the T/P/Y markers render at DEFAULT positions — centre-top, centre-bottom, centre — and then
+       * snap to their real ones a moment later, a flicker that was visible on every hole switch.
+       *
+       * So a curated photo alone is NOT enough to drop the loading state: the picture would be
+       * right and the markers would be wrong, which is worse than waiting. Only a warm geometry
+       * with a real green means every marker can be placed correctly on the first paint.
+       */
+      const warmEnough = !!warmGeo?.green;
+
+      if (warmCurated && warmEnough) {
+        // A bundled photo is the fastest thing we own and works offline. Show it now; the satellite
+        // pass below replaces it when it resolves, exactly as it would have anyway.
+        setImagerySource('curated');
+        setLoading(false);
+      } else if (warmEnough && warmGreen && courseId && imageW > 0 && imageH > 0) {
+        const MAXW = 1280;
+        let w = imageW;
+        let h = imageH;
+        if (w > MAXW || h > MAXW) {
+          const k = Math.min(MAXW / w, MAXW / h);
+          w = Math.floor(w * k);
+          h = Math.floor(h * k);
+        }
+        const warmUri = getCenteredImageryUrl({ lat: warmGreen.lat, lng: warmGreen.lng, zoom: 16, width: w, height: h });
+        if (warmUri) {
+          setImagerySource('satellite');
+          setImageUri(warmUri);
+          setLoading(false);
+        }
+      }
+      // No warm geometry — `loading` stays true and the async path below does the work, exactly as
+      // before. That is now the ONLY case that waits, and it is the case that genuinely has to.
+    }
+
     void (async () => {
       // Always load geometry so the F/M/B yardage panel can use it
       // even in curated mode (when geometry is available).
