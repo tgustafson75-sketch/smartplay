@@ -6,6 +6,10 @@ module.exports = {
     {
       displayName: 'logic',
       testEnvironment: 'node',
+      // 2026-09-05 — the logic project had NO setup file, so Node's real fetch was live and
+      // tests posted to production (thirteen fake ROUND TRACE emails + paid inference calls).
+      // See __tests__/setupNoNetwork.ts.
+      setupFilesAfterEnv: ['<rootDir>/__tests__/setupNoNetwork.ts'],
       testMatch: [
         '<rootDir>/__tests__/logic/**/*.test.ts',
         '<rootDir>/__tests__/regression/**/*.test.ts',
@@ -45,7 +49,7 @@ module.exports = {
       displayName: 'components',
       preset: 'jest-expo',
       testMatch: ['<rootDir>/__tests__/components/**/*.test.tsx'],
-      setupFilesAfterEnv: ['<rootDir>/__tests__/setup.ts'],
+      setupFilesAfterEnv: ['<rootDir>/__tests__/setupNoNetwork.ts', '<rootDir>/__tests__/setup.ts'],
       transformIgnorePatterns: [
         'node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|zustand)/)',
       ],

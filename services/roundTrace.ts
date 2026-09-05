@@ -68,7 +68,19 @@ export function formatRoundTrace(): string {
   const firstReply = rows.find(r => r.tag === 'turn_reply');
 
   const swings = by('watch').filter(r => r.tag === 'swing').length;
-  const holes = new Set(by('round').filter(r => r.tag === 'hole').map(r => String(r.data?.hole))).size;
+  /**
+   * 2026-09-05 — this counted `round/hole` rows, and hole 1 never emits one: the round OPENS on it,
+   * so the first hole is announced by `round/start`. A nine-hole round therefore reported "holes
+   * seen 8" above a timeline listing nine — the one thing this formatter's header promises cannot
+   * happen ("built from the rows themselves… so the summary can never disagree with the timeline").
+   * A summary that undercounts holes is worse than no summary: it reads as a hole-advance bug.
+   *
+   * Counting every hole number the trace mentions, wherever it appears, cannot drift from the
+   * timeline again — a hole is "seen" exactly when a row names it. [[state-what-you-measured-not-what-you-intended]]
+   */
+  const holes = new Set(
+    rows.map(r => r.data?.hole).filter(h => h !== undefined && h !== null && h !== '').map(String),
+  ).size;
   const geometry = rows.find(r => r.tag === 'geometry');
 
   const dur = rows.length ? rows[rows.length - 1].t : 0;
@@ -165,6 +177,21 @@ async function sendRoundTraceOnce(reporter: string, key: string): Promise<boolea
     const { Platform } = require('react-native') as typeof import('react-native');
     const base = getApiBaseUrl();
     if (!base) return false;
+    /**
+     * 2026-09-05 — WITHOUT THIS, EVERY ROUND TRACE EMAIL LIED ABOUT THE BUILD.
+     *
+     * api/issue-report reads the install id out of `context` and otherwise prints
+     * "Install: unknown (pre-2026-08-13 build)". This sender builds its own entry and never attached
+     * one — only services/issueLogExport did — so a trace mailed from today's build was labelled as
+     * coming from a build three weeks older than the trace format itself. Tim read that line and
+     * reasonably concluded a stale tester install was the problem.
+     *
+     * Never throws and never blocks: getInstallId() returns null rather than failing, and an
+     * unattributed trace still sends. [[a-stale-header-is-a-source-someone-trusts]]
+     */
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getInstallId } = require('./installId') as typeof import('./installId');
+    const installId = await getInstallId().catch(() => null);
     const res = await fetch(`${base.replace(/\/+$/, '')}/api/issue-report`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...appKeyHeaders() },
@@ -174,7 +201,7 @@ async function sendRoundTraceOnce(reporter: string, key: string): Promise<boolea
           text: `ROUND TRACE — ${label}`,
           reporter,
           platform: Platform.OS,
-          context: { kind: 'round_trace' },
+          context: installId ? { kind: 'round_trace', installId } : { kind: 'round_trace' },
           /**
            * 2026-09-04 — WAS `details: body`, a bare string, and the whole trace was discarded.
            *

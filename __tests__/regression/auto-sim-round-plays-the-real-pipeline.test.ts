@@ -32,6 +32,30 @@ jest.mock('../../services/courseGeometryService', () => {
   const actual = jest.requireActual('../../services/courseGeometryService');
   return { ...actual, fetchCourseGeometry: jest.fn(async () => null) };
 });
+/**
+ * 2026-09-05 — THE TWO SENDERS THIS FILE WAS MAILING TO PRODUCTION.
+ *
+ * endRound() fire-and-forgets sendRoundTrace(), so every run of this file mailed Tim a "ROUND TRACE
+ * — Menifee Lakes Palms" from `reporter: tester` describing a nine-hole round that took 100ms. He
+ * got thirteen of them in one evening and read them as a broken field round. endRound() also fans
+ * out to generateKevinRead(), a PAID Haiku call — seven per run of this file, against the live
+ * inference budget.
+ *
+ * Stubbed for the same reason as the three above: the teardown is still the REAL endRound, and only
+ * the network it fans out to is stubbed. The socket-level gate in __tests__/setupNoNetwork.ts now
+ * stops these regardless; these mocks keep the intent legible at the call site rather than leaving
+ * the reader to wonder why a rejected fetch is expected here.
+ */
+jest.mock('../../services/roundTrace', () => ({
+  trace: jest.fn(),
+  startRoundTrace: jest.fn(),
+  formatRoundTrace: jest.fn(() => ''),
+  sendRoundTrace: jest.fn(async () => false),
+  _resetRoundTraceSendGuard: jest.fn(),
+}));
+jest.mock('../../services/kevinReadService', () => ({
+  generateKevinRead: jest.fn(async () => undefined),
+}));
 
 import { runAutoSimRound, readAutoSimPlayer } from '../../services/simRoundAuto';
 import { useRoundStore } from '../../store/roundStore';
