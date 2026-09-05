@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { courseDisplayLabel } from '../../data/courseComplexes';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { pickTeeSet } from '../../services/teeSelection';
 import {
@@ -373,7 +374,10 @@ export default function CourseDetailScreen() {
     localSlug === 'greenhill' ? 'Greenhill Golf Course' :
     localSlug === 'westlake-cc-nj' ? 'Westlake Country Club' :
     null;
-  const displayClubName = localFriendlyName ?? course?.club_name ?? '';
+  // 2026-09-05 — carries the LAYOUT, not just the club. This name feeds getLocalHoleImage below,
+  // and a bare club name on a multi-course property resolves to whichever sibling it happens to
+  // contain — the Menifee Palms/Lakes bug.
+  const displayClubName = localFriendlyName ?? courseDisplayLabel(course?.club_name, course?.course_name);
   const noteByHole = useMemo(() => {
     const m = new Map<number, string>();
     (content?.hole_notes ?? []).forEach(n => m.set(n.hole_number, n.note));

@@ -58,7 +58,31 @@ describe('the slug resolver keeps the Lakes courses apart', () => {
   it('the Menifee pair still resolve to themselves', () => {
     expect(getLocalCourseSlug('Menifee Lakes Lakes')).toBe('lakes');
     expect(getLocalCourseSlug('Menifee Lakes — Palms')).toBe('palms');
-    expect(getLocalCourseSlug('Menifee Lakes Country Club')).toBe('lakes');
+  });
+
+  it('...but the PARENT CLUB name resolves to neither — corrected 2026-09-05', () => {
+    /**
+     * THIS ASSERTION USED TO READ `.toBe('lakes')`, AND THAT IS THE BUG TIM HIT ON THE COURSE.
+     *
+     * On 2026-09-01 this file locked in "Menifee Lakes Country Club" meaning the Lakes layout. It
+     * looked harmless — the club is named after the Lakes — and it made a real symptom go away.
+     *
+     * On 2026-09-05 Tim played the PALMS. golfcourseapi returns the same `club_name` for both
+     * layouts, the round was stamped with that club name alone, and this rule then answered "lakes"
+     * with total confidence. He got the Lakes' hole photographs beside correct Palms yardages, on
+     * his home course, on a build that was already in review.
+     *
+     * A facility name cannot identify a layout. The previous expectation was not a smaller bug than
+     * the one it fixed; it was the same bug pointed the other way. The real fix is upstream — the
+     * round now carries "Menifee Lakes Country Club — Palms" — and this resolver declines rather
+     * than guessing when the layout is genuinely absent.
+     */
+    expect(getLocalCourseSlug('Menifee Lakes Country Club')).toBeNull();
+    expect(getLocalCourseSlug('Menifee Lakes')).toBeNull();
+
+    // ...and with the layout present, both siblings resolve exactly.
+    expect(getLocalCourseSlug('Menifee Lakes Country Club — Palms')).toBe('palms');
+    expect(getLocalCourseSlug('Menifee Lakes Country Club — Lakes')).toBe('lakes');
   });
 
   it('Pembroke keeps its own precedence', () => {

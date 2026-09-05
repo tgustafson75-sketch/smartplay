@@ -14,6 +14,7 @@
  */
 
 import type { ImageSourcePropType } from 'react-native';
+import { isAmbiguousComplexName } from './courseComplexes';
 
 // 2026-05-26 — Fix BJ: all 18 holes refreshed with 18Birdies versions
 // (replacing prior Golfshot screenshots). Same caveats as Maplewood —
@@ -339,6 +340,21 @@ export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug |
   if (!courseName) return null;
   const c = courseName.toLowerCase();
   /**
+   * 2026-09-05 — MULTI-COURSE GATE, BEFORE ANY SUBSTRING MATCH.
+   *
+   * Tim played the Palms at Menifee Lakes and got the Lakes' hole imagery beside correct Palms
+   * yardages. golfcourseapi returns the same parent club for both layouts, so the name in hand was
+   * "Menifee Lakes Country Club" — which contains "lakes", does not contain "palms", and sailed
+   * straight into the generic match below.
+   *
+   * The `lakes && !palms` guard further down was not wrong. It was answering a question the name
+   * could not answer. A facility name cannot identify a layout, so this declines instead of
+   * guessing and the caller falls through to live satellite geometry, which is keyed by the course
+   * id and is correct. Mirrored from getLocalHoleImage: this file's header promises both functions resolve identically
+   * from the same courseName, and a gate on only one of them is the same bug with a longer fuse. [[two-owners-is-the-root-cause]]
+   */
+  if (isAmbiguousComplexName(courseName)) return null;
+  /**
    * 2026-08-25 — MARQUEE SET FIRST. These are the bundled famous courses; matching them early keeps
    * them clear of the generic substring rules below (e.g. a bare 'lakes' or 'pines' match).
    *
@@ -417,6 +433,21 @@ export function getLocalCourseSlug(courseName: string | null): LocalCourseSlug |
 export function getLocalHoleImage(courseName: string | null, holeNumber: number): ImageSourcePropType | null {
   if (!courseName) return null;
   const c = courseName.toLowerCase();
+  /**
+   * 2026-09-05 — MULTI-COURSE GATE, BEFORE ANY SUBSTRING MATCH.
+   *
+   * Tim played the Palms at Menifee Lakes and got the Lakes' hole imagery beside correct Palms
+   * yardages. golfcourseapi returns the same parent club for both layouts, so the name in hand was
+   * "Menifee Lakes Country Club" — which contains "lakes", does not contain "palms", and sailed
+   * straight into the generic match below.
+   *
+   * The `lakes && !palms` guard further down was not wrong. It was answering a question the name
+   * could not answer. A facility name cannot identify a layout, so this declines instead of
+   * guessing and the caller falls through to live satellite geometry, which is keyed by the course
+   * id and is correct. A right hole from a satellite beats a curated photograph of a different golf
+   * course. [[two-owners-is-the-root-cause]]
+   */
+  if (isAmbiguousComplexName(courseName)) return null;
   if (c.includes('crystal') && c.includes('spring')) return CRYSTAL_SPRINGS_HOLE_IMAGES[holeNumber] ?? null;
   if (c.includes('mariner')) return MARINERS_POINT_HOLE_IMAGES[holeNumber] ?? null;
   // Pembroke precedes the 'lakes' match (the course is "Pembroke Lakes").

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { courseDisplayLabel } from '../../data/courseComplexes';
 import { QuickTutorial } from '../../components/QuickTutorial';
 import {
   View,
@@ -2711,7 +2712,13 @@ export default function CaddieTab() {
             const apiCourse = await getApiCourse(match.id);
             if (apiCourse && apiCourse.tees.length > 0) {
               holes = courseToHoles(apiCourse);
-              courseName = apiCourse.club_name;
+              // 2026-09-05 — club_name ALONE LOSES THE LAYOUT. golfcourseapi returns
+              // club_name='Menifee Lakes Country Club' with course_name='Palms' or 'Lakes' beside
+              // it; taking only the club discarded which course the player is standing on, and
+              // every downstream consumer that resolves imagery from the name then guessed — and
+              // guessed wrong, giving Tim the Lakes' hole photographs on a Palms round with correct
+              // Palms yardages next to them. [[two-owners-is-the-root-cause]]
+              courseName = courseDisplayLabel(apiCourse.club_name, apiCourse.course_name);
               console.log('[startRound] local API fallback: got', holes.length, 'holes for', courseName, 'via id', match.id);
             }
           }
@@ -2736,7 +2743,9 @@ export default function CaddieTab() {
         const apiCourse = await getApiCourse(courseId);
         if (apiCourse && apiCourse.tees.length > 0) {
           holes = courseToHoles(apiCourse);
-          courseName = apiCourse.club_name;
+          // Same as above: keep the layout, or a multi-course property resolves to whichever
+          // sibling the club name happens to contain.
+          courseName = courseDisplayLabel(apiCourse.club_name, apiCourse.course_name);
           if (
             typeof apiCourse.location?.latitude === 'number' &&
             typeof apiCourse.location?.longitude === 'number' &&
