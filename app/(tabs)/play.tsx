@@ -2456,13 +2456,13 @@ return StyleSheet.create({
     borderRadius: 12, borderWidth: 1, borderColor: c.accent,
   },
   activeRoundLabel: { color: c.accent, fontSize: 10, fontWeight: '800', letterSpacing: 1.4 },
-  activeRoundCourse: { color: '#e8f5e9', fontSize: 14, fontWeight: '700', marginTop: 2 },
+  activeRoundCourse: { color: c.text_secondary, fontSize: 14, fontWeight: '700', marginTop: 2 },
   endRoundBtn: {
     paddingHorizontal: 14, paddingVertical: 8,
     borderRadius: 8, borderWidth: 1, borderColor: '#ef4444',
     backgroundColor: 'rgba(239, 68, 68, 0.08)',
   },
-  endRoundBtnText: { color: '#ef4444', fontSize: 13, fontWeight: '800' },
+  endRoundBtnText: { color: c.error, fontSize: 13, fontWeight: '800' },
 
   headerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
   h1: { color: c.text_primary, fontSize: 22, fontWeight: '900' },
@@ -2635,12 +2635,12 @@ return StyleSheet.create({
     paddingBottom: 13,
   },
   heroCourseName: {
-    color: '#eafff6',
+    color: c.text_primary,
     fontSize: 19,
     fontWeight: '800',
   },
   heroMeta: {
-    color: 'rgba(232,245,233,0.62)',
+    color: c.text_muted,
     fontSize: 12.5,
     fontWeight: '500',
     marginTop: 2,
@@ -2653,7 +2653,7 @@ return StyleSheet.create({
   },
   heroHistoryText: {
     flex: 1,
-    color: 'rgba(232,245,233,0.9)',
+    color: c.text_secondary,
     fontSize: 12.5,
     fontWeight: '600',
   },
@@ -2687,7 +2687,7 @@ return StyleSheet.create({
   },
   atCourseBannerText: {
     flex: 1,
-    color: '#e8f5e9',
+    color: c.text_secondary,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -2705,7 +2705,7 @@ return StyleSheet.create({
     backgroundColor: 'rgba(0,200,150,0.16)',
   },
   atCourseChoiceText: {
-    color: '#e8f5e9',
+    color: c.text_secondary,
     fontSize: 13,
     fontWeight: '800',
   },
@@ -2736,7 +2736,7 @@ return StyleSheet.create({
   searchBtnText: { color: c.surface, fontWeight: '900', fontSize: 14 },
 
   statusText: { color: c.text_muted, fontSize: 12, paddingHorizontal: 16, paddingTop: 10 },
-  statusErr: { color: '#fbbf24', fontSize: 12, paddingHorizontal: 16, paddingTop: 10 },
+  statusErr: { color: c.warning, fontSize: 12, paddingHorizontal: 16, paddingTop: 10 },
   // 2026-06-30 — AI course-search fallback card.
   aiCourseCard: {
     marginHorizontal: 16, marginTop: 10, padding: 14, borderRadius: 14,

@@ -591,7 +591,7 @@ return StyleSheet.create({
   },
   headerBtn: { minWidth: 80 },
   headerBtnText: { color: '#00C896', fontSize: 14, fontWeight: '700' },
-  headerTitle: { color: '#ffffff', fontSize: 16, fontWeight: '800' },
+  headerTitle: { color: c.text_primary, fontSize: 16, fontWeight: '800' },
 
   cameraTop: {
     position: 'absolute', left: 0, right: 0,
@@ -603,8 +603,8 @@ return StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center', justifyContent: 'center',
   },
-  iconBtnText: { color: '#ffffff', fontSize: 22, fontWeight: '700' },
-  cameraTitle: { color: '#ffffff', fontSize: 14, fontWeight: '800', letterSpacing: 1.5 },
+  iconBtnText: { color: c.text_primary, fontSize: 22, fontWeight: '700' },
+  cameraTitle: { color: c.text_primary, fontSize: 14, fontWeight: '800', letterSpacing: 1.5 },
 
   // 2026-05-26 — Fix W.2 opener phase styles.
   openerBody: {
@@ -626,11 +626,11 @@ return StyleSheet.create({
   },
   openerOrbGlyph: { color: '#00C896', fontSize: 48, fontWeight: '700' },
   openerHeadline: {
-    color: '#ffffff', fontSize: 22, fontWeight: '800', marginBottom: 8,
+    color: c.text_primary, fontSize: 22, fontWeight: '800', marginBottom: 8,
     letterSpacing: 0.3,
   },
   openerSub: {
-    color: 'rgba(255,255,255,0.85)', fontSize: 14, lineHeight: 21,
+    color: c.text_secondary, fontSize: 14, lineHeight: 21,
     textAlign: 'center', maxWidth: 320,
   },
   openerSkipBtn: { marginTop: 32, paddingVertical: 10, paddingHorizontal: 18 },
@@ -646,7 +646,7 @@ return StyleSheet.create({
   playerNotesLabel: {
     color: '#00C896', fontSize: 9, fontWeight: '900', letterSpacing: 1,
   },
-  playerNotesText: { color: '#ffffff', fontSize: 12, flex: 1, fontStyle: 'italic' },
+  playerNotesText: { color: c.text_primary, fontSize: 12, flex: 1, fontStyle: 'italic' },
   playerNotesClear: { color: '#00C896', fontSize: 11, fontWeight: '700' },
   instructionBox: {
     position: 'absolute',
@@ -655,7 +655,7 @@ return StyleSheet.create({
     alignItems: 'center',
   },
   instructionText: {
-    color: 'rgba(255,255,255,0.85)',
+    color: c.text_secondary,
     backgroundColor: 'rgba(0,0,0,0.55)',
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -697,14 +697,14 @@ return StyleSheet.create({
     backgroundColor: '#00C896',
   },
   strategyToggleText: {
-    color: 'rgba(255,255,255,0.85)',
+    color: c.text_secondary,
     fontSize: 11, fontWeight: '900', letterSpacing: 1.4,
   },
   strategyToggleTextOn: {
     color: '#00C896',
   },
   strategyHint: {
-    color: 'rgba(255,255,255,0.85)',
+    color: c.text_secondary,
     backgroundColor: 'rgba(0,0,0,0.55)',
     fontSize: 11, fontWeight: '600',
     paddingHorizontal: 10, paddingVertical: 4,
@@ -728,10 +728,10 @@ return StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.7)',
     borderRadius: 14,
   },
-  analyzingText: { color: '#ffffff', fontSize: 14, fontWeight: '700' },
+  analyzingText: { color: c.text_primary, fontSize: 14, fontWeight: '700' },
 
   permBox: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, backgroundColor: c.background },
-  permTitle: { color: '#ffffff', fontSize: 20, fontWeight: '800', marginBottom: 12 },
+  permTitle: { color: c.text_primary, fontSize: 20, fontWeight: '800', marginBottom: 12 },
   permText: { color: '#c2cad4', fontSize: 15, lineHeight: 22, textAlign: 'center', marginBottom: 24 },
   permBtn: { backgroundColor: '#00C896', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 32 },
   permBtnText: { color: c.background, fontSize: 16, fontWeight: '800' },
@@ -739,7 +739,7 @@ return StyleSheet.create({
   permLinkText: { color: '#c2cad4', fontSize: 14 },
 
   errorBox: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, backgroundColor: c.background },
-  errorTitle: { color: '#ffffff', fontSize: 20, fontWeight: '800', marginBottom: 12 },
+  errorTitle: { color: c.text_primary, fontSize: 20, fontWeight: '800', marginBottom: 12 },
   errorBody: { color: '#cbd5e1', fontSize: 15, lineHeight: 22, textAlign: 'center', marginBottom: 22 },
   errorActions: { flexDirection: 'row', gap: 10 },
   actionBtn: {

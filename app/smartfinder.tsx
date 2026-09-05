@@ -2421,7 +2421,7 @@ return StyleSheet.create({
   },
   headerBtn: { minWidth: 100 },
   headerBtnText: { color: '#00C896', fontSize: 14, fontWeight: '700' },
-  title: { color: '#ffffff', fontSize: 16, fontWeight: '800' },
+  title: { color: c.text_primary, fontSize: 16, fontWeight: '800' },
   // Phase 406 wave 2 — graceful-landscape SmartFinder. Map / Target /
   // Standard-without-camera modes route through this ScrollView; the
   // maxWidth: 720 + alignSelf: center keeps the content readable on
@@ -2445,9 +2445,9 @@ return StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center', justifyContent: 'center',
   },
-  cameraIconText: { color: '#ffffff', fontSize: 22, fontWeight: '700' },
+  cameraIconText: { color: c.text_primary, fontSize: 22, fontWeight: '700' },
   cameraTopCenter: { alignItems: 'center', flex: 1 },
-  cameraTopTitle: { color: '#ffffff', fontSize: 14, fontWeight: '800', letterSpacing: 1.5 },
+  cameraTopTitle: { color: c.text_primary, fontSize: 14, fontWeight: '800', letterSpacing: 1.5 },
   // 2026-07-25 — grouped, labeled mode toggles (replaces the crowded, morphing icon row).
   modeToggleWrap: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 2,
@@ -2483,19 +2483,19 @@ return StyleSheet.create({
     alignItems: 'stretch',
   },
   targetToLabel: {
-    color: '#FFE600',
+    color: c.accent_yellow,
     fontSize: 14,
     fontWeight: '800',
     letterSpacing: 0.4,
     marginBottom: 4,
   },
-  targetToLabelMuted: { color: 'rgba(255,230,0,0.85)' },
-  targetToYards: { color: '#FFE600', fontSize: 18 },
+  targetToLabelMuted: { color: c.accent_yellow },
+  targetToYards: { color: c.accent_yellow, fontSize: 18 },
   // SF-2 — static-distance caption. Mirrors the MapView path's geometryMsgText
   // (amber, 12px, 600) so the "not live" framing reads consistently across the
   // camera + map surfaces; nudged up under the TO TARGET label.
   targetStaticCaption: {
-    color: '#fbbf24',
+    color: c.warning,
     fontSize: 12,
     fontWeight: '600',
     letterSpacing: 0.4,
@@ -2528,9 +2528,9 @@ return StyleSheet.create({
   },
   brainReadHeadline: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   brainReadClub: { color: '#00C896', fontSize: 22, fontWeight: '900', letterSpacing: 0.3 },
-  brainReadNums: { color: '#ffffff', fontSize: 15, fontWeight: '800' },
-  brainReadWhy: { color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '600', marginTop: 3 },
-  brainReadTend: { color: '#F0C030', fontSize: 12, fontWeight: '700', marginTop: 2 },
+  brainReadNums: { color: c.text_primary, fontSize: 15, fontWeight: '800' },
+  brainReadWhy: { color: c.text_secondary, fontSize: 12, fontWeight: '600', marginTop: 3 },
+  brainReadTend: { color: c.accent_yellow, fontSize: 12, fontWeight: '700', marginTop: 2 },
   brainReadPast: { color: '#7CC0FF', fontSize: 12, fontWeight: '700', marginTop: 2 },
   targetIntelTopRow: {
     flexDirection: 'row',
@@ -2539,21 +2539,21 @@ return StyleSheet.create({
   },
   targetIntelMetric: { alignItems: 'center', minWidth: 60 },
   targetIntelLabel: {
-    color: 'rgba(255,255,255,0.85)',
+    color: c.text_secondary,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1.1,
   },
-  targetIntelValue: { color: '#ffffff', fontSize: 14, fontWeight: '800' },
+  targetIntelValue: { color: c.text_primary, fontSize: 14, fontWeight: '800' },
   targetIntelValueAccent: { color: '#00C896', fontSize: 14, fontWeight: '900' },
   targetIntelLine: {
-    color: '#d1d5db',
+    color: c.text_muted,
     fontSize: 11,
     lineHeight: 16,
     marginTop: 2,
   },
   targetIntelPlan: {
-    color: '#f3f4f6',
+    color: c.text_secondary,
     fontSize: 11,
     lineHeight: 16,
     marginTop: 4,
@@ -2561,7 +2561,7 @@ return StyleSheet.create({
   },
   targetFmbRow: { flexDirection: 'row', justifyContent: 'space-around', alignSelf: 'stretch' },
   targetFmbCol: { alignItems: 'center', minWidth: 70 },
-  targetFmbHeader: { color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: '900', letterSpacing: 1.4 },
+  targetFmbHeader: { color: c.text_muted, fontSize: 12, fontWeight: '900', letterSpacing: 1.4 },
   targetFmbHeaderMid: { color: '#00C896', fontSize: 12, fontWeight: '900', letterSpacing: 1.4 },
   targetFmbValue: { color: '#fff', fontSize: 18, fontWeight: '800', letterSpacing: 0.4, marginTop: 2 },
   targetFmbValueMid: { color: '#00C896', fontSize: 20, fontWeight: '900', letterSpacing: 0.4, marginTop: 2 },
@@ -2573,21 +2573,21 @@ return StyleSheet.create({
     paddingTop: 18, paddingHorizontal: 24, alignItems: 'center',
     borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)',
   },
-  instructionText: { color: 'rgba(255,255,255,0.85)', fontSize: 15, textAlign: 'center', paddingBottom: 10 },
+  instructionText: { color: c.text_secondary, fontSize: 15, textAlign: 'center', paddingBottom: 10 },
   clearBtn: { borderWidth: 1, borderColor: '#ef4444', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 6, marginTop: 8 },
-  clearBtnText: { color: '#ef4444', fontSize: 13, fontWeight: '700' },
+  clearBtnText: { color: c.error, fontSize: 13, fontWeight: '700' },
 
   // Putt panel
   puttResultRow: { flexDirection: 'row', alignItems: 'center', gap: 24, marginTop: 4 },
   puttResultItem: { alignItems: 'center', minWidth: 80 },
-  puttResultValue: { color: '#ffffff', fontSize: 32, fontWeight: '900' },
+  puttResultValue: { color: c.text_primary, fontSize: 32, fontWeight: '900' },
   puttResultLabel: { color: '#c2cad4', fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginTop: 2 },
   puttDivider: { width: 1, height: 36, backgroundColor: 'rgba(255,255,255,0.15)' },
   puttHint: { color: '#cbd5e1', fontSize: 12, marginTop: 8, textAlign: 'center', paddingHorizontal: 16 },
 
   // Permission gate
   permBox: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
-  permTitle: { color: '#ffffff', fontSize: 20, fontWeight: '800', marginBottom: 12 },
+  permTitle: { color: c.text_primary, fontSize: 20, fontWeight: '800', marginBottom: 12 },
   permText: { color: '#c2cad4', fontSize: 15, lineHeight: 22, textAlign: 'center', marginBottom: 28 },
   permBtn: { backgroundColor: '#00C896', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 32 },
   permBtnText: { color: c.background, fontSize: 16, fontWeight: '800' },
@@ -2616,19 +2616,19 @@ return StyleSheet.create({
     paddingHorizontal: 6,
   },
   standardDivider: { width: 1, height: 40, backgroundColor: c.border },
-  bigValue: { color: '#e8f5e9', fontSize: 32, fontWeight: '900', fontVariant: ['tabular-nums'] },
-  bigValueEmphasis: { color: '#ffffff', fontSize: 56 },
+  bigValue: { color: c.text_secondary, fontSize: 32, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  bigValueEmphasis: { color: c.text_primary, fontSize: 56 },
   bigLabel: { color: '#6b7280', fontSize: 10, fontWeight: '800', letterSpacing: 1.4, marginTop: 4 },
-  playsLike: { color: '#F5A623', fontSize: 12, fontWeight: '700', marginTop: 2 },
+  playsLike: { color: c.accent_amber, fontSize: 12, fontWeight: '700', marginTop: 2 },
 
   canvasWrap: { paddingHorizontal: 16, paddingTop: 12, alignItems: 'center' },
   canvasHint: { color: '#c2cad4', fontSize: 12, marginBottom: 8 },
-  tapResult: { color: '#ffffff', fontSize: 16, fontWeight: '800', marginTop: 12 },
+  tapResult: { color: c.text_primary, fontSize: 16, fontWeight: '800', marginTop: 12 },
   hazardList: { marginTop: 24, alignSelf: 'stretch', paddingHorizontal: 16 },
   hazardHeading: { color: '#00C896', fontSize: 11, fontWeight: '800', letterSpacing: 1.4, marginBottom: 8 },
   hazardItem: { color: '#c2cad4', fontSize: 13, lineHeight: 19 },
   geometryMsgRow: { marginTop: 16, alignSelf: 'stretch', alignItems: 'center', paddingHorizontal: 16 },
-  geometryMsgText: { color: '#fbbf24', fontSize: 12, fontWeight: '600', letterSpacing: 0.4, textAlign: 'center' },
+  geometryMsgText: { color: c.warning, fontSize: 12, fontWeight: '600', letterSpacing: 0.4, textAlign: 'center' },
   markGreenBtn: {
     marginTop: 12,
     paddingHorizontal: 18,
@@ -2648,13 +2648,13 @@ return StyleSheet.create({
   holeBtnDisabled: { borderColor: c.border },
   holeBtnText: { color: '#00C896', fontSize: 13, fontWeight: '700' },
   holeBtnTextDisabled: { color: '#374151' },
-  holeNavLabel: { color: '#ffffff', fontSize: 14, fontWeight: '800', letterSpacing: 1.2 },
+  holeNavLabel: { color: c.text_primary, fontSize: 14, fontWeight: '800', letterSpacing: 1.2 },
   // Sits where the hole navigator would be, so the row does not collapse and the player is TOLD
   // what the screen is doing rather than left with a blank strip.
   // The way INTO practice measure while a course is still selected. Deliberately quiet — it sits
   // under the hole navigator and must not compete with it on a course.
-  practiceToggle: { color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: '700', letterSpacing: 1, textAlign: 'center', paddingBottom: 8 },
-  offCourseNote: { color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: '700', letterSpacing: 0.8, textAlign: 'center', paddingVertical: 10 },
+  practiceToggle: { color: c.text_muted, fontSize: 11, fontWeight: '700', letterSpacing: 1, textAlign: 'center', paddingBottom: 8 },
+  offCourseNote: { color: c.text_muted, fontSize: 12, fontWeight: '700', letterSpacing: 0.8, textAlign: 'center', paddingVertical: 10 },
   // 2026-05-22 — Refresh GPS button. Blue accent to differentiate from
   // the green hole-nav pills above; full-width, generous touch target.
   refreshGpsBtn: {

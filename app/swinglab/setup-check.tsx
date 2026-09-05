@@ -315,7 +315,7 @@ function makeStyles(c: ReturnType<typeof useTheme>['colors']) {
     },
     instructionBox: { position: 'absolute', top: '6%', left: 24, right: 24, alignItems: 'center' },
     instructionText: {
-      color: 'rgba(255,255,255,0.9)', backgroundColor: 'rgba(0,0,0,0.6)',
+      color: c.text_primary, backgroundColor: 'rgba(0,0,0,0.6)',
       paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, fontSize: 13, fontWeight: '600', textAlign: 'center',
     },
 
@@ -323,14 +323,14 @@ function makeStyles(c: ReturnType<typeof useTheme>['colors']) {
     timerRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
     timerChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)', backgroundColor: 'rgba(0,0,0,0.5)' },
     timerChipOn: { borderColor: '#00C896', backgroundColor: 'rgba(0,200,150,0.18)' },
-    timerChipText: { color: 'rgba(255,255,255,0.85)', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
+    timerChipText: { color: c.text_secondary, fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
     timerChipTextOn: { color: '#00C896' },
     shutterOuter: { width: 76, height: 76, borderRadius: 38, borderWidth: 5, borderColor: '#fff', alignItems: 'center', justifyContent: 'center' },
     shutterInner: { width: 58, height: 58, borderRadius: 29, backgroundColor: '#fff' },
     shutterInnerCounting: { backgroundColor: '#00C896' },
     countdownOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.35)' },
     countdownNumber: { color: '#fff', fontSize: 120, fontWeight: '900', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 12 },
-    countdownHint: { color: 'rgba(255,255,255,0.9)', fontSize: 14, fontWeight: '700', marginTop: 8 },
+    countdownHint: { color: c.text_primary, fontSize: 14, fontWeight: '700', marginTop: 8 },
     analyzingBox: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 18, paddingHorizontal: 22, backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: 14 },
     analyzingText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   });

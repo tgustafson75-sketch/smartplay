@@ -4535,7 +4535,7 @@ return StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
     fontStyle: 'italic',
-    color: '#ffffff',
+    color: c.text_primary,
     textAlign: 'center',
     lineHeight: 24,
     textShadowColor: 'rgba(0, 0, 0, 0.95)',
@@ -4609,7 +4609,7 @@ return StyleSheet.create({
     zIndex: 10,
   },
   penaltyQuickBtnText: {
-    color: '#f87171',
+    color: c.error,
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 0.2,
@@ -4689,7 +4689,7 @@ return StyleSheet.create({
   },
   toolsStatusItem: { flex: 1, alignItems: 'center' },
   toolsStatusLabel: { color: '#6b7280', fontSize: 9, fontWeight: '800', letterSpacing: 1.2 },
-  toolsStatusValue: { color: '#ffffff', fontSize: 13, fontWeight: '800', marginTop: 2 },
+  toolsStatusValue: { color: c.text_primary, fontSize: 13, fontWeight: '800', marginTop: 2 },
   toolsStatusDivider: { width: 1, height: 26, backgroundColor: c.border },
   moreScrollContent: {
     paddingBottom: 24,
@@ -4709,7 +4709,7 @@ return StyleSheet.create({
     marginBottom: 20,
   },
   sheetTitle: {
-    color: '#ffffff',
+    color: c.text_primary,
     fontSize: 20,
     fontWeight: '800',
     flex: 1,
@@ -4783,7 +4783,7 @@ return StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  findTeeBtnText: { color: '#F5A623', fontSize: 14, fontWeight: '800' },
+  findTeeBtnText: { color: c.accent_amber, fontSize: 14, fontWeight: '800' },
   notesWrap: {
     flexDirection: 'row',
     backgroundColor: c.surface,
@@ -4814,7 +4814,7 @@ return StyleSheet.create({
     opacity: 0.5,
   },
   startBtnText: {
-    color: '#ffffff',
+    color: c.text_primary,
     fontSize: 16,
     fontWeight: '800',
   },
@@ -4845,12 +4845,12 @@ return StyleSheet.create({
     justifyContent: 'center',
   },
   scoreBtnText: {
-    color: '#ffffff',
+    color: c.text_primary,
     fontSize: 24,
     fontWeight: '300',
   },
   scoreValue: {
-    color: '#ffffff',
+    color: c.text_primary,
     fontSize: 48,
     fontWeight: '900',
     minWidth: 60,
@@ -4886,7 +4886,7 @@ return StyleSheet.create({
     flex: 1,
   },
   moreLabel: {
-    color: '#ffffff',
+    color: c.text_primary,
     fontSize: 15,
     fontWeight: '600',
   },
@@ -4933,7 +4933,7 @@ return StyleSheet.create({
     fontWeight: '600',
   },
   ghostRowTextSelected: {
-    color: '#ffffff',
+    color: c.text_primary,
   },
   ghostRowDate: {
     color: '#4b5563',
@@ -4963,7 +4963,7 @@ return StyleSheet.create({
     textTransform: 'uppercase',
   },
   brandSub: {
-    color: '#ffffff',
+    color: c.text_primary,
     fontSize: 16,
     fontWeight: '800',
     letterSpacing: 2.5,
@@ -4991,7 +4991,7 @@ return StyleSheet.create({
     letterSpacing: 0.5,
   },
   trialBannerExpiredText: {
-    color: '#ef4444',
+    color: c.error,
   },
   directionRow: {
     flexDirection: 'row',
@@ -5069,7 +5069,7 @@ return StyleSheet.create({
     alignItems: 'center',
   },
   rulesChoiceBtnText: {
-    color: '#d1d5db',
+    color: c.text_muted,
     fontSize: 12,
     fontWeight: '600' as const,
     textAlign: 'center',

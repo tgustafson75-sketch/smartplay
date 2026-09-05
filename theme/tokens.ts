@@ -32,6 +32,15 @@ export interface ThemeColors {
   /** Brand accent — SKY #38BDF8. The palette's "data" channel:
    *  ANALYSIS / prep / review / info. (See ACCENT_SKY below.) */
   accent_sky: string;
+  /**
+   * 2026-09-05 — Brand YELLOW. SmartFinder's target readout (#FFE600 in dark).
+   *
+   * Added as a token because it was hardcoded in the screen and therefore had no light-mode value
+   * at all: pure yellow on white is ~1.1:1 contrast, which is why Tim could see "shading of yellow
+   * or gold text" and nothing else. Dark keeps the exact original hex so the signed-off dark look
+   * is unchanged; light gets a darkened yellow of the same hue that actually reads.
+   */
+  accent_yellow: string;
   success: string;
   warning: string;
   error: string;
@@ -122,6 +131,7 @@ export const darkTheme: ThemeTokens = {
     accent_lime:      '#88F700',
     accent_amber:     '#FBBF24',
     accent_sky:       '#38BDF8',
+    accent_yellow:    '#FFE600',
     success:          '#00C896',
     warning:          '#fbbf24',
     error:            '#ef4444',
@@ -149,8 +159,17 @@ export const lightTheme: ThemeTokens = {
     accent:           '#009e7a',
     accent_muted:     '#d0f0e6',
     accent_lime:      '#5a9e1a',
-    accent_amber:     '#FBBF24',
+    /**
+     * 2026-09-05 — DARKENED FOR LIGHT MODE, as accent and accent_lime already were.
+     *
+     * This sat at the dark value '#FBBF24' while every other brand accent had a light variant —
+     * green #00C896 → #009e7a, lime #88F700 → #5a9e1a. Amber was simply missed, so amber text on a
+     * white surface ran at roughly 2:1 against a 4.5:1 target. Same hue, enough to read.
+     */
+    accent_amber:     '#B45309',
     accent_sky:       '#38BDF8',
+    /** Dark ships #FFE600; pure yellow is ~1.1:1 on white, so light gets the same hue darkened. */
+    accent_yellow:    '#A16207',
     success:          '#009e7a',
     warning:          '#d97706',
     error:            '#dc2626',
@@ -167,8 +186,14 @@ export const lightTheme: ThemeTokens = {
 // Phase AP — applied as an overlay on top of the base dark/light theme when
 // the user enables High Contrast in settings. Pure-black/pure-white field
 // with stronger borders for readability in bright sunlight or for users
-// who need max contrast. Brand accent colors stay consistent — they
-// already pass contrast against both backgrounds.
+// who need max contrast.
+//
+// 2026-09-05 — CORRECTED. This used to read "Brand accent colors stay consistent — they already
+// pass contrast against both backgrounds." That was not true and it is why brand-coloured text
+// disappeared in light mode: #FFE600 is ~1.1:1 on white and the ambers ~2:1, against a 4.5:1
+// target. Brand accents now carry LIGHT VARIANTS of the same hue (see lightTheme above), which is
+// what accent and accent_lime were already doing. High contrast still leaves them alone; the base
+// light theme is where the correction belongs.
 
 export const darkHighContrast: Partial<ThemeTokens['colors']> = {
   background:       '#000000',
@@ -192,9 +217,11 @@ export const lightHighContrast: Partial<ThemeTokens['colors']> = {
 
 /**
  * Compose a base theme with the appropriate high-contrast layer when
- * enabled. Brand accent colors (accent, accent_muted, warning, error,
- * success) are NOT overridden — they pass contrast against both modes
- * and stay consistent for brand recognition.
+ * enabled. Brand accent colors are NOT overridden HERE — but note that is
+ * not the same as them being mode-agnostic: as of 2026-09-05 the base light
+ * theme carries darkened variants of the brand hues, because the originals
+ * do not pass contrast on a white field. High contrast only strengthens the
+ * neutrals on top of whichever base is in play.
  */
 export function composeTheme(
   base: ThemeTokens,
