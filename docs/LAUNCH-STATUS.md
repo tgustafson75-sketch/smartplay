@@ -13,7 +13,10 @@ the other's side, so this file is where they meet.
 (`docs/LAUNCH-STATUS.md` → pencil icon → commit to `main`). Put your name and the date in the row
 you touch.
 
-**Last updated:** 2026-09-03 · Claude Code (session `smartplaycaddie-fd`) — **BUILDS ARE DONE AND iOS IS SUBMITTED.** Billing is ON, Health Connect is OUT of 1.0, versionCode is **23**. Several rows below were rewritten today; the Health rows reversed direction, so re-read them before filling any form.
+**Last updated:** 2026-09-05 · Claude Code (session `smartplaycaddie-fd`) — **BOTH STORES ARE IN REVIEW.** Play versionCode **26** and App Store build **26**, both in review. Billing is ON; Health Connect is
+OUT of 1.0. Rows below were rewritten across 09-03/09-05 and the **Health rows reversed direction** —
+re-read them before filling any form. The console side is complete; what remains is listed under
+Blocking and none of it gates review.
 
 ---
 
@@ -21,14 +24,14 @@ you touch.
 
 | # | Item | Owner | Status |
 |---|---|---|---|
-| 1 | `REFERRAL_SALT` env var set on Vercel (any long random string; never rotate once live — rotating invalidates every existing referral code) | **Cowork** | ☐ **STILL OPEN** |
-| 2 | Run `supabase/migrations/0009_referrals.sql` against the `smartplay` schema | **Cowork** | ☐ **STILL OPEN** |
+| 1 | `REFERRAL_SALT` env var on Vercel | **Cowork/Tim** | 🔴 **STILL OPEN, AND IT HAS A DEADLINE.** `api/referral.ts` derives codes as `sha256(salt + install)` with `?? ''` — an unset variable silently falls back to an EMPTY salt, so codes are being minted from it now. Setting it later invalidates every code issued before it, and there is no migration: the code IS the hash. Today only testers hold codes, so it costs nothing. After the app is public it costs real users their referrals. `openssl rand -hex 32`. Never rotate once set. |
+| 2 | Run `supabase/migrations/0009_referrals.sql` against the `smartplay` schema | **Cowork** | ✅ **DONE 2026-09-05 (Cowork)** — applied and verified. |
 | 3 | ~~Publish the September 3 privacy policy~~ | ~~Cowork~~ → **Code** | ✅ **DONE 2026-09-03** — live and verified at `smartplaycaddie.com/privacy` (19,426 bytes, health disclosure + address present, "cage" gone). See the note below: this was never a dashboard task. |
 | 4 | Create the Play Console app (`com.smartplaycaddie.app`) | **Cowork** | ✅ **DONE 2026-09-03 (Cowork)** — Play app ID `4973574947441812809`. RevenueCat Play app `appdf3a1c0d56` also created. |
 | 5 | ~~Health Connect declaration form~~ ✅ *Cowork confirms 2026-09-03: filed as "no health features", matching the binary.* | ~~Cowork~~ | ✅ **NOT NEEDED for 1.0** — health is out of the build entirely. The four `health.READ_*` permissions, the `react-native-health-connect` plugin and the API-34 rationale alias are all gone from `app.json`; a prebuild on 2026-09-03 confirms **zero** `permission.health` entries in the manifest. Filing this declaration would describe a feature the binary does not have. Comes back in 1.1 with the permissions. |
-| 6 | Background location declaration form | **Cowork** | ⚠️ **REPORTED CLEAR, RE-CHECK AFTER THE FIRST AAB UPLOAD.** Cowork 2026-09-03: App content shows "You're all caught up", zero declarations pending. But **no AAB has been uploaded to Play yet** (the Android submit is still blocked on the service account key), and Play surfaces the background-location declaration off the permissions it finds in an uploaded bundle. Expect it to appear once versionCode 23 lands on the internal track. Not a contradiction of Cowork's check — a different moment in time. |
-| 7 | Background location **video** (screen recording — see recipe below) | **Tim** | ✅ **UNBLOCKED** — OTA shipped 2026-09-03 to production + preview from `a20c4031`. Force-close and reopen the app to pick it up, then film. |
-| 8 | Fresh EAS native build (API 36 + permission changes) | **Code** | ✅ **DONE 2026-09-03** — both platforms, `production` profile/channel, 1.0.0 build **23**. Android AAB `6abd67e6-3948-4ced-b566-2a856984a050`, iOS IPA `3b04e18d-2940-4c9a-b1d5-fd70eac098dc`. iOS **submitted to App Store Connect**; Android AAB built but **not** submitted (no Play service account key yet). |
+| 6 | Background location declaration form | **Cowork** | ✅ **DONE 2026-09-05** — filed, with Tim's ≤30s video (unlisted YouTube, verified reachable without login). The Foreground service permissions declaration (FOREGROUND_SERVICE_LOCATION, Geofencing) was filed from the same video. App content shows "You're all caught up", zero declarations pending, re-checked AFTER bundle 26 was on the internal track. |
+| 7 | Background location **video** | **Tim** | ✅ **SHOT 2026-09-05** — `https://www.youtube.com/watch?v=-YO79eIeqJI`, unlisted, 31s, verified reachable without a login. Covers both declarations. |
+| 8 | Fresh EAS native build | **Code** | ✅ **DONE — superseded twice since.** Final artifacts are Play 26 / App Store 26. Originally 2026-09-03 — both platforms, `production` profile/channel, 1.0.0 build **23**. Android AAB `6abd67e6-3948-4ced-b566-2a856984a050`, iOS IPA `3b04e18d-2940-4c9a-b1d5-fd70eac098dc`. iOS **submitted to App Store Connect**; Android AAB built but **not** submitted (no Play service account key yet). |
 | 9 | Decision: ship 1.0 with `SUBSCRIPTIONS_ENABLED` false, or flip it | **Tim** | ✅ **FLIPPED TRUE 2026-09-03.** The listing and the Play Purchase-history declaration both describe a paid app, so the binary had to match the paperwork. Both real RevenueCat public keys are in; the test-store key is deleted. **Consequence: the paywall is live, so the store products must exist or testers meet an empty paywall.** |
 
 ## 🟡 Needed before submit, not blocking each other
@@ -75,7 +78,7 @@ repositories. Change the policy in both, or the guard passes while the web lies.
 
 ## Facts the console forms need — take these from here, not from memory
 
-**Package** `com.smartplaycaddie.app` · **version** 1.0.0 · **versionCode** 23
+**Package** `com.smartplaycaddie.app` · **version** 1.0.0 · **versionCode** 26 (Play) / build 26 (App Store)
 **Target API** 36 (was 35; Play rejects below 36 for new apps as of 2026-08-31)
 **minSdk** 29 · **Entity** SmartPlay AI LLC, 29003 Navigator Way, Menifee, CA 92585
 
@@ -182,32 +185,59 @@ a device is API 35 with the old permission set.
 clones. Branch state is fine, but either session can stage or publish the other's in-progress edits.
 If two sessions are going to work at once, one should move to a git worktree.
 
+## 🏌️ What the first real round found (2026-09-05)
+
+Tim played 18 holes on the Palms at Menifee Lakes with the submitted build. Everything below was
+found by playing, not by testing, and all of it shipped by OTA the same night. Recording it because
+the SHAPE repeats: in every case the app already had the right answer and threw it away.
+
+| Symptom on the course | What was actually wrong |
+|---|---|
+| Correct yardages, wrong hole photos | The round was stamped with `club_name` only, discarding `course_name`. golfcourseapi returns "Menifee Lakes Country Club" for BOTH layouts, so imagery had to guess and guessed Lakes |
+| "2 iron" logged a 2, and an eagle | Putts and pin distances were stripped from score parsing; club and hole numbers never were |
+| SmartVision showed a loading canvas while the caddie tab had a moving cart | The loading state was not cleared until an async chain finished, ending in a live vision derive — for geometry already warm in memory |
+| Almost no text on the Play tab in light mode | 65 text colours were frozen at dark-theme values inside themed stylesheets; the brand accents had no light variants and the tokens file claimed they did |
+| Serena describing a shot already played | A positional reply was spoken whenever it arrived — and, worse, silently stamped as the club for the NEXT shot |
+
+The last one explains a second report Tim had raised separately ("we're still not scoring implied
+club usage"): the attribution machinery was fine, it was being handed a recommendation for a
+position the player had left.
+
 ## 🚚 Deployment — what is actually ON A DEVICE
 
-**Committed is not deployed, and the gap is currently five commits.** The last OTA went out at
-`a20c4031`. Everything after it is on `main` and on nobody's phone:
+**Everything on `main` is deployed.** As of 2026-09-05 there is no gap between committed and
+shipped — the native half is in both stores' review queues and every JS change since has gone out
+by OTA to production AND preview (sequentially, never in parallel), runtime `1.0.0`.
 
-| Commit | What is stranded |
-|---|---|
-| `6c545ac6` | route-change tag on the voice preempt diagnostic |
-| `583a45b2` | 3-iron reading slower than a 4-iron; tagged 7W told to tag itself |
-| `983bdd63` | recap tempo card (the tempo story's first reader) |
-| `18f84572` | recap YOUR CLIPS row (clip_uri's first reader) |
-| `0db45e23` | handicap card showing a differential the round never posted |
+| Store | Artifact | State |
+|---|---|---|
+| Google Play | versionCode **26** | in review · 177 countries · verified 16 KB-aligned on the artifact |
+| App Store | build **26** (1.0.0) | submitted for review, with the watch screenshot and both subscriptions |
 
-**The background-location video IS filmable** — `2e8aae9b` (the prominent disclosure) is an ancestor
-of the OTA commit, so it is on testers' devices now. Force-close and reopen first. Verified with
-`git merge-base --is-ancestor`, not assumed.
+Android 23 → 25 → 26 and iOS 23 → 26. The gaps are `autoIncrement`, not lost work: **24 never
+existed as an artifact.** Bundle 25 must never be released — it carries the 16 KB defect.
 
-Everything above is JS and can go OTA at any time. The NATIVE half — target API 36, the removed
-storage permissions, Health Connect — cannot, and still needs the EAS build in row 8.
+**OTAs shipped 2026-09-05**, all from field reports during Tim's round:
+- Menifee Palms/Lakes — the layout was discarded at round start, so imagery guessed and guessed wrong
+- club and hole numbers no longer parsed as scores ("a 2 iron" became a 2, and an eagle)
+- SmartVision renders from warm geometry instead of waiting on a vision derive
+- light mode text (65 colours frozen at dark values; brand accents given light variants)
+- advice for a shot already played is captioned rather than spoken, and no longer stamps a club
+
+**The native/OTA line, unchanged:** target API, permissions, `app.json` and native plugins need a
+BUILD. Everything in `app/`, `services/`, `store/`, `components/` and `api/` does not — `api/`
+deploys to Vercel on push to `main`, independently of the stores.
 
 ## Repo state
 
-`main` @ `507623f0` · ts-check clean · jest **230 suites / 2546 tests** · sim **969/969** · user-sim 100 players, 0 issues
+`main` @ `13a32a8d` · ts-check clean · jest **239 suites / 2613 tests** · sim **969/969** · user-sim
+100 players, 0 issues · production API verified running the current commit (`/api/health` reports
+`build.commit`).
 
-Gates run in an isolated worktree (`/Users/timothyg/smartplay-launch`, branch `launch-prep`, pushed
-with `git push origin launch-prep:main`). A jest run counts only when it prints a `Tests:` line —
+Gates now run in the MAIN tree (`/Users/timothyg/smartplay`) — the launch worktree was only needed
+while two sessions shared one checkout. Note the pre-commit hook re-runs the whole suite and can
+exceed a 10-minute tool timeout; when a commit uses `--no-verify`, the gates were run manually first
+and the commit message says so. A jest run counts only when it prints a `Tests:` line —
 on 2026-09-03 node_modules was destroyed and jest exited 194 with ZERO output while `tsc` stayed
 green, so "ts-check clean" alone is not evidence the suite ran.
 

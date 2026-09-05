@@ -28,6 +28,28 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Sep 2026',
+    note: 'Your caddie no longer talks you through a shot you have already hit. If a club call arrives after you have played, it shows on screen instead of being read out — and it is no longer written down as the club you used.',
+  },
+  {
+    when: 'Sep 2026',
+    note: 'Saying a club or a hole number no longer lands on your card as a score. "I am going to hit a 2 iron" used to become a 2, and an eagle. Now only the number you actually mean as your score is written down.',
+    howTo: 'Say your score however you like — "bogey with two putts", "I made a 5, hit 7 iron in". The club, the putts and the hole number are all ignored as scores.',
+  },
+  {
+    when: 'Sep 2026',
+    note: 'SmartVision opens straight to your hole. If the caddie is already tracking you, the view is there the moment you tap it instead of making you wait on a blank screen.',
+  },
+  {
+    when: 'Sep 2026',
+    note: 'At clubs with more than one course, you now see the right one. Playing the Palms could show you photos of the Lakes while your yardages were correct — the hole you are standing on and the picture of it now always agree.',
+  },
+  {
+    when: 'Sep 2026',
+    note: 'Light mode is readable again. Whole sections of the Play screen were showing almost no text on a bright background. If you play in daylight with a light theme, everything is legible now.',
+    howTo: 'Settings has the light and dark choice, plus a high-contrast option for bright sun.',
+  },
+  {
+    when: 'Sep 2026',
     note: 'The clips you record during a round are watchable again. Saying "record this shot" has always saved the video against that shot — but there was nowhere to play it back, so they just sat there. Your recap now has a YOUR CLIPS row: tap the hole and the swing plays.',
     howTo: 'Say "record this shot" while you play, then open the round recap and tap the clip under YOUR CLIPS.',
   },
