@@ -4,6 +4,7 @@ import { BRAIN_FETCH_TIMEOUT_MS as KEVIN_FETCH_TIMEOUT_MS } from '../constants/v
 import { endsAsQuestion } from './voice/endsAsQuestion';
 import { speak, speakFromBase64, stopSpeaking, captureUtteranceDetailed, releaseExternalMic, playLocalFile, stopCapture, endCaptureEarly, flashCaption, getLastSpokenLine, type CaptureBail, type CaptureResult } from './voiceService';
 import { logVoiceSilentFail, logVoiceDiag, describeError } from './voiceErrorLog';
+import { adviceIsStillWorthSaying, captureShotEpoch, currentTurnEpoch } from './adviceFreshness';
 import { responseForCaptureBail, shouldRetryCapture } from './voice/captureBail';
 import { conversationalBrainTurn } from './conversationalBrain';
 import { askCaddie } from './caddieBrain';
@@ -708,7 +709,12 @@ export async function speakHonestFailure(
  * [[caddie-failsafe-no-walls]] [[no-half-fixes-enforce-every-surface]] [[feels-like-a-real-caddie]]
  */
 async function deliverBrainReply(opts: {
-  reply: { text: string | null; audioBase64: string | null };
+  /**
+   * The brain's reply. `toolActions` is read straight off it (every caller passes the whole
+   * BrainReply) so the freshness check needs no change at any of the ten call sites — the site that
+   * got missed would have been the one that stayed broken.
+   */
+  reply: { text: string | null; audioBase64: string | null; toolActions?: readonly unknown[] | null };
   utterance: string;
   language: string | null | undefined;
   voiceGender: 'male' | 'female';
@@ -723,6 +729,13 @@ async function deliverBrainReply(opts: {
    * session and passes false.
    */
   requireResponding: boolean;
+  /**
+   * 2026-09-05 — the shot the player was standing over when this turn STARTED, and the tools the
+   * turn ended up calling. Together they answer "is this advice still about the shot he is facing?"
+   * Both optional: a caller that passes neither behaves exactly as before.
+   */
+  positionEpoch?: string | null;
+  toolActions?: readonly unknown[] | null;
 }): Promise<void> {
   const { reply, utterance, voiceGender, apiUrl, ttsAllowed, site, requireResponding } = opts;
   const lang: 'en' | 'es' | 'zh' = (['en', 'es', 'zh'] as const).includes(opts.language as never)
@@ -737,6 +750,19 @@ async function deliverBrainReply(opts: {
 
   // 1 — The caddie answered. Say it.
   if (text) {
+    /**
+     * 2026-09-05 (Tim) — unless he has already played the shot it was about. "By the time I get to
+     * the green, Serena was giving me my layout for the shot I just hit." A club call for a lie he
+     * is not standing in is worse than silence. Captioned, not binned — same contract as an answer
+     * that arrives after the session moved on. See services/adviceFreshness.ts.
+     */
+    if (!adviceIsStillWorthSaying(opts.positionEpoch ?? currentTurnEpoch(), opts.toolActions ?? reply.toolActions ?? null)) {
+      const shown = caption(text, 7000);
+      logVoiceSilentFail('advice_overtaken_by_play', {
+        source: site, captioned: shown, epochNow: captureShotEpoch(), utteranceHead: utterance.slice(0, 60),
+      });
+      return;
+    }
     if (maySpeak()) {
       await stopSpeaking().catch(() => {});
       if (maySpeak()) {

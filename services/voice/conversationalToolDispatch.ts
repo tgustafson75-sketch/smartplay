@@ -18,6 +18,7 @@
  */
 
 import { router } from 'expo-router';
+import { adviceIsStillWorthSaying, currentTurnEpoch } from '../adviceFreshness';
 import { Linking } from 'react-native';
 import { useSettingsStore } from '../../store/settingsStore';
 import { getScreenContext } from '../screenContext';
@@ -470,6 +471,23 @@ function dispatchOne(a: AnyAction): void {
       // from the shot-strategy query path). If the player then hits it without changing clubs, the
       // shot-club resolver attributes THIS club and its measured distance trains the bag. Active-round
       // only; clears on hole change; the resolver arbitrates it against any club the player declares.
+      /**
+       * 2026-09-05 (Tim) — DO NOT STAMP A RECOMMENDATION FOR A SHOT ALREADY PLAYED.
+       *
+       * Tim: "by the time I get to the green, Serena was giving me my layout for the shot I just
+       * hit." Suppressing the SPEECH (see services/adviceFreshness.ts) was only half of it. This
+       * dispatch runs whenever the reply lands, so a late recommendation still wrote itself into
+       * pendingKevinRec — after the shot it was about had been logged, where it then sat waiting to
+       * be attributed to the NEXT shot the player hit.
+       *
+       * That is worse than the late voice line, because it is silent: the wrong club gets logged
+       * against a shot the caddie never advised on, its measured distance trains the learned bag,
+       * and adherence is scored against advice for a different position entirely. Stale advice must
+       * not become data. [[two-owners-is-the-root-cause]]
+       */
+      if (!adviceIsStillWorthSaying(currentTurnEpoch(), [{ name: 'recommend_club' }])) {
+        break;
+      }
       if (typeof a.club === 'string' && a.club.trim()) {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const round = (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState();

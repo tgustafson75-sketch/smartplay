@@ -30,6 +30,7 @@
  */
 
 import { askCaddie } from './caddieBrain';
+import { markAdviceTurnStart } from './adviceFreshness';
 import { mayTalkToCaddie } from './featureAccess';
 import { setConversationHistory, clearConversationHistory } from './voice/conversationHistory';
 import { useSettingsStore } from '../store/settingsStore';
@@ -54,6 +55,12 @@ export function clearConversationalHistory(): void { clearConversationHistory();
  * check lives here.
  */
 export async function conversationalBrainTurn(utterance: string, opts?: { timeoutMs?: number }): Promise<BrainReply> {
+  /**
+   * 2026-09-05 — stamp WHICH SHOT the player was standing over when this turn began, so the
+   * delivery path can tell whether the answer still applies by the time it arrives. See
+   * services/adviceFreshness.ts; Tim was getting club calls for shots he had already hit.
+   */
+  try { markAdviceTurnStart(); } catch { /* advisory only — never break a turn over freshness */ }
   // 2026-08-25 — the one caddie access gate. NO_ANSWER is this module's own vocabulary for "the
   // brain did not answer", so every existing caller already handles it correctly.
   if (!mayTalkToCaddie()) return NO_ANSWER;

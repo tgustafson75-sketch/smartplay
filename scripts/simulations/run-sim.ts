@@ -9510,7 +9510,17 @@ console.log('\n=== Beta-wrap deep-audit LOCK ===');
     (() => {
       const at = listenSrc.indexOf('async function deliverBrainReply');
       if (at < 0) return false;
-      const fn = listenSrc.slice(at, at + 4000);
+      /**
+       * 2026-09-05 — window widened 4000 → 7000. The function grew when advice-freshness suppression
+       * was added (a positional club call is captioned, not spoken, once the shot has been played),
+       * which pushed the honest-line captioner past the old cut-off and failed this guard for a
+       * reason that had nothing to do with the property it protects.
+       *
+       * The magic number is the weak part of this check, not the assertions. Kept as a bounded slice
+       * rather than the whole file so the four captioners must live inside THIS function, but sized
+       * with headroom. If it fails again for length alone, size it again — do not delete assertions.
+       */
+      const fn = listenSrc.slice(at, at + 7000);
       return (
         // the shared captioner exists and is the muted path's answer
         /const caption = \(line: string, ms: number\): boolean =>/.test(fn) &&
