@@ -14,6 +14,7 @@ import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { getApiBaseUrl, appKeyHeaders } from './apiBase';
 import { getInstallId } from './installId';
+import { isTestRunner } from './isTestRunner';
 
 // App-key gate → shared appKeyHeaders() (services/apiBase.ts), mirrors api/_appKey.ts on the server.
 /**
@@ -42,14 +43,9 @@ import { getInstallId } from './installId';
  * so it cannot be defeated by import ordering. Inert in the app — React Native never sets
  * NODE_ENV=test and has no JEST_WORKER_ID — so this changes no shipped behaviour.
  */
-function isTestRunner(): boolean {
-  try {
-    if (typeof process === 'undefined' || process.env == null) return false;
-    return process.env.JEST_WORKER_ID != null || process.env.NODE_ENV === 'test';
-  } catch {
-    return false;
-  }
-}
+// 2026-09-05 — MOVED to services/isTestRunner so the OTHER sender to this endpoint can reach it.
+// It was private here, so services/roundTrace (a second POST to /api/issue-report, written 08-12)
+// never got the guard and mailed Tim thirteen fake round traces. One owner, both callers.
 
 const AUTOSEND_DEBOUNCE_MS = 4000;
 // 2026-07-30 (audit #17) — cap how long the debounce can keep deferring. A SUSTAINED sub-4s failure

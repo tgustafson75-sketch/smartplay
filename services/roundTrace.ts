@@ -11,6 +11,7 @@
  * answers "did it work"; the timeline is what answers "why not".
  */
 import { useRoundTraceStore, type TraceEvent, type TraceRow } from '../store/roundTraceStore';
+import { isTestRunner } from './isTestRunner';
 
 /**
  * Record one tick. Safe to call from anywhere, including hot paths.
@@ -154,6 +155,29 @@ export function _resetRoundTraceSendGuard(): void {
 export async function sendRoundTrace(reporter: string): Promise<boolean> {
   const store = useRoundTraceStore.getState();
   if (store.rows.length === 0) { store.clear(); return false; }
+
+  /**
+   * 2026-09-05 — THE TWO GATES THIS SENDER NEVER HAD, both already enforced on the OTHER POST to
+   * /api/issue-report (services/issueLogExport). This file was written 08-12 and predates them.
+   *
+   * isTestRunner: a jest run calls the real endRound(), which fire-and-forgets this. That is how
+   * thirteen "ROUND TRACE — Menifee Lakes Palms" emails arrived overnight from a tester who does not
+   * exist. __tests__/setupNoNetwork.ts now blocks the socket too; this is the same rule stated where
+   * the send decision is actually made, so it holds under any runner, not just jest.
+   *
+   * shareDiagnostics: a CONSENT toggle in Settings, split out in the 2026-07-27 privacy audit
+   * precisely so a player could refuse diagnostic uploads — with a persist migration written to keep
+   * an existing opt-out from silently flipping true. This sender ignored it and mailed a full
+   * tick-by-tick round timeline at the end of every round regardless. That is the more serious half
+   * of today's find: the emails were noise for Tim, but for a player who said no it was a send that
+   * should never have left the phone. [[no-half-fixes-enforce-every-surface]]
+   */
+  if (isTestRunner()) { store.clear(); return false; }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { useSettingsStore } = require('../store/settingsStore') as typeof import('../store/settingsStore');
+    if (useSettingsStore.getState().shareDiagnostics === false) { store.clear(); return false; }
+  } catch { /* a settings read must never strand the round */ }
 
   const key = store.label ?? 'round';
   if (inFlight) return inFlight;
