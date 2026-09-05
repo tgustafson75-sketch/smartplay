@@ -31,6 +31,25 @@ export function stripNonScoreClauses(s: string): string {
     .replace(/\b(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)[\s-]*putt(?:s|ed|ing)?\b/gi, ' ')
     // distances: "from 12 feet", "a 20 footer", "8 foot"
     .replace(/\b(?:from\s+)?(?:\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten)\s*(?:feet|foot|footer|yards?|yd)\b/gi, ' ')
+    /**
+     * 2026-09-05 (Tim, from the course) — CLUBS. "if I say I am going to use a 2 iron ... it still
+     * may say Eagle and score the 2 as the score."
+     *
+     * A club number is the most common number in golf speech after the score itself, and it is said
+     * constantly outside any scoring context. Nothing here stripped it, so "a 2 iron" put a 2 on the
+     * scorecard and called it an eagle. Same for "5 wood", "3 hybrid", "56 degree".
+     *
+     * Covers the spoken forms and the shorthand people actually say: "7 iron", "7-iron", "7i",
+     * "3 wood", "3W", "4 hybrid", "56 degree", "60 deg".
+     */
+    .replace(/\b(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\s*(?:-\s*)?(?:iron|wood|hybrid|rescue|utility|wedge|degree|deg)\b/gi, ' ')
+    .replace(/\b(\d{1,2})\s*(?:i|w|h)\b/gi, ' ')
+    // named clubs carry no number but often sit beside one: "driver 280"
+    .replace(/\b(?:driver|putter|pitching|sand|lob|gap)\s*wedge?\b/gi, ' ')
+    /**
+     * Hole references. "I got a bogey on hole 7" — the 7 is where, not what.
+     */
+    .replace(/\bhole\s*(?:number\s*)?(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\b/gi, ' ')
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
@@ -127,6 +146,19 @@ export function resolveStrokes(
   if (mentionsScoreName(paramStrokes) || mentionsScoreName(rawText)) {
     const named = parseScoreName(paramStrokes, par) ?? parseScoreName(rawText, par);
     if (named != null) return named;
+    /**
+     * 2026-09-05 — A NAMED SCORE THAT CANNOT BE RESOLVED MUST NOT FALL THROUGH TO A STRAY NUMBER.
+     *
+     * Score names are par-relative, so with par unknown (course holes not loaded yet, or an
+     * off-book hole) parseScoreName returns null. The old code then dropped into the numeric path
+     * and took whatever digit was in the sentence — which, in "bogey with 2 putt", is the putt
+     * count. The player said "bogey" and got a 2 logged as an eagle.
+     *
+     * The player naming a score is itself the evidence that no other number in that sentence is the
+     * score. Returning null asks one short question instead of writing a wrong number silently, and
+     * a wrong scorecard is far more expensive to the player than one clarifier.
+     */
+    return null;
   }
   return (
     parseStrokes(paramStrokes) ??
