@@ -28,6 +28,11 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Sep 2026',
+    note: 'Turning off diagnostics now turns off all of it. The switch already stopped error reports, but a summary of each round was still being sent when you finished. If you have that switch off, nothing about your round leaves your phone.',
+    howTo: 'Settings has the diagnostics switch — off means off, for error reports and round summaries alike.',
+  },
+  {
+    when: 'Sep 2026',
     note: 'Your caddie no longer talks you through a shot you have already hit. If a club call arrives after you have played, it shows on screen instead of being read out — and it is no longer written down as the club you used.',
   },
   {
