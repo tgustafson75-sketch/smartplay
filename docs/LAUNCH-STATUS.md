@@ -15,8 +15,9 @@ you touch.
 
 **Last updated:** 2026-09-05 · Claude Code (session `smartplaycaddie-fd`) — **BOTH STORES ARE IN REVIEW.** Play versionCode **26** and App Store build **26**, both in review. Billing is ON; Health Connect is
 OUT of 1.0. Rows below were rewritten across 09-03/09-05 and the **Health rows reversed direction** —
-re-read them before filling any form. The console side is complete; what remains is listed under
-Blocking and none of it gates review.
+re-read them before filling any form. The console side is complete. **Nothing on the Blocking list is open** — the last row
+(`REFERRAL_SALT`) was verified live on 09-05 by deriving a code and comparing it against what an
+empty salt would produce.
 
 ---
 
@@ -24,7 +25,7 @@ Blocking and none of it gates review.
 
 | # | Item | Owner | Status |
 |---|---|---|---|
-| 1 | `REFERRAL_SALT` env var on Vercel | **Cowork/Tim** | 🔴 **STILL OPEN, AND IT HAS A DEADLINE.** `api/referral.ts` derives codes as `sha256(salt + install)` with `?? ''` — an unset variable silently falls back to an EMPTY salt, so codes are being minted from it now. Setting it later invalidates every code issued before it, and there is no migration: the code IS the hash. Today only testers hold codes, so it costs nothing. After the app is public it costs real users their referrals. `openssl rand -hex 32`. Never rotate once set. |
+| 1 | `REFERRAL_SALT` env var on Vercel | **Tim** | ✅ **DONE — VERIFIED LIVE 2026-09-05.** Proven rather than reported: production returned code `NZVZHWQLZJ` for install `spc-testsalt01`, while an empty salt derives `6VHSEH1U7E`. Different, so a real salt is in the hash. Never rotate it — every existing code is derived from it and the code IS the hash, so there is no migration. |
 | 2 | Run `supabase/migrations/0009_referrals.sql` against the `smartplay` schema | **Cowork** | ✅ **DONE 2026-09-05 (Cowork)** — applied and verified. |
 | 3 | ~~Publish the September 3 privacy policy~~ | ~~Cowork~~ → **Code** | ✅ **DONE 2026-09-03** — live and verified at `smartplaycaddie.com/privacy` (19,426 bytes, health disclosure + address present, "cage" gone). See the note below: this was never a dashboard task. |
 | 4 | Create the Play Console app (`com.smartplaycaddie.app`) | **Cowork** | ✅ **DONE 2026-09-03 (Cowork)** — Play app ID `4973574947441812809`. RevenueCat Play app `appdf3a1c0d56` also created. |
