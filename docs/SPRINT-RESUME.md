@@ -8,6 +8,23 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+> ### ⚠️ LATEST — 2026-09-06. One course engine for every course.
+>
+> Menifee Palms + Lakes were the only two courses with a private data path, and it reached into the
+> **resolver**, not just imagery: `smartFinderService` read a Golfbert pin cache above `courseHoles`,
+> and that cache's only populator was SmartVision's mount. So Menifee's yardages depended on whether
+> the map had been opened that session — the likely cause of Tim's bad round there. Also removed: a
+> Golfbert render branch that anchored markers with calibration measured off images deleted on
+> 2026-08-25, and an `includes('palms')` name gate that left *any* "Palms" course with no imagery.
+>
+> **Severed, not deleted** — `golfbertApi.ts`, `golfbert-proxy.ts`, `golfbertCourses.ts` stay on disk;
+> Tim's paid access is intact. Rewire it *behind* the engine (a provider feeding `courseHoles`) or not
+> at all. Pinned by `__tests__/regression/one-course-engine-answers-for-every-course.test.ts`.
+>
+> Health: tsc 0 · jest **2645/2645** (241 suites) · lint 1 pre-existing error (`app/paywall.tsx:271`).
+>
+> **NEXT:** PATH 2 + PATH 5 device verification at Menifee — Tier A only so far.
+>
 > ### ⚠️ CURRENT STATE — 2026-08-13. Read this block; the rest of this file is older.
 >
 > The dated material below ("Day 5 — 2026-05-24") is **months stale** and describes a different point

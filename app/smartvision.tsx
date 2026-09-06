@@ -91,8 +91,8 @@ import { bumpToActive } from '../services/gpsManager';
 import { verifyShotAtLocation, correctShotClub, confirmTrackedShot, type ShotTrackResult } from '../services/shotTracking';
 import ShotTrackedSheet from '../components/round/ShotTrackedSheet';
 import type { ClubName } from '../store/clubStatsStore';
-import { getGolfbertHolesForCourse, type GolfbertHole } from '../services/golfbertApi';
-import { hasGolfbertCourseMapping } from '../constants/golfbertCourses';
+// 2026-09-06 — golfbertApi / golfbertCourses imports removed; this screen renders course-engine
+// geometry over Mapbox for every course, with no per-course provider branch.
 import { fetchHoleImagery, computeFitView, getCenteredImageryUrl, getHoleImageryUrl } from '../services/mapboxImagery';
 import { useCaddieBarReserve } from '../components/GlobalCaddieBar';
 import YardageBookPanel from '../components/smartvision/YardageBookPanel';
@@ -676,13 +676,7 @@ export default function SmartVisionScreen() {
   // be accidentally moved by a fat-finger gesture during play.
   const [teeByHole, setTeeByHole] = useState<Record<string, { x: number; y: number }>>({});
 
-  // Golfbert premium-data state — populated when the active course has a
-  // mapping AND the upstream proxy returns data successfully. Holds the
-  // current hole's polygon vectors (greens / fairway / bunkers / water)
-  // so the SmartVision overlay layer can render them on top of the
-  // satellite tile. Null means no premium data; existing geometry path
-  // handles rendering with point-only data (status quo).
-  const [golfbertHole, setGolfbertHole] = useState<GolfbertHole | null>(null);
+  // 2026-09-06 — golfbertHole state removed with the fetch effect below. See the note there.
   // 2026-06-07 — Shot tracked via cart-mark verification (shotTracking).
   // Set after a same-hole cart tap during an active round; drives the
   // ShotTrackedSheet (distance + approach + tap-to-scroll club correct).
@@ -972,26 +966,13 @@ export default function SmartVisionScreen() {
       if (cancelled) return;
       setGeometry(geo);
 
-      // Golfbert premium fetch (opportunistic — failures are silent and
-      // the existing geometry path serves as the fallback). Pulls all
-      // mapped holes for the course, filters to current hole. Cached
-      // by SmartVision component mount; re-fetched only on hole switch.
-      if (courseId && hasGolfbertCourseMapping(courseId)) {
-        try {
-          const holes = await getGolfbertHolesForCourse(courseId);
-          if (cancelled) return;
-          const match = holes?.find(h => h.holeNumber === holeIndex) ?? null;
-          setGolfbertHole(match);
-          if (match) {
-            console.log('[smartvision] using Golfbert premium data for hole', holeIndex);
-          }
-        } catch (e) {
-          console.log('[smartvision] golfbert fetch failed (non-fatal)', e);
-          if (!cancelled) setGolfbertHole(null);
-        }
-      } else {
-        setGolfbertHole(null);
-      }
+      // 2026-09-06 (Tim — "all courses need to go through our course engine") — the Golfbert fetch
+      // that stood here is UNWIRED, not deleted. services/golfbertApi.ts and api/golfbert-proxy.ts
+      // remain on disk with Tim's paid access intact; what's removed is this screen's role as the
+      // ONLY populator of the golfbertCache that services/smartFinderService.ts then read as a pin
+      // source. That made Menifee's yardages depend on whether this screen had mounted. If Golfbert
+      // is ever rewired, it belongs BEHIND the course engine as one provider feeding courseHoles —
+      // not beside it as a second answer only two courses can get.
 
       // 2026-05-18 — Curated bundled images win when one exists for this
       // course. Superseded 2026-08-11 — the live tile leads; see the block below.
@@ -1284,11 +1265,17 @@ export default function SmartVisionScreen() {
   // live tile for this hole, so the photo IS the imagery.
   const preferCurated = !!curatedImage && imagerySource === 'curated';
 
-  // 2026-06-21 — Golfbert imageryUrl IS a curated photo (M13 audit fix).
-  // GPS projection is Mapbox-tile-specific; applying it to any curated image
-  // (local bundled OR Golfbert) sends T/P markers off-screen. Set the flag
-  // for all curated cases so calibration data is used instead of GPS projection.
-  const onCuratedPhoto = preferCurated || !!golfbertHole?.imageryUrl || (!imageUri && !!curatedImage);
+  // GPS projection is Mapbox-tile-specific; applying it to a curated bundled photo (whose framing
+  // is not bearing-rotated to match) sends T/P markers off-screen, so curated holes use calibration.
+  //
+  // 2026-09-06 — the `golfbertHole?.imageryUrl` term is GONE, and it was a live bug, not just a
+  // special case. When the bundled packs were emptied on 2026-08-25, `preferCurated` went false at
+  // Palms/Lakes and Golfbert's photo took the render. That flipped this flag true, which switched
+  // marker placement off GPS projection and onto data/holeLineCalibration.ts — whose palms/lakes
+  // fractions were scanned FROM the very crops that had just been deleted. Golfbert's framing is
+  // different, so the tee/pin were anchored by measurements of an image no longer on screen. The
+  // 2026-06-23 note below predicted exactly this; our crop winning the race was all that hid it.
+  const onCuratedPhoto = preferCurated || (!imageUri && !!curatedImage);
 
   const calibrationSlug = useMemo(() => {
     // Use courseId directly when it's a local: course — avoids fragile
@@ -2365,14 +2352,12 @@ export default function SmartVisionScreen() {
         {/* 2026-06-23 (Tim) — "Golfbert premium" pill removed: it's internal
             data-sourcing detail, not something the player needs on the map, and
             it collided with the tap-to-place banner. */}
-        {/* 2026-06-23 (Tim) — our clean curated image wins over Golfbert (matched
-            to our calibration → correct anchoring). Golfbert only when we have no
-            curated image; Mapbox tile last. */}
+        {/* 2026-09-06 — two branches, not three. Curated bundled photo when one exists (matched to
+            our calibration → correct anchoring), else the Mapbox tile the course engine framed.
+            The Golfbert branch that sat between them is removed: it was reachable on exactly two
+            courses and, once the bundled packs were emptied, it mis-anchored both. */}
         {preferCurated ? (
           <Image source={curatedImage} style={{ width: imageW, height: imageH }} resizeMode="cover" />
-        ) : golfbertHole?.imageryUrl ? (
-          // onError falls through to curated/Mapbox/empty instead of blank-white.
-          <Image source={{ uri: golfbertHole.imageryUrl }} style={{ width: imageW, height: imageH }} resizeMode="cover" onError={() => setGolfbertHole(null)} />
         ) : imageUri ? (
           <Image source={{ uri: imageUri }} style={{ width: imageW, height: imageH }} resizeMode="cover" onError={() => setImageUri(null)} />
         ) : loading ? (

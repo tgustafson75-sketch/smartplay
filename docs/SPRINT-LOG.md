@@ -2338,3 +2338,72 @@ If it did not arrive, the email leg is broken despite the endpoint claiming `ema
 **App Store blockers — still 404 (checked live 2026-08-13):** `smartplaycaddie.com/privacy`,
 `/terms`, `/support` all return 404. Hard requirement, **Oct 1 target, ~7 weeks out.** Nothing in the
 codebase can fix this; it needs pages published.
+
+---
+
+## Day N — 2026-09-06
+
+### Shipped today
+
+**One course engine for every course — the Menifee special-case severed.**
+
+Tim's rule, and the reason for the work: *"all courses need to go through our course engine so we can
+eventually build our course engine API."* An engine that answers differently for two courses is two
+engines, and only one of them is sellable.
+
+Menifee Palms and Lakes were the only two courses in the app with a private data path. What was found
+and removed:
+
+1. **A second pin/tee source inside the resolver (the real bug).** `services/smartFinderService.ts`
+   read `getCachedGolfbertHole()` *above* `courseHoles` in both `resolveGreenCoords` and
+   `resolveTeeCoords`. That cache had exactly ONE populator in the whole app — SmartVision's mount
+   effect — so at Menifee the pin feeding every yardage depended on whether the player had opened the
+   map that session. SmartVision first → `source: 'golfbert'`; straight to the caddie →
+   `source: 'courseHoles'`. Same hole, same round, two different pins. Non-determinism, not a fallback.
+   This is the most likely explanation for Tim's last round at Menifee reading wrong.
+2. **A second image path that mis-anchored the markers.** SmartVision rendered Golfbert's photo between
+   the curated crop and the Mapbox tile, and `onCuratedPhoto` went true on its presence — switching
+   marker placement off GPS projection onto `data/holeLineCalibration.ts`, whose palms/lakes fractions
+   were scanned *from the bundled crops emptied on 2026-08-25*. So since that date the tee and pin were
+   anchored by measurements of an image no longer on screen. The 2026-06-23 comment in smartvision.tsx
+   predicted this exact failure; our crop winning the render race was all that hid it.
+3. **A name-substring gate.** `StartRoundCourseCard` and `CourseDetailModal` keyed on
+   `courseName.toLowerCase().includes('palms')` to suppress the Mapbox URL in favour of `PALMS_IMAGES`
+   — `{}` since 2026-08-25. Net effect today: **any** course with "Palms" in its name rendered no hero
+   and no hole thumbnails at all. Same family as `a-course-is-not-the-first-name-that-contains-the-word`.
+4. **The last two hand-authored thumbnails.** `local:palms` / `local:lakes` were the only 2 of ~40
+   entries not built by `satelliteThumb(lat, lng)`. They resolved to `undefined` and `courseThumb()`'s
+   lat/lng rescue silently covered for them.
+
+**SEVERED, NOT DELETED** — per the LENS. `services/golfbertApi.ts`, `api/golfbert-proxy.ts` and
+`constants/golfbertCourses.ts` all stay on disk with Tim's paid access intact. What was removed is
+their reach into the resolver and the render path. If Golfbert is ever rewired it belongs *behind* the
+engine as one provider feeding `courseHoles`, so every course can reach whatever it provides.
+
+New gate: `__tests__/regression/one-course-engine-answers-for-every-course.test.ts` (14 tests).
+**Verified it can actually fail** — each violation was reintroduced and tripped its own assertion
+before being restored.
+
+### Verified on device (Z Fold)
+
+Nothing. This is Tier A (static + suite) only. Menifee needs an on-course look before it counts.
+
+### Open / carried to tomorrow
+
+- **PATH 2 + PATH 5 need device verification at Menifee.** Expected: Palms/Lakes now show Mapbox
+  satellite with GPS-projected tee/pin, and the yardages no longer change depending on whether
+  SmartVision was opened first.
+- `app/landmark-curate.tsx` still imports `PALMS_IMAGES` and is hardcoded to `COURSE_ID = 'palms'`. It
+  is an internal authoring tool, off the player path, and cannot function while the map is `{}`. Left
+  alone deliberately (parked capability, not dead code) — but it is the last palms-shaped thing in the
+  tree.
+- ~10 other courses still carry `X_HOLE_IMAGES[1]` thumbnails from maps that are all `{}`. Uniform
+  across those courses so not a special case, and `courseThumb()` rescues them — but it is the same
+  dead pattern and should be swept.
+- `data/holeLineCalibration.ts` is now entirely unreachable (it needs a curated image, and every pack
+  is empty). Harmless, but it is measurement data for images that no longer exist.
+
+### Notes
+
+Health: tsc 0 · jest **2645/2645** (241 suites) · lint 260 problems / 1 error, and that error
+(`app/paywall.tsx:271`, unescaped apostrophe) is pre-existing and untouched by this work.

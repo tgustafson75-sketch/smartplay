@@ -2,27 +2,26 @@
  * Start Round preview card — compact legacy-style course card shown
  * inside the Start Round modal sheet once a course is selected.
  *
- * Layout: hero thumbnail (Palms bundled images for Palms; Mapbox aerial
- * otherwise) + course name + (i) info icon + stats strip. Tapping the
+ * Layout: hero thumbnail (Mapbox aerial, same path for every course)
+ * + course name + (i) info icon + stats strip. Tapping the
  * (i) opens the full CourseDetailModal with hole-by-hole detail.
  */
 
 import React, { useEffect, useState } from 'react';
 import { playerTee } from '../../services/teeSelection';
-import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator, type ImageSourcePropType } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import AppIcon from '../AppIcon';
 import CourseDetailModal, { type ModalHole } from './CourseDetailModal';
 import { getCourse } from '../../services/golfCourseApi';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
 import { fetchCourseContent } from '../../services/courseContentService';
 import { getCourseImageryUrl } from '../../services/mapboxImagery';
-import PALMS_IMAGES from '../../data/palmsImages';
 import type { Course } from '../../types/course';
 
 type Props = {
   /** Course id (golfcourseapi). Pass null for local-only manual courses. */
   courseId: string | null;
-  /** Course display name used by the legacy bundled-image lookup. */
+  /** Course display name — label only; it never selects a data path. */
   courseName: string;
 };
 
@@ -34,7 +33,6 @@ export default function StartRoundCourseCard({ courseId, courseName }: Props) {
   // (no Mapbox token / no geometry / no tee) shows a static placeholder instead of spinning forever.
   const [heroResolved, setHeroResolved] = useState(false);
   const [open, setOpen] = useState(false);
-  const isPalms = courseName.toLowerCase().includes('palms');
 
   useEffect(() => {
     let cancelled = false;
@@ -96,14 +94,15 @@ export default function StartRoundCourseCard({ courseId, courseName }: Props) {
         };
       });
       setHolesForModal(holes);
-      if (!isPalms) {
-        const url = getCourseImageryUrl({ courseId, holes }, 800, 450);
-        setHeroUrl(url);
-      }
+      // 2026-09-06 — the `if (!isPalms)` guard is gone. It skipped the hero fetch for any course
+      // whose name contained "palms" so a bundled image could take over, but that map has been {}
+      // since 2026-08-25 — the guard's only remaining effect was a permanently empty hero.
+      const url = getCourseImageryUrl({ courseId, holes }, 800, 450);
+      setHeroUrl(url);
       if (!cancelled) setHeroResolved(true); // fetch done (url may be null → placeholder, not spinner)
     })();
     return () => { cancelled = true; };
-  }, [courseId, isPalms]);
+  }, [courseId]);
 
   const tee = playerTee(course) ?? course?.tees[0] ?? null;
   const location = course
@@ -114,9 +113,7 @@ export default function StartRoundCourseCard({ courseId, courseName }: Props) {
     <>
       <View style={styles.card}>
         <View style={styles.heroWrap}>
-          {isPalms && PALMS_IMAGES[1] ? (
-            <Image source={PALMS_IMAGES[1] as ImageSourcePropType} style={styles.hero} resizeMode="cover" />
-          ) : heroUrl ? (
+          {heroUrl ? (
             <Image source={{ uri: heroUrl }} style={styles.hero} resizeMode="cover" />
           ) : !heroResolved ? (
             <View style={[styles.hero, styles.heroPlaceholder]}>

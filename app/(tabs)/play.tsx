@@ -56,11 +56,9 @@ import { prefetchCourseImagery } from '../../services/roundPrefetch';
 import { getCourseImageryUrl, getCenteredImageryUrl } from '../../services/mapboxImagery';
 import { isValidGolfCoord } from '../../utils/coordGuard';
 import { getCachedGeometry } from '../../services/courseGeometryService';
-import PALMS_IMAGES from '../../data/palmsImages';
 import {
   CRYSTAL_SPRINGS_HOLE_IMAGES,
   MARINERS_POINT_HOLE_IMAGES,
-  LAKES_HOLE_IMAGES,
   RANCHO_CALIFORNIA_HOLE_IMAGES,
   SAN_JOSE_MUNI_HOLE_IMAGES,
   SUNNYVALE_HOLE_IMAGES,
@@ -386,7 +384,10 @@ const LOCAL_COURSES_RAW: CourseSummary[] = [
     rating: 69.6,
     slope: 119,
     isLocal: true,
-    thumbnail: PALMS_IMAGES[1] as ImageSourcePropType,
+    // 2026-09-06 — was PALMS_IMAGES[1], the last bundled-image thumbnail in this list. The map has
+    // been {} since 2026-08-25, so this resolved to undefined and courseThumb() silently rescued it
+    // from lat/lng anyway. Now it says what it does, and Palms is built like every other course.
+    thumbnail: satelliteThumb(33.6953922, -117.1504551),
     // Phase 407 — coords from data/courses.ts PALMS_HOLES[0] tee
     lat: 33.6953922,
     lng: -117.1504551,
@@ -398,7 +399,8 @@ const LOCAL_COURSES_RAW: CourseSummary[] = [
     rating: 69.3,
     slope: 119,
     isLocal: true,
-    thumbnail: (LAKES_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    // 2026-09-06 — see the Palms note above; same emptied-map story.
+    thumbnail: satelliteThumb(33.6913348, -117.1573364),
     // Phase 407 — coords from data/courses.ts LAKES_HOLES[0] tee
     lat: 33.6913348,
     lng: -117.1573364,

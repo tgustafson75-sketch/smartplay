@@ -30,12 +30,7 @@ import { getGreenOverride } from './courseGreenOverrides';
 // hole length" computation (marked tee → marked green).
 import { getTeeOverride } from './courseTeeOverrides';
 import { getCourseTruthSync } from './courseTruth';
-// 2026-06-03 — Golfbert paid premium data ranks above the free-tier
-// golfcourseapi courseHoles (which returns zeros for per-hole coords)
-// but below user Mark Green / Mark Tee overrides and surveyed truth.
-// Cache is populated when SmartVision (or any caller) invokes
-// getGolfbertHolesForCourse; until then the resolvers fall through.
-import { getCachedGolfbertHole, getGolfbertGreenCoord, getGolfbertTeeCoord } from './golfbertApi';
+// 2026-09-06 — the golfbertApi import is gone; the resolvers below are provider-uniform.
 
 /**
  * Phase D-2 — SmartFinder data layer.
@@ -377,7 +372,7 @@ export function resolveGreenCoords(holeNumber: number): {
   front: ShotLocation | null;
   middle: ShotLocation | null;
   back: ShotLocation | null;
-  source: 'truth' | 'override' | 'golfbert' | 'courseHoles' | 'geometryCache' | 'none';
+  source: 'truth' | 'override' | 'courseHoles' | 'geometryCache' | 'none';
 } {
   const round = useRoundStore.getState();
   const courseId = resolveSmartFinderCourseId(round);
@@ -421,17 +416,19 @@ export function resolveGreenCoords(holeNumber: number): {
       return { front, middle: middleLoc, back, source: 'override' };
     }
   }
-  // 2026-06-03 — Golfbert paid premium data. Single pin point per
-  // hole (flagcoords); F/B stay null. Cache populated by SmartVision.
-  if (courseId) {
-    const golfbertHole = getCachedGolfbertHole(courseId, personalHole);
-    if (golfbertHole) {
-      const greenLoc = getGolfbertGreenCoord(golfbertHole);
-      if (greenLoc) {
-        return { front: null, middle: greenLoc, back: null, source: 'golfbert' };
-      }
-    }
-  }
+  // 2026-09-06 (Tim — "all courses need to go through our course engine so we can eventually build
+  // our course engine API") — the Golfbert leg that sat here is GONE. Two reasons, the second fatal:
+  //
+  //   1. It applied to exactly two courses out of ~40 (Menifee Palms + Lakes, the only entries in
+  //      constants/golfbertCourses.ts). A resolver that answers from a different provider on the
+  //      owner's home course is not one engine, it's two — and only one of them is shippable as an API.
+  //   2. It was NON-DETERMINISTIC. getCachedGolfbertHole reads an in-memory cache whose ONLY populator
+  //      in the entire app was SmartVision's mount effect. So the pin feeding every yardage depended on
+  //      whether the player had opened the map this session: SmartVision first → source 'golfbert',
+  //      straight to the caddie → source 'courseHoles'. Same hole, same round, two different pins.
+  //
+  // Menifee now resolves the way all 38 other courses do: surveyed truth → Mark-Green override →
+  // courseHoles → geometryCache. One cascade, same answer every time, no session history in it.
   const hData = round.courseHoles.find(h => h.hole === holeNumber);
   let front = hData ? safeLoc(hData.frontLat, hData.frontLng) : null;
   let middle = hData ? safeLoc(hData.middleLat, hData.middleLng) : null;
@@ -470,7 +467,7 @@ export function resolveGreenCoords(holeNumber: number): {
  */
 export function resolveTeeCoords(holeNumber: number): {
   tee: ShotLocation | null;
-  source: 'override' | 'golfbert' | 'courseHoles' | 'none';
+  source: 'override' | 'courseHoles' | 'none';
 } {
   const round = useRoundStore.getState();
   const courseId = resolveSmartFinderCourseId(round);
@@ -483,18 +480,8 @@ export function resolveTeeCoords(holeNumber: number): {
       return { tee: { lat: ov.lat, lng: ov.lng }, source: 'override' };
     }
   }
-  // 2026-06-03 — Golfbert tee data (White → Blue → Gold → Red
-  // fallback). Falls through to courseHoles when no Golfbert vectors
-  // are cached for this course/hole.
-  if (courseId) {
-    const golfbertHole = getCachedGolfbertHole(courseId, personalHole);
-    if (golfbertHole) {
-      const teeLoc = getGolfbertTeeCoord(golfbertHole);
-      if (teeLoc) {
-        return { tee: teeLoc, source: 'golfbert' };
-      }
-    }
-  }
+  // 2026-09-06 — Golfbert tee leg removed alongside the green leg above; see the note in
+  // resolveGreenCoords. Same two-course scope, same SmartVision-mount-order non-determinism.
   const hData = round.courseHoles.find(h => h.hole === holeNumber);
   if (hData) {
     const tee = safeLoc(hData.teeLat, hData.teeLng);
@@ -862,7 +849,7 @@ export type YardageCalcEntry = {
    *  callers (rangefinder taps, smartfinder lock-in coords). Not a
    *  cascade source — just identifies the source kind so debug tools
    *  can distinguish green-yardage rows from arbitrary-target rows. */
-  source?: 'truth' | 'override' | 'golfbert' | 'courseHoles' | 'geometryCache' | 'none' | 'tapped_point' | null;
+  source?: 'truth' | 'override' | 'courseHoles' | 'geometryCache' | 'none' | 'tapped_point' | null;
   /** 2026-06-01 — Fix GF.2: outcome of the yardage decision. Previously
    *  early-return paths (no_fix, no_hole, no_geometry) and the sanity-
    *  clamp fallback bypassed logYardageCalc entirely, so the debug
@@ -886,7 +873,7 @@ function logYardageCalc(
   fix: LastFix,
   targets: { front: ShotLocation | null; middle: ShotLocation | null; back: ShotLocation | null },
   result: GreenYardages,
-  source?: 'truth' | 'override' | 'golfbert' | 'courseHoles' | 'geometryCache' | 'none' | 'tapped_point' | null,
+  source?: 'truth' | 'override' | 'courseHoles' | 'geometryCache' | 'none' | 'tapped_point' | null,
   outcome: 'ok' | 'no_fix' | 'no_hole' | 'no_geometry' | 'clamp_fallback' = 'ok',
 ): void {
   const entry: YardageCalcEntry = {

@@ -13,11 +13,10 @@
 import React from 'react';
 import {
   Modal, View, Text, ScrollView, Image, TouchableOpacity, StyleSheet,
-  useWindowDimensions, type ImageSourcePropType,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getHoleThumbnailUrl, getCourseImageryUrl } from '../../services/mapboxImagery';
-import PALMS_IMAGES from '../../data/palmsImages';
 
 export type ModalHole = {
   hole_number: number;
@@ -39,13 +38,16 @@ type Props = {
 export default function CourseDetailModal({ visible, onClose, courseName, location, holes }: Props) {
   // Subscribe to dimensions so Z Fold reconfigure refreshes the aerial size.
   const { width: screenW } = useWindowDimensions();
-  // Palms is curated — bundled screenshots beat Mapbox tiles for this course.
-  const isPalms = courseName.toLowerCase().includes('palms');
-  const courseUrl = isPalms ? null : getCourseImageryUrl({
+  // 2026-09-06 (Tim — one course engine, no per-course branches) — the `isPalms` substring match is
+  // gone. It suppressed the Mapbox URL for ANY course whose name contains "palms" and swapped in
+  // PALMS_IMAGES, which has been {} since 2026-08-25 — so every such course rendered no hero and no
+  // hole thumbnails at all. Same family as the regression already pinned by
+  // __tests__/regression/a-course-is-not-the-first-name-that-contains-the-word.test.ts: a facility
+  // name is not allowed to choose a data path.
+  const courseUrl = getCourseImageryUrl({
     courseId: null,
     holes: holes.map(h => ({ tee: h.tee, green: h.green })),
   }, Math.round(screenW * 0.92), Math.round(screenW * 0.92 * 0.55));
-  const courseAerialPalms: ImageSourcePropType | null = isPalms ? PALMS_IMAGES[1] ?? null : null;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -61,11 +63,9 @@ export default function CourseDetailModal({ visible, onClose, courseName, locati
         </View>
 
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          {/* Course-wide aerial — Palms uses curated bundled image. */}
+          {/* Course-wide aerial — one path for every course. */}
           <Text style={styles.sectionLabel}>COURSE AERIAL</Text>
-          {courseAerialPalms ? (
-            <Image source={courseAerialPalms} style={styles.courseAerial} resizeMode="cover" />
-          ) : courseUrl ? (
+          {courseUrl ? (
             <Image source={{ uri: courseUrl }} style={styles.courseAerial} resizeMode="cover" />
           ) : (
             <View style={[styles.courseAerial, styles.placeholderTile]}>
@@ -76,8 +76,7 @@ export default function CourseDetailModal({ visible, onClose, courseName, locati
           {/* Hole-by-hole */}
           <Text style={[styles.sectionLabel, { marginTop: 22 }]}>HOLE BY HOLE</Text>
           {holes.map(h => {
-            const palmsImage: ImageSourcePropType | null = isPalms ? PALMS_IMAGES[h.hole_number] ?? null : null;
-            const thumbUrl = palmsImage ? null : getHoleThumbnailUrl({
+            const thumbUrl = getHoleThumbnailUrl({
               courseId: null,
               holeNumber: h.hole_number,
               par: h.par,
@@ -88,9 +87,7 @@ export default function CourseDetailModal({ visible, onClose, courseName, locati
             return (
               <View key={h.hole_number} style={styles.holeRow}>
                 <View style={styles.thumbWrap}>
-                  {palmsImage ? (
-                    <Image source={palmsImage} style={styles.thumb} resizeMode="cover" />
-                  ) : thumbUrl ? (
+                  {thumbUrl ? (
                     <Image source={{ uri: thumbUrl }} style={styles.thumb} resizeMode="cover" />
                   ) : (
                     <View style={[styles.thumb, styles.placeholderTile]}>
