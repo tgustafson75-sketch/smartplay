@@ -15,6 +15,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { getApiBaseUrl, appKeyHeaders } from './apiBase';
 import { getInstallId } from './installId';
 import { isTestRunner } from './isTestRunner';
+import * as Sentry from '@sentry/react-native';
 
 // App-key gate → shared appKeyHeaders() (services/apiBase.ts), mirrors api/_appKey.ts on the server.
 /**
@@ -138,6 +139,18 @@ export function scheduleIssueAutoSend(): void {
   autoSendTimer = setTimeout(() => { autoSendTimer = null; autoSendFirstArmedAt = 0; void autoSendIssues(); }, AUTOSEND_DEBOUNCE_MS);
 }
 
+/**
+ * Compose the feedback body without losing a structured `details`.
+ *
+ * A string rides through untouched; anything else is JSON so the round trace survives. An
+ * unserialisable value (a cycle) degrades to the text alone rather than throwing away the report.
+ */
+function renderDetails(text: string, details: unknown): string {
+  if (details == null) return text;
+  if (typeof details === 'string') return `${text}\n\n${details}`;
+  try { return `${text}\n\n${JSON.stringify(details, null, 2)}`; } catch { return text; }
+}
+
 export async function autoSendIssues(): Promise<boolean> {
   // ...and never sends, even if something calls it directly.
   if (isTestRunner()) return false;
@@ -184,6 +197,46 @@ export async function autoSendIssues(): Promise<boolean> {
     clearTimeout(timer);
     if (res.ok) {
       for (const e of unsent) sentIds.add(e.id);
+      /**
+       * 2026-09-06 (Tim — the issue log and Sentry should be ONE system, not two inboxes).
+       *
+       * The same entries now also go to Sentry as user feedback, so a crash Sentry caught on its own
+       * and a tester's note about that same crash land in one fingerprint space with one dedupe.
+       * Before this they could not meet: the crash was in Sentry, the note was in an email.
+       *
+       * Sent AFTER the POST succeeds and inside the ok-branch on purpose — Supabase stays the
+       * durable record, and a Sentry outage must not cost us the entry. Each call is individually
+       * guarded because captureFeedback is fire-and-forget telemetry and must never be able to fail
+       * a send that already succeeded.
+       */
+      for (const e of unsent) {
+        try {
+          const ctx = (e.context && typeof e.context === 'object' ? e.context : {}) as Record<string, unknown>;
+          Sentry.captureFeedback({
+            /**
+             * 2026-09-06 — `details` is typed loose and IS an object on the round-trace path
+             * (`details: { trace: body }`). Template-interpolating it yields "[object Object]" and
+             * silently loses the trace — the exact regression
+             * the-issue-inbox-carries-only-real-issues.test.ts was written for, which is how this
+             * was caught. Stringify a non-string; never interpolate it.
+             */
+            message: renderDetails(e.text, e.details),
+            name: reporter,
+            source: 'issue-log',
+            tags: {
+              install_id: installId ?? 'unknown',
+              platform: Platform.OS,
+              // The round context the triage side needs to reproduce: which course, which hole,
+              // mid-round or not. Already on every entry — this just carries it across.
+              course_id: String(ctx.courseId ?? 'none'),
+              hole: String(ctx.currentHole ?? 'none'),
+              round_active: String(ctx.isRoundActive ?? false),
+              route: String(ctx.route ?? 'unknown'),
+              app_version: String(ctx.appVersion ?? 'unknown'),
+            },
+          });
+        } catch { /* telemetry only; the entry is already stored server-side */ }
+      }
       console.log('[issueLogExport] auto-sent', unsent.length, 'issues');
       return true;
     }

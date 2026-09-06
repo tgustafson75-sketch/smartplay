@@ -98,12 +98,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { error } = await db.from(TABLE).upsert(rows, { onConflict: 'id' });
     if (error) return res.status(200).json({ ok: false, error: error.message });
 
-    // Email the owner the NEW entries (Tim's chosen delivery). Gated on RESEND_API_KEY: until it's set on
-    // Vercel this is a no-op and the rows still live in Supabase. Best-effort, never fails the request.
-    let emailed = false;
-    if (newRows.length > 0) emailed = await emailIssuesToOwner(newRows).catch(() => false);
-
-    return res.status(200).json({ ok: true, stored: rows.length, new: newRows.length, emailed });
+    /**
+     * 2026-09-06 (Tim — the issue log and Sentry are ONE system, not two inboxes) — the owner-email
+     * leg is GONE, along with its Gmail-SMTP and Resend transports. The client now sends the same
+     * entries to Sentry as user feedback, so a report shares a fingerprint space with the crash it
+     * describes; an email could never do that. Supabase remains the durable record.
+     *
+     * `emailed` is kept in the response shape and pinned false: a fielded build still reads it, and
+     * removing the key would make an older client's parse see undefined where it expects a boolean.
+     */
+    return res.status(200).json({ ok: true, stored: rows.length, new: newRows.length, emailed: false });
   } catch (e) {
     console.error('[issue-report] failed:', e instanceof Error ? e.message : e);
     return res.status(200).json({ ok: false, error: 'write_failed' });
@@ -115,107 +119,3 @@ type StoredRow = {
   context: unknown; details: unknown; reported_at: string | null;
 };
 
-/**
- * 2026-08-09 (Tim — "f a Resend account, I'm over having so many accounts. Make it work with Google") —
- * owner delivery of tester issues via GMAIL SMTP (nodemailer + a Google App Password; no new account,
- * no domain verification). Resend kept ONLY as a fallback if its key happens to be configured.
- * Sends when either transport is configured; otherwise a no-op (rows are already stored in Supabase).
- *   GMAIL_USER                — the Gmail address to send FROM (e.g. t.gustafson75@gmail.com)
- *   GMAIL_APP_PASSWORD        — a Google App Password (Google Account → Security → 2-Step → App passwords)
- *   ISSUE_REPORT_EMAIL_TO     — recipient (default t.gustafson75@gmail.com)
- */
-async function emailIssuesToOwner(rows: StoredRow[]): Promise<boolean> {
-  const gmailUser = process.env.GMAIL_USER;
-  const gmailPass = process.env.GMAIL_APP_PASSWORD;
-  const resendKey = process.env.RESEND_API_KEY;
-  if (!gmailUser || !gmailPass) {
-    if (!resendKey) return false;
-  }
-  const to = process.env.ISSUE_REPORT_EMAIL_TO || 't.gustafson75@gmail.com';
-  const from = gmailUser ? `SmartPlay Issues <${gmailUser}>` : (process.env.ISSUE_REPORT_EMAIL_FROM || 'SmartPlay Issues <onboarding@resend.dev>');
-  const reporter = rows[0]?.reporter || 'beta tester';
-  /**
-   * 2026-08-13 — put the anonymous install id in the SUBJECT.
-   *
-   * Tim couldn't tell whether incoming reports were his own or a tester's, because the From/To are
-   * always his Gmail (SMTP sends as the account) and every tester who skipped the email field arrives
-   * as the same literal string, "beta tester". Two people and one person twice were indistinguishable.
-   *
-   * The id is the cheapest possible fix: distinct ids in the inbox = distinct installs, countable at a
-   * glance without opening anything. Rides in `context` so it needed no schema change.
-   */
-  const installId = (() => {
-    const ctx = rows[0]?.context as { installId?: unknown } | null | undefined;
-    const v = ctx && typeof ctx === 'object' ? ctx.installId : null;
-    return typeof v === 'string' && v.trim() ? v.trim() : null;
-  })();
-  const who = installId ? `${reporter} · ${installId}` : reporter;
-  const subject = `SmartPlay issue log — ${who} (${rows.length} new)`;
-  const block = (r: StoredRow) => {
-    const ctx = (r.context ?? {}) as { route?: string; persona?: string; isRoundActive?: boolean; currentHole?: number; courseId?: string };
-    const where = ctx.isRoundActive ? `hole ${ctx.currentHole ?? '?'} @ ${ctx.courseId ?? '?'}` : 'no round';
-    /**
-     * 2026-09-04 — a STRING details used to render as nothing.
-     *
-     * This tested `typeof r.details === 'object'` and silently produced '' for anything else.
-     * services/roundTrace sent the entire formatted round trace as a bare string, so every ROUND
-     * TRACE email arrived carrying its title and none of its content — the diagnostic was
-     * delivered with the payload dropped, and nothing anywhere said so.
-     *
-     * The sender now passes an object, but this stays defensive on purpose: the next caller to
-     * pass a string should get its text through, not silence. A long multi-line value (a trace)
-     * is printed on its own lines rather than joined with ' · ', which is for short key/value
-     * pairs and turns a timeline into an unreadable ribbon. [[echo-what-the-code-threw-away]]
-     */
-    const det = (() => {
-      if (!r.details) return '';
-      if (typeof r.details === 'string') return r.details.trim() ? `\n${r.details}` : '';
-      if (typeof r.details !== 'object') return `\n  ${String(r.details)}`;
-      const pairs = Object.entries(r.details as Record<string, unknown>);
-      if (!pairs.length) return '';
-      const long = pairs.filter(([, v]) => typeof v === 'string' && (v.includes('\n') || v.length > 200));
-      const short = pairs.filter(([, v]) => !(typeof v === 'string' && (v.includes('\n') || v.length > 200)));
-      const shortLine = short.length
-        ? '\n  ' + short.map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join(' · ')
-        : '';
-      const longBlock = long.map(([k, v]) => `\n\n  ${k}:\n${String(v)}`).join('');
-      return `${shortLine}${longBlock}`;
-    })();
-    return `• ${r.text}\n  [${r.reported_at ?? ''} · ${ctx.persona ?? '—'} · ${ctx.route ?? '—'} · ${where}]${det}`;
-  };
-  const text = `Reporter: ${reporter}\nInstall: ${installId ?? 'unknown (pre-2026-08-13 build)'}\nNew entries: ${rows.length}\nPlatform: ${rows[0]?.platform ?? '—'}\n\n${rows.map(block).join('\n\n')}\n\n— Auto-forwarded from the SmartPlay issue log`;
-
-  // Primary: Gmail SMTP (Tim's Google account, App Password — no extra accounts).
-  if (gmailUser && gmailPass) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const nodemailer = require('nodemailer') as typeof import('nodemailer');
-      const transporter = nodemailer.createTransport({
-        host: 'smtp.gmail.com',
-        port: 465,
-        secure: true,
-        auth: { user: gmailUser, pass: gmailPass },
-        connectionTimeout: 6000,
-        greetingTimeout: 6000,
-        socketTimeout: 8000,
-      });
-      await transporter.sendMail({ from, to, subject, text });
-      return true;
-    } catch (e) {
-      console.warn('[issue-report] gmail send failed', e instanceof Error ? e.message : e);
-      // fall through to Resend if configured
-    }
-  }
-  if (!resendKey) return false;
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 6000);
-  try {
-    const r = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from, to, subject, text }),
-      signal: ctrl.signal,
-    });
-    return r.ok;
-  } catch { return false; } finally { clearTimeout(t); }
-}

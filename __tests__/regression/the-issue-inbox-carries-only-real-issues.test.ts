@@ -70,9 +70,19 @@ describe('the round trace is sent once, and arrives with its contents', () => {
     expect(code).not.toMatch(/details:\s*body\s*,/);
   });
 
+  /**
+   * 2026-09-06 — this used to read the EMAIL renderer in api/issue-report.ts. That renderer is gone
+   * (issue log + Sentry are one system now), so the assertion moved to the path that replaced it —
+   * and it earned its keep on the way: the first version of the Sentry send interpolated
+   * `${e.details}` straight into the message, which is "[object Object]" for the round trace and
+   * loses exactly what this test exists to protect.
+   */
   it('and the renderer no longer silently drops a non-object details', () => {
-    const api = fs.readFileSync(path.join(root, 'api', 'issue-report.ts'), 'utf8');
-    const code = api.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-    expect(code).toMatch(/typeof r\.details === 'string'/);
+    const exp = fs.readFileSync(path.join(root, 'services', 'issueLogExport.ts'), 'utf8');
+    const code = exp.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    expect(code).toMatch(/typeof details === 'string'/);
+    expect(code).toMatch(/JSON\.stringify\(details/);
+    // and the naive interpolation must not come back
+    expect(code).not.toMatch(/\$\{e\.details\}/);
   });
 });

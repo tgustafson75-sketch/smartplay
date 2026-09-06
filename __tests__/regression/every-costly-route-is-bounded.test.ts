@@ -6,7 +6,7 @@
  * player, not just a bill. The same reasoning was never applied to the routes that spend someone
  * else's quota or write to our database.
  *
- * Found unbounded: issue-report (EMAILS the owner through Resend on every accepted report — an open
+ * Found unbounded: issue-report (writes durable storage on every accepted report — an open
  * relay into Tim's inbox), course-geometry-share (WRITES the crowd-sourced geometry other players
  * read), messages (writes arbitrary from/to/body), usage (writes telemetry rows), and four proxies
  * that spend OUR third-party keys — weather, elevation, youtube-search. YouTube's is a hard
@@ -67,7 +67,7 @@ describe('nothing costly is left unbounded', () => {
     }
   });
 
-  it('issue-report is bounded — it emails the owner on every accepted report', () => {
+  it('issue-report is bounded — it writes to Supabase and Sentry on every accepted report', () => {
     const r = routes.find((x) => x.file === 'issue-report.ts')!;
     expect(r.src).toMatch(/allowInference\(req, res, 'issue_report', \d+\)/);
   });

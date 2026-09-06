@@ -10102,7 +10102,6 @@ check('LOCK: issue reports carry an anonymous install id, attached once, with no
   (() => {
     const svc = read('services/installId.ts');
     const exp = read('services/issueLogExport.ts');
-    const api = read('api/issue-report.ts');
     // ONE owner that mints and persists it
     const owned = /export async function getInstallId/.test(svc) && /AsyncStorage\.setItem\(KEY/.test(svc);
     // attached at the single SEND point, not at each of the ~10 entry writers
@@ -10111,12 +10110,16 @@ check('LOCK: issue reports carry an anonymous install id, attached once, with no
     // it must ride INSIDE context: that column is already JSON, so this needs no migration and cannot
     // break the insert. Verified live against the deployed endpoint before shipping.
     const noSchemaRisk = /\.\.\.\(e\.context && typeof e\.context === 'object' \? e\.context : \{\}\), installId/.test(exp);
-    // and the owner has to be able to SEE it without opening the mail
-    const surfaced = /const who = installId \? `\$\{reporter\} · \$\{installId\}` : reporter;/.test(api) &&
-      /Install: \$\{installId \?\? 'unknown/.test(api);
+    /**
+     * 2026-09-06 — the owner still has to SEE which install a report came from, but the surface
+     * moved: the email that carried it in its subject line is gone (issue log + Sentry are one
+     * system now), so the install id rides as a Sentry TAG instead — which is strictly better,
+     * because a tag is filterable and a subject line is not.
+     */
+    const surfaced = /install_id: installId \?\? 'unknown',/.test(exp);
     return owned && attachedOnce && noSchemaRisk && surfaced;
   })(),
-  'one owner mints/persists the install id, it is attached once at the send path inside context (no migration), and the email surfaces it in the subject');
+  'one owner mints/persists the install id, it is attached once at the send path inside context (no migration), and it is surfaced as a filterable Sentry tag');
 
 // 2026-08-14 (Tim's round at Berlin — white screens at the course, and when it loaded the app was a
 // brick: loaded but unresponsive to any tap). That is the JS thread pegged, and this is what pegged it.
