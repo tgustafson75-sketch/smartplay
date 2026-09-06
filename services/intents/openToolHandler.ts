@@ -1,5 +1,22 @@
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import { isShelved } from '../releaseSurface';
+import { isRouteKilled } from '../../store/flagStore';
+
+/**
+ * Some gated tools are expressed as an action TYPE rather than a path (open_smartvision emits the
+ * paywall check that a bare navigate would skip — see the 2026-07-10 audit note below), so the
+ * kill-switch lookup has to understand both forms.
+ */
+const ACTION_TYPE_TO_ROUTE: Readonly<Record<string, string>> = {
+  open_smartvision: '/smartvision',
+  open_smartfinder: '/smartfinder',
+};
+
+function actionIsKilled(a: ToolAction | { type: 'navigate'; path: string }): boolean {
+  if ('path' in a && typeof a.path === 'string') return isRouteKilled(a.path);
+  const route = ACTION_TYPE_TO_ROUTE[a.type];
+  return route ? isRouteKilled(route) : false;
+}
 import type { ToolAction } from '../../types/toolAction';
 // 2026-06-24 — APP-FEATURE CATALOG as the routing source of truth. The explicit
 // classifier-name map below stays (existing tool routes), but any tool_name or
@@ -510,6 +527,29 @@ export const openToolHandler: IntentHandler = {
 
     let action = TOOL_NAME_TO_ACTION[toolName];
 
+    /**
+     * 2026-09-06 — remote kill switch, at the point of ACTION.
+     *
+     * releaseSurface.ts's header names this exact trap for the shelving mechanism: hide the card but
+     * leave the catalog and this handler wired, and the caddie "still offers a shelved screen and
+     * navigates straight to it". A kill switch has the same three consumers, so gating only the •••
+     * menu would reproduce it.
+     *
+     * A killed tool goes to the BRAIN rather than to the `unknown_tool` clarifying prompt below —
+     * that prompt reads "Which tool — SmartVision, SmartFinder, …?", which would name the killed
+     * feature straight back at the player. route_to_brain is the same shape social_greeting already
+     * uses, so no new path was built for this.
+     */
+    if (action && actionIsKilled(action)) {
+      return {
+        success: true,
+        voice_response: null,
+        route_to_brain: true,
+        side_effects: ['route_to_brain:kill_switch:' + toolName],
+        follow_up_needed: false,
+      };
+    }
+
     // 2026-06-24 — APP-FEATURE CATALOG fallback. When the explicit map misses,
     // try the catalog's conservative alias match against the classifier's
     // tool_name AND the raw transcript. This catches phrasings the classifier
@@ -519,6 +559,16 @@ export const openToolHandler: IntentHandler = {
     if (!action) {
       const feature =
         lookupFeature(toolName) ?? lookupFeature(intent.raw_text ?? '');
+      // A catalog alias must not become a back door around the switch above.
+      if (feature && isRouteKilled(feature.route)) {
+        return {
+          success: true,
+          voice_response: null,
+          route_to_brain: true,
+          side_effects: ['route_to_brain:kill_switch:' + feature.id],
+          follow_up_needed: false,
+        };
+      }
       if (feature) {
         // 2026-07-10 (audit N2) — a catalog match to a PAYWALLED tool must emit its gated
         // action type (open_smartvision/open_smartfinder), which the dispatcher runs the

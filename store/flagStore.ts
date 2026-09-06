@@ -235,3 +235,39 @@ export function startFlagSync(): () => void {
   });
   return () => sub.remove();
 }
+
+/**
+ * Route → flag, for the caddie's own tool routing.
+ *
+ * 2026-09-06 — services/releaseSurface.ts already learned this lesson the hard way and says so in
+ * its header: hiding a card while leaving `appCatalog` and `openToolHandler` wired means the caddie
+ * "still offers a shelved screen and navigates straight to it — the exact connected-but-not-used
+ * trap, inverted." A kill switch has the same three consumers as a shelf, and gating only the ••• menu
+ * would reproduce that bug exactly.
+ *
+ * Every route here must correspond to a screen that calls useFlagGate, and vice versa. The two are
+ * the same decision expressed at the two ends of it — the menu that offers a feature and the code
+ * that opens it — and a regression test asserts they agree.
+ */
+const ROUTE_TO_FLAG: Readonly<Record<string, FlagKey>> = {
+  '/smartvision': 'smartvision',
+  '/smartfinder': 'smartfinder',
+  '/(tabs)/swinglab': 'swinglab',
+  '/lie-analysis': 'lie_analysis',
+  '/swinglab/upload': 'swing_analysis',
+  '/swinglab/smartmotion': 'cage_capture',
+};
+
+/**
+ * Is this route behind a switch that is currently off?
+ *
+ * Query-string tolerant, because the menu opens '/smartfinder?autoread=1' and the caddie can too —
+ * a gate that misses on a query string is a gate with a hole in it.
+ */
+export function isRouteKilled(route: string | null | undefined): boolean {
+  if (!route) return false;
+  const bare = route.split('?')[0];
+  const key = ROUTE_TO_FLAG[bare];
+  if (!key) return false;
+  return !useFlagStore.getState().flags[key];
+}
