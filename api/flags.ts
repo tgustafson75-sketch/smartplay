@@ -26,7 +26,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { applyCors } from './_cors';
 
-/** Shipped defaults. Every feature ON. Mirrors data/remoteFlagDefaults on the client. */
+/** Shipped defaults. Every feature ON. Must mirror DEFAULT_FLAGS in store/flagStore.ts. */
 const DEFAULTS = {
   flags: {
     smartvision: true,

@@ -16,6 +16,7 @@ import { planTrialLifecycle } from '../services/billing/trialLifecycle';
 import { refreshEntitlement } from '../services/billing/purchases';
 import { PRICING } from '../lib/pricing';
 import { useSettingsStore } from '../store/settingsStore';
+import { startFlagSync } from '../store/flagStore';
 import { useRoundStore, whenRoundStoreHydrated } from '../store/roundStore';
 import { stopSpeaking, getLastSpeakStartedAt } from '../services/voiceService';
 import { setProactiveLineComposer } from '../services/proactiveLineRegistry';
@@ -627,6 +628,14 @@ function AppNavigator() {
   // uncaught-JS-error handler ASAP so async / event-handler crashes (which React error boundaries
   // can't catch) funnel into the Issue Log. Idempotent; runs before the heavier boot effects below.
   useEffect(() => { initCrashCapture(); }, []);
+
+  /**
+   * 2026-09-06 — remote kill switches. Fetches /flags on boot and on every foreground, with a 60s
+   * floor between fetches. Deliberately NOT awaited and deliberately not gating anything below it:
+   * the store already holds all-ON defaults, so a slow or failed fetch costs nothing and a hung
+   * network cannot delay boot by a single frame. See store/flagStore.ts for the fail-open contract.
+   */
+  useEffect(() => startFlagSync(), []);
 
   // 2026-07-30 (issue-log audit SEV-2/SEV-4 — Tim: "make sure users' apps are RECORDING and
   // sending issue logs") — flush any issues recorded in a PRIOR session on next launch. A hard
