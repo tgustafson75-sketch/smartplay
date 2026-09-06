@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ShotLocation } from '../store/roundStore';
 import { LOCAL_COURSE_CENTROIDS, type LocalCourseSlug } from '../data/localCourseImages';
 import { getApiBaseUrl } from './apiBase';
+import { isCourseGeometryDisabled } from '../store/flagStore';
 
 // 2026-05-17 — Known hole count per local course. Passed to the
 // /api/course-geometry endpoint so the OSM-Overpass fallback can cap
@@ -412,7 +413,16 @@ function geometryStatus() {
 }
 
 export function getHoleGeometry(courseId: string, holeNumber: number): HoleGeometry | null {
-  const c = memCache.get(courseId) ?? buildBundledGeometry(courseId);
+  /**
+   * 2026-09-06 — the read side of the per-course kill switch. fetchCourseGeometry() already refuses
+   * to BUILD a disabled course, but a course cached before it was disabled would still be served
+   * from memCache, so the switch would not take effect until the cache aged out. Skipping memCache
+   * here drops straight to buildBundledGeometry — our own hand-authored holes from data/courses.ts,
+   * which is precisely the honest fallback and not a new one.
+   */
+  const c = isCourseGeometryDisabled(courseId)
+    ? buildBundledGeometry(courseId)
+    : (memCache.get(courseId) ?? buildBundledGeometry(courseId));
   const direct = c?.holes.find(h => h.hole_number === holeNumber);
   if (direct) return direct;
   // 2026-08-08 (Tim — "allow a 9-hole course to be played twice"). TWICE-AROUND wrap: at a course whose
@@ -849,6 +859,18 @@ export async function fetchCourseGeometry(
   options?: { courseLocation?: { lat: number; lng: number } | null },
 ): Promise<CourseGeometry | null> {
   if (!courseId) return null;
+  /**
+   * 2026-09-06 — per-course kill switch (course_geometry.disabled_course_ids).
+   *
+   * The engine synthesises holes from OSM/Overpass, and a bad synthesis produces confident WRONG
+   * yardages on the tee — which is worse than none, because the player has no way to tell. Listing a
+   * course id remotely stops the build for THAT COURSE ONLY.
+   *
+   * Returning null is not a new code path: it is exactly what this function already returns when a
+   * build fails, and every caller already handles it by falling back to bundled holes and then to
+   * the honest empty state (ENGINEERING-PRINCIPLES #4 — no new fallback introduced).
+   */
+  if (isCourseGeometryDisabled(courseId)) return null;
   /**
    * 2026-08-10 — ANTI-RACE. Several surfaces ask for the same course at the same moment (the caddie
    * preview, SmartVision, the round prefetch). Without this each fired its OWN build: three sets of

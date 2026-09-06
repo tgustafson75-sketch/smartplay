@@ -47,6 +47,7 @@ import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 import type { AppContext, VoiceIntent } from '../types/voiceIntent';
 import { getApiBaseUrl, isConnectionWarmed, getConnectionEvidence } from './apiBase';
 import { isAwaitingPutts, awaitingPuttsHole, parsePuttAnswer, clearAwaitingPutts } from './pendingPuttAsk';
+import { isFlagEnabled } from '../store/flagStore';
 
 // 2026-07-25 (Tim — "first ask errors every time") — cold-aware brain timeout, mirroring useVoiceCaddie.
 // The FIRST turn after launch is cold on the Lambda + provider SDK + tool rounds; a fixed 30s aborts it.
@@ -447,6 +448,15 @@ export function isActiveListeningEnabled(): boolean {
  * Toggle the listening session. Open if idle; close if any other state.
  */
 export async function toggle(): Promise<void> {
+  /**
+   * 2026-09-06 — remote kill switch for the voice caddie. toggle() is the SINGLE chokepoint the
+   * earbud tap, the badge tap and handsFreeOrchestrator all route through (see the note below), so
+   * gating here kills every way of opening a listening session with one check.
+   *
+   * Silent return, not an error line: the mic simply does not engage (ENGINEERING-PRINCIPLES #3).
+   * Typed questions still reach the caddie — this switch kills the MICROPHONE path, not the brain.
+   */
+  if (!isFlagEnabled('voice_caddie')) return;
   // 2026-06-16 (Tim — earbud-tap-to-stop) — if Smart Motion is actively RECORDING,
   // the camera owns the mic. A tap must STOP the capture, NOT open a listen session
   // (opening one races the camera's audio = "Only one Recording object" crash). This

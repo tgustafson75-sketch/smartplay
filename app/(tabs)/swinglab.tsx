@@ -45,6 +45,7 @@ import { SETUP_CHECK_ENABLED } from '../../services/swing/setupCheck';
 //   PLAY     → CYAN   #22D3EE → SKY   #38BDF8
 //   PREPARE  → SKY    #38BDF8 → INDIGO #6366F1
 import { ACCENT_GREEN } from '../../theme/tokens';
+import { useFlagGate } from '../../hooks/useFlagGate';
 
 // Per-section spectrum segments [startHex, endHex]. Endpoints chain so the whole page
 // flows green→indigo continuously. ANALYZE is the solo green hero (handled directly).
@@ -329,6 +330,9 @@ function segmentColor(startHex: string, endHex: string, index: number, count: nu
 }
 
 export default function SwingLab() {
+  // 2026-09-06 — remote kill switch. Redirects to the Caddie screen if `swinglab` is off, whether it
+  // was already off on entry or flips off while this screen is open. No message, by instruction.
+  useFlagGate('swinglab');
   const router = useRouter();
   const { t } = useTranslation();
   const { colors } = useTheme();

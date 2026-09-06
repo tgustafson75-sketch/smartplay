@@ -29,6 +29,7 @@ import { useRoundStore } from '../store/roundStore';
 import { getDialog } from '../services/dialogEngine';
 import { useTrustLevelStore } from '../store/trustLevelStore';
 import { getApiBaseUrl } from '../services/apiBase';
+import { useFlagGate } from '../hooks/useFlagGate';
 
 const apiUrl = getApiBaseUrl();
 
@@ -44,6 +45,9 @@ const apiUrl = getApiBaseUrl();
 type Phase = 'opener' | 'opener_listening' | 'camera' | 'analyzing' | 'result' | 'low_quality' | 'no_network' | 'error';
 
 export default function LieAnalysisScreen() {
+  // 2026-09-06 — remote kill switch. Redirects to the Caddie screen if `lie_analysis` is off, whether it
+  // was already off on entry or flips off while this screen is open. No message, by instruction.
+  useFlagGate('lie_analysis');
   useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   // 2026-05-26 — Fix CE: theme-aware styles (was hardcoded dark palette).
   const { colors } = useTheme();

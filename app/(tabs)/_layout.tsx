@@ -6,6 +6,7 @@ import { useRoundStore } from '../../store/roundStore';
 import { TourOverlay, type TourStep } from '../../components/onboarding/TourOverlay';
 import { DASHBOARD_TOUR_STEPS, PLAY_TOUR_STEPS, SCORECARD_TOUR_STEPS, SWINGLAB_TOUR_STEPS } from '../../constants/tabTours';
 import { useTabTour } from '../../hooks/useTabTour';
+import { useFlag } from '../../store/flagStore';
 
 // 2026-07-30 (Tim — "Show me around on SwingLab + basics on all main tabs"). One host that shows the
 // FOCUSED tab's short basics tour (the caddie tab runs its own richer tour on its screen). Reuses the same
@@ -67,6 +68,7 @@ function CaddieTabIcon({ focused, label }: { focused: boolean; label: string }) 
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
+  const swinglabEnabled = useFlag('swinglab');
   const isRoundActive = useRoundStore(s => s.isRoundActive);
 
   // 2026-07-24 (Tim — "tab bar is too big"). Icon-only row (labels hidden), so it
@@ -137,6 +139,13 @@ export default function TabLayout() {
       <Tabs.Screen
         name="swinglab"
         options={{
+          /**
+           * 2026-09-06 — remote kill switch. `href: null` removes the tab from the bar entirely
+           * rather than disabling it, so a killed SwingLab leaves a four-tab bar with no gap and no
+           * explanation (ENGINEERING-PRINCIPLES #3). The screen itself also calls useFlagGate, so
+           * a deep link to /(tabs)/swinglab redirects even while the tab is hidden.
+           */
+          href: swinglabEnabled ? undefined : null,
           tabBarIcon: ({ focused }) => (
             // Phase 401 follow-up — Tim 2026-05-15: previous MCI "golf"
             // (swinging golfer) read too similar to the Play tab's golf

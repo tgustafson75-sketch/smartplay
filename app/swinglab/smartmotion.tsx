@@ -76,6 +76,7 @@ import { analyzeSwing, probeDurationMs, ANALYSIS_WORST_CASE_MS, type SwingAnalys
 import { evaluateSwingValidity, reconcileSwingValidity, type MeasuredSwingEvidence } from '../../services/swingValidity';
 import { buildPoseSwingRead } from '../../services/swing/poseSwingRead';
 import { poseReadToPrimaryIssue } from '../../services/swing/poseReadVerdict';
+import { useFlagGate } from '../../hooks/useFlagGate';
 import {
   synthesizeSwingMetrics,
   isTruthGrade,
@@ -554,6 +555,9 @@ const toolCardStyles = StyleSheet.create({
 // ─── screen ──────────────────────────────────────────────────────────
 
 export default function SmartMotion() {
+  // 2026-09-06 — remote kill switch. Redirects to the Caddie screen if `cage_capture` is off, whether it
+  // was already off on entry or flips off while this screen is open. No message, by instruction.
+  useFlagGate('cage_capture');
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();

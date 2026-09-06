@@ -25,6 +25,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { useFamilyStore } from '../../store/familyStore';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
 import { getApiBaseUrl } from '../../services/apiBase';
+import { useFlagGate } from '../../hooks/useFlagGate';
 
 const CLUBS = ['Driver', '3W', '5W', 'Hybrid', '4i', '5i', '6i', '7i', '8i', '9i', 'PW', 'GW', 'SW', 'LW', 'Putter'];
 const TAGS: { id: SwingTag; label: string }[] = [
@@ -37,6 +38,9 @@ const TAGS: { id: SwingTag; label: string }[] = [
 ];
 
 export default function UploadSwing() {
+  // 2026-09-06 — remote kill switch. Redirects to the Caddie screen if `swing_analysis` is off, whether it
+  // was already off on entry or flips off while this screen is open. No message, by instruction.
+  useFlagGate('swing_analysis');
   const router = useRouter();
   const { colors } = useTheme();
   const { isWide } = useDeviceLayout();

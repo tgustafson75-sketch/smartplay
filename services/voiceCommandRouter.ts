@@ -4,6 +4,7 @@ import { useVoiceMissStore, type VoiceMissType } from '../store/voiceMissStore';
 import { getActiveSurface } from './activeSurfaceRegistry';
 import { precheckLocalIntent } from './localIntentPrecheck';
 import { useAgentBrainStats } from '../store/agentBrainStats';
+import { isFlagEnabled } from '../store/flagStore';
 
 export interface RoutingLog {
   timestamp: number;
@@ -55,6 +56,37 @@ export class VoiceCommandRouter {
   }
 
   async route(text: string, context: AppContext, apiUrl: string): Promise<{ intent: VoiceIntent; result: IntentResult }> {
+    /**
+     * 2026-09-06 — remote kill switch for TOOL ROUTING, not for the caddie.
+     *
+     * With `kevin_tool_routing` off, we skip the classifier and every handler and hand the utterance
+     * straight to the brain via the SAME route_to_brain shape a social_greeting already uses. The
+     * player still gets an answer — Kevin just stops taking ACTIONS (opening screens, starting
+     * rounds, changing clubs) on their behalf. That is the failure this switch exists for: a
+     * mis-routing handler doing the wrong thing mid-round is worse than a chattier caddie.
+     *
+     * No new fallback was built for this (ENGINEERING-PRINCIPLES #4) — route_to_brain is the path
+     * an unhandled intent already takes, which the sim asserts as "an unrecognised utterance falls
+     * through to the brain, never to silence".
+     */
+    if (!isFlagEnabled('kevin_tool_routing')) {
+      return {
+        intent: {
+          intent_type: 'conversational',
+          parameters: {},
+          confidence: 'high',
+          follow_up_question: null,
+          raw_text: text,
+        },
+        result: {
+          success: true,
+          voice_response: null,
+          route_to_brain: true,
+          side_effects: ['route_to_brain:kill_switch'],
+          follow_up_needed: false,
+        },
+      };
+    }
     // 2026-06-06 — Local pre-classifier (services/localIntentPrecheck.ts).
     // High-frequency unambiguous phrases ("what's my score", "yards to
     // pin", "open SmartFinder") match here and skip the 200-500ms

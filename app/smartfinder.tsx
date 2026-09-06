@@ -78,6 +78,7 @@ import { getApiBaseUrl } from '../services/apiBase';
 import { ingestCapture } from '../services/courseCaptureIngest';
 import { effectiveEyeHeightM, observeCalibration } from '../services/rangefinderCalibration';
 import { featureOnAimLine } from '../services/aimedFeature';
+import { useFlagGate } from '../hooks/useFlagGate';
 import { buildAimCandidates } from '../services/aimCandidates';
 
 const REFRESH_MS = 3_000;
@@ -96,6 +97,9 @@ const CANVAS_W_FRACTION = 0.92;
  * the standard header.
  */
 export default function SmartFinder() {
+  // 2026-09-06 — remote kill switch. Redirects to the Caddie screen if `smartfinder` is off, whether it
+  // was already off on entry or flips off while this screen is open. No message, by instruction.
+  useFlagGate('smartfinder');
   const styles = useStyles();
   useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   const _insets = useSafeAreaInsets();

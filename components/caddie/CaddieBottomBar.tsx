@@ -30,6 +30,7 @@ import { toggle as toggleListening } from '../../services/listeningSession';
 import { handleTranscribedUtterance } from '../../services/listeningSession';
 import { useTourTarget } from '../../hooks/useTourTarget';
 import { useListeningSessionStore } from '../../store/listeningSessionStore';
+import { useFlag } from '../../store/flagStore';
 import {
   markChevronNav, consumeChevronNav, pushForward, popForward, hasForward, clearForward,
 } from '../../services/navHistory';
@@ -91,6 +92,7 @@ export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: 
     void handleTranscribedUtterance(q).catch(() => {});
   }, [text]);
 
+  const voiceCaddieOn = useFlag('voice_caddie');
   const onMic = useCallback(() => {
     try { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); } catch { /* optional */ }
     try { toggleListening(); } catch { /* toggle guards itself */ }
@@ -104,7 +106,12 @@ export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: 
         <Ionicons name="chevron-back" size={24} color={colors.text_primary} />
       </TouchableOpacity>
 
-      {/* The neon caddie SPEAKING = tap to talk (same listeningSession as everywhere) */}
+      {/* The neon caddie SPEAKING = tap to talk (same listeningSession as everywhere).
+          2026-09-06 — hidden outright when `voice_caddie` is killed, rather than left as a dead
+          control the player taps at (listeningSession.toggle() also refuses, but a button that
+          silently does nothing is its own kind of broken). The TEXT INPUT beside it stays: this
+          switch kills the microphone path, not the caddie. */}
+      {voiceCaddieOn && (
       <TouchableOpacity
         ref={micTarget.ref}
         onLayout={micTarget.onLayout}
@@ -115,6 +122,7 @@ export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: 
       >
         <Image source={MIC_CADDIE} style={s.micImg} resizeMode="contain" />
       </TouchableOpacity>
+      )}
 
       <TextInput
         style={s.input}

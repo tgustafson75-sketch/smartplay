@@ -78,6 +78,7 @@ import { useSmartVision } from '../contexts/SmartVisionContext';
 // haversine yardages instead of the pixel-axis interpolation fallback.
 import { useTeeOverride } from '../services/courseTeeOverrides';
 import { useGreenOverride } from '../services/courseGreenOverrides';
+import { useFlagGate } from '../hooks/useFlagGate';
 import { fetchCourseGeometry, getHoleGeometry, getCachedGeometry, getDerivedHoleGeometry, loadDerivedGeometry, type HoleGeometry } from '../services/courseGeometryService';
 import { deriveHoleGeometry } from '../services/holeGeometryDerivation';
 import { courseDisplayName } from '../services/courseDisplayName';
@@ -332,6 +333,9 @@ function Marker({ kind, x, y, draggable, onDragLive, onDragEnd }: {
 const svDeriveAttempts = new Set<string>();
 
 export default function SmartVisionScreen() {
+  // 2026-09-06 — remote kill switch. Redirects to the Caddie screen if `smartvision` is off, whether it
+  // was already off on entry or flips off while this screen is open. No message, by instruction.
+  useFlagGate('smartvision');
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: W, height: H } = useWindowDimensions();

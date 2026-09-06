@@ -41,6 +41,7 @@ import { recalibrateGps } from '../../services/gpsManager';
 import { markGpsRefreshNow, useLastGpsRefresh, formatRefreshAge } from '../../services/lastGpsRefresh';
 import { forceMarkPosition } from '../../services/positionMarkBus';
 import { canAccess, type FeatureKey } from '../../services/featureAccess';
+import { useFlag } from '../../store/flagStore';
 import { triggerPaywall } from '../../services/paywallGuard';
 import { openYouTubeChannel } from '../../services/youtubeLinks';
 import { promptEndRound } from '../../services/round/endRoundFlow';
@@ -192,6 +193,18 @@ export function GlobalToolsMenu() {
 
   const nav = (path: string) => fire(() => router.push(path as never));
 
+  /**
+   * 2026-09-06 — remote kill switches. A killed feature's row is NOT RENDERED; there is no disabled
+   * state and no explanatory text (ENGINEERING-PRINCIPLES #3). These are ANDed with the existing
+   * canAccess entitlement inside navOrPaywall — a feature must pass both, and neither check knows
+   * about the other. Nothing here touches SUBSCRIPTIONS_ENABLED or RevenueCat.
+   */
+  const flagSwingLab = useFlag('swinglab');
+  const flagSmartVision = useFlag('smartvision');
+  const flagSmartFinder = useFlag('smartfinder');
+  const flagLieAnalysis = useFlag('lie_analysis');
+  const flagSwingAnalysis = useFlag('swing_analysis');
+
   return (
     <Modal visible={isOpen} transparent animationType="fade" onRequestClose={close}>
       <Pressable style={styles.scrim} onPress={close}>
@@ -299,6 +312,7 @@ export function GlobalToolsMenu() {
                 SmartVision + SmartFinder stay because they're routinely
                 opened mid-round from this menu (not via SwingLab). */}
             <SectionHeader colors={colors}>PRACTICE</SectionHeader>
+{flagSwingLab && (
             <Row
               icon="golf-outline"
               label="SwingLab"
@@ -306,9 +320,11 @@ export function GlobalToolsMenu() {
               onPress={() => nav('/(tabs)/swinglab')}
               colors={colors}
             />
+            )}
             {/* 2026-06-15 (Tim) — "Reference Authoring" moved to Settings → Owner
                 Tools as "Train the Trainer" (instructor surface). Removed here to
                 avoid a duplicate owner entry. */}
+{flagSmartVision && (
             <Row
               icon="telescope-outline"
               label="SmartVision"
@@ -316,6 +332,8 @@ export function GlobalToolsMenu() {
               onPress={() => navOrPaywall('smartvision', '/smartvision')}
               colors={colors}
             />
+            )}
+{flagSmartFinder && (
             <Row
               icon="locate-outline"
               label="SmartFinder"
@@ -323,10 +341,12 @@ export function GlobalToolsMenu() {
               onPress={() => navOrPaywall('smartfinder', '/smartfinder')}
               colors={colors}
             />
+            )}
             {/* 2026-06-17 — Smart Play tap shortcut mirrors the voice trigger
                 "Hey Caddy, what's the smart play?" → SmartFinder + autoread.
                 Opens the same screen as SmartFinder but auto-fires the caddie
                 scene read so the user doesn't need to tap the eye button. */}
+{flagSmartFinder && (
             <Row
               icon="eye-outline"
               label="Smart Play"
@@ -334,9 +354,11 @@ export function GlobalToolsMenu() {
               onPress={() => navOrPaywall('smartfinder', '/smartfinder?autoread=1')}
               colors={colors}
             />
+            )}
             {/* 2026-07-04 (elite-clean audit, menu finding #8) — TightLie was the one
                 tool with NO Tools-menu entry (reachable only from the cockpit pill /
                 L4 row / voice). One menu, every tool. */}
+{flagLieAnalysis && (
             <Row
               icon="fitness-outline"
               label="TightLie"
@@ -344,9 +366,11 @@ export function GlobalToolsMenu() {
               onPress={() => nav('/lie-analysis')}
               colors={colors}
             />
+            )}
             {/* 2026-07-04 (elite-clean audit, menu finding #18) — was labeled
                 "PuttingLab" but opens the GENERIC video-upload screen (putting is
                 one tag there). Honest label until a dedicated putting lab exists. */}
+{flagSwingAnalysis && (
             <Row
               icon="golf-outline"
               label="Upload a Swing or Putt"
@@ -354,6 +378,7 @@ export function GlobalToolsMenu() {
               onPress={() => nav('/swinglab/upload')}
               colors={colors}
             />
+            )}
             {/* 2026-06-04 — Coach Mode toggle. Tap the row to flip the
                 setting (no nav). When ON, shared-session surfaces appear
                 on Caddie + Dashboard; when OFF, both hide. Sub-label
