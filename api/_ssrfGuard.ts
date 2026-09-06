@@ -5,7 +5,7 @@
  * scheme/host validation, letting an unauthenticated caller make the server request
  * internal/metadata endpoints (169.254.169.254, localhost, 10/8, …) and read reachability
  * back through the error string. This module centralizes the defense so every proxy route
- * (pose-analysis, and any future course-proxy / golfbert-proxy / image-edit adoption) uses
+ * (pose-analysis, and any future course-proxy / image-edit adoption) uses
  * the same allowlist instead of re-implementing it.
  *
  * Strategy:

@@ -105,7 +105,7 @@ export type TransportMode = 'walking' | 'cart';
  *
  * What the local copy was missing:
  *   1. THE CANONICAL RESOLVER. getGreenCentroid consults smartFinderService.resolveGreenCoords first
- *      — surveyed truth → Mark Green override → golfbert → courseHoles → geometryCache — and maps a
+ *      — surveyed truth → Mark Green override → courseHoles → geometryCache — and maps a
  *      front-nine marked green onto the back nine on a twice-around course. This copy went straight
  *      to the geometry cache, so a green the player had MARKED was ignored when their hole was
  *      closed out. Every surface the player HEARS (wind, lie analysis, shot tracking, the caddie

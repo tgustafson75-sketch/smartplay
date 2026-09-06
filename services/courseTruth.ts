@@ -10,8 +10,8 @@
  *   truth_<courseId>_<hole>  →  '{"lat":N,"lng":N,"savedAt":N}'
  *
  * AsyncStorage was chosen over the existing courseHoles store so
- * survey data is decoupled from cached API data (golfcourseapi /
- * golfbert) — flushing the cache won't erase ground truth. Cloud
+ * survey data is decoupled from cached API data (golfcourseapi) —
+ * flushing the cache won't erase ground truth. Cloud
  * sync of these keys is a follow-up; for now they're device-local.
  */
 

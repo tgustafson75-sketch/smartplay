@@ -2407,3 +2407,68 @@ Nothing. This is Tier A (static + suite) only. Menifee needs an on-course look b
 
 Health: tsc 0 · jest **2645/2645** (241 suites) · lint 260 problems / 1 error, and that error
 (`app/paywall.tsx:271`, unescaped apostrophe) is pre-existing and untouched by this work.
+
+### Addendum, same day — "make sure course engine is uniform for all courses"
+
+The Menifee severance above was the trigger; this is the sweep that followed it, plus a correction
+to the call I made in it.
+
+**CORRECTION — the parked file was not allowed to be parked.** `eb0a20b6` kept `golfbertApi.ts` on
+disk under the LENS ("an unwired capability is unconnected, not dead"). That was wrong here, and the
+sim said so: `scripts/simulations/marshal.ts` counts a shipped file nothing imports as an ISLAND,
+and its baseline says resolve one *"by wiring the file up or deleting it WITH its guards — never by
+adding a line here."* Parking it meant a sim guard certifying code that cannot run — the exact
+hooks/useKevin.ts failure that check exists to catch. Tim's call: delete.
+
+Removed: `services/golfbertApi.ts`, `api/golfbert-proxy.ts`, `constants/golfbertCourses.ts`, the
+`/api/golfbert-proxy` route in `vercel.json`, the cache guard in `run-sim.ts`, the three
+ORPHAN_BASELINE entries, and the `golfbert-proxy.ts` leg of `every-costly-route-is-bounded`. All
+recoverable from `eb0a20b6`. If it is ever rewired it goes BEHIND the engine as a provider feeding
+`courseHoles` — returning null for unmapped courses is a *data* difference, which is fine; a second
+code path only two courses can reach is not.
+
+**PROCESS GAP THIS EXPOSED.** `eb0a20b6` was pushed with the sim at 967/969 and nothing stopped it:
+the pre-commit hook runs tsc + jest, not `npm run sim`. Any change that removes an import can orphan
+a file, and only the sim sees that. Run it before pushing.
+
+**The uniformity sweep itself — three more findings, none Menifee-specific:**
+
+1. **11 more courses built thumbnails from empty maps.** Rancho California, Crystal Springs, Mariners
+   Point, San Jose Muni, Sunnyvale, Echo Hills, Westlake CC NJ, Greenhill, Spessard Holland, Webster
+   Dudley and Pembroke Pines all did `X_HOLE_IMAGES[1]`, and all 29 of those maps have been `{}`
+   since 2026-08-25. Every one resolved to undefined and leaned on `courseThumb()`'s lat/lng rescue.
+   All 41 courses now build the same way: `satelliteThumb(lat, lng)`.
+
+2. **SmartVision carried a second, divergent name→id matcher.** `homeCourseIdFromProfile`: seven
+   hand-ordered rules, `void`ed out of the cascade but reading as live logic. It was a duplicate of
+   `getLocalCourseSlug`, and it had received NEITHER fix the real one got — no
+   `isAmbiguousComplexName` gate (2026-09-05, the Menifee facility-name bug) and no `shadow` rule
+   ahead of its bare `n.includes('lakes')` (2026-09-01, after Shadow Lakes resolved to MENIFEE's
+   Lakes). Deleted as a duplicate, which is what the LENS permits outright.
+
+3. **Two live slug resolutions disagreed about their own precedence.** Calibration was id-first;
+   the CENTROID was name-only. The centroid decides where the satellite tile is centred, so a name
+   collision there renders a confidently wrong picture of another club — the Shadow Lakes shape
+   again, on the aerial instead of the imagery. New `data/courseSlug.ts` holds the single rule (id
+   first, name only as last resort, no course-specific knowledge except a legacy alias table for
+   rounds persisted under an upstream id). All four resolution sites in SmartVision now call it, and
+   SmartVision no longer imports any provider module to do generic `local:` prefix work.
+
+**Swept and found clean:** `courseGeometryService`, `courseDataOrchestrator`, `courseTruth`,
+`courseDownloadEngine`, `smartFinderService`, `shotLocationService` — no course-identity branching.
+`getCourseHoleCount` branches on hole COUNT, not identity, which is data-driven and correct.
+
+**Still open (deliberate):**
+- `getLocalCourseSlug`'s ~25-rule substring chain survives as the name-only fallback leg. It is
+  guarded by `isAmbiguousComplexName` and is only reachable when there is no id (voice, homeCourse).
+  A name genuinely is all the user gave us on those paths.
+- `getLocalHoleImage`'s name-matching is unreachable while every pack is `{}` — kept as the
+  registration site for future curated packs.
+- `app/landmark-curate.tsx` is still hardcoded to `COURSE_ID = 'palms'`. Internal authoring tool,
+  off the player path.
+- `data/holeLineCalibration.ts` is unreachable (needs a curated image; none exist).
+
+Health after: tsc 0 · jest **2650/2650** (241 suites) · **sim 968/968** · lint 260 problems / 1 error
+(`app/paywall.tsx:271`, pre-existing, untouched).
+
+Critical paths touched: PATH 2 ROUND, PATH 5 GPS. Tier A only.

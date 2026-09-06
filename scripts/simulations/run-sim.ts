@@ -7048,14 +7048,11 @@ check('L1HolePreview: hole art is aspect-locked to its OWN aspect + centered (co
   })(),
   'a hole crop is fully contained + centered at ITS OWN aspect (our crops range 2:3 → 2.6:1 → 1:1), so nothing is cropped off; only a null-aspect captured aerial fills+covers');
 
-// 2026-06-14 (audit — redundant work) — golfbert holes were re-fetched over the
-// network on every hole switch even though the cache was populated. Now read-through.
-check('Perf: golfbert holes served from cache (no per-hole refetch)',
-  (() => {
-    const g = read('services/golfbertApi.ts');
-    return /const cached = golfbertCache\.get\(smartplayCourseId\);\s*\n\s*if \(cached && cached\.length > 0\) return cached;/.test(g);
-  })(),
-  'getGolfbertHolesForCourse returns the in-memory cache once fetched instead of re-hitting the network on every hole change');
+// 2026-09-06 — the golfbert cache guard that stood here is deleted WITH its subject. Tim:
+// "make sure course engine is uniform for all courses" — services/golfbertApi.ts was a provider
+// wired to exactly 2 of ~41 courses, and severing it from the resolver left the file imported by
+// nobody. MARSHAL's rule is that a guard on an unimported file proves nothing, and its baseline may
+// only get shorter, so the file and its guard go together. Recoverable from commit eb0a20b6.
 
 // 2026-06-14 (audit — lifecycle/audio) — recordings/cameras left running on abrupt
 // unmount kept the iOS audio session in record mode (muting later TTS) or left the
@@ -13049,7 +13046,7 @@ check('LOCK: one answer to "where is the green for this hole" — the closer can
      * closing out a hole's last shot, and its own comment admitted the split: "(Mirrors
      * shotLocationService.getGreenCentroid, which does this right.)" The copy it mirrored was better
      * three ways — it consults the canonical resolver (surveyed truth → Mark Green override →
-     * golfbert → courseHoles → geometryCache, including the twice-around hole mapping), it applies
+     * courseHoles → geometryCache, including the twice-around hole mapping), it applies
      * the full WGS84 guard instead of loose `!== 0` checks, and it averages front/back on the
      * geometry path too.
      *

@@ -56,20 +56,11 @@ import { prefetchCourseImagery } from '../../services/roundPrefetch';
 import { getCourseImageryUrl, getCenteredImageryUrl } from '../../services/mapboxImagery';
 import { isValidGolfCoord } from '../../utils/coordGuard';
 import { getCachedGeometry } from '../../services/courseGeometryService';
-import {
-  CRYSTAL_SPRINGS_HOLE_IMAGES,
-  MARINERS_POINT_HOLE_IMAGES,
-  RANCHO_CALIFORNIA_HOLE_IMAGES,
-  SAN_JOSE_MUNI_HOLE_IMAGES,
-  SUNNYVALE_HOLE_IMAGES,
-  WESTLAKE_CC_NJ_HOLE_IMAGES,
-  ECHO_HILLS_HOLE_IMAGES,
-  GREENHILL_HOLE_IMAGES,
-  SPESSARD_HOLLAND_HOLE_IMAGES,
-  WEBSTER_DUDLEY_HOLE_IMAGES,
-  PEMBROKE_PINES_HOLE_IMAGES,
-  getLocalHoleImageById,
-} from '../../data/localCourseImages';
+// 2026-09-06 — the eleven bundled-image thumbnail imports are gone. Every one of those maps has
+// been {} since 2026-08-25, so each `X_HOLE_IMAGES[1]` resolved to undefined and courseThumb()'s
+// lat/lng rescue was already drawing the card. All 41 courses now build the same way:
+// satelliteThumb(lat, lng). getLocalHoleImageById stays — it is the id-keyed hole-image lookup.
+import { getLocalHoleImageById } from '../../data/localCourseImages';
 import AppIcon from '../../components/AppIcon';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 import { QuickTutorial } from '../../components/QuickTutorial';
@@ -412,7 +403,7 @@ const LOCAL_COURSES_RAW: CourseSummary[] = [
     rating: 70.9,
     slope: 127,
     isLocal: true,
-    thumbnail: (RANCHO_CALIFORNIA_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    thumbnail: satelliteThumb(33.560927, -117.144702),
     // 2026-08-11 — the old "approximate clubhouse centroid, any error <500m is invisible" was 7.96km
     // out and in the WRONG TOWN: the course is The Golf Club at Rancho California in MURRIETA
     // (39500 Robert Trent Jones Pkwy), not Temecula. That error is far from invisible — the geometry
@@ -428,7 +419,7 @@ const LOCAL_COURSES_RAW: CourseSummary[] = [
     rating: 70.4,
     slope: 128,
     isLocal: true,
-    thumbnail: (CRYSTAL_SPRINGS_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    thumbnail: satelliteThumb(37.5560947, -122.3829982),
     // 2026-05-17 — corrected from OSM golf_course centroid (was 5 km off)
     lat: 37.5560947,
     lng: -122.3829982,
@@ -440,7 +431,7 @@ const LOCAL_COURSES_RAW: CourseSummary[] = [
     rating: 53.0,
     slope: 74,
     isLocal: true,
-    thumbnail: (MARINERS_POINT_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    thumbnail: satelliteThumb(37.5731586, -122.2823681),
     // 2026-05-17 — corrected from OSM golf_course centroid (was 2.8 km off)
     lat: 37.5731586,
     lng: -122.2823681,
@@ -459,7 +450,7 @@ const LOCAL_COURSES_RAW: CourseSummary[] = [
     // 2026-05-16 — cropped Golfshot screenshot (chrome removed via PIL).
     // 2026-05-17 — thumbnail field was dropped during a prior centroid
     // edit, leaving Play tab to render the generic icon. Restored.
-    thumbnail: (SAN_JOSE_MUNI_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    thumbnail: satelliteThumb(37.3771789, -121.8881051),
     // 2026-05-17 — corrected from OSM golf_course centroid (was 4.5 km
     // off, in the wrong neighborhood entirely)
     lat: 37.3771789,
@@ -477,7 +468,7 @@ const LOCAL_COURSES_RAW: CourseSummary[] = [
     slope: 117,
     isLocal: true,
     // 2026-05-16 — cropped Golfshot screenshot (chrome removed via PIL).
-    thumbnail: (SUNNYVALE_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    thumbnail: satelliteThumb(37.3983857, -122.0417245),
     // 2026-05-17 — corrected from OSM golf_course centroid (was 2.4 km off)
     lat: 37.3983857,
     lng: -122.0417245,
@@ -496,7 +487,7 @@ const LOCAL_COURSES_RAW: CourseSummary[] = [
     rating: null,
     slope: null,
     isLocal: true,
-    thumbnail: (ECHO_HILLS_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    thumbnail: satelliteThumb(33.7475, -116.9719),
     lat: 33.7475,
     lng: -116.9719,
   },
@@ -511,7 +502,7 @@ const LOCAL_COURSES_RAW: CourseSummary[] = [
     rating: null,
     slope: null,
     isLocal: true,
-    thumbnail: (WESTLAKE_CC_NJ_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    thumbnail: satelliteThumb(40.0828, -74.3196),
     lat: 40.0828,
     lng: -74.3196,
   },
@@ -523,7 +514,7 @@ const LOCAL_COURSES_RAW: CourseSummary[] = [
     rating: null,
     slope: null,
     isLocal: true,
-    thumbnail: (GREENHILL_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    thumbnail: satelliteThumb(42.2677, -71.8562),
     lat: 42.2677,
     lng: -71.8562,
   },
@@ -539,7 +530,7 @@ const LOCAL_COURSES_RAW: CourseSummary[] = [
     rating: 62.2,
     slope: 113,
     isLocal: true,
-    thumbnail: (SPESSARD_HOLLAND_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    thumbnail: satelliteThumb(28.04947, -80.55063),
     // 2026-07-24 (final QA) — reconciled to the LOCAL_COURSE_CENTROIDS value (~1.3mi apart before;
     // the two registries are documented to mirror each other). This is the OSM/golfcourseapi-matched
     // centroid; the prior value drifted.
@@ -556,7 +547,7 @@ const LOCAL_COURSES_RAW: CourseSummary[] = [
     rating: null,
     slope: null,
     isLocal: true,
-    thumbnail: (WEBSTER_DUDLEY_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    thumbnail: satelliteThumb(42.047568, -71.924881),
     // 2026-08-11 — was an "approx town-center" placeholder (its own comment said so), 1.66km from
     // the course. OSM has the real thing: "Dudley Hill Golf Club at Nichols College".
     lat: 42.047568,
@@ -572,7 +563,7 @@ const LOCAL_COURSES_RAW: CourseSummary[] = [
     rating: 72.9,
     slope: 139,
     isLocal: true,
-    thumbnail: (PEMBROKE_PINES_HOLE_IMAGES[1] ?? null) as ImageSourcePropType | null,
+    thumbnail: satelliteThumb(26.019337, -80.2868),
     lat: 26.019337,
     lng: -80.2868,
   },

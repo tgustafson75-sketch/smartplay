@@ -30,12 +30,18 @@
  *      no hero and no hole thumbnails. Same family as
  *      a-course-is-not-the-first-name-that-contains-the-word.test.ts.
  *
- * These lock the SEVERANCE, not the deletion. services/golfbertApi.ts, api/golfbert-proxy.ts and
- * constants/golfbertCourses.ts stay on disk — Tim's paid access is a real capability and per the
- * LENS in CLAUDE.md an unwired capability is unconnected, not dead. What is forbidden is those
- * modules re-entering the resolver or the render path. If Golfbert is ever rewired it belongs
- * BEHIND the engine, as one provider feeding courseHoles like any other, so every course can reach
- * whatever it provides.
+ * SEVERED FIRST, THEN DELETED (Tim's call, 2026-09-06). The initial pass parked golfbertApi.ts on
+ * disk under CLAUDE.md's LENS — an unwired capability is unconnected, not dead. The sim disagreed,
+ * and it was right: `scripts/simulations/marshal.ts` counts a shipped file nothing imports as an
+ * ISLAND, and says to resolve one "by wiring the file up or deleting it WITH its guards — never by
+ * adding a line here." Parking it would have meant a guard certifying code that cannot run, which is
+ * the exact failure (hooks/useKevin.ts, green for a month) that check exists to catch. So
+ * services/golfbertApi.ts, api/golfbert-proxy.ts and constants/golfbertCourses.ts are gone, with
+ * their sim guard and orphan-baseline entries, recoverable from commit eb0a20b6.
+ *
+ * If Golfbert is ever rewired it belongs BEHIND the engine, as one provider feeding courseHoles like
+ * any other, so every course reaches it through the same call — returning null for the unmapped ones
+ * is a DATA difference, which is fine. A second code path reachable by two courses is not.
  */
 import fs from 'fs';
 import path from 'path';
@@ -166,15 +172,54 @@ describe('the home courses are built like the other thirty-eight', () => {
   });
 });
 
-describe('the paid provider is parked, not destroyed', () => {
-  it('keeps the client, proxy and mapping on disk for a future rewire', () => {
-    // Per CLAUDE.md's LENS: deleting a capability is the expensive mistake. Severing it is not.
+describe('the two-course provider is gone, not hiding', () => {
+  it('leaves no client, proxy or mapping behind to be re-imported', () => {
     for (const p of [
       'services/golfbertApi.ts',
       'api/golfbert-proxy.ts',
       'constants/golfbertCourses.ts',
     ]) {
-      expect(fs.existsSync(path.join(__dirname, '../..', p))).toBe(true);
+      expect(fs.existsSync(path.join(__dirname, '../..', p))).toBe(false);
     }
+  });
+
+  it('drops its route from vercel.json rather than leaving a 404 endpoint declared', () => {
+    const vercel = fs.readFileSync(path.join(__dirname, '../../vercel.json'), 'utf8');
+    expect(vercel).not.toContain('golfbert');
+  });
+
+  it('takes its sim guard and orphan-baseline entries with it', () => {
+    // marshal.ts: a guard on a file nothing imports proves nothing, and ORPHAN_BASELINE may not
+    // carry entries for exports that no longer exist.
+    const sim = fs.readFileSync(path.join(__dirname, '../../scripts/simulations/run-sim.ts'), 'utf8');
+    const orphans = fs.readFileSync(
+      path.join(__dirname, '../../scripts/simulations/orphanExports.ts'), 'utf8');
+    expect(sim).not.toContain("read('services/golfbertApi.ts')");
+    expect(orphans).not.toContain('services/golfbertApi.ts');
+  });
+});
+
+describe('one slug resolver, id first, shared by every surface', () => {
+  it('SmartVision holds no private name-to-id matcher of its own', () => {
+    // A seven-rule duplicate of getLocalCourseSlug lived here, `void`ed but intact, and had missed
+    // BOTH fixes the real one received: the isAmbiguousComplexName gate (2026-09-05) and the
+    // `shadow` rule ahead of a bare `lakes` (2026-09-01, after Shadow Lakes resolved to Menifee).
+    expect(smartvision).not.toContain("if (n.includes('palms')) return 'local:palms';");
+    expect(smartvision).not.toContain("if (n.includes('lakes')) return 'local:lakes';");
+    expect(smartvision).not.toContain('homeCourseIdFromProfile');
+  });
+
+  it('resolves the centroid and the calibration through the SAME resolver', () => {
+    // These asked the same question two ways: calibration was id-first, the centroid was name-only.
+    // The centroid decides where the aerial is CENTRED, so a name collision there is a confidently
+    // wrong picture of another club.
+    expect(smartvision).toContain('resolveLocalSlug(courseId, courseName)');
+    // No direct name-only resolution left in executing code — the history of it stays in comments.
+    expect(smartvision).not.toContain('getLocalCourseSlug(');
+  });
+
+  it('keeps id-resolution free of any provider module', () => {
+    expect(smartvision).not.toContain('localSlugFromAnyCourseId');
+    expect(smartvision).toContain("from '../data/courseSlug'");
   });
 });

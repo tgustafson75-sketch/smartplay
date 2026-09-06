@@ -526,10 +526,6 @@
       "dest": "/api/tutorial-analysis.ts"
     },
     {
-      "src": "/api/golfbert-proxy",
-      "dest": "/api/golfbert-proxy.ts"
-    },
-    {
       "src": "/api/pose-analysis",
       "dest": "/api/pose-analysis.ts"
     },

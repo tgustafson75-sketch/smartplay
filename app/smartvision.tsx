@@ -91,14 +91,15 @@ import { bumpToActive } from '../services/gpsManager';
 import { verifyShotAtLocation, correctShotClub, confirmTrackedShot, type ShotTrackResult } from '../services/shotTracking';
 import ShotTrackedSheet from '../components/round/ShotTrackedSheet';
 import type { ClubName } from '../store/clubStatsStore';
-// 2026-09-06 — golfbertApi / golfbertCourses imports removed; this screen renders course-engine
-// geometry over Mapbox for every course, with no per-course provider branch.
+// 2026-09-06 — the golfbertApi / golfbertCourses imports are gone with those modules; this screen
+// renders course-engine geometry over Mapbox for every course, with no per-course provider branch.
 import { fetchHoleImagery, computeFitView, getCenteredImageryUrl, getHoleImageryUrl } from '../services/mapboxImagery';
 import { useCaddieBarReserve } from '../components/GlobalCaddieBar';
 import YardageBookPanel from '../components/smartvision/YardageBookPanel';
 import { useDeviceLayout } from '../hooks/useDeviceLayout';
 import { useElevationDeltaStatus } from '../hooks/useElevationDelta';
-import { getLocalHoleImage, getLocalHoleImageById, LOCAL_COURSE_CENTROIDS, getLocalCourseSlug, type LocalCourseSlug } from '../data/localCourseImages';
+import { getLocalHoleImage, getLocalHoleImageById, LOCAL_COURSE_CENTROIDS, type LocalCourseSlug } from '../data/localCourseImages';
+import { localSlugFromCourseId, resolveLocalSlug } from '../data/courseSlug';
 import { getHoleLineCalibration, calibrationToCanvas } from '../data/holeLineCalibration';
 import { getBundledHoles, getCourseHoleCount } from '../data/courses';
 // 2026-05-31 — Fix GA: consolidate to canonical haversine. Prior inline
@@ -369,20 +370,14 @@ export default function SmartVisionScreen() {
   //      "No course" / "No geometry" when bundled imagery is available. The
   //      user can swipe to any hole; if nothing matches, the green canvas
   //      with friendly hint copy renders instead of a broken-looking state.
-  // homeCourse is a NAME (string), not an id, so we resolve to id via
-  // a fuzzy substring match against LOCAL_COURSE_SLUG_BY_NAME below.
-  const homeCourseIdFromProfile: string | null = (() => {
-    if (!homeCourseName) return null;
-    const n = homeCourseName.toLowerCase();
-    if (n.includes('sunnyvale')) return 'local:sunnyvale';
-    if (n.includes('san jose')) return 'local:san-jose-muni';
-    if (n.includes('palms')) return 'local:palms';
-    if (n.includes('lakes')) return 'local:lakes';
-    if (n.includes('rancho')) return 'local:rancho-california';
-    if (n.includes('crystal')) return 'local:crystal-springs';
-    if (n.includes('mariner')) return 'local:mariners-point';
-    return null;
-  })();
+  // 2026-09-06 (Tim — "make sure course engine is uniform for all courses") — a SECOND, DIVERGENT
+  // name→slug matcher lived here: seven hand-ordered rules, `void`ed out of the cascade below but
+  // still reading as live logic. It was a duplicate of getLocalCourseSlug() in
+  // data/localCourseImages.ts, and duplicates drift: this copy never received either fix the real
+  // one got. It had no isAmbiguousComplexName gate (added 2026-09-05 for the Menifee facility-name
+  // bug) and no `shadow` rule ahead of its bare `n.includes('lakes')` (added 2026-09-01 after Shadow
+  // Lakes resolved to MENIFEE's Lakes), so it still answered 'local:lakes' for both. Deleted as a
+  // duplicate, which is the one thing CLAUDE.md's LENS says may be deleted outright. One matcher.
   // 2026-05-17 — Removed BOTH the 'local:palms' hard fallback AND the
   // homeCourseIdFromProfile fallback. The home-course leg was the
   // remaining Palms leak: when a user with homeCourse="Menifee Lakes
@@ -398,28 +393,22 @@ export default function SmartVisionScreen() {
   // because he hadn't selected a course on Play tab first → all three
   // context vars were null → courseHoles empty → no F/M/B numbers. Now
   // when the explicit context cascade is null AND a homeCourse string
-  // is set, resolve it to a local slug via getLocalCourseSlug and use
-  // that local:<slug> id. Falls through to null when the resolver
-  // doesn't recognize the home course name. Pure additive — existing
-  // explicit-context paths get the same effectiveCourseId they had.
+  // is set, resolve it to a local slug and use that local:<slug> id. Falls through to null when the
+  // resolver doesn't recognize the home course name.
+  //
+  // 2026-09-06 — this is the ONE place in this screen where a name-only resolution is legitimate:
+  // homeCourse is stored as a string and there is no id to prefer. It still goes through the shared
+  // resolver (null id → name leg), so it inherits the isAmbiguousComplexName gate rather than
+  // re-implementing matching, which is exactly how the deleted duplicate above went stale.
   const explicitCourseId =
     activeCourseId ?? pendingStartCourseId ?? previewCourseId ?? null;
   const homeFallbackCourseId = (() => {
     if (explicitCourseId) return null;
     if (!homeCourseName) return null;
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { getLocalCourseSlug } = require('../data/localCourseImages') as typeof import('../data/localCourseImages');
-      const slug = getLocalCourseSlug(homeCourseName);
-      return slug ? `local:${slug}` : null;
-    } catch {
-      return null;
-    }
+    const slug = resolveLocalSlug(null, homeCourseName);
+    return slug ? `local:${slug}` : null;
   })();
   const effectiveCourseId = explicitCourseId ?? homeFallbackCourseId;
-  // homeCourseIdFromProfile still computed for any read-only consumer
-  // below that wants it; it's no longer in the cascade.
-  void homeCourseIdFromProfile;
   /**
    * 2026-08-11 (Tim — "there's some identifying information within the screen that I don't usually
    * see. Instead of yardage, you get, like, f w t z f").
@@ -495,12 +484,10 @@ export default function SmartVisionScreen() {
   // from the previewed courseId.
   const courseHoles = useMemo(() => {
     if (liveCourseHoles.length > 0) return liveCourseHoles;
-    // 2026-06-24 — Out-of-round Palms arrives as a Golfbert NUMERIC id, so the
-    // raw courseId never matches a bundled-holes key. Normalize the same way
-    // the image + calibration paths do (localSlugFromAnyCourseId) before the
-    // bundled-holes lookup, so the F/M/B reconcile keeps its source pre-round.
-    const { localSlugFromAnyCourseId } = require('../constants/golfbertCourses') as typeof import('../constants/golfbertCourses');
-    const slug = localSlugFromAnyCourseId(courseId);
+    // Normalize the id before the bundled-holes lookup so the F/M/B reconcile keeps its source
+    // pre-round. 2026-09-06 — now via data/courseSlug, the one resolver every surface shares;
+    // this used to reach into constants/golfbertCourses for the same generic `local:` strip.
+    const slug = localSlugFromCourseId(courseId);
     return getBundledHoles(slug ? `local:${slug}` : courseId);
   }, [liveCourseHoles, courseId]);
   // 2026-06-04 — Bundled length wins over live for known local courses
@@ -575,12 +562,9 @@ export default function SmartVisionScreen() {
   const curatedImage = useMemo(() => {
     const direct = getLocalHoleImageById(courseId, holeIndex) ?? getLocalHoleImage(courseName, holeIndex);
     if (direct) return direct;
-    // 2026-06-23 (Tim — out-of-round Palms) — a course opened via its Golfbert
-    // numeric id (e.g. 17345) still maps to our bundled crop. localSlugFromAnyCourseId
-    // recognizes both `local:<slug>` and the upstream Golfbert id.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { localSlugFromAnyCourseId } = require('../constants/golfbertCourses') as typeof import('../constants/golfbertCourses');
-    const slug = localSlugFromAnyCourseId(courseId);
+    // A round persisted under an upstream id still maps to our bundled crop; localSlugFromCourseId
+    // handles both `local:<slug>` and the legacy alias ids.
+    const slug = localSlugFromCourseId(courseId);
     return slug ? getLocalHoleImageById(`local:${slug}`, holeIndex) : null;
   }, [courseId, courseName, holeIndex]);
 
@@ -967,12 +951,11 @@ export default function SmartVisionScreen() {
       setGeometry(geo);
 
       // 2026-09-06 (Tim — "all courses need to go through our course engine") — the Golfbert fetch
-      // that stood here is UNWIRED, not deleted. services/golfbertApi.ts and api/golfbert-proxy.ts
-      // remain on disk with Tim's paid access intact; what's removed is this screen's role as the
-      // ONLY populator of the golfbertCache that services/smartFinderService.ts then read as a pin
-      // source. That made Menifee's yardages depend on whether this screen had mounted. If Golfbert
-      // is ever rewired, it belongs BEHIND the course engine as one provider feeding courseHoles —
-      // not beside it as a second answer only two courses can get.
+      // that stood here is gone, along with the client, proxy and mapping. This screen was the ONLY
+      // populator of the golfbertCache that services/smartFinderService.ts then read as a pin source,
+      // which made Menifee's yardages depend on whether this screen had mounted. If that provider is
+      // ever rewired it belongs BEHIND the course engine, feeding courseHoles — not beside it as a
+      // second answer only two courses can reach.
 
       // 2026-05-18 — Curated bundled images win when one exists for this
       // course. Superseded 2026-08-11 — the live tile leads; see the block below.
@@ -1101,7 +1084,12 @@ export default function SmartVisionScreen() {
           //      this makes the tool useful on a course we never pre-loaded.
           const okc = (c: { lat: number; lng: number } | null | undefined) =>
             !!c && Number.isFinite(c.lat) && Number.isFinite(c.lng) && Math.abs(c.lat) <= 90 && Math.abs(c.lng) <= 180;
-          const slug = getLocalCourseSlug(courseName);
+          // 2026-09-06 — was getLocalCourseSlug(courseName), i.e. name-only, while the calibration
+          // path a few hundred lines down was already id-first. Same question, two answers, and the
+          // name one picks the WRONG course on a collision ("Shadow Lakes" → Menifee's Lakes). The
+          // centroid decides where the aerial is centred, so a wrong slug here is a confidently
+          // wrong picture. Both now go through resolveLocalSlug.
+          const slug = resolveLocalSlug(courseId, courseName);
           const centroid = slug ? LOCAL_COURSE_CENTROIDS[slug] : null;
           const fix = getLastFix();
           const playerPt = fix && okc(fix.location) ? { lat: fix.location.lat, lng: fix.location.lng } : null;
@@ -1191,7 +1179,7 @@ export default function SmartVisionScreen() {
   }, [geometry, courseHoles, holeIndex]);
 
   // 2026-07-01 (audit) — prefer the canonical green resolver (truth → Mark-Green
-  // override → golfbert → courseHoles) so the overlay green MATCHES the SmartFinder
+  // override → courseHoles) so the overlay green MATCHES the SmartFinder
   // strip after the user marks the green. Raw geometry?.green bypassed the override,
   // so the tile + aim line diverged from the spoken/strip yardage. Falls back to raw
   // geometry when the resolver has nothing (source 'none').
@@ -1277,18 +1265,12 @@ export default function SmartVisionScreen() {
   // 2026-06-23 note below predicted exactly this; our crop winning the race was all that hid it.
   const onCuratedPhoto = preferCurated || (!imageUri && !!curatedImage);
 
-  const calibrationSlug = useMemo(() => {
-    // Use courseId directly when it's a local: course — avoids fragile
-    // substring name-match that can return the wrong slug for similarly-named courses.
-    if (courseId?.startsWith('local:')) return courseId.replace('local:', '') as LocalCourseSlug;
-    // 2026-06-23 (Tim — out-of-round Palms) — also recognize the Golfbert numeric id
-    // so calibration resolves regardless of how the course was opened.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { localSlugFromAnyCourseId } = require('../constants/golfbertCourses') as typeof import('../constants/golfbertCourses');
-    const fromId = localSlugFromAnyCourseId(courseId);
-    if (fromId) return fromId as LocalCourseSlug;
-    return getLocalCourseSlug(courseName);
-  }, [courseId, courseName]);
+  // 2026-09-06 — id first, name only as a last resort. resolveLocalSlug is that rule, shared with
+  // the centroid path below so the two cannot drift apart again.
+  const calibrationSlug = useMemo(
+    () => resolveLocalSlug(courseId, courseName),
+    [courseId, courseName],
+  );
   const calibration = useMemo(() => {
     if (!calibrationSlug) return null;
     return getHoleLineCalibration(calibrationSlug, holeIndex);

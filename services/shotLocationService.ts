@@ -75,7 +75,7 @@ export async function getCurrentLocation(): Promise<ShotLocation | null> {
  */
 export function getGreenCentroid(holeNumber: number): ShotLocation | null {
   // 2026-07-01 (re-audit) — consult the canonical green resolver FIRST
-  // (truth → Mark-Green override → golfbert → courseHoles → geometryCache). This is
+  // (truth → Mark-Green override → courseHoles → geometryCache). This is
   // the same cascade the SmartFinder strip uses, so the consumers of getGreenCentroid
   // (club recommendation via queryStatusHandler, lie-analysis brain context, shot-
   // distance logging) stop diverging from the strip after the user marks a green.

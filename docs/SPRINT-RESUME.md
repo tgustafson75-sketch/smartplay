@@ -17,13 +17,31 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 > Golfbert render branch that anchored markers with calibration measured off images deleted on
 > 2026-08-25, and an `includes('palms')` name gate that left *any* "Palms" course with no imagery.
 >
-> **Severed, not deleted** — `golfbertApi.ts`, `golfbert-proxy.ts`, `golfbertCourses.ts` stay on disk;
-> Tim's paid access is intact. Rewire it *behind* the engine (a provider feeding `courseHoles`) or not
-> at all. Pinned by `__tests__/regression/one-course-engine-answers-for-every-course.test.ts`.
+> **Severed, then DELETED** (Tim's call). Parking `golfbertApi.ts` on disk left it imported by
+> nobody, and MARSHAL counts that as an ISLAND — "wire the file up or delete it WITH its guards,
+> never by adding a line here." So `golfbertApi.ts`, `golfbert-proxy.ts` and `golfbertCourses.ts` are
+> gone, with the sim guard, the ORPHAN_BASELINE entries and the vercel route. Recoverable from
+> `eb0a20b6`. **Rewire it behind the engine (a provider feeding `courseHoles`) or not at all.**
 >
-> Health: tsc 0 · jest **2645/2645** (241 suites) · lint 1 pre-existing error (`app/paywall.tsx:271`).
+> Same pass, second half — uniformity sweep across ALL courses:
+> - 11 more courses still built thumbnails from `X_HOLE_IMAGES[1]` maps that are `{}`. All 41 now use
+>   `satelliteThumb(lat, lng)`.
+> - SmartVision held a `void`ed 7-rule copy of `getLocalCourseSlug` that had missed both fixes the
+>   real one got — no `isAmbiguousComplexName` gate, no `shadow` rule before a bare `lakes`. Deleted.
+> - Centroid resolution was name-only while calibration was id-first. **New `data/courseSlug.ts` is
+>   the one resolver: id first, name only as last resort.** The centroid picks where the aerial is
+>   centred, so a name collision there was a confidently wrong picture of another club.
+>
+> Pinned by `__tests__/regression/one-course-engine-answers-for-every-course.test.ts` (19 tests).
+>
+> Health: tsc 0 · jest **2650/2650** (241 suites) · **sim 968/968** · lint 1 pre-existing error
+> (`app/paywall.tsx:271`).
 >
 > **NEXT:** PATH 2 + PATH 5 device verification at Menifee — Tier A only so far.
+>
+> **LESSON:** the pre-commit hook runs tsc + jest but NOT the sim. The first commit of this pass
+> (`eb0a20b6`) went out with the sim at 967/969 and nothing caught it. Run `npm run sim` before
+> pushing anything that removes an import.
 >
 > ### ⚠️ CURRENT STATE — 2026-08-13. Read this block; the rest of this file is older.
 >

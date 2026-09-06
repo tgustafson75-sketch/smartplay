@@ -30,7 +30,7 @@ import { getGreenOverride } from './courseGreenOverrides';
 // hole length" computation (marked tee → marked green).
 import { getTeeOverride } from './courseTeeOverrides';
 import { getCourseTruthSync } from './courseTruth';
-// 2026-09-06 — the golfbertApi import is gone; the resolvers below are provider-uniform.
+// 2026-09-06 — the golfbertApi import is gone (with the module itself); resolvers are provider-uniform.
 
 /**
  * Phase D-2 — SmartFinder data layer.
@@ -379,7 +379,7 @@ export function resolveGreenCoords(holeNumber: number): {
   // 2026-08-10 (logic-universality fix #4) — TWICE-AROUND: the player's marked/surveyed green from loop 1
   // is stored under the physical hole (1-9). On loop 2 (holes 10-18) look those personal sources up under
   // hole-9 so a green you marked on the front nine still resolves on the back nine (the geometry cache
-  // already wraps; truth/override/golfbert did not). courseHoles/geometry keep the raw number.
+  // already wraps; truth/override did not). courseHoles/geometry keep the raw number.
   const personalHole = (round.twiceAround === true && holeNumber >= 10) ? holeNumber - 9 : holeNumber;
   // 2026-05-24 — Surveyed ground truth wins over EVERYTHING. The dev
   // screen at app/dev/CourseTruth.tsx captures on-foot GPS at the
@@ -419,9 +419,10 @@ export function resolveGreenCoords(holeNumber: number): {
   // 2026-09-06 (Tim — "all courses need to go through our course engine so we can eventually build
   // our course engine API") — the Golfbert leg that sat here is GONE. Two reasons, the second fatal:
   //
-  //   1. It applied to exactly two courses out of ~40 (Menifee Palms + Lakes, the only entries in
-  //      constants/golfbertCourses.ts). A resolver that answers from a different provider on the
-  //      owner's home course is not one engine, it's two — and only one of them is shippable as an API.
+  //   1. It applied to exactly two courses out of ~41 (Menifee Palms + Lakes, the only entries in
+  //      the since-deleted constants/golfbertCourses.ts). A resolver that answers from a different
+  //      provider on the owner's home course is not one engine, it's two — and only one of them is
+  //      shippable as an API.
   //   2. It was NON-DETERMINISTIC. getCachedGolfbertHole reads an in-memory cache whose ONLY populator
   //      in the entire app was SmartVision's mount effect. So the pin feeding every yardage depended on
   //      whether the player had opened the map this session: SmartVision first → source 'golfbert',
@@ -471,7 +472,7 @@ export function resolveTeeCoords(holeNumber: number): {
 } {
   const round = useRoundStore.getState();
   const courseId = resolveSmartFinderCourseId(round);
-  // 2026-08-10 (logic-universality fix #4) — twice-around: personal marks (tee override / golfbert) live
+  // 2026-08-10 (logic-universality fix #4) — twice-around: personal marks (tee override) live
   // under the physical hole 1-9; wrap on loop 2 so a marked tee resolves on the back nine too.
   const personalHole = (round.twiceAround === true && holeNumber >= 10) ? holeNumber - 9 : holeNumber;
   if (courseId) {

@@ -255,12 +255,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
     'SURFACE — text fallback when no generated clip exists; the audio path is the one in use.',
   'services/fillerLibrary.ts :: isLibraryGenerated':
     'SURFACE — a readiness read for diagnostics.',
-  'services/golfbertApi.ts :: getGolfbertHole':
-    'PARKED — Golfbert per-hole detail. The shipped geometry path is AI-vision hole scan plus the course book; Golfbert is the fallback provider and only its course-level call is wired.',
-  'services/golfbertApi.ts :: getGolfbertHoleImageryUrl':
-    'PARKED — see getGolfbertHole. Imagery ships from the bundled/prefetched set.',
-  'services/golfbertApi.ts :: golfbertHealth':
-    'SURFACE — a /tools health probe.',
   'services/golferModel.ts :: readPersistedGolferModel':
     'SURFACE — reads the last snapshot from disk so a prompt has something before the first computed model lands. The live path computes synchronously and does not need the cold read.',
   'services/healthData.ts :: getGrantedHealthPermissions':

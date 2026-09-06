@@ -5,7 +5,7 @@
  * last shot. Its own comment admitted the split — "(Mirrors shotLocationService.getGreenCentroid,
  * which does this right.)" — and the copy it mirrored was better in three ways:
  *
- *   1. It consults the canonical resolver (surveyed truth → Mark Green override → golfbert →
+ *   1. It consults the canonical resolver (surveyed truth → Mark Green override →
  *      courseHoles → geometryCache). The local copy went straight to the geometry cache, so a green
  *      the player had MARKED was ignored when their hole was closed out — while every surface they
  *      HEAR (wind, lie analysis, shot tracking, the caddie payload, distance-to-green) used the

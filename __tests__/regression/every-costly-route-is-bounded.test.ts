@@ -9,7 +9,7 @@
  * Found unbounded: issue-report (EMAILS the owner through Resend on every accepted report — an open
  * relay into Tim's inbox), course-geometry-share (WRITES the crowd-sourced geometry other players
  * read), messages (writes arbitrary from/to/body), usage (writes telemetry rows), and four proxies
- * that spend OUR third-party keys — weather, elevation, golfbert, youtube-search. YouTube's is a hard
+ * that spend OUR third-party keys — weather, elevation, youtube-search. YouTube's is a hard
  * DAILY quota, so exhausting it is an outage that lasts until midnight.
  *
  * Payload caps already bounded one request's SIZE. Nothing bounded the COUNT.
@@ -60,7 +60,7 @@ describe('nothing costly is left unbounded', () => {
   });
 
   it('the four third-party proxies that spend OUR keys are bounded', () => {
-    for (const f of ['weather.ts', 'elevation.ts', 'golfbert-proxy.ts', 'youtube-search.ts']) {
+    for (const f of ['weather.ts', 'elevation.ts', 'youtube-search.ts']) {
       const r = routes.find((x) => x.file === f);
       expect(r).toBeDefined();
       expect(r!.src).toMatch(/allowInference\(req, res, '[\w_]+', \d+\)/);
