@@ -38,6 +38,21 @@ import {
 // Brand neon green (matches the caddie voice-state cue).
 const NEON = '#88F700';
 
+/**
+ * 2026-09-06 (Tim, on-course, light mode: "our bottom caddy bar where you type in… the text doesn't
+ * show") — THE BAR IS ALWAYS DARK, SO ITS CONTENTS MUST ALWAYS BE LIGHT.
+ *
+ * `bar.backgroundColor` is hardcoded '#0d1a0d' (the neon-on-dark brand treatment), but the text and
+ * chevrons on it read `colors.text_primary` / `colors.text_muted` from the THEME. In light mode
+ * text_primary is '#0d1a0d' — byte-for-byte the same value as the background the bar paints. Not
+ * merely low contrast: the identical colour. Everything on the bar disappeared, and it only ever
+ * looked right because the app is used in dark mode.
+ *
+ * Pinned to the dark palette's own values rather than themed, because the surface they sit on is not
+ * themed either. If the bar ever becomes theme-aware, these move with it — same owner. */
+const ON_BAR_TEXT = '#ffffff';   // theme/tokens.ts dark text_primary
+const ON_BAR_MUTED = '#c2cad4';  // theme/tokens.ts dark text_muted
+
 export interface CaddieBottomBarProps {
   placeholder?: string;
 }
@@ -103,7 +118,7 @@ export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: 
       {/* ‹ universal page back */}
       <TouchableOpacity onPress={goBack} style={s.chevron} accessibilityRole="button" accessibilityLabel="Back"
         hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
-        <Ionicons name="chevron-back" size={24} color={colors.text_primary} />
+        <Ionicons name="chevron-back" size={24} color={ON_BAR_TEXT} />
       </TouchableOpacity>
 
       {/* The neon caddie SPEAKING = tap to talk (same listeningSession as everywhere).
@@ -129,7 +144,7 @@ export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: 
         value={text}
         onChangeText={setText}
         placeholder={placeholder}
-        placeholderTextColor={colors.text_muted}
+        placeholderTextColor={ON_BAR_MUTED}
         returnKeyType="send"
         onSubmitEditing={submit}
         onFocus={() => setFocused(true)}
@@ -148,14 +163,14 @@ export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: 
         <TouchableOpacity onPress={() => Keyboard.dismiss()} style={s.chevron}
           accessibilityRole="button" accessibilityLabel="Hide keyboard"
           hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
-          <Ionicons name="chevron-down" size={24} color={colors.text_primary} />
+          <Ionicons name="chevron-down" size={24} color={ON_BAR_TEXT} />
         </TouchableOpacity>
       ) : (
         // › universal page forward (disabled/dim when there's nowhere forward)
         <TouchableOpacity onPress={goForward} disabled={!canForward} style={[s.chevron, { opacity: canForward ? 1 : 0.3 }]}
           accessibilityRole="button" accessibilityLabel="Forward"
           hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
-          <Ionicons name="chevron-forward" size={24} color={colors.text_primary} />
+          <Ionicons name="chevron-forward" size={24} color={ON_BAR_TEXT} />
         </TouchableOpacity>
       )}
     </View>
@@ -194,7 +209,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     micImg: { width: 46, height: 32 },
     input: {
       flex: 1,
-      color: colors.text_primary,
+      color: ON_BAR_TEXT,
       fontSize: 16,
       paddingVertical: Platform.OS === 'ios' ? 8 : 4,
       paddingHorizontal: 4,

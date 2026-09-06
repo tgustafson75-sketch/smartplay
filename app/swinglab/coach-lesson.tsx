@@ -39,6 +39,11 @@ import { useCoachLessonStore } from '../../store/coachLessonStore';
 import { displayCaddieName } from '../../services/caddieResolver';
 import { getApiBaseUrl } from '../../services/apiBase';
 
+/** This screen paints a permanent black background (video review), so its contents are pinned to the
+ *  dark palette rather than themed. theme/tokens.ts dark text_primary / text_muted. */
+const ON_BLACK_TEXT = '#ffffff';
+const ON_BLACK_MUTED = '#c2cad4';
+
 // Best-effort spoken line. Uses the standalone one-voice-safe speak(); never throws / blocks.
 function say(text: string) {
   try {
@@ -478,7 +483,7 @@ export default function CoachLessonScreen() {
       <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
         <View style={s.header}>
           <TouchableOpacity onPress={() => safeBack()} style={s.headerBtn} accessibilityRole="button" accessibilityLabel="Back">
-            <Ionicons name="chevron-back" size={24} color={colors.text_primary} />
+            <Ionicons name="chevron-back" size={24} color={ON_BLACK_TEXT} />
           </TouchableOpacity>
           {/**
             * 2026-09-01 (Tim — "to start, whoever is currently selected would be the coach. We might
@@ -519,7 +524,7 @@ export default function CoachLessonScreen() {
           {LESSON_FOCUSES.map((f) => (
             <TouchableOpacity key={f.id} style={s.focusRow} onPress={() => pickFocus(f)} accessibilityRole="button">
               <Text style={s.focusLabel}>{f.label}</Text>
-              <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+              <Ionicons name="chevron-forward" size={18} color={ON_BLACK_MUTED} />
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -615,13 +620,21 @@ export default function CoachLessonScreen() {
 
 function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
+    /**
+     * 2026-09-06 (Tim, light mode: text disappearing) — this screen is a VIDEO REVIEW surface and its
+     * background is permanently '#000', not themed. Everything painted on it therefore has to be
+     * light too. The six `colors.text_*` reads below were themed, and in light mode text_primary is
+     * '#0d1a0d' — near-black on black. Same shape as the caddie bottom bar found the same day: a
+     * hardcoded dark surface with theme-aware contents, which only ever looked right because the app
+     * is used in dark mode.
+     */
     screen: { flex: 1, backgroundColor: '#000' },
     scrimTop: { position: 'absolute', top: 0, left: 0, right: 0, height: 140, backgroundColor: 'rgba(0,0,0,0.45)' },
     scrimBottom: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 260, backgroundColor: 'rgba(0,0,0,0.5)' },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10 },
     headerOverlay: { position: 'absolute', top: 8, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 8, zIndex: 10 },
     headerBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-    title: { color: colors.text_primary, fontSize: 18, fontWeight: '800' },
+    title: { color: ON_BLACK_TEXT, fontSize: 18, fontWeight: '800' },
     livePill: { flexDirection: 'row', alignItems: 'center', gap: 7, backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 16 },
     liveDot: { width: 8, height: 8, borderRadius: 4 },
     livePillText: { color: '#fff', fontSize: 13, fontWeight: '800' },
@@ -647,10 +660,10 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     heroSub: { color: '#0d1a0d', fontSize: 14, lineHeight: 20, opacity: 0.85 },
     heroCta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
     heroCtaText: { color: '#0d1a0d', fontSize: 15, fontWeight: '800' },
-    sectionLabel: { color: colors.text_muted, fontSize: 11, fontWeight: '900', letterSpacing: 1.2, marginTop: 22, marginBottom: 2 },
+    sectionLabel: { color: ON_BLACK_MUTED, fontSize: 11, fontWeight: '900', letterSpacing: 1.2, marginTop: 22, marginBottom: 2 },
     planRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.accent, padding: 16, marginTop: 12 },
-    planBlurb: { color: colors.text_muted, fontSize: 13, marginTop: 3 },
+    planBlurb: { color: ON_BLACK_MUTED, fontSize: 13, marginTop: 3 },
     focusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, padding: 16, marginTop: 12 },
-    focusLabel: { color: colors.text_primary, fontSize: 16, fontWeight: '700' },
+    focusLabel: { color: ON_BLACK_TEXT, fontSize: 16, fontWeight: '700' },
   });
 }
