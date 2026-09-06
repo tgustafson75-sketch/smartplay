@@ -626,6 +626,10 @@
       "dest": "/api/glasses-return.ts"
     },
     {
+      "src": "/flags",
+      "dest": "/api/flags.ts"
+    },
+    {
       "handle": "filesystem"
     },
     {
