@@ -223,3 +223,114 @@ describe('one slug resolver, id first, shared by every surface', () => {
     expect(smartvision).toContain("from '../data/courseSlug'");
   });
 });
+
+/**
+ * 2026-09-06 (Tim — "make sure all the course books are clean, all thumbnails are clean and the whole
+ * setup stays commercially elite").
+ *
+ * data/courseComplexes.ts carries its own standing instruction: "Add a property here the moment a
+ * second layout is bundled for it — the cost of a missing entry is the Menifee bug, silently, on
+ * somebody's home course." That instruction had never been enforced, and two of the three
+ * multi-layout properties already in the bundle (Coyote Creek, Gleneagles) were unregistered.
+ *
+ * Neither had bitten yet only because getLocalCourseSlug happens to carry no `coyote` or `gleneagles`
+ * name rule. The collision was one well-meaning line away — which is precisely how "Shadow Lakes"
+ * reached Menifee's Lakes on 2026-09-01. This derives the facility list from the shipped courses
+ * rather than restating it, so a THIRD layout added tomorrow fails here on the day it lands.
+ */
+describe('every multi-layout facility in the bundle is a registered complex', () => {
+  const complexes = read('data/courseComplexes.ts');
+
+  /** club_name up to the layout separator — "Gleneagles — King's" → "gleneagles". */
+  const facilityOf = (clubName: string) =>
+    clubName.split(/[—(]/)[0].trim().toLowerCase();
+
+  const courses = (() => {
+    const block = playTab.slice(
+      playTab.indexOf('const LOCAL_COURSES_RAW'),
+      playTab.indexOf('\n];', playTab.indexOf('const LOCAL_COURSES_RAW')),
+    );
+    const out: { id: string; name: string }[] = [];
+    let id: string | null = null;
+    for (const line of block.split('\n')) {
+      const mId = /id: 'local:([^']+)'/.exec(line);
+      if (mId) id = mId[1];
+      const mName = /club_name: ['"](.+?)['"],/.exec(line);
+      if (mName && id) { out.push({ id, name: mName[1] }); id = null; }
+    }
+    return out;
+  })();
+
+  it('parses the shipped course list (guards the parser itself)', () => {
+    // A silent parse failure would make every assertion below vacuously true.
+    expect(courses.length).toBeGreaterThan(30);
+  });
+
+  const byFacility = courses.reduce<Record<string, string[]>>((acc, c) => {
+    const f = facilityOf(c.name);
+    (acc[f] ??= []).push(c.id);
+    return acc;
+  }, {});
+  const multiLayout = Object.entries(byFacility).filter(([, ids]) => ids.length > 1);
+
+  it('finds the facilities that ship more than one layout', () => {
+    expect(multiLayout.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it.each(multiLayout)('%s is registered in COURSE_COMPLEXES', facility => {
+    // The distinctive first word is enough: entries are keyed/regexed on the facility stem.
+    const stem = facility.split(/\s+/)[0];
+    expect(complexes.toLowerCase()).toContain(stem);
+  });
+});
+
+/**
+ * The thumbnail half of the same ask. These are correctness properties, not style: a 0,0 coordinate
+ * centres a satellite tile in the Gulf of Guinea, and a thumbnail built from a DIFFERENT course's
+ * coordinates is a confidently wrong picture — worse than no picture, which is the standard
+ * courseThumb() already holds itself to.
+ */
+describe('every bundled course card carries an honest thumbnail', () => {
+  const entries = (() => {
+    const block = playTab.slice(
+      playTab.indexOf('const LOCAL_COURSES_RAW'),
+      playTab.indexOf('\n];', playTab.indexOf('const LOCAL_COURSES_RAW')),
+    );
+    const out: { id: string; thumb: [number, number] | null; lat: number | null; lng: number | null }[] = [];
+    let cur: (typeof out)[number] | null = null;
+    for (const line of block.split('\n')) {
+      const mId = /id: 'local:([^']+)'/.exec(line);
+      if (mId) { if (cur) out.push(cur); cur = { id: mId[1], thumb: null, lat: null, lng: null }; }
+      if (!cur) continue;
+      const mT = /thumbnail: satelliteThumb\((-?[\d.]+), (-?[\d.]+)\)/.exec(line);
+      if (mT) cur.thumb = [Number(mT[1]), Number(mT[2])];
+      const mLat = /\blat: (-?[\d.]+)/.exec(line);
+      if (mLat) cur.lat = Number(mLat[1]);
+      const mLng = /\blng: (-?[\d.]+)/.exec(line);
+      if (mLng) cur.lng = Number(mLng[1]);
+    }
+    if (cur) out.push(cur);
+    return out;
+  })();
+
+  it('parses the shipped course list (guards the parser itself)', () => {
+    expect(entries.length).toBeGreaterThan(30);
+  });
+
+  it.each(entries.map(e => [e.id, e] as const))('%s has real coordinates', (_id, e) => {
+    expect(e.lat).not.toBeNull();
+    expect(e.lng).not.toBeNull();
+    // 0,0 is the placeholder that produced the ocean thumbnails isValidGolfCoord was written for.
+    expect(Math.abs(e.lat as number) > 0.001 || Math.abs(e.lng as number) > 0.001).toBe(true);
+    expect(Math.abs(e.lat as number)).toBeLessThanOrEqual(90);
+    expect(Math.abs(e.lng as number)).toBeLessThanOrEqual(180);
+  });
+
+  it.each(entries.map(e => [e.id, e] as const))(
+    '%s builds its thumbnail from its OWN coordinates',
+    (_id, e) => {
+      expect(e.thumb).not.toBeNull();
+      expect(e.thumb).toEqual([e.lat, e.lng]);
+    },
+  );
+});

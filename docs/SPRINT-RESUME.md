@@ -37,6 +37,20 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 > Health: tsc 0 · jest **2650/2650** (241 suites) · **sim 968/968** · lint 1 pre-existing error
 > (`app/paywall.tsx:271`).
 >
+> **Third pass — course books / thumbnails / commercial polish.** Course books audited and left
+> alone: they decline rather than invent, surface `description_source` to the player ("from public
+> data — not field-verified"), key on course_id, and gate par/yardage plausibility. No unlicensed
+> assets on disk. Thumbnails 38/38 honest — real coords, none 0,0, each built from its own lat/lng.
+> Fixed two surfaces that had silently lost their image when the packs emptied on 08-25 (recap hole
+> panel, Sim Round board) — both now fall through to Mapbox like every other surface already did.
+> Registered the two missing multi-layout complexes (**Coyote Creek**, **Gleneagles**); only Menifee
+> had been. Gates now DERIVE the facility list from the shipped courses, so the next one fails on
+> arrival. 101 tests in that file.
+>
+> Known and deliberate: Gleneagles King's/Queen's share one coordinate, so both cards show the same
+> tile. Both are scorecard-only (all-zero hole coords) — there is no per-layout geometry to split
+> them, and inventing a second centroid would be a fabricated coordinate.
+>
 > **NEXT:** PATH 2 + PATH 5 device verification at Menifee — Tier A only so far.
 >
 > **LESSON:** the pre-commit hook runs tsc + jest but NOT the sim. The first commit of this pass

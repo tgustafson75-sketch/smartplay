@@ -71,6 +71,38 @@ export const COURSE_COMPLEXES: readonly CourseComplex[] = [
       center: null, // Not measured. Do not invent one.
     },
   },
+  /**
+   * 2026-09-06 — the other two multi-layout properties already in the bundle. This file's own
+   * instruction is "add a property here the moment a second layout is bundled for it", and both had
+   * been sitting unregistered since before the gate existed. Neither has bitten yet only because
+   * getLocalCourseSlug happens to carry no `coyote` or `gleneagles` name rule — so the collision is
+   * one well-meaning line away, and that line is exactly how Shadow Lakes reached Menifee's Lakes.
+   *
+   * Registering them now means "Coyote Creek Golf Club" and "Gleneagles Country Club" DECLINE rather
+   * than guess, whoever adds a name rule later.
+   */
+  {
+    key: 'coyote-creek',
+    displayName: 'Coyote Creek Golf Club',
+    facility: /coyote(\s+creek)?/,
+    layouts: ['tournament', 'valley'],
+    range: {
+      aliases: ['driving range', 'range', 'practice facility'],
+      center: null, // Not measured. Do not invent one.
+    },
+  },
+  {
+    key: 'gleneagles-plano',
+    displayName: 'Gleneagles Country Club',
+    // Matches "king's"/"kings" and "queen's"/"queens" via the bare stems, so the possessive
+    // apostrophe in the shipped club_name ("Gleneagles — King's") cannot decide the outcome.
+    facility: /gleneagles/,
+    layouts: ['king', 'queen'],
+    range: {
+      aliases: ['driving range', 'range', 'practice facility'],
+      center: null, // Not measured. Do not invent one.
+    },
+  },
 ];
 
 export type ComplexResolution =

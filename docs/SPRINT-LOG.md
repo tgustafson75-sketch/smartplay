@@ -2472,3 +2472,61 @@ Health after: tsc 0 · jest **2650/2650** (241 suites) · **sim 968/968** · lin
 (`app/paywall.tsx:271`, pre-existing, untouched).
 
 Critical paths touched: PATH 2 ROUND, PATH 5 GPS. Tier A only.
+
+### Third pass, same day — "course books clean, thumbnails clean, commercially elite"
+
+**COURSE BOOKS — audited, no work needed.** This is the strongest part of the course stack and it
+should be left alone:
+- `api/course-content.ts` instructs the model to decline rather than invent ("OK to write 'Limited
+  data — play your standard plan' rather than invent"), and the client treats missing holes as
+  intentional — "Honest empty > invented copy".
+- Provenance reaches the player: `description_source` renders in `HoleGuide` as *"from public data —
+  not field-verified"* vs pro-contributed vs field-verified.
+- `saveCourseBook` keys on `course_id` (not name), merges additively so a partial source cannot wipe
+  a richer one, and runs a plausibility gate (par 3-6, yardage 30-700) so a course-total-sized number
+  can never be anchored as a hole yardage.
+- The one bundled seed (Berlin CC) is transcribed from the printed card with "No fabricated hazards"
+  stated in the file.
+
+**LICENSING — clean.** No `hole-*.jpg` or course image anywhere on disk; `assets/courses/` does not
+exist. Nothing unlicensed ships in the bundle. All 29 `*_HOLE_IMAGES` maps are `{}`.
+
+**THUMBNAILS — 38/38 honest.** Every bundled course card has real in-range coordinates, no 0,0
+placeholder, and builds its tile from *its own* lat/lng. One duplicate remains and cannot be fixed
+from data we have: Gleneagles King's and Queen's share 33.028737,-96.809567, so both cards render the
+same tile. Both layouts are scorecard-only (all-zero hole coords, `estimated: true`), so there is no
+per-layout geometry to derive distinct centroids from. Left as-is: they genuinely are one property,
+and inventing a second centroid to make the cards differ would be a fabricated coordinate.
+
+**TWO SURFACES HAD SILENTLY LOST THEIR IMAGE** when the packs were emptied on 2026-08-25. Neither
+showed a *wrong* picture — both just stopped showing one, and nothing flagged it:
+1. `app/recap/hole/[round_id]/[hole].tsx` — the "no shots tracked on this hole — here's the hole"
+   panel was curated-or-nothing, so it had gone permanently text-only. Now falls through to the
+   Mapbox tile using the geometry the shot map already loaded (free), and to the honest text state
+   when there is no geometry.
+2. `app/swinglab/simround.tsx` — the board rendered `ImageBackground` with `source={undefined}`, so
+   the tracer and shot markers were drawing on a flat panel. Now curated → Mapbox. Spessard Holland
+   has real per-hole coords and gets a true aerial; Webster Dudley has none and degrades exactly as
+   before.
+
+Checked and already correct (no change): SmartVision, `L1HolePreview` both pre-round and in-round
+(the 2026-08-10 `previewTileUrl` fix covers it), the course-detail hole grid, and the Play tab
+selected-course hero. All four already fall through to Mapbox.
+
+**TWO UNREGISTERED MULTI-LAYOUT COMPLEXES.** `data/courseComplexes.ts` says "Add a property here the
+moment a second layout is bundled for it — the cost of a missing entry is the Menifee bug, silently,
+on somebody's home course." That instruction was never enforced, and 2 of the 3 multi-layout
+properties in the bundle were missing: **Coyote Creek** (Tournament / Valley) and **Gleneagles**
+(King's / Queen's). Neither had bitten yet only because `getLocalCourseSlug` carries no `coyote` or
+`gleneagles` name rule — the collision was one well-meaning line away, which is exactly how Shadow
+Lakes reached Menifee's Lakes on 09-01. Both registered.
+
+New gates in `one-course-engine-answers-for-every-course.test.ts` (now 101 tests): the multi-layout
+facility list is DERIVED from the shipped courses rather than restated, so a third layout added
+tomorrow fails on the day it lands; and every course card is asserted to carry real coordinates and
+a thumbnail built from its own. Break-tested both.
+
+Health: tsc 0 · jest **2732/2732** (241 suites) · **sim 968/968** · lint 260 problems / 1 error
+(`app/paywall.tsx:271`, pre-existing).
+
+Critical paths touched: PATH 2 ROUND, PATH 6 SCORECARD (recap). Tier A only.
