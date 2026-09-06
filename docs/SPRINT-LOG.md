@@ -2530,3 +2530,68 @@ Health: tsc 0 · jest **2732/2732** (241 suites) · **sim 968/968** · lint 260 
 (`app/paywall.tsx:271`, pre-existing).
 
 Critical paths touched: PATH 2 ROUND, PATH 6 SCORECARD (recap). Tier A only.
+
+## Day N+1 — 2026-09-06 (later) — Layer 0: remote kill switches
+
+Any optional feature can now be turned off on a phone already in a player's pocket: no rebuild, no
+OTA, no store review. Verified server-side in both directions in **under 6 seconds** each way.
+
+**Server.** Edge Config store `smartplay-flags` (`ecfg_hmrnml3ir8ri5vehc546vqqxwri4`) connected to the
+`smartplay` Vercel project via `EDGE_CONFIG`; `GET /flags` reads it. The Vercel read token stays
+server-side — the app holds no credential, which is the whole reason the endpoint exists. Fail-open:
+an unreachable or malformed store returns all-ON with 200, never a 5xx, and a `source` field says
+which happened so a probe can tell without any client behaving differently.
+
+**Client.** `store/flagStore.ts` — Zustand + persist (`smartplay.flags.v1`). Initial state is the
+bundled all-ON defaults, so first render is instant and no feature is ever hidden while we wait to
+learn whether it should be. One fetch, 4s timeout, 60s floor, no retry loop — the next foreground IS
+the retry.
+
+**Gated at BOTH ends** — the menu that offers a feature and the code that opens it. Six ••• rows are
+not rendered when killed; the SwingLab tab gets `href: null`; six screens self-gate via
+`useFlagGate`, which covers "route redirects" and "unmounts if flipped while open" with one effect
+because those differ only in timing. Voice is gated at `listeningSession.toggle()` (the single
+chokepoint every mic path routes through) plus the bottom-bar mic button. `kevin_tool_routing` off
+sends utterances to the brain instead of handlers — Kevin still answers, he just stops taking
+ACTIONS. Per-course geometry is gated on both the build and the cached read.
+
+**NOT gated:** GPS yardages, round tracking, scorecard, bag, course book, history.
+
+**The catch this nearly shipped with.** The first pass gated the menu and the screens only.
+`releaseSurface.ts` names that exact trap in its own header, for the shelving mechanism: hide the
+card but leave `appCatalog` and `openToolHandler` wired and the caddie "still offers a shelved screen
+and navigates straight to it — the exact connected-but-not-used trap, inverted." A kill switch has
+the same consumers. Found it while writing up why the change was all additions. `openToolHandler` now
+refuses a killed route on both resolution paths.
+
+**Gate quality.** `a-kill-switch-cannot-dark-the-app.test.ts`, 28 tests. Nine failure modes (offline,
+timeout, 500, 404, HTML, array, null, wrong key, non-boolean) each asserted to leave every feature
+ON. The navigation assertion is BEHAVIOURAL because the textual version was proven too weak by
+break-test: `if (false && …)` kept every string in place and the test stayed green. A static check
+catches a deleted gate, not a disabled one.
+
+**ENGINEERING-PRINCIPLES #2 — this is 909 insertions against 2 deletions, and that is worth naming.**
+Nothing could be removed because nothing did this before. But the honest note is that
+`services/releaseSurface.ts` is now the SECOND mechanism for "hide a feature", with the same three
+consumers. It was deliberately not merged: releaseSurface is a build-time product decision (what
+exists in 1.0), the flags are a runtime emergency control, and folding the 2.0 roadmap into a
+dashboard toggle would put the App Store surface under remote control, which is a different risk
+profile. Defensible, but it IS duplication and the next person should know it was a choice.
+
+**Verified:** tsc 0 · jest **2760/2760** (242 suites) · **sim 968/968** · lint 1 pre-existing error.
+`npx expo export --platform ios` bundles clean, which is what proves Metro resolves the new imports
+from all 11 call sites (tsc does not).
+
+**NOT verified — Tim's to run:** the physical-device leg of the success criterion. Flip, background
+the app, reopen, confirm SmartVision leaves the ••• menu with no rebuild and no message; flip back
+and confirm it returns.
+
+    vercel edge-config update smartplay-flags --patch '[{"operation":"update","key":"flags","value":{"smartvision":false,"smartfinder":true,"swinglab":true,"cage_capture":true,"voice_caddie":true,"kevin_tool_routing":true,"lie_analysis":true,"swing_analysis":true}}]'
+
+Set `"smartvision":true` to restore. Server propagation is ~6s; the app picks it up on the next
+foreground subject to its own 60s floor.
+
+**Known gap:** `catalogForPrompt()` runs SERVER-side in `api/kevin.ts`, which cannot see the client's
+flags. Kevin may still MENTION a killed feature; he cannot open it (openToolHandler refuses). Closing
+that would mean either a per-request Edge Config read on the brain's hot path or sending flags up in
+the request body — neither justified by "Kevin named a screen you can't reach."

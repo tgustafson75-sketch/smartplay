@@ -8,7 +8,26 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
-> ### ⚠️ LATEST — 2026-09-06. One course engine for every course.
+> ### ⚠️ LATEST — 2026-09-06 (later). Layer 0: remote kill switches are LIVE.
+>
+> Any optional feature can be turned off on a phone already in a player's pocket — no rebuild, no
+> OTA, no store review. Edge Config `smartplay-flags` → `GET api.smartplaycaddie.com/flags` →
+> `store/flagStore.ts`. Server round-trip verified both directions in **under 6 seconds**.
+>
+> Fail-open everywhere: a failed fetch NEVER darks a feature (28 tests, nine failure modes). Gated at
+> both ends — menu rows, the SwingLab tab, six self-gating screens, the mic chokepoint, the caddie's
+> own tool routing, and per-course geometry. NOT gated: GPS, round, scorecard, bag, course book,
+> history.
+>
+> **Flip a switch:** `vercel edge-config update smartplay-flags --patch '[{"operation":"update","key":"flags","value":{...}}]'`
+>
+> **STILL OWED:** the physical-device leg. Flip smartvision false, background + reopen the app,
+> confirm it leaves the ••• menu silently; flip back. Nothing else in this feature is unverified.
+>
+> Known gap: `catalogForPrompt()` is server-side, so Kevin may still MENTION a killed feature. He
+> cannot open it.
+>
+> ### 2026-09-06 (earlier). One course engine for every course.
 >
 > Menifee Palms + Lakes were the only two courses with a private data path, and it reached into the
 > **resolver**, not just imagery: `smartFinderService` read a Golfbert pin cache above `courseHoles`,
