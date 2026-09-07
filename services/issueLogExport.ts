@@ -16,6 +16,7 @@ import { getApiBaseUrl, appKeyHeaders } from './apiBase';
 import { getInstallId } from './installId';
 import { isTestRunner } from './isTestRunner';
 import * as Sentry from '@sentry/react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // App-key gate → shared appKeyHeaders() (services/apiBase.ts), mirrors api/_appKey.ts on the server.
 /**
@@ -54,7 +55,41 @@ const AUTOSEND_DEBOUNCE_MS = 4000;
 // forever, so issues NEVER auto-sent while the failures continued. Once a send has been pending this long,
 // fire immediately instead of re-arming.
 const AUTOSEND_MAX_WAIT_MS = 20000;
+/**
+ * 2026-09-06 — PERSISTED, and it has to be.
+ *
+ * This was an in-memory Set, so it emptied on every app launch and autoSendIssues re-sent every
+ * retained entry. That was tolerable while the SERVER was the only consumer — api/issue-report
+ * deduped on id and only ever emailed genuinely-new rows. Tonight the client also sends each entry
+ * to Sentry as user feedback, and that fires for everything in `unsent` regardless of what the
+ * server thinks. So a relaunch became a duplicate storm: Tim got 18 alerts in 8 minutes, five of
+ * them at one timestamp, including entries from the day before. I turned a deduped path into a
+ * duplicating one; this closes it at the source rather than filtering downstream.
+ */
+const SENT_IDS_KEY = 'issue-log-sent-ids-v1';
+/** Bounded: only recent ids can still be in the retained log, so an unbounded list would grow
+ *  forever to prevent resends of entries that no longer exist. */
+const SENT_IDS_CAP = 400;
 const sentIds = new Set<string>();
+let sentIdsHydrated = false;
+
+async function hydrateSentIds(): Promise<void> {
+  if (sentIdsHydrated) return;
+  sentIdsHydrated = true;   // set first: a failed read must not retry forever
+  try {
+    const raw = await AsyncStorage.getItem(SENT_IDS_KEY);
+    if (!raw) return;
+    const list = JSON.parse(raw) as unknown;
+    if (Array.isArray(list)) for (const id of list) if (typeof id === 'string') sentIds.add(id);
+  } catch { /* a cold start with no memory just re-sends once, which is the old behaviour */ }
+}
+
+async function persistSentIds(): Promise<void> {
+  try {
+    const trimmed = Array.from(sentIds).slice(-SENT_IDS_CAP);
+    await AsyncStorage.setItem(SENT_IDS_KEY, JSON.stringify(trimmed));
+  } catch { /* best-effort */ }
+}
 let autoSendTimer: ReturnType<typeof setTimeout> | null = null;
 let autoSendFirstArmedAt = 0;
 
@@ -160,6 +195,7 @@ export async function autoSendIssues(): Promise<boolean> {
   const reporter = usePlayerProfileStore.getState().email || 'beta tester';
   // 2026-08-10 — only real errors + manual notes auto-send; the voice_turn / sim_round / boot
   // breadcrumbs stay device-side for owner-log review and never clutter the issue email.
+  await hydrateSentIds();
   const unsent = useIssueLogStore.getState().entries.filter(e => !sentIds.has(e.id) && isReportable(e));
   if (unsent.length === 0) return false;
   /**
@@ -197,6 +233,7 @@ export async function autoSendIssues(): Promise<boolean> {
     clearTimeout(timer);
     if (res.ok) {
       for (const e of unsent) sentIds.add(e.id);
+      void persistSentIds();
       /**
        * 2026-09-06 (Tim — the issue log and Sentry should be ONE system, not two inboxes).
        *
@@ -210,6 +247,17 @@ export async function autoSendIssues(): Promise<boolean> {
        * a send that already succeeded.
        */
       for (const e of unsent) {
+        /**
+         * 2026-09-06 — DO NOT SEND A CRASH AS FEEDBACK. Sentry's own global handler already captured
+         * `uncaught_js_error` as a fatal EXCEPTION, with a real stack. Sending the issue-log copy as
+         * user feedback puts the same crash in the project twice under two different shapes — which
+         * is exactly what Tim saw: "Error anonymous(index.android)" at 11:32:07 and
+         * "User Feedback: SmartPlay owner test e..." at 11:32:50, one event, two entries.
+         *
+         * The whole reason to merge the log into Sentry was ONE fingerprint space. Duplicating the
+         * events we already had there would undo that on the first crash.
+         */
+        if (e.kind === 'app_error') continue;
         try {
           const ctx = (e.context && typeof e.context === 'object' ? e.context : {}) as Record<string, unknown>;
           Sentry.captureFeedback({
