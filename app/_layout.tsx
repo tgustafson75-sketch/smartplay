@@ -16,6 +16,8 @@ import { planTrialLifecycle } from '../services/billing/trialLifecycle';
 import { refreshEntitlement } from '../services/billing/purchases';
 import { PRICING } from '../lib/pricing';
 import { useSettingsStore } from '../store/settingsStore';
+import { selfContext } from '../store/issueLogStore';
+import { getTrustLevel } from '../services/trustLevelService';
 import { startFlagSync } from '../store/flagStore';
 import { useRoundStore, whenRoundStoreHydrated } from '../store/roundStore';
 import { stopSpeaking, getLastSpeakStartedAt } from '../services/voiceService';
@@ -57,6 +59,7 @@ import { startMovementModeDetector, stopMovementModeDetector } from '../services
 // IS the honest "we don't know" tell. Initialized at app root next
 // to the existing toast subscriber.
 import { initGpsConfidenceAsk } from '../services/gpsConfidenceAsk';
+import Constants from 'expo-constants';
 // 2026-05-24 — Caddie reward speech (250+ measured drive, 1-putt). Subscribes
 // to roundStore.shots / roundStore.putts, persona-aware via the existing
 // voiceService.speak path, trust-gated to L2+. Reset on round-start so the
@@ -125,10 +128,27 @@ import { genderForPersona } from '../services/caddieGender';
 const SENTRY_DSN_FALLBACK = 'https://94204d567ba053ad6f9dc3f39ff84655@o4511297513717760.ingest.us.sentry.io/4511297527283712';
 const sentryDsn = process.env.EXPO_PUBLIC_SENTRY_DSN || SENTRY_DSN_FALLBACK;
 if (sentryDsn) {
+  /**
+   * 2026-09-06 — RELEASE + DIST, and why they are not optional.
+   *
+   * Without them every event is attributable only to "1.0.0", so you cannot tell a crash that has
+   * been there for six builds from one that landed in the build you shipped this morning, and the
+   * commit range that introduced a regression is unrecoverable. `release` is the marketing version,
+   * `dist` the native build number (app.json ios.buildNumber / android.versionCode, currently 26),
+   * which is what actually changes per build.
+   */
+  const appVersion = (Constants.expoConfig?.version ?? '1.0.0') as string;
+  const buildNumber = String(
+    Constants.expoConfig?.ios?.buildNumber
+    ?? Constants.expoConfig?.android?.versionCode
+    ?? '0',
+  );
   Sentry.init({
     dsn: sentryDsn,
     tracesSampleRate: 0.2,
     environment: __DEV__ ? 'development' : 'production',
+    release: `smartplay-caddie@${appVersion}+${buildNumber}`,
+    dist: buildNumber,
   });
 }
 
@@ -628,6 +648,34 @@ function AppNavigator() {
   // uncaught-JS-error handler ASAP so async / event-handler crashes (which React error boundaries
   // can't catch) funnel into the Issue Log. Idempotent; runs before the heavier boot effects below.
   useEffect(() => { initCrashCapture(); }, []);
+
+  /**
+   * 2026-09-06 (Tim — "the app log knows what's wrong and helps us create more responsive prompts
+   * for fixes") — ROUND CONTEXT ON EVERY SENTRY EVENT.
+   *
+   * A stack trace says what broke. It does not say the player was on hole 14 at Menifee Palms with a
+   * round live, which is most of what you need to reproduce it. The issue log already computes
+   * exactly that per entry; this feeds the same builder into Sentry's scope so a CRASH carries it too
+   * — one owner, so a crash and the report a tester types about it cannot describe different states.
+   *
+   * Re-tagged on every navigation because course and hole change during a round; a tag set once at
+   * boot would say "hole 1" for the whole eighteen. No PII: ids and flags only, never the name or
+   * email.
+   */
+  useEffect(() => {
+    try {
+      const ctx = selfContext(pathname ?? 'unknown');
+      Sentry.setTags({
+        route: String(ctx?.route ?? 'unknown'),
+        course_id: String(ctx?.courseId ?? 'none'),
+        hole: String(ctx?.currentHole ?? 'none'),
+        round_active: String(ctx?.isRoundActive ?? false),
+        persona: String(ctx?.persona ?? 'unknown'),
+        // getTrustLevel() is the one owner (services/trustLevelService) — not a settings field.
+        trust_level: String(getTrustLevel()),
+      });
+    } catch { /* tagging is telemetry; it must never affect a render */ }
+  }, [pathname]);
 
   /**
    * 2026-09-06 — remote kill switches. Fetches /flags on boot and on every foreground, with a 60s

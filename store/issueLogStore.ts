@@ -169,7 +169,13 @@ function scheduleAutoSend(): void {
 
 /** Best-effort context snapshot via lazy requires (mirrors addGpsEvent/addAppEvent)
  *  so callers don't thread route/persona/round and we avoid module-eval cycles. */
-function selfContext(route: string): IssueLogEntry['context'] {
+/**
+ * 2026-09-06 — exported so Sentry can tag every CRASH with the same round context an issue-log entry
+ * already carries. Before this, a crash told you the stack and nothing about where the player was;
+ * the report they typed afterwards had the course and hole but was a separate record. One builder
+ * feeding both means the two can never disagree about what was happening.
+ */
+export function selfContext(route: string): IssueLogEntry['context'] {
   let appVersion = '1.0.0';
   let persona: string | null = null;
   let isRoundActive = false;
