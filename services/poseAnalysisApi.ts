@@ -1259,10 +1259,41 @@ export async function extractPoseFramesFromVideo(
   // Sequential — on-device runs one detector instance; cloud is polite to the rate limit.
   // (workUri = the private copy made at the top of this function; NEVER the playing original.)
   const frames: PoseFrame[] = [];
+  /** Anchors the model could not read at all, and anchors that only came back after a nudge. Both
+   *  are reported below — a swing that needs three nudges is a capture problem worth knowing about. */
+  const missedPositions: string[] = [];
+  const nudgedPositions: string[] = [];
   try {
     for (const { key, timeMs, source } of sampleTimes) {
       if (shouldAbort?.()) { console.log('[pose] aborted between frames — playback active'); break; }
-      const f = await poseAtTime(workUri, timeMs, key);
+      let f = await poseAtTime(workUri, timeMs, key);
+      /**
+       * 2026-09-06 (Tim, from the field: "the body mechanics aren't staying on through the swing…
+       * they show up nice and thin and then go away") — NUDGE A MISSED ANCHOR, DON'T DROP IT.
+       *
+       * ROOT CAUSE of the skeleton dying mid-swing: poseAtTime returns null when the model finds no
+       * body in THAT ONE FRAME, and the null was silently dropped. The frames most likely to fail are
+       * P4_top and P6_impact, because they sit in the fastest, most motion-blurred part of the swing.
+       * Lose those two and the surviving frames are address and takeaway — so interpolateFrame's pose
+       * window collapses to the SLOW half, and the skeleton correctly draws nothing from there on.
+       * Nothing was broken in the renderer; it was being handed a swing that stopped before impact.
+       *
+       * This is not a fallback masking a failure (ENGINEERING-PRINCIPLES #4) — it is sampling the
+       * blurriest moment of the swing more than once. A single instant at impact is a coin flip on
+       * whether that exact frame was readable; the neighbouring frame usually is. ±60ms is ~2 frames
+       * at 30fps, close enough that the label still means what it says.
+       *
+       * Anchors only, one retry each, and only after a miss: a clean swing pays nothing.
+       */
+      if (!f && key) {
+        for (const nudge of [-60, 60]) {
+          if (shouldAbort?.()) break;
+          const t = Math.max(0, Math.round(timeMs + nudge));
+          f = await poseAtTime(workUri, t, key);
+          if (f) { nudgedPositions.push(`${key}${nudge > 0 ? '+' : ''}${nudge}`); break; }
+        }
+      }
+      if (!f && key) missedPositions.push(key);
       // 2026-09-01 — carry HOW the label was arrived at onto the frame itself. A consumer that reads
       // back `position === 'P6_impact'` must be able to tell a heard strike from a fraction of a clip.
       if (f) frames.push(key && source ? { ...f, positionSource: source } : f);
@@ -1311,6 +1342,32 @@ export async function extractPoseFramesFromVideo(
       frames.sort((a, b) => (a.timestampMs ?? 0) - (b.timestampMs ?? 0));
       logPose('pose_recovered_after_walk_in', { anchorMs, got: frames.length }, 'diag');
     }
+  }
+  /**
+   * 2026-09-06 — PARTIAL COVERAGE IS THE FAILURE TIM ACTUALLY HIT, and it had no report.
+   *
+   * The block below only fires when frames.length === 0, so "asked for 5, got 2" — the case that
+   * makes the skeleton vanish mid-swing — reached the field as console noise and nothing else. That
+   * is why weeks of "the mechanics don't stay on" produced no evidence: the pipeline considered a
+   * half-read swing a success.
+   *
+   * Reported at 'diag' rather than as an error because a nudged anchor is a normal, recovered read;
+   * what matters is the SHAPE of the misses. P4_top + P6_impact missing together is motion blur
+   * through the downswing. Everything missing is framing or distance.
+   */
+  if (frames.length > 0 && (missedPositions.length > 0 || nudgedPositions.length > 0)) {
+    logPose('pose_partial_coverage', {
+      requested: sampleTimes.length,
+      got: frames.length,
+      missed: missedPositions.join(',') || null,
+      nudged: nudgedPositions.join(',') || null,
+      windowed: !!(window && window.endMs - window.startMs >= 500),
+      // The span the skeleton can actually be drawn over. If this is materially shorter than the
+      // swing, the overlay is correct to stop and the SAMPLING is what to fix.
+      poseSpanMs: frames.length > 1
+        ? Math.round((frames[frames.length - 1].timestampMs ?? 0) - (frames[0].timestampMs ?? 0))
+        : 0,
+    }, 'diag');
   }
   if (frames.length > 0) lastFrameFailure = null;
   console.log('[pose] extracted frames', { requested: sampleTimes.length, got: frames.length, windowed: !!(window && window.endMs - window.startMs >= 500) });
