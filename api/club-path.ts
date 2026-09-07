@@ -56,6 +56,40 @@ const MIN_ARC_POINTS = 3;
  * data — an implausible set is returned as all-null so the client keeps its honest hand/tempo
  * trace instead of drawing a wrong club.
  */
+/**
+ * 2026-09-06 (Tim, from a live Sentry event: `clubpath_arc_too_sparse · points: 0` at Lakes, hole 1).
+ *
+ * WHY THIS EXISTS: the rejection below is correct — an implausible set must come back as all-null so
+ * no client draws a wrong club. But every rejection reached the field as the SAME line, `points: 0`,
+ * and that one number covers four different failures with four different fixes:
+ *
+ *   too_few  — the model genuinely could not see the head. A CAPTURE problem: light, angle, frame rate.
+ *   cluster  — it found points, but they collapse to a blob. A MIS-DETECTION (ball, grip, background).
+ *   scatter  — it found points that zig-zag rather than sweep. Also a mis-detection.
+ *   none     — nothing came back at all.
+ *
+ * Tim's log said "0 points" when the model may well have returned eight and we threw them away. That
+ * sends you to the camera when the problem is the prompt, or the reverse. The gate is unchanged; what
+ * changes is that it now says which of the four it was. [[the-app-log-knows-whats-wrong]]
+ */
+export type ArcRejection = 'none' | 'too_few' | 'cluster' | 'scatter';
+
+function classifyArc(pts: { x: number; y: number }[]): ArcRejection | null {
+  if (pts.length === 0) return 'none';
+  if (pts.length < MIN_ARC_POINTS) return 'too_few';
+  let minX = 1, maxX = 0, minY = 1, maxY = 0;
+  for (const p of pts) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const spanX = maxX - minX, spanY = maxY - minY;
+  if (Math.max(spanX, spanY) < 0.10 || spanX + spanY < 0.13) return 'cluster';
+  // Anything that clears the span test but still fails the full gate failed on path efficiency.
+  return looksLikeClubArc(pts) ? null : 'scatter';
+}
+
 function looksLikeClubArc(pts: { x: number; y: number }[]): boolean {
   if (pts.length < MIN_ARC_POINTS) return false;
   let minX = 1, maxX = 0, minY = 1, maxY = 0;
@@ -218,8 +252,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Gate the WHOLE set on arc plausibility: if the clearly-detected points don't form a real
     // sweep, they're a mis-detection — return all-null so no client draws a wrong "club" (Tim).
     const detected = positions.filter((p): p is { x: number; y: number } => p != null);
-    if (!looksLikeClubArc(detected)) {
-      return res.status(200).json({ positions: frames.map(() => null) });
+    const rejection = classifyArc(detected);
+    if (rejection) {
+      /**
+       * Still all-null — the client must not draw an implausible arc, and that behaviour is
+       * unchanged. `rejected` is additive diagnosis: an older client ignores the extra key.
+       */
+      return res.status(200).json({
+        positions: frames.map(() => null),
+        rejected: { reason: rejection, detected: detected.length, frames: frames.length },
+      });
     }
     return res.status(200).json({ positions });
   } catch (e) {

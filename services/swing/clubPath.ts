@@ -47,6 +47,18 @@ export interface ClubPathResult {
    *  needs the aspect to map them into the container's cover/contain space. */
   frameW?: number | null;
   frameH?: number | null;
+  /**
+   * 2026-09-06 — WHY the arc came back empty, when it did.
+   *
+   * `points: []` was reported to the field as a bare "0 points", which reads as "the model saw
+   * nothing" — but the same 0 is produced when the model saw plenty and a gate threw them away for
+   * clustering or zig-zagging. Those have opposite fixes (fix the capture vs fix the detection), and
+   * the log could not tell them apart. Null when the arc was accepted.
+   *
+   * `detected` is how many raw points existed BEFORE the gate, which is the number that was missing:
+   * "rejected: scatter, detected: 8" is a completely different bug report from "rejected: none".
+   */
+  rejected?: { reason: 'none' | 'too_few' | 'cluster' | 'scatter'; detected: number; gate: 'server' | 'client' } | null;
 }
 
 /** Minimum detected points that must survive before we'll call it a real arc. */
@@ -471,8 +483,20 @@ export async function detectClubPath(args: {
       signal: AbortSignal.timeout(32_000), // background analysis; room for the stronger clubhead model
     });
     if (!res.ok) return null;
-    const data = (await res.json()) as { positions?: ({ x: number; y: number } | null)[]; configured?: boolean };
+    const data = (await res.json()) as {
+      positions?: ({ x: number; y: number } | null)[];
+      configured?: boolean;
+      rejected?: { reason: 'none' | 'too_few' | 'cluster' | 'scatter'; detected: number } | null;
+    };
     if (data.configured === false || !Array.isArray(data.positions)) return null;
+    // The server already classified its own rejection; carry it rather than re-deriving it from
+    // all-nulls, which is the information loss this whole change is about.
+    if (data.rejected) {
+      return {
+        points: [], framesSampled: usable.length, frameW, frameH,
+        rejected: { ...data.rejected, gate: 'server' },
+      };
+    }
 
     const points: ClubPathPoint[] = [];
     data.positions.forEach((pos, i) => {
@@ -493,9 +517,14 @@ export async function detectClubPath(args: {
     // clustered/degenerate set is a mis-detection → return empty so the renderer keeps the
     // NO trace rather than a wrong "club" (Tim: trace it correctly or not at all).
     if (!looksLikeClubArc(deduped)) {
-      return { points: [], framesSampled: usable.length, frameW, frameH };
+      // Reached only when the CLIENT gate rejects a set the server accepted — the two mirror each
+      // other, so this firing at all is itself worth seeing in the log.
+      return {
+        points: [], framesSampled: usable.length, frameW, frameH,
+        rejected: { reason: deduped.length < 3 ? 'too_few' : 'scatter', detected: deduped.length, gate: 'client' },
+      };
     }
-    return { points: deduped, framesSampled: usable.length, frameW, frameH };
+    return { points: deduped, framesSampled: usable.length, frameW, frameH, rejected: null };
   } catch {
     return null;
   } finally {

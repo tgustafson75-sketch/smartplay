@@ -821,6 +821,17 @@ export default function SwingDetail() {
                   points: r?.points.length ?? 0,
                   aborted: !r,
                   windowMs: Math.max(0, endMs - startMs),
+                  /**
+                   * 2026-09-06 — `points: 0` alone sent Tim's Sentry event to the wrong suspect. It
+                   * is produced when the model saw nothing AND when it saw plenty that a gate threw
+                   * out for clustering or zig-zagging, and those have opposite fixes. These three
+                   * say which: `rejected` (too_few / cluster / scatter / none), `detected` (how many
+                   * raw points existed before the gate) and `gate` (server or client).
+                   */
+                  rejected: r?.rejected?.reason ?? null,
+                  detected: r?.rejected?.detected ?? null,
+                  gate: r?.rejected?.gate ?? null,
+                  framesSampled: r?.framesSampled ?? null,
                 },
                 /**
                  * 2026-08-31 — AN ABORTED RUN IS NOT A FAILURE, and calling it one cost Tim a
