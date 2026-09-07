@@ -2595,3 +2595,12 @@ foreground subject to its own 60s floor.
 flags. Kevin may still MENTION a killed feature; he cannot open it (openToolHandler refuses). Closing
 that would mean either a per-request Edge Config read on the brain's hot path or sending flags up in
 the request body — neither justified by "Kevin named a screen you can't reach."
+
+### Device verification — 2026-09-06 (Tim, on course)
+
+- **Layer 0 kill switches: VERIFIED, both directions.** smartvision false → gone from ••• after a
+  force-close/reopen; true → returned. Tier C.
+  Gotcha worth keeping: Tim's phone was on a build predating the flag code, so nothing happened until
+  `eas update` went to both branches. A kill switch cannot turn off code the installed build has
+  never heard of — that is the OTA rule, not a flag defect.
+- **Light-mode contrast fix: VERIFIED.** Bottom-bar text box readable.

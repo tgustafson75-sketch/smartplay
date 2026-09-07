@@ -21,8 +21,14 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 >
 > **Flip a switch:** `vercel edge-config update smartplay-flags --patch '[{"operation":"update","key":"flags","value":{...}}]'`
 >
-> **STILL OWED:** the physical-device leg. Flip smartvision false, background + reopen the app,
-> confirm it leaves the ••• menu silently; flip back. Nothing else in this feature is unverified.
+> **VERIFIED ON DEVICE 2026-09-06 (Tim):** flipped smartvision false → gone from the ••• menu after a
+> force-close/reopen; flipped back → returned. No rebuild, no store review, no message shown. Layer 0
+> is Tier C. NOTE: the flip only reaches a build that HAS the flag code — Tim's phone needed an
+> `eas update` to both branches first, which is the ordinary OTA rule, not a flag bug.
+>
+> **NEW RISK FROM THE SENTRY MERGE:** the issue-log email path is deleted, so Sentry is now the ONLY
+> notification channel for user reports. Until an alert rule exists in the smartplay-caddie project,
+> reports land silently. Highest-priority open item.
 >
 > Known gap: `catalogForPrompt()` is server-side, so Kevin may still MENTION a killed feature. He
 > cannot open it.
