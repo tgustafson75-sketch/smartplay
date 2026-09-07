@@ -57,6 +57,7 @@ import {
   subscribeToWalk, isSimulatedActive, type SimulatedWalkState,
 } from '../services/simulatedGPS';
 import { setScreenContext } from '../services/screenContext';
+import * as Sentry from '@sentry/react-native';
 
 // 2026-07-08 (Tim — "answer, don't interview") — primes the caddie to INVITE the golfer
 // to talk and then LISTEN, not run a Q&A. Ingested to CNS via narrativeIngest.
@@ -2071,6 +2072,58 @@ export default function Settings() {
                       an owner/instructor surface. */}
                   {/* 2026-08-31 (Tim) — the digital business card, in the app. Owner-gated at the
                       SCREEN as well as here, because a route can also be reached by voice. */}
+                  {/**
+                    * 2026-09-06 (Tim — "I need to make sure I still get notified of errors").
+                    *
+                    * The issue-log EMAIL was removed today when the log and Sentry were merged into
+                    * one system, so Sentry is now the only channel that pings him. That made
+                    * "is alerting actually on?" a question with no way to answer it short of waiting
+                    * for a real crash — which is exactly the wrong time to find out it is off.
+                    *
+                    * This fires one real error into Sentry on demand. Owner-gated by the enclosing
+                    * block, and it throws asynchronously so it reaches the global handler (the path a
+                    * genuine crash takes) rather than being swallowed by React's render try/catch.
+                    */}
+                  <TouchableOpacity
+                    style={styles.resetRow}
+                    onPress={() => {
+                      const stamp = new Date().toISOString();
+                      Alert.alert(
+                        'Send a test error?',
+                        'Fires one real error into Sentry so you can confirm you get notified. Nothing in the app breaks.',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Send it',
+                            onPress: () => {
+                              // Breadcrumb first so the event carries the same shape a real one would.
+                              try { Sentry.addBreadcrumb({ category: 'owner', message: 'owner test error requested', level: 'info' }); } catch { /* non-fatal */ }
+                              // Thrown out of band: this is how an uncaught async error actually reaches
+                              // Sentry. Calling captureException directly would test a different path
+                              // than the one a real crash takes.
+                              setTimeout(() => {
+                                throw new Error(`SmartPlay owner test error · ${stamp}`);
+                              }, 0);
+                              Alert.alert(
+                                'Sent',
+                                'Check Sentry, and check whether you got an email or push. If Sentry shows it but you were not notified, the alert RULE is off — not the reporting.',
+                              );
+                            },
+                          },
+                        ],
+                      );
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Send a test error to Sentry"
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Send Test Error</Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                        Fires one real error into Sentry so you can confirm error alerts still reach you. Nothing breaks.
+                      </Text>
+                    </View>
+                    <Ionicons name="bug-outline" size={20} color={colors.text_muted} />
+                  </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.resetRow}
                     onPress={() => router.push('/owner-card' as never)}
