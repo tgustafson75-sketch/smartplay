@@ -159,6 +159,9 @@ export async function activateMediaSession(): Promise<void> {
   if (!loadTrackPlayer()) return;
   // A second caller joins the first rather than starting its own ExoPlayer conversation.
   if (activation) return activation;
+  // ─── everything to the matching `})();` below runs INSIDE the single-flight promise ───
+  // (left at its original indentation so this fix stays a small diff on a file that just produced a
+  //  fatal crash from subtle control flow — the boundary markers are the thing to read, not the tabs)
   activation = (async () => {
   await ensureSetup();
 
@@ -211,6 +214,7 @@ export async function activateMediaSession(): Promise<void> {
     console.log('[mediaKeyBridge] activate failed:', e);
   }
   })();
+  // ─── end single-flight body ───
   try {
     await activation;
   } finally {

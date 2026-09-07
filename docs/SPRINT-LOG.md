@@ -2604,3 +2604,57 @@ the request body — neither justified by "Kevin named a screen you can't reach.
   `eas update` went to both branches. A kill switch cannot turn off code the installed build has
   never heard of — that is the OTA rule, not a flag defect.
 - **Light-mode contrast fix: VERIFIED.** Bottom-bar text box readable.
+
+---
+
+## Session close-out — 2026-09-06 → 09-07 (24 commits)
+
+Health at close: **tsc 0 · jest 2834/2834 (250 suites) · sim 968/968 · lint 1 pre-existing error**
+(`app/paywall.tsx:271`, untouched all session) · `expo export` bundles clean · tree clean, 0 unpushed.
+Live: `api.smartplaycaddie.com/flags` → `source: edge_config`, all flags ON, no disabled courses.
+
+### Verified ON DEVICE (Tier C)
+- **Layer 0 kill switches, both directions.** smartvision false → gone from ••• after force-close;
+  true → returned. No rebuild, no store review, no message.
+- **Light-mode bottom bar** readable.
+- **Sentry alerting.** Test error arrived with `release 1.0.0 (26)`, `dist 26`, `hole 1`,
+  `route /settings`, `trust_level 3`, `persona kevin` — every tag added this session, on real hardware.
+
+### The three that mattered
+1. **Menifee answered differently from every other course.** `smartFinderService` read a Golfbert pin
+   cache ABOVE courseHoles, and that cache's only populator was SmartVision's mount — so the pin
+   feeding every yardage depended on whether the map had been opened that session. Deleted. Proven
+   with 13 tests rather than deferred to a round, because a yardage quietly wrong on some holes and
+   right on others reads as a bad swing, not a bug. That is why it survived a real round already.
+2. **The skeleton died mid-swing.** Not the renderer. `poseAtTime` returns null when the model finds
+   no body in one frame and the null was silently dropped; the frames that fail are top and impact.
+   Lose those and the pose window collapses to the slow half. Now: nudge ±60ms, then retry CROPPED —
+   using `roiFromBodyBounds`, the engine that already existed but was wired only to the club path.
+3. **Every open cost money.** `clubArcRunKeyRef` was set only on success, and `isPlaying` is in the
+   effect's deps, so every open/play/pause re-ran a paid vision call on a swing already answered.
+
+### Two bugs I introduced and caught
+- **The crop remap assumed one coordinate space; there are two.** `normalizeKeypoints` passes x/y
+  through raw despite its name. Applying the normalized formula to pixel coords gives 170.2 in a
+  space whose max is 1 — a confidently misplaced skeleton, worse than none. Caught by re-reading
+  already-pushed work, not by tsc, jest, lint or the sim.
+- **The 18-alert storm.** `sentIds` was in-memory so every launch re-sent everything, and crashes
+  reached Sentry twice (exception + feedback). Merging the log into Sentry turned a server-deduped
+  path into a client-duplicating one.
+
+### Also shipped
+Course engine uniform across all 41 courses · one inbox (issue log → Sentry, email path removed,
+net −143/+87) · Coyote Creek + Gleneagles registered as multi-layout complexes · light-mode contrast
+sweep with a ratchet · owner Send Test Error · OTA native-change guard · thin analysis stage pipeline
+(observes order, files a diagnostic, executes nothing) · ExoPlayer boot crash: a check-then-act guard
+across an await, now single-flighted.
+
+### Open
+- **Sentry alert rule** — Tim confirmed working via Cowork.
+- **ExoPlayer crash**: fix is shape-locked by tests but UNPROVEN on device; it was a native crash on
+  build 25. If it recurs on 27+, dig again.
+- **60fps + closer framing** dominate any further analysis work. Measure before building.
+- Swing-analysis orchestrator parked in `docs/v1.2-deferred.md`.
+- Gleneagles King's/Queen's still share one coordinate — no per-layout geometry exists to split them.
+
+**Waiting on the app stores.**
