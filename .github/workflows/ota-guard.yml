@@ -1,0 +1,134 @@
+name: OTA guard
+
+# Blocks a native change from reaching the OTA path.
+#
+# 2026-09-06 (Tim) — WHY THIS ONE GUARD EXISTS AND THE REST OF THE PIPELINE DOES NOT.
+#
+# An OTA update ships JavaScript into an already-installed native shell. If the JS it ships expects a
+# native module, permission, or SDK version that the installed shell does not have, the result is an
+# app that crashes on launch — and because it crashes on launch, it cannot download the next OTA that
+# would fix it. The user's only recourse is a store update they have to be told to install. That is
+# the expo-gl / SDK-54 crash class, and it is the one failure a kill switch cannot save you from,
+# because the switch is read by code that never gets to run.
+#
+# So this is a hard gate with no override flag. A native change is not "an OTA that needs care", it
+# is not an OTA at all — it is a store build.
+#
+# The staged-rollout and auto-rollback pipeline this was drafted alongside is deliberately NOT built.
+# It decides using crash-free session rate over a 50-session floor, and at pre-beta traffic that floor
+# is never reached: the watcher would neither ramp nor revert, it would just idle and look healthy.
+# Revisit when there are real sessions to measure. See docs/OTA-RUNBOOK.md.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  native-change-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect native-touching changes
+        id: detect
+        run: |
+          set -euo pipefail
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+          echo "Comparing $BASE...$HEAD"
+          CHANGED="$(git diff --name-only "$BASE" "$HEAD")"
+          echo "--- changed files ---"; echo "$CHANGED"
+
+          HITS=""
+
+          # ios/ and android/ — the native projects themselves.
+          echo "$CHANGED" | grep -qE '^(ios|android)/' && HITS="${HITS}native project dirs (ios/ or android/)"$'\n' || true
+
+          # app.json / app.config.* — plugins, permissions, entitlements, bundle ids.
+          echo "$CHANGED" | grep -qE '^app\.(json|config\.(js|ts|cjs|mjs))$' && HITS="${HITS}app config (plugins / permissions / entitlements / bundle id)"$'\n' || true
+
+          # eas.json — build profiles.
+          echo "$CHANGED" | grep -qE '^eas\.json$' && HITS="${HITS}eas.json build profiles"$'\n' || true
+
+          # package.json, but ONLY when dependencies actually changed. A version bump, a script edit
+          # or a formatting change is not a native change, and failing those trains people to ignore
+          # this check — which is how a real one gets waved through.
+          if echo "$CHANGED" | grep -qE '^package\.json$'; then
+            OLD="$(git show "$BASE:package.json" 2>/dev/null || echo '{}')"
+            NEW="$(git show "$HEAD:package.json" 2>/dev/null || echo '{}')"
+            DEP_DIFF="$(
+              node -e '
+                const a = JSON.parse(process.argv[1] || "{}");
+                const b = JSON.parse(process.argv[2] || "{}");
+                const pick = o => ({ ...(o.dependencies||{}), ...(o.devDependencies||{}) });
+                const A = pick(a), B = pick(b);
+                const keys = [...new Set([...Object.keys(A), ...Object.keys(B)])].sort();
+                const out = [];
+                for (const k of keys) {
+                  if (A[k] !== B[k]) out.push(`${k}: ${A[k] ?? "(absent)"} -> ${B[k] ?? "(removed)"}`);
+                }
+                process.stdout.write(out.join("\n"));
+              ' "$OLD" "$NEW"
+            )"
+            if [ -n "$DEP_DIFF" ]; then
+              HITS="${HITS}dependency changes:"$'\n'"$DEP_DIFF"$'\n'
+            fi
+          fi
+
+          if [ -n "$HITS" ]; then
+            {
+              echo "native<<EOF"
+              echo "$HITS"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            echo "blocked=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "blocked=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Label and comment
+        if: steps.detect.outputs.blocked == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const detail = `${{ toJSON(steps.detect.outputs.native) }}`;
+            const body = [
+              '**Native change detected — requires a store build, not an OTA.**',
+              '',
+              'An OTA ships JavaScript into the native shell that is already installed. If this JS',
+              'expects native code that shell does not have, the app crashes on launch — and a crash',
+              'on launch means it can never download the OTA that would fix it. A remote kill switch',
+              'cannot save it either, because the switch is read by code that never runs.',
+              '',
+              'What changed:',
+              '```',
+              JSON.parse(detail).trim(),
+              '```',
+              '',
+              'Ship this with `eas build`, not `eas update`.',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, body,
+            });
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, labels: ['needs-build'],
+            });
+
+      - name: Fail if native
+        if: steps.detect.outputs.blocked == 'true'
+        run: |
+          echo "::error::Native change detected — requires a store build, not an OTA."
+          exit 1
+
+      - name: Safe for OTA
+        if: steps.detect.outputs.blocked == 'false'
+        run: echo "JS-only diff. Safe to ship as an OTA."
