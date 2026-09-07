@@ -812,6 +812,26 @@ export default function SwingDetail() {
            * (a 2-point "arc" is a mis-detection, not a swing); what was wrong is that failing it was
            * invisible. Now the next round says exactly how far it got.
            */
+          /**
+           * 2026-09-06 (Tim — "it's either analyzing every time I open, even if my swing file
+           * already has a reading, and there may be a second read coming after the first").
+           *
+           * Both, and this is why. `clubArcRunKeyRef` was marked ONLY on a successful arc, so a
+           * swing whose club path genuinely cannot be traced never recorded that it had been tried.
+           * `isPlaying` is in this effect's deps on purpose (native frame extraction cannot run
+           * while ExoPlayer holds the file, so a play/pause flip must retry) — but combined with
+           * "mark only on success" that turns every open, every play and every pause into a fresh
+           * native extraction plus a PAID vision call, for a result that already came back empty.
+           *
+           * The distinction that fixes it is one the log already draws: `aborted: !r`.
+           *   r === null  -> we never got an answer (superseded / playback started). Retry: correct.
+           *   r truthy    -> we asked and the answer was "no traceable arc". That is a RESULT, and
+           *                  re-asking the same model about the same frames cannot change it.
+           *
+           * So mark the window done whenever we got an answer, however empty. A different window,
+           * clip or shot produces a different runKey and is still tried.
+           */
+          if (r) clubArcRunKeyRef.current = runKey;
           try {
             // eslint-disable-next-line @typescript-eslint/no-require-imports
             (require('../../../store/issueLogStore') as typeof import('../../../store/issueLogStore'))
