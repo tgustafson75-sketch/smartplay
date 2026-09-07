@@ -1485,6 +1485,25 @@ export async function extractPoseFramesFromVideo(
    * what matters is the SHAPE of the misses. P4_top + P6_impact missing together is motion blur
    * through the downswing. Everything missing is framing or distance.
    */
+  /**
+   * 2026-09-06 — report POSE to the stage pipeline. This is observation only: analysisPipeline
+   * executes nothing and changes nothing, it just knows which stages must precede which and says so
+   * when the order cannot be right. `frame` (the roi) depends on pose, and `club` depends on both —
+   * the edge with two dependents, which is the one a per-screen effect forgets.
+   */
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pipe = require('./swing/analysisPipeline') as typeof import('./swing/analysisPipeline');
+    const key = pipe.runKeyFor(videoUri, window?.startMs ?? 0, window?.endMs ?? 0);
+    pipe.noteStage(key, 'pose',
+      frames.length === 0 ? 'empty' : (missedPositions.length > 0 ? 'partial' : 'ok'),
+      { got: frames.length, requested: sampleTimes.length });
+    if (zoomedPositions.length > 0 || nudgedPositions.length > 0) {
+      // The crop was derived and used, which IS the frame stage doing its job.
+      pipe.noteStage(key, 'frame', zoomedPositions.length > 0 ? 'ok' : 'skipped',
+        { zoomed: zoomedPositions.length });
+    }
+  } catch { /* observation must never break a read */ }
   if (frames.length > 0 && (missedPositions.length > 0 || nudgedPositions.length > 0)) {
     logPose('pose_partial_coverage', {
       requested: sampleTimes.length,
@@ -1498,6 +1517,18 @@ export async function extractPoseFramesFromVideo(
       poseSpanMs: frames.length > 1
         ? Math.round((frames[frames.length - 1].timestampMs ?? 0) - (frames[0].timestampMs ?? 0))
         : 0,
+      /**
+       * 2026-09-06 — the run as a SEQUENCE ("locate:ok → pose:partial → frame:ok"), not one stage's
+       * complaint in isolation. This is the line that turns "points: 0" into something you can act
+       * on without opening the app: it says which stage stopped and what had already succeeded.
+       */
+      stages: (() => {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const pipe = require('./swing/analysisPipeline') as typeof import('./swing/analysisPipeline');
+          return pipe.describeRun(pipe.runKeyFor(videoUri, window?.startMs ?? 0, window?.endMs ?? 0))?.stages ?? null;
+        } catch { return null; }
+      })(),
     }, 'diag');
   }
   if (frames.length > 0) lastFrameFailure = null;

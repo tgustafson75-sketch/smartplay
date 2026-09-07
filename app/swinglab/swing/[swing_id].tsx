@@ -788,7 +788,26 @@ export default function SwingDetail() {
         // 2026-09-01 — the anchor that CHOSE this window is also the right centre for the samples
         // inside it. Passing it stops the dense band running into the follow-through, where a real
         // clubhead sits behind the player's shoulder and draws an arc that looks wrong.
+        /**
+         * 2026-09-06 — CLUB is the last stage and needs both `pose` and `frame` (the roi) to have
+         * happened. checkOrder does not block: it returns the unmet deps and files a diagnostic, so
+         * if this ever runs before pose has read the swing we find out from the field instead of
+         * guessing. Running early is usually still better than not running at all, which is why it
+         * reports rather than refuses.
+         */
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const pipe = require('../../../services/swing/analysisPipeline') as typeof import('../../../services/swing/analysisPipeline');
+          pipe.checkOrder(pipe.runKeyFor(uri, startMs, endMs), 'club');
+        } catch { /* observation only */ }
         const r = await detectClubPath({ videoUri: uri, startMs, endMs, impactMs: anchorMs, shouldAbort: () => cancelled });
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const pipe = require('../../../services/swing/analysisPipeline') as typeof import('../../../services/swing/analysisPipeline');
+          pipe.noteStage(pipe.runKeyFor(uri, startMs, endMs), 'club',
+            !r ? 'skipped' : (r.points.length >= 3 ? 'ok' : 'empty'),
+            { points: r?.points.length ?? 0 });
+        } catch { /* observation only */ }
         if (cancelled) return;
         // 2026-07-22 (Tim) — require a real arc (>= 3 validated points from detectClubPath, which
         // now returns [] for a clustered mis-detection) before drawing the club. A sparse/degenerate
