@@ -419,14 +419,27 @@ let lastFrameFailure: string | null = null;
 function boundsFromFrames(fs: PoseFrame[]): { minX: number; minY: number; maxX: number; maxY: number } | null {
   let minX = 1, minY = 1, maxX = 0, maxY = 0, seen = 0;
   for (const f of fs) {
+    /**
+     * 2026-09-06 — PIXELS OR FRACTIONS, same as the remap above. normalizeKeypoints passes x/y
+     * through raw, so a backend may hand us either. The original version of this helper (lifted from
+     * smartmotion.tsx) dropped anything outside 0..1, which on a pixel-space backend rejected EVERY
+     * keypoint, returned null, and quietly disabled the zoom retry on exactly the devices that might
+     * need it most. Divide by the frame's own dims instead of discarding the frame.
+     */
+    const maxCoord = (f.keypoints ?? []).reduce((m, k) => Math.max(m, Math.abs(k.x), Math.abs(k.y)), 0);
+    const px = maxCoord > 1.5;
+    const fw = f.frameW ?? 0, fh = f.frameH ?? 0;
+    if (px && !(fw > 0 && fh > 0)) continue; // pixel coords with no dims — cannot place them
     for (const k of f.keypoints ?? []) {
       if ((k.score ?? 0) < 0.4) continue;
       if (!Number.isFinite(k.x) || !Number.isFinite(k.y)) continue;
-      if (k.x < 0 || k.x > 1 || k.y < 0 || k.y > 1) continue;
-      if (k.x < minX) minX = k.x;
-      if (k.x > maxX) maxX = k.x;
-      if (k.y < minY) minY = k.y;
-      if (k.y > maxY) maxY = k.y;
+      const nx = px ? k.x / fw : k.x;
+      const ny = px ? k.y / fh : k.y;
+      if (nx < 0 || nx > 1 || ny < 0 || ny > 1) continue;
+      if (nx < minX) minX = nx;
+      if (nx > maxX) maxX = nx;
+      if (ny < minY) minY = ny;
+      if (ny > maxY) maxY = ny;
       seen++;
     }
   }
@@ -492,14 +505,30 @@ export async function poseAtTime(
     if (cropUri && roi) {
       /**
        * Map crop-space back to full-frame. Every consumer downstream — the overlay's aligned path,
-       * the club-arc ROI, the metrics — reasons in full-frame normalized coords, and handing them
-       * crop-space coords would put the skeleton in the wrong place with total confidence.
+       * the club-arc ROI, the metrics — reasons in FULL-FRAME coordinates, and handing them
+       * crop-space coords would put the skeleton in the wrong place with total confidence, which is
+       * worse than not drawing it.
+       *
+       * TWO COORDINATE SPACES, and this is the part that nearly shipped wrong. normalizeKeypoints
+       * passes x/y through RAW — it does not normalise despite the name — so a pose backend may
+       * return either 0..1 fractions or PIXELS. components/swinglab/SwingBodyOverlay carries
+       * `coordsAreNormalized()` precisely because both occur in the field.
+       *
+       *   normalized → the crop is a sub-rectangle of the unit square: x = roi.x + k.x * roi.w
+       *   pixels     → the crop was cut, NOT resized, so a crop pixel is just offset from a full
+       *                pixel: x = roi.x * width + k.x
+       *
+       * Applying the normalized formula to pixel coords yields values like 0.2 + 340*0.5 = 170.2 —
+       * off-frame nonsense. Detect the space the same way the overlay does rather than assuming.
        */
-      frame.keypoints = frame.keypoints.map(k => ({
-        ...k,
-        x: roi.x + k.x * roi.w,
-        y: roi.y + k.y * roi.h,
-      }));
+      const maxCoord = frame.keypoints.reduce(
+        (m, k) => Math.max(m, Math.abs(k.x), Math.abs(k.y)), 0);
+      const isNormalized = maxCoord <= 1.5;
+      frame.keypoints = frame.keypoints.map(k => (
+        isNormalized
+          ? { ...k, x: roi.x + k.x * roi.w, y: roi.y + k.y * roi.h }
+          : { ...k, x: roi.x * (width ?? 0) + k.x, y: roi.y * (height ?? 0) + k.y }
+      ));
     }
     // Carry the true frame dimensions so the overlay can align the skeleton
     // to the body (correct aspect ratio + resize mode) rather than bbox-fit.
