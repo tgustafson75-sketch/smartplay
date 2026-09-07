@@ -24,6 +24,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { getApiBaseUrl } from './apiBase';
 import { inferCameraAngle } from './cameraAngleInference';
 import { rejectImplausible } from './swing/biomechPlausibility';
+import { roiFromBodyBounds } from './swing/clubPath';
 
 const apiUrl = (): string => getApiBaseUrl();
 
@@ -407,7 +408,54 @@ const MEDIUM_CLIP_BACK_WINDOW_MS = 5_000;
 let lastFrameFailure: string | null = null;
 
 /** Exported 2026-09-01 for the on-device swing locate (services/swing/onDeviceLocate). */
-export async function poseAtTime(videoUri: string, timeMs: number, position: PoseFrame['position']): Promise<PoseFrame | null> {
+/**
+ * Confident-keypoint bounding box across the frames read so far.
+ *
+ * 2026-09-06 — this logic existed only inside app/swinglab/smartmotion.tsx, a SCREEN, which is why
+ * the pose pipeline could not reach it and ran full-frame forever. Same shape, one owner, usable by
+ * both. Score gate 0.4 and an 8-keypoint floor: a flickering low-score joint on the horizon would
+ * balloon the box and the crop would gain nothing.
+ */
+function boundsFromFrames(fs: PoseFrame[]): { minX: number; minY: number; maxX: number; maxY: number } | null {
+  let minX = 1, minY = 1, maxX = 0, maxY = 0, seen = 0;
+  for (const f of fs) {
+    for (const k of f.keypoints ?? []) {
+      if ((k.score ?? 0) < 0.4) continue;
+      if (!Number.isFinite(k.x) || !Number.isFinite(k.y)) continue;
+      if (k.x < 0 || k.x > 1 || k.y < 0 || k.y > 1) continue;
+      if (k.x < minX) minX = k.x;
+      if (k.x > maxX) maxX = k.x;
+      if (k.y < minY) minY = k.y;
+      if (k.y > maxY) maxY = k.y;
+      seen++;
+    }
+  }
+  if (seen < 8) return null;
+  if (!(maxX > minX) || !(maxY > minY)) return null;
+  return { minX, minY, maxX, maxY };
+}
+
+export async function poseAtTime(
+  videoUri: string,
+  timeMs: number,
+  position: PoseFrame['position'],
+  /**
+   * 2026-09-06 (Tim — "I had asked for some kind of engine for resizing to put the golfer optimally
+   * within the window… you can't expect somebody to want you to stand right behind them").
+   *
+   * He is right on both counts, and the engine already existed: `roiFromBodyBounds` in
+   * services/swing/clubPath.ts crops to the body with asymmetric padding (the club goes far above
+   * the head and sweeps wide). Only the CLUB path used it. Pose ran full-frame, which on his own
+   * upload means a golfer occupying about a quarter of the height of a 4K frame — downscaled to the
+   * model's input he is a small subject, and a small subject is the thing pose detection fails on.
+   *
+   * So the same crop is now available here. Passing an roi zooms the pixel budget onto the player
+   * instead of an acre of empty fairway. Detections come back normalized to the CROP and are mapped
+   * back to full-frame before returning, so every downstream consumer keeps reasoning in full-frame
+   * coordinates exactly as before.
+   */
+  roi?: { x: number; y: number; w: number; h: number } | null,
+): Promise<PoseFrame | null> {
   try {
     let uri: string; let width: number | undefined; let height: number | undefined;
     try {
@@ -417,11 +465,41 @@ export async function poseAtTime(videoUri: string, timeMs: number, position: Pos
       if (!lastFrameFailure) lastFrameFailure = `thumbnail_failed: ${te instanceof Error ? te.message.slice(0, 90) : String(te).slice(0, 90)}`;
       throw te;
     }
-    const frame = await analyzePoseFromUri(uri, timeMs);
+    let cropUri: string | null = null;
+    if (roi && width && height) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const IM = require('expo-image-manipulator') as typeof import('expo-image-manipulator');
+        const manip = await IM.manipulateAsync(
+          uri,
+          [{ crop: {
+            originX: Math.round(roi.x * width),
+            originY: Math.round(roi.y * height),
+            width: Math.max(1, Math.round(roi.w * width)),
+            height: Math.max(1, Math.round(roi.h * height)),
+          } }],
+          { compress: 0.9, format: IM.SaveFormat.JPEG },
+        );
+        cropUri = manip.uri;
+      } catch { cropUri = null; /* crop is an optimisation; fall back to the full frame */ }
+    }
+    const frame = await analyzePoseFromUri(cropUri ?? uri, timeMs);
     if (!frame) {
       // Read the image fine, found no body. Distinct from being unable to read it at all.
       if (!lastFrameFailure) lastFrameFailure = 'no_pose_in_frame';
       return null;
+    }
+    if (cropUri && roi) {
+      /**
+       * Map crop-space back to full-frame. Every consumer downstream — the overlay's aligned path,
+       * the club-arc ROI, the metrics — reasons in full-frame normalized coords, and handing them
+       * crop-space coords would put the skeleton in the wrong place with total confidence.
+       */
+      frame.keypoints = frame.keypoints.map(k => ({
+        ...k,
+        x: roi.x + k.x * roi.w,
+        y: roi.y + k.y * roi.h,
+      }));
     }
     // Carry the true frame dimensions so the overlay can align the skeleton
     // to the body (correct aspect ratio + resize mode) rather than bbox-fit.
@@ -1263,6 +1341,9 @@ export async function extractPoseFramesFromVideo(
    *  are reported below — a swing that needs three nudges is a capture problem worth knowing about. */
   const missedPositions: string[] = [];
   const nudgedPositions: string[] = [];
+  /** Anchors that only came back once we cropped to the player. A swing with several of these is
+   *  telling you the subject is too small in frame — actionable coaching, not just a stat. */
+  const zoomedPositions: string[] = [];
   try {
     for (const { key, timeMs, source } of sampleTimes) {
       if (shouldAbort?.()) { console.log('[pose] aborted between frames — playback active'); break; }
@@ -1291,6 +1372,26 @@ export async function extractPoseFramesFromVideo(
           const t = Math.max(0, Math.round(timeMs + nudge));
           f = await poseAtTime(workUri, t, key);
           if (f) { nudgedPositions.push(`${key}${nudge > 0 ? '+' : ''}${nudge}`); break; }
+        }
+        /**
+         * 2026-09-06 — LAST RESORT: ZOOM IN ON HIM.
+         *
+         * Tim films from where a playing partner would actually stand, and asked for "an engine for
+         * resizing to put the golfer optimally within the window". That engine is roiFromBodyBounds,
+         * and it was only ever wired to the club path. On his own upload he fills about a quarter of
+         * the frame height, so the model is being asked to find a small subject in a lot of fairway.
+         *
+         * Bounds come from a frame that ALREADY succeeded this run, so there is no extra detection
+         * cost to compute them and no chicken-and-egg: the slow parts of the swing read fine, and
+         * they tell us where to look for the fast parts. Only after both time nudges have failed, so
+         * a swing that reads cleanly never pays for this.
+         */
+        if (!f && frames.length > 0) {
+          const roi = roiFromBodyBounds(boundsFromFrames(frames));
+          if (roi) {
+            f = await poseAtTime(workUri, timeMs, key, roi);
+            if (f) zoomedPositions.push(key);
+          }
         }
       }
       if (!f && key) missedPositions.push(key);
@@ -1361,6 +1462,7 @@ export async function extractPoseFramesFromVideo(
       got: frames.length,
       missed: missedPositions.join(',') || null,
       nudged: nudgedPositions.join(',') || null,
+      zoomed: zoomedPositions.join(',') || null,
       windowed: !!(window && window.endMs - window.startMs >= 500),
       // The span the skeleton can actually be drawn over. If this is materially shorter than the
       // swing, the overlay is correct to stop and the SAMPLING is what to fix.
