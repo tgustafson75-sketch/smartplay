@@ -65,6 +65,29 @@ let TrackPlayer: any = null;
 let Event: any = null;
 let Capability: any = null;
 let isRegistered = false;
+/**
+ * 2026-09-07 — SINGLE-FLIGHT THE ACTIVATION. Root cause of the fatal boot crash Tim caught in
+ * Sentry (build 25, 2026-09-05 01:11):
+ *
+ *   IllegalStateException: Player is accessed on the wrong thread.
+ *   Current thread: 'pool-4-thread-1'  Expected thread: 'main'
+ *   com.google.android.exoplayer2.ExoPlayerImpl.verifyApplicationThread
+ *
+ * `activateMediaSession` guarded on `isRegistered` at its top but only SET it ~50 lines and several
+ * awaits later, so two concurrent calls both passed the guard and both ran setupPlayer + reset + add
+ * against the same ExoPlayer instance from two different async continuations. react-native-track-
+ * player resolves those on a pool thread; ExoPlayer requires main. That is the exception, verbatim.
+ *
+ * Boot is when it collides: whenRoundStoreHydrated fires one activate, and the roundStore
+ * subscription can fire another the moment isRoundActive settles during hydration.
+ *
+ * The second hole was worse and quieter. `deactivateMediaSession` returns early when
+ * `!isRegistered` — which is TRUE for the whole duration of an in-flight activation. A deactivate
+ * arriving mid-activate did nothing at all and left a session registered that nothing would ever
+ * clean up. Both now share one in-flight promise, the same single-flight discipline
+ * utils/videoThumbnail already uses to keep one native media reader alive at a time.
+ */
+let activation: Promise<void> | null = null;
 let setupPromise: Promise<void> | null = null;
 let unsubRemotePlay: { remove(): void } | null = null;
 let unsubRemotePause: { remove(): void } | null = null;
@@ -134,7 +157,9 @@ async function ensureSetup(): Promise<void> {
 export async function activateMediaSession(): Promise<void> {
   if (isRegistered) return;
   if (!loadTrackPlayer()) return;
-
+  // A second caller joins the first rather than starting its own ExoPlayer conversation.
+  if (activation) return activation;
+  activation = (async () => {
   await ensureSetup();
 
   try {
@@ -185,6 +210,14 @@ export async function activateMediaSession(): Promise<void> {
   } catch (e) {
     console.log('[mediaKeyBridge] activate failed:', e);
   }
+  })();
+  try {
+    await activation;
+  } finally {
+    // Cleared whether it succeeded or threw, so a failed activation can be retried rather than
+    // leaving every future caller joined to a dead promise.
+    activation = null;
+  }
 }
 
 /**
@@ -193,6 +226,13 @@ export async function activateMediaSession(): Promise<void> {
  * to other apps (Spotify, podcasts).
  */
 export async function deactivateMediaSession(): Promise<void> {
+  /**
+   * Wait for an in-flight activation before deciding. Checking `isRegistered` first was the bug:
+   * it is false for the entire duration of an activation, so a deactivate arriving mid-activate
+   * returned immediately and did nothing, leaving a registered session nothing would clean up — and
+   * the next activate then raced the leftover one.
+   */
+  if (activation) { try { await activation; } catch { /* activation reports its own failure */ } }
   if (!isRegistered) return;
   if (!TrackPlayer) return;
 
