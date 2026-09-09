@@ -2752,7 +2752,7 @@ check('Music portal: "play [song]" → kid-safe search → clean in-app player (
       // architecture's question and returns null under bridgeless — so this asserted the presence of
       // the very check that made the player unreachable. hasNativeWebView() asks hasViewManagerConfig,
       // which both UIManagers answer.
-      /hasNativeWebView\(\)/.test(screen) &&
+      /hasNativeWebView\(WebView\)/.test(screen) &&
       /WebBrowser\.openBrowserAsync/.test(screen) &&
       // wired into the voice path (short-circuits the brain with a spoken confirm)
       /tryPlaySong\(message\)/.test(voice)

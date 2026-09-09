@@ -44,10 +44,32 @@ import { UIManager } from 'react-native';
  * One exported answer instead of a constant copied into two screens: the two copies were already the
  * same bug twice. [[two-owners-is-the-root-cause]]
  */
-export function hasNativeWebView(): boolean {
-  // Present on BOTH UIManagers — PaperUIManager (legacy) and BridgelessUIManager (new arch) — and it
-  // is the only one of the two that answers this question correctly under the new architecture.
-  return UIManager.hasViewManagerConfig?.('RNCWebView') ?? false;
+export function hasNativeWebView(component?: unknown): boolean {
+  /**
+   * 2026-09-09 (triple-check pass, a defect in my own fix from an hour earlier).
+   *
+   * `hasViewManagerConfig` is present on BOTH UIManagers, but they do not fail the same way. Paper's
+   * returns `getViewManagerConfig(name) != null` — safe. Bridgeless delegates to
+   * `unstable_hasComponent`, which THROWS A BARE STRING when `global.__nativeComponentRegistry__hasComponent`
+   * has not been installed yet:
+   *
+   *     throw `unstable_hasComponent('${'$'}{name}'): Global function is not registered`;
+   *
+   * Optional chaining guards a MISSING method, not a throwing one. Both callers evaluate this at
+   * module scope, so a throw would escape module evaluation and take the whole route down — a white
+   * screen, which is worse than the silent false it replaced.
+   */
+  try {
+    const has = UIManager.hasViewManagerConfig?.('RNCWebView');
+    if (typeof has === 'boolean') return has;
+  } catch { /* registry global not installed yet — fall through to the direct check */ }
+  /**
+   * Undeterminable, so ask the definitive question instead: did the module actually hand us a
+   * component? The screens import WebView statically from react-native-webview, so on a build that
+   * linked it this is non-null, and on one that did not it is undefined and the in-app browser path
+   * is correct. That is a fact about THIS build rather than a guess, and it cannot throw.
+   */
+  return component != null;
 }
 
 /** What the WebView posts back. Anything unrecognised is ignored by the caller. */

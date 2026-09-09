@@ -30,6 +30,21 @@ const entries = new Map<string, Entry>();
 /** Keep the copy this long after the last release — review consumers fire back-to-back. */
 const LINGER_MS = 8_000;
 
+/** The filename shape acquireClipCopy writes. One owner for the naming, so the check below cannot drift. */
+const COPY_PREFIX = 'shared-clip-';
+
+/**
+ * 2026-09-09 — is this URI already one of our pooled copies?
+ *
+ * Needed because some callers hand a WORK uri downstream (poseAnalysisApi probes `workUri`, not the
+ * original). Without this, a consumer that acquires on behalf of its caller would copy a copy: a
+ * second full byte-copy of a clip already on disk, keyed under a uri nothing else will ever ask for,
+ * so it is never shared and only reaped by its own linger.
+ */
+export function isPooledCopy(uri: string | null | undefined): boolean {
+  return !!uri && uri.includes(COPY_PREFIX);
+}
+
 export async function acquireClipCopy(
   videoUri: string,
 ): Promise<{ uri: string; release: () => void } | null> {
@@ -41,7 +56,7 @@ export async function acquireClipCopy(
       try {
         const dir = FileSystem.cacheDirectory;
         if (!dir) return null;
-        dest = `${dir}shared-clip-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp4`;
+        dest = `${dir}${COPY_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp4`;
         await FileSystem.copyAsync({ from: videoUri, to: dest });
         const info = await FileSystem.getInfoAsync(dest);
         if (!info.exists || (info.size ?? 0) <= 0) {

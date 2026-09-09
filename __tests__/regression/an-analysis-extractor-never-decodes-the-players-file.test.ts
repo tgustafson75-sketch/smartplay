@@ -24,7 +24,51 @@ import path from 'path';
 
 const root = path.join(__dirname, '..', '..');
 
-/** The extractors that run while the review surface is looping the clip. */
+/**
+ * 2026-09-09 (triple-check) — this list was hand-written once and was WRONG: it cleared
+ * feelReconcile and swingShare as "not on the looping surface" when feelReconcile is called twice
+ * from smartmotion.tsx (the putt read and the feel reconcile) and swingShare from the swing-detail
+ * screen's Share button while its video plays.
+ *
+ * So the list is DERIVED now. Every module that pulls frames from a clip is discovered by scanning,
+ * and each one must either take the pooled copy or appear in ALLOWED with the reason it is safe.
+ * A new extractor added tomorrow fails this test until someone answers the question.
+ */
+const SCAN_DIRS = ['services', 'app', 'components', 'hooks'];
+
+/**
+ * Readers that do NOT need the pooled copy, each with the reason. A full clip copy is hundreds of
+ * megabytes; it is the right price for a multi-frame sweep and the wrong one for a single still.
+ */
+const ALLOWED: Record<string, string> = {
+  'utils/videoThumbnail.ts': 'the queue itself',
+  'app/swinglab/swing/[swing_id].tsx':
+    'the grab-frame handler PAUSES the player first (07-21) — the other valid remedy — and reads one frame',
+  'components/swinglab/SwingStillComposite.tsx':
+    'one frame, reached only through that same paused grab-frame path',
+  'components/swinglab/PuttReadLine.tsx':
+    'one frame for a still; failure is handled and a full clip copy costs far more than the read',
+  'app/swinglab/library.tsx':
+    'thumbnail backfill on the LIST screen — no player is mounted on the clip it reads',
+  'app/swinglab/tutorial-upload.tsx': 'one poster frame during import; no player on the file yet',
+  'services/puttFrameExtractor.ts': 'called only from videoUpload, an import path with no player',
+  'services/videoUpload.ts': 'import/upload path — the clip is not mounted in a player',
+  'services/bagScan.ts':
+    'the clip comes straight from ImagePicker.launchCameraAsync (the OS camera UI); the app never mounts a player on it',
+};
+
+function listFiles(dir: string): string[] {
+  if (!fs.existsSync(dir)) return [];
+  const out: string[] = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...listFiles(full));
+    else if (/\.tsx?$/.test(entry.name)) out.push(full);
+  }
+  return out;
+}
+
+/** The extractors that run while a review surface is looping the clip. */
 const ANALYSIS_EXTRACTORS = [
   'services/poseDetection.ts',      // fault-read frames + the locate's coarse sweep
   'services/poseAnalysisApi.ts',    // the measured pose read + tempo
@@ -32,6 +76,8 @@ const ANALYSIS_EXTRACTORS = [
   'services/swing/ballPath.ts',     // the trace
   'services/swing/ballDeparture.ts',
   'services/swing/onDeviceLocate.ts',
+  'services/swing/feelReconcile.ts', // the putt read + the feel reconcile, both from smartmotion
+  'services/swingShare.ts',          // Share, from the swing-detail screen while it plays
 ];
 
 const read = (rel: string): string => fs.readFileSync(path.join(root, rel), 'utf8');
@@ -55,6 +101,28 @@ describe('every swing-analysis extractor reads a private copy', () => {
   it('each extractor RELEASES it, or the pool never frees the file', () => {
     const offenders = ANALYSIS_EXTRACTORS.filter((rel) => !/\.release\(\)/.test(stripComments(read(rel))));
     expect(offenders).toEqual([]);
+  });
+
+  it('THE DERIVED SWEEP: every frame reader either pools or is allowed with a reason', () => {
+    const unaccounted: string[] = [];
+    for (const dir of SCAN_DIRS) {
+      for (const file of listFiles(path.join(root, dir))) {
+        const rel = path.relative(root, file).split(path.sep).join('/');
+        const code = stripComments(fs.readFileSync(file, 'utf8'));
+        if (!/getThumbnailAsync/.test(code)) continue;
+        if (ALLOWED[rel]) continue;
+        if (code.includes('acquireClipCopy')) continue;
+        unaccounted.push(rel);
+      }
+    }
+    expect(unaccounted).toEqual([]);
+  });
+
+  it('every allowance names a file that still reads frames', () => {
+    for (const rel of Object.keys(ALLOWED)) {
+      const code = fs.readFileSync(path.join(root, rel), 'utf8');
+      expect(code).toMatch(/getThumbnailAsync/);
+    }
   });
 
   it('nobody makes a SECOND copy of a clip the pool already holds', () => {

@@ -49,6 +49,31 @@ describe('component presence is asked in a way the new architecture can answer',
     expect(offenders).toEqual([]);
   });
 
+  /**
+   * 2026-09-09 (triple-check) — a defect in the fix above, found by reading RN's source rather than
+   * trusting the API name. Bridgeless `hasViewManagerConfig` delegates to `unstable_hasComponent`,
+   * which THROWS A BARE STRING when the native component registry global is not installed yet.
+   * Optional chaining guards a missing method, not a throwing one — and both screens call this at
+   * MODULE SCOPE, so an escape would fail module evaluation and white-screen the whole route.
+   */
+  it('the detector cannot throw, and says so in code', () => {
+    const embed = fs.readFileSync(path.join(root, 'services/youtubeEmbed.ts'), 'utf8');
+    const fn = embed.slice(embed.indexOf('export function hasNativeWebView'));
+    const body = fn.slice(0, fn.indexOf('\n}'));
+    expect(body).toMatch(/try\s*\{[\s\S]*hasViewManagerConfig[\s\S]*\}\s*catch/);
+    // And when it cannot answer, it must NOT answer `false` — that is the original bug returning.
+    expect(body).toContain('return component != null;');
+    expect(body).not.toMatch(/catch[\s\S]{0,80}return false/);
+  });
+
+  it('both screens hand it the component, so the fallback is a fact not a guess', () => {
+    for (const screen of ['app/drill-video.tsx', 'app/jukebox.tsx']) {
+      const src = fs.readFileSync(path.join(root, screen), 'utf8');
+      expect(src).toContain('hasNativeWebView(WebView)');
+      expect(src).toMatch(/import \{ WebView[^}]*\} from 'react-native-webview'/);
+    }
+  });
+
   it('there is ONE owner of the WebView answer, and both screens use it', () => {
     const embed = fs.readFileSync(path.join(root, 'services/youtubeEmbed.ts'), 'utf8');
     expect(embed).toContain('hasViewManagerConfig');

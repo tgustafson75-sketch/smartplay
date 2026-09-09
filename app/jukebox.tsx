@@ -25,7 +25,7 @@ import { useTheme } from '../contexts/ThemeContext';
 // predates it (the current installed APK), render-then-crash isn't acceptable, so we
 // detect the native view manager and fall back to the in-app browser. The next native
 // build gets the true embedded player; older builds still play the clean embed.
-const HAS_NATIVE_WEBVIEW = hasNativeWebView();
+const HAS_NATIVE_WEBVIEW = hasNativeWebView(WebView);
 
 export default function Jukebox() {
   const router = useRouter();

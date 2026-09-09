@@ -27,7 +27,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { usePracticePointsStore } from '../store/practicePointsStore';
 import { useToastStore } from '../store/toastStore';
 
-const HAS_NATIVE_WEBVIEW = hasNativeWebView();
+const HAS_NATIVE_WEBVIEW = hasNativeWebView(WebView);
 
 /** Pull the 11-char YouTube id out of a watch / youtu.be / embed / shorts URL. */
 function extractVideoId(u: string | undefined): string | null {

@@ -198,6 +198,7 @@ const TENTATIVE_TIMEOUT_MS = 55_000;
  * as `no_frames`.
  */
 import * as VT from '../utils/videoThumbnail'; // serialized wrapper (native retriever crash fix)
+import { acquireClipCopy, isPooledCopy } from './swing/sharedClipCopy';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Audio } from 'expo-av';
 // 2026-06-07 (audit) — share the circuit breaker + reactive connectivity
@@ -319,6 +320,41 @@ export async function probeDurationMs(clipUri: string): Promise<number> {
 }
 
 async function probeDurationUncached(clipUri: string): Promise<number> {
+  /**
+   * 2026-09-09 (triple-check pass) — PROBE THE POOLED COPY WHEN THERE CAN BE ONE.
+   *
+   * This is the last member of the class. The probe loads an Audio.Sound (a native decoder) and up to
+   * three thumbnails; on SmartMotion it runs on the ORIGINAL at four call sites while the review
+   * <Video> is looping that same file. Serialized against other retrievers by the media chain, and
+   * not against ExoPlayer — which is the distinction that produced today's crash.
+   *
+   * Fixing it here rather than at the four call sites: one owner, and poseAnalysisApi already probes
+   * its work copy deliberately, so this makes every caller behave the way that one already does.
+   *
+   * `isPooledCopy` stops us copying a copy — poseAnalysisApi passes a work uri, and acquiring on that
+   * would byte-copy an on-disk copy under a key nobody else will ask for.
+   *
+   * UNLIKE the frame sweeps, this does NOT refuse when no copy can be made: it probes the original,
+   * exactly as it always has. A sweep that cannot run costs an overlay; a duration that cannot be
+   * read costs the entire analysis, and the exposure here is one decoder plus three reads rather than
+   * twelve to sixteen. Naming the asymmetry rather than pretending the two cases are the same.
+   */
+  let probeCopy: { uri: string; release: () => void } | null = null;
+  let probeUri = clipUri;
+  if (!isPooledCopy(clipUri)) {
+    try {
+      probeCopy = await acquireClipCopy(clipUri);
+      if (probeCopy) probeUri = probeCopy.uri;
+    } catch { /* no copy — probe the original, as before */ }
+  }
+  try {
+    return await probeDurationOn(probeUri);
+  } finally {
+    probeCopy?.release();
+  }
+}
+
+async function probeDurationOn(clipUri: string): Promise<number> {
   // 2026-06-10 — Overall timeout so a problem clip (slow audio-track load or a
   // stalling MediaMetadataRetriever on Android) can NEVER hang re-analysis on an
   // infinite spinner. If probing doesn't finish in time, fall back to the
