@@ -85,6 +85,18 @@ export const NOT_BACKED_UP_STORE_KEYS: string[] = [
 ];
 
 export const BACKED_UP_STORE_KEYS: string[] = [
+  /**
+   * 2026-09-09 — Tim's owner checklist. BACKED UP, deliberately.
+   *
+   * The items themselves are seeded from code and merge in by id, so only the TICKS are device
+   * state — and a tick records that a test was actually run, which is real work and annoying to
+   * re-derive on a new handset. Small, structured, and his own data.
+   *
+   * The nearby argument for exclusion (issue-log-v1: "restoring stale reports would resurrect
+   * issues the tester already sent") does not apply — a completed check stays true regardless of
+   * which phone it was completed on.
+   */
+  'owner-checklist-v1',
   // ── Crown jewels ──────────────────────────────────────────────
   'round-store-v1',        // rounds, scores, shots, handicap history
   'club-bag-v1',           // the player's bag

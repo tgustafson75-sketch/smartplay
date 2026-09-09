@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   isMetaWearablesAvailable,
   startMetaWearablesStreaming,
@@ -33,6 +33,7 @@ import { displayCaddieName } from '../services/caddieResolver';
 // (cage-mode, cage/summary, settings) share one source of truth.
 import { useWatchStore } from '../store/watchStore';
 import { watchDeviceLabel } from '../services/watchBridge';
+import { useOwnerChecklistStore } from '../store/ownerChecklistStore';
 import { initWatchSwingBridge, stopWatchSwingBridge, isWatchSwingBridgeAvailable } from '../services/watchSwingBridge';
 // 2026-05-27 — Fix EA: screenshot mode toggle (hides system chrome
 // for clean promo / store screenshots). Sourced from its own store
@@ -126,6 +127,15 @@ export default function Settings() {
   // display row. Reads from the dedicated watchStore — stays false
   // until the native SDK lands and flips it.
   const watchConnected = useWatchStore((s) => s.isConnected);
+  /**
+   * 2026-09-09 — the count rides on the row itself, so Owner Tools says there is work without opening
+   * it. Selected as the raw array and counted in a useMemo, NOT `.filter(...).length` inside the
+   * selector: a selector that allocates is what caused the recap screen's "Maximum update depth
+   * exceeded" three times, and the repo has a guard for exactly this shape. Caught by that guard on
+   * first run, which is the guard doing its job.
+   */
+  const checklistItems = useOwnerChecklistStore((s) => s.items);
+  const checklistOpen = useMemo(() => checklistItems.filter((i) => !i.done).length, [checklistItems]);
   // 2026-06-30 (Tim — "turning on the watch is blocked") — the Galaxy Watch swing-IMU bridge
   // shipped in the native build, so this is a REAL toggle now. Available only when the native
   // module is linked (latest build); on an older binary it stays disabled with a clear note.
@@ -2140,6 +2150,24 @@ export default function Settings() {
                       </Text>
                     </View>
                     <Ionicons name="bug-outline" size={20} color={colors.text_muted} />
+                  </TouchableOpacity>
+                  {/* 2026-09-09 (Tim — "put my checklists of to dos on the phone in owners tool").
+                      First row in Owner Tools on purpose: it is the one that has something to say. */}
+                  <TouchableOpacity
+                    style={styles.resetRow}
+                    onPress={() => router.push('/owner-checklist' as never)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open my checklist"
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>
+                        Checklist{checklistOpen > 0 ? ` · ${checklistOpen} open` : ''}
+                      </Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                        Field tests and ship steps, ticked off as you go. Reminds you on launch, and the caddie will read it out — &quot;what&apos;s on my checklist&quot;.
+                      </Text>
+                    </View>
+                    <Ionicons name="checkbox-outline" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.resetRow}

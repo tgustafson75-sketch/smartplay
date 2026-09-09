@@ -3121,3 +3121,42 @@ Gate: `the-publish-command-is-guarded` — derived from package.json (every scri
 runtimeVersion matching app.json.
 
 Health: **tsc 0 · jest 2935/2935 (262 suites) · sim 968/968 · lint 0 errors**.
+
+### Owner checklist on the phone — 2026-09-09 (Tim: "we should have done that months ago")
+
+He is right. Every field test this year has run off a list living in a chat window or a sprint log —
+i.e. on the laptop, the one place it is not needed. The list is needed on a first tee, one-handed,
+in a glove.
+
+Four surfaces, all wired: **Settings → Owner Tools** row carrying the open count · **`/owner-checklist`**
+screen (owner-gated at the RENDER, not just the menu — a route is reachable by voice, deep link or
+typing) · a **launch reminder** toast · and the **caddie reads it aloud** ("what's on my checklist",
+"read my reminders").
+
+Design decisions worth keeping:
+- **The seed MERGES by id.** The list is persisted (a tick must survive a round) and shipped in code
+  (a new session must be able to add items). A naive persisted store keeps the first seed forever and
+  silently ignores everything added later — a checklist that cannot receive new work, which is worse
+  than none because it reads as complete. New ids appear, ticks survive, removed ids go.
+- **The reminder waits for profile hydration.** `email` is async-persisted; reading it at mount gives
+  null on a cold boot, the owner check fails and the reminder never fires. Exactly the bug
+  watchRoundSync had on 08-24.
+- **A toast, not a modal.** It fires on every launch, including the ones where he is opening the app
+  to play golf. Something you must dismiss to reach your round gets uninstalled in a week. It also
+  mirrors to the watch through watchRoundSync for free.
+- **The caddie reads only what is OUTSTANDING, capped at five spoken items.** A spoken list past
+  about five has lost the listener; grouped, then "and N more".
+- **Owner-only at every entry**, and a non-owner falls THROUGH to the brain rather than being told a
+  list exists.
+
+**Three of the repo's own guards caught this on first run**, which is the system working:
+the allocating-selector guard (`.filter().length` inside a Zustand selector — the recap crash shape,
+three times over), the classifier-parity guard (a handler whose intent the cloud could never emit,
+and then one with no prompt guidance beyond the enum line), and the backup-allowlist guard (a new
+persisted store with nobody having said whether it survives a device swap — it does).
+
+Gate: `the-owner-checklist-is-wired-everywhere` — seed-merge behaviour, all four surfaces, and the
+voice path end to end.
+
+Health: **tsc 0 · jest 2950/2950 (263 suites) · sim 968/968 · lint 0 errors**. JS/TS only; preflight
+passes, so this can ride an OTA.

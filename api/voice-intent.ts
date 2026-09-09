@@ -52,6 +52,10 @@ const INTENT_TYPE_ENUM = [
   // classifier enum, so any phrasing the narrow regex missed fell to conversational (the caddie
   // chatted instead of acting). Now the cloud classifier can emit them too.
   'undo', 'find_my_data', 'open_course',
+  // 2026-09-09 (Tim — "have it so the Caddie can read the reminder"). Owner-only field checklist,
+  // read aloud. The handler itself re-checks the owner gate and falls through to the brain for
+  // anyone else, so putting it in the enum exposes nothing.
+  'owner_checklist',
   // 2026-07-27 (Tim — SESSION FOCUS) — capture "I want to work on X this session" so the caddie holds
   // that intent and orients the whole session around it.
   'set_session_focus',
@@ -269,6 +273,11 @@ Available intents:
    - "let's focus on tempo this session" / "today is all about tempo" -> { intent_type: "set_session_focus", parameters: { goal: "tempo" } }
    - "we're dialing in my chipping, staying under the wind" -> { intent_type: "set_session_focus", parameters: { goal: "chipping", note: "staying under the wind" } }
    - "forget the focus, let's just hit some balls" -> { intent_type: "set_session_focus", parameters: { clear: true } }
+
+3.36b owner_checklist — The OWNER asking for their own to-do / test checklist to be read back. Only Tim has one; for anyone else the handler declines and the brain answers normally, so classify on the words, not on who is speaking.
+   - "what's on my checklist" / "read my checklist" / "what's left on my list" -> { intent_type: "owner_checklist", parameters: {} }
+   - "read my reminders" / "what do I still need to test" -> { intent_type: "owner_checklist", parameters: {} }
+   - NOT this: "add milk to my list" (no list-editing exists), or "what's my score" (query_status).
 
 3.37 open_course — User wants to OPEN a specific golf course (to view/plan/play it), naming the course. Distinct from quick_round (which also names players) and find_my_data (past records). If they only say "start a round" with NO course, that's open_tool { tool_name: "play" }.
    parameters: { course_label: "<spoken course name>" }
