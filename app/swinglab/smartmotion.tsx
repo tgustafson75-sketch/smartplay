@@ -1906,6 +1906,47 @@ export default function SmartMotion() {
         const pts = r && r.points.length >= 3 ? r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs + segStart })) : null;
         clubPathCacheRef.current[selectedSwing] = pts;
         setClubArcPoints(pts);
+        /**
+         * 2026-09-09 (Tim — "the swing arc I've yet to ever see"). WHY THE 09-06 DIAGNOSTICS NEVER
+         * CAME BACK FROM A DEVICE.
+         *
+         * `f44f06d` added rejected/detected/gate so a zero-point arc would say WHY — but it wired the
+         * report into the SWING-DETAIL screen only. This one, the screen Tim actually records on,
+         * dropped every empty result on the floor and told nobody. So the single field report that
+         * would settle whether the private copy is the ONLY cause of a sparse arc could not be
+         * produced by the surface that produces the swings. The close-out asked for that report; the
+         * code made it unobtainable.
+         *
+         * Same event, same fields, and the same kind split swing-detail draws: an answer we did not
+         * like is an `analysis_error` and worth an inbox line; a run superseded by a re-render is
+         * `diag`, because a log that cries wolf hides the entries that matter.
+         * [[missing-log-entry-is-the-evidence]]
+         *
+         * `screen` is new and belongs on both: two surfaces emit this now, and "which one" is the
+         * first question anyone reading the event asks.
+         *
+         * DIAGNOSTICS ONLY — the arc drawn, the 3-point gate and the cache are unchanged.
+         */
+        if (!pts) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            (require('../../store/issueLogStore') as typeof import('../../store/issueLogStore'))
+              .useIssueLogStore.getState().addAppEvent(
+                r ? 'clubpath_arc_too_sparse' : 'clubpath_superseded',
+                {
+                  screen: 'smartmotion',
+                  points: r?.points.length ?? 0,
+                  aborted: !r,
+                  windowMs: Math.max(0, seg.endMs - seg.startMs),
+                  rejected: r?.rejected?.reason ?? null,
+                  detected: r?.rejected?.detected ?? null,
+                  gate: r?.rejected?.gate ?? null,
+                  framesSampled: r?.framesSampled ?? null,
+                },
+                r ? 'analysis_error' : 'diag',
+              );
+          } catch { /* best-effort — a diagnostic must never break the review surface */ }
+        }
       })
       .catch(() => undefined);
     return () => { cancelled = true; };

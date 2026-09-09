@@ -857,6 +857,9 @@ export default function SwingDetail() {
               .useIssueLogStore.getState().addAppEvent(
                 r ? 'clubpath_arc_too_sparse' : 'clubpath_superseded',
                 {
+                  // 2026-09-09 — SmartMotion emits this same event now (it never did, which is why
+                  // the 09-06 fields never reached a device). Both surfaces name themselves.
+                  screen: 'swing-detail',
                   points: r?.points.length ?? 0,
                   aborted: !r,
                   windowMs: Math.max(0, endMs - startMs),

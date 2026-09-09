@@ -2756,3 +2756,45 @@ Every `Audio.Sound` on a clip and every frame fan-out is on the serializing chai
 
 Health at close: **tsc 0 (1 pre-existing, `api/messages.ts:29`) · jest 2854/2854 · sim 968/968 ·
 lint 1 pre-existing error**. Still zero device verification — that remains Tim's gate.
+
+### Open-items pass — 2026-09-09 (Tim: "fix all open items", "nothing that messes with the builds in review")
+
+Every item the close-out left open, closed or explicitly deferred. **Nothing on this branch touches
+native code, `app.json`, `eas.json`, `package.json` or `patches/`** — it is JS/TS only, so it cannot
+reach a binary already in review, and no OTA was published.
+
+1. **The sparse-arc field report was UNOBTAINABLE — that is why it never came.** The close-out asked
+   for one device report carrying `rejected`/`detected`/`gate` from `f44f06d`. Those fields were only
+   ever reported by the SWING-DETAIL screen. **SmartMotion — the screen swings are actually recorded
+   on — dropped every empty arc silently**, and `videoUpload`'s analysis pass still logged the bare
+   `points: 0` that f44f06d existed to replace. Two of the three surfaces could not answer the
+   question they had been asked. All three report now, and both screens carry a `screen` field
+   because two surfaces emit the event.
+
+   The videoUpload one matters most: that pass runs with nothing playing (`shouldAbort: false`), so a
+   sparse arc there cannot be blamed on ExoPlayer holding the file. It isolates model-or-gates from
+   file contention — exactly the question "is the private copy the ONLY cause" needs answered.
+
+   Behaviour is unchanged on all three: same arc drawn, same 3-point gate, same cache.
+2. **`app/paywall.tsx:271` lint error — fixed.** An unescaped apostrophe in JSX text. Rendering is
+   identical. **Lint is now 0 errors** for the first time in the sprint; the 261 warnings are
+   untouched and pre-existing.
+3. **`api/messages.ts:29` tsc error — does not exist.** `npx tsc --noEmit` is silent on this repo,
+   and `tsconfig.json` includes `**/*.ts` with only `node_modules` excluded, so the file IS
+   typechecked. The error was an artifact of the cloud session's environment, not of the code. The
+   claim has been dropped rather than carried forward as a phantom.
+4. **Voice start/stop during recording — deliberately NOT touched.** Tim's standing instruction
+   ("don't change voice path to stop recording"); tap-stop stays the chokepoint. Not a defect to fix.
+5. **The deliberate non-migrations stand.** `probeDurationMs` (bounded, uses `acquireExistingClipCopy`)
+   and the non-analysis readers already carry named reasons and are enforced by the derived gate.
+
+### Gate added (verified to FAIL on `cbb5b5c4`: 3 failures)
+`a-zero-point-arc-must-say-why-on-every-surface` — DERIVES the caller set by scanning for
+`detectClubPath(`, and requires each to report the rejection reason or carry a named allowance. It
+does not hand-list the surfaces, because the triple-check proved a hand-written list wrong twice.
+
+Health at close: **tsc 0 · jest 2859/2859 (255 suites) · sim 968/968 · lint 0 errors, 261 warnings**.
+
+### Still Tim's gate
+**Device verification of all seven earlier commits.** Unchanged — the crash class is native and no
+code change this session altered that. Branch remains UNMERGED while builds are in review.

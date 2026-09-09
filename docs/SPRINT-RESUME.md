@@ -28,7 +28,19 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 > now DERIVE their file lists rather than trusting a hand-written one, because the hand-written one
 > was wrong twice.
 >
-> Detail: [SPRINT-LOG.md](SPRINT-LOG.md) → "Day N+2 — 2026-09-08 / 09-09" and its triple-check pass.
+> An open-items pass then closed the rest. The headline: the sparse-arc field report the close-out
+> asked for was UNOBTAINABLE — `f44f06d`'s `rejected`/`detected`/`gate` fields were reported by the
+> swing-detail screen ONLY, so SmartMotion (where swings are recorded) and videoUpload's analysis pass
+> stayed silent. All three report now. **The next recorded swing should produce the event that settles
+> whether the private copy is the only cause of a sparse arc** — look for `clubpath_arc_too_sparse`
+> with `screen` and `rejected`. Lint is 0 errors; the claimed `api/messages.ts` tsc error does not
+> exist. Voice start/stop deliberately untouched.
+>
+> **This branch is JS/TS only — no native, no app.json, no eas.json, no deps — so it cannot affect a
+> build in review. It is UNMERGED and no OTA was published. Merge is Tim's call after device test.**
+>
+> Detail: [SPRINT-LOG.md](SPRINT-LOG.md) → "Day N+2 — 2026-09-08 / 09-09", its triple-check pass, and
+> the open-items pass.
 
 
 > ### ⚠️ LATEST — 2026-09-06 (later). Layer 0: remote kill switches are LIVE.
