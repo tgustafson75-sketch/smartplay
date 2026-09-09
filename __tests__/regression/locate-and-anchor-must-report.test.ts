@@ -21,8 +21,9 @@ import fs from 'fs';
 import path from 'path';
 import {
   STAGE_SCOPE, STAGE_DEPS, clipKeyOf, runKeyFor, noteStage, noteLocate,
-  unmetDeps, describeRun, __resetPipelineForTest,
+  unmetDeps, describeRun, checkOrder, __resetPipelineForTest,
 } from '../../services/swing/analysisPipeline';
+import { useIssueLogStore } from '../../store/issueLogStore';
 
 const root = path.resolve(__dirname, '../..');
 const read = (rel: string) => fs.readFileSync(path.join(root, rel), 'utf8');
@@ -71,6 +72,20 @@ describe('scope, not circularity', () => {
     noteStage(k, 'pose', 'ok');
     noteStage(k, 'club', 'empty');
     expect(describeRun(k)?.stages).toBe('locate:ok → anchor:ok → pose:ok → club:empty');
+  });
+
+  it('the out-of-order diagnostic NAMES the locate — it is built through describeRun', () => {
+    // 2026-09-09 triple-check: checkOrder built its own sequence from runs.get(key), so the moment
+    // locate became clip-scoped it silently vanished from every diagnostic that exists to explain a
+    // bad read. Two readers of the same data; only one was updated.
+    const k = runKeyFor('file:///a.mp4', 1200, 4300);
+    noteLocate('file:///a.mp4', 'ok');
+    noteStage(k, 'pose', 'empty');
+    const before = useIssueLogStore.getState().entries.length;
+    checkOrder(k, 'club');
+    const entries = useIssueLogStore.getState().entries;
+    expect(entries.length).toBeGreaterThan(before);
+    expect(JSON.stringify(entries[0])).toContain('locate:ok');
   });
 
   it('the graph still hangs everything off locate — the premise of this file', () => {

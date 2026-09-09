@@ -1893,7 +1893,19 @@ export default function SmartMotion() {
      * and we then run full-frame exactly as before, because an unzoomed arc beats no arc. What must
      * not happen is spending the one cached answer on a run whose inputs had not arrived.
      */
-    if (poseAttemptKey !== `${clipUri}|${selectedSwing}`) return;
+    /**
+     * 2026-09-09 (triple-check, a defect in my own fix from earlier today) — CLEAR BEFORE WAITING.
+     *
+     * This bailed with a bare `return`, leaving `clubArcPoints` holding the PREVIOUS swing's arc.
+     * Selecting swing 3 with no cached answer therefore kept drawing swing 1's clubhead path over
+     * swing 3's video until pose settled — a wrong arc presented exactly as confidently as a right
+     * one. It is the same mistake the 08-09 deep audit fixed for fault heat ("painting swing-1's
+     * fault on swing-3's body is a visible lie"), reintroduced by making the wait longer than the
+     * old code's was.
+     *
+     * The old code cleared unconditionally on its way to detection; the new gate has to do it too.
+     */
+    if (poseAttemptKey !== `${clipUri}|${selectedSwing}`) { setClubArcPoints(null); return; }
     /**
      * 2026-09-09 (triple-check) — AND REPORT THE ORDER, from the screen where it is emergent.
      *

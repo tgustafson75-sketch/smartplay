@@ -92,6 +92,53 @@ describe('the shared inbound listener is refcounted', () => {
     await releaseWatchDataLayer('swing');
     expect(isWatchDataLayerListening()).toBe(true);
   });
+
+  /**
+   * 2026-09-09 (triple-check) — A FAILED START MUST LEAVE NOBODY BELIEVING THEY ARE LISTENING.
+   *
+   * The first version returned `true` to the second acquirer the instant it saw a non-empty holder
+   * set, while the first was still awaiting start(). If that start failed, the first rolled back its
+   * own holder and the second stayed registered with no listener behind it — and
+   * isWatchDataLayerListening() is load-bearing now: the swing bridge asks it before clearing the
+   * connected flag, so the lie would have left Settings claiming a watch nobody could hear.
+   */
+  it('a start that fails leaves NOBODY holding, including whoever joined mid-flight', async () => {
+    nativeStart.mockRejectedValueOnce(new Error('no wearable api'));
+    const both = await Promise.all([acquireWatchDataLayer('caddie'), acquireWatchDataLayer('swing')]);
+    expect(both).toEqual([false, false]);
+    expect(isWatchDataLayerListening()).toBe(false);
+  });
+
+  it('concurrent acquirers share ONE start, not one each', async () => {
+    await Promise.all([acquireWatchDataLayer('caddie'), acquireWatchDataLayer('swing')]);
+    expect(nativeStart).toHaveBeenCalledTimes(1);
+    expect(isWatchDataLayerListening()).toBe(true);
+  });
+});
+
+describe('a failed init never leaves a claim behind', () => {
+  it('both bridges release on their init failure path', () => {
+    // acquire runs early in initWatchCaddieBridge, so anything throwing after it used to leak the
+    // holder forever: the listener could never be removed and isWatchDataLayerListening() lied.
+    const caddie = code('services/watchCaddieBridge.ts');
+    const caddieCatch = caddie.slice(caddie.indexOf("init failed"));
+    expect(caddieCatch.slice(0, 400)).toContain("releaseWatchDataLayer('caddie')");
+    const swing = code('services/watchSwingBridge.ts');
+    expect(swing).toContain("releaseWatchDataLayer('swing')");
+  });
+});
+
+describe('the yardage trace does not evict the evidence', () => {
+  it('success is traced on CHANGE, failures every time', () => {
+    // roundTrace is a 2000-row ring buffer; an 18s tick would have spent ~900 rows of a 4.5h round
+    // on "nothing wrong", pushing out the GPS/voice/shot rows that diagnose something.
+    const caddie = code('services/watchCaddieBridge.ts');
+    expect(caddie).toContain('if (sentKey !== lastYardageSent)');
+    expect(caddie).toContain("lastYardageSent = '';");
+    // the failure paths stay unconditional
+    expect(caddie).toContain("traceWatch('yardage_undelivered'");
+    expect(caddie).toContain("traceWatch('yardage_error'");
+  });
 });
 
 describe('neither bridge touches the native listener directly', () => {

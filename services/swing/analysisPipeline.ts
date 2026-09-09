@@ -180,7 +180,6 @@ export function checkOrder(key: string, stage: Stage): Stage[] {
   const missing = unmetDeps(key, stage);
   if (missing.length === 0) return [];
   try {
-    const r = runs.get(key);
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('../../store/issueLogStore') as typeof import('../../store/issueLogStore'))
       .useIssueLogStore.getState().addAppEvent(
@@ -188,11 +187,17 @@ export function checkOrder(key: string, stage: Stage): Stage[] {
         {
           stage,
           missing: missing.join(','),
-          // What HAD reported, so the report reads as a sequence rather than a single complaint.
-          seen: STAGE_ORDER
-            .filter(s => r?.stages[s])
-            .map(s => `${s}:${r?.stages[s]?.status}`)
-            .join(' → ') || 'none',
+          /**
+           * What HAD reported, so the report reads as a sequence rather than a single complaint.
+           *
+           * 2026-09-09 (triple-check) — through `describeRun`, which is the ONE place that knows
+           * clip-scoped stages live under a different key. This built the sequence itself from
+           * `runs.get(key)`, so the moment locate became clip-scoped it silently dropped out of every
+           * diagnostic — the stage Tim had just called fundamental, missing from the event that
+           * exists to explain a bad read. Two readers of the same data and I updated one.
+           * [[two-owners-is-the-root-cause]]
+           */
+          seen: describeRun(key)?.stages || 'none',
           runKey: key.slice(-60),
         },
         'diag',

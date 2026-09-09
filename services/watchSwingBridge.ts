@@ -222,6 +222,10 @@ export async function initWatchSwingBridge(): Promise<boolean> {
   } catch {
     // Defensive — never throw across the bridge init.
     started = false;
+    // 2026-09-09 (triple-check) — symmetric with the caddie bridge: never leave a claim behind on a
+    // failed init. The window here is narrow, but two bridges doing the same job differently is what
+    // produced today's clashes in the first place.
+    void releaseWatchDataLayer('swing').catch(() => {});
     return false;
   }
 }

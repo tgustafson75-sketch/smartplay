@@ -43,21 +43,42 @@ const holders = new Set<string>();
  * Register the inbound listener on behalf of `holder`. Idempotent per holder.
  * Resolves false when there is no native module (web, or a build without the watch target).
  */
+/**
+ * In-flight `start()`, shared by everyone who arrives while it is running.
+ *
+ * 2026-09-09 (triple-check, a defect in my own hours-old code) — without this, the SECOND acquirer
+ * returned `true` the moment it saw a non-empty holder set, while the first was still awaiting
+ * `start()`. If that start then FAILED, the first rolled its own holder back and the second was left
+ * registered as a holder with no native listener behind it — `isWatchDataLayerListening()` reporting
+ * true while nothing was listening. That lie is load-bearing now: the swing bridge consults it to
+ * decide whether to clear the connected flag, so one failed start would have left Settings claiming
+ * a watch that was not there and no inbound path to correct it.
+ *
+ * Everyone awaits the same attempt and gets the same answer.
+ */
+let starting: Promise<boolean> | null = null;
+
 export async function acquireWatchDataLayer(holder: string): Promise<boolean> {
   if (!NativeMod) return false;
-  const first = holders.size === 0;
   holders.add(holder);
-  if (!first) return true;
-  try {
-    await NativeMod.start();
-    devLog(`[watchDataLayer] listening (first holder: ${holder})`);
-    return true;
-  } catch (e) {
-    // Roll the holder back so a later acquire genuinely retries rather than assuming we are live.
-    holders.delete(holder);
-    devLog(`[watchDataLayer] start failed: ${String(e)}`);
-    return false;
-  }
+  if (starting) return starting;      // a start is in flight — share its outcome
+  if (holders.size > 1) return true;  // already listening from an earlier, settled acquire
+  starting = (async () => {
+    try {
+      await NativeMod.start();
+      devLog(`[watchDataLayer] listening (first holder: ${holder})`);
+      return true;
+    } catch (e) {
+      // Nobody is listening, so NOBODY may believe they are — clear every holder that joined while
+      // this attempt was in flight, not just the one that started it.
+      holders.clear();
+      devLog(`[watchDataLayer] start failed: ${String(e)}`);
+      return false;
+    } finally {
+      starting = null;
+    }
+  })();
+  return starting;
 }
 
 /**

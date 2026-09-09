@@ -2988,3 +2988,44 @@ The native module is **mocked** in that gate rather than absent: without one, `a
 short-circuits and the refcount never populates, so the test would assert nothing while passing.
 
 Health: **tsc 0 · jest 2904/2904 (259 suites) · sim 968/968 · lint 0 errors**. JS/TS only.
+
+
+### Triple-check pass #2 — 2026-09-09 (Tim: "you know the rule, we must triple check all work")
+
+Six defects, **all six in my own work from today**, which is the point of the exercise. Ordered by
+what they would have cost.
+
+1. **The pose gate drew the WRONG SWING'S ARC.** The club effect's new wait bailed with a bare
+   `return`, leaving `clubArcPoints` holding the previous swing's path. Selecting swing 3 with no
+   cached answer kept drawing swing 1's clubhead over it until pose settled — a wrong arc presented
+   as confidently as a right one. The old code cleared unconditionally on its way to detection; the
+   new gate had to as well, and making the wait *longer* made it visible. Exactly the class the
+   08-09 audit fixed for fault heat ("painting swing-1's fault on swing-3's body is a visible lie").
+2. **`checkOrder` silently dropped `locate` from every diagnostic.** It built its own sequence from
+   `runs.get(key)`; the moment locate became clip-scoped it vanished from the event that exists to
+   explain a bad read — the stage Tim had *just* called fundamental. `describeRun` was updated for
+   scope and its twin was not. Now built through `describeRun`, one owner.
+3. **A failed `start()` left holders believing they were listening.** The second acquirer returned
+   `true` on seeing a non-empty holder set while the first was still awaiting `start()`; if that
+   start failed, the first rolled back its own holder and the second stayed registered with no
+   listener behind it. `isWatchDataLayerListening()` is load-bearing now — the swing bridge asks it
+   before clearing the connected flag — so the lie would have left Settings claiming a watch nobody
+   could hear. Acquirers share one in-flight start and a failure clears every holder.
+4. **`initWatchCaddieBridge` leaked its claim on failure.** `acquire` runs first in the try block, so
+   anything throwing after it left 'caddie' held forever: the native listener could never be removed
+   and the same flag lied. Released on the failure path; the swing bridge made symmetric, because two
+   bridges doing one job differently is what produced yesterday's clashes.
+5. **My yardage trace would have evicted the evidence.** roundTrace is a **2000-row ring buffer**; an
+   18s tick would have spent ~900 rows of a 4.5-hour round on "yardage sent, nothing wrong", pushing
+   out the GPS/voice/shot rows that diagnose something. Failures still trace every time — they are
+   rare and each one is the answer; success traces only when the numbers change.
+6. Bonus, checked and found sound: `clipKeyOf` on a uri containing pipes, `unmetDeps` after the scope
+   change, the `markDurable` release on both persist paths, and no double-report when the on-device
+   locate falls through to the network one (the second overwrites with the better answer).
+
+### Gates extended (5 new assertions, all verified to fail on `f8ee9c06`)
+The stale-arc clear, locate appearing in the out-of-order event, a failed start leaving nobody
+holding, both bridges releasing on init failure, and the trace-on-change rule.
+
+Health: **tsc 0 · jest 2910/2910 (259 suites) · sim 968/968 · lint 0 errors**. JS/TS only.
+Device verification remains Tim's gate; branch remains UNMERGED while builds are in review.

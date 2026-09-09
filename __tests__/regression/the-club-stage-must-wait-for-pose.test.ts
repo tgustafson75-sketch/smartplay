@@ -35,7 +35,13 @@ describe('the club stage waits for pose', () => {
   });
 
   it('the club effect refuses to run until the pose stage has settled for this clip + swing', () => {
-    expect(sm).toContain('if (poseAttemptKey !== `${clipUri}|${selectedSwing}`) return;');
+    expect(sm).toContain('if (poseAttemptKey !== `${clipUri}|${selectedSwing}`)');
+  });
+
+  it('CLEARS the arc while it waits — a bare return kept drawing the previous swing’s clubhead', () => {
+    // 2026-09-09 triple-check: the first version of this gate bailed without clearing, so selecting
+    // swing 3 with no cached answer drew swing 1's arc over it until pose settled.
+    expect(sm).toContain('if (poseAttemptKey !== `${clipUri}|${selectedSwing}`) { setClubArcPoints(null); return; }');
   });
 
   it('pose releases it from a `finally`, so a FAILED pose does not strand the arc forever', () => {

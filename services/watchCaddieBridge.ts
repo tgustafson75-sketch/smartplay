@@ -74,6 +74,8 @@ let tapSub: { remove: () => void } | null = null;
 let commandSub: { remove: () => void } | null = null;
 let unsubRound: (() => void) | null = null;
 let yardageTimer: ReturnType<typeof setInterval> | null = null;
+/** Last yardage actually put on the wire, so an unchanged repeat does not spend a trace row. */
+let lastYardageSent = '';
 let started = false;
 
 export function isWatchCaddieBridgeAvailable(): boolean {
@@ -147,7 +149,23 @@ export async function pushYardageToWatch(): Promise<void> {
     // A delivered outbound message proves the round trip just as well as an inbound one does, and
     // the watch app may have been running before we started listening for its `hello`.
     markWatchAlive();
-    traceWatch('yardage_sent', { hole: y.hole_number ?? null, middle: y.middle ?? null });
+    /**
+     * 2026-09-09 (triple-check, my own trace from earlier today) — SUCCESS IS TRACED ON CHANGE ONLY.
+     *
+     * roundTrace is a 2000-row RING BUFFER that only records while a round is traced. This tick runs
+     * every 18s, so a 4.5-hour round would have spent ~900 rows — nearly half the buffer — on
+     * "yardage sent, nothing wrong", evicting the GPS, voice and shot rows that actually diagnose
+     * something. A diagnostic that pushes the evidence out of the log is worse than no diagnostic,
+     * which is the same lesson as the 08-31 `analysis_error` vs `diag` split.
+     *
+     * FAILURES still trace every single time — they are rare, and each one is the answer. Success
+     * traces when the numbers change, which is what "the yardage is updating" actually looks like.
+     */
+    const sentKey = `${y.hole_number}|${y.front ?? ''}|${y.middle ?? ''}|${y.back ?? ''}`;
+    if (sentKey !== lastYardageSent) {
+      lastYardageSent = sentKey;
+      traceWatch('yardage_sent', { hole: y.hole_number ?? null, middle: y.middle ?? null });
+    }
   } catch (e) {
     traceWatch('yardage_error', { reason: String(e).slice(0, 120) });
     devLog('[watchCaddieBridge] pushYardage failed: ' + String(e));
@@ -233,6 +251,15 @@ export async function initWatchCaddieBridge(): Promise<boolean> {
   } catch (e) {
     devLog('[watchCaddieBridge] init failed: ' + String(e));
     started = false;
+    /**
+     * 2026-09-09 (triple-check, my own code from an hour ago) — RELEASE THE CLAIM WE MAY ALREADY
+     * HOLD. `acquireWatchDataLayer` runs first in this try block, so anything throwing after it left
+     * the 'caddie' holder registered forever: the native listener could never be removed, and
+     * `isWatchDataLayerListening()` reported true for a bridge that had failed to start. The swing
+     * bridge now consults that to decide whether to clear the connected flag, so a single failed
+     * init would also have left Settings claiming a watch nobody was listening to.
+     */
+    void releaseWatchDataLayer('caddie').catch(() => {});
     return false;
   }
 }
@@ -256,6 +283,7 @@ export async function stopWatchCaddieBridge(): Promise<void> {
     /* no-op */
   } finally {
     voiceSub = null; tapSub = null; commandSub = null; unsubRound = null; yardageTimer = null; emitter = null;
+    lastYardageSent = '';   // a new session must re-trace its first send, not inherit the old key
     started = false;
   }
 }
