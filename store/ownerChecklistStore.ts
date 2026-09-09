@@ -88,10 +88,10 @@ const SEED: Omit<ChecklistItem, 'done' | 'doneAt'>[] = [
     detail: 'With capture running on the watch, take a swing. It should appear tagged to the hole in View Hole and the round recap.',
   },
   {
-    id: 'ota-after-review',
-    group: 'ship',
-    title: 'Publish the JS fixes once review clears',
-    detail: 'npm run ota:production. The preflight runs first and refuses if native moved without a runtimeVersion bump. Everything on main is JS-only, so it passes.',
+    id: 'confirm-ota-landed',
+    group: 'field',
+    title: 'Confirm the OTA actually landed',
+    detail: 'This reminder appearing IS the proof — it only exists in the update published 09-09 (group d0527ffc). If you are reading it, build 26 is running the new JS. Tick and move on.',
   },
   {
     id: 'watch-native-branch',
