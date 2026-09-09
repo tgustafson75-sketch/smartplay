@@ -2658,3 +2658,64 @@ across an await, now single-flighted.
 - Gleneagles King's/Queen's still share one coordinate — no per-layout geometry exists to split them.
 
 **Waiting on the app stores.**
+
+
+---
+
+## Day N+2 — 2026-09-08 / 09-09 — three crashes, one media chain
+
+Branch: `claude/android-crashes-voice-failures-tjsmho` (3 commits).
+Health at close: **tsc 0 · jest 2848/2848 (254 suites) · sim 968/968 · lint 1 pre-existing error**
+(`app/paywall.tsx:271`). Note: `api/messages.ts:29` now shows one pre-existing tsc error, present on
+HEAD and untouched all session.
+
+### Shipped
+- **Recap "Maximum update depth exceeded" (`d6b40d5`).** Third time on that screen, same cause all
+  three: a Zustand selector that ALLOCATES, so useSyncExternalStore's mount check never matches and
+  forceStoreRerender loops. The offender was `clipShots` (09-03, `.filter()` inside the selector);
+  `useCallback` stabilises the function, not the value. The two earlier fixes each repaired one
+  selector and left the shape — three selectors that re-found the same record collapsed into one.
+- **Drill videos never played (`d6b40d5`).** Not rights, not the hardcoded ids. Both embedding
+  screens gated on `UIManager.getViewManagerConfig('RNCWebView')` — the OLD architecture's question.
+  `newArchEnabled: true` → bridgeless → that returns null for every component (verified against RN
+  v0.81.5 source; RN's own error text says to call `hasViewManagerConfig`). So they skipped the
+  WebView and opened `youtube.com/embed/<id>` in the in-app browser, which YouTube refuses to serve,
+  then popped back — exactly the 09-08 route trail.
+- **SmartMotion record crash (`086d6cf`).** `onDeviceLocate` (09-01) imported expo-video-thumbnails
+  RAW, bypassing `utils/videoThumbnail`, the single-flight queue that exists because concurrent
+  MediaMetadataRetrievers are an uncatchable SIGSEGV. Wired into analyzeSwing for every caller the
+  same day, so the stop-recording handoff set clipUri (the `<Video>` mounts) and then ran 12
+  unserialized reads on that file. Two more bypasses fixed: `swingShare`, library thumbnail backfill.
+- **Pose and trace read the player's file (`20ed507`).** clubPath's 07-30 private-copy fix and the
+  08-09 shared-pool migration were never finished: `extractKeyFrames`, `extractCoarseFrames` and
+  `onDeviceLocate` decoded the ORIGINAL while the review `<Video>` (`isLooping` + `shouldPlay`)
+  held it, and `ballPath` made a redundant second full copy. All on the pooled copy now — cheaper,
+  not dearer. Deleted `LONG_CLIP_FRACTIONS` (superseded 06-09).
+- **`speak_superseded` now names its culprit (`d6b40d5`).** The 09-03 note said the proof would be
+  `preemptedBy: 'route_change'`; the field was never recorded. It is now. No behaviour change.
+
+### Gates added (each verified to FAIL on the pre-fix code)
+`a-selector-must-not-build-what-it-returns` · `a-native-component-check-must-work-on-the-new-architecture`
+· `one-native-media-reader-at-a-time` · `an-analysis-extractor-never-decodes-the-players-file`.
+The 12 `useShallow` call sites are correct and excluded by the first.
+
+### Verified on device (Z Fold)
+**Nothing.** All four fixes are code-level with shape-locked tests; the crash class is native and on
+hardware this session cannot reach. Tim's verification is the gate.
+
+### Open / carried
+- **Sparse club arc is NOT closed.** The private copy is a real cause of empty extraction, but
+  whether it is the ONLY one is unsettled — `f44f06d`'s `rejected`/`detected`/`gate` fields have not
+  come back from a device yet, and they are what separates "the model could not see the head" from
+  "a gate threw away eight good points". Next field report on the arc should carry them.
+- **Voice start/stop during recording** — left alone on Tim's instruction ("don't change voice path
+  to stop recording"). Tap-stop stays the chokepoint.
+- Not migrated to the pool, deliberately: `probeDurationMs` (3 bounded reads, not a sweep) and the
+  non-analysis readers (library backfill, tutorial-upload, puttFrameExtractor, feelReconcile,
+  videoUpload, swingShare) — none run against the looping review surface.
+- `api/messages.ts:29` tsc error, pre-existing and untouched.
+
+### Note
+Repo arrived as a 50-commit shallow clone, which made "find when it last worked" impossible for the
+first half of the session. `git fetch --unshallow` (3004 commits) is what turned the SmartMotion
+crash from four competing hypotheses into one archaeology answer. Do that first next time.

@@ -8,6 +8,23 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+> ### ⚠️ LATEST — 2026-09-09. Three crashes fixed; all await device verification.
+>
+> Branch `claude/android-crashes-voice-failures-tjsmho`, 3 commits, unmerged.
+> **Recap crash** (allocating Zustand selector, third recurrence), **drill videos never played**
+> (`getViewManagerConfig` returns null under the new architecture, so no WebView was ever mounted),
+> **SmartMotion record crash** (`onDeviceLocate` bypassed the single-flight media queue AND read the
+> file ExoPlayer was looping), **pose + trace** finished onto the shared private-copy pool that
+> clubPath has used since 07-30.
+>
+> **Nothing here is device-verified.** The crash class is native; the tests lock shape only.
+> **Still open:** whether the private copy is the ONLY cause of a sparse club arc — needs one field
+> report carrying `rejected`/`detected`/`gate` from `f44f06d`.
+> Voice start/stop during recording is deliberately unchanged (Tim: tap-stop stays).
+>
+> Detail: [SPRINT-LOG.md](SPRINT-LOG.md) → "Day N+2 — 2026-09-08 / 09-09".
+
+
 > ### ⚠️ LATEST — 2026-09-06 (later). Layer 0: remote kill switches are LIVE.
 >
 > Any optional feature can be turned off on a phone already in a player's pocket — no rebuild, no
