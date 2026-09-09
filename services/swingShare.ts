@@ -20,7 +20,10 @@
  * customers, and a fabricated stat on it would be the most expensive lie the product could tell.
  * [[illustration-data-points]]
  */
-import * as VideoThumbnails from 'expo-video-thumbnails';
+// 2026-09-09 — the single-flight media queue, not the raw module. Same reason as onDeviceLocate:
+// one native frame reader at a time app-wide, or Android's MediaMetadataRetriever takes the process
+// down. A share can be requested while a swing is being analysed or played.
+import * as VideoThumbnails from '../utils/videoThumbnail';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { getApiBaseUrl, appKeyHeaders } from './apiBase';
 import { resolveClipUri } from './videoUpload';

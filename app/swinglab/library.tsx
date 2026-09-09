@@ -229,7 +229,11 @@ export default function SwingLibrary() {
           // the entry already carries thumbnail_uri, so it won't regenerate.
           if (!thumbOk && videoOk && playableUri) {
             try {
-              const VT = await import('expo-video-thumbnails');
+              // 2026-09-09 — the single-flight queue, not the raw package. This backfill decodes
+              // Tim's ~180MB 60fps clips while the library's own cards may be reading the same
+              // files; unserialized MediaMetadataRetriever instances are the native SIGSEGV that
+              // kills the process outright. utils/videoThumbnail is a drop-in re-export.
+              const VT = await import('../../utils/videoThumbnail');
               // 2026-06-12 — robust for LARGE 60fps clips (Tim's are ~180MB): the first
               // frame (time 0) is the cheapest/most reliable to decode; only fall back to
               // a mid-clip frame if t=0 fails. Lower quality keeps the decode fast.

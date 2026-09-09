@@ -24,7 +24,27 @@
  * measured timing may narrow a search, and may never manufacture evidence.
  * [[smartmotion-clubhead-trace-root-cause]] [[speed-is-the-wow]]
  */
-import * as VideoThumbnails from 'expo-video-thumbnails';
+/**
+ * 2026-09-09 (Tim — "open smartmotion and record crashes the app… it did work before").
+ *
+ * THE QUEUE, NOT THE RAW MODULE. utils/videoThumbnail is a drop-in re-export that puts every native
+ * frame read app-wide on ONE chain, because Android's MediaMetadataRetriever is not safe to run as
+ * several concurrent instances against a file -- least of all one ExoPlayer is decoding for playback.
+ * That combination is a native OOM/SIGSEGV which kills the process to the launcher and cannot be
+ * caught from JS, which is why no crash for this screen ever reached the issue log.
+ *
+ * This module imported `expo-video-thumbnails` directly and so was never on that chain. The loop
+ * below is serial WITHIN ITSELF, and the note there says "the media chain serializes them anyway" --
+ * it did not, for these reads. Being serial with yourself is not the property that matters; the
+ * crash is concurrency with the OTHER readers (poseDetection, clubPath, ballPath, ballDeparture,
+ * feelReconcile) and with the player.
+ *
+ * It went from harmless to fatal on 09-01, when ad3d1216 wired the on-device locate into
+ * analyzeSwing for every caller: SmartMotion's stop-recording handoff sets clipUri (the <Video>
+ * mounts and starts decoding) and then runs twelve unserialized retriever reads on that same file.
+ * One import; nothing else about the locate changes.
+ */
+import * as VideoThumbnails from '../../utils/videoThumbnail';
 import { wristCentroid, deriveSwingAnchors, type MotionSample } from './poseMotion';
 
 /** Enough to resolve a swing's shape; few enough to stay inside a couple of seconds. */
@@ -85,8 +105,8 @@ export async function locateSwingWindowOnDevice(
   const deadline = Date.now() + BUDGET_MS;
   for (const tMs of times) {
     if (Date.now() > deadline) break;   // spend what is left on the answer, not on more frames
-    // Serial on purpose: concurrent thumbnail reads on one file are the SIGSEGV class this app has
-    // already been bitten by, and the media chain serializes them anyway.
+    // Serial on purpose, AND on the global media chain (see the import note) — the second half is
+    // what actually holds off the other readers and the player.
     let frame = null;
     try {
       const thumb = await VideoThumbnails.getThumbnailAsync(clipUri, { time: tMs, quality: 0.6 });
