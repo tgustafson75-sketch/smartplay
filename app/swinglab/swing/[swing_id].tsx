@@ -759,6 +759,14 @@ export default function SwingDetail() {
     });
     const { startMs, endMs } = narrowClubPathWindow(rawStartMs, rawEndMs, anchorMs);
     if (!(endMs > startMs)) { setClubArcPoints(null); return; }
+    // 2026-09-09 — `anchor` had no reporter anywhere. It decides which frames the arc is sampled
+    // from, so an unanchored run and a mis-seen clubhead used to arrive looking identical.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pipe = require('../../../services/swing/analysisPipeline') as typeof import('../../../services/swing/analysisPipeline');
+      pipe.noteStage(pipe.runKeyFor(shot.clipUri, startMs, endMs), 'anchor',
+        anchorMs != null ? 'ok' : 'empty', { anchorMs, method: shot.detectionMethod ?? null });
+    } catch { /* observation only */ }
     // Dedupe: a stable window (uri+start+end) that SUCCEEDED runs once. The key is set only after a
     // real result below, so an extraction aborted by playback retries the next time we're paused.
     const runKey = `${shot.clipUri}|${Math.round(startMs)}|${Math.round(endMs)}`;
@@ -1227,6 +1235,12 @@ export default function SwingDetail() {
             rawStartMs: wStart,
             rawEndMs: wEnd,
           });
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            const pipe = require('../../../services/swing/analysisPipeline') as typeof import('../../../services/swing/analysisPipeline');
+            pipe.noteStage(pipe.runKeyFor(analyzeUri, wStart, wEnd), 'anchor',
+              arcAnchorMs != null ? 'ok' : 'empty', { anchorMs: arcAnchorMs, method: selShot.detectionMethod ?? null });
+          } catch { /* observation only */ }
           const arc = await detectClubPath({ videoUri: analyzeUri, startMs: wStart, endMs: wEnd, impactMs: arcAnchorMs, shouldAbort: () => cancelled });
           // 2026-08-06 (audit) — >= 3 to match the loosened MIN_ARC_POINTS everywhere else; the old >= 4 here
           // would drop a valid 3-point arc and persist []. (Dead today under LIBRARY_AUTO_PROCESS=false, but

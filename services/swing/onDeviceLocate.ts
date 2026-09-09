@@ -82,7 +82,37 @@ export type LocatedWindow = { startSec: number; endSec: number; swingTimeSec: nu
  * the device cannot see enough of the body, so the caller falls back to the network locate exactly
  * as it did before. A null here costs nothing; a fabricated window would cost the read.
  */
+/**
+ * 2026-09-09 (Tim: "locate and anchor are fundamental though") — REPORT THE LOCATE, FROM THE LOCATE.
+ *
+ * Wired here rather than at the call sites because there are eight of those across four files and a
+ * hand-list has already been wrong twice this sprint. A mechanism reports itself, so a caller added
+ * tomorrow is covered without anyone remembering. The wrapper is the whole reporting surface: the
+ * implementation below is untouched and cannot be made slower or more fragile by observation.
+ */
 export async function locateSwingWindowOnDevice(
+  clipUri: string,
+  durationMs: number,
+): Promise<LocatedWindow | null> {
+  try {
+    const out = await locateSwingWindowOnDeviceImpl(clipUri, durationMs);
+    try {
+      const { noteLocate } = await import('./analysisPipeline');
+      noteLocate(clipUri, out ? 'ok' : 'empty', out
+        ? { via: 'on_device', startSec: Math.round(out.startSec * 100) / 100, endSec: Math.round(out.endSec * 100) / 100 }
+        : { via: 'on_device' });
+    } catch { /* observation must never break a locate */ }
+    return out;
+  } catch (e) {
+    try {
+      const { noteLocate } = await import('./analysisPipeline');
+      noteLocate(clipUri, 'failed', { via: 'on_device' });
+    } catch { /* ignore */ }
+    throw e;
+  }
+}
+
+async function locateSwingWindowOnDeviceImpl(
   clipUri: string,
   durationMs: number,
 ): Promise<LocatedWindow | null> {

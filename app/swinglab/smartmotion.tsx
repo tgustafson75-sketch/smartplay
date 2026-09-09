@@ -1953,6 +1953,23 @@ export default function SmartMotion() {
     // effectiveMode, not environmentMode: it is forced to 'course' during a round, which is
     // exactly the case Tim is describing — alone in a fairway, nobody else's ball near the mic.
     const segToleranceMs = anchorToleranceMs(seg.confidence, effectiveMode);
+    /**
+     * 2026-09-09 (Tim: "locate and anchor are fundamental though") — REPORT THE ANCHOR.
+     *
+     * This is where the anchor for this swing is DECIDED, and it decides which frames the arc is
+     * sampled from. With one, the sampler clusters a dense band on the strike; without one it
+     * spreads across the whole back half and runs into the follow-through — the "arc looks like it's
+     * behind the user" report of 09-01. That is a completely different failure from "the model could
+     * not see the clubhead", and until now the two arrived looking identical.
+     *
+     * `empty` when there is no anchor, which is honest rather than alarming: the sampler still runs,
+     * just unanchored, and the log now says so.
+     */
+    try {
+      noteStage(stageKey, 'anchor', segStrikeMs != null ? 'ok' : 'empty', {
+        strikeMs: segStrikeMs, toleranceMs: segToleranceMs, confidence: seg.confidence ?? null,
+      });
+    } catch { /* observation only */ }
     void detectClubPath({ videoUri: clipUri, startMs: seg.startMs, endMs: seg.endMs, impactMs: segStrikeMs, toleranceMs: segToleranceMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(poseFrames) })
       .then((r) => {
         if (cancelled) return;
@@ -2971,6 +2988,12 @@ export default function SmartMotion() {
                     rawStartMs: poseWindow.startMs,
                     rawEndMs: poseWindow.endMs,
                   });
+                  // 2026-09-09 — the persist path decides its own anchor, so it reports its own.
+                  try {
+                    noteStage(runKeyFor(clipUri, poseWindow.startMs, poseWindow.endMs), 'anchor',
+                      anchorMs != null ? 'ok' : 'empty',
+                      { anchorMs, source: impactFrame?.positionSource ?? null, via: 'pose_impact' });
+                  } catch { /* observation only */ }
                   const arc = await detectClubPath({ videoUri: clipUri, startMs: poseWindow.startMs, endMs: poseWindow.endMs, impactMs: anchorMs, shouldAbort: () => false });
                   const store = useSwingSessionStore.getState();
                   if (arc && arc.points.length >= 3) {

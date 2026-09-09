@@ -935,7 +935,34 @@ function logLocate(stage: string, details: Record<string, unknown>): void {
  * wide-spread sampling). Best-effort: its own 15s timeout, never throws,
  * never trips the analysis breaker.
  */
+/**
+ * 2026-09-09 — the network single-swing locate reports itself. See onDeviceLocate for why the
+ * reporting lives on the mechanism and not on its callers.
+ */
 export async function locateSwingWindow(
+  clipUri: string,
+  durationMs: number,
+  opts?: { onAbort?: (cause: 'dead_host' | 'ceiling' | 'unknown') => void },
+): Promise<{ startSec: number; endSec: number; swingTimeSec: number } | null> {
+  try {
+    const out = await locateSwingWindowImpl(clipUri, durationMs, opts);
+    try {
+      const { noteLocate } = await import('./swing/analysisPipeline');
+      noteLocate(clipUri, out ? 'ok' : 'empty', out
+        ? { via: 'network', startSec: Math.round(out.startSec * 100) / 100, endSec: Math.round(out.endSec * 100) / 100 }
+        : { via: 'network' });
+    } catch { /* observation only */ }
+    return out;
+  } catch (e) {
+    try {
+      const { noteLocate } = await import('./swing/analysisPipeline');
+      noteLocate(clipUri, 'failed', { via: 'network' });
+    } catch { /* ignore */ }
+    throw e;
+  }
+}
+
+async function locateSwingWindowImpl(
   clipUri: string,
   durationMs: number,
   /**
@@ -1070,7 +1097,36 @@ const LOCATE_SWINGS_TIMEOUT_MS = 30_000;
  * empty — caller then falls back to single-swing localization). Best-effort:
  * own timeout, never throws, never trips the analysis breaker.
  */
+/**
+ * 2026-09-09 — the multi-swing range locate reports itself. This is the one that matters most on the
+ * range: it decides HOW MANY swings the session has, and every per-swing window downstream is carved
+ * from its answer. An over- or under-count here is invisible later and looks like bad analysis.
+ */
 export async function locateSwings(
+  clipUri: string,
+  durationMs: number,
+): Promise<Array<{ timeSec: number; confidence: 'high' | 'low' }>> {
+  try {
+    const out = await locateSwingsImpl(clipUri, durationMs);
+    try {
+      const { noteLocate } = await import('./swing/analysisPipeline');
+      noteLocate(clipUri, out.length > 0 ? 'ok' : 'empty', {
+        via: 'range',
+        found: out.length,
+        low: out.filter((sw) => sw.confidence === 'low').length,
+      });
+    } catch { /* observation only */ }
+    return out;
+  } catch (e) {
+    try {
+      const { noteLocate } = await import('./swing/analysisPipeline');
+      noteLocate(clipUri, 'failed', { via: 'range' });
+    } catch { /* ignore */ }
+    throw e;
+  }
+}
+
+async function locateSwingsImpl(
   clipUri: string,
   durationMs: number,
 ): Promise<Array<{ timeSec: number; confidence: 'high' | 'low' }>> {

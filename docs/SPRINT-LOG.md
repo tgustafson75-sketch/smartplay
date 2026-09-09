@@ -2851,3 +2851,48 @@ observer wiring, key parity with poseAnalysisApi, and both halves of the warm fi
 
 Health at close: **tsc 0 · jest 2867/2867 (256 suites) · sim 968/968 · lint 0 errors**.
 Device verification remains Tim's gate; branch remains UNMERGED while builds are in review.
+
+
+### locate + anchor — 2026-09-09 (Tim: "locate and anchor are fundamental though")
+
+He was right, and the previous entry's deferral was wrong. I had called the key circular — a run is
+`(clipUri, startMs, endMs)` and locate PRODUCES startMs/endMs — and stopped there. The observation
+was real; the conclusion was not. It is **scope**, not circularity: locate searches a whole clip and
+finds the window(s) once, for every swing in it; every stage after it runs per window.
+
+It was also the worst gap to have accepted. **If locate returns the wrong seconds, every stage after
+it measures the wrong part of the swing and reports a confident, clean, completely wrong read** —
+indistinguishable from "the model is bad" from outside. Same for anchor: an unanchored sampler
+spreads its dense band into the follow-through (the 09-01 "arc looks like it's behind the user"),
+which arrived looking exactly like a clubhead the model could not see. Two opposite fixes, one
+symptom, no way to tell them apart.
+
+**`STAGE_SCOPE`** now models it. A clip-scoped stage records against the clip alone; a window-scoped
+dependent resolves that dep against the clip. Callers pass whatever key they have — `runKeyFor(clip,
+0, 0)` before a window exists — and the routing puts it where it belongs. `describeRun` merges the
+clip-scoped stage back in, so a run reads as one sequence: `locate:ok → anchor:ok → pose:ok →
+club:empty`.
+
+**Reporting lives on the MECHANISMS, not the call sites.** There are eight locate call sites across
+four files; a hand-list has been wrong twice this sprint. `locateSwingWindowOnDevice`,
+`locateSwingWindow` and `locateSwings` each split into a reporting wrapper + `…Impl`, so ok, empty
+AND throw all report, and a caller added tomorrow is covered by nobody remembering anything.
+`locateSwings` carries `found` + `low` — it decides how many swings the session has, and every
+window downstream is carved from that answer.
+
+Anchor is reported at the four sites that DECIDE one (two in SmartMotion, two in swing-detail),
+enforced by a derived scan rather than a list.
+
+### Gate added: `locate-and-anchor-must-report`
+Scope semantics, the shared-locate-per-clip property, empty/failed not satisfying dependents,
+`clipKeyOf` surviving a uri containing pipes, plus derived scans over both locate mechanisms and
+every anchor decider. On `2494a237` it does not compile (the scope model did not exist) and the tree
+had **0** locate reporters, **0** anchor reporters, **0** `noteLocate` calls.
+
+**The scan flagged `services/swing/clubPath.ts` on its first run — a false positive from PROSE**
+naming `impactAnchorMs` in a comment. run-sim.ts learned this exact lesson on 08-31; third time this
+sprint. Comments are now stripped before scanning: a file's account of itself is not the file doing
+the thing.
+
+Health: **tsc 0 · jest 2881/2881 (257 suites) · sim 968/968 · lint 0 errors**. JS/TS only — no
+native, no app.json/eas.json/deps. Unmerged; device verification remains Tim's gate.
