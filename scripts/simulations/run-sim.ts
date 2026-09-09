@@ -2737,7 +2737,9 @@ check('Music portal: "play [song]" → kid-safe search → clean in-app player (
     const safe = detectPlaySongRequest('play it safe');
     const api = read('api/youtube-search.ts');
     const svc = read('services/songPortal.ts');
-    const screen = read('app/jukebox.tsx');
+    // Comments stripped: the archaeology note in jukebox.tsx names the dead guard it removed, and a
+    // check that reads prose is not checking the code.
+    const screen = read('app/jukebox.tsx').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
     const voice = read('hooks/useVoiceCaddie.ts');
     const vercel = read('vercel.json');
     return (
@@ -2747,14 +2749,15 @@ check('Music portal: "play [song]" → kid-safe search → clean in-app player (
       /videoEmbeddable:\s*'true'/.test(api) && /\/api\/youtube-search/.test(vercel) &&
       // client search via the spine
       /getApiBaseUrl\(\)\}\/api\/youtube-search\?q=/.test(svc) &&
-      // player is OTA-safe: native webview when present, in-app browser fallback otherwise
-      /UIManager\.getViewManagerConfig\?\.\('RNCWebView'\)/.test(screen) &&
-      /WebBrowser\.openBrowserAsync/.test(screen) &&
+      // 2026-09-09 — this check USED to assert the OTA guard was present. The guard
+      // (UIManager.getViewManagerConfig('RNCWebView')) is permanently null under the New
+      // Architecture, so it pinned a player that never mounted. It asserts the opposite now.
+      !/getViewManagerConfig/.test(screen) && /<WebView/.test(screen) &&
       // wired into the voice path (short-circuits the brain with a spoken confirm)
       /tryPlaySong\(message\)/.test(voice)
     );
   })(),
-  'play-song searches the kid-safe server endpoint and opens the clean player; OTA-safe webview fallback; golf "play" phrases excluded');
+  'play-song searches the kid-safe server endpoint and opens the clean embedded player (no dead OTA guard in front of it); golf "play" phrases excluded');
 
 check('Quick how-to: first-time tutorials + on-demand "how do I use this?" share one source',
   // 2026-06-13 (Tim) — quick orientation (text + caddie narration) on the doing surfaces,

@@ -8,7 +8,25 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
-> ### ⚠️ LATEST — 2026-09-06 (later). Layer 0: remote kill switches are LIVE.
+> ### ⚠️ LATEST — 2026-09-09. The drill videos were never handed to a player.
+>
+> "YouTube drill videos still not playing" — *still*, after three rounds of fixes to the player
+> document. All three were correct; none ever ran. `/drill-video` and `/jukebox` gated their
+> `<WebView>` on `!!UIManager.getViewManagerConfig?.('RNCWebView')`, a 2026-06-13 OTA guard that has
+> been permanently **false** since: `newArchEnabled: true` on RN 0.81 is bridgeless-only, where
+> `getViewManagerConfig` returns null unless the legacy interop layer is on (it isn't), and webview
+> 13.15 registers `RNCWebView` in the **Fabric** registry that legacy view-manager constants never
+> see. Every tap fell to a Custom Tab on the bare embed URL and popped the screen — no IFrame API,
+> no watch points, and the "Try this drill in Smart Motion" handoff never rendered either.
+>
+> Fixed by **deleting** the guard and its fallback on both screens (net −57/+52). The sim check that
+> asserted the guard was *present* now asserts the opposite. New gate:
+> `__tests__/regression/the-embedded-player-is-actually-mounted.test.ts`.
+>
+> **NOT VERIFIED ON DEVICE.** Needs a dev-client run: open a drill → video plays embedded, in-app,
+> with the drill CTA visible below it. Green: tsc, lint, jest 2842/2842, sim 968/968.
+
+> ### 2026-09-06 (later). Layer 0: remote kill switches are LIVE.
 >
 > Any optional feature can be turned off on a phone already in a player's pocket — no rebuild, no
 > OTA, no store review. Edge Config `smartplay-flags` → `GET api.smartplaycaddie.com/flags` →

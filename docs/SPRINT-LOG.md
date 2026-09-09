@@ -2658,3 +2658,82 @@ across an await, now single-flighted.
 - Gleneagles King's/Queen's still share one coordinate — no per-layout geometry exists to split them.
 
 **Waiting on the app stores.**
+
+---
+
+## Day N+2 — 2026-09-09 — the drill videos were never handed to a player
+
+### Shipped today
+
+**The YouTube drill videos did not play because the WebView was never mounted.**
+
+Tim's report was "YouTube drill videos still not playing" — *still*, after three rounds of fixes.
+Those three rounds all went into the player document (`services/youtubeEmbed.ts`: an `onError`
+handler, a 12s "the IFrame API never loaded" timeout, one shared builder replacing two drifted
+copies). Every one of them was correct. None of them ever executed.
+
+`/drill-video` and `/jukebox` both gated their `<WebView>` on:
+
+```
+const HAS_NATIVE_WEBVIEW = !!UIManager.getViewManagerConfig?.('RNCWebView');
+```
+
+Written 2026-06-13 for a real but temporary condition: an OTA JS update landing on an installed APK
+that predated `react-native-webview`. It has been permanently **false** since, for a reason that has
+nothing to do with whether the WebView is present:
+
+- `app.json` sets `newArchEnabled: true`, and RN 0.81 New Architecture is bridgeless-only. In
+  bridgeless mode `UIManager` resolves to `BridgelessUIManager`, whose `getViewManagerConfig`
+  returns `null` — and `console.error`s — unless the legacy ViewConfig interop layer is enabled.
+  Nothing in this repo enables it (`RN$LegacyInterop_UIManager_getConstants` appears nowhere).
+- It could not have helped anyway: webview 13.15 registers `RNCWebView` through
+  `codegenNativeComponent` → `NativeComponentRegistry.get`, i.e. the **Fabric** registry, which the
+  legacy view-manager constants never see. `hasViewManagerConfig()` is the bridgeless equivalent;
+  `getViewManagerConfig()` cannot answer this question at all.
+
+Verified against the installed `node_modules`, not from memory — RN 0.81.5's
+`BridgelessUIManager.js` line 268, and `react-native-webview` 13.15.0's
+`RNCWebViewNativeComponent.js`.
+
+So every tap fell to the fallback branch: a Custom Tab opened on the bare `youtube.com/embed` URL and
+the screen popped itself. No IFrame API → no `ended` event → no watch points, and on `/drill-video`
+the entire deck below the player — the instructor line and the **"Try this drill in Smart Motion"**
+handoff, the whole point of the video→drill loop — never rendered either. It was gated on the same
+constant.
+
+**The fix is a deletion.** Removed on both screens: `HAS_NATIVE_WEBVIEW`, the `UIManager` import, the
+`expo-web-browser` import and its fallback effect, the "Opening the video…" interstitial, and (in
+jukebox) the now-purposeless `embedUrl`. Net **−57/+52**, and most of the additions are the
+archaeology comment. The guard never protected anything: `react-native-webview` is imported
+statically at the top of both files, so a build without it fails at module load, not at render.
+
+**The sim was pinning the bug in place.** `run-sim.ts` had a check asserting the guard was
+*present* ("player is OTA-safe"). It now asserts the opposite, reading comment-stripped source so
+the note explaining the removal can't satisfy the check it's explaining.
+
+New gate: `__tests__/regression/the-embedded-player-is-actually-mounted.test.ts` — the player-HTML
+tests proved the document was correct, never that anything rendered it. This one asserts a `<WebView>`
+exists on both screens, no legacy view-manager lookup gates it, no browser fallback is left to
+swallow the video, autoplay props are intact, and the drill deck is tied to `videoId`.
+
+### Verified
+
+`npx tsc --noEmit` clean (one pre-existing unrelated error in `api/messages.ts`) ·
+`npx expo lint` clean on both files (one pre-existing error in `app/paywall.tsx`) ·
+jest **2842/2842** · sim **968/968**.
+
+### Open / carried
+
+- **NOT verified on device.** This needs a native dev-client run: open a drill → the video plays
+  embedded, in-app, with the "Try this drill in Smart Motion" button visible below it.
+- `expo-web-browser` now has zero importers in the app. Left in `package.json` — pulling an Expo
+  module changes the native build surface for no user-visible gain. Flag for a later dependency pass.
+- The 19 drill/instructor video ids are still hardcoded and unfiltered for embeddability. That is
+  now *survivable* rather than invisible — a 101/150 renders the owner's-choice message and a
+  "Find it on YouTube" button — but nothing checks them ahead of time.
+
+### Note
+
+Principle 5 earned its keep: three fix attempts on a recurring bug meant the fix belonged somewhere
+other than where the fixes were going. The tests all passed the whole time because they tested the
+thing that was correct.
