@@ -48,8 +48,29 @@ jobs:
 
           HITS=""
 
-          # ios/ and android/ — the native projects themselves.
+          # ios/ and android/ — the GENERATED native projects.
           echo "$CHANGED" | grep -qE '^(ios|android)/' && HITS="${HITS}native project dirs (ios/ or android/)"$'\n' || true
+
+          # 2026-09-09 (72-hour triple-check) — AND THE DIRECTORIES THIS REPO ACTUALLY KEEPS NATIVE
+          # CODE IN, which the original list missed entirely.
+          #
+          # `ios/` and `android/` are prebuild OUTPUT. The authored native source lives in
+          # android-native/ (WearSwingBridgeModule.kt, MetaWearablesFrameModule.kt),
+          # ios-native/ (.swift/.m), plugins/ (Expo config plugins that INJECT that code at prebuild),
+          # targets/ (the Apple Watch target) and wear-os-app/ (the Wear OS app). Every one of those
+          # is a native change, and every one of them would have sailed through this gate.
+          #
+          # That is not theoretical: the watch fixes named in the 09-09 log — a command path on the
+          # Data Layer module, a CapabilityClient listener — are android-native/ edits. This guard was
+          # the reason given for not shipping them by OTA, and it would not have stopped anyone.
+          #
+          # patches/ counts too: patch-package runs in postinstall with --error-on-fail and can patch
+          # native code inside node_modules.
+          echo "$CHANGED" | grep -qE '^(android-native|ios-native)/' && HITS="${HITS}authored native source (android-native/ or ios-native/)"$'\n' || true
+          echo "$CHANGED" | grep -qE '^plugins/' && HITS="${HITS}expo config plugins (inject native code at prebuild)"$'\n' || true
+          echo "$CHANGED" | grep -qE '^targets/' && HITS="${HITS}native targets (watch app)"$'\n' || true
+          echo "$CHANGED" | grep -qE '^wear-os-app/' && HITS="${HITS}Wear OS app (separate native binary)"$'\n' || true
+          echo "$CHANGED" | grep -qE '^patches/' && HITS="${HITS}patch-package patches (can patch native code)"$'\n' || true
 
           # app.json / app.config.* — plugins, permissions, entitlements, bundle ids.
           echo "$CHANGED" | grep -qE '^app\.(json|config\.(js|ts|cjs|mjs))$' && HITS="${HITS}app config (plugins / permissions / entitlements / bundle id)"$'\n' || true

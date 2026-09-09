@@ -3029,3 +3029,60 @@ holding, both bridges releasing on init failure, and the trace-on-change rule.
 
 Health: **tsc 0 · jest 2910/2910 (259 suites) · sim 968/968 · lint 0 errors**. JS/TS only.
 Device verification remains Tim's gate; branch remains UNMERGED while builds are in review.
+
+
+### 72-hour triple-check — 2026-09-09 (Tim: "triple check all work last 72 hours")
+
+28 commits in the window (09-06 21:00 → now). The 09-08 cloud session audited itself and the 09-09
+work was audited this morning, so this pass targeted the **16 commits from 09-06/07 that had never
+had an adversarial read**. Two real defects, both in guards that were believed to be protecting us.
+
+**1. The OTA guard watched the wrong directories.** `.github/workflows/ota-guard.yml` matched
+`^(ios|android)/` — which is prebuild OUTPUT. This repo's authored native source lives in
+`android-native/`, `ios-native/`, `plugins/` (Expo config plugins that inject native code at
+prebuild), `targets/` (the Apple Watch target) and `wear-os-app/`. **None were listed**, so a PR
+editing `android-native/WearSwingBridgeModule.kt` sailed through clean.
+
+Not theoretical: the two watch fixes named in this same log — a command path for `onWatchCommand`, a
+`CapabilityClient` listener — are edits to exactly that file, and this guard was the stated reason
+they could not ship by OTA. It would not have stopped anyone. `patches/` was missing too
+(patch-package runs in postinstall with `--error-on-fail` and can patch native code).
+
+Now derived by a test: any top-level directory containing `.kt/.java/.swift/.m/.gradle` sources must
+be named in the workflow, so a new one fails here rather than in a launch crash.
+
+**Still open, and it needs Tim's call:** the guard runs on `pull_request` only. `npm run ota:production`
+from a laptop never touches CI. Since that is how OTAs actually get published here, the guard protects
+the path nobody uses. A pre-publish check in the npm script would close it — not done, because it
+changes the deploy command.
+
+**2. "One event, one alert" assumed a lock it never took.** `ed15ed2b` fixed the 18-alert storm by
+persisting `sentIds` — correct, and not sufficient. Ids are added only AFTER the POST resolves, and
+nothing stopped a second call entering while the first was in flight. There are two triggers:
+`_layout.tsx` fires one on mount, and `scheduleIssueAutoSend` fires from seven store call sites on a
+4s debounce **with a 20s max-wait flush that bypasses the debounce**. A POST slower than 4s — a cold
+Lambda, a weak signal, exactly the conditions that generate issues worth sending — meant the second
+call recomputed `unsent` from an unchanged `sentIds` and re-sent every row plus a second Sentry
+feedback each. The storm that commit set out to end, reachable on any slow network.
+
+`hydrateSentIds` had the same shape one level down: it sets its flag before awaiting storage, so a
+caller arriving mid-await saw an empty `sentIds`. That is the same **check-then-act across an await**
+that `27633173` fixed in the media path the next morning — the class was known and this instance was
+missed. Coalescing on one in-flight promise closes both.
+
+**Checked and found sound** (recorded so the next pass does not redo them): `SENT_IDS_CAP` 400 vs the
+log's `MAX_ENTRIES` 100 — correctly sized, no resend from trimming; `dddb5067`'s crop remap, where
+`roi.x * (width ?? 0)` looks unguarded but the crop is only ever created under `if (roi && width &&
+height)`, so the fallback is unreachable; and no double-report when the on-device locate falls
+through to the network one.
+
+**And a fourth repeat of the same mistake, in this pass's own test.** The override assertion failed
+on its first run against the workflow's *own header* — "a hard gate with no override flag". Prose
+naming the thing defeated the predicate forbidding it, after run-sim.ts on 08-31 and the anchor scan
+this morning. Every scanner written today now strips comments first.
+
+### Gates added, both verified to fail on `139bcbf3` (8 assertions)
+`the-ota-guard-must-know-where-native-lives` (derived from the filesystem) and
+`one-issue-send-at-a-time`.
+
+Health: **tsc 0 · jest 2925/2925 (261 suites) · sim 968/968 · lint 0 errors**.
