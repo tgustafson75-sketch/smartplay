@@ -3086,3 +3086,38 @@ this morning. Every scanner written today now strips comments first.
 `one-issue-send-at-a-time`.
 
 Health: **tsc 0 · jest 2925/2925 (261 suites) · sim 968/968 · lint 0 errors**.
+
+### Publish path closed — 2026-09-09 (Tim: "dont leave anything open")
+
+The open item from the 72-hour pass is closed. `npm run ota:production` and `ota:preview` now run
+`scripts/ota-preflight.mjs` first, and `&&` means a refusal stops the publish.
+
+It matters more here than in most repos: `app.json` pins `runtimeVersion` to the literal `"1.0.0"`,
+so Expo delivers an update to **every** binary sharing it — including the build in the store.
+
+There are no release tags and nothing records which commit produced the installed shell, so a
+git-diff baseline would be a guess. The preflight FINGERPRINTS the native surface (157 files across
+`android-native/`, `ios-native/`, `plugins/`, `targets/`, `wear-os-app/`, `patches/`, `ios/`,
+`android/`, app config, plus package.json **dependencies only**) and stores the hash beside the
+runtimeVersion it belongs to. The rule then needs no history and is exactly Expo's own contract:
+
+> native fingerprint changed **AND** runtimeVersion did not → **REFUSE**
+
+Baseline recorded at the current tree, which is accurate: this branch changes no native file, so its
+native surface *is* build 26's. `npm run ota:baseline` re-records it — run that when a STORE BUILD
+ships, because that is when the installed shell catches up with the source.
+
+Verified all three paths by hand: clean tree passes; appending a line to
+`android-native/WearSwingBridgeModule.kt` (the very fix that would have needed this) refuses; that
+same change with runtimeVersion bumped to 1.0.1 passes. No override flag — the refusal offers a store
+build, never a bypass.
+
+**Fifth prose-vs-predicate slip, in this pass's own test.** It asserted on the script's own comment
+text and failed because the sentence wrapped. The answer is not a better regex: assert what the code
+DOES. It now checks `pkg.dependencies`/`pkg.devDependencies` are hashed and `pkg.scripts` is not.
+
+Gate: `the-publish-command-is-guarded` — derived from package.json (every script containing
+`eas update` must be preceded by the preflight), plus the native-surface coverage and the baseline's
+runtimeVersion matching app.json.
+
+Health: **tsc 0 · jest 2935/2935 (262 suites) · sim 968/968 · lint 0 errors**.
