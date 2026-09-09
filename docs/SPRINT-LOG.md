@@ -2719,3 +2719,40 @@ hardware this session cannot reach. Tim's verification is the gate.
 Repo arrived as a 50-commit shallow clone, which made "find when it last worked" impossible for the
 first half of the session. `git fetch --unshallow` (3004 commits) is what turned the SmartMotion
 crash from four competing hypotheses into one archaeology answer. Do that first next time.
+
+
+### Triple-check pass — 2026-09-09 (3 more commits: `a460bda`, `45a37f6`, + docs)
+
+Tim asked for a triple-check of the session's work and a full SmartMotion sweep. It found **three
+defects in my own changes from earlier the same day**, which is the point of the exercise.
+
+1. **The WebView detector I added could white-screen the route.** `hasViewManagerConfig?.()` guards a
+   MISSING method, not a THROWING one — and Bridgeless delegates to `unstable_hasComponent`, which
+   throws a bare string when `global.__nativeComponentRegistry__hasComponent` is not installed yet.
+   Both screens call it at module scope. Now wrapped, and when it cannot answer it does not answer
+   `false` (that is the original bug returning) — the screens pass the imported `WebView`, so the
+   fallback is a fact about the build.
+2. **My scope note was wrong.** "None of the un-migrated readers run against the looping surface" —
+   two do: `feelReconcile` (twice from smartmotion.tsx) and `swingShare` (from swing-detail while its
+   video plays). Both pooled now. The gate no longer trusts a hand-list: it DERIVES the set by
+   scanning, and each reader must pool or carry a named reason. That immediately caught one more I
+   had assumed away (`bagScan` — genuinely safe, ImagePicker's OS camera UI, no player).
+3. **A bounded probe grew an unbounded step in front of it.** Routing `probeDurationUncached` through
+   `acquireClipCopy` put a multi-hundred-MB copy OUTSIDE `PROBE_TIMEOUT_MS` — and
+   `DURATION_PROBE_CEILING_MS` is derived from that timeout and feeds `ANALYSIS_WORST_CASE_MS`, the
+   screen's hang guard. It would have fired "Analysis timed out" on clips that were going to succeed.
+   Fixed with `acquireExistingClipCopy`: borrow a copy only when one already exists (which is exactly
+   when the player is looping), never make one. Zero added cost, budget stays honest.
+
+Also corrected a stale comment on SmartMotion's club-arc gate (said ">= 4 points"; code has said 3
+since 08-06). It cost a minute of doubt mid-audit — which is what that class of comment does.
+
+**SmartMotion verified, no change needed:** arc + trace both wired and rendered (SwingBodyOverlay,
+gated at 3, cache marked on ANSWER so an empty read is not retried forever); unmount cleanup covers
+timers, camera, metering, speech and the mic flag; `reset()` is reachable only from review so it
+cannot orphan an in-flight recording; camera/mic permission gates are after all hooks; the pool is
+correct under concurrency (refs before the await, idempotent release, linger cleared on re-acquire).
+Every `Audio.Sound` on a clip and every frame fan-out is on the serializing chain.
+
+Health at close: **tsc 0 (1 pre-existing, `api/messages.ts:29`) · jest 2854/2854 · sim 968/968 ·
+lint 1 pre-existing error**. Still zero device verification — that remains Tim's gate.

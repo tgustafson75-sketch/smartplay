@@ -22,7 +22,13 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 > report carrying `rejected`/`detected`/`gate` from `f44f06d`.
 > Voice start/stop during recording is deliberately unchanged (Tim: tap-stop stays).
 >
-> Detail: [SPRINT-LOG.md](SPRINT-LOG.md) → "Day N+2 — 2026-09-08 / 09-09".
+> A triple-check pass then found three defects in those same fixes (a detector that could throw at
+> module scope, a wrong scope claim about which readers touch the looping clip, and an unbounded copy
+> in front of a bounded probe that would have broken the analysis hang guard). All fixed; the gates
+> now DERIVE their file lists rather than trusting a hand-written one, because the hand-written one
+> was wrong twice.
+>
+> Detail: [SPRINT-LOG.md](SPRINT-LOG.md) → "Day N+2 — 2026-09-08 / 09-09" and its triple-check pass.
 
 
 > ### ⚠️ LATEST — 2026-09-06 (later). Layer 0: remote kill switches are LIVE.
