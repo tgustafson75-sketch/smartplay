@@ -44,6 +44,17 @@ class WearSwingBridgeModule(reactContext: ReactApplicationContext) :
     // 2026-07-06 — inbound from the watch mic + tap (watch → phone).
     private val voicePath = "/smartplay/voice"
     private val tapPath = "/smartplay/tap"
+    /**
+     * 2026-09-09 (72-hour triple-check) — THE COMMAND PATH THAT NEVER EXISTED.
+     *
+     * services/watchCaddieBridge has subscribed to `onWatchCommand` since 2026-08-07 (Tim: "record
+     * button on the watch to control SmartMotion record + stop"), routing open_smartmotion /
+     * smartmotion_record / smartmotion_stop / smartmotion_toggle into the command bus. This module
+     * has never had a command path and has never emitted that event, and the watch app never sent
+     * one either. Both ends of the feature were missing; only the middle was written, so the handler
+     * could not fire under any circumstances. [[orphans-are-live-bugs-not-dead-code]]
+     */
+    private val commandPath = "/smartplay/command"
     @Volatile private var listening = false
 
     override fun getName(): String = "WearSwingBridge"
@@ -102,6 +113,7 @@ class WearSwingBridgeModule(reactContext: ReactApplicationContext) :
                 // regular voice-intent pipeline so "how far to the pin" is answered.
                 voicePath -> emitVoice(event)
                 tapPath -> emitTap(event)
+                commandPath -> emitCommand(event)
             }
         } catch (t: Throwable) {
             Log.w(tag, "onMessageReceived parse failed (non-fatal)", t)
@@ -120,6 +132,48 @@ class WearSwingBridgeModule(reactContext: ReactApplicationContext) :
         val payload = Arguments.createMap().apply { putString("pattern", pattern) }
         emit("onWatchTap", payload)
         emitConnection(true, event.sourceNodeId)
+    }
+
+    /**
+     * 2026-09-09 — the watch asking the phone to DO something, as opposed to reporting what it saw.
+     *
+     * Unknown commands are forwarded rather than filtered: the JS side already whitelists the four
+     * it understands and ignores the rest, so keeping the native side dumb means a new command needs
+     * a JS change only — never a store build. That asymmetry matters here more than most places,
+     * because JS ships by OTA and this file cannot.
+     */
+    private fun emitCommand(event: MessageEvent) {
+        val command = String(event.data, Charsets.UTF_8).trim()
+        if (command.isEmpty()) return
+        val payload = Arguments.createMap().apply { putString("command", command) }
+        emit("onWatchCommand", payload)
+        emitConnection(true, event.sourceNodeId)
+    }
+
+    /**
+     * 2026-09-09 — IS A WATCH REACHABLE RIGHT NOW, without sending anything?
+     *
+     * Until now the only way to learn this was to try a send and read the resolved boolean, so
+     * Settings could not answer "is my watch connected" until a round was live and a yardage push had
+     * already failed. This is a plain NodeClient query — deliberately NOT a CapabilityClient
+     * listener, which would need a matching capability declared in the watch app's res/values, and a
+     * capability that does not match produces a listener that silently never fires. That is the exact
+     * class of bug this sprint has been spent on, and it is not one to introduce blind on a change
+     * that cannot be tested from here.
+     */
+    @ReactMethod
+    fun getConnectedNodeCount(promise: Promise) {
+        try {
+            Wearable.getNodeClient(reactApplicationContext.applicationContext).connectedNodes
+                .addOnSuccessListener { nodes -> promise.resolve(nodes.size) }
+                .addOnFailureListener { e ->
+                    Log.w(tag, "connectedNodes query failed (non-fatal): ${e.message}")
+                    promise.resolve(0)
+                }
+        } catch (t: Throwable) {
+            Log.w(tag, "getConnectedNodeCount failed (non-fatal)", t)
+            promise.resolve(0)
+        }
     }
 
     /**

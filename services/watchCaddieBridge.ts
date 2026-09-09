@@ -55,6 +55,12 @@ const WATCH_HEARTBEAT_GRACE_MS = YARDAGE_TICK_MS * 2;
 
 interface WearCaddieNativeModule {
   sendToWatch(path: string, data: string): Promise<boolean>;
+  /**
+   * 2026-09-09 — optional on purpose. It exists on the Android module from build 27; older shells
+   * and the iOS module do not have it, and an OTA reaches every one of them. Typed optional so a
+   * caller must decide what "cannot ask" means rather than crashing on an absent method.
+   */
+  getConnectedNodeCount?(): Promise<number>;
   addListener(eventName: string): void;
   removeListeners(count: number): void;
 }
@@ -80,6 +86,27 @@ let started = false;
 
 export function isWatchCaddieBridgeAvailable(): boolean {
   return NativeMod != null;
+}
+
+/**
+ * 2026-09-09 — IS A WATCH REACHABLE RIGHT NOW? Ask without sending anything.
+ *
+ * Until now the only way to find out was to try a push and read the resolved boolean, so Settings
+ * could not answer "is my watch connected" until a round was live and a yardage send had already
+ * failed — the answer arrived after the moment it was useful. Tim went a whole round on a blank
+ * watch face partly because nothing could tell him this beforehand.
+ *
+ * Three-state, and the third state is the point: `null` means "cannot ask" — an older native shell
+ * or iOS, where the method does not exist. A caller must not render that as "not connected", which
+ * would be a confident wrong answer of exactly the kind this sprint keeps finding.
+ */
+export async function watchReachable(): Promise<boolean | null> {
+  if (!NativeMod?.getConnectedNodeCount) return null;
+  try {
+    return (await NativeMod.getConnectedNodeCount()) > 0;
+  } catch {
+    return null;   // the query itself failed — that is "unknown", not "absent"
+  }
 }
 
 /** Push the current GPS-live green yardages to the watch. Best-effort; skips when

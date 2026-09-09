@@ -126,6 +126,28 @@ export default function Settings() {
   // display row. Reads from the dedicated watchStore — stays false
   // until the native SDK lands and flips it.
   const watchConnected = useWatchStore((s) => s.isConnected);
+  /**
+   * 2026-09-09 — ASK whether a watch is reachable, rather than waiting to discover it by failing.
+   *
+   * `isConnected` is set by traffic: an inbound message, or a yardage push that got through. So
+   * before a round it is whatever it was last time, and Tim went a whole round on a blank watch face
+   * with nothing here able to tell him beforehand. `watchReachable()` queries the Data Layer without
+   * sending anything.
+   *
+   * THREE states and the third is the point: null = "cannot ask" (an older native shell, or iOS,
+   * where the method does not exist — and an OTA reaches all of them). Rendering that as "not
+   * connected" would be a confident wrong answer, which is the failure this whole sprint has been
+   * about. Unknown falls back to the traffic-derived flag and says nothing new.
+   */
+  const [watchReach, setWatchReach] = useState<boolean | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void import('../services/watchCaddieBridge')
+      .then(m => m.watchReachable())
+      .then(r => { if (alive) setWatchReach(r); })
+      .catch(() => { if (alive) setWatchReach(null); });
+    return () => { alive = false; };
+  }, []);
   // 2026-06-30 (Tim — "turning on the watch is blocked") — the Galaxy Watch swing-IMU bridge
   // shipped in the native build, so this is a REAL toggle now. Available only when the native
   // module is linked (latest build); on an older binary it stays disabled with a clear note.
@@ -1473,7 +1495,7 @@ export default function Settings() {
                     watch mic silently rode on a switch labelled "swing capture" and defaulting off.
                     They are independent now — say so, so nobody goes hunting here for yardage. */}
                 {watchBridgeAvailable
-                  ? `Captures every swing the watch sees — during a live round (tagged to the hole, shown in View hole and the round recap) and in Smart Motion, where a calibrated capture also reads club speed. Pin yardage and the watch mic do not need this — they work whenever your watch is paired and the SmartPlay watch app is open.${watchConnected ? ' Watch connected.' : ` Open the SmartPlay watch app on your ${watchDeviceLabel()} to start sending.`}`
+                  ? `Captures every swing the watch sees — during a live round (tagged to the hole, shown in View hole and the round recap) and in Smart Motion, where a calibrated capture also reads club speed. Pin yardage and the watch mic do not need this — they work whenever your watch is paired and the SmartPlay watch app is open.${watchReach === false ? ` No ${watchDeviceLabel()} is reachable — check it is paired and nearby.` : (watchConnected || watchReach === true) ? ' Watch connected.' : ` Open the SmartPlay watch app on your ${watchDeviceLabel()} to start sending.`}`
                   : 'The watch swing-capture module ships in the latest native build — install it, then this turns on.'}
               </Text>
             </View>
