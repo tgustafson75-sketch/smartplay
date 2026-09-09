@@ -76,13 +76,40 @@ export function isWatchCaddieBridgeAvailable(): boolean {
 
 /** Push the current GPS-live green yardages to the watch. Best-effort; skips when
  *  there's no usable read (no fix / no hole data) so the watch never shows a fake. */
+/**
+ * 2026-09-09 (Tim — "the yardage would not populate on my watch") — SAY WHY, EVERY TIME.
+ *
+ * This function had FIVE silent exits — no native module, no live round, no honest yardage, a throw,
+ * and the one that is not even an exit: `sendToWatch` RESOLVES FALSE when no watch node is
+ * connected, and its return value was dropped on the floor. So "the phone never tried", "the phone
+ * had nothing to send" and "the phone sent it and no watch was listening" all reached Tim as the
+ * same blank screen, and reached us as nothing at all.
+ *
+ * Those have completely different fixes — a toggle, a GPS/course problem, and a watch-pairing
+ * problem — which is the same class of failure as the club arc reporting `points: 0` for four
+ * different causes. `getGreenYardagesSync` already traces its own reason through roundTrace; this
+ * now does too, on the 'watch' channel, so one round export answers the question.
+ * [[missing-log-entry-is-the-evidence]]
+ */
+function traceWatch(tag: string, data?: Record<string, string | number | boolean | null>): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('./roundTrace') as typeof import('./roundTrace')).trace('watch', tag, data);
+  } catch { /* tracing must never affect the round */ }
+}
+
 export async function pushYardageToWatch(): Promise<void> {
-  if (!NativeMod) return;
+  if (!NativeMod) { traceWatch('yardage_skip', { reason: 'no_native_module' }); return; }
   try {
     const round = useRoundStore.getState();
-    if (!round.isRoundActive) return;
+    if (!round.isRoundActive) { traceWatch('yardage_skip', { reason: 'no_active_round' }); return; }
     const y = getGreenYardagesSync(round.currentHole);
-    if (y.middle == null && y.front == null && y.back == null) return; // nothing honest to show
+    if (y.middle == null && y.front == null && y.back == null) {
+      // nothing honest to show — carry the funnel's OWN reason (no_fix / no_hole / no_green_coords)
+      // rather than restating that the numbers were absent.
+      traceWatch('yardage_skip', { reason: y.reason ?? 'no_yardage', hole: y.hole_number ?? null });
+      return;
+    }
     const payload = {
       kind: 'yardage' as const,
       hole: y.hole_number,
@@ -90,8 +117,20 @@ export async function pushYardageToWatch(): Promise<void> {
       middle: y.middle,
       back: y.back,
     };
-    await NativeMod.sendToWatch(CADDIE_PATH, JSON.stringify(payload));
+    const delivered = await NativeMod.sendToWatch(CADDIE_PATH, JSON.stringify(payload));
+    if (delivered === false) {
+      // The native side resolves false ONLY when connectedNodes is empty (or the node query failed).
+      // That is a paired-watch problem, not a yardage problem, and it must not read as one.
+      traceWatch('yardage_undelivered', { reason: 'no_connected_node', hole: y.hole_number ?? null });
+      try { useWatchStore.getState().setConnected(false, watchDeviceLabel()); } catch { /* non-fatal */ }
+      return;
+    }
+    // A delivered outbound message proves the round trip just as well as an inbound one does, and
+    // the watch app may have been running before we started listening for its `hello`.
+    markWatchAlive();
+    traceWatch('yardage_sent', { hole: y.hole_number ?? null, middle: y.middle ?? null });
   } catch (e) {
+    traceWatch('yardage_error', { reason: String(e).slice(0, 120) });
     devLog('[watchCaddieBridge] pushYardage failed: ' + String(e));
   }
 }

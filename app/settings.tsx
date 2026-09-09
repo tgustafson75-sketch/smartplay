@@ -1468,8 +1468,12 @@ export default function Settings() {
                     nothing here that looked like the round setting he was hunting for — and no round
                     setting existed to find, because this one already covers it. It captures during
                     rounds too, tagged to the hole you were on; say so. */}
+                {/* 2026-09-09 (Tim — "the yardage would not populate on my watch", first Play Store
+                    round). This toggle used to gate the caddie bridge too, so pin yardage and the
+                    watch mic silently rode on a switch labelled "swing capture" and defaulting off.
+                    They are independent now — say so, so nobody goes hunting here for yardage. */}
                 {watchBridgeAvailable
-                  ? `Captures every swing the watch sees — during a live round (tagged to the hole, shown in View hole and the round recap) and in Smart Motion, where a calibrated capture also reads club speed.${watchConnected ? ' Watch connected.' : ` Open the SmartPlay watch app on your ${watchDeviceLabel()} to start sending.`}`
+                  ? `Captures every swing the watch sees — during a live round (tagged to the hole, shown in View hole and the round recap) and in Smart Motion, where a calibrated capture also reads club speed. Pin yardage and the watch mic do not need this — they work whenever your watch is paired and the SmartPlay watch app is open.${watchConnected ? ' Watch connected.' : ` Open the SmartPlay watch app on your ${watchDeviceLabel()} to start sending.`}`
                   : 'The watch swing-capture module ships in the latest native build — install it, then this turns on.'}
               </Text>
             </View>

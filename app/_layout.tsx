@@ -394,12 +394,36 @@ function AppNavigator() {
   const settingsHydratedForBoot = useSettingsStore(s => s.hasHydrated);
   useEffect(() => {
     if (!settingsHydratedForBoot) return;
-    if (!useSettingsStore.getState().watchSwingEnabled) return;
+    /**
+     * 2026-09-09 (Tim, first round on the Play Store build — "the yardage would not populate on my
+     * watch") — PIN YARDAGE WAS GATED BEHIND THE SWING-CAPTURE TOGGLE.
+     *
+     * `watchSwingEnabled` is the Galaxy Watch SWING-IMU setting: its label says "swing capture" and
+     * its description talks only about capturing swings. This early return sat in front of BOTH
+     * bridges, so that one toggle silently also controlled pin yardage, the watch mic, watch taps
+     * and the round-state/score push — four features it does not name and nobody would look for
+     * behind it.
+     *
+     * It defaults to FALSE and is persisted per install. A dev build carried a toggle Tim had
+     * flipped on months ago; a fresh Play Store install starts with empty storage, so the whole
+     * caddie bridge never started and the watch sat empty for a round. "It worked before it was on
+     * the Play Store" is exactly what a persisted-default-off gate looks like from the outside.
+     *
+     * The two bridges are now independent, which is what they always were in every way except this
+     * line. Swing capture keeps its toggle (it costs battery on the watch and is opt-in by design).
+     * The caddie bridge starts whenever the native module is present: it sends nothing unless a
+     * round is live AND a watch node is connected, its inbound listeners fire only when the watch
+     * speaks first, and the round/score push inside it is separately owner-gated. Nothing here can
+     * appear for someone with no watch.
+     */
+    const swingCaptureEnabled = useSettingsStore.getState().watchSwingEnabled;
     let active = true;
     void (async () => {
       try {
-        const m = await import('../services/watchSwingBridge');
-        if (active && m.isWatchSwingBridgeAvailable()) await m.initWatchSwingBridge();
+        if (swingCaptureEnabled) {
+          const m = await import('../services/watchSwingBridge');
+          if (active && m.isWatchSwingBridgeAvailable()) await m.initWatchSwingBridge();
+        }
         // 2026-07-06 — same watch, second half: pin-yardage push + watch-mic → caddie.
         const c = await import('../services/watchCaddieBridge');
         if (active && c.isWatchCaddieBridgeAvailable()) await c.initWatchCaddieBridge();

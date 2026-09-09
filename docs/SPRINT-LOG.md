@@ -2896,3 +2896,47 @@ the thing.
 
 Health: **tsc 0 · jest 2881/2881 (257 suites) · sim 968/968 · lint 0 errors**. JS/TS only — no
 native, no app.json/eas.json/deps. Unmerged; device verification remains Tim's gate.
+
+
+### Watch bridge — 2026-09-09 (Tim: "now that it's on Play Store the yardage would not populate on my watch")
+
+**Root cause: pin yardage was gated behind the swing-capture toggle, which defaults OFF.**
+
+`app/_layout.tsx` started BOTH watch bridges behind one early return on `watchSwingEnabled` — the
+Galaxy Watch SWING-IMU setting, labelled "swing capture" and described only in terms of capturing
+swings. That one switch silently also owned **pin yardage, the watch mic, watch taps, and the
+round-state/score push**: four features it does not name, behind a toggle nobody would look under.
+
+`watchSwingEnabled` defaults to `false` and is persisted per install. Tim's dev build carried a
+toggle he flipped on months ago; **a Play Store install starts from empty storage**, so
+`initWatchCaddieBridge()` never ran and the watch sat blank for the whole round. "It worked until it
+went on the Play Store" is exactly what a persisted-default-off gate looks like from outside —
+nothing about the build changed, only the storage it started from.
+
+Fixed by decoupling. Swing capture keeps its toggle (real battery cost, genuinely opt-in). The caddie
+bridge starts whenever the native module is present — it sends nothing unless a round is live AND a
+watch node is connected, its inbound listeners fire only when the watch speaks first, and the
+round/score push inside it stays owner-gated. **This is decoupling, not switching a feature on.**
+
+**Second half: none of it was diagnosable.** `pushYardageToWatch` had five silent exits, and the
+worst was not an exit at all — the native `sendToWatch` **resolves `false` when no watch node is
+connected**, and JS dropped the return value. So "the phone never tried", "the phone had nothing to
+send" and "the phone sent it to nobody" were one blank watch face with no trace anywhere. Three
+different fixes (a toggle, GPS/course data, watch pairing), one symptom — the same shape as the club
+arc reporting `points: 0` for four causes. All five now trace on roundTrace's `watch` channel,
+carrying `getGreenYardagesSync`'s own reason (`no_fix` / `no_hole` / `no_green_coords`) rather than
+restating that numbers were absent. A delivered push now also proves the watch is alive; an
+undelivered one clears the flag.
+
+Settings copy corrected: the row no longer implies the toggle owns yardage.
+
+### Gate added: `pin-yardage-does-not-ride-the-swing-toggle` (10 of 11 fail on `caa2bce9`)
+The decoupling, that swing capture is still opt-in, that the default is still `false`, every trace
+reason, and that the native result is honoured rather than discarded.
+
+### NOT done — needs a native build, cannot go OTA
+A no-connected-node condition is only observable when we try to SEND. A passive
+`CapabilityClient`/`OnCapabilityChanged` listener would let Settings say "watch not reachable" before
+a round rather than after it. That is `android-native/` work and the OTA guard correctly blocks it.
+
+Health: **tsc 0 · jest 2892/2892 (258 suites) · sim 968/968 · lint 0 errors**. JS/TS only.
