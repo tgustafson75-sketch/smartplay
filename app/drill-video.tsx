@@ -15,19 +15,19 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, UIManager } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
-import { youtubePlayerHtml, parsePlayerMessage, isEmbedBlocked } from '../services/youtubeEmbed';
+import { youtubePlayerHtml, parsePlayerMessage, isEmbedBlocked, hasNativeWebView } from '../services/youtubeEmbed';
 import { openYouTubeSearch } from '../services/youtubeLinks';
 import * as WebBrowser from 'expo-web-browser';
 import { useTheme } from '../contexts/ThemeContext';
 import { usePracticePointsStore } from '../store/practicePointsStore';
 import { useToastStore } from '../store/toastStore';
 
-const HAS_NATIVE_WEBVIEW = !!UIManager.getViewManagerConfig?.('RNCWebView');
+const HAS_NATIVE_WEBVIEW = hasNativeWebView();
 
 /** Pull the 11-char YouTube id out of a watch / youtu.be / embed / shorts URL. */
 function extractVideoId(u: string | undefined): string | null {

@@ -23,6 +23,33 @@
  * [[two-owners-is-the-root-cause]] [[caddie-failsafe-no-walls]]
  */
 
+import { UIManager } from 'react-native';
+
+/**
+ * 2026-09-09 (Tim — "YouTube links for drills not showing") — IS THERE A NATIVE WEBVIEW?
+ *
+ * Both embedding screens answered this with `UIManager.getViewManagerConfig('RNCWebView')`, which is
+ * the OLD ARCHITECTURE's question. app.json has had `newArchEnabled: true` since before this repo's
+ * history begins, so the app runs bridgeless, and RN 0.81's BridgelessUIManager returns null from
+ * getViewManagerConfig for every component unless the ViewConfig interop layer is on — its own error
+ * text says "If you want to see if this component is registered with React Native, please call
+ * hasViewManagerConfig() instead." react-native-webview 13.15.0 ships a Fabric component
+ * (codegenConfig RNCWebViewSpec, type "all"), so the player IS there; the detector could not see it.
+ *
+ * The consequence was not a broken player, it was NO player: both screens read false, skipped the
+ * WebView entirely and opened `youtube.com/embed/<id>` in the in-app browser, which YouTube serves as
+ * "Video unavailable" outside an embedding page — then popped straight back. Watch a drill, land back
+ * on the dashboard a second later. That is exactly the route trail in the 09-08 report.
+ *
+ * One exported answer instead of a constant copied into two screens: the two copies were already the
+ * same bug twice. [[two-owners-is-the-root-cause]]
+ */
+export function hasNativeWebView(): boolean {
+  // Present on BOTH UIManagers — PaperUIManager (legacy) and BridgelessUIManager (new arch) — and it
+  // is the only one of the two that answers this question correctly under the new architecture.
+  return UIManager.hasViewManagerConfig?.('RNCWebView') ?? false;
+}
+
 /** What the WebView posts back. Anything unrecognised is ignored by the caller. */
 export type PlayerMessage =
   | { kind: 'ready' }

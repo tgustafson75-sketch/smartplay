@@ -11,12 +11,12 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, UIManager } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
-import { youtubePlayerHtml, parsePlayerMessage, isEmbedBlocked } from '../services/youtubeEmbed';
+import { youtubePlayerHtml, parsePlayerMessage, isEmbedBlocked, hasNativeWebView } from '../services/youtubeEmbed';
 import { openYouTubeSearch } from '../services/youtubeLinks';
 import * as WebBrowser from 'expo-web-browser';
 import { useTheme } from '../contexts/ThemeContext';
@@ -25,7 +25,7 @@ import { useTheme } from '../contexts/ThemeContext';
 // predates it (the current installed APK), render-then-crash isn't acceptable, so we
 // detect the native view manager and fall back to the in-app browser. The next native
 // build gets the true embedded player; older builds still play the clean embed.
-const HAS_NATIVE_WEBVIEW = !!UIManager.getViewManagerConfig?.('RNCWebView');
+const HAS_NATIVE_WEBVIEW = hasNativeWebView();
 
 export default function Jukebox() {
   const router = useRouter();
