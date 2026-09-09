@@ -3926,8 +3926,26 @@ check('LOCK: the pose warm starts INSIDE the network wait, and both paths key it
       !/videoDurationMs/.test(helper) &&
       // non-blocking: fired with void, and its failures swallowed
       /void \(async \(\) => \{[\s\S]{0,1200}?poseExtractCacheRef\.current = \{ key: warmKey, frames \};[\s\S]{0,200}?\} catch \{/.test(sm) &&
-      // warmed on the DURABLE uri — keying on rawUri would be a guaranteed miss
-      /clipUri: uri, poseWindow/.test(sm)
+      /**
+       * warmed on the DURABLE uri — keying on rawUri would be a guaranteed miss.
+       *
+       * 2026-09-09 (triple-check) — THIS GUARD STATED THE PROPERTY AND ASSERTED THE BUG. It matched
+       * the literal `clipUri: uri`, and `uri` is a `let` that becomes the durable copy partway
+       * through runAnalysis. So what the warm keyed on depended on whether persistClipToDocuments
+       * had finished when analyzeSwing raised onFramesReady — a race, losing exactly on the long
+       * high-frame-rate clips whose decodes cost most, and losing SILENTLY: 5-8 decodes on the one
+       * serialized media chain, cached under a key the review read never looks up, then decoded
+       * again. The precise "latency fix that added latency" this scenario's own header describes.
+       *
+       * The comment was right the whole time; only the assertion was wrong. Assert the property:
+       * the warm AWAITS the copy the review will use, and both persist paths release it.
+       * [[three-ways-a-guard-is-worthless]] [[a-stale-header-is-a-source-someone-trusts]]
+       */
+      /clipUri: await durableUriP, poseWindow/.test(sm) &&
+      /const warmUri = await durableUriP;/.test(sm) &&
+      /extractPoseFramesFromVideo\(warmUri,/.test(sm) &&
+      // released on BOTH persist outcomes, or a failed copy would stall the warm forever
+      /markDurable\(uri\);/.test(sm)
     );
   })(),
   'the pose decode moves inside the vision round-trip (started after the POST, before the verdict is awaited), both paths key it through one owner, and a failed warm degrades to the old serial extract');

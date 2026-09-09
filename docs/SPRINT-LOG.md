@@ -2798,3 +2798,56 @@ Health at close: **tsc 0 · jest 2859/2859 (255 suites) · sim 968/968 · lint 0
 ### Still Tim's gate
 **Device verification of all seven earlier commits.** Unchanged — the crash class is native and no
 code change this session altered that. Branch remains UNMERGED while builds are in review.
+
+
+### SmartMotion triple-check — 2026-09-09 (Tim: "gated correctly and efficiently to give clean fast accurate complete reads")
+
+JS/TS only. No native, no `app.json`, no `eas.json`, no deps — cannot affect a build in review.
+
+**1. THE ARC TIM HAS NEVER SEEN IS AN ORDERING BUG, and it was never intermittent.**
+`STAGE_DEPS` says `club: ['pose','frame']`. On SmartMotion club ran FIRST, always: the pose effect
+is gated on `phase === 'review' && videoDurationMs != null`, and `runAnalysis` nulls videoDurationMs
+on entry and reaches `setPhase('review')` only at its very end — while the club effect needed nothing
+but `clipUri` + `segments`, both set during 'analyzing'. Club could not lose that race.
+
+`bodyBoundsFromPose(null)` is null, so every first read asked the model to find a clubhead in a
+downscaled FULL FRAME — the six-pixels-across case `roiFromBodyBounds` was written on 08-10 to fix.
+The empty answer was then cached under a bare swing index, so the re-run `poseFrames` triggers took
+the cache hit. **The ROI zoom shipped, was unit-tested, was wired, and never once ran on a swing
+recorded on this screen.** `club-arc-render-path` asserted the argument was present — which is all a
+wire test can prove: that the wire exists, never that a signal flows down it.
+
+Fixed: club waits for the pose stage to SETTLE (released from a `finally`, so a failed pose still
+lets the arc run full-frame — one failure must not become two), and the cache is keyed by
+clip + swing + window instead of a bare index.
+
+**2. The pose warm keyed on a file that changes mid-run.** `uri` is a `let` that becomes the durable
+copy partway through `runAnalysis`; the warm read it at whatever moment `onFramesReady` fired. On a
+miss the 5-8 decodes still ran, still queued on the one serialized media chain, and landed under a
+key the review read never looks up — which then decoded again. Exactly the "latency fix that added
+latency" of 08-31, reintroduced through the key rather than the timing. The warm now awaits the
+durable copy, released on both persist outcomes.
+
+**2b. The sim guard for that stated the property and asserted the bug.** Its comment said "warmed on
+the DURABLE uri"; its assertion matched the literal `clipUri: uri`, locking the race in place. Third
+time in this sprint a guard has been defeated by the difference between its prose and its predicate.
+Corrected to assert the property. [[three-ways-a-guard-is-worthless]]
+
+**3. The stage observer could not see the screen it was written about.** analysisPipeline was built
+on 09-06 for precisely defect 1, and wired into swing-detail and poseAnalysisApi only — SmartMotion
+reported nothing and checked nothing. Now wired (`checkOrder` before club, `noteStage` after, plus
+`metrics`, which had NO reporter anywhere in the app). The run key is derived from the same
+`poseExtractInputsFor` helper the pose read uses, because a stage observer that mis-keys does not go
+quiet — it reports a violation on every sound run.
+
+**Still unreported: `locate` and `anchor`.** Not an oversight — `runKeyFor` is
+`(clipUri, startMs, endMs)`, and locate is the stage that PRODUCES startMs/endMs. The key is circular
+for the two earliest stages. Worth fixing when the real orchestrator lands; noting it rather than
+wiring a key that would be wrong.
+
+### Gate added (verified to FAIL on `a47612ff`: 7 of 8)
+`the-club-stage-must-wait-for-pose` — the pose gate, the `finally` release, the cache key, the
+observer wiring, key parity with poseAnalysisApi, and both halves of the warm fix.
+
+Health at close: **tsc 0 · jest 2867/2867 (256 suites) · sim 968/968 · lint 0 errors**.
+Device verification remains Tim's gate; branch remains UNMERGED while builds are in review.
