@@ -100,40 +100,76 @@ export async function locateSwingWindowOnDevice(
   const status = await mp.getMediaPipeStatus().catch(() => null);
   if (!status?.available) return null;   // pre-build / unlinked: fall back to the network locate
 
-  const samples: MotionSample[] = [];
-  let consecutiveMisses = 0;
-  const deadline = Date.now() + BUDGET_MS;
-  for (const tMs of times) {
-    if (Date.now() > deadline) break;   // spend what is left on the answer, not on more frames
-    // Serial on purpose, AND on the global media chain (see the import note) — the second half is
-    // what actually holds off the other readers and the player.
-    let frame = null;
-    try {
-      const thumb = await VideoThumbnails.getThumbnailAsync(clipUri, { time: tMs, quality: 0.6 });
-      frame = await mp.detectPoseFromUri(thumb.uri, undefined, tMs);
-    } catch {
-      frame = null; // one unreadable frame is a shorter signal, not a failed locate
+  /**
+   * 2026-09-09 — READ A PRIVATE COPY, NEVER THE FILE THE PLAYER HOLDS.
+   *
+   * The media chain (see the import note) serializes retriever against retriever. It cannot serialize
+   * a retriever against ExoPlayer, which is a different subsystem, and decoding the same file the
+   * player is looping is the other half of the same SIGSEGV. clubPath settled this on 07-30 and its
+   * comment is explicit: "if the private copy could NOT be made, do NOT fall back to decoding the
+   * ORIGINAL... on a surface that keeps looping the same file (SmartMotion review), a native retriever
+   * on the file ExoPlayer is playing is the exact SIGSEGV / white-screen vector."
+   *
+   * This function read the ORIGINAL — on exactly the surface that comment names. SmartMotion's
+   * stop-recording handoff sets clipUri, the <Video> mounts on it, and the locate then sampled twelve
+   * frames off it.
+   *
+   * The pool is refcounted with an 8s linger, so acquiring here costs nothing the review was not
+   * already going to pay: pose, tempo, club path and ball departure all take the SAME copy moments
+   * later, and the locate now warms it for them instead of racing them on the original.
+   *
+   * No copy means no locate. That is not a new fallback — null is this function's documented answer
+   * for "the device cannot see enough", and every caller already falls back to the network locate on
+   * it. A missing measurement beats a crash to the launcher.
+   */
+  let shared: { uri: string; release: () => void } | null = null;
+  try {
+    const { acquireClipCopy } = await import('./sharedClipCopy');
+    shared = await acquireClipCopy(clipUri);
+  } catch { /* acquire failed — refused below, same as clubPath */ }
+  if (!shared) return null;
+  const workUri = shared.uri;
+
+  try {
+    const samples: MotionSample[] = [];
+    let consecutiveMisses = 0;
+    const deadline = Date.now() + BUDGET_MS;
+    for (const tMs of times) {
+      if (Date.now() > deadline) break;   // spend what is left on the answer, not on more frames
+      // Serial on purpose, AND on the global media chain (see the import note) — the second half is
+      // what actually holds off the other retrievers. The private copy handles the player.
+      let frame = null;
+      try {
+        const thumb = await VideoThumbnails.getThumbnailAsync(workUri, { time: tMs, quality: 0.6 });
+        frame = await mp.detectPoseFromUri(thumb.uri, undefined, tMs);
+      } catch {
+        frame = null; // one unreadable frame is a shorter signal, not a failed locate
+      }
+      if (!frame) {
+        // Bail early rather than paying for a dozen decodes that are clearly going nowhere — the
+        // caller's network locate is a better use of the time than finishing a hopeless sweep.
+        if (++consecutiveMisses >= 3 && samples.length === 0) return null;
+        continue;
+      }
+      consecutiveMisses = 0;
+      const c = wristCentroid(frame);
+      if (c) samples.push({ tMs, x: c.x, y: c.y });
     }
-    if (!frame) {
-      // Bail early rather than paying for a dozen decodes that are clearly going nowhere — the
-      // caller's network locate is a better use of the time than finishing a hopeless sweep.
-      if (++consecutiveMisses >= 3 && samples.length === 0) return null;
-      continue;
-    }
-    consecutiveMisses = 0;
-    const c = wristCentroid(frame);
-    if (c) samples.push({ tMs, x: c.x, y: c.y });
+    if (samples.length < MIN_USABLE_SAMPLES) return null;
+
+    const anchors = deriveSwingAnchors(samples);
+    if (!anchors) return null;
+    const { startMs, endMs, impactMs } = anchors;
+    if (!(Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs)) return null;
+
+    return {
+      startSec: Math.max(0, startMs / 1000),
+      endSec: Math.min(durationMs / 1000, endMs / 1000),
+      swingTimeSec: Math.min(Math.max(impactMs / 1000, startMs / 1000), endMs / 1000),
+    };
+  } finally {
+    // Every early return above lands here. Releasing decrements the refcount; the pool keeps the file
+    // for another 8s so the consumers right behind this one reuse it rather than re-copying.
+    shared.release();
   }
-  if (samples.length < MIN_USABLE_SAMPLES) return null;
-
-  const anchors = deriveSwingAnchors(samples);
-  if (!anchors) return null;
-  const { startMs, endMs, impactMs } = anchors;
-  if (!(Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs)) return null;
-
-  return {
-    startSec: Math.max(0, startMs / 1000),
-    endSec: Math.min(durationMs / 1000, endMs / 1000),
-    swingTimeSec: Math.min(Math.max(impactMs / 1000, startMs / 1000), endMs / 1000),
-  };
 }
