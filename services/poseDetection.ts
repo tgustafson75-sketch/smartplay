@@ -198,7 +198,7 @@ const TENTATIVE_TIMEOUT_MS = 55_000;
  * as `no_frames`.
  */
 import * as VT from '../utils/videoThumbnail'; // serialized wrapper (native retriever crash fix)
-import { acquireClipCopy, isPooledCopy } from './swing/sharedClipCopy';
+import { acquireClipCopy, acquireExistingClipCopy, isPooledCopy } from './swing/sharedClipCopy';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Audio } from 'expo-av';
 // 2026-06-07 (audit) — share the circuit breaker + reactive connectivity
@@ -334,18 +334,25 @@ async function probeDurationUncached(clipUri: string): Promise<number> {
    * `isPooledCopy` stops us copying a copy — poseAnalysisApi passes a work uri, and acquiring on that
    * would byte-copy an on-disk copy under a key nobody else will ask for.
    *
-   * UNLIKE the frame sweeps, this does NOT refuse when no copy can be made: it probes the original,
-   * exactly as it always has. A sweep that cannot run costs an overlay; a duration that cannot be
-   * read costs the entire analysis, and the exposure here is one decoder plus three reads rather than
-   * twelve to sixteen. Naming the asymmetry rather than pretending the two cases are the same.
+   * AN EXISTING COPY ONLY — never one made for the probe. Caught on re-reading my own change: the
+   * copy step would sit OUTSIDE this function's PROBE_TIMEOUT_MS, and `DURATION_PROBE_CEILING_MS`
+   * documents itself as "probeDurationMs' own PROBE_TIMEOUT_MS" and feeds ANALYSIS_WORST_CASE_MS, the
+   * screen's hang guard. An unbounded multi-hundred-megabyte copy in front of a bounded probe makes
+   * that budget a lie and can fire "Analysis timed out" on a big clip that was going to succeed.
+   *
+   * Taking one only when it already exists puts the safety exactly where the risk is — a live copy
+   * means an analysis is running and the review player is looping — at zero added cost and with
+   * nothing unbounded. When there is none, this probes the original exactly as it always has: a
+   * sweep that cannot run costs an overlay, a duration that cannot be read costs the whole analysis,
+   * and this exposure is one decoder plus three reads rather than sixteen.
    */
   let probeCopy: { uri: string; release: () => void } | null = null;
   let probeUri = clipUri;
   if (!isPooledCopy(clipUri)) {
     try {
-      probeCopy = await acquireClipCopy(clipUri);
+      probeCopy = await acquireExistingClipCopy(clipUri);
       if (probeCopy) probeUri = probeCopy.uri;
-    } catch { /* no copy — probe the original, as before */ }
+    } catch { /* no existing copy — probe the original, as before */ }
   }
   try {
     return await probeDurationOn(probeUri);

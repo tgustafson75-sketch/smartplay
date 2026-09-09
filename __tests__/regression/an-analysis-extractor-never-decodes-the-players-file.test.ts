@@ -125,6 +125,28 @@ describe('every swing-analysis extractor reads a private copy', () => {
     }
   });
 
+  /**
+   * 2026-09-09 — caught by re-reading my own change. The duration probe wanted the same safety, but
+   * it lives inside a deliberately BOUNDED function: PROBE_TIMEOUT_MS, which DURATION_PROBE_CEILING_MS
+   * is derived from, which feeds ANALYSIS_WORST_CASE_MS — the screen's hang guard. Putting an
+   * unbounded multi-hundred-megabyte copy in front of it makes that budget a lie and can fire
+   * "Analysis timed out" on a clip that was going to succeed.
+   */
+  it('the duration probe never MAKES a copy — it only borrows one that exists', () => {
+    const src = stripComments(read('services/poseDetection.ts'));
+    const probe = src.slice(src.indexOf('async function probeDurationUncached'));
+    const body = probe.slice(0, probe.indexOf('async function probeDurationOn'));
+    expect(body).toContain('acquireExistingClipCopy');
+    expect(body).not.toMatch(/[^g]\bacquireClipCopy\(/);
+  });
+
+  it('the hang-guard budget still names the probe timeout it is derived from', () => {
+    const src = read('services/poseDetection.ts');
+    // If the probe ever grows an unbounded step, this constant stops describing reality.
+    expect(src).toMatch(/DURATION_PROBE_CEILING_MS = 8_000;\s*\/\/ probeDurationMs' own PROBE_TIMEOUT_MS/);
+    expect(src).toContain('const PROBE_TIMEOUT_MS = 8_000;');
+  });
+
   it('nobody makes a SECOND copy of a clip the pool already holds', () => {
     // ballPath did until 09-09: hundreds of megabytes copied twice per review on a 60fps capture.
     for (const rel of ANALYSIS_EXTRACTORS) {

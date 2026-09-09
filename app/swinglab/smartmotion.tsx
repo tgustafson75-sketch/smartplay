@@ -1894,8 +1894,13 @@ export default function SmartMotion() {
     void detectClubPath({ videoUri: clipUri, startMs: seg.startMs, endMs: seg.endMs, impactMs: segStrikeMs, toleranceMs: segToleranceMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(poseFrames) })
       .then((r) => {
         if (cancelled) return;
-        // 2026-07-22 (Tim) — require a validated arc (>= 4 points; detectClubPath returns [] for a
-        // clustered mis-detection) so we never draw a wrong "club". Below that → skeleton only.
+        // 2026-07-22 (Tim) — require a validated arc (detectClubPath returns [] for a clustered
+        // mis-detection) so we never draw a wrong "club". Below that → skeleton only.
+        // 2026-09-09 — the comment said ">= 4 points" and the code has said 3 since 08-06, when the
+        // server's MIN_ARC_POINTS was lowered 4→3 because Sonnet returns null through the blurred
+        // downswing and a server gate PLUS a client gate double-rejected valid partial sweeps into
+        // all-null. Server, swing-detail and this screen all gate at 3; only the prose lagged.
+        // [[a-stale-header-is-a-source-someone-trusts]]
         // 2026-07-27 (audit) — rebase window-relative tMs to ABSOLUTE (+segStart) so the live blue clubTip
         // tracks correctly on the 2nd/3rd split swing (was pinning to the finish point).
         const pts = r && r.points.length >= 3 ? r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs + segStart })) : null;
