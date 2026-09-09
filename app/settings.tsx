@@ -1481,12 +1481,25 @@ export default function Settings() {
               value={watchSwingEnabled}
               onValueChange={(v) => {
                 setWatchSwingEnabled(v);
+                /**
+                 * 2026-09-09 (Tim: "make sure swing capture and yardage do not clash").
+                 *
+                 * Turning this OFF used to call stopWatchCaddieBridge() — so switching off SWING
+                 * CAPTURE also killed pin yardage, the watch mic and the round push for the rest of
+                 * the session. That is the same coupling that was just removed from _layout.tsx,
+                 * living in a second file: decoupling the startup path alone would have left the
+                 * toggle able to re-break it with one tap.
+                 *
+                 * This switch now owns exactly what it is labelled: swing capture. The caddie bridge
+                 * is started on boot whenever the module exists and is left alone here. It is still
+                 * ENSURED on the way on, because a user reaching for watch features is a good moment
+                 * to make sure the bridge is up, and init is idempotent.
+                 */
                 if (v) {
                   void initWatchSwingBridge().catch(() => {});
                   void import('../services/watchCaddieBridge').then(m => m.initWatchCaddieBridge()).catch(() => {});
                 } else {
                   void stopWatchSwingBridge().catch(() => {});
-                  void import('../services/watchCaddieBridge').then(m => m.stopWatchCaddieBridge()).catch(() => {});
                 }
               }}
               trackColor={{ false: colors.border, true: colors.accent }}

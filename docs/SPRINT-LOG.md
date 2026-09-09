@@ -2940,3 +2940,51 @@ A no-connected-node condition is only observable when we try to SEND. A passive
 a round rather than after it. That is `android-native/` work and the OTA guard correctly blocks it.
 
 Health: **tsc 0 · jest 2892/2892 (258 suites) · sim 968/968 · lint 0 errors**. JS/TS only.
+
+
+### swing capture vs yardage — 2026-09-09 (Tim: "make sure swing capture and yardage do not clash")
+
+They did, three ways, and yesterday's decoupling is what made it matter.
+
+Both bridges resolve the SAME native module, and the native `start()`/`stop()` register/remove **ONE**
+`MessageClient` listener for the whole app. Every inbound path rides it: `/smartplay/swing`,
+`/smartplay/voice` (watch mic), `/smartplay/tap`, and `/smartplay/hello` — the presence ping that is
+the only thing firing `onWatchConnection`.
+
+1. **Only `watchSwingBridge` ever called `start()`.** So with swing capture off, the caddie bridge
+   had no inbound at all — outbound yardage worked (sending needs no listener) while the mic, taps
+   and presence were dead. Decoupling yardage without this would have shipped half a feature that
+   looked whole.
+2. **`stopWatchSwingBridge` called `stop()` unconditionally**, removing the listener from under a
+   live caddie bridge, and called `setConnected(false)` — declaring the watch gone while the caddie
+   bridge was proving otherwise every 18s.
+3. **The Settings toggle called `stopWatchCaddieBridge()` on the way off** — the exact coupling just
+   removed from `_layout.tsx`, living in a second file, able to re-break it with one tap.
+
+`services/watchDataLayer.ts` is now the single owner: refcounted acquire/release, native listener
+registered once and removed only when the last holder leaves. A failed yardage send also no longer
+flickers a live watch offline — it defers to the heartbeat (two ticks) before clearing the flag.
+
+### Tim: "I've only seen the yardage interface and have never seen the output from swing capture"
+
+Consistent with the above and it sharpens the picture: yardage worked historically (so the toggle
+WAS on), and swing capture never produced anything. Two findings, neither yet device-confirmed:
+
+- **Swing capture needs a SECOND switch, on the watch.** `SwingSensorService` only runs after the
+  wearer taps "Record swings" in the watch app (`MainActivity.onToggleCapture`). The phone toggle
+  arms the phone; the watch button starts the sensor. Neither UI mentions the other, so with the
+  phone toggle on and the watch button never pressed, the phone waits forever and says nothing.
+- **The watch Record button feature (08-07) is an orphan.** JS subscribes to `onWatchCommand`, but
+  `android-native/WearSwingBridgeModule.kt` has no command path and never emits that event — the
+  handler cannot fire. Native, so it cannot ride an OTA.
+
+### Gate added: `swing-capture-and-yardage-must-not-clash`
+Refcount semantics (native start once, stop only on last release, no underflow), both bridges going
+through the owner, the toggle no longer stopping the caddie bridge, and the heartbeat deference.
+Fails to compile on `86e8886d`; that tree had the swing bridge calling `NativeMod.stop()` directly,
+the caddie bridge claiming the listener **0** times, and the toggle stopping the caddie bridge.
+
+The native module is **mocked** in that gate rather than absent: without one, `acquireWatchDataLayer`
+short-circuits and the refcount never populates, so the test would assert nothing while passing.
+
+Health: **tsc 0 · jest 2904/2904 (259 suites) · sim 968/968 · lint 0 errors**. JS/TS only.

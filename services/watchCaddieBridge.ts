@@ -28,6 +28,7 @@ import { registerWatchSender, notifyWatchVoice, notifyWatchTap, notifyWatchComma
 import { getGreenYardagesSync } from './smartFinderService';
 import { useRoundStore } from '../store/roundStore';
 import { useWatchStore } from '../store/watchStore';
+import { acquireWatchDataLayer, releaseWatchDataLayer, isWatchDataLayerListening } from './watchDataLayer';
 import { devLog } from './devLog';
 
 // 2026-07-29 (Tim — "don't see if the app is saying watch connected, but they work perfectly").
@@ -46,6 +47,11 @@ const CADDIE_PATH = '/smartplay/caddie';
 // you walk" against watch battery; the phone already has the fix, so this is just a
 // tiny Data Layer message.
 const YARDAGE_TICK_MS = 18_000;
+/**
+ * How recently the watch must have been heard from for a failed send to be treated as a blip rather
+ * than a disconnection. Two yardage ticks: one miss is noise, a sustained silence is a real answer.
+ */
+const WATCH_HEARTBEAT_GRACE_MS = YARDAGE_TICK_MS * 2;
 
 interface WearCaddieNativeModule {
   sendToWatch(path: string, data: string): Promise<boolean>;
@@ -122,7 +128,20 @@ export async function pushYardageToWatch(): Promise<void> {
       // The native side resolves false ONLY when connectedNodes is empty (or the node query failed).
       // That is a paired-watch problem, not a yardage problem, and it must not read as one.
       traceWatch('yardage_undelivered', { reason: 'no_connected_node', hole: y.hole_number ?? null });
-      try { useWatchStore.getState().setConnected(false, watchDeviceLabel()); } catch { /* non-fatal */ }
+      /**
+       * 2026-09-09 — CLEAR THE FLAG, BUT NOT OVER THE TOP OF LIVE EVIDENCE.
+       *
+       * An inbound swing sets connected=true (watchSwingBridge), and this tick fires every 18s. If a
+       * single connectedNodes miss could clear it, a watch actively streaming swings would flicker
+       * "disconnected" in Settings mid-round. `connectedNodes` empty means the Data Layer has no
+       * node RIGHT NOW, which a recent inbound message directly contradicts — so defer to the
+       * heartbeat and only clear when nothing has been heard recently.
+       */
+      try {
+        const w = useWatchStore.getState();
+        const heardRecently = typeof w.lastHeartbeat === 'number' && Date.now() - w.lastHeartbeat < WATCH_HEARTBEAT_GRACE_MS;
+        if (!heardRecently) w.setConnected(false, watchDeviceLabel());
+      } catch { /* non-fatal */ }
       return;
     }
     // A delivered outbound message proves the round trip just as well as an inbound one does, and
@@ -143,6 +162,19 @@ export async function initWatchCaddieBridge(): Promise<boolean> {
   if (!NativeMod) return false;
   if (started) return true;
   try {
+    /**
+     * 2026-09-09 (Tim: "make sure swing capture and yardage do not clash") — CLAIM THE INBOUND
+     * LISTENER, which this bridge never used to do.
+     *
+     * The native `start()` registers ONE MessageClient listener carrying every inbound path, and
+     * only watchSwingBridge ever called it. So with swing capture off, this bridge's mic/tap
+     * subscriptions below were connected to a socket nobody had plugged in: outbound yardage worked
+     * (sending needs no listener) while the watch mic, taps and the `/smartplay/hello` presence ping
+     * were all dead. Decoupling yardage from the swing toggle without this would have shipped half
+     * the feature and looked like it worked.
+     */
+    await acquireWatchDataLayer('caddie');
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     emitter = new NativeEventEmitter(NativeMod as any);
 
@@ -217,6 +249,9 @@ export async function stopWatchCaddieBridge(): Promise<void> {
     commandSub?.remove();
     unsubRound?.();
     if (yardageTimer) clearInterval(yardageTimer);
+    // Only our claim — swing capture may still be listening, and taking the shared listener down
+    // under it would silently stop every swing the watch sends.
+    if (started) await releaseWatchDataLayer('caddie');
   } catch {
     /* no-op */
   } finally {
