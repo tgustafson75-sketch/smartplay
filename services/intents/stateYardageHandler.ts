@@ -49,6 +49,35 @@ function extractYardage(raw: string, paramYards: unknown): number | null {
   return n;
 }
 
+/**
+ * 2026-09-10 — does this utterance carry a number that could only be a YARDAGE?
+ *
+ * Lives here because this file already owns "what counts as a stated yardage" (extractYardage
+ * above); the follow-up path in hooks/useVoiceCaddie needed the question answered and must not grow
+ * a second opinion about it. [[two-owners-is-the-root-cause]]
+ *
+ * Used for ONE decision: whether a reply given while the caddie is awaiting a follow-up should still
+ * reach the intent router. It is deliberately not a yardage PARSER — it decides only whether routing
+ * is worth doing, and the router's classifier makes the actual call.
+ *
+ * The floor is 30 rather than extractYardage's 10 because this runs on ANSWERS to the caddie's own
+ * questions, where small numbers are common and mean other things: hole numbers (1-18), scores and
+ * putts (1-12), club numbers (3-9). Nobody corrects a caddie's distance with "twelve". Above 30 the
+ * only thing a bare golf number means is yards, so "no, 165" routes and "twelve" stays a
+ * conversational answer — as does "send it home", which carries no number at all and is the
+ * utterance the follow-up bypass was written for in the first place.
+ */
+const MIN_FOLLOWUP_YARDAGE = 30;
+
+export function carriesYardageCorrection(raw: string): boolean {
+  const text = String(raw ?? '');
+  for (const m of text.matchAll(/\b(\d{2,3})\b/g)) {
+    const n = parseInt(m[1], 10);
+    if (Number.isFinite(n) && n >= MIN_FOLLOWUP_YARDAGE && n <= 400) return true;
+  }
+  return false;
+}
+
 export const stateYardageHandler: IntentHandler = {
   intent_type: 'state_yardage',
 

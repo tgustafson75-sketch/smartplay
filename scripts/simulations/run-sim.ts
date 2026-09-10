@@ -2737,7 +2737,9 @@ check('Music portal: "play [song]" → kid-safe search → clean in-app player (
     const safe = detectPlaySongRequest('play it safe');
     const api = read('api/youtube-search.ts');
     const svc = read('services/songPortal.ts');
-    const screen = read('app/jukebox.tsx');
+    // Comments stripped: the archaeology note in jukebox.tsx names the dead guard it removed, and a
+    // check that reads prose is not checking the code.
+    const screen = read('app/jukebox.tsx').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
     const voice = read('hooks/useVoiceCaddie.ts');
     const vercel = read('vercel.json');
     return (
@@ -2758,7 +2760,7 @@ check('Music portal: "play [song]" → kid-safe search → clean in-app player (
       /tryPlaySong\(message\)/.test(voice)
     );
   })(),
-  'play-song searches the kid-safe server endpoint and opens the clean player; OTA-safe webview fallback; golf "play" phrases excluded');
+  'play-song searches the kid-safe server endpoint and opens the clean embedded player behind a guard that asks the question BOTH architectures answer; golf "play" phrases excluded');
 
 check('Quick how-to: first-time tutorials + on-demand "how do I use this?" share one source',
   // 2026-06-13 (Tim) — quick orientation (text + caddie narration) on the doing surfaces,
@@ -3649,15 +3651,30 @@ check('Sim round: narrated yardage holds (simulated fix not treated as stale) + 
   // 2026-07-30 (Tim — "yardage updated for a second then went back to the whole hole yardage" + "3 min
   // to give the course brief"). The simulated fix never re-ticks, so the 10s freshness gate reverted the
   // read to the static hole distance; and the sim launcher prewarmed nothing so the first turn was cold.
+  //
+  // 2026-09-10 — INVERTED, and the sim round is now safe BY CONSTRUCTION rather than by exemption.
+  // Tim hit the same reversion on a REAL round at Hemet ("the right number goes in and out"): the
+  // gate was `fixAge < 10_000` and gpsManager's walking mode polls at exactly 10_000ms, so a live
+  // fix aged out at the instant its replacement was due. The whole gate is deleted — gpsManager
+  // already owns staleness (30s, "walking (10s) + 3 missed ticks"), degrades at 60s keeping the
+  // position, and hard-clears at 5 min. With no age arithmetic left, a frozen simulated timestamp
+  // cannot be aged out either, so the isSimulatedActive exemption that existed ONLY to dodge this
+  // gate is gone with it. Asserting its presence would now pin the bug it was working around.
   (() => {
-    const yr = read('services/yardageResolver.ts');
+    const yr = readCode('services/yardageResolver.ts');
     const sr = read('services/simRound.ts');
+    const gps = readCode('services/gpsManager.ts');
+    const cadence = /walking:\s*\{\s*intervalMs:\s*([\d_]+)/.exec(gps);
+    const staleness = /const FIX_STALENESS_MS = ([\d_]+)/.exec(gps);
+    const toMs = (m: RegExpExecArray | null) => (m ? parseInt(m[1].replace(/_/g, ''), 10) : NaN);
     return (
-      /isSimulatedActive/.test(yr) && /\(isSimulatedActive\(\) \|\| fixAge < 10_000\)/.test(yr) &&
+      !/fixAge < 10_000/.test(yr) && !/isSimulatedActive/.test(yr) &&
+      // The defect in one line: a staleness bound must never be <= the cadence that feeds it.
+      toMs(staleness) > toMs(cadence) &&
       /prewarmBriefing/.test(sr) && /prewarmVoice\(true\)/.test(sr) && /warmBackendConnection/.test(sr)
     );
   })(),
-  'a narrated sim shot moves the position and the yardage HOLDS its countdown (the simulated fix is not aged out to the static hole distance), and starting a sim round prewarms the briefing + TTS + connection so the first brief is not a 3-minute cold wait');
+  'the live tier owns no staleness rule of its own, so neither a simulated fix (timestamp never ticks) nor a real one arriving on the 10s walking cadence can be aged out into the static hole distance; gpsManager stays the single owner and stays sized above its own cadence; and starting a sim round prewarms the briefing + TTS + connection so the first brief is not a 3-minute cold wait');
 
 check('Voice: get-to-know interview never opens a tool (fault = info, not a command)',
   // 2026-07-30 (Tim — "in tell-your-caddie mode caddie keeps opening SwingLab while I list my

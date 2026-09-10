@@ -3160,3 +3160,88 @@ voice path end to end.
 
 Health: **tsc 0 · jest 2950/2950 (263 suites) · sim 968/968 · lint 0 errors**. JS/TS only; preflight
 passes, so this can ride an OTA.
+
+---
+
+## Day N+3 — 2026-09-10 — three ways the right number could not reach Tim
+
+Reported from the tee at Hemet Golf Club, mid-round, escalating. Three separate defects, one symptom
+each. All found read-only before anything was changed.
+
+### 1. "The right number goes in and out" — THE FLAP
+
+`services/yardageResolver.ts` gated the live-GPS tier on `fixAge < 10_000`. `gpsManager`'s walking
+mode polls at **exactly** `10_000`ms (`POLL_CONFIG.walking.intervalMs`). **The gate was tied with the
+cadence feeding it.** A fix landed, stayed healthy for 9.9s, and aged out at the instant its
+replacement was due — falling to the static card, which is the *frozen tee→green scorecard number*,
+not a slightly older live reading. The next fix flipped it back. Every ten seconds, all round. The
+caddie tab re-runs that memo on a 4s tick and on every fix, so both states got rendered.
+
+`gpsManager` already **owns** staleness and sized it deliberately — its own comment reads *"30s
+covers walking-mode (10s) + 3 missed ticks of headroom"* — then degrades at 60s while keeping the
+position, and only hard-clears at 5 minutes. That two-stage design is Tim's own 2026-06-29
+over-strict-gate fix. The resolver had invented a second, tighter rule one layer up and re-created
+the failure that fix removed. [[two-owners-is-the-root-cause]]
+
+**The age arithmetic is deleted, not retuned.** Deleting it also deletes the reason the
+`isSimulatedActive()` exemption existed — it was only ever there to dodge this gate for simulated
+fixes, whose timestamps never tick (2026-07-30). The sim round is now safe *by construction* rather
+than by exemption, and the sim check that asserted the old gate's presence — which would now pin the
+bug — asserts its absence and additionally asserts `FIX_STALENESS_MS > walking.intervalMs`.
+
+### 2. "I'm telling Kevin the correction and he keeps repeating the wrong yardage"
+
+The follow-up bypass in `hooks/useVoiceCaddie.ts` was a **blanket skip of the entire intent
+router** — all 35 handlers — whenever the caddie was awaiting a reply. `state_yardage` is one of
+them, and it is the intent whose most natural moment in the whole round is the instant after the
+caddie says a number you disagree with. So the correction went to the brain as prose,
+`setUserStatedYardage` was never called, Tier 3 stayed empty, the next context build re-derived the
+same wrong number, and Kevin repeated it. **Stating the number as a fresh utterance always worked;
+correcting him with it never did.**
+
+The bypass is still right for what it was written for (2026-05-16: "send it home" read as `navigate
+home`). A conversational answer carries no yardage, so the skip **narrows** rather than disappears:
+a reply carrying a yardage-shaped number reaches the router — the existing owner of intent
+classification, not a second detector. The predicate lives beside `extractYardage`, which already
+owns "what counts as a stated yardage". Floor of 30 because this runs on answers to the caddie's own
+questions, where hole numbers (1-18), scores (1-12) and club numbers (3-9) are common and mean other
+things.
+
+### 3. "The watch yardage is not updating"
+
+`watchCaddieBridge` pushed on hole change and an 18s tick, and on nothing else. Every other live
+surface rides the GPS fix: SmartFinder polls at 3s, Cockpit takes `subscribeFixChange` + a 3s
+backstop, the caddie tab takes `subscribeFixChange` + a 4s poll. The watch took neither — ~26 yards
+of walking per tick, visibly frozen in between, on a device you look at for one second. Cockpit had
+this exact complaint on 2026-07-01; this is its answer applied to the surface that was missed.
+
+Merged onto main's same-day watch work rather than over it: main's `lastYardageSent` change-compare
+(added for trace volume) and its `traceWatch` skip reasons are untouched. The new fix-driven sends
+pass `{ onlyIfChanged: true }`; the **timer and hole-change sends stay unconditional**, because a
+delivered outbound message is what proves the round trip (`markWatchAlive`) and standing still must
+not read as disconnected.
+
+### Verified
+
+`tsc` clean (one pre-existing `api/messages.ts` error) · lint clean on all changed files ·
+jest **green** · sim **968/968**.
+
+### Open / carried
+
+- **None of this is verified on device.** It went out as an OTA to a player mid-round.
+- **The Hemet green coordinate is still unproven.** SmartVision read right while the data bar read
+  wrong; they answer different questions from different sources (`holeLengthYards` = anchored or
+  card hole length; `resolveYardage` = live GPS to green centre). Needs two numbers off the same tee
+  to tell whether golfcourseapi's green for that hole is simply in the wrong place. Not patched on a
+  hypothesis.
+- **SmartVision not loading** — reported, not yet investigated.
+- **Auto-scoring / auto shot detection / movement** — reported as "not seamless", wiring unverified.
+- `data/courses.ts` ECHO_HILLS (the *other* Hemet course): every tee→green geodesic computes to
+  ~150y regardless of a listed 221–322, and every front/back is exactly `distance ∓ 9`. Those coords
+  are synthetic. Not this round's course, but it will misreport if anyone tees it up.
+
+### Note
+
+Principle 5 again, and principle 1 did the work: all three were found by asking *what does this
+number's owner already decide* rather than by tuning the number. Two of the three fixes are
+deletions.

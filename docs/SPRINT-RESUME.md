@@ -8,6 +8,25 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+> ### ⚠️ LATEST — 2026-09-10. Three ways the right number could not reach the player.
+>
+> Reported from the tee at Hemet, mid-round. **(1) The flap** — `yardageResolver` gated live GPS on
+> `fixAge < 10_000` while `gpsManager`'s walking mode polls at *exactly* 10_000ms, so the live tier
+> aged out at the instant its replacement was due and dropped to the frozen scorecard number, every
+> ten seconds. gpsManager already owned staleness (30s, "walking (10s) + 3 missed ticks"); the gate
+> is deleted, and the `isSimulatedActive` exemption that existed only to dodge it goes with it.
+> **(2) Kevin would not take a correction** — the follow-up bypass skipped the ENTIRE intent router,
+> `state_yardage` included, so the one correction a player most needs to make was the one the router
+> could not hear. Now narrowed: a reply carrying a yardage reaches the router, everything else
+> bypasses as before. **(3) The watch rode an 18s timer and no GPS subscription** — now takes the
+> fix fan-out too, merged onto main's same-day watch work, with the heartbeat cadence unchanged.
+>
+> Green: tsc, lint, jest, sim 968/968. **NOT verified on device — shipped as an OTA mid-round.**
+>
+> **Still open from that round:** Hemet's green coordinate is unproven (SmartVision right, data bar
+> wrong — needs two numbers off one tee); SmartVision not loading; auto-scoring / auto shot
+> detection wiring unverified.
+
 > ### ⚠️ LATEST — 2026-09-09. Three crashes fixed; all await device verification.
 >
 > Branch `claude/android-crashes-voice-failures-tjsmho`, 3 commits, unmerged.

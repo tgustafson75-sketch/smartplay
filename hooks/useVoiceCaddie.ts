@@ -37,6 +37,7 @@ import {
   toggle as toggleListeningSession,
 } from '../services/listeningSession';
 import { voiceCommandRouter } from '../services/intents';
+import { carriesYardageCorrection } from '../services/intents/stateYardageHandler';
 import { openToolHandler } from '../services/intents/openToolHandler';
 import { quickRoundHandler } from '../services/intents/quickRoundHandler';
 import type { AppContext, VoiceIntent } from '../types/voiceIntent';
@@ -2347,9 +2348,31 @@ export const useVoiceCaddie = ({
       // mis-classified as `navigate home`. The brain receives the full
       // conversation buffer and resolves the follow-up against Kevin's
       // own prior turn.
-      const skipIntentRouter = isAwaitingFollowUp();
+      /**
+       * 2026-09-10 (Tim, Hemet, mid-round: "I'm telling Kevin the correction and he keeps repeating
+       * the wrong yardage. this is unacceptable") — THE CORRECTION COULD NOT LAND.
+       *
+       * The bypass above is a BLANKET skip of the whole router — all 35 handlers — whenever Kevin is
+       * awaiting a follow-up. `state_yardage` is one of them, and it is the intent whose most natural
+       * moment in the entire round is the instant AFTER the caddie says a number you disagree with.
+       * So the one correction a player most needs to make was the one the router was structurally
+       * incapable of hearing: the utterance went to the brain as prose, setUserStatedYardage was
+       * never called, yardageResolver's Tier 3 stayed empty, and the next context build re-derived
+       * the same wrong number. Kevin repeated it, forever, and saying it louder never helped.
+       *
+       * Stating the number as a FRESH utterance always worked. Correcting him with it never did.
+       *
+       * The bypass itself is still right for what it was written for (2026-05-16: "send it home"
+       * after "lay up or send it home?" being misread as `navigate home`). A conversational ANSWER
+       * carries no yardage. So the skip narrows instead of disappearing: a reply carrying a
+       * yardage-shaped number goes through the router — which is the existing owner of intent
+       * classification, not a second detector — and everything else bypasses exactly as before.
+       */
+      const skipIntentRouter = isAwaitingFollowUp() && !carriesYardageCorrection(transcript);
       if (skipIntentRouter) {
         devLog('[voice] follow-up bypass: Kevin asked a question, routing reply straight to brain');
+      } else if (isAwaitingFollowUp()) {
+        devLog('[voice] follow-up carries a yardage — routing it so the correction can land');
       }
 
       // ── Local-first (AUTO — always on, NOT a user toggle) ─────────────────
