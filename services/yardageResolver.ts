@@ -18,8 +18,10 @@
  *   1. user_stated  — Tier 3 voice anchor (roundStore.userStatedYardage)
  *                     when same hole and <5 min old. The player explicitly
  *                     fed the system a number; respect it.
- *   2. gps_live     — Tier 1, live GPS + green coords, when accuracy is
- *                     ≤15m AND fix age <10s. The default in clean conditions.
+ *   2. gps_live     — Tier 1, live GPS + green coords, whenever accuracy is
+ *                     ≤15m and gpsManager still holds the fix. The default in
+ *                     clean conditions. Staleness is gpsManager's call, not
+ *                     ours — see the note on `gpsHealthy` below.
  *   3. static_card  — Tier 2, bundled courseHoles.distance (tee→green
  *                     scorecard yardage). Used when GPS soft OR mid-warm-up.
  *                     Only valid from the tee — gets stale once player walks.
@@ -31,7 +33,7 @@
  */
 
 import { useRoundStore } from '../store/roundStore';
-import { getGreenYardagesSync, getLastFix, classifyAccuracy, isSimulatedActive } from './smartFinderService';
+import { getGreenYardagesSync, getLastFix, classifyAccuracy } from './smartFinderService';
 
 export type YardageSource = 'user_stated' | 'gps_live' | 'static_card' | 'none';
 export type YardageConfidence = 'high' | 'med' | 'low';
@@ -112,9 +114,30 @@ export function resolveYardage(holeNumberArg?: number): ResolvedYardage {
   // hole. A simulated fix legitimately never ticks, so treating it as "stale" is the defect. Bypass the
   // age gate when the simulator owns the fix — mirrors gpsManager.getGpsHealth()'s own simulated
   // short-circuit — so the narrated countdown holds.
+  /**
+   * 2026-09-10 (Tim, Hemet, mid-round: "the right number goes in and out") — THE FLAP.
+   *
+   * This gate used to read `(isSimulatedActive() || fixAge < 10_000)`. gpsManager's walking mode
+   * polls at EXACTLY 10_000ms (POLL_CONFIG.walking.intervalMs). So the gate and the cadence feeding
+   * it were tied: a fix landed, stayed "healthy" for 9.9s, and at the very instant the next one was
+   * due it aged out — dropping to the static card, which is the FROZEN tee→green scorecard number,
+   * not a slightly older live reading. The next fix flipped it back. Every ten seconds, all round.
+   * The caddie tab re-runs this memo on a 4s tick and on every fix, so both states got rendered.
+   *
+   * gpsManager already OWNS "is this fix usable" and sized it deliberately — its own comment reads
+   * "30s covers walking-mode (10s) + 3 missed ticks of headroom" — then degrades at 60s while KEEPING
+   * the position, and only hard-clears at 5 minutes. That two-stage design is Tim's own 2026-06-29
+   * over-strict-gate fix. This resolver invented a SECOND, tighter staleness rule one layer up and
+   * re-created the exact failure that fix removed. [[two-owners-is-the-root-cause]]
+   *
+   * So the age arithmetic is deleted rather than retuned. If getLastFix() hands us a fix at all, the
+   * owner has already decided it is usable; when GPS genuinely dies the owner clears it and we fall
+   * to the static card through the normal path. Deleting the gate also deletes the reason the
+   * `isSimulatedActive()` special-case existed — it was only ever there to bypass this gate for
+   * simulated fixes, whose timestamps never tick (2026-07-30).
+   */
   const gpsHealthy =
     fix != null &&
-    (isSimulatedActive() || fixAge < 10_000) &&
     quality.level !== 'weak' &&
     quality.level !== 'none';
 

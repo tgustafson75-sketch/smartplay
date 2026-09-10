@@ -25,7 +25,7 @@
 
 import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
 import { registerWatchSender, notifyWatchVoice, notifyWatchTap, notifyWatchCommand, type OutboundPayload, watchDeviceLabel } from './watchBridge';
-import { getGreenYardagesSync } from './smartFinderService';
+import { getGreenYardagesSync, subscribeFixChange } from './smartFinderService';
 import { useRoundStore } from '../store/roundStore';
 import { useWatchStore } from '../store/watchStore';
 import { devLog } from './devLog';
@@ -68,6 +68,25 @@ let tapSub: { remove: () => void } | null = null;
 let commandSub: { remove: () => void } | null = null;
 let unsubRound: (() => void) | null = null;
 let yardageTimer: ReturnType<typeof setInterval> | null = null;
+/**
+ * 2026-09-10 (Tim, Hemet, mid-round: "the watch yardage is not updating") — THE WATCH RODE A TIMER
+ * AND NOTHING ELSE.
+ *
+ * Yardage went out on hole change and on an 18s tick. Every other live surface in the app rides the
+ * GPS fix: SmartFinder polls at 3s, Cockpit takes subscribeFixChange plus a 3s backstop, the caddie
+ * tab takes subscribeFixChange plus a 4s poll. The watch took neither. Walking is ~26 yards of
+ * travel per 18-second tick, so the number on the wrist was stale by up to that much and sat
+ * visibly frozen in between — which is exactly what "not updating" looks like on a device you
+ * glance at for one second.
+ *
+ * Cockpit had this same complaint on 2026-07-01 and the answer was the same one used here: take the
+ * push AND keep the timer as a backstop, funnelled through one sender that only transmits when the
+ * numbers actually CHANGED. The 18s cadence was chosen for watch battery, and the key-compare
+ * honours that better than the timer did — standing still now sends nothing at all, where the timer
+ * re-sent the same triplet every 18 seconds all round. [[no-half-fixes-enforce-every-surface]]
+ */
+let fixSub: (() => void) | null = null;
+let lastYardageKey = '';
 let started = false;
 
 export function isWatchCaddieBridgeAvailable(): boolean {
@@ -83,6 +102,11 @@ export async function pushYardageToWatch(): Promise<void> {
     if (!round.isRoundActive) return;
     const y = getGreenYardagesSync(round.currentHole);
     if (y.middle == null && y.front == null && y.back == null) return; // nothing honest to show
+    // Only transmit on a real change — see the note on lastYardageKey. Hole is in the key so a
+    // hole change always sends even when the triplet happens to repeat.
+    const key = `${y.hole_number}|${y.front}|${y.middle}|${y.back}`;
+    if (key === lastYardageKey) return;
+    lastYardageKey = key;
     const payload = {
       kind: 'yardage' as const,
       hole: y.hole_number,
@@ -155,6 +179,12 @@ export async function initWatchCaddieBridge(): Promise<boolean> {
         void pushYardageToWatch();
       }
     });
+    // Live push: the same fan-out every other yardage surface reads. The timer below stays as the
+    // backstop for the gap this fan-out is known to have (round teardown/reconnect) — the reason
+    // Cockpit kept its poll too.
+    try {
+      fixSub = subscribeFixChange(() => { void pushYardageToWatch(); });
+    } catch (e) { devLog(`[watchCaddie] fix subscribe failed: ${String(e)}`); }
     yardageTimer = setInterval(() => { void pushYardageToWatch(); }, YARDAGE_TICK_MS);
 
     started = true;
@@ -177,11 +207,14 @@ export async function stopWatchCaddieBridge(): Promise<void> {
     tapSub?.remove();
     commandSub?.remove();
     unsubRound?.();
+    fixSub?.();
     if (yardageTimer) clearInterval(yardageTimer);
   } catch {
     /* no-op */
   } finally {
-    voiceSub = null; tapSub = null; commandSub = null; unsubRound = null; yardageTimer = null; emitter = null;
+    voiceSub = null; tapSub = null; commandSub = null; unsubRound = null; fixSub = null; yardageTimer = null; emitter = null;
+    // A fresh start must be able to send the first reading even if it repeats the last one.
+    lastYardageKey = '';
     started = false;
   }
 }
