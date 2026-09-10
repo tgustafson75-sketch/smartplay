@@ -19,6 +19,7 @@ import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { postingInputsFor, postedDifferentialFor, computeRoundHandicap, estimateNewIndex, computeScoreDifferential, expectedNineDifferential } from '../../services/handicapCalculator';
 import { getBundledHoles } from '../../data/courses';
+import { holePar } from '../../services/smartFinderService';
 
 /**
  * Phase V — confidence band for the Index estimate. WHS itself doesn't
@@ -102,7 +103,7 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
     // the card DECLINES to compute/post a differential on unknown par — matching endRound/computeWhsPostingScore,
     // which return null on any unknown par. (Removes the "card posts a fabricated-par differential the engine refused".)
     const parForHole = (hole: number): number | null =>
-      round.holePars?.[hole] ?? bundled.find(h => h.hole === hole)?.par ?? courseHoles.find(c => c.hole === hole)?.par ?? null;
+      round.holePars?.[hole] ?? bundled.find(h => h.hole === hole)?.par ?? holePar(hole);
     const tee = (courseHoles[0] ?? bundled[0]) as ({ course_rating?: number; slope_rating?: number } | undefined);
     // 2026-07-18 (audit) — resolve par from REAL sources only; do NOT fall back to a fabricated 72.
     // A differential computed off par-72/slope-113 neutrals would be wrong on a par-70/71 course, so

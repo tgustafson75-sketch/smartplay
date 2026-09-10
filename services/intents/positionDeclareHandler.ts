@@ -21,6 +21,7 @@
  *   - position_declaration confirms WHERE you are physically
  */
 
+import { holeData as resolvedHoleData } from '../smartFinderService';
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import { useRoundStore } from '../../store/roundStore';
 import { getLastFix, forceRefreshGps } from '../gpsManager';
@@ -77,7 +78,7 @@ export const positionDeclareHandler: IntentHandler = {
       : inferSpot(intent.raw_text ?? '');
 
     const hole = round.currentHole;
-    const holeData = round.courseHoles.find(h => h.hole === hole);
+    const holeData = resolvedHoleData(hole);
     if (!holeData) {
       return {
         success: false,

@@ -1,4 +1,5 @@
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
+import { holePar } from '../smartFinderService';
 import { useRoundStore } from '../../store/roundStore';
 import { track } from '../analytics';
 // 2026-08-10 — score-utterance parsing lives in a PURE module so it is reachable from the logic
@@ -83,7 +84,7 @@ export const logScoreHandler: IntentHandler = {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { voiceScoreHole } = require('../../store/roundStore') as typeof import('../../store/roundStore');
     const hole = parseHole(params.hole_number, voiceScoreHole(round));
-    const par = round.courseHoles.find(h => h.hole === hole)?.par ?? null;
+    const par = holePar(hole);
     // Numeric parsing first (params.strokes is the classifier's primary
     // emit; raw_text is the verbatim utterance fallback). If neither
     // yields a number, fall through to par-relative score-name parsing

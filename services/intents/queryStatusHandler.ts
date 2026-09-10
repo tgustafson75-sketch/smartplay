@@ -1,4 +1,5 @@
 import { resolveYardage, resolvedToFmb } from '../yardageResolver';
+import { holePar } from '../smartFinderService';
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import { useRoundStore } from '../../store/roundStore';
 import { useGhostStore } from '../../store/ghostStore';
@@ -1095,7 +1096,7 @@ export const queryStatusHandler: IntentHandler = {
             follow_up_needed: false,
           };
         }
-        const par = round.courseHoles.find(h => h.hole === round.currentHole)?.par ?? 4;
+        const par = holePar(round.currentHole) ?? 4;
         // 2026-07-29 (Tim — "not just score but a review of the shots") — narrate the actual shot
         // SEQUENCE from a prior round on this hole, not just the number. Every shot persists club +
         // outcome + distance (ShotResult on RoundRecord.shots), so replay them in order. Returns '' when
@@ -1297,7 +1298,7 @@ export const queryStatusHandler: IntentHandler = {
         // Greens in regulation DERIVED honestly: strokes-to-green = hole score − putts; a green
         // is hit in regulation when that's ≤ par − 2. Counts only holes where score, putts, AND
         // par are all known — no putts logged for a hole means we can't derive it, so we skip it.
-        const parOf = (h: number) => round.courseHoles.find((c) => c.hole === h)?.par ?? null;
+        const parOf = (h: number) => holePar(h);
         let counted = 0, hit = 0;
         for (const hStr of Object.keys(round.scores)) {
           const h = Number(hStr);
@@ -1318,7 +1319,7 @@ export const queryStatusHandler: IntentHandler = {
         const raw = (intent.raw_text ?? '').toLowerCase();
         const wantBack = /\bback\b/.test(raw);
         const lo = wantBack ? 10 : 1, hi = wantBack ? 18 : 9;
-        const parOf = (h: number) => round.courseHoles.find((c) => c.hole === h)?.par ?? null;
+        const parOf = (h: number) => holePar(h);
         let strokes = 0, parSum = 0, played = 0;
         for (let h = lo; h <= hi; h++) {
           const s = round.scores[h];

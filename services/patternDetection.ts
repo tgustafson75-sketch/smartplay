@@ -11,6 +11,7 @@
  *    Expect: subtle left-side aim suggestion, no lecturing. Kevin uses patterns silently.
  */
 
+import { holePar } from './smartFinderService';
 import { STRENGTH_LABEL_BREAKS } from '../constants/handicapTiers';
 import type { ShotResult, CourseHole } from '../store/roundStore';
 import type { RoundMode, PatternInsights } from '../types/patterns';
@@ -102,7 +103,7 @@ export function generatePatternInsights(
   const pressureShots = shots.filter(shot => {
     const score = scores[shot.hole];
     if (score == null) return false;
-    const par = courseHoles.find(h => h.hole === shot.hole)?.par ?? 4;
+    const par = holePar(shot.hole) ?? 4;
     return (score - par) > threshold;
   });
 

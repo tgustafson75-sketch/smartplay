@@ -1,3 +1,4 @@
+import { holePar } from './smartFinderService';
 /**
  * 2026-07-04 (elite-clean audit, menu finding #1) — the immediate spoken/shown
  * end-of-round summary line, extracted to ONE implementation. It was duplicated
@@ -26,7 +27,7 @@ export function buildRoundEndSummary(s: RoundEndSnapshot): string {
   // screen already greys unknown-par holes out — now the spoken summary agrees).
   const holesWithPar = Object.entries(s.scores)
     .map(([h, sc]) => {
-      const par = s.courseHoles.find((c) => c.hole === Number(h))?.par ?? null;
+      const par = holePar(Number(h));
       return { hole: Number(h), score: sc as number, par, offset: par != null ? (sc as number) - par : 0 };
     })
     .filter((h): h is { hole: number; score: number; par: number; offset: number } => h.score > 0 && h.par != null);

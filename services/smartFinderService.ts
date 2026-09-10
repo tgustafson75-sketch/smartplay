@@ -579,6 +579,24 @@ export function holeLengthYards(holeNumber: number): number | null {
 // when populated; otherwise fall back to bundled per-slug data from
 // data/courses.ts. activeCourseId | pendingStartCourseId | previewCourseId
 // is the preview courseId for slug resolution.
+/**
+ * 2026-09-10 (Tim: "one universal truth for the course engine") — THE HOLE, RESOLVED ONCE.
+ *
+ * Twenty-odd call sites did `round.courseHoles.find(h => h.hole === n)` themselves. Every one of
+ * them silently skipped the bundled fallback below, so pre-round and any moment before courseHoles
+ * hydrates they read `undefined` and defaulted par to 4 — which is why a par 3 could be briefed,
+ * scored and posted as a par 4. Exported so nobody has a reason to write that `.find` again.
+ */
+export function holeData(hole: number): import('../store/roundStore').CourseHole | null {
+  return resolveHoleDataWithFallback(hole);
+}
+
+/** Par for a hole through the same resolution. Null when genuinely unknown — never a guessed 4. */
+export function holePar(hole: number): number | null {
+  const p = resolveHoleDataWithFallback(hole)?.par;
+  return typeof p === 'number' && Number.isFinite(p) && p > 0 ? p : null;
+}
+
 function resolveHoleDataWithFallback(hole: number): import('../store/roundStore').CourseHole | null {
   const round = useRoundStore.getState();
   const live = round.courseHoles.find(h => h.hole === hole);

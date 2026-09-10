@@ -41,6 +41,7 @@ import { useRoundStore } from '../store/roundStore';
 import { useOffCourseStore } from '../services/offCourseDetector';
 import { runAuditV2 } from '../services/audit/scenarioRunner';
 import type { AuditReport } from '../services/audit/types';
+import { holePar } from '../services/smartFinderService';
 const PEBBLE_MOCK_ROUND: MockRound = require('../__mocks__/mockRound.json');
 const MENIFEE_MOCK_ROUND: MockRound = require('../__mocks__/menifeeRound.json');
 
@@ -453,7 +454,7 @@ export default function GpsTestScreen() {
                   {Object.entries(scores)
                     .sort(([a], [b]) => Number(a) - Number(b))
                     .map(([h, s]) => {
-                      const par = courseHoles.find(c => c.hole === Number(h))?.par ?? 4;
+                      const par = holePar(Number(h)) ?? 4;
                       const offset = s - par;
                       const chipColor = offset < 0 ? '#00C896' : offset === 0 ? colors.text_primary : offset === 1 ? '#F5A623' : '#ef4444';
                       return (

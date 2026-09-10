@@ -33,7 +33,7 @@
  */
 
 import { useRoundStore } from '../store/roundStore';
-import { getGreenYardagesSync, getLastFix, classifyAccuracy } from './smartFinderService';
+import { getGreenYardagesSync, getLastFix, classifyAccuracy, holeData } from './smartFinderService';
 
 export type YardageSource = 'user_stated' | 'gps_live' | 'static_card' | 'none';
 export type YardageConfidence = 'high' | 'med' | 'low';
@@ -210,7 +210,7 @@ export function resolveYardage(holeNumberArg?: number): ResolvedYardage {
   // course-total-sized number would render straight into the per-hole "top" cards. This is the
   // mechanism behind the recurring "header showed the whole-course yardage" bug — gate it here
   // so a course-total-magnitude value is rejected (falls through to `none`) instead of shown.
-  const hData = round.courseHoles.find(h => h.hole === hole);
+  const hData = holeData(hole);
   if (hData && hData.distance > 30 && hData.distance <= 700) {
     const gpsState =
       fix == null ? 'GPS not ready' :

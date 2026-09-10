@@ -55,6 +55,7 @@ import { playsLikeDistance } from '../utils/playsLike';
 // OFFLINE from the persisted book, not a network fetch. [[course-book-cns]]
 import { useCaddieMemoryStore } from '../store/caddieMemoryStore';
 import { STANDARD_LADDER, CLUB_LABEL } from './standardBag';
+import { holeData as resolvedHoleData } from './smartFinderService';
 
 /**
  * 2026-08-11 (adversarial audit) — ONE bag builder for every spoken reply in this file.
@@ -937,7 +938,7 @@ function scoreReply(lang: LocalReplyLanguage): LocalReplyResult {
   Object.entries(scores).forEach(([holeStr, s]) => {
     if (typeof s !== 'number' || s <= 0) return;
     const hole = Number(holeStr);
-    const ch = courseHoles.find(h => h.hole === hole);
+    const ch = resolvedHoleData(hole);
     if (ch && typeof ch.par === 'number') {
       totalScore += s;
       totalPar += ch.par;

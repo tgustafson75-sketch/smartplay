@@ -40,7 +40,7 @@ export type ClubType = 'iron' | 'wedge' | 'hybrid' | 'wood' | 'driver' | 'putter
 
 // The pure bag-reconcile logic lives in its own dependency-free module (testable in node).
 import { reconcileClubWithBag } from './clubBagReconcile';
-import { digitizeNumberWords } from './clubNormalize';
+import { digitizeNumberWords, normalizeClub } from './clubNormalize';
 export { reconcileClubWithBag } from './clubBagReconcile';
 
 export interface ClubRecognitionResult {
@@ -314,13 +314,27 @@ export function clubLabel(club_id: string): string {
     case 'SW': return 'sand wedge';
     case 'LW': return 'lob wedge';
     case 'unknown': return 'unknown club';
-    default:
-      // Legacy bare-number values like '7' (without 'I' suffix) still
-      // render as "7-iron" so older sessions don't show a raw token.
-      if (/^[3-9]$/.test(club_id)) return `${club_id}-iron`;
-      if (/^[3-9]I$/.test(club_id)) return `${club_id[0]}-iron`;
-      if (/^[2-5]H$/.test(club_id)) return `${club_id[0]}-hybrid`;
-      if (/^[3579]W$/.test(club_id)) return `${club_id[0]}-wood`;
+    default: {
+      /**
+       * 2026-09-10 (Tim: "one universal truth for the clubs") — NORMALISE, THEN LABEL.
+       *
+       * This branch used to re-parse club strings with its own regexes — bare '7', '7I', '5H',
+       * '3W' — which made it a SECOND opinion on what a club string means, next to
+       * clubNormalize.normalizeClub. Two parsers means the same session can render "7-iron" on one
+       * surface and a raw token on another, and only one of them learns a new spelling.
+       *
+       * normalizeClub already understands every one of those forms and a great deal more ("seven
+       * iron", "the 7", "pitching"), so it runs first and this function goes back to doing one job:
+       * turning a canonical club into words.
+       */
+      const canon = normalizeClub(club_id);
+      if (canon && canon !== club_id) return clubLabel(canon);
+      if (canon) {
+        if (/^[3-9]I$/.test(canon)) return `${canon[0]}-iron`;
+        if (/^[1-9]H$/.test(canon)) return `${canon[0]}-hybrid`;
+        if (/^[1-9]W$/.test(canon)) return `${canon[0]}-wood`;
+      }
       return club_id;
+    }
   }
 }

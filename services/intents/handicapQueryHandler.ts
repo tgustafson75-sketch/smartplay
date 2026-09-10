@@ -14,6 +14,7 @@
  *   • "how does my handicap work"
  */
 
+import { holePar as parForHole } from '../smartFinderService';
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import {
   computeCourseHandicap, computeScoreDifferential, netDoubleBogeyCap,
@@ -106,7 +107,7 @@ export const handicapQueryHandler: IntentHandler = {
 
       case 'net_double_bogey': {
         const requestedPar = Number(intent.parameters.par_value);
-        const holePar = Number.isFinite(requestedPar) ? requestedPar : (round.currentHole ? round.courseHoles.find(h => h.hole === round.currentHole)?.par ?? 4 : 4);
+        const holePar = Number.isFinite(requestedPar) ? requestedPar : (round.currentHole ? parForHole(round.currentHole) ?? 4 : 4);
         const rating = (tee && (tee as { course_rating?: number }).course_rating) ?? par;
         const slope = (tee && (tee as { slope_rating?: number }).slope_rating) ?? 113;
         const ch = computeCourseHandicap(idx, rating, slope, par);

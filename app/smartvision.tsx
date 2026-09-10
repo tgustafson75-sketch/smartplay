@@ -87,7 +87,7 @@ import { courseDisplayName } from '../services/courseDisplayName';
 // golf apps... Mapbox tiles are commodity; SmartPlay's strategic overlay is proprietary IP", and
 // drawn by nobody for three months. See the OWNER-ONLY block in the SVG below.
 import { computeYardageRings, computeLandingZone, computeLayupSuggestion, computeDangerCarries } from '../services/smartVisionOverlay';
-import { getLastFix, subscribeFixChange, resolveGreenCoords, resolveTeeCoords, setMarkedFix, holeLengthYards } from '../services/smartFinderService';
+import { getLastFix, subscribeFixChange, resolveGreenCoords, resolveTeeCoords, setMarkedFix, holeLengthYards, holePar } from '../services/smartFinderService';
 import { bumpToActive } from '../services/gpsManager';
 import { verifyShotAtLocation, correctShotClub, confirmTrackedShot, type ShotTrackResult } from '../services/shotTracking';
 import ShotTrackedSheet from '../components/round/ShotTrackedSheet';
@@ -1859,7 +1859,7 @@ export default function SmartVisionScreen() {
   // the [SMARTVISION OPEN] block lands in the prompt and tactical reads
   // skip the "let me look" preamble. Mirrors the legacy hole-view wiring.
   const par = useMemo(() => {
-    return courseHoles.find(h => h.hole === holeIndex)?.par ?? null;
+    return holePar(holeIndex);
   }, [courseHoles, holeIndex]);
   useEffect(() => {
     setSmartVisionState({ isOpen: true, holeNumber: holeIndex, par });

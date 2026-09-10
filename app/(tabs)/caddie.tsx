@@ -163,6 +163,7 @@ import type { ShotOutcome } from '../../types/shot';
 import type { RulesDecision } from '../../types/penalty';
 import { getApiBaseUrl } from '../../services/apiBase';
 import { buildRoundEndSummary } from '../../services/roundEndSummary';
+import { holePar, holeData as resolvedHoleData } from '../../services/smartFinderService';
 
 const NULL_HUD = { hole: null, par: null, yards: null, wind: null, playsLike: null };
 
@@ -1311,7 +1312,7 @@ export default function CaddieTab() {
     // Build recentScores (last 3, relative to par) for the proactive engine.
     const scoreEntries = Object.entries(storeNow.scores)
       .map(([h, s]) => {
-        const par = storeNow.courseHoles.find(c => c.hole === Number(h))?.par ?? 4;
+        const par = holePar(Number(h)) ?? 4;
         return { hole: Number(h), offset: s - par };
       })
       .sort((a, b) => a.hole - b.hole);
@@ -1355,7 +1356,7 @@ export default function CaddieTab() {
     const holesPlayed = Object.keys(storeNow.scores).length;
     const scoreEntries = Object.entries(storeNow.scores)
       .map(([h, s]) => {
-        const par = storeNow.courseHoles.find(c => c.hole === Number(h))?.par ?? 4;
+        const par = holePar(Number(h)) ?? 4;
         return { hole: Number(h), offset: s - par };
       })
       .sort((a, b) => a.hole - b.hole);
@@ -1494,7 +1495,7 @@ export default function CaddieTab() {
     // 2026-08-21 — the tee brief is the fourth unprompted voice and the second that never consulted
     // the shared clock. Same reasoning as the stop read above.
     if (!mayInterject(trustLevel)) return;
-    const tee = courseHoles.find(h => h.hole === currentHole);
+    const tee = resolvedHoleData(currentHole);
     if (!tee || !tee.teeLat || !tee.teeLng) return; // no geometry → pull-only, no auto tee brief
     let cancelled = false;
     const timer = setTimeout(() => {
@@ -1509,7 +1510,7 @@ export default function CaddieTab() {
           // 2026-08-08 (progression audit P1-6, Tim-approved) — next tees are routinely <40y from the
           // PREVIOUS green, so after a score-advance the brief could fire while the player was still
           // picking the ball out of the cup. Require having LEFT the previous green (>40y) first.
-          const prevHoleData = courseHoles.find(h => h.hole === currentHole - 1);
+          const prevHoleData = resolvedHoleData(currentHole - 1);
           if (prevHoleData && prevHoleData.middleLat !== 0 && prevHoleData.middleLng !== 0) {
             const distFromPrevGreen = haversineYards({ lat: fix.lat, lng: fix.lng }, { lat: prevHoleData.middleLat, lng: prevHoleData.middleLng });
             if (distFromPrevGreen <= 40) return; // still at the previous green — brief when they walk over
@@ -2996,7 +2997,7 @@ export default function CaddieTab() {
       // A back-nine round starts on hole 10 — the old code said "Hole 1. Par X..." while standing on the 10th.
       const rs0 = useRoundStore.getState();
       const startH = rs0.currentHole || roundFirstHole(rs0);
-      const startHoleData = rs0.courseHoles.find(h => h.hole === startH);
+      const startHoleData = resolvedHoleData(startH);
       if (startHoleData) {
         const msg = `Hole ${startH}. Par ${startHoleData.par}. ${startHoleData.distance} yards. Let's go.`;
         setCaddieResponse(msg);

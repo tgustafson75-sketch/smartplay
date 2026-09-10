@@ -39,6 +39,7 @@
  * positionDeclareHandler uses.
  */
 
+import { holeData as resolvedHoleData } from '../smartFinderService';
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import { useRoundStore } from '../../store/roundStore';
 import { getLastFix, forceRefreshGps } from '../gpsManager';
@@ -120,7 +121,7 @@ export const confirmPositionHandler: IntentHandler = {
 
     const namedHole = extractHole(raw, intent.parameters.hole);
     const hole = namedHole ?? round.currentHole;
-    const holeData = round.courseHoles.find(h => h.hole === hole);
+    const holeData = resolvedHoleData(hole);
     if (!holeData) {
       return {
         success: false,

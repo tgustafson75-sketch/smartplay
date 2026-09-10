@@ -66,6 +66,7 @@ import {
 } from './cockpit/ShotResultRow';
 
 import type { VoiceState } from '../CaddieAvatar';
+import { holeData as resolvedHoleData } from '../../services/smartFinderService';
 
 export interface CockpitCaddieScreenProps {
   /** Current voice pipeline state from useVoiceCaddie (parent owns). */
@@ -204,7 +205,7 @@ export default function CockpitCaddieScreen({
   }, [currentHole]);
 
   // Hole metadata from the active course's hole list.
-  const holeData = courseHoles.find((h) => h.hole === currentHole);
+  const holeData = resolvedHoleData(currentHole);
   const par = holeData?.par ?? 4;
   const baseYardage = holeData?.distance ?? null;
   // 2026-05-20 — Day 1 / Fix 5: cockpit SHOTS cell value. Manual-edit
