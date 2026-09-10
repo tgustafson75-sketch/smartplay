@@ -769,6 +769,25 @@ export default function SmartVisionScreen() {
       // before. That is now the ONLY case that waits, and it is the case that genuinely has to.
     }
 
+    /**
+     * 2026-09-10 (Tim, on the course: "active smartvision not loading") — THE SPINNER HAD NO FLOOR.
+     *
+     * `setLoading(false)` was the LAST STATEMENT of this ~400-line async body rather than a
+     * guaranteed one. Individual awaits carry their own try/catch, but any unguarded throw anywhere
+     * between here and the bottom skipped it and left `loading` true forever — and `loading` gates
+     * the whole canvas, so the screen sits on the spinner with nothing logged and no way out but
+     * backing off the screen.
+     *
+     * This has happened before and was fixed one instance at a time. The comment further down says
+     * so in as many words: "A geo-null hole here threw a TypeError inside this un-awaited async →
+     * the catch/setLoading(false) never ran → the canvas hung on the loading spinner." Patching the
+     * null that threw that day left every other thrower in the chain still able to do it. So the
+     * floor goes under the whole body instead: whatever happens in there, the spinner clears.
+     *
+     * `!cancelled` matters — a cancelled run means the hole or course changed and the NEXT run has
+     * already set loading true. Clearing it here would drop the spinner on a canvas that is still
+     * resolving. [[two-attempts-then-archaeology]]
+     */
     void (async () => {
       // Always load geometry so the F/M/B yardage panel can use it
       // even in curated mode (when geometry is available).
@@ -1154,8 +1173,7 @@ export default function SmartVisionScreen() {
           }
         }
       }
-      setLoading(false);
-    })();
+    })().finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [courseId, courseName, holeIndex, imageW, imageH, isRoundActive, courseHoles]);
 

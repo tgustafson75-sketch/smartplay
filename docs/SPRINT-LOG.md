@@ -3245,3 +3245,96 @@ jest **green** · sim **968/968**.
 Principle 5 again, and principle 1 did the work: all three were found by asking *what does this
 number's owner already decide* rather than by tuning the number. Two of the three fixes are
 deletions.
+
+---
+
+## Day N+3 (cont.) — 2026-09-10 — the other three from the Hemet round
+
+Tim: *"just do them in order and finish it. I'm obviously busy playing."* Taken in the order they
+were reported.
+
+### 1. Hemet's "wrong" green coordinate — ANSWERED, and there was no green to be wrong
+
+Not a bad coordinate. **There was never a coordinate at all.** `courseToHoles` (services/
+golfCourseApi.ts) maps a golfcourseapi course into `courseHoles` and writes the API's per-hole `gps`
+into `teeLat/teeLng` — then writes **zero** into `middleLat/middleLng/frontLat/frontLng/backLat/
+backLng`, because the free tier ships tees and null greens. So `resolveGreenCoords` fell past
+courseHoles to the geometry cache, and with nothing there `getGreenYardages` used
+`estimatedFromTee`: **hole total − straight-line distance walked from the tee**, flagged
+`'estimated'`.
+
+That is why SmartVision and the data bar disagreed. They were never answering the same question:
+SmartVision's `holeLengthYards` returns the anchored-or-card HOLE LENGTH, which on the tee is simply
+right; the data bar was showing a live *estimate* with no green behind it. And it is why it
+"corrected" mid-round — the OSM/derivation build landed a green and the tier changed under him.
+
+Nothing to patch here on a hypothesis, and the flap fix earlier today removes the part that actually
+looked broken. Still worth doing properly: greens for API courses arrive late or never, and the
+estimate is a straight-line subtraction that under-reads as soon as the player is off the tee→green
+axis. Carried, not guessed at.
+
+### 2. "Active SmartVision not loading" — THE SPINNER HAD NO FLOOR
+
+`setLoading(false)` was the **last statement** of a ~400-line async body in `app/smartvision.tsx`,
+not a guaranteed one. Individual awaits carry their own try/catch, but any unguarded throw between
+the top and the bottom skipped it and left `loading` true forever — and `loading` gates the whole
+canvas, so the screen sits on the spinner with nothing logged and no way out but backing off it.
+
+This had happened before and was fixed one instance at a time. The file says so: *"A geo-null hole
+here threw a TypeError inside this un-awaited async → the catch/setLoading(false) never ran → the
+canvas hung on the loading spinner."* Patching the null that threw that day left every other thrower
+still able to do it. **The floor now goes under the whole body** — `.finally(() => { if (!cancelled)
+setLoading(false); })` — so whatever happens in there, the spinner clears. `!cancelled` matters: a
+cancelled run means the hole changed and the next run already set loading true.
+
+### 3. Auto hole advance / shot detection "not seamless" — IT READ THE ONE SOURCE THAT WAS EMPTY
+
+Both toggles are wired (settings → `_layout` → `shotDetectionService`, `holeDetection`), so this was
+not dead wiring. It was the same two-owners defect as everything else today.
+
+`detectCurrentHole` asked `getHoleGeometry()` — the geometry **cache** — and nothing else. Every
+other consumer asks smartFinderService, whose cascade is surveyed truth → the player's Mark Green /
+Mark Tee override → `roundStore.courseHoles` → and only then that cache. On a golfcourseapi course
+that gap is total, per finding 1: no greens in the cache means the detector hit `no current-hole
+green geometry` and returned `transition_recommended: false` **on every fix**, with the toggle
+showing ON and nothing on screen saying why. The candidate loop had the mirror of it — `candGeom?.
+tee` was null for every hole while the real tee coordinate sat in `courseHoles` the whole time.
+
+Worst of it: the app's own documented remedy was useless. A player who walks up and taps **Mark
+Green** writes an override, which the cache does not carry — so hole advance still could not see it.
+
+All four coordinate reads in that file now go through the resolvers. The direct cache read survives
+underneath only for the pure path (the tests and the simulated-GPS harness call the detector with a
+seeded cache and no active round, and the resolver is round-scoped by construction).
+
+New gate: `__tests__/regression/auto-advance-works-without-cached-geometry.test.ts` — **functional,
+not a source scan.** It drives the detector with an empty cache and only courseHoles populated,
+which is exactly the Hemet shape. Confirmed it fails on the old code (2 of 3) and passes on the new,
+and the third case proves it still refuses to fabricate a transition when there is genuinely no
+green anywhere.
+
+### Verified
+
+`tsc` clean (one pre-existing `api/messages.ts` error) · lint: warnings only, all pre-existing ·
+jest **2963/2963 (265 suites)** · sim **968/968**.
+
+### Open / carried
+
+- **Still nothing verified on device.** Three OTAs today, all on Tim's word that he'd restart.
+- **Greens for golfcourseapi courses.** The real gap behind findings 1 and 3. Options: fetch/derive
+  geometry at course *download* rather than round start, or make `courseToHoles` stop writing zeros
+  and let the cascade skip a tier. Needs a decision, not a patch.
+- **`estimatedFromTee` is a straight-line subtraction** — under-reads once off the tee→green axis.
+  Honest while labelled 'estimated'; worth revisiting when greens land reliably.
+- **The OTA guard cannot pass anywhere but Tim's machine.** `scripts/ota-preflight.mjs` fingerprints
+  `ios/` and `android/`, which are gitignored prebuild output. Baseline says 157 files; a fresh clone
+  produces 67, so the hash can never match in CI or any clean checkout — `origin/main` fails it with
+  no changes at all. Not weakened today; flagged.
+- `data/courses.ts` ECHO_HILLS coords are synthetic (every tee→green ≈150y regardless of a listed
+  221–322; every front/back exactly `distance ∓ 9`).
+
+### Note
+
+Five defects today, one shape: **two sources for one fact, and the consumer reading the empty one.**
+The flap, Kevin's correction, the watch, and hole advance were all that. Three of the five fixes are
+deletions.

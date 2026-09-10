@@ -23,9 +23,24 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 >
 > Green: tsc, lint, jest, sim 968/968. **NOT verified on device — shipped as an OTA mid-round.**
 >
-> **Still open from that round:** Hemet's green coordinate is unproven (SmartVision right, data bar
-> wrong — needs two numbers off one tee); SmartVision not loading; auto-scoring / auto shot
-> detection wiring unverified.
+>
+> **All three follow-ups closed the same day.** Hemet's green was never wrong — `courseToHoles`
+> writes ZERO greens for every golfcourseapi course (the free tier ships tees, null greens), so the
+> data bar was on `estimatedFromTee` (hole total − distance walked) while SmartVision showed the card
+> hole length. Different questions, not a bad coordinate. **SmartVision not loading:** `setLoading
+> (false)` was the last statement of a 400-line async body, not a `finally` — any throw hung the
+> canvas forever; the floor now goes under the whole body. **Auto hole advance:** `detectCurrentHole`
+> read the geometry CACHE only, so on a course with no cached green it returned "no transition" on
+> every fix with the toggle ON — and could not even see a player's Mark Green override. All four
+> coordinate reads now go through the smartFinderService cascade, proven by a functional test that
+> fails on the old code.
+>
+> **The real carried item:** golfcourseapi courses have no greens until an OSM/derivation build
+> lands. That single gap is behind two of today's five defects. Needs a decision (fetch geometry at
+> course *download*? stop writing zeros?), not another patch.
+>
+> **Also carried:** `scripts/ota-preflight.mjs` fingerprints gitignored `ios/`+`android/` prebuild
+> output, so it can only pass on Tim's machine — `origin/main` fails it with zero changes.
 
 > ### ⚠️ LATEST — 2026-09-09. Three crashes fixed; all await device verification.
 >

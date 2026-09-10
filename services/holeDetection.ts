@@ -26,7 +26,7 @@
 
 import { useRoundStore } from '../store/roundStore';
 import { fetchCourseGeometry, getHoleGeometry } from './courseGeometryService';
-import { getLastFix, classifyAccuracy } from './smartFinderService';
+import { getLastFix, classifyAccuracy, resolveGreenCoords, resolveTeeCoords } from './smartFinderService';
 // 2026-06-07 (audit N2) — gpsManager's fix carries `speed` (smartFinder's
 // LastFix does not), used for the cart-speed gate below.
 import { getLastFix as getGpsManagerFix } from './gpsManager';
@@ -160,6 +160,63 @@ let markUnsub: (() => void) | null = null;
  * Caller supplies the GPS position; this returns a recommendation without
  * side effects.
  */
+/**
+ * 2026-09-10 (Tim, on the course: "I turned on auto scoring and auto shot detection and movement
+ * and it doesn't seem to be working seamlessly") — AUTO HOLE ADVANCE READ THE ONE SOURCE THAT WAS
+ * EMPTY.
+ *
+ * This detector asked `getHoleGeometry()` — the geometry CACHE — and nothing else. Every other
+ * consumer in the app asks smartFinderService, whose cascade is surveyed truth → the player's Mark
+ * Green / Mark Tee override → roundStore.courseHoles → and only then that same cache.
+ *
+ * On a golfcourseapi course that gap is total rather than partial. `courseToHoles` writes the API's
+ * per-hole `gps` into teeLat/teeLng and writes ZERO into every green field, because the free tier
+ * ships tees and null greens. So until (or unless) an OSM/derivation build lands a green in the
+ * cache, `detectCurrentHole` hit `no current-hole green geometry` and returned
+ * `transition_recommended: false` on EVERY fix — with the toggle showing ON and nothing on screen
+ * saying why. The candidate loop had the mirror of it: `candGeom?.tee` was null for every hole even
+ * though the real tee coordinate was sitting in `courseHoles` the whole time.
+ *
+ * Worse, it made the app's own documented remedy useless: a player who walks up and taps Mark Green
+ * writes an OVERRIDE, which the cache does not carry — so hole advance still could not see it.
+ *
+ * Asking the owner fixes all of that at once and deletes this file's private idea of where a
+ * coordinate comes from. The direct cache read stays underneath ONLY for the pure path — the tests
+ * and the simulated-GPS harness call this function with a courseId and a seeded cache but no active
+ * round, and the resolver is round-scoped by construction. [[two-owners-is-the-root-cause]]
+ */
+function activeRoundMatches(courseId: string): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const rs = require('../store/roundStore') as typeof import('../store/roundStore');
+    return rs.useRoundStore.getState().activeCourseId === courseId;
+  } catch { return false; }
+}
+
+/** This hole's green, from the app's own cascade when there's a round, else the seeded cache. */
+function greenForHole(courseId: string, hole: number): LatLng | null {
+  if (activeRoundMatches(courseId)) {
+    try {
+      const m = resolveGreenCoords(hole).middle;
+      if (m && isValidGolfCoord(m.lat, m.lng)) return m;
+    } catch { /* fall through to the cache */ }
+  }
+  const g = getHoleGeometry(courseId, hole)?.green;
+  return g && isValidGolfCoord(g.lat, g.lng) ? g : null;
+}
+
+/** A candidate hole's tee, same cascade. courseHoles carries it for every golfcourseapi course. */
+function teeForHole(courseId: string, hole: number): LatLng | null {
+  if (activeRoundMatches(courseId)) {
+    try {
+      const t = resolveTeeCoords(hole).tee;
+      if (t && isValidGolfCoord(t.lat, t.lng)) return t;
+    } catch { /* fall through to the cache */ }
+  }
+  const t = getHoleGeometry(courseId, hole)?.tee;
+  return t && isValidGolfCoord(t.lat, t.lng) ? t : null;
+}
+
 export function detectCurrentHole(
   position: LatLng,
   courseId: string | null,
@@ -178,18 +235,17 @@ export function detectCurrentHole(
     return { hole_number: currentHole, confidence: 'low', transition_recommended: false, reason: 'invalid player coord' };
   }
 
-  const currentGeom = getHoleGeometry(courseId, currentHole);
-  // 2026-06-01 — Fix GL: also validate the cached green coord. Cache
-  // entries can have placeholder/garbage values from a partial API
-  // response. Without this guard, haversine against {0,0} returns
-  // ~10M yards, fails the >gate check trivially, and the player is
-  // pinned to currentHole forever (or worse, the next-hole gate
-  // succeeds against the same garbage and flips a wrong transition).
-  if (!currentGeom?.green || !isValidGolfCoord(currentGeom.green.lat, currentGeom.green.lng)) {
+  // 2026-06-01 — Fix GL: the coord is validated (inside greenForHole) before any haversine. Cache
+  // entries can carry placeholder values from a partial API response; without that guard haversine
+  // against {0,0} returns ~10M yards, fails the > gate trivially, and pins the player to currentHole
+  // forever — or worse, the next-hole gate succeeds against the same garbage and flips a wrong
+  // transition.
+  const currentGreen = greenForHole(courseId, currentHole);
+  if (!currentGreen) {
     return { hole_number: currentHole, confidence: 'low', transition_recommended: false, reason: 'no current-hole green geometry' };
   }
 
-  const distFromCurrentGreen = haversineYards(position, currentGeom.green);
+  const distFromCurrentGreen = haversineYards(position, currentGreen);
 
   // Must be at least MIN_DISTANCE_FROM_GREEN_YD from current green to consider
   // a transition — short of that, the user is around the current green.
@@ -218,8 +274,7 @@ export function detectCurrentHole(
     const candidate = currentHole + offset;
     if (candidate > roundMaxHole) break;
     if (scoresByHole[candidate] != null) continue; // already played
-    const candGeom = getHoleGeometry(courseId, candidate);
-    const candTee = candGeom?.tee;
+    const candTee = teeForHole(courseId, candidate);
     // 2026-06-01 — Fix GL: guard candidate tee coord. Garbage tee
     // coord on hole N+1 would otherwise make the next-tee gate fire
     // trivially (distance to {0,0} is huge so a forward gate that
@@ -227,7 +282,7 @@ export function detectCurrentHole(
     // but the inverse is also true: a near-zero tee would always be
     // "closer" than the current green if the player is far from
     // origin, triggering spurious forward transitions).
-    if (!candTee || !isValidGolfCoord(candTee.lat, candTee.lng)) continue;
+    if (!candTee) continue;
     const d = haversineYards(position, candTee);
     if (d < bestNextDist) {
       bestNextDist = d;
@@ -309,15 +364,13 @@ export function detectCurrentHole(
     // player is ALSO within ~30y of the CURRENT hole's tee (co-located tees: waiting to hit on N+1
     // beside N's tee box), a <20y read on the played tee is ambiguous — do NOT jump backward. Genuine
     // walk-backs (retrieving a club mid-fairway of the old hole) are nowhere near the current tee.
-    const currentTee = currentGeom.tee;
-    const nearOwnTee = !!currentTee && isValidGolfCoord(currentTee.lat, currentTee.lng)
-      && haversineYards(position, currentTee) <= 30;
+    const currentTee = teeForHole(courseId, currentHole);
+    const nearOwnTee = !!currentTee && haversineYards(position, currentTee) <= 30;
     for (const playedHoleStr of Object.keys(scoresByHole)) {
       const playedHole = Number(playedHoleStr);
       if (!Number.isFinite(playedHole) || playedHole === currentHole) continue;
       if (nearOwnTee) break; // at our own tee box — never re-enter a played hole from here
-      const playedGeom = getHoleGeometry(courseId, playedHole);
-      const playedTee = playedGeom?.tee;
+      const playedTee = teeForHole(courseId, playedHole);
       // 2026-06-01 — Fix GL: guard played-hole tee coord.
       if (!playedTee || !isValidGolfCoord(playedTee.lat, playedTee.lng)) continue;
       const d = haversineYards(position, playedTee);
