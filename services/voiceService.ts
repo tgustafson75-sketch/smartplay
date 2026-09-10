@@ -789,6 +789,19 @@ let speakQueue: Promise<void> = Promise.resolve();
 // moved by the time they get to run. Prevents a chained briefing → handoff
 // pair from continuing after the user taps to interrupt mid-briefing.
 let speakGeneration = 0;
+/**
+ * 2026-09-09 — WHICH stopSpeaking bumped the generation.
+ *
+ * The 09-01 note on the supersede branch below says the dropped line is correct behaviour and the
+ * missing thing was VISIBILITY; the 09-03 note on the route-change guard in app/_layout names the
+ * exact evidence that would settle it — "a report carrying preemptedBy: 'route_change' is the proof;
+ * one carrying 'speak' rules it out." That field was never actually recorded, so Tim's 09-08
+ * speak_superseded on /recap says a line was dropped and still cannot say by whom. stopSpeaking
+ * already takes the reason; this just keeps the last one. No behaviour changes.
+ * [[missing-log-entry-is-the-evidence]]
+ */
+let lastStopReason: SpeechIdReason | null = null;
+let lastStopAt = 0;
 
 // 2026-06-16 (Tim — "old voices leaking from prior steps" on navigation) — stamp
 // when the most-recent utterance actually STARTED (queue body runs, not enqueue).
@@ -822,6 +835,10 @@ const enqueueSpeak = (body: () => Promise<void>): Promise<void> => {
             enqueuedAtGeneration: enqueuedAt,
             currentGeneration: speakGeneration,
             msSinceLastSpeakStart: lastSpeakStartedAt ? Date.now() - lastSpeakStartedAt : null,
+            // Who cancelled it. 'route_change' indicts the _layout navigation guard; 'speak' means a
+            // newer utterance legitimately took over; 'stop' is an explicit screen-level cut.
+            preemptedBy: lastStopReason,
+            msSinceStop: lastStopAt ? Date.now() - lastStopAt : null,
           });
         } catch { /* a diagnostic must never break the voice path */ }
         return; // stopSpeaking fired after enqueue
@@ -1110,7 +1127,10 @@ export const subscribeToCaption = (
  * [[missing-log-entry-is-the-evidence]] [[voice-path-change-freeze]]
  */
 export const stopSpeaking = async (why: SpeechIdReason = 'stop'): Promise<void> => {
-  claimSpeechId(SPEECH_ID_REASONS.includes(why) ? why : 'stop');
+  const reason: SpeechIdReason = SPEECH_ID_REASONS.includes(why) ? why : 'stop';
+  claimSpeechId(reason);
+  lastStopReason = reason;
+  lastStopAt = Date.now();
   speakGeneration++;
   if (currentAbortController) {
     currentAbortController.abort();

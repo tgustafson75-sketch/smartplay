@@ -2749,15 +2749,18 @@ check('Music portal: "play [song]" → kid-safe search → clean in-app player (
       /videoEmbeddable:\s*'true'/.test(api) && /\/api\/youtube-search/.test(vercel) &&
       // client search via the spine
       /getApiBaseUrl\(\)\}\/api\/youtube-search\?q=/.test(svc) &&
-      // 2026-09-09 — this check USED to assert the OTA guard was present. The guard
-      // (UIManager.getViewManagerConfig('RNCWebView')) is permanently null under the New
-      // Architecture, so it pinned a player that never mounted. It asserts the opposite now.
-      !/getViewManagerConfig/.test(screen) && /<WebView/.test(screen) &&
+      // player is OTA-safe: native webview when present, in-app browser fallback otherwise
+      // 2026-09-09: was pinned to `UIManager.getViewManagerConfig?.('RNCWebView')`, which is the OLD
+      // architecture's question and returns null under bridgeless — so this asserted the presence of
+      // the very check that made the player unreachable. hasNativeWebView() asks hasViewManagerConfig,
+      // which both UIManagers answer.
+      /hasNativeWebView\(WebView\)/.test(screen) &&
+      /WebBrowser\.openBrowserAsync/.test(screen) &&
       // wired into the voice path (short-circuits the brain with a spoken confirm)
       /tryPlaySong\(message\)/.test(voice)
     );
   })(),
-  'play-song searches the kid-safe server endpoint and opens the clean embedded player (no dead OTA guard in front of it); golf "play" phrases excluded');
+  'play-song searches the kid-safe server endpoint and opens the clean embedded player behind a guard that asks the question BOTH architectures answer; golf "play" phrases excluded');
 
 check('Quick how-to: first-time tutorials + on-demand "how do I use this?" share one source',
   // 2026-06-13 (Tim) — quick orientation (text + caddie narration) on the doing surfaces,
@@ -3940,8 +3943,26 @@ check('LOCK: the pose warm starts INSIDE the network wait, and both paths key it
       !/videoDurationMs/.test(helper) &&
       // non-blocking: fired with void, and its failures swallowed
       /void \(async \(\) => \{[\s\S]{0,1200}?poseExtractCacheRef\.current = \{ key: warmKey, frames \};[\s\S]{0,200}?\} catch \{/.test(sm) &&
-      // warmed on the DURABLE uri — keying on rawUri would be a guaranteed miss
-      /clipUri: uri, poseWindow/.test(sm)
+      /**
+       * warmed on the DURABLE uri — keying on rawUri would be a guaranteed miss.
+       *
+       * 2026-09-09 (triple-check) — THIS GUARD STATED THE PROPERTY AND ASSERTED THE BUG. It matched
+       * the literal `clipUri: uri`, and `uri` is a `let` that becomes the durable copy partway
+       * through runAnalysis. So what the warm keyed on depended on whether persistClipToDocuments
+       * had finished when analyzeSwing raised onFramesReady — a race, losing exactly on the long
+       * high-frame-rate clips whose decodes cost most, and losing SILENTLY: 5-8 decodes on the one
+       * serialized media chain, cached under a key the review read never looks up, then decoded
+       * again. The precise "latency fix that added latency" this scenario's own header describes.
+       *
+       * The comment was right the whole time; only the assertion was wrong. Assert the property:
+       * the warm AWAITS the copy the review will use, and both persist paths release it.
+       * [[three-ways-a-guard-is-worthless]] [[a-stale-header-is-a-source-someone-trusts]]
+       */
+      /clipUri: await durableUriP, poseWindow/.test(sm) &&
+      /const warmUri = await durableUriP;/.test(sm) &&
+      /extractPoseFramesFromVideo\(warmUri,/.test(sm) &&
+      // released on BOTH persist outcomes, or a failed copy would stall the warm forever
+      /markDurable\(uri\);/.test(sm)
     );
   })(),
   'the pose decode moves inside the vision round-trip (started after the POST, before the verdict is awaited), both paths key it through one owner, and a failed warm degrades to the old serial extract');
@@ -14820,8 +14841,14 @@ check(
   check(
     'VOICE: the route-change guard names itself when it cancels a line',
     /export const stopSpeaking = async \(why: SpeechIdReason = 'stop'\)/.test(vs) &&
-      /claimSpeechId\(SPEECH_ID_REASONS\.includes\(why\) \? why : 'stop'\)/.test(vs) &&
-      /void stopSpeaking\('route_change'\)/.test(readCode('app/_layout.tsx')),
+      /SPEECH_ID_REASONS\.includes\(why\) \? why : 'stop'/.test(vs) &&
+      /void stopSpeaking\('route_change'\)/.test(readCode('app/_layout.tsx')) &&
+      // 2026-09-09 — AND THE FIELD ITSELF. This check's own rationale says the proof is a report
+      // reading `preemptedBy: route_change`, and until today nothing recorded one: stopSpeaking took
+      // the reason and threw it away, so every speak_superseded said a line was dropped and could not
+      // say by whom. Asserting the plumbing without the field is how that survived.
+      /preemptedBy: lastStopReason/.test(vs) &&
+      /lastStopReason = reason/.test(vs),
     'a report reading preemptedBy: route_change is the proof for the lastSpeakStartedAt theory; one reading speak kills it — and validating `why` stops a future onPress={stopSpeaking} recording a press event as the reason',
   );
 }
@@ -15100,7 +15127,11 @@ check(
   const recap = readCode('app/recap/[round_id].tsx');
   check(
     'TEMPO: the round tempo story reaches a screen',
-    /roundHistory\.find\(r => r\.id === round_id\)\?\.tempoStory \?\? null/.test(recap) &&
+    // 2026-09-09: the three selectors that each re-found the record collapsed into ONE record
+    // selector (a selector that BUILDS its result is what crashed this screen three times), so the
+    // read is now a derivation. Still pinned to the RECORD, which is the property that matters.
+    /const roundRecord = useRoundStore\(s => s\.roundHistory\.find\(r => r\.id === round_id\) \?\? null\)/.test(recap) &&
+      /const tempoStory = roundRecord\?\.tempoStory \?\? null/.test(recap) &&
       /\{tempoStory\?\.headline && \(/.test(recap),
     'a story computed at round end, frozen onto the record and backed up off-device, with nothing that renders it, is the Health Connect defect wearing a different name',
   );
@@ -15117,7 +15148,10 @@ check(
    */
   check(
     'CLIPS: a shot clip recorded in a round can be opened from the recap',
-    /\(rec\?\.shots \?\? \[\]\)\.filter\(\(sh\) => !!sh\.clip_uri\)/.test(recap) &&
+    // 2026-09-09: same collapse as TEMPO above — and this one was the crash. `.filter()` INSIDE the
+    // Zustand selector returned a new array every call, so useSyncExternalStore's mount check never
+    // matched and the screen looped to "Maximum update depth exceeded". It is a useMemo now.
+    /useMemo\(\s*\(\) => \(roundRecord\?\.shots \?\? \[\]\)\.filter\(\(sh\) => !!sh\.clip_uri\)/.test(recap) &&
       /openShotClip\(sh\.clip_uri as string, label\)/.test(recap) &&
       /<Video/.test(recap),
     'the write has existed since Phase 110 with no reader — a video attached to a shot nobody can watch is the measured-and-never-read shape all over again',

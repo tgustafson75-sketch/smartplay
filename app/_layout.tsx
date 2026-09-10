@@ -191,6 +191,9 @@ const DEBUG_ROUTES: ReadonlySet<string> = new Set([
   // only from swing-sessions-debug (transitively gated but defence-in-depth).
   '/author/reference-assets',
   '/landmark-curate',
+  // 2026-09-09 — Tim's field checklist. Owner-only at the route AND at the render (a route is
+  // reachable by voice, deep link, or typing), same as /owner-card.
+  '/owner-checklist',
   // 2026-07-10 (audit N1) — /owner-logs REMOVED from this gate. The Issue Log is an
   // ALL-BETA-TESTER surface (openToolHandler maps "send the issue log" → /owner-logs for
   // everyone, with ?send=1 auto-export). Gating it here redirected a non-owner tester who
@@ -385,6 +388,46 @@ function AppNavigator() {
     return () => { unsubP?.(); unsubS?.(); };
   }, []);
 
+  /**
+   * 2026-09-09 (Tim: "with a reminder when I open") — NAG ONCE PER LAUNCH, NOT ONCE PER RENDER.
+   *
+   * Gated on the profile having HYDRATED, because `email` is async-persisted and reading it at mount
+   * gives null on a cold boot — the owner check would fail and the reminder would never fire. That is
+   * the exact bug watchRoundSync had on 08-24 and the one the Layer 0 audit found in play.tsx; it is
+   * the default outcome of gating anything on a persisted value without waiting for it.
+   *
+   * A toast rather than a modal: this fires on every launch, including the ones where he is opening
+   * the app to play golf. Something you must dismiss to get to your round would be uninstalled within
+   * a week. The toast also mirrors to the watch through watchRoundSync, so the reminder reaches the
+   * wrist for free.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    const remind = () => {
+      if (cancelled) return false;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const prof = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
+        if (!prof.isOwnerEmail(prof.usePlayerProfileStore.getState().email)) return true;  // settled: not the owner
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const cl = require('../store/ownerChecklistStore') as typeof import('../store/ownerChecklistStore');
+        const open = cl.useOwnerChecklistStore.getState().items.filter(i => !i.done).length;
+        if (open === 0) return true;
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        (require('../store/toastStore') as typeof import('../store/toastStore'))
+          .useToastStore.getState().show(`${open} on your checklist — ask me to read it`);
+        cl.useOwnerChecklistStore.getState().markReminded();
+      } catch { /* a reminder must never be able to break a launch */ }
+      return true;
+    };
+    // Delayed so it lands after the first paint rather than competing with it.
+    const t = setTimeout(() => {
+      if (remind()) return;
+    }, 2500);
+    const unsub = usePlayerProfileStore.persist?.onFinishHydration?.(() => { remind(); });
+    return () => { cancelled = true; clearTimeout(t); try { unsub?.(); } catch { /* non-fatal */ } };
+  }, []);
+
   // 2026-06-30 (Tim) — start the Galaxy Watch swing-IMU bridge on boot when the user has
   // it enabled, so a persisted toggle survives app restarts. No-ops without the native
   // module (older binaries) — safe everywhere. Stop it on teardown.
@@ -394,12 +437,36 @@ function AppNavigator() {
   const settingsHydratedForBoot = useSettingsStore(s => s.hasHydrated);
   useEffect(() => {
     if (!settingsHydratedForBoot) return;
-    if (!useSettingsStore.getState().watchSwingEnabled) return;
+    /**
+     * 2026-09-09 (Tim, first round on the Play Store build — "the yardage would not populate on my
+     * watch") — PIN YARDAGE WAS GATED BEHIND THE SWING-CAPTURE TOGGLE.
+     *
+     * `watchSwingEnabled` is the Galaxy Watch SWING-IMU setting: its label says "swing capture" and
+     * its description talks only about capturing swings. This early return sat in front of BOTH
+     * bridges, so that one toggle silently also controlled pin yardage, the watch mic, watch taps
+     * and the round-state/score push — four features it does not name and nobody would look for
+     * behind it.
+     *
+     * It defaults to FALSE and is persisted per install. A dev build carried a toggle Tim had
+     * flipped on months ago; a fresh Play Store install starts with empty storage, so the whole
+     * caddie bridge never started and the watch sat empty for a round. "It worked before it was on
+     * the Play Store" is exactly what a persisted-default-off gate looks like from the outside.
+     *
+     * The two bridges are now independent, which is what they always were in every way except this
+     * line. Swing capture keeps its toggle (it costs battery on the watch and is opt-in by design).
+     * The caddie bridge starts whenever the native module is present: it sends nothing unless a
+     * round is live AND a watch node is connected, its inbound listeners fire only when the watch
+     * speaks first, and the round/score push inside it is separately owner-gated. Nothing here can
+     * appear for someone with no watch.
+     */
+    const swingCaptureEnabled = useSettingsStore.getState().watchSwingEnabled;
     let active = true;
     void (async () => {
       try {
-        const m = await import('../services/watchSwingBridge');
-        if (active && m.isWatchSwingBridgeAvailable()) await m.initWatchSwingBridge();
+        if (swingCaptureEnabled) {
+          const m = await import('../services/watchSwingBridge');
+          if (active && m.isWatchSwingBridgeAvailable()) await m.initWatchSwingBridge();
+        }
         // 2026-07-06 — same watch, second half: pin-yardage push + watch-mic → caddie.
         const c = await import('../services/watchCaddieBridge');
         if (active && c.isWatchCaddieBridgeAvailable()) await c.initWatchCaddieBridge();

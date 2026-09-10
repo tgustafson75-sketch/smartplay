@@ -30,6 +30,42 @@ const entries = new Map<string, Entry>();
 /** Keep the copy this long after the last release — review consumers fire back-to-back. */
 const LINGER_MS = 8_000;
 
+/** The filename shape acquireClipCopy writes. One owner for the naming, so the check below cannot drift. */
+const COPY_PREFIX = 'shared-clip-';
+
+/**
+ * 2026-09-09 — is this URI already one of our pooled copies?
+ *
+ * Needed because some callers hand a WORK uri downstream (poseAnalysisApi probes `workUri`, not the
+ * original). Without this, a consumer that acquires on behalf of its caller would copy a copy: a
+ * second full byte-copy of a clip already on disk, keyed under a uri nothing else will ever ask for,
+ * so it is never shared and only reaped by its own linger.
+ */
+export function isPooledCopy(uri: string | null | undefined): boolean {
+  return !!uri && uri.includes(COPY_PREFIX);
+}
+
+/**
+ * 2026-09-09 — attach to an entry that ALREADY EXISTS, or nothing.
+ *
+ * The duration probe wants the same ExoPlayer safety the frame sweeps get, but it is a much smaller
+ * read (one decoder plus up to three thumbnails) and it lives inside a deliberately BOUNDED function
+ * — `PROBE_TIMEOUT_MS`, which `DURATION_PROBE_CEILING_MS` and therefore `ANALYSIS_WORST_CASE_MS` are
+ * derived from. Making it copy would put an unbounded multi-hundred-megabyte step outside that bound
+ * and quietly turn the hang-guard budget into a lie.
+ *
+ * So it takes a copy only when one is already on disk — which is exactly when the risk is real, since
+ * a live copy means an analysis is running and the review player is looping. No copy is ever made for
+ * a probe, nothing is unbounded, and the budget stays honest.
+ */
+export async function acquireExistingClipCopy(
+  videoUri: string,
+): Promise<{ uri: string; release: () => void } | null> {
+  const e = entries.get(videoUri);
+  if (!e) return null;
+  return attach(e, videoUri);
+}
+
 export async function acquireClipCopy(
   videoUri: string,
 ): Promise<{ uri: string; release: () => void } | null> {
@@ -41,7 +77,7 @@ export async function acquireClipCopy(
       try {
         const dir = FileSystem.cacheDirectory;
         if (!dir) return null;
-        dest = `${dir}shared-clip-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp4`;
+        dest = `${dir}${COPY_PREFIX}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp4`;
         await FileSystem.copyAsync({ from: videoUri, to: dest });
         const info = await FileSystem.getInfoAsync(dest);
         if (!info.exists || (info.size ?? 0) <= 0) {
@@ -62,6 +98,14 @@ export async function acquireClipCopy(
     e = entry;
     entries.set(videoUri, e);
   }
+  return attach(e, videoUri);
+}
+
+/** Take a reference on an existing entry and hand back its handle. Shared by both acquire paths. */
+async function attach(
+  e: Entry,
+  videoUri: string,
+): Promise<{ uri: string; release: () => void } | null> {
   if (e.linger) { clearTimeout(e.linger); e.linger = null; }
   e.refs++;
   const uri = await e.ready;

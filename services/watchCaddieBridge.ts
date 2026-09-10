@@ -28,6 +28,7 @@ import { registerWatchSender, notifyWatchVoice, notifyWatchTap, notifyWatchComma
 import { getGreenYardagesSync, subscribeFixChange } from './smartFinderService';
 import { useRoundStore } from '../store/roundStore';
 import { useWatchStore } from '../store/watchStore';
+import { acquireWatchDataLayer, releaseWatchDataLayer, isWatchDataLayerListening } from './watchDataLayer';
 import { devLog } from './devLog';
 
 // 2026-07-29 (Tim — "don't see if the app is saying watch connected, but they work perfectly").
@@ -46,6 +47,11 @@ const CADDIE_PATH = '/smartplay/caddie';
 // you walk" against watch battery; the phone already has the fix, so this is just a
 // tiny Data Layer message.
 const YARDAGE_TICK_MS = 18_000;
+/**
+ * How recently the watch must have been heard from for a failed send to be treated as a blip rather
+ * than a disconnection. Two yardage ticks: one miss is noise, a sustained silence is a real answer.
+ */
+const WATCH_HEARTBEAT_GRACE_MS = YARDAGE_TICK_MS * 2;
 
 interface WearCaddieNativeModule {
   sendToWatch(path: string, data: string): Promise<boolean>;
@@ -72,21 +78,21 @@ let yardageTimer: ReturnType<typeof setInterval> | null = null;
  * 2026-09-10 (Tim, Hemet, mid-round: "the watch yardage is not updating") — THE WATCH RODE A TIMER
  * AND NOTHING ELSE.
  *
- * Yardage went out on hole change and on an 18s tick. Every other live surface in the app rides the
- * GPS fix: SmartFinder polls at 3s, Cockpit takes subscribeFixChange plus a 3s backstop, the caddie
- * tab takes subscribeFixChange plus a 4s poll. The watch took neither. Walking is ~26 yards of
- * travel per 18-second tick, so the number on the wrist was stale by up to that much and sat
- * visibly frozen in between — which is exactly what "not updating" looks like on a device you
- * glance at for one second.
+ * Yardage went out on hole change and on an 18s tick, and on nothing else. Every other live surface
+ * rides the GPS fix: SmartFinder polls at 3s, Cockpit takes subscribeFixChange plus a 3s backstop,
+ * the caddie tab takes subscribeFixChange plus a 4s poll. The watch took neither. Walking is ~26
+ * yards of travel per 18-second tick, so the wrist was stale by up to that much and sat visibly
+ * frozen in between — which is what "not updating" looks like on a device you glance at for a
+ * second.
  *
- * Cockpit had this same complaint on 2026-07-01 and the answer was the same one used here: take the
- * push AND keep the timer as a backstop, funnelled through one sender that only transmits when the
- * numbers actually CHANGED. The 18s cadence was chosen for watch battery, and the key-compare
- * honours that better than the timer did — standing still now sends nothing at all, where the timer
- * re-sent the same triplet every 18 seconds all round. [[no-half-fixes-enforce-every-surface]]
+ * Cockpit had this same complaint on 2026-07-01 and this is its answer, applied to the surface that
+ * was missed: take the push AND keep the timer as a backstop. The change-compare below (added the
+ * same day for trace volume) already makes the extra sends nearly free — standing still still sends
+ * nothing. [[no-half-fixes-enforce-every-surface]]
  */
 let fixSub: (() => void) | null = null;
-let lastYardageKey = '';
+/** Last yardage actually put on the wire, so an unchanged repeat does not spend a trace row. */
+let lastYardageSent = '';
 let started = false;
 
 export function isWatchCaddieBridgeAvailable(): boolean {
@@ -95,18 +101,54 @@ export function isWatchCaddieBridgeAvailable(): boolean {
 
 /** Push the current GPS-live green yardages to the watch. Best-effort; skips when
  *  there's no usable read (no fix / no hole data) so the watch never shows a fake. */
-export async function pushYardageToWatch(): Promise<void> {
-  if (!NativeMod) return;
+/**
+ * 2026-09-09 (Tim — "the yardage would not populate on my watch") — SAY WHY, EVERY TIME.
+ *
+ * This function had FIVE silent exits — no native module, no live round, no honest yardage, a throw,
+ * and the one that is not even an exit: `sendToWatch` RESOLVES FALSE when no watch node is
+ * connected, and its return value was dropped on the floor. So "the phone never tried", "the phone
+ * had nothing to send" and "the phone sent it and no watch was listening" all reached Tim as the
+ * same blank screen, and reached us as nothing at all.
+ *
+ * Those have completely different fixes — a toggle, a GPS/course problem, and a watch-pairing
+ * problem — which is the same class of failure as the club arc reporting `points: 0` for four
+ * different causes. `getGreenYardagesSync` already traces its own reason through roundTrace; this
+ * now does too, on the 'watch' channel, so one round export answers the question.
+ * [[missing-log-entry-is-the-evidence]]
+ */
+function traceWatch(tag: string, data?: Record<string, string | number | boolean | null>): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (require('./roundTrace') as typeof import('./roundTrace')).trace('watch', tag, data);
+  } catch { /* tracing must never affect the round */ }
+}
+
+export async function pushYardageToWatch(opts?: { onlyIfChanged?: boolean }): Promise<void> {
+  if (!NativeMod) { traceWatch('yardage_skip', { reason: 'no_native_module' }); return; }
   try {
     const round = useRoundStore.getState();
-    if (!round.isRoundActive) return;
+    if (!round.isRoundActive) { traceWatch('yardage_skip', { reason: 'no_active_round' }); return; }
     const y = getGreenYardagesSync(round.currentHole);
-    if (y.middle == null && y.front == null && y.back == null) return; // nothing honest to show
-    // Only transmit on a real change — see the note on lastYardageKey. Hole is in the key so a
-    // hole change always sends even when the triplet happens to repeat.
-    const key = `${y.hole_number}|${y.front}|${y.middle}|${y.back}`;
-    if (key === lastYardageKey) return;
-    lastYardageKey = key;
+    if (y.middle == null && y.front == null && y.back == null) {
+      // nothing honest to show — carry the funnel's OWN reason (no_fix / no_hole / no_green_coords)
+      // rather than restating that the numbers were absent.
+      traceWatch('yardage_skip', { reason: y.reason ?? 'no_yardage', hole: y.hole_number ?? null });
+      return;
+    }
+    /**
+     * 2026-09-10 — the fix-driven sends are the ones that must be cheap.
+     *
+     * The GPS fan-out fires far faster than the 18s tick (1s in active mode), so subscribing without
+     * this would multiply Data Layer traffic on a wrist battery for numbers that did not move. The
+     * TIMER and hole-change calls still send unconditionally: a delivered outbound message is what
+     * proves the round trip (markWatchAlive below), and standing still must not read as
+     * disconnected. So the heartbeat cadence is exactly what main already shipped, and the live push
+     * adds a message only when the yardage actually changed.
+     */
+    if (opts?.onlyIfChanged) {
+      const nextKey = `${y.hole_number}|${y.front ?? ''}|${y.middle ?? ''}|${y.back ?? ''}`;
+      if (nextKey === lastYardageSent) return;
+    }
     const payload = {
       kind: 'yardage' as const,
       hole: y.hole_number,
@@ -114,20 +156,75 @@ export async function pushYardageToWatch(): Promise<void> {
       middle: y.middle,
       back: y.back,
     };
-    await NativeMod.sendToWatch(CADDIE_PATH, JSON.stringify(payload));
+    const delivered = await NativeMod.sendToWatch(CADDIE_PATH, JSON.stringify(payload));
+    if (delivered === false) {
+      // The native side resolves false ONLY when connectedNodes is empty (or the node query failed).
+      // That is a paired-watch problem, not a yardage problem, and it must not read as one.
+      traceWatch('yardage_undelivered', { reason: 'no_connected_node', hole: y.hole_number ?? null });
+      /**
+       * 2026-09-09 — CLEAR THE FLAG, BUT NOT OVER THE TOP OF LIVE EVIDENCE.
+       *
+       * An inbound swing sets connected=true (watchSwingBridge), and this tick fires every 18s. If a
+       * single connectedNodes miss could clear it, a watch actively streaming swings would flicker
+       * "disconnected" in Settings mid-round. `connectedNodes` empty means the Data Layer has no
+       * node RIGHT NOW, which a recent inbound message directly contradicts — so defer to the
+       * heartbeat and only clear when nothing has been heard recently.
+       */
+      try {
+        const w = useWatchStore.getState();
+        const heardRecently = typeof w.lastHeartbeat === 'number' && Date.now() - w.lastHeartbeat < WATCH_HEARTBEAT_GRACE_MS;
+        if (!heardRecently) w.setConnected(false, watchDeviceLabel());
+      } catch { /* non-fatal */ }
+      return;
+    }
+    // A delivered outbound message proves the round trip just as well as an inbound one does, and
+    // the watch app may have been running before we started listening for its `hello`.
+    markWatchAlive();
+    /**
+     * 2026-09-09 (triple-check, my own trace from earlier today) — SUCCESS IS TRACED ON CHANGE ONLY.
+     *
+     * roundTrace is a 2000-row RING BUFFER that only records while a round is traced. This tick runs
+     * every 18s, so a 4.5-hour round would have spent ~900 rows — nearly half the buffer — on
+     * "yardage sent, nothing wrong", evicting the GPS, voice and shot rows that actually diagnose
+     * something. A diagnostic that pushes the evidence out of the log is worse than no diagnostic,
+     * which is the same lesson as the 08-31 `analysis_error` vs `diag` split.
+     *
+     * FAILURES still trace every single time — they are rare, and each one is the answer. Success
+     * traces when the numbers change, which is what "the yardage is updating" actually looks like.
+     */
+    const sentKey = `${y.hole_number}|${y.front ?? ''}|${y.middle ?? ''}|${y.back ?? ''}`;
+    if (sentKey !== lastYardageSent) {
+      lastYardageSent = sentKey;
+      traceWatch('yardage_sent', { hole: y.hole_number ?? null, middle: y.middle ?? null });
+    }
   } catch (e) {
+    traceWatch('yardage_error', { reason: String(e).slice(0, 120) });
     devLog('[watchCaddieBridge] pushYardage failed: ' + String(e));
   }
 }
 
 /**
  * Start the caddie bridge. Idempotent. Registers the outbound sender, subscribes to
- * watch voice/tap, and pushes live yardage on hole change + a slow tick.
+ * watch voice/tap, and pushes live yardage on every GPS fix that moves the number, on hole change,
+ * and on a backstop tick.
  */
 export async function initWatchCaddieBridge(): Promise<boolean> {
   if (!NativeMod) return false;
   if (started) return true;
   try {
+    /**
+     * 2026-09-09 (Tim: "make sure swing capture and yardage do not clash") — CLAIM THE INBOUND
+     * LISTENER, which this bridge never used to do.
+     *
+     * The native `start()` registers ONE MessageClient listener carrying every inbound path, and
+     * only watchSwingBridge ever called it. So with swing capture off, this bridge's mic/tap
+     * subscriptions below were connected to a socket nobody had plugged in: outbound yardage worked
+     * (sending needs no listener) while the watch mic, taps and the `/smartplay/hello` presence ping
+     * were all dead. Decoupling yardage from the swing toggle without this would have shipped half
+     * the feature and looked like it worked.
+     */
+    await acquireWatchDataLayer('caddie');
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     emitter = new NativeEventEmitter(NativeMod as any);
 
@@ -183,7 +280,7 @@ export async function initWatchCaddieBridge(): Promise<boolean> {
     // backstop for the gap this fan-out is known to have (round teardown/reconnect) — the reason
     // Cockpit kept its poll too.
     try {
-      fixSub = subscribeFixChange(() => { void pushYardageToWatch(); });
+      fixSub = subscribeFixChange(() => { void pushYardageToWatch({ onlyIfChanged: true }); });
     } catch (e) { devLog(`[watchCaddie] fix subscribe failed: ${String(e)}`); }
     yardageTimer = setInterval(() => { void pushYardageToWatch(); }, YARDAGE_TICK_MS);
 
@@ -192,6 +289,15 @@ export async function initWatchCaddieBridge(): Promise<boolean> {
   } catch (e) {
     devLog('[watchCaddieBridge] init failed: ' + String(e));
     started = false;
+    /**
+     * 2026-09-09 (triple-check, my own code from an hour ago) — RELEASE THE CLAIM WE MAY ALREADY
+     * HOLD. `acquireWatchDataLayer` runs first in this try block, so anything throwing after it left
+     * the 'caddie' holder registered forever: the native listener could never be removed, and
+     * `isWatchDataLayerListening()` reported true for a bridge that had failed to start. The swing
+     * bridge now consults that to decide whether to clear the connected flag, so a single failed
+     * init would also have left Settings claiming a watch nobody was listening to.
+     */
+    void releaseWatchDataLayer('caddie').catch(() => {});
     return false;
   }
 }
@@ -209,12 +315,14 @@ export async function stopWatchCaddieBridge(): Promise<void> {
     unsubRound?.();
     fixSub?.();
     if (yardageTimer) clearInterval(yardageTimer);
+    // Only our claim — swing capture may still be listening, and taking the shared listener down
+    // under it would silently stop every swing the watch sends.
+    if (started) await releaseWatchDataLayer('caddie');
   } catch {
     /* no-op */
   } finally {
     voiceSub = null; tapSub = null; commandSub = null; unsubRound = null; fixSub = null; yardageTimer = null; emitter = null;
-    // A fresh start must be able to send the first reading even if it repeats the last one.
-    lastYardageKey = '';
+    lastYardageSent = '';   // a new session must re-trace its first send, not inherit the old key
     started = false;
   }
 }

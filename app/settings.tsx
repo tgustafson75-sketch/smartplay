@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   isMetaWearablesAvailable,
   startMetaWearablesStreaming,
@@ -33,6 +33,7 @@ import { displayCaddieName } from '../services/caddieResolver';
 // (cage-mode, cage/summary, settings) share one source of truth.
 import { useWatchStore } from '../store/watchStore';
 import { watchDeviceLabel } from '../services/watchBridge';
+import { useOwnerChecklistStore } from '../store/ownerChecklistStore';
 import { initWatchSwingBridge, stopWatchSwingBridge, isWatchSwingBridgeAvailable } from '../services/watchSwingBridge';
 // 2026-05-27 — Fix EA: screenshot mode toggle (hides system chrome
 // for clean promo / store screenshots). Sourced from its own store
@@ -126,6 +127,15 @@ export default function Settings() {
   // display row. Reads from the dedicated watchStore — stays false
   // until the native SDK lands and flips it.
   const watchConnected = useWatchStore((s) => s.isConnected);
+  /**
+   * 2026-09-09 — the count rides on the row itself, so Owner Tools says there is work without opening
+   * it. Selected as the raw array and counted in a useMemo, NOT `.filter(...).length` inside the
+   * selector: a selector that allocates is what caused the recap screen's "Maximum update depth
+   * exceeded" three times, and the repo has a guard for exactly this shape. Caught by that guard on
+   * first run, which is the guard doing its job.
+   */
+  const checklistItems = useOwnerChecklistStore((s) => s.items);
+  const checklistOpen = useMemo(() => checklistItems.filter((i) => !i.done).length, [checklistItems]);
   // 2026-06-30 (Tim — "turning on the watch is blocked") — the Galaxy Watch swing-IMU bridge
   // shipped in the native build, so this is a REAL toggle now. Available only when the native
   // module is linked (latest build); on an older binary it stays disabled with a clear note.
@@ -1468,8 +1478,12 @@ export default function Settings() {
                     nothing here that looked like the round setting he was hunting for — and no round
                     setting existed to find, because this one already covers it. It captures during
                     rounds too, tagged to the hole you were on; say so. */}
+                {/* 2026-09-09 (Tim — "the yardage would not populate on my watch", first Play Store
+                    round). This toggle used to gate the caddie bridge too, so pin yardage and the
+                    watch mic silently rode on a switch labelled "swing capture" and defaulting off.
+                    They are independent now — say so, so nobody goes hunting here for yardage. */}
                 {watchBridgeAvailable
-                  ? `Captures every swing the watch sees — during a live round (tagged to the hole, shown in View hole and the round recap) and in Smart Motion, where a calibrated capture also reads club speed.${watchConnected ? ' Watch connected.' : ` Open the SmartPlay watch app on your ${watchDeviceLabel()} to start sending.`}`
+                  ? `Captures every swing the watch sees — during a live round (tagged to the hole, shown in View hole and the round recap) and in Smart Motion, where a calibrated capture also reads club speed. Pin yardage and the watch mic do not need this — they work whenever your watch is paired and the SmartPlay watch app is open.${watchConnected ? ' Watch connected.' : ` Open the SmartPlay watch app on your ${watchDeviceLabel()} to start sending.`}`
                   : 'The watch swing-capture module ships in the latest native build — install it, then this turns on.'}
               </Text>
             </View>
@@ -1477,12 +1491,25 @@ export default function Settings() {
               value={watchSwingEnabled}
               onValueChange={(v) => {
                 setWatchSwingEnabled(v);
+                /**
+                 * 2026-09-09 (Tim: "make sure swing capture and yardage do not clash").
+                 *
+                 * Turning this OFF used to call stopWatchCaddieBridge() — so switching off SWING
+                 * CAPTURE also killed pin yardage, the watch mic and the round push for the rest of
+                 * the session. That is the same coupling that was just removed from _layout.tsx,
+                 * living in a second file: decoupling the startup path alone would have left the
+                 * toggle able to re-break it with one tap.
+                 *
+                 * This switch now owns exactly what it is labelled: swing capture. The caddie bridge
+                 * is started on boot whenever the module exists and is left alone here. It is still
+                 * ENSURED on the way on, because a user reaching for watch features is a good moment
+                 * to make sure the bridge is up, and init is idempotent.
+                 */
                 if (v) {
                   void initWatchSwingBridge().catch(() => {});
                   void import('../services/watchCaddieBridge').then(m => m.initWatchCaddieBridge()).catch(() => {});
                 } else {
                   void stopWatchSwingBridge().catch(() => {});
-                  void import('../services/watchCaddieBridge').then(m => m.stopWatchCaddieBridge()).catch(() => {});
                 }
               }}
               trackColor={{ false: colors.border, true: colors.accent }}
@@ -2123,6 +2150,24 @@ export default function Settings() {
                       </Text>
                     </View>
                     <Ionicons name="bug-outline" size={20} color={colors.text_muted} />
+                  </TouchableOpacity>
+                  {/* 2026-09-09 (Tim — "put my checklists of to dos on the phone in owners tool").
+                      First row in Owner Tools on purpose: it is the one that has something to say. */}
+                  <TouchableOpacity
+                    style={styles.resetRow}
+                    onPress={() => router.push('/owner-checklist' as never)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open my checklist"
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>
+                        Checklist{checklistOpen > 0 ? ` · ${checklistOpen} open` : ''}
+                      </Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                        Field tests and ship steps, ticked off as you go. Reminds you on launch, and the caddie will read it out — &quot;what&apos;s on my checklist&quot;.
+                      </Text>
+                    </View>
+                    <Ionicons name="checkbox-outline" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.resetRow}

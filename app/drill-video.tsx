@@ -10,22 +10,24 @@
  *
  * Honesty: points are awarded ONLY on a real 'ended' event (a genuine full watch),
  * one-time per drill (no farming). The "Try the drill" handoff is always available
- * regardless of watch state.
- *
- * 2026-09-09 — THE PLAYER WAS NEVER MOUNTED. See the note on the render below.
+ * regardless of watch state. On a build without the native WebView, it falls back
+ * to the in-app browser (plays, but can't detect completion → no points).
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
-import { youtubePlayerHtml, parsePlayerMessage, isEmbedBlocked } from '../services/youtubeEmbed';
+import { youtubePlayerHtml, parsePlayerMessage, isEmbedBlocked, hasNativeWebView } from '../services/youtubeEmbed';
 import { openYouTubeSearch } from '../services/youtubeLinks';
+import * as WebBrowser from 'expo-web-browser';
 import { useTheme } from '../contexts/ThemeContext';
 import { usePracticePointsStore } from '../store/practicePointsStore';
 import { useToastStore } from '../store/toastStore';
+
+const HAS_NATIVE_WEBVIEW = hasNativeWebView(WebView);
 
 /** Pull the 11-char YouTube id out of a watch / youtu.be / embed / shorts URL. */
 function extractVideoId(u: string | undefined): string | null {
@@ -33,6 +35,8 @@ function extractVideoId(u: string | undefined): string | null {
   const m = u.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
   return m ? m[1] : (/^[A-Za-z0-9_-]{11}$/.test(u) ? u : null);
 }
+
+/** IFrame-API player HTML — fires postMessage('ended') on state 0 (ENDED). */
 
 export default function DrillVideo() {
   const router = useRouter();
@@ -47,6 +51,15 @@ export default function DrillVideo() {
   const playerH = Math.round((W * 9) / 16);
   const [finished, setFinished] = useState(false);
   const [playerError, setPlayerError] = useState<{ code: number; reason: string } | null>(null);
+
+  // No native player → open the clean embed in the in-app browser (can't detect
+  // completion there, so no watch points), then pop back.
+  useEffect(() => {
+    if (videoId && !HAS_NATIVE_WEBVIEW) {
+      const embed = `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&playsinline=1&autoplay=1&fs=1`;
+      void WebBrowser.openBrowserAsync(embed).catch(() => undefined).finally(() => router.back());
+    }
+  }, [videoId, router]);
 
   const onFinished = () => {
     if (finished) return;
@@ -118,34 +131,7 @@ export default function DrillVideo() {
         <View style={{ width: 28 }} />
       </View>
 
-      {/**
-        * 2026-09-09 — THE PLAYER WAS NEVER MOUNTED ON ANY BUILD OF THIS APP.
-        *
-        * These three branches used to be gated on `HAS_NATIVE_WEBVIEW`, i.e.
-        * `!!UIManager.getViewManagerConfig?.('RNCWebView')`. That guard was written 2026-06-13 for a
-        * real, temporary condition: an OTA JS update landing on an installed APK that predated
-        * react-native-webview. It has been permanently FALSE ever since, for a reason that has
-        * nothing to do with whether the WebView is present:
-        *
-        *   app.json sets newArchEnabled: true, and RN 0.81 New Architecture is bridgeless-only. In
-        *   bridgeless mode `UIManager` resolves to BridgelessUIManager, whose getViewManagerConfig
-        *   returns null (and console.errors) unless the legacy ViewConfig interop layer is on —
-        *   nothing in this repo turns it on. And it could not help anyway: webview 13.15 registers
-        *   RNCWebView through codegenNativeComponent, i.e. the Fabric component registry, which the
-        *   legacy view-manager constants never see. hasViewManagerConfig() is the bridgeless
-        *   equivalent; getViewManagerConfig() cannot answer this question at all.
-        *
-        * So every tap fell to the in-app-browser branch: a Custom Tab opened on the bare
-        * youtube.com/embed URL and the screen popped itself. No IFrame API, no 'ended' event, no
-        * watch points, and the whole drill deck below — instructor, the "try this drill" handoff —
-        * never rendered. Three rounds of fixes went into the player HTML (onError, the 12s timeout,
-        * one shared builder); none of them ran, because the WebView was never mounted.
-        *
-        * The fix is the deletion. react-native-webview is a hard dependency imported statically at
-        * the top of this file — if it were absent this module would not load at all, so the guard
-        * never protected anything the import didn't already require. [[two-owners-is-the-root-cause]]
-        */}
-      {videoId && playerError ? (
+      {videoId && HAS_NATIVE_WEBVIEW && playerError ? (
         /* The video exists but will not play here. Say which of those it is, and hand the player
            somewhere that works — the drill CTA below stays available either way. */
         <View style={styles.empty}>
@@ -162,7 +148,7 @@ export default function DrillVideo() {
             </TouchableOpacity>
           )}
         </View>
-      ) : videoId ? (
+      ) : videoId && HAS_NATIVE_WEBVIEW ? (
         <View style={{ width: W, height: playerH, backgroundColor: '#000' }}>
           <WebView
             source={{ html: youtubePlayerHtml(videoId), baseUrl: 'https://www.youtube.com' }}
@@ -176,6 +162,11 @@ export default function DrillVideo() {
             onMessage={onMessage}
           />
         </View>
+      ) : videoId ? (
+        <View style={styles.empty}>
+          <Ionicons name="play-circle" size={40} color="#88F700" />
+          <Text style={[styles.emptyText, { color: colors.text_secondary }]}>Opening the video…</Text>
+        </View>
       ) : (
         <View style={styles.empty}>
           <Ionicons name="alert-circle-outline" size={40} color={colors.text_muted} />
@@ -185,7 +176,7 @@ export default function DrillVideo() {
 
       {/* Instructor + the always-available "try the drill" handoff. After a full
           watch, the CTA highlights and the finished note appears. */}
-      {videoId && (
+      {videoId && HAS_NATIVE_WEBVIEW && (
         <View style={styles.deck}>
           {params.instructor ? (
             <Text style={styles.instructor} numberOfLines={1}>{params.instructor}</Text>

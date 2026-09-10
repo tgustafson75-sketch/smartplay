@@ -198,6 +198,7 @@ const TENTATIVE_TIMEOUT_MS = 55_000;
  * as `no_frames`.
  */
 import * as VT from '../utils/videoThumbnail'; // serialized wrapper (native retriever crash fix)
+import { acquireClipCopy, acquireExistingClipCopy, isPooledCopy } from './swing/sharedClipCopy';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Audio } from 'expo-av';
 // 2026-06-07 (audit) — share the circuit breaker + reactive connectivity
@@ -319,6 +320,48 @@ export async function probeDurationMs(clipUri: string): Promise<number> {
 }
 
 async function probeDurationUncached(clipUri: string): Promise<number> {
+  /**
+   * 2026-09-09 (triple-check pass) — PROBE THE POOLED COPY WHEN THERE CAN BE ONE.
+   *
+   * This is the last member of the class. The probe loads an Audio.Sound (a native decoder) and up to
+   * three thumbnails; on SmartMotion it runs on the ORIGINAL at four call sites while the review
+   * <Video> is looping that same file. Serialized against other retrievers by the media chain, and
+   * not against ExoPlayer — which is the distinction that produced today's crash.
+   *
+   * Fixing it here rather than at the four call sites: one owner, and poseAnalysisApi already probes
+   * its work copy deliberately, so this makes every caller behave the way that one already does.
+   *
+   * `isPooledCopy` stops us copying a copy — poseAnalysisApi passes a work uri, and acquiring on that
+   * would byte-copy an on-disk copy under a key nobody else will ask for.
+   *
+   * AN EXISTING COPY ONLY — never one made for the probe. Caught on re-reading my own change: the
+   * copy step would sit OUTSIDE this function's PROBE_TIMEOUT_MS, and `DURATION_PROBE_CEILING_MS`
+   * documents itself as "probeDurationMs' own PROBE_TIMEOUT_MS" and feeds ANALYSIS_WORST_CASE_MS, the
+   * screen's hang guard. An unbounded multi-hundred-megabyte copy in front of a bounded probe makes
+   * that budget a lie and can fire "Analysis timed out" on a big clip that was going to succeed.
+   *
+   * Taking one only when it already exists puts the safety exactly where the risk is — a live copy
+   * means an analysis is running and the review player is looping — at zero added cost and with
+   * nothing unbounded. When there is none, this probes the original exactly as it always has: a
+   * sweep that cannot run costs an overlay, a duration that cannot be read costs the whole analysis,
+   * and this exposure is one decoder plus three reads rather than sixteen.
+   */
+  let probeCopy: { uri: string; release: () => void } | null = null;
+  let probeUri = clipUri;
+  if (!isPooledCopy(clipUri)) {
+    try {
+      probeCopy = await acquireExistingClipCopy(clipUri);
+      if (probeCopy) probeUri = probeCopy.uri;
+    } catch { /* no existing copy — probe the original, as before */ }
+  }
+  try {
+    return await probeDurationOn(probeUri);
+  } finally {
+    probeCopy?.release();
+  }
+}
+
+async function probeDurationOn(clipUri: string): Promise<number> {
   // 2026-06-10 — Overall timeout so a problem clip (slow audio-track load or a
   // stalling MediaMetadataRetriever on Android) can NEVER hang re-analysis on an
   // infinite spinner. If probing doesn't finish in time, fall back to the
@@ -439,6 +482,39 @@ export async function extractKeyFrames(
     V6('STAGE 2 — empty clipUri, no frames');
     return [];
   }
+  /**
+   * 2026-09-09 — EXTRACT FROM THE PRIVATE COPY, NOT THE FILE THE PLAYER IS LOOPING.
+   *
+   * clubPath settled this on 07-30 and the shared pool landed on 08-09, but only three consumers
+   * were migrated; the fault-read frames still decoded the ORIGINAL. On SmartMotion's review surface
+   * the <Video> is `isLooping` + `shouldPlay`, so these reads ran against a file ExoPlayer was
+   * actively decoding — the documented native OOM/SIGSEGV vector, and, short of the crash, the
+   * reason a read comes back with nothing. `frame_extraction_empty` below has been reporting the
+   * symptom ("plays manually but won't re-analyze") without naming this as the cause.
+   *
+   * The pool is refcounted with an 8s linger and pose, tempo, club path and ball departure all take
+   * the same copy during a review, so this shares their file rather than making another.
+   *
+   * No copy means no frames — which is already a handled outcome here (`return []` above, and the
+   * empty-extraction diagnostic below), not a new failure mode.
+   */
+  let sharedCopy: { uri: string; release: () => void } | null = null;
+  try {
+    const { acquireClipCopy } = await import('./swing/sharedClipCopy');
+    sharedCopy = await acquireClipCopy(clipUri);
+  } catch { /* acquire failed — refusal below */ }
+  if (!sharedCopy) {
+    V6('STAGE 2 — private copy failed, refusing to decode the original');
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require('../store/issueLogStore').useIssueLogStore.getState().addAppEvent('frame_extraction_no_private_copy', {
+        uri_scheme: clipUri.split(':')[0],
+        uri_tail: clipUri.slice(-44),
+      });
+    } catch { /* logging is best-effort */ }
+    return [];
+  }
+  const workUri = sharedCopy.uri;
   try {
     // When boundaries provided, the swing window is known — skip the
     // whole-clip duration probe and sample within [startSec, endSec].
@@ -463,7 +539,10 @@ export async function extractKeyFrames(
     const LONG_CLIP_THRESHOLD_MS = 10_000;
     const MEDIUM_CLIP_THRESHOLD_MS = 4_000;
     const MEDIUM_CLIP_BACK_WINDOW_MS = 5_000;
-    const LONG_CLIP_FRACTIONS = [0.20, 0.40, 0.60, 0.78, 0.92];
+    // 2026-09-09 — LONG_CLIP_FRACTIONS (a fixed 5-frame spread) deleted: genuinely superseded, not
+    // unconnected. The 06-09 long-clip branch below computes a DURATION-SCALED even spread (6-12
+    // frames, ~1 per 5s) because a fixed 5 was too sparse for a ~2s swing to land in, which is the
+    // same job done better. It has had no reader since; the comment above still described it.
     // 2026-06-07 — Quick-tier: 3-frame address/impact/finish sample
     // for the speed paths (SmartMotion / Cage / library Quick). Saves
     // ~6-12s of Haiku vision latency vs 5 frames; accuracy on the
@@ -542,7 +621,7 @@ export async function extractKeyFrames(
           let r: { uri: string } | null = null;
           let lastErr: unknown = null;
           for (const ct of [timeMs, timeMs + 250, Math.max(0, timeMs - 250), 0]) {
-            try { r = await VT.getThumbnailAsync(clipUri, { time: ct, quality: 0.8 }); break; }
+            try { r = await VT.getThumbnailAsync(workUri, { time: ct, quality: 0.8 }); break; }
             catch (e) { lastErr = e; }
           }
           if (!r) {
@@ -632,6 +711,8 @@ export async function extractKeyFrames(
   } catch (e) {
     V6('STAGE 2 — extractKeyFrames threw', { error: e instanceof Error ? e.message : String(e) });
     return [];
+  } finally {
+    sharedCopy.release();   // refcount down; the pool lingers 8s for the consumers behind this one
   }
 }
 
@@ -787,11 +868,22 @@ async function extractCoarseFrames(clipUri: string, durationMs: number, count: n
   // then aborted/failed on real uploads. Extract SEQUENTIALLY: one retriever at a time is dramatically
   // faster on a 4K source (no thrash) and can't crash. The frames are tiny + this is background, so the
   // sequential cost is invisible next to the concurrent thrash it replaces.
+  // 2026-09-09 — same private-copy rule as extractKeyFrames: the locate's coarse sweep decoded the
+  // ORIGINAL, which on the looping review surface is the file ExoPlayer holds. Sequential-only (the
+  // 07-29 fix above) stops these racing EACH OTHER; it does nothing about the player.
+  let coarseCopy: { uri: string; release: () => void } | null = null;
+  try {
+    const { acquireClipCopy } = await import('./swing/sharedClipCopy');
+    coarseCopy = await acquireClipCopy(clipUri);
+  } catch { /* acquire failed — refusal below */ }
+  if (!coarseCopy) return [];   // no frames: the caller already treats an empty sweep as "no locate"
+  const coarseUri = coarseCopy.uri;
+  try {
   const out: Frame[] = [];
   for (const frac of fracs) {
     const timeMs = Math.round(durationMs * frac);
     try {
-      const r = await VT.getThumbnailAsync(clipUri, { time: timeMs, quality: 0.5 });
+      const r = await VT.getThumbnailAsync(coarseUri, { time: timeMs, quality: 0.5 });
       const m = await ImageManipulator.manipulateAsync(
         r.uri,
         [{ resize: { width: LOCATE_FRAME_WIDTH } }],
@@ -803,6 +895,9 @@ async function extractCoarseFrames(clipUri: string, durationMs: number, count: n
     }
   }
   return out;
+  } finally {
+    coarseCopy.release();   // refcount down; the pool lingers 8s for the consumers behind this one
+  }
 }
 
 // 2026-06-10 — Field telemetry for the auto swing-finder. Logged to /owner-logs
@@ -840,7 +935,34 @@ function logLocate(stage: string, details: Record<string, unknown>): void {
  * wide-spread sampling). Best-effort: its own 15s timeout, never throws,
  * never trips the analysis breaker.
  */
+/**
+ * 2026-09-09 — the network single-swing locate reports itself. See onDeviceLocate for why the
+ * reporting lives on the mechanism and not on its callers.
+ */
 export async function locateSwingWindow(
+  clipUri: string,
+  durationMs: number,
+  opts?: { onAbort?: (cause: 'dead_host' | 'ceiling' | 'unknown') => void },
+): Promise<{ startSec: number; endSec: number; swingTimeSec: number } | null> {
+  try {
+    const out = await locateSwingWindowImpl(clipUri, durationMs, opts);
+    try {
+      const { noteLocate } = await import('./swing/analysisPipeline');
+      noteLocate(clipUri, out ? 'ok' : 'empty', out
+        ? { via: 'network', startSec: Math.round(out.startSec * 100) / 100, endSec: Math.round(out.endSec * 100) / 100 }
+        : { via: 'network' });
+    } catch { /* observation only */ }
+    return out;
+  } catch (e) {
+    try {
+      const { noteLocate } = await import('./swing/analysisPipeline');
+      noteLocate(clipUri, 'failed', { via: 'network' });
+    } catch { /* ignore */ }
+    throw e;
+  }
+}
+
+async function locateSwingWindowImpl(
   clipUri: string,
   durationMs: number,
   /**
@@ -975,7 +1097,36 @@ const LOCATE_SWINGS_TIMEOUT_MS = 30_000;
  * empty — caller then falls back to single-swing localization). Best-effort:
  * own timeout, never throws, never trips the analysis breaker.
  */
+/**
+ * 2026-09-09 — the multi-swing range locate reports itself. This is the one that matters most on the
+ * range: it decides HOW MANY swings the session has, and every per-swing window downstream is carved
+ * from its answer. An over- or under-count here is invisible later and looks like bad analysis.
+ */
 export async function locateSwings(
+  clipUri: string,
+  durationMs: number,
+): Promise<Array<{ timeSec: number; confidence: 'high' | 'low' }>> {
+  try {
+    const out = await locateSwingsImpl(clipUri, durationMs);
+    try {
+      const { noteLocate } = await import('./swing/analysisPipeline');
+      noteLocate(clipUri, out.length > 0 ? 'ok' : 'empty', {
+        via: 'range',
+        found: out.length,
+        low: out.filter((sw) => sw.confidence === 'low').length,
+      });
+    } catch { /* observation only */ }
+    return out;
+  } catch (e) {
+    try {
+      const { noteLocate } = await import('./swing/analysisPipeline');
+      noteLocate(clipUri, 'failed', { via: 'range' });
+    } catch { /* ignore */ }
+    throw e;
+  }
+}
+
+async function locateSwingsImpl(
   clipUri: string,
   durationMs: number,
 ): Promise<Array<{ timeSec: number; confidence: 'high' | 'low' }>> {

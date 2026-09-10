@@ -2659,81 +2659,589 @@ across an await, now single-flighted.
 
 **Waiting on the app stores.**
 
+
 ---
 
-## Day N+2 — 2026-09-09 — the drill videos were never handed to a player
+## Day N+2 — 2026-09-08 / 09-09 — three crashes, one media chain
 
-### Shipped today
+Branch: `claude/android-crashes-voice-failures-tjsmho` (3 commits).
+Health at close: **tsc 0 · jest 2848/2848 (254 suites) · sim 968/968 · lint 1 pre-existing error**
+(`app/paywall.tsx:271`). Note: `api/messages.ts:29` now shows one pre-existing tsc error, present on
+HEAD and untouched all session.
 
-**The YouTube drill videos did not play because the WebView was never mounted.**
+### Shipped
+- **Recap "Maximum update depth exceeded" (`d6b40d5`).** Third time on that screen, same cause all
+  three: a Zustand selector that ALLOCATES, so useSyncExternalStore's mount check never matches and
+  forceStoreRerender loops. The offender was `clipShots` (09-03, `.filter()` inside the selector);
+  `useCallback` stabilises the function, not the value. The two earlier fixes each repaired one
+  selector and left the shape — three selectors that re-found the same record collapsed into one.
+- **Drill videos never played (`d6b40d5`).** Not rights, not the hardcoded ids. Both embedding
+  screens gated on `UIManager.getViewManagerConfig('RNCWebView')` — the OLD architecture's question.
+  `newArchEnabled: true` → bridgeless → that returns null for every component (verified against RN
+  v0.81.5 source; RN's own error text says to call `hasViewManagerConfig`). So they skipped the
+  WebView and opened `youtube.com/embed/<id>` in the in-app browser, which YouTube refuses to serve,
+  then popped back — exactly the 09-08 route trail.
+- **SmartMotion record crash (`086d6cf`).** `onDeviceLocate` (09-01) imported expo-video-thumbnails
+  RAW, bypassing `utils/videoThumbnail`, the single-flight queue that exists because concurrent
+  MediaMetadataRetrievers are an uncatchable SIGSEGV. Wired into analyzeSwing for every caller the
+  same day, so the stop-recording handoff set clipUri (the `<Video>` mounts) and then ran 12
+  unserialized reads on that file. Two more bypasses fixed: `swingShare`, library thumbnail backfill.
+- **Pose and trace read the player's file (`20ed507`).** clubPath's 07-30 private-copy fix and the
+  08-09 shared-pool migration were never finished: `extractKeyFrames`, `extractCoarseFrames` and
+  `onDeviceLocate` decoded the ORIGINAL while the review `<Video>` (`isLooping` + `shouldPlay`)
+  held it, and `ballPath` made a redundant second full copy. All on the pooled copy now — cheaper,
+  not dearer. Deleted `LONG_CLIP_FRACTIONS` (superseded 06-09).
+- **`speak_superseded` now names its culprit (`d6b40d5`).** The 09-03 note said the proof would be
+  `preemptedBy: 'route_change'`; the field was never recorded. It is now. No behaviour change.
 
-Tim's report was "YouTube drill videos still not playing" — *still*, after three rounds of fixes.
-Those three rounds all went into the player document (`services/youtubeEmbed.ts`: an `onError`
-handler, a 12s "the IFrame API never loaded" timeout, one shared builder replacing two drifted
-copies). Every one of them was correct. None of them ever executed.
+### Gates added (each verified to FAIL on the pre-fix code)
+`a-selector-must-not-build-what-it-returns` · `a-native-component-check-must-work-on-the-new-architecture`
+· `one-native-media-reader-at-a-time` · `an-analysis-extractor-never-decodes-the-players-file`.
+The 12 `useShallow` call sites are correct and excluded by the first.
 
-`/drill-video` and `/jukebox` both gated their `<WebView>` on:
+### Verified on device (Z Fold)
+**Nothing.** All four fixes are code-level with shape-locked tests; the crash class is native and on
+hardware this session cannot reach. Tim's verification is the gate.
 
-```
-const HAS_NATIVE_WEBVIEW = !!UIManager.getViewManagerConfig?.('RNCWebView');
-```
+### Open / carried
+- **Sparse club arc is NOT closed.** The private copy is a real cause of empty extraction, but
+  whether it is the ONLY one is unsettled — `f44f06d`'s `rejected`/`detected`/`gate` fields have not
+  come back from a device yet, and they are what separates "the model could not see the head" from
+  "a gate threw away eight good points". Next field report on the arc should carry them.
+- **Voice start/stop during recording** — left alone on Tim's instruction ("don't change voice path
+  to stop recording"). Tap-stop stays the chokepoint.
+- Not migrated to the pool, deliberately: `probeDurationMs` (3 bounded reads, not a sweep) and the
+  non-analysis readers (library backfill, tutorial-upload, puttFrameExtractor, feelReconcile,
+  videoUpload, swingShare) — none run against the looping review surface.
+- `api/messages.ts:29` tsc error, pre-existing and untouched.
 
-Written 2026-06-13 for a real but temporary condition: an OTA JS update landing on an installed APK
-that predated `react-native-webview`. It has been permanently **false** since, for a reason that has
-nothing to do with whether the WebView is present:
+### Note
+Repo arrived as a 50-commit shallow clone, which made "find when it last worked" impossible for the
+first half of the session. `git fetch --unshallow` (3004 commits) is what turned the SmartMotion
+crash from four competing hypotheses into one archaeology answer. Do that first next time.
 
-- `app.json` sets `newArchEnabled: true`, and RN 0.81 New Architecture is bridgeless-only. In
-  bridgeless mode `UIManager` resolves to `BridgelessUIManager`, whose `getViewManagerConfig`
-  returns `null` — and `console.error`s — unless the legacy ViewConfig interop layer is enabled.
-  Nothing in this repo enables it (`RN$LegacyInterop_UIManager_getConstants` appears nowhere).
-- It could not have helped anyway: webview 13.15 registers `RNCWebView` through
-  `codegenNativeComponent` → `NativeComponentRegistry.get`, i.e. the **Fabric** registry, which the
-  legacy view-manager constants never see. `hasViewManagerConfig()` is the bridgeless equivalent;
-  `getViewManagerConfig()` cannot answer this question at all.
 
-Verified against the installed `node_modules`, not from memory — RN 0.81.5's
-`BridgelessUIManager.js` line 268, and `react-native-webview` 13.15.0's
-`RNCWebViewNativeComponent.js`.
+### Triple-check pass — 2026-09-09 (3 more commits: `a460bda`, `45a37f6`, + docs)
 
-So every tap fell to the fallback branch: a Custom Tab opened on the bare `youtube.com/embed` URL and
-the screen popped itself. No IFrame API → no `ended` event → no watch points, and on `/drill-video`
-the entire deck below the player — the instructor line and the **"Try this drill in Smart Motion"**
-handoff, the whole point of the video→drill loop — never rendered either. It was gated on the same
-constant.
+Tim asked for a triple-check of the session's work and a full SmartMotion sweep. It found **three
+defects in my own changes from earlier the same day**, which is the point of the exercise.
 
-**The fix is a deletion.** Removed on both screens: `HAS_NATIVE_WEBVIEW`, the `UIManager` import, the
-`expo-web-browser` import and its fallback effect, the "Opening the video…" interstitial, and (in
-jukebox) the now-purposeless `embedUrl`. Net **−57/+52**, and most of the additions are the
-archaeology comment. The guard never protected anything: `react-native-webview` is imported
-statically at the top of both files, so a build without it fails at module load, not at render.
+1. **The WebView detector I added could white-screen the route.** `hasViewManagerConfig?.()` guards a
+   MISSING method, not a THROWING one — and Bridgeless delegates to `unstable_hasComponent`, which
+   throws a bare string when `global.__nativeComponentRegistry__hasComponent` is not installed yet.
+   Both screens call it at module scope. Now wrapped, and when it cannot answer it does not answer
+   `false` (that is the original bug returning) — the screens pass the imported `WebView`, so the
+   fallback is a fact about the build.
+2. **My scope note was wrong.** "None of the un-migrated readers run against the looping surface" —
+   two do: `feelReconcile` (twice from smartmotion.tsx) and `swingShare` (from swing-detail while its
+   video plays). Both pooled now. The gate no longer trusts a hand-list: it DERIVES the set by
+   scanning, and each reader must pool or carry a named reason. That immediately caught one more I
+   had assumed away (`bagScan` — genuinely safe, ImagePicker's OS camera UI, no player).
+3. **A bounded probe grew an unbounded step in front of it.** Routing `probeDurationUncached` through
+   `acquireClipCopy` put a multi-hundred-MB copy OUTSIDE `PROBE_TIMEOUT_MS` — and
+   `DURATION_PROBE_CEILING_MS` is derived from that timeout and feeds `ANALYSIS_WORST_CASE_MS`, the
+   screen's hang guard. It would have fired "Analysis timed out" on clips that were going to succeed.
+   Fixed with `acquireExistingClipCopy`: borrow a copy only when one already exists (which is exactly
+   when the player is looping), never make one. Zero added cost, budget stays honest.
 
-**The sim was pinning the bug in place.** `run-sim.ts` had a check asserting the guard was
-*present* ("player is OTA-safe"). It now asserts the opposite, reading comment-stripped source so
-the note explaining the removal can't satisfy the check it's explaining.
+Also corrected a stale comment on SmartMotion's club-arc gate (said ">= 4 points"; code has said 3
+since 08-06). It cost a minute of doubt mid-audit — which is what that class of comment does.
 
-New gate: `__tests__/regression/the-embedded-player-is-actually-mounted.test.ts` — the player-HTML
-tests proved the document was correct, never that anything rendered it. This one asserts a `<WebView>`
-exists on both screens, no legacy view-manager lookup gates it, no browser fallback is left to
-swallow the video, autoplay props are intact, and the drill deck is tied to `videoId`.
+**SmartMotion verified, no change needed:** arc + trace both wired and rendered (SwingBodyOverlay,
+gated at 3, cache marked on ANSWER so an empty read is not retried forever); unmount cleanup covers
+timers, camera, metering, speech and the mic flag; `reset()` is reachable only from review so it
+cannot orphan an in-flight recording; camera/mic permission gates are after all hooks; the pool is
+correct under concurrency (refs before the await, idempotent release, linger cleared on re-acquire).
+Every `Audio.Sound` on a clip and every frame fan-out is on the serializing chain.
+
+Health at close: **tsc 0 (1 pre-existing, `api/messages.ts:29`) · jest 2854/2854 · sim 968/968 ·
+lint 1 pre-existing error**. Still zero device verification — that remains Tim's gate.
+
+### Open-items pass — 2026-09-09 (Tim: "fix all open items", "nothing that messes with the builds in review")
+
+Every item the close-out left open, closed or explicitly deferred. **Nothing on this branch touches
+native code, `app.json`, `eas.json`, `package.json` or `patches/`** — it is JS/TS only, so it cannot
+reach a binary already in review, and no OTA was published.
+
+1. **The sparse-arc field report was UNOBTAINABLE — that is why it never came.** The close-out asked
+   for one device report carrying `rejected`/`detected`/`gate` from `f44f06d`. Those fields were only
+   ever reported by the SWING-DETAIL screen. **SmartMotion — the screen swings are actually recorded
+   on — dropped every empty arc silently**, and `videoUpload`'s analysis pass still logged the bare
+   `points: 0` that f44f06d existed to replace. Two of the three surfaces could not answer the
+   question they had been asked. All three report now, and both screens carry a `screen` field
+   because two surfaces emit the event.
+
+   The videoUpload one matters most: that pass runs with nothing playing (`shouldAbort: false`), so a
+   sparse arc there cannot be blamed on ExoPlayer holding the file. It isolates model-or-gates from
+   file contention — exactly the question "is the private copy the ONLY cause" needs answered.
+
+   Behaviour is unchanged on all three: same arc drawn, same 3-point gate, same cache.
+2. **`app/paywall.tsx:271` lint error — fixed.** An unescaped apostrophe in JSX text. Rendering is
+   identical. **Lint is now 0 errors** for the first time in the sprint; the 261 warnings are
+   untouched and pre-existing.
+3. **`api/messages.ts:29` tsc error — does not exist.** `npx tsc --noEmit` is silent on this repo,
+   and `tsconfig.json` includes `**/*.ts` with only `node_modules` excluded, so the file IS
+   typechecked. The error was an artifact of the cloud session's environment, not of the code. The
+   claim has been dropped rather than carried forward as a phantom.
+4. **Voice start/stop during recording — deliberately NOT touched.** Tim's standing instruction
+   ("don't change voice path to stop recording"); tap-stop stays the chokepoint. Not a defect to fix.
+5. **The deliberate non-migrations stand.** `probeDurationMs` (bounded, uses `acquireExistingClipCopy`)
+   and the non-analysis readers already carry named reasons and are enforced by the derived gate.
+
+### Gate added (verified to FAIL on `cbb5b5c4`: 3 failures)
+`a-zero-point-arc-must-say-why-on-every-surface` — DERIVES the caller set by scanning for
+`detectClubPath(`, and requires each to report the rejection reason or carry a named allowance. It
+does not hand-list the surfaces, because the triple-check proved a hand-written list wrong twice.
+
+Health at close: **tsc 0 · jest 2859/2859 (255 suites) · sim 968/968 · lint 0 errors, 261 warnings**.
+
+### Still Tim's gate
+**Device verification of all seven earlier commits.** Unchanged — the crash class is native and no
+code change this session altered that. Branch remains UNMERGED while builds are in review.
+
+
+### SmartMotion triple-check — 2026-09-09 (Tim: "gated correctly and efficiently to give clean fast accurate complete reads")
+
+JS/TS only. No native, no `app.json`, no `eas.json`, no deps — cannot affect a build in review.
+
+**1. THE ARC TIM HAS NEVER SEEN IS AN ORDERING BUG, and it was never intermittent.**
+`STAGE_DEPS` says `club: ['pose','frame']`. On SmartMotion club ran FIRST, always: the pose effect
+is gated on `phase === 'review' && videoDurationMs != null`, and `runAnalysis` nulls videoDurationMs
+on entry and reaches `setPhase('review')` only at its very end — while the club effect needed nothing
+but `clipUri` + `segments`, both set during 'analyzing'. Club could not lose that race.
+
+`bodyBoundsFromPose(null)` is null, so every first read asked the model to find a clubhead in a
+downscaled FULL FRAME — the six-pixels-across case `roiFromBodyBounds` was written on 08-10 to fix.
+The empty answer was then cached under a bare swing index, so the re-run `poseFrames` triggers took
+the cache hit. **The ROI zoom shipped, was unit-tested, was wired, and never once ran on a swing
+recorded on this screen.** `club-arc-render-path` asserted the argument was present — which is all a
+wire test can prove: that the wire exists, never that a signal flows down it.
+
+Fixed: club waits for the pose stage to SETTLE (released from a `finally`, so a failed pose still
+lets the arc run full-frame — one failure must not become two), and the cache is keyed by
+clip + swing + window instead of a bare index.
+
+**2. The pose warm keyed on a file that changes mid-run.** `uri` is a `let` that becomes the durable
+copy partway through `runAnalysis`; the warm read it at whatever moment `onFramesReady` fired. On a
+miss the 5-8 decodes still ran, still queued on the one serialized media chain, and landed under a
+key the review read never looks up — which then decoded again. Exactly the "latency fix that added
+latency" of 08-31, reintroduced through the key rather than the timing. The warm now awaits the
+durable copy, released on both persist outcomes.
+
+**2b. The sim guard for that stated the property and asserted the bug.** Its comment said "warmed on
+the DURABLE uri"; its assertion matched the literal `clipUri: uri`, locking the race in place. Third
+time in this sprint a guard has been defeated by the difference between its prose and its predicate.
+Corrected to assert the property. [[three-ways-a-guard-is-worthless]]
+
+**3. The stage observer could not see the screen it was written about.** analysisPipeline was built
+on 09-06 for precisely defect 1, and wired into swing-detail and poseAnalysisApi only — SmartMotion
+reported nothing and checked nothing. Now wired (`checkOrder` before club, `noteStage` after, plus
+`metrics`, which had NO reporter anywhere in the app). The run key is derived from the same
+`poseExtractInputsFor` helper the pose read uses, because a stage observer that mis-keys does not go
+quiet — it reports a violation on every sound run.
+
+**Still unreported: `locate` and `anchor`.** Not an oversight — `runKeyFor` is
+`(clipUri, startMs, endMs)`, and locate is the stage that PRODUCES startMs/endMs. The key is circular
+for the two earliest stages. Worth fixing when the real orchestrator lands; noting it rather than
+wiring a key that would be wrong.
+
+### Gate added (verified to FAIL on `a47612ff`: 7 of 8)
+`the-club-stage-must-wait-for-pose` — the pose gate, the `finally` release, the cache key, the
+observer wiring, key parity with poseAnalysisApi, and both halves of the warm fix.
+
+Health at close: **tsc 0 · jest 2867/2867 (256 suites) · sim 968/968 · lint 0 errors**.
+Device verification remains Tim's gate; branch remains UNMERGED while builds are in review.
+
+
+### locate + anchor — 2026-09-09 (Tim: "locate and anchor are fundamental though")
+
+He was right, and the previous entry's deferral was wrong. I had called the key circular — a run is
+`(clipUri, startMs, endMs)` and locate PRODUCES startMs/endMs — and stopped there. The observation
+was real; the conclusion was not. It is **scope**, not circularity: locate searches a whole clip and
+finds the window(s) once, for every swing in it; every stage after it runs per window.
+
+It was also the worst gap to have accepted. **If locate returns the wrong seconds, every stage after
+it measures the wrong part of the swing and reports a confident, clean, completely wrong read** —
+indistinguishable from "the model is bad" from outside. Same for anchor: an unanchored sampler
+spreads its dense band into the follow-through (the 09-01 "arc looks like it's behind the user"),
+which arrived looking exactly like a clubhead the model could not see. Two opposite fixes, one
+symptom, no way to tell them apart.
+
+**`STAGE_SCOPE`** now models it. A clip-scoped stage records against the clip alone; a window-scoped
+dependent resolves that dep against the clip. Callers pass whatever key they have — `runKeyFor(clip,
+0, 0)` before a window exists — and the routing puts it where it belongs. `describeRun` merges the
+clip-scoped stage back in, so a run reads as one sequence: `locate:ok → anchor:ok → pose:ok →
+club:empty`.
+
+**Reporting lives on the MECHANISMS, not the call sites.** There are eight locate call sites across
+four files; a hand-list has been wrong twice this sprint. `locateSwingWindowOnDevice`,
+`locateSwingWindow` and `locateSwings` each split into a reporting wrapper + `…Impl`, so ok, empty
+AND throw all report, and a caller added tomorrow is covered by nobody remembering anything.
+`locateSwings` carries `found` + `low` — it decides how many swings the session has, and every
+window downstream is carved from that answer.
+
+Anchor is reported at the four sites that DECIDE one (two in SmartMotion, two in swing-detail),
+enforced by a derived scan rather than a list.
+
+### Gate added: `locate-and-anchor-must-report`
+Scope semantics, the shared-locate-per-clip property, empty/failed not satisfying dependents,
+`clipKeyOf` surviving a uri containing pipes, plus derived scans over both locate mechanisms and
+every anchor decider. On `2494a237` it does not compile (the scope model did not exist) and the tree
+had **0** locate reporters, **0** anchor reporters, **0** `noteLocate` calls.
+
+**The scan flagged `services/swing/clubPath.ts` on its first run — a false positive from PROSE**
+naming `impactAnchorMs` in a comment. run-sim.ts learned this exact lesson on 08-31; third time this
+sprint. Comments are now stripped before scanning: a file's account of itself is not the file doing
+the thing.
+
+Health: **tsc 0 · jest 2881/2881 (257 suites) · sim 968/968 · lint 0 errors**. JS/TS only — no
+native, no app.json/eas.json/deps. Unmerged; device verification remains Tim's gate.
+
+
+### Watch bridge — 2026-09-09 (Tim: "now that it's on Play Store the yardage would not populate on my watch")
+
+**Root cause: pin yardage was gated behind the swing-capture toggle, which defaults OFF.**
+
+`app/_layout.tsx` started BOTH watch bridges behind one early return on `watchSwingEnabled` — the
+Galaxy Watch SWING-IMU setting, labelled "swing capture" and described only in terms of capturing
+swings. That one switch silently also owned **pin yardage, the watch mic, watch taps, and the
+round-state/score push**: four features it does not name, behind a toggle nobody would look under.
+
+`watchSwingEnabled` defaults to `false` and is persisted per install. Tim's dev build carried a
+toggle he flipped on months ago; **a Play Store install starts from empty storage**, so
+`initWatchCaddieBridge()` never ran and the watch sat blank for the whole round. "It worked until it
+went on the Play Store" is exactly what a persisted-default-off gate looks like from outside —
+nothing about the build changed, only the storage it started from.
+
+Fixed by decoupling. Swing capture keeps its toggle (real battery cost, genuinely opt-in). The caddie
+bridge starts whenever the native module is present — it sends nothing unless a round is live AND a
+watch node is connected, its inbound listeners fire only when the watch speaks first, and the
+round/score push inside it stays owner-gated. **This is decoupling, not switching a feature on.**
+
+**Second half: none of it was diagnosable.** `pushYardageToWatch` had five silent exits, and the
+worst was not an exit at all — the native `sendToWatch` **resolves `false` when no watch node is
+connected**, and JS dropped the return value. So "the phone never tried", "the phone had nothing to
+send" and "the phone sent it to nobody" were one blank watch face with no trace anywhere. Three
+different fixes (a toggle, GPS/course data, watch pairing), one symptom — the same shape as the club
+arc reporting `points: 0` for four causes. All five now trace on roundTrace's `watch` channel,
+carrying `getGreenYardagesSync`'s own reason (`no_fix` / `no_hole` / `no_green_coords`) rather than
+restating that numbers were absent. A delivered push now also proves the watch is alive; an
+undelivered one clears the flag.
+
+Settings copy corrected: the row no longer implies the toggle owns yardage.
+
+### Gate added: `pin-yardage-does-not-ride-the-swing-toggle` (10 of 11 fail on `caa2bce9`)
+The decoupling, that swing capture is still opt-in, that the default is still `false`, every trace
+reason, and that the native result is honoured rather than discarded.
+
+### NOT done — needs a native build, cannot go OTA
+A no-connected-node condition is only observable when we try to SEND. A passive
+`CapabilityClient`/`OnCapabilityChanged` listener would let Settings say "watch not reachable" before
+a round rather than after it. That is `android-native/` work and the OTA guard correctly blocks it.
+
+Health: **tsc 0 · jest 2892/2892 (258 suites) · sim 968/968 · lint 0 errors**. JS/TS only.
+
+
+### swing capture vs yardage — 2026-09-09 (Tim: "make sure swing capture and yardage do not clash")
+
+They did, three ways, and yesterday's decoupling is what made it matter.
+
+Both bridges resolve the SAME native module, and the native `start()`/`stop()` register/remove **ONE**
+`MessageClient` listener for the whole app. Every inbound path rides it: `/smartplay/swing`,
+`/smartplay/voice` (watch mic), `/smartplay/tap`, and `/smartplay/hello` — the presence ping that is
+the only thing firing `onWatchConnection`.
+
+1. **Only `watchSwingBridge` ever called `start()`.** So with swing capture off, the caddie bridge
+   had no inbound at all — outbound yardage worked (sending needs no listener) while the mic, taps
+   and presence were dead. Decoupling yardage without this would have shipped half a feature that
+   looked whole.
+2. **`stopWatchSwingBridge` called `stop()` unconditionally**, removing the listener from under a
+   live caddie bridge, and called `setConnected(false)` — declaring the watch gone while the caddie
+   bridge was proving otherwise every 18s.
+3. **The Settings toggle called `stopWatchCaddieBridge()` on the way off** — the exact coupling just
+   removed from `_layout.tsx`, living in a second file, able to re-break it with one tap.
+
+`services/watchDataLayer.ts` is now the single owner: refcounted acquire/release, native listener
+registered once and removed only when the last holder leaves. A failed yardage send also no longer
+flickers a live watch offline — it defers to the heartbeat (two ticks) before clearing the flag.
+
+### Tim: "I've only seen the yardage interface and have never seen the output from swing capture"
+
+Consistent with the above and it sharpens the picture: yardage worked historically (so the toggle
+WAS on), and swing capture never produced anything. Two findings, neither yet device-confirmed:
+
+- **Swing capture needs a SECOND switch, on the watch.** `SwingSensorService` only runs after the
+  wearer taps "Record swings" in the watch app (`MainActivity.onToggleCapture`). The phone toggle
+  arms the phone; the watch button starts the sensor. Neither UI mentions the other, so with the
+  phone toggle on and the watch button never pressed, the phone waits forever and says nothing.
+- **The watch Record button feature (08-07) is an orphan.** JS subscribes to `onWatchCommand`, but
+  `android-native/WearSwingBridgeModule.kt` has no command path and never emits that event — the
+  handler cannot fire. Native, so it cannot ride an OTA.
+
+### Gate added: `swing-capture-and-yardage-must-not-clash`
+Refcount semantics (native start once, stop only on last release, no underflow), both bridges going
+through the owner, the toggle no longer stopping the caddie bridge, and the heartbeat deference.
+Fails to compile on `86e8886d`; that tree had the swing bridge calling `NativeMod.stop()` directly,
+the caddie bridge claiming the listener **0** times, and the toggle stopping the caddie bridge.
+
+The native module is **mocked** in that gate rather than absent: without one, `acquireWatchDataLayer`
+short-circuits and the refcount never populates, so the test would assert nothing while passing.
+
+Health: **tsc 0 · jest 2904/2904 (259 suites) · sim 968/968 · lint 0 errors**. JS/TS only.
+
+
+### Triple-check pass #2 — 2026-09-09 (Tim: "you know the rule, we must triple check all work")
+
+Six defects, **all six in my own work from today**, which is the point of the exercise. Ordered by
+what they would have cost.
+
+1. **The pose gate drew the WRONG SWING'S ARC.** The club effect's new wait bailed with a bare
+   `return`, leaving `clubArcPoints` holding the previous swing's path. Selecting swing 3 with no
+   cached answer kept drawing swing 1's clubhead over it until pose settled — a wrong arc presented
+   as confidently as a right one. The old code cleared unconditionally on its way to detection; the
+   new gate had to as well, and making the wait *longer* made it visible. Exactly the class the
+   08-09 audit fixed for fault heat ("painting swing-1's fault on swing-3's body is a visible lie").
+2. **`checkOrder` silently dropped `locate` from every diagnostic.** It built its own sequence from
+   `runs.get(key)`; the moment locate became clip-scoped it vanished from the event that exists to
+   explain a bad read — the stage Tim had *just* called fundamental. `describeRun` was updated for
+   scope and its twin was not. Now built through `describeRun`, one owner.
+3. **A failed `start()` left holders believing they were listening.** The second acquirer returned
+   `true` on seeing a non-empty holder set while the first was still awaiting `start()`; if that
+   start failed, the first rolled back its own holder and the second stayed registered with no
+   listener behind it. `isWatchDataLayerListening()` is load-bearing now — the swing bridge asks it
+   before clearing the connected flag — so the lie would have left Settings claiming a watch nobody
+   could hear. Acquirers share one in-flight start and a failure clears every holder.
+4. **`initWatchCaddieBridge` leaked its claim on failure.** `acquire` runs first in the try block, so
+   anything throwing after it left 'caddie' held forever: the native listener could never be removed
+   and the same flag lied. Released on the failure path; the swing bridge made symmetric, because two
+   bridges doing one job differently is what produced yesterday's clashes.
+5. **My yardage trace would have evicted the evidence.** roundTrace is a **2000-row ring buffer**; an
+   18s tick would have spent ~900 rows of a 4.5-hour round on "yardage sent, nothing wrong", pushing
+   out the GPS/voice/shot rows that diagnose something. Failures still trace every time — they are
+   rare and each one is the answer; success traces only when the numbers change.
+6. Bonus, checked and found sound: `clipKeyOf` on a uri containing pipes, `unmetDeps` after the scope
+   change, the `markDurable` release on both persist paths, and no double-report when the on-device
+   locate falls through to the network one (the second overwrites with the better answer).
+
+### Gates extended (5 new assertions, all verified to fail on `f8ee9c06`)
+The stale-arc clear, locate appearing in the out-of-order event, a failed start leaving nobody
+holding, both bridges releasing on init failure, and the trace-on-change rule.
+
+Health: **tsc 0 · jest 2910/2910 (259 suites) · sim 968/968 · lint 0 errors**. JS/TS only.
+Device verification remains Tim's gate; branch remains UNMERGED while builds are in review.
+
+
+### 72-hour triple-check — 2026-09-09 (Tim: "triple check all work last 72 hours")
+
+28 commits in the window (09-06 21:00 → now). The 09-08 cloud session audited itself and the 09-09
+work was audited this morning, so this pass targeted the **16 commits from 09-06/07 that had never
+had an adversarial read**. Two real defects, both in guards that were believed to be protecting us.
+
+**1. The OTA guard watched the wrong directories.** `.github/workflows/ota-guard.yml` matched
+`^(ios|android)/` — which is prebuild OUTPUT. This repo's authored native source lives in
+`android-native/`, `ios-native/`, `plugins/` (Expo config plugins that inject native code at
+prebuild), `targets/` (the Apple Watch target) and `wear-os-app/`. **None were listed**, so a PR
+editing `android-native/WearSwingBridgeModule.kt` sailed through clean.
+
+Not theoretical: the two watch fixes named in this same log — a command path for `onWatchCommand`, a
+`CapabilityClient` listener — are edits to exactly that file, and this guard was the stated reason
+they could not ship by OTA. It would not have stopped anyone. `patches/` was missing too
+(patch-package runs in postinstall with `--error-on-fail` and can patch native code).
+
+Now derived by a test: any top-level directory containing `.kt/.java/.swift/.m/.gradle` sources must
+be named in the workflow, so a new one fails here rather than in a launch crash.
+
+**Still open, and it needs Tim's call:** the guard runs on `pull_request` only. `npm run ota:production`
+from a laptop never touches CI. Since that is how OTAs actually get published here, the guard protects
+the path nobody uses. A pre-publish check in the npm script would close it — not done, because it
+changes the deploy command.
+
+**2. "One event, one alert" assumed a lock it never took.** `ed15ed2b` fixed the 18-alert storm by
+persisting `sentIds` — correct, and not sufficient. Ids are added only AFTER the POST resolves, and
+nothing stopped a second call entering while the first was in flight. There are two triggers:
+`_layout.tsx` fires one on mount, and `scheduleIssueAutoSend` fires from seven store call sites on a
+4s debounce **with a 20s max-wait flush that bypasses the debounce**. A POST slower than 4s — a cold
+Lambda, a weak signal, exactly the conditions that generate issues worth sending — meant the second
+call recomputed `unsent` from an unchanged `sentIds` and re-sent every row plus a second Sentry
+feedback each. The storm that commit set out to end, reachable on any slow network.
+
+`hydrateSentIds` had the same shape one level down: it sets its flag before awaiting storage, so a
+caller arriving mid-await saw an empty `sentIds`. That is the same **check-then-act across an await**
+that `27633173` fixed in the media path the next morning — the class was known and this instance was
+missed. Coalescing on one in-flight promise closes both.
+
+**Checked and found sound** (recorded so the next pass does not redo them): `SENT_IDS_CAP` 400 vs the
+log's `MAX_ENTRIES` 100 — correctly sized, no resend from trimming; `dddb5067`'s crop remap, where
+`roi.x * (width ?? 0)` looks unguarded but the crop is only ever created under `if (roi && width &&
+height)`, so the fallback is unreachable; and no double-report when the on-device locate falls
+through to the network one.
+
+**And a fourth repeat of the same mistake, in this pass's own test.** The override assertion failed
+on its first run against the workflow's *own header* — "a hard gate with no override flag". Prose
+naming the thing defeated the predicate forbidding it, after run-sim.ts on 08-31 and the anchor scan
+this morning. Every scanner written today now strips comments first.
+
+### Gates added, both verified to fail on `139bcbf3` (8 assertions)
+`the-ota-guard-must-know-where-native-lives` (derived from the filesystem) and
+`one-issue-send-at-a-time`.
+
+Health: **tsc 0 · jest 2925/2925 (261 suites) · sim 968/968 · lint 0 errors**.
+
+### Publish path closed — 2026-09-09 (Tim: "dont leave anything open")
+
+The open item from the 72-hour pass is closed. `npm run ota:production` and `ota:preview` now run
+`scripts/ota-preflight.mjs` first, and `&&` means a refusal stops the publish.
+
+It matters more here than in most repos: `app.json` pins `runtimeVersion` to the literal `"1.0.0"`,
+so Expo delivers an update to **every** binary sharing it — including the build in the store.
+
+There are no release tags and nothing records which commit produced the installed shell, so a
+git-diff baseline would be a guess. The preflight FINGERPRINTS the native surface (157 files across
+`android-native/`, `ios-native/`, `plugins/`, `targets/`, `wear-os-app/`, `patches/`, `ios/`,
+`android/`, app config, plus package.json **dependencies only**) and stores the hash beside the
+runtimeVersion it belongs to. The rule then needs no history and is exactly Expo's own contract:
+
+> native fingerprint changed **AND** runtimeVersion did not → **REFUSE**
+
+Baseline recorded at the current tree, which is accurate: this branch changes no native file, so its
+native surface *is* build 26's. `npm run ota:baseline` re-records it — run that when a STORE BUILD
+ships, because that is when the installed shell catches up with the source.
+
+Verified all three paths by hand: clean tree passes; appending a line to
+`android-native/WearSwingBridgeModule.kt` (the very fix that would have needed this) refuses; that
+same change with runtimeVersion bumped to 1.0.1 passes. No override flag — the refusal offers a store
+build, never a bypass.
+
+**Fifth prose-vs-predicate slip, in this pass's own test.** It asserted on the script's own comment
+text and failed because the sentence wrapped. The answer is not a better regex: assert what the code
+DOES. It now checks `pkg.dependencies`/`pkg.devDependencies` are hashed and `pkg.scripts` is not.
+
+Gate: `the-publish-command-is-guarded` — derived from package.json (every script containing
+`eas update` must be preceded by the preflight), plus the native-surface coverage and the baseline's
+runtimeVersion matching app.json.
+
+Health: **tsc 0 · jest 2935/2935 (262 suites) · sim 968/968 · lint 0 errors**.
+
+### Owner checklist on the phone — 2026-09-09 (Tim: "we should have done that months ago")
+
+He is right. Every field test this year has run off a list living in a chat window or a sprint log —
+i.e. on the laptop, the one place it is not needed. The list is needed on a first tee, one-handed,
+in a glove.
+
+Four surfaces, all wired: **Settings → Owner Tools** row carrying the open count · **`/owner-checklist`**
+screen (owner-gated at the RENDER, not just the menu — a route is reachable by voice, deep link or
+typing) · a **launch reminder** toast · and the **caddie reads it aloud** ("what's on my checklist",
+"read my reminders").
+
+Design decisions worth keeping:
+- **The seed MERGES by id.** The list is persisted (a tick must survive a round) and shipped in code
+  (a new session must be able to add items). A naive persisted store keeps the first seed forever and
+  silently ignores everything added later — a checklist that cannot receive new work, which is worse
+  than none because it reads as complete. New ids appear, ticks survive, removed ids go.
+- **The reminder waits for profile hydration.** `email` is async-persisted; reading it at mount gives
+  null on a cold boot, the owner check fails and the reminder never fires. Exactly the bug
+  watchRoundSync had on 08-24.
+- **A toast, not a modal.** It fires on every launch, including the ones where he is opening the app
+  to play golf. Something you must dismiss to reach your round gets uninstalled in a week. It also
+  mirrors to the watch through watchRoundSync for free.
+- **The caddie reads only what is OUTSTANDING, capped at five spoken items.** A spoken list past
+  about five has lost the listener; grouped, then "and N more".
+- **Owner-only at every entry**, and a non-owner falls THROUGH to the brain rather than being told a
+  list exists.
+
+**Three of the repo's own guards caught this on first run**, which is the system working:
+the allocating-selector guard (`.filter().length` inside a Zustand selector — the recap crash shape,
+three times over), the classifier-parity guard (a handler whose intent the cloud could never emit,
+and then one with no prompt guidance beyond the enum line), and the backup-allowlist guard (a new
+persisted store with nobody having said whether it survives a device swap — it does).
+
+Gate: `the-owner-checklist-is-wired-everywhere` — seed-merge behaviour, all four surfaces, and the
+voice path end to end.
+
+Health: **tsc 0 · jest 2950/2950 (263 suites) · sim 968/968 · lint 0 errors**. JS/TS only; preflight
+passes, so this can ride an OTA.
+
+---
+
+## Day N+3 — 2026-09-10 — three ways the right number could not reach Tim
+
+Reported from the tee at Hemet Golf Club, mid-round, escalating. Three separate defects, one symptom
+each. All found read-only before anything was changed.
+
+### 1. "The right number goes in and out" — THE FLAP
+
+`services/yardageResolver.ts` gated the live-GPS tier on `fixAge < 10_000`. `gpsManager`'s walking
+mode polls at **exactly** `10_000`ms (`POLL_CONFIG.walking.intervalMs`). **The gate was tied with the
+cadence feeding it.** A fix landed, stayed healthy for 9.9s, and aged out at the instant its
+replacement was due — falling to the static card, which is the *frozen tee→green scorecard number*,
+not a slightly older live reading. The next fix flipped it back. Every ten seconds, all round. The
+caddie tab re-runs that memo on a 4s tick and on every fix, so both states got rendered.
+
+`gpsManager` already **owns** staleness and sized it deliberately — its own comment reads *"30s
+covers walking-mode (10s) + 3 missed ticks of headroom"* — then degrades at 60s while keeping the
+position, and only hard-clears at 5 minutes. That two-stage design is Tim's own 2026-06-29
+over-strict-gate fix. The resolver had invented a second, tighter rule one layer up and re-created
+the failure that fix removed. [[two-owners-is-the-root-cause]]
+
+**The age arithmetic is deleted, not retuned.** Deleting it also deletes the reason the
+`isSimulatedActive()` exemption existed — it was only ever there to dodge this gate for simulated
+fixes, whose timestamps never tick (2026-07-30). The sim round is now safe *by construction* rather
+than by exemption, and the sim check that asserted the old gate's presence — which would now pin the
+bug — asserts its absence and additionally asserts `FIX_STALENESS_MS > walking.intervalMs`.
+
+### 2. "I'm telling Kevin the correction and he keeps repeating the wrong yardage"
+
+The follow-up bypass in `hooks/useVoiceCaddie.ts` was a **blanket skip of the entire intent
+router** — all 35 handlers — whenever the caddie was awaiting a reply. `state_yardage` is one of
+them, and it is the intent whose most natural moment in the whole round is the instant after the
+caddie says a number you disagree with. So the correction went to the brain as prose,
+`setUserStatedYardage` was never called, Tier 3 stayed empty, the next context build re-derived the
+same wrong number, and Kevin repeated it. **Stating the number as a fresh utterance always worked;
+correcting him with it never did.**
+
+The bypass is still right for what it was written for (2026-05-16: "send it home" read as `navigate
+home`). A conversational answer carries no yardage, so the skip **narrows** rather than disappears:
+a reply carrying a yardage-shaped number reaches the router — the existing owner of intent
+classification, not a second detector. The predicate lives beside `extractYardage`, which already
+owns "what counts as a stated yardage". Floor of 30 because this runs on answers to the caddie's own
+questions, where hole numbers (1-18), scores (1-12) and club numbers (3-9) are common and mean other
+things.
+
+### 3. "The watch yardage is not updating"
+
+`watchCaddieBridge` pushed on hole change and an 18s tick, and on nothing else. Every other live
+surface rides the GPS fix: SmartFinder polls at 3s, Cockpit takes `subscribeFixChange` + a 3s
+backstop, the caddie tab takes `subscribeFixChange` + a 4s poll. The watch took neither — ~26 yards
+of walking per tick, visibly frozen in between, on a device you look at for one second. Cockpit had
+this exact complaint on 2026-07-01; this is its answer applied to the surface that was missed.
+
+Merged onto main's same-day watch work rather than over it: main's `lastYardageSent` change-compare
+(added for trace volume) and its `traceWatch` skip reasons are untouched. The new fix-driven sends
+pass `{ onlyIfChanged: true }`; the **timer and hole-change sends stay unconditional**, because a
+delivered outbound message is what proves the round trip (`markWatchAlive`) and standing still must
+not read as disconnected.
 
 ### Verified
 
-`npx tsc --noEmit` clean (one pre-existing unrelated error in `api/messages.ts`) ·
-`npx expo lint` clean on both files (one pre-existing error in `app/paywall.tsx`) ·
-jest **2842/2842** · sim **968/968**.
+`tsc` clean (one pre-existing `api/messages.ts` error) · lint clean on all changed files ·
+jest **green** · sim **968/968**.
 
 ### Open / carried
 
-- **NOT verified on device.** This needs a native dev-client run: open a drill → the video plays
-  embedded, in-app, with the "Try this drill in Smart Motion" button visible below it.
-- `expo-web-browser` now has zero importers in the app. Left in `package.json` — pulling an Expo
-  module changes the native build surface for no user-visible gain. Flag for a later dependency pass.
-- The 19 drill/instructor video ids are still hardcoded and unfiltered for embeddability. That is
-  now *survivable* rather than invisible — a 101/150 renders the owner's-choice message and a
-  "Find it on YouTube" button — but nothing checks them ahead of time.
+- **None of this is verified on device.** It went out as an OTA to a player mid-round.
+- **The Hemet green coordinate is still unproven.** SmartVision read right while the data bar read
+  wrong; they answer different questions from different sources (`holeLengthYards` = anchored or
+  card hole length; `resolveYardage` = live GPS to green centre). Needs two numbers off the same tee
+  to tell whether golfcourseapi's green for that hole is simply in the wrong place. Not patched on a
+  hypothesis.
+- **SmartVision not loading** — reported, not yet investigated.
+- **Auto-scoring / auto shot detection / movement** — reported as "not seamless", wiring unverified.
+- `data/courses.ts` ECHO_HILLS (the *other* Hemet course): every tee→green geodesic computes to
+  ~150y regardless of a listed 221–322, and every front/back is exactly `distance ∓ 9`. Those coords
+  are synthetic. Not this round's course, but it will misreport if anyone tees it up.
 
 ### Note
 
-Principle 5 earned its keep: three fix attempts on a recurring bug meant the fix belonged somewhere
-other than where the fixes were going. The tests all passed the whole time because they tested the
-thing that was correct.
+Principle 5 again, and principle 1 did the work: all three were found by asking *what does this
+number's owner already decide* rather than by tuning the number. Two of the three fixes are
+deletions.

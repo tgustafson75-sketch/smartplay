@@ -23,6 +23,55 @@
  * [[two-owners-is-the-root-cause]] [[caddie-failsafe-no-walls]]
  */
 
+import { UIManager } from 'react-native';
+
+/**
+ * 2026-09-09 (Tim — "YouTube links for drills not showing") — IS THERE A NATIVE WEBVIEW?
+ *
+ * Both embedding screens answered this with `UIManager.getViewManagerConfig('RNCWebView')`, which is
+ * the OLD ARCHITECTURE's question. app.json has had `newArchEnabled: true` since before this repo's
+ * history begins, so the app runs bridgeless, and RN 0.81's BridgelessUIManager returns null from
+ * getViewManagerConfig for every component unless the ViewConfig interop layer is on — its own error
+ * text says "If you want to see if this component is registered with React Native, please call
+ * hasViewManagerConfig() instead." react-native-webview 13.15.0 ships a Fabric component
+ * (codegenConfig RNCWebViewSpec, type "all"), so the player IS there; the detector could not see it.
+ *
+ * The consequence was not a broken player, it was NO player: both screens read false, skipped the
+ * WebView entirely and opened `youtube.com/embed/<id>` in the in-app browser, which YouTube serves as
+ * "Video unavailable" outside an embedding page — then popped straight back. Watch a drill, land back
+ * on the dashboard a second later. That is exactly the route trail in the 09-08 report.
+ *
+ * One exported answer instead of a constant copied into two screens: the two copies were already the
+ * same bug twice. [[two-owners-is-the-root-cause]]
+ */
+export function hasNativeWebView(component?: unknown): boolean {
+  /**
+   * 2026-09-09 (triple-check pass, a defect in my own fix from an hour earlier).
+   *
+   * `hasViewManagerConfig` is present on BOTH UIManagers, but they do not fail the same way. Paper's
+   * returns `getViewManagerConfig(name) != null` — safe. Bridgeless delegates to
+   * `unstable_hasComponent`, which THROWS A BARE STRING when `global.__nativeComponentRegistry__hasComponent`
+   * has not been installed yet:
+   *
+   *     throw `unstable_hasComponent('${'$'}{name}'): Global function is not registered`;
+   *
+   * Optional chaining guards a MISSING method, not a throwing one. Both callers evaluate this at
+   * module scope, so a throw would escape module evaluation and take the whole route down — a white
+   * screen, which is worse than the silent false it replaced.
+   */
+  try {
+    const has = UIManager.hasViewManagerConfig?.('RNCWebView');
+    if (typeof has === 'boolean') return has;
+  } catch { /* registry global not installed yet — fall through to the direct check */ }
+  /**
+   * Undeterminable, so ask the definitive question instead: did the module actually hand us a
+   * component? The screens import WebView statically from react-native-webview, so on a build that
+   * linked it this is non-null, and on one that did not it is undefined and the in-app browser path
+   * is correct. That is a fact about THIS build rather than a guess, and it cannot throw.
+   */
+  return component != null;
+}
+
 /** What the WebView posts back. Anything unrecognised is ignored by the caller. */
 export type PlayerMessage =
   | { kind: 'ready' }

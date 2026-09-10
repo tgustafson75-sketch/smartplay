@@ -35,6 +35,7 @@ import { socialGreetingHandler } from './socialGreetingHandler';
 import { undoHandler } from './undoHandler';
 import { correctLastShotHandler } from './correctLastShotHandler';
 import { setClubDistanceHandler } from './setClubDistanceHandler';
+import { ownerChecklistHandler } from './ownerChecklistHandler';
 
 export const voiceCommandRouter = new VoiceCommandRouter();
 
@@ -46,6 +47,8 @@ voiceCommandRouter.registerHandler(navigateHandler);
 voiceCommandRouter.registerHandler(openCourseHandler);
 voiceCommandRouter.registerHandler(findMyDataHandler);
 voiceCommandRouter.registerHandler(helpHandler);
+// 2026-09-09 — Tim's field checklist, read aloud. Owner-only; falls through to the brain otherwise.
+voiceCommandRouter.registerHandler(ownerChecklistHandler);
 voiceCommandRouter.registerHandler(rulesQueryHandler);
 voiceCommandRouter.registerHandler(handicapQueryHandler);
 voiceCommandRouter.registerHandler(setTrustQuietHandler);

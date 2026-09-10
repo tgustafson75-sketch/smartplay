@@ -37,7 +37,9 @@ describe('the arc computes without the Motion toggle', () => {
 
   it('the effect no longer depends on showSkeleton', () => {
     expect(sm).not.toContain('}, [showSkeleton, clipUri, segments, selectedSwing]);');
-    expect(sm).toContain('}, [clipUri, segments, selectedSwing, poseFrames]);');
+    // 2026-09-09 — poseAttemptKey joined the deps: the effect must also re-run when the pose stage
+    // SETTLES, because that is what releases it (see "the club stage waits for pose" below).
+    expect(sm).toContain('}, [clipUri, segments, selectedSwing, poseFrames, poseAttemptKey]);');
   });
 
   it('still keeps the ROI zoom that makes a distant clubhead detectable', () => {

@@ -8,22 +8,24 @@
  * playsinline, autoplay. Honest empty state when no song resolved.
  *
  * See memory: youtube-song-portal. Needs react-native-webview (native build).
- *
- * 2026-09-09 — this screen carried the same dead HAS_NATIVE_WEBVIEW guard as /drill-video, so the
- * embedded player was never mounted here either. See the long note in app/drill-video.tsx for why
- * `UIManager.getViewManagerConfig('RNCWebView')` is permanently null under the New Architecture.
- * Fixed on both surfaces at once. [[no-half-fixes-enforce-every-surface]]
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
-import { youtubePlayerHtml, parsePlayerMessage, isEmbedBlocked } from '../services/youtubeEmbed';
+import { youtubePlayerHtml, parsePlayerMessage, isEmbedBlocked, hasNativeWebView } from '../services/youtubeEmbed';
 import { openYouTubeSearch } from '../services/youtubeLinks';
+import * as WebBrowser from 'expo-web-browser';
 import { useTheme } from '../contexts/ThemeContext';
+
+// 2026-06-13 — OTA-safe: react-native-webview is a NATIVE module. On a build that
+// predates it (the current installed APK), render-then-crash isn't acceptable, so we
+// detect the native view manager and fall back to the in-app browser. The next native
+// build gets the true embedded player; older builds still play the clean embed.
+const HAS_NATIVE_WEBVIEW = hasNativeWebView(WebView);
 
 export default function Jukebox() {
   const router = useRouter();
@@ -50,6 +52,18 @@ export default function Jukebox() {
   const W = Dimensions.get('window').width;
   const playerH = Math.round((W * 9) / 16);
 
+  const embedUrl = videoId
+    ? `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&playsinline=1&autoplay=1&fs=1`
+    : null;
+
+  // No native player in this build → open the clean embed in the in-app browser, then
+  // pop back so we don't leave an empty Jukebox screen behind.
+  useEffect(() => {
+    if (embedUrl && !HAS_NATIVE_WEBVIEW) {
+      void WebBrowser.openBrowserAsync(embedUrl).catch(() => undefined).finally(() => router.back());
+    }
+  }, [embedUrl, router]);
+
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: '#000' }]} edges={['top']}>
       <View style={styles.header}>
@@ -60,7 +74,7 @@ export default function Jukebox() {
         <View style={{ width: 28 }} />
       </View>
 
-      {videoId && playerError ? (
+      {embedUrl && HAS_NATIVE_WEBVIEW && playerError ? (
         <View style={styles.empty}>
           <Ionicons name="alert-circle-outline" size={40} color={colors.text_muted} />
           <Text style={[styles.emptyText, { color: colors.text_secondary }]}>{playerError.reason}</Text>
@@ -75,7 +89,7 @@ export default function Jukebox() {
             </TouchableOpacity>
           )}
         </View>
-      ) : videoId ? (
+      ) : embedUrl && HAS_NATIVE_WEBVIEW ? (
         <View style={{ width: W, height: playerH, backgroundColor: '#000' }}>
           <WebView
             source={{ html: youtubePlayerHtml(videoId as string), baseUrl: 'https://www.youtube.com' }}
@@ -88,6 +102,11 @@ export default function Jukebox() {
             domStorageEnabled
             onMessage={onMessage}
           />
+        </View>
+      ) : embedUrl ? (
+        <View style={styles.empty}>
+          <Ionicons name="musical-notes" size={40} color="#88F700" />
+          <Text style={[styles.emptyText, { color: colors.text_secondary }]}>Opening {title || 'your song'}…</Text>
         </View>
       ) : (
         <View style={styles.empty}>

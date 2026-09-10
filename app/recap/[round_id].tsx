@@ -148,14 +148,10 @@ import type { GhostHoleResult } from '../../types/ghost';
 import type { RoundPhoto } from '../../store/roundStore';
 import { getApiBaseUrl } from '../../services/apiBase';
 
-// Day 1 fix — module-level stable empty array. Used as the selector
-// fallback below so the Zustand selector returns the SAME reference
-// across renders when the round has no photos. The prior `?? []`
-// inline fallback produced a fresh `[]` per render → Zustand's
-// useSyncExternalStore saw a "changed snapshot" → re-rendered →
-// re-ran the selector → new `[]` → loop → "Maximum update depth
-// exceeded" on the End Round → recap navigation. Same fix pattern
-// as the GpsQualityOverlay split-selector bug fix (2026-05-16).
+// Day 1 fix — module-level stable empty array, so a round with no photos hands the
+// same reference down every render instead of a fresh `[]`. The selector that used to
+// need it is gone (see the record selector in RecapScreen); the const stays because the
+// stability requirement did not — `roundPhotos` still feeds memo deps and child props.
 const EMPTY_PHOTOS: RoundPhoto[] = [];
 
 const MODE_LABELS: Record<string, string> = {
@@ -297,39 +293,45 @@ export default function RecapScreen() {
   const router = useRouter();
   const { voiceGender, voiceEnabled, caddiePersonality } = useSettingsStore();
   const caddieName = getCaddieName(caddiePersonality);
-  // Phase R — pull round photos from the persisted RoundRecord (recap api
-  // returns a different shape — photos live on the local roundStore).
-  const roundPhotos = useRoundStore(s => s.roundHistory.find(r => r.id === round_id)?.round_photos ?? EMPTY_PHOTOS);
   /**
-   * 2026-09-03 — THE TEMPO STORY HAD NO READER.
+   * 2026-09-09 — ONE selector for the record, everything else derived.
    *
-   * roundStore computes it at round end from the watch's in-memory session swings, freezes it onto
-   * the record because that is the last moment it can be captured, and carries it to Supabase inside
-   * the round-store backup. Nothing has ever displayed it. The write site's own comment says to
-   * "route it to the CADDIE, not just the recap card" — the caddie half genuinely works, the
-   * observation reaches the brain prompt, but the recap card it contrasts itself against was never
-   * built. Same shape as the Health Connect block fixed this morning: measured, persisted, shipped
-   * off-device, read by nobody. [[orphans-are-live-bugs-not-dead-code]]
+   * Third "Maximum update depth exceeded" on this screen, same cause all three times: a Zustand
+   * selector that BUILDS its result, so useSyncExternalStore's mount check sees a changed snapshot
+   * on every pass, forces a re-render, and loops. The stack Tim's crash carried names that check
+   * exactly — commitHookEffectListMount → updateStoreInstance → forceStoreRerender.
    *
-   * Read straight off the RECORD rather than through RoundRecap, deliberately: mergeRecap spreads
-   * whichever side has more hole rows, so anything routed through the recap object needs an explicit
-   * carry or it vanishes on exactly the rounds with the richest archive. The record has no such
-   * hazard. [[no-half-fixes-enforce-every-surface]]
+   * The 07-01 fix (courseHoles) and the Day 1 fix (EMPTY_PHOTOS) each repaired one selector and left
+   * the shape that produces them, so `clipShots` — added 09-03 with a `.filter()` inside the
+   * selector — reintroduced the identical bug five days ago. Fixing a fourth instance is not the
+   * job; removing the shape is. Three selectors that each re-`find()` the same record collapse into
+   * one that selects it, plus plain derivations. A selector here now returns a reference the store
+   * already holds; nothing downstream can build one.
+   *
+   * Read off the RECORD rather than through RoundRecap, deliberately (kept from the 09-03 notes):
+   * mergeRecap spreads whichever side has more hole rows, so anything routed through the recap
+   * object needs an explicit carry or it vanishes on exactly the rounds with the richest archive.
+   * [[no-half-fixes-enforce-every-surface]]
    */
-  const tempoStory = useRoundStore(s => s.roundHistory.find(r => r.id === round_id)?.tempoStory ?? null);
+  const roundRecord = useRoundStore(s => s.roundHistory.find(r => r.id === round_id) ?? null);
+  // Phase R — photos live on the local roundStore (the recap api returns a different shape).
+  const roundPhotos = roundRecord?.round_photos ?? EMPTY_PHOTOS;
   /**
-   * 2026-09-03 — CLIPS. mediaCapture back-writes clip_uri onto the last shot of the hole whenever
+   * THE TEMPO STORY HAD NO READER (2026-09-03). roundStore computes it at round end from the watch's
+   * in-memory session swings, freezes it onto the record because that is the last moment it can be
+   * captured, and carries it to Supabase inside the round-store backup. Nothing had ever displayed
+   * it. [[orphans-are-live-bugs-not-dead-code]]
+   */
+  const tempoStory = roundRecord?.tempoStory ?? null;
+  /**
+   * CLIPS (2026-09-03). mediaCapture back-writes clip_uri onto the last shot of the hole whenever
    * the player says "record this shot" mid-round. Nothing had ever rendered it, so every in-round
-   * capture attached a video to a shot no screen could open — the same measured-and-never-read shape
-   * as Health Connect and the tempo story. [[orphans-are-live-bugs-not-dead-code]]
-   *
-   * Read off the RECORD, like tempoStory, so mergeRecap cannot drop it on the rounds with the
-   * richest archive.
+   * capture attached a video to a shot no screen could open.
    */
-  const clipShots = useRoundStore(useCallback((st: ReturnType<typeof useRoundStore.getState>) => {
-    const rec = st.roundHistory.find((r) => r.id === round_id);
-    return (rec?.shots ?? []).filter((sh) => !!sh.clip_uri);
-  }, [round_id]));
+  const clipShots = useMemo(
+    () => (roundRecord?.shots ?? []).filter((sh) => !!sh.clip_uri),
+    [roundRecord],
+  );
   const [openClip, setOpenClip] = useState<{ uri: string; label: string } | null>(null);
   const [clipLoading, setClipLoading] = useState(false);
 
@@ -385,16 +387,18 @@ export default function RecapScreen() {
     // then opened an OLD round's recap, courseHoles held the ACTIVE course's pars and
     // the old round showed the wrong par-by-hole colors. Prefer the record's holePars
     // first, regardless of active-round state.
-    const rec = round_id ? useRoundStore.getState().roundHistory.find((r) => r.id === round_id) : null;
-    if (rec?.holePars && Object.keys(rec.holePars).length > 0) return { ...rec.holePars };
+    // 2026-09-09 — reads the record the screen already selected instead of a second
+    // getState() lookup, so a holePars change actually recomputes this map (the old deps
+    // were [courseHoles, round_id] and could not see it).
+    if (roundRecord?.holePars && Object.keys(roundRecord.holePars).length > 0) return { ...roundRecord.holePars };
     // No snapshot (old round): live courseHoles if this is the active round, else the
     // bundled hole list for the record's course (custom:/local: resolve; API IDs → par 4).
     let holes = courseHoles;
-    if (holes.length === 0 && rec?.courseId) holes = getBundledHoles(rec.courseId);
+    if (holes.length === 0 && roundRecord?.courseId) holes = getBundledHoles(roundRecord.courseId);
     const map: Record<number, number> = {};
     for (const h of holes) map[h.hole] = h.par;
     return map;
-  }, [courseHoles, round_id]);
+  }, [courseHoles, roundRecord]);
   // 2026-05-21 — Fix R: subscribe to issue log entries so the recap
   // can surface "Kevin, log this" notes captured during the round.
   // Must be called before any conditional return below (rules of hooks).

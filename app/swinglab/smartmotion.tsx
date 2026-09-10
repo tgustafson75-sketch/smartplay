@@ -97,6 +97,7 @@ import { detectStrikes, type DetectedStrike } from '../../services/swing/strikeD
 import { analyzeStrike, type AcousticAnalysis } from '../../services/acousticsAnalyzer';
 import { segmentsFromStrikes, segmentsFromVideoSwings, correlateStrikesWithVideo, filterReboundStrikes, type SwingSegment } from '../../services/swing/swingSegmentation';
 import { poseExtractInputsFor, poseExtractKeyFor } from '../../services/swing/poseExtractKey';
+import { checkOrder, noteStage, runKeyFor } from '../../services/swing/analysisPipeline';
 import { detectBallSpeed, type BallSpeedResult } from '../../services/acousticDetectApi';
 import { useSwingSessionStore, type PrimaryIssue } from '../../store/swingSessionStore';
 import { deriveDrillVerdict } from '../../services/drillVerdict';
@@ -768,7 +769,24 @@ export default function SmartMotion() {
   // nothing clearly detected → the overlay keeps the honest hand/tempo trace. Cached
   // per swing index like the ball path (one server pass per swing, on the Motion step).
   const [clubArcPoints, setClubArcPoints] = useState<{ x: number; y: number; tMs: number }[] | null>(null);
-  const clubPathCacheRef = useRef<Record<number, { x: number; y: number; tMs: number }[] | null>>({});
+  /**
+   * 2026-09-09 (triple-check) — KEYED BY WHAT CHANGES THE ANSWER, not by a bare swing index.
+   *
+   * `Record<number, …>` meant index 0 of a re-segmented clip, or of a DIFFERENT clip uri, served the
+   * arc computed for the old one. The record path reassigns clipUri mid-run (raw recorder file →
+   * durable copy) and re-segmentation moves a swing's window under the same index, so both happen.
+   * An `in` hit on a stale key is indistinguishable from a real answer, and a wrong arc is drawn as
+   * confidently as a right one. [[a-cache-key-must-name-every-input]]
+   */
+  const clubPathCacheRef = useRef<Record<string, { x: number; y: number; tMs: number }[] | null>>({});
+  /**
+   * 2026-09-09 — HAS THE POSE STAGE FINISHED FOR THIS CLIP + SWING? (success OR failure).
+   *
+   * `poseFrames` alone cannot answer this: null means "not yet" AND "tried and got nothing", and the
+   * club stage must wait for the first while refusing to wait forever on the second. Set in the pose
+   * effect's finally, so a pose that throws still releases the club stage instead of stranding it.
+   */
+  const [poseAttemptKey, setPoseAttemptKey] = useState<string | null>(null);
   const [liveDb, setLiveDb] = useState<number | null>(null);
   // 2026-06-14 (audit — perf) — throttles the ~50ms meter callback down to ~120ms
   // of React state churn so the live meter doesn't re-render the whole screen 20×/s.
@@ -1847,10 +1865,66 @@ export default function SmartMotion() {
       setClubArcPoints(null);
       return;
     }
-    if (selectedSwing in clubPathCacheRef.current) {
-      setClubArcPoints(clubPathCacheRef.current[selectedSwing]);
+    const clubCacheKey = `${clipUri}|${selectedSwing}|${Math.round(seg.startMs)}|${Math.round(seg.endMs)}`;
+    if (clubCacheKey in clubPathCacheRef.current) {
+      setClubArcPoints(clubPathCacheRef.current[clubCacheKey]);
       return;
     }
+    /**
+     * 2026-09-09 (triple-check — THE ARC TIM HAS NEVER SEEN, and it was an ORDERING BUG).
+     *
+     * analysisPipeline's graph says `club: ['pose', 'frame']`, and on this screen club ran FIRST —
+     * not sometimes, ALWAYS. The pose effect is gated on `phase === 'review' && videoDurationMs !=
+     * null`; runAnalysis sets videoDurationMs to null on entry and only reaches setPhase('review') at
+     * the very end. This effect needed nothing but clipUri + segments, both set during 'analyzing'.
+     * So club could not lose that race.
+     *
+     * The cost is the whole reason the ROI exists. `bodyBoundsFromPose(null)` is null, so every first
+     * read asked the model to find the clubhead in a DOWNSCALED FULL FRAME — the 6-pixels-across case
+     * from Tim's on-course clip that `roiFromBodyBounds` was written on 08-10 to fix. Then the empty
+     * answer was cached, and the re-run that poseFrames triggers took the cache hit. The zoom shipped,
+     * was unit-tested, was wired, and never once ran on a swing recorded on this screen.
+     *
+     * `club-arc-render-path` asserted the ARGUMENT was present (`bodyBounds: bodyBoundsFromPose(
+     * poseFrames)`) and that is exactly what a wire test can prove: that the wire exists, never that a
+     * signal flows down it. [[orphans-are-live-bugs-not-dead-code]]
+     *
+     * So wait for the pose stage to SETTLE. Not for it to succeed — a failed pose still releases us,
+     * and we then run full-frame exactly as before, because an unzoomed arc beats no arc. What must
+     * not happen is spending the one cached answer on a run whose inputs had not arrived.
+     */
+    /**
+     * 2026-09-09 (triple-check, a defect in my own fix from earlier today) — CLEAR BEFORE WAITING.
+     *
+     * This bailed with a bare `return`, leaving `clubArcPoints` holding the PREVIOUS swing's arc.
+     * Selecting swing 3 with no cached answer therefore kept drawing swing 1's clubhead path over
+     * swing 3's video until pose settled — a wrong arc presented exactly as confidently as a right
+     * one. It is the same mistake the 08-09 deep audit fixed for fault heat ("painting swing-1's
+     * fault on swing-3's body is a visible lie"), reintroduced by making the wait longer than the
+     * old code's was.
+     *
+     * The old code cleared unconditionally on its way to detection; the new gate has to do it too.
+     */
+    if (poseAttemptKey !== `${clipUri}|${selectedSwing}`) { setClubArcPoints(null); return; }
+    /**
+     * 2026-09-09 (triple-check) — AND REPORT THE ORDER, from the screen where it is emergent.
+     *
+     * analysisPipeline was built on 09-06 for exactly the defect above ("the club stage ran from a
+     * useEffect with isPlaying in its deps"), and it was wired into swing-detail and poseAnalysisApi
+     * ONLY. SmartMotion — where the effects are, where recording happens, where club genuinely did
+     * run before pose every single time — reported nothing and checked nothing. The observer could
+     * not see the screen it was written about. Same shape as the arc diagnostics that never reached a
+     * device: built once, wired once, and not on the surface that matters.
+     *
+     * The run key is DERIVED FROM THE SAME HELPER the pose read uses (`poseExtractInputsFor`), not
+     * from seg.startMs/endMs directly. Those agree today, but a key computed two ways is a key that
+     * will disagree eventually, and a stage observer that mis-keys does not go quiet — it reports
+     * a violation on every sound run. A diagnostic that cries wolf is worse than none.
+     * [[two-owners-is-the-root-cause]]
+     */
+    const pipeWindow = poseExtractInputsFor(segments, selectedSwing).poseWindow;
+    const stageKey = runKeyFor(clipUri, pipeWindow?.startMs ?? 0, pipeWindow?.endMs ?? 0);
+    try { checkOrder(stageKey, 'club'); } catch { /* observation only */ }
     setClubArcPoints(null);
     let cancelled = false;
     const segStart = seg.startMs;
@@ -1891,20 +1965,87 @@ export default function SmartMotion() {
     // effectiveMode, not environmentMode: it is forced to 'course' during a round, which is
     // exactly the case Tim is describing — alone in a fairway, nobody else's ball near the mic.
     const segToleranceMs = anchorToleranceMs(seg.confidence, effectiveMode);
+    /**
+     * 2026-09-09 (Tim: "locate and anchor are fundamental though") — REPORT THE ANCHOR.
+     *
+     * This is where the anchor for this swing is DECIDED, and it decides which frames the arc is
+     * sampled from. With one, the sampler clusters a dense band on the strike; without one it
+     * spreads across the whole back half and runs into the follow-through — the "arc looks like it's
+     * behind the user" report of 09-01. That is a completely different failure from "the model could
+     * not see the clubhead", and until now the two arrived looking identical.
+     *
+     * `empty` when there is no anchor, which is honest rather than alarming: the sampler still runs,
+     * just unanchored, and the log now says so.
+     */
+    try {
+      noteStage(stageKey, 'anchor', segStrikeMs != null ? 'ok' : 'empty', {
+        strikeMs: segStrikeMs, toleranceMs: segToleranceMs, confidence: seg.confidence ?? null,
+      });
+    } catch { /* observation only */ }
     void detectClubPath({ videoUri: clipUri, startMs: seg.startMs, endMs: seg.endMs, impactMs: segStrikeMs, toleranceMs: segToleranceMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(poseFrames) })
       .then((r) => {
         if (cancelled) return;
-        // 2026-07-22 (Tim) — require a validated arc (>= 4 points; detectClubPath returns [] for a
-        // clustered mis-detection) so we never draw a wrong "club". Below that → skeleton only.
+        // 2026-07-22 (Tim) — require a validated arc (detectClubPath returns [] for a clustered
+        // mis-detection) so we never draw a wrong "club". Below that → skeleton only.
+        // 2026-09-09 — the comment said ">= 4 points" and the code has said 3 since 08-06, when the
+        // server's MIN_ARC_POINTS was lowered 4→3 because Sonnet returns null through the blurred
+        // downswing and a server gate PLUS a client gate double-rejected valid partial sweeps into
+        // all-null. Server, swing-detail and this screen all gate at 3; only the prose lagged.
+        // [[a-stale-header-is-a-source-someone-trusts]]
         // 2026-07-27 (audit) — rebase window-relative tMs to ABSOLUTE (+segStart) so the live blue clubTip
         // tracks correctly on the 2nd/3rd split swing (was pinning to the finish point).
         const pts = r && r.points.length >= 3 ? r.points.map((p) => ({ x: p.x, y: p.y, tMs: p.tMs + segStart })) : null;
-        clubPathCacheRef.current[selectedSwing] = pts;
+        clubPathCacheRef.current[clubCacheKey] = pts;
         setClubArcPoints(pts);
+        try {
+          noteStage(stageKey, 'club', !r ? 'skipped' : (r.points.length >= 3 ? 'ok' : 'empty'),
+            { points: r?.points.length ?? 0, zoomed: bodyBoundsFromPose(poseFrames) != null });
+        } catch { /* observation only */ }
+        /**
+         * 2026-09-09 (Tim — "the swing arc I've yet to ever see"). WHY THE 09-06 DIAGNOSTICS NEVER
+         * CAME BACK FROM A DEVICE.
+         *
+         * `f44f06d` added rejected/detected/gate so a zero-point arc would say WHY — but it wired the
+         * report into the SWING-DETAIL screen only. This one, the screen Tim actually records on,
+         * dropped every empty result on the floor and told nobody. So the single field report that
+         * would settle whether the private copy is the ONLY cause of a sparse arc could not be
+         * produced by the surface that produces the swings. The close-out asked for that report; the
+         * code made it unobtainable.
+         *
+         * Same event, same fields, and the same kind split swing-detail draws: an answer we did not
+         * like is an `analysis_error` and worth an inbox line; a run superseded by a re-render is
+         * `diag`, because a log that cries wolf hides the entries that matter.
+         * [[missing-log-entry-is-the-evidence]]
+         *
+         * `screen` is new and belongs on both: two surfaces emit this now, and "which one" is the
+         * first question anyone reading the event asks.
+         *
+         * DIAGNOSTICS ONLY — the arc drawn, the 3-point gate and the cache are unchanged.
+         */
+        if (!pts) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            (require('../../store/issueLogStore') as typeof import('../../store/issueLogStore'))
+              .useIssueLogStore.getState().addAppEvent(
+                r ? 'clubpath_arc_too_sparse' : 'clubpath_superseded',
+                {
+                  screen: 'smartmotion',
+                  points: r?.points.length ?? 0,
+                  aborted: !r,
+                  windowMs: Math.max(0, seg.endMs - seg.startMs),
+                  rejected: r?.rejected?.reason ?? null,
+                  detected: r?.rejected?.detected ?? null,
+                  gate: r?.rejected?.gate ?? null,
+                  framesSampled: r?.framesSampled ?? null,
+                },
+                r ? 'analysis_error' : 'diag',
+              );
+          } catch { /* best-effort — a diagnostic must never break the review surface */ }
+        }
       })
       .catch(() => undefined);
     return () => { cancelled = true; };
-  }, [clipUri, segments, selectedSwing, poseFrames]);
+  }, [clipUri, segments, selectedSwing, poseFrames, poseAttemptKey]);
 
   // Compose the tiered multi-point shot trace from the measured positions +
   // the aim reference. 'full' = solid in-frame path; 'launch' = solid measured
@@ -2251,6 +2392,26 @@ export default function SmartMotion() {
       const hangGuardMs = ANALYSIS_WORST_CASE_MS;
       let uri = rawUri;
       /**
+       * 2026-09-09 (triple-check) — THE WARM MUST KEY ON THE FILE THE REVIEW READ WILL ASK FOR.
+       *
+       * `uri` is a `let`: it becomes the DURABLE copy a few lines below, and `setClipUri` points the
+       * review at that copy. The warm read `uri` at whatever moment `onFramesReady` happened to fire,
+       * so which file it keyed on depended on whether persistClipToDocuments had finished — a race,
+       * and one that loses exactly when it matters most, because the copy is slowest on the long
+       * high-frame-rate clips whose decodes are dearest.
+       *
+       * Losing it is not a no-op. The 5-8 decodes still ran, still queued on the one serialized media
+       * chain, and produced a cache entry under a key the review read never looks up: it then decodes
+       * all of them again. That is the precise failure the 08-31 note describes ("a latency fix that
+       * added latency"), reintroduced through the key rather than the timing.
+       *
+       * The 08-31 §10 comment claims the shared helper makes the warm "compute the identical key this
+       * read looks up". It unified the window and the anchor — but not the clip uri, the one input
+       * that provably changes mid-run. So await the copy the review will use.
+       */
+      let markDurable: (u: string) => void = () => {};
+      const durableUriP = new Promise<string>((res) => { markDurable = res; });
+      /**
        * 2026-08-31 — WARM THE POSE FRAMES, BUT ONLY ONCE THE DECODER IS ACTUALLY FREE.
        *
        * This started as soon as the request was built, which is BEFORE analyzeSwing probes, locates
@@ -2272,13 +2433,15 @@ export default function SmartMotion() {
         try {
           const { poseWindow, acousticImpactMs } = poseExtractInputsFor(segmentsRef.current, selectedSwingRef.current);
           const warmKey = poseExtractKeyFor({
-            clipUri: uri, poseWindow, selectedSwing: selectedSwingRef.current,
+            clipUri: await durableUriP, poseWindow, selectedSwing: selectedSwingRef.current,
             handedness: swingerHandedness, acousticImpactMs,
           });
           if (poseExtractCacheRef.current?.key === warmKey) return; // already warm — never decode twice
-          const durMs = await probeDurationMs(uri).catch(() => 0);
+          // The file the review will key on — never the raw recorder path, which may already be gone.
+          const warmUri = await durableUriP;
+          const durMs = await probeDurationMs(warmUri).catch(() => 0);
           if (!durMs || durMs <= 0) return;
-          const frames = await extractPoseFramesFromVideo(uri, durMs, true, poseWindow, acousticImpactMs);
+          const frames = await extractPoseFramesFromVideo(warmUri, durMs, true, poseWindow, acousticImpactMs);
           // Only publish if nothing better landed while we decoded, and only for THIS session.
           if (myRun !== sessionRunRef.current) return;
           if (poseExtractCacheRef.current?.key === warmKey) return;
@@ -2349,6 +2512,9 @@ export default function SmartMotion() {
         // Point review/replay + re-analyze at the DURABLE copy (survives cache eviction).
         if (uri !== rawUri) setClipUri(uri);
       } catch { /* use rawUri */ }
+      // Release the warm, on both paths: a failed persist leaves the review on rawUri, and the warm
+      // must key on THAT rather than stall forever waiting for a copy that is not coming.
+      markDurable(uri);
 
 
       try {
@@ -2778,6 +2944,15 @@ export default function SmartMotion() {
         // computeBiomechanics runs inferCameraAngle over the swing's own frames and that read is the
         // single source of truth for both the metrics and the screen.
         const bio = frames ? computeBiomechanicsFromFrames(frames, null, swingerHandedness === 'left' ? 'left' : 'right') : null;
+        /**
+         * 2026-09-09 — `metrics` had NO reporter anywhere in the app, so a run description skipped
+         * straight from pose to club and could never show that the measured read had happened. It is
+         * computed right here, from the frames the pose stage produced, on the same run key.
+         */
+        try {
+          noteStage(runKeyFor(clipUri, poseWindow?.startMs ?? 0, poseWindow?.endMs ?? 0), 'metrics',
+            bio ? 'ok' : 'empty', { frames: frames?.length ?? 0 });
+        } catch { /* observation only */ }
         if (!cancelled && bio) {
           /**
            * 2026-08-19 — the UI now FOLLOWS the geometry, always. This used to be gated on
@@ -2825,6 +3000,12 @@ export default function SmartMotion() {
                     rawStartMs: poseWindow.startMs,
                     rawEndMs: poseWindow.endMs,
                   });
+                  // 2026-09-09 — the persist path decides its own anchor, so it reports its own.
+                  try {
+                    noteStage(runKeyFor(clipUri, poseWindow.startMs, poseWindow.endMs), 'anchor',
+                      anchorMs != null ? 'ok' : 'empty',
+                      { anchorMs, source: impactFrame?.positionSource ?? null, via: 'pose_impact' });
+                  } catch { /* observation only */ }
                   const arc = await detectClubPath({ videoUri: clipUri, startMs: poseWindow.startMs, endMs: poseWindow.endMs, impactMs: anchorMs, shouldAbort: () => false });
                   const store = useSwingSessionStore.getState();
                   if (arc && arc.points.length >= 3) {
@@ -2850,6 +3031,17 @@ export default function SmartMotion() {
         }
       } catch (e) {
         console.log('[smartmotion] pose/biomech failed (non-fatal):', e);
+      } finally {
+        /**
+         * 2026-09-09 — RELEASE THE CLUB STAGE, whatever happened here.
+         *
+         * In the `finally` and not the success path on purpose: pose failing is precisely when the
+         * club stage must still get its turn (full-frame, as it always ran), and a `catch` that
+         * forgot to release would convert "no skeleton" into "no arc either" — one failure becoming
+         * two. Not set when cancelled: a superseded run releasing a key it no longer owns would let
+         * club read a body box belonging to a different swing.
+         */
+        if (!cancelled) setPoseAttemptKey(`${clipUri}|${selectedSwing}`);
       }
     })();
     return () => { cancelled = true; };

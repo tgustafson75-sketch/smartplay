@@ -50,6 +50,35 @@ async function frameB64(videoUri: string, timeMs: number): Promise<string | null
   }
 }
 
+/**
+ * 2026-09-09 (triple-check pass — I cleared this file wrongly earlier today).
+ *
+ * Both readers below sample several frames across the clip, and BOTH are called from SmartMotion's
+ * review surface, whose <Video> is `isLooping` + `shouldPlay` (the putt read at smartmotion.tsx:2486,
+ * the feel reconcile at :3228). That is a native retriever decoding the same file ExoPlayer is
+ * decoding — the documented SIGSEGV, and short of it the reason a sweep comes back empty. The
+ * previous commit's scope note claimed nothing here ran against the looping surface. It was wrong.
+ *
+ * Same remedy as every analysis extractor: read the pooled private copy. Refcounted with an 8s
+ * linger, so on the review surface this shares the file pose/arc/tempo already hold rather than
+ * making another. No copy → no frames, which both callers already treat as "no frames" (`[]` here,
+ * `null` from reconcileFeel), so nothing new can fail.
+ */
+async function framesFrom(videoUri: string, timesMs: number[]): Promise<string[]> {
+  let shared: { uri: string; release: () => void } | null = null;
+  try {
+    const { acquireClipCopy } = await import('./sharedClipCopy');
+    shared = await acquireClipCopy(videoUri);
+  } catch { /* acquire failed — refused below */ }
+  if (!shared) return [];
+  try {
+    const frames = await Promise.all(timesMs.map((t) => frameB64(shared!.uri, t)));
+    return frames.filter((b): b is string => !!b);
+  } finally {
+    shared.release();
+  }
+}
+
 /** Shared helper: extract a few base64 JPEG frames across a clip. Best-effort —
  *  returns whatever it can ([] on total failure). Reused by feel + putt. */
 export async function extractFramesB64(
@@ -58,8 +87,7 @@ export async function extractFramesB64(
   fractions: number[] = FRAME_FRACTIONS,
 ): Promise<string[]> {
   const dur = durationMs && durationMs > 0 ? durationMs : 3000;
-  const frames = await Promise.all(fractions.map((f) => frameB64(videoUri, dur * f)));
-  return frames.filter((b): b is string => !!b);
+  return framesFrom(videoUri, fractions.map((f) => dur * f));
 }
 
 /**
@@ -72,8 +100,7 @@ export async function reconcileFeel(input: FeelReconcileInput): Promise<string |
   if (!base || !feel || !input.videoUri) return null;
 
   const dur = input.durationMs && input.durationMs > 0 ? input.durationMs : 3000;
-  const frames = (await Promise.all(FRAME_FRACTIONS.map((f) => frameB64(input.videoUri, dur * f))))
-    .filter((b): b is string => !!b)
+  const frames = (await framesFrom(input.videoUri, FRAME_FRACTIONS.map((f) => dur * f)))
     .map((b64) => ({ b64, media_type: 'image/jpeg' as const }));
   if (frames.length === 0) return null;
 

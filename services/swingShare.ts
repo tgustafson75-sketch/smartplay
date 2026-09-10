@@ -20,7 +20,10 @@
  * customers, and a fabricated stat on it would be the most expensive lie the product could tell.
  * [[illustration-data-points]]
  */
-import * as VideoThumbnails from 'expo-video-thumbnails';
+// 2026-09-09 — the single-flight media queue, not the raw module. Same reason as onDeviceLocate:
+// one native frame reader at a time app-wide, or Android's MediaMetadataRetriever takes the process
+// down. A share can be requested while a swing is being analysed or played.
+import * as VideoThumbnails from '../utils/videoThumbnail';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { getApiBaseUrl, appKeyHeaders } from './apiBase';
 import { resolveClipUri } from './videoUpload';
@@ -87,12 +90,33 @@ export async function createSwingShare(input: ShareInput): Promise<ShareResult> 
   const end = input.endSec && input.endSec > start ? input.endSec : start + 3;
   const times = frameTimesMs(start, end);
 
-  // Serial on purpose: concurrent thumbnail reads on one file are the SIGSEGV class this app has
-  // already been bitten by, and the media chain serializes them anyway.
+  /**
+   * 2026-09-09 (triple-check pass) — read the pooled PRIVATE COPY.
+   *
+   * Serial-within-itself and the media chain both serialize retriever against retriever. Neither
+   * serializes against ExoPlayer, and this is invoked from the swing-detail screen's Share button
+   * while that screen's video is playing — the grab-frame handler beside it PAUSES first for exactly
+   * this reason (07-21), and share never did.
+   *
+   * Refcounted, so on a screen that has already analysed the swing this shares the existing copy.
+   * No copy → no frames → the honest `no_frames` result this function already returns.
+   */
+  let shared: { uri: string; release: () => void } | null = null;
+  try {
+    const { acquireClipCopy } = await import('./swing/sharedClipCopy');
+    shared = await acquireClipCopy(uri);
+  } catch { /* acquire failed — refused below */ }
+  if (!shared) return { ok: false, reason: 'no_frames' };
   const frames: { b64: string; timeMs: number }[] = [];
-  for (const t of times) {
-    const b64 = await grabFrame(uri, t);
-    if (b64) frames.push({ b64, timeMs: t });
+  try {
+    // Serial on purpose: concurrent thumbnail reads on one file are the SIGSEGV class this app has
+    // already been bitten by, and the media chain serializes them anyway.
+    for (const t of times) {
+      const b64 = await grabFrame(shared.uri, t);
+      if (b64) frames.push({ b64, timeMs: t });
+    }
+  } finally {
+    shared.release();
   }
   if (frames.length < 2) return { ok: false, reason: 'no_frames' };
 

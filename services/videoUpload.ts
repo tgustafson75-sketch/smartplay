@@ -1353,7 +1353,24 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
               } else {
                 useSwingSessionStore.getState().setSessionClubArc(sessionId, [], null);
               }
-              uploadLog('club-arc', { points: arc?.points.length ?? 0 }, sessionId);
+              /**
+               * 2026-09-09 — this line was the exact ambiguity `f44f06d` set out to kill, still
+               * standing in the analysis pass: `points: 0` for all four reasons (nothing came back /
+               * the model saw 1-2 / the points clustered / they zig-zagged), which send you to
+               * opposite fixes — the camera, or the prompt.
+               *
+               * It matters MOST here. This pass runs with nothing playing (`shouldAbort: false`, see
+               * the 07-30 note above), so it is the one arc read that cannot be blamed on ExoPlayer
+               * holding the file. A sparse arc HERE is the model or the gates, and that is precisely
+               * the question the close-out left open.
+               */
+              uploadLog('club-arc', {
+                points: arc?.points.length ?? 0,
+                rejected: arc?.rejected?.reason ?? null,
+                detected: arc?.rejected?.detected ?? null,
+                gate: arc?.rejected?.gate ?? null,
+                framesSampled: arc?.framesSampled ?? null,
+              }, sessionId);
             } catch (arcErr) {
               console.log('[club-arc] analysis-pass detection failed', arcErr);
             }

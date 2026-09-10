@@ -19,6 +19,7 @@
 import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
 import { watchDeviceLabel } from './watchBridge';
 import { useWatchStore } from '../store/watchStore';
+import { acquireWatchDataLayer, releaseWatchDataLayer, isWatchDataLayerListening } from './watchDataLayer';
 import { useClubSelectionStore } from '../store/clubSelectionStore';
 import { useSwingSessionStore } from '../store/swingSessionStore';
 import { normalizeClub } from './clubNormalize';
@@ -211,12 +212,20 @@ export async function initWatchSwingBridge(): Promise<boolean> {
       useWatchStore.getState().setConnected(!!e.connected, watchDeviceLabel(e.node));
     });
 
-    await NativeMod.start();
+    /**
+     * 2026-09-09 — through the shared owner. The native listener is ONE registration serving every
+     * inbound path, including the caddie bridge's mic and the watch's presence ping.
+     */
+    await acquireWatchDataLayer('swing');
     started = true;
     return true;
   } catch {
     // Defensive — never throw across the bridge init.
     started = false;
+    // 2026-09-09 (triple-check) — symmetric with the caddie bridge: never leave a claim behind on a
+    // failed init. The window here is narrow, but two bridges doing the same job differently is what
+    // produced today's clashes in the first place.
+    void releaseWatchDataLayer('swing').catch(() => {});
     return false;
   }
 }
@@ -229,11 +238,18 @@ export async function stopWatchSwingBridge(): Promise<void> {
     swingSub = null;
     connSub = null;
     emitter = null;
-    if (NativeMod && started) await NativeMod.stop();
+    // Releases only OUR claim: if the caddie bridge is still up, the listener stays and the watch
+    // mic keeps working. This used to call NativeMod.stop() unconditionally and take it down.
+    if (started) await releaseWatchDataLayer('swing');
   } catch {
     /* no-op */
   } finally {
     started = false;
-    useWatchStore.getState().setConnected(false);
+    /**
+     * 2026-09-09 — DO NOT declare the watch disconnected while something else is still listening.
+     * Turning swing capture off says nothing about whether a watch is on the wrist, and the caddie
+     * bridge may be mid-round proving otherwise every 18 seconds. Only the last holder out clears it.
+     */
+    if (!isWatchDataLayerListening()) useWatchStore.getState().setConnected(false);
   }
 }

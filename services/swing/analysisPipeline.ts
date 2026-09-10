@@ -63,6 +63,46 @@ export const STAGE_DEPS: Readonly<Record<Stage, readonly Stage[]>> = {
 /** Canonical order, for reporting. Not enforced as a sequence — only STAGE_DEPS is. */
 export const STAGE_ORDER: readonly Stage[] = ['locate', 'anchor', 'pose', 'frame', 'metrics', 'club'];
 
+/**
+ * 2026-09-09 (Tim: "locate and anchor are fundamental though") — WHAT A STAGE IS KEYED BY.
+ *
+ * The first version of this file could not report `locate` at all, and I wrote that off as an
+ * unavoidable circularity: a run is keyed by `(clipUri, startMs, endMs)` and locate is the stage
+ * that PRODUCES startMs and endMs. Tim was right to push. It is not circular — it is a SCOPE
+ * distinction the key never modelled, and locate is the most consequential stage in the graph to
+ * leave unobservable. If locate returns the wrong seconds, every stage after it measures the wrong
+ * part of the swing and reports a confident, clean, completely wrong read. That failure is
+ * indistinguishable from "the model is bad" from the outside, which is the worst kind of bug to be
+ * blind to.
+ *
+ * locate is CLIP-scoped: it searches a whole clip and finds the window(s) in it, once, for every
+ * swing in that clip. Everything after it is WINDOW-scoped: it runs per swing, on one window.
+ *
+ * So a clip-scoped stage records against the clip alone, and a window-scoped stage that depends on
+ * it resolves that dependency against the clip too. A caller never has to know: it passes whatever
+ * run key it has — `runKeyFor(clip, 0, 0)` before a window exists — and the routing below puts the
+ * record where it belongs. One owner for the scope rule. [[two-owners-is-the-root-cause]]
+ */
+export const STAGE_SCOPE: Readonly<Record<Stage, 'clip' | 'window'>> = {
+  locate: 'clip',
+  anchor: 'window',
+  pose: 'window',
+  frame: 'window',
+  metrics: 'window',
+  club: 'window',
+};
+
+/** The clip part of a run key — `${clipUri}|${start}|${end}` → `${clipUri}|0|0`. */
+export function clipKeyOf(key: string): string {
+  const cut = key.lastIndexOf('|', key.lastIndexOf('|') - 1);
+  return cut < 0 ? `${key}|0|0` : `${key.slice(0, cut)}|0|0`;
+}
+
+/** Where a stage's record lives, given the key a caller happened to have. */
+function keyForStage(key: string, stage: Stage): string {
+  return STAGE_SCOPE[stage] === 'clip' ? clipKeyOf(key) : key;
+}
+
 export type StageRecord = { status: StageStatus; at: number; detail?: Record<string, unknown> };
 
 /** One analysis run, keyed by clip + window. */
@@ -104,10 +144,11 @@ function getRun(key: string): Run {
  * downstream can be computed from.
  */
 export function unmetDeps(key: string, stage: Stage): Stage[] {
-  const r = runs.get(key);
-  const stages = r?.stages ?? {};
   return STAGE_DEPS[stage].filter((d) => {
-    const rec = stages[d];
+    // A clip-scoped dep (locate) is resolved against the CLIP, not this swing's window — otherwise
+    // every window-scoped stage would report locate missing forever, which is a guard that cries
+    // wolf on every sound run.
+    const rec = runs.get(keyForStage(key, d))?.stages[d];
     if (!rec) return true;
     return rec.status === 'empty' || rec.status === 'failed';
   });
@@ -122,7 +163,7 @@ export function noteStage(
   detail?: Record<string, unknown>,
 ): void {
   try {
-    getRun(key).stages[stage] = { status, at: Date.now(), detail };
+    getRun(keyForStage(key, stage)).stages[stage] = { status, at: Date.now(), detail };
   } catch { /* observation must never break analysis */ }
 }
 
@@ -139,7 +180,6 @@ export function checkOrder(key: string, stage: Stage): Stage[] {
   const missing = unmetDeps(key, stage);
   if (missing.length === 0) return [];
   try {
-    const r = runs.get(key);
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('../../store/issueLogStore') as typeof import('../../store/issueLogStore'))
       .useIssueLogStore.getState().addAppEvent(
@@ -147,11 +187,17 @@ export function checkOrder(key: string, stage: Stage): Stage[] {
         {
           stage,
           missing: missing.join(','),
-          // What HAD reported, so the report reads as a sequence rather than a single complaint.
-          seen: STAGE_ORDER
-            .filter(s => r?.stages[s])
-            .map(s => `${s}:${r?.stages[s]?.status}`)
-            .join(' → ') || 'none',
+          /**
+           * What HAD reported, so the report reads as a sequence rather than a single complaint.
+           *
+           * 2026-09-09 (triple-check) — through `describeRun`, which is the ONE place that knows
+           * clip-scoped stages live under a different key. This built the sequence itself from
+           * `runs.get(key)`, so the moment locate became clip-scoped it silently dropped out of every
+           * diagnostic — the stage Tim had just called fundamental, missing from the event that
+           * exists to explain a bad read. Two readers of the same data and I updated one.
+           * [[two-owners-is-the-root-cause]]
+           */
+          seen: describeRun(key)?.stages || 'none',
           runKey: key.slice(-60),
         },
         'diag',
@@ -160,13 +206,32 @@ export function checkOrder(key: string, stage: Stage): Stage[] {
   return missing;
 }
 
+/**
+ * 2026-09-09 — REPORT A LOCATE WITHOUT KNOWING ANYTHING ABOUT KEYS.
+ *
+ * The locate functions run before a window exists, and none of them should have to reason about run
+ * keys or scope to say what they found. They know the clip; that is the whole key a clip-scoped
+ * stage needs. One entry point, so the three locate mechanisms cannot key themselves three ways.
+ */
+export function noteLocate(
+  clipUri: string | null | undefined,
+  status: StageStatus,
+  detail?: Record<string, unknown>,
+): void {
+  noteStage(runKeyFor(clipUri, 0, 0), 'locate', status, detail);
+}
+
 /** The run so far, for a report. Null when nothing has been recorded for this key. */
 export function describeRun(key: string): { key: string; stages: string } | null {
   const r = runs.get(key);
-  if (!r) return null;
+  const clip = runs.get(clipKeyOf(key));
+  if (!r && !clip) return null;
+  // Clip-scoped stages are merged in, so a run reads as ONE sequence — `locate:ok → pose:ok → …` —
+  // rather than hiding the stage that decided which seconds everything else read.
+  const recOf = (s: Stage) => (STAGE_SCOPE[s] === 'clip' ? clip : r)?.stages[s];
   return {
     key,
-    stages: STAGE_ORDER.filter(s => r.stages[s]).map(s => `${s}:${r.stages[s]?.status}`).join(' → '),
+    stages: STAGE_ORDER.filter(s => recOf(s)).map(s => `${s}:${recOf(s)?.status}`).join(' → '),
   };
 }
 

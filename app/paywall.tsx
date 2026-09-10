@@ -268,7 +268,7 @@ export default function PaywallScreen() {
               >
                 <Text style={styles.extensionBtnText}>Give me another {TRIAL_EXTENSION_DAYS} days</Text>
               </TouchableOpacity>
-              <Text style={styles.extensionFootnote}>No card, no charge. Subscribe whenever you're ready.</Text>
+              <Text style={styles.extensionFootnote}>No card, no charge. Subscribe whenever you&apos;re ready.</Text>
             </View>
           )}
 

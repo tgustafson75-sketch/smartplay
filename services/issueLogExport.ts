@@ -186,7 +186,43 @@ function renderDetails(text: string, details: unknown): string {
   try { return `${text}\n\n${JSON.stringify(details, null, 2)}`; } catch { return text; }
 }
 
+/**
+ * 2026-09-09 (72-hour triple-check) — ONE SEND AT A TIME, which "one event, one alert" assumed and
+ * never enforced.
+ *
+ * `ed15ed2b` fixed the storm Tim got on 09-06 by persisting `sentIds` — correct, and not sufficient,
+ * because ids are only added AFTER the POST resolves. Nothing stopped a second call entering while
+ * the first was still in flight, and there are two independent triggers: `app/_layout.tsx` fires one
+ * on mount, and `scheduleIssueAutoSend` fires from seven store call sites behind ~40 log sites, on a
+ * 4s debounce with a 20s max-wait FLUSH that bypasses the debounce entirely.
+ *
+ * A POST that takes longer than the debounce — a cold Lambda, a bad cell signal, exactly the
+ * conditions that produce issues worth sending — means the second call recomputes `unsent` from an
+ * unchanged `sentIds`, sends the same rows again, and files a second Sentry feedback for each. The
+ * duplicate storm this commit set out to end, reachable on any slow network.
+ *
+ * `hydrateSentIds` had the same shape one level down: it sets its flag BEFORE awaiting storage
+ * (deliberately, so a failed read cannot retry forever), so a caller arriving during that await saw
+ * an empty `sentIds` and treated every retained entry as unsent. That is the same check-then-act
+ * across an await that `27633173` fixed in the media path the very next morning.
+ *
+ * Coalescing fixes both at once: a concurrent caller gets the in-flight send's result rather than
+ * starting a competing one. Entries that arrive DURING a send are not lost — the store's own
+ * scheduler re-arms for them, and the trailing check below covers the case where it already fired.
+ */
+let inFlightSend: Promise<boolean> | null = null;
+
 export async function autoSendIssues(): Promise<boolean> {
+  if (inFlightSend) return inFlightSend;
+  inFlightSend = autoSendIssuesInner();
+  try {
+    return await inFlightSend;
+  } finally {
+    inFlightSend = null;
+  }
+}
+
+async function autoSendIssuesInner(): Promise<boolean> {
   // ...and never sends, even if something calls it directly.
   if (isTestRunner()) return false;
   if (useSettingsStore.getState().shareDiagnostics === false) return false;

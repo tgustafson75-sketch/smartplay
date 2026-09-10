@@ -101,14 +101,23 @@ describe('the watch tracks the fix, not just a timer', () => {
     expect(bridge).toMatch(/setInterval\([\s\S]{0,80}?pushYardageToWatch/);
   });
 
-  it('only transmits when the numbers actually changed, so the wrist costs less than before', () => {
-    expect(bridge).toMatch(/if \(key === lastYardageKey\) return;/);
-    // Hole belongs in the key: a hole change must send even if the triplet repeats.
-    expect(bridge).toMatch(/const key = `\$\{y\.hole_number\}/);
+  it('the fix-driven sends are the only ones gated on change', () => {
+    // The GPS fan-out fires far faster than the tick, so subscribing without this would multiply
+    // Data Layer traffic on a wrist battery for numbers that did not move.
+    expect(bridge).toMatch(/subscribeFixChange\(\(\) => \{ void pushYardageToWatch\(\{ onlyIfChanged: true \}\); \}\)/);
+    expect(bridge).toMatch(/if \(opts\?\.onlyIfChanged\)/);
+    expect(bridge).toMatch(/if \(nextKey === lastYardageSent\) return;/);
   });
 
-  it('unsubscribes and forgets the last reading on teardown', () => {
+  it('leaves the heartbeat sends unconditional, so standing still never reads as disconnected', () => {
+    // A delivered outbound message is what proves the round trip (markWatchAlive). The timer and
+    // hole-change calls must therefore still send even when the numbers repeat.
+    expect(bridge).toMatch(/setInterval\(\(\) => \{ void pushYardageToWatch\(\); \}, YARDAGE_TICK_MS\)/);
+    expect(bridge).toContain('markWatchAlive();');
+  });
+
+  it('unsubscribes on teardown', () => {
     expect(bridge).toContain('fixSub?.();');
-    expect(bridge).toMatch(/lastYardageKey = '';/);
+    expect(bridge).toMatch(/fixSub = null;/);
   });
 });

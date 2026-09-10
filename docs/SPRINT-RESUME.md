@@ -8,25 +8,61 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
-> ### ⚠️ LATEST — 2026-09-09. The drill videos were never handed to a player.
+> ### ⚠️ LATEST — 2026-09-10. Three ways the right number could not reach the player.
 >
-> "YouTube drill videos still not playing" — *still*, after three rounds of fixes to the player
-> document. All three were correct; none ever ran. `/drill-video` and `/jukebox` gated their
-> `<WebView>` on `!!UIManager.getViewManagerConfig?.('RNCWebView')`, a 2026-06-13 OTA guard that has
-> been permanently **false** since: `newArchEnabled: true` on RN 0.81 is bridgeless-only, where
-> `getViewManagerConfig` returns null unless the legacy interop layer is on (it isn't), and webview
-> 13.15 registers `RNCWebView` in the **Fabric** registry that legacy view-manager constants never
-> see. Every tap fell to a Custom Tab on the bare embed URL and popped the screen — no IFrame API,
-> no watch points, and the "Try this drill in Smart Motion" handoff never rendered either.
+> Reported from the tee at Hemet, mid-round. **(1) The flap** — `yardageResolver` gated live GPS on
+> `fixAge < 10_000` while `gpsManager`'s walking mode polls at *exactly* 10_000ms, so the live tier
+> aged out at the instant its replacement was due and dropped to the frozen scorecard number, every
+> ten seconds. gpsManager already owned staleness (30s, "walking (10s) + 3 missed ticks"); the gate
+> is deleted, and the `isSimulatedActive` exemption that existed only to dodge it goes with it.
+> **(2) Kevin would not take a correction** — the follow-up bypass skipped the ENTIRE intent router,
+> `state_yardage` included, so the one correction a player most needs to make was the one the router
+> could not hear. Now narrowed: a reply carrying a yardage reaches the router, everything else
+> bypasses as before. **(3) The watch rode an 18s timer and no GPS subscription** — now takes the
+> fix fan-out too, merged onto main's same-day watch work, with the heartbeat cadence unchanged.
 >
-> Fixed by **deleting** the guard and its fallback on both screens (net −57/+52). The sim check that
-> asserted the guard was *present* now asserts the opposite. New gate:
-> `__tests__/regression/the-embedded-player-is-actually-mounted.test.ts`.
+> Green: tsc, lint, jest, sim 968/968. **NOT verified on device — shipped as an OTA mid-round.**
 >
-> **NOT VERIFIED ON DEVICE.** Needs a dev-client run: open a drill → video plays embedded, in-app,
-> with the drill CTA visible below it. Green: tsc, lint, jest 2842/2842, sim 968/968.
+> **Still open from that round:** Hemet's green coordinate is unproven (SmartVision right, data bar
+> wrong — needs two numbers off one tee); SmartVision not loading; auto-scoring / auto shot
+> detection wiring unverified.
 
-> ### 2026-09-06 (later). Layer 0: remote kill switches are LIVE.
+> ### ⚠️ LATEST — 2026-09-09. Three crashes fixed; all await device verification.
+>
+> Branch `claude/android-crashes-voice-failures-tjsmho`, 3 commits, unmerged.
+> **Recap crash** (allocating Zustand selector, third recurrence), **drill videos never played**
+> (`getViewManagerConfig` returns null under the new architecture, so no WebView was ever mounted),
+> **SmartMotion record crash** (`onDeviceLocate` bypassed the single-flight media queue AND read the
+> file ExoPlayer was looping), **pose + trace** finished onto the shared private-copy pool that
+> clubPath has used since 07-30.
+>
+> **Nothing here is device-verified.** The crash class is native; the tests lock shape only.
+> **Still open:** whether the private copy is the ONLY cause of a sparse club arc — needs one field
+> report carrying `rejected`/`detected`/`gate` from `f44f06d`.
+> Voice start/stop during recording is deliberately unchanged (Tim: tap-stop stays).
+>
+> A triple-check pass then found three defects in those same fixes (a detector that could throw at
+> module scope, a wrong scope claim about which readers touch the looping clip, and an unbounded copy
+> in front of a bounded probe that would have broken the analysis hang guard). All fixed; the gates
+> now DERIVE their file lists rather than trusting a hand-written one, because the hand-written one
+> was wrong twice.
+>
+> An open-items pass then closed the rest. The headline: the sparse-arc field report the close-out
+> asked for was UNOBTAINABLE — `f44f06d`'s `rejected`/`detected`/`gate` fields were reported by the
+> swing-detail screen ONLY, so SmartMotion (where swings are recorded) and videoUpload's analysis pass
+> stayed silent. All three report now. **The next recorded swing should produce the event that settles
+> whether the private copy is the only cause of a sparse arc** — look for `clubpath_arc_too_sparse`
+> with `screen` and `rejected`. Lint is 0 errors; the claimed `api/messages.ts` tsc error does not
+> exist. Voice start/stop deliberately untouched.
+>
+> **This branch is JS/TS only — no native, no app.json, no eas.json, no deps — so it cannot affect a
+> build in review. It is UNMERGED and no OTA was published. Merge is Tim's call after device test.**
+>
+> Detail: [SPRINT-LOG.md](SPRINT-LOG.md) → "Day N+2 — 2026-09-08 / 09-09", its triple-check pass, and
+> the open-items pass.
+
+
+> ### ⚠️ LATEST — 2026-09-06 (later). Layer 0: remote kill switches are LIVE.
 >
 > Any optional feature can be turned off on a phone already in a player's pocket — no rebuild, no
 > OTA, no store review. Edge Config `smartplay-flags` → `GET api.smartplaycaddie.com/flags` →

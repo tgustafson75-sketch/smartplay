@@ -144,19 +144,21 @@ export async function detectBallPath(args: {
   }
 
   // 2026-07-30 (analysis audit C3) — extract from a PRIVATE COPY so a native retriever never decodes the
-  // clip ExoPlayer is looping in the Motion overlay (SIGSEGV to launcher). Copy-or-bail (honest no-trace
-  // beats a crash); the source copy is only needed through frame extraction, so delete it right after.
+  // clip ExoPlayer is looping in the Motion overlay (SIGSEGV to launcher). Copy-or-bail: an honest
+  // no-trace beats a crash.
+  //
+  // 2026-09-09 — through the SHARED POOL, like every other consumer. The 08-09 migration moved pose,
+  // tempo, club path and ball departure onto one refcounted copy and left this one making its own,
+  // so a review that already held a copy of the clip copied it a SECOND time — hundreds of megabytes
+  // and seconds of wall-clock on Tim's 60fps captures, for a file that was already on disk. Same
+  // crash-safety story, same refusal, one fewer full-clip copy per review.
   let ballWorkUri = args.videoUri;
-  let ballTempCopy: string | null = null;
+  let ballTempCopy: { uri: string; release: () => void } | null = null;
   try {
-    const dir = FileSystem.cacheDirectory;
-    if (dir) {
-      const dest = `${dir}ballpath-src-${args.impactMs}-${Date.now()}.mp4`; // unique per invocation (audit C-1)
-      await FileSystem.copyAsync({ from: args.videoUri, to: dest });
-      const info = await FileSystem.getInfoAsync(dest);
-      if (info.exists && (info.size ?? 0) > 0) { ballTempCopy = dest; ballWorkUri = dest; }
-    }
-  } catch { /* copy failed */ }
+    const { acquireClipCopy } = await import('./sharedClipCopy');
+    ballTempCopy = await acquireClipCopy(args.videoUri);
+    if (ballTempCopy) ballWorkUri = ballTempCopy.uri;
+  } catch { /* acquire failed — refusal below */ }
   if (!ballTempCopy) {
     console.warn('[ballPath] private copy failed — skipping to avoid a native crash');
     // No multi-point ball trace: the shot map falls back to the single-line read, or to nothing.
@@ -167,7 +169,7 @@ export async function detectBallPath(args: {
   try {
     frames = await Promise.all(offsets.map((o) => frameAt(ballWorkUri, args.impactMs! + o)));
   } finally {
-    try { await FileSystem.deleteAsync(ballTempCopy, { idempotent: true }); } catch { /* best-effort */ }
+    ballTempCopy.release();   // the pool deletes when nothing holds it, after an 8s linger
   }
   const crops = await Promise.all(
     frames.map((f) => (f ? cropWide(f, args.ballArea!, WIDE_SCALE) : Promise.resolve(null))),
