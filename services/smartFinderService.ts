@@ -17,7 +17,7 @@ import {
 // round starts, fetchCourseGeometry pulls real coords from golfcourseapi
 // and caches them; without this fallback the live API result was being
 // ignored and yardages stayed null forever.
-import { getHoleGeometry } from './courseGeometryService';
+import { getHoleGeometry, getDerivedHoleGeometry } from './courseGeometryService';
 // 2026-05-19 — user-captured green overrides win over EVERYTHING.
 // Captured via the Mark Green tool when the user is standing at the
 // center of an actual green. Persists per (courseId, hole) so the
@@ -372,7 +372,7 @@ export function resolveGreenCoords(holeNumber: number): {
   front: ShotLocation | null;
   middle: ShotLocation | null;
   back: ShotLocation | null;
-  source: 'truth' | 'override' | 'courseHoles' | 'geometryCache' | 'none';
+  source: 'truth' | 'override' | 'courseHoles' | 'geometryCache' | 'derived' | 'none';
 } {
   const round = useRoundStore.getState();
   const courseId = resolveSmartFinderCourseId(round);
@@ -449,6 +449,25 @@ export function resolveGreenCoords(holeNumber: number): {
       back = geo.green_back ?? null;
       if (front || middle || back) {
         return { front, middle, back, source: 'geometryCache' };
+      }
+    }
+  }
+  /**
+   * 2026-09-10 — the AI-derived green never reached the number.
+   *
+   * deriveHoleGeometry (api/hole-scan) exists to answer exactly the case that ends here: a course
+   * golfcourseapi and OSM have no green for. It runs, it persists, and SmartVision draws from it —
+   * but this cascade stopped one tier short, so every yardage, the caddie's working number and hole
+   * detection all still read "no green" on a hole the app had already solved.
+   */
+  if (courseId) {
+    const derived = getDerivedHoleGeometry(courseId, holeNumber);
+    if (derived) {
+      front = derived.green_front ?? null;
+      middle = derived.green ?? null;
+      back = derived.green_back ?? null;
+      if (front || middle || back) {
+        return { front, middle, back, source: 'derived' };
       }
     }
   }
@@ -850,7 +869,7 @@ export type YardageCalcEntry = {
    *  callers (rangefinder taps, smartfinder lock-in coords). Not a
    *  cascade source — just identifies the source kind so debug tools
    *  can distinguish green-yardage rows from arbitrary-target rows. */
-  source?: 'truth' | 'override' | 'courseHoles' | 'geometryCache' | 'none' | 'tapped_point' | null;
+  source?: 'truth' | 'override' | 'courseHoles' | 'geometryCache' | 'derived' | 'none' | 'tapped_point' | null;
   /** 2026-06-01 — Fix GF.2: outcome of the yardage decision. Previously
    *  early-return paths (no_fix, no_hole, no_geometry) and the sanity-
    *  clamp fallback bypassed logYardageCalc entirely, so the debug
@@ -874,7 +893,7 @@ function logYardageCalc(
   fix: LastFix,
   targets: { front: ShotLocation | null; middle: ShotLocation | null; back: ShotLocation | null },
   result: GreenYardages,
-  source?: 'truth' | 'override' | 'courseHoles' | 'geometryCache' | 'none' | 'tapped_point' | null,
+  source?: 'truth' | 'override' | 'courseHoles' | 'geometryCache' | 'derived' | 'none' | 'tapped_point' | null,
   outcome: 'ok' | 'no_fix' | 'no_hole' | 'no_geometry' | 'clamp_fallback' = 'ok',
 ): void {
   const entry: YardageCalcEntry = {

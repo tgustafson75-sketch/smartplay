@@ -414,6 +414,53 @@ export function handleSustainedPosition(
 let candidateHole: number | null = null;
 let candidateSince = 0;
 
+/**
+ * 2026-09-10 — DERIVE THE GREEN WHERE THE PLAYER ACTUALLY IS, not only if they open the map.
+ *
+ * `deriveHoleGeometry` (api/hole-scan) exists precisely for courses golfcourseapi and OSM have no
+ * green for, and it had exactly one caller: SmartVision's mount effect. So on a course with no
+ * green, a player who never opened the map got no green all round — no live yardage, no hole
+ * advance — while the capability to produce one sat there unused.
+ *
+ * Same guards SmartVision uses, and for the same reasons: only for the hole the player is STANDING
+ * on (the tile is centred on their fix, so deriving a hole they are not on reads the wrong green and
+ * caches it), only with a real fix, and once per course:hole per session. Marked BEFORE the await so
+ * an in-flight run cannot be started twice. Purely additive — the derived tier is the LAST one
+ * resolveGreenCoords consults, so this can never override real geometry or a player's own mark.
+ */
+const greenDeriveAttempts = new Set<string>();
+
+async function ensureGreenForCurrentHole(
+  courseId: string,
+  hole: number,
+  at: LatLng,
+): Promise<void> {
+  const key = `${courseId}:${hole}`;
+  if (greenDeriveAttempts.has(key)) return;
+  if (greenForHole(courseId, hole)) return;   // something in the cascade already answers
+  if (!isValidGolfCoord(at.lat, at.lng)) return;
+  greenDeriveAttempts.add(key);
+  try {
+    const { loadDerivedGeometry, getDerivedHoleGeometry } = await import('./courseGeometryService');
+    // A previous session may already have solved this hole — hydrate before spending a vision call.
+    await loadDerivedGeometry(courseId).catch(() => undefined);
+    if (getDerivedHoleGeometry(courseId, hole)?.green) return;
+    const { deriveHoleGeometry } = await import('./holeGeometryDerivation');
+    const known = getHoleGeometry(courseId, hole);
+    await deriveHoleGeometry({
+      seed: at,
+      holeNumber: hole,
+      par: known?.par ?? null,
+      yardage: known?.yardage ?? null,
+      courseId,
+      knownTee: known?.tee ?? resolveTeeCoords(hole).tee ?? null,
+    });
+  } catch (e) {
+    // Never let a vision derive disturb hole detection — it is an enrichment, not a dependency.
+    console.log('[holeDetection] green derive failed (non-fatal)', e);
+  }
+}
+
 async function tick(): Promise<void> {
   const round = useRoundStore.getState();
   if (!round.isRoundActive) return;
@@ -462,6 +509,7 @@ async function tick(): Promise<void> {
   // Warm geometry cache opportunistically
   if (round.activeCourseId) {
     void fetchCourseGeometry(round.activeCourseId).catch(() => {});
+    void ensureGreenForCurrentHole(round.activeCourseId, round.currentHole, fix.location);
   }
 
   const result = detectCurrentHole(

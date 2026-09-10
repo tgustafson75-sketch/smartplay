@@ -36,7 +36,7 @@
  *     always available offline.
  */
 
-import { fetchCourseGeometry, getHoleGeometry } from './courseGeometryService';
+import { fetchCourseGeometry, getHoleGeometry, loadDerivedGeometry } from './courseGeometryService';
 import { fetchCourseContent } from './courseContentService';
 import { fetchCourseIntelligence } from './courseIntelligenceService';
 import { prefetchHoles, isMapboxConfigured, type HoleImageryInput } from './mapboxImagery';
@@ -71,6 +71,17 @@ export async function prefetchRoundData(args: PrefetchArgs): Promise<void> {
   const yardage = holes.reduce((sum, h) => sum + (typeof h.distance === 'number' ? h.distance : 0), 0);
   const ratingNum = typeof rating === 'number' ? rating : (typeof rating === 'string' && rating.trim() ? Number(rating) : null);
   const slopeNum = typeof slope === 'number' ? slope : (typeof slope === 'string' && slope.trim() ? Number(slope) : null);
+
+  /**
+   * 2026-09-10 — hydrate the AI-DERIVED greens too, not just the API/OSM ones.
+   *
+   * deriveHoleGeometry persists a green for exactly the courses golfcourseapi and OSM have none for,
+   * but loadDerivedGeometry was called from ONE place: SmartVision's mount. So a green the app had
+   * already solved and stored was invisible to yardages, the caddie's working number and hole
+   * detection for any round where the player never opened the map. Hydrating here costs one
+   * AsyncStorage read and makes the derived tier of resolveGreenCoords reachable.
+   */
+  void loadDerivedGeometry(courseId).catch(() => undefined);
 
   const geometryP = fetchCourseGeometry(courseId, { courseLocation: courseLocation ?? null })
     .then((g) => {
