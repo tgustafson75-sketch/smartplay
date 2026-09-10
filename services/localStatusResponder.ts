@@ -38,7 +38,7 @@ import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useConversationLog } from '../store/conversationLogStore';
 import { getLastFix } from './gpsManager';
 import { haversineYards, bearingDegrees } from '../utils/geoDistance';
-import { resolveGreenCoords, classifyAccuracy, getGreenYardagesSync } from './smartFinderService';
+import { resolveGreenCoords, classifyAccuracy } from './smartFinderService';
 // 2026-06-12 — Offline caddie Tier 1: the player's REAL logged bag distances, used to
 // CALL A CLUB locally when the cloud brain is unreachable. Honest by construction —
 // bagDistances() only returns clubs the player has actually tracked. [[offline-caddie-plan]]
@@ -578,7 +578,9 @@ function yardageReply(transcript: string, lang: LocalReplyLanguage): LocalReplyR
     // tee-relative GPS ESTIMATE, so the two disagreed. Use the SAME estimate here so the
     // local answer matches the caddie. Phrased as iffy (it IS an estimate).
     try {
-      const est = getGreenYardagesSync(round.currentHole);
+      // 2026-09-10 — one owner, so a spoken status can never contradict the screen.
+      const { resolveYardage, resolvedToFmb } = require('./yardageResolver') as typeof import('./yardageResolver');
+      const est = resolvedToFmb(resolveYardage(round.currentHole)) ?? { front: null, middle: null, back: null, reason: 'no_hole' as const };
       if (est && est.reason === 'estimated' && typeof est.middle === 'number') {
         return { text: L[lang].yardageIffy(est.middle), queryType: 'yardage_middle' };
       }

@@ -40,6 +40,20 @@ export type YardageConfidence = 'high' | 'med' | 'low';
 
 export interface ResolvedYardage {
   value: number | null;
+  /**
+   * 2026-09-10 (Tim: "a yard is a universal truth for every tool — why do we have multiple
+   * interpretations and feeds and loops") — THE TRIPLET LIVES HERE NOW.
+   *
+   * Thirteen surfaces were reading a yardage from three different functions: this resolver,
+   * getGreenYardagesSync, and holeLengthYards. Only this one applies the tier ladder, so the caddie
+   * could be clubbing off a number the watch and the cockpit had never heard of — and a stated
+   * correction moved some of them and not others.
+   *
+   * getGreenYardagesSync is now the ENGINE, not an answer: it is called from inside this file and
+   * nowhere else. front/back ride along so a surface that needs F/M/B has no reason to go around.
+   */
+  front: number | null;
+  back: number | null;
   source: YardageSource;
   confidence: YardageConfidence;
   /** Human-readable hint Kevin can echo. Always populated. */
@@ -87,6 +101,9 @@ export function resolveYardage(holeNumberArg?: number): ResolvedYardage {
       'your stated number';
     return {
       value: stated.value,
+      // The player gave us ONE number. Inventing a front and back around it would be fabrication.
+      front: null,
+      back: null,
       source: 'user_stated',
       confidence: 'high', // user-asserted = highest trust
       reason: `Using ${sourceLabel} (${stated.value}y).`,
@@ -153,6 +170,8 @@ export function resolveYardage(holeNumberArg?: number): ResolvedYardage {
       const estimated = y.reason === 'estimated';
       return {
         value: y.middle,
+        front: y.front ?? null,
+        back: y.back ?? null,
         source: 'gps_live',
         confidence: estimated ? 'low' : 'med',
         reason: estimated
@@ -170,6 +189,8 @@ export function resolveYardage(holeNumberArg?: number): ResolvedYardage {
       const estimated = y.reason === 'estimated';
       return {
         value: y.middle,
+        front: y.front ?? null,
+        back: y.back ?? null,
         source: 'gps_live',
         confidence: estimated ? 'med' : (quality.level === 'strong' ? 'high' : 'med'),
         reason: estimated
@@ -197,6 +218,10 @@ export function resolveYardage(holeNumberArg?: number): ResolvedYardage {
       'GPS soft';
     return {
       value: hData.distance,
+      // Card front/back are placeholders equal to `distance` on every API course (courseToHoles
+      // writes them that way), so they are only passed through when they say something different.
+      front: hData.front > 0 && hData.front !== hData.distance ? hData.front : null,
+      back: hData.back > 0 && hData.back !== hData.distance ? hData.back : null,
       source: 'static_card',
       confidence: 'low',
       reason: `${gpsState} — using static card (${hData.distance}y from the tee).`,
@@ -207,6 +232,8 @@ export function resolveYardage(holeNumberArg?: number): ResolvedYardage {
 
   return {
     value: null,
+    front: null,
+    back: null,
     source: 'none',
     confidence: 'low',
     reason: 'No yardage available — no green geometry and no static card.',
@@ -232,4 +259,26 @@ export function buildYardageInsight(): {
     confidence: r.confidence,
     reason: r.reason,
   };
+}
+
+/**
+ * 2026-09-10 — the ONE adapter from the resolved yardage to the F/M/B card shape.
+ *
+ * Cockpit and the caddie tab had each grown their own version of this mapping, which is how the
+ * number and the "SCORECARD ~Xy" label under it came to disagree about which tier produced them.
+ * `reason` is derived from the resolver's own source, so a surface cannot label a tier it is not on.
+ */
+export type FmbReason = 'ok' | 'no_geometry' | 'no_fix' | 'no_hole' | 'estimated';
+
+export function resolvedToFmb(r: ResolvedYardage | null): {
+  front: number | null; middle: number | null; back: number | null; reason: FmbReason;
+} | null {
+  if (!r) return null;
+  if (r.front == null && r.value == null && r.back == null) return null;
+  const reason: FmbReason =
+    r.source === 'static_card' ? 'no_geometry'
+    : r.source === 'none' ? 'no_hole'
+    : r.is_fallback ? 'estimated'
+    : 'ok';
+  return { front: r.front, middle: r.value, back: r.back, reason };
 }

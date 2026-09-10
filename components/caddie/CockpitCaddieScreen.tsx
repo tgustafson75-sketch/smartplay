@@ -43,11 +43,11 @@ import { useToolsMenuStore } from '../../store/toolsMenuStore';
 // 2026-05-22 — Ghost Rounds. "vs last time" row renders only when a ghost
 // is active. Subscribed inline; refreshes on activate/deactivate and on
 // every logScore (roundStore.logScore → ghostStore.updateHole).
+import { resolveYardage, resolvedToFmb } from '../../services/yardageResolver';
 import { useGhostStore } from '../../store/ghostStore';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getCaddieName } from '../../lib/persona';
 import {
-  getGreenYardagesSync,
   subscribeFixChange,
   type GreenYardages,
 } from '../../services/smartFinderService';
@@ -178,8 +178,7 @@ export default function CockpitCaddieScreen({
   // Live FRONT/CENTER/BACK from Pro's existing SmartFinder. Re-reads
   // on every GPS fix change so yardages update as the player walks.
   const [fmb, setFmb] = useState<FrontMiddleBack | null>(() => {
-    const initial = getGreenYardagesSync(currentHole);
-    return greenYardsToFmb(initial);
+    return resolvedToFmb(resolveYardage(currentHole));
   });
   // 2026-07-01 (Tim — "cockpit mode was NOT updating with yardage; it should have all the same
   // functionality as every other caddie tab") — cockpit read yardage ONLY off subscribeFixChange,
@@ -192,7 +191,7 @@ export default function CockpitCaddieScreen({
   const lastFmbKeyRef = useRef<string>('');
   useEffect(() => {
     const refresh = () => {
-      const next = greenYardsToFmb(getGreenYardagesSync(currentHole));
+      const next = resolvedToFmb(resolveYardage(currentHole));
       const key = next ? `${next.front}|${next.middle}|${next.back}|${next.reason ?? ''}` : 'null';
       if (key === lastFmbKeyRef.current) return; // unchanged — skip (no flicker, no re-render)
       lastFmbKeyRef.current = key;
@@ -553,23 +552,6 @@ export default function CockpitCaddieScreen({
       </ScrollView>
     </SafeAreaView>
   );
-}
-
-/**
- * Adapter: convert smartFinderService's GreenYardages to the FmB
- * shape the DistanceCard expects. They're structurally similar; this
- * just drops the hole_number field that the card doesn't use.
- */
-function greenYardsToFmb(g: GreenYardages | null): FrontMiddleBack | null {
-  if (!g) return null;
-  if (g.front == null && g.middle == null && g.back == null) return null;
-  // 2026-06-23 — preserve `reason` so DistanceCard's honest-degrade
-  // handling survives the adapter. Without it, a scorecard tee→green
-  // fallback (reason === 'no_geometry') rendered as if it were a live
-  // GPS read — no "SCORECARD" pill, no "~" prefix, GPS dot lit green.
-  // smartfinder.tsx surfaces the same reason; this brings cockpit to
-  // parity instead of silently dropping the degrade flag.
-  return { front: g.front, middle: g.middle, back: g.back, reason: g.reason };
 }
 
 const styles = StyleSheet.create({

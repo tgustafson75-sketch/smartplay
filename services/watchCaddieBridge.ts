@@ -25,7 +25,8 @@
 
 import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
 import { registerWatchSender, notifyWatchVoice, notifyWatchTap, notifyWatchCommand, type OutboundPayload, watchDeviceLabel } from './watchBridge';
-import { getGreenYardagesSync, subscribeFixChange } from './smartFinderService';
+import { subscribeFixChange } from './smartFinderService';
+import { resolveYardage, resolvedToFmb } from './yardageResolver';
 import { useRoundStore } from '../store/roundStore';
 import { useWatchStore } from '../store/watchStore';
 import { acquireWatchDataLayer, releaseWatchDataLayer, isWatchDataLayerListening } from './watchDataLayer';
@@ -128,7 +129,14 @@ export async function pushYardageToWatch(opts?: { onlyIfChanged?: boolean }): Pr
   try {
     const round = useRoundStore.getState();
     if (!round.isRoundActive) { traceWatch('yardage_skip', { reason: 'no_active_round' }); return; }
-    const y = getGreenYardagesSync(round.currentHole);
+    // 2026-09-10 — the wrist shows what the caddie is holding. This read the engine directly, so a
+    // stated correction never reached the watch at all.
+    const r = resolveYardage(round.currentHole);
+    const fmb = resolvedToFmb(r);
+    const y = {
+      front: fmb?.front ?? null, middle: fmb?.middle ?? null, back: fmb?.back ?? null,
+      hole_number: round.currentHole, reason: fmb?.reason ?? 'no_hole',
+    };
     if (y.middle == null && y.front == null && y.back == null) {
       // nothing honest to show — carry the funnel's OWN reason (no_fix / no_hole / no_green_coords)
       // rather than restating that the numbers were absent.

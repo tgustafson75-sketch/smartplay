@@ -1,3 +1,4 @@
+import { resolveYardage, resolvedToFmb } from '../yardageResolver';
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import { useRoundStore } from '../../store/roundStore';
 import { useGhostStore } from '../../store/ghostStore';
@@ -817,7 +818,8 @@ export const queryStatusHandler: IntentHandler = {
           // case): the SmartFinder strip now shows a tee-relative GPS ESTIMATE. Speak
           // that (hedged) instead of a flat "no green" that contradicts the strip.
           try {
-            const est = await getGreenYardages(greenHole);
+            // 2026-09-10 — one owner: a spoken yardage is the same number the screen shows.
+            const est = resolvedToFmb(resolveYardage(greenHole)) ?? { front: null, middle: null, back: null, reason: 'no_hole' as const };
             if (est && (est as { reason?: string }).reason === 'estimated' && typeof est.middle === 'number') {
               return {
                 success: true,
@@ -1029,7 +1031,7 @@ export const queryStatusHandler: IntentHandler = {
       case 'green_back':
       case 'green_middle': {
         const hole = context.current_hole ?? round.currentHole;
-        const yards = await getGreenYardages(hole);
+        const yards = resolvedToFmb(resolveYardage(hole)) ?? { front: null, middle: null, back: null, reason: 'no_hole' as const };
         const which = topic === 'green_front' ? 'front' : topic === 'green_back' ? 'back' : 'middle';
         const value = yards[which];
         if (value == null) {

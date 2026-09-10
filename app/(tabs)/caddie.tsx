@@ -608,35 +608,6 @@ export default function CaddieTab() {
   const geometryBuilding = useGeometryStatusStore((st) => st.building);
   const geometryCompletions = useGeometryStatusStore((st) => st.completions);
 
-  const liveYardage = useMemo(() => {
-    if (yardageMode !== 'live' || !isRoundActive) return null;
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { getGreenYardagesSync } = require('../../services/smartFinderService');
-      const y = getGreenYardagesSync(currentHole);
-      // 2026-07-06 (course audit) — only count as LIVE when the read is genuinely
-      // GPS-live ('ok') or a walking tee-relative estimate ('estimated'). 'no_fix' /
-      // 'no_geometry' / 'no_hole' return the FROZEN scorecard number — badging that
-      // "live" is a lie (it doesn't count down as you walk). Those → null → 'static'.
-      return (y && (y.reason === 'ok' || y.reason === 'estimated')) ? (y.middle ?? null) : null;
-    } catch { return null; }
-    // markTick listed as a re-render signal: getGreenYardagesSync reads
-    // from a cache the Mark handler writes; without it, the data-strip
-    // middle yardage was stale until next hole change (Phase BG fix).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    // Same reason as the resolver memo below: a finished geometry build is new information for the
-    // LIVE tier too — it is the tier that needs the green coordinate.
-  }, [yardageMode, isRoundActive, currentHole, markTick, geometryCompletions]);
-
-  // 2026-05-25 — Fix L: route the displayed yardage through the unified
-  // resolver so userStatedYardage (Tier 3 voice anchor) AND static-card
-  // fallback (Tier 2 when GPS is soft) both surface to the UI. The
-  // resolver returns { value, source, confidence, reason } — we still
-  // collapse to a number for the existing display contract, but the
-  // source/confidence are available for honest labeling in a follow-up
-  // (e.g. "STATIC CARD" badge below the number when is_fallback).
-  // markTick + userStatedYardage in deps so the memo re-runs on mark
-  // captures and voice-stated number changes.
   const userStatedYardage = useRoundStore(s => s.userStatedYardage);
   const resolvedYardage = useMemo(() => {
     if (!isRoundActive) return null;
@@ -650,31 +621,52 @@ export default function CaddieTab() {
     // holds the static-card answer for the rest of the round even after the greens arrive.
   }, [isRoundActive, currentHole, markTick, userStatedYardage, geometryCompletions]);
 
+  /**
+   * 2026-09-10 (Tim: "a yard is a universal truth for every tool") — ONE READ.
+   *
+   * This memo used to call getGreenYardagesSync itself, alongside the resolver memo right below it
+   * reading the same hole through the tier ladder. Two answers to one question on one screen: LIVE
+   * was badged off the engine's raw reason while the number shown came from the resolver, so a
+   * stated correction moved the number and not the badge.
+   *
+   * Now it is derived from the SAME resolved object. 'live' means the resolver is on a GPS tier that
+   * actually counts down as you walk — user_stated and static_card are not that, and never were.
+   */
+  const liveYardage = useMemo(() => {
+    if (yardageMode !== 'live' || !isRoundActive) return null;
+    return resolvedYardage?.source === 'gps_live' ? (resolvedYardage.value ?? null) : null;
+  }, [yardageMode, isRoundActive, resolvedYardage]);
+
+  // 2026-05-25 — Fix L: route the displayed yardage through the unified
+  // resolver so userStatedYardage (Tier 3 voice anchor) AND static-card
+  // fallback (Tier 2 when GPS is soft) both surface to the UI. The
+  // resolver returns { value, source, confidence, reason } — we still
+  // collapse to a number for the existing display contract, but the
+  // source/confidence are available for honest labeling in a follow-up
+  // (e.g. "STATIC CARD" badge below the number when is_fallback).
+  // markTick + userStatedYardage in deps so the memo re-runs on mark
+  // captures and voice-stated number changes.
+
   const displayYardage = resolvedYardage?.value ?? liveYardage ?? currentYardage;
 
   // L1 Quiet's new SmartFinder hero needs the F/M/B triplet, not just
   // the middle. Pulled the same way liveYardage is (sync read + markTick
   // re-subscribe) so we don't add another GPS subscription.
+  /**
+   * 2026-09-10 — the THIRD read of the same number on this screen, now the same object as the other
+   * two. `reason` is mapped from the resolver's source so the DistanceCard's "SCORECARD ~Xy" label
+   * and the number above it can never disagree about which tier produced it.
+   */
+  /**
+   * 2026-09-10 — the THIRD read of the same number on this screen, now the same object as the other
+   * two, through the one adapter in the resolver rather than a private copy of the mapping.
+   */
   const _fmb = useMemo<FrontMiddleBack | null>(() => {
     if (!isRoundActive) return null;
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { getGreenYardagesSync } = require('../../services/smartFinderService');
-      const y = getGreenYardagesSync(currentHole);
-      if (!y) return null;
-      if (y.front == null && y.middle == null && y.back == null) return null;
-      // 2026-05-21 — Consolidation 5: pass the reason through so the
-      // DistanceCard can label "SCORECARD ~Xy" when the middle value
-      // is the scorecard tee→green total (no per-hole green geometry
-      // for this course) instead of a live GPS read.
-      return { front: y.front, middle: y.middle, back: y.back, reason: y.reason };
-    } catch { return null; }
-    // markTick listed as a re-render signal — same rationale as liveYardage.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    // geometryCompletions — front/middle/back and the green coord all come from geometry. My first
-    // pass added this to the two yardage memos only; the guard below caught the other three. Same
-    // defect, five places.
-  }, [isRoundActive, currentHole, markTick, geometryCompletions]);
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { resolvedToFmb } = require('../../services/yardageResolver') as typeof import('../../services/yardageResolver');
+    return resolvedToFmb(resolvedYardage);
+  }, [isRoundActive, resolvedYardage]);
 
   // 2026-06-25 — Wire REAL elevation into the caddie HUD's plays-like. Player =
   // live GPS fix; target = the current hole's green (resolveGreenCoords). The

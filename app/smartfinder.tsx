@@ -39,13 +39,24 @@ import { bagDistances } from '../services/shotStrategy';
 import { useClubStatsStore, CLUB_ORDER } from '../store/clubStatsStore';
 // SF fix #3 — the 4-tier yardage resolver, so a number the player STATED
 // ("I'm 150 out") wins over the GPS/scorecard middle on the target overlay.
-import { resolveYardage } from '../services/yardageResolver';
+import { resolveYardage, resolvedToFmb } from '../services/yardageResolver';
+
+/** The resolved yardage in this screen's existing GreenYardages shape — one owner, one number. */
+function resolvedToGreenYardages(hole: number): GreenYardages {
+  const fmb = resolvedToFmb(resolveYardage(hole));
+  return {
+    front: fmb?.front ?? null,
+    middle: fmb?.middle ?? null,
+    back: fmb?.back ?? null,
+    hole_number: hole,
+    reason: fmb?.reason ?? 'no_hole',
+  };
+}
 import { useSmartFinderStore, type SmartFinderMode } from '../store/smartFinderStore';
 import {
   peekFix,
   classifyAccuracy,
   getLastFix,
-  getGreenYardagesSync,
   type GreenYardages,
   type GPSQualityReading,
 } from '../services/smartFinderService';
@@ -147,7 +158,9 @@ export default function SmartFinder() {
   const autoRead = autoread === '1';
   const displayMode: SmartFinderMode = autoRead && mode === 'map' ? 'target' : mode;
 
-  const [yards, setYards] = useState<GreenYardages>(() => getGreenYardagesSync(currentHole));
+  // 2026-09-10 — through the resolver, like every other surface. This screen read the engine
+  // directly, so a stated correction moved the caddie's number and not this one.
+  const [yards, setYards] = useState<GreenYardages>(() => resolvedToGreenYardages(currentHole));
   const [gps, setGps] = useState<GPSQualityReading>(() => {
     const f = getLastFix();
     // 2026-05-27 — Fix ET: thread fix timestamp into classifyAccuracy
@@ -166,7 +179,7 @@ export default function SmartFinder() {
       const fix = await peekFix();
       if (cancelled) return;
       setGps(classifyAccuracy(fix?.accuracy_m ?? null, fix?.timestamp ?? null));
-      setYards(getGreenYardagesSync(currentHole));
+      setYards(resolvedToGreenYardages(currentHole));
     };
     // 2026-06-04 — Defer first tick ~500ms. Voice-open path now awaits
     // speak BEFORE navigating (useVoiceCaddie order swap), so TTS is
