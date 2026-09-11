@@ -447,7 +447,9 @@
       "logged": "LOGGED",
       "mark_done": "MARK DONE",
       "holes_competition": "{{date_str}} · {{holes_played}} holes · competition",
-      "holes": "{{date_str}} · {{holes_played}} holes"
+      "holes": "{{date_str}} · {{holes_played}} holes",
+      "before_the_round": "BEFORE THE ROUND",
+      "preround_association_note": "Association, not cause — the rounds you stretched for are often the ones you arrived early for."
     },
     "alert": {
       "delete_round": "Delete round?"

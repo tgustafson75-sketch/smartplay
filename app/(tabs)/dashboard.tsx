@@ -50,6 +50,7 @@ import { useClubBagStore } from '../../store/clubBagStore';
 import { computePointsPerformance } from '../../services/practice/pointsPerformance';
 import { computeWorkoutPerformance } from '../../services/practice/workoutPerformance';
 import { computeWarmupPerformance } from '../../services/practice/warmupPerformance';
+import { composePreRoundFactors } from '../../services/practice/preRoundFactors';
 import { useSwingSessionStore, resolvePlayerName } from '../../store/swingSessionStore';
 import { exercisesForFault } from '../../services/swing/faultWorkouts';
 import { usePointsBaselineStore } from '../../store/pointsBaselineStore';
@@ -230,6 +231,35 @@ export default function Dashboard() {
       .map((w) => w.date),
   ].filter((t): t is number => typeof t === 'number' && Number.isFinite(t))),
   [practiceHistory, workoutHistory]);
+
+  /**
+   * 2026-09-11 (Tim) — ONE CARD FOR HOW THE PRE-ROUND FACTORS INTERTWINE.
+   *
+   * "If I hit a bucket pre-round it's very mixed on the results, and especially how I feel about it.
+   * But definitely some differences on whether I stretch before I play… I just really want the
+   * dashboard to have one comprehensive set of data that shows how all these factors intertwine."
+   *
+   * The warmupEvents union above deliberately loses the KIND — it exists so the two older cards stop
+   * disagreeing about whether a round was warmed at all. That merge was right and it flattened the
+   * exact question he is asking, because a bucket and a stretch both became "a warm-up".
+   *
+   * So this splits them again — balls, stretch, both, neither — over the SAME window, and puts his
+   * own post-round word for each cohort beside the number. That is the "how I feel about it" half.
+   */
+  const ballTimes = useMemo(() => practiceHistory
+    .filter((x) => x.focus === 'preround' || x.environment === 'preround')
+    .map((x) => x.startedAt)
+    .filter((t): t is number => typeof t === 'number'), [practiceHistory]);
+  const stretchTimes = useMemo(() => workoutHistory
+    .filter((w) => w.source === 'preround_warmup')
+    .map((w) => w.date)
+    .filter((t): t is number => typeof t === 'number'), [workoutHistory]);
+  const preRound = useMemo(() => composePreRoundFactors({
+    rounds: roundHistory.map((r) => ({
+      startedAt: r.startedAt, scoreVsPar: r.scoreVsPar, postRoundFeelings: r.postRoundFeelings,
+    })),
+    ballTimes, stretchTimes,
+  }), [roundHistory, ballTimes, stretchTimes]);
 
   const practiceImpact = useMemo(
     () => computePracticeImpact({
@@ -1287,16 +1317,27 @@ export default function Dashboard() {
             {/* 2026-08-06 (Tim — "track stretching, warmup... as metrics to judge progress"). Warmed-vs-cold
                 scoring split — a real progress metric, shown only on the Practice view once there are ≥2
                 rounds in both cohorts. */}
-            {activeProgress.key === 'practice' && practiceImpact.warmupOutcome && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
-                <View style={{ width: 9, height: 9, borderRadius: 5, borderWidth: 2, borderColor: '#f9a8d4' }} />
-                <Text style={[styles.practiceLabel, { color: colors.text_secondary, letterSpacing: 0, flex: 1 }]}>
-                  {practiceImpact.warmupOutcome.deltaStrokes > 0.4
-                    ? `You average ${practiceImpact.warmupOutcome.deltaStrokes} strokes better when you warm up first (${practiceImpact.warmupOutcome.warmedCount} warmed vs ${practiceImpact.warmupOutcome.coldCount} cold).`
-                    : practiceImpact.warmupOutcome.deltaStrokes < -0.4
-                      ? `Warmed rounds are averaging ${Math.abs(practiceImpact.warmupOutcome.deltaStrokes)} higher so far (${practiceImpact.warmupOutcome.warmedCount} warmed vs ${practiceImpact.warmupOutcome.coldCount} cold) — small sample.`
-                      : `Warm-up vs cold scoring is even so far (${practiceImpact.warmupOutcome.warmedCount} warmed vs ${practiceImpact.warmupOutcome.coldCount} cold).`}
+            {activeProgress.key === 'practice' && (preRound.enough || preRound.buckets.some((b) => b.n > 0)) && (
+              <View style={{ marginTop: 10 }}>
+                <Text style={[styles.practiceLabel, { color: colors.text_muted, marginBottom: 4 }]}>
+                  {t('dashboard.text.before_the_round')}
                 </Text>
+                <Text style={[styles.practiceLabel, { color: colors.text_primary, letterSpacing: 0, marginBottom: 6 }]}>
+                  {preRound.headline}
+                </Text>
+                {preRound.detail.map((line) => (
+                  <View key={line} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                    <View style={{ width: 9, height: 9, borderRadius: 5, borderWidth: 2, borderColor: '#f9a8d4' }} />
+                    <Text style={[styles.practiceLabel, { color: colors.text_secondary, letterSpacing: 0, flex: 1 }]}>
+                      {line}
+                    </Text>
+                  </View>
+                ))}
+                {preRound.enough && (
+                  <Text style={[styles.practiceLabel, { color: colors.text_muted, letterSpacing: 0, marginTop: 6, fontSize: 11 }]}>
+                    {t('dashboard.text.preround_association_note')}
+                  </Text>
+                )}
               </View>
             )}
           </View>
