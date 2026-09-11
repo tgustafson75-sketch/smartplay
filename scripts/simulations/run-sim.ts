@@ -12346,7 +12346,22 @@ check('LOCK: the cached system prompt holds nothing that changes shot to shot',
     const factsInMessage = /liveFactsPrefix/.test(k) && /\$\{liveFactsPrefix\}/.test(k);
     // The bag was already on the message side; keep it there.
     const bagInMessage = !/\$\{bagBlock\}/.test(sys);
-    return factsOutOfSystem && factsInMessage && bagInMessage;
+    /**
+     * 2026-09-11 — roundFactsBlock and turnStateBlock were moved out on 2026-08-25 (the 08-24 fix
+     * had been verified on a turn with NO ROUND ACTIVE, so the on-course branch rendered as nothing
+     * and the measurement was a false positive). This guard was never widened to cover them.
+     *
+     * It matters more now than it did then: roundFactsBlock is where the play profile, the round
+     * stats, the hole plan and the standing club call all render, so it is the largest per-shot
+     * block in the request and every one of those values moves shot to shot. Naming only
+     * liveFactsBlock would let the next block added there re-create the $50 day in silence.
+     */
+    const roundFactsInMessage =
+      !/\$\{roundFactsBlock\}/.test(sys) && /\$\{roundFactsPrefix\}/.test(k);
+    const turnStateInMessage =
+      !/\$\{turnStateBlock\}/.test(sys) && /\$\{turnStatePrefix\}/.test(k);
+    return factsOutOfSystem && factsInMessage && bagInMessage
+      && roundFactsInMessage && turnStateInMessage;
   })(),
   'per-shot facts ride the message; the cached prompt stays stable for a whole round');
 
