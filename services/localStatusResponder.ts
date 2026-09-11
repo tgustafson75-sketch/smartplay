@@ -48,6 +48,7 @@ import { bagDistances } from './shotStrategy';
 // is pure/offline-safe; cached weather feeds the wind factor. [[smartfinder-unified-brain-read]]
 import { composeShotRead } from './cnsShotRead';
 import { getEffectiveDominantMiss } from './effectiveMiss';
+import { liveShotReadInputs } from './shotReadLive';
 import { getCachedWeatherEvenIfStale } from './weatherService';
 import { playsLikeDistance } from '../utils/playsLike';
 // 2026-06-14 (Tim — course book) — STATIC per-hole knowledge (note/description/
@@ -769,17 +770,25 @@ function composedReadReply(lang: LocalReplyLanguage): LocalReplyResult {
   }
   const playerLoc = { lat: fix.lat, lng: fix.lng };
   const rawYards = Math.round(haversineYards(playerLoc, green.middle));
-  const read = composeShotRead({
-      // 2026-08-12 — the caddie's risk posture reaches the club pick (near-ties only). See cnsShotRead.
-      risk: useRoundStore.getState().riskMode,
+  /**
+   * 2026-09-11 — THE OFFLINE ANSWER WAS MISSING ELEVATION.
+   *
+   * This is the no-signal "what does this play like" reply, and it passed 7 of the 15 inputs
+   * composeShotRead accepts. The one that matters most was ELEVATION: a downhill shot was clubbed as
+   * if it were flat, which is Tim's Greenhill hole 2 report exactly — "230 yards downhill
+   * considerably; if I'd taken the caddie's recommendation I'd have smoked it into the woods past
+   * the hole." It was also missing green depth and distance control.
+   *
+   * liveShotReadInputs fills every one of them from live state, so the answer with no signal is
+   * built from the same facts as the answer with signal. This path still owns its own measured
+   * yardage and bearing to the green it resolved. [[no-half-fixes-enforce-every-surface]]
+   */
+  const read = composeShotRead(liveShotReadInputs({
     rawYards,
     weather: getCachedWeatherEvenIfStale(playerLoc),
     shotBearingDeg: bearingDegrees(playerLoc, green.middle),
-    bag: bagDistances(),
-    // 2026-08-07 (Tim) — manual miss first, else the miss learned from the player's own shots.
     dominantMiss: getEffectiveDominantMiss(),
-    isCompetition: round.isCompetition,
-  });
+  }));
   if (!read || read.playsLikeYards == null) {
     return { text: L[lang].noFix, queryType: 'plays_like' };
   }
@@ -813,14 +822,23 @@ function reachReply(lang: LocalReplyLanguage): LocalReplyResult {
   }
   const playerLoc = { lat: fix.lat, lng: fix.lng };
   const rawYards = Math.round(haversineYards(playerLoc, green.middle));
-  const read = composeShotRead({
-      // 2026-08-12 — the caddie's risk posture reaches the club pick (near-ties only). See cnsShotRead.
-      risk: useRoundStore.getState().riskMode,
+  /**
+   * 2026-09-11 — "CAN I REACH IT" WAS THE WORST-FED READ IN THE APP, AND IT IS THE ONE THAT MATTERS.
+   *
+   * Four of the fifteen inputs. No ELEVATION above all — so a carry over water, downhill or uphill,
+   * was answered as if the shot were flat, and the whole reply is a go/no-go: reachYes / reachTight
+   * / reachNo. Getting elevation wrong here is not a worse sentence, it is the wrong side of a
+   * hazard.
+   *
+   * A second call site in this same file had already been given the shared composer; this one was
+   * missed, and the parity guard in preferred-tee-and-dead-fields caught it. That is precisely the
+   * "one unwired caller is a silent half-fix" case the guard was written for.
+   */
+  const read = composeShotRead(liveShotReadInputs({
     rawYards,
     weather: getCachedWeatherEvenIfStale(playerLoc),
     shotBearingDeg: bearingDegrees(playerLoc, green.middle),
-    bag: bagDistances(),
-  });
+  }));
   const plays = read?.playsLikeYards ?? rawYards;
   let longest = bag[0];
   for (const e of bag) if (e[1] > longest[1]) longest = e;

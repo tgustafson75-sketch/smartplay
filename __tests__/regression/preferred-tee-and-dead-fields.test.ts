@@ -123,10 +123,24 @@ describe('what was inert is now wired, not deleted', () => {
     expect(cns).toContain('// a posture must never hand you a club that doesn\'t fit the shot.');
   });
 
-  it('every shot-read caller passes it — one unwired caller is a silent half-fix', () => {
+  /**
+   * 2026-09-11 — this asserted the literal `risk: useRoundStore.getState().riskMode` at all three
+   * call sites, which was the right guard for a one-fact problem. The problem turned out to be
+   * bigger: those three callers were passing 14, 7 and 6 of the read's 15 inputs, so risk was the
+   * only fact anyone had remembered to wire everywhere.
+   *
+   * They now share ONE input composer, which makes the original intent structural — and covers every
+   * fact rather than this one. What this must still reject: a caller hand-building the input object
+   * and therefore being able to omit something.
+   */
+  it('every shot-read caller goes through the ONE input composer', () => {
     for (const f of ['app/smartvision.tsx', 'app/smartfinder.tsx', 'services/localStatusResponder.ts']) {
-      expect(read(f)).toContain('risk: useRoundStore.getState().riskMode');
+      // Comments stripped first — a call site EXPLAINING the old shape must not satisfy the guard.
+      const src = read(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+      expect(src).toMatch(/composeShotRead\(\s*liveShotReadInputs\(/);
+      expect(src).not.toMatch(/composeShotRead\(\s*\{/);
     }
+    expect(read('services/shotReadLive.ts')).toMatch(/risk: safe\(\(\) => \(round\?\.riskMode/);
   });
 
   it('per-hole stats are DERIVED, with a real producer', () => {

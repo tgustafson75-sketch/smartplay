@@ -115,6 +115,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 // plays-like + a short "why" line. NO fabricated success% (per the
 // illustration-data rule — the mockup's "78%" is illustrative only).
 import { composeShotRead } from '../services/cnsShotRead';
+import { liveShotReadInputs } from '../services/shotReadLive';
 import { bagDistances } from '../services/shotStrategy';
 import { useTranslation } from 'react-i18next';
 
@@ -1753,15 +1754,24 @@ export default function SmartVisionScreen() {
     if (yardages.middle == null) return null;
     const bearing = (teeCoord && greenCoord) ? bearingDegrees(teeCoord, greenCoord) : null;
     try {
-      return composeShotRead({
-      // 2026-08-12 — the caddie's risk posture reaches the club pick (near-ties only). See cnsShotRead.
-      risk: useRoundStore.getState().riskMode,
+      /**
+       * 2026-09-11 — THIS SCREEN WAS CLUBBING WITH NO WIND.
+       *
+       * It passed `weather: null` outright and 6 of the 15 inputs composeShotRead accepts — no miss
+       * bias, no hazard, no green depth, no distance control. And it SPEAKS its read aloud
+       * (registerSmartVisionRead below), so the player heard a club chosen from less than SmartFinder
+       * used for the same shot. Not a bug in this file; it simply grew before those facts existed and
+       * nobody re-fed it.
+       *
+       * liveShotReadInputs fills them once, for every surface. This screen still owns what it knows
+       * better: its own middle-of-green yardage, its own tee→green bearing, and its own measured
+       * elevation. [[two-owners-is-the-root-cause]]
+       */
+      return composeShotRead(liveShotReadInputs({
         rawYards: yardages.middle,
-        weather: null,
         shotBearingDeg: bearing,
         elevationDeltaFeet: svElevation.deltaFeet,
-        bag: bagDistances(),
-      });
+      }));
     } catch { return null; }
   }, [yardages.middle, teeCoord, greenCoord, svElevation.deltaFeet]);
 

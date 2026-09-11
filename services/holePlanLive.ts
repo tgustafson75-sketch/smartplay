@@ -50,17 +50,39 @@ export function composeLiveHolePlan(): LiveHolePlan {
     const par = parForHole(r.courseHoles ?? [], hole);
     if (par == null) return EMPTY;
 
+    // The one owner of this count — the prompt's currentStroke is the same number plus one.
+    const { strokesPlayedOnHole } = require('../store/roundStore') as typeof import('../store/roundStore');
+    const strokesPlayed = strokesPlayedOnHole(r as never, hole);
+
     /**
-     * The number in front of them, through the one resolver that owns it. Never the card: the plan's
-     * whole value is that "leaves you 145" is true, and a scorecard length two shots in is not the
-     * distance they are hitting.
+     * The number in front of them, through the one resolver that owns it.
+     *
+     * 2026-09-11 — AND THE CARD IS ONLY TRUE ON THE TEE.
+     *
+     * Caught by driving the real stores: with GPS not yet ready, buildYardageInsight falls back to
+     * `static_card`, which is the hole's length FROM THE TEE. Handed that after one shot, the planner
+     * told a man with 150 yards left to hit driver, and the chip showed it: "Driver from here —
+     * leaving 150." Every number in the sentence was internally consistent and the starting one was
+     * the scorecard.
+     *
+     * That is the 2026-08-22 Greenhill defect exactly — "a TEE briefing, off the scorecard, to a man
+     * standing in the fairway" — and the source-level test for this file PASSED through it, because
+     * the source did say buildYardageInsight(); it was the VALUE that was the card.
+     *
+     * Once he has hit, the one thing we know for certain is that he is closer than the card. So the
+     * plan says nothing rather than briefing a tee shot. On the tee the card is a fair number and
+     * the plan stands. [[illustration-data-points]] [[two-owners-is-the-root-cause]]
      */
-    const yards = (() => {
+    const insight = (() => {
       try {
         const { buildYardageInsight } = require('./yardageResolver') as typeof import('./yardageResolver');
-        const v = buildYardageInsight()?.yardage;
-        if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v;
-      } catch { /* fall through */ }
+        return buildYardageInsight() ?? null;
+      } catch { return null; }
+    })();
+    if (strokesPlayed > 0 && insight?.source === 'static_card') return EMPTY;
+    const yards = (() => {
+      const v = insight?.yardage;
+      if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v;
       const c = r.currentYardage;
       return typeof c === 'number' && Number.isFinite(c) && c > 0 ? c : null;
     })();
@@ -69,10 +91,6 @@ export function composeLiveHolePlan(): LiveHolePlan {
     const bag = (() => {
       try { return bagDistances() as Record<string, number>; } catch { return {}; }
     })();
-
-    // The one owner of this count — the prompt's currentStroke is the same number plus one.
-    const { strokesPlayedOnHole } = require('../store/roundStore') as typeof import('../store/roundStore');
-    const strokesPlayed = strokesPlayedOnHole(r as never, hole);
 
     const plan = planHole({
       hole,

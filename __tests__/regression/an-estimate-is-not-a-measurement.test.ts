@@ -78,10 +78,24 @@ describe('an estimate is not a measurement', () => {
     // sentences before the provenance line said "NO RELIABLE NUMBER right now".
     expect(kevinSrc).toMatch(/const haveNumber = typeof currentYardage === 'number'/);
     expect(kevinSrc).toMatch(/DISTANCE REMAINING RIGHT NOW: not established/);
-    // the numeric form must be reachable only behind that check
+    /**
+     * 2026-09-11 — asserts the PROPERTY, not the ternary it happened to be written as.
+     *
+     * This pinned the exact expression `haveNumber ? \`DISTANCE...${currentYardage}\``. When the block
+     * grew a second guarded branch (the card-after-a-shot fix) the shape changed, the property did
+     * not, and the guard failed on correct code — a guard enforcing a stale premise.
+     *
+     * What it must still reject: ANY interpolation of currentYardage that is not behind haveNumber.
+     * So every occurrence is checked for itself. [[a-guard-can-assert-the-broken-shape]]
+     */
     const at = kevinSrc.indexOf('const haveNumber = typeof currentYardage');
-    const tail = kevinSrc.slice(at, at + 600);
-    expect(tail).toMatch(/haveNumber\s*\n?\s*\?\s*`DISTANCE REMAINING RIGHT NOW: \$\{currentYardage\}/);
+    const block = kevinSrc.slice(at, at + 6000).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const spots = [...block.matchAll(/\$\{currentYardage\}/g)].map((m) => m.index ?? 0);
+    expect(spots.length).toBeGreaterThan(0);
+    for (const i of spots) {
+      // the guard must appear between the declaration and this interpolation
+      expect(block.slice(0, i)).toMatch(/haveNumber/);
+    }
   });
 
   it('still gives a club rather than going dark on an estimate', () => {

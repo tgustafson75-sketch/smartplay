@@ -19,6 +19,7 @@ import { DeviceMotion } from 'expo-sensors';
 import { useRoundStore } from '../store/roundStore';
 import { useGreenReadStore } from '../store/greenReadStore';
 import { composeShotRead } from '../services/cnsShotRead';
+import { liveShotReadInputs } from '../services/shotReadLive';
 import { getLearnedMissDirection } from '../services/effectiveMiss';
 import { getCourseHoleGuidance } from '../services/caddieMemoryRetrieval';
 import { bagDistances } from '../services/shotStrategy';
@@ -1743,24 +1744,28 @@ function TargetCameraOverlay({
     try { return getCourseHoleGuidance({ courseId: activeCourseForLine ?? null, hole: activeHoleForLine })?.bestLine ?? null; }
     catch { return null; }
   }, [activeHoleForLine, activeCourseForLine]);
-  const shotRead = useMemo(() => composeShotRead({
-      // 2026-08-12 — the caddie's risk posture reaches the club pick (near-ties only). See cnsShotRead.
-      risk: useRoundStore.getState().riskMode,
+  /**
+   * 2026-09-11 — through the shared composer, like every other caller.
+   *
+   * This screen was the BEST-fed of the three (14 of 15) and it still goes through
+   * liveShotReadInputs, for one reason: the next fact added to the read must reach all three
+   * surfaces without anyone remembering three call sites. That is what went wrong here — SmartVision
+   * and the offline responder were left behind each time this one was improved.
+   *
+   * It still owns what it genuinely knows better than live state: the TAPPED target (not the green),
+   * the bearing to that target, the measured slope to it, and the front/back it has on screen.
+   * `pastScoreNote` is no longer hardcoded null — it had no producer at all until today.
+   */
+  const shotRead = useMemo(() => composeShotRead(liveShotReadInputs({
     rawYards: targetYards,
     weather,
     shotBearingDeg: targetBearing ?? shotBearingDeg,
     elevationDeltaFeet,
-    bag: bagDistances(),
-    dominantMiss,
     holeLineNote,
     nearestHazard: hazardSummary?.nearest ?? null,
-    isCompetition,
-    pastScoreNote: null,
-    // 2026-09-11 — this screen has SHOWN front/back since it was written and never told the read.
     greenFrontYards: yards.front ?? null,
     greenBackYards: yards.back ?? null,
-    distanceControl,
-  }), [targetYards, weather, targetBearing, shotBearingDeg, elevationDeltaFeet, dominantMiss, holeLineNote, hazardSummary, isCompetition, yards.front, yards.back, distanceControl]);
+  })), [targetYards, weather, targetBearing, shotBearingDeg, elevationDeltaFeet, holeLineNote, hazardSummary, yards.front, yards.back, dominantMiss, isCompetition, distanceControl]);
 
   return (
     <View style={StyleSheet.absoluteFill}>

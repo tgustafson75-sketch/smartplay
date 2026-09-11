@@ -255,8 +255,10 @@ describe('it is wired to the caddie AND to the screen, from ONE composer', () =>
   });
 
   it('plans from the working number, never from the scorecard length', () => {
-    expect(live).toMatch(/buildYardageInsight\(\)\?\.yardage/);
+    expect(live).toMatch(/buildYardageInsight\(\) \?\? null/);
     expect(live).toMatch(/holeYards: yards,/);
+    // And once he has hit, a CARD number is refused outright — see todays-facts-actually-resolve.
+    expect(live).toMatch(/if \(strokesPlayed > 0 && insight\?\.source === 'static_card'\) return EMPTY;/);
   });
 
   it('counts strokes through the one owner of that count', () => {

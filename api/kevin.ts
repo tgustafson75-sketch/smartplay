@@ -1352,8 +1352,36 @@ Do NOT re-sell your club, do NOT list a second caveat, and do NOT say "are you s
    * [[illustration-data-points]]
    */
   const haveNumber = typeof currentYardage === 'number' && Number.isFinite(currentYardage) && currentYardage > 0;
+  /**
+   * 2026-09-11 — THE BASE SENTENCE ASSERTED THE OPPOSITE OF THE TRUTH, AND IT WAS THE CARD.
+   *
+   * Found by driving the real stores rather than reading the source. With no green geometry — which
+   * is every hole of every golfcourseapi course until geometry builds — the resolver falls through
+   * to `static_card`, whose own `reason` says "from the tee". It returns the FULL card length no
+   * matter how many shots have been played.
+   *
+   * So a man 150 yards out, lying one, had this block tell the caddie: "DISTANCE REMAINING RIGHT
+   * NOW: 370 yards. This is the shot in front of them. It is NOT the hole's card length" — three
+   * claims, all false, about a number that was exactly the card length. The static_card hedge below
+   * then said "say it plays about this", which would have the caddie say about 370 to a man with a
+   * 7-iron in his hand. Wrong by the entire tee shot, not merely imprecise.
+   *
+   * This is the 2026-08-22 Greenhill defect — "a TEE briefing, off the scorecard, to a man standing
+   * in the fairway" — still live through the one path nobody re-checked after the currentStroke fix.
+   *
+   * ON the tee the card IS the shot in front of them and the number stands, hedged. Once they have
+   * hit it is not a distance remaining at all, so it is withheld: an absent number sends the caddie
+   * to ask for a read, a wrong one sends him to club off it. [[illustration-data-points]]
+   */
+  const onTheTee = !(typeof currentStroke === 'number' && currentStroke > 1);
+  const cardOnly = yi?.source === 'static_card';
+  if (haveNumber && cardOnly && !onTheTee) {
+    return `DISTANCE REMAINING RIGHT NOW: not established. The only figure available is the hole's CARD LENGTH FROM THE TEE (${currentYardage}y) and they have ALREADY HIT — so it is not the shot in front of them and must never be spoken as one. Do not club off it. Say you are getting the read back, or ask what they have left if it is natural to.`;
+  }
   const base = haveNumber
-    ? `DISTANCE REMAINING RIGHT NOW: ${currentYardage} yards. This is the shot in front of them. It is NOT the hole's card length, and the card length is NOT the shot — never quote a scorecard yardage as the distance they are hitting.`
+    ? cardOnly
+      ? `DISTANCE REMAINING RIGHT NOW: ${currentYardage} yards — the hole's card length from the tee, which IS the shot in front of them because they are still on the tee.`
+      : `DISTANCE REMAINING RIGHT NOW: ${currentYardage} yards. This is the shot in front of them. It is NOT the hole's card length, and the card length is NOT the shot — never quote a scorecard yardage as the distance they are hitting.`
     : `DISTANCE REMAINING RIGHT NOW: not established. Do not invent a number and do not quote the hole's card length as the distance they are hitting.`;
   if (!yi || typeof yi.source !== 'string') return base;
   /**
