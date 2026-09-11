@@ -309,6 +309,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       clubCall = null,
       holePlan = null,
       shotRead = null,
+      roundConditions = null,
       transportMode = null,
       currentLocationType = null,
       riskMode = null,
@@ -1256,6 +1257,26 @@ ${(() => {
     return `${lines.join('\n')}\n`;
   }
   return '';
+})()}${(() => {
+  const rc = roundConditions as { pattern?: string | null; today?: string | null } | null;
+  if (!rc || (!rc.pattern && !rc.today)) return '';
+  /**
+   * 2026-09-11 (Tim) — WHAT HE TOLD US AFTER HIS OTHER ROUNDS.
+   *
+   * The app asks four questions at the end of every round — energy, focus, vibe, weather — and until
+   * now the answers were read once, by that round's own recap, and never again. A player answered
+   * them for months and the app learned nothing.
+   *
+   * These are ASSOCIATIONS and must be spoken as such. A golfer who felt locked in was often also
+   * the golfer who slept well and drew an easy course; this cannot separate those. Say "on the
+   * rounds where…", never "your focus costs you shots".
+   */
+  const lines = [
+    `WHAT HE HAS TOLD YOU AFTER OTHER ROUNDS (association, not cause — say "on the rounds where…", never diagnose him):`,
+    rc.pattern ? `Pattern: ${rc.pattern}.` : null,
+    rc.today ? `AND IT APPLIES TODAY: ${rc.today}. Worth one mention if it fits naturally — set expectations, do not make him self-conscious about it, and never repeat it.` : null,
+  ].filter(Boolean);
+  return `${lines.join('\n')}\n`;
 })()}${(() => {
   const sr = shotRead as {
     club?: string | null; rawYards?: number | null; playsLikeYards?: number | null;

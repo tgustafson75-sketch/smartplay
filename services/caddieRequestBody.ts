@@ -579,6 +579,24 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * vision is needed. Could offer user to open TightLie for a full analysis."
      * [[arithmetic-belongs-in-code-not-the-model]]
      */
+    /**
+     * 2026-09-11 (Tim) — THE POST-ROUND ANSWERS, FINALLY WORTH SOMETHING.
+     *
+     * "It asks feel, weather, mindset etc but I have a suspicion that does not feed information for
+     * future rounds and situations and data." It did not: the four questions asked after every round
+     * were read once, by the recap of that same round, and never again.
+     *
+     * `conditions` is what has repeated enough to mean something across rounds. `todayMatches` is the
+     * subset that describes the round being played right now, which is the "and SITUATIONS" half —
+     * a finding about wind is worth far more standing on a windy tee than in a season summary.
+     */
+    roundConditions: safe(() => {
+      const { decideShot } = require('./caddieDecision') as typeof import('./caddieDecision');
+      const d = decideShot({ rawYards: workingYards });
+      if (!d.conditions && !d.todayMatches) return null;
+      return { pattern: d.conditions, today: d.todayMatches };
+    }, null),
+
     shotRead: safe(() => {
       const { decideShot } = require('./caddieDecision') as typeof import('./caddieDecision');
       const r0 = decideShot({ rawYards: workingYards }).shot;

@@ -54,6 +54,19 @@ export interface CaddieDecision {
   override: OverrideRead | null;
   /** In-play reminders still worth saying, already decayed by what has been said. */
   cues: PlayFinding[];
+  /**
+   * 2026-09-11 (Tim) — WHAT THE POST-ROUND ANSWERS HAVE ACTUALLY BEEN WORTH.
+   *
+   * "It asks feel, weather, mindset etc but I have a suspicion that does not feed information for
+   * future rounds and situations and data."
+   *
+   * It did not. The four questions asked after every round were read once, by the recap of that same
+   * round, and never again. These are the ones that have repeated enough to mean something, and
+   * `todayMatches` is the subset that describes the round being played RIGHT NOW — a finding about
+   * wind is worth far more on a windy tee than in a season summary.
+   */
+  conditions: string | null;
+  todayMatches: string | null;
 }
 
 
@@ -104,6 +117,44 @@ export function decideShot(known: CallerKnown = { rawYards: null }): CaddieDecis
     profile,
     override: safe(() => composeOverride(known), null),
     cues: safe(() => composeCues(profile), []),
+    conditions: safe(() => composeConditions().all, null),
+    todayMatches: safe(() => composeConditions().today, null),
+  };
+}
+
+/**
+ * What the post-round answers have been worth across rounds, and which of them describe TODAY.
+ *
+ * Today's weather comes from the app's own measurement rather than waiting to be told: the player
+ * answers the weather question at the END of a round, which is no use during one.
+ */
+function composeConditions(): { all: string | null; today: string | null } {
+  const { useRoundStore } = require('../store/roundStore') as typeof import('../store/roundStore');
+  const rc = require('./roundConditions') as typeof import('./roundConditions');
+  const r = useRoundStore.getState();
+  const findings = rc.conditionFindings((r.roundHistory ?? []) as never);
+  if (findings.length === 0) return { all: null, today: null };
+
+  const weatherNow = safe(() => {
+    const { getCachedWeatherEvenIfStale } = require('./weatherService') as typeof import('./weatherService');
+    const { getLastFix } = require('./gpsManager') as typeof import('./gpsManager');
+    const fix = getLastFix();
+    if (!fix || fix.lat == null || fix.lng == null) return null;
+    const w = getCachedWeatherEvenIfStale({ lat: fix.lat, lng: fix.lng });
+    if (!w) return null;
+    // Mapped onto the SAME words the post-round screen offers, or the buckets can never match.
+    const mph = typeof w.wind_speed_mph === 'number' ? w.wind_speed_mph : 0;
+    const f = typeof w.temp_f === 'number' ? w.temp_f : null;
+    if (mph >= 12) return 'Windy';
+    if (f != null && f >= 85) return 'Hot';
+    if (f != null && f <= 50) return 'Cold';
+    return null;
+  }, null);
+
+  const today = rc.findingsForToday(findings, { weather: weatherNow });
+  return {
+    all: rc.describeConditions(findings, 2),
+    today: rc.describeConditions(today, 1),
   };
 }
 
