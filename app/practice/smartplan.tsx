@@ -43,12 +43,22 @@ export default function SmartPlanScreen() {
 
   // 2026-07-04 (Tim) — the plan is now PERSISTED (this week's plan), drives caddie
   // guidance, and carries a goals/challenges narrative + check-offs + reminders.
-  const { goal, days, minutes, location, narrative, completed, reminders } = usePracticePlanStore(
+  const { goal, days, minutes, location, narrative, completed: _rawCompleted, weekStartMs, reminders } = usePracticePlanStore(
     useShallow((s) => ({
       goal: s.goal, days: s.daysPerWeek, minutes: s.minutesPerSession, location: s.location,
-      narrative: s.narrative, completed: s.completed, reminders: s.reminders,
+      narrative: s.narrative, completed: s.completed, weekStartMs: s.weekStartMs, reminders: s.reminders,
     })),
   );
+  /**
+   * 2026-09-10 — read THIS week's check-offs, not whatever is still in the store.
+   *
+   * The week only rolled as a side effect of toggleComplete, so on the Monday of a new week this
+   * screen showed last week's ticks — and the first tap on any day silently cleared all the others,
+   * because that tap is what finally rolled the week. `weekStartMs` is subscribed above so this
+   * re-derives when the store rolls; the raw map is deliberately not read anywhere below.
+   */
+  const completed = usePracticePlanStore.getState().effectiveCompleted();
+  void _rawCompleted; void weekStartMs;
   const setConfig = usePracticePlanStore((s) => s.setConfig);
   const setNarrative = usePracticePlanStore((s) => s.setNarrative);
   const toggleComplete = usePracticePlanStore((s) => s.toggleComplete);

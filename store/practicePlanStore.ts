@@ -46,6 +46,8 @@ interface PracticePlanState {
   setNarrative: (text: string) => void;
   toggleComplete: (focusKey: string) => void;
   resetWeek: () => void;
+  /** This week's check-offs — empty once the week has lapsed. Always read through this. */
+  effectiveCompleted: () => Record<string, number>;
   addReminder: (text: string, whenText?: string | null, whenMs?: number | null) => PlanReminder;
   toggleReminderDone: (id: string) => void;
   removeReminder: (id: string) => void;
@@ -79,6 +81,25 @@ export const usePracticePlanStore = create<PracticePlanState>()(
           return { completed, weekStartMs, updatedAt: now };
         }),
       resetWeek: () => set({ completed: {}, weekStartMs: Date.now(), updatedAt: Date.now() }),
+
+      /**
+       * 2026-09-10 — THE WEEK ROLLED ONLY WHEN YOU TOUCHED SOMETHING.
+       *
+       * `toggleComplete` rolls a lapsed week, and `resetWeek` exists to do it explicitly — and
+       * `resetWeek` was called by nothing, anywhere (store-wide orphan sweep). The render read
+       * `completed[dayKey]` raw and never looked at `weekStartMs`. So on the Monday of a new week
+       * the plan still showed last week's ticks, and the instant the player tapped ANY day, every
+       * other tick silently vanished — because that tap is what finally rolled the week.
+       *
+       * Reading through here makes the READ and the WRITE agree about which week it is, which is
+       * the actual invariant. The stale map is still in the store until the next write; nothing
+       * may read it directly. [[two-owners-is-the-root-cause]]
+       */
+      effectiveCompleted: () => {
+        const s = get();
+        if (!s.weekStartMs) return s.completed;
+        return Date.now() - s.weekStartMs < WEEK_MS ? s.completed : {};
+      },
 
       addReminder: (text, whenText = null, whenMs = null) => {
         const r: PlanReminder = {

@@ -2053,6 +2053,30 @@ export const useRoundStore = create<RoundState>()(
           currentTeeBox: null,
           active_ghost: null,
         }));
+        /**
+         * 2026-09-10 — THE PLAYING PARTNERS GO HOME WHEN THE ROUND DOES.
+         *
+         * `guestProfileStore.clearGuests` and `removeGuest` were called by NOTHING, anywhere
+         * (store-wide orphan sweep). Guests are minted BY VOICE ONLY — quickRoundHandler and
+         * pendingDisambiguation — and rendered as the scorecard's "PLAYING WITH" chips, which have
+         * no onPress and no delete. So a misheard name ("playing with Mike and John" mishearing a
+         * course name, say) was stuck for the rest of the round, and the ONLY exit was the store's
+         * 24-hour TTL: play twice in a day and yesterday's partners were still on today's card.
+         *
+         * The store's own doc names the caller that was never written — "used by an 'end round' /
+         * 'clear guests' voice action later". A guest is a partner for THIS round; the round ending
+         * is exactly when they stop being one. Lazy require + try/catch, because a roster tidy-up
+         * must never be able to fail the saving of a round.
+         *
+         * Still open: removing ONE wrong guest MID-round. That needs a voice intent or a tap
+         * target on those chips — the latter is a layout change under the 2026-07-29 freeze.
+         * [[orphans-are-live-bugs-not-dead-code]]
+         */
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          (require('./guestProfileStore') as typeof import('./guestProfileStore'))
+            .useGuestProfileStore.getState().clearGuests();
+        } catch { /* a guest roster must never block ending a round */ }
         // 2026-06-27 (smoke-test fix) — gate on score>0 to match the saved
         // RoundRecord (scoredEntries) and the getScoreVsPar/getHolesPlayed
         // getters. The ungated count let a never-finalized 0-score hole slip
