@@ -6928,7 +6928,22 @@ check('Course book: hole imagery rejects 0,0 placeholder coords (no garbage thum
       // the cache-key path mirrors the same guard (no permanent cache miss)
       /const green = input\.green && isValidGolfCoord[\s\S]{0,200}const fit = green \? computeFitView/.test(m) &&
       // coordGuard rejects 0,0 + near-zero
-      /if \(lat === 0 && lng === 0\) return false;/.test(cg) &&
+      /**
+       * 2026-09-10 — this pinned `lat === 0 && lng === 0`. coordGuard now rejects EITHER axis being
+       * exactly zero, which is strictly stronger (it also catches the half-null {37.4, 0} shape
+       * golfcourseapi returns for a malformed record), and keeps the null-island NEIGHBOURHOOD as a
+       * separate AND band. The old `||` band — either axis merely NEAR zero — was throwing away real
+       * coordinates on the prime meridian and the equator.
+       *
+       * Asserting both properties rather than the one expression: the sentinel is rejected, and the
+       * neighbourhood is an AND so a course in London or Kenya is not collateral.
+       */
+      /if \(lat === 0 \|\| lng === 0\) return false;/.test(cg) &&
+      /Math\.abs\(lat\) < 0\.001 && Math\.abs\(lng\) < 0\.001/.test(cg) &&
+      // NOTE: no negative assertion on the old `||` form. These sim guards regex RAW source, and
+      // coordGuard's comment quotes that expression to explain the fix — a `not` here matches the
+      // prose and fails on correct code. The positive AND above is sufficient: if anyone restored
+      // the OR, it would stop matching. [[strip-comments-before-a-guard-matches]]
       // grid degrades to a clean placeholder when no valid photos
       /if \(photos\.length === 0\)/.test(grid)
     );

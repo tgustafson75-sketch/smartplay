@@ -76,18 +76,40 @@ const POLL_CONFIG: Record<GpsMode, { intervalMs: number; accuracy: Location.Accu
 // fixes reach consumers; downstream confidence gates flag low quality.
 const OUTLIER_ACCURACY_M = 90;
 // 2026-06-05 — Absolute-distance outlier gate (cell-tower glitch).
-// The time-windowed jump check below only fires when the bad fix
-// arrives within OUTLIER_JUMP_WINDOW_MS of the last good fix. A
-// cell-tower handoff that delivers a 200m-off fix several seconds
-// AFTER a clean fix slips through both gates. 300m absolute is the
+// 2026-09-10 — this note used to explain that the jump check "only fires when the bad fix arrives
+// within OUTLIER_JUMP_WINDOW_MS of the last good fix", which was true and was the defect: no poll
+// mode outside `active` delivers fixes that close together, so the jump check never ran during a
+// round and this gate was carrying the whole load alone. The jump check is now an implied-SPEED
+// rule that holds at any cadence (see below), and this absolute gate remains the backstop for a
+// glitch that is slow AND far. 300m absolute is the
 // realistic "I did not teleport mid-swing" threshold — a golfer
 // can't move that far between watch ticks even at full cart speed.
 // We reject these regardless of time gap, then let the smoothing
 // buffer recover on the next real fix.
 const OUTLIER_ABSOLUTE_JUMP_M = 300;
-// position jump > this between consecutive accepted fixes within 5s = impossible
+/**
+ * 2026-09-10 — THIS GATE COULD NOT RUN DURING A ROUND.
+ *
+ * It read `(raw.timestamp - lastFix.timestamp) < OUTLIER_JUMP_WINDOW_MS` with the window at 5s,
+ * and POLL_CONFIG delivers walking fixes 10s apart and stationary fixes 20s apart. The condition is
+ * therefore false on every tick outside `active` mode, so through ordinary play the only surviving
+ * position filter was the 300m absolute gate — and a 60-290m cell-tower/Wi-Fi handoff, the common
+ * urban-course glitch, landed straight in lastFix, the smoothing buffer and every yardage. The
+ * player sees the number to the green jump by a hundred yards and settle back a tick later.
+ *
+ * Widening the window would be wrong: 50m over 10s is a cart travelling normally, and rejecting it
+ * would be worse than the glitch. The rule's real content was never a distance — it is a SPEED.
+ * 50m in 5s is 10 m/s (~22 mph), faster than anything on a golf course, and stated that way it
+ * holds at ANY cadence: 1Hz, 10s or 20s. A cart at 5 m/s is accepted at every interval; a 200m
+ * teleport is rejected at every interval.
+ *
+ * The constants are kept so the derivation stays legible and the 300m absolute gate below is
+ * unchanged as the backstop. [[a-budget-must-fit-what-runs-inside-it]]
+ */
 const OUTLIER_JUMP_M = 50;
 const OUTLIER_JUMP_WINDOW_MS = 5_000;
+/** 10 m/s — the speed the original 50m-in-5s rule actually encoded. */
+const OUTLIER_MAX_IMPLIED_MPS = OUTLIER_JUMP_M / (OUTLIER_JUMP_WINDOW_MS / 1000);
 
 // Phase 107 / B3 — rolling smoothing window.
 // 2026-06-11 — widened 3 → 5 and switched from a flat mean to an
@@ -420,13 +442,20 @@ function processFix(raw: GpsFix): boolean {
   // the auto-reconcile. Bypass the outlier gates during
   // USER_MARK_OUTLIER_BYPASS_MS so the legitimate live fix lands.
   const userMarkBypassActive = userMarkedAt > 0 && (Date.now() - userMarkedAt) < USER_MARK_OUTLIER_BYPASS_MS;
-  // (2) Discard if position jumps > 50m within 5s of the last accepted fix.
-  if (!userMarkBypassActive && lastFix && (raw.timestamp - lastFix.timestamp) < OUTLIER_JUMP_WINDOW_MS) {
-    const jump = haversineMeters(lastFix, raw);
-    if (jump > OUTLIER_JUMP_M) {
-      outliersDiscarded++;
-      console.log(`[gps:outlier-rejected] jump_m=${jump.toFixed(1)} dt_ms=${raw.timestamp - lastFix.timestamp}`);
-      return false;
+  // (2) Discard a jump that implies an impossible SPEED. See OUTLIER_MAX_IMPLIED_MPS — this was a
+  //     fixed 5s window, which no poll mode outside `active` can satisfy.
+  if (!userMarkBypassActive && lastFix) {
+    const dtMs = raw.timestamp - lastFix.timestamp;
+    // A non-positive gap is a duplicate or out-of-order delivery; dividing by it is meaningless, and
+    // the absolute gate below still covers a genuine teleport.
+    if (dtMs > 0) {
+      const jump = haversineMeters(lastFix, raw);
+      const impliedMps = jump / (dtMs / 1000);
+      if (impliedMps > OUTLIER_MAX_IMPLIED_MPS) {
+        outliersDiscarded++;
+        console.log(`[gps:outlier-rejected] jump_m=${jump.toFixed(1)} dt_ms=${dtMs} implied=${impliedMps.toFixed(1)}m/s`);
+        return false;
+      }
     }
   }
   // (3) 2026-06-05 — Absolute-distance gate regardless of time gap.
@@ -1098,13 +1127,27 @@ export function subscribe(cb: Subscriber, opts?: { persistent?: boolean }): () =
 }
 
 /** Shot intent event — bump to active for 60s. */
-export function bumpToActive(reason: string): void {
+/**
+ * 2026-09-10 — `resetSmoothing` exists because this function conflated two jobs.
+ *
+ * "Switch to active polling" and "throw away the smoothing history" are different requests. A MARK
+ * or an explicit refresh wants both — you asked for the position NOW, un-averaged. But
+ * smartFinderService.peekFix also calls this, and per its own docstring it is POLLED every 3-4s by
+ * three surfaces (the SmartFinder screen, the SmartFinder card, the hole preview). Wiping the
+ * buffer on that cadence meant the 5-sample inverse-accuracy-weighted smoother added on 2026-06-11
+ * never filled — it sat at three or four samples and was frequently down to one.
+ *
+ * So the number jittered precisely while the player was looking at it, which is the one moment the
+ * smoothing exists for. Every caller keeps today's behaviour by default; only the poll opts out.
+ * [[two-owners-is-the-root-cause]]
+ */
+export function bumpToActive(reason: string, opts?: { resetSmoothing?: boolean }): void {
   lastActiveBumpAt = Date.now();
   lastBumpReason = reason;
   lastBumpAt = lastActiveBumpAt;
   // Phase 107 / B3 — Mark wants the raw current position, not a smoothed
   // history. Reset the smoothing buffer so the next fix is unaveraged.
-  smoothingBuffer = [];
+  if (opts?.resetSmoothing !== false) smoothingBuffer = [];
   setMode('active', reason);
 }
 

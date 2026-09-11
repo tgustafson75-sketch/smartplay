@@ -31,6 +31,7 @@ import { getGreenOverride } from './courseGreenOverrides';
 import { getTeeOverride } from './courseTeeOverrides';
 import { getCourseTruthSync } from './courseTruth';
 import { personalHoleKey } from './personalHoleKey';
+import { isValidGolfCoord } from '../utils/coordGuard';
 // 2026-09-06 — the golfbertApi import is gone (with the module itself); resolvers are provider-uniform.
 
 /**
@@ -293,7 +294,14 @@ export async function refreshFix(): Promise<LastFix | null> {
  * Still bumps to active so the watch stays responsive while a shot surface is open.
  */
 export async function peekFix(): Promise<LastFix | null> {
-  bumpToActive('smartfinder_peek');
+  /**
+   * 2026-09-10 — keep the watch responsive, but do NOT discard the smoothing history.
+   *
+   * This is polled every 3-4s by three surfaces (see the docstring above), and bumpToActive used to
+   * clear the 5-sample smoothing buffer on every call — so while a yardage was on screen the
+   * smoother never filled and the number the player was reading jittered on raw GPS.
+   */
+  bumpToActive('smartfinder_peek', { resetSmoothing: false });
   try {
     const fix = await getOneShotFix({ maxAgeMs: 3000 });
     if (!fix) return getLastFixInternal();
@@ -345,13 +353,17 @@ export function classifyAccuracy(accuracy_m: number | null, fixTimestamp?: numbe
 //   - either axis out of WGS84 range (|lat|>90, |lng|>180) → reject
 //     (catches projection regressions where meters leaked into a
 //     degree slot — the 246yd-artifact shape)
+/**
+ * 2026-09-10 — DELEGATES to utils/coordGuard instead of restating its rules.
+ *
+ * This was a hand-copied duplicate of isValidGolfCoord, including the near-zero band that rejected
+ * real coordinates on the prime meridian. Two copies of "is this a real course coordinate" is how
+ * one of them gets fixed and the other does not — and coordGuard's own header says it exists
+ * precisely because this pattern was "inlined ad-hoc (smartFinderService.safeLoc, ...)".
+ * [[two-owners-is-the-root-cause]]
+ */
 function safeLoc(lat: number | null | undefined, lng: number | null | undefined): ShotLocation | null {
-  if (lat == null || lng == null) return null;
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  if (lat === 0 && lng === 0) return null;
-  if (Math.abs(lat) < 0.001 || Math.abs(lng) < 0.001) return null;
-  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
-  return { lat, lng };
+  return isValidGolfCoord(lat, lng) ? { lat: lat as number, lng: lng as number } : null;
 }
 
 /**
