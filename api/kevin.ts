@@ -307,6 +307,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       roundStats = null,
       playProfile = null,
       clubCall = null,
+      holePlan = null,
       transportMode = null,
       currentLocationType = null,
       riskMode = null,
@@ -1254,6 +1255,35 @@ ${(() => {
     return `${lines.join('\n')}\n`;
   }
   return '';
+})()}${(() => {
+  const hp = holePlan as {
+    par?: number; holeYards?: number; playingFor?: string; targetScore?: number;
+    steps?: { shot: number; club: string; carryYards: number; leavesYards: number; why: string }[];
+    say?: string;
+  } | null;
+  if (!hp || !hp.steps?.length) return '';
+  /**
+   * 2026-09-11 (Tim) — THE HOLE, PLANNED BACKWARDS, AND ALREADY DONE.
+   *
+   * "We're gonna start with the three wood here. It's gonna leave us this."
+   *
+   * Every number below was computed in services/holePlan before this request was built, which is the
+   * point: the model is NOT being asked to work out what a 3 wood leaves. It is being handed the
+   * plan and asked to say it. The arithmetic that produces "145, which is your 8 iron" has to be
+   * right every single time or the sentence is worse than saying nothing.
+   *
+   * It is a PLAN, not an order. If he wants a different club the override block below governs —
+   * agree with him. [[arithmetic-belongs-in-code-not-the-model]]
+   */
+  const shape = hp.steps.map(s =>
+    s.leavesYards > 0 ? `shot ${s.shot}: ${s.club} (${s.carryYards}y) → ${s.leavesYards} left — ${s.why}`
+                      : `shot ${s.shot}: ${s.club} onto the green — ${s.why}`,
+  ).join('\n');
+  return `THE PLAN FOR THIS HOLE (computed — these numbers are correct, do NOT recompute them and do NOT contradict them):
+Playing for ${hp.playingFor === 'par' ? 'par' : `a ${hp.targetScore}`}, ${hp.holeYards} to the green.
+${shape}
+Say it like this if he asks what the play is: "${hp.say}"
+This is a PLAN, not an instruction. Smart bogey golf: the plan is built so a good miss still makes the number. If he wants a different club, agree with him.\n`;
 })()}${(() => {
   const cc = clubCall as {
     advised?: string; advisedShape?: string | null; advisedAgoSec?: number | null; playerClub?: string | null;

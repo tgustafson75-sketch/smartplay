@@ -148,6 +148,18 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
   }, null);
 
   /**
+   * The stroke he is ABOUT to play (shots + penalties + 1) — hoisted 2026-09-11 so the hole plan
+   * counts the same strokes the prompt announces. Two answers to "which shot is he on" is how the
+   * caddie ends up briefing a tee shot to a man in the fairway while the plan promises him a par he
+   * can no longer make. [[two-owners-is-the-root-cause]]
+   */
+  const currentStroke: number = safe(() => {
+    const shots = (r.shots ?? []).filter((sh: { hole: number }) => sh.hole === currentHole);
+    if (!shots.length) return 1;
+    return shots.length + 1 + shots.reduce((a: number, sh: { penalty_strokes?: number }) => a + (sh.penalty_strokes ?? 0), 0);
+  }, 1);
+
+  /**
    * The learned-memory slice merged with the caller's live block. This is also where the measured
    * "TROUBLE ON THIS SHOT" line enters (see caddieMemoryRetrieval.liveTroubleLine), so every path
    * gets the hole picture — not just whichever one happened to be wired.
@@ -319,11 +331,7 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      *
      * Same definition the on-screen strip uses: the stroke he is ABOUT to play (shots + penalties + 1).
      */
-    currentStroke: safe(() => {
-      const shots = (r.shots ?? []).filter((sh: { hole: number }) => sh.hole === currentHole);
-      if (!shots.length) return 1;
-      return shots.length + 1 + shots.reduce((a: number, sh: { penalty_strokes?: number }) => a + (sh.penalty_strokes ?? 0), 0);
-    }, 1),
+    currentStroke,
     /**
      * 2026-08-22 — walking or riding. Set on the Play tab, persisted on the round since 2026-06-13,
      * and read by NOTHING on the caddie side: zero matches in either old payload. The store's own
@@ -580,6 +588,65 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
             })
           : null,
       };
+    }, null),
+
+    /**
+     * 2026-09-11 (Tim) — THE HOLE, PLANNED BACKWARDS. "We're gonna start with the three wood here.
+     * It's gonna leave us this… avoid hazards and play smart bogey."
+     *
+     * Nothing in the app has ever planned a hole. cnsShotRead answers THIS shot and answers it well;
+     * the question of what the next one should be left to is one nobody was asking, which is how a
+     * player ends up 47 yards out holding a wedge they have never practised.
+     *
+     * It is computed rather than prompted for the reason club match, wind and plays-like are all
+     * computed: three subtractions asserted by a language model come out right about two times in
+     * three, and the sentence "3 wood, because it leaves 145, and 145 is your 8 iron" is worth
+     * nothing at all if the 145 is wrong. [[arithmetic-belongs-in-code-not-the-model]]
+     */
+    holePlan: safe(() => {
+      if (!r.isRoundActive || currentHole == null) return null;
+      const { planHole } = require('./holePlan') as typeof import('./holePlan');
+      const { bagDistances } = require('./shotStrategy') as typeof import('./shotStrategy');
+      const { parForHole } = require('./holeParLookup') as typeof import('./holeParLookup');
+      const par = parForHole(r.courseHoles ?? [], currentHole);
+      if (par == null) return null;
+      const bag = safe(() => bagDistances() as Record<string, number>, {});
+      const strokesPlayed = Math.max(0, currentStroke - 1);
+      /**
+       * The number in front of them, not the card. On the tee those are the same; two shots in they
+       * are not, and quoting the card as the distance they are hitting is the exact defect the
+       * yardage provenance block was written to stop.
+       */
+      const yards = workingYards;
+      if (typeof yards !== 'number' || !Number.isFinite(yards) || yards <= 0) return null;
+      return planHole({
+        hole: currentHole,
+        par,
+        holeYards: yards,
+        bag,
+        strokesPlayed,
+        distanceControl: (p.distanceControl ?? null) as never,
+        /**
+         * Trouble measured from where they stand. Absent when the hole has no mapped geometry — an
+         * unknown hazard must stay unknown rather than being planned around as if it were not there,
+         * so the plan simply says less. [[illustration-data-points]]
+         */
+        hazards: safe(() => {
+          if (!activeCourseId) return [];
+          const cg = require('./courseGeometryService') as typeof import('./courseGeometryService');
+          const hz = require('./hazardIntelligence') as typeof import('./hazardIntelligence');
+          const wr = require('./windRelative') as typeof import('./windRelative');
+          const { getLastFix } = require('./gpsManager') as typeof import('./gpsManager');
+          const fix = getLastFix();
+          if (!fix || fix.lat == null || fix.lng == null) return [];
+          const geom = cg.getHoleGeometry(activeCourseId, currentHole);
+          const intel = hz.computeHazardIntelligence(
+            { lat: fix.lat, lng: fix.lng }, geom, yards, wr.shotBearingDeg(currentHole),
+          );
+          if (!intel || !(intel.carryToClear > intel.front)) return [];
+          return [{ label: intel.label, startsAt: intel.front, carryToClear: intel.carryToClear }];
+        }, []),
+      });
     }, null),
 
     roundStats: safe(() => {
