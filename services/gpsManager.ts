@@ -707,6 +707,20 @@ function setMode(next: GpsMode, reason: string) {
 }
 
 let lastWatchRestartAt = 0;
+/**
+ * 2026-09-10 — when the current watch was armed. See the never-ticked recovery in evaluateMode:
+ * both existing self-heal paths require `lastTickAt > 0`, which is precisely false for a watch that
+ * started and never delivered a fix, so that state had no recovery at all.
+ */
+let watchStartedAt = 0;
+/**
+ * How long to let a brand-new watch try before concluding it will never tick.
+ *
+ * This file puts cold GPS re-acquisition at 30-60s, and the 2026-07-08 fix exists because
+ * restarting inside that window STARVES the chip's lock. 90s clears it with margin, and the 60s
+ * restart cooldown below then spaces any further attempts. [[overstrict-gate-lens]]
+ */
+const NEVER_TICKED_RECOVERY_MS = 90_000;
 async function restartWatch() {
   if (!subscription) return;
   lastWatchRestartAt = Date.now();
@@ -795,6 +809,11 @@ async function startWatchInternal() {
           },
           onLocationUpdate,
         );
+        /**
+         * 2026-09-10 — when this watch was armed, so a watch that NEVER ticks can be recovered.
+         * `lastWatchRestartAt` only marks restarts; the FIRST start had no timestamp at all.
+         */
+        watchStartedAt = Date.now();
         console.log(`[path5:gps] watch_started accuracy=${accuracy} wanted=${cfg.accuracy} interval_ms=${cfg.intervalMs}`);
         if (accuracy !== cfg.accuracy) {
           // Made it on a fallback rung — tell the breadcrumbs so we
@@ -910,6 +929,25 @@ function evaluateMode() {
   // gets a full re-acquisition window instead of being torn down every tick.
   if (subscription && lastTickAt > 0 && now - lastTickAt > FIX_STALENESS_MS && now - lastWatchRestartAt > 60_000) {
     console.log(`[gps] watch stalled (${now - lastTickAt}ms since last fix) — restarting`);
+    void restartWatch();
+  }
+  /**
+   * 2026-09-10 — A WATCH THAT NEVER TICKED HAD NO RECOVERY.
+   *
+   * The stall recovery above and the foreground one both require `lastTickAt > 0`, and
+   * startGpsManager sets it to 0 before arming the watch. So a subscription that starts and never
+   * delivers a single fix — an OEM glitch, location services switched off after start, a permission
+   * revoked mid-session — sat there dead for the whole round. getGpsHealth even NAMES this state
+   * ('never_ticked') and reports it; nothing acted on it.
+   *
+   * Deliberately separate from the stall branch rather than relaxing its `lastTickAt > 0`: a
+   * never-ticked watch needs a LONGER grace period than a stalled one, because it may simply still
+   * be acquiring. Same 60s restart cooldown, so this cannot thrash.
+   */
+  if (subscription && lastTickAt === 0 && watchStartedAt > 0
+      && now - watchStartedAt > NEVER_TICKED_RECOVERY_MS
+      && now - lastWatchRestartAt > 60_000) {
+    console.log(`[gps] watch never ticked (${now - watchStartedAt}ms since start) — restarting`);
     void restartWatch();
   }
   // Cool down from active 60s after the most recent bump
@@ -1092,6 +1130,27 @@ export function stopGpsManager(): void {
   lastBumpAt = null;
   lastActiveBumpAt = 0;
   lastMotionAt = 0;
+  /**
+   * 2026-09-10 — per-ROUND state that outlived the round.
+   *
+   *  watchStartedAt / lastWatchRestartAt — both feed restart cooldowns. A round that ended within
+   *    60s of a watch restart suppressed the next round's stall AND never-ticked recovery for the
+   *    remainder of that cooldown, which is the worst possible minute to be unable to self-heal.
+   *  userMarkedAt — arms the outlier bypass for a SmartVision tap-to-place. A mark from the last
+   *    round must not bypass outlier rejection for the first fixes of this one.
+   *  firstFixLogged — the [path5:gps] happy-path marker, added because a log had to distinguish
+   *    "GPS working" from "GPS never started". Left true, round two never prints it and the marker
+   *    stops being able to answer the question it exists for.
+   *
+   * NOT cleared: poorSignalListeners. initGpsConfidenceAsk registers once behind an `initialized`
+   * flag and app/_layout owns its teardown, so clearing the set here would silently unsubscribe the
+   * caddie's soft-GPS ask for every round after the first — the exact footgun the `subscribers`
+   * contract note above describes.
+   */
+  watchStartedAt = 0;
+  lastWatchRestartAt = 0;
+  userMarkedAt = 0;
+  firstFixLogged = false;
   mode = 'walking';
   breadcrumb('manager_stop');
   // Phase 405 wave 4 — also stop the background-location task so the
