@@ -429,6 +429,75 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * putting surface, and nothing to ground a putt read in. "Everything is everything" -- this is
      * the half that never joined.
      */
+    /**
+     * 2026-09-11 (Tim) — WHO THIS GOLFER IS, composed once, instead of inferred fresh every turn.
+     *
+     * The brain was handed handicap, dominantMiss and persistentPatterns and left to work the player
+     * out on every single request. services/playProfile composes the whole picture — strengths,
+     * weaknesses, the smart-bogey budget, and the in-play cues for their level — from signals that
+     * were already being measured but had never been put in one place.
+     *
+     * Every finding carries its SOURCE, and that matters more here than anywhere: the brain must be
+     * able to say "most players starting out lose shots to penalties" rather than "you lose shots to
+     * penalties" when all it has is a prior about their level. Sending an unlabelled claim is how a
+     * model states a guess as a fact about someone. [[illustration-data-points]]
+     */
+    playProfile: safe(() => {
+      const { composePlayProfile, bogeyBudgetLine, cuesFor } = require('./playProfile') as typeof import('./playProfile');
+      const { deriveComplexityLevel } = require('./coachingAdaptation') as typeof import('./coachingAdaptation');
+      const stats = typeof r.getHoleStats === 'function' ? (r.getHoleStats() ?? []) : [];
+      const played = stats.length;
+      const penalties = stats.reduce((a: number, h: { penalties?: number }) => a + (h.penalties ?? 0), 0);
+      const putts = stats.reduce((a: number, h: { putts?: number }) => a + (h.putts ?? 0), 0);
+      const level = deriveComplexityLevel({
+        handicap: p.handicap ?? null,
+        experienceContext: p.experienceContext ?? null,
+        physicalLimitation: p.physicalLimitation ?? null,
+      });
+      const coursePar = (r.courseHoles ?? []).reduce(
+        (a: number, h: { par?: number }) => a + (h.par ?? 0), 0,
+      ) || null;
+      const profile = composePlayProfile({
+        level,
+        goal: (r.mode ?? null) as never,
+        coursePar,
+        distanceControl: p.distanceControl ?? null,
+        dominantMiss: (p.dominantMiss ?? null) as never,
+        // Per-18 rates only mean something once a round is actually under way.
+        penaltiesPerRound: played > 0 ? (penalties / played) * 18 : null,
+        puttsPerRound: played > 0 ? (putts / played) * 18 : null,
+        roundsPlayed: rel.roundsTogether ?? 0,
+      });
+      const overPar = typeof r.getScoreVsPar === 'function' ? r.getScoreVsPar() : null;
+      return {
+        level: profile.level,
+        goal: profile.goal,
+        targetScore: profile.targetScore,
+        strokeBudget: profile.strokeBudget,
+        confidence: profile.confidence,
+        strengths: profile.strengths,
+        weaknesses: profile.weaknesses,
+        /**
+         * ONLY THE CUES THAT ARE STILL WORTH SAYING.
+         *
+         * Sending all of them would have the brain repeat a reminder the player has already acted
+         * on, which reads as not listening and is the nagging this app refuses outright. roundStore
+         * already records what has been spoken this round (spokenHoleEvents), so a cue that has been
+         * said twice is filtered out before the brain ever sees it — the decay happens here rather
+         * than being left to a model's discretion. [[no-push-nagging-no-ads]]
+         */
+        cues: cuesFor(profile, safe(() => {
+          const spoken = (r.spokenHoleEvents ?? {}) as Record<string, true>;
+          const counts: Record<string, number> = {};
+          for (const c of profile.cues) {
+            counts[c.text] = Object.keys(spoken).filter((k) => k.startsWith(`cue:${c.text}`)).length;
+          }
+          return counts;
+        }, {}), 2),
+        bogeyBudget: bogeyBudgetLine(profile, overPar, played),
+      };
+    }, null),
+
     roundStats: safe(() => {
       const stats = typeof r.getHoleStats === 'function' ? (r.getHoleStats() ?? []) : [];
       if (!stats.length) return null;

@@ -305,6 +305,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       currentStroke = null,
       pendingLieAnalysis = null,
       roundStats = null,
+      playProfile = null,
       transportMode = null,
       currentLocationType = null,
       riskMode = null,
@@ -1212,6 +1213,47 @@ Course: ${activeCourse || 'unknown'}
 Hole: ${currentHole} | Par: ${currentPar}
 PLAYING THEIR STROKE ${currentStroke ?? 1}${(currentStroke ?? 1) > 1 ? ' — they have ALREADY TEED OFF. Do NOT brief the tee shot or suggest a driver off the tee.' : ' — they are on the tee.'}
 ${(() => {
+  const pp = playProfile as {
+    level?: string; goal?: string; targetScore?: number | null; strokeBudget?: number | null;
+    confidence?: string;
+    strengths?: { text: string; source: string }[];
+    weaknesses?: { text: string; source: string }[];
+    cues?: { text: string; source: string }[];
+    bogeyBudget?: string | null;
+  } | null;
+  if (pp) {
+    /**
+     * 2026-09-11 (Tim) — WHO THIS GOLFER IS, and the lens to coach them through.
+     *
+     * Composed once by services/playProfile instead of being re-inferred here every turn from
+     * handicap and a miss side.
+     *
+     * THE SOURCE LABELS ARE NOT DECORATION. A "seeded" finding is a prior about players at this
+     * level; a "measured" one is an observation about THIS player. Stating the first as the second
+     * is telling someone a guess about themselves as a fact, so the instruction below is explicit
+     * about the difference and the model is told to speak accordingly.
+     *
+     * Smart bogey golf is the frame: "seventeen bogeys and one par and you break ninety." The budget
+     * arrives as shots IN HAND so a double reads as absorbed, not as failure.
+     */
+    const fmt = (f?: { text: string; source: string }[]) =>
+      (f ?? []).map(x => `${x.text} [${x.source}]`).join('; ') || 'none';
+    const lines = [
+      `PLAY PROFILE (level: ${pp.level ?? 'standard'}, confidence: ${pp.confidence ?? 'seeded'})`,
+      `Goal: ${pp.goal ?? 'free_play'}${pp.targetScore ? ` — target ${pp.targetScore}, ${pp.strokeBudget} over par allowed` : ''}`,
+      `Strengths: ${fmt(pp.strengths)}`,
+      `Weaknesses: ${fmt(pp.weaknesses)}`,
+      pp.cues?.length ? `Cue to work in ONCE if it fits: ${fmt(pp.cues)}` : null,
+      pp.bogeyBudget ? `Budget: ${pp.bogeyBudget}` : null,
+      'A finding marked [seeded] is TYPICAL OF THIS LEVEL, not something measured about him — say ' +
+      '"most players here…" not "you…". A [measured] finding is his own record and can be stated ' +
+      'directly. Play smart bogey golf: bogey is a good result, par is a bonus, a double is absorbed ' +
+      'by the budget — never scold, never celebrate into recklessness.',
+    ].filter(Boolean);
+    return `${lines.join('\n')}\n`;
+  }
+  return '';
+})()}${(() => {
   const rs = roundStats as { holesPlayed?: number; puttsPerHole?: number; threePutts?: number; gir?: string | null; fairways?: string | null; penalties?: number; lastThreeHoles?: { hole: number; score: number; putts: number | null }[] } | null;
   if (!rs || !rs.holesPlayed) return '';
   const bits = [
