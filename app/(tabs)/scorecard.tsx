@@ -775,13 +775,47 @@ export default function Scorecard() {
           <View style={styles.partnersRow}>
             <Text style={[styles.partnersLabel, { color: c.text_muted }]}>PLAYING WITH</Text>
             <View style={styles.partnersChips}>
+              {/*
+                2026-09-10 (Tim) — LONG-PRESS A PARTNER TO REMOVE THEM.
+
+                guestProfileStore.removeGuest was defined and called by nothing (store-wide orphan
+                sweep). Guests are minted BY VOICE ONLY, so a misheard name landed here with no way
+                out: these chips were plain Views with no onPress, and the only exit was the store's
+                24-hour TTL. End-of-round clearing shipped separately; this is the mid-round remedy,
+                which is when you actually notice the wrong name.
+
+                A long-press keeps the chip pixel-identical at rest, so this stays inside the
+                2026-07-29 whole-app layout freeze. [[orphans-are-live-bugs-not-dead-code]]
+              */}
               {guests.map(g => (
-                <View key={g.id} style={[styles.partnerChip, { backgroundColor: c.surface, borderColor: c.border }]}>
+                <TouchableOpacity
+                  key={g.id}
+                  style={[styles.partnerChip, { backgroundColor: c.surface, borderColor: c.border }]}
+                  onLongPress={() => {
+                    Alert.alert(
+                      `Remove ${g.displayName}?`,
+                      'They came from something you said. Removing them only affects this round.',
+                      [
+                        { text: 'Keep', style: 'cancel' },
+                        {
+                          text: 'Remove',
+                          style: 'destructive',
+                          onPress: () => {
+                            try { useGuestProfileStore.getState().removeGuest(g.id); }
+                            catch { /* a roster tidy-up must never crash the scorecard */ }
+                          },
+                        },
+                      ],
+                    );
+                  }}
+                  delayLongPress={600}
+                  activeOpacity={0.85}
+                >
                   <Text style={[styles.partnerName, { color: c.text_primary }]}>{g.displayName}</Text>
                   {typeof g.handicap === 'number' ? (
                     <Text style={[styles.partnerHcp, { color: c.text_muted }]}>{g.handicap}</Text>
                   ) : null}
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
           </View>

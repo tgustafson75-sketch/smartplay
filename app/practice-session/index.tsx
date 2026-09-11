@@ -167,12 +167,33 @@ export default function CageIndex() {
         )}
 
         {/* CAMERA STATUS */}
-        <View style={[styles.cameraCard, cameraAlignment?.locked && styles.cameraCardLocked]}>
+        {/*
+          2026-09-10 (Tim) — THIS CARD CONTRADICTED ITSELF.
+
+          The title keyed on `cameraAlignment.locked`, and `setCameraAlignment` — the ONLY writer of
+          `locked: true` — is called by nothing, anywhere (store-wide orphan sweep): the fine
+          aim-lock step it belongs to was never built. `setDistanceCalibration` deliberately
+          preserves rather than sets it (`locked: s.cameraAlignment?.locked ?? false`).
+
+          So a player who calibrated their distance saw a grey "Camera Not Set" directly above
+          "Calibrated to 25 yards" — the card telling them two opposite things at once, and the one
+          that looked authoritative was the wrong one.
+
+          `locked` and `distance_yards` are two different facts. Ready means we know SOMETHING
+          usable, and the subtitle already says which. Honest degradation rather than a false
+          negative. [[guards-by-element-not-blanket-suppression]] [[illustration-data-points]]
+        */}
+        {(() => { const cameraKnown = !!cameraAlignment?.locked || cameraAlignment?.distance_yards != null; return (
+        <View style={[styles.cameraCard, cameraKnown && styles.cameraCardLocked]}>
           <View style={styles.cameraRow}>
-            <AppIcon name="videocam-outline" size={22} color={cameraAlignment?.locked ? '#00C896' : '#9ca3af'} />
+            <AppIcon name="videocam-outline" size={22} color={cameraKnown ? '#00C896' : '#9ca3af'} />
             <View style={styles.cameraText}>
               <Text style={styles.cameraTitle}>
-                {cameraAlignment?.locked ? 'Camera Ready ✓' : 'Camera Not Set'}
+                {cameraAlignment?.locked
+                  ? 'Camera Ready ✓'
+                  : cameraAlignment?.distance_yards != null
+                    ? 'Camera Calibrated ✓'
+                    : 'Camera Not Set'}
               </Text>
               <Text style={styles.cameraSub}>
                 {cameraAlignment?.distance_yards != null
@@ -202,6 +223,7 @@ export default function CageIndex() {
             </TouchableOpacity>
           </View>
         </View>
+        ); })()}
 
         {/* DEVICE STATUS */}
         <View style={styles.deviceRow}>

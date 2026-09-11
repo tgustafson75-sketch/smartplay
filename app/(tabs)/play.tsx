@@ -1918,6 +1918,39 @@ export default function PlayTab() {
                 key={c.id}
                 style={[styles.localRow, isActive && styles.localRowActive]}
                 onPress={() => selectSummary(c)}
+                /**
+                 * 2026-09-10 (Tim) — LONG-PRESS TO REMOVE A COURSE YOU ADDED FROM A SCORECARD PHOTO.
+                 *
+                 * customCourseStore.removeCustomCourse was defined and called by nothing (store-wide
+                 * orphan sweep), and courseImport mints these from an OCR'd card. The id is a content
+                 * hash of name+holes, so RE-IMPORTING the same card with a slightly different OCR
+                 * result adds a SECOND entry rather than replacing the first. Misread pars and
+                 * yardages then sat in the picker permanently and fed startRound's `custom:` branch.
+                 *
+                 * A long-press adds the capability with ZERO pixels moved — the row is identical at
+                 * rest — which keeps it inside Tim's 2026-07-29 whole-app layout freeze. Scoped to
+                 * `custom:` ids only: bundled and API courses are not the player's to delete.
+                 */
+                onLongPress={() => {
+                  if (!c.id.startsWith('custom:')) return;
+                  Alert.alert(
+                    'Remove this course?',
+                    `"${c.club_name}" was added from a scorecard photo. Removing it won't affect rounds you've already played.`,
+                    [
+                      { text: 'Keep', style: 'cancel' },
+                      {
+                        text: 'Remove',
+                        style: 'destructive',
+                        onPress: () => {
+                          try {
+                            useCustomCourseStore.getState().removeCustomCourse(c.id);
+                          } catch { /* a picker tidy-up must never crash the screen */ }
+                        },
+                      },
+                    ],
+                  );
+                }}
+                delayLongPress={600}
                 activeOpacity={0.85}
               >
                 <View style={styles.localThumb}>

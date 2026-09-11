@@ -222,6 +222,27 @@ export default function Settings() {
     goal,
     personalBest,
     preferredTee,
+    /**
+     * 2026-09-10 (Tim: "I am tired of half done work") — FOUR PROFILE FIELDS WITH READERS AND NO
+     * WRITER. missType, experienceContext, homeCourse and default_mode each have live consumers and
+     * were never editable anywhere, so every one of those consumers took its null branch forever:
+     *   homeCourse        -> play.tsx default-selects your home course; smartvision's last-resort
+     *                        courseId; contextSynthesizer's brief to Kevin
+     *   missType          -> ball-fit's ball recommendation
+     *   experienceContext -> coachingAdaptation's tone + complexity (always the default branch),
+     *                        videoUpload, ball-fit
+     *   default_mode      -> the mode Kevin assumes when you start a round
+     * The comment further down this file CLAIMED these were already here ("experience, home course"),
+     * which is most likely why nobody noticed for months. [[a-stale-header-is-a-source-someone-trusts]]
+     */
+    missType,
+    experienceContext,
+    homeCourse,
+    default_mode,
+    setMissType,
+    setExperienceContext,
+    setHomeCourse,
+    setDefaultMode,
     setName,
     setRole,
     setCoachCredentials,
@@ -237,6 +258,7 @@ export default function Settings() {
   const [editName, setEditName] = useState(name);
   const [editHandicap, setEditHandicap] = useState(String(handicap));
   const [editCreds, setEditCreds] = useState(coachCredentials ?? '');
+  const [editHomeCourse, setEditHomeCourse] = useState(homeCourse ?? '');
   const [editGoal, setEditGoal] = useState(goal ?? '');
 
   // 2026-07-11 — Ray-Ban Meta glasses live stream (DAT v0.8). Subscribe to the
@@ -967,6 +989,70 @@ export default function Settings() {
             ]}
             value={preferredTee}
             onSelect={(v) => setPreferredTee(v as 'front' | 'middle' | 'back')}
+          />
+
+          {/*
+            2026-09-10 — the four fields below had LIVE READERS AND NO WRITER until today. Each one
+            was permanently null, so every consumer silently took its fallback branch. Placed here,
+            in the Profile section, because the comment lower down this file already told readers
+            they lived here.
+          */}
+
+          {/* Miss Type is richer than Dominant Miss (direction only) and the setter DERIVES
+              dominantMiss from it, so setting this keeps the two in step rather than splitting
+              them. Read by ball-fit's ball recommendation. */}
+          <PillRow
+            label="Typical Miss"
+            options={[
+              { label: 'Slice', value: 'slice' },
+              { label: 'Hook', value: 'hook' },
+              { label: 'Pull', value: 'pull' },
+              { label: 'Push', value: 'push' },
+              { label: 'Thin', value: 'thin' },
+              { label: 'Fat', value: 'fat' },
+              { label: 'Varies', value: 'varies' },
+            ]}
+            value={missType ?? ''}
+            onSelect={(v) => setMissType(v as 'slice' | 'hook' | 'thin' | 'fat' | 'pull' | 'push' | 'varies')}
+          />
+
+          {/* Drives coachingAdaptation's tone + complexity, which until now ALWAYS fell to the
+              default branch — the caddie could not adapt how it explained things to anyone. */}
+          <PillRow
+            label="Where You're At"
+            options={[
+              { label: 'Starting', value: 'starting' },
+              { label: 'Improving', value: 'improving' },
+              { label: 'Returning', value: 'returning' },
+              { label: 'Competitive', value: 'competitive' },
+            ]}
+            value={experienceContext ?? ''}
+            onSelect={(v) => setExperienceContext(v as 'starting' | 'improving' | 'returning' | 'competitive')}
+          />
+
+          {/* The mode Kevin assumes when a round starts (contextSynthesizer). */}
+          <PillRow
+            label="Default Round Mode"
+            options={[
+              { label: 'Break 100', value: 'break_100' },
+              { label: 'Break 90', value: 'break_90' },
+              { label: 'Break 80', value: 'break_80' },
+              { label: 'Just play', value: 'free_play' },
+            ]}
+            value={default_mode ?? ''}
+            onSelect={(v) => setDefaultMode(v as 'break_100' | 'break_90' | 'break_80' | 'free_play')}
+          />
+
+          {/* Read by play.tsx to default-select your course, by smartvision as a last-resort
+              courseId, and by contextSynthesizer. Commits on blur, like Credentials above. */}
+          <Text style={inputLblStyle}>Home Course</Text>
+          <TextInput
+            style={inputFldStyle}
+            value={editHomeCourse}
+            onChangeText={setEditHomeCourse}
+            onBlur={() => setHomeCourse(editHomeCourse.trim() || null)}
+            placeholder="e.g. Hemet Golf Club"
+            placeholderTextColor={colors.text_muted}
           />
 
           {/*
@@ -1743,6 +1829,10 @@ export default function Settings() {
             The first Profile section near the top of this screen
             already has all the editable fields inline (name, handicap,
             personal best, dominant miss, experience, home course, etc).
+            2026-09-10 — that sentence was FALSE for four of them until today.
+            experience, home course, typical miss and default round mode had
+            live readers and no editor anywhere, and this claim is probably why
+            nobody went looking. They exist now; keep this list honest.
             The redundant "Edit Profile →" route to /welcome was leftover
             from a prior flow and contributed to Tim's settings-within-
             settings fatigue. The /welcome single-screen onboarding is
