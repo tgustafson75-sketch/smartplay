@@ -2482,6 +2482,9 @@ export default function CaddieTab() {
       relState.recordBreakthrough(
         'New personal best: ' + total,
         relState.roundsTogether,
+        // 2026-09-10 — pass the NUMBER so firstBreak90 is derived from the score rather than from
+        // whether the description happens to contain the characters "90".
+        { totalScore: total },
       );
     }
 

@@ -3,7 +3,7 @@ import { Stack , router, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useEffect, useRef } from 'react';
-import { Text, View } from 'react-native';
+import { Text, View, Alert } from 'react-native';
 import * as Sentry from '@sentry/react-native';
 import { SmartVisionProvider } from '../contexts/SmartVisionContext';
 import { KevinPresenceProvider } from '../contexts/KevinPresenceContext';
@@ -18,7 +18,7 @@ import { PRICING } from '../lib/pricing';
 import { useSettingsStore } from '../store/settingsStore';
 import { selfContext } from '../store/issueLogStore';
 import { getTrustLevel } from '../services/trustLevelService';
-import { startFlagSync } from '../store/flagStore';
+import { startFlagSync, useFlagStore, isBuildUnsupported } from '../store/flagStore';
 import { useRoundStore, whenRoundStoreHydrated } from '../store/roundStore';
 import { stopSpeaking, getLastSpeakStartedAt } from '../services/voiceService';
 import { setProactiveLineComposer } from '../services/proactiveLineRegistry';
@@ -127,6 +127,21 @@ import { genderForPersona } from '../services/caddieGender';
 // coursePlaces): a Sentry DSN is a public ingest key, safe to embed.
 const SENTRY_DSN_FALLBACK = 'https://94204d567ba053ad6f9dc3f39ff84655@o4511297513717760.ingest.us.sentry.io/4511297527283712';
 const sentryDsn = process.env.EXPO_PUBLIC_SENTRY_DSN || SENTRY_DSN_FALLBACK;
+
+/**
+ * 2026-09-10 — THE NATIVE BUILD NUMBER, ONCE.
+ *
+ * This derivation lived inside the `if (sentryDsn)` block, so the old-build check below could not
+ * see it and would have had to compute its own copy — two readings of "which build is this", free
+ * to disagree the day one of them is updated. Hoisted to a single owner; Sentry reads it, and so
+ * does the minSupportedBuild nudge. [[two-owners-is-the-root-cause]]
+ */
+const NATIVE_BUILD_NUMBER = String(
+  Constants.expoConfig?.ios?.buildNumber
+  ?? Constants.expoConfig?.android?.versionCode
+  ?? '0',
+);
+
 if (sentryDsn) {
   /**
    * 2026-09-06 — RELEASE + DIST, and why they are not optional.
@@ -138,11 +153,7 @@ if (sentryDsn) {
    * which is what actually changes per build.
    */
   const appVersion = (Constants.expoConfig?.version ?? '1.0.0') as string;
-  const buildNumber = String(
-    Constants.expoConfig?.ios?.buildNumber
-    ?? Constants.expoConfig?.android?.versionCode
-    ?? '0',
-  );
+  const buildNumber = NATIVE_BUILD_NUMBER;
   Sentry.init({
     dsn: sentryDsn,
     tracesSampleRate: 0.2,
@@ -751,6 +762,34 @@ function AppNavigator() {
    * network cannot delay boot by a single frame. See store/flagStore.ts for the fail-open contract.
    */
   useEffect(() => startFlagSync(), []);
+
+  /**
+   * 2026-09-10 (Tim) — THE SOFT NUDGE FOR A BUILD BELOW THE REMOTE FLOOR.
+   *
+   * `minSupportedBuild` was fetched and stored and read by nothing, so the remote "get people off
+   * that build" lever did not exist. This makes it real without making it a wall: ONE dismissible
+   * alert, at most once per launch, and only when Tim has actually set a floor above this build.
+   *
+   * Not a blocking gate, by Tim's call — a hard wall can lock a player out mid-round if the value
+   * is ever set wrong, and being wrong about this on a first tee is worse than an old build.
+   * Not a banner either: a banner is a permanent layout change under the 2026-07-29 freeze, and
+   * this must cost nothing on the screen when it is not firing. [[no-push-nagging-no-ads]]
+   *
+   * Subscribed to `minSupportedBuild` rather than read once, because flags arrive AFTER boot — the
+   * first refresh lands a second or two in, and a one-shot read at mount would always see 0.
+   */
+  const minSupportedBuild = useFlagStore(s => s.minSupportedBuild);
+  const nudgedThisLaunch = useRef(false);
+  useEffect(() => {
+    if (nudgedThisLaunch.current) return;
+    if (!isBuildUnsupported(NATIVE_BUILD_NUMBER)) return;
+    nudgedThisLaunch.current = true;
+    Alert.alert(
+      'Update available',
+      'You\u2019re on an older version of SmartPlay Caddie. Updating gets you the latest fixes \u2014 you can keep playing on this one for now.',
+      [{ text: 'OK' }],
+    );
+  }, [minSupportedBuild]);
 
   // 2026-07-30 (issue-log audit SEV-2/SEV-4 — Tim: "make sure users' apps are RECORDING and
   // sending issue logs") — flush any issues recorded in a PRIOR session on next launch. A hard

@@ -464,6 +464,25 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     }, null),
     topObservations: safe(() => rel.getTopObservations?.() ?? null, null),
     recentHeroMoments: safe(() => rel.getRecentHeroMoments?.(2) ?? null, null),
+    /**
+     * 2026-09-10 (Tim, Hemet: "there's no fucking long term actual caddie type memory going on
+     * here") — THE BREAKTHROUGHS REACHED THE DASHBOARD AND NOT THE CADDIE.
+     *
+     * `breakthroughs` is recorded (a new personal best) and rendered on the dashboard's card, and
+     * was the one part of the relationship record the brain never saw — so the caddie could hold
+     * your hero moments and your observations and still not know you had just played the best round
+     * of your life. Newest three, description + when only; the payload does not need the ids.
+     *
+     * Kept small on purpose: this rides on EVERY turn, and a long list of past glories crowds out
+     * the shot in front of the player. [[state-what-you-measured-not-what-you-intended]]
+     */
+    recentBreakthroughs: safe(() => {
+      const list = (rel.breakthroughs ?? []) as { description?: string; timestamp?: number }[];
+      return list.slice(-3).reverse().map(b => ({
+        description: String(b.description ?? '').slice(0, 80),
+        at: typeof b.timestamp === 'number' ? b.timestamp : null,
+      }));
+    }, []),
     recentCageSessions: safe(() => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const c = require('../store/swingSessionStore').useSwingSessionStore.getState();

@@ -99,9 +99,14 @@ interface RelationshipState {
   recomputeMentalState: (recent: { strokes: number; par: number }[]) => void;
   resetSpiral: () => void;
 
+  /**
+   * 2026-09-10 — `totalScore` is passed so the milestone flags can be DERIVED rather than sniffed
+   * out of the description string. See the implementation.
+   */
   recordBreakthrough: (
     description: string,
     roundNumber: number,
+    opts?: { totalScore?: number | null },
   ) => void;
 
   updateClubConfidence: (club: string, score: number) => void;
@@ -232,7 +237,7 @@ export const useRelationshipStore = create<RelationshipState>()(
       resetSpiral: () =>
         set({ consecutiveBadHoles: 0, currentMentalState: 'neutral' }),
 
-      recordBreakthrough: (description, roundNumber) =>
+      recordBreakthrough: (description, roundNumber, opts) =>
         set(s => ({
           // 2026-06-08 (audit M3) — cap to last 50; was unbounded.
           breakthroughs: [
@@ -244,9 +249,24 @@ export const useRelationshipStore = create<RelationshipState>()(
               roundNumber,
             },
           ].slice(-50),
-          firstBreak90: description.includes('90')
-            ? (s.firstBreak90 ?? Date.now())
-            : s.firstBreak90,
+          /**
+           * 2026-09-10 — THIS FIRED ON THE ONE SCORE THAT IS NOT BREAKING 90.
+           *
+           * It read `description.includes('90')`, and the only caller passes
+           * `'New personal best: ' + total`. So shooting exactly 90 — which is not breaking 90 —
+           * stamped the milestone, while 85, 88 or 89 never did. A round of 190 would have set it
+           * too. The flag is a DATE meaning "the first time they broke 90"; it was really "the
+           * first time their score had the characters 9 and 0 next to each other".
+           *
+           * Nothing reads it yet, so this has cost nothing so far — but the breakthroughs list now
+           * reaches the caddie, so a milestone it might one day speak has to be true.
+           * Derived from the number, with the string out of the decision entirely.
+           * [[arithmetic-belongs-in-code-not-the-model]] [[illustration-data-points]]
+           */
+          firstBreak90:
+            typeof opts?.totalScore === 'number' && Number.isFinite(opts.totalScore) && opts.totalScore < 90
+              ? (s.firstBreak90 ?? Date.now())
+              : s.firstBreak90,
         })),
 
       updateClubConfidence: (club, score) =>

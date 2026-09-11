@@ -222,6 +222,29 @@ export function isCourseGeometryDisabled(courseId: string | null | undefined): b
 }
 
 /**
+ * 2026-09-10 — IS THIS BUILD BELOW THE REMOTE FLOOR?
+ *
+ * `minSupportedBuild` has been fetched from the flag document and written into this store since the
+ * store was created, and NOTHING read it (found by a store-wide unread-field sweep). So the one
+ * remote lever for "that build is broken, get people off it" did not exist — it looked like it did,
+ * which is worse: a lever you believe in and never pull is indistinguishable from one that works.
+ * That matters with production staged in 176 countries.
+ *
+ * Deliberately conservative. Returns false unless the remote value is a real positive number AND
+ * this build's number parses AND it is genuinely lower. Every uncertain case is "supported": a
+ * misconfigured flag doc, an OTA where the constant is missing, a dev build — none of them may
+ * nag a player. The floor is opt-in by Tim setting it; it is 0 until then.
+ * [[overstrict-gate-lens]]
+ */
+export function isBuildUnsupported(currentBuild: string | number | null | undefined): boolean {
+  const min = useFlagStore.getState().minSupportedBuild;
+  if (typeof min !== 'number' || !Number.isFinite(min) || min <= 0) return false;
+  const cur = typeof currentBuild === 'number' ? currentBuild : parseInt(String(currentBuild ?? ''), 10);
+  if (!Number.isFinite(cur) || cur <= 0) return false;
+  return cur < min;
+}
+
+/**
  * Start the background refresh. Called once from app/_layout.tsx.
  *
  * Two triggers, both cheap: boot, and every transition INTO active. The 60s gate inside refresh()

@@ -321,6 +321,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       isSpiralRisk = false,
       topObservations = [],
       recentHeroMoments = [],
+      /**
+       * 2026-09-10 — the player's own milestones. The client has recorded these to the dashboard
+       * for months and never sent them, so the caddie held your hero moments and your observations
+       * and still could not know you had just played the best round of your life.
+       */
+      recentBreakthroughs = [],
       recentCageSessions = [],
       dominantMiss = null,
       physicalLimitation = null,
@@ -1327,6 +1333,10 @@ ${_goal ? `GOAL: ${_goal} — reference when relevant, never constantly.` : ''}
 
 ${(recentHeroMoments as Array<{ hole: number; club: string; courseName: string }>).length > 0
   ? `HERO MOMENTS: ${(recentHeroMoments as Array<{ hole: number; club: string; courseName: string }>).map(m => 'Hole ' + m.hole + ' — ' + m.club).join(', ')}. Use one for confidence if the moment calls for it.`
+  : ''}
+
+${(recentBreakthroughs as Array<{ description: string; at: number | null }>).length > 0
+  ? `THEIR MILESTONES (most recent first): ${(recentBreakthroughs as Array<{ description: string; at: number | null }>).map(b => b.description).join(' · ')}. These are things THEY did. Reference one only when this moment genuinely echoes it — a milestone recited for its own sake is worse than silence.`
   : ''}
 
 ${_personalBest ? `Personal best: ${_personalBest}. Acknowledge briefly if round is tracking toward it.` : ''}
