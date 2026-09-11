@@ -67,6 +67,8 @@ export default function Scorecard() {
   const scores = useRoundStore(s => s.scores);
   const putts = useRoundStore(s => s.putts);
   const logPutts = useRoundStore(s => s.logPutts);
+  const notedPenalties = useRoundStore(s => s.notedPenalties);
+  const noteHolePenalty = useRoundStore(s => s.noteHolePenalty);
   const shots = useRoundStore(s => s.shots);
   const currentHole = useRoundStore(s => s.currentHole);
   const nineHoleMode = useRoundStore(s => s.nineHoleMode);
@@ -100,6 +102,21 @@ export default function Scorecard() {
     () => (isRoundActive ? putts : (lastCompletedRound?.putts ?? {})),
     [isRoundActive, putts, lastCompletedRound],
   );
+  /**
+   * Noted penalties are live-round state only. A finished round's penalties live on its saved
+   * RoundRecord holes, so a completed scorecard shows an empty map rather than borrowing the next
+   * round's notes.
+   */
+  const viewNotedPenalties = useMemo(
+    () => (isRoundActive ? notedPenalties : {}),
+    [isRoundActive, notedPenalties],
+  );
+  /** Tap n to SET the count for the hole (tapping the active one clears it back to zero). */
+  const setNotedPenaltyCount = useCallback((hole: number, n: number) => {
+    const current = (notedPenalties as Record<number, number>)[hole] ?? 0;
+    const target = current === n ? 0 : n;
+    if (target !== current) noteHolePenalty(hole, target - current);
+  }, [notedPenalties, noteHolePenalty]);
   const viewShots = useMemo(
     () => (isRoundActive ? shots : (lastCompletedRound?.shots ?? [])),
     [isRoundActive, shots, lastCompletedRound],
@@ -574,6 +591,41 @@ export default function Scorecard() {
               activeOpacity={0.8}
               accessibilityRole="button"
               accessibilityLabel={`${n} putts on hole ${hole}`}
+            >
+              <Text style={{ color: active ? '#0a0a0a' : c.text_secondary, fontSize: 13, fontWeight: '800' }}>{n}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      {/**
+        * 2026-09-11 (Tim) — "remove all auto penalty counts, let user note penalties on the
+        * scorecard like drops and lost balls."
+        *
+        * Until now the app COUNTED penalties for you: logging a shot as water or OB had the rules
+        * engine silently add one or two strokes. The player told it where the ball went and it
+        * decided what that cost them — wrong wherever OB is a local-rule drop, or the ball is found,
+        * or the stroke was already counted. That is gone.
+        *
+        * This is the replacement, and it deliberately does NOT touch the score. On a scorecard the
+        * number you type already contains the penalty; adding one here would count it twice. What it
+        * records is WHAT happened, so the round knows you took two drops rather than just that you
+        * shot a 6 — which is what the caddie needs to say anything useful about it later.
+        */}
+      <View style={styles.chipsRow}>
+        <Text style={[styles.holeSub, { color: c.text_muted, alignSelf: 'center', marginRight: 6 }]}>
+          {t('scorecard.penalties_label')}
+        </Text>
+        {([0, 1, 2, 3] as const).map(n => {
+          const noted = (viewNotedPenalties as Record<number, number>)[hole] ?? 0;
+          const active = noted === n;
+          return (
+            <TouchableOpacity
+              key={`pen-${n}`}
+              style={[styles.puttChip, { borderColor: active ? c.accent : c.border, backgroundColor: active ? c.accent : 'transparent' }]}
+              onPress={() => setNotedPenaltyCount(hole, n)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={t('scorecard.accessibility_label.penalties_on_hole', { count: n, hole })}
             >
               <Text style={{ color: active ? '#0a0a0a' : c.text_secondary, fontSize: 13, fontWeight: '800' }}>{n}</Text>
             </TouchableOpacity>

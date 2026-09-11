@@ -469,6 +469,18 @@ interface RoundState {
   scores: Record<number, number>;
   putts: Record<number, number>;
   penalties: Record<number, number>;
+  /**
+   * 2026-09-11 (Tim: "let user note penalties on the scorecard like drops and lost balls") —
+   * PENALTIES THE PLAYER NOTED, WHICH NEVER CHANGE A SCORE.
+   *
+   * Deliberately separate from `penalties` (the dead legacy map) and from ShotResult.penalty_strokes
+   * (the caddie-tab +penalty button, which IS a stroke because it is logged shot-by-shot mid-hole).
+   *
+   * On a scorecard the player types the TOTAL, and that total already contains the penalty. So a
+   * note here records WHAT happened — a drop, a lost ball — for stats and for the caddie, and
+   * touches no number the player entered. computeHoleScore must never read this map.
+   */
+  notedPenalties: Record<number, number>;
   /** The caddie's current risk posture. Set by the player (voice or tap) or eased by the caddie. */
   riskMode: RiskMode;
   /**
@@ -779,6 +791,8 @@ interface RoundState {
   getHoleStats: () => HoleStats[];
   logPutts: (hole: number, putts: number) => void;
   addPenalty: (hole: number) => void;
+  /** Record-only: note (delta +1) or un-note (delta -1) a penalty on a hole. Never alters the score. */
+  noteHolePenalty: (hole: number, delta: number) => void;
   logShot: (shot: ShotResult) => void;
   /** 2026-07-25 — revert the last score/putt/shot (voice "undo / scratch that").
    *  Returns a spoken description of what was undone, or ok:false when there's
@@ -928,6 +942,7 @@ export const useRoundStore = create<RoundState>()(
       scores: {},
       putts: {},
       penalties: {},
+      notedPenalties: {},
       riskMode: 'normal',
       riskEasedAt: null,
       shots: [],
@@ -1199,6 +1214,7 @@ export const useRoundStore = create<RoundState>()(
           scores: {},
           putts: {},
           penalties: {},
+      notedPenalties: {},
           riskMode: 'normal',
       riskEasedAt: null,
           shots: [],
@@ -1617,6 +1633,7 @@ export const useRoundStore = create<RoundState>()(
           scores: {},
           putts: {},
           penalties: {},
+      notedPenalties: {},
           riskMode: 'normal',
       riskEasedAt: null,
           shots: [],
@@ -2029,6 +2046,7 @@ export const useRoundStore = create<RoundState>()(
           scores: {},
           putts: {},
           penalties: {},
+      notedPenalties: {},
           riskMode: 'normal',
       riskEasedAt: null,
           shots: [],
@@ -2702,10 +2720,21 @@ export const useRoundStore = create<RoundState>()(
              *
              * Read the authoritative source. [[orphans-are-live-bugs-not-dead-code]]
              */
+            /**
+             * 2026-09-11 — shot-logged penalties PLUS the ones the player noted on the scorecard.
+             *
+             * The two are disjoint by surface: a stroke logged mid-hole from the caddie tab lives on
+             * a ShotResult, a drop or lost ball noted after the fact lives in notedPenalties. Summing
+             * them is what the player actually took; it is NOT the 2026-09-10 double-count, which was
+             * one penalty read from two places.
+             *
+             * This is a STAT, read by services/caddieRequestBody so the caddie knows the round had
+             * penalties. It is not the score — computeHoleScore never sees notedPenalties.
+             */
             penalties: s.shots.reduce(
               (acc, sh) => (sh.hole === hole ? acc + (sh.penalty_strokes ?? 0) : acc),
               0,
-            ),
+            ) + (s.notedPenalties?.[hole] ?? 0),
             fairwayHit: null,
             girHit,
           };
@@ -2853,6 +2882,31 @@ export const useRoundStore = create<RoundState>()(
           putts: { ...s.putts, [hole]: putts },
           lastMutation: { kind: 'putts', hole, prevPutts: s.putts[hole], at: Date.now() },
         })),
+
+      /**
+       * 2026-09-11 — RECORD-ONLY. This writes nothing computeHoleScore reads.
+       *
+       * The scorecard is where the player enters a TOTAL that already contains the penalty, so
+       * noting "lost ball" here must not add a stroke on top. Contrast addPenalty below, which is
+       * the caddie-tab button used shot-by-shot mid-hole and DOES log a stroke, because there no
+       * total has been entered yet.
+       */
+      noteHolePenalty: (hole, delta) => {
+        if (!Number.isFinite(hole) || hole < 1) return;
+        set((s) => {
+          const next = { ...s.notedPenalties };
+          /**
+           * Honour the MAGNITUDE. An earlier version clamped delta to ±1, so a caller asking for +2
+           * silently got +1 — a number quietly disagreeing with the number that was requested, which
+           * is the whole class of bug this round of work has been about.
+           */
+          const step = Math.trunc(delta);
+          if (!Number.isFinite(step) || step === 0) return {};
+          const v = Math.max(0, (next[hole] ?? 0) + step);
+          if (v === 0) delete next[hole]; else next[hole] = v;
+          return { notedPenalties: next };
+        });
+      },
 
       addPenalty: (hole) => {
         // Unified path: creates a ShotResult so the penalty flows through computeHoleScore,
@@ -3373,6 +3427,7 @@ export const useRoundStore = create<RoundState>()(
         scores: s.scores,
         putts: s.putts,
         penalties: s.penalties,
+        notedPenalties: s.notedPenalties,
         shots: s.shots,
         roundNumber: s.roundNumber,
         // 2026-07-01 (re-audit) — compact older rounds so this single row can't grow

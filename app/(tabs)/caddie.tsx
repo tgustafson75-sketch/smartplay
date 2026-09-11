@@ -2164,7 +2164,22 @@ export default function CaddieTab() {
       timestamp: Date.now(),
       acousticContact: null,
       outcome: resolution.outcome,
-      penalty_strokes: resolution.penalty_strokes,
+      /**
+       * 2026-09-11 (Tim: "remove all auto penalty counts") — THE APP NEVER ADDS A STROKE ON ITS OWN.
+       *
+       * Logging a shot as water / OB / unplayable / lost used to have resolvePenalty silently add
+       * one or two strokes to the hole. The player told the app WHERE the ball went; the app decided
+       * what that cost them. On a public course where OB is played as a local-rule drop, or where a
+       * ball is found, or where the player already counted the stroke themselves, that arithmetic is
+       * a guess applied to their scorecard without being asked.
+       *
+       * Penalties are now the PLAYER'S entry, on the scorecard, alongside drops and lost balls.
+       *
+       * The rules KNOWLEDGE is deliberately kept: resolution.kevin_voice_line still speaks
+       * "Water — that's one and a drop", the OB stroke-and-distance question is still asked, and
+       * rules_decision is still recorded on the shot. What is gone is the silent count.
+       */
+      penalty_strokes: 0,
       rules_decision: resolution.rules_decision,
     };
     logShot(shot);

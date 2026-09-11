@@ -103,7 +103,11 @@
     "listen": "Escuchar",
     "competition_round": "Ronda de Competición",
     "putts_label": "Putts",
-    "add_putts": "añadir putts"
+    "add_putts": "añadir putts",
+    "penalties_label": "PENALIZACIONES",
+    "accessibility_label": {
+      "penalties_on_hole": "{{count}} penalizaciones anotadas en el hoyo {{hole}}"
+    }
   },
   "dashboard": {
     "title": "Panel",

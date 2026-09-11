@@ -378,7 +378,8 @@
     "putts_label": "Putts",
     "add_putts": "add putts",
     "accessibility_label": {
-      "go_to_the_dashboard_to": "Go to the dashboard to see your recent rounds"
+      "go_to_the_dashboard_to": "Go to the dashboard to see your recent rounds",
+      "penalties_on_hole": "{{count}} penalties noted on hole {{hole}}"
     },
     "text": {
       "start_a_round_from_the": "Start a round from the Caddie tab. Your finished rounds are saved on the dashboard.",
@@ -389,7 +390,8 @@
     },
     "alert": {
       "they_came_from_something_you": "They came from something you said. Removing them only affects this round."
-    }
+    },
+    "penalties_label": "PENALTIES"
   },
   "dashboard": {
     "title": "Dashboard",

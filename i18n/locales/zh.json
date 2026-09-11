@@ -103,7 +103,11 @@
     "listen": "收听",
     "competition_round": "比赛轮",
     "putts_label": "推杆",
-    "add_putts": "添加推杆"
+    "add_putts": "添加推杆",
+    "penalties_label": "罚杆",
+    "accessibility_label": {
+      "penalties_on_hole": "第 {{hole}} 洞记录了 {{count}} 杆罚杆"
+    }
   },
   "dashboard": {
     "title": "面板",
