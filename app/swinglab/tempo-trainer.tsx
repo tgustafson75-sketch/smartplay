@@ -1,7 +1,7 @@
 /**
  * 2026-06-11 — Tempo Trainer (Tour Tempo style).
  * 2026-07-08 — Reworked into a "Choose Your Training Mode" selector (Tim): a clean
- *   card menu — 3:1 Full Swing trainer, 2:1 Short Game trainer, and GolfFather
+ *   card menu — 3:1 Full Swing trainer, 2:1 Short Game trainer, and Smart Tempo
  *   personal swing analysis — modeled on the intuitive tempo layout, rendered in
  *   OUR product language (dark surface, neon-green #88F700 accent, persona-brand
  *   feel). The metronome engine below is unchanged; the menu just picks its ratio.
@@ -277,8 +277,10 @@ export default function TempoTrainerScreen() {
             </Pressable>
           ))}
 
-          {/* GolfFather personal swing analysis — the premium, AI-read tier (routes to the
-              real honest tempo analysis, Smart Tempo). Gold-accented to read as premium. */}
+          {/* 2026-09-11 — was branded "GolfFather personal swing analysis". The Golf Father was a
+              retired Tank persona and is deleted app-wide; this card is the front door to Smart
+              Tempo, which is a real, live feature. The BRANDING went, not the feature — deleting the
+              card would have removed the only way in. */}
           <Pressable
             onPress={() => router.push('/swinglab/smart-tempo' as never)}
             style={({ pressed }) => [
@@ -286,13 +288,13 @@ export default function TempoTrainerScreen() {
               { backgroundColor: colors.surface, borderColor: GOLD, opacity: pressed ? 0.9 : 1 },
             ]}
             accessibilityRole="button"
-            accessibilityLabel={t('swinglab_tempo_trainer.accessibility_label.golffather_personal_swing_analysis')}
+            accessibilityLabel={t('swinglab_tempo_trainer.accessibility_label.smart_tempo_personal_swing_analysis')}
           >
             <View style={styles.cardTop}>
               <View style={[styles.cardIcon, { backgroundColor: 'rgba(232,178,58,0.14)' }]}>
                 <Ionicons name="ribbon" size={22} color={GOLD} />
               </View>
-              <Text style={[styles.cardTitle, { color: colors.text_primary }]}>{t('swinglab_tempo_trainer.tempo_trainer_screen.golffather_personal_swing_analysis')}</Text>
+              <Text style={[styles.cardTitle, { color: colors.text_primary }]}>{t('swinglab_tempo_trainer.tempo_trainer_screen.smart_tempo_personal_swing_analysis')}</Text>
               <View style={[styles.ratioBadge, { backgroundColor: 'rgba(232,178,58,0.16)', borderColor: GOLD }]}>
                 <Text style={[styles.ratioBadgeText, { color: GOLD }]}>{t('swinglab_tempo_trainer.tempo_trainer_screen.premium')}</Text>
               </View>

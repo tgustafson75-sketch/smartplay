@@ -30,7 +30,6 @@ From [lib/persona.ts](../../lib/persona.ts):
 
 - **Kevin** — original, balanced, all-around (default for new users)
 - **Serena** — analytical, calm, female voice
-- **Tank** — Marine vet intensity, clipped cadence, no-BS — scoped to `ask_golf_father` (rule + course-management questions) so the volume matches the character
 - **Harry** — Army medic vet wisdom — currently in `ACTIVE_PERSONAS` only when re-enabled in `lib/persona.ts`; assets retained, settings migration v6 maps persisted Harry → Kevin so existing users don't get stuck
 
 ### Persona-equality model

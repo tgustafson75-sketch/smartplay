@@ -150,8 +150,8 @@ export function liveShotReadInputs(known: CallerKnown): ShotReadInputs {
      *
      * TightLie has produced a full lie analysis since Phase 409 and written it to
      * roundStore.pendingLieAnalysis, which reached the caddie's PROMPT as prose and reached the club
-     * picker not at all. askGolfFatherHandler's own header has said "lie — pendingLieAnalysis
-     * exists; not wired" the whole time.
+     * picker not at all — a retired handler's own header carried a "lie … exists; not wired" note
+     * about it the whole time.
      *
      * So the tool was built, the player was already using it, and the one decision it should change
      * never saw it. Its description is read into the structured lie the picker understands, and the

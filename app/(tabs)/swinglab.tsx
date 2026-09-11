@@ -131,7 +131,7 @@ const PRACTICE_SECTION: LauncherCardSpec[] = [
     title: 'Tempo Trainer & Analysis',
     sub: 'Train to the 3:1 / 2:1 beat, or get a personal swing analysis',
     // 2026-07-09 (audit — the mode selector was orphaned) — the hub is the selector's
-    // front door: 3:1 full / 2:1 short trainers + the GolfFather analysis card (which
+    // front door: 3:1 full / 2:1 short trainers + the Smart Tempo analysis card (which
     // continues into smart-tempo). Was routing straight to camera-first smart-tempo.
     route: '/swinglab/tempo-trainer',
     tag: 'TEMPO',

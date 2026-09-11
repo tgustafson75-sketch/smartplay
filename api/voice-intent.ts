@@ -45,7 +45,7 @@ const INTENT_TYPE_ENUM = [
   'in_round_diagnostic', 'club_change', 'club_query', 'club_menu',
   'log_shot', 'log_score', 'log_putts', 'media_capture', 'media_playback',
   'at_my_ball', 'log_issue', 'sequence', 'declare_hole', 'set_hole_note',
-  'putt_watch', 'ask_golf_father', 'quick_round', 'open_external',
+  'putt_watch', 'quick_round', 'open_external',
   'state_yardage', 'refresh_gps', 'coach_refine', 'position_declaration',
   'confirm_position', 'end_round', 'social_greeting', 'conversational', 'unknown',
   // 2026-07-25 (deep audit) — these three had handlers + precheck regex but were MISSING from the
@@ -586,24 +586,6 @@ Available intents:
    - "got my ball" -> { intent_type: "at_my_ball" }
    - "ball position" -> { intent_type: "at_my_ball" }
    DO NOT match shot-logging phrases ("I hit driver 240 left") — those are log_shot. at_my_ball is the position-capture, not a shot.
-
-22. ask_golf_father — User wants strategic in-round advice ("the Golf Father"). Triggered by "what's the play here", "Golf Father help", "tell me what to do here", etc. Distinct from in_round_diagnostic (which reasons about multi-shot patterns) and from query_status/shot_strategy (which asks about a specific shot). This is the "give me the read" channel.
-   parameters: { topic?: "course_management" | "mental" | "swing", subtopic?: "tank_advice", use_context?: boolean }
-   NOTE (2026-08-25): the subtopic TOKEN is still "tank_advice" and must stay so — it is a
-   client/server contract, and clients on an older bundle branch on that exact string. Renaming it
-   here without shipping the client first would break the channel during the deploy gap. The
-   persona it was named after is gone from the app; no example above invokes it by name any more.
-   Examples:
-   - "what would the Golf Father do" / "Golf Father help" -> { topic: "course_management", subtopic: "tank_advice", use_context: true }
-   - "tell me what to do here" -> { topic: "course_management", subtopic: "tank_advice", use_context: true }
-   - "red penalty vs yellow" / "red stake vs yellow" / "what's the difference between red and yellow" -> { topic: "rules", subtopic: "red_vs_yellow" }
-   - "driver or 3 wood" / "should I hit driver" / "what club off the tee" -> { topic: "course_management", subtopic: "driver_or_3wood", use_context: true }
-   - "Golf Father what should I hit from 250" / "Golf Father what club for 300" -> { topic: "course_management", subtopic: "tank_advice", use_context: true } (When the Golf Father is explicitly named in a club-recommendation question — even with a yardage — route here, NOT query_status. It is the canonical "give me the read" channel; the handler weaves in distance + lie + wind on top.)
-   - "should I lay up" / "lay up or go for it" / "go for the green" -> { topic: "course_management", subtopic: "lay_up" }
-   - "nearest point of relief" / "free drop here" / "cart path relief" -> { topic: "rules", subtopic: "nearest_point_relief" }
-   - "can I ground my club" / "can I touch the sand" / "ground club in bunker" -> { topic: "rules", subtopic: "can_ground_club", use_context: true }
-   - "flag or center" / "should I attack the pin" / "pin or middle" -> { topic: "course_management", subtopic: "flag_or_center", use_context: true }
-   Default subtopic = "tank_advice" (a legacy token — see the note above) and use_context = true when omitted. Use this intent ONLY when the user names the Golf Father OR explicitly asks for in-context strategic advice; "what should I hit" on its own stays on query_status/shot_strategy.
 
 20. sequence — User chained two or more distinct commands in a single utterance, separated by "and", "then", commas, or implicit pause. Each step is a real first-class intent above (open_tool, change_setting, log_shot, etc.). Use this ONLY when the steps are independent actions; do NOT use for a single clause with multiple parameters (e.g. "log driver 240 left" is one log_shot, not a sequence).
    parameters: { steps: [{ intent_type, parameters }, ...] }

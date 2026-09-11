@@ -2,8 +2,9 @@
  * 2026-05-24 — Practice→Play bridge store.
  *
  * Persisted snapshot of the user's recent practice / cage-session
- * tendencies, consumed by the Golf Father Tank rules (services/intents/
- * askGolfFatherHandler.ts) to make "driver or 3-wood" / "flag or center"
+ * tendencies. 2026-09-11 — these were consumed by the Golf Father Tank rules, which are DELETED;
+ * the tendencies themselves are still read by the caddie's own club and strategy path, so the
+ * capture stays. A header naming a deleted consumer is how a live writer gets removed by mistake"
  * style answers context-aware. Fed by mediaHandlers' swing-analysis
  * subscriber on every analyzed SwingShot.
  *
@@ -110,7 +111,7 @@ export const usePracticeStore = create<PracticeStats>()(
         const driverSample = isDriver && carry > 0;
         // 2026-07-10 (audit FD1) — was `!isDriver && carry>0`, which pooled EVERY non-driver
         // carry (irons, wedges) into the "3-wood" average. That value is consumed downstream
-        // (smartfinder carry ladder, GolfFather club calls) as the literal 3-wood distance +
+        // (smartfinder carry ladder, club calls) as the literal 3-wood distance +
         // surfaced as high-confidence "measured" — so an iron swing dragged the ladder wrong.
         // Only count actual fairway woods now.
         const isWood = /wood|fairway/.test(String(club).toLowerCase()) || /^[3457]w$/.test(String(club).toLowerCase());

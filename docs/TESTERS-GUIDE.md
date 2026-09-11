@@ -138,7 +138,6 @@ If you swap to Harry, you're effectively in Cockpit — that's by design. Harry'
 
 Tap in → you'll see:
 - The standard drill text
-- **Tank's Tips** infographic — full-page comparison card (PGA vs The Golf Father). Tap to zoom — it's text-heavy on purpose.
 - **Watch** card — Tank's YouTube video
 
 **Chang Chip — Randy Chang short-game** is pinned second. Randy is the head pro at Journey at Pechanga, known for his under-3-minute YouTube instruction format.

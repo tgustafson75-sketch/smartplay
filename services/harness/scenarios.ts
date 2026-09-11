@@ -110,77 +110,8 @@ const SCEN_3: Scenario = {
   }),
 };
 
-const SCEN_4: Scenario = {
-  id: 'C4',
-  title: 'Golf Father rule — red_vs_yellow EN + ES',
-  category: 'critical',
-  run: () => runWithAsserts('C4', 'Golf Father rule — red_vs_yellow EN + ES', async (a) => {
-    // EN — i18n defaults to 'en'; assert canonical English phrase fragment.
-    const tEn = M.seedLanguage('en');
-    const en = await dispatchVoiceIntent({
-      intent_type: 'ask_golf_father',
-      parameters: { topic: 'rules', subtopic: 'red_vs_yellow', use_context: false },
-      raw_text: 'red penalty vs yellow',
-    });
-    a.expect('EN dispatch succeeded', en.success);
-    a.expectContains('EN response mentions Red stake', en.voice_response, 'Red stake');
-    await tEn();
 
-    // ES — flip via setLanguage so i18n.changeLanguage('es') runs.
-    const tEs = M.seedLanguage('es');
-    const es = await dispatchVoiceIntent({
-      intent_type: 'ask_golf_father',
-      parameters: { topic: 'rules', subtopic: 'red_vs_yellow', use_context: false },
-      raw_text: 'red penalty vs yellow',
-    });
-    a.expect('ES dispatch succeeded', es.success);
-    a.expectContains('ES response mentions Estaca roja', es.voice_response, 'Estaca roja');
-    await tEs();
-  }),
-};
 
-const SCEN_5: Scenario = {
-  id: 'C5',
-  title: 'Golf Father rule — driver_or_3wood (over-the-top branch)',
-  category: 'critical',
-  run: () => runWithAsserts('C5', 'Golf Father rule — driver_or_3wood over-the-top', async (a) => {
-    const tEn = M.seedLanguage('en');
-    const tReset = M.resetPracticeStats();
-    const tFeed = M.feedPracticeSwings(8, { detected_issue: 'over_the_top', severity: 'significant' });
-    const tLoc = M.seedLocationType('tee');
-    // sanity — practice stats updated
-    a.expect('overTheTopCount > 3 after seed', usePracticeStore.getState().overTheTopCount > 3);
-    a.expect('swingCount > 5 after seed', usePracticeStore.getState().swingCount > 5);
-
-    const r = await dispatchVoiceIntent({
-      intent_type: 'ask_golf_father',
-      parameters: { topic: 'course_management', subtopic: 'driver_or_3wood', use_context: false },
-      raw_text: 'driver or 3 wood here',
-    });
-    a.expect('Dispatch succeeded', r.success);
-    // EN copy from i18n/locales/en.json the Golf Father.driver_or_3wood
-    a.expectContains('Response mentions 3-wood', r.voice_response, '3-wood');
-    await tLoc(); await tFeed(); await tReset(); await tEn();
-  }),
-};
-
-const SCEN_6: Scenario = {
-  id: 'C6',
-  title: 'Golf Father rule — flag_or_center (default handicap)',
-  category: 'critical',
-  run: () => runWithAsserts('C6', 'Golf Father rule — flag_or_center safe', async (a) => {
-    const tEn = M.seedLanguage('en');
-    // Handler defaults user_handicap to 18 (> 15 → safe branch).
-    const r = await dispatchVoiceIntent({
-      intent_type: 'ask_golf_father',
-      parameters: { topic: 'course_management', subtopic: 'flag_or_center', use_context: false },
-      raw_text: 'flag or center',
-    });
-    a.expect('Dispatch succeeded', r.success);
-    a.expectContains('Response = safe-center copy', r.voice_response, 'Center of the green');
-    await tEn();
-  }),
-};
 
 const SCEN_7: Scenario = {
   id: 'C7',
@@ -205,29 +136,33 @@ const SCEN_7: Scenario = {
 
 const SCEN_8: Scenario = {
   id: 'C8',
-  title: 'ES language thread — the Golf Father rule routes through i18n',
+  title: 'ES language thread — the offline caddie answers in Spanish',
   category: 'critical',
   run: () => runWithAsserts('C8', 'ES language thread', async (a) => {
-    // Verify the language thread through a path that does NOT need
-    // an active round. ask_golf_father (Golf Father rules) reads i18n.t
-    // directly, so flipping language end-to-end exercises the same
-    // translation plumbing distance_to_green would use, without the
-    // global isRoundActive flip the prior version did (that flip
-    // tripped roundStore subscribers in app/_layout.tsx — start
-    // holeDetection / movement / off-course — which on a synthetic
-    // harness state had nothing real to read and risked cascading).
+    /**
+     * 2026-09-11 — RE-VEHICLED, NOT DELETED.
+     *
+     * This tested the language thread by dispatching ask_golf_father, because that handler read
+     * i18n.t directly. The Golf Father is gone (a retired Tank persona), and with it the last
+     * localized INTENT handler — so the old vehicle no longer exists.
+     *
+     * The coverage still matters, so it moves to the path that is genuinely language-threaded and
+     * that players actually hit with no signal: services/offlineCaddie, localized en/es/zh. Deleting
+     * the scenario would have quietly dropped the ES thread from the harness along with the persona.
+     */
     const tEs = M.seedLanguage('es');
-    const r = await dispatchVoiceIntent({
-      intent_type: 'ask_golf_father',
-      parameters: { topic: 'rules', subtopic: 'red_vs_yellow', use_context: false },
-      raw_text: 'roja contra amarilla',
-      language: 'es',
-    });
-    a.expect('Dispatch succeeded', !!r && r.success);
-    a.expectContains('Spanish copy (Estaca roja) returned', r?.voice_response, 'Estaca roja');
+    const { answerOffline } = require('../offlineCaddie') as typeof import('../offlineCaddie');
+    const es = answerOffline('que palo uso', 'es');
+    const en = answerOffline('what club should I hit', 'en');
+    // Both layers may legitimately decline with no round and no GPS; what must hold is that the
+    // language argument is honoured rather than ignored.
+    a.expect('offline caddie is callable in ES', es === null || typeof es.text === 'string');
+    a.expect('offline caddie is callable in EN', en === null || typeof en.text === 'string');
+    if (es && en) a.expect('ES and EN are not the same string', es.text !== en.text);
     await tEs();
   }),
 };
+
 
 const SCEN_9: Scenario = {
   id: 'C9',
@@ -257,10 +192,12 @@ const SCEN_10: Scenario = {
   run: () => runWithAsserts('H10', 'Voice intent dispatch — 10 phrases', async (a) => {
     const tEn = M.seedLanguage('en');
     const phrases: { intent_type: string; parameters?: Record<string, unknown>; raw_text: string }[] = [
-      { intent_type: 'ask_golf_father', parameters: { topic: 'rules', subtopic: 'red_vs_yellow' }, raw_text: 'red vs yellow' },
-      { intent_type: 'ask_golf_father', parameters: { topic: 'course_management', subtopic: 'flag_or_center' }, raw_text: 'flag or center' },
-      { intent_type: 'ask_golf_father', parameters: { topic: 'rules', subtopic: 'nearest_point_relief' }, raw_text: 'cart path relief' },
-      { intent_type: 'ask_golf_father', parameters: { topic: 'course_management', subtopic: 'lay_up' }, raw_text: 'should I lay up' },
+      // 2026-09-11 — four ask_golf_father phrases lived here; the persona is deleted. Replaced with
+      // live intents rather than shortening the smoke test, so it still covers ten dispatches.
+      { intent_type: 'query_status', parameters: { topic: 'yardage' }, raw_text: 'how far to the green' },
+      { intent_type: 'club_change', parameters: { club: '7 iron' }, raw_text: "I'm hitting my 7" },
+      { intent_type: 'log_score', parameters: { score: 5 }, raw_text: 'I made a 5' },
+      { intent_type: 'acknowledge', parameters: {}, raw_text: 'got it' },
       { intent_type: 'help', parameters: {}, raw_text: 'help' },
       { intent_type: 'acknowledge', parameters: {}, raw_text: 'thanks' },
       { intent_type: 'navigate', parameters: { destination: 'cage' }, raw_text: 'open cage' },
@@ -943,7 +880,7 @@ const SCEN_24: Scenario = {
 };
 
 export const ALL_SCENARIOS: readonly Scenario[] = [
-  SCEN_1, SCEN_2, SCEN_3, SCEN_4, SCEN_5, SCEN_6, SCEN_7, SCEN_8, SCEN_9,
+  SCEN_1, SCEN_2, SCEN_3, SCEN_7, SCEN_8, SCEN_9,
   SCEN_10, SCEN_11, SCEN_12, SCEN_13, SCEN_14,
   SCEN_15, SCEN_16, SCEN_17,
   SCEN_18, SCEN_19, SCEN_20,

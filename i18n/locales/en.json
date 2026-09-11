@@ -1,20 +1,4 @@
 {
-  "golf_advice": {
-    "driver_or_3wood": "You've been over the top in practice. Feel right field. Take 3-wood.",
-    "driver_or_3wood_clean": "Driver is fine today. Trust your swing.",
-    "red_vs_yellow": "Red stake: lateral drop within 2 club lengths, no nearer the hole. Yellow: back-on-line only.",
-    "yellow_vs_red": "Yellow stake: back-on-line drop only. Red allows lateral relief.",
-    "par3_wind": "Wind in your face. Take one more club and swing smooth.",
-    "layup": "Lay up to your favorite wedge number. Avoid the trouble short.",
-    "nearest_point_relief": "Find nearest point, no nearer hole, where you get full relief from cart path or sprinkler. Drop within 1 club length. No penalty.",
-    "can_ground_club_yes": "Yes. Fairway or rough, ground it.",
-    "can_ground_club_no": "No. Penalty area or bunker - don't ground it. 2 stroke penalty.",
-    "flag_or_center_safe": "Center of the green. Every time. You don't have the skill to hunt flags yet.",
-    "flag_or_center_attack": "Attack it. Wedge in hand, go at it.",
-    "flag_or_center_balanced": "Center. A 30-foot putt is better than a short-sided bunker.",
-    "analyze_hole_photo": "I've got the hole photo — let me read the layout and call your line.",
-    "analyze_swing_video": "Swing video detected. I'll have the full read once the backend's wired."
-  },
   "buttons": {
     "start_cage": "Start Cage Session",
     "watch_swing": "Watch My Swing",
@@ -2383,18 +2367,18 @@
   "swinglab_tempo_trainer": {
     "accessibility_label": {
       "back": "Back",
-      "golffather_personal_swing_analysis": "GolfFather personal swing analysis",
-      "back_to_training_modes": "Back to training modes"
+      "back_to_training_modes": "Back to training modes",
+      "smart_tempo_personal_swing_analysis": "Smart Tempo — Personal Swing Analysis"
     },
     "tempo_trainer_screen": {
       "tempo_trainer_analysis": "Tempo Trainer & Analysis",
       "choose_your_training_mode": "Choose your training mode",
-      "golffather_personal_swing_analysis": "GolfFather Personal Swing Analysis",
       "premium": "PREMIUM",
       "record_a_swing_and_your": "Record a swing and your caddie reads YOUR real tempo, positions, and the fault that's costing you — no guessing, only what the swing actually shows.",
       "tempo": "TEMPO",
       "tip_this_plays_through_the": "Tip: this plays through the speaker — use it standalone, or on headphones when recording in cage mode (so the strike mic won't hear the tones).",
-      "yours_1": "{{value}}yours {{ratio}} : 1"
+      "yours_1": "{{value}}yours {{ratio}} : 1",
+      "smart_tempo_personal_swing_analysis": "Smart Tempo — Personal Swing Analysis"
     }
   },
   "swinglab_trim": {

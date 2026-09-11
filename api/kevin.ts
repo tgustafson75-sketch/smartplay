@@ -1453,10 +1453,14 @@ ${(() => {
   /**
    * 2026-08-23 — WHAT THE BALL IS ACTUALLY SITTING IN.
    *
-   * The client has sent `pendingLieAnalysis` for months and this handler never destructured it --
-   * services/intents/askGolfFatherHandler.ts says so in a comment: "round.pendingLieAnalysis
-   * exists; not wired". So a player who photographed a buried lie got advice built as if the ball
-   * were sitting up in the fairway, which is a large part of "your advice is very generic".
+   * The client has sent `pendingLieAnalysis` for months and this handler never destructured it. So a
+   * player who photographed a buried lie got advice built as if the ball were sitting up in the
+   * fairway, which is a large part of "your advice is very generic".
+   *
+   * 2026-09-11 — this note used to cite askGolfFatherHandler's own "not wired" comment as the
+   * evidence. That handler is deleted (a retired Tank persona), and the citation went with it rather
+   * than being left pointing at a file nobody can open. The lie now also reaches the CLUB PICKER via
+   * services/shotReadLive, not just this prompt.
    */
   const lie = pendingLieAnalysis as { situation_description?: string; tactical_advice?: string; recommended_club?: string | null; alternative_play?: string | null; confidence_level?: string } | null;
   if (!lie || !lie.situation_description) return '';

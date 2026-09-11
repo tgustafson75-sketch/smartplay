@@ -66,7 +66,6 @@ The 30 Zustand stores; bold = highest-traffic.
 
 | Handler | Intent |
 |---|---|
-| [askGolfFatherHandler.ts](../../services/intents/askGolfFatherHandler.ts) | `ask_golf_father` (Tank rules + course-management). |
 | [queryStatusHandler.ts](../../services/intents/queryStatusHandler.ts) | `query_status` (score, distance_to_green, carry_check, etc.). |
 | [logShotHandler.ts](../../services/intents/logShotHandler.ts) | `log_shot`. |
 | [logScoreHandler.ts](../../services/intents/logScoreHandler.ts) | `log_score`. |

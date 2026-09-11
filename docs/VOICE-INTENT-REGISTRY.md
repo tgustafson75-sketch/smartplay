@@ -71,7 +71,6 @@ Every `IntentResult.voice_response` follows one of these shapes:
 | `end_round` | `services/intents/endRoundHandler.ts` | Ends the round → scorecard + recap |
 | `coach_refine` | `services/intents/coachRefineHandler.ts` | Refines a coaching read after a drill |
 | `set_session_focus` | `services/intents/sessionFocusHandler.ts` | "I want to work on X this session" — orients the session |
-| `ask_golf_father` | `services/intents/askGolfFatherHandler.ts` | Strategic course-management ask |
 | `find_my_data` | `services/intents/findMyDataHandler.ts` | Universal recall ("pull up my last scorecard") |
 | `undo` | `services/intents/undoHandler.ts` | Reverses the last logged action |
 | `open_external` | `services/intents/openExternalHandler.ts` | Opens an external URL / app |

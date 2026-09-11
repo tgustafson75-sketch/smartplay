@@ -66,7 +66,7 @@ function watchAndSpeakNextSwingAnalysis(): void {
     clearTimeout(watchdog);
     unsub();
     // 2026-05-24 — Pipe analyzed swing into practiceStore so Tank rules
-    // (askGolfFatherHandler.ts) can branch on tendencies like
+    // strategy handlers can branch on tendencies like
     // overTheTopCount / typicalMiss. Wrap because store writes shouldn't
     // ever block the speak path.
     try {

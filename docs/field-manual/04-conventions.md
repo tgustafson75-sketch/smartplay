@@ -14,7 +14,6 @@
 - Branding line is **"Built by SmartPlay AI"** (the company), never a single caddie name.
 - All four caddies are equal. UI surfaces don't elevate any one as "the face." The canonical avatar component is [components/CaddieAvatar.tsx](../../components/CaddieAvatar.tsx); the dead `KevinAvatar.tsx` was removed in commit `532fbe5`.
 - Per-pillar caddie assignment lives in `settingsStore.caddieAssignments`. Three-register interpretation (Caddie / Coach / Psychologist) is built into each character spec.
-- Tank is scoped to `ask_golf_father` to keep his volume aligned with the character; he doesn't drive proactive cadence on the round surface unless the user explicitly assigns him.
 
 ## No fake precision / honest degradation
 

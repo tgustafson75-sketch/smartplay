@@ -21,7 +21,6 @@ import { logIssueHandler } from './logIssueHandler';
 import { sequenceHandler } from './sequenceHandler';
 import { sessionFocusHandler } from './sessionFocusHandler';
 import { declareHoleHandler } from './declareHoleHandler';
-import { askGolfFatherHandler } from './askGolfFatherHandler';
 import { quickRoundHandler } from './quickRoundHandler';
 import { openExternalHandler } from './openExternalHandler';
 import { stateYardageHandler } from './stateYardageHandler';
@@ -69,7 +68,6 @@ voiceCommandRouter.registerHandler(logIssueHandler);
 voiceCommandRouter.registerHandler(sequenceHandler);
 voiceCommandRouter.registerHandler(sessionFocusHandler);
 voiceCommandRouter.registerHandler(declareHoleHandler);
-voiceCommandRouter.registerHandler(askGolfFatherHandler);
 voiceCommandRouter.registerHandler(quickRoundHandler);
 voiceCommandRouter.registerHandler(openExternalHandler);
 voiceCommandRouter.registerHandler(stateYardageHandler);
@@ -116,7 +114,6 @@ export {
   logIssueHandler,
   sequenceHandler,
   declareHoleHandler,
-  askGolfFatherHandler,
   quickRoundHandler,
   openExternalHandler,
   stateYardageHandler,

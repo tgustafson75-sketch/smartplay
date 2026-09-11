@@ -1,20 +1,4 @@
 {
-  "golf_advice": {
-    "driver_or_3wood": "你在练习时挥杆过顶。感觉向右场。用3号木。",
-    "driver_or_3wood_clean": "今天用1号木没问题。相信你的挥杆。",
-    "red_vs_yellow": "红桩:横向抛球,在2杆长度内,不可更靠近球洞。黄桩:仅可沿原线后方抛球。",
-    "yellow_vs_red": "黄桩:仅可沿原线后方抛球。红桩允许横向救济。",
-    "par3_wind": "顶风。多用一号杆,挥杆平稳。",
-    "layup": "打到你最喜欢的劈起杆距离。避开短距离的麻烦。",
-    "nearest_point_relief": "找到最近的救济点,不更靠近球洞,从手推车道或洒水器获得完全救济。在1杆长度内抛球。无罚杆。",
-    "can_ground_club_yes": "可以。球道或长草区,可以触地。",
-    "can_ground_club_no": "不可以。罚杆区或沙坑——不要触地。2杆罚杆。",
-    "flag_or_center_safe": "瞄准果岭中心。每次都是。你还没有追旗的技术。",
-    "flag_or_center_attack": "进攻。手中拿劈起杆,直奔目标。",
-    "flag_or_center_balanced": "瞄准中心。30英尺的推杆比短边沙坑要好。",
-    "analyze_hole_photo": "我看到球洞照片了——让我读读布局,给你一条线。",
-    "analyze_swing_video": "检测到挥杆视频。后端连接好后,我会给出完整分析。"
-  },
   "buttons": {
     "start_cage": "开始训练场",
     "watch_swing": "观看我的挥杆",

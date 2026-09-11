@@ -3698,14 +3698,19 @@ check('Voice: canned-speech sweep — strategy/conversation reads route to the b
   // hole-info strategy is AI-led online; unmapped query_status defers; "help me X" + acks-with-a-request
   // route to the brain.
   (() => {
-    const gf = read('services/intents/askGolfFatherHandler.ts');
+    /**
+     * 2026-09-11 — the golf-father clause is GONE, not relaxed: that handler was the first of the
+     * seven local intercepts this scenario was written about, and it has been deleted outright
+     * (a retired Tank persona). An intercept that no longer exists cannot speak over the brain.
+     * The remaining six are unchanged and still checked below.
+     */
     const lsr = read('services/localStatusResponder.ts');
     const qs = read('services/intents/queryStatusHandler.ts');
     const help = read('services/intents/helpHandler.ts');
     const ack = read('services/intents/acknowledgeHandler.ts');
     return (
-      // 1 — golf-father reduced to EXPLICIT invocations (generic strategy phrases removed from examples)
-      /'ask the golf father'/.test(gf) &&
+      // 1 — the golf-father cascade is deleted, so it cannot claim a conversational phrase at all.
+      !fs.existsSync(path.resolve(__dirname, '../../', 'services/intents/askGolfFatherHandler.ts')) &&
       // 7 — hole strategy is AI-led online (added to the exclusion set)
       /'club_recommend', 'plays_like', 'reach', 'hole_info'/.test(lsr) &&
       // 3 — unmapped query_status defers to the brain
@@ -11942,28 +11947,42 @@ check('LOCK: we ask for no permission we cannot use, and every purpose string co
   })(),
   'POST_NOTIFICATIONS is declared if and only if the app actually posts one, and the microphone and camera purpose strings name every use the code actually makes');
 
-check('LOCK: every golf_advice translation key resolves in every locale',
+check('LOCK: the retired Tank advice namespace is gone from every locale',
+  /**
+   * 2026-08-25 — this namespace was called `tank` and was renamed with the persona; the scenario
+   * checked that every key the handler asked for existed in EVERY locale, because a missed key
+   * shows the player the RAW KEY STRING mid-answer and only a human reading that screen would
+   * notice.
+   *
+   * 2026-09-11 — Tim: "all golffather is Tank related and needs to be deleted." The handler is
+   * deleted and the `golf_advice` namespace with it, in en/es/zh. The invariant flips: nothing may
+   * ask for those keys, and no locale may still carry them — a stranded namespace is how a deleted
+   * persona comes back through a copy-paste.
+   */
   (() => {
-    /**
-     * 2026-08-25 — this namespace was called `tank` and was renamed with the persona. A rename that
-     * misses one key does not fail a build or a test: the player is shown the RAW KEY STRING
-     * ("golf_advice.layup") in the middle of a rules answer, and only a human reading that screen
-     * would ever notice. So the invariant is checked mechanically instead — every key the code asks
-     * for must exist in EVERY locale, not just English.
-     */
-    const src = readCode('services/intents/askGolfFatherHandler.ts');
-    const used = [...src.matchAll(/i18n\.t\('golf_advice\.([a-z0-9_]+)'/g)].map((m) => m[1]!);
-    if (used.length === 0) return false;                       // the handler stopped asking — investigate
-    const locales = ['en', 'es', 'zh'];
-    return locales.every((loc) => {
-      const raw = readCode(`i18n/locales/${loc}.json`);
-      let parsed: { golf_advice?: Record<string, string> };
-      try { parsed = JSON.parse(raw) as typeof parsed; } catch { return false; }
-      const have = parsed.golf_advice ?? {};
-      return used.every((k) => typeof have[k] === 'string' && have[k]!.length > 0);
+    if (fs.existsSync(path.resolve(__dirname, '../../', 'services/intents/askGolfFatherHandler.ts'))) return false;
+    const ROOT_DIR = path.resolve(__dirname, '../../');
+    const asks = ['services', 'app', 'components', 'hooks'].some((d) => {
+      const hit = (dir: string): boolean => {
+        let entries: string[] = [];
+        try { entries = fs.readdirSync(path.join(ROOT_DIR, dir)); } catch { return false; }
+        for (const e of entries) {
+          const full = path.join(ROOT_DIR, dir, e);
+          let st; try { st = fs.statSync(full); } catch { continue; }
+          if (st.isDirectory()) { if (hit(path.join(dir, e))) return true; continue; }
+          if (!/\.tsx?$/.test(e)) continue;
+          if (/golf_advice\./.test(fs.readFileSync(full, 'utf8'))) return true;
+        }
+        return false;
+      };
+      return hit(d);
+    });
+    if (asks) return false;
+    return ['en', 'es', 'zh'].every((loc) => {
+      try { return !JSON.parse(readCode(`i18n/locales/${loc}.json`)).golf_advice; } catch { return false; }
     });
   })(),
-  'every golf_advice key used by the rules/course-management handler resolves in en, es and zh — no player ever sees a raw key');
+  'the Golf Father handler and its golf_advice namespace are deleted from the code and from every locale');
 
 check('LOCK: every require()d asset exists on disk',
   (() => {
@@ -14378,8 +14397,10 @@ check('LOCK: the removed persona cannot return to shipped code',
       "if ((reassigned[pillar] as string) === 'tank') reassigned[pillar] = 'kevin';",
       "if (p && (p.customCaddieBasePersona as string) === 'tank') p.customCaddieBasePersona = 'kevin';",
     ]);
-    // The wire token the classifier still emits for ask_golf_father; renaming it would break
-    // in-flight clients. Documented at api/voice-intent.ts.
+    // 2026-09-11 — `tank_advice` was the wire token the classifier emitted for ask_golf_father, kept
+    // so renaming it would not break in-flight clients. The intent is deleted, so the token is not
+    // emitted any more; it stays allowed here only so an OLD client's payload is still recognisable
+    // in a log rather than tripping this scan.
     const WIRE_TOKEN = /tank_advice/;
     const NAME = /\btank\b/i;
     const PERSON = /marc[\s._-]*ward|marc\.ward3533/i;
