@@ -57,6 +57,13 @@ export interface TrendChartProps {
   endLabel?: string;
   /** Unit shown after the primary line's end value, e.g. 'over'. */
   endUnit?: string;
+  /**
+   * 2026-09-11 (Tim) — "the graph should have a timeline."
+   *
+   * It had no x-axis at all: six weekly buckets drawn with nothing saying they were weeks, or which
+   * end was now. Two strings, oldest and newest, drawn at the bottom corners.
+   */
+  xLabels?: [string, string];
   // 2026-08-06 (Tim — "there should be ONE graph not multiple"). A SECOND series overlaid on the same
   // chart (its own independent scale, so different units — practice balls vs score-vs-par — can share one
   // timeline and read as "are they moving together"). Drawn as a line in its own color with its own legend
@@ -113,7 +120,7 @@ export default function TrendChart({
   data, width, height, color = '#00C896', label, yMin, yMax,
   higherIsBetter = true, emptyText = 'Not enough data yet',
   legendDotColor, showTrend = false, deltaUnit, markerIndices, markerColor = '#38bdf8', markerLabel,
-  endLabel, endUnit,
+  endLabel, endUnit, xLabels,
   overlay = null,
 }: TrendChartProps) {
   const series = useMemo(
@@ -145,7 +152,8 @@ export default function TrendChart({
   const PAD_X = 6;
   const hasLegend = !!label;
   const PAD_TOP = hasLegend ? 22 : 4;
-  const PAD_BOT = 4;
+  // Room for the timeline when there is one.
+  const PAD_BOT = xLabels ? 13 : 4;
   const chartW = width - PAD_X * 2;
   const chartH = height - PAD_TOP - PAD_BOT;
   const baseY = PAD_TOP + chartH;
@@ -216,6 +224,24 @@ export default function TrendChart({
     return out;
   })();
 
+  /**
+   * 2026-09-11 (Tim) — "you can show a line that's flat-lined with no activity, and then a blip,
+   * once you do like one stretch or one pre-round or one whatever."
+   *
+   * Exactly right, and it is an honesty problem rather than a cosmetic one. Five zeroes and a single
+   * value drawn as a CONTINUOUS LINE is a claim about a trend, and there is no trend — there is one
+   * event. A reader sees a shape and reads a direction into it.
+   *
+   * So a series with fewer than two ACTIVE periods is drawn as the points that actually happened,
+   * not as a line through mostly nothing. The same discipline the rest of the app keeps: show the
+   * real signal, never a shape that implies more than the data says. [[illustration-data-points]]
+   */
+  const activeCount = (xs: number[]) => xs.filter((v) => Number.isFinite(v) && v !== 0).length;
+  const overlaySparse = overlayPts.length > 0 && activeCount(overlaySeries) < 2;
+  const overlayDots = overlaySparse
+    ? overlayPts.filter((_, i) => Number.isFinite(overlaySeries[i]) && overlaySeries[i] !== 0)
+    : [];
+
   return (
     <View style={{ width, height }}>
       {hasLegend ? (
@@ -249,9 +275,13 @@ export default function TrendChart({
         <Path d={areaPath} fill={`url(#${gradId})`} stroke="none" />
         {/* 2026-08-06 (Tim — ONE graph) — the overlaid effort line (own scale, own solid color), drawn
             BENEATH the primary outcome line so the score line stays the visual anchor. */}
-        {overlayPath ? (
+        {overlayPath && !overlaySparse ? (
           <Path d={overlayPath} fill="none" stroke={overlay!.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" strokeOpacity={0.9} strokeDasharray="5 3" />
         ) : null}
+        {/* One event is a point, not a trend. */}
+        {overlayDots.map((p, i) => (
+          <Circle key={`od-${i}`} cx={p.x} cy={p.y} r={3.5} fill={overlay!.color} />
+        ))}
         <Path
           d={linePath}
           fill="none"
@@ -275,6 +305,19 @@ export default function TrendChart({
           * you have to decode from a legend. The chip sits behind the text because a line can run
           * underneath it. Anchored to the right edge so it cannot be clipped.
           */}
+        {xLabels ? (
+          <>
+            <SvgText x={PAD_X} y={height - 3} fill="#6b7280" fontSize={8} fontWeight="800" letterSpacing={0.6}>
+              {xLabels[0]}
+            </SvgText>
+            <SvgText
+              x={width - PAD_X} y={height - 3} fill="#6b7280" fontSize={8} fontWeight="800"
+              letterSpacing={0.6} textAnchor="end"
+            >
+              {xLabels[1]}
+            </SvgText>
+          </>
+        ) : null}
         {endTags.map((t) => (
           <React.Fragment key={t.key}>
             <Rect

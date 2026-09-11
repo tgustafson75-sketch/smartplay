@@ -1317,6 +1317,15 @@ export default function Dashboard() {
                 }}
                 endLabel={activeProgress.scoreLabel.split(' ')[0]}
                 endUnit={activeProgress.scoreDeltaUnit}
+                /**
+                 * 2026-09-11 (Tim) — "the graph should have a timeline." It had no x-axis at all:
+                 * six weekly buckets drawn with nothing saying they were weeks, or which end is now.
+                 * Derived from the series length so it cannot drift from what is plotted.
+                 */
+                xLabels={[
+                  t('dashboard.text.weeks_ago', { count: Math.max(1, activeProgress.score.length - 1) }),
+                  t('dashboard.text.this_week'),
+                ]}
                 markerIndices={activeProgress.markers}
                 markerColor="#f9a8d4"
                 markerLabel={activeProgress.markers.length ? 'warm-up' : undefined}

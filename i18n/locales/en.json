@@ -449,7 +449,10 @@
       "holes_competition": "{{date_str}} · {{holes_played}} holes · competition",
       "holes": "{{date_str}} · {{holes_played}} holes",
       "before_the_round": "BEFORE THE ROUND",
-      "preround_association_note": "Association, not cause — the rounds you stretched for are often the ones you arrived early for."
+      "preround_association_note": "Association, not cause — the rounds you stretched for are often the ones you arrived early for.",
+      "weeks_ago_one": "{{count}} wk ago",
+      "weeks_ago_other": "{{count}} wks ago",
+      "this_week": "this wk"
     },
     "alert": {
       "delete_round": "Delete round?"
