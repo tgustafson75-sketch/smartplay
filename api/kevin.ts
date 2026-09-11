@@ -306,6 +306,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       pendingLieAnalysis = null,
       roundStats = null,
       playProfile = null,
+      clubCall = null,
       transportMode = null,
       currentLocationType = null,
       riskMode = null,
@@ -1253,6 +1254,43 @@ ${(() => {
     return `${lines.join('\n')}\n`;
   }
   return '';
+})()}${(() => {
+  const cc = clubCall as {
+    advised?: string; advisedShape?: string | null; advisedAgoSec?: number | null; playerClub?: string | null;
+    override?: {
+      advisedClub?: string; chosenClub?: string; deltaYards?: number | null;
+      lean?: string; leavesYards?: number | null; demand?: string; adjustment?: string;
+    } | null;
+  } | null;
+  if (!cc || !cc.advised) return '';
+  /**
+   * 2026-09-11 (Tim) — THE OVERRIDE. "The caddie's job is to agree, but point out — okay, but we're
+   * gonna have to really swing smooth and do this."
+   *
+   * Until this block existed the brain was never told what it had just recommended, so a player
+   * nominating a different club produced an answer with no memory of the call it was replacing.
+   *
+   * TWO STATES, and the first one is what makes the second work in the SAME breath. `club_change`
+   * dispatches after this turn has already been answered, so on the turn the player actually says
+   * "I'll take the 3 wood" there is no structured override yet — only his words and, now, the
+   * caddie's own standing call to read them against.
+   *
+   * The instruction is deliberately one-sided. AGREE. A caddie who re-argues a club he has already
+   * lost is not a caddie, and a player who gets a lecture every time he backs himself stops saying
+   * what he is doing — which costs the app the shot data as well as the trust. One condition, named
+   * once, and then it is his shot. [[feels-like-a-real-caddie]]
+   */
+  const ov = cc.override;
+  if (!ov || !ov.chosenClub) {
+    return `YOUR STANDING CLUB CALL: you told him the ${cc.advised}${cc.advisedShape ? ` (${cc.advisedShape})` : ''}${
+      cc.advisedAgoSec != null ? `, ${cc.advisedAgoSec}s ago` : ''
+    }. That is YOUR call and he has not played it yet — so if he now names a DIFFERENT club, he is overriding you. AGREE with him, name ONE adjustment his club demands, and do not re-sell the ${cc.advised}.\n`;
+  }
+  return `HE IS OVERRIDING YOUR CLUB. You called the ${ov.advisedClub}; he is going with the ${ov.chosenClub}${
+    ov.deltaYards != null ? ` (${ov.deltaYards > 0 ? '+' : ''}${ov.deltaYards} yards of club)` : ''
+  }${ov.leavesYards != null ? `, which leaves him about ${ov.leavesYards} in` : ''}.
+AGREE WITH HIM — it is his shot and his call. Then name ONE thing, once: ${ov.adjustment}
+Do NOT re-sell your club, do NOT list a second caveat, and do NOT say "are you sure". Say it the way a caddie hands over a club he would not have picked: short, easy, and already on to the shot.\n`;
 })()}${(() => {
   const rs = roundStats as { holesPlayed?: number; puttsPerHole?: number; threePutts?: number; gir?: string | null; fairways?: string | null; penalties?: number; lastThreeHoles?: { hole: number; score: number; putts: number | null }[] } | null;
   if (!rs || !rs.holesPlayed) return '';

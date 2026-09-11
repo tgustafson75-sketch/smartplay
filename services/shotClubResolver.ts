@@ -47,6 +47,37 @@ export function declaredClubIfFresh(nowMs = Date.now()): string | null {
 }
 
 /**
+ * 2026-09-11 — THE CADDIE'S OWN OUTSTANDING CALL, for the caddie's own prompt.
+ *
+ * Sibling of declaredClubIfFresh above, added for the same reason and against the same window. The
+ * brain has never been told what it just recommended: `pendingKevinRec` is written by recommend_club
+ * and read only here, at shot-log time. So when the player answers "I'll take the 3 wood", the
+ * caddie has no call of its own to reconcile that against and replies as if the question arrived
+ * cold — Tim: "it goes into… I don't kind of have the context loop."
+ *
+ * It has to be the STANDING call, not only a detected override: `club_change` dispatches AFTER the
+ * brain has already answered the turn, so a payload that only spoke up once the player's club had
+ * landed in the store would arrive one turn late — agreeing with an override the caddie had already
+ * talked past. Sending the outstanding call every turn is what lets it notice the override in the
+ * player's own words, in the same breath.
+ *
+ * An INFERRED stamp is excluded here exactly as it is for adherence below: the app guessing a club
+ * from a distance is not something the caddie said, and a caddie cannot be overruled on a call it
+ * never made.
+ */
+export function pendingAdviceIfFresh(nowMs = Date.now()): { club: string; shape: string | null; agoSec: number } | null {
+  try {
+    const rec = useRoundStore.getState().pendingKevinRec ?? null;
+    if (!rec || !rec.club || !isAdvice(rec.kind as RecKind | null | undefined)) return null;
+    const at = rec.at ?? null;
+    if (at == null || nowMs - at > FRESH_MS) return null;
+    return { club: rec.club, shape: rec.shape ?? null, agoSec: Math.round((nowMs - at) / 1000) };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * 2026-08-17 (Tim — "shot recommendation in club has always been an issue… make sure it's all
  * cleaned") — TWO defects lived in this file's own comparison, under a header describing the fix.
  *

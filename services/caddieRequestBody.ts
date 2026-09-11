@@ -498,6 +498,90 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       };
     }, null),
 
+    /**
+     * 2026-09-11 (Tim) — THE PLAYER JUST PICKED A DIFFERENT CLUB, AND THE CADDIE HAD NO IDEA.
+     *
+     * `pendingKevinRec` is written the moment the caddie calls a club and read at shot-log time by
+     * shotClubResolver. It has never once been sent to the brain. So the caddie could not know it
+     * had said "driver" ten seconds earlier, and when the player answered "I'll take the 3 wood"
+     * there was no contradiction for it to notice — it replied as if the question had arrived cold.
+     * Tim: "it goes into… I don't kind of have the context loop."
+     *
+     * That is not a model failing to be conversational. It is a model that was never told.
+     *
+     * So the STANDING call goes out every turn it is still live, and when the player has named a
+     * club of their own, services/overrideLoop turns the two into the one thing a caddie actually
+     * says while handing over a club he did not pick: how much club it is, what it leaves, and the
+     * single condition attached. [[close-the-loop-strategy]]
+     */
+    clubCall: safe(() => {
+      const { pendingAdviceIfFresh } = require('./shotClubResolver') as typeof import('./shotClubResolver');
+      const standing = pendingAdviceIfFresh();
+      if (!standing) return null;
+      const { readOverride } = require('./overrideLoop') as typeof import('./overrideLoop');
+      const { normalizeClub } = require('./clubNormalize') as typeof import('./clubNormalize');
+      const { bagDistances } = require('./shotStrategy') as typeof import('./shotStrategy');
+      const bag = safe(() => bagDistances() as Record<string, number>, {});
+      const chosenYds = safe(() => {
+        const k = club ? normalizeClub(club) : null;
+        return k ? (bag[k] ?? null) : null;
+      }, null);
+      return {
+        advised: standing.club,
+        advisedShape: standing.shape,
+        advisedAgoSec: standing.agoSec,
+        /** The club the player has declared since, within the same freshness window. */
+        playerClub: club,
+        /**
+         * Null on the turn the player FIRST says it — club_change has not dispatched yet — which is
+         * exactly why `advised` above is sent unconditionally rather than only alongside a detected
+         * override. The structured read covers the turns after that, and the tap-driven club change
+         * that never passes through the brain at all.
+         */
+        override: club
+          ? readOverride({
+              advisedClub: standing.club,
+              chosenClub: club,
+              bag,
+              normalize: normalizeClub,
+              yardsToTarget: workingYards,
+              distanceControl: (p.distanceControl ?? null) as never,
+              /**
+               * Green geometry — the half the app could SEE and never told the read. Room behind the
+               * pin is what decides whether taking more club is fine or is the whole problem.
+               */
+              roomBehindYards: safe(() => {
+                const yr = require('./yardageResolver') as typeof import('./yardageResolver');
+                const fmb = yr.resolvedToFmb(yr.resolveYardage(currentHole ?? undefined));
+                const back = fmb?.back ?? null;
+                return typeof back === 'number' && workingYards != null && back > workingYards
+                  ? back - workingYards
+                  : null;
+              }, null),
+              /**
+               * What THEIR club has to carry — not the caddie's. The question an override raises is
+               * whether the club they picked gets over the trouble.
+               */
+              carryNeededYards: safe(() => {
+                if (!activeCourseId || currentHole == null || chosenYds == null) return null;
+                const cg = require('./courseGeometryService') as typeof import('./courseGeometryService');
+                const hz = require('./hazardIntelligence') as typeof import('./hazardIntelligence');
+                const wr = require('./windRelative') as typeof import('./windRelative');
+                const { getLastFix } = require('./gpsManager') as typeof import('./gpsManager');
+                const fix = getLastFix();
+                if (!fix || fix.lat == null || fix.lng == null) return null;
+                const geom = cg.getHoleGeometry(activeCourseId, currentHole);
+                const intel = hz.computeHazardIntelligence(
+                  { lat: fix.lat, lng: fix.lng }, geom, chosenYds, wr.shotBearingDeg(currentHole),
+                );
+                const c = intel?.carryToClear ?? null;
+                return typeof c === 'number' && Number.isFinite(c) && c > 0 ? c : null;
+              }, null),
+            })
+          : null,
+      };
+    }, null),
+
     roundStats: safe(() => {
       const stats = typeof r.getHoleStats === 'function' ? (r.getHoleStats() ?? []) : [];
       if (!stats.length) return null;

@@ -264,6 +264,38 @@ export function getCaddieContext(input: {
         calibrationLine = `YOUR OWN CALLING (clean strikes on clubs you called) — correct for this silently; never read it back to him: ${calib.join('; ')}.`;
       }
     } catch { /* calibration is additive — no learning yet just means no line */ }
+    /**
+     * 2026-09-11 (Tim) — WHEN HE OVERRODE YOU, DID IT WORK?
+     *
+     * The calibration line above measures the caddie on clubs the player TOOK — by design, because a
+     * shot hit with a club the caddie never called says nothing about the caddie's call. The cost of
+     * that correct rule was that every override was discarded: the single most interesting thing a
+     * golfer does, back his own judgement, was the one thing the app refused to learn from.
+     *
+     * services/overrideLoop is adviceOutcome's complement and is kept strictly SEPARATE from it —
+     * override evidence must never enter the club calibration, or the caddie starts grading itself
+     * on shots it did not choose.
+     *
+     * Here, in the CNS block, for the same reason the calibration line is here: one builder, every
+     * caddie path, no structured field that teaches one turn and leaves the next one ignorant.
+     */
+    let overrideLine: string | null = null;
+    try {
+      const ol = require('./overrideLoop') as typeof import('./overrideLoop');
+      const cn = require('./clubNormalize') as typeof import('./clubNormalize');
+      const rs = require('../store/roundStore').useRoundStore.getState();
+      const history = (rs.roundHistory ?? []).flatMap((r: { shots?: unknown[] }) => r.shots ?? []);
+      const all = [...history, ...(rs.shots ?? [])].slice(-300);
+      const bag = (() => {
+        try {
+          return require('./shotStrategy').bagDistances() as Record<string, number>;
+        } catch { return {}; }
+      })();
+      const line = ol.describeOverrideRecord(ol.overrideRecord(all as never, cn.normalizeClub, bag));
+      // Addressed to the caddie about how to HANDLE him, never read back as a scoreboard of the
+      // times he was wrong. [[feels-like-a-real-caddie]]
+      if (line) overrideLine = `HIS OWN JUDGEMENT (when he takes a different club from the one you call) — use this to decide how hard to press, never quote it at him: ${line}.`;
+    } catch { /* additive — no overrides yet just means no line */ }
     if (course) {
       const parts: string[] = [];
       if (course.name) parts.push(course.name);
@@ -363,6 +395,8 @@ export function getCaddieContext(input: {
      * caddie's own club bias. So it goes last: if something has to be cut, cut this.
      */
     if (calibrationLine) lines.push(calibrationLine);
+    // Same reasoning, same tier: a prior about how he decides, cut before hole knowledge is cut.
+    if (overrideLine) lines.push(overrideLine);
 
     /**
      * Live trouble goes FIRST in the block, not last. Everything above it is a learned prior; this
