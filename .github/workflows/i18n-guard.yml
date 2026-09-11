@@ -1,0 +1,111 @@
+name: i18n guard
+
+# Fails when a NEW user-facing string literal is written without going through t().
+#
+# 2026-09-11 (release 1.5, Localization Layer) — WHY THIS RUNS ON PUSH AND NOT ONLY ON PULL REQUEST.
+#
+# The other workflow in this repo (ota-guard.yml) runs on `pull_request` only, and its own header
+# records what that cost: OTAs are published from a laptop, so the guard was "protecting the path
+# nobody uses". Work in this repo is committed and pushed directly to main — there is frequently no
+# pull request at all. A guard that waits for one would never fire.
+#
+# So this runs on PUSH, on every branch, and on pull_request as well. It is also wired into
+# .githooks/pre-commit, which is the gate that demonstrably runs, because CI that fires after the
+# push is a report and a hook that fires before the commit is a gate.
+#
+# SCOPE: CHANGED FILES ONLY, deliberately, and temporarily.
+# At the time this landed the repo carried 2,732 pre-existing violations across 172 files — the
+# backlog documented in docs/I18N-AUDIT.md. A full-repo gate would fail every push on day one and be
+# switched off within a week, which is precisely how the June 2026 campaign decayed. Linting the
+# files a push actually touches means a NEW literal fails immediately while the backlog is cleared
+# by the codemod in phase 2 of this release.
+#
+# ⇒ FLIP `LINT_SCOPE` TO `all` ONCE THE CODEMOD HAS LANDED AND THE BACKLOG IS ZERO.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  no-hardcoded-strings:
+    runs-on: ubuntu-latest
+    env:
+      LINT_SCOPE: changed   # 'changed' | 'all'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci --ignore-scripts
+
+      - name: Resolve the range this push introduced
+        id: range
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+            # A new branch, or a force-push that rewrote history, reports an all-zero `before`.
+            # Fall back to the first parent so the job still has a real range to diff.
+            if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] \
+               || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+              BASE="$(git rev-parse "${HEAD}^" 2>/dev/null || echo "$HEAD")"
+            fi
+          fi
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
+          echo "head=$HEAD" >> "$GITHUB_OUTPUT"
+          echo "Comparing $BASE...$HEAD"
+
+      - name: Lint for hardcoded user-facing strings
+        run: |
+          set -euo pipefail
+          if [ "$LINT_SCOPE" = "all" ]; then
+            echo "Scope: whole repo"
+            npx eslint "app/**/*.tsx" "components/**/*.tsx" --rule '{}' 2>/dev/null || true
+            npx eslint "app/**/*.tsx" "components/**/*.tsx"
+            exit $?
+          fi
+
+          BASE='${{ steps.range.outputs.base }}'
+          HEAD='${{ steps.range.outputs.head }}'
+          # Added/Copied/Modified/Renamed — never Deleted, whose path no longer exists to lint.
+          #
+          # `:(glob)` is REQUIRED, not stylistic. Under git's default wildmatch, `app/**/*.tsx`
+          # matches only NESTED files — it silently skips app/settings.tsx and app/_layout.tsx, i.e.
+          # every top-level screen, including the one holding the largest concentration of hardcoded
+          # strings in the app. Verified by diffing the same range both ways: the default form
+          # returned 3 files where `:(glob)` returned 5. A guard that reads its own empty output as
+          # success is the failure this whole release is about.
+          FILES="$(git diff --name-only --diff-filter=ACMR "$BASE" "$HEAD" \
+            -- ':(glob)app/**/*.tsx' ':(glob)components/**/*.tsx' || true)"
+
+          if [ -z "$FILES" ]; then
+            echo "No screen files changed — nothing for this guard to check."
+            exit 0
+          fi
+
+          echo "--- linting changed screen files ---"
+          echo "$FILES"
+          echo "$FILES" | tr '\n' '\0' | xargs -0 npx eslint
+
+      - name: Explain a failure
+        if: failure()
+        run: |
+          echo "::error::A user-facing string was written without t(). Every one of these is a"
+          echo "::error::sentence a Japanese, Korean, Spanish or Chinese player would read in English."
+          echo "::error::Wrap it in t('screen.section.purpose') and add the key to i18n/locales/*.json."
+          echo "::error::Background: docs/I18N-AUDIT.md. The rule: eslint-rules/no-hardcoded-jsx-text.js"

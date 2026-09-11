@@ -39,3 +39,28 @@ if git diff --cached --name-only | grep -qE '\.(ts|tsx)$'; then
     exit 1
   fi
 fi
+
+# 2026-09-11 (release 1.5) — THE i18n GUARD JOINS THE GATE.
+#
+# .github/workflows/i18n-guard.yml runs this same rule on push, but CI reports AFTER the push and a
+# hook refuses BEFORE the commit. This repo already learned that lesson the expensive way: the OTA
+# guard ran on `pull_request` in a repo where work goes straight to main, so it protected a path
+# nobody used. Two translation campaigns decayed for want of exactly this check.
+#
+# STAGED SCREEN FILES ONLY. Linting the whole repo would fail on the 2,732-violation backlog
+# (docs/I18N-AUDIT.md) and this hook would be bypassed within a day, which is how the last campaign
+# died. Once the phase-2 codemod clears the backlog this can widen to the full repo.
+STAGED_TSX="$(git diff --cached --name-only --diff-filter=ACMR \
+  -- ':(glob)app/**/*.tsx' ':(glob)components/**/*.tsx')"
+if [ -n "$STAGED_TSX" ]; then
+  printf 'pre-commit: i18n guard... '
+  if OUT=$(printf '%s\n' "$STAGED_TSX" | tr '\n' '\0' | xargs -0 npx eslint 2>&1); then
+    printf 'clean\n'
+  else
+    printf 'FAILED\n\n%s\n\n' "$(echo "$OUT" | grep -E 'i18n/no-hardcoded|^/' | head -40)"
+    echo 'Commit blocked: a user-facing string is not going through t().'
+    echo 'Every one of these is a sentence a Japanese or Korean player would read in English.'
+    echo 'Wrap it in t(...) and add the key to i18n/locales/*.json, or --no-verify in a genuine emergency.'
+    exit 1
+  fi
+fi
