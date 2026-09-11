@@ -1,0 +1,619 @@
+{
+  "tempo": {
+    "category": "swing",
+    "count": 30,
+    "keys": [
+      "labels.meta_glasses_analyze_video_btn",
+      "swinglab.card_tempo_title",
+      "swinglab.card_tempo_sub",
+      "practice_session_summary.cage_summary.avg_tempo",
+      "practice.practice_session_detail.tempo_through_the_session",
+      "practice.empty_text.not_enough_tempo_reads",
+      "practice_open_range.open_range_screen.sixty_balls_with_one_club",
+      "practice_open_range.label.tempo",
+      "recap.recap_screen.tempo",
+      "recap_hole.hole_shot_map_screen.every_swing_the_watch_measured",
+      "swinglab_indoor.indoor_hotel_mode_screen.tempo_anywhere_no_ball_needed",
+      "swinglab_indoor.indoor_hotel_mode_screen.rhythm_tempo_only_no_ball",
+      "swinglab_indoor.indoor_hotel_mode_screen.rhythm_tempo_only_no_ball_2",
+      "swinglab_simround.swing_sim_screen.your_real_bag_your_real",
+      "swinglab_simround.swing_sim_screen.swing_the_phone_like_a",
+      "swinglab_smart_tempo.smart_tempo_screen.smart_tempo",
+      "swinglab_smart_tempo.smart_tempo_screen.records_a_swing_and_brings",
+      "swinglab_smart_tempo.smart_tempo_screen.hear_your_tempo",
+      "swinglab_smart_tempo.smart_tempo_screen.save_tempo",
+      "swinglab_smart_tempo.accessibility_label.open_the_tempo_metronome_to",
+      "swinglab_smart_tempo.accessibility_label.replay_your_tempo",
+      "swinglab_smart_tempo.accessibility_label.save_this_tempo_to_your",
+      "swinglab_tempo_trainer.tempo_trainer_screen.tempo_trainer_analysis",
+      "swinglab_tempo_trainer.tempo_trainer_screen.record_a_swing_and_your",
+      "swinglab_tempo_trainer.tempo_trainer_screen.tempo",
+      "swinglab_upload.placeholder.e_g_range_session_working",
+      "junior_swing_result_card.label.tempo",
+      "smartmotion_smart_motion_hud.tempo_bar.tempo",
+      "swinglab_putting_analysis_card.label.tempo",
+      "swinglab_tempo_patch.tempo_patch.your_tempo"
+    ]
+  },
+  "club": {
+    "category": "equipment",
+    "count": 26,
+    "keys": [
+      "golf_advice.par3_wind",
+      "settings.placeholder.e_g_hemet_golf_club",
+      "scorecard.club_usage",
+      "scorecard.col_club",
+      "scorecard.club_usage_all",
+      "caddie.caddie_tab.i_can_t_hear_you",
+      "arccos_import.arccos_import_screen.smart_club_distances",
+      "arccos_import.arccos_import_screen.screen_and_take_a_screenshot",
+      "arccos_import.arccos_import_screen.for_the_truest_numbers_tag",
+      "arccos_import.arccos_import_screen.reading_your_club_distances",
+      "bag_scan.bag_scan_screen.keep_the_heads_in_view",
+      "practice_session.alert.select_a_club",
+      "practice_session.alert.pick_a_club_before_starting",
+      "practice_session.cage_index.select_club",
+      "practice.practice_session_detail.by_club",
+      "practice_fit_profile.accessibility_label.import_my_club_distances_from",
+      "practice_open_range.open_range_screen.by_club",
+      "swinglab_smartmotion.smart_motion.hold_the_club_sole_flat",
+      "swinglab_smartmotion.title.scan_club",
+      "swinglab_swing.swing_detail.behind_the_golfer_looking_toward",
+      "quick_log_shot_sheet.text.club",
+      "charts_striation_bar.striation_bar.no_per_club_breakdown_yet",
+      "practice_club_identify_controls.accessibility_label.identify_club_by_photographing_the",
+      "practice_club_picker_modal.club_picker_modal.pick_a_club",
+      "practice_club_picker_modal.accessibility_label.close_club_picker",
+      "smartmotion_smart_motion_hud.accessibility_label.set_club"
+    ]
+  },
+  "ball": {
+    "category": "equipment",
+    "count": 23,
+    "keys": [
+      "ball_fit.ball_fit_screen.ball_fit",
+      "ball_fit.ball_fit_screen.your_ball",
+      "ball_fit.placeholder.the_ball_you_play_e",
+      "practice_session.session_runner_screen.record_this_ball",
+      "practice_fit_profile.fit_profile_screen.recommended_ball",
+      "reference.placeholder.search_rules_e_g_embedded",
+      "smartfinder.putt_camera_overlay.tap_your_ball_position_point",
+      "swinglab_calibrate.alert.calibration_listens_to_your_ball",
+      "swinglab_smartmotion.alert.smart_motion_listens_for_ball",
+      "swinglab_smartmotion.smart_motion.tap_the_floor_where_your",
+      "swinglab_smartmotion.smart_motion.tap_where_your_ball_sits",
+      "swinglab_smartmotion.accessibility_label.tap_where_your_ball_is",
+      "swinglab_smartmotion.label.ball",
+      "swinglab_swing.accessibility_label.toggle_ball_box_and_aim",
+      "practice_practice_target_ui.accessibility_label.tap_where_the_ball_hit",
+      "smartmotion_shot_map_page.label.ball_canvas",
+      "smartmotion_shot_map_page.course_map.set_your_target_effort_on",
+      "smartmotion_smart_motion_hud.text.ball_line",
+      "swinglab_practice_targeting_card.practice_targeting_card.mark_where_your_ball_sat",
+      "swinglab_practice_targeting_card.accessibility_label.auto_detect_ball_position",
+      "swinglab_putting_analysis_card.label.ball_position",
+      "swinglab_video_annotation_overlay.accessibility_label.calibrate_scale_to_the_ball",
+      "swinglab_video_annotation_overlay.video_annotation_overlay.ball_1_68"
+    ]
+  },
+  "handicap": {
+    "category": "scoring",
+    "count": 21,
+    "keys": [
+      "settings.alert.handicap_updated",
+      "settings.text.handicap",
+      "settings.text.handicap_index_usga",
+      "settings.text.optional_we_ll_pull_your",
+      "settings.text.when_you_talk_to_your",
+      "settings.text.in_profile_history_handicap",
+      "settings.text.voice_narrated_practice_round_on",
+      "settings.text.plays_a_full_round_by",
+      "play.end_round_body",
+      "import_rounds_list.import_rounds_list_screen.open_your_rounds_list_in",
+      "profile.alert.handicap_updated",
+      "profile.profile_screen.handicap_index",
+      "profile.profile_screen.handicap",
+      "profile.profile_screen.name_ghin_number_handicap_index",
+      "recap.alert.this_removes_the_round_from",
+      "reference.label.handicap",
+      "reference.label.handicap_index",
+      "reference.label.course_handicap",
+      "welcome.welcome_screen.handicap_optional",
+      "recap_handicap_impact_card.handicap_impact_card.handicap_impact",
+      "tools_global_tools_menu.label.rules_handicap"
+    ]
+  },
+  "tee": {
+    "category": "course",
+    "count": 16,
+    "keys": [
+      "settings.label.preferred_tee",
+      "scorecard.fairway_pct",
+      "dashboard.fairway_pct",
+      "dashboard.tee_avg",
+      "play.play_tab.tee_times",
+      "play.accessibility_label.round_challenge_break_a_score",
+      "caddie.caddie_tab.find_tee_time",
+      "course.course_detail_screen.book_tee_time",
+      "course.accessibility_label.book_a_tee_time_at",
+      "smartfinder.target_view.tee",
+      "swinglab_simround.accessibility_label.tee_off",
+      "tee_goals.tee_goals_screen.tee_goals",
+      "tee_goals.tee_goals_screen.tee",
+      "tee_goals.accessibility_label.add_this_tee_goal",
+      "caddie_l1_hole_preview.l1_hole_preview.tee",
+      "recap_hole_shot_map.hole_shot_map.tee"
+    ]
+  },
+  "carry": {
+    "category": "course",
+    "count": 15,
+    "keys": [
+      "dashboard.text.set_up_your_bag_tap",
+      "practice_fit_profile.fit_profile_screen.reps_you_ve_logged_in",
+      "practice_fit_profile.fit_profile_screen.your_bag_tap_a_club",
+      "practice_fit_profile.fit_profile_screen.tracked_from_your_shots_you",
+      "smartvision.label.carry",
+      "swinglab_range_import.range_import_screen.choose_a_toptracer_range_screenshot",
+      "swinglab_range_import.range_import_screen.works_with_the_side_view",
+      "swinglab_range_import.range_import_screen.kevin_s_club_recommendations_are",
+      "swinglab_range_import.range_import_screen.carry",
+      "swinglab_range_import.range_import_screen.flat_carry_numbers_will_calibrate",
+      "swinglab_smartmotion.smart_motion.carry",
+      "swinglab_smartmotion.label.carry",
+      "swinglab_swing.swing_detail.carry",
+      "smartmotion_shot_map_page.label.plan_carry",
+      "smartmotion_shot_map_page.course_map.estimated_from_your_club_effort"
+    ]
+  },
+  "bag": {
+    "category": "equipment",
+    "count": 12,
+    "keys": [
+      "settings.text.your_rounds_scores_swing_clips",
+      "scorecard.club_footer",
+      "dashboard.accessibility_label.open_my_bag_and_fit",
+      "dashboard.text.my_bag",
+      "arccos_import.arccos_import_screen.seed_your_bag_from_arccos",
+      "arccos_import.arccos_import_screen.confirm_the_numbers_then_add",
+      "arccos_import.accessibility_label.add_these_distances_to_my",
+      "bag_scan.bag_scan_screen.scan_my_bag",
+      "bag_scan.bag_scan_screen.record_my_bag",
+      "practice_fit_profile.fit_profile_screen.scan_my_bag_with_video",
+      "practice_fit_profile.fit_profile_screen.fit_gap_your_bag_vs",
+      "practice_fit_profile.accessibility_label.scan_my_bag_with_video"
+    ]
+  },
+  "putt": {
+    "category": "course",
+    "count": 9,
+    "keys": [
+      "settings.text.longest_putt_yards",
+      "dashboard.longest_putt",
+      "smartfinder.smart_finder.putt",
+      "smartfinder.accessibility_label.switch_to_putt_camera",
+      "swinglab_simround.accessibility_label.arm_the_putt",
+      "swinglab_swing.swing_detail.this_is_a_putt_read",
+      "green_heat_card.text.1_putt_rate",
+      "green_heat_card.label.3_putt",
+      "tools_global_tools_menu.label.upload_a_swing_or_putt"
+    ]
+  },
+  "putts": {
+    "category": "scoring",
+    "count": 9,
+    "keys": [
+      "scorecard.putts",
+      "scorecard.avg_putts",
+      "scorecard.n_putts",
+      "scorecard.putts_label",
+      "scorecard.add_putts",
+      "import_round.import_round_screen.pick_a_screenshot_from_golfshot",
+      "practice_smartplan.placeholder.e_g_round_saturday_want",
+      "green_heat_card.text.collecting_your_putts",
+      "green_heat_card.text.your_green_map_fills_in"
+    ]
+  },
+  "green": {
+    "category": "course",
+    "count": 7,
+    "keys": [
+      "golf_advice.flag_or_center_safe",
+      "dev_course_truth.course_truth_screen.walk_to_the_center_of",
+      "smartfinder.target_view.green",
+      "smartfinder.map_view.mark_this_green_for_live",
+      "green_heat_card.text.green_heat",
+      "caddie_l1_hole_preview.l1_hole_preview.green",
+      "recap_hole_shot_map.hole_shot_map.green"
+    ]
+  },
+  "index": {
+    "category": "scoring",
+    "count": 7,
+    "keys": [
+      "drills.drill_detail.drill_not_found_pull_back",
+      "profile.profile_screen.screenshot_your_rounds_list_from",
+      "profile.profile_screen.rebuild_your_index_best_8",
+      "recap_handicap_impact_card.handicap_impact_card.track_your_index",
+      "recap_handicap_impact_card.handicap_impact_card.set_index",
+      "recap_handicap_impact_card.handicap_impact_card.post_to_my_index",
+      "recap_handicap_impact_card.handicap_impact_card.posted_your_index_updated"
+    ]
+  },
+  "backswing": {
+    "category": "swing",
+    "count": 7,
+    "keys": [
+      "practice.practice_session_detail.backswing_downswing_ratio_per_ball",
+      "swinglab_smart_tempo.smart_tempo_screen.smart_tempo_opens_your_camera",
+      "swinglab_smart_tempo.smart_tempo_screen.these_marks_are_out_of",
+      "swinglab_smart_tempo.label.backswing",
+      "practice_session_overlay.text.place_phone_so_you_stand",
+      "practice_session_overlay.text.stand_inside_the_figure_full",
+      "swinglab_tempo_patch.tempo_patch.backswing"
+    ]
+  },
+  "rating": {
+    "category": "course",
+    "count": 6,
+    "keys": [
+      "settings.text.uses_the_whs_best_8",
+      "settings.label.course_rating_set",
+      "reference.label.course_rating",
+      "reference.label.slope_rating",
+      "swinglab_smart_tempo.smart_tempo_screen.tempo_rating",
+      "course_start_round_course_card.label.rating"
+    ]
+  },
+  "top": {
+    "category": "shot shape",
+    "count": 6,
+    "keys": [
+      "settings.text.top_left_badge_during_a",
+      "settings.text.capture_example_photos_narrative_for",
+      "settings.label.screenshot_mode_hide_top_bar",
+      "kevin_learning.kevin_learning_screen.top_phrases",
+      "profile_custom_caddie.custom_caddie_screen.your_caddie_takes_on_this",
+      "swinglab_smartmotion.smart_motion.top_focus"
+    ]
+  },
+  "par": {
+    "category": "scoring",
+    "count": 6,
+    "keys": [
+      "scorecard.par",
+      "scorecard.par_n",
+      "scorecard.hole_par",
+      "scorecard.par_label",
+      "tee_goals.label.break_par",
+      "tournament.setup_panel.defaults_to_par_4_tap"
+    ]
+  },
+  "driver": {
+    "category": "equipment",
+    "count": 5,
+    "keys": [
+      "golf_advice.driver_or_3wood_clean",
+      "labels.driver",
+      "settings.glasses_how_to_body",
+      "settings.text.updated_automatically_as_you_log",
+      "practice_fit_profile.fit_profile_screen.track_a_few_driver_shots"
+    ]
+  },
+  "contact": {
+    "category": "swing",
+    "count": 4,
+    "keys": [
+      "settings.text.contact_support",
+      "swing_review_summary.cage_review_summary.contact_quality",
+      "swing_review_summary.cage_review_summary.contact",
+      "swinglab_swing_action_sheet.label.contact"
+    ]
+  },
+  "stroke": {
+    "category": "scoring",
+    "count": 4,
+    "keys": [
+      "caddie.caddie_tab.1_stroke",
+      "caddie.caddie_tab.stroke_distance",
+      "swinglab_upload.upload_swing.pov_downward_video_routes_to",
+      "swinglab_putting_analysis_card.putting_analysis_card.stroke"
+    ]
+  },
+  "yardage": {
+    "category": "course",
+    "count": 4,
+    "keys": [
+      "add_course.add_course_screen.course_not_in_the_database",
+      "smartfinder.target_view.tap_anywhere_on_the_hole",
+      "swinglab_simround.swing_sim_screen.standard_yardage_tell_me_your",
+      "smartvision_yardage_book_panel.yardage_book_panel.yardage_book"
+    ]
+  },
+  "lie": {
+    "category": "course",
+    "count": 4,
+    "keys": [
+      "lie_analysis.lie_analysis_screen.lie_analysis",
+      "lie_analysis.lie_analysis_screen.point_at_your_lie_and",
+      "lie_analysis.accessibility_label.include_strategy_in_the_lie",
+      "swinglab_simround.swing_sim_screen.lie"
+    ]
+  },
+  "impact": {
+    "category": "swing",
+    "count": 4,
+    "keys": [
+      "practice_session_target_calibration.cage_target_calibration.listening_for_impact",
+      "swinglab_tutorial_upload.placeholder.keep_the_club_low_through",
+      "swinglab_putting_analysis_card.putting_analysis_card.deceleration_through_impact_commit_accelerat",
+      "swinglab_putting_analysis_card.label.face_impact"
+    ]
+  },
+  "differential": {
+    "category": "scoring",
+    "count": 4,
+    "keys": [
+      "reference.label.score_for_differential",
+      "reference.label.score_differential",
+      "recap_handicap_impact_card.handicap_impact_card.set_your_handicap_index_once",
+      "recap_handicap_impact_card.label.differential"
+    ]
+  },
+  "strike": {
+    "category": "swing",
+    "count": 4,
+    "keys": [
+      "swing_review_summary.cage_review_summary.strike_location",
+      "swing_review_summary.cage_review_summary.strike",
+      "swinglab_indoor.indoor_hotel_mode_screen.decel_is_the_classic_three",
+      "swinglab_tempo_trainer.tempo_trainer_screen.tip_this_plays_through_the"
+    ]
+  },
+  "over the top": {
+    "category": "swing",
+    "count": 3,
+    "keys": [
+      "golf_advice.driver_or_3wood",
+      "voice.over_the_top_detected",
+      "swinglab_swing.coach_note_card.type_or_speak_your_read"
+    ]
+  },
+  "lateral": {
+    "category": "course",
+    "count": 3,
+    "keys": [
+      "golf_advice.red_vs_yellow",
+      "golf_advice.yellow_vs_red",
+      "smartmotion_shot_map_page.cage_bullseye.lateral_start_comes_from_the"
+    ]
+  },
+  "drive": {
+    "category": "course",
+    "count": 3,
+    "keys": [
+      "settings.text.longest_drive_yards",
+      "dashboard.longest_drive",
+      "settings_cloud_backup_card.cloud_backup_card.save_a_backup_file_of"
+    ]
+  },
+  "flag": {
+    "category": "course",
+    "count": 3,
+    "keys": [
+      "settings.text.on_device_module_status_the",
+      "practice_session.session_runner_screen.pick_what_today_is_each",
+      "practice_fit_profile.fit_profile_screen.your_bag_matches_your_distances"
+    ]
+  },
+  "grip": {
+    "category": "equipment",
+    "count": 3,
+    "keys": [
+      "swinglab_setup_check.setup_check_screen.the_pre_round_setup_check",
+      "junior_swing_result_card.label.grip",
+      "swinglab_putting_analysis_card.label.grip"
+    ]
+  },
+  "wedge": {
+    "category": "equipment",
+    "count": 2,
+    "keys": [
+      "golf_advice.layup",
+      "golf_advice.flag_or_center_attack"
+    ]
+  },
+  "penalty": {
+    "category": "rules",
+    "count": 2,
+    "keys": [
+      "golf_advice.can_ground_club_no",
+      "caddie.caddie_tab.penalty"
+    ]
+  },
+  "bunker": {
+    "category": "course",
+    "count": 2,
+    "keys": [
+      "golf_advice.flag_or_center_balanced",
+      "landmark_curate.placeholder.name_e_g_left_bunker"
+    ]
+  },
+  "drop": {
+    "category": "rules",
+    "count": 2,
+    "keys": [
+      "settings.text.drop_an_anchor_at_your",
+      "smartvision.smart_vision_screen.waiting_on_your_location_to"
+    ]
+  },
+  "tee box": {
+    "category": "course",
+    "count": 2,
+    "keys": [
+      "settings.text.walk_to_a_tee_box",
+      "play.tee_box"
+    ]
+  },
+  "vs par": {
+    "category": "scoring",
+    "count": 2,
+    "keys": [
+      "scorecard.vs_par",
+      "dashboard.vs_par"
+    ]
+  },
+  "bogey": {
+    "category": "scoring",
+    "count": 2,
+    "keys": [
+      "scorecard.bogey",
+      "play.mode_break_100_desc"
+    ]
+  },
+  "strokes": {
+    "category": "scoring",
+    "count": 2,
+    "keys": [
+      "caddie.caddie_tab.2_strokes",
+      "swinglab_simround.swing_sim_screen.strokes"
+    ]
+  },
+  "net": {
+    "category": "scoring",
+    "count": 2,
+    "keys": [
+      "practice_session_target_calibration.cage_target_calibration.aim_for_10_canvas_hits",
+      "practice_practice_target_ui.practice_target_ui.net"
+    ]
+  },
+  "slope": {
+    "category": "course",
+    "count": 2,
+    "keys": [
+      "smartfinder.putt_camera_overlay.slope",
+      "course_start_round_course_card.label.slope"
+    ]
+  },
+  "downswing": {
+    "category": "swing",
+    "count": 2,
+    "keys": [
+      "swinglab_smart_tempo.label.downswing",
+      "swinglab_tempo_patch.tempo_patch.downswing"
+    ]
+  },
+  "pin": {
+    "category": "course",
+    "count": 2,
+    "keys": [
+      "round_shot_tracked_sheet.shot_tracked_sheet.to_pin",
+      "swinglab_practice_targeting_card.cage_targeting_overlay.pin"
+    ]
+  },
+  "nearest point": {
+    "category": "rules",
+    "count": 1,
+    "keys": [
+      "golf_advice.nearest_point_relief"
+    ]
+  },
+  "fairway": {
+    "category": "course",
+    "count": 1,
+    "keys": [
+      "golf_advice.can_ground_club_yes"
+    ]
+  },
+  "wood": {
+    "category": "equipment",
+    "count": 1,
+    "keys": [
+      "labels.wood3"
+    ]
+  },
+  "push": {
+    "category": "shot shape",
+    "count": 1,
+    "keys": [
+      "settings.alert.check_sentry_and_check_whether"
+    ]
+  },
+  "GIR": {
+    "category": "scoring",
+    "count": 1,
+    "keys": [
+      "scorecard.gir_pct"
+    ]
+  },
+  "eagle": {
+    "category": "scoring",
+    "count": 1,
+    "keys": [
+      "scorecard.eagle"
+    ]
+  },
+  "birdie": {
+    "category": "scoring",
+    "count": 1,
+    "keys": [
+      "scorecard.birdie"
+    ]
+  },
+  "loft": {
+    "category": "equipment",
+    "count": 1,
+    "keys": [
+      "bag_scan.placeholder.loft"
+    ]
+  },
+  "shaft": {
+    "category": "equipment",
+    "count": 1,
+    "keys": [
+      "practice_fit_profile.fit_profile_screen.shaft_flex"
+    ]
+  },
+  "double bogey": {
+    "category": "scoring",
+    "count": 1,
+    "keys": [
+      "reference.label.net_double_bogey_avg_hole"
+    ]
+  },
+  "face angle": {
+    "category": "swing",
+    "count": 1,
+    "keys": [
+      "swinglab_smartmotion.smart_motion.face_angle"
+    ]
+  },
+  "smash factor": {
+    "category": "swing",
+    "count": 1,
+    "keys": [
+      "swinglab_smartmotion.smart_motion.face_angle_needs_higher_frame"
+    ]
+  },
+  "sway": {
+    "category": "swing",
+    "count": 1,
+    "keys": [
+      "swinglab_swing.swing_detail.facing_the_golfer_reads_weight"
+    ]
+  },
+  "cup": {
+    "category": "course",
+    "count": 1,
+    "keys": [
+      "swinglab_practice_targeting_card.cage_targeting_overlay.cup"
+    ]
+  },
+  "early extension": {
+    "category": "swing",
+    "count": 1,
+    "keys": [
+      "swinglab_video_annotation_overlay.placeholder.early_extension"
+    ]
+  }
+}
