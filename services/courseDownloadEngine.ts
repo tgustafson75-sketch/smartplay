@@ -285,18 +285,36 @@ export async function downloadCourse(input: {
   // course, so callers only toast "downloaded" when it truly happened (the arrival toast was claiming
   // a fresh download for courses owned for weeks).
   const store = useDownloadedCoursesStore.getState();
-  if (input.courseId && store.isDownloaded(input.courseId)) return { ok: true, courseId: input.courseId, fresh: false };
+  /**
+   * 2026-09-10 — "already downloaded" must also mean "downloaded with something in it".
+   *
+   * A course recorded with ZERO greens is owned, ticked, and unusable for measured yardage — and
+   * this early return meant asking for it again was a no-op forever. Re-running the build is cheap
+   * (measured 3.2s against production for a healthy course) and the geometry service dedupes
+   * in-flight requests per course, so a repeat ask cannot stampede.
+   *
+   * `greens === 0` only — `undefined` is a record written before the field existed and means
+   * UNKNOWN, not empty. Treating unknown as empty would rebuild every course the player owns.
+   */
+  const needsGeometry = (id: string | null | undefined): boolean => {
+    if (!id) return false;
+    const rec = useDownloadedCoursesStore.getState().downloaded[id];
+    return rec != null && rec.greens === 0;
+  };
+  if (input.courseId && store.isDownloaded(input.courseId) && !needsGeometry(input.courseId)) {
+    return { ok: true, courseId: input.courseId, fresh: false };
+  }
 
   const resolved = await resolveCourse(input.name, input.courseId ?? null);
   if (!resolved) return { ok: false, reason: 'unresolved' };
   const { courseId, courseName, holes, rating, slope } = resolved;
-  if (store.isDownloaded(courseId)) return { ok: true, courseId, fresh: false };
+  if (store.isDownloaded(courseId) && !needsGeometry(courseId)) return { ok: true, courseId, fresh: false };
 
   store.markDownloading(courseId, courseName, 0.1);
   try {
     // prefetchRoundData fans out geometry + content + intelligence + imagery and caches each. It's
     // fire-and-forget by design (doesn't reject), so we await it and then record the course as available.
-    await prefetchRoundData({
+    const greens = await prefetchRoundData({
       courseId,
       courseName,
       courseLocation: (Number.isFinite(input.lat) && Number.isFinite(input.lng)) ? { lat: input.lat as number, lng: input.lng as number } : null,
@@ -304,7 +322,24 @@ export async function downloadCourse(input: {
       rating: rating ?? null,
       slope: slope ?? null,
     });
-    store.markDownloaded({ courseId, name: courseName, holeCount: holes.length, at: Date.now() });
+    /**
+     * 2026-09-10 (Tim, Hemet) — RECORD WHAT WE ACTUALLY GOT.
+     *
+     * This marked the course downloaded and returned ok whether the geometry build produced
+     * eighteen greens or none. A golfcourseapi course carries literal zeros in every green
+     * coordinate (courseToHoles), so a build that came back empty leaves NO green anywhere in the
+     * cascade — the player gets hole-length-minus-distance-walked for eighteen holes, hole advance
+     * holds all round, and Refresh GPS reports it has nothing. The download said "done".
+     *
+     * Still `ok: true` — a course with no greens is playable and must download. But the count is
+     * recorded so a later start can tell an empty build from a good one and go back for it, and so
+     * the log line stops claiming a success it cannot support.
+     * [[state-what-you-measured-not-what-you-intended]]
+     */
+    if (greens === 0) {
+      console.warn(`[courseDownload] ${courseName} downloaded with ZERO greens — yardages will be estimates until geometry builds`);
+    }
+    store.markDownloaded({ courseId, name: courseName, holeCount: holes.length, at: Date.now(), greens });
     return { ok: true, courseId, fresh: true };
   } catch (e) {
     store.clearDownloading(courseId);

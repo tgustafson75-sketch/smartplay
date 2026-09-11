@@ -36,7 +36,7 @@
  *     always available offline.
  */
 
-import { fetchCourseGeometry, getHoleGeometry, loadDerivedGeometry } from './courseGeometryService';
+import { fetchCourseGeometry, getHoleGeometry, loadDerivedGeometry, mappedHoleCount } from './courseGeometryService';
 import { fetchCourseContent } from './courseContentService';
 import { fetchCourseIntelligence } from './courseIntelligenceService';
 import { prefetchHoles, isMapboxConfigured, type HoleImageryInput } from './mapboxImagery';
@@ -55,12 +55,16 @@ type PrefetchArgs = {
 /**
  * Run the prefetch chain for a freshly-started round. Fire-and-forget
  * from store/roundStore.startRound — don't await.
+ *
+ * 2026-09-10 — resolves with the number of holes that ended up with a GREEN, so the caller can tell
+ * a course that built from one that merely finished. Zero is a usable course with no measured
+ * yardage to the pin; it is not a failure to download, but it is never a success to report.
  */
-export async function prefetchRoundData(args: PrefetchArgs): Promise<void> {
+export async function prefetchRoundData(args: PrefetchArgs): Promise<number> {
   const { courseId, courseName, courseLocation, holes, rating, slope } = args;
   if (!courseId || !courseName || !Array.isArray(holes) || holes.length === 0) {
     console.log('[roundPrefetch] skipped — missing courseId / courseName / holes', { courseId, courseName, holesLen: holes?.length ?? 0 });
-    return;
+    return 0;
   }
   console.log('[roundPrefetch] starting for', courseId, '— holes:', holes.length);
   const startedAt = Date.now();
@@ -84,13 +88,46 @@ export async function prefetchRoundData(args: PrefetchArgs): Promise<void> {
    */
   void loadDerivedGeometry(courseId).catch(() => undefined);
 
-  const geometryP = fetchCourseGeometry(courseId, { courseLocation: courseLocation ?? null })
-    .then((g) => {
-      console.log('[roundPrefetch] geometry done for', courseId, '— holes cached:', g?.holes?.length ?? 0);
-    })
-    .catch((e) => {
+  /**
+   * 2026-09-10 (Tim, Hemet: "the course engine spun and loaded and I got what I thought was the
+   * course" — then no yardage for eighteen holes) — A BUILD THAT PRODUCED NO GREENS REPORTED SUCCESS.
+   *
+   * This logged `holes cached: N` and swallowed every failure as non-fatal, and downloadCourse then
+   * marked the course DOWNLOADED regardless. So a course whose geometry build returned nothing was
+   * indistinguishable from one that worked — and nothing ever went back for it. `courseToHoles`
+   * writes literal zeros into every green coordinate for a golfcourseapi course, so with no cached
+   * geometry there is no green ANYWHERE in the cascade: yardage silently degrades to hole-length
+   * minus distance-walked for the whole round, hole advance holds on "no current-hole green
+   * geometry", and Refresh GPS says it has nothing.
+   *
+   * Two things change. Holes cached is not the measure — GREENS are (`mappedHoleCount` counts holes
+   * that actually carry one; `cacheIsServable` already refuses to serve a zero-green cache, so
+   * "cached" can mean "cached and useless"). And a zero-green result is RETRIED once, because it is
+   * usually transient: the engine fans out to golfcourseapi plus Overpass, and Overpass throttles.
+   * Measured against production on 2026-09-10, a healthy build of Tim's own course returns 18/18
+   * greens in 3.2 seconds — so one retry is cheap relative to losing the round.
+   *
+   * Still non-fatal: a course with no greens must still download and play, degraded and honest. The
+   * difference is that we now KNOW, and say so. [[state-what-you-measured-not-what-you-intended]]
+   */
+  const geometryP = (async (): Promise<number> => {
+    const build = async () => {
+      const g = await fetchCourseGeometry(courseId, { courseLocation: courseLocation ?? null });
+      return mappedHoleCount(g);
+    };
+    try {
+      let greens = await build();
+      if (greens === 0) {
+        console.log('[roundPrefetch] geometry returned ZERO greens for', courseId, '— retrying once');
+        try { greens = await build(); } catch { /* keep the zero and report it */ }
+      }
+      console.log('[roundPrefetch] geometry done for', courseId, '— greens mapped:', greens);
+      return greens;
+    } catch (e) {
       console.log('[roundPrefetch] geometry failed (non-fatal):', e instanceof Error ? e.message : String(e));
-    });
+      return 0;
+    }
+  })();
 
   const contentP = fetchCourseContent({
     courseId,
@@ -165,7 +202,20 @@ export async function prefetchRoundData(args: PrefetchArgs): Promise<void> {
   }
 
   await Promise.allSettled([geometryP, contentP, intelP, tileP]);
-  console.log('[roundPrefetch] complete for', courseId, '— elapsed', Date.now() - startedAt, 'ms');
+  const greens = await geometryP.catch(() => 0);
+  console.log('[roundPrefetch] complete for', courseId, '— elapsed', Date.now() - startedAt, 'ms', '— greens:', greens);
+  /**
+   * 2026-09-10 — a course with no greens is the single fact that most changes how a round will go,
+   * so it goes in the field-test trace by name. Without it the report can only observe the
+   * CONSEQUENCE ("hole 7 never resolved a green") and not the cause ("the build came back empty
+   * before you teed off").
+   */
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const rt = require('./roundTrace') as typeof import('./roundTrace');
+    rt.trace('course', 'geometry', { courseId, greens, holes: holes.length });
+  } catch { /* tracing never blocks a prefetch */ }
+  return greens;
 }
 
 // Courses whose SmartVision imagery we've already warmed this session, so

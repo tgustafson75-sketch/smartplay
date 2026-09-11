@@ -13,6 +13,19 @@ export interface DownloadedCourse {
   name: string;
   holeCount: number;
   at: number;
+  /**
+   * 2026-09-10 — how many holes came back with a GREEN when this course was built.
+   *
+   * A course used to be recorded as downloaded whether its geometry build returned eighteen greens
+   * or none, so "downloaded" could mean "you will have no measured yardage for the whole round" and
+   * nothing distinguished the two. Recording it lets the next round start re-attempt a course that
+   * built empty instead of trusting a tick from weeks ago.
+   *
+   * `undefined` on records written before this existed — read it as UNKNOWN, never as zero: an
+   * older record almost certainly has greens, and treating it as empty would re-build every course
+   * the player owns. [[a-field-that-is-sometimes-a-placeholder]]
+   */
+  greens?: number;
 }
 
 interface DownloadingState {

@@ -1204,6 +1204,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!upstream.ok) {
       const text = await upstream.text();
       console.error('[course-geometry] upstream', upstream.status, text.slice(0, 200));
+      /**
+       * 2026-09-10 — AN UPSTREAM BLIP MUST NOT COST A COURSE ITS GEOMETRY.
+       *
+       * This returned the upstream status and stopped, so ANY golfcourseapi failure — a 404 on an
+       * id that used to resolve, a 429 from the free tier, a 500, a timeout — produced no geometry
+       * at all. The client then falls back to `persisted ?? bundled ?? null`, and for an API course
+       * with nothing cached that is null: no green anywhere in the cascade for the whole round.
+       *
+       * Meanwhile OSM usually has the course outright. Measured on 2026-09-10 against production:
+       * the osmOnly path returned 18/18 greens and 18/18 tees for Hemet Golf Club in 3.2 seconds,
+       * from the same centroid this request already carries. Failing the whole build while a free,
+       * fast, complete answer sat one branch away is the expensive half of this defect.
+       *
+       * So when we have a centroid, fall through to the OSM synthesis rather than surfacing the
+       * upstream's status. Re-entering the handler with osmOnly set reuses that path exactly as the
+       * client's own osmOnly callers get it — no second copy of the algorithm to drift.
+       * Terminating by construction: the re-entered call has osmOnly='1' and returns from that
+       * branch long before it reaches this fetch. [[caddie-failsafe-no-walls]]
+       */
+      if (centroid && !osmOnly) {
+        console.warn(`[course-geometry] upstream ${upstream.status} for ${courseId} — falling back to OSM synthesis at the supplied centroid`);
+        // Mutate `query` rather than cloning the request: req is a Node IncomingMessage, and a
+        // spread copy silently drops its prototype (and every stream method with it). Nothing reads
+        // this request after the re-entered call answers it.
+        req.query = {
+          ...req.query,
+          osmOnly: '1',
+          cloudFirst: '1',
+          origId: courseId,
+          lat: String(centroid.lat),
+          lng: String(centroid.lng),
+        };
+        return handler(req, res);
+      }
       return res.status(upstream.status).json({ error: `Upstream ${upstream.status}` });
     }
 
