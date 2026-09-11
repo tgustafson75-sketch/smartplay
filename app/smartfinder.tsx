@@ -160,6 +160,24 @@ export default function SmartFinder() {
   });
   const [geometry, setGeometry] = useState<HoleGeometry | null>(null);
 
+  /**
+   * 2026-09-11 — ELEVATION FOR THE SPOKEN GREEN CALLOUT.
+   *
+   * The callout below announces "Middle of green, X. Plays Y." and computed Y with NO elevation,
+   * while TargetCameraOverlay's on-screen card passed elevationDeltaFeet — so the same shot was
+   * spoken as one number and shown as another. On an elevated green that gap is a full club.
+   *
+   * Same resolution the overlay uses (live fix -> green centroid), so both surfaces read one
+   * elevation for one shot. Defaults to flat (0) until both points resolve, so it can never block
+   * or distort the yardage. [[two-owners-is-the-root-cause]]
+   */
+  const elevFixForCallout = getLastFix();
+  const calloutElevation = useElevationDeltaStatus(
+    elevFixForCallout ? { lat: elevFixForCallout.location.lat, lng: elevFixForCallout.location.lng } : null,
+    geometry?.green ? { lat: geometry.green.lat, lng: geometry.green.lng } : null,
+  );
+  const calloutElevationFeet = calloutElevation.deltaFeet;
+
   useEffect(() => {
     let cancelled = false;
     const tick = async () => {
@@ -260,7 +278,14 @@ export default function SmartFinder() {
     calloutSpokenRef.current = true;
     const parts: string[] = [`Middle of green, ${middle} yards.`];
     if (caddieWeather) {
-      const breakdown = playsLikeDistance(middle, caddieWeather, shotBearingDeg);
+      /**
+       * 2026-09-11 — ELEVATION WAS MISSING HERE, so the spoken callout and the on-screen card gave
+       * DIFFERENT plays-like numbers for the same shot. The card (line ~1604) passes
+       * elevationDeltaFeet; this one defaulted it to 0 and announced the shot as if the green were
+       * level with the ball. On an elevated green that is the difference between a club too little
+       * and the right one — and the player heard one number and read another.
+       */
+      const breakdown = playsLikeDistance(middle, caddieWeather, shotBearingDeg, calloutElevationFeet);
       if (Math.abs(breakdown.delta_yards) >= 3) {
         parts.push(`Plays ${breakdown.plays_like_yards}.`);
       }

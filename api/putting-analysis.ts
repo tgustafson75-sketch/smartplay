@@ -333,7 +333,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (typeof body.distance_feet === 'number') ctx.push(`Stated putt distance: ${body.distance_feet} feet`);
     if (body.hole_number) ctx.push(`Hole: ${body.hole_number}`);
     if (body.video_url) ctx.push(`Video URL: ${body.video_url}`);
+    /**
+     * 2026-09-11 (Tim — "most definitely wire green geometry") — THE GREEN'S DEPTH AND ORIENTATION,
+     * NOT JUST ITS MIDDLE.
+     *
+     * The client resolves front, middle and back of the green and sends all three; only the centroid
+     * was ever read. Front and back are what give the green a DEPTH and an AXIS: a putt across a
+     * 40-yard green is a different read from the same distance on a 15-yard one, and the front→back
+     * line is the fall line most greens are built along. Dropping them left the model judging a putt
+     * against a single point with no idea which way the green ran.
+     *
+     * Sent and discarded since the endpoint was written. Found by an audit comparing what every
+     * screen sends against what each route actually reads.
+     */
     if (body.green_centroid) ctx.push(`Green centroid: ${JSON.stringify(body.green_centroid)}`);
+    if (body.green_front) ctx.push(`Green FRONT edge: ${JSON.stringify(body.green_front)}`);
+    if (body.green_back) ctx.push(`Green BACK edge: ${JSON.stringify(body.green_back)}`);
+    if (body.green_front && body.green_back) {
+      ctx.push(
+        'Front and back are the green\'s depth axis — most greens fall from back to front along it. ' +
+        'Use it to judge whether this putt is up or down the slope, and how much green there is to work with.',
+      );
+    }
+    if (body.course_id) ctx.push(`Course: ${body.course_id}`);
     if (body.ball_area_norm) ctx.push(`Ball position in frame (x,y,r normalized 0-1): ${JSON.stringify(body.ball_area_norm)} — this is where the ball sat.`);
     if (body.target_norm) ctx.push(`Player's aim target in frame (x,y normalized 0-1): ${JSON.stringify(body.target_norm)} — judge start line and face relative to this.`);
     const userText = (ctx.length ? ctx.join('\n') + '\n\n' : '') +
