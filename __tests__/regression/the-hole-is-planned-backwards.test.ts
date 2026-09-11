@@ -221,37 +221,72 @@ describe('it plans from where they are standing, not from the tee they left', ()
   });
 });
 
-describe('it is wired to the caddie, not left as an island', () => {
+describe('it is wired to the caddie AND to the screen, from ONE composer', () => {
   const fs = require('fs') as typeof import('fs');
   const path = require('path') as typeof import('path');
-  const kevin = fs.readFileSync(path.join(__dirname, '../../api/kevin.ts'), 'utf8');
-  const body = fs.readFileSync(path.join(__dirname, '../../services/caddieRequestBody.ts'), 'utf8');
+  const R = (f: string) => fs.readFileSync(path.join(__dirname, '../..', f), 'utf8');
+  const kevin = R('api/kevin.ts');
+  const body = R('services/caddieRequestBody.ts');
+  const live = R('services/holePlanLive.ts');
+  const chip = R('components/HolePlanChip.tsx');
+  const caddieTab = R('app/(tabs)/caddie.tsx');
 
-  it('the payload composes the plan', () => {
+  /**
+   * THE SPLIT THIS PREVENTS. The player can now SEE a plan and HEAR a plan. If those ever came from
+   * two compositions they would eventually disagree — and unlike the rangefinder-vs-card split that
+   * preceded it, both halves would be confidently wrong at each other in the same moment, on the
+   * tee, out loud. So there is exactly one caller of planHole outside the pure engine and its tests.
+   */
+  it('planHole has exactly ONE composer in the app', () => {
+    const callers = ['services/caddieRequestBody.ts', 'app/(tabs)/caddie.tsx', 'components/HolePlanChip.tsx']
+      .filter((f) => /\bplanHole\(/.test(R(f)));
+    expect(callers).toEqual([]);
+    expect(/\bplanHole\(\{/.test(live)).toBe(true);
+  });
+
+  it('the payload sends what that composer produced', () => {
     expect(body).toMatch(/holePlan: safe\(/);
-    expect(body).toMatch(/planHole\(\{/);
+    expect(body).toMatch(/composeLiveHolePlan\(\)\.plan/);
+  });
+
+  it('the chip shows what that composer produced', () => {
+    expect(caddieTab).toMatch(/composeLiveHolePlan\(\)/);
+    expect(caddieTab).toMatch(/<HolePlanChip/);
   });
 
   it('plans from the working number, never from the scorecard length', () => {
-    const at = body.indexOf('holePlan: safe(');
-    const block = body.slice(at, at + 1800);
-    expect(block).toMatch(/const yards = workingYards;/);
-    expect(block).toMatch(/holeYards: yards,/);
+    expect(live).toMatch(/buildYardageInsight\(\)\?\.yardage/);
+    expect(live).toMatch(/holeYards: yards,/);
   });
 
-  it('counts strokes from the SAME place the prompt announces them', () => {
-    // Two answers to "which shot is he on" is how the caddie promises a par he can no longer make.
-    const at = body.indexOf('holePlan: safe(');
-    expect(body.slice(at, at + 1800)).toMatch(/const strokesPlayed = Math\.max\(0, currentStroke - 1\);/);
-    expect(body).toMatch(/const currentStroke: number = safe\(/);
-    // and the payload field is the same value, not a second computation
-    expect(body).toMatch(/\n {4}currentStroke,\n/);
+  it('counts strokes through the one owner of that count', () => {
+    // Three callers needed it and each was about to grow its own copy.
+    expect(live).toMatch(/strokesPlayedOnHole\(r as never, hole\)/);
+    expect(body).toMatch(/strokesPlayedOnHole\(r as never, currentHole\) \+ 1/);
+    expect(R('store/roundStore.ts')).toMatch(/export function strokesPlayedOnHole\(/);
+  });
+
+  it('counts a penalty as a stroke — a drop is a shot', () => {
+    const store = R('store/roundStore.ts');
+    const at = store.indexOf('export function strokesPlayedOnHole(');
+    expect(store.slice(at, at + 500)).toMatch(/penalty_strokes \?\? 0/);
   });
 
   it('refuses to plan a hole whose par it does not know', () => {
-    // parForHole returns null rather than inventing a par; the plan must stop there too.
-    const at = body.indexOf('holePlan: safe(');
-    expect(body.slice(at, at + 1800)).toMatch(/if \(par == null\) return null;/);
+    expect(live).toMatch(/if \(par == null\) return EMPTY;/);
+  });
+
+  it('the chip renders NOTHING rather than a placeholder when there is no plan', () => {
+    // A chip that shows a plan on an unmapped hole would be inventing one, and it is read at a
+    // glance and trusted.
+    expect(chip).toMatch(/if \(!plan \|\| !visible \|\| plan\.steps\.length === 0\) return null;/);
+  });
+
+  it('the chip is positioned above the strip, so the frozen layout does not move', () => {
+    expect(chip).toMatch(/position: 'absolute'/);
+    expect(caddieTab).toMatch(/bottomOffset=\{84\}/);
+    // CaddieDataStrip keeps bottom: 0 and its own height.
+    expect(R('components/CaddieDataStrip.tsx')).toMatch(/bottom: 0,/);
   });
 
   it('the brain renders it and is told NOT to recompute the numbers', () => {
@@ -260,7 +295,6 @@ describe('it is wired to the caddie, not left as an island', () => {
     const block = kevin.slice(at, at + 900);
     expect(block).toMatch(/do NOT recompute them/);
     expect(block).toMatch(/PLAN, not an instruction/);
-    // The plan must never override the override — agreeing with the player still wins.
     expect(block).toMatch(/If he wants a different club, agree with him/);
   });
 });

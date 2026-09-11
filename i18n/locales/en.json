@@ -3560,5 +3560,9 @@
       "out": "{{accStr}} · {{mode}} · {{ageStr}} · out:{{outliersDiscarded}}",
       "h_tee": "H{{currentHole}} · {{moveStr}} · {{offStr}} · tee:{{teeStr}}"
     }
+  },
+  "holeplan": {
+    "label": "PLAN",
+    "par": "par"
   }
 }

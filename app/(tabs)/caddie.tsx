@@ -97,6 +97,7 @@ import AppIcon from '../../components/AppIcon';
 // dedicated round-active camera button surfaces it elsewhere.
 import VocabBanner from '../../components/VocabBanner';
 import CaddieDataStrip from '../../components/CaddieDataStrip';
+import HolePlanChip from '../../components/HolePlanChip';
 import { canAccess, trialDaysLeft, SUBSCRIPTIONS_ENABLED } from '../../services/featureAccess';
 import { triggerPaywall } from '../../services/paywallGuard';
 import { subscribeBattery } from '../../services/batteryMonitor';
@@ -640,6 +641,31 @@ export default function CaddieTab() {
   // captures and voice-stated number changes.
 
   const displayYardage = resolvedYardage?.value ?? liveYardage ?? currentYardage;
+
+  /**
+   * 2026-09-11 (Tim, approved against the layout freeze) — THE PLAN, ON SCREEN.
+   *
+   * Recomputed when the shot in front of the player changes: the hole, the number, and how many
+   * strokes he has played. composeLiveHolePlan is the SAME composer services/caddieRequestBody
+   * sends to the brain, so the plan he can read and the plan the caddie speaks cannot disagree —
+   * which, of everything in this app, is the split that would hurt most. [[two-owners-is-the-root-cause]]
+   */
+  // A plain count, not `.filter(...).length` — that allocates an array on every store change and
+  // this selector runs on all of them. The selector guard caught it; it was right to.
+  const holeShotCount = useRoundStore(s => {
+    let n = 0;
+    for (const sh of s.shots) if (sh.hole === s.currentHole) n++;
+    return n;
+  });
+  const livePlan = useMemo(() => {
+    if (!isRoundActive) return { plan: null, budgetLine: null };
+    try {
+      const { composeLiveHolePlan } = require('../../services/holePlanLive') as typeof import('../../services/holePlanLive');
+      return composeLiveHolePlan();
+    } catch {
+      return { plan: null, budgetLine: null };
+    }
+  }, [isRoundActive, currentHole, displayYardage, holeShotCount]);
 
   // L1 Quiet's new SmartFinder hero needs the F/M/B triplet, not just
   // the middle. Pulled the same way liveYardage is (sync read + markTick
@@ -3860,6 +3886,14 @@ export default function CaddieTab() {
         style={[StyleSheet.absoluteFill, { opacity: stripOpacity }]}
         pointerEvents={isRoundActive ? 'box-none' : 'none'}
       >
+        {/* Sits ABOVE the strip, absolutely positioned — the strip keeps bottom: 0 and its own
+             height, and nothing already on this screen moves by a pixel. */}
+        <HolePlanChip
+          plan={livePlan.plan}
+          budgetLine={livePlan.budgetLine}
+          bottomOffset={84}
+          visible={isRoundActive}
+        />
         <CaddieDataStrip
           yardage={displayYardage}
           playsLike={playsLikeYardage}

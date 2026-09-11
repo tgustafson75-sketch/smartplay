@@ -894,6 +894,26 @@ const compactHistoryForPersist = (rounds: RoundRecord[]): RoundRecord[] => {
 // 2026-08-06 (audit — back nine fix). The round's true hole RANGE, respecting nineHoleMode + roundStartHole
 // so front (1-9), back (10-18), and full (1-N) rounds all navigate/end within their own bounds. Single
 // source of truth for every stepper / clamp / end-detection so they can't desync.
+/**
+ * 2026-09-11 — HOW MANY STROKES HE HAS ALREADY PLAYED ON THIS HOLE, in one place.
+ *
+ * Penalties count: a drop is a stroke, and a plan that offers par to a man lying three after a
+ * penalty is a wrong answer, not a plan.
+ *
+ * Exported here, beside roundFirstHole/roundLastHole, because three callers need it and each had
+ * been about to grow its own copy — the prompt's currentStroke (shots + penalties + 1), the hole
+ * plan's strokesPlayed, and the chip's. The 2026-08-22 defect this feeds was the caddie briefing a
+ * tee shot to a man standing in the fairway; two answers to "which shot is he on" is how that comes
+ * back. [[two-owners-is-the-root-cause]]
+ */
+export function strokesPlayedOnHole(
+  s: { shots: { hole: number; penalty_strokes?: number }[] }, hole: number | null,
+): number {
+  if (hole == null) return 0;
+  const shots = (s.shots ?? []).filter((sh) => sh.hole === hole);
+  return shots.length + shots.reduce((a, sh) => a + (sh.penalty_strokes ?? 0), 0);
+}
+
 export function roundFirstHole(s: { nineHoleMode: boolean; roundStartHole: number }): number {
   return s.nineHoleMode ? Math.max(1, s.roundStartHole || 1) : 1;
 }
