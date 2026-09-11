@@ -1146,7 +1146,26 @@ export const useSettingsStore = create<SettingsState>()(
           const wasSystemDefault = p.theme_preference === 'system' || p.theme_preference == null;
           if (wasSystemDefault) {
             p.theme_preference = 'dark';
-            if (p.highContrast !== true) p.highContrast = true;
+            /**
+             * 2026-09-10 — THE FLAG THAT EXISTS FOR THIS DECISION WAS NEVER READ.
+             *
+             * `highContrastUserTouched` is declared, persisted, and set to true by setHighContrast,
+             * and its own doc comment states its whole purpose: "a player who deliberately switches
+             * it OFF is recorded as having chosen, and no future default change may quietly switch
+             * it back." Nothing anywhere read it — a sweep of all 57 settings fields across every
+             * source directory found it to be the only declared field with zero readers.
+             *
+             * So this migration used `theme_preference === 'system'` as a PROXY for "never
+             * customised appearance" and then checked `highContrast !== true`, which reads "hasn't
+             * already enabled it" — indistinguishable from "deliberately turned it off". A player
+             * on the system theme who switched high contrast off got it switched back on, which is
+             * exactly the case the flag was built to protect, and it is an ACCESSIBILITY setting.
+             *
+             * Ask the flag, not the proxy. Users below v21 still exist (anyone who has not opened
+             * the app since July), so this is still live — and it sets the pattern every future
+             * appearance default has to follow. [[a-persisted-grant-outlives-the-switch-that-made-it]]
+             */
+            if (p.highContrastUserTouched !== true && p.highContrast !== true) p.highContrast = true;
           }
         }
         return p as SettingsState;
