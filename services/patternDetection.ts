@@ -11,7 +11,7 @@
  *    Expect: subtle left-side aim suggestion, no lecturing. Kevin uses patterns silently.
  */
 
-import { holePar } from './smartFinderService';
+import { parForHole } from './holeParLookup';
 import { STRENGTH_LABEL_BREAKS } from '../constants/handicapTiers';
 import type { ShotResult, CourseHole } from '../store/roundStore';
 import type { RoundMode, PatternInsights } from '../types/patterns';
@@ -103,7 +103,33 @@ export function generatePatternInsights(
   const pressureShots = shots.filter(shot => {
     const score = scores[shot.hole];
     if (score == null) return false;
-    const par = holePar(shot.hole) ?? 4;
+    /**
+     * 2026-09-11 — PAR COMES FROM THE SHOTS' OWN COURSE, NOT FROM THE LIVE ROUND.
+     *
+     * 8d84ac50 ("one truth for the hole") replaced
+     *     courseHoles.find(h => h.hole === shot.hole)?.par
+     * with smartFinderService.holePar(shot.hole), which resolves against
+     * useRoundStore.getState() — the round happening RIGHT NOW. That is the correct truth for a
+     * different question. This function is handed an arbitrary set of shots plus the courseHoles
+     * they belong to, and all five callers pass them (caddie.tsx, round/briefing.tsx,
+     * caddieRequestBody.ts, useVoiceCaddie.ts, patterns-debug.tsx). After that change the parameter
+     * was declared, destructured, and never read, so pressure-shot detection scored every analysed
+     * shot against whatever course the player happens to be standing on — and against `?? 4` when
+     * no round is live at all.
+     *
+     * It reaches the brain: caddieRequestBody is the one payload builder, so a wrong par here means
+     * the caddie's read on "where you miss under pressure" is computed from the wrong hole.
+     *
+     * The refactor's intent stands; the truth for THESE shots is the courseHoles supplied with them.
+     * [[two-owners-is-the-root-cause]]
+     */
+    const par = parForHole(courseHoles, shot.hole);
+    /**
+     * An unknown par is NOT a par 4. The previous `?? 4` meant a hole we had no data for was scored
+     * as if it were a par 4, so a 6 there became "+2 under pressure" and fed the brain as fact.
+     * Unknown holes are now skipped: the insight says less, and what it says is true.
+     */
+    if (par == null) return false;
     return (score - par) > threshold;
   });
 
