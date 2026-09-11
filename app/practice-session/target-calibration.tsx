@@ -184,13 +184,13 @@ export default function CageTargetCalibration() {
           <Text style={[styles.statusLabel, { color: colors.text_secondary }]}>{t('practice_session_target_calibration.cage_target_calibration.shots_logged')}</Text>
           <View style={styles.statusDivider} />
           <View style={[styles.statusDot, { backgroundColor: '#00C896' }]} />
-          <Text style={[styles.statusLabel, { color: colors.text_secondary }]}>{centerCount} center</Text>
+          <Text style={[styles.statusLabel, { color: colors.text_secondary }]}>{t('practice_session_target_calibration.cage_target_calibration.center', { centerCount })}</Text>
           <View style={styles.statusDivider} />
           <View style={[styles.statusDot, { backgroundColor: '#f59e0b' }]} />
           <Text style={[styles.statusLabel, { color: colors.text_secondary }]}>{canvasCount - centerCount} edge</Text>
           <View style={styles.statusDivider} />
           <View style={[styles.statusDot, { backgroundColor: '#ef4444' }]} />
-          <Text style={[styles.statusLabel, { color: colors.text_secondary }]}>{netCount} net</Text>
+          <Text style={[styles.statusLabel, { color: colors.text_secondary }]}>{t('practice_session_target_calibration.cage_target_calibration.net', { netCount })}</Text>
         </View>
 
         {/* Phase instruction */}
@@ -277,9 +277,7 @@ export default function CageTargetCalibration() {
         {/* Scatter plot — shows once enough samples exist */}
         {dots.length >= SCATTER_MIN && (
           <View style={[styles.scatterCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.scatterTitle, { color: colors.text_primary }]}>
-              Hit distribution ({dots.length} canvas shots)
-            </Text>
+            <Text style={[styles.scatterTitle, { color: colors.text_primary }]}>{t('practice_session_target_calibration.cage_target_calibration.hit_distribution_canvas_shots', { length: dots.length })}</Text>
             <View style={[styles.scatterWrap, { width: SCATTER_SIZE, height: SCATTER_SIZE }]}>
               {/* Net background */}
               <View style={[StyleSheet.absoluteFill, { backgroundColor: '#1a4a1a', borderRadius: 6 }]} />

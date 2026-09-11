@@ -582,7 +582,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
     return (
       <HoleFrame onPress={onOpenSmartVision} onLayout={setMeasuredDims}>
         <View style={[styles.wrap, wrapDims, styles.placeholder]}>
-          <Text style={styles.placeholderText}>HOLE {currentHole}</Text>
+          <Text style={styles.placeholderText}>{t('caddie_l1_hole_preview.l1_hole_preview.hole', { currentHole })}</Text>
           <Text style={styles.placeholderSub}>{t('caddie_l1_hole_preview.l1_hole_preview.preview_coming_for_this_course')}</Text>
           <Text style={styles.placeholderCta}>{t('caddie_l1_hole_preview.l1_hole_preview.tap_to_open_smartvision')}</Text>
         </View>
@@ -602,7 +602,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
   if (!(axisYards > 0)) {
     return (
       <View style={[styles.wrap, wrapDims, styles.placeholder]}>
-        <Text style={styles.placeholderText}>HOLE {currentHole}</Text>
+        <Text style={styles.placeholderText}>{t('caddie_l1_hole_preview.l1_hole_preview.hole', { currentHole })}</Text>
       </View>
     );
   }
@@ -652,9 +652,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
               <Circle cx={playerPos.sx} cy={playerPos.sy} r={5} fill="#F5A623" stroke="#0d1a0d" strokeWidth={1.5} />
             </>
           )}
-          <SvgText x={W - pad} y={pad + 2} fill="#fff" fontSize={9} fontWeight="800" textAnchor="end" letterSpacing={1}>
-            HOLE {currentHole}
-          </SvgText>
+          <SvgText x={W - pad} y={pad + 2} fill="#fff" fontSize={9} fontWeight="800" textAnchor="end" letterSpacing={1}>{t('caddie_l1_hole_preview.l1_hole_preview.hole', { currentHole })}</SvgText>
         </Svg>
       </View>
     </HoleFrame>

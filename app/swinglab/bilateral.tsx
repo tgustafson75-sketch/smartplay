@@ -151,7 +151,7 @@ export default function BilateralReview() {
         <Text style={[styles.angleLabel, { color: colors.accent }]}>
           {r.angle === 'down_the_line' ? 'DOWN THE LINE' : 'FACE-ON'}
         </Text>
-        <Text style={[styles.sub, { color: colors.text_muted }]}>{r.label} · reads {r.reads}</Text>
+        <Text style={[styles.sub, { color: colors.text_muted }]}>{t('swinglab_bilateral.angle_card.reads', { label: r.label, reads: r.reads })}</Text>
         {wins.length > 0 ? (
           <View style={styles.winBlock}>
             <Text style={[styles.winLabel, { color: '#3FB950' }]}>{t('swinglab_bilateral.angle_card.what_s_working')}</Text>
@@ -162,7 +162,7 @@ export default function BilateralReview() {
         ) : null}
         {r.faultName ? <Text style={[styles.fault, { color: colors.text_primary }]}>{r.faultName}</Text> : <Text style={[styles.sub, { color: colors.text_muted }]}>{t('swinglab_bilateral.angle_card.no_fault_flagged_from_this')}</Text>}
         {r.breakdown ? <Text style={[styles.body, { color: colors.text_primary }]}>{r.breakdown}</Text> : null}
-        {r.fix ? <Text style={[styles.fix, { color: colors.accent }]}>Fix: {r.fix}</Text> : null}
+        {r.fix ? <Text style={[styles.fix, { color: colors.accent }]}>{t('swinglab_bilateral.angle_card.fix', { fix: r.fix })}</Text> : null}
       </View>
     );
   };

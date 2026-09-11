@@ -101,7 +101,7 @@ export default function CourseDetailModal({ visible, onClose, courseName, locati
                   </View>
                 </View>
                 <View style={styles.holeMain}>
-                  <Text style={styles.holeStat}>Par {h.par} · {h.yardage}y</Text>
+                  <Text style={styles.holeStat}>{t('course_course_detail_modal.text.par_y', { par: h.par, yardage: h.yardage })}</Text>
                   {h.note ? (
                     <Text style={styles.holeNote} numberOfLines={3}>{h.note}</Text>
                   ) : (

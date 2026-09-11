@@ -173,9 +173,7 @@ export default function FitProfileScreen() {
         <Text style={[styles.headline, { color: colors.text_primary }]}>{profile.headline}</Text>
         <View style={styles.confRow}>
           <View style={[styles.confDot, { backgroundColor: confColor }]} />
-          <Text style={[styles.confText, { color: colors.text_muted }]}>
-            {profile.measuredCount} tracked · {profile.statedCount} you set · of {profile.totalCount} clubs · {profile.confidence} confidence
-          </Text>
+          <Text style={[styles.confText, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.tracked_you_set_of_clubs', { measuredCount: profile.measuredCount, statedCount: profile.statedCount, totalCount: profile.totalCount, confidence: profile.confidence })}</Text>
         </View>
 
         {/* 2026-07-23 (Tim — Bag Vision) — populate the bag by video instead of typing each club. */}
@@ -205,9 +203,7 @@ export default function FitProfileScreen() {
         {fitGap.ownedCount > 0 && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.accent }]}>
             <Text style={[styles.cardLabel, { color: colors.accent }]}>{t('practice_fit_profile.fit_profile_screen.fit_gap_your_bag_vs')}</Text>
-            <Text style={[styles.confText, { color: colors.text_muted, marginBottom: 8 }]}>
-              {fitGap.ownedCount} clubs in your bag · {fitGap.dialedCount} with a carry set
-            </Text>
+            <Text style={[styles.confText, { color: colors.text_muted, marginBottom: 8 }]}>{t('practice_fit_profile.fit_profile_screen.clubs_in_your_bag_with', { ownedCount: fitGap.ownedCount, dialedCount: fitGap.dialedCount })}</Text>
             {fitGap.findings.length === 0 ? (
               <Text style={[styles.gapText, { color: colors.text_primary }]}>{t('practice_fit_profile.fit_profile_screen.your_bag_matches_your_distances')}</Text>
             ) : (

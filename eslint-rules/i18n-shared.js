@@ -103,7 +103,29 @@ function isTextComponentName(name) {
   return TEXT_COMPONENTS.includes(tail) || /Text$/.test(tail);
 }
 
+/**
+ * The same owner-screen set expressed as ESLint flat-config globs. Derived from ONE list with
+ * OWNER_SCREEN_PATTERNS above so the rule and the codemod can never disagree about what counts as
+ * an owner screen — the regexes drive the codemod, these globs drive the lint config, and both are
+ * edited here together.
+ */
+const OWNER_SCREEN_GLOBS = [
+  'app/gps-test.tsx',
+  'app/owner-logs.tsx',
+  'app/voice-misses.tsx',
+  'app/api-debug.tsx',
+  'app/**/*-debug.tsx',
+  'app/*-debug.tsx',
+  'app/author/**',
+  'app/swing-sessions-debug.tsx',
+  'app/simround-auto.tsx',
+  'app/owner-*.tsx',
+  'app/harness.tsx',
+  'app/coach-knowledge.tsx',
+  'app/mark-green.tsx',
+];
+
 module.exports = {
   TEXT_COMPONENTS, USER_FACING_PROPS, IGNORED_PROPS, ALERT_CALLEES,
-  OWNER_SCREEN_PATTERNS, isOwnerScreen, looksLikeProse, isTextComponentName,
+  OWNER_SCREEN_PATTERNS, OWNER_SCREEN_GLOBS, isOwnerScreen, looksLikeProse, isTextComponentName,
 };

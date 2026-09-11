@@ -1,0 +1,782 @@
+[
+  {
+    "file": "app/(tabs)/caddie.tsx",
+    "line": 4144,
+    "text": "{r.totalScore} strokes · {ROUND_MODE_LABELS[r.mode] ?? r.mode}"
+  },
+  {
+    "file": "app/(tabs)/caddie.tsx",
+    "line": 4360,
+    "text": "{i + 1}. {s.direction ?? '?'} {s.outcome && s.outcome !== 'clean' ? …} {(s.penalty_strokes ?? 0) > 0 ? ' +' +…}"
+  },
+  {
+    "file": "app/(tabs)/dashboard.tsx",
+    "line": 778,
+    "text": "{dayStreak} day{dayStreak === 1 ? '' : 's'}"
+  },
+  {
+    "file": "app/(tabs)/dashboard.tsx",
+    "line": 784,
+    "text": "{playerTier.replace(/ Golfer$/, '')} · {totalPoints}"
+  },
+  {
+    "file": "app/(tabs)/dashboard.tsx",
+    "line": 813,
+    "text": "Handicap {handicap_index != null ? handicap_ind…} · Goal {goal || '—'}"
+  },
+  {
+    "file": "app/(tabs)/dashboard.tsx",
+    "line": 898,
+    "text": "{coachableRoster.length} golfer{coachableRoster.length === 1 ? '' : 's'}"
+  },
+  {
+    "file": "app/(tabs)/dashboard.tsx",
+    "line": 1050,
+    "text": "{weather.temp_f != null ? Math.round(w…}°"
+  },
+  {
+    "file": "app/(tabs)/dashboard.tsx",
+    "line": 1062,
+    "text": "{Math.round(weather.wind_speed_mph)} mph"
+  },
+  {
+    "file": "app/(tabs)/dashboard.tsx",
+    "line": 1121,
+    "text": "{rec.points} pts · {rec.sessions}×"
+  },
+  {
+    "file": "app/(tabs)/dashboard.tsx",
+    "line": 1180,
+    "text": "{d} · {balls} {balls === 1 ? 'ball' : 'balls'}"
+  },
+  {
+    "file": "app/(tabs)/dashboard.tsx",
+    "line": 1417,
+    "text": "{dateStr} · {r.holesPlayed} holes{r.isCompetition ? ' · competition' : ''}"
+  },
+  {
+    "file": "app/(tabs)/play.tsx",
+    "line": 2173,
+    "text": "No courses found for \"{query.trim()}\". Try a different name."
+  },
+  {
+    "file": "app/(tabs)/play.tsx",
+    "line": 2251,
+    "text": "{pickTeeSet(selected.tees, preferredTe…}Par {pickTeeSet(selected.tees, preferredTe…} {pickTeeSet(selected.tees, preferredTe…} {pickTeeSet(se"
+  },
+  {
+    "file": "app/(tabs)/scorecard.tsx",
+    "line": 630,
+    "text": "• {t('scorecard.add_putts')}"
+  },
+  {
+    "file": "app/(tabs)/scorecard.tsx",
+    "line": 963,
+    "text": "★ {t('scorecard.highlight_swings', { def…}"
+  },
+  {
+    "file": "app/(tabs)/scorecard.tsx",
+    "line": 1020,
+    "text": "YOUR BAG · {activeCourse.toUpperCase()}"
+  },
+  {
+    "file": "app/(tabs)/scorecard.tsx",
+    "line": 1022,
+    "text": "{courseClubUsage.length} club{courseClubUsage.length === 1 ? '' : 's'} see action here {courseRounds.length > 0 ? ` over ${co…} {courseRound"
+  },
+  {
+    "file": "app/add-course.tsx",
+    "line": 109,
+    "text": "{result.tee_name ? `${result.tee_name}…}{readCount} holes read{withYardage < readCount ? ` · ${withY…}"
+  },
+  {
+    "file": "app/arccos-import.tsx",
+    "line": 148,
+    "text": "Added to your bag. Your Fit Profile and the Caddie now use these {unit === 'carry' ? 'carries' : 'dista…}."
+  },
+  {
+    "file": "app/bag-scan.tsx",
+    "line": 106,
+    "text": "{clubs.length} club{clubs.length === 1 ? '' : 's'} detected. Fix any make/model and untick anything wrong before adding."
+  },
+  {
+    "file": "app/drills/index.tsx",
+    "line": 201,
+    "text": "{entry.drills.length} drill{entry.drills.length === 1 ? '' : 's'}"
+  },
+  {
+    "file": "app/family/[memberId].tsx",
+    "line": 192,
+    "text": "{member.age != null ? `${member.age}y …}{BAND_LABEL[band]} band · {member.skillLevel.replace(/_/g, ' ')} {member.handedness !== 'unknown' ? "
+  },
+  {
+    "file": "app/family/[memberId].tsx",
+    "line": 212,
+    "text": "{recordedCount} recorded swing{recordedCount === 1 ? '' : 's'}"
+  },
+  {
+    "file": "app/family/captain.tsx",
+    "line": 357,
+    "text": "{recipients.length} number{recipients.length === 1 ? '' : 's'}"
+  },
+  {
+    "file": "app/family/captain.tsx",
+    "line": 361,
+    "text": "Sends through your phone's Messages app to {teamName || 'the team'}. No data leaves the device."
+  },
+  {
+    "file": "app/family/captain.tsx",
+    "line": 459,
+    "text": "Coach{member.team ? ` · ${member.team}` : ''}"
+  },
+  {
+    "file": "app/import-round.tsx",
+    "line": 243,
+    "text": "par {h.par}"
+  },
+  {
+    "file": "app/import-rounds-list.tsx",
+    "line": 169,
+    "text": "{phase.rounds.length} round{phase.rounds.length === 1 ? '' : 's'} found"
+  },
+  {
+    "file": "app/import-rounds-list.tsx",
+    "line": 216,
+    "text": "Add {phase.rounds.length} round{phase.rounds.length === 1 ? '' : 's'} to history"
+  },
+  {
+    "file": "app/jukebox.tsx",
+    "line": 111,
+    "text": "Opening {title || 'your song'}…"
+  },
+  {
+    "file": "app/kevin-learning.tsx",
+    "line": 107,
+    "text": "{phraseCount === 1 ? 'phrase' : 'phrases'} learned"
+  },
+  {
+    "file": "app/kevin-learning.tsx",
+    "line": 110,
+    "text": "from {totalShotsParsed} shots {roundsTogether > 0 ? `across ${rounds…}"
+  },
+  {
+    "file": "app/kevin-learning.tsx",
+    "line": 139,
+    "text": "{summary}{entry.was_corrected ? ' · corrected' …} · said {entry.count}×"
+  },
+  {
+    "file": "app/landmark-curate.tsx",
+    "line": 224,
+    "text": "{lm.type} · {lm.side}{lm.position ? ` · (${lm.position.x}, …}"
+  },
+  {
+    "file": "app/landmark-curate.tsx",
+    "line": 240,
+    "text": "H{h}: {count} landmark{count !== 1 ? 's' : ''}"
+  },
+  {
+    "file": "app/paywall.tsx",
+    "line": 248,
+    "text": "{PAYWALL_SUBHEAD}{'\\n'} {PRICING.trialDays}-day free trial. Cancel anytime."
+  },
+  {
+    "file": "app/practice-session/history.tsx",
+    "line": 140,
+    "text": "+{session.shots.length - 20}"
+  },
+  {
+    "file": "app/practice-session/target-calibration.tsx",
+    "line": 190,
+    "text": "{canvasCount - centerCount} edge"
+  },
+  {
+    "file": "app/practice-session/target-calibration.tsx",
+    "line": 210,
+    "text": "Peak: {lastPeakDb != null ? `${lastPeakDb.to…}"
+  },
+  {
+    "file": "app/practice-session/target-calibration.tsx",
+    "line": 320,
+    "text": "{centerCount} center · {canvasCount - centerCount} edge · {netCount} net"
+  },
+  {
+    "file": "app/practice/[sessionId].tsx",
+    "line": 77,
+    "text": "{fmtDate(session.startedAt)} · {fmtTime(session.startedAt)} · {ballCount} {ballCount === 1 ? 'ball' : 'balls'} {session.environment ? ` · ${"
+  },
+  {
+    "file": "app/practice/fit-profile.tsx",
+    "line": 235,
+    "text": "{g.gapYards} yd between your {g.upper} and {g.lower} — a club-and-a-half hole around {g.centerYards} yds."
+  },
+  {
+    "file": "app/practice/fit-profile.tsx",
+    "line": 247,
+    "text": "{o.longer} and {o.shorter} carry within {o.gapYards} yds — one may be redundant."
+  },
+  {
+    "file": "app/practice/session.tsx",
+    "line": 106,
+    "text": "SESSION COMPLETE · {focus?.label?.toUpperCase()}"
+  },
+  {
+    "file": "app/practice/session.tsx",
+    "line": 128,
+    "text": "{focus?.label?.toUpperCase()} · BALL {done + 1} OF {total}"
+  },
+  {
+    "file": "app/practice/shot-shapes.tsx",
+    "line": 79,
+    "text": "{s.intendedHeight.toUpperCase()} LAUNCH"
+  },
+  {
+    "file": "app/profile.tsx",
+    "line": 102,
+    "text": "GHIN {ghin || '—'}"
+  },
+  {
+    "file": "app/profile.tsx",
+    "line": 103,
+    "text": "Goal {goal || '—'}"
+  },
+  {
+    "file": "app/profile/custom-caddie.tsx",
+    "line": 750,
+    "text": "Record short phrases in your own voice. The caddie uses your recording for any phrase you record and the AI voice for everything else. {reco"
+  },
+  {
+    "file": "app/quick-start.tsx",
+    "line": 192,
+    "text": "{i + 1}. {card.title}"
+  },
+  {
+    "file": "app/recap/[round_id].tsx",
+    "line": 657,
+    "text": "Your round data is saved{timedOut ? ' — tap Try again, or it’l…}"
+  },
+  {
+    "file": "app/recap/[round_id].tsx",
+    "line": 949,
+    "text": "Hole {hc.hole_number}"
+  },
+  {
+    "file": "app/recap/hole/[round_id]/[hole].tsx",
+    "line": 209,
+    "text": "WATCH · {swingsForHole.length} SWING{swingsForHole.length === 1 ? '' : 'S'} ON THIS HOLE"
+  },
+  {
+    "file": "app/reference.tsx",
+    "line": 205,
+    "text": "Save {parsedIdx.toFixed(1)} as my Index"
+  },
+  {
+    "file": "app/settings.tsx",
+    "line": 732,
+    "text": "Handicap {handicapIndex != null ? handicapIndex…} · Goal {goal || '—'}"
+  },
+  {
+    "file": "app/settings.tsx",
+    "line": 915,
+    "text": "Optional. {isOwnerEmail(editEmail) ? '✓ Owner To…}"
+  },
+  {
+    "file": "app/settings.tsx",
+    "line": 1558,
+    "text": "{watchDeviceLabel()} swing capture{watchBridgeAvailable ? '' : ' · needs…}"
+  },
+  {
+    "file": "app/settings.tsx",
+    "line": 2250,
+    "text": "Checklist{checklistOpen > 0 ? ` · ${checklistOp…}"
+  },
+  {
+    "file": "app/settings.tsx",
+    "line": 2690,
+    "text": "Waypoint {walkState.waypoint_index + 1} · {(walkState.fraction_through * 100).to…}% through"
+  },
+  {
+    "file": "app/settings.tsx",
+    "line": 2693,
+    "text": "{walkState.current_lat.toFixed(5)}, {walkState.current_lng.toFixed(5)}"
+  },
+  {
+    "file": "app/settings.tsx",
+    "line": 2799,
+    "text": "🕶️ {t('settings.glasses_mode')}"
+  },
+  {
+    "file": "app/settings.tsx",
+    "line": 2806,
+    "text": "✓ {t('settings.glasses_mode_active')}"
+  },
+  {
+    "file": "app/settings.tsx",
+    "line": 2946,
+    "text": "{isOpenAI ? 'OpenAI (gpt-4o / gpt-4o-m…} {'\\n'}TTS and STT always use OpenAI regardless of this setting."
+  },
+  {
+    "file": "app/settings.tsx",
+    "line": 2952,
+    "text": "Active: {isOpenAI ? 'OpenAI' : 'Gemini'}"
+  },
+  {
+    "file": "app/smartfinder.tsx",
+    "line": 1766,
+    "text": "⊕ {(aimedLabel ?? 'to target').toUpperCa…}"
+  },
+  {
+    "file": "app/smartfinder.tsx",
+    "line": 1870,
+    "text": "Ranged off {heightRangeRef === 'flagstick' ? 'the…} — no tilt needed"
+  },
+  {
+    "file": "app/smartfinder.tsx",
+    "line": 1878,
+    "text": "Elevation: {elevationDeltaFeet > 0 ? '↑ uphill' :…} {Math.abs(Math.round(elevationDeltaFeet))} ft {' · '}plays {elevationDeltaFeet > 0 ? '+'"
+  },
+  {
+    "file": "app/smartfinder.tsx",
+    "line": 1884,
+    "text": "Landing: carry {landing.carry}{landing.baseline ? ' est' : ''} · total {landing.total} · ±{dispersion.yards}y ({dispersion.band})"
+  },
+  {
+    "file": "app/swing-review/[review_session_id].tsx",
+    "line": 391,
+    "text": "Shot {reviewedCount + 1} of {totalCount}"
+  },
+  {
+    "file": "app/swing-review/start.tsx",
+    "line": 110,
+    "text": "Kevin will review {previewCount} shot{previewCount !== 1 ? 's' : ''} with you."
+  },
+  {
+    "file": "app/swing-review/summary.tsx",
+    "line": 121,
+    "text": "{labeledCount} shot{labeledCount !== 1 ? 's' : ''} labeled"
+  },
+  {
+    "file": "app/swinglab/calibrate.tsx",
+    "line": 231,
+    "text": "noise floor {Number.isFinite(result?.floorDb) ? re…} dB"
+  },
+  {
+    "file": "app/swinglab/calibrate.tsx",
+    "line": 252,
+    "text": "✓ Active calibration: floor {appliedCalibration.noiseFloorDb.toFix…} dB · threshold {appliedCalibration.transientThresholdDb} dB"
+  },
+  {
+    "file": "app/swinglab/coach-lesson.tsx",
+    "line": 574,
+    "text": "DRILL · {priority.fault.drill.name.toUpperCase()}"
+  },
+  {
+    "file": "app/swinglab/coach-mode.tsx",
+    "line": 283,
+    "text": "{roster.length} {roster.length === 1 ? 'player' : 'pla…} · {totalSwingsLogged} swings logged"
+  },
+  {
+    "file": "app/swinglab/coach-mode.tsx",
+    "line": 498,
+    "text": "{activeMember.firstName.toUpperCase()}'S SWINGS"
+  },
+  {
+    "file": "app/swinglab/indoor.tsx",
+    "line": 244,
+    "text": "benchmark {benchmark.toFixed(0)}:1"
+  },
+  {
+    "file": "app/swinglab/indoor.tsx",
+    "line": 285,
+    "text": "AVG TEMPO · bench {benchmark.toFixed(0)}:1"
+  },
+  {
+    "file": "app/swinglab/indoor.tsx",
+    "line": 315,
+    "text": "{r.tempoRatio.toFixed(1)}:1"
+  },
+  {
+    "file": "app/swinglab/indoor.tsx",
+    "line": 316,
+    "text": "{Math.round(r.backswingMs)}ms / {Math.round(r.downswingMs)}ms"
+  },
+  {
+    "file": "app/swinglab/library.tsx",
+    "line": 457,
+    "text": "Filters{advancedFiltersActive ? ' •' : ''}"
+  },
+  {
+    "file": "app/swinglab/library.tsx",
+    "line": 672,
+    "text": "{dateStr} · {entry.swing_count} swing{entry.swing_count === 1 ? '' : 's'}"
+  },
+  {
+    "file": "app/swinglab/range-import.tsx",
+    "line": 195,
+    "text": "{phase.applied} distance{phase.applied === 1 ? '' : 's'} applied"
+  },
+  {
+    "file": "app/swinglab/range-import.tsx",
+    "line": 240,
+    "text": "{mappable.length} club{mappable.length === 1 ? '' : 's'} detected {result.consistency_pct != null ? ` · …}"
+  },
+  {
+    "file": "app/swinglab/range-import.tsx",
+    "line": 245,
+    "text": "{result.confidence.toUpperCase()} CONFIDENCE"
+  },
+  {
+    "file": "app/swinglab/range-import.tsx",
+    "line": 267,
+    "text": "{unmapped.map(r => r.display_name).joi…} — not matched to a known club; excluded from import."
+  },
+  {
+    "file": "app/swinglab/range-import.tsx",
+    "line": 293,
+    "text": "Apply {mappable.length} distance{mappable.length === 1 ? '' : 's'}"
+  },
+  {
+    "file": "app/swinglab/simround.tsx",
+    "line": 399,
+    "text": "{n} HOLES"
+  },
+  {
+    "file": "app/swinglab/simround.tsx",
+    "line": 416,
+    "text": "👻 {ghostLabel(r)}"
+  },
+  {
+    "file": "app/swinglab/simround.tsx",
+    "line": 521,
+    "text": "{b.club} · {b.carry}{b.learned ? '' : '*'}"
+  },
+  {
+    "file": "app/swinglab/smart-tempo.tsx",
+    "line": 678,
+    "text": "{PHASE_META.find(p => p.key === active…} {' · '}{position.toFixed(2)}s"
+  },
+  {
+    "file": "app/swinglab/smartmotion.tsx",
+    "line": 5820,
+    "text": "{recordedSeconds}s · {recordingMaxSeconds - recordedSeconds}s left"
+  },
+  {
+    "file": "app/swinglab/smartmotion.tsx",
+    "line": 5960,
+    "text": "Back {(tempo.backswingMs / 1000).toFixed(1)}s · Down {(tempo.downswingMs / 1000).toFixed(1)}s {tempo.sequencingScore != null ? ` · T…}"
+  },
+  {
+    "file": "app/swinglab/smartmotion.tsx",
+    "line": 5971,
+    "text": "RANGE · ENGAGED{aimRead ? ` · aim ${aimRead}` : ''}"
+  },
+  {
+    "file": "app/swinglab/smartmotion.tsx",
+    "line": 6225,
+    "text": "SWING {selectedSwing + 1} OF {segments.length}"
+  },
+  {
+    "file": "app/swinglab/smartmotion.tsx",
+    "line": 6265,
+    "text": "PUTT READ{puttAnalysis.partialCapture ? ' · est…}"
+  },
+  {
+    "file": "app/swinglab/smartmotion.tsx",
+    "line": 6319,
+    "text": "Confidence: {analysis.confidence ?? '—'}"
+  },
+  {
+    "file": "app/swinglab/space-scan.tsx",
+    "line": 189,
+    "text": "{errorMessage ?? \"Something went sidew…} Try a wider shot showing the hitting area, mat, and net."
+  },
+  {
+    "file": "app/swinglab/swing/[swing_id].tsx",
+    "line": 2647,
+    "text": "Pick a swing below to compare with swing {String((session.shots.findIndex(x => …}."
+  },
+  {
+    "file": "app/swinglab/swing/[swing_id].tsx",
+    "line": 2667,
+    "text": "Swing {String((session.shots.findIndex(x => …} {leftShot.perShotAnalysis?.detected_is…}"
+  },
+  {
+    "file": "app/swinglab/swing/[swing_id].tsx",
+    "line": 2684,
+    "text": "Swing {String((session.shots.findIndex(x => …} {rightShot.perShotAnalysis?.detected_i…}"
+  },
+  {
+    "file": "app/swinglab/swing/[swing_id].tsx",
+    "line": 2953,
+    "text": "{fmtClock(Math.max(0, position - winSt…} / {fmtClock(winSpanSec)}"
+  },
+  {
+    "file": "app/swinglab/swing/[swing_id].tsx",
+    "line": 3048,
+    "text": "{Math.floor(ts / 60)}:{Math.floor(ts % 60).toString().padSta…}"
+  },
+  {
+    "file": "app/swinglab/swing/[swing_id].tsx",
+    "line": 3156,
+    "text": "Analyze the swing at 0:{Math.floor(position).toString().padSt…}"
+  },
+  {
+    "file": "app/swinglab/swing/[swing_id].tsx",
+    "line": 3182,
+    "text": "Analyze the swing at 0:{Math.floor(position).toString().padSt…}"
+  },
+  {
+    "file": "app/swinglab/swing/[swing_id].tsx",
+    "line": 3702,
+    "text": "BIOMECHANICS{session.shots.length > 1 ? ` · SWING …}"
+  },
+  {
+    "file": "app/swinglab/swing/[swing_id].tsx",
+    "line": 3742,
+    "text": "• Club plane: {clubPlane.classification === 'over_th…} {clubPlane.provisional ? ' — measured …}"
+  },
+  {
+    "file": "app/swinglab/swing/[swing_id].tsx",
+    "line": 3809,
+    "text": "Back {(session.smart_motion_shot_map.tempo.…}s · Down {(session.smart_motion_shot_map.tempo.…}s {session.smart_motion_shot_map.tempo.s…}"
+  },
+  {
+    "file": "app/swinglab/swing/[swing_id].tsx",
+    "line": 3927,
+    "text": "Duration: {duration.toFixed(1)}s · Position: {position.toFixed(1)}s"
+  },
+  {
+    "file": "app/swinglab/swing/[swing_id].tsx",
+    "line": 4016,
+    "text": "REFERENCE{reference.position ? ` · ${reference.…}"
+  },
+  {
+    "file": "app/swinglab/tempo-trainer.tsx",
+    "line": 342,
+    "text": "{' '}yours {selfRead.ratio.toFixed(1)} : 1"
+  },
+  {
+    "file": "app/swinglab/trim.tsx",
+    "line": 178,
+    "text": "{startSec.toFixed(1)}s"
+  },
+  {
+    "file": "app/swinglab/trim.tsx",
+    "line": 182,
+    "text": "{endSec.toFixed(1)}s"
+  },
+  {
+    "file": "app/swinglab/trim.tsx",
+    "line": 185,
+    "text": "({windowSec.toFixed(1)}s)"
+  },
+  {
+    "file": "app/swinglab/trim.tsx",
+    "line": 201,
+    "text": "Set Start ({position.toFixed(1)}s)"
+  },
+  {
+    "file": "app/swinglab/trim.tsx",
+    "line": 211,
+    "text": "Set End ({position.toFixed(1)}s)"
+  },
+  {
+    "file": "app/swinglab/trim.tsx",
+    "line": 224,
+    "text": "Analyze This Window ({windowSec.toFixed(1)}s)"
+  },
+  {
+    "file": "app/tournament.tsx",
+    "line": 202,
+    "text": "{pi + 1}."
+  },
+  {
+    "file": "app/tournament.tsx",
+    "line": 239,
+    "text": "par {h.par}"
+  },
+  {
+    "file": "app/tournament.tsx",
+    "line": 384,
+    "text": "{FORMAT_LABEL[state.format]}{state.courseName ? ` · ${state.course…} · thru {result.maxThrough}/18"
+  },
+  {
+    "file": "app/welcome.tsx",
+    "line": 361,
+    "text": "Accepted {new Date(termsAcceptedAt!).toLocaleSt…}"
+  },
+  {
+    "file": "components/CaddieDataStrip.tsx",
+    "line": 301,
+    "text": "({playsLikeDelta > 0 ? '+' : ''}{playsLikeDelta})"
+  },
+  {
+    "file": "components/CaddieDataStrip.tsx",
+    "line": 426,
+    "text": "({cell.delta > 0 ? '+' : ''}{cell.delta})"
+  },
+  {
+    "file": "components/ErrorBoundary.tsx",
+    "line": 90,
+    "text": "platform: {Platform.OS} {Platform.Version}"
+  },
+  {
+    "file": "components/GreenHeatCard.tsx",
+    "line": 80,
+    "text": "{model.totalHoles} of {GREEN_HEAT_MIN_HOLES} putt-holes logged {model.remaining > 0 ? ` · ${model.rem…}"
+  },
+  {
+    "file": "components/GreenHeatCard.tsx",
+    "line": 102,
+    "text": "{b.avgPutts != null ? b.avgPutts.toFix…} avg · {b.holes} hole {b.holes === 1 ? '' : 's'}"
+  },
+  {
+    "file": "components/GreenHeatCard.tsx",
+    "line": 107,
+    "text": "{pct(b.threePuttRate)} 3-putt+"
+  },
+  {
+    "file": "components/NativeFallbackBanner.tsx",
+    "line": 86,
+    "text": "Cloud mode — {missingLabels.join(' + ')} unavailable on this build."
+  },
+  {
+    "file": "components/QuickLogShotSheet.tsx",
+    "line": 186,
+    "text": "Log shot · hole {holeOverride ?? currentHole}"
+  },
+  {
+    "file": "components/SmartVisionLiveStrategy.tsx",
+    "line": 79,
+    "text": "⚠ {ctx.geometry.hazards.length} hazard{ctx.geometry.hazards.length === 1 ? '…}"
+  },
+  {
+    "file": "components/SmartVisionLiveStrategy.tsx",
+    "line": 86,
+    "text": "👁 Glasses · {ctx.vision.mode.replace('_', ' ')}"
+  },
+  {
+    "file": "components/SmartVisionLiveStrategy.tsx",
+    "line": 93,
+    "text": "← {last.club ?? 'last'}{last.direction ? ` ${last.direction}`…}{last.distanceYards != null ? ` (${las…}"
+  },
+  {
+    "file": "components/battery/BatterySaverPrompt.tsx",
+    "line": 43,
+    "text": "Battery low{pct != null ? ` · ${pct}%` : ''}"
+  },
+  {
+    "file": "components/charts/StriationBar.tsx",
+    "line": 75,
+    "text": "{r.seg.label} · {pct}%{r.seg.detail ? ` · ${r.seg.detail}` : ''}"
+  },
+  {
+    "file": "components/course/HolePhotosGrid.tsx",
+    "line": 110,
+    "text": "Hole {item.hole_number}"
+  },
+  {
+    "file": "components/practice/ClubIdentifyControls.tsx",
+    "line": 224,
+    "text": "Looks like your {clubLabel(pendingConfirm.club_id)} — confirm?"
+  },
+  {
+    "file": "components/recap/HandicapImpactCard.tsx",
+    "line": 236,
+    "text": "{holesPlayed} {holesPlayed === 1 ? 'hole' : 'holes'} in the books — finish 9 or 18 to post a Score Differential to your Index. The round's s"
+  },
+  {
+    "file": "components/recap/HandicapImpactCard.tsx",
+    "line": 270,
+    "text": "{CONFIDENCE_LABELS[conf]} · {n} round{n === 1 ? '' : 's'} on file"
+  },
+  {
+    "file": "components/recap/HoleShotMap.tsx",
+    "line": 271,
+    "text": "Shot {selectedIdx! + 1}"
+  },
+  {
+    "file": "components/recap/HoleShotMap.tsx",
+    "line": 278,
+    "text": "✓ Watch confirmed {confirmations[selectedIdx!].tempoRati…} {confirmations[selectedIdx!].swingClub…}"
+  },
+  {
+    "file": "components/recap/OutcomeCard.tsx",
+    "line": 56,
+    "text": "Shot {i + 1}"
+  },
+  {
+    "file": "components/round/ShotTrackedSheet.tsx",
+    "line": 79,
+    "text": "YDS{estimated ? ' (est)' : ''}"
+  },
+  {
+    "file": "components/settings/CloudBackupCard.tsx",
+    "line": 171,
+    "text": "Last cloud backup: {timeAgo(serverLastAt)}"
+  },
+  {
+    "file": "components/smartmotion/ShotMapPage.tsx",
+    "line": 184,
+    "text": "{Math.round(maxRange * f)}y"
+  },
+  {
+    "file": "components/smartmotion/ShotMapPage.tsx",
+    "line": 300,
+    "text": "{Math.max(1, canvasFeet + cameraBehind…} ft"
+  },
+  {
+    "file": "components/smartmotion/SmartMotionHud.tsx",
+    "line": 308,
+    "text": "IDEAL {idealLow.toFixed(1)}–{idealHigh.toFixed(1)}"
+  },
+  {
+    "file": "components/swinglab/AskYourSwingCard.tsx",
+    "line": 187,
+    "text": "ASK {caddieName.toUpperCase()}"
+  },
+  {
+    "file": "components/swinglab/CompareReferencePickerSheet.tsx",
+    "line": 113,
+    "text": "{clubFilter ? `Filtered to ${clubFilte…} Ranked by match similarity."
+  },
+  {
+    "file": "components/swinglab/ComparisonResultSheet.tsx",
+    "line": 230,
+    "text": "Feel: {f.feel} {f.drillId ? ` · drill: ${f.drillId}` …}"
+  },
+  {
+    "file": "components/swinglab/ComparisonResultSheet.tsx",
+    "line": 262,
+    "text": "NOT MEASURED ON {unreadable.every((u) => u.missing ===…}"
+  },
+  {
+    "file": "components/swinglab/ComparisonResultSheet.tsx",
+    "line": 268,
+    "text": "{readableCount === 0 ? 'Nothing lined …} {' '}A full-body view with the whole swing in frame reads more of them."
+  },
+  {
+    "file": "components/swinglab/PrimaryIssueCard.tsx",
+    "line": 117,
+    "text": "Detected in {issue.occurrence_count} of {totalShots} swings {isTentative ? ' · tentative' : ''}"
+  },
+  {
+    "file": "components/swinglab/PuttReadLine.tsx",
+    "line": 99,
+    "text": "The line to play — read from the break above{readLine.confidence ? ` · ${Math.roun…}. Not a trace of your actual roll."
+  },
+  {
+    "file": "components/swinglab/PuttingAnalysisCard.tsx",
+    "line": 61,
+    "text": "{analysis.distanceFeet} foot putt {analysis.holeNumber ? ` · Hole ${anal…}"
+  },
+  {
+    "file": "components/swinglab/PuttingAnalysisCard.tsx",
+    "line": 188,
+    "text": "{arrow} {fmt(severity)} {breakInches > 0 ? `· ~${round1(breakI…} · {confidence}%"
+  },
+  {
+    "file": "components/swinglab/TempoPatch.tsx",
+    "line": 150,
+    "text": "IDEAL {targetRatio.toFixed(0)}:1"
+  }
+]

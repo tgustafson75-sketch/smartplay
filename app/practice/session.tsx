@@ -128,7 +128,7 @@ export default function SessionRunnerScreen() {
               <Text style={[styles.sectionLabel, { color: colors.accent }]}>{focus?.label?.toUpperCase()} · BALL {done + 1} OF {total}</Text>
               <Text style={[styles.repClub, { color: colors.text_primary }]}>{currentRep?.club}</Text>
               {currentRep?.switchClub && done > 0 ? (
-                <Text style={[styles.switchCue, { color: colors.accent_amber }]}>↻ Switch clubs — {currentRep.club}</Text>
+                <Text style={[styles.switchCue, { color: colors.accent_amber }]}>{t('practice_session.session_runner_screen.switch_clubs', { club: currentRep.club })}</Text>
               ) : null}
               <Text style={[styles.repCue, { color: colors.text_secondary }]}>{currentRep?.targetCue}</Text>
               {/* progress dots */}

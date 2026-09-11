@@ -139,7 +139,7 @@ export default function HoleShotMap({
         <TouchableOpacity onPress={onClose} style={styles.headerBtn} accessibilityRole="button">
           <Text style={styles.headerBtnText}>{t('recap_hole_shot_map.hole_shot_map.back')}</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Hole {hole}</Text>
+        <Text style={styles.title}>{t('recap_hole_shot_map.hole_shot_map.hole', { hole })}</Text>
         <View style={styles.headerBtn} />
       </View>
 

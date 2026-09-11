@@ -265,9 +265,7 @@ export default function UploadSwing() {
 
         {step === 'pick' && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.copy, { color: colors.text_primary }]}>
-              Pick a swing video from your phone. Cap is {MAX_FILE_SIZE_MB}MB.
-            </Text>
+            <Text style={[styles.copy, { color: colors.text_primary }]}>{t('swinglab_upload.upload_swing.pick_a_swing_video_from', { MAX_FILE_SIZE_MB })}</Text>
             <Text style={[styles.copySub, { color: colors.text_muted }]}>
               {t('swinglab_upload.upload_swing.videos_with_coaching_audio_a')}
             </Text>

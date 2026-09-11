@@ -121,6 +121,30 @@ function slugFor(text) {
 }
 
 // ─── per-file transform ──────────────────────────────────────────────────────
+
+/**
+ * 2026-09-11 — A CLASS COMPONENT CANNOT HOLD A HOOK, AND THE ONE THAT CAUGHT THIS IS THE ROOT
+ * ERROR BOUNDARY.
+ *
+ * The interpolation pass inserted `const { t } = useTranslation()` into components/ErrorBoundary,
+ * which is a React CLASS. React throws on a hook called from a class method, so the boundary that
+ * exists to catch render crashes would itself crash the app — the exact field-fatal shape an OTA
+ * cannot recover from, because a launch crash cannot download the next update.
+ *
+ * Caught by the repo's rules-of-hooks LOCK before it left the machine. Both codemods now refuse any
+ * function whose enclosing scope is a class body.
+ */
+function isInsideClassComponent(nodePath) {
+  let p = nodePath;
+  while (p) {
+    const t = p.node?.type;
+    if (t === 'ClassDeclaration' || t === 'ClassExpression' || t === 'ClassBody' ||
+        t === 'ClassMethod' || t === 'ClassProperty' || t === 'ClassPrivateMethod') return true;
+    p = p.parentPath;
+  }
+  return false;
+}
+
 const stats = {
   filesScanned: 0, filesChanged: 0, filesSkippedOwner: 0,
   rewritten: 0, reusedKeys: 0, newKeys: 0,
@@ -213,6 +237,11 @@ function transformFile(absPath) {
     if (!fn) {
       skipped.push({ file: rel, line, text: decodeEntities(rawText).trim().slice(0, 60),
         reason: 'not inside a React component — no scope to call useTranslation() from' });
+      return null;
+    }
+    if (isInsideClassComponent(fn)) {
+      skipped.push({ file: rel, line, text: decodeEntities(rawText).trim().slice(0, 60),
+        reason: 'inside a React CLASS component — a hook there crashes the render' });
       return null;
     }
     const body = fn.node.body;

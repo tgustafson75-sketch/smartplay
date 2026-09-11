@@ -192,9 +192,7 @@ export default function TutorialUpload() {
         ) : (
           <>
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.copy, { color: colors.text_primary }]}>
-                Capture a coaching lesson so {caddieName} can reference it during your rounds.
-              </Text>
+              <Text style={[styles.copy, { color: colors.text_primary }]}>{t('swinglab_tutorial_upload.tutorial_upload.capture_a_coaching_lesson_so', { caddieName })}</Text>
               <Text style={[styles.copySub, { color: colors.text_muted }]}>
                 {t('swinglab_tutorial_upload.tutorial_upload.attach_the_source_video_if')}
               </Text>
@@ -241,10 +239,7 @@ export default function TutorialUpload() {
 
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_tutorial_upload.tutorial_upload.target_clubs_optional')}</Text>
-              <Text style={[styles.copySub, { color: colors.text_muted, marginTop: 4, marginBottom: 8 }]}>
-                Tap any clubs this lesson directly applies to. {caddieName} will reference the
-                lesson on shots with those clubs.
-              </Text>
+              <Text style={[styles.copySub, { color: colors.text_muted, marginTop: 4, marginBottom: 8 }]}>{t('swinglab_tutorial_upload.tutorial_upload.tap_any_clubs_this_lesson', { caddieName })}</Text>
               <View style={styles.clubGrid}>
                 {CLUBS.map(c => {
                   const active = selectedClubs.includes(c.value);

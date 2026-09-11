@@ -85,9 +85,7 @@ export default function CageReviewStart() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.sessionMeta}>
-          {session.club} · {session.shots.length} shots
-        </Text>
+        <Text style={styles.sessionMeta}>{t('swing_review_start.cage_review_start.shots', { club: session.club, length: session.shots.length })}</Text>
 
         <Text style={styles.sectionLabel}>{t('swing_review_start.cage_review_start.review_mode')}</Text>
 

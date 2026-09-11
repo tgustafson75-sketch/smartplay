@@ -41,7 +41,7 @@ export default function PhotoCollage({ photos }: { photos: RoundPhoto[] }) {
             <>
               <Image source={{ uri: photos[expanded].uri }} style={{ width: screenW, height: screenW }} resizeMode="contain" />
               <View style={styles.lightboxOverlay}>
-                <Text style={styles.lightboxText}>Hole {photos[expanded].hole}</Text>
+                <Text style={styles.lightboxText}>{t('recap_photo_collage.photo_collage.hole', { hole: photos[expanded].hole })}</Text>
               </View>
             </>
           )}

@@ -177,13 +177,13 @@ export default function HoleShotMapScreen() {
           <>
             <Image source={staticHoleImage} style={styles.staticHero} resizeMode="cover" />
             <View style={styles.empty}>
-              <Text style={styles.emptyTitle}>Hole {hole}</Text>
+              <Text style={styles.emptyTitle}>{t('recap_hole.hole_shot_map_screen.hole', { hole })}</Text>
               <Text style={styles.emptyText}>{t('recap_hole.hole_shot_map_screen.no_shots_were_tracked_on')}</Text>
             </View>
           </>
         ) : (
           <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>No shots logged on hole {hole}</Text>
+            <Text style={styles.emptyTitle}>{t('recap_hole.hole_shot_map_screen.no_shots_logged_on_hole', { hole })}</Text>
             <Text style={styles.emptyText}>{t('recap_hole.hole_shot_map_screen.open_a_hole_you_actually')}</Text>
           </View>
         )}

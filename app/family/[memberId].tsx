@@ -212,18 +212,14 @@ export default function FamilyMemberScreen() {
             <Text style={[styles.ctaTitle, { color: colors.text_primary }]}>
               {recordedCount} recorded swing{recordedCount === 1 ? '' : 's'}
             </Text>
-            <Text style={[styles.ctaHint, { color: colors.text_muted }]}>
-              Open {member.firstName}&apos;s swing library — everything you&apos;ve captured in Smart Motion or Coach Mode.
-            </Text>
+            <Text style={[styles.ctaHint, { color: colors.text_muted }]}>{t('family.family_member_screen.open_s_swing_library_everything', { firstName: member.firstName })}</Text>
           </Pressable>
         )}
 
         {/* Voice + tap CTAs */}
         <View style={[styles.ctaCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
           <Text style={[styles.ctaTitle, { color: colors.text_primary }]}>Hands-free</Text>
-          <Text style={[styles.ctaHint, { color: colors.text_muted }]}>
-            Say &quot;Coach {member.firstName}&apos;s swing&quot; to start a tagged recording on the glasses, then &quot;Analyze {member.firstName}&apos;s swing&quot; to hear the feedback.
-          </Text>
+          <Text style={[styles.ctaHint, { color: colors.text_muted }]}>{t('family.family_member_screen.say_coach_s_swing_to', { firstName: member.firstName })}</Text>
           <View style={styles.ctaRow}>
             <Pressable
               onPress={toggleRecording}
@@ -318,9 +314,7 @@ export default function FamilyMemberScreen() {
 
             {history.length > 1 && (
               <>
-                <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>
-                  HISTORY ({history.length})
-                </Text>
+                <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>{t('family.family_member_screen.history', { length: history.length })}</Text>
                 <View style={styles.historyList}>
                   {history.slice(0, -1).reverse().map((a) => (
                     <JuniorSwingResultCard key={a.swingId} analysis={a} compact />
@@ -334,9 +328,7 @@ export default function FamilyMemberScreen() {
             <Text style={[styles.emptyTitle, { color: colors.text_primary }]}>
               {t('family.family_member_screen.first_swing_coming_up')}
             </Text>
-            <Text style={[styles.emptyText, { color: colors.text_muted }]}>
-              Tap &quot;Record {member.firstName}&apos;s swing&quot; above (or say it), capture on the glasses or phone, then &quot;Analyze {member.firstName}&apos;s swing.&quot; We&apos;ll start tracking progress from there.
-            </Text>
+            <Text style={[styles.emptyText, { color: colors.text_muted }]}>{t('family.family_member_screen.tap_record_s_swing_above', { firstName: member.firstName })}</Text>
           </View>
         )}
       </ScrollView>

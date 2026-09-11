@@ -175,7 +175,7 @@ export default function YardageBookPanel({
     <View style={styles.wrap}>
       <View style={styles.titleRow}>
         <Text style={styles.title}>{t('smartvision_yardage_book_panel.yardage_book_panel.yardage_book')}</Text>
-        <Text style={styles.titleQualifier} numberOfLines={1}>from {originLabel}</Text>
+        <Text style={styles.titleQualifier} numberOfLines={1}>{t('smartvision_yardage_book_panel.yardage_book_panel.from', { originLabel })}</Text>
       </View>
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         {rows.map(r => (

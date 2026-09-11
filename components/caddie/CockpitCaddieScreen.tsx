@@ -430,9 +430,7 @@ export default function CockpitCaddieScreen({
             correctly. */}
         {isRoundActive && (
           <View style={[styles.subRow, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.holeLabel, { color: colors.accent }]}>
-              Hole {currentHole}/{totalHolesCockpit}
-            </Text>
+            <Text style={[styles.holeLabel, { color: colors.accent }]}>{t('caddie_cockpit_caddie_screen.cockpit_caddie_screen.hole', { currentHole, totalHolesCockpit })}</Text>
             <Text style={[styles.courseName, { color: colors.text_muted }]} numberOfLines={1}>
               {activeCourse ?? ''}
             </Text>

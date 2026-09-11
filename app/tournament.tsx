@@ -275,8 +275,8 @@ function ScoringPanel() {
           <Ionicons name="chevron-back" size={22} color={hole <= 1 ? '#3a5a40' : '#00C896'} />
         </TouchableOpacity>
         <View style={{ alignItems: 'center' }}>
-          <Text style={styles.holeBig}>Hole {hole}</Text>
-          <Text style={styles.parSmall}>par {par}</Text>
+          <Text style={styles.holeBig}>{t('tournament.scoring_panel.hole', { hole })}</Text>
+          <Text style={styles.parSmall}>{t('tournament.scoring_panel.par', { par })}</Text>
         </View>
         <TouchableOpacity onPress={() => state.setCurrentHole(hole + 1)} disabled={hole >= 18} style={styles.holeNavBtn}>
           <Ionicons name="chevron-forward" size={22} color={hole >= 18 ? '#3a5a40' : '#00C896'} />

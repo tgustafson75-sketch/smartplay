@@ -103,9 +103,7 @@ export function UndoMarkBanner() {
     >
       <View style={styles.pill}>
         <Ionicons name="flag-outline" size={16} color="#F5A623" style={{ marginRight: 8 }} />
-        <Text style={styles.message} numberOfLines={2}>
-          Marked tee on hole {active.hole} ({active.delta_yards}y off)
-        </Text>
+        <Text style={styles.message} numberOfLines={2}>{t('undo_mark_banner.undo_mark_banner.marked_tee_on_hole_y', { hole: active.hole, delta_yards: active.delta_yards })}</Text>
         <TouchableOpacity
           onPress={onUndo}
           style={styles.undoBtn}

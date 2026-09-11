@@ -118,9 +118,7 @@ export default function TutorialDetail() {
             {tutorial.teaching_focus}
           </Text>
           {tutorial.instructor && (
-            <Text style={[styles.subText, { color: colors.text_muted, marginTop: 6 }]}>
-              From {tutorial.instructor}
-            </Text>
+            <Text style={[styles.subText, { color: colors.text_muted, marginTop: 6 }]}>{t('swinglab_tutorial.tutorial_detail.from', { instructor: tutorial.instructor })}</Text>
           )}
         </View>
 

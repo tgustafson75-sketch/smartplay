@@ -10,6 +10,7 @@ import {
 } from '../services/voiceOnboardingService';
 import { useSettingsStore } from '../store/settingsStore';
 import { getCaddieName } from '../lib/persona';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   /** Optional style override (e.g. positioning offset). */
@@ -22,6 +23,7 @@ interface Props {
  * the /kevin-learning screen. Dismissable; never shows twice.
  */
 export default function VocabBanner({ style }: Props) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const router = useRouter();
   const [visible, setVisible] = useState(false);
@@ -70,9 +72,7 @@ export default function VocabBanner({ style }: Props) {
       ]}
     >
       <TouchableOpacity onPress={open} activeOpacity={0.85} style={styles.bannerContent}>
-        <Text style={[styles.bannerText, { color: colors.text_primary }]}>
-          {caddieName} learned {count} of your phrases — see what {subjectPronoun} picked up.
-        </Text>
+        <Text style={[styles.bannerText, { color: colors.text_primary }]}>{t('vocab_banner.vocab_banner.learned_of_your_phrases_see', { caddieName, count, subjectPronoun })}</Text>
         <Ionicons name="chevron-forward" size={18} color={colors.accent} />
       </TouchableOpacity>
       <TouchableOpacity

@@ -41,6 +41,7 @@ import {
   abortImpactRecording,
   cleanupImpactRecording,
 } from '../services/acousticImpactDetector';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Maximum recording duration (ms) if no acoustic strike is detected.
@@ -63,6 +64,7 @@ interface ActiveCapture {
 }
 
 export default function CaptureOverlay() {
+  const { t } = useTranslation();
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   const [permission, requestPermission] = useCameraPermissions();
   const [active, setActive] = useState<ActiveCapture | null>(null);
@@ -253,9 +255,7 @@ export default function CaptureOverlay() {
       />
       <View style={styles.hud}>
         <View style={styles.recDot} />
-        <Text style={styles.hudLabel}>
-          Shot · {elapsedSec}s / {totalSec}s
-        </Text>
+        <Text style={styles.hudLabel}>{t('capture_overlay.capture_overlay.shot_s_s', { elapsedSec, totalSec })}</Text>
         {errorMsg ? <Text style={styles.errText}>{errorMsg}</Text> : null}
       </View>
       {!cameraRef.current && <ActivityIndicator color="#fff" style={styles.spinner} />}

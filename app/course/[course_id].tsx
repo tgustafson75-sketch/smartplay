@@ -562,7 +562,7 @@ export default function CourseDetailScreen() {
                 and we'd rather show nothing than show a wrong number. */}
             {(tee.holes.length === 9 || tee.holes.length === 18) && (
               <View style={styles.holesBadge}>
-                <Text style={styles.holesBadgeText}>{tee.holes.length} Holes</Text>
+                <Text style={styles.holesBadgeText}>{t('course.course_detail_screen.holes', { length: tee.holes.length })}</Text>
               </View>
             )}
           </View>

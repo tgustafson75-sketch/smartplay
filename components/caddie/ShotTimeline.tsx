@@ -97,7 +97,7 @@ export default function ShotTimeline({ maxRows = DEFAULT_MAX_ROWS, holeOnly = fa
     <View style={styles.wrap}>
       <View style={styles.headerRow}>
         <Text style={styles.headerLabel}>{t('caddie_shot_timeline.shot_timeline.shots')}</Text>
-        <Text style={styles.headerCount}>{rows.length} of {shots.length}</Text>
+        <Text style={styles.headerCount}>{t('caddie_shot_timeline.shot_timeline.of', { length: shots.length })}</Text>
       </View>
       <ScrollView
         horizontal={false}

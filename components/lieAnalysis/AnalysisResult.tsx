@@ -104,9 +104,7 @@ export default function AnalysisResult({
             </View>
             <Text style={styles.strategyTradeoff}>{riskReward.tradeoff}</Text>
             {riskReward.alternative_play && (
-              <Text style={styles.strategyAlt}>
-                If you&apos;re feeling cautious: {riskReward.alternative_play}
-              </Text>
+              <Text style={styles.strategyAlt}>{t('lie_analysis_analysis_result.analysis_result.if_you_re_feeling_cautious', { alternative_play: riskReward.alternative_play })}</Text>
             )}
           </View>
         )}

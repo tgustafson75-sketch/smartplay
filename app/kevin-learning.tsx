@@ -93,7 +93,7 @@ export default function KevinLearningScreen() {
         >
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text_primary }]}>{caddieName}&apos;s Learning</Text>
+        <Text style={[styles.headerTitle, { color: colors.text_primary }]}>{t('kevin_learning.kevin_learning_screen.s_learning', { caddieName })}</Text>
         <View style={{ width: 26 }} />
       </View>
 
@@ -111,9 +111,7 @@ export default function KevinLearningScreen() {
             from {totalShotsParsed} shots {roundsTogether > 0 ? `across ${roundsTogether} ${roundsTogether === 1 ? 'round' : 'rounds'}` : ''}
           </Text>
           {phraseCount === 0 && (
-            <Text style={[styles.heroEmpty, { color: colors.text_muted }]}>
-              Once you start logging shots by voice, {caddieName} will start picking up the words you actually use.
-            </Text>
+            <Text style={[styles.heroEmpty, { color: colors.text_muted }]}>{t('kevin_learning.kevin_learning_screen.once_you_start_logging_shots', { caddieName })}</Text>
           )}
         </View>
 
@@ -166,9 +164,7 @@ export default function KevinLearningScreen() {
           </TouchableOpacity>
         )}
 
-        <Text style={[styles.footer, { color: colors.text_muted }]}>
-          {caddieName} uses these phrases to understand your specific way of describing shots. Forgetting a phrase removes its weight; the next time you say it, {caddieName} parses it fresh.
-        </Text>
+        <Text style={[styles.footer, { color: colors.text_muted }]}>{t('kevin_learning.kevin_learning_screen.uses_these_phrases_to_understand', { caddieName })}</Text>
 
       </ScrollView>
     </SafeAreaView>

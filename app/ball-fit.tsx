@@ -89,7 +89,7 @@ export default function BallFitScreen() {
             <Text style={[styles.profileTag, { color: '#0a1410', backgroundColor: colors.accent }]}>
               {PROFILE_LABEL[fit.profile]}
             </Text>
-            <Text style={[styles.conf, { color: confColor }]}>{fit.confidence} confidence</Text>
+            <Text style={[styles.conf, { color: confColor }]}>{t('ball_fit.ball_fit_screen.confidence', { confidence: fit.confidence })}</Text>
           </View>
           <Text style={[styles.headline, { color: colors.text_primary }]}>{fit.headline}</Text>
 

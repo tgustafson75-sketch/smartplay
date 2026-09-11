@@ -100,7 +100,7 @@ export default function ReferenceScreen() {
               />
             )}
             ListFooterComponent={
-              <Text style={styles.footnote}>Rules of Golf {RULES_EDITION} edition · USGA / R&amp;A</Text>
+              <Text style={styles.footnote}>{t('reference.reference_screen.rules_of_golf_edition_usga', { RULES_EDITION })}</Text>
             }
           />
         </>

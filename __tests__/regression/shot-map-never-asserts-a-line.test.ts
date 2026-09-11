@@ -40,7 +40,13 @@ describe('the shot map never asserts a line it did not read', () => {
     const at = code.indexOf('styles.distanceBand');
     expect(at).toBeGreaterThan(-1);
     const window = code.slice(at, at + 400);
-    expect(window).toContain('line not read');
+    // 2026-09-11 — the label moved into a t() key; assert the key AND that en.json still carries
+    // the words, which together are stricter than grepping the sentence out of the JSX.
+    expect(window).toContain('y_line_not_read');
+    expect(
+      JSON.parse(fs.readFileSync(path.join(__dirname, '../../i18n/locales/en.json'), 'utf8'))
+        .smartmotion_shot_map_page.course_map.y_line_not_read,
+    ).toContain('line not read');
     // a band spans the field; it must not carry a lateral offset
     expect(window).not.toContain('lateral * 38');
   });

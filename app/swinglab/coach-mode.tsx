@@ -488,10 +488,7 @@ export default function CoachMode() {
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={[styles.captureTitle, { color: colors.text_primary }]}>{t('swinglab_coach_mode.coach_mode.record_with_glasses')}</Text>
-            <Text style={[styles.captureSub, { color: colors.text_muted }]}>
-              Say &ldquo;{caddieName}, record this&rdquo; while you&apos;re watching the swing.
-              I&apos;ll capture and analyze.
-            </Text>
+            <Text style={[styles.captureSub, { color: colors.text_muted }]}>{t('swinglab_coach_mode.coach_mode.say_record_this_while_you', { caddieName })}</Text>
           </View>
         </View>
 
@@ -580,9 +577,7 @@ export default function CoachMode() {
             <Text style={[styles.modalLine, { color: colors.text_primary }]}>
               {t('swinglab_coach_mode.coach_mode.2_point_glasses_or_phone')}
             </Text>
-            <Text style={[styles.modalLine, { color: colors.text_primary }]}>
-              3. Say &ldquo;{caddieName}, record this&rdquo; — I&apos;ll break it down.
-            </Text>
+            <Text style={[styles.modalLine, { color: colors.text_primary }]}>{t('swinglab_coach_mode.coach_mode.3_say_record_this_i', { caddieName })}</Text>
             <Text style={[styles.modalLine, { color: colors.text_primary }]}>
               {t('swinglab_coach_mode.coach_mode.4_add_your_own_coach')}
             </Text>

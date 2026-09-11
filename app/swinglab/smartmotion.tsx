@@ -5150,7 +5150,7 @@ export default function SmartMotion() {
   const reel =
     isReview && segments.length > 1 ? (
       <View style={styles.reelWrap}>
-        <Text style={[styles.reelLabel, { color: '#fff' }]}>{segments.length} SWINGS</Text>
+        <Text style={[styles.reelLabel, { color: '#fff' }]}>{t('swinglab_smartmotion.smart_motion.swings', { length: segments.length })}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
           {segments.map((s, i) => {
             const sel = i === selectedSwing;

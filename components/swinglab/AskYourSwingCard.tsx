@@ -186,9 +186,7 @@ export default function AskYourSwingCard({ session }: Props) {
         <Ionicons name="sparkles-outline" size={16} color={colors.accent} />
         <Text style={[styles.label, { color: colors.accent }]}>ASK {caddieName.toUpperCase()}</Text>
       </View>
-      <Text style={[styles.helperText, { color: colors.text_muted }]}>
-        Ask anything about this swing — {caddieName} can see the frames.
-      </Text>
+      <Text style={[styles.helperText, { color: colors.text_muted }]}>{t('swinglab_ask_your_swing_card.ask_your_swing_card.ask_anything_about_this_swing', { caddieName })}</Text>
 
       <View style={styles.inputRow}>
         <TextInput
@@ -251,9 +249,7 @@ export default function AskYourSwingCard({ session }: Props) {
         <View style={[styles.answerCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
           <Text style={[styles.answerText, { color: colors.text_primary }]}>{answer}</Text>
           {provider && (
-            <Text style={[styles.providerTag, { color: colors.text_muted }]}>
-              via {provider}
-            </Text>
+            <Text style={[styles.providerTag, { color: colors.text_muted }]}>{t('swinglab_ask_your_swing_card.ask_your_swing_card.via', { provider })}</Text>
           )}
         </View>
       )}

@@ -148,10 +148,7 @@ export function GreenHeatCard({ scope = 'career', style }: GreenHeatCardProps) {
             </View>
             <Text style={[styles.legendLabel, { color: c.text_muted }]}>hot</Text>
           </View>
-          <Text style={[styles.legendCaption, { color: c.text_muted }]}>
-            Color = your 1-putt conversion (higher = hotter). From {model.totalHoles} real
-            putt-holes.
-          </Text>
+          <Text style={[styles.legendCaption, { color: c.text_muted }]}>{t('green_heat_card.green_heat_card.color_your_1_putt_conversion', { totalHoles: model.totalHoles })}</Text>
         </>
       )}
     </View>

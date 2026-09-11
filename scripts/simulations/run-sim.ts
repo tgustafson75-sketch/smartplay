@@ -5298,7 +5298,8 @@ check('SmartVision Yardage Book labels its reference point ("from tee")',
     const p = read('components/smartvision/YardageBookPanel.tsx');
     return (
       /originLabel = 'tee'/.test(p) &&       // defaults to the sole caller's origin (the tee)
-      /from \{originLabel\}/.test(p)          // qualifier rendered under the title
+      saysToPlayer(p, 'from') &&               // qualifier rendered under the title
+      /originLabel \}\)/.test(p)              // …and it still interpolates the ORIGIN, not a fixed word
     );
   })(),
   'the Yardage Book shows a "from tee" qualifier so tee-referenced hazard/green F/B yardages are not misread as from the player\'s current position mid-hole');
@@ -8351,7 +8352,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /cameraBehindFeet: s\.cameraBehindFeet/.test(read('store/settingsStore.ts')) &&
       // honest: course marker only when an effort-carry estimate exists; cage impact is preview-labeled.
       /const has = estCarry != null;/.test(read('components/smartmotion/ShotMapPage.tsx')) &&
-      /est · preview/.test(read('components/smartmotion/ShotMapPage.tsx')),
+      saysToPlayer(read('components/smartmotion/ShotMapPage.tsx'), 'est · preview'),
     'page 3 is a shot map for every full swing (never gated on a camera-angle label): course plots from real effort→carry + trace; cage shows a bullseye + confirmable canvas/camera distances; no fabricated positions (empty until a real read)');
 
   check('SmartMotion spine fixes: thumbnails, ball-speed honesty, feel-on-save (2026-06-12)',

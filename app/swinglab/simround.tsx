@@ -389,7 +389,7 @@ export default function SwingSimScreen() {
             return (
               <TouchableOpacity key={id} style={[s.courseCard, courseId === id && { borderColor: NEON }]} onPress={() => setCourseId(id)} accessibilityRole="button">
                 <Text style={s.courseName}>{c.name}</Text>
-                <Text style={s.courseSub}>par {c.par} · {c.totalYards}y</Text>
+                <Text style={s.courseSub}>{t('swinglab_simround.text.par_y', { par: c.par, totalYards: c.totalYards })}</Text>
               </TouchableOpacity>
             );
           })}
@@ -456,7 +456,7 @@ export default function SwingSimScreen() {
             return (
             <View key={h.hole} style={s.scRow}>
               <Text style={s.scHole}>{h.hole}</Text>
-              <Text style={s.scPar}>par {h.par}</Text>
+              <Text style={s.scPar}>{t('swinglab_simround.text.par', { par: h.par })}</Text>
               <Text style={[s.scStrokes, { color: h.strokes < h.par ? NEON : h.strokes === h.par ? '#fff' : '#F0C030' }]}>{h.strokes}</Text>
               {typeof g === 'number' && g > 0 ? <Text style={s.scGhost}>👻 {g}</Text> : null}
               <Text style={s.scName}>{scoreName(h.strokes, h.par)}</Text>
@@ -492,8 +492,8 @@ export default function SwingSimScreen() {
             ) : null}
             {stage === 'flyover' ? (
               <Animated.View style={[s.flyCard, { opacity: fade }]}>
-                <Text style={s.flyHole}>HOLE {hole.hole}</Text>
-                <Text style={s.flyPar}>PAR {hole.par} · {hole.distance} YDS</Text>
+                <Text style={s.flyHole}>{t('swinglab_simround.swing_sim_screen.hole', { hole: hole.hole })}</Text>
+                <Text style={s.flyPar}>{t('swinglab_simround.swing_sim_screen.par_yds', { par: hole.par, distance: hole.distance })}</Text>
                 <Text style={s.flyCourse}>{course.name.toUpperCase()}</Text>
               </Animated.View>
             ) : null}

@@ -208,7 +208,7 @@ function CourseMap({
               <View style={[styles.distanceBand, { bottom: `${Math.max(2, downFrac * 96)}%` }]}>
                 <View style={styles.distanceBandLine} />
                 <View style={styles.ballPill}>
-                  <Text style={styles.ballPillText}>~{estCarry}y · line not read</Text>
+                  <Text style={styles.ballPillText}>{t('smartmotion_shot_map_page.course_map.y_line_not_read', { estCarry })}</Text>
                 </View>
               </View>
             )
@@ -285,7 +285,7 @@ function CageBullseye({
         </View>
         {hasImpact ? (
           <View style={styles.impactLabel}>
-            <Text style={styles.impactLabelText}>est · preview · {dirLabel} start</Text>
+            <Text style={styles.impactLabelText}>{t('smartmotion_shot_map_page.cage_bullseye.est_preview_start', { dirLabel })}</Text>
           </View>
         ) : null}
       </View>

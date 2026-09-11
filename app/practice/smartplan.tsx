@@ -133,7 +133,7 @@ export default function SmartPlanScreen() {
 
         {/* The plan */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.planTitle, { color: colors.text_primary }]}>Your week · {plan.goalLabel}</Text>
+          <Text style={[styles.planTitle, { color: colors.text_primary }]}>{t('practice_smartplan.smart_plan_screen.your_week', { goalLabel: plan.goalLabel })}</Text>
           {plan.sessions.length === 0 ? (
             <Text style={[styles.note, { color: colors.text_secondary }]}>{plan.notes[plan.notes.length - 1]}</Text>
           ) : (
@@ -152,7 +152,7 @@ export default function SmartPlanScreen() {
                   <TouchableOpacity style={{ flex: 1 }} onPress={() => runDay(s.focusKey, s.reps)} accessibilityRole="button" accessibilityLabel={`Run day ${s.day}: ${s.focusLabel}`}>
                     <Text style={[styles.dayFocus, { color: colors.text_primary }, done && { textDecorationLine: 'line-through', opacity: 0.55 }]}>{s.focusLabel}</Text>
                   </TouchableOpacity>
-                  <Text style={[styles.dayReps, { color: colors.text_secondary }]}>{s.reps} balls</Text>
+                  <Text style={[styles.dayReps, { color: colors.text_secondary }]}>{t('practice_smartplan.text.balls', { reps: s.reps })}</Text>
                   <TouchableOpacity onPress={() => runDay(s.focusKey, s.reps)} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}>
                     <Ionicons name="play-circle" size={22} color={colors.accent} />
                   </TouchableOpacity>

@@ -1110,10 +1110,8 @@ export default function Settings() {
             accessibilityLabel={t('settings.accessibility_label.talk_to_your_caddie_so')}
           >
             <View style={styles.rowText}>
-              <Text style={labelStyle}>Let {caddieName} get to know you</Text>
-              <Text style={subStyle}>
-                A short chat — how you practice, your real time, your goals. {caddieName} remembers it and coaches around it. Re-visit anytime.
-              </Text>
+              <Text style={labelStyle}>{t('settings.settings.let_get_to_know_you', { caddieName })}</Text>
+              <Text style={subStyle}>{t('settings.settings.a_short_chat_how_you', { caddieName })}</Text>
             </View>
             <Ionicons name="chatbubbles-outline" size={20} color={colors.accent} />
           </TouchableOpacity>
@@ -1254,8 +1252,8 @@ export default function Settings() {
               settings-within-settings pattern Tim called out. The full
               slider + descriptions now render directly in this card. */}
           <View style={[styles.trustBlock, { borderBottomColor: colors.border }]}>
-            <Text style={labelStyle}>{caddieName}&apos;s presence</Text>
-            <Text style={[subStyle, { marginBottom: 10 }]}>How present should {caddieName} be during your round?</Text>
+            <Text style={labelStyle}>{t('settings.settings.s_presence', { caddieName })}</Text>
+            <Text style={[subStyle, { marginBottom: 10 }]}>{t('settings.settings.how_present_should_be_during', { caddieName })}</Text>
             <View style={[styles.trustSlider, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               {TRUST_LEVEL_SLIDER_ORDER.map((lvl) => {
                 const meta = TRUST_LEVEL_META[lvl];
@@ -1720,9 +1718,7 @@ export default function Settings() {
           >
             <View style={styles.rowText}>
               <Text style={labelStyle}>{t('settings.text.import_meta_glasses_voice_log')}</Text>
-              <Text style={subStyle}>
-                Pick a Meta View JSON export of your &quot;Hey Meta&quot; voice exchanges. We match each one to the hole you were on so {caddieName} can recall what the glasses said during this round. Start a round first — only exchanges inside the active round&apos;s window are imported.
-              </Text>
+              <Text style={subStyle}>{t('settings.settings.pick_a_meta_view_json', { caddieName })}</Text>
             </View>
             <Ionicons name="cloud-upload-outline" size={20} color={colors.accent} />
           </TouchableOpacity>
@@ -2126,10 +2122,7 @@ export default function Settings() {
           >
             <View style={{ flex: 1 }}>
               <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.issue_log')}</Text>
-              <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                Say &quot;{caddieName}, log this: ...&quot; to capture an issue.
-                Tap to review + export the log to support@smartplaycaddie.com.
-              </Text>
+              <Text style={[styles.rowSub, { color: colors.text_muted }]}>{t('settings.settings.say_log_this_to_capture', { caddieName })}</Text>
             </View>
             <Ionicons name="bug-outline" size={20} color={colors.text_muted} />
           </TouchableOpacity>
@@ -2556,10 +2549,8 @@ export default function Settings() {
                     accessibilityLabel={`Open ${caddieName} learning log`}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{caddieName} Learning</Text>
-                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        Vocabulary {caddieName} has picked up from your shot phrasing. Review entries, correct miscoded meanings.
-                      </Text>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.learning', { caddieName })}</Text>
+                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>{t('settings.text.vocabulary_has_picked_up_from', { caddieName })}</Text>
                     </View>
                     <Ionicons name="library-outline" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
@@ -2703,9 +2694,7 @@ function DeveloperToolsSection({ cardStyle, colors }: { cardStyle: object[]; col
                     {walkState.current_lat.toFixed(5)}, {walkState.current_lng.toFixed(5)}
                   </Text>
                   {walkState.next_label && (
-                    <Text style={{ color: colors.text_muted, fontSize: 11, marginTop: 2 }}>
-                      Next: {walkState.next_label}
-                    </Text>
+                    <Text style={{ color: colors.text_muted, fontSize: 11, marginTop: 2 }}>{t('settings.developer_tools_section.next', { next_label: walkState.next_label })}</Text>
                   )}
                 </>
               ) : null}

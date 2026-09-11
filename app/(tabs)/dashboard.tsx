@@ -771,9 +771,7 @@ export default function Dashboard() {
         <View style={styles.titleBlock}>
           <Text style={[styles.title, { color: colors.text_primary }]}>{t('dashboard.title')}</Text>
           <View style={styles.welcomeRow}>
-            <Text style={[styles.welcome, { color: colors.text_muted }]}>
-              Welcome back, {welcomeName}
-            </Text>
+            <Text style={[styles.welcome, { color: colors.text_muted }]}>{t('dashboard.dashboard.welcome_back', { welcomeName })}</Text>
             {dayStreak > 0 && (
               <View style={styles.streakPill}>
                 <Ionicons name="flame" size={13} color={colors.accent_amber} />
@@ -1506,9 +1504,7 @@ export default function Dashboard() {
             ) : null}
           </View>
           <Text style={[styles.kevinReadText, { color: colors.text_primary }]}>{kevinReadText}</Text>
-          <Text style={[styles.kevinReadFooter, { color: colors.text_muted }]}>
-            {kevinReadFooter} · tap to refresh
-          </Text>
+          <Text style={[styles.kevinReadFooter, { color: colors.text_muted }]}>{t('dashboard.dashboard.tap_to_refresh', { kevinReadFooter })}</Text>
         </TouchableOpacity>
 
         {/* HIGHLIGHTS — 2×2 grid replacing Hero Reel + Progress.

@@ -156,12 +156,12 @@ export default function TempoPatch({ result }: TempoPatchProps) {
       <View style={styles.segRow}>
         <View style={styles.seg}>
           <Text style={[styles.segLabel, { color: colors.text_muted }]}>{t('swinglab_tempo_patch.tempo_patch.backswing')}</Text>
-          <Text style={[styles.segVal, { color: colors.accent_lime }]}>{result.backswingMs} ms</Text>
+          <Text style={[styles.segVal, { color: colors.accent_lime }]}>{t('swinglab_tempo_patch.tempo_patch.ms', { backswingMs: result.backswingMs })}</Text>
         </View>
         <Text style={[styles.segDiv, { color: colors.text_muted }]}>·</Text>
         <View style={styles.seg}>
           <Text style={[styles.segLabel, { color: colors.text_muted }]}>{t('swinglab_tempo_patch.tempo_patch.downswing')}</Text>
-          <Text style={[styles.segVal, { color: colors.accent_amber }]}>{result.downswingMs} ms</Text>
+          <Text style={[styles.segVal, { color: colors.accent_amber }]}>{t('swinglab_tempo_patch.tempo_patch.ms_2', { downswingMs: result.downswingMs })}</Text>
         </View>
         <Text style={[styles.segDiv, { color: colors.text_muted }]}>·</Text>
         <View style={styles.seg}>

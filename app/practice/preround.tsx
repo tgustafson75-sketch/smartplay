@@ -200,9 +200,7 @@ export default function PreroundWarmUp() {
         <View style={[styles.readyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={styles.readyTop}>
             <Text style={[styles.readyLabel, { color: colors.text_muted }]}>{t('practice_preround.preround_warm_up.readiness')}</Text>
-            <Text style={[styles.readyCount, { color: allDone ? '#3FB950' : colors.text_primary }]}>
-              {completed.size} of {plan.steps.length} · ~{plan.allocated} min
-            </Text>
+            <Text style={[styles.readyCount, { color: allDone ? '#3FB950' : colors.text_primary }]}>{t('practice_preround.preround_warm_up.of_min', { size: completed.size, length: plan.steps.length, allocated: plan.allocated })}</Text>
           </View>
           <View style={[styles.readyTrack, { backgroundColor: colors.border }]}>
             <View style={[styles.readyFill, { width: `${Math.round(readiness * 100)}%` }]} />

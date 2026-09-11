@@ -86,7 +86,7 @@ export function RestModeOverlay() {
           <View style={styles.gpsDot} />
           <Text style={styles.gpsText}>{isRoundActive ? 'GPS LIVE · RESTING' : 'RESTING · TAP TO WAKE'}</Text>
         </View>
-        {isRoundActive && currentHole ? <Text style={styles.hole}>HOLE {currentHole}</Text> : null}
+        {isRoundActive && currentHole ? <Text style={styles.hole}>{t('round_rest_mode_overlay.rest_mode_overlay.hole', { currentHole })}</Text> : null}
         <Text style={styles.hint}>{t('round_rest_mode_overlay.rest_mode_overlay.tap_anywhere_to_wake')}</Text>
       </View>
     </Pressable>

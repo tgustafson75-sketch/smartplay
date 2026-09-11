@@ -387,7 +387,7 @@ export default function SmartFinder() {
             <Text style={[styles.holeBtnText, prevHole == null && styles.holeBtnTextDisabled]}>{t('smartfinder.smart_finder.prev')}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setHolePickerOpen(true)} accessibilityRole="button" accessibilityLabel={t('smartfinder.accessibility_label.pick_hole')}>
-            <Text style={styles.holeNavLabel}>HOLE {currentHole} ▾</Text>
+            <Text style={styles.holeNavLabel}>{t('smartfinder.smart_finder.hole', { currentHole })}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.holeBtn, nextHole == null && styles.holeBtnDisabled]}
@@ -1005,7 +1005,7 @@ function CameraSmartFinder({
           <Text style={styles.cameraIconText}>←</Text>
         </TouchableOpacity>
         <View style={styles.cameraTopCenter}>
-          <Text style={styles.cameraTopTitle}>HOLE {currentHole}</Text>
+          <Text style={styles.cameraTopTitle}>{t('smartfinder.camera_smart_finder.hole', { currentHole })}</Text>
           <View style={{ marginTop: 4 }}>
             <GPSQuality reading={gps} showText />
           </View>
@@ -1871,7 +1871,7 @@ function TargetCameraOverlay({
                   Ranged off {heightRangeRef === 'flagstick' ? 'the flagstick' : 'a person'} — no tilt needed
                 </Text>
               )}
-              {!!playsLike?.windText && <Text style={styles.targetIntelLine}>Wind: {playsLike.windText}</Text>}
+              {!!playsLike?.windText && <Text style={styles.targetIntelLine}>{t('smartfinder.target_camera_overlay.wind', { windText: playsLike.windText })}</Text>}
               {/* 2026-06-25 — Honest REAL-elevation line. Shown ONLY when we have a
                   real read (hasData) that actually moves the number (≥1yd ≈ 3ft). */}
               {elevation.hasData && Math.abs(elevationDeltaFeet) >= 3 && (
@@ -1896,9 +1896,7 @@ function TargetCameraOverlay({
                   (hazardSummary.secondary) but was dropped. Surface it as a quiet
                   follow-on line so the player sees the next thing in play. */}
               {!!hazardSummary?.secondary && (
-                <Text style={styles.targetIntelLine}>
-                  Also: {hazardSummary.secondary.label} {hazardSummary.secondary.yards}y
-                </Text>
+                <Text style={styles.targetIntelLine}>{t('smartfinder.target_camera_overlay.also_y', { label: hazardSummary.secondary.label, yards: hazardSummary.secondary.yards })}</Text>
               )}
               <Text style={styles.targetIntelPlan}>{aggressiveLine}</Text>
               <Text style={styles.targetIntelPlan}>{conservativeLine}</Text>
@@ -2281,7 +2279,7 @@ function TargetView({ geometry, width }: { geometry: HoleGeometry | null; width:
           </>
         )}
       </Svg>
-      {tap && <Text style={styles.tapResult}>{tap.yards} yards to tap</Text>}
+      {tap && <Text style={styles.tapResult}>{t('smartfinder.target_view.yards_to_tap', { yards: tap.yards })}</Text>}
       {tap && tap.approx && <Text style={styles.tapResult}>{t('smartfinder.target_view.approximate_due_to_gps_quality')}</Text>}
     </View>
   );
@@ -2373,13 +2371,14 @@ function MapView({
 function BigCell({ label, value, emphasis, playsLikeValue }: {
   label: string; value: number | null; emphasis?: boolean; playsLikeValue?: number | null;
 }) {
+  const { t } = useTranslation();
   const styles = useStyles();
   return (
     <View style={styles.bigCell}>
       <Text style={[styles.bigValue, emphasis && styles.bigValueEmphasis]}>
         {value != null ? value : '—'}
       </Text>
-      {playsLikeValue != null && <Text style={styles.playsLike}>plays {playsLikeValue}</Text>}
+      {playsLikeValue != null && <Text style={styles.playsLike}>{t('smartfinder.big_cell.plays', { playsLikeValue })}</Text>}
       <Text style={styles.bigLabel}>{label}</Text>
     </View>
   );

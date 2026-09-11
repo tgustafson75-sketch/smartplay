@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 /**
  * HoleBrandBadge — the SmartPlay-branded neon-green hole chip that sits in the UPPER-RIGHT corner
@@ -26,6 +27,7 @@ export function HoleBrandBadge({
   /** Position override — the mount point sets top/right so it clears the tools pill. */
   style?: StyleProp<ViewStyle>;
 }) {
+  const { t } = useTranslation();
   const courseLabel = (course || '').trim();
   const hasDist = typeof distanceYds === 'number' && distanceYds > 0;
   return (
@@ -38,7 +40,7 @@ export function HoleBrandBadge({
         </Text>
       ) : null}
       <View style={styles.row}>
-        <Text style={styles.hole}>HOLE {hole}</Text>
+        <Text style={styles.hole}>{t('caddie_hole_brand_badge.hole_brand_badge.hole', { hole })}</Text>
         {hasDist ? (
           <View style={styles.distWrap}>
             <Text style={styles.dist}>{distanceYds}</Text>

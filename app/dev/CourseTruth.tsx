@@ -174,9 +174,7 @@ export default function CourseTruthScreen() {
         <View style={styles.header}>
           <Ionicons name="flag" size={22} color="#00C896" />
           <Text style={styles.title}>{t('dev_course_truth.course_truth_screen.course_truth')}</Text>
-          <Text style={styles.subtitle}>
-            {courseId} · Hole {hole}
-          </Text>
+          <Text style={styles.subtitle}>{t('dev_course_truth.course_truth_screen.hole', { courseId, hole })}</Text>
           <Text style={styles.note}>
             {t('dev_course_truth.course_truth_screen.walk_to_the_center_of')}
           </Text>
@@ -211,9 +209,7 @@ export default function CourseTruthScreen() {
             extra={savedAt ? `${Math.round((Date.now() - savedAt) / 60_000)}m ago` : null}
           />
           {yardageDiff != null && (
-            <Text style={styles.diff}>
-              Δ vs cached: {yardageDiff} yds
-            </Text>
+            <Text style={styles.diff}>{t('dev_course_truth.course_truth_screen.vs_cached_yds', { yardageDiff })}</Text>
           )}
         </Section>
 

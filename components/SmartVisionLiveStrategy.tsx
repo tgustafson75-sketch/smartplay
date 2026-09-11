@@ -99,9 +99,7 @@ export default function SmartVisionLiveStrategy({ onPress, alwaysShow = false }:
 
       {/* Player-tendency tail — only when meaningful */}
       {ctx.player.dominantMiss ? (
-        <Text style={styles.tendency} numberOfLines={1}>
-          Watch: dominant miss {ctx.player.dominantMiss}
-        </Text>
+        <Text style={styles.tendency} numberOfLines={1}>{t('smart_vision_live_strategy.smart_vision_live_strategy.watch_dominant_miss', { dominantMiss: ctx.player.dominantMiss })}</Text>
       ) : null}
     </View>
   );

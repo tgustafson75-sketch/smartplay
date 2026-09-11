@@ -47,9 +47,7 @@ export function OwnerIssueLogPrompt(): React.ReactElement | null {
         padding: 14, shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 10, elevation: 8,
       }}
     >
-      <Text style={{ color: '#fbbf24', fontSize: 14, fontWeight: '800', marginBottom: 2 }}>
-        ⚠ {unsent} issues logged
-      </Text>
+      <Text style={{ color: '#fbbf24', fontSize: 14, fontWeight: '800', marginBottom: 2 }}>{t('owner_issue_log_prompt.owner_issue_log_prompt.issues_logged', { unsent })}</Text>
       <Text style={{ color: '#cbd5e1', fontSize: 13, marginBottom: 12 }}>
         {t('owner_issue_log_prompt.text.send_them_to_the_team')}
       </Text>

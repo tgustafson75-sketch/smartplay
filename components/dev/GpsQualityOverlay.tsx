@@ -24,8 +24,10 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { getGpsStats } from '../../services/gpsManager';
 import { useOffCourseStore } from '../../services/offCourseDetector';
 import { useMovementModeStore } from '../../services/movementModeDetector';
+import { useTranslation } from 'react-i18next';
 
 export default function GpsQualityOverlay() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   const showDevOverlay = useSettingsStore(s => s.gpsQualityDebugOverlay ?? false);
@@ -95,12 +97,8 @@ export default function GpsQualityOverlay() {
     <View style={[styles.wrap, { bottom: insets.bottom + 80 }]} pointerEvents="none">
       <View style={[styles.dot, { backgroundColor: color }]} />
       <View>
-        <Text style={styles.text}>
-          {accStr}  ·  {stats.mode}  ·  {ageStr}  ·  out:{stats.outliersDiscarded}
-        </Text>
-        <Text style={styles.textSub}>
-          H{currentHole}  ·  {moveStr}  ·  {offStr}  ·  tee:{teeStr}
-        </Text>
+        <Text style={styles.text}>{t('dev_gps_quality_overlay.gps_quality_overlay.out', { accStr, mode: stats.mode, ageStr, outliersDiscarded: stats.outliersDiscarded })}</Text>
+        <Text style={styles.textSub}>{t('dev_gps_quality_overlay.gps_quality_overlay.h_tee', { currentHole, moveStr, offStr, teeStr })}</Text>
       </View>
     </View>
   );

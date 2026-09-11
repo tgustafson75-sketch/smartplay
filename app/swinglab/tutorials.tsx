@@ -71,12 +71,8 @@ export default function TutorialsLibrary() {
       </View>
 
       <View style={[styles.banner, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <Text style={[styles.bannerText, { color: colors.text_secondary }]}>
-          Active tutorials inform Kevin during your rounds. Up to {MAX_ACTIVE_TUTORIALS} can be active at once.
-        </Text>
-        <Text style={[styles.bannerCount, { color: colors.accent }]}>
-          {activeCount} / {MAX_ACTIVE_TUTORIALS} active
-        </Text>
+        <Text style={[styles.bannerText, { color: colors.text_secondary }]}>{t('swinglab_tutorials.tutorials_library.active_tutorials_inform_kevin_during', { MAX_ACTIVE_TUTORIALS })}</Text>
+        <Text style={[styles.bannerCount, { color: colors.accent }]}>{t('swinglab_tutorials.tutorials_library.active', { activeCount, MAX_ACTIVE_TUTORIALS })}</Text>
       </View>
 
       {tutorials.length === 0 ? (

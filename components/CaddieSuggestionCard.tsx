@@ -74,8 +74,8 @@ export default function CaddieSuggestionCard() {
           style={styles.portrait}
         />
         <View style={styles.headerText}>
-          <Text style={[styles.from, { color: colors.text_muted }]}>{fromName} suggests</Text>
-          <Text style={[styles.title, { color: colors.text_primary }]}>Bring in {toName}?</Text>
+          <Text style={[styles.from, { color: colors.text_muted }]}>{t('caddie_suggestion_card.caddie_suggestion_card.suggests', { fromName })}</Text>
+          <Text style={[styles.title, { color: colors.text_primary }]}>{t('caddie_suggestion_card.caddie_suggestion_card.bring_in', { toName })}</Text>
         </View>
       </View>
 
@@ -92,14 +92,14 @@ export default function CaddieSuggestionCard() {
           style={[styles.btn, styles.btnPrimary, { backgroundColor: colors.accent }]}
           onPress={() => acceptPending()}
         >
-          <Text style={styles.btnTextPrimary}>Yes, switch to {toName}</Text>
+          <Text style={styles.btnTextPrimary}>{t('caddie_suggestion_card.caddie_suggestion_card.yes_switch_to', { toName })}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.btn, styles.btnSecondary, { borderColor: colors.border }]}
           onPress={() => declinePending()}
         >
-          <Text style={[styles.btnTextSecondary, { color: colors.text_primary }]}>Stay with {fromName}</Text>
+          <Text style={[styles.btnTextSecondary, { color: colors.text_primary }]}>{t('caddie_suggestion_card.caddie_suggestion_card.stay_with', { fromName })}</Text>
         </TouchableOpacity>
       </View>
 

@@ -3826,7 +3826,7 @@ export default function SwingDetail() {
                     {session.smart_motion_shot_map.estCarry != null ? (
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.biomechSub, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.carry')}</Text>
-                        <Text style={[styles.biomechRow, { color: colors.text_primary, fontWeight: '900' }]}>~{session.smart_motion_shot_map.estCarry} yds</Text>
+                        <Text style={[styles.biomechRow, { color: colors.text_primary, fontWeight: '900' }]}>{t('swinglab_swing.swing_detail.yds', { estCarry: session.smart_motion_shot_map.estCarry })}</Text>
                       </View>
                     ) : null}
                     {session.smart_motion_shot_map.trace ? (
@@ -3916,12 +3916,12 @@ export default function SwingDetail() {
         {session.upload && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.details')}</Text>
-            <Text style={[styles.detailLine, { color: colors.text_primary }]}>Club: {session.club}</Text>
+            <Text style={[styles.detailLine, { color: colors.text_primary }]}>{t('swinglab_swing.swing_detail.club', { club: session.club })}</Text>
             {session.upload.swinger ? (
-              <Text style={[styles.detailLine, { color: colors.text_primary }]}>Swinger: {session.upload.swinger}</Text>
+              <Text style={[styles.detailLine, { color: colors.text_primary }]}>{t('swinglab_swing.swing_detail.swinger', { swinger: session.upload.swinger })}</Text>
             ) : null}
             {session.upload.tag ? (
-              <Text style={[styles.detailLine, { color: colors.text_primary }]}>Tag: {session.upload.tag}</Text>
+              <Text style={[styles.detailLine, { color: colors.text_primary }]}>{t('swinglab_swing.swing_detail.tag', { tag: session.upload.tag })}</Text>
             ) : null}
             {duration != null ? (
               <Text style={[styles.detailLine, { color: colors.text_muted }]}>Duration: {duration.toFixed(1)}s · Position: {position.toFixed(1)}s</Text>

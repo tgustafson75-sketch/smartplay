@@ -68,7 +68,7 @@ export default function WhatsNewHeroCard() {
         </View>
       ))}
       {extra > 0 ? (
-        <Text style={[styles.more, { color: colors.text_muted }]}>+{extra} more — ask your caddie &ldquo;what&apos;s new?&rdquo;</Text>
+        <Text style={[styles.more, { color: colors.text_muted }]}>{t('whats_new_hero_card.whats_new_hero_card.more_ask_your_caddie_what', { extra })}</Text>
       ) : null}
 
       <TouchableOpacity onPress={markAllSeen} style={[styles.gotIt, { borderColor: colors.accent }]} accessibilityRole="button">

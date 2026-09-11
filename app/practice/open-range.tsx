@@ -75,9 +75,7 @@ export default function OpenRangeScreen() {
                     <View key={s.id} style={[styles.histRow, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                       <Text style={[styles.histMain, { color: colors.text_primary }]}>{sum.headline}</Text>
                       {sum.blockedPractice ? (
-                        <Text style={[styles.histSub, { color: '#f59e0b' }]}>
-                          {sum.blockedPractice.pct}% one club
-                        </Text>
+                        <Text style={[styles.histSub, { color: '#f59e0b' }]}>{t('practice_open_range.text.one_club', { pct: sum.blockedPractice.pct })}</Text>
                       ) : null}
                     </View>
                   );

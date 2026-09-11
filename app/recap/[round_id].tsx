@@ -225,7 +225,7 @@ function AnimatedHoleCard({
   return (
     <Animated.View style={[styles.holeCard, isHighlighted && styles.holeCardHighlighted, animStyle]}>
       <View style={styles.holeCardHeader}>
-        <Text style={styles.holeNum}>Hole {hc.hole_number}</Text>
+        <Text style={styles.holeNum}>{t('recap.animated_hole_card.hole', { hole_number: hc.hole_number })}</Text>
         {hasScore && !ghostResult && (
           <View style={[styles.variancePill, { backgroundColor: varianceColor(vspar) + '22', borderColor: varianceColor(vspar) }]}>
             <Text style={[styles.variancePillText, { color: varianceColor(vspar) }]}>
@@ -234,9 +234,7 @@ function AnimatedHoleCard({
           </View>
         )}
         {hasScore && ghostResult && (
-          <Text style={[styles.variancePillText, { color: varianceColor(vspar) }]}>
-            Score: {hc.actual_score}
-          </Text>
+          <Text style={[styles.variancePillText, { color: varianceColor(vspar) }]}>{t('recap.animated_hole_card.score', { actual_score: hc.actual_score })}</Text>
         )}
       </View>
 
@@ -666,7 +664,7 @@ export default function RecapScreen() {
             </TouchableOpacity>
           ) : null}
           <TouchableOpacity style={styles.emptyBtn} onPress={() => router.replace('/(tabs)/caddie' as never)}>
-            <Text style={styles.emptyBtnText}>Back to {caddieName}</Text>
+            <Text style={styles.emptyBtnText}>{t('recap.recap_screen.back_to', { caddieName })}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -874,7 +872,7 @@ export default function RecapScreen() {
                   accessibilityLabel={t('recap.accessibility_label.walk_me_through_this_round')}
                 >
                   <Text style={styles.walkthroughCtaText}>{t('recap.recap_screen.walk_me_through_this_round')}</Text>
-                  <Text style={styles.walkthroughCtaSub}>{caddieName} will guide you hole-by-hole</Text>
+                  <Text style={styles.walkthroughCtaSub}>{t('recap.recap_screen.will_guide_you_hole_by', { caddieName })}</Text>
                 </TouchableOpacity>
               )}
               <View style={styles.kevinActions}>

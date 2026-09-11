@@ -136,7 +136,7 @@ export default function BagScanScreen() {
           </ScrollView>
           <View style={s.footer}>
             <TouchableOpacity onPress={addToBag} disabled={includedCount === 0} style={[s.primaryBtn, includedCount === 0 && { opacity: 0.5 }]} accessibilityRole="button">
-              <Text style={s.primaryText}>Add {includedCount} to my bag</Text>
+              <Text style={s.primaryText}>{t('bag_scan.bag_scan_screen.add_to_my_bag', { includedCount })}</Text>
             </TouchableOpacity>
           </View>
         </>

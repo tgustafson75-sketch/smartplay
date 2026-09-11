@@ -143,7 +143,7 @@ export default function LandmarkCurateScreen() {
               <Image source={holeImage} style={{ width: imgW, height: imgH }} resizeMode="cover" />
             ) : (
               <View style={[styles.imagePlaceholder, { width: imgW, height: imgH }]}>
-                <Text style={styles.imagePlaceholderText}>No image for hole {selectedHole}</Text>
+                <Text style={styles.imagePlaceholderText}>{t('landmark_curate.landmark_curate_screen.no_image_for_hole', { selectedHole })}</Text>
               </View>
             )}
             {/* Existing landmarks for this hole */}
@@ -166,7 +166,7 @@ export default function LandmarkCurateScreen() {
           </View>
         </TouchableOpacity>
         {pendingPos && (
-          <Text style={styles.pendingText}>Tap position: ({pendingPos.x}, {pendingPos.y})</Text>
+          <Text style={styles.pendingText}>{t('landmark_curate.landmark_curate_screen.tap_position', { x: pendingPos.x, y: pendingPos.y })}</Text>
         )}
 
         {/* ADD FORM */}
@@ -209,14 +209,14 @@ export default function LandmarkCurateScreen() {
             ))}
           </View>
           <TouchableOpacity style={styles.addBtn} onPress={handleAddLandmark}>
-            <Text style={styles.addBtnText}>+ Add to Hole {selectedHole}</Text>
+            <Text style={styles.addBtnText}>{t('landmark_curate.landmark_curate_screen.add_to_hole', { selectedHole })}</Text>
           </TouchableOpacity>
         </View>
 
         {/* HOLE LANDMARK LIST */}
         {holeList.length > 0 && (
           <>
-            <Text style={styles.section}>HOLE {selectedHole} LANDMARKS ({holeList.length})</Text>
+            <Text style={styles.section}>{t('landmark_curate.landmark_curate_screen.hole_landmarks', { selectedHole, length: holeList.length })}</Text>
             {holeList.map(lm => (
               <View key={lm.id} style={styles.lmRow}>
                 <View style={styles.lmInfo}>
@@ -232,7 +232,7 @@ export default function LandmarkCurateScreen() {
         )}
 
         {/* ALL LANDMARKS SUMMARY */}
-        <Text style={styles.section}>ALL LANDMARKS ({landmarks.length})</Text>
+        <Text style={styles.section}>{t('landmark_curate.landmark_curate_screen.all_landmarks', { length: landmarks.length })}</Text>
         {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(h => {
           const count = landmarks.filter(l => l.hole_number === h).length;
           if (count === 0) return null;

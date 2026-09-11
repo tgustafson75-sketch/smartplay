@@ -268,7 +268,7 @@ export default function PaywallScreen() {
                   safeBack();
                 }}
               >
-                <Text style={styles.extensionBtnText}>Give me another {TRIAL_EXTENSION_DAYS} days</Text>
+                <Text style={styles.extensionBtnText}>{t('paywall.paywall_screen.give_me_another_days', { TRIAL_EXTENSION_DAYS })}</Text>
               </TouchableOpacity>
               <Text style={styles.extensionFootnote}>{t('paywall.paywall_screen.no_card_no_charge_subscribe')}</Text>
             </View>
@@ -289,10 +289,8 @@ export default function PaywallScreen() {
           <View style={styles.pricingCard}>
             <Text style={styles.pricingTitle}>{t('paywall.paywall_screen.smartplay_caddie_pro')}</Text>
             <Text style={styles.pricingPrice}>{PRICING.monthly.displayPrice} / {PRICING.monthly.period}</Text>
-            <Text style={styles.pricingTrial}>
-              or {PRICING.annual.displayPrice}/{PRICING.annual.period} — save {PRICING.annual.savingsPct}%
-            </Text>
-            <Text style={styles.pricingTrial}>Free for {PRICING.trialDays} days</Text>
+            <Text style={styles.pricingTrial}>{t('paywall.paywall_screen.or_save', { displayPrice: PRICING.annual.displayPrice, period: PRICING.annual.period, savingsPct: PRICING.annual.savingsPct })}</Text>
+            <Text style={styles.pricingTrial}>{t('paywall.paywall_screen.free_for_days', { trialDays: PRICING.trialDays })}</Text>
           </View>
 
           <TouchableOpacity style={styles.ctaBtn} onPress={handleSubscribe} activeOpacity={0.88} disabled={busy}>

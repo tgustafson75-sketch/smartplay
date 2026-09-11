@@ -215,9 +215,7 @@ function ConfirmCard({
                 {scoreVsPar === 0 ? 'E' : scoreVsPar > 0 ? `+${scoreVsPar}` : scoreVsPar}
               </Text>
             )}
-            <Text style={[styles.confirmHolesPlayed, { color: colors.text_muted }]}>
-              · {scoredHoles.length} holes
-            </Text>
+            <Text style={[styles.confirmHolesPlayed, { color: colors.text_muted }]}>{t('import_round.confirm_card.holes', { length: scoredHoles.length })}</Text>
           </View>
         </View>
       </View>

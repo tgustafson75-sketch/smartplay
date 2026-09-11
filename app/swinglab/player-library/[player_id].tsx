@@ -67,7 +67,7 @@ export default function PlayerLibraryScreen() {
         >
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text_primary }]}>{playerName} Library</Text>
+        <Text style={[styles.title, { color: colors.text_primary }]}>{t('swinglab_player_library.player_library_screen.library', { playerName })}</Text>
         <View style={{ width: 22 }} />
       </View>
 

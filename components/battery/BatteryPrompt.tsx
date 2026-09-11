@@ -60,7 +60,7 @@ export default function BatteryPrompt() {
     return (
       <View style={[styles.banner, { top: insets.top + 88 }]}>
         <Ionicons name="battery-half-outline" size={18} color="#fbbf24" />
-        <Text style={styles.bannerText}>Phone at {pctText}. Save battery this round?</Text>
+        <Text style={styles.bannerText}>{t('battery_battery_prompt.battery_prompt.phone_at_save_battery_this', { pctText })}</Text>
         <TouchableOpacity onPress={acceptBatterySaver} style={styles.bannerYes}>
           <Text style={styles.bannerYesText}>{t('battery_battery_prompt.battery_prompt.yes')}</Text>
         </TouchableOpacity>
@@ -77,7 +77,7 @@ export default function BatteryPrompt() {
         <View style={[styles.card, { marginTop: insets.top + 80 }]}>
           <View style={styles.headerRow}>
             <Ionicons name="battery-half-outline" size={22} color="#fbbf24" />
-            <Text style={styles.headerTitle}>Battery at {pctText}</Text>
+            <Text style={styles.headerTitle}>{t('battery_battery_prompt.battery_prompt.battery_at', { pctText })}</Text>
           </View>
           <Text style={styles.body}>
             {t('battery_battery_prompt.battery_prompt.want_me_to_slow_down')}

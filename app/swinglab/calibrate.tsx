@@ -201,9 +201,7 @@ export default function CalibrateAcoustics() {
         <View style={{ width: 26 }} />
       </View>
 
-      <Text style={[styles.sub, { color: colors.text_muted }]}>
-        Take {TARGET_STRIKES} ball strikes with the phone near where you hit. Smart Motion learns your strike sound so it can count and split your swings automatically.
-      </Text>
+      <Text style={[styles.sub, { color: colors.text_muted }]}>{t('swinglab_calibrate.calibrate_acoustics.take_ball_strikes_with_the', { TARGET_STRIKES })}</Text>
 
       {/* Environment */}
       <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>{t('swinglab_calibrate.calibrate_acoustics.where_are_you')}</Text>
@@ -229,21 +227,21 @@ export default function CalibrateAcoustics() {
         {phase === 'done' ? (
           <>
             <Text style={[styles.counterBig, { color: colors.text_primary }]}>{detectedCount}</Text>
-            <Text style={[styles.counterCaption, { color: colors.text_muted }]}>strikes detected (target {TARGET_STRIKES})</Text>
+            <Text style={[styles.counterCaption, { color: colors.text_muted }]}>{t('swinglab_calibrate.calibrate_acoustics.strikes_detected_target', { TARGET_STRIKES })}</Text>
             <Text style={[styles.counterCaption, { color: colors.text_muted }]}>noise floor {Number.isFinite(result?.floorDb) ? result!.floorDb.toFixed(0) : '—'} dB</Text>
           </>
         ) : phase === 'recording' ? (
           <>
-            <Text style={[styles.counterCaption, { color: colors.accent }]}>LISTENING · {elapsed}s</Text>
+            <Text style={[styles.counterCaption, { color: colors.accent }]}>{t('swinglab_calibrate.calibrate_acoustics.listening_s', { elapsed })}</Text>
             <View style={[styles.meterTrack, { backgroundColor: colors.surface }]}>
               <View style={[styles.meterFill, { width: `${level * 100}%`, backgroundColor: colors.accent }]} />
             </View>
-            <Text style={[styles.counterCaption, { color: colors.text_muted }]}>Hit your {TARGET_STRIKES} strikes, then tap Done</Text>
+            <Text style={[styles.counterCaption, { color: colors.text_muted }]}>{t('swinglab_calibrate.calibrate_acoustics.hit_your_strikes_then_tap', { TARGET_STRIKES })}</Text>
           </>
         ) : (
           <>
             <Ionicons name="pulse-outline" size={30} color={colors.text_muted} />
-            <Text style={[styles.counterCaption, { color: colors.text_muted }]}>Tap Record, then take {TARGET_STRIKES} strikes</Text>
+            <Text style={[styles.counterCaption, { color: colors.text_muted }]}>{t('swinglab_calibrate.calibrate_acoustics.tap_record_then_take_strikes', { TARGET_STRIKES })}</Text>
           </>
         )}
       </View>

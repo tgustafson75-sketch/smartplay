@@ -222,9 +222,7 @@ export default function YouTubeReferenceModal({ visible, onClose, defaultClub = 
                       {preview.fetchedAuthorName}
                     </Text>
                   ) : null}
-                  <Text style={[styles.previewId, { color: colors.text_muted }]} numberOfLines={1}>
-                    video {preview.videoId}
-                  </Text>
+                  <Text style={[styles.previewId, { color: colors.text_muted }]} numberOfLines={1}>{t('swinglab_you_tube_reference_modal.you_tube_reference_modal.video', { videoId: preview.videoId })}</Text>
                   {preview.alreadyExists ? (
                     <View style={[styles.existsBadge, { borderColor: '#fbbf24' }]}>
                       <Text style={[styles.existsBadgeText, { color: '#fbbf24' }]}>

@@ -686,9 +686,7 @@ export default function SmartTempoScreen() {
             accessibilityLabel={`Mark ${PHASE_META.find(p => p.key === activePhase)!.tab} at the current frame`}
           >
             <Ionicons name="flag" size={18} color="#06281b" />
-            <Text style={styles.markBtnText}>
-              Mark {PHASE_META.find(p => p.key === activePhase)!.tab}
-            </Text>
+            <Text style={styles.markBtnText}>{t('swinglab_smart_tempo.smart_tempo_screen.mark', { tab: PHASE_META.find(p => p.key === activePhase)!.tab })}</Text>
           </Pressable>
 
           {/* ─── C) RESULT ─────────────────────────────────────────────── */}
@@ -745,9 +743,7 @@ export default function SmartTempoScreen() {
                     );
                   })}
                 </View>
-                <Text style={[styles.metroHint, { color: colors.text_muted }]}>
-                  Tick-tick-tock at your measured spacing vs the {result.targetLabel}. Built from your real marks.
-                </Text>
+                <Text style={[styles.metroHint, { color: colors.text_muted }]}>{t('swinglab_smart_tempo.text.tick_tick_tock_at_your', { targetLabel: result.targetLabel })}</Text>
 
                 <View style={styles.resultActions}>
                   <Pressable
@@ -839,9 +835,7 @@ export default function SmartTempoScreen() {
               maxLength={60}
             />
             {result && (
-              <Text style={[styles.savePreview, { color: colors.text_muted }]}>
-                {result.ratingLabel} · {result.ratioLabel} (back {result.backswingMs}ms / down {result.downswingMs}ms)
-              </Text>
+              <Text style={[styles.savePreview, { color: colors.text_muted }]}>{t('swinglab_smart_tempo.smart_tempo_screen.back_ms_down_ms', { ratingLabel: result.ratingLabel, ratioLabel: result.ratioLabel, backswingMs: result.backswingMs, downswingMs: result.downswingMs })}</Text>
             )}
             <View style={styles.saveActions}>
               <Pressable onPress={() => setSaveOpen(false)} style={[styles.saveCancel, { borderColor: colors.border }]} disabled={saving}>
