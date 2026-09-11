@@ -117,7 +117,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         method: 'POST',
         headers: {
           Authorization: `Token ${DEEPGRAM_API_KEY}`,
-          'Content-Type': 'audio/m4a',
+          /**
+           * 2026-09-11 — `audio/m4a` is not a real MIME type. The client records MPEG-4/AAC
+           * (Audio.AndroidOutputFormat.MPEG_4 + AAC, IOSOutputFormat.MPEG4AAC) and the registered
+           * type for that container is `audio/mp4`. Deepgram does not reject an unknown type; it
+           * answers 200 with an empty transcript, which reaches the phone as "the player said
+           * nothing" on audio the VAD confirmed contained speech.
+           */
+          'Content-Type': 'audio/mp4',
         },
         body: audioBuffer,
         signal: ctrl.signal,
@@ -146,8 +153,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
       .filter((u) => u.text.length > 0);
 
-    console.log('[transcribe] result:', cleanedText.slice(0, 80),
-      `(${utterances.length} utterances)`, cleanedText !== rawText ? '(substituted)' : '');
+    /**
+     * 2026-09-11 — an EMPTY result is the one that needs the detail.
+     *
+     * This logged a truncated transcript, so the failure that actually reaches the field — 200 with
+     * nothing in it — logged as a blank line and said nothing about why. When the transcript is
+     * empty, record what we sent and what Deepgram replied, so the next occurrence is diagnosable
+     * from the server instead of inferred from the phone.
+     */
+    if (!cleanedText.trim()) {
+      console.log('[transcribe] EMPTY transcript —',
+        `bytes=${fileSize}`,
+        `lang=${dgLang}`,
+        `channels=${dgData.results?.channels?.length ?? 0}`,
+        `alts=${dgData.results?.channels?.[0]?.alternatives?.length ?? 0}`,
+        `utterances=${dgData.results?.utterances?.length ?? 0}`);
+    } else {
+      console.log('[transcribe] result:', cleanedText.slice(0, 80),
+        `(${utterances.length} utterances)`, cleanedText !== rawText ? '(substituted)' : '');
+    }
 
     return res.status(200).json({ text: cleanedText, utterances, _debug: { provider: 'deepgram-nova2' } });
 

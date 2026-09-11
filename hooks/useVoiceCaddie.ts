@@ -38,6 +38,7 @@ import {
 } from '../services/listeningSession';
 import { voiceCommandRouter } from '../services/intents';
 import { carriesYardageCorrection } from '../services/intents/stateYardageHandler';
+import { raceHedged } from '../services/voice/hedgedFetch';
 import { openToolHandler } from '../services/intents/openToolHandler';
 import { quickRoundHandler } from '../services/intents/quickRoundHandler';
 import type { AppContext, VoiceIntent } from '../types/voiceIntent';
@@ -1632,19 +1633,24 @@ export const useVoiceCaddie = ({
        * The budget is still fully enforced — this fetch has always aborted itself on its own
        * timeout. What it no longer accepts is an OUTSIDE opinion about whether it should give up.
        */
-      const doTranscribeFetch = async (timeoutMs: number) => {
+      /**
+       * 2026-09-11 — returns its abort instead of hiding it, so the hedged race can cancel the
+       * connection it does not need. See services/voice/hedgedFetch.
+       */
+      const doTranscribeFetch = (timeoutMs: number): { result: Promise<Response>; abort: () => void } => {
         // Rebuild the multipart body per attempt — a consumed FormData stream
         // can't be safely re-sent on a retry.
         const fd = new FormData();
-        fd.append('audio', { uri, type: 'audio/m4a', name: 'audio.m4a' } as unknown as Blob);
+        fd.append('audio', { uri, type: 'audio/mp4', name: 'audio.m4a' } as unknown as Blob);
         fd.append('language', language);
         const ctrl = new AbortController();
         const t = setTimeout(() => ctrl.abort(), timeoutMs);
-        return fetch(apiUrl + '/api/transcribe', {
+        const result = fetch(apiUrl + '/api/transcribe', {
           method: 'POST',
           body: fd,
           signal: ctrl.signal,
         }).finally(() => { clearTimeout(t); });
+        return { result, abort: () => { clearTimeout(t); try { ctrl.abort(); } catch { /* already done */ } } };
       };
 
       let transcribeRes: Response | undefined;
@@ -1971,16 +1977,19 @@ export const useVoiceCaddie = ({
         for (let i = 0; i < attemptBudgets.length; i += 1) {
           const budget = attemptBudgets[i];
           try {
-            const primary = doTranscribeFetch(budget);
-            // Suppress unhandled rejections on whichever branch loses the race.
-            primary.catch(() => {});
-            const hedged = (async () => {
-              await new Promise(r => setTimeout(r, HEDGE_AFTER_MS));
-              const alt = doTranscribeFetch(Math.max(6_000, budget - HEDGE_AFTER_MS));
-              alt.catch(() => {});
-              return alt;
-            })();
-            transcribeRes = await Promise.any([primary, hedged]);
+            /**
+             * 2026-09-11 — the same hedged race the earbud path uses, and it now CANCELS the loser.
+             *
+             * This built its own hedge inline, inside a two-budget retry loop, with no cancellation:
+             * on a healthy turn the primary answered in ~1.2s and the hedge still woke at 2.5s and
+             * POSTed the audio again. One spoken sentence could cost four uploads and four
+             * transcriptions off a phone on cell data. The comment above claimed "one duplicate
+             * upload on a slow turn only" — it was every turn.
+             */
+            transcribeRes = await raceHedged<Response>(
+              (isHedge) => doTranscribeFetch(isHedge ? Math.max(6_000, budget - HEDGE_AFTER_MS) : budget),
+              HEDGE_AFTER_MS,
+            );
             if (i > 0) console.log('[voice] transcribe recovered on attempt', i + 1);
             break;
           } catch (e) {
@@ -2078,7 +2087,7 @@ export const useVoiceCaddie = ({
             await failTranscribeOffline('transcribe_host_unreachable', ping.ok, ping.ms, get.ok, get.ms, cdn.ok, cdn.ms);
             return;
           }
-          transcribeRes = await doTranscribeFetch(probeSaysDown ? retryBudgetMs : Math.min(15000, retryBudgetMs));
+          transcribeRes = await doTranscribeFetch(probeSaysDown ? retryBudgetMs : Math.min(15000, retryBudgetMs)).result;
           if (probeSaysDown) console.log('[voice] probe was WRONG — retry succeeded; the connection was fine');
         } catch {
           // Two genuine attempts have now failed. Log the probe's real verdict so "probe wrong,

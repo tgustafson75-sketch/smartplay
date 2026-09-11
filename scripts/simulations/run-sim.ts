@@ -7885,10 +7885,15 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     /const CLASSIFY_HEDGE_MS = 2_500;/.test(lsSrc) && /Promise\.any\(\[primary, hedged\]\)/.test(lsSrc),
     'the intent classify opens a second connection after 2.5s rather than betting 22 seconds on the first — the old guard asserted that 22s wait as if it were the feature, and it was the hang');
   const vsSrc = read('services/voiceService.ts');
+  // 2026-09-11 — the race moved into services/voice/hedgedFetch, ONE owner shared with the tap path,
+  // because both inline copies leaked: nothing cancelled the loser, so a healthy turn still POSTed
+  // the audio a second time. The LOCK follows the behaviour rather than the expression it used to
+  // pin — a hedged race that CANCELS what it does not need.
   check('LOCK voice: the earbud transcribe races a hedge instead of waiting out a hung socket',
-    /const raceOnce = async \(budgetMs: number\)/.test(vsSrc) && /Promise\.any\(\[primary, hedged\]\)/.test(vsSrc)
-      && !/doFetch\(25_000\)/.test(vsSrc),
-    'captureUtterance opens a second connection after 2.5s and takes the first answer — the 25s single-shot it replaced made the earbud the SLOWEST entry point, not the safest');
+    /raceHedged</.test(vsSrc) && /HEDGE_MS/.test(vsSrc) && !/doFetch\(25_000\)/.test(vsSrc)
+      && /Promise\.any\(\[primaryTagged, hedged\]\)/.test(read('services/voice/hedgedFetch.ts'))
+      && /if \(state\.winner === 'hedge'\) primary\.abort\(\);/.test(read('services/voice/hedgedFetch.ts')),
+    'captureUtterance opens a second connection after 2.5s and takes the first answer — and the connection that loses is aborted rather than left to upload the same audio again');
 
   // 4) TRIGGER HAPTIC — every talk trigger (earbud/glasses tap, mic badge) buzzes on open (feel it's on).
   // 2026-08-11 — the trigger edge moved. 'listening' is now reached ~1s after the tap (we hold
@@ -12817,11 +12822,15 @@ check('LOCK: every mic entry point fails the same way — tap, earbud and text b
     // The earbud and the text-box mic must keep routing to the shared session, not grow their own.
     const convergent = /subscribeEarbudTap\(\(\) => \{ void toggle\(\); \}\)/.test(ls)
       && /toggleListening\(\)/.test(bar);
-    // Both owners race a second connection rather than waiting out the first.
-    const tapHedges = /const primary = doTranscribeFetch\(budget\);/.test(vc)
-      && /Promise\.any\(\[primary, hedged\]\)/.test(vc);
-    const earbudHedges = /const raceOnce = async \(budgetMs: number\)/.test(vs)
-      && /Promise\.any\(\[primary, hedged\]\)/.test(vs);
+    /**
+     * 2026-09-11 — both owners now race through the SAME function rather than through two inline
+     * copies that had to be kept in step by this guard. Both copies leaked: neither cancelled the
+     * loser, so a healthy turn re-POSTed the audio at 2.5s, and the tap path did it inside a
+     * two-budget retry loop — four uploads for one sentence. Convergence is structural now, so this
+     * asserts they share the owner rather than that they look alike.
+     */
+    const tapHedges = /raceHedged</.test(vc) && /HEDGE_AFTER_MS/.test(vc);
+    const earbudHedges = /raceHedged</.test(vs) && /HEDGE_MS/.test(vs);
     // And the 25s single-shot that made the earbud the worst path is gone.
     const noLongSingleShot = !/res = await doFetch\(25_000\);/.test(vs);
     return convergent && tapHedges && earbudHedges && noLongSingleShot;
@@ -12910,7 +12919,10 @@ check('LOCK: nothing but the real request may decide the real request failed',
     // mechanism by which a probe held authority over the real request, so it is gone rather than
     // merely unused — otherwise the next probe author finds a ready-made hook and only a comment
     // standing in the way.
-    const takesNoSignal = /const doTranscribeFetch = async \(timeoutMs: number\) =>/.test(vc)
+    // 2026-09-11 — the signature gained a return type (it hands back its abort so the hedged race
+    // can cancel the connection it does not need) but the PARAMETER LIST is the invariant: exactly
+    // one timeout, and no way to accept an outside opinion about when to give up.
+    const takesNoSignal = /const doTranscribeFetch = (?:async )?\(timeoutMs: number\)\s*(?::[^=]*)?=>/.test(vc)
       // Match CODE use only (`externalSignal?:`, `.addEventListener`, `, externalSignal)`), never the
       // prose above it that explains the removal — a bare /externalSignal/ matches its own tombstone.
       && !/externalSignal\s*[?.,)]/.test(vc);
@@ -12932,10 +12944,19 @@ check('LOCK: nothing but the real request may decide the real request failed',
      *
      * Still no signal parameter anywhere — nothing outside the request may cancel it.
      */
-    const uncancellable = /const primary = doTranscribeFetch\(budget\);/.test(vc)
-      && /transcribeRes = await Promise\.any\(\[primary, hedged\]\);/.test(vc)
+    /**
+     * 2026-09-11 — the hedge moved into services/voice/hedgedFetch, ONE owner shared with the earbud
+     * path, because both inline copies leaked: nothing cancelled the loser, so a healthy turn
+     * re-POSTed the audio at 2.5s and the tap path did it inside a two-budget retry loop — four
+     * uploads for one sentence. The property this LOCK owns is unchanged and is what is asserted:
+     * the hedge still exists, and nothing outside the request may cancel it. Cancelling the LOSER is
+     * not an outside opinion about the winner — the shared owner never aborts the attempt whose
+     * answer is being used, because Promise.any resolves on headers and the body is read after.
+     */
+    const uncancellable = /raceHedged</.test(vc)
       && /const HEDGE_AFTER_MS = 2_500;/.test(vc)
-      && !/doTranscribeFetch\([^)]*signal/.test(vc);
+      && !/doTranscribeFetch\([^)]*signal/.test(vc)
+      && /if \(state\.winner === 'hedge'\) primary\.abort\(\);/.test(read('services/voice/hedgedFetch.ts'));
     // 2. ORDER, not presence: the diagnostic probes must appear AFTER the real attempt, inside its
     //    catch. If they ever migrate back above it, they are racing the upload again.
     // 2026-08-21 — anchored on the attempt LOOP, not the old single-attempt call site. The property

@@ -10,6 +10,7 @@ import type { CaptureBail } from './voice/captureBail';
 import { isDegraded as cbIsDegraded, recordSuccess as cbRecordSuccess, recordFailure as cbRecordFailure } from './voiceCircuitBreaker';
 import { reportOnline as cbReportOnline, reportNetworkFailure as cbReportNetworkFailure } from '../store/connectivityStore';
 import { useConversationLog } from '../store/conversationLogStore';
+import { raceHedged } from './voice/hedgedFetch';
 // 2026-05-30 — Fix FX: voice/network circuit-breaker. After 3 consecutive
 // fetch failures within 30s on any of /api/voice, /api/kevin, or
 // /api/transcribe, that endpoint is marked degraded for 60s and we
@@ -356,13 +357,26 @@ export const releaseExternalMic = async (): Promise<MicReleaseVerdict> => {
 // in-flight captureUtterance.
 let captureEarlyStop = false;
 
+/**
+ * 2026-09-11 (field log: three empty_transcript / listen_no_transcript entries with heardSpeech
+ * TRUE and 8.3s of audio) — TWO OWNERS COULD STOP THE SAME RECORDING.
+ *
+ * captureUtteranceDetailed owns the Recording: it reads duration, calls stopAndUnloadAsync, then
+ * getURI. stopCapture reached in and called stopAndUnloadAsync on the SAME object. When a stop
+ * landed in that window the two unloads interleaved, and the .m4a was handed to the uploader with
+ * its MPEG-4 moov atom never written — a file that exists, passes the >1KB size gate, and cannot be
+ * demuxed. Deepgram answers 200 with an empty transcript, which is indistinguishable downstream
+ * from "the player said nothing". That is the intermittent empty transcript on audio the VAD had
+ * already confirmed contained speech.
+ *
+ * The cancel flag alone is enough: the capture loop checks `captureCancelled` and performs the one
+ * stop itself. So this now signals, and the owner stops. One writer to the recorder.
+ * [[two-owners-is-the-root-cause]]
+ */
 export const stopCapture = async (): Promise<void> => {
   captureCancelled = true;
-  const r = currentRecording;
-  currentRecording = null;
-  if (r) {
-    try { await r.stopAndUnloadAsync(); } catch { /* ignore */ }
-  }
+  // Deliberately does NOT touch currentRecording — the capture that created it unloads it, reads
+  // its URI, and clears the handle. Racing that is what corrupted the container.
 };
 
 /**
@@ -618,14 +632,23 @@ export const captureUtteranceDetailed = async (
     // reach a now-warm backend. Pure resilience: a call that would have
     // succeeded is unaffected; only a failed first attempt gets a second try.
     // 25s first try (cold Lambda) + 15s retry = ~40s bounded worst case.
-    const doFetch = (timeoutMs: number) => {
+    /**
+     * 2026-09-11 — the hedge used to LEAK a second upload on every healthy turn.
+     *
+     * `doFetch` kept its AbortController to itself, so once Promise.any settled nothing cancelled
+     * the loser. On a turn that answered in ~1.2s the hedge still woke at 2.5s and POSTed the same
+     * audio again: two transcriptions billed, two uploads off a phone on cell data, for one spoken
+     * sentence. The controller is returned now and whoever loses is aborted.
+     */
+    const doFetch = (timeoutMs: number): { res: Promise<Response>; abort: () => void } => {
       const controller = new AbortController();
       const cancelTimer = setTimeout(() => controller.abort(), timeoutMs);
-      return fetch(apiUrl + '/api/transcribe', {
+      const res = fetch(apiUrl + '/api/transcribe', {
         method: 'POST',
         body: mkForm(),
         signal: controller.signal,
       }).finally(() => clearTimeout(cancelTimer));
+      return { res, abort: () => { clearTimeout(cancelTimer); try { controller.abort(); } catch { /* already done */ } } };
     };
     /**
      * 2026-08-21 — SAME HEDGE AS THE TAP PATH. Tim: "we need to triple check that tapping the caddie,
@@ -646,17 +669,13 @@ export const captureUtteranceDetailed = async (
      * the exact drift this codebase keeps paying for.
      */
     const HEDGE_MS = 2_500;
-    const raceOnce = async (budgetMs: number): Promise<Response> => {
-      const primary = doFetch(budgetMs);
-      primary.catch(() => {});
-      const hedged = (async () => {
-        await new Promise(r => setTimeout(r, HEDGE_MS));
-        const alt = doFetch(Math.max(6_000, budgetMs - HEDGE_MS));
-        alt.catch(() => {});
-        return alt;
-      })();
-      return Promise.any([primary, hedged]);
-    };
+    // One owner for the hedged race — shared with the tap path so the two mic entry points cannot
+    // drift apart again. See services/voice/hedgedFetch.
+    const raceOnce = (budgetMs: number): Promise<Response> =>
+      raceHedged<Response>((isHedge) => {
+        const { res, abort } = doFetch(isHedge ? Math.max(6_000, budgetMs - HEDGE_MS) : budgetMs);
+        return { result: res, abort };
+      }, HEDGE_MS);
     let res: Response;
     try {
       res = await raceOnce(15_000);
