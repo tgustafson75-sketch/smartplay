@@ -1740,7 +1740,10 @@ function TargetCameraOverlay({
     nearestHazard: hazardSummary?.nearest ?? null,
     isCompetition,
     pastScoreNote: null,
-  }), [targetYards, weather, targetBearing, shotBearingDeg, elevationDeltaFeet, dominantMiss, holeLineNote, hazardSummary, isCompetition]);
+    // 2026-09-11 — this screen has SHOWN front/back since it was written and never told the read.
+    greenFrontYards: yards.front ?? null,
+    greenBackYards: yards.back ?? null,
+  }), [targetYards, weather, targetBearing, shotBearingDeg, elevationDeltaFeet, dominantMiss, holeLineNote, hazardSummary, isCompetition, yards.front, yards.back]);
 
   return (
     <View style={StyleSheet.absoluteFill}>

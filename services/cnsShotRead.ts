@@ -35,6 +35,12 @@ export interface ShotRead {
   why: string[];
   /** One light hazard line, or null. */
   hazardNote: string | null;
+  /**
+   * How much green there is to work with — "14y of green behind the pin", "only 3y behind the pin —
+   * miss short". A FACT about the target, not an instruction; the club pick is unchanged by it.
+   * Null when the green geometry is absent or implausible.
+   */
+  greenRoomNote: string | null;
   /** One light tendency/line note, or null. */
   tendencyNote: string | null;
   /** Past-performance line — populated ONLY when isCompetition. */
@@ -223,10 +229,24 @@ export function composeShotRead(input: {
   isCompetition?: boolean;
   /** Past-performance one-liner for this hole (only used when isCompetition). */
   pastScoreNote?: string | null;
+  /**
+   * 2026-09-11 (Tim — "plays like factors really need that info") — HOW MUCH GREEN IS THERE.
+   *
+   * Front and back yardages to the green. SmartFinder has computed and DISPLAYED these since it was
+   * written and never passed them here, so the read knew the distance to a point and nothing about
+   * the room around it. That is the difference between "158, hit 7 iron" and "158, and there are 14
+   * yards of green behind the pin" — the second is a decision, the first is a number.
+   *
+   * Optional: every existing caller is unchanged, and a read with no green data simply omits the
+   * room line rather than guessing at it.
+   */
+  greenFrontYards?: number | null;
+  greenBackYards?: number | null;
 }): ShotRead | null {
   const {
     rawYards, weather, shotBearingDeg, elevationDeltaFeet = 0,
     bag = {}, dominantMiss, holeLineNote, nearestHazard, isCompetition, pastScoreNote,
+    greenFrontYards = null, greenBackYards = null,
   } = input;
   if (rawYards == null || !Number.isFinite(rawYards)) return null;
 
@@ -263,6 +283,41 @@ export function composeShotRead(input: {
     hazardNote = `${nearestHazard.label} ${nearestHazard.yards}y`;
   }
 
+  /**
+   * 3b) ROOM ON THE GREEN — the half of the decision a yardage alone cannot carry.
+   *
+   * Depth is back − front. A pin with 15 yards behind it forgives a club too much; one with 4 yards
+   * and a bunker behind does not. This is stated as a FACT the player can act on, never as an
+   * instruction — the club pick stays where it is, and this tells them what the miss costs.
+   *
+   * Only spoken when the numbers are real and sane: front < back, and a depth a green can actually
+   * have. A bad geometry read must not invent room that isn't there. [[illustration-data-points]]
+   */
+  let greenRoomNote: string | null = null;
+  if (
+    typeof greenFrontYards === 'number' && typeof greenBackYards === 'number' &&
+    Number.isFinite(greenFrontYards) && Number.isFinite(greenBackYards) &&
+    greenBackYards > greenFrontYards
+  ) {
+    const depth = Math.round(greenBackYards - greenFrontYards);
+    if (depth >= 4 && depth <= 60) {
+      const behind = Math.round(greenBackYards - playsLikeYards);
+      const inFront = Math.round(playsLikeYards - greenFrontYards);
+      /**
+       * ORDER MATTERS, and it is the urgency order, not the arithmetic one.
+       *
+       * A tight edge beats a roomy one. Sitting three yards onto the green means short-siding into
+       * whatever guards the front, and that is a worse outcome than the comfort of room behind — so
+       * it is said first even when there are twenty yards long. The back-pin warning comes next for
+       * the same reason. "Plenty behind" is the reassurance, and reassurance goes last.
+       */
+      if (inFront >= 0 && inFront < 5) greenRoomNote = `front edge is ${inFront}y short — don't come up light`;
+      else if (behind >= 0 && behind < 5) greenRoomNote = `only ${behind}y behind the pin — miss short`;
+      else if (behind >= 8) greenRoomNote = `${behind}y of green behind the pin`;
+      else greenRoomNote = `${depth}y of green to work with`;
+    }
+  }
+
   // 4) Tendency — hole-specific learned line beats the generic miss.
   let tendencyNote: string | null = null;
   if (holeLineNote && holeLineNote.trim()) tendencyNote = holeLineNote.trim();
@@ -278,6 +333,7 @@ export function composeShotRead(input: {
     deltaYards: playsLikeYards - rawYards,
     why,
     hazardNote,
+    greenRoomNote,
     tendencyNote,
     pastPerfNote,
   };
