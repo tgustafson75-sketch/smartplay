@@ -1954,10 +1954,17 @@ export const useRoundStore = create<RoundState>()(
             if (post) { record.handicapAgs = post.adjustedGrossScore; record.handicapHoles = post.postedHoles; }
           } catch (e) { console.log('[handicap] WHS posting score failed (non-fatal):', e); }
         }
-        // 2026-06-10 — Caddie CNS Phase 1: distill this round into per-course /
-        // per-hole memory (rounds played, scoring avg, tee club, par). Additive
-        // + best-effort; nothing reads it yet (Phase 2 retrieval). Reuses the
-        // record we just built so it's consistent with roundHistory.
+        // 2026-06-10 — Caddie CNS: distill this round into per-course / per-hole memory (rounds
+        // played, scoring avg, tee club, par). Reuses the record we just built so it stays
+        // consistent with roundHistory.
+        //
+        // 2026-09-11 — a "Phase 2 / no reader yet" claim was deleted from here rather than updated.
+        // It HAS readers: getCourseHoleGuidance takes typicalTeeClub and bestLine from this memory,
+        // getHoleScoringHistory takes scoringAvg, and both feed the shot read and the caddie prompt.
+        // A comment telling you a writer has no reader is an invitation to delete the writer. The
+        // phrase itself is not repeated here, because quoting a claim is how a guard against it
+        // silently passes. [[my-own-comment-defeats-my-own-guard]]
+        // [[a-stale-header-is-a-source-someone-trusts]] [[prose-that-asserts-runtime-state-goes-stale]]
         try {
           const mem = require('./caddieMemoryStore') as typeof import('./caddieMemoryStore');
           // Build per-hole data ONCE (course-independent). 2026-06-13 (audit G3):
@@ -3092,8 +3099,9 @@ export const useRoundStore = create<RoundState>()(
             }
           }
 
-          // 2026-06-10 — Caddie CNS Phase 1: feed real carries into the learning
-          // bag model. Additive + best-effort; nothing reads it yet (Phase 2).
+          // 2026-06-10 — Caddie CNS: feed real carries into the learning bag model.
+          // 2026-09-11 — a "no reader yet" claim was deleted here too: caddieMemoryRetrieval renders
+          // these carries as the "Learned bag" line in every caddie prompt.
           try {
             // 2026-06-14 (audit #5) — train the bag ONLY on a measured carry, never a
             // GPS estimate (see measuredCarry above). Keeps the learned model honest.
