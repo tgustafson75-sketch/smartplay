@@ -1215,12 +1215,32 @@ ${(() => {
   // How the round is ACTUALLY going, not just the total. Ground advice in this rather than guessing.
   return `HOW THIS ROUND IS GOING: ${bits}${last ? `\nLast three: ${last}` : ''}\n`;
 })()}${(() => {
-  const yi = yardageInsight as { yardage: number | null; source?: string; confidence?: string; reason?: string } | null;
+  const yi = yardageInsight as { yardage: number | null; source?: string; confidence?: string; reason?: string; is_fallback?: boolean } | null;
   const base = `DISTANCE REMAINING RIGHT NOW: ${currentYardage} yards. This is the shot in front of them. It is NOT the hole's card length, and the card length is NOT the shot — never quote a scorecard yardage as the distance they are hitting.`;
   if (!yi || typeof yi.source !== 'string') return base;
-  // Say where the number came from, so the caddie can be as confident as the number deserves.
+  /**
+   * 2026-09-10 (Tim, Hemet — eighteen holes of estimates the caddie stated as measurements).
+   *
+   * `gps_live` is TWO different claims. One is a real distance from the player to a known green.
+   * The other is `estimatedFromTee`: the hole's card length minus the straight-line distance walked
+   * from the tee, used when the hole has NO green coordinate at all — which is every hole of every
+   * golfcourseapi course until geometry builds. Both arrived here as `gps_live`, and this line told
+   * the caddie to "state it flatly".
+   *
+   * It got worse from there: the only hedge below fires on confidence 'low', and the estimate
+   * carries 'med'. So the estimate was the one case that got full confidence and no caveat.
+   *
+   * The resolver has always carried `is_fallback` and a `reason` saying it in plain words; neither
+   * reached this renderer. Now the flag splits the branch, and the reason rides along so the caddie
+   * can say WHY rather than just hedging vaguely. An estimate is still worth speaking — a blank is
+   * not more honest than a number with its uncertainty attached — it just must not be dressed as a
+   * measurement. [[guards-by-element-not-blanket-suppression]] [[illustration-data-points]]
+   */
+  const estimated = yi.is_fallback === true;
   const provenance =
-    yi.source === 'gps_live' ? ' Measured live off GPS — you can state it flatly.'
+    yi.source === 'gps_live' && estimated
+      ? ` ESTIMATE, not a measurement: ${yi.reason || 'no green data for this hole yet'}. It is derived from the hole length and how far they have walked, so it drifts as soon as they are off the tee-to-green line. Give the club you would give, but say the number is a read rather than exact, and do not build fine margins on it.`
+    : yi.source === 'gps_live' ? ' Measured live off GPS — you can state it flatly.'
     : yi.source === 'user_stated' ? ` This is THEIR number — they told you they were ${yi.yardage ?? currentYardage}. Use it and do not second-guess it.`
     : yi.source === 'static_card' ? ' HEDGE: this is the scorecard yardage, not a live measurement — GPS is soft right now. Say it plays about this, do not state it as exact, and never present it as a measured distance.'
     : ' NO RELIABLE NUMBER right now. Do not invent one and do not ask them for it — say you are getting the read back.';

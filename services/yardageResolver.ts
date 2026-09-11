@@ -280,6 +280,22 @@ export function buildYardageInsight(): {
   source: YardageSource;
   confidence: YardageConfidence;
   reason: string;
+  /**
+   * 2026-09-10 (Tim, Hemet) — `source` ALONE CANNOT TELL THE CADDIE WHETHER THIS WAS MEASURED.
+   *
+   * `gps_live` covers two completely different claims: a real distance from the player to a KNOWN
+   * green, and `estimatedFromTee` — the hole's card length minus the straight-line distance walked
+   * from the tee, on a hole with no green coordinate at all. api/kevin rendered `gps_live` as
+   * "Measured live off GPS — you can state it flatly", and its only hedge fires on confidence
+   * 'low' while an estimate carries 'med'. So for eighteen holes at Hemet the caddie was
+   * explicitly instructed to state an estimate flatly.
+   *
+   * The `reason` string has always said so in plain words ("GPS estimate from the tee — no green
+   * data yet") and the renderer never read it. Sending the FLAG as well means the distinction is
+   * machine-readable rather than something the model has to notice in prose.
+   * [[arithmetic-belongs-in-code-not-the-model]] [[illustration-data-points]]
+   */
+  is_fallback: boolean;
 } {
   const r = resolveYardage();
   return {
@@ -287,6 +303,7 @@ export function buildYardageInsight(): {
     source: r.source,
     confidence: r.confidence,
     reason: r.reason,
+    is_fallback: r.is_fallback,
   };
 }
 
