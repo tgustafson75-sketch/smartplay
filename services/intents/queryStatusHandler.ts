@@ -476,7 +476,18 @@ export const queryStatusHandler: IntentHandler = {
             }
           }
         }
-        const withSwings = teammates.filter(async (m) => (await analyzer.getMemberSwingHistory(m.id)).length > 0).length;
+        /**
+         * 2026-09-11 — REMOVED: `teammates.filter(async (m) => …)`.
+         *
+         * An async callback returns a Promise, and every Promise is truthy, so that filter kept
+         * EVERY teammate and `withSwings` was always `teammates.length` — it could never be wrong
+         * in a way that looked wrong. It was dead (nothing read it), so the count never reached a
+         * player; deleting it rather than repairing it, because the "has this member logged swings"
+         * question is already answered below by `totalLatest === 0`.
+         *
+         * Verified this is the only async predicate in the app: no .filter/.some/.every takes an
+         * async callback anywhere under app/ components/ services/ hooks/ store/ lib/ api/ utils/.
+         */
         if (totalLatest === 0) {
           return {
             success: true,
