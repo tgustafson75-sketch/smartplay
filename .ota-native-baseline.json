@@ -1,7 +1,8 @@
 {
   "note": "Native fingerprint of the shell currently in the stores. Re-record with `npm run ota:baseline` when a STORE BUILD ships.",
   "runtimeVersion": "1.0.0",
-  "hash": "2cd1465a2ba125bbf4d5aa853a5e888b15bf4c9511db5dc924462a4c3e769767",
-  "fileCount": 157,
-  "recordedAt": "2026-09-09T21:18:24.522Z"
+  "hash": "f7f29de7513f26777bb3ddb6b155c4893def1745d4a787666ed0b60ac1e57b78",
+  "fileCount": 70,
+  "recordedAt": "2026-09-11T07:46:10.143Z",
+  "reRecordedWhy": "2026-09-11 \u2014 re-recorded after scoping the fingerprint to files that can actually reach a build (.easignore excludes ios/ and android/, which are prebuild OUTPUT in this CNG project). Deleting stray local copies of those dirs had moved the hash and refused a prose-only OTA. Re-recording is honest here because the build-reachable native surface was verified UNCHANGED against both shipped commits by git: ebf26637 (Android 26) and 9fdeda03 (iOS 26) -> HEAD touches only app.json version numbers and the eas.json submit track, neither of which is compiled into a binary. See docs/LAUNCH-RECONCILE.md section 1."
 }
