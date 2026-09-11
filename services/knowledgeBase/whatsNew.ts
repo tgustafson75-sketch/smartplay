@@ -28,6 +28,28 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Sep 2026',
+    note: 'Auto Shot Detection now works from a cart. If you ride — most people do — it was switched on and quietly recording nothing at all. Your shots are now written to the card as you play, with no club and no interruption, so your round has shots in it when you finish.',
+    howTo: 'Settings, Round Experience, Auto Shot Detection. Riding, it logs quietly; walking, the caddie asks what you hit. Either way you can correct a shot on the scorecard.',
+  },
+  {
+    when: 'Sep 2026',
+    note: 'Your caddie notices when you play a hole well. It used to speak up only during bad stretches, and a good hole went by without a word — because the only praise it had needed three great holes in a row. It now recognises one hole that beat the way you usually play it, and it knows your history on that hole to say so.',
+  },
+  {
+    when: 'Sep 2026',
+    note: 'Auto Hole Advance responds when you switch it back on. Turning it off and on again mid-round used to leave it off until your next round, even though the switch said otherwise.',
+    howTo: 'Settings, Round Experience, Auto Hole Advance. It now takes effect straight away, mid-round.',
+  },
+  {
+    when: 'Sep 2026',
+    note: 'Refresh GPS works on courses we look up for you. On any course that was not already built in, asking "where am I?" answered that it had no hole information — on exactly the courses where you most needed it.',
+  },
+  {
+    when: 'Sep 2026',
+    note: 'The yardage on your hole photo comes back on more courses. On looked-up courses the distance badge and the position bar were simply missing from the picture.',
+  },
+  {
+    when: 'Sep 2026',
     note: 'Turning off diagnostics now turns off all of it. The switch already stopped error reports, but a summary of each round was still being sent when you finished. If you have that switch off, nothing about your round leaves your phone.',
     howTo: 'Settings has the diagnostics switch — off means off, for error reports and round summaries alike.',
   },
