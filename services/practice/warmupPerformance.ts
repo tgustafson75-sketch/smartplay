@@ -18,8 +18,32 @@
  *     rounds you warmed up", never "warming up lowered your score".
  */
 
-/** How long before the first tee a warm-up still counts as belonging to that round. */
+/**
+ * How long before the first tee a warm-up still counts as belonging to that round.
+ *
+ * 2026-09-11 — THE ONE OWNER. services/practice/practiceImpact declared its own copy at FOUR hours
+ * and anchored it on the warm-up's START rather than its completion, so the same round could be
+ * "warmed" in one dashboard card and "cold" in the other — and both cards render on the SAME screen,
+ * both phrased to the player as "when you warm up". [[two-owners-is-the-root-cause]]
+ */
 export const WARMUP_WINDOW_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * Did a warm-up belong to this round? The single answer, for every surface that asks.
+ *
+ * A warm-up logged AFTER the round started belongs to no round — counting it would let a mid-round
+ * tap rewrite history. Times are warm-up events (a pre-round practice session or a pre-round
+ * workout); the two record slightly different instants and that imprecision is real and stated
+ * rather than papered over, but it must at least be the SAME imprecision everywhere.
+ */
+export function wasRoundWarmed(
+  roundStartedAt: number | null | undefined,
+  warmupTimes: readonly number[],
+  windowMs: number = WARMUP_WINDOW_MS,
+): boolean {
+  if (typeof roundStartedAt !== 'number' || !Number.isFinite(roundStartedAt)) return false;
+  return warmupTimes.some((t) => typeof t === 'number' && t <= roundStartedAt && roundStartedAt - t <= windowMs);
+}
 
 /** Rounds needed on EACH side before we'll show a comparison at all. */
 const MIN_ROUNDS_PER_SIDE = 3;
@@ -68,7 +92,7 @@ export function computeWarmupPerformance(input: WarmupPerformanceInput): WarmupP
   for (const r of rounds) {
     // Warmed up = a completion in the window BEFORE the first tee. A warm-up logged after the round
     // started belongs to no round; counting it would let a mid-round tap rewrite history.
-    const warmed = warmups.some(t => t <= r.startedAt && r.startedAt - t <= WARMUP_WINDOW_MS);
+    const warmed = wasRoundWarmed(r.startedAt, warmups);
     (warmed ? withWarmup : withoutWarmup).push(r.scoreVsPar);
   }
 

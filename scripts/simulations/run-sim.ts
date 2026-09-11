@@ -6825,7 +6825,14 @@ check('Practice→performance: honest connection card (association, gated, no fa
     const graphSmartOk =
       /warmupWeekIndices: number\[\]/.test(svc) &&                    // service surfaces warm-up weeks
       /warmupWeeks\.add\(WEEKS - 1 - ageWeeks\)/.test(svc) &&          // bucketed like practiceSeries
-      /warmups: practiceHistory/.test(dash) &&                        // dashboard feeds warm-up sessions
+      // 2026-09-11 — was `/warmups: practiceHistory/`, which pinned the dashboard's own inline
+      // filter. That filter was HALF the warm-up events: the sibling card counted pre-round
+      // WORKOUTS, so the two cards disagreed about whether a round was warmed. One list feeds both
+      // now, so the property is "the dashboard supplies warm-up events", not which array it greps.
+      /warmups: warmupEvents\.map\(/.test(dash) &&
+      /const warmupEvents = useMemo\(/.test(dash) &&
+      /w\.source === 'preround_warmup'/.test(dash) &&                 // workouts count as warm-ups
+      /s\.focus === 'preround' \|\| s\.environment === 'preround'/.test(dash) &&
       /markerIndices=\{activeProgress\.markers\}/.test(dash) &&        // warm-ups marked on the (overlay) practice line
       /markerLabel=\{activeProgress\.markers\.length \? 'warm-up' : undefined\}/.test(dash) &&
       /legendDotColor=/.test(dash) && /showTrend/.test(dash) &&        // self-labeling legend + trend

@@ -13,6 +13,8 @@
  * practice is up AND scores are genuinely trending down.
  */
 
+import { wasRoundWarmed } from './warmupPerformance';
+
 export interface PracticeImpactInput {
   /** Practice sessions with a start time + a ball/swing count. */
   sessions: { startedAt: number; balls: number }[];
@@ -77,9 +79,13 @@ export function computePracticeImpact(input: PracticeImpactInput): PracticeImpac
   }
   const warmupWeekIndices = [...warmupWeeks].sort((a, b) => a - b);
 
-  // 2026-08-06 (Tim) — warmed-vs-cold scoring split. A round is "warmed" if a warm-up session STARTED within
-  // the 4h before the round's own start. Honest: only reported when there are ≥2 rounds in BOTH cohorts.
-  const WARMUP_WINDOW_MS = 4 * 60 * 60 * 1000;
+  /**
+   * 2026-08-06 (Tim) — warmed-vs-cold scoring split. Only reported with >=2 rounds in BOTH cohorts.
+   *
+   * 2026-09-11 — this declared its OWN 4-hour window while warmupPerformance used 3, so the same
+   * round could land in opposite cohorts in the two cards the dashboard renders side by side. The
+   * rule now has one owner. [[two-owners-is-the-root-cause]]
+   */
   const warmupStarts = (input.warmups ?? []).map((w) => w.startedAt).filter((t): t is number => typeof t === 'number');
   const warmed: number[] = [];
   const cold: number[] = [];
@@ -87,7 +93,7 @@ export function computePracticeImpact(input: PracticeImpactInput): PracticeImpac
     if (typeof r.scoreVsPar !== 'number') continue;
     const rStart = typeof r.startedAt === 'number' ? r.startedAt : r.endedAt;
     if (typeof rStart !== 'number') continue;
-    const wasWarmed = warmupStarts.some((w) => w <= rStart && rStart - w <= WARMUP_WINDOW_MS);
+    const wasWarmed = wasRoundWarmed(rStart, warmupStarts);
     (wasWarmed ? warmed : cold).push(r.scoreVsPar);
   }
   const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;

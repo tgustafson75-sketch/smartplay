@@ -206,15 +206,38 @@ export default function Dashboard() {
   }, [clubManual, clubStats, clubCarry, registeredBag]);
   // 2026-06-14 (Tim — phase 3) — the honest practice→course connection: practice
   // volume per week vs score-vs-par per round. Association, never causation.
+  // Hoisted 2026-09-11 so warmupEvents below can read it; unconditional, hook order unchanged.
+  const workoutHistory = useWorkoutStore((s) => s.history);
+
+  /**
+   * 2026-09-11 — ONE LIST OF WARM-UPS, because this screen renders TWO warmed-vs-cold cards.
+   *
+   * They were built from different events entirely: the practice-impact card counted practice
+   * SESSIONS tagged pre-round, the warm-up card counted pre-round WORKOUTS. Add the 4h-vs-3h window
+   * split and the start-vs-completion anchor, and the same round could be "warmed" in one card and
+   * "cold" in the other, a few hundred pixels apart, both phrased to the player as "when you warm
+   * up". A golfer who stretches got counted by one and ignored by the other.
+   *
+   * A warm-up is a warm-up. Both cards now read the same events through the same rule.
+   * [[two-owners-is-the-root-cause]]
+   */
+  const warmupEvents = useMemo(() => ([
+    ...practiceHistory
+      .filter((s) => s.focus === 'preround' || s.environment === 'preround')
+      .map((s) => s.startedAt),
+    ...workoutHistory
+      .filter((w) => w.source === 'preround_warmup')
+      .map((w) => w.date),
+  ].filter((t): t is number => typeof t === 'number' && Number.isFinite(t))),
+  [practiceHistory, workoutHistory]);
+
   const practiceImpact = useMemo(
     () => computePracticeImpact({
       sessions: practiceHistory.map((s) => ({ startedAt: s.startedAt, balls: s.swingCount ?? s.swings.length })),
       rounds: realRounds.filter((r) => r.scoreVsPar != null).map((r) => ({ endedAt: r.endedAt, startedAt: r.startedAt, scoreVsPar: r.scoreVsPar as number })),
-      // 2026-08-06 (Tim) — warm-up / pre-round stretch sessions (recorded with focus/environment 'preround')
-      // → marked on the practice line as their own data point AND correlated to warmed-vs-cold scoring.
-      warmups: practiceHistory
-        .filter((s) => s.focus === 'preround' || s.environment === 'preround')
-        .map((s) => ({ startedAt: s.startedAt })),
+      // 2026-08-06 (Tim) — warm-up / pre-round stretch sessions → marked on the practice line as
+      // their own data point AND correlated to warmed-vs-cold scoring.
+      warmups: warmupEvents.map((t) => ({ startedAt: t })),
       nowMs: Date.now(),
     }),
     [practiceHistory, realRounds],
@@ -319,7 +342,6 @@ export default function Dashboard() {
   // 2026-07-07 (Tim — SmartPump third rail) — imported golf-workout volume per week
   // vs. score-vs-par per round. Third correlation rail alongside practice + points.
   // Honest: association, never causation; quiet until enough on both sides.
-  const workoutHistory = useWorkoutStore((s) => s.history);
   const workoutPerf = useMemo(
     () => computeWorkoutPerformance({
       workouts: (workoutHistory ?? []).map((w) => ({ date: w.date, durationMin: w.durationMin })),
@@ -506,10 +528,10 @@ export default function Dashboard() {
    */
   const warmupPerf = useMemo(
     () => computeWarmupPerformance({
-      warmups: workoutHistory.filter((w) => w.source === 'preround_warmup').map((w) => ({ completedAt: w.date })),
+      warmups: warmupEvents.map((t) => ({ completedAt: t })),
       rounds: roundHistory.map((r) => ({ startedAt: r.startedAt, scoreVsPar: r.scoreVsPar })),
     }),
-    [workoutHistory, roundHistory],
+    [warmupEvents, roundHistory],
   );
 
   /**
