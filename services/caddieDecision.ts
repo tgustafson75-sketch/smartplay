@@ -75,6 +75,16 @@ export interface CaddieDecision {
    * the target the round should actually be measured against.
    */
   conditionPlay: import('./roundConditions').ConditionPlay | null;
+  /**
+   * 2026-09-11 (Tim — "same way we are handling pre round stretch and warmup drills data") — DID HE
+   * WARM UP TODAY, AND WHAT HAS WARMING UP BEEN WORTH.
+   *
+   * Exactly the gap the post-round answers had: services/practice/warmupPerformance measures it,
+   * app/(tabs)/dashboard shows it, and the caddie — standing with him on the first tee having NOT
+   * warmed up — knew nothing about it. Measured, displayed, and absent from the one moment it could
+   * change anything.
+   */
+  warmup: { warmedToday: boolean; worthStrokes: number | null; line: string | null } | null;
 }
 
 
@@ -128,6 +138,7 @@ export function decideShot(known: CallerKnown = { rawYards: null }): CaddieDecis
     conditions: safe(() => composeConditions().all, null),
     todayMatches: safe(() => composeConditions().today, null),
     conditionPlay: safe(() => composeConditions().play, null),
+    warmup: safe(() => composeWarmup(), null),
   };
 }
 
@@ -179,6 +190,57 @@ function composeConditions(): {
     today: rc.describeConditions(today, 1),
     play: rc.playForToday(findings, { weather: weatherNow }),
   };
+}
+
+/**
+ * Whether he warmed up for THIS round, and what warming up has been worth across his rounds.
+ *
+ * Uses the existing owners rather than re-deriving either: wasRoundWarmed for today, and
+ * computeWarmupPerformance for the pattern, both of which already carry the honesty bars (three
+ * rounds each side, association never causation). Rebuilding them here would be the two-owners bug
+ * that had the dashboard's own two cards disagreeing this morning. [[two-owners-is-the-root-cause]]
+ */
+function composeWarmup(): { warmedToday: boolean; worthStrokes: number | null; line: string | null } | null {
+  const { useRoundStore } = require('../store/roundStore') as typeof import('../store/roundStore');
+  const wp = require('./practice/warmupPerformance') as typeof import('./practice/warmupPerformance');
+  const r = useRoundStore.getState();
+  if (!r.isRoundActive) return null;
+
+  // The same union of warm-up EVENTS the dashboard builds — a pre-round practice session or a
+  // pre-round workout. A warm-up is a warm-up.
+  const events = safe(() => {
+    const { usePracticeSessionStore } = require('../store/practiceSessionStore') as typeof import('../store/practiceSessionStore');
+    const { useWorkoutStore } = require('../store/workoutStore') as typeof import('../store/workoutStore');
+    const practice = (usePracticeSessionStore.getState().history ?? [])
+      .filter((x) => (x as { focus?: string; environment?: string }).focus === 'preround'
+        || (x as { environment?: string }).environment === 'preround')
+      .map((x) => (x as { startedAt?: number }).startedAt);
+    const workouts = (useWorkoutStore.getState().history ?? [])
+      .filter((w) => (w as { source?: string }).source === 'preround_warmup')
+      .map((w) => (w as { date?: number }).date);
+    return [...practice, ...workouts].filter((t): t is number => typeof t === 'number' && Number.isFinite(t));
+  }, [] as number[]);
+
+  const warmedToday = wp.wasRoundWarmed(r.roundStartTime ?? null, events);
+  const perf = safe(() => wp.computeWarmupPerformance({
+    warmups: events.map((t) => ({ completedAt: t })),
+    rounds: (r.roundHistory ?? []).map((x) => ({
+      startedAt: (x as { startedAt?: number }).startedAt as number,
+      scoreVsPar: (x as { scoreVsPar?: number | null }).scoreVsPar ?? null,
+    })),
+  }), null);
+
+  const worth = perf?.enough ? (perf.deltaStrokes ?? null) : null;
+  /**
+   * Only worth saying when he did NOT warm up and warming up has measurably helped him. Telling a
+   * man who warmed up that warming up is good is noise; telling one who did not that his own record
+   * says it costs him is the expectation-setting the cold line does. It is one sentence, at the
+   * start, and never again.
+   */
+  const line = (!warmedToday && typeof worth === 'number' && worth >= 1)
+    ? `He did not warm up today, and on his own record he averages ${Math.round(worth * 10) / 10} strokes better when he does. Say it ONCE, early, as a expectation rather than a scolding — the first few holes are where it shows, so a conservative club early is the play, not a lecture.`
+    : null;
+  return { warmedToday, worthStrokes: worth, line };
 }
 
 /** Shots IN HAND against the round's goal — never a deficit. Null when there is no goal. */

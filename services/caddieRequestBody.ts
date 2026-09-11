@@ -593,8 +593,17 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     roundConditions: safe(() => {
       const { decideShot } = require('./caddieDecision') as typeof import('./caddieDecision');
       const d = decideShot({ rawYards: workingYards });
-      if (!d.conditions && !d.todayMatches && !d.conditionPlay) return null;
-      return { pattern: d.conditions, today: d.todayMatches, play: d.conditionPlay };
+      if (!d.conditions && !d.todayMatches && !d.conditionPlay && !d.warmup?.line) return null;
+      return {
+        pattern: d.conditions, today: d.todayMatches, play: d.conditionPlay,
+        /**
+         * 2026-09-11 (Tim — "same way we are handling pre round stretch and warmup drills data") —
+         * the warm-up had the SAME gap the post-round answers had: measured by
+         * services/practice/warmupPerformance, shown on the dashboard, and absent from the one
+         * moment it could change anything — the first tee.
+         */
+        warmup: d.warmup?.line ?? null,
+      };
     }, null),
 
     shotRead: safe(() => {

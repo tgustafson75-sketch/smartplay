@@ -1264,8 +1264,9 @@ ${(() => {
       value?: string; costStrokes?: number; alreadyHandled?: string | null;
       mitigations?: string[]; mindset?: string;
     } | null;
+    warmup?: string | null;
   } | null;
-  if (!rc || (!rc.pattern && !rc.today && !rc.play)) return '';
+  if (!rc || (!rc.pattern && !rc.today && !rc.play && !rc.warmup)) return '';
   /**
    * 2026-09-11 (Tim) — WHAT HE TOLD US AFTER HIS OTHER ROUNDS.
    *
@@ -1303,6 +1304,12 @@ ${(() => {
       `Do NOT hand him all of that at once, and do not bring it up again unless he does. It is a frame for the round, not a lecture.`,
     );
   }
+  /**
+   * 2026-09-11 — the warm-up, handled the same way as the weather: measured across his rounds, and
+   * only spoken when it applies TODAY and he is on the wrong side of it. Telling a man who warmed up
+   * that warming up is good is noise.
+   */
+  if (rc.warmup) lines.push(rc.warmup);
   return `${lines.filter(Boolean).join('\n')}\n`;
 })()}${(() => {
   const sr = shotRead as {
