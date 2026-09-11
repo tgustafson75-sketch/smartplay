@@ -88,7 +88,7 @@ describe('EVERY voice surface consults it — one path covered is how this bug s
   // is why "bogey / how many putts / 2" still came back an eagle a month after the "fix".
   it('the on-screen mic checks BEFORE any classification', () => {
     const src = read('hooks/useVoiceCaddie.ts');
-    const intercept = src.indexOf('tryAnswerPendingPutts(transcript)');
+    const intercept = src.indexOf('tryAnswerOpenQuestion(transcript)');
     const bypasses = src.indexOf('const bypass = checkBypasses(transcript);');
     expect(intercept).toBeGreaterThan(-1);
     // Bypasses, the local precheck and the classifier will all read a bare number as a score.
@@ -97,7 +97,7 @@ describe('EVERY voice surface consults it — one path covered is how this bug s
 
   it('the caddie-tab mic checks before it reaches the brain — the path that never had one', () => {
     const src = read('hooks/useCaddieTabMic.ts');
-    const intercept = src.indexOf('tryAnswerPendingPutts(transcript)');
+    const intercept = src.indexOf('tryAnswerOpenQuestion(transcript)');
     const brain = src.indexOf('const turn = await askCaddie({');
     expect(intercept).toBeGreaterThan(-1);
     expect(intercept).toBeLessThan(brain);
@@ -105,7 +105,7 @@ describe('EVERY voice surface consults it — one path covered is how this bug s
 
   it('the earbud / global-mic path checks before ITS classification', () => {
     const src = read('services/listeningSession.ts');
-    const intercept = src.indexOf('tryAnswerPendingPutts(utterance)');
+    const intercept = src.indexOf('tryAnswerOpenQuestion(utterance)');
     const precheck = src.indexOf('let intent: VoiceIntent | null = precheckLocalIntent(utterance);');
     expect(intercept).toBeGreaterThan(-1);
     expect(intercept).toBeLessThan(precheck);
@@ -117,7 +117,7 @@ describe('EVERY voice surface consults it — one path covered is how this bug s
     // "is a putt question open", which is exactly how one path got fixed and the rest didn't.
     expect(src).not.toContain('const awaitingPutts = /putt/i.test(lastKevinText)');
     // Both the follow-up loop and the primary path route through the shared owner.
-    expect(src.split('tryAnswerPendingPutts(').length - 1).toBeGreaterThanOrEqual(2);
+    expect(src.split('tryAnswerOpenQuestion(').length - 1).toBeGreaterThanOrEqual(2);
   });
 
   it('both places the caddie ASKS mark the question open', () => {

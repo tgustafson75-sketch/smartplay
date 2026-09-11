@@ -46,7 +46,7 @@ import { resolvePendingCourseUtterance } from './pendingDisambiguation';
 import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 import type { AppContext, VoiceIntent } from '../types/voiceIntent';
 import { getApiBaseUrl, isConnectionWarmed, getConnectionEvidence } from './apiBase';
-import { tryAnswerPendingPutts } from './pendingPuttAsk';
+import { tryAnswerOpenQuestion } from './pendingPuttAsk';
 import { isFlagEnabled } from '../store/flagStore';
 
 // 2026-07-25 (Tim — "first ask errors every time") — cold-aware brain timeout, mirroring useVoiceCaddie.
@@ -1183,7 +1183,7 @@ async function openSession() {
      * tap path. Same shared state and strict parser as the on-screen mic.
      */
     {
-      const answered = tryAnswerPendingPutts(utterance);
+      const answered = tryAnswerOpenQuestion(utterance);
       if (answered) {
         if ((state as SessionState) === 'thinking') setSessionStateMirror('responding');
         if (settings.voiceEnabled) {

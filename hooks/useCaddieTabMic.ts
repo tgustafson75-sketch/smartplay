@@ -119,8 +119,8 @@ export function useCaddieTabMic({
      */
     {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { tryAnswerPendingPutts } = require('../services/pendingPuttAsk') as typeof import('../services/pendingPuttAsk');
-      const answered = tryAnswerPendingPutts(transcript);
+      const { tryAnswerOpenQuestion } = require('../services/pendingPuttAsk') as typeof import('../services/pendingPuttAsk');
+      const answered = tryAnswerOpenQuestion(transcript);
       if (answered) {
         onVoiceStateChange?.('speaking');
         const s0 = useSettingsStore.getState();

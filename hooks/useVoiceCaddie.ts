@@ -46,7 +46,7 @@ import type { ToolAction } from '../types/toolAction';
 import { useSmartVision } from '../contexts/SmartVisionContext';
 import { useKevinPresence } from '../contexts/KevinPresenceContext';
 import { useRoundStore, voicePuttsHole } from '../store/roundStore';
-import { tryAnswerPendingPutts } from '../services/pendingPuttAsk';
+import { tryAnswerOpenQuestion } from '../services/pendingPuttAsk';
 import { resolveYardage } from '../services/yardageResolver';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
@@ -1364,7 +1364,7 @@ export const useVoiceCaddie = ({
          * one path — this one — and missing every other. [[no-half-fixes-enforce-every-surface]]
          */
         {
-          const answered = tryAnswerPendingPutts(trimmed);
+          const answered = tryAnswerOpenQuestion(trimmed);
           if (answered) {
             recordUserTurn(trimmed);
             onResponseReceived(answered.line);
@@ -2297,7 +2297,7 @@ export const useVoiceCaddie = ({
        * can always correct the caddie. [[no-half-fixes-enforce-every-surface]]
        */
       {
-        const answered = tryAnswerPendingPutts(transcript);
+        const answered = tryAnswerOpenQuestion(transcript);
         if (answered) {
           recordUserTurn(transcript);
           onResponseReceived(answered.line);

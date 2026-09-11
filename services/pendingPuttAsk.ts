@@ -75,9 +75,20 @@ export function parsePuttAnswer(transcript: string): number | null {
     return typeof n === 'number' && n >= 0 && n <= 10 ? n : null;
   }
 
-  // A BARE answer — the common case, and the one that was being read as a score.
-  // Fillers often carry a comma the transcriber inserted ("uh, two"), so allow one after the word.
-  const bare = t.replace(/^(?:uh|um|ah|well|it was|i had|i hit|just|only)[,\s]+/, '').trim();
+  /**
+   * A BARE answer — the common case, and the one that was being read as a score.
+   *
+   * 2026-09-11 — the lead-in list was too short. "had two" fell through to the score parser, and the
+   * precheck routes it straight to log_score: a 2 on a par 4, the eagle again, on a phrase a player
+   * uses constantly. Answering a question the caddie just asked gets a verb far more often than a
+   * bare digit. This only runs while a putt question is OPEN, and only 0-6 survives below, so
+   * widening the lead-in cannot claim anything that is not an answer to what was just asked.
+   */
+  const bare = t
+    .replace(/^(?:uh|um|ah|well|okay|ok|yeah|yep)[,\s]+/, '')
+    .replace(/^(?:i\s+)?(?:had|hit|took|got|made|needed)[,\s]+/, '')
+    .replace(/^(?:it\s+was|that\s+was|just|only|about|like|maybe)[,\s]+/, '')
+    .trim();
   if (/^\d{1,2}$/.test(bare)) {
     const n = parseInt(bare, 10);
     return n >= 0 && n <= 10 ? n : null;
@@ -135,4 +146,25 @@ export function noteCaddieAskedForPutts(reply: string | null | undefined, hole: 
   if (!text.includes('?')) return;
   if (!PUTT_QUESTION.test(text)) return;
   markAwaitingPutts(hole);
+}
+
+/**
+ * 2026-09-11 — ONE INTERCEPT FOR EVERY OPEN QUESTION, so a surface cannot be wired for one and not
+ * the other.
+ *
+ * The putt question got its own shared intercept; the par question (asked when the player NAMES a
+ * score on a hole whose par we do not have) would otherwise have needed the same four call sites
+ * wired again by hand — which is the mistake that left the caddie-tab mic without a putt intercept
+ * for a month. Both open questions are answered here, par first: a par answer logs the score the
+ * player already named and opens the putt question on that same hole, so the exchange continues
+ * naturally instead of dead-ending.
+ */
+export function tryAnswerOpenQuestion(transcript: string): { line: string } | null {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { tryAnswerPendingPar } = require('./pendingParAsk') as typeof import('./pendingParAsk');
+  const par = tryAnswerPendingPar(transcript);
+  if (par) return { line: par.line };
+  const putts = tryAnswerPendingPutts(transcript);
+  if (putts) return { line: putts.line };
+  return null;
 }

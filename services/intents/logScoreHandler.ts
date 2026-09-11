@@ -4,7 +4,7 @@ import { useRoundStore } from '../../store/roundStore';
 import { track } from '../analytics';
 // 2026-08-10 — score-utterance parsing lives in a PURE module so it is reachable from the logic
 // test suite (this file imports roundStore → bundled image assets, which jest can't load).
-import { resolveStrokes, parsePutts } from './scoreParse';
+import { resolveStrokes, parsePutts, mentionsScoreName, scoreLabel } from './scoreParse';
 
 /**
  * 2026-05-19 — Score-by-voice intent. The shot-by-shot logShotHandler
@@ -26,20 +26,6 @@ function parseHole(raw: unknown, fallback: number): number {
     if (m) return parseInt(m[1], 10);
   }
   return fallback;
-}
-
-function scoreLabel(strokes: number, par: number | null | undefined): string {
-  if (par == null) return `${strokes}`;
-  const diff = strokes - par;
-  if (diff === 0) return 'par';
-  if (diff === 1) return 'bogey';
-  if (diff === 2) return 'double bogey';
-  if (diff === 3) return 'triple bogey';
-  if (diff === -1) return 'birdie';
-  if (diff === -2) return 'eagle';
-  if (diff === -3) return 'albatross';
-  if (diff > 3) return `${diff} over`;
-  return `${Math.abs(diff)} under`;
 }
 
 export const logScoreHandler: IntentHandler = {
@@ -96,6 +82,29 @@ export const logScoreHandler: IntentHandler = {
     // number hunting. "I got a par with two putts" is a par, not an eagle.
     const strokes = resolveStrokes(params.strokes, intent.raw_text, par);
     if (strokes == null) {
+      /**
+       * 2026-09-11 — "I GOT A BOGEY" WITH NO PAR IS HOW THE EAGLE HAPPENS.
+       *
+       * parseScoreName returns null the moment par is unknown, so a NAMED score fell into this
+       * generic clarifier and logged nothing. The clarifier then asked "How many strokes?" — which
+       * to a player who has just been asked about putts on every other hole sounds exactly like the
+       * putt question. He answers "2", there is no open putt question because nothing was logged,
+       * and 2 goes in as the STROKE COUNT. On a par 4 that is the eagle, and it is the caddie's own
+       * question that set the trap.
+       *
+       * He told us what he made. Asking him to say it again as a number is the canned thing; the
+       * fact we are missing is PAR. So ask for the one we are missing, and never invite a bare
+       * number that a stroke parser will happily read as an albatross.
+       */
+      if (mentionsScoreName(intent.raw_text)) {
+        (require('../pendingParAsk') as typeof import('../pendingParAsk')).markAwaitingPar(hole, intent.raw_text);
+        return {
+          success: false,
+          voice_response: `I don't have the par for ${hole === round.currentHole ? 'this hole' : `hole ${hole}`} — what is it?`,
+          side_effects: [`logScore:named_score_no_par:hole_${hole}`],
+          follow_up_needed: true,
+        };
+      }
       // Genuine ambiguity — classifier saw a log_score but couldn't
       // pin a number or score name. ONE brief clarifier; the user's
       // next utterance will be parsed fresh. (Tim's Fix P spec: clear

@@ -167,3 +167,22 @@ export function resolveStrokes(
     parseScoreName(rawText, par)
   );
 }
+
+/**
+ * 2026-09-11 — the score in words. Lived privately inside logScoreHandler; pendingParAsk needs the
+ * same words for the same number, and two copies of "what is 5 on a par 4 called" is exactly the
+ * kind of split that produced the eagle in the first place.
+ */
+export function scoreLabel(strokes: number, par: number | null | undefined): string {
+  if (par == null) return `${strokes}`;
+  const diff = strokes - par;
+  if (diff === 0) return 'par';
+  if (diff === 1) return 'bogey';
+  if (diff === 2) return 'double bogey';
+  if (diff === 3) return 'triple bogey';
+  if (diff === -1) return 'birdie';
+  if (diff === -2) return 'eagle';
+  if (diff === -3) return 'albatross';
+  if (diff > 3) return `${diff} over`;
+  return `${Math.abs(diff)} under`;
+}

@@ -10246,9 +10246,12 @@ check('Logic universal: voice yardage + putts + swing-caddie match every other p
       // 2026-09-11 — the intercept moved into pendingPuttAsk.tryAnswerPendingPutts, ONE owner, after
       // the caddie-tab mic was found never to have received a hand-copied one. Assert every
       // transcript path calls the owner rather than that each carries its own isAwaitingPutts().
-      /tryAnswerPendingPutts\(/.test(vc) &&
-      /tryAnswerPendingPutts\(/.test(read('services/listeningSession.ts')) &&
-      /tryAnswerPendingPutts\(/.test(read('hooks/useCaddieTabMic.ts')) &&
+      // 2026-09-11 — one call answers EVERY open question (putts, and the par question asked when a
+      // named score lands on a hole with no par), so a surface cannot be wired for one and not the
+      // other. That split is what left the caddie-tab mic without a putt intercept for a month.
+      /tryAnswerOpenQuestion\(/.test(vc) &&
+      /tryAnswerOpenQuestion\(/.test(read('services/listeningSession.ts')) &&
+      /tryAnswerOpenQuestion\(/.test(read('hooks/useCaddieTabMic.ts')) &&
       // 2026-09-01 — the 'cage' pillar is now 'practice'. It covers ALL swing work, not a venue.
       /getActiveCaddieForPillar\('practice'\)/.test(sm) &&                      // #3 narration = active caddie
       /caddie_name: analysisCaddie/.test(sm) && !/caddie_name: caddiePersonality/.test(sm)

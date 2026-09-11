@@ -13,8 +13,9 @@
  */
 import {
   markAwaitingPutts, isAwaitingPutts, clearAwaitingPutts,
-  tryAnswerPendingPutts, noteCaddieAskedForPutts, parsePuttAnswer,
+  tryAnswerPendingPutts, tryAnswerOpenQuestion, noteCaddieAskedForPutts, parsePuttAnswer,
 } from '../../services/pendingPuttAsk';
+import { markAwaitingPar, clearAwaitingPar, parseParAnswer, tryAnswerPendingPar } from '../../services/pendingParAsk';
 import { useRoundStore } from '../../store/roundStore';
 import fs from 'fs';
 import path from 'path';
@@ -48,11 +49,26 @@ describe('the exact exchange Tim keeps reporting', () => {
     expect(useRoundStore.getState().putts[4]).toBe(2);
   });
 
-  it.each(['2', 'two', 'to', 'too', 'Two.', 'two putts', 'I had 2 putts'])(
-    'claims "%s" as an answer, not a score', (said) => {
-      markAwaitingPutts(4);
-      expect(tryAnswerPendingPutts(said)?.putts).toBe(2);
-    });
+  it.each([
+    '2', 'two', 'to', 'too', 'Two.', 'two putts', 'I had 2 putts',
+    // 2026-09-11 — the phrasings a player actually uses when answering a question the caddie just
+    // asked. "had two" fell through to the score parser, and the precheck routes it to log_score:
+    // a 2 on a par 4, the eagle again.
+    'had two', 'I had two', 'took two', 'just two', 'only two', 'about two', 'like two',
+    'uh two', 'it was two', 'that was two', 'I two putted', 'I had a two putt',
+  ])('claims "%s" as an answer, not a score', (said) => {
+    markAwaitingPutts(4);
+    expect(tryAnswerPendingPutts(said)?.putts).toBe(2);
+  });
+
+  it('the brain wording Tim actually gets opens the question, and the answer lands', () => {
+    useRoundStore.getState().logScore(6, 5);
+    noteCaddieAskedForPutts('Okay, a bogey on hole six. How many putts did you have?', 6);
+    expect(isAwaitingPutts()).toBe(true);
+    expect(tryAnswerOpenQuestion('I had two putts')).toEqual({ line: 'Got it — 2 putts.' });
+    expect(useRoundStore.getState().scores[6]).toBe(5);
+    expect(useRoundStore.getState().putts[6]).toBe(2);
+  });
 });
 
 describe('it does not become over-sensitive the other way', () => {
@@ -114,8 +130,10 @@ describe('every transcript path uses the one intercept', () => {
     'services/listeningSession.ts',
   ];
 
-  it.each(PATHS)('%s calls tryAnswerPendingPutts', (rel) => {
-    expect(code(read(rel))).toContain('tryAnswerPendingPutts');
+  // Every path answers EVERY open question through one call, so a surface cannot be wired for putts
+  // and not for par — which is the mistake that left the caddie-tab mic uncovered for a month.
+  it.each(PATHS)('%s calls tryAnswerOpenQuestion', (rel) => {
+    expect(code(read(rel))).toContain('tryAnswerOpenQuestion');
   });
 
   it('no path re-implements the parse/log itself', () => {
@@ -130,5 +148,40 @@ describe('every transcript path uses the one intercept', () => {
     const callers = ['services/caddieBrain.ts', 'hooks/useVoiceCaddie.ts', 'hooks/useCaddieTabMic.ts', 'services/listeningSession.ts']
       .filter((f) => code(read(f)).includes('noteCaddieAskedForPutts('));
     expect(callers).toEqual(['services/caddieBrain.ts']);
+  });
+});
+
+describe('a NAMED score with no par asks for par, never for a bare number', () => {
+  beforeEach(() => clearAwaitingPar());
+
+  it('logs the score the player already named once par arrives, then asks putts', () => {
+    markAwaitingPar(4, 'I got a bogey');
+    const res = tryAnswerPendingPar('four');
+    expect(res).not.toBeNull();
+    expect(res!.strokes).toBe(5);            // bogey on a par 4
+    expect(useRoundStore.getState().scores[4]).toBe(5);
+    expect(res!.line).toContain('bogey');
+    // ...and the putt question is now open on that same hole, so the exchange continues.
+    expect(isAwaitingPutts()).toBe(true);
+  });
+
+  it.each(['3', '4', '5', 'four', 'par four', "it's a 4", 'a 5', 'par 3'])('reads "%s" as par', (said) => {
+    expect(parseParAnswer(said)).toBeGreaterThan(2);
+  });
+
+  it.each(['two', '7', 'I do not know', 'driver', '12'])('refuses "%s" as par', (said) => {
+    expect(parseParAnswer(said)).toBeNull();
+  });
+
+  it('the handler asks for PAR, not for strokes, when a score name was said', () => {
+    const src = read('services/intents/logScoreHandler.ts');
+    expect(src).toContain('mentionsScoreName(intent.raw_text)');
+    expect(src).toContain('markAwaitingPar(hole');
+  });
+
+  it('scoreLabel exists once, shared by both owners', () => {
+    const copies = ['services/intents/scoreParse.ts', 'services/intents/logScoreHandler.ts', 'services/pendingParAsk.ts']
+      .filter((f) => /function scoreLabel\(/.test(code(read(f))));
+    expect(copies).toEqual(['services/intents/scoreParse.ts']);
   });
 });
