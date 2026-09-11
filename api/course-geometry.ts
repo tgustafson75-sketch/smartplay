@@ -1221,7 +1221,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
        * upstream's status. Re-entering the handler with osmOnly set reuses that path exactly as the
        * client's own osmOnly callers get it — no second copy of the algorithm to drift.
        * Terminating by construction: the re-entered call has osmOnly='1' and returns from that
-       * branch long before it reaches this fetch. [[caddie-failsafe-no-walls]]
+       * branch long before it reaches this fetch.
+       *
+       * THE BUDGET FITS WHAT NOW RUNS INSIDE IT, worst case:
+       *   upstream TIMEOUT_MS (10s) + OVERPASS_TOTAL_BUDGET_MS (70s) = 80s
+       *   < client abort 85s (courseGeometryService) < Vercel maxDuration 90s (vercel.json).
+       * Re-entry re-arms `overpassDeadlineMs`, which is why the two are ADDED rather than shared.
+       * Five seconds of headroom to the client is thin: raise any of the three and re-do this sum,
+       * or the fallback becomes a request the phone has already given up on. The measured healthy
+       * case is 3.2s. [[a-budget-must-fit-what-runs-inside-it]] [[caddie-failsafe-no-walls]]
        */
       if (centroid && !osmOnly) {
         console.warn(`[course-geometry] upstream ${upstream.status} for ${courseId} — falling back to OSM synthesis at the supplied centroid`);
