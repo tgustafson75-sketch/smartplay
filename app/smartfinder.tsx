@@ -633,6 +633,20 @@ function CameraSmartFinder({
         // hole's real player's-eye imagery (course-data self-build).
         void ingestCapture({ sourceUri: photo.uri, kind: 'single', hole: currentHole, heading: headingRef.current })
           .then((ok) => { if (ok) useToastStore.getState().show("Added to this hole's library"); });
+        /**
+         * 2026-09-11 (store sweep) — THE RECAP'S PHOTO COLLAGE COULD NEVER HAVE A PHOTO IN IT.
+         *
+         * The whole chain was built and only this hop was missing: roundStore.addRoundPhoto is the
+         * ONLY writer of currentRoundPhotos, endRound copies it onto the round record as
+         * round_photos, and app/recap/[round_id] renders <PhotoCollage photos={roundPhotos} />.
+         * Nothing anywhere called addRoundPhoto, so the collage rendered an empty array for every
+         * round anyone has ever played.
+         *
+         * This is the one place in the app that takes a photo on a golf course, so this is where the
+         * hop belongs. addRoundPhoto no-ops when no round is active, so an off-round range photo does
+         * not collect. [[orphans-are-live-bugs-not-dead-code]] [[sweep-the-missing-half-not-the-unused-export]]
+         */
+        useRoundStore.getState().addRoundPhoto(photo.uri);
         const Sharing = await import('expo-sharing');
         const can = await Sharing.isAvailableAsync().catch(() => false);
         if (can) {
