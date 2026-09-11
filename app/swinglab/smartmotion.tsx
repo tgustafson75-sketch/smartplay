@@ -649,7 +649,6 @@ export default function SmartMotion() {
    
   const analysisCaddie = React.useMemo(() => {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       return (require('../../services/caddieResolver') as typeof import('../../services/caddieResolver')).getActiveCaddieForPillar('practice');
     } catch { return caddiePersonality; }
   }, [caddiePersonality]);
@@ -1273,7 +1272,6 @@ export default function SmartMotion() {
   const SwingVisionCamera = useMemo(() => {
     if (!useVisionCamera) return null;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       return require('../../components/capture/SwingVisionCamera').SwingVisionCamera as typeof import('../../components/capture/SwingVisionCamera').SwingVisionCamera;
     } catch {
       // Toggle flipped on a build that didn't link vision-camera → fall back to
@@ -1679,7 +1677,6 @@ export default function SmartMotion() {
     // signals also feed the CNS rolling tendencies, so the brain can cite YOUR real
     // tempo average / start-line % / contact pattern (was: computed but never learned).
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const mem = require('../../store/caddieMemoryStore') as typeof import('../../store/caddieMemoryStore');
       const cr = analysis?.contact_read;
       mem.useCaddieMemoryStore.getState().recordSwingMetrics({
@@ -2026,7 +2023,6 @@ export default function SmartMotion() {
          */
         if (!pts) {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             (require('../../store/issueLogStore') as typeof import('../../store/issueLogStore'))
               .useIssueLogStore.getState().addAppEvent(
                 r ? 'clubpath_arc_too_sparse' : 'clubpath_superseded',
@@ -2375,7 +2371,6 @@ export default function SmartMotion() {
       // read below can carry them — identical to reading them just before the request).
       const cnsTend = (() => {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const mem = require('../../store/caddieMemoryStore') as typeof import('../../store/caddieMemoryStore');
           return mem.useCaddieMemoryStore.getState().getPlayer().tendencies;
         } catch { return { dominantMiss: null as string | null, recentFaults: [] as string[] }; }
@@ -2723,7 +2718,6 @@ export default function SmartMotion() {
           // not the conservative `detected_issue` (biased to 'none'). Computed ONCE.
           let rolled: PrimaryIssue | null = null;
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const { classifySession } = require('../../services/swingIssueClassifier') as typeof import('../../services/swingIssueClassifier');
             const resolvedCns = Object.entries(analysisCacheRef.current)
               .filter(([, an]) => !!an)
@@ -2741,7 +2735,6 @@ export default function SmartMotion() {
                 : a.primary_fault && a.primary_fault !== 'no_dominant_fault' && a.primary_fault !== 'inconclusive'
                   ? a.primary_fault
                   : null;
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const mem = require('../../store/caddieMemoryStore') as typeof import('../../store/caddieMemoryStore');
             mem.useCaddieMemoryStore.getState().recordSwingFault({ fault: learnedFault, nowMs: Date.now() });
             /**
@@ -2760,7 +2753,6 @@ export default function SmartMotion() {
              * [[feels-like-a-real-caddie]] [[illustration-data-points]]
              */
             if (!learnedFault && a.contact_read === 'clean') {
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
               const rel = require('../../store/relationshipStore') as typeof import('../../store/relationshipStore');
               rel.useRelationshipStore.getState().addHeroMoment({
                 clipUri: clipUri ?? null,
@@ -2832,7 +2824,6 @@ export default function SmartMotion() {
                 // 2026-07-09 — recompute this club's confidence (clean-strike rate) from the
                 // now-updated cage history, so the cage setup badge has a real value.
                 try {
-                  // eslint-disable-next-line @typescript-eslint/no-require-imports
                   (require('../../services/clubConfidence') as typeof import('../../services/clubConfidence'))
                     .updateClubConfidenceFromCage(sess?.club);
                 } catch { /* non-fatal */ }
@@ -3185,7 +3176,6 @@ export default function SmartMotion() {
          */
         if (t.ratio == null) {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const ws = require('../../store/watchStore') as typeof import('../../store/watchStore');
             const swings = ws.useWatchStore.getState().sessionSwings ?? [];
             const last = swings.length > 0 ? swings[swings.length - 1] : null;
@@ -3643,7 +3633,6 @@ export default function SmartMotion() {
         try {
           const sessionId = ingestedSessionIdRef.current;
           if (sessionId) {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const { classifySession } = require('../../services/swingIssueClassifier') as typeof import('../../services/swingIssueClassifier');
             const resolved = Object.entries(analysisCacheRef.current)
               .filter(([, an]) => !!an)
@@ -3750,14 +3739,12 @@ export default function SmartMotion() {
     // audio-session flip mid-recordAsync risked killing the capture's audio on iOS.
     // Silence the caddie the moment ANY entry path starts a recording.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       await (require('../../services/voiceService') as typeof import('../../services/voiceService')).stopSpeaking();
     } catch { /* best-effort — never block the capture */ }
     // 2026-06-12 (analysis speed) — warm the fault-read Lambda the MOMENT recording starts.
     // The open record window (up to 60s) is free warm time, so the first swing's read lands
     // on a HOT Lambda instead of eating a cold start → no more cold-first-swing NO READ.
     // The mount warmup often loses the race (user records within a few seconds of opening).
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     try { require('../../services/swingAnalysisWarmup').prewarmSwingAnalysis({ force: true }); } catch { /* non-fatal */ }
     setBallSpeed(null);
     setBallDeparture(null);
@@ -4939,7 +4926,6 @@ export default function SmartMotion() {
     // recording's analysis hits a hot Lambda (no cold-start latency that could
     // push it toward the client timeout). Mirrors the upload/cage screens.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('../../services/swingAnalysisWarmup').prewarmSwingAnalysis({ force: true });
     } catch { /* non-fatal */ }
     // Voice layer: tell Kevin we're open so he can greet + ask what to work on.

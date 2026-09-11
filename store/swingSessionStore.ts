@@ -765,13 +765,11 @@ function uid(kind: string): string {
 
 export function derivePlayerId(): string {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const fam = require('./familyStore') as typeof import('./familyStore');
     const id = fam.useFamilyStore.getState().active_member_id;
     if (id) return id;
   } catch { /* no-op — familyStore unavailable */ }
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const profile = require('./playerProfileStore') as typeof import('./playerProfileStore');
     const email = profile.usePlayerProfileStore.getState().email;
     if (email && email.trim().length > 0) return email.trim().toLowerCase();
@@ -811,7 +809,6 @@ export function resolvePlayerName(playerId: string | null | undefined, selfLabel
   if (playerId === OTHER_PLAYER_ID) return 'Other';
   if (playerId) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fam = require('./familyStore') as typeof import('./familyStore');
       const member = fam.useFamilyStore.getState().getMember(playerId);
       if (member) return member.firstName;
@@ -833,7 +830,6 @@ export function resolveSwingerToPlayerId(swinger: string | null | undefined): st
   const name = (swinger ?? '').trim();
   if (!name || name.toLowerCase() === 'me') return derivePlayerId();
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const fam = require('./familyStore') as typeof import('./familyStore');
     const members = fam.useFamilyStore.getState().members ?? [];
     const hit = members.find((m: { firstName?: string; id: string; archived?: boolean }) =>
@@ -842,7 +838,6 @@ export function resolveSwingerToPlayerId(swinger: string | null | undefined): st
   } catch { /* familyStore unavailable */ }
   // Match the account holder's own name → self, else it's a named guest.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const profile = require('./playerProfileStore') as typeof import('./playerProfileStore');
     const self = (profile.usePlayerProfileStore.getState().name ?? '').trim();
     if (self && self.toLowerCase() === name.toLowerCase()) return derivePlayerId();
@@ -869,7 +864,6 @@ export function playerMatchesFilter(session: SwingSession, filterName: string): 
 // require avoids a roundStore↔cageStore import cycle. All-null off-course.
 function roundContextStamp(): { roundId: string | null; roundCourseId: string | null; roundHole: number | null } {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { useRoundStore } = require('./roundStore') as typeof import('./roundStore');
     const r = useRoundStore.getState();
     if (r.isRoundActive) {
@@ -931,7 +925,6 @@ export const useSwingSessionStore = create<SwingSessionState>()(
         // The other half of "the friend actually played" — a range session counts as much as a
         // round. Fire-and-forget and self-limiting; see startRound in roundStore for the reasoning.
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           void (require('../services/billing/referral') as typeof import('../services/billing/referral'))
             .reportReferralQualifyingActivity();
         } catch { /* a growth feature never blocks a swing */ }
@@ -1005,7 +998,6 @@ export const useSwingSessionStore = create<SwingSessionState>()(
           if (s.activeSession.shots.length >= SHOT_HARD_CAP) {
             console.log('[cageStore] addShot blocked — cage session hit 100-shot cap');
             try {
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
               const { useToastStore } = require('./toastStore');
               useToastStore.getState().show(
                 'Cage session hit 100-shot cap — end session and start a new one to keep practicing.',
@@ -1015,7 +1007,6 @@ export const useSwingSessionStore = create<SwingSessionState>()(
           }
           if (s.activeSession.shots.length + 1 === SHOT_WARN_THRESHOLD) {
             try {
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
               const { useToastStore } = require('./toastStore');
               useToastStore.getState().show(
                 'Heads up — 50 shots logged in this session. Hard cap is 100.',
@@ -1914,7 +1905,6 @@ export const useSwingSessionStore = create<SwingSessionState>()(
         // the row back past Android's ~2MB limit → SQLITE_FULL → unreadable store → dashboard crash / lost
         // sessions. Compact BOTH the session-level and every shot's frames in the same pass.
         sessionHistory: s.sessionHistory.map((sess) => {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const { compactPoseFramesForPersist } = require('../services/poseAnalysisApi') as typeof import('../services/poseAnalysisApi');
           const compactBio = (bio: typeof sess.biomechanics) =>
             (bio && Array.isArray(bio.frames) && bio.frames.length > 0)

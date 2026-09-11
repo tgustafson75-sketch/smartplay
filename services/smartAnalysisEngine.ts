@@ -283,7 +283,6 @@ export async function analyze(request: AnalysisRequest): Promise<AnalysisEnvelop
     // one place that catches EVERY structured analyzer (putting/lie/green_read/
     // shot_strategy/swing_compare/pose_estimate/lie_enriched). Best-effort.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('../store/issueLogStore').useIssueLogStore.getState()
         .addAppEvent(`analysis:${request.kind}`, { error: msg }, 'analysis_error');
     } catch { /* best-effort — never let logging break the analyzer */ }

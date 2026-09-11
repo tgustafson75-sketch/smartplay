@@ -215,7 +215,6 @@ export const useFamilyStore = create<FamilyState>()(
         // HOLDER ("Me") — so deleting a kid silently merged their swings into the parent's own
         // library. Reassigning to '__other__' keeps them labeled "Other".
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const cage = require('./swingSessionStore') as typeof import('./swingSessionStore');
           for (const sess of cage.useSwingSessionStore.getState().sessionHistory) {
             if (sess.player_id === id) cage.useSwingSessionStore.getState().setSessionPlayer(sess.id, cage.OTHER_PLAYER_ID);

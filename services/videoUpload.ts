@@ -299,7 +299,6 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
   // result lands via puttingAnalysisService.analyzePutt and is rendered
   // by the cage-review "Putting" tab (next sprint).
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getAnalyzerKind } = require('./swingLibrary') as typeof import('./swingLibrary');
     if (getAnalyzerKind(session) === 'putting') {
       uploadLog('phase-k-skip-putting', { session_id: sessionId, source_device: session.upload?.source_device ?? null, tag: session.upload?.tag ?? null }, sessionId);
@@ -340,7 +339,6 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
           // 2026-06-21 — pass hole_number so the brain can anchor the read
           // to the correct hole context. distance_feet has no source in the
           // session; analyzePutt estimates it server-side when omitted.
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const roundState = (require('../store/roundStore') as typeof import('../store/roundStore')).useRoundStore.getState();
           const holeNumber = roundState.isRoundActive ? (roundState.currentHole ?? null) : null;
           const result = await putting.analyzePutt({
@@ -647,7 +645,6 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       const haveTranscriptAlready = session.shots.some(
         s => (s.commentary_transcript ?? '').trim().length > 0,
       );
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { getTranscriptionStatus } = require('./swingCommentaryService') as typeof import('./swingCommentaryService');
       const everyShotTranscriptionDone = session.shots.every(
         s => getTranscriptionStatus(s.id) === 'done',
@@ -999,7 +996,6 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
       // connectivity; error → server). Pairs with the frame_extraction_empty
       // detail logged inside extractKeyFrames.
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         require('../store/issueLogStore').useIssueLogStore.getState().addAppEvent('analysis_failed', {
           source: session.source ?? 'upload',
           failure_kinds: failureKinds,
@@ -1385,7 +1381,6 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
     // 2026-07-09 — recompute this club's confidence (clean-strike rate) from the now-updated
     // cage history, so the cage setup "X% confidence" badge has a real value.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       (require('./clubConfidence') as typeof import('./clubConfidence')).updateClubConfidenceFromCage(session.club);
     } catch { /* non-fatal */ }
 
@@ -1484,7 +1479,6 @@ export async function ingestVideoFromPick(args: {
     inferredPerspective = args.perspective;
   } else {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fam = require('../store/familyStore') as typeof import('../store/familyStore');
       const activeId = fam.useFamilyStore.getState().active_member_id;
       if (activeId) inferredPerspective = 'watching_someone';

@@ -130,7 +130,6 @@ type AnyAction = {
 
 function toast(msg: string): void {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('../../store/toastStore') as typeof import('../../store/toastStore')).useToastStore.getState().show(msg);
   } catch { /* toast is best-effort */ }
 }
@@ -138,11 +137,8 @@ function toast(msg: string): void {
 /** Paywall-gated navigation, mirroring the tab dispatcher's open_* cases. */
 function gatedOpen(feature: 'smartvision' | 'smartfinder', path: string): void {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { canAccess } = require('../featureAccess') as typeof import('../featureAccess');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { triggerPaywall } = require('../paywallGuard') as typeof import('../paywallGuard');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const profile = (require('../../store/playerProfileStore') as typeof import('../../store/playerProfileStore')).usePlayerProfileStore.getState();
     if (!canAccess(feature, profile.subscription_status)) {
       void triggerPaywall(feature, () => router.push('/paywall' as never));
@@ -160,7 +156,6 @@ function dispatchOne(a: AnyAction): void {
         // custom-caddie flag exactly like the tab cycler does.
         useSettingsStore.getState().setCaddiePersonality(a.personality as Persona);
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           (require('../../store/playerProfileStore') as typeof import('../../store/playerProfileStore'))
             .usePlayerProfileStore.getState().setUseCustomCaddie(a.personality === 'custom');
         } catch { /* sync is best-effort */ }
@@ -205,7 +200,6 @@ function dispatchOne(a: AnyAction): void {
     case 'set_hole_note': {
       const note = typeof a.note === 'string' ? a.note.trim() : '';
       if (!note) break;
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const r = (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState();
       // No hole stated = the hole he is on. Asking "which hole?" is what made this feel robotic.
       const hole = typeof a.hole === 'number' && a.hole >= 1 && a.hole <= 18 ? a.hole : r.currentHole;
@@ -215,19 +209,16 @@ function dispatchOne(a: AnyAction): void {
     case 'state_yardage': {
       const y = typeof a.yards === 'number' ? Math.round(a.yards) : NaN;
       // He paced or measured it. It beats our GPS estimate, which is why the store marks the source.
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       if (Number.isFinite(y) && y > 0 && y < 900) (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState().setUserStatedYardage(y, 'user');
       break;
     }
     case 'club_change': {
       const club = typeof a.club === 'string' ? a.club.trim() : '';
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       if (club) (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState().setClub(club);
       break;
     }
     case 'declare_hole': {
       const h = typeof a.hole === 'number' ? Math.round(a.hole) : NaN;
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       if (Number.isFinite(h) && h >= 1 && h <= 18) (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState().setCurrentHole(h);
       break;
     }
@@ -237,7 +228,6 @@ function dispatchOne(a: AnyAction): void {
        * became a brain tool. Saying "let's work on tempo today" hands-free set a focus; saying it to
        * the caddie in conversation did nothing, which is how most people talk to it.
        */
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const sf = require('../../store/sessionFocusStore') as typeof import('../../store/sessionFocusStore');
       if (a.clear) sf.useSessionFocusStore.getState().clearFocus();
       else if (typeof a.goal === 'string' && a.goal.trim()) {
@@ -253,7 +243,6 @@ function dispatchOne(a: AnyAction): void {
        * Recorded as the operating truth for the session, NOT as something to coach. The store keeps
        * the arc so an overcorrection later reads as an overcorrection rather than a fresh fault.
        */
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const pc = require('../../store/playingConditionStore') as typeof import('../../store/playingConditionStore');
       if (a.clear) pc.usePlayingConditionStore.getState().clearCondition();
       else if (typeof a.stated === 'string' && a.stated.trim()) {
@@ -277,7 +266,6 @@ function dispatchOne(a: AnyAction): void {
        * The command is emitted after the push because the screen has to mount and subscribe first;
        * an emit into an empty listener set is simply lost, and the player would have to ask twice.
        */
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const bus = require('../smartFinderCommandBus') as typeof import('../smartFinderCommandBus');
       const level = a.level === 'out' ? 'zoomOut' : a.level === 'reset' ? 'zoomReset' : 'zoomIn';
       if (bus.isSmartFinderActive()) {
@@ -289,14 +277,12 @@ function dispatchOne(a: AnyAction): void {
       break;
     }
     case 'record_swing': {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const bus = require('../smartMotionRecordBus') as typeof import('../smartMotionRecordBus');
       if (bus.isSmartMotionActive()) bus.emitSmartMotionCommand('start');
       else router.push('/swinglab/smartmotion?autoRecord=1' as never);
       break;
     }
     case 'configure_drill': {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const bus = require('../smartMotionRecordBus') as typeof import('../smartMotionRecordBus');
       // 2026-07-06 (nav audit) — if SmartMotion is CLOSED there are no bus listeners,
       // so the drill config was silently dropped. Open SmartMotion carrying the shot
@@ -314,13 +300,11 @@ function dispatchOne(a: AnyAction): void {
       break;
     }
     case 'close_swinglab': {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const bus = require('../smartMotionRecordBus') as typeof import('../smartMotionRecordBus');
       bus.emitSmartMotionCommand('close');
       break;
     }
     case 'set_angle': {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const bus = require('../smartMotionRecordBus') as typeof import('../smartMotionRecordBus');
       // 2026-07-06 (nav audit) — same as configure_drill: a closed SmartMotion has no
       // listeners, so "record me face on" was dropped. Open it set to that angle + rolling.
@@ -335,7 +319,6 @@ function dispatchOne(a: AnyAction): void {
       break;
     }
     case 'set_golfer': {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fam = (require('../../store/familyStore') as typeof import('../../store/familyStore')).useFamilyStore.getState();
       const name = a.name?.trim();
       if (!name || /^(me|myself|i)$/i.test(name)) fam.setActiveMember(null);
@@ -354,7 +337,6 @@ function dispatchOne(a: AnyAction): void {
       // prompt reads, so the next club call quotes the numbers he just said. Unparsed phrases return in
       // `missed`; the brain's confirm can ask about them instead of guessing.
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const reg = (require('../bagVoiceRegistration') as typeof import('../bagVoiceRegistration'));
         const result = reg.registerBagFromSpeech({
           clubs: Array.isArray(a.clubs) ? (a.clubs as string[]) : null,
@@ -363,7 +345,6 @@ function dispatchOne(a: AnyAction): void {
             : null,
         });
         if (result.registered.length > 0 || result.distancesSet.length > 0) {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           (require('../../store/toastStore') as typeof import('../../store/toastStore'))
             .useToastStore.getState().show(result.confirmLine || 'Bag updated');
         }
@@ -375,30 +356,24 @@ function dispatchOne(a: AnyAction): void {
       // 2026-07-09 — actually PERSIST the mark from GPS (was only signalling the usually-
       // unmounted SmartVision screen, so "marked" was a lie off that screen). Still signal so
       // a mounted SmartVision updates its on-screen marker too.
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       void (require('../gpsMarkOverride') as typeof import('../gpsMarkOverride')).writeGpsMarkOverride('tee');
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       (require('../../store/smartVisionSignalStore') as typeof import('../../store/smartVisionSignalStore'))
         .useSmartVisionSignalStore.getState().signalMark('tee');
       break;
     }
     case 'mark_green': {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       void (require('../gpsMarkOverride') as typeof import('../gpsMarkOverride')).writeGpsMarkOverride('green');
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       (require('../../store/smartVisionSignalStore') as typeof import('../../store/smartVisionSignalStore'))
         .useSmartVisionSignalStore.getState().signalMark('pin');
       break;
     }
     case 'log_score': {
       if (typeof a.score !== 'number' || !Number.isFinite(a.score)) break;
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const round = (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState();
       // 2026-08-09 (pass-2 P5) — don't write into a dead store: a brain-emitted log_score racing just
       // after endRound would flash a transient score on the scorecard between rounds (never persisted).
       if (!round.isRoundActive) break;
       // 2026-08-09 (on-course audit C2) — bare score → lowest unscored hole at/behind currentHole.
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { voiceScoreHole } = require('../../store/roundStore') as typeof import('../../store/roundStore');
       const targetHole = typeof a.hole === 'number' && a.hole > 0 ? Math.round(a.hole) : voiceScoreHole(round);
       const rounded = Math.round(a.score);
@@ -414,7 +389,6 @@ function dispatchOne(a: AnyAction): void {
     }
     case 'log_shot': {
       // Mirrors the tab dispatcher's log_shot case (caddie.tsx) — keep in sync.
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const roundMod = require('../../store/roundStore') as typeof import('../../store/roundStore');
       const round = roundMod.useRoundStore.getState();
       const dirMap: Record<string, 'left' | 'straight' | 'right' | null> = {
@@ -430,14 +404,12 @@ function dispatchOne(a: AnyAction): void {
       };
       let startLoc: { lat: number; lng: number } | null = null;
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const fix = (require('../gpsManager') as typeof import('../gpsManager')).getLastFix();
         if (fix) startLoc = { lat: fix.lat, lng: fix.lng };
       } catch { /* non-fatal */ }
       // 2026-08-09 (Tim — club-use logic) — ONE arbiter: explicit club > the more RECENT of the
       // player's declared club vs the caddie's advice. Silent adherence now attributes the ADVISED
       // club to the shot (it used to log club:null and learn nothing).
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { resolveShotClub } = require('../shotClubResolver') as typeof import('../shotClubResolver');
       const resolved = resolveShotClub(typeof a.club === 'string' ? a.club : null);
       const shotClub = resolved.club;
@@ -489,7 +461,6 @@ function dispatchOne(a: AnyAction): void {
         break;
       }
       if (typeof a.club === 'string' && a.club.trim()) {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const round = (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState();
         if (round.isRoundActive) {
           // kind 'spoken': the caddie said this club out loud. The only kind adherence is measured on.
@@ -499,7 +470,6 @@ function dispatchOne(a: AnyAction): void {
       break;
     }
     case 'plan_shot': {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const round = (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState();
       if (typeof a.club === 'string' && a.club.trim()) round.setClub(a.club.trim());
       if (typeof a.distance_yards === 'number' && a.distance_yards > 0 && a.distance_yards <= 700) {
@@ -516,7 +486,6 @@ function dispatchOne(a: AnyAction): void {
     }
     case 'set_reminder': {
       if (typeof a.text === 'string' && a.text.trim()) {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('../../store/practicePlanStore') as typeof import('../../store/practicePlanStore'))
           .usePracticePlanStore.getState().addReminder(a.text.trim(), a.when ?? null);
         toast(`⏰ Reminder set${a.when ? ` — ${a.when.trim()}` : ''}`);
@@ -525,7 +494,6 @@ function dispatchOne(a: AnyAction): void {
     }
     case 'log_emotional_state': {
       if (typeof a.state === 'string' && (a.valence === 'positive' || a.valence === 'neutral' || a.valence === 'negative')) {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const round = (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState();
         round.logEmotionalState(a.state, a.valence, round.currentHole);
         const emoji = a.valence === 'positive' ? '💚' : a.valence === 'negative' ? '🫶' : '👍';
@@ -535,7 +503,6 @@ function dispatchOne(a: AnyAction): void {
     }
     case 'log_issue': {
       if (typeof a.note === 'string') {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('../../store/issueLogStore') as typeof import('../../store/issueLogStore'))
           .useIssueLogStore.getState().addUserIssue(a.note ?? '');
         toast('📝 Logged to the issue log');

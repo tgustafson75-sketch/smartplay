@@ -176,7 +176,6 @@ export class VoiceCommandRouter {
       // course (mid-conversation, at home) is nonsensical, so never open the camera then.
       let inRound = false;
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         inRound = require('../store/roundStore').useRoundStore.getState().isRoundActive === true;
       } catch { inRound = false; }
       // Gate 2 — opening the camera is the most disruptive action; require HIGH confidence so an
@@ -306,12 +305,10 @@ function logVoiceMiss(args: {
     let isRoundActive = false;
     let currentHole: number | null = null;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const settings = require('../store/settingsStore') as typeof import('../store/settingsStore');
       persona = settings.useSettingsStore.getState().caddiePersonality ?? null;
     } catch { /* settings store not available — leave null */ }
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const round = require('../store/roundStore') as typeof import('../store/roundStore');
       const r = round.useRoundStore.getState();
       isRoundActive = !!r.isRoundActive;
@@ -336,7 +333,6 @@ function logVoiceMiss(args: {
     // so misses live alongside voice/transcribe/gps/app errors (not only in the
     // separate voice-misses tool).
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { useIssueLogStore } = require('../store/issueLogStore') as typeof import('../store/issueLogStore');
       useIssueLogStore.getState().addVoiceMiss(args.missType, {
         transcript: args.transcript,

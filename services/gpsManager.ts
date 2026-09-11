@@ -224,13 +224,11 @@ function armStaleHardTimer(): void {
       const isManualMark = lastFix.source === 'user_mark';
       const roundActive = (() => {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           return require('../store/roundStore').useRoundStore.getState().isRoundActive === true;
         } catch { return false; }
       })();
       if (!isBenignStationaryStale && !isManualMark && roundActive) {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           require('../store/issueLogStore').useIssueLogStore.getState().addGpsEvent('stale_degrade', {
             sinceMs: STALE_HARD_LIMIT_MS,
             lastAccuracy_m: lastAcc,
@@ -261,7 +259,6 @@ function armStaleHardTimer(): void {
           const wasAccurate = (lastFix.accuracy_m ?? 999) <= 10;
           const roundActive = (() => {
             try {
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
               return require('../store/roundStore').useRoundStore.getState().isRoundActive === true;
             } catch { return false; }
           })();
@@ -274,7 +271,6 @@ function armStaleHardTimer(): void {
           const isManualMark = lastFix.source === 'user_mark';
           if (roundActive && !isManualMark) {
             try {
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
               require('../store/issueLogStore').useIssueLogStore.getState().addGpsEvent('stale_hard_clear', {
                 sinceMs: STALE_FULL_CLEAR_MS,
                 lastAccuracy_m: lastFix.accuracy_m ?? null,
@@ -547,7 +543,6 @@ function processFix(raw: GpsFix): boolean {
   // have a rolling window to read. Dynamic require avoids the orchestrator
   // depending on gpsManager and vice-versa at module-load time.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const orch = require('./courseDataOrchestrator');
     orch.pushSustainedFix?.(fix);
   } catch { /* non-fatal */ }
@@ -754,12 +749,10 @@ async function startWatchInternal() {
       ownerSentinel('gps.startWatch.no_permission',
         new Error('Location permission denied'));
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { useToastStore } = require('../store/toastStore') as typeof import('../store/toastStore');
         useToastStore.getState().show('GPS off — enable Location in Settings to keep yardages live.');
       } catch { /* toast layer unavailable */ }
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         require('../store/issueLogStore').useIssueLogStore.getState().addGpsEvent('permission_denied');
       } catch { /* issue-log best-effort */ }
       return;
@@ -843,7 +836,6 @@ async function startWatchInternal() {
         useToastStore.getState().show('GPS unavailable on this device — check Location Services, then restart the app.');
       } catch { /* toast is best-effort */ }
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         require('../store/issueLogStore').useIssueLogStore.getState().addGpsEvent('all_accuracy_failed', {
           error: lastWatchErr instanceof Error ? lastWatchErr.message : String(lastWatchErr ?? 'no subscription'),
         });
@@ -852,7 +844,6 @@ async function startWatchInternal() {
   } catch (err) {
     ownerSentinel('gps.startWatchInternal', err);
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('../store/issueLogStore').useIssueLogStore.getState().addGpsEvent('watch_setup_error', {
         error: err instanceof Error ? err.message : String(err),
       });

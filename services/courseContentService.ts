@@ -121,7 +121,6 @@ function anchorCourseBook(courseId: string, content: CourseContent, name?: strin
         byHole.set(d.hole_number, e);
       }
     }
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mem = require('../store/caddieMemoryStore') as typeof import('../store/caddieMemoryStore');
     mem.useCaddieMemoryStore.getState().saveCourseBook({
       course_id: courseId,
@@ -164,7 +163,6 @@ export async function fetchCourseContent(input: CourseContentInput): Promise<Cou
     // get kevin → server generates Kevin-voice content → cached for
     // a week. Wait up to 3s for hydration; if it never lands, fall
     // back to defaults rather than block the user forever.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const settingsMod = require('../store/settingsStore');
     const HYDRATION_BUDGET_MS = 3_000;
     const HYDRATION_POLL_MS = 100;

@@ -322,7 +322,6 @@ export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng:
   (() => {
     // Lazy require: data/courses.ts is large and does not import this module, so there is no cycle,
     // but keeping it inside the IIFE means the bundle only pays for it when centroids are read.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getBundledCourseCentroid } = require('./courses') as typeof import('./courses');
     const out = {} as Record<LocalCourseSlug, { lat: number; lng: number }>;
     for (const slug of Object.keys(LOCAL_COURSE_CENTROIDS_RAW) as LocalCourseSlug[]) {

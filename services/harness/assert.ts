@@ -154,7 +154,6 @@ export async function runWithAsserts(
   title: string,
   body: (a: AssertCtx) => Promise<void>,
 ): Promise<ScenarioReport> {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { ConsoleProbe, IssueEventProbe, LoopLagProbe } = require('./probe') as typeof import('./probe');
   const t0 = Date.now();
   const a = new AssertCtx(id);
@@ -208,7 +207,6 @@ export async function runWithAsserts(
 export function logScenarioToIssueLog(report: ScenarioReport): void {
   if (report.status !== 'fail') return;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { useIssueLogStore } = require('../../store/issueLogStore') as typeof import('../../store/issueLogStore');
     const failed = report.checks.filter((c) => c.status === 'fail');
     useIssueLogStore.getState().addAppEvent(
@@ -245,7 +243,6 @@ export function logScenarioToIssueLog(report: ScenarioReport): void {
  */
 export async function logRunSummaryToIssueLog(reports: ScenarioReport[]): Promise<void> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { useIssueLogStore } = require('../../store/issueLogStore') as typeof import('../../store/issueLogStore');
 
     const failed = reports.filter((r) => r.status === 'fail');
@@ -268,7 +265,6 @@ export async function logRunSummaryToIssueLog(reports: ScenarioReport[]): Promis
     // The self-test causes its own error and its own stall on purpose; counting them would make every
     // run look dirty and the two signals worthless. Failures from it still count — a self-test that
     // FAILS means the probes stopped seeing the device, which is the loudest thing in this file.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { SELFTEST_SCENARIO_ID } = require('./probe') as typeof import('./probe');
     const observed = reports.filter((r) => r.id !== SELFTEST_SCENARIO_ID);
     const stalls = observed

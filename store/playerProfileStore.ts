@@ -564,7 +564,6 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
           // Dynamic require to avoid pulling Sentry at module-eval
           // time (the persist config is evaluated before _layout.tsx
           // wires Sentry.init when EXPO_PUBLIC_SENTRY_DSN is unset).
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const Sentry = require('@sentry/react-native');
           if (error) {
             Sentry.addBreadcrumb({

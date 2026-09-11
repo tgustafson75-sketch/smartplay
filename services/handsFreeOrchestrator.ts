@@ -43,7 +43,6 @@ import { getApiBaseUrl } from './apiBase';
 // toggle command opens it with ?autoRecord=1 so the camera rolls on arrival (the promise holds).
 function handleWatchCommand(command: WatchCommand): void {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { router } = require('expo-router') as typeof import('expo-router');
     switch (command) {
       case 'open_smartmotion':

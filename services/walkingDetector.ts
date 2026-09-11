@@ -82,7 +82,6 @@ export async function detectActivity(windowGpsSpeedMps: number): Promise<Detecto
   let available = false;
   let snapshot: Awaited<ReturnType<typeof readHealthSnapshot>> | null = null;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const settingsMod = require('../store/settingsStore') as typeof import('../store/settingsStore');
     if (settingsMod.useSettingsStore.getState().hasAskedHealthPermission) {
       available = await isHealthAvailable();
@@ -219,12 +218,10 @@ export function startActivityTicker(getGpsSpeedMps: () => number): void {
  */
 function applyDetectedTransport(reading: DetectorReading): void {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const round = require('../store/roundStore') as typeof import('../store/roundStore');
     const declared = round.useRoundStore.getState().transportMode;
     if (declared === 'cart' || declared === 'walking') return;
 
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const settings = require('../store/settingsStore').useSettingsStore.getState();
     const suggestion = cartModeSuggestion(settings.cartMode, reading);
     if (suggestion === null) return;

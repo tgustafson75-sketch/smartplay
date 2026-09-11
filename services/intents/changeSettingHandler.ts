@@ -65,7 +65,6 @@ export const changeSettingHandler: IntentHandler = {
         if (v !== 'safe' && v !== 'normal' && v !== 'aggressive') {
           return clarify('Safe, normal, or aggressive?');
         }
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { useRoundStore } = require('../../store/roundStore') as typeof import('../../store/roundStore');
         useRoundStore.getState().setRiskMode(v as 'safe' | 'normal' | 'aggressive');
         const line =
@@ -225,7 +224,6 @@ export const changeSettingHandler: IntentHandler = {
         // the custom voice/name everywhere); switching to a base persona turns it off. Without this, a
         // "switch to <custom name>" set the persona but left the custom caddie dormant.
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const prof = require('../../store/playerProfileStore').usePlayerProfileStore.getState();
           prof.setUseCustomCaddie?.(v === 'custom');
         } catch { /* non-fatal */ }

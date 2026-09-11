@@ -385,9 +385,7 @@ function tick(): void {
   let publishLat: number | null = lat;
   let publishLng: number | null = lng;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const probes = require('./audit/probes');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const injector = require('./audit/noiseInjector');
     probes.setGroundTruth(lat, lng);
     const noised = injector.applyNoise(lat, lng);
@@ -399,14 +397,10 @@ function tick(): void {
   }
   // Probe sample: capture per-tick raw consumer state.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const probes = require('./audit/probes');
     if (probes.isProbeActive()) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const sf = require('./smartFinderService');
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const off = require('./offCourseDetector');
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { useRoundStore } = require('../store/roundStore');
       const round = useRoundStore.getState();
       const fix = sf.getLastFix();
@@ -531,7 +525,6 @@ function tick(): void {
         const totalHoles = round.courseHoles.length;
         const persona = (() => {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const settingsMod = require('../store/settingsStore') as typeof import('../store/settingsStore');
             return settingsMod.useSettingsStore.getState().caddiePersonality;
           } catch { return 'unknown'; }

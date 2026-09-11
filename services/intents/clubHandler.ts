@@ -85,7 +85,6 @@ export const clubChangeHandler: IntentHandler = {
     // (it IS the club), so voice is the only natural switch. Route to the mounted game via the sim bus;
     // honest reply when the club has no learned distance (the sim can only play the learned bag).
     {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const simBus = require('../simRoundBus') as typeof import('../simRoundBus');
       if (simBus.isSimGameActive()) {
         if (!parsed) {

@@ -628,7 +628,6 @@ export const useSettingsStore = create<SettingsState>()(
          * caddie, including a Serena-based one. The boot reconcile then corrected it — so the
          * caddie's gender changed at the next app restart. Derived in one place now.
          */
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const gender = (require('../services/caddieGender') as typeof import('../services/caddieGender')).genderForPersona(p);
         // Defensive voice-race guard (sim-202 follow-up): any caller that
         // flips persona without first stopping in-flight TTS would
@@ -672,7 +671,6 @@ export const useSettingsStore = create<SettingsState>()(
         // this handoff and reading as two greetings racing. Applies to EVERY persona (incl. custom).
         if (prev !== p) {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             (require('../services/openerGuard') as typeof import('../services/openerGuard')).claimOpenerSlot();
           } catch { /* best-effort */ }
         }
@@ -701,7 +699,6 @@ export const useSettingsStore = create<SettingsState>()(
          * which is the problem the bundled clip existed to solve.
          */
         if (prev !== p && p !== 'custom') {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const introSrc = (require('../services/offlineVoiceCache') as typeof import('../services/offlineVoiceCache')).PERSONA_HANDOFF_INTROS;
           const text = introSrc[p] ?? `${p} stepping in.`;
           if (personaHandoffTimer) clearTimeout(personaHandoffTimer);
@@ -889,7 +886,6 @@ export const useSettingsStore = create<SettingsState>()(
         set({ analyticsOptIn: v });
         if (!v) {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const mod = require('../services/usageTelemetry');
             void mod.flushUsage?.();
           } catch { /* ignore */ }

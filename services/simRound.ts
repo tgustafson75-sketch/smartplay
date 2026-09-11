@@ -46,7 +46,6 @@ let simPos: { lat: number; lng: number } | null = null;
 function simLog(detail: string, extra?: Record<string, unknown>): void {
   logHarnessEvent('sim_round', detail);
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('../store/issueLogStore') as typeof import('../store/issueLogStore'))
       .useIssueLogStore.getState().addAppEvent(detail, extra, 'sim_round');
   } catch { /* persistence is best-effort */ }
@@ -99,20 +98,15 @@ export function startVoiceSimRound(opts?: { courseId?: string; nineHoles?: boole
   // speech that is never produced. Everything BELOW this block is the real pipeline and runs
   // identically either way — the only thing silence removes is the voice.
   if (!opts?.silent) try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('./apiBase') as typeof import('./apiBase')).warmBackendConnection().catch(() => {});
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const apiBase = (require('./apiBase') as typeof import('./apiBase')).getApiBaseUrl();
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('./briefingGenerator') as typeof import('./briefingGenerator')).prewarmBriefing(apiBase);
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('./voiceWarmup') as typeof import('./voiceWarmup')).prewarmVoice(true);
   } catch { /* prewarm is best-effort */ }
 
   // 1. The simulator owns the fix — suppress the real watcher first so a real
   //    GPS fix can't fight the simulated position mid-round.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('./gpsManager') as typeof import('./gpsManager')).stopGpsManager();
   } catch { /* non-fatal — setSimulatedFix overrides regardless */ }
 

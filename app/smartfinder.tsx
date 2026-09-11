@@ -1279,7 +1279,6 @@ function TargetCameraOverlay({
   // + the on-screen target yardage (target_position projected + flagged estimated). On unlock:
   // clear it. No fabrication — if there's no GPS or no yardage, we don't write a lock.
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const store = (require('../store/smartFinderStore') as typeof import('../store/smartFinderStore')).useSmartFinderStore.getState();
     if (!locked) { store.clearLock(); return; }
     const fix = getLastFix();

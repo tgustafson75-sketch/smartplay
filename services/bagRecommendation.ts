@@ -272,9 +272,7 @@ export function recommendBagForCourse(courseId: string | null): BagRecommendatio
   // gap/overlap recommendations. Map ClubId ('DR','7I') → ClubName via clubIdToClubName.
   const registered = (() => {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { useClubBagStore } = require('../store/clubBagStore') as typeof import('../store/clubBagStore');
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { clubIdToClubName } = require('../store/clubStatsStore') as typeof import('../store/clubStatsStore');
       return useClubBagStore.getState().bagList()
         .map(c => clubIdToClubName(c.club_id))

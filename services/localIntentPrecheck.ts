@@ -469,7 +469,6 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
   // switch-persona pattern only knows the 4 base names. Also recognize the user's OWN custom caddie name
   // so "switch to <name>" / "put <name> in charge" / "<name>, ..." activates the custom caddie.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const cn = require('../store/playerProfileStore').usePlayerProfileStore.getState().customCaddieName as string | null;
     const name = typeof cn === 'string' ? cn.trim() : '';
     if (name.length >= 2 && name.length <= 24) {

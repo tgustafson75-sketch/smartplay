@@ -48,12 +48,10 @@ const GLYPH: Record<Check['status'], string> = { pass: '✓', fail: '✗', skip:
 export async function collectRunEnv(): Promise<Record<string, unknown>> {
   const env: Record<string, unknown> = {};
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { Platform } = require('react-native') as typeof import('react-native');
     env.os = `${Platform.OS} ${String(Platform.Version)}`;
   } catch { /* context is best-effort */ }
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const Updates = require('expo-updates') as typeof import('expo-updates');
     env.runtime = Updates.runtimeVersion ?? null;
     env.updateId = Updates.updateId ?? 'embedded';

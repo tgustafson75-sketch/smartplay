@@ -80,12 +80,10 @@ const safe = <T,>(fn: () => T, fallback: T): T => {
   }
 };
 
-/* eslint-disable @typescript-eslint/no-require-imports */
 const roundStore = () => require('../store/roundStore').useRoundStore.getState();
 const profileStore = () => require('../store/playerProfileStore').usePlayerProfileStore.getState();
 const relationshipStore = () => require('../store/relationshipStore').useRelationshipStore.getState();
 const settingsStore = () => require('../store/settingsStore').useSettingsStore.getState();
-/* eslint-enable @typescript-eslint/no-require-imports */
 
 export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<string, unknown> {
   const r = safe(() => roundStore(), {} as ReturnType<typeof roundStore>);
@@ -120,7 +118,6 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
    * strict improvement rather than a new source of truth. [[check-the-brain-has-the-information]]
    */
   const workingYards: number | null = safe(() => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { buildYardageInsight } = require('./yardageResolver') as typeof import('./yardageResolver');
     const resolved = buildYardageInsight()?.yardage;
     if (typeof resolved === 'number' && Number.isFinite(resolved) && resolved > 0) return resolved;
@@ -146,7 +143,6 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
    * caddie's own prompt was the looser of the two owners. [[two-owners-is-the-root-cause]]
    */
   const club = safe(() => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const m = require('./shotClubResolver') as typeof import('./shotClubResolver');
     return m.declaredClubIfFresh();
   }, null);
@@ -157,7 +153,6 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
    * gets the hole picture — not just whichever one happened to be wired.
    */
   const unified_context_block = safe(() => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const m = require('./caddieMemoryRetrieval') as typeof import('./caddieMemoryRetrieval');
     const merged = m.mergeMemoryIntoContext(
       extras.liveBlock ?? null,
@@ -183,7 +178,6 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * block that moves shot to shot must never ride the cached prompt.
      */
     const offline = safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const vl = require('./voiceLogService') as typeof import('./voiceLogService');
       return vl.peekOfflineNotesBlock() || null;
     }, null);
@@ -195,7 +189,6 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
   }, extras.liveBlock ?? null);
 
   const patternInsights = safe(() => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { generatePatternInsights } = require('./patternDetection') as typeof import('./patternDetection');
     return generatePatternInsights(safe(() => r.shots ?? [], []), {
       currentRoundMode: safe(() => r.mode ?? null, null),
@@ -235,7 +228,6 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     kevinContext: safe(() => p.kevinContext ?? null, null),
     persistentPatterns: safe(() => p.persistentPatterns ?? null, null),
     golfer_model_snippet: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const g = require('./golferModel') as typeof import('./golferModel');
       return g.describeForPrompt(g.buildGolferModel()) || null;
     }, null),
@@ -257,7 +249,6 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * because this builder read the store field directly.
      */
     persona: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { getActiveCaddie } = require('./caddieResolver') as typeof import('./caddieResolver');
       return getActiveCaddie();
     }, safe(() => st.caddiePersonality ?? null, null)),
@@ -272,9 +263,7 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * rather than a third copy of the lookup.
      */
     ...safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { brainSettings } = require('./voice/brainSettings') as typeof import('./voice/brainSettings');
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { getActiveCaddie } = require('./caddieResolver') as typeof import('./caddieResolver');
       const bs = brainSettings({ ...st, caddiePersonality: getActiveCaddie() });
       // Only personaIntensity: the brain has no use for continuousConversationMode (it decides
@@ -408,7 +397,6 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     courseContext: null,
     courseIntelligence: safe(() => {
       if (!isRoundActive || !activeCourseId) return null;
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const intel = require('./courseIntelligenceService') as typeof import('./courseIntelligenceService');
       return intel.getCachedCourseIntelligenceSync(activeCourseId);
     }, null),
@@ -420,12 +408,10 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      */
     holeNotes: safe(() => r.holeNotes ?? {}, {}),
     yardageInsight: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { buildYardageInsight } = require('./yardageResolver') as typeof import('./yardageResolver');
       return buildYardageInsight();
     }, null),
     smartFinderContext: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const sf = require('../store/smartFinderStore').useSmartFinderStore.getState();
       const lock = sf.currentLock;
       if (!lock) return null;
@@ -472,7 +458,6 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     patternInsights,
     penaltyContext: safe(() => extras.overrides?.penaltyContext ?? null, null),
     ghostContext: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       return require('../store/ghostStore').useGhostStore.getState().getSummaryText();
     }, null),
     topObservations: safe(() => rel.getTopObservations?.() ?? null, null),
@@ -497,7 +482,6 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       }));
     }, []),
     recentCageSessions: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const c = require('../store/swingSessionStore').useSwingSessionStore.getState();
       // 2026-08-26 — Array.isArray, not `?? []`. A malformed persisted session whose `shots` is a
       // string or an object does not throw on `.length`; it silently reports a character count or
@@ -510,7 +494,6 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
         }));
     }, []),
     recent_analyses_snippet: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const eng = require('./smartAnalysisEngine') as { getRecentAnalyses?: (n: number) => { kind: string; voice_summary: string }[] };
       const recent = eng.getRecentAnalyses?.(8) ?? [];
       return recent.length ? recent.map((a) => `[${a.kind}] ${a.voice_summary}`).join('\n') : null;
@@ -525,17 +508,14 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     practice_context: safe(() => {
       const supplied = extras.overrides?.practice_context;
       if (typeof supplied === 'string' && supplied.trim()) return supplied;
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { buildFullPracticeContext } = require('./tutorialContext') as typeof import('./tutorialContext');
       return buildFullPracticeContext() || null;
     }, null),
     coachKnowledgeContext: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { getCoachKnowledgeForMessage } = require('../store/coachKnowledgeStore') as { getCoachKnowledgeForMessage: (m: string) => string };
       return getCoachKnowledgeForMessage(extras.message);
     }, ''),
     watchData: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const w = require('../store/watchStore').useWatchStore.getState();
       if (!w.isConnected) return null;
       const s = w.getSessionSummary?.();
@@ -603,7 +583,6 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * is a different fact, and it lives in clubBagStore — see bagClubs below.
      */
     clubDistances: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { bagDistances } = require('./shotStrategy') as typeof import('./shotStrategy');
       return bagDistances();
     }, {}),
@@ -624,17 +603,13 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * club they no longer carry but still have history for.
      */
     bagClubs: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { useClubBagStore } = require('../store/clubBagStore') as typeof import('../store/clubBagStore');
       return useClubBagStore.getState().bagList().map((c) => c.club_id);
     }, []),
     /** Per-club character (shape + miss + carry), evidence-barred by clubTendency itself. */
     club_tendencies: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const ct = require('./clubTendency') as typeof import('./clubTendency');
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const cn = require('./clubNormalize') as typeof import('./clubNormalize');
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const cs = require('../store/clubStatsStore').useClubStatsStore.getState();
       const history = (r.roundHistory ?? []).flatMap((h: { shots?: unknown[] }) => h.shots ?? []);
       const all = [...history, ...(r.shots ?? [])].slice(-300);
@@ -663,7 +638,6 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * Putting them on the message side would have been the cousin of the 08-24 cache defect.
      */
     playerHistoryBlock: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const h = require('./caddieHistoryContext') as typeof import('./caddieHistoryContext');
       return h.historyPromptBlock() || null;
     }, null),
@@ -682,7 +656,6 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * more honest window: a finding drawn from finished rounds, not from the four shots so far today.
      */
     routineImpactBlock: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const ri = require('./practice/routineImpact') as typeof import('./practice/routineImpact');
       const past = (r.roundHistory ?? []).flatMap((h: { shots?: unknown[] }) => h.shots ?? []);
       const out = ri.routineImpact(past as never);
@@ -693,19 +666,16 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
 
     /** The stated weekly plan — goals, challenges, open reminders. Empty until they engage it. */
     practicePlanBlock: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const pp = require('../store/practicePlanStore') as typeof import('../store/practicePlanStore');
       return pp.practicePlanPromptBlock() || null;
     }, null),
     /** Phrases this player actually uses — the difference between his caddie and a generic one. */
     playerVocabulary: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const v = require('../store/vocabularyProfileStore').useVocabularyProfileStore.getState();
       const top = v.getTopPhrases?.(20);
       return Array.isArray(top) && top.length > 0 ? top : null;
     }, null),
     recentCageInsights: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       return (require('../store/swingSessionStore').useSwingSessionStore.getState().recentInsights ?? []).slice(-3);
     }, []),
     recentRoundInsights: safe(() => (r.recentInsights ?? []).slice(-3), []),
@@ -719,7 +689,6 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * question asked by voice in the cage got the on-course voice.
      */
     register: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { getActiveSurface } = require('./activeSurfaceRegistry') as { getActiveSurface: () => string };
       const s = getActiveSurface();
       if (s === 'cage' || s === 'swing_library' || s === 'swing_detail') return 'coach';
@@ -728,7 +697,6 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     }, 'caddie'),
     /** The screen/drill he is looking at right now, so a question asked inside a drill is about it. */
     screen_context: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { screenContextForPrompt } = require('./screenContext') as typeof import('./screenContext');
       return screenContextForPrompt();
     }, null),
@@ -752,9 +720,7 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
        * follow-up detection (isAwaitingFollowUp) on a 3-minute decay window, which is a different
        * job from feeding the prompt.
        */
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { getConversationHistory } = require('./voice/conversationHistory') as typeof import('./voice/conversationHistory');
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { getRecentTurns } = require('./conversationState') as typeof import('./conversationState');
 
       const fromPipecat = (getConversationHistory() ?? []).map(
@@ -789,7 +755,6 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     missType: safe(() => p.missType ?? null, null),
     /** How much the player has earned the caddie's directness. */
     trustLevel: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       return require('../store/trustLevelStore').useTrustLevelStore.getState().level ?? null;
     }, null),
     /**
@@ -798,7 +763,6 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      */
     priorGreenRead: safe(() => {
       if (!isRoundActive || currentHole == null) return null;
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const store = require('../store/greenReadStore').useGreenReadStore.getState();
       type GR = { at: number; feetEst: number | null; slopePct: number | null; text: string } | null;
       const startMs = r.roundStartTime ?? 0;
@@ -846,17 +810,13 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     }, 0),
     /** Say "I'm reacquiring GPS" rather than asking the golfer for the number — the backwards ask. */
     gpsLost: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { resolveYardage } = require('./yardageResolver') as typeof import('./yardageResolver');
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { getLastFix } = require('./gpsManager') as typeof import('./gpsManager');
       return resolveYardage(currentHole).value == null && getLastFix() == null;
     }, false),
     /** How far he just hit it — so the caddie can confirm the drive before it is even logged. */
     distanceFromTeeYds: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { getLastFix } = require('./gpsManager') as typeof import('./gpsManager');
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { haversineYards } = require('../utils/geoDistance') as typeof import('../utils/geoDistance');
       const fix = getLastFix();
       const tee = (r.courseHoles ?? []).find((x: { hole: number }) => x.hole === currentHole) as
@@ -885,9 +845,7 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * turn over in a hole. [[unconnected-halves-not-broken-code]]
      */
     weather: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { getCachedWeatherEvenIfStale } = require('./weatherService') as typeof import('./weatherService');
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { getLastFix } = require('./gpsManager') as typeof import('./gpsManager');
       const fix = getLastFix();
       if (!fix || fix.lat == null || fix.lng == null) return null;
@@ -903,7 +861,6 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
        * club is chosen FROM cannot drift apart. Null when the hole has no mapped geometry — an
        * unknown wind must stay unknown rather than defaulting to "into".
        */
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { decomposeWind, shotBearingDeg } = require('./windRelative') as typeof import('./windRelative');
       const bearing = safe(() => shotBearingDeg(currentHole), null);
       const relative = safe(() => decomposeWind(w.wind_direction_deg, w.wind_speed_mph, bearing), null);
@@ -931,9 +888,7 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
          * builder is synchronous, and elevation is static per point so the play screen has usually
          * already resolved these exact cells), and warm it for next turn when it has not.
          */
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const el = require('./elevationService') as typeof import('./elevationService');
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { getGreenCentroid } = require('./shotLocationService') as typeof import('./shotLocationService');
         const here = fix && fix.lat != null && fix.lng != null ? { lat: fix.lat, lng: fix.lng } : null;
         const green = safe(() => getGreenCentroid(currentHole), null);
@@ -943,7 +898,6 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
           if (cached) elevFeet = cached.deltaFeet;
           else el.warmElevation([here, green]);
         }
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { playsLikeDistance } = require('../utils/playsLike') as typeof import('../utils/playsLike');
         const b = playsLikeDistance(yds, w, bearing, elevFeet);
         return b.delta_yards === 0 ? null : {

@@ -180,7 +180,6 @@ export function checkOrder(key: string, stage: Stage): Stage[] {
   const missing = unmetDeps(key, stage);
   if (missing.length === 0) return [];
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('../../store/issueLogStore') as typeof import('../../store/issueLogStore'))
       .useIssueLogStore.getState().addAppEvent(
         'analysis_stage_out_of_order',

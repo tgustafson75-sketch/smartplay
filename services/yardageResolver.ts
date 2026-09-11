@@ -262,7 +262,6 @@ function resolveYardageInner(
  */
 function traceResolved(hole: number, r: ResolvedYardage): ResolvedYardage {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const rt = require('./roundTrace') as typeof import('./roundTrace');
     rt.traceDeep('gps', 'yardage_tier', {
       hole,

@@ -130,7 +130,6 @@ export const correctLastShotHandler: IntentHandler = {
 
     // Visual confirmation to match the voice ack (parity with logShot's toast).
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const t = require('../../store/toastStore') as typeof import('../../store/toastStore');
       const distTag = 'distance_yards' in distancePatch ? ` · ${statedYds}y` : '';
       t.useToastStore.getState().show(`Last shot → ${clubLabel(parsed.club_id)}${distTag}`);

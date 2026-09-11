@@ -80,7 +80,6 @@ export function processSwingAnalysis(args: {
     : null;
   if (fault) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const mem = require('../store/caddieMemoryStore') as typeof import('../store/caddieMemoryStore');
       mem.useCaddieMemoryStore.getState().recordSwingFault({ fault, nowMs: Date.now() });
     } catch { /* non-fatal — CNS write is best-effort */ }

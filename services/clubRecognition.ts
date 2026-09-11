@@ -127,7 +127,6 @@ export async function recognizeClubFromBase64(
     // Lazy require avoids any import cycle with the store; empty bag → reconcile is a no-op.
     let club_id = rawClubId;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const owned = (require('../store/clubBagStore') as typeof import('../store/clubBagStore'))
         .useClubBagStore.getState().bagList().map((c) => c.club_id);
       club_id = reconcileClubWithBag(rawClubId, confidence, owned) as ClubId;

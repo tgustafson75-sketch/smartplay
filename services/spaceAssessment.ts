@@ -74,7 +74,6 @@ export async function scanSpace(
     // 2026-05-22 — Fix Q follow-up audit. Threading persona.
     let _persona: 'kevin' | 'serena' | 'harry' | 'custom' | undefined;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const mod = require('../store/settingsStore') as typeof import('../store/settingsStore');
       _persona = mod.useSettingsStore.getState().caddiePersonality;
     } catch { /* fall through to voiceGender on backend */ }

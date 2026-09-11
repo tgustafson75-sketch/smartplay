@@ -116,7 +116,6 @@ class ConversationalLoggingOrchestrator {
      * and today's cart-suppression defect hid inside exactly that ambiguity for months. Each early
      * return now names itself.
      */
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const rt = require('./roundTrace') as typeof import('./roundTrace');
     rt.traceDeep('shot', 'auto_detected', {
       yards: event.estimated_distance_yards ?? null,
@@ -154,7 +153,6 @@ class ConversationalLoggingOrchestrator {
     // manual cartMode setting only.
     let effectiveCart = settings.cartMode;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { isEffectiveCartMode } = require('./walkingDetector') as typeof import('./walkingDetector');
       effectiveCart = isEffectiveCartMode(settings.cartMode);
     } catch (e) {
@@ -201,7 +199,6 @@ class ConversationalLoggingOrchestrator {
     // first 1-2 stops before the detector arms. This gate catches
     // that window using only GPS state.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { getLastFix } = require('./gpsManager') as typeof import('./gpsManager');
       const speed = getLastFix()?.speed ?? 0;
       if (speed > 4.0) {

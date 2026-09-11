@@ -138,7 +138,6 @@ export const inRoundDiagnosticHandler: IntentHandler = {
        */
       const live = await (async () => {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const uv = require('../unifiedVisionContext') as typeof import('../unifiedVisionContext');
           return (await uv.getUnifiedVisionContext()).promptBlock;
         } catch { return null; }

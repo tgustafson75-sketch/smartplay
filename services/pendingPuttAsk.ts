@@ -121,9 +121,7 @@ export function tryAnswerPendingPutts(transcript: string): { line: string; putts
     clearAwaitingPutts();
     return null;
   }
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const rs = (require('../store/roundStore') as typeof import('../store/roundStore')).useRoundStore.getState();
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { voicePuttsHole } = require('../store/voiceScoringHole') as typeof import('../store/voiceScoringHole');
   const hole = awaitingPuttsHole() ?? voicePuttsHole(rs);
   rs.logPutts(hole, putts);
@@ -160,7 +158,6 @@ export function noteCaddieAskedForPutts(reply: string | null | undefined, hole: 
  * naturally instead of dead-ending.
  */
 export function tryAnswerOpenQuestion(transcript: string): { line: string } | null {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { tryAnswerPendingPar } = require('./pendingParAsk') as typeof import('./pendingParAsk');
   const par = tryAnswerPendingPar(transcript);
   if (par) return { line: par.line };

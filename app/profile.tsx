@@ -40,7 +40,6 @@ export default function ProfileScreen() {
 
   const onRecalculate = useCallback(() => {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const calcMod = require('../services/handicapCalculator') as typeof import('../services/handicapCalculator');
       const rounds = useRoundStore.getState().roundHistory;
       // 2026-07-06 (audit P0) — canonical filter also excludes sim rounds.

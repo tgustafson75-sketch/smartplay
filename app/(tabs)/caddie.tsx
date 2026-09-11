@@ -509,9 +509,7 @@ export default function CaddieTab() {
     let cancelled = false;
     void (async () => {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const KeepAwake = require('expo-keep-awake') as typeof import('expo-keep-awake');
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const Battery = require('expo-battery') as typeof import('expo-battery');
         const state = await Battery.getBatteryStateAsync().catch(() => null);
         if (cancelled) return;
@@ -528,7 +526,6 @@ export default function CaddieTab() {
     return () => {
       cancelled = true;
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const KeepAwake = require('expo-keep-awake') as typeof import('expo-keep-awake');
         KeepAwake.deactivateKeepAwake('caddie-active-round');
       } catch { /* non-fatal */ }
@@ -625,7 +622,6 @@ export default function CaddieTab() {
   const resolvedYardage = useMemo(() => {
     if (!isRoundActive) return null;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { resolveYardage } = require('../../services/yardageResolver') as typeof import('../../services/yardageResolver');
       return resolveYardage(currentHole);
     } catch { return null; }
@@ -676,7 +672,6 @@ export default function CaddieTab() {
    */
   const _fmb = useMemo<FrontMiddleBack | null>(() => {
     if (!isRoundActive) return null;
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { resolvedToFmb } = require('../../services/yardageResolver') as typeof import('../../services/yardageResolver');
     return resolvedToFmb(resolvedYardage);
   }, [isRoundActive, resolvedYardage]);
@@ -690,7 +685,6 @@ export default function CaddieTab() {
   const elevPlayerCoord = useMemo(() => {
     if (!isRoundActive) return null;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { getLastFix } = require('../../services/smartFinderService');
       const fix = getLastFix();
       return fix ? { lat: fix.location.lat, lng: fix.location.lng } : null;
@@ -703,7 +697,6 @@ export default function CaddieTab() {
   const elevGreenCoord = useMemo(() => {
     if (!isRoundActive) return null;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { resolveGreenCoords } = require('../../services/smartFinderService');
       const g = resolveGreenCoords(currentHole);
       const mid = g?.middle;
@@ -1346,7 +1339,6 @@ export default function CaddieTab() {
       if (!lastEntry) return null;
       const hist = (() => {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const m = require('../../services/caddieMemoryRetrieval') as typeof import('../../services/caddieMemoryRetrieval');
           return m.getHoleScoringHistory({ courseId: storeNow.activeCourseId ?? null, hole: lastEntry.hole });
         } catch { return null; }
@@ -1778,7 +1770,6 @@ export default function CaddieTab() {
     // The get-to-know interview is a pure voice profile-build; a described fault is INFO, not a
     // command to open a drill. Deterministic guard (shared with the hands-free dispatcher) drops
     // every navigational/tool-opening action while that context is active.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     if ((require('../../services/voice/conversationalToolDispatch') as typeof import('../../services/voice/conversationalToolDispatch')).isSuppressedInGetToKnow(action.type)) {
       return;
     }
@@ -1813,7 +1804,6 @@ export default function CaddieTab() {
         // opening the modal. `hole` is optional; default to the lowest UNSCORED hole at/behind
         // currentHole (on-course audit C2 — GPS/auto-advance move currentHole off the hole being
         // reported). Explicit hole still wins.
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { voiceScoreHole } = require('../../store/roundStore') as typeof import('../../store/roundStore');
         const targetHole = (action as { hole?: number }).hole ?? voiceScoreHole(useRoundStore.getState());
         const score = (action as { score: number }).score;
@@ -1875,7 +1865,6 @@ export default function CaddieTab() {
         // extracts a club name from the player's utterance.
         // 2026-08-09 (Tim — club-use logic) — same arbiter as the dispatch path: explicit > more
         // recent of declared vs ADVISED. Silent adherence attributes the advised club.
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { resolveShotClub } = require('../../services/shotClubResolver') as typeof import('../../services/shotClubResolver');
         const resolvedClub = resolveShotClub(typeof a.club === 'string' ? a.club : null);
         const shotClub: string | null = resolvedClub.club;
@@ -1883,7 +1872,6 @@ export default function CaddieTab() {
         // player's actual position when the shot was hit, not stale or null.
         let shotStartLocation: ShotLocation | null = null;
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const gpsMod = require('../../services/gpsManager') as typeof import('../../services/gpsManager');
           const fix = gpsMod.getLastFix();
           if (fix) shotStartLocation = { lat: fix.lat, lng: fix.lng };
@@ -1933,7 +1921,6 @@ export default function CaddieTab() {
           rs.setUserStatedYardage(Math.round(p.distance_yards), 'user');
         }
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const toast = require('../../store/toastStore') as typeof import('../../store/toastStore');
           const bits = [
             typeof p.club === 'string' && p.club.trim() ? p.club.trim() : null,
@@ -1952,10 +1939,8 @@ export default function CaddieTab() {
         const rem = action as { text?: string; when?: string };
         if (typeof rem.text === 'string' && rem.text.trim()) {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const plan = require('../../store/practicePlanStore') as typeof import('../../store/practicePlanStore');
             plan.usePracticePlanStore.getState().addReminder(rem.text.trim(), rem.when ?? null);
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const toast = require('../../store/toastStore') as typeof import('../../store/toastStore');
             toast.useToastStore.getState().show(`⏰ Reminder set${rem.when ? ` — ${rem.when.trim()}` : ''}`);
           } catch (e) { console.log('[caddie] set_reminder failed (non-fatal):', e); }
@@ -1971,7 +1956,6 @@ export default function CaddieTab() {
         // Append works regardless of round state; this just makes it VISIBLE with a
         // warm, valence-aware confirmation so you can see the caddie register it.
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const toast = require('../../store/toastStore') as typeof import('../../store/toastStore');
           const emoji = a.valence === 'positive' ? '💚' : a.valence === 'negative' ? '🫶' : '👍';
           const label = (a.state || '').trim();
@@ -1988,10 +1972,8 @@ export default function CaddieTab() {
         // brain already spoke the confirmation; this just persists it.
         const a = action as { note: string };
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const issue = require('../../store/issueLogStore') as typeof import('../../store/issueLogStore');
           issue.useIssueLogStore.getState().addUserIssue(a.note ?? '');
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const toast = require('../../store/toastStore') as typeof import('../../store/toastStore');
           toast.useToastStore.getState().show('📝 Logged to the issue log');
         } catch (e) { console.log('[caddie] log_issue write failed (non-fatal):', e); }
@@ -2066,7 +2048,6 @@ export default function CaddieTab() {
         // service dispatcher: it excluded 'custom' and skipped the setUseCustomCaddie
         // sync (stale avatar/voice overrides). Delegate to the ONE implementation.
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           (require('../../services/voice/conversationalToolDispatch') as typeof import('../../services/voice/conversationalToolDispatch'))
             .dispatchConversationalToolActions([action]);
         } catch (e) { console.log('[caddie] switch_caddie dispatch failed:', e); }
@@ -2075,15 +2056,11 @@ export default function CaddieTab() {
       case 'mark_tee':
         // 2026-07-09 — persist the GPS override (was signal-only → "marked" saved nothing off
         // the SmartVision screen). Still signal a mounted SmartVision.
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         void (require('../../services/gpsMarkOverride') as typeof import('../../services/gpsMarkOverride')).writeGpsMarkOverride('tee');
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('../../store/smartVisionSignalStore') as typeof import('../../store/smartVisionSignalStore')).useSmartVisionSignalStore.getState().signalMark('tee');
         break;
       case 'mark_green':
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         void (require('../../services/gpsMarkOverride') as typeof import('../../services/gpsMarkOverride')).writeGpsMarkOverride('green');
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('../../store/smartVisionSignalStore') as typeof import('../../store/smartVisionSignalStore')).useSmartVisionSignalStore.getState().signalMark('pin');
         break;
       case 'open_smartfinder':
@@ -2117,7 +2094,6 @@ export default function CaddieTab() {
         // no https/host allowlist and no internal-path handling, while the service
         // dispatcher enforced both. Delegate to the ONE implementation.
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           (require('../../services/voice/conversationalToolDispatch') as typeof import('../../services/voice/conversationalToolDispatch'))
             .dispatchConversationalToolActions([action]);
         } catch (e) { console.log('[caddie] open_url dispatch failed:', e); }
@@ -2155,7 +2131,6 @@ export default function CaddieTab() {
          * logs genuinely unknown types itself. [[no-half-fixes-enforce-every-surface]]
          */
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           (require('../../services/voice/conversationalToolDispatch') as typeof import('../../services/voice/conversationalToolDispatch'))
             .dispatchConversationalToolActions([action]);
         } catch (e) {

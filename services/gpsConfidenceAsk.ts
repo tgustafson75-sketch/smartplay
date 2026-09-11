@@ -75,7 +75,6 @@ export function initGpsConfidenceAsk(): () => void {
   // initialized at app root and doesn't need to drag in roundStore
   // until the subscriber actually fires.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const round = require('../store/roundStore') as typeof import('../store/roundStore');
     let prevHole = round.useRoundStore.getState().currentHole;
     let prevActive = round.useRoundStore.getState().isRoundActive;
@@ -120,13 +119,9 @@ async function maybeAskWhatHole(accuracy_m: number | null): Promise<void> {
   let round: typeof import('../store/roundStore');
   let voiceService: typeof import('./voiceService');
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     settings = require('../store/settingsStore') as typeof import('../store/settingsStore');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     trust = require('../store/trustLevelStore') as typeof import('../store/trustLevelStore');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     round = require('../store/roundStore') as typeof import('../store/roundStore');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     voiceService = require('./voiceService') as typeof import('./voiceService');
   } catch (e) {
     console.log('[gpsConfidenceAsk] dependency load failed (non-fatal):', e);

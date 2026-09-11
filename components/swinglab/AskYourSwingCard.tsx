@@ -75,7 +75,6 @@ export default function AskYourSwingCard({ session }: Props) {
   // swing-question answer speaks as the SAME caddie as every other surface, never drifting character.
   const activePersona = (() => {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       return (require('../../services/caddieResolver') as typeof import('../../services/caddieResolver')).getActiveCaddie();
     } catch { return caddiePersonality; }
   })();
@@ -130,7 +129,6 @@ export default function AskYourSwingCard({ session }: Props) {
             // it can answer "is this my usual miss?" from the CNS instead of being a memory island.
             player_memory: (() => {
               try {
-                // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const { getCaddieContext } = require('../../services/caddieMemoryRetrieval') as typeof import('../../services/caddieMemoryRetrieval');
                 return getCaddieContext({ club: session.club }).promptBlock || null;
               } catch { return null; }

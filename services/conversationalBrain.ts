@@ -70,11 +70,8 @@ export async function conversationalBrainTurn(utterance: string, opts?: { timeou
   // store's per-session cap + pending guard bound it further.
   try {
     if (/(i'?m (so |really )?(stuck|frustrated)|not getting (any )?better|keep (doing|hitting) the same|what am i doing wrong)/i.test(utterance)) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const ti = require('./teamIntelligence') as typeof import('./teamIntelligence');
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const surf = (require('./activeSurfaceRegistry') as typeof import('./activeSurfaceRegistry')).getActiveSurface();
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const roundActive = (require('../store/roundStore') as typeof import('../store/roundStore')).useRoundStore.getState().isRoundActive;
       const pillar = roundActive ? 'round' as const
         : surf === 'cage' || surf === 'swing_library' || surf === 'swing_detail' ? 'practice' as const

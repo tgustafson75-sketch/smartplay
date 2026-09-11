@@ -1105,7 +1105,6 @@ export default function PlayTab() {
               // never for a course already owned (was claiming 'downloaded' for weeks-old courses).
               if (r.ok && r.fresh && r.courseId && !downloadToastFiredRef.current.has(r.courseId)) {
                 downloadToastFiredRef.current.add(r.courseId);
-                // eslint-disable-next-line @typescript-eslint/no-require-imports
                 (require('../../store/toastStore') as typeof import('../../store/toastStore')).useToastStore.getState()
                   .show(`${nearest.name} is ready — full course data downloaded.`);
               }

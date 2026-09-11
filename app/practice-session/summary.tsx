@@ -170,7 +170,6 @@ export default function CageSummary() {
       // UI (CaddieSuggestionCard) — and were never called from anywhere. This is their designed
       // boundary moment (session analysis complete). Best-effort; detection stays conservative.
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const ti = require('../../services/teamIntelligence') as typeof import('../../services/teamIntelligence');
         ti.evaluateCageEnd();
         const fresh = useSwingSessionStore.getState().sessionHistory.find((x) => x.id === session.id);

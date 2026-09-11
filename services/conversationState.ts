@@ -59,7 +59,6 @@ export function recordUserTurn(text: string): void {
   // voice path already funnels through, rather than at each call site (which is how half of them
   // would have been missed). Truncated: a trace is for reading, not transcription.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('./roundTrace') as typeof import('./roundTrace')).trace('voice', 'said', { text: text.trim().slice(0, 120) });
   } catch { /* non-fatal */ }
   if (buffer.length > MAX_TURNS) buffer = buffer.slice(-MAX_TURNS);
@@ -72,7 +71,6 @@ export function recordKevinTurn(text: string): void {
   evictIfStale();
   buffer.push({ role: 'kevin', text: text.trim(), timestamp: Date.now() });
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('./roundTrace') as typeof import('./roundTrace')).trace('voice', 'turn_reply', { text: text.trim().slice(0, 120) });
   } catch { /* non-fatal */ }
   if (buffer.length > MAX_TURNS) buffer = buffer.slice(-MAX_TURNS);

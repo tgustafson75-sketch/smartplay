@@ -91,7 +91,6 @@ async function ensureAnonId(): Promise<string> {
 function getUserId(): string | null {
   try {
     // Dynamic require avoids a hard module cycle at import time.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mod = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
     const email = mod.usePlayerProfileStore.getState().email;
     return typeof email === 'string' && email.trim() ? email.trim() : null;

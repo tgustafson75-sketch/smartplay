@@ -54,7 +54,6 @@ import type { SubscriptionStatus } from '../../store/playerProfileStore';
  */
 function reportSilentFailure(e: unknown, context: Record<string, unknown>): void {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('../analytics') as typeof import('../analytics')).captureError(e, context);
   } catch { /* reporting is best-effort */ }
 }
@@ -132,7 +131,6 @@ function sdk(): AnySdk | null {
   if (cachedSdk) return cachedSdk;
   if (sdkMissing) return null;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mod = require('react-native-purchases');
     const Purchases = mod?.default ?? mod;
     // NOTE (audit 1): this proves the JS module loaded, NOT that the native side exists — configure

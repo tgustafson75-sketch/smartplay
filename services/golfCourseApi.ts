@@ -504,7 +504,6 @@ export async function searchCourses(
  *  matched) must still be visible somewhere, or "search is broken" is unfalsifiable. Never throws. */
 function logSearch(stage: string, details: Record<string, unknown>, kind: 'analysis_error' | 'diag' = 'analysis_error'): void {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('../store/issueLogStore').useIssueLogStore.getState().addAppEvent(stage, details, kind);
   } catch { /* best-effort */ }
 }

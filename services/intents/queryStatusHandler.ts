@@ -164,7 +164,6 @@ export const queryStatusHandler: IntentHandler = {
          * line and is appended to whatever is already there, de-duplicated.
          */
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const ps = require('../playSongFlow') as typeof import('../playSongFlow');
           const cand = ps.takeSongRoutineCandidate();
           if (cand) {
@@ -271,9 +270,7 @@ export const queryStatusHandler: IntentHandler = {
         let clubName: string | null = null;
         let label = 'that club';
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const rec = require('../clubRecognition') as typeof import('../clubRecognition');
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const cs = require('../../store/clubStatsStore') as typeof import('../../store/clubStatsStore');
           const parsed = rec.parseSpokenClub(phrase);
           if (parsed) {
@@ -289,7 +286,6 @@ export const queryStatusHandler: IntentHandler = {
             follow_up_needed: true,
           };
         }
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const store = (require('../../store/clubStatsStore') as typeof import('../../store/clubStatsStore')).useClubStatsStore.getState();
         const dist = store.distanceFor(clubName as never);
         const tracked = store.hasDistance(clubName as never);
@@ -349,7 +345,6 @@ export const queryStatusHandler: IntentHandler = {
             if (fix && green) {
               const yds = Math.round(haversineYards({ lat: fix.lat, lng: fix.lng }, green));
               if (yds > 0 && yds <= 400) {
-                // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const { useClubStatsStore } = require('../../store/clubStatsStore') as typeof import('../../store/clubStatsStore');
                 const recClub = useClubStatsStore.getState().inferClub(yds);
                 // kind 'inferred': this is inferClub(yards) — the APP picking a club from a
@@ -863,9 +858,7 @@ export const queryStatusHandler: IntentHandler = {
           // drought don't spam.
           const roundState = useRoundStore.getState();
           const holeMeta = roundState.courseHoles?.find(h => h.hole === greenHole);
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const profileMod = require('../../store/playerProfileStore') as typeof import('../../store/playerProfileStore');
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const settingsMod = require('../../store/settingsStore') as typeof import('../../store/settingsStore');
           const player = profileMod.usePlayerProfileStore.getState();
           const settings = settingsMod.useSettingsStore.getState();

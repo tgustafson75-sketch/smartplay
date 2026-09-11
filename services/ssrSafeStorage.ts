@@ -44,7 +44,6 @@ function reportPersistFailure(key: string, err: unknown): void {
   console.log('[persist] setItem FAILED for', key, '—', msg);
   if (key === ISSUE_LOG_KEY) return; // never recurse into the log we're writing to
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('../store/issueLogStore').useIssueLogStore.getState().addAppEvent('persist_write_failed', {
       store_key: key,
       error: msg.slice(0, 200),

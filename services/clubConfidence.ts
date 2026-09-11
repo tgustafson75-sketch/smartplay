@@ -14,9 +14,7 @@ const WINDOW = 24;     // consider the most recent N rated swings for this club
 export function updateClubConfidenceFromCage(club: string | null | undefined): void {
   if (!club || club === 'unknown') return;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const cage = require('../store/swingSessionStore') as typeof import('../store/swingSessionStore');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const rel = require('../store/relationshipStore') as typeof import('../store/relationshipStore');
 
     const sessions = cage.useSwingSessionStore.getState().sessionHistory;

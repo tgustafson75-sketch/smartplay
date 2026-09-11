@@ -419,14 +419,11 @@ function AppNavigator() {
     const remind = () => {
       if (cancelled) return false;
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const prof = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
         if (!prof.isOwnerEmail(prof.usePlayerProfileStore.getState().email)) return true;  // settled: not the owner
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const cl = require('../store/ownerChecklistStore') as typeof import('../store/ownerChecklistStore');
         const open = cl.useOwnerChecklistStore.getState().items.filter(i => !i.done).length;
         if (open === 0) return true;
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('../store/toastStore') as typeof import('../store/toastStore'))
           .useToastStore.getState().show(`${open} on your checklist — ask me to read it`);
         cl.useOwnerChecklistStore.getState().markReminded();

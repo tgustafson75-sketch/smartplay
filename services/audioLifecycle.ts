@@ -53,7 +53,6 @@ async function goCold(reason: string): Promise<void> {
     // './voiceService'` would cycle. Require at call time is safe
     // because by the time goCold ever fires (idle 90s / app
     // background / trust quiet), the JS bundle is fully loaded.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const voiceMod = require('./voiceService') as typeof import('./voiceService');
     await voiceMod.setAudioModeSerial({
       allowsRecordingIOS: false,

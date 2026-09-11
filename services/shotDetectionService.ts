@@ -318,7 +318,6 @@ class ShotDetector {
     // RESULT card from nowhere. Dynamic require avoids dragging
     // roundStore into this module at boot.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const round = require('../store/roundStore') as typeof import('../store/roundStore');
       if (!round.useRoundStore.getState().isRoundActive) return;
     } catch (e) {
@@ -435,7 +434,6 @@ class ShotDetector {
     this.lastSensedCart = sensed;
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const round = require('../store/roundStore') as typeof import('../store/roundStore');
       // An explicit player choice is never overridden — we only fill an unset one.
       const declared = round.useRoundStore.getState().transportMode;

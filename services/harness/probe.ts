@@ -88,7 +88,6 @@ export class IssueEventProbe {
 
   start(): void {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { useIssueLogStore } = require('../../store/issueLogStore') as typeof import('../../store/issueLogStore');
       for (const e of useIssueLogStore.getState().entries) this.seen.add(e.id);
     } catch { /* no store, no flow trace */ }
@@ -100,7 +99,6 @@ export class IssueEventProbe {
    */
   stop(): string[] {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { useIssueLogStore } = require('../../store/issueLogStore') as typeof import('../../store/issueLogStore');
       const fresh = useIssueLogStore.getState().entries.filter(e => !this.seen.has(e.id));
       return fresh

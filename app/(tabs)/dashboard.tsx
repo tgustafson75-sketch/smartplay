@@ -1533,7 +1533,6 @@ export default function Dashboard() {
               activeOpacity={0.7}
               onPress={() => {
                 try {
-                  // eslint-disable-next-line @typescript-eslint/no-require-imports
                   (require('../../store/toastStore') as typeof import('../../store/toastStore'))
                     .useToastStore.getState().show('Longest Putt is under Settings → Profile');
                 } catch { /* toast is best-effort */ }

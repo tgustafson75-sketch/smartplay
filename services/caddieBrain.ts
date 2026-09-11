@@ -116,9 +116,7 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
      * left the caddie-tab mic without a putt intercept for a month. One brain, one place.
      */
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { noteCaddieAskedForPutts } = require('./pendingPuttAsk') as typeof import('./pendingPuttAsk');
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const rs = (require('../store/roundStore') as typeof import('../store/roundStore')).useRoundStore.getState();
       noteCaddieAskedForPutts(text, rs.isRoundActive ? rs.currentHole : null);
     } catch { /* never let this affect the turn */ }

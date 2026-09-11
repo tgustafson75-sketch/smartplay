@@ -241,7 +241,6 @@ export type AnalysisTiming = {
 
 function logAnalysisTiming(t: AnalysisTiming): void {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('../store/issueLogStore') as typeof import('../store/issueLogStore')).useIssueLogStore
       .getState().addAppEvent('swing_analysis_timing', t as unknown as Record<string, unknown>, 'diag');
   } catch { /* telemetry is never allowed to break an analysis */ }
@@ -377,7 +376,6 @@ async function probeDurationOn(clipUri: string): Promise<number> {
     // 2026-08-09 (shared-copy verification) — the Audio.Sound load is a NATIVE DECODER read; under
     // the shared-copy pool other consumers' retrievers may hold the SAME file, so this must run
     // through the global media-read chain (decoder + retriever on one file = the SIGSEGV class).
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { serializeMediaRead } = require('../utils/videoThumbnail') as typeof import('../utils/videoThumbnail');
     const probed = await serializeMediaRead(async () => {
       const { sound, status } = await Audio.Sound.createAsync({ uri: clipUri }, { shouldPlay: false });
@@ -506,7 +504,6 @@ export async function extractKeyFrames(
   if (!sharedCopy) {
     V6('STAGE 2 — private copy failed, refusing to decode the original');
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('../store/issueLogStore').useIssueLogStore.getState().addAppEvent('frame_extraction_no_private_copy', {
         uri_scheme: clipUri.split(':')[0],
         uri_tail: clipUri.slice(-44),
@@ -676,7 +673,6 @@ export async function extractKeyFrames(
     if (valid.length === 0) {
       try {
         const firstErrs = perFrameOutcomes.filter(o => !o.ok).slice(0, 3).map(o => o.error);
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         require('../store/issueLogStore').useIssueLogStore.getState().addAppEvent('frame_extraction_empty', {
           uri_scheme: clipUri.split(':')[0],
           uri_tail: clipUri.slice(-44),
@@ -923,7 +919,6 @@ function logLocate(stage: string, details: Record<string, unknown>): void {
     const reason = typeof details.reason === 'string' ? details.reason : '';
     const expected = stage.endsWith('_located')
       || reason === 'clip_under_12s' || reason === 'clip_too_short';
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('../store/issueLogStore').useIssueLogStore.getState()
       .addAppEvent(stage, details, expected ? 'diag' : 'analysis_error');
   } catch { /* best-effort */ }
@@ -1615,7 +1610,6 @@ export async function analyzeSwing(
     // pipe end-to-end. Wrapped in try/catch so a store hiccup never
     // blocks the analysis return path.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const dbg = require('../store/swingAnalysisDebugStore') as typeof import('../store/swingAnalysisDebugStore');
       // Perspective isn't on the analyzeSwing context type today; the
       // store field is null-tolerant and future-proofed if a caller

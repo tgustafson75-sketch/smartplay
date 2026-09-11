@@ -403,7 +403,6 @@ export interface ResolvedGreen {
 export function resolveGreenCoords(holeNumber: number): ResolvedGreen {
   const out = resolveGreenCoordsInner(holeNumber);
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const rt = require('./roundTrace') as typeof import('./roundTrace');
     rt.traceDeep('gps', 'green_tier', {
       hole: holeNumber,
@@ -658,7 +657,6 @@ function resolveHoleDataWithFallback(hole: number): import('../store/roundStore'
   const round = useRoundStore.getState();
   const live = round.courseHoles.find(h => h.hole === hole);
   if (live) return live;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { getBundledHoles } = require('../data/courses') as typeof import('../data/courses');
   const courseId = resolveSmartFinderCourseId(round);
   const bundled = getBundledHoles(courseId);
@@ -826,7 +824,6 @@ export function getGreenYardagesSync(holeNumber?: number): GreenYardages {
    */
   const traceReason = (reason: string, extra?: Record<string, string | number | boolean | null>) => {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       (require('./roundTrace') as typeof import('./roundTrace')).trace('gps', 'yardage', { hole, reason, ...extra });
     } catch { /* non-fatal */ }
   };

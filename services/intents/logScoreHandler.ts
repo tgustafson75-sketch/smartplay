@@ -67,7 +67,6 @@ export const logScoreHandler: IntentHandler = {
     // 2026-08-09 (on-course audit C2) — a bare score (no hole spoken) targets the lowest UNSCORED hole
     // at/behind currentHole, NOT the nav currentHole (which GPS/first-score auto-advance move on their
     // own). An explicit spoken hole still wins.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { voiceScoreHole } = require('../../store/roundStore') as typeof import('../../store/roundStore');
     const hole = parseHole(params.hole_number, voiceScoreHole(round));
     const par = holePar(hole);
@@ -162,7 +161,6 @@ export const logScoreHandler: IntentHandler = {
      * follow-up loop and is read as a two on the hole — an eagle that overwrites the bogey he just
      * logged correctly. See services/pendingPuttAsk.
      */
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('../pendingPuttAsk') as typeof import('../pendingPuttAsk')).markAwaitingPutts(hole);
     return {
       success: true,

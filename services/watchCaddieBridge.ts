@@ -119,7 +119,6 @@ export function isWatchCaddieBridgeAvailable(): boolean {
  */
 function traceWatch(tag: string, data?: Record<string, string | number | boolean | null>): void {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('./roundTrace') as typeof import('./roundTrace')).trace('watch', tag, data);
   } catch { /* tracing must never affect the round */ }
 }
@@ -248,7 +247,6 @@ export async function initWatchCaddieBridge(): Promise<boolean> {
      * hole and spoken line now push through services/watchRoundSync (owner-gated, fire-and-forget).
      */
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       (require('./watchRoundSync') as typeof import('./watchRoundSync')).startWatchRoundSync();
     } catch (e) { devLog(`[watchCaddie] round sync failed to start: ${String(e)}`); }
 
@@ -313,7 +311,6 @@ export async function initWatchCaddieBridge(): Promise<boolean> {
 /** Tear down. Idempotent. */
 export async function stopWatchCaddieBridge(): Promise<void> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('./watchRoundSync') as typeof import('./watchRoundSync')).stopWatchRoundSync();
   } catch { /* non-fatal */ }
   try {

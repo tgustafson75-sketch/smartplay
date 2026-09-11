@@ -120,7 +120,6 @@ export function GlobalToolsMenu() {
     // leaving 'custom' for any other persona, flip it off so the
     // standard persona's portrait + voice resume cleanly.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const profileMod = require('../../store/playerProfileStore') as typeof import('../../store/playerProfileStore');
       profileMod.usePlayerProfileStore.getState().setUseCustomCaddie(next === 'custom');
     } catch (e) {
@@ -131,7 +130,6 @@ export function GlobalToolsMenu() {
     let displayName = getCaddieName(next);
     if (next === 'custom') {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const profileMod = require('../../store/playerProfileStore') as typeof import('../../store/playerProfileStore');
         const name = profileMod.usePlayerProfileStore.getState().customCaddieName;
         if (name && name.trim()) displayName = name.trim();

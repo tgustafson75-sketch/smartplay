@@ -915,7 +915,6 @@ const currentPlaybackVolume = (): number => {
     const s = settingsMod.useSettingsStore.getState();
     // 2026-08-09 (pass-2 P2) — the playback-volume dial must track the persona actually SPEAKING (the
     // active per-pillar caddie), not the global pick, or a per-pillar caddie is scaled by the wrong dial.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const persona = (require('./caddieResolver') as typeof import('./caddieResolver')).getActiveCaddie();
     const dial = s.personaIntensity?.[persona];
     let base = 1.0;
@@ -1243,7 +1242,6 @@ async function deviceSpeakFallback(text: string, language: 'en' | 'es' | 'zh', m
   // Breadcrumb only, as `diag`: a silent turn stays explainable in the issue log without reading as
   // a failure the player has to act on. [[silent-failure-audit-analysis-and-first-turn]]
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('../store/issueLogStore') as typeof import('../store/issueLogStore')).useIssueLogStore
       .getState().addAppEvent('voice_device_tts_suppressed', { chars: text.length, language, gender }, 'diag');
   } catch { /* best-effort */ }
@@ -1547,7 +1545,6 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
           notifySpeaking(false);
           const fbText = opts?.caption ?? null;
           if (fbText) {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const st = (require('../store/settingsStore') as typeof import('../store/settingsStore')).useSettingsStore.getState();
             const lang = (['en', 'es', 'zh'] as const).includes(st.language as 'en' | 'es' | 'zh') ? (st.language as 'en' | 'es' | 'zh') : 'en';
             await deviceSpeakFallback(fbText, lang, myId, (st.voiceGender as 'male' | 'female') ?? 'male');
@@ -1674,7 +1671,6 @@ export const speak = async (
    * screen does not, which is the inconsistency, not the fix.
    */
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('./watchRoundSync') as typeof import('./watchRoundSync')).pushWatchVoicePrompt(text);
   } catch { /* the wrist never delays the voice */ }
 
@@ -1738,10 +1734,8 @@ export const speak = async (
   // unchanged — additive, no regression to the default path.
   let customClipUri: string | null = null;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const profile = require('../store/playerProfileStore').usePlayerProfileStore.getState();
     if (profile?.useCustomCaddie) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const clipLookup = require('./customCaddieClips') as typeof import('./customCaddieClips');
       const maybeUri = clipLookup.lookupClipUri(text, profile.customCaddieClips ?? null);
       // 2026-05-27 — Fix EC: verify the file ACTUALLY exists before
@@ -1821,11 +1815,9 @@ export const speak = async (
      * It is now the same call every other writer makes, so the pronoun on screen, the device-TTS
      * fallback and the cloud voice cannot drift apart. The VOICE selection below is unchanged.
      */
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const cg = require('./caddieGender') as typeof import('./caddieGender');
     effectiveGender = cg.genderForPersona(persona);
     if (persona === 'custom') {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const pp = require('../store/playerProfileStore').usePlayerProfileStore.getState();
       // 2026-07-30 (Tim — "tie my custom persona to one of the caddies"). The custom caddie INHERITS its
       // base persona's voice, so it always has a real, on-character voice instead of a generic gender

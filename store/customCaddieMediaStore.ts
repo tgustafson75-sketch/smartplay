@@ -53,7 +53,6 @@ export const useCustomCaddieMediaStore = create<CustomCaddieMediaState>()(
       migrateFromProfile: () => {
         if (get()._migratedFromProfile) return;
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const profileMod = require('./playerProfileStore') as typeof import('./playerProfileStore');
           const profile = profileMod.usePlayerProfileStore.getState() as unknown as {
             selfieB64?: string | null;

@@ -32,7 +32,6 @@ const THROTTLE_MS = 40_000;     // at most ~1 extract per 40s of conversation
  *  round distills separately at endRound, and mid-round chat is tactical, not narrative. */
 function roundActive(): boolean {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const r = require('../store/roundStore') as typeof import('../store/roundStore');
     return r.useRoundStore.getState().isRoundActive;
   } catch { return false; }
@@ -64,7 +63,6 @@ async function ingest(newUserTurns: ConversationTurn[]): Promise<boolean> {
     const hasFact = ['experience', 'practiceFrequency', 'timeAvailable'].some((k) => typeof f[k] === 'string' && (f[k] as string).trim())
       || ['likes', 'dislikes', 'workAreas', 'strengths', 'goals', 'story'].some((k) => Array.isArray(f[k]) && (f[k] as unknown[]).length > 0);
     if (!hasFact) return true;
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mem = require('../store/caddieMemoryStore') as typeof import('../store/caddieMemoryStore');
     type NarrativeInput = Parameters<ReturnType<typeof mem.useCaddieMemoryStore.getState>['recordNarrative']>[0];
     mem.useCaddieMemoryStore.getState().recordNarrative({ ...(f as Record<string, unknown>), nowMs: Date.now() } as NarrativeInput);

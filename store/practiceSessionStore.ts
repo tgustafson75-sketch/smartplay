@@ -146,7 +146,6 @@ export const usePracticeSessionStore = create<PracticeSessionState>()(
           try {
             const key = active.focus ? `focus:${active.focus}` : active.kind;
             const label = active.focus ? prettyFocus(active.focus) : (active.kind === 'open_range' ? 'Open Range' : 'Practice');
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const pp = require('./practicePointsStore') as typeof import('./practicePointsStore');
             pp.usePracticePointsStore.getState().awardPracticePoints({ key, label, swings, now: Date.now() });
           } catch { /* award best-effort, never blocks ending a session */ }

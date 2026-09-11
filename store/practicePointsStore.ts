@@ -84,7 +84,6 @@ export const usePracticePointsStore = create<PracticePointsState>()(
           },
         }));
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const pts = require('./pointsStore') as typeof import('./pointsStore');
           pts.usePointsStore.getState().addPoints(WATCH_POINTS, label ? `Watched: ${label}` : 'Watched a drill video');
         } catch { /* tier feed best-effort */ }
@@ -110,7 +109,6 @@ export const usePracticePointsStore = create<PracticePointsState>()(
         // Unify: practice also feeds the visible tiered points (gamification),
         // so the user's level reflects practice, not just rounds/cage/caddie.
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const pts = require('./pointsStore') as typeof import('./pointsStore');
           pts.usePointsStore.getState().addPoints(granted, label ? `Practice: ${label}` : 'Practice session');
         } catch { /* tier feed best-effort */ }

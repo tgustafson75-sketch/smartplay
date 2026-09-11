@@ -33,12 +33,10 @@ export function logCrash(
     let route: string | null = null;
     let trail: string[] = [];
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const rb = require('./routeBreadcrumb');
       route = rb.getRoute?.() ?? null;
       trail = rb.getTrail?.() ?? [];
     } catch { /* no tracker — fall back to stack only */ }
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('../store/issueLogStore').useIssueLogStore.getState().addAppEvent(
       stage,
       {

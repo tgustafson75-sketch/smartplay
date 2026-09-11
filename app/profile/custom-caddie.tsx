@@ -320,7 +320,6 @@ export default function CustomCaddieScreen() {
             // Kevin. Sync the cycler back to Kevin on Clear so all
             // three (label / avatar / voice) match.
             try {
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
               const settingsMod = require('../../store/settingsStore') as typeof import('../../store/settingsStore');
               const s = settingsMod.useSettingsStore.getState();
               if (s.caddiePersonality === 'custom') {

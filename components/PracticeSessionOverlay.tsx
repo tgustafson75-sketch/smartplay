@@ -512,7 +512,6 @@ export default function PracticeSessionOverlay({ onComplete, onCancel, drill }: 
       // practiced, not just a count. Empty sessions don't farm points.
       if (swingCount > 0) {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const pointsMod = require('../store/pointsStore');
           const reason = activeDrill ? `cage_drill_${activeDrill.id}` : 'cage_session';
           pointsMod.usePointsStore.getState().addPoints(10, reason);

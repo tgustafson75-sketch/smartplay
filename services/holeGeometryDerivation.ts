@@ -432,7 +432,6 @@ export async function deriveHoleGeometry(input: {
       // next player of this course reads it back with no AI pass. Fire-and-forget; require
       // lazily so this module has no hard dependency on the sharing path.
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const cc = require('./courseCloud') as typeof import('./courseCloud');
         void cc.shareCourseGeometry(input.courseId, [derived]);
       } catch { /* sharing is optional */ }

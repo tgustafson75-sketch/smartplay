@@ -43,7 +43,6 @@ export interface RunnerCtx {
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
 async function waitForHoleCount(targetCount: number, timeoutMs: number): Promise<boolean> {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { useRoundStore } = require('../../store/roundStore');
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -63,14 +62,11 @@ function scheduleActions(scenario: ScenarioConfig): ReturnType<typeof setTimeout
     handles.push(setTimeout(() => {
       try {
         if (action.kind === 'manual_mark') {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const bus = require('../positionMarkBus');
           // Programmatic mark: we don't go through forceMarkPosition because
           // that pulls real GPS (which is suppressed during synthetic). Instead
           // we emit a MarkedPosition based on the current simulator fix.
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const sf = require('../smartFinderService');
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const { useRoundStore } = require('../../store/roundStore');
           const fix = sf.getLastFix();
           if (fix) {
@@ -94,7 +90,6 @@ function scheduleActions(scenario: ScenarioConfig): ReturnType<typeof setTimeout
         } else if (action.kind === 'force_jump') {
           triggerGlitch(action.lateral_m);
         } else if (action.kind === 'force_advance_hole') {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const { useRoundStore } = require('../../store/roundStore');
           const cur = useRoundStore.getState().currentHole;
           useRoundStore.getState().setCurrentHole(cur + 1);
@@ -154,7 +149,6 @@ function assertNoFalseOffCourse(): AssertionResult {
 }
 
 function assertHolesAdvanced(min: number): AssertionResult {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { useRoundStore } = require('../../store/roundStore');
   const scored = Object.keys(useRoundStore.getState().scores).length;
   return {
@@ -267,7 +261,6 @@ export async function runAuditV2(ctx: RunnerCtx): Promise<AuditReport> {
       configureNoise(sc.emitter);
 
       // Apply pace BEFORE starting the walk so the walk uses the override.
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const sim = require('../simulatedGPS');
       if (sc.emitter.pace_mps) sim.setSimulatorPace(sc.emitter.pace_mps);
       sim.setSimulatorPaused(false);

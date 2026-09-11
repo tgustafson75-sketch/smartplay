@@ -324,7 +324,6 @@ function setSessionStateMirror(next: SessionState): void {
   // keeps the feel immediate and can't double-fire, since opening → listening has prev !== 'idle'.
   if (prev === 'idle' && (next === 'opening' || next === 'listening')) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const H = require('expo-haptics');
       void H.impactAsync(H.ImpactFeedbackStyle.Medium).catch(() => {});
     } catch { /* haptics optional */ }
@@ -333,7 +332,6 @@ function setSessionStateMirror(next: SessionState): void {
     // state and reset the idle clock so the pipeline isn't mid-doze when the user starts speaking (the cart
     // case: phone dimmed 40y away). Best-effort — can never affect the voice flow.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       (require('../store/restModeStore') as typeof import('../store/restModeStore')).useRestModeStore.getState().exitRest();
     } catch { /* rest store optional */ }
   }
@@ -356,7 +354,6 @@ function setSessionStateMirror(next: SessionState): void {
   }
   armDormancyTimer(next);
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { useListeningSessionStore } = require('../store/listeningSessionStore');
     useListeningSessionStore.getState().setState(next);
   } catch (e) {
@@ -663,7 +660,6 @@ function failureFallbackFor(lang: string | null | undefined): string {
 
 function customCaddieFields(): { customCaddieBasePersona: string; customCaddieName: string | null } {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const p = require('../store/playerProfileStore').usePlayerProfileStore.getState();
     return { customCaddieBasePersona: p.customCaddieBasePersona ?? 'kevin', customCaddieName: p.customCaddieName ?? null };
   } catch { return { customCaddieBasePersona: 'kevin', customCaddieName: null }; }
@@ -806,7 +802,6 @@ async function deliverBrainReply(opts: {
   //     bag and the green, and a local club call beats "I'm having trouble connecting" every time.
   let localAnswer: string | null = null;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const off = (require('./offlineCaddie') as typeof import('./offlineCaddie')).answerOffline(utterance, lang);
     localAnswer = off?.text?.trim() || null;
   } catch { /* the local answer is a bonus, never a dependency */ }

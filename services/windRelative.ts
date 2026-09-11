@@ -38,7 +38,6 @@ export function shotBearingDeg(hole: number): number | null {
   const green = getGreenCentroid(hole);
   if (!green) return null;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getLastFix } = require('./gpsManager') as typeof import('./gpsManager');
     const fix = getLastFix();
     if (fix && fix.lat != null && fix.lng != null) {

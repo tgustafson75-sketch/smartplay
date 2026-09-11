@@ -336,7 +336,6 @@ export const useCaddieMemoryStore = create<CaddieMemoryState>()(
         if (hole >= 10 && hole <= 18 && book?.holes) {
           let twiceAround = false;
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const rs = (require('./roundStore') as typeof import('./roundStore')).useRoundStore.getState();
             twiceAround = rs.isRoundActive && rs.twiceAround === true
               && (rs.activeCourseId === courseId || rs.activeCourseId == null);

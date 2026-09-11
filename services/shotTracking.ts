@@ -106,9 +106,7 @@ export function verifyShotAtLocation(loc: ShotLocation, opts?: { club?: ClubName
   // caddie says "8-iron", the player hits it without a word — now attributes the 8-iron, and via
   // confirmTrackedShot its MEASURED distance trains the learned bag) > distance inference (a guess,
   // last resort). normalizeClub keeps the resolver's string vocab out of the ClubName union.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { resolveShotClub } = require('./shotClubResolver') as typeof import('./shotClubResolver');
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { normalizeClub: normClub } = require('./clubNormalize') as typeof import('./clubNormalize');
   const resolved = resolveShotClub(opts?.club ?? null);
   const club: ClubName | null =

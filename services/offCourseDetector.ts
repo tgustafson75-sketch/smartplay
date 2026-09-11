@@ -173,7 +173,6 @@ function tick(): void {
   // and score logs.
   const logEvent = (kind: string, detail: string) => {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { logHarnessEvent } = require('./simulatedGPS');
       logHarnessEvent(kind, detail);
     } catch {}

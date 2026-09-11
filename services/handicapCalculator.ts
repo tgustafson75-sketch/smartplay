@@ -338,7 +338,6 @@ export function postingBaseline(r: {
   let slope: number | null = null;
   try {
     if (r.courseId && r.courseId.startsWith('local:')) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { COURSES } = require('../data/courses') as typeof import('../data/courses');
       const c = COURSES.find(x => x.id === r.courseId!.slice('local:'.length));
       const rr = c ? parseFloat(c.rating) : NaN;

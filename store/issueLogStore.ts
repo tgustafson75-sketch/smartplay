@@ -162,7 +162,6 @@ const MAX_ENTRIES = 100;
  *  imports this store). Best-effort; never throws. */
 function scheduleAutoSend(): void {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('../services/issueLogExport') as typeof import('../services/issueLogExport')).scheduleIssueAutoSend();
   } catch { /* auto-send is optional */ }
 }
@@ -182,12 +181,9 @@ export function selfContext(route: string): IssueLogEntry['context'] {
   let courseId: string | null = null;
   let currentHole: number | null = null;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const round = require('./roundStore').useRoundStore.getState();
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const settings = require('./settingsStore').useSettingsStore.getState();
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       appVersion = require('expo-constants').default?.expoConfig?.version ?? '1.0.0';
     } catch { /* keep default */ }
     persona = settings?.caddiePersonality ?? null;
@@ -255,13 +251,10 @@ export const useIssueLogStore = create<IssueLogState>()(
           courseId: null, currentHole: null, appVersion: '1.0.0',
         };
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const round = require('./roundStore').useRoundStore.getState();
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const settings = require('./settingsStore').useSettingsStore.getState();
           let appVersion = '1.0.0';
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             appVersion = require('expo-constants').default?.expoConfig?.version ?? '1.0.0';
           } catch { /* keep default */ }
           context = {
@@ -298,7 +291,6 @@ export const useIssueLogStore = create<IssueLogState>()(
           courseId: null, currentHole: null, appVersion: '1.0.0',
         };
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const settings = require('./settingsStore').useSettingsStore.getState();
           context = { ...context, persona: settings?.caddiePersonality ?? null };
         } catch { /* best-effort context */ }
@@ -322,13 +314,10 @@ export const useIssueLogStore = create<IssueLogState>()(
           isRoundActive: false, courseId: null, currentHole: null, appVersion: '1.0.0',
         };
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const round = require('./roundStore').useRoundStore.getState();
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const settings = require('./settingsStore').useSettingsStore.getState();
           let appVersion = '1.0.0';
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             appVersion = require('expo-constants').default?.expoConfig?.version ?? '1.0.0';
           } catch { /* keep default */ }
           context = {
@@ -364,7 +353,6 @@ export const useIssueLogStore = create<IssueLogState>()(
         // Owner-only (mirrors bootMark / addUserIssue) — don't fill a beta tester's log
         // with their whole conversation. Fail-safe: if we can't tell, don't log.
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const prof = require('./playerProfileStore') as typeof import('./playerProfileStore');
           if (!prof.isOwnerEmail(prof.usePlayerProfileStore.getState().email)) return;
         } catch { return; }

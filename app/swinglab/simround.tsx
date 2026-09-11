@@ -97,9 +97,7 @@ export default function SwingSimScreen() {
   // identical "Got it" reply masking it. useFocusEffect drops the registration the moment the sim
   // stops being the visible screen and re-arms on return.
   useFocusEffect(useCallback(() => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const bus = require('../../services/simRoundBus') as typeof import('../../services/simRoundBus');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { normalizeClub } = require('../../services/clubNormalize') as typeof import('../../services/clubNormalize');
     bus.setSimGameActive(true);
     bus.registerSimClubResolver((clubId: string) => {

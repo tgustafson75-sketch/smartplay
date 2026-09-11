@@ -450,7 +450,6 @@ export default function SmartVisionScreen() {
     } catch { /* fall through */ }
     if (id.startsWith('custom:')) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const cc = require('../store/customCourseStore') as typeof import('../store/customCourseStore');
         const n = cc.useCustomCourseStore.getState().courses[id]?.name;
         if (n) return n;
@@ -1452,7 +1451,6 @@ export default function SmartVisionScreen() {
    */
   const strategyOwner = useMemo(() => {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const prof = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
       return prof.isOwnerEmail(prof.usePlayerProfileStore.getState().email);
     } catch { return false; }
@@ -1464,7 +1462,6 @@ export default function SmartVisionScreen() {
     // computeLandingZone falls back to its own 230 default rather than inventing a number for them.
     let driverYards: number | null = null;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const cs = require('../store/clubStatsStore').useClubStatsStore.getState();
       driverYards = cs.hasDistance('Driver') ? Math.round(cs.carryFor('Driver')) : null;
     } catch { /* the chart default is a fine fallback */ }
@@ -2780,7 +2777,6 @@ export default function SmartVisionScreen() {
             if (r.hazardNote) parts.push(`watch the ${r.hazardNote}`);
             if (r.tendencyNote) parts.push(r.tendencyNote);
             try {
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
               const toast = require('../store/toastStore') as typeof import('../store/toastStore');
               toast.useToastStore.getState().show(parts.join('  ·  '));
             } catch { /* non-fatal */ }

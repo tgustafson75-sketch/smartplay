@@ -146,7 +146,6 @@ export const logShotHandler: IntentHandler = {
      * arbitration between a declared club and an advised one, and no idea that an inferred stamp
      * isn't advice. Three shot-logging paths, three answers for the same shot. Now there is one.
      */
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { resolveShotClub } = require('../shotClubResolver') as typeof import('../shotClubResolver');
     const resolvedRec = resolveShotClub(parsedClub.club_id ?? null);
     const kevinRecClub = resolvedRec.recClub;
@@ -195,7 +194,6 @@ export const logShotHandler: IntentHandler = {
     // tonight that he couldn't tell when shot-log captured. Toast is
     // a deterministic visual confirmation that fires for every success.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const t = require('../../store/toastStore') as typeof import('../../store/toastStore');
       const directionTag = direction ? ` · ${direction}` : '';
       const distTag = distance != null ? ` · ${distance}y` : '';

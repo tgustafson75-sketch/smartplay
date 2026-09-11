@@ -95,7 +95,6 @@ export function getBundledHoles(courseId: string | null | undefined): CourseHole
   // resolution point: every caller (Play chip, runStartRound, hole count) gets these for free.
   if (courseId.startsWith('custom:')) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const cc = require('../store/customCourseStore').useCustomCourseStore.getState().getCustomCourse(courseId) as
         | { holes: {
               hole: number; par: number; distance: number | null; handicap?: number | null;

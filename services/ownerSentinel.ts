@@ -45,12 +45,10 @@ export function ownerSentinel(scope: string, err: unknown, extra?: Record<string
     const prev = lastFireAt.get(scope) ?? 0;
     if (now - prev < DEDUPE_WINDOW_MS) return;
 
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const profileMod = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
     const email = profileMod.usePlayerProfileStore.getState().email;
     if (!profileMod.isOwnerEmail(email)) return;
 
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const toastMod = require('../store/toastStore') as typeof import('../store/toastStore');
     const errText = err instanceof Error
       ? (err.message || err.name || 'error')
@@ -65,7 +63,6 @@ export function ownerSentinel(scope: string, err: unknown, extra?: Record<string
     // with its scope + error + extra, not just a 30s toast. We're already past the
     // owner gate + 30s-per-scope dedupe, so this can never flood the log.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('../store/issueLogStore').useIssueLogStore.getState()
         .addAppEvent(scope, { error: truncated, ...(extra ?? {}) }, 'app_error');
     } catch { /* best-effort — issue log unavailable in some test envs */ }

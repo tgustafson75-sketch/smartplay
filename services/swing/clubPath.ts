@@ -243,7 +243,6 @@ async function downscaled(frame: Frame, roi?: Roi | null): Promise<string | null
  */
 function logCapabilityLost(stage: string, details: Record<string, unknown>): void {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('../../store/issueLogStore').useIssueLogStore.getState().addAppEvent(stage, details, 'analysis_error');
   } catch { /* best-effort — never throw from a failure path */ }
 }

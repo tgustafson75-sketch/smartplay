@@ -211,7 +211,6 @@ export async function prefetchRoundData(args: PrefetchArgs): Promise<number> {
    * before you teed off").
    */
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const rt = require('./roundTrace') as typeof import('./roundTrace');
     rt.trace('course', 'geometry', { courseId, greens, holes: holes.length });
   } catch { /* tracing never blocks a prefetch */ }

@@ -119,7 +119,6 @@ async function ensurePostNotificationsPermission(): Promise<boolean> {
 function ensureTaskDefined(): boolean {
   if (taskDefined) return true;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const TaskManager = require('expo-task-manager') as typeof import('expo-task-manager');
     if (TaskManager.isTaskDefined(BACKGROUND_LOCATION_TASK)) {
       taskDefined = true;

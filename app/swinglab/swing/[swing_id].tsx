@@ -764,7 +764,6 @@ export default function SwingDetail() {
     // 2026-09-09 — `anchor` had no reporter anywhere. It decides which frames the arc is sampled
     // from, so an unanchored run and a mis-seen clubhead used to arrive looking identical.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const pipe = require('../../../services/swing/analysisPipeline') as typeof import('../../../services/swing/analysisPipeline');
       pipe.noteStage(pipe.runKeyFor(shot.clipUri, startMs, endMs), 'anchor',
         anchorMs != null ? 'ok' : 'empty', { anchorMs, method: shot.detectionMethod ?? null });
@@ -806,13 +805,11 @@ export default function SwingDetail() {
          * reports rather than refuses.
          */
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const pipe = require('../../../services/swing/analysisPipeline') as typeof import('../../../services/swing/analysisPipeline');
           pipe.checkOrder(pipe.runKeyFor(uri, startMs, endMs), 'club');
         } catch { /* observation only */ }
         const r = await detectClubPath({ videoUri: uri, startMs, endMs, impactMs: anchorMs, shouldAbort: () => cancelled });
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const pipe = require('../../../services/swing/analysisPipeline') as typeof import('../../../services/swing/analysisPipeline');
           pipe.noteStage(pipe.runKeyFor(uri, startMs, endMs), 'club',
             !r ? 'skipped' : (r.points.length >= 3 ? 'ok' : 'empty'),
@@ -862,7 +859,6 @@ export default function SwingDetail() {
            */
           if (r) clubArcRunKeyRef.current = runKey;
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             (require('../../../store/issueLogStore') as typeof import('../../../store/issueLogStore'))
               .useIssueLogStore.getState().addAppEvent(
                 r ? 'clubpath_arc_too_sparse' : 'clubpath_superseded',
@@ -992,7 +988,6 @@ export default function SwingDetail() {
     // swing_analyzed when the analysis lands successfully ('ok').
     if (analysisStatus === 'ok') {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         require('../../../services/usageTelemetry').track('swing_analyzed', { hasIssue: !!session?.primary_issue });
       } catch { /* telemetry never throws */ }
     }
@@ -1238,7 +1233,6 @@ export default function SwingDetail() {
             rawEndMs: wEnd,
           });
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const pipe = require('../../../services/swing/analysisPipeline') as typeof import('../../../services/swing/analysisPipeline');
             pipe.noteStage(pipe.runKeyFor(analyzeUri, wStart, wEnd), 'anchor',
               arcAnchorMs != null ? 'ok' : 'empty', { anchorMs: arcAnchorMs, method: selShot.detectionMethod ?? null });
@@ -1866,7 +1860,6 @@ export default function SwingDetail() {
   const logExportFailure = (stage: string, reason: string, extra?: Record<string, unknown>) => {
     console.log(`[swing-detail] ${stage} failed`, reason);
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       (require('../../../store/issueLogStore') as typeof import('../../../store/issueLogStore')).useIssueLogStore
         .getState().addAppEvent('export_failed', { stage, reason: reason.slice(0, 200), ...extra }, 'analysis_error');
     } catch { /* telemetry must never break the export path */ }
@@ -2057,7 +2050,6 @@ export default function SwingDetail() {
         // bare family code ("H"→"Hybrid", "D"→"Driver"), else the raw. Never surface a lone letter.
         const rawClub = typeof s.club === 'string' ? s.club : (s.upload as { club?: string } | undefined)?.club;
         if (rawClub && rawClub.trim() && rawClub.toLowerCase() !== 'unknown') {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const norm = (require('../../../services/clubNormalize') as typeof import('../../../services/clubNormalize')).normalizeClub(rawClub);
           const FAMILY: Record<string, string> = { H: 'Hybrid', D: 'Driver', W: 'Wood', I: 'Iron', P: 'Putter', PT: 'Putter' };
           const clubValue = norm ?? FAMILY[rawClub.toUpperCase()] ?? rawClub.replace(/_/g, ' ');
@@ -2093,7 +2085,6 @@ export default function SwingDetail() {
           // Look up issue_id first, then genuinely fall back to primary_fault so those reports get the
           // full named-drill plan instead of silently downgrading to the one-liner.
           if (!pi) return null;
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const { getDrillEntry } = require('../../../data/drillCatalog') as typeof import('../../../data/drillCatalog');
           const entry = getDrillEntry(String(pi.issue_id)) ?? getDrillEntry(String(pi.primary_fault ?? ''));
           const drills = entry?.drills ?? [];
@@ -4166,7 +4157,6 @@ function FeelNoteCard({ sessionId, initialNote }: { sessionId: string; initialNo
     const landed = setSessionFeel(sessionId, draft);
     if (!landed) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('../../../store/toastStore') as typeof import('../../../store/toastStore')).useToastStore
           .getState().show("Couldn't attach that to this swing — it's still here, try again.");
       } catch { /* best-effort */ }
@@ -4257,7 +4247,6 @@ function CoachNoteCard({ sessionId, initialNote }: { sessionId: string; initialN
     const landed = setSessionCoachNote(sessionId, draft);
     if (!landed) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('../../../store/toastStore') as typeof import('../../../store/toastStore')).useToastStore
           .getState().show("Couldn't attach that note to this swing — it's still here, try again.");
       } catch { /* toast is best-effort */ }

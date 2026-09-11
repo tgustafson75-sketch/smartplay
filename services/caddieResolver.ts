@@ -96,7 +96,6 @@ export function displayCaddieName(persona?: Persona | null): string {
   const p = persona ?? getActiveCaddie();
   if (p !== 'custom') return getCaddieName(p);
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const prof = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
     const chosen = prof.usePlayerProfileStore.getState().customCaddieName;
     if (typeof chosen === 'string' && chosen.trim()) return chosen.trim();

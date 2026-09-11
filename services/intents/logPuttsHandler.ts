@@ -49,7 +49,6 @@ export const logPuttsHandler: IntentHandler = {
     // 2026-08-09 (on-course audit C1) — putts FOLLOW the shot just scored. After "I made a 5" auto-
     // advances the hole, the "how many putts?" answer must land on the SCORED hole, not the new nav
     // currentHole. voicePuttsHole reads the recent-score mutation. Explicit spoken hole still wins.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { voicePuttsHole } = require('../../store/roundStore') as typeof import('../../store/roundStore');
     const hole = (typeof params.hole_number === 'number' && params.hole_number >= 1 && params.hole_number <= 18)
       ? params.hole_number
@@ -59,7 +58,6 @@ export const logPuttsHandler: IntentHandler = {
     if (putts === null) {
       // 2026-08-12 — same open-question marker as logScoreHandler, so a bare number answered on ANY
       // surface lands as putts rather than a score. See services/pendingPuttAsk.
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       (require('../pendingPuttAsk') as typeof import('../pendingPuttAsk')).markAwaitingPutts(hole);
       return {
         success: false,
@@ -70,7 +68,6 @@ export const logPuttsHandler: IntentHandler = {
     }
 
     round.logPutts(hole, putts);
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     (require('../pendingPuttAsk') as typeof import('../pendingPuttAsk')).clearAwaitingPutts();
     track('log_putts_voice', { hole, putts });
 

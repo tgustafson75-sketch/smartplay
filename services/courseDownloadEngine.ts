@@ -111,7 +111,6 @@ export async function locateNearbyCourses(
   const cacheKey = `course_locate_v2:${lat.toFixed(2)}:${lng.toFixed(2)}`;
   const readCache = async (): Promise<NearbyCourse[] | null> => {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const AS = (require('@react-native-async-storage/async-storage') as { default: typeof import('@react-native-async-storage/async-storage').default }).default;
       const raw = await AS.getItem(cacheKey);
       if (!raw) return null;
@@ -122,7 +121,6 @@ export async function locateNearbyCourses(
   const writeCache = async (courses: NearbyCourse[]): Promise<void> => {
     try {
       if (courses.length === 0) return;
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const AS = (require('@react-native-async-storage/async-storage') as { default: typeof import('@react-native-async-storage/async-storage').default }).default;
       // `at` is written for diagnostics only — nothing reads it, deliberately (see the no-TTL note
       // above). Recorded here rather than dropped so a field log can still say how old a served
@@ -209,7 +207,6 @@ const LOCATE_DIAGNOSTIC_STAGES = new Set([
 /** Best-effort issue-log breadcrumb — discovery failures were previously invisible. Never throws. */
 function logLocate(stage: string, details: Record<string, unknown>): void {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('../store/issueLogStore').useIssueLogStore.getState()
       .addAppEvent(stage, details, LOCATE_DIAGNOSTIC_STAGES.has(stage) ? 'diag' : 'analysis_error');
   } catch { /* best-effort */ }
@@ -421,7 +418,6 @@ export async function prefetchFoundCourses(
    * route around is not a guard. 'unknown' deliberately fails: an unmeasured connection is exactly
    * when to ask rather than assume someone's data plan.
    */
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { mayPullCourseNow } = require('./connectionClass') as typeof import('./connectionClass');
   const gate = await mayPullCourseNow().catch(() => ({ ok: false }));
   if (!gate.ok) {

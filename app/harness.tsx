@@ -84,7 +84,6 @@ let _scenariosLoadError: string | null = null;
 function loadScenarios() {
   if (_allScenariosCache || _scenariosLoadError) return;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mod = require('../services/harness/scenarios') as typeof import('../services/harness/scenarios');
     _allScenariosCache = mod.ALL_SCENARIOS;
   } catch (e) {

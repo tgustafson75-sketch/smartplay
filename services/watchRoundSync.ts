@@ -29,7 +29,6 @@ import { devLog } from './devLog';
 /** The freeze boundary. Everything below is a no-op for anyone who is not the owner. */
 function ownerOnly(): boolean {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const prof = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
     return prof.isOwnerEmail(prof.usePlayerProfileStore.getState().email);
   } catch {

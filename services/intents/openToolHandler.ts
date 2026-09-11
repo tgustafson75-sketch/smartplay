@@ -33,9 +33,7 @@ async function tryVoiceDirectMark(
 ): Promise<IntentResult | null> {
   // Dynamic requires avoid module-load cycles since these stores import
   // from openToolHandler's caller graph.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { useRoundStore } = require('../../store/roundStore') as typeof import('../../store/roundStore');
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const gps = require('../gpsManager') as typeof import('../gpsManager');
 
   const round = useRoundStore.getState();
@@ -57,11 +55,9 @@ async function tryVoiceDirectMark(
 
   try {
     if (isTee) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const m = require('../courseTeeOverrides') as typeof import('../courseTeeOverrides');
       await m.setTeeOverride(round.activeCourseId, hole, { lat: fix.lat, lng: fix.lng });
     } else {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const m = require('../courseGreenOverrides') as typeof import('../courseGreenOverrides');
       await m.setGreenOverride(round.activeCourseId, hole, { lat: fix.lat, lng: fix.lng });
     }
@@ -454,7 +450,6 @@ export const openToolHandler: IntentHandler = {
     // Not a navigation: the engine call IS the action; the say-line confirms it.
     if (toolName === 'sim_round' || toolName === 'simround' || toolName === 'sim') {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const sim = require('../simRound') as typeof import('../simRound');
         const raw = String(intent.raw_text ?? intent.parameters.raw_utterance ?? '');
         const eighteen = /\beighteen\b|\b18\b/i.test(raw);
@@ -517,7 +512,6 @@ export const openToolHandler: IntentHandler = {
     // claims it; otherwise fall through to the camera scene_read navigate below.
     if (toolName === 'scene_read') {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { requestSmartVisionRead } = require('../visionReadBus') as typeof import('../visionReadBus');
         if (requestSmartVisionRead()) {
           return { success: true, voice_response: '', side_effects: ['scene_read:smartvision_aerial'], follow_up_needed: false };
@@ -602,7 +596,6 @@ export const openToolHandler: IntentHandler = {
 
     // 2026-06-24 — off-device usage telemetry (opt-in; no-op if off).
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('../usageTelemetry').track('tool_opened', { tool: toolName });
     } catch { /* telemetry never throws */ }
 
@@ -645,7 +638,6 @@ export const openToolHandler: IntentHandler = {
         // a phantom student + spoke "coaching Emma", THEN the screen bounced with "Coach Mode is off" — a
         // self-contradiction. Speak the enable-it line and don't navigate/mutate.
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const settings = (require('../../store/settingsStore') as typeof import('../../store/settingsStore')).useSettingsStore.getState();
           if (!settings.coachModeEnabled) {
             return { success: true, voice_response: "Coach Mode is off — turn it on in Settings, then I'll coach your player.", side_effects: [], follow_up_needed: false };
@@ -669,7 +661,6 @@ export const openToolHandler: IntentHandler = {
         const name = (fromParam.length > 0 ? fromParam : (fromRegex ?? '')).trim();
         if (name) {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const fam = require('../../store/familyStore') as typeof import('../../store/familyStore');
             const state = fam.useFamilyStore.getState();
             const target = name.toLowerCase();

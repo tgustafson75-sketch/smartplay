@@ -294,7 +294,6 @@ export default function Settings() {
           useToastStore.getState().show(describeGlassesError(code, msg));
         }
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           (require('../store/issueLogStore') as typeof import('../store/issueLogStore'))
             .useIssueLogStore.getState().addAppEvent('glasses_connect_failed', { code, message: msg }, 'app_error');
         } catch { /* non-fatal */ }
@@ -327,9 +326,7 @@ export default function Settings() {
   // success so the user can see the new value land.
   const onRecalculateHandicap = useCallback(() => {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const roundMod = require('../store/roundStore') as typeof import('../store/roundStore');
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const calcMod = require('../services/handicapCalculator') as typeof import('../services/handicapCalculator');
       const rounds = roundMod.useRoundStore.getState().roundHistory;
       // 2026-07-06 (audit P0) — canonical filter from roundStore: also
@@ -2360,10 +2357,8 @@ export default function Settings() {
                     style={styles.resetRow}
                     onPress={() => {
                       try {
-                        // eslint-disable-next-line @typescript-eslint/no-require-imports
                         const sim = require('../services/simRound') as typeof import('../services/simRound');
                         const r = sim.startVoiceSimRound({ nineHoles: true });
-                        // eslint-disable-next-line @typescript-eslint/no-require-imports
                         (require('../store/toastStore') as typeof import('../store/toastStore')).useToastStore.getState().show(r.ok ? '🎮 Sim round started — Palms, 9 holes' : r.say);
                         if (r.ok) router.push('/(tabs)/caddie' as never);
                       } catch (e) { console.log('[settings] sim round start failed:', e); }

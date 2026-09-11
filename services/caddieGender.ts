@@ -46,7 +46,6 @@ type CustomBasePersona = ReturnType<
  */
 export function customBasePersona(): CustomBasePersona {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const pp = (require('../store/playerProfileStore') as typeof import('../store/playerProfileStore')).usePlayerProfileStore.getState();
     return pp.customCaddieBasePersona ?? 'kevin';
   } catch {

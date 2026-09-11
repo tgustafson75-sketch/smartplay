@@ -57,7 +57,6 @@ export const SHELVED_ROUTES: ReadonlySet<string> = new Set<string>([
  */
 export function isOwnerBuild(): boolean {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const prof = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
     return prof.isOwnerEmail(prof.usePlayerProfileStore.getState().email);
   } catch {

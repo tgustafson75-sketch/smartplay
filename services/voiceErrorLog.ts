@@ -29,9 +29,7 @@ function snapshotContext(): IssueLogEntry['context'] {
     // boot sequence; static imports here would risk a cycle. The cost
     // is one require() per log call (~microseconds; this is a failure
     // path anyway).
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const round = require('../store/roundStore').useRoundStore.getState();
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const settings = require('../store/settingsStore').useSettingsStore.getState();
     let route: string | null = null;
     try { route = require('./routeBreadcrumb').getRoute() ?? null; } catch { /* tracker absent */ }
@@ -84,7 +82,6 @@ export function resetVoiceTurnCounter(): void { voiceTurnCounter = 0; }
 
 function turnContext(): Record<string, unknown> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { isConnectionWarmed } = require('./apiBase') as typeof import('./apiBase');
     const warmed = isConnectionWarmed();
     return {
@@ -104,7 +101,6 @@ function write(
   details?: Record<string, unknown>,
 ): void {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { useIssueLogStore } = require('../store/issueLogStore') as typeof import('../store/issueLogStore');
     // Turn context first so an explicit detail from the call site always wins.
     useIssueLogStore.getState().addVoiceEvent(kind, stage, snapshotContext(), { ...turnContext(), ...details });

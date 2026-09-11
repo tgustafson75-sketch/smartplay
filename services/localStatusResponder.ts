@@ -563,7 +563,6 @@ function yardageReply(transcript: string, lang: LocalReplyLanguage): LocalReplyR
   const memoryFallback = (): LocalReplyResult | null => {
     if (lang !== 'en') return { text: L[lang].noFix, queryType: 'yardage_middle' };
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const mod = require('./caddieMemoryRetrieval') as typeof import('./caddieMemoryRetrieval');
       const g = mod.getCourseHoleGuidance({ courseId: round.activeCourseId, hole: round.currentHole });
       if (g) return { text: `${L[lang].noFix} ${g.text}`, queryType: 'course_memory' };
@@ -917,7 +916,6 @@ function holeInfoReply(lang: LocalReplyLanguage): LocalReplyResult {
   // book has nothing — keeps the answer useful on courses with no fetched content.
   if (parts.length === 0) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const mod = require('./caddieMemoryRetrieval') as typeof import('./caddieMemoryRetrieval');
       const g = mod.getCourseHoleGuidance({ courseId, hole });
       if (g?.text) parts.push(g.text);

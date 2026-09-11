@@ -113,7 +113,6 @@ export function pickTeeSet<T extends TeeLike>(
 export function playerTee<T extends TeeLike>(course: { tees?: T[] | null } | null | undefined): T | null {
   if (!course?.tees?.length) return null;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const store = require('../store/playerProfileStore').usePlayerProfileStore.getState();
     return pickTeeSet(course.tees, store.preferredTee ?? 'middle', store.handicap_gender ?? 'x');
   } catch {

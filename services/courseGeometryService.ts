@@ -357,7 +357,6 @@ function buildBundledGeometry(courseId: string): CourseGeometry | null {
   let result: CourseGeometry | null = null;
   try {
     // Dynamic require avoids any import cycle with data/courses (same pattern as roundStore below).
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getBundledHoles } = require('../data/courses') as typeof import('../data/courses');
     const holes = getBundledHoles(courseId);
     const geoHoles: HoleGeometry[] = holes
@@ -407,7 +406,6 @@ export function isGeometryBuilding(courseId: string | null | undefined): boolean
  * contexts and avoids a module cycle (the store must not pull the geometry service back in).
  */
 function geometryStatus() {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   return (require('../store/geometryStatusStore') as typeof import('../store/geometryStatusStore'))
     .useGeometryStatusStore.getState();
 }
@@ -439,7 +437,6 @@ export function getHoleGeometry(courseId: string, holeNumber: number): HoleGeome
     // nine — wrong yardages presented as real. Outside an active twice-around round there is no honest
     // reason to serve hole 12 of a 9-hole set.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { useRoundStore } = require('../store/roundStore') as typeof import('../store/roundStore');
       const rs = useRoundStore.getState();
       if (!(rs.isRoundActive && rs.twiceAround && rs.activeCourseId === courseId)) return null;
@@ -633,7 +630,6 @@ async function commitGeometry(courseId: string, geo: CourseGeometry): Promise<Co
 // the existing pre-fix behavior holds.
 function deriveCentroidFromActiveCourseHoles(): { lat: number; lng: number } | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { useRoundStore } = require('../store/roundStore') as typeof import('../store/roundStore');
     const holes = useRoundStore.getState().courseHoles ?? [];
     let latSum = 0;
@@ -662,7 +658,6 @@ function deriveCentroidFromActiveCourseLocation(
   courseId: string,
 ): { lat: number; lng: number } | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { useRoundStore } = require('../store/roundStore') as typeof import('../store/roundStore');
     const round = useRoundStore.getState();
     if (round.activeCourseId !== courseId) return null;
@@ -730,7 +725,6 @@ const waitingForSlot: (() => void)[] = [];
  */
 function isActiveRoundCourse(courseId: string): boolean {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { useRoundStore } = require('../store/roundStore') as typeof import('../store/roundStore');
     const st = useRoundStore.getState();
     return !!st.isRoundActive && st.activeCourseId === courseId;
@@ -1068,7 +1062,6 @@ async function fetchCourseGeometryInner(
         return mean <= 0.25;
       })();
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('./roundTrace') as typeof import('./roundTrace')).trace('course', 'bundled_check', {
           courseId, trusted: bundledIsTrustworthy, holes: bundled?.holes?.length ?? 0,
         });
@@ -1128,7 +1121,6 @@ async function fetchCourseGeometryInner(
      */
     if (!centroid) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const book = (require('../store/caddieMemoryStore') as typeof import('../store/caddieMemoryStore'))
           .useCaddieMemoryStore.getState().getCourseBook(courseId);
         const bLat = book?.lat, bLng = book?.lng;
@@ -1146,7 +1138,6 @@ async function fetchCourseGeometryInner(
     // live fix as the centroid so the server OSM green-fill fires and greens map at ANY course.
     if (!centroid) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const fix = (require('./gpsManager') as typeof import('./gpsManager')).getLastFix();
         if (fix && Number.isFinite(fix.lat) && Number.isFinite(fix.lng)
             && !(Math.abs(fix.lat) < 0.001 && Math.abs(fix.lng) < 0.001)) {
@@ -1177,7 +1168,6 @@ async function fetchCourseGeometryInner(
    * needs this most.
    */
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getBundledHoles } = require('../data/courses') as typeof import('../data/courses');
     const card = getBundledHoles(courseId);
     if (card.length >= 3) {

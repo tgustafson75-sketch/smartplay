@@ -81,11 +81,8 @@ const EMPTY: CaddieContext = {
 function liveTroubleLine(courseId: string | null | undefined, hole: number | null | undefined): string | null {
   if (!courseId || hole == null) return null;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const geo = require('./courseGeometryService') as typeof import('./courseGeometryService');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const gps = require('./gpsManager') as typeof import('./gpsManager');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const hz = require('./hazardIntelligence') as typeof import('./hazardIntelligence');
 
     const geometry = geo.getHoleGeometry(courseId, hole);
@@ -97,7 +94,6 @@ function liveTroubleLine(courseId: string | null | undefined, hole: number | nul
     let bearing: number | null = null;
     const green = geometry.green ?? null;
     if (green) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const gd = require('../utils/geoDistance') as typeof import('../utils/geoDistance');
       bearing = gd.bearingDegrees({ lat: fix.lat, lng: fix.lng }, green);
     }
@@ -178,7 +174,6 @@ export function getCaddieContext(input: {
     // clubStats only fills gaps. getLearnedClubDistances returns real tracked clubs only.
     let statsBag: Record<string, number> = {};
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const cs = require('../store/clubStatsStore') as typeof import('../store/clubStatsStore');
       statsBag = cs.getLearnedClubDistances();
     } catch { /* clubStats optional */ }
@@ -189,7 +184,6 @@ export function getCaddieContext(input: {
     // below (the brain orients its reads/drills/encouragement around it). Session-scoped + auto-expiring,
     // pulled lazily so this CNS module has no hard dep on the focus store.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const sf = require('../store/sessionFocusStore') as typeof import('../store/sessionFocusStore');
       const focusLine = sf.sessionFocusPromptLine();
       if (focusLine) lines.push(focusLine);
@@ -201,7 +195,6 @@ export function getCaddieContext(input: {
      * learned right-miss is not listening.
      */
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const pc = require('../store/playingConditionStore') as typeof import('../store/playingConditionStore');
       const line = pc.playingConditionPromptLine();
       if (line) lines.push(line);
@@ -252,17 +245,13 @@ export function getCaddieContext(input: {
      */
     let calibrationLine: string | null = null;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const ao = require('./adviceOutcome') as typeof import('./adviceOutcome');
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const cn = require('./clubNormalize') as typeof import('./clubNormalize');
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const rs = require('../store/roundStore').useRoundStore.getState();
       const history = (rs.roundHistory ?? []).flatMap((r: { shots?: unknown[] }) => r.shots ?? []);
       const all = [...history, ...(rs.shots ?? [])].slice(-300);
       const expectedFor = (c: string) => {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const cs = require('../store/clubStatsStore').useClubStatsStore.getState();
           return cs.hasDistance(c) ? cs.totalFor(c) : null;
         } catch { return null; }

@@ -52,7 +52,6 @@ export default function UploadSwing() {
   // 2026-05-27 — Fix EK: pre-warm /api/swing-analysis on mount so the
   // first uploaded swing doesn't pay Vercel cold-start.
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     require('../../services/swingAnalysisWarmup').prewarmSwingAnalysis();
   }, []);
 

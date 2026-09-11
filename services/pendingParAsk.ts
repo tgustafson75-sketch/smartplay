@@ -66,19 +66,16 @@ export function tryAnswerPendingPar(transcript: string): { line: string; strokes
     clearAwaitingPar();
     return null;
   }
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { parseScoreName, scoreLabel } = require('./intents/scoreParse') as typeof import('./intents/scoreParse');
   const strokes = parseScoreName(said, par);
   if (strokes == null) {
     clearAwaitingPar();
     return null;
   }
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const rs = (require('../store/roundStore') as typeof import('../store/roundStore')).useRoundStore.getState();
   rs.logScore(hole, strokes);
   clearAwaitingPar();
   // The score is in — now the putt question is the honest next one, on the SAME hole.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   (require('./pendingPuttAsk') as typeof import('./pendingPuttAsk')).markAwaitingPutts(hole);
   return {
     line: `Par ${par} — that's a ${scoreLabel(strokes, par)}, ${strokes}. How many putts?`,

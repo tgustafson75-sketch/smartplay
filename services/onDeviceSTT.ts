@@ -53,7 +53,6 @@ interface STTModule {
 // report unavailable and the caller degrades to the typed fallback.
 let mod: { ExpoSpeechRecognitionModule?: STTModule } | null = null;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   mod = require('expo-speech-recognition');
 } catch {
   mod = null;

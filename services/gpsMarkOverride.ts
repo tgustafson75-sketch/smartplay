@@ -11,9 +11,7 @@
 
 export async function writeGpsMarkOverride(kind: 'tee' | 'green'): Promise<boolean> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { useRoundStore } = require('../store/roundStore') as typeof import('../store/roundStore');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const gps = require('./gpsManager') as typeof import('./gpsManager');
 
     const round = useRoundStore.getState();
@@ -27,11 +25,9 @@ export async function writeGpsMarkOverride(kind: 'tee' | 'green'): Promise<boole
 
     const hole = round.currentHole;
     if (kind === 'tee') {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const m = require('./courseTeeOverrides') as typeof import('./courseTeeOverrides');
       await m.setTeeOverride(round.activeCourseId, hole, { lat: fix.lat, lng: fix.lng });
     } else {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const m = require('./courseGreenOverrides') as typeof import('./courseGreenOverrides');
       await m.setGreenOverride(round.activeCourseId, hole, { lat: fix.lat, lng: fix.lng });
     }

@@ -120,7 +120,6 @@ export async function submitVisionFrame(frame: VisionFrame): Promise<VisionConte
   let golferId: string | null = frame.golfer_id ?? null;
   if (!golferId) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fam = require('../store/familyStore') as typeof import('../store/familyStore');
       golferId = fam.useFamilyStore.getState().active_member_id;
     } catch { /* non-fatal */ }
@@ -488,7 +487,6 @@ export function beginFamilyRecording(memberId: string | null): void {
   activeRecordingMemberId = memberId;
   recordingExpiresAt = Date.now() + FAMILY_SESSION_TIMEOUT_MS;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const fam = require('../store/familyStore') as typeof import('../store/familyStore');
     fam.useFamilyStore.getState().setActiveMember(memberId);
   } catch { /* non-fatal */ }
@@ -500,7 +498,6 @@ export function endFamilyRecording(): void {
   activeRecordingMemberId = null;
   recordingExpiresAt = 0;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const fam = require('../store/familyStore') as typeof import('../store/familyStore');
     fam.useFamilyStore.getState().setActiveMember(null);
   } catch { /* non-fatal */ }

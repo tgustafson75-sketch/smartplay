@@ -81,7 +81,6 @@ export function getGreenCentroid(holeNumber: number): ShotLocation | null {
   // distance logging) stop diverging from the strip after the user marks a green.
   // Lazy require avoids any import cycle with smartFinderService.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { resolveGreenCoords } = require('./smartFinderService') as typeof import('./smartFinderService');
     const resolved = resolveGreenCoords(holeNumber);
     if (resolved.middle) return resolved.middle;
@@ -144,7 +143,6 @@ export function getGreenCentroid(holeNumber: number): ShotLocation | null {
  */
 export function snapshotShotLocation(): ShotLocation | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const sf = (require('./smartFinderService') as typeof import('./smartFinderService')).getLastFix();
     if (sf) return sf.location;
   } catch { /* fall through to GPS */ }
@@ -171,12 +169,10 @@ export function getTeeCentroid(holeNumber: number): ShotLocation | null {
  */
 export function _setLastLocationForTest(loc: ShotLocation | null): void {
   if (!loc) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { clearSimulatedFix } = require('./gpsManager') as typeof import('./gpsManager');
     clearSimulatedFix();
     return;
   }
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { setSimulatedFix } = require('./gpsManager') as typeof import('./gpsManager');
   setSimulatedFix(loc, 3);
 }

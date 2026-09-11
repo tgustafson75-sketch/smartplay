@@ -81,7 +81,6 @@ export const coachRefineHandler: IntentHandler = {
     const email = profile.email ?? null;
 
     // Authorization: coach by inviteePreferences OR owner (for testing).
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { isOwnerEmail } = require('../../store/playerProfileStore') as typeof import('../../store/playerProfileStore');
     const isOwner = isOwnerEmail(email);
     const isCoach = isAuthorizedCoach(email);
@@ -107,7 +106,6 @@ export const coachRefineHandler: IntentHandler = {
     // We can't speak through this handler directly — the router speaks
     // our voice_response AFTER execute() returns. So speak via direct
     // import here, then capture, THEN return the final ack.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const vs = require('../voiceService') as typeof import('../voiceService');
     const { useSettingsStore } = require('../../store/settingsStore') as typeof import('../../store/settingsStore');
     const settings = useSettingsStore.getState();

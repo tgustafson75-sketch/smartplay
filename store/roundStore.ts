@@ -127,7 +127,6 @@ export type TransportMode = 'walking' | 'cart';
  */
 function greenForHole(holeNumber: number): ShotLocation | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getGreenCentroid } = require('../services/shotLocationService') as typeof import('../services/shotLocationService');
     return getGreenCentroid(holeNumber);
   } catch {
@@ -887,7 +886,6 @@ export function roundFirstHole(s: { nineHoleMode: boolean; roundStartHole: numbe
 export function roundLastHole(s: { nineHoleMode: boolean; roundStartHole: number; activeCourseId: string | null; courseHoles: CourseHole[] }): number {
   if (s.nineHoleMode) return Math.max(1, s.roundStartHole || 1) + 8;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getCourseHoleCount } = require('../data/courses') as typeof import('../data/courses');
     return getCourseHoleCount(s.activeCourseId, s.courseHoles.length);
   } catch {
@@ -1042,7 +1040,6 @@ export const useRoundStore = create<RoundState>()(
         // 2026-08-12 — begin the round trace automatically. Zero setup: the round IS the signal
         // that we want a trace ([[hands-free-zero-setup-is-the-product]]).
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const rt = require('../services/roundTrace') as typeof import('../services/roundTrace');
           /**
            * 2026-09-10 — the owner field-test toggle is read HERE, once, at round start.
@@ -1053,7 +1050,6 @@ export const useRoundStore = create<RoundState>()(
            */
           const fieldTest = (() => {
             try {
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
               return (require('./settingsStore') as typeof import('./settingsStore'))
                 .useSettingsStore.getState().ownerFieldTest === true;
             } catch { return false; }
@@ -1071,7 +1067,6 @@ export const useRoundStore = create<RoundState>()(
          * See services/billing/referral.ts. [[hands-free-zero-setup-is-the-product]]
          */
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           void (require('../services/billing/referral') as typeof import('../services/billing/referral'))
             .reportReferralQualifyingActivity();
         } catch { /* a growth feature never blocks a round */ }
@@ -1093,7 +1088,6 @@ export const useRoundStore = create<RoundState>()(
         // wipe the shared pipecat history so last round's chat can't leak context into
         // this one. Best-effort; never blocks the round from starting.
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           require('../services/voice/conversationHistory').clearConversationHistory();
         } catch { /* voice history is additive */ }
         // FIX B5 — explicitly bind selectedTee and transportMode from opts so
@@ -1224,7 +1218,6 @@ export const useRoundStore = create<RoundState>()(
         // persisted into the NEXT round, muting hole-1 tactical coaching.
         // Clear it here alongside the other start-of-round resets.
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const relMod = require('./relationshipStore') as typeof import('./relationshipStore');
           relMod.useRelationshipStore.getState().resetSpiral();
         } catch (e) {
@@ -1234,7 +1227,6 @@ export const useRoundStore = create<RoundState>()(
         console.log(`[audit:round-active] state=true roundId=${roundId} hole=1 course="${course}"`);
         // 2026-06-24 — off-device usage telemetry (opt-in; no-op if off).
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           require('../services/usageTelemetry').track('round_started', { holes: holes.length, mode: options.mode ?? 'free_play' });
         } catch { /* telemetry never throws */ }
         // FIX B6 — hole 1 voice intro. startRound sets currentHole:1 via direct
@@ -1252,7 +1244,6 @@ export const useRoundStore = create<RoundState>()(
         // so a heading carried over from a prior round can't bias the
         // first reconciliation on this round.
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           require('../services/courseDataOrchestrator').clearSustainedBuffer?.();
         } catch { /* non-fatal */ }
         // 2026-06-06 — Phase 2 of on-course resilience sprint. Pre-warm
@@ -1265,7 +1256,6 @@ export const useRoundStore = create<RoundState>()(
         // Fire-and-forget — UX never blocks on this.
         if (courseId && holes.length > 0) {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const prefetch = require('../services/roundPrefetch') as typeof import('../services/roundPrefetch');
             void prefetch.prefetchRoundData({
               courseId,
@@ -1528,10 +1518,8 @@ export const useRoundStore = create<RoundState>()(
         // and dragged the estimated Index way down.
         if ((input.updateHandicap ?? true) && (input.holesPlayed === 9 || input.holesPlayed === 18)) {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const profileMod = require('./playerProfileStore');
             const profile = profileMod.usePlayerProfileStore.getState();
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const calcMod = require('../services/handicapCalculator');
             // Differential from total score against the neutral course
             // baseline. Skip per-hole AGS cap since imported rounds
@@ -1669,7 +1657,6 @@ export const useRoundStore = create<RoundState>()(
         // Uses the pre-reset `s.isSimRound` snapshot (set() above already cleared the live flag).
         if (s.isSimRound) {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             (require('../services/simRound') as typeof import('../services/simRound')).stopVoiceSimRound();
           } catch { /* best-effort */ }
         }
@@ -1822,7 +1809,6 @@ export const useRoundStore = create<RoundState>()(
            */
           watchSwings: (() => {
             try {
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
               const w = require('./watchStore') as typeof import('./watchStore');
               return w.useWatchStore.getState().sessionSwings
                 .filter(sw => sw.hole != null)
@@ -1840,7 +1826,6 @@ export const useRoundStore = create<RoundState>()(
           ...(() => { try {
             const rt = require('../services/roundTrace') as typeof import('../services/roundTrace');
             rt.trace('round', 'end', { holes: scoredEntries.length, score: scoredEntries.reduce((a, [, sc]) => a + sc, 0) });
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const prof = (require('./playerProfileStore') as typeof import('./playerProfileStore')).usePlayerProfileStore.getState();
             void rt.sendRoundTrace(prof.email || 'tester');
           } catch { /* tracing never blocks the round record */ } return {}; })(),
@@ -1848,9 +1833,7 @@ export const useRoundStore = create<RoundState>()(
           // memory, so this is the last moment it can be captured. Null when no watch was worn.
           tempoStory: (() => {
             try {
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
               const ws = (require('./watchStore') as typeof import('./watchStore')).useWatchStore.getState();
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
               const rd = require('../services/round/roundSwingRead') as typeof import('../services/round/roundSwingRead');
               const story = rd.roundTempoStory(ws.sessionSwings ?? []);
               if (!story.enough || !story.headline) return null;
@@ -1862,7 +1845,6 @@ export const useRoundStore = create<RoundState>()(
                * [[caddie-brain-lens]] [[self-growing-agent-architecture]]
                */
               try {
-                // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const rel = (require('./relationshipStore') as typeof import('./relationshipStore')).useRelationshipStore.getState();
                 if (story.quickenedBy != null && Math.abs(story.quickenedBy) > 0.2) {
                   rel.addObservation({
@@ -1940,7 +1922,6 @@ export const useRoundStore = create<RoundState>()(
         // + best-effort; nothing reads it yet (Phase 2 retrieval). Reuses the
         // record we just built so it's consistent with roundHistory.
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const mem = require('./caddieMemoryStore') as typeof import('./caddieMemoryStore');
           // Build per-hole data ONCE (course-independent). 2026-06-13 (audit G3):
           // feed REAL approachClub (last clubbed shot that isn't the tee shot) +
@@ -2003,9 +1984,7 @@ export const useRoundStore = create<RoundState>()(
             // durable takeaways so the dialogue feeds the brain. Honest/narrow — only
             // high-confidence stated signals; [] when nothing matched.
             try {
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
               const convo = require('./conversationLogStore') as typeof import('./conversationLogStore');
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
               const distill = require('../services/conversationDistill') as typeof import('../services/conversationDistill');
               const startedAt = s.roundStartTime ?? 0;
               const roundTurns = convo.useConversationLog.getState().turns.filter(t => t.at >= startedAt);
@@ -2099,7 +2078,6 @@ export const useRoundStore = create<RoundState>()(
          * [[orphans-are-live-bugs-not-dead-code]]
          */
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           (require('./guestProfileStore') as typeof import('./guestProfileStore'))
             .useGuestProfileStore.getState().clearGuests();
         } catch { /* a guest roster must never block ending a round */ }
@@ -2120,7 +2098,6 @@ export const useRoundStore = create<RoundState>()(
         console.log(`[audit:round-active] state=false holesPlayed=${holesPlayed} totalScore=${total}`);
         // 2026-06-24 — off-device usage telemetry (opt-in; no-op if off).
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           require('../services/usageTelemetry').track('round_completed', { holesPlayed, totalScore: total });
         } catch { /* telemetry never throws */ }
         // Phase 405 wave 3 — visible round-end confirmation.
@@ -2308,7 +2285,6 @@ export const useRoundStore = create<RoundState>()(
         // Connect access).
         void (async () => {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const settingsMod = require('./settingsStore');
             if (!settingsMod.useSettingsStore.getState().healthDataEnabled) return;
             const { readHealthSnapshot } = await import('../services/healthData');
@@ -2334,9 +2310,7 @@ export const useRoundStore = create<RoundState>()(
         // teeGoalStore (already persisted) + evaluateTeeGoal (pure fn, no network).
         // Only fires when voice is enabled, trust > 1, and at least one goal is active.
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const teeGoalMod = require('./teeGoalStore') as typeof import('./teeGoalStore');
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const evalMod = require('../services/goals/teeScoreGoal') as typeof import('../services/goals/teeScoreGoal');
           const goals = teeGoalMod.useTeeGoalStore.getState().goals;
           if (goals.length > 0) {
@@ -2344,14 +2318,12 @@ export const useRoundStore = create<RoundState>()(
             const updatedHistory = get().roundHistory;
             const settingsForGoal = (() => {
               try {
-                // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const mod = require('./settingsStore');
                 return mod.useSettingsStore.getState();
               } catch { return null; }
             })();
             const trustForGoal = (() => {
               try {
-                // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const mod = require('./trustLevelStore');
                 return mod.useTrustLevelStore.getState().level;
               } catch { return 2; }
@@ -2362,7 +2334,6 @@ export const useRoundStore = create<RoundState>()(
                 // Celebrate only when this round tipped the goal into achieved for the first time.
                 if (progress.achieved && progress.achievedAt === record.endedAt) {
                   try {
-                    // eslint-disable-next-line @typescript-eslint/no-require-imports
                     const voiceMod = require('../services/voiceService') as typeof import('../services/voiceService');
                     const celebText = `Goal achieved! ${evalMod.describeTeeGoal(goal)} — you did it!`;
                     const apiUrl = getApiBaseUrl();
@@ -2380,7 +2351,6 @@ export const useRoundStore = create<RoundState>()(
         // 2026-07-01 — a finished round is a natural high-value moment to back up
         // to the cloud. Debounced + no-op-gated + inert unless signed in.
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           require('../services/cloudSync/autoBackup').scheduleBackup();
         } catch { /* best-effort — backup is additive */ }
 
@@ -2388,7 +2358,6 @@ export const useRoundStore = create<RoundState>()(
         // simulated fix when a sim round ends. Uses the pre-reset snapshot flag.
         if (s.isSimRound) {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             (require('../services/simRound') as typeof import('../services/simRound')).stopVoiceSimRound();
           } catch { /* best-effort */ }
         }
@@ -2397,7 +2366,6 @@ export const useRoundStore = create<RoundState>()(
         // part of the finished round (they stay in voiceLogStore for recap). Mark them
         // ingested so the live caddie stops surfacing them.
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           require('../services/voiceLogService').markRoundNotesIngested(record.id);
         } catch { /* best-effort */ }
 
@@ -2460,7 +2428,6 @@ export const useRoundStore = create<RoundState>()(
 
       setCurrentHole: (hole) => {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           (require('../services/roundTrace') as typeof import('../services/roundTrace'))
             .trace('round', 'hole', { hole });
         } catch { /* non-fatal */ }
@@ -2517,7 +2484,6 @@ export const useRoundStore = create<RoundState>()(
             set({ nineHoleMode: false });
             maxHole = roundLastHole({ ...state, nineHoleMode: false });
             try {
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
               (require('./issueLogStore') as typeof import('./issueLogStore')).useIssueLogStore
                 .getState().addAppEvent('round_expanded_past_nine', { from: 9, onto: hole, courseHoles: courseHoleCount }, 'diag');
             } catch { /* best-effort */ }
@@ -2586,7 +2552,6 @@ export const useRoundStore = create<RoundState>()(
           // Tim's perception fix: makes a deliberate transition feel
           // unambiguous rather than buried in audio.
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const toastMod = require('./toastStore') as typeof import('./toastStore');
             toastMod.useToastStore.getState().show(`Now on hole ${clamped}`);
           } catch { /* non-fatal */ }
@@ -2757,7 +2722,6 @@ export const useRoundStore = create<RoundState>()(
 
       logScore: (hole, score) => {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           (require('../services/roundTrace') as typeof import('../services/roundTrace'))
             .trace('shot', 'score', { hole, score });
         } catch { /* non-fatal */ }
@@ -2794,7 +2758,6 @@ export const useRoundStore = create<RoundState>()(
               par: st.courseHoles.find(c => c.hole === h)?.par ?? 0,
             }))
             .filter(x => x.par > 0); // unknown par can't be judged — never guess a bad hole into existence
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const relMod = require('./relationshipStore') as typeof import('./relationshipStore');
           relMod.useRelationshipStore.getState().recomputeMentalState(played);
           /**
@@ -2822,7 +2785,6 @@ export const useRoundStore = create<RoundState>()(
         // require avoids the circular import (ghostStore depends on
         // RoundRecord from this file).
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const ghostMod = require('./ghostStore');
           if (ghostMod.useGhostStore.getState().ghostRecord) {
             ghostMod.useGhostStore.getState().updateHole(hole, score);
@@ -2837,7 +2799,6 @@ export const useRoundStore = create<RoundState>()(
         try {
           if (prevScore === 0) {
             const st = get();
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const autoAdvance = require('./settingsStore').useSettingsStore.getState().autoHoleAdvance;
             // 2026-07-01 (audit) — respect nineHoleMode for the upper bound, and go
             // through setCurrentHole (NOT a raw set). The old raw set({currentHole})
@@ -2862,7 +2823,6 @@ export const useRoundStore = create<RoundState>()(
                * another round of guessing. Recorded as `diag`: on-device, never mailed.
                */
               try {
-                // eslint-disable-next-line @typescript-eslint/no-require-imports
                 (require('./issueLogStore') as typeof import('./issueLogStore')).useIssueLogStore
                   .getState().addAppEvent('hole_advance_skipped', {
                     reason: !autoAdvance ? 'setting_off'
@@ -3037,7 +2997,6 @@ export const useRoundStore = create<RoundState>()(
           // learned bag was keyed by a form nothing reads. All bag writes below use the normalized name.
           const normClub = (() => {
             try {
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
               return (require('../services/clubNormalize') as typeof import('../services/clubNormalize')).normalizeClub(enriched.club);
             } catch { return null; }
           })();
@@ -3049,7 +3008,6 @@ export const useRoundStore = create<RoundState>()(
           const driverYards = normClub === 'Driver' ? measuredCarry(enriched) : null;
           if (driverYards != null && !s.isSimRound) { // 2026-07-04 — sim shots can't set records
             try {
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
               const profileMod = require('./playerProfileStore') as typeof import('./playerProfileStore');
               const cur = profileMod.usePlayerProfileStore.getState().longestDrive;
               if (cur == null || driverYards > cur) {
@@ -3067,14 +3025,12 @@ export const useRoundStore = create<RoundState>()(
             // GPS estimate (see measuredCarry above). Keeps the learned model honest.
             const carry = measuredCarry(enriched);
             if (normClub && carry != null && !s.isSimRound) { // 2026-07-04 — sim shots never train the bag
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
               const mem = require('./caddieMemoryStore') as typeof import('./caddieMemoryStore');
               mem.useCaddieMemoryStore.getState().recordShot({ club: normClub, carryYds: carry, nowMs: enriched.timestamp ?? 0 });
               // 2026-07-24 (club-logic unification) — ALSO feed the clubStats CARRY ladder from this real
               // airtime carry, so the app-wide bag (bagDistances / Fit Profile / dashboard) shares ONE
               // honest carry number with the CNS bag instead of diverging by unit.
               try {
-                // eslint-disable-next-line @typescript-eslint/no-require-imports
                 (require('./clubStatsStore') as typeof import('./clubStatsStore')).useClubStatsStore.getState().recordCarry(normClub, carry);
               } catch { /* additive */ }
             }
@@ -3088,7 +3044,6 @@ export const useRoundStore = create<RoundState>()(
             const stated = enriched.distance_yards ?? enriched.carry_distance ?? null;
             if (typeof stated === 'number' && stated > 0) {
               try {
-                // eslint-disable-next-line @typescript-eslint/no-require-imports
                 (require('../services/simRound') as typeof import('../services/simRound')).simAdvanceTowardGreen(stated);
               } catch { /* sim movement is best-effort */ }
             }
@@ -3133,7 +3088,6 @@ export const useRoundStore = create<RoundState>()(
           });
           // Keep the ghost match in step with the reverted score.
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const ghostMod = require('./ghostStore');
             if (ghostMod.useGhostStore.getState().ghostRecord) {
               ghostMod.useGhostStore.getState().updateHole(snap.hole, snap.prevScore > 0 ? snap.prevScore : 0);

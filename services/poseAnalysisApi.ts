@@ -481,7 +481,6 @@ export async function poseAtTime(
     let cropUri: string | null = null;
     if (roi && width && height) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const IM = require('expo-image-manipulator') as typeof import('expo-image-manipulator');
         const manip = await IM.manipulateAsync(
           uri,
@@ -988,7 +987,6 @@ function computeBiomechanics(frames: PoseFrame[], angle?: 'down_the_line' | 'fac
   ].filter((v) => v != null).length;
   if (measured === 0) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('../store/issueLogStore').useIssueLogStore.getState().addAppEvent('biomech_all_null', {
         frames: frames.length,
         angle: angle ?? null,
@@ -1103,7 +1101,6 @@ export async function extractPoseFramesFromVideo(
   let fileWaitMs = 0;
   let fileBytes: number | null = null;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const FS = require('expo-file-system') as typeof import('expo-file-system');
     let lastSize = -1;
     for (let attempt = 0; attempt < 6; attempt++) {
@@ -1139,9 +1136,7 @@ export async function extractPoseFramesFromVideo(
       // "pose returned nothing" reads identically whether MediaPipe ran on-device in 40ms or the
       // cloud proxy was called and timed out. The explicit details win on key collision — a caller
       // that measured something itself knows more than the shared bus does.
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const pose = require('./poseTelemetry').describePoseTelemetry() as Record<string, unknown> | null;
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('../store/issueLogStore').useIssueLogStore.getState()
         .addAppEvent(stage, { ...(pose ?? {}), ...details }, kind);
     } catch { /* best-effort */ }
@@ -1205,7 +1200,6 @@ export async function extractPoseFramesFromVideo(
     const canTrust = trustDuration && durationMs >= 500;
     if (!canTrust) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { probeDurationMs } = require('./poseDetection') as { probeDurationMs: (uri: string) => Promise<number> };
         // 2026-07-30 (audit #13 — "analysis stuck, works on the 3rd try") — probe the PRIVATE COPY, never
         // the original: probeDurationMs runs a native MediaMetadataRetriever, and on the always-looping
@@ -1273,7 +1267,6 @@ export async function extractPoseFramesFromVideo(
   let sampleTimes: { key: PoseFrame['position'] | undefined; timeMs: number; source?: 'strike' | 'estimated' }[] =
     [...positionTimes];
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mp = require('./mediaPipePoseService') as { isMediaPipeAvailable: () => boolean };
     if (mp.isMediaPipeAvailable()) {
       const DENSE_TARGET = 20;
@@ -1492,7 +1485,6 @@ export async function extractPoseFramesFromVideo(
    * the edge with two dependents, which is the one a per-screen effect forgets.
    */
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const pipe = require('./swing/analysisPipeline') as typeof import('./swing/analysisPipeline');
     const key = pipe.runKeyFor(videoUri, window?.startMs ?? 0, window?.endMs ?? 0);
     pipe.noteStage(key, 'pose',
@@ -1524,7 +1516,6 @@ export async function extractPoseFramesFromVideo(
        */
       stages: (() => {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const pipe = require('./swing/analysisPipeline') as typeof import('./swing/analysisPipeline');
           return pipe.describeRun(pipe.runKeyFor(videoUri, window?.startMs ?? 0, window?.endMs ?? 0))?.stages ?? null;
         } catch { return null; }
@@ -1547,7 +1538,6 @@ export async function extractPoseFramesFromVideo(
      */
     let nativePose: boolean | null = null;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       nativePose = (require('./mediaPipePoseService') as typeof import('./mediaPipePoseService')).isMediaPipeAvailable();
     } catch { nativePose = null; }
     logPose('pose_zero_frames', {

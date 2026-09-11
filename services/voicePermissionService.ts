@@ -63,7 +63,6 @@ export function clearMicDenial(): void {
   // instead of re-asking the OS. Dynamic import avoids the
   // hook-imports-service-imports-hook cycle.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mod = require('../hooks/useVoiceCaddie') as { resetMicPermissionCache?: () => void };
     mod.resetMicPermissionCache?.();
   } catch { /* swallow — cache reset is a nice-to-have, not load-bearing */ }

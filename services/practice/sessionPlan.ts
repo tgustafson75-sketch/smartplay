@@ -192,7 +192,6 @@ export function focusClubsForBag(clubs: readonly string[], ownedIds: readonly st
   if (ownedIds.length === 0) return [...clubs];
   const out: string[] = [];
   for (const c of clubs) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { reconcileClubWithBag } = require('../clubBagReconcile') as typeof import('../clubBagReconcile');
     const snapped = reconcileClubWithBag(c, 'low', ownedIds);
     // Two template clubs can snap to the SAME owned club (7I and 8I both → 7I in a sparse bag).

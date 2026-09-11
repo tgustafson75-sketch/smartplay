@@ -375,7 +375,6 @@ export default function SmartTempoScreen() {
     if (result && !tempoTrackedRef.current) {
       tempoTrackedRef.current = true;
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         require('../../services/usageTelemetry').track('smart_tempo_completed', { ratio: result.ratio ?? null });
       } catch { /* telemetry never throws */ }
     }

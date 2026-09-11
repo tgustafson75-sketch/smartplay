@@ -68,7 +68,6 @@ async function detectRoute() {
   // Same dynamic-require pattern as audioLifecycle.goCold (avoids the
   // circular dep with voiceService).
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const voiceMod = require('./voiceService') as typeof import('./voiceService');
     await voiceMod.setAudioModeSerial({
       allowsRecordingIOS: false,
@@ -93,7 +92,6 @@ async function detectRoute() {
    * overriding a player's explicit choice with a guess would be worse than not knowing.
    */
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { NativeModules } = require('react-native') as typeof import('react-native');
     const mod = (NativeModules as Record<string, unknown>).BluetoothMediaButton as
       | {
@@ -119,7 +117,6 @@ async function detectRoute() {
       routeWatchStarted = true;
       const started = await mod.startRouteWatch().catch(() => false);
       if (started) {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { DeviceEventEmitter } = require('react-native') as typeof import('react-native');
         DeviceEventEmitter.addListener('onAudioRouteChanged', (payload: unknown) => {
           applyNativeRoute(payload as { route?: string });

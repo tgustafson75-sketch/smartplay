@@ -219,12 +219,10 @@ export function featuresIn(edition: Edition): FeatureKey[] {
  */
 export function mayTalkToCaddie(): boolean {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const prof = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
     const status = prof.usePlayerProfileStore.getState().subscription_status;
     if (canAccess('voice_advanced', status)) return true;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { triggerPaywall } = require('./paywallGuard') as typeof import('./paywallGuard');
       // No navigate function here — the paywall guard defers to the round-aware path, and the
       // screens that own navigation raise it themselves. This is the signal, not the UI.

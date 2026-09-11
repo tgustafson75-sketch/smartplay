@@ -38,7 +38,6 @@ export class ErrorBoundary extends React.Component<Props, State> {
     // crash (white-screen) used to leave NO trace in the Issue Log. Record it so a tester's
     // white-screen is diagnosable + exportable. Lazy require avoids an import cycle; best-effort.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('../services/crashCapture').logCrash('render_crash', error, {
         componentStack: (info?.componentStack ?? '').slice(0, 1500),
       });

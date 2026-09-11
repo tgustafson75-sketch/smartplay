@@ -34,7 +34,6 @@
 export function personalHoleKey(hole: number): number {
   if (!Number.isFinite(hole) || hole < 10) return hole;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { useRoundStore } = require('../store/roundStore') as typeof import('../store/roundStore');
     return useRoundStore.getState().twiceAround === true ? hole - 9 : hole;
   } catch {

@@ -68,7 +68,6 @@ export async function tryPlaySong(raw: string): Promise<{ spoken: string } | nul
   songCandidate = { text: routineText, title: match.title, at: Date.now() };
   let alreadySaved = false;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const prof = (require('../store/playerProfileStore') as typeof import('../store/playerProfileStore'))
       .usePlayerProfileStore.getState();
     const existing = (prof.preRoundRoutine ?? '').toLowerCase();

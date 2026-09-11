@@ -55,7 +55,6 @@ export async function openTeeTimeSearch(courseName: string, locationHint?: strin
   // 1. Course book (Places-anchored) — the real site, if we've looked it up.
   if (courseId) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const mem = require('../store/caddieMemoryStore') as typeof import('../store/caddieMemoryStore');
       const book = mem.useCaddieMemoryStore.getState().getCourseBook(courseId);
       const url = book?.bookingUrl ?? book?.website ?? null;

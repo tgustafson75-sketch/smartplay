@@ -232,7 +232,6 @@ export function ensureOfflineClipsCached(gender: Gender, persona: string): Promi
       // 2026-08-12 — readDirectoryAsync, not Paths.cache.list(): the latter was used exactly once
       // here (by me, today) and nowhere else in the app, so it was unproven on this engine. This is
       // the pattern clipStorageGc already uses successfully.
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const FS = require('expo-file-system/legacy') as typeof import('expo-file-system/legacy');
       const dir = FS.cacheDirectory;
       if (dir) {

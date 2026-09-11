@@ -42,7 +42,6 @@ const POSITIONAL_TOOLS: ReadonlySet<string> = new Set([
  */
 export function captureShotEpoch(): string | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { useRoundStore } = require('../store/roundStore') as typeof import('../store/roundStore');
     const r = useRoundStore.getState();
     if (!r.isRoundActive) return null;

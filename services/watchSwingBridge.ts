@@ -123,11 +123,9 @@ export async function initWatchSwingBridge(): Promise<boolean> {
       const wrist = useSettingsStore.getState().watchWrist ?? 'lead';
       // 2026-08-12 — stamp the HOLE at capture. The round moves on, so reconstructing this later
       // would attach the swing to wherever the player has since walked. Null off-course.
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const rs = (require('../store/roundStore') as typeof import('../store/roundStore')).useRoundStore.getState();
       const hole = rs.isRoundActive ? rs.currentHole : null;
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('./roundTrace') as typeof import('./roundTrace')).trace('watch', 'swing', {
           hole, club, tempo: Math.round((e.tempoRatio ?? 0) * 100) / 100, wrist,
         });
@@ -167,13 +165,11 @@ export async function initWatchSwingBridge(): Promise<boolean> {
         const realSwing = !!e.transitionDetected
           || (e.impactAcceleration ?? 0) > 0
           || (e.clubHeadSpeedEst ?? 0) >= 30;
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const roundActive = (require('../store/roundStore') as typeof import('../store/roundStore'))
           .useRoundStore.getState().isRoundActive;
         const now = Date.now();
         if (roundActive && realSwing && now - lastLiveShotTriggerAt > LIVE_SHOT_TRIGGER_COOLDOWN_MS) {
           lastLiveShotTriggerAt = now;
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           void (require('./conversationalLoggingOrchestrator') as typeof import('./conversationalLoggingOrchestrator'))
             .conversationalLoggingOrchestrator.triggerManual().catch(() => undefined);
           console.log('[watchSwing] live round → manual shot flow triggered, cart-suppression bypassed (club:', club, ')');

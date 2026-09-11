@@ -204,7 +204,6 @@ export async function ingestSmartPumpExport(): Promise<SmartPumpImportResult> {
  * costs one call and cannot drift into a second, differently-worded version of the same flow.
  */
 export async function importSmartPumpWithFeedback(source: string): Promise<SmartPumpImportResult> {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const toast = () => (require('../store/toastStore') as typeof import('../store/toastStore')).useToastStore.getState();
   try {
     toast().show('Reading your workout export…');

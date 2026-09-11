@@ -206,7 +206,6 @@ export async function sendRoundTrace(reporter: string): Promise<boolean> {
    */
   if (isTestRunner()) { store.clear(); return false; }
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { useSettingsStore } = require('../store/settingsStore') as typeof import('../store/settingsStore');
     if (useSettingsStore.getState().shareDiagnostics === false) { store.clear(); return false; }
   } catch { /* a settings read must never strand the round */ }
@@ -233,7 +232,6 @@ async function sendRoundTraceOnce(reporter: string, key: string): Promise<boolea
   const fieldReport = (() => {
     if (!store.deep) return '';
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const fr = require('./roundFieldReport') as typeof import('./roundFieldReport');
       return fr.formatFieldReport(store.rows) + '\n' + '='.repeat(60) + '\n\n';
     } catch { return ''; }
@@ -244,9 +242,7 @@ async function sendRoundTraceOnce(reporter: string, key: string): Promise<boolea
   try {
     // Lazy requires: this runs once per round, and importing the whole API/platform surface at
     // module load for a once-per-round call is not worth it.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getApiBaseUrl, appKeyHeaders } = require('./apiBase') as typeof import('./apiBase');
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { Platform } = require('react-native') as typeof import('react-native');
     const base = getApiBaseUrl();
     if (!base) return false;
@@ -262,7 +258,6 @@ async function sendRoundTraceOnce(reporter: string, key: string): Promise<boolea
      * Never throws and never blocks: getInstallId() returns null rather than failing, and an
      * unattributed trace still sends. [[a-stale-header-is-a-source-someone-trusts]]
      */
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getInstallId } = require('./installId') as typeof import('./installId');
     const installId = await getInstallId().catch(() => null);
     /**
@@ -321,7 +316,6 @@ async function sendRoundTraceOnce(reporter: string, key: string): Promise<boolea
        * Sentry outage must not cost the trace. [[a-finding-that-cannot-leave-the-device]]
        */
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const fb = require('./issueFeedback') as typeof import('./issueFeedback');
         fb.sendIssueFeedback(
           { text: entryText, details: { trace: body }, context: entryContext },

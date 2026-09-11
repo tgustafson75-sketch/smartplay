@@ -118,7 +118,6 @@ export function useCaddieTabMic({
      * and overwrote the score he had just given correctly. Runs before the brain, like the other two.
      */
     {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { tryAnswerOpenQuestion } = require('../services/pendingPuttAsk') as typeof import('../services/pendingPuttAsk');
       const answered = tryAnswerOpenQuestion(transcript);
       if (answered) {
@@ -287,13 +286,11 @@ export function useCaddieTabMic({
      * from the log itself instead of needing someone to reproduce it.
      */
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       (require('../services/voiceErrorLog') as typeof import('../services/voiceErrorLog'))
         .logVoiceSilentFail('pipecat_degrade', { reason, path: 'pipecat_audio' });
     } catch { /* never throw from a failure path */ }
     let line = "Let's stay on this one — what are you working with?";
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const responder = require('../services/localStatusResponder') as typeof import('../services/localStatusResponder');
       const lang = useSettingsStore.getState().language;
       const langSafe = (['en', 'es', 'zh'] as const).includes(lang as 'en' | 'es' | 'zh')
@@ -322,7 +319,6 @@ export function useCaddieTabMic({
     // 2026-08-19 — number this turn so a failure below says WHICH turn it was. "Always the 1st" and
     // "the 1st and the 9th" are different bugs and used to look identical in the log.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       (require('../services/voiceErrorLog') as typeof import('../services/voiceErrorLog')).noteVoiceTurnStarted();
     } catch { /* advisory */ }
 

@@ -35,10 +35,8 @@ export function bootMark(label: string, extra?: Record<string, unknown>): void {
   // testing). The boot breadcrumbs stay in the owner log on purpose; the owner-logs view
   // gains an "Errors" filter so real failures are separable from this benign tracking.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const prof = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
     if (!prof.isOwnerEmail(prof.usePlayerProfileStore.getState().email)) return; // owner-only in the log
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const log = require('../store/issueLogStore') as typeof import('../store/issueLogStore');
     log.useIssueLogStore.getState().addBootEvent(label, { sinceBootMs, ...(extra ?? {}) });
   } catch {

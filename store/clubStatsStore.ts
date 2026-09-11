@@ -318,7 +318,6 @@ export const useClubStatsStore = create<ClubStatsState>()(
         //    this can never leave the caddie with nothing to suggest.
         const bagKeys = (() => {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const { useClubBagStore } = require('./clubBagStore') as typeof import('./clubBagStore');
             const ids = Object.keys(useClubBagStore.getState().clubs ?? {});
             const names = ids.map(clubIdToClubName).filter((n): n is ClubName => n != null && n !== 'Putter');

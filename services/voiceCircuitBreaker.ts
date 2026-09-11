@@ -107,7 +107,6 @@ export function recordSuccess(endpoint: VoiceEndpoint): void {
   // 2026-06-07 (audit) — any successful network call means we're online;
   // clear the reactive offline banner. Dynamic require avoids a cycle.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const c = require('../store/connectivityStore') as typeof import('../store/connectivityStore');
     c.reportOnline();
   } catch { /* non-fatal */ }

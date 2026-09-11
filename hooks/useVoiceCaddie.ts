@@ -810,7 +810,6 @@ export const useVoiceCaddie = ({
       // shape. Falls back to s.firstName when no override exists.
       firstName: (() => {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const { resolveCaddieSalutation } = require('../data/inviteePreferences') as typeof import('../data/inviteePreferences');
           return resolveCaddieSalutation(s.email, s.firstName);
         } catch {
@@ -949,7 +948,6 @@ export const useVoiceCaddie = ({
     // 2026-06-24 — off-device usage telemetry (opt-in; no-op if off). Count a
     // voice turn whenever the caddie brain is engaged. No message content sent.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       require('../services/usageTelemetry').track('voice_turn');
     } catch { /* telemetry never throws */ }
     // 2026-06-13 (Cecily) — if the player asked the caddie to SING, reshape the brain
@@ -959,7 +957,6 @@ export const useVoiceCaddie = ({
     // for that feature (shared SCREEN_HELP copy, same as the first-time tutorials).
     // Checked first so "how do I play this" is help, not a song request.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const sh = require('../services/screenHelp') as typeof import('../services/screenHelp');
       const help = sh.detectHelpRequest(message);
       if (help) {
@@ -968,7 +965,6 @@ export const useVoiceCaddie = ({
       }
     } catch { /* non-fatal */ }
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const sa = require('../services/singAttempt') as typeof import('../services/singAttempt');
       const sing = sa.detectSingRequest(message);
       if (sing) message = sa.buildSingMessage(sing.song);
@@ -976,7 +972,6 @@ export const useVoiceCaddie = ({
     // 2026-06-13 (Tim/Cecily) — "play [song]" → search the kid-safe portal and open the
     // clean in-app player, short-circuiting the brain with a spoken confirmation.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const ps = require('../services/playSongFlow') as typeof import('../services/playSongFlow');
       const handled = await ps.tryPlaySong(message);
       if (handled) return { text: handled.spoken, audioBase64: null, toolAction: null, fallback: false };
@@ -984,7 +979,6 @@ export const useVoiceCaddie = ({
     // 2026-06-13 (Tim) — plain-speak: if the user asked for it simple (or signals they're
     // new), reshape so the brain answers short, jargon-free, and conversational.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const pl = require('../services/plainSpeak') as typeof import('../services/plainSpeak');
       if (pl.detectPlainSpeakRequest(message)) message = pl.buildPlainSpeakPrefix() + message;
     } catch { /* non-fatal */ }
@@ -1041,7 +1035,6 @@ export const useVoiceCaddie = ({
       let courseIntelligence: string | null = null;
       try {
         if (isRoundActive && activeCourseId) {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const intelMod = require('../services/courseIntelligenceService') as typeof import('../services/courseIntelligenceService');
           courseIntelligence = intelMod.getCachedCourseIntelligenceSync(activeCourseId);
           if (!courseIntelligence) {
@@ -1147,7 +1140,6 @@ export const useVoiceCaddie = ({
       // Try the on-device local brain FIRST, honoring the "→ local brain backup" design.
       if (isFallback) {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const offline = require('../services/offlineCaddie') as typeof import('../services/offlineCaddie');
           const langSafe = (['en', 'es', 'zh'] as const).includes(language as 'en' | 'es' | 'zh')
             ? (language as 'en' | 'es' | 'zh') : 'en';
@@ -1245,7 +1237,6 @@ export const useVoiceCaddie = ({
       //      this brings it to the device. [[caddie-brain-kb-spec]]
       // Phase 1 device TTS then speaks the reply via system voice.
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const offline = require('../services/offlineCaddie') as typeof import('../services/offlineCaddie');
         const langSafe = (['en', 'es', 'zh'] as const).includes(language as 'en' | 'es' | 'zh')
           ? (language as 'en' | 'es' | 'zh')
@@ -1744,7 +1735,6 @@ export const useVoiceCaddie = ({
       const failTranscribeOffline = async (name: string, pingOk: boolean, pingMs: number, getOk = false, getMs = -1, cdnOk: boolean | null = null, cdnMs = -1) => {
         const elapsedMs = Date.now() - txStart;
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           (require('../services/roundTrace') as typeof import('../services/roundTrace')).trace('error', 'transcribe_fail', {
             reason: name, elapsedMs, pingOk, pingMs, getOk, getMs, cdnOk, cdnMs,
           });
@@ -1775,7 +1765,6 @@ export const useVoiceCaddie = ({
         const localModeOn = (() => { try { return useSettingsStore.getState().localMode === true; } catch { return false; } })();
         const deadEnd = (): string => {
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             const responder = require('../services/localStatusResponder') as typeof import('../services/localStatusResponder');
             return responder.cloudFailureLine(langSafe, localModeOn);
           } catch {
@@ -1803,7 +1792,6 @@ export const useVoiceCaddie = ({
           consecutiveCloudFailuresRef.current += 1;
           if (consecutiveCloudFailuresRef.current < CLOUD_FAILURES_BEFORE_OFFER) return;
           try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
             (require('../store/toastStore') as typeof import('../store/toastStore')).useToastStore.getState()
               .show('Signal trouble — turn on Local Mode in Settings to keep going without it.');
           } catch { /* toast is additive */ }
@@ -1830,7 +1818,6 @@ export const useVoiceCaddie = ({
         // Mode ON (they've explicitly chosen the offline caddie). [[offline-caddie-plan]]
         // (localModeOn is resolved once above — the on-device STT path reads the same value.)
         try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const stt = require('../services/onDeviceSTT') as typeof import('../services/onDeviceSTT');
           if (localModeOn && stt.isOnDeviceSTTReady()) {
             const prompt = "Say that again for me?";
@@ -1840,7 +1827,6 @@ export const useVoiceCaddie = ({
             const heard = await stt.recognizeOnceOnDevice(langSafe, { timeoutMs: 9000 });
             wrappedOnVoiceStateChange('thinking');
             if (heard) {
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
               const offline = require('../services/offlineCaddie') as typeof import('../services/offlineCaddie');
               const ans = offline.answerOffline(heard, langSafe);
               const reply = ans?.text ?? deadEnd();
@@ -2545,7 +2531,6 @@ export const useVoiceCaddie = ({
        * "how do I play this" is a help question, not a request for a song called "this".
        */
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const sh = require('../services/screenHelp') as typeof import('../services/screenHelp');
         const help = sh.detectHelpRequest(transcript);
         const h = help ? sh.getScreenHelp(help.key) : null;
@@ -2580,7 +2565,6 @@ export const useVoiceCaddie = ({
        * is a real path and must keep working. [[hands-free-zero-setup-is-the-product]]
        */
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const ps = require('../services/playSongFlow') as typeof import('../services/playSongFlow');
         const song = await ps.tryPlaySong(transcript);
         if (song) {
@@ -2620,13 +2604,11 @@ export const useVoiceCaddie = ({
        */
       let brainTranscript = transcript;
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const sa = require('../services/singAttempt') as typeof import('../services/singAttempt');
         const sing = sa.detectSingRequest(brainTranscript);
         if (sing) brainTranscript = sa.buildSingMessage(sing.song);
       } catch { /* non-fatal — the literal transcript is a fine fallback */ }
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const pl = require('../services/plainSpeak') as typeof import('../services/plainSpeak');
         if (pl.detectPlainSpeakRequest(brainTranscript)) brainTranscript = pl.buildPlainSpeakPrefix() + brainTranscript;
       } catch { /* non-fatal */ }
@@ -2785,7 +2767,6 @@ export const useVoiceCaddie = ({
     // 2026-07-18 (Tim — haptic feedback so you feel the caddie mic register your tap). Best-effort,
     // wrapped — never blocks or affects the voice flow.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const H = require('expo-haptics');
       void H.impactAsync(H.ImpactFeedbackStyle.Medium).catch(() => {});
     } catch { /* haptics optional */ }
@@ -2830,7 +2811,6 @@ export const useVoiceCaddie = ({
     // silent acoustic-track loss). SmartMotion's own mic button doesn't route
     // through here, so this blocks only the collisions.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       if ((require('../services/smartMotionRecordBus') as typeof import('../services/smartMotionRecordBus')).isSmartMotionActive()) return;
     } catch { /* guard is best-effort */ }
 
@@ -3122,7 +3102,6 @@ export const useVoiceCaddie = ({
       // opening words were lost. 'arming' releases VAD exactly the same way (its gate is
       // voiceState === 'idle') while telling the UI to hold the invitation until we're really live.
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
         (require('../services/roundTrace') as typeof import('../services/roundTrace')).trace('voice', 'turn_start');
       } catch { /* non-fatal */ }
       wrappedOnVoiceStateChange('arming');

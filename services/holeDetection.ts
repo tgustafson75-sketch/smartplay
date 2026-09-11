@@ -104,7 +104,6 @@ export function noteManualOverride(): void {
 export function startHoleDetection(): void {
   if (pollTimer) return;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const settingsMod = require('../store/settingsStore') as typeof import('../store/settingsStore');
     if (!settingsMod.useSettingsStore.getState().autoHoleAdvance) {
       console.log('[holeDetection] start skipped — autoHoleAdvance is OFF (manual hole control)');
@@ -118,7 +117,6 @@ export function startHoleDetection(): void {
   // hole transitions. The bus subscription closes the gap.
   if (!markUnsub) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { subscribeToMark } = require('./positionMarkBus');
       markUnsub = subscribeToMark(() => {
         console.log('[audit:gps] holeDetection tick triggered by mark event');
@@ -187,7 +185,6 @@ let markUnsub: (() => void) | null = null;
  */
 function activeRoundMatches(courseId: string): boolean {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const rs = require('../store/roundStore') as typeof import('../store/roundStore');
     return rs.useRoundStore.getState().activeCourseId === courseId;
   } catch { return false; }
@@ -242,7 +239,6 @@ export function detectCurrentHole(
 ): DetectionResult {
   const out = detectCurrentHoleInner(position, courseId, currentHole, scoresByHole);
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const rt = require('./roundTrace') as typeof import('./roundTrace');
     rt.traceDeep('gps', 'hole_detect', {
       from: currentHole,
@@ -304,7 +300,6 @@ function detectCurrentHoleInner(
   // back by setCurrentHole, but re-toasting the unscored nag every override window).
   let roundMaxHole = 18;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const rs = require('../store/roundStore') as typeof import('../store/roundStore');
     roundMaxHole = rs.roundLastHole(rs.useRoundStore.getState());
   } catch { /* store unavailable (tests) — keep 18 */ }
@@ -581,7 +576,6 @@ async function tick(): Promise<void> {
     // so Tim can see (in the GPS Test Bench) exactly when and why each
     // hole advance fired. Lazy require dodges any circular import risk.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { logHarnessEvent } = require('./simulatedGPS');
       logHarnessEvent('transition', `→ hole ${next} · ${result.reason}`);
     } catch {}

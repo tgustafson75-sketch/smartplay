@@ -330,7 +330,6 @@ export async function startImpactRecording(opts?: {
             const noiseFloor = state.meterBuffer.reduce((a, b) => a + b, 0) / state.meterBuffer.length;
             let thresholdOffset = TRANSIENT_THRESHOLD_DB;
             try {
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
               const calMod = require('../store/acousticCalibrationStore') as typeof import('../store/acousticCalibrationStore');
               const applied = calMod.useAcousticCalibrationStore.getState().appliedCalibration;
               // 2026-07-08 (cage audit #1) — ONLY trust an applied calibration whose env
@@ -348,7 +347,6 @@ export async function startImpactRecording(opts?: {
                 !e ? null : (e === 'range' || e === 'course') ? 'outdoor' : 'indoor';
               let curEnv: string | null = null;
               try {
-                // eslint-disable-next-line @typescript-eslint/no-require-imports
                 const setMod = require('../store/settingsStore') as typeof import('../store/settingsStore');
                 curEnv = setMod.useSettingsStore.getState().environmentMode ?? null;
               } catch { /* settings optional */ }
@@ -520,7 +518,6 @@ export async function stopMultiShotRecording(): Promise<{ audio_uri: string | nu
 export async function cleanupImpactRecording(uri: string | null): Promise<void> {
   if (!uri) return;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const FS = require('expo-file-system/legacy');
     await FS.deleteAsync(uri, { idempotent: true });
   } catch { /* noop */ }
