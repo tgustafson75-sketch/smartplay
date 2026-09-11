@@ -211,6 +211,11 @@ interface SettingsState {
    *  voice ("I made a 5"). STROKE count then reflects the player's
    *  manual score, not derived from auto-detected shots. */
   autoShotDetection: boolean;
+  /**
+   * 2026-09-10 — OWNER FIELD TEST. When on, the next round is traced at decision-point depth and
+   * analysed into a findings report at round end. Owner-only; costs one boolean read when off.
+   */
+  ownerFieldTest: boolean;
   /** 2026-07-23 (Tim — Course Cloud) — share derived course MAPS (coords only, no PII) to the community
    *  DB. Default ON for beta; opt out anytime. Gates ONLY courseCloud upload.
    *  2026-07-27 — the issue-report/diagnostics auto-send was SPLIT OUT to `shareDiagnostics` (below); do
@@ -405,6 +410,7 @@ interface SettingsState {
   setAutoHoleAdvance: (v: boolean) => void;
   setInteractiveRound: (v: boolean) => void;
   setAutoShotDetection: (v: boolean) => void;
+  setOwnerFieldTest: (v: boolean) => void;
   setShareCommunityData: (v: boolean) => void;
   setShareDiagnostics: (v: boolean) => void;
   setHasAskedHealthPermission: (v: boolean) => void;
@@ -421,7 +427,12 @@ interface SettingsState {
   setGlassesMode: (v: boolean) => void;
   setFeelCaptureEnabled: (v: boolean) => void;
   setKevinGreetingEnabled: (v: boolean) => void;
-  setSmartVisionImagery: (v: 'curated' | 'gps' | 'auto') => void;
+  /**
+   * @deprecated 2026-09-10 — REMOVED. Its last caller was the voice "show me satellite view"
+   * handler, which set a value nothing reads and replied "SmartVision showing satellite aerial
+   * now." The field above stays for clean rehydration; a setter for a value with no reader is just
+   * a way to keep writing it. See services/intents/changeSettingHandler.ts.
+   */
   setYardageMode: (v: 'live' | 'preround') => void;
   setEnvironmentMode: (mode: 'course' | 'range' | 'sim') => void;
   setPracticeCanvasFeet: (feet: number) => void;
@@ -531,6 +542,7 @@ export const useSettingsStore = create<SettingsState>()(
       autoHoleAdvance: true, // FIX M5 — default true; GPS auto-advance is the expected behavior for new installs
       interactiveRound: false, // 2026-08-07 (Tim) — speak-when-you-stop is OFF by default; auto-brief is tee-box only
       autoShotDetection: false,
+      ownerFieldTest: false,
       shareCommunityData: true, // default ON for beta — helps build the shared course DB (coords only)
       shareDiagnostics: true, // beta issue triage (includes your email) — now a SEPARATE, honestly-labeled toggle
       hasAskedHealthPermission: false,
@@ -816,6 +828,7 @@ export const useSettingsStore = create<SettingsState>()(
       setAutoHoleAdvance: (v) => set({ autoHoleAdvance: v }),
       setInteractiveRound: (v) => set({ interactiveRound: v }),
       setAutoShotDetection: (v) => set({ autoShotDetection: v }),
+      setOwnerFieldTest: (v) => set({ ownerFieldTest: v }),
       setShareCommunityData: (v) => set({ shareCommunityData: v }),
       setShareDiagnostics: (v) => set({ shareDiagnostics: v }),
       setHasAskedHealthPermission: (v) => set({ hasAskedHealthPermission: v }),
@@ -836,7 +849,6 @@ export const useSettingsStore = create<SettingsState>()(
       setGlassesMode: (v) => set({ glassesMode: v }),
       setFeelCaptureEnabled: (v) => set({ feelCaptureEnabled: v }),
       setKevinGreetingEnabled: (v) => set({ kevinGreetingEnabled: v }),
-      setSmartVisionImagery: (v) => set({ smartVisionImagery: v }),
       setYardageMode: (v) => {
         const prev = get().yardageMode;
         set({ yardageMode: v });
@@ -1170,6 +1182,7 @@ export const useSettingsStore = create<SettingsState>()(
         autoHoleAdvance: s.autoHoleAdvance,
         interactiveRound: s.interactiveRound,
         autoShotDetection: s.autoShotDetection,
+        ownerFieldTest: s.ownerFieldTest,
         shareCommunityData: s.shareCommunityData,
         shareDiagnostics: s.shareDiagnostics,
         // 2026-05-17 — audit B P0: both health-permission flags were

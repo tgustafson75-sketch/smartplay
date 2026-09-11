@@ -46,14 +46,27 @@ export interface TraceRow {
  * because a truncated beginning is far less costly than losing the end, which is where a round's
  * problems usually surface.
  */
-const MAX_ROWS = 2000;
+export const MAX_ROWS = 2000;
+
+/**
+ * 2026-09-10 — FIELD TEST MODE raises the ceiling, because it raises the event rate.
+ *
+ * Owner field-test tracing instruments the decision points a normal trace leaves out (which green
+ * tier answered, why a shot was or wasn't logged, why the caddie stayed quiet). At that density
+ * 2,000 rows is roughly four holes, and the buffer drops the OLDEST — so a full round would mail
+ * back a trace that begins on hole 15. The point of the mode is the whole round, so it gets a
+ * ceiling sized for one.
+ */
+export const MAX_ROWS_DEEP = 20000;
 
 interface RoundTraceState {
   active: boolean;
+  /** Owner field-test round: record the verbose decision-point events too. */
+  deep: boolean;
   startedAt: number | null;
   label: string | null;
   rows: TraceRow[];
-  start: (label: string) => void;
+  start: (label: string, deep?: boolean) => void;
   stop: () => void;
   push: (event: TraceEvent, tag: string, data?: TraceRow['data']) => void;
   clear: () => void;
@@ -61,23 +74,38 @@ interface RoundTraceState {
 
 export const useRoundTraceStore = create<RoundTraceState>()((set, get) => ({
   active: false,
+  deep: false,
   startedAt: null,
   label: null,
   rows: [],
 
-  start: (label) => {
-    set({ active: true, startedAt: Date.now(), label, rows: [] });
+  start: (label, deep = false) => {
+    set({ active: true, deep, startedAt: Date.now(), label, rows: [] });
   },
 
   stop: () => set({ active: false }),
 
+  /**
+   * 2026-09-10 — pushes MUTATE the existing array instead of rebuilding it.
+   *
+   * This was `[...s.rows, row]` plus a `set()` on every single event: an O(n) copy of a buffer that
+   * grows to thousands, i.e. O(n²) over a round, on paths the module header promises are cheap
+   * ("tracing must never change what it observes" / "safe to call from hot paths"). At the normal
+   * event rate it was survivable; field-test mode multiplies the rate and the ceiling tenfold, which
+   * would have turned the diagnostic into the thing worth diagnosing.
+   *
+   * Mutating is safe here precisely BECAUSE nothing renders from `rows` — every reader goes through
+   * `useRoundTraceStore.getState()` in services/roundTrace.ts. If a component ever subscribes to
+   * rows, it will need a version counter; that is the trade this comment is here to flag.
+   */
   push: (event, tag, data) => {
     const s = get();
     if (!s.active || s.startedAt == null) return;
-    const row: TraceRow = { t: Date.now() - s.startedAt, event, tag, data };
-    const rows = s.rows.length >= MAX_ROWS ? [...s.rows.slice(1), row] : [...s.rows, row];
-    set({ rows });
+    const cap = s.deep ? MAX_ROWS_DEEP : MAX_ROWS;
+    const rows = s.rows;
+    if (rows.length >= cap) rows.shift();
+    rows.push({ t: Date.now() - s.startedAt, event, tag, data });
   },
 
-  clear: () => set({ active: false, startedAt: null, label: null, rows: [] }),
+  clear: () => set({ active: false, deep: false, startedAt: null, label: null, rows: [] }),
 }));

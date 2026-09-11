@@ -368,12 +368,42 @@ function safeLoc(lat: number | null | undefined, lng: number | null | undefined)
 // raw pin coords through the same Mark-Green-override-aware cascade
 // the visual yardage strip uses, so the spoken number agrees with the
 // on-screen number. Resolver itself unchanged.
-export function resolveGreenCoords(holeNumber: number): {
+export interface ResolvedGreen {
   front: ShotLocation | null;
   middle: ShotLocation | null;
   back: ShotLocation | null;
   source: 'truth' | 'override' | 'courseHoles' | 'geometryCache' | 'derived' | 'none';
-} {
+}
+
+/**
+ * 2026-09-10 — WHICH TIER ANSWERED is the single most useful fact in a field test.
+ *
+ * The Hemet round was un-diagnosable from the outside because every surface could only report the
+ * NUMBER, never where it came from. "148 yards" from a surveyed green and "148 yards" from
+ * hole-length-minus-distance-walked look identical on a phone and are completely different claims.
+ * This wrapper records the tier for every resolution during an owner field-test round, so the
+ * report can say "hole 7 never had a green all round" instead of "the yardage looked wrong".
+ *
+ * Wrapping rather than editing six return sites: a tier added later is traced automatically, and
+ * there is no branch that can forget to report itself. [[no-half-fixes-enforce-every-surface]]
+ */
+export function resolveGreenCoords(holeNumber: number): ResolvedGreen {
+  const out = resolveGreenCoordsInner(holeNumber);
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const rt = require('./roundTrace') as typeof import('./roundTrace');
+    rt.traceDeep('gps', 'green_tier', {
+      hole: holeNumber,
+      source: out.source,
+      hasMiddle: out.middle != null,
+      hasFront: out.front != null,
+      hasBack: out.back != null,
+    });
+  } catch { /* tracing never affects resolution */ }
+  return out;
+}
+
+function resolveGreenCoordsInner(holeNumber: number): ResolvedGreen {
   const round = useRoundStore.getState();
   const courseId = resolveSmartFinderCourseId(round);
   // 2026-08-10 (logic-universality fix #4) — TWICE-AROUND: the player's marked/surveyed green from loop 1

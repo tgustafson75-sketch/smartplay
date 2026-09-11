@@ -1391,6 +1391,20 @@ function AppNavigator() {
           shotDetectionService.pause();
         }
       }
+      /**
+       * 2026-09-10 — autoHoleAdvance had NO live branch here, and startHoleDetection's own
+       * docstring promised one: "subscribers can re-arm later by toggling Settings → Auto Hole
+       * Advance." Nothing anywhere read a change to that setting, so the promise was false.
+       *
+       * startHoleDetection() refuses to arm while the setting is OFF, and the only caller is the
+       * isRoundActive transition above. So turning the toggle off mid-round and back on left the
+       * poll loop DEAD until the next round — with the switch showing ON. That is exactly the
+       * "I turned it on and it isn't working" shape, and Tim toggles on-course constantly.
+       */
+      if (s.autoHoleAdvance !== prev.autoHoleAdvance) {
+        if (s.autoHoleAdvance) startHoleDetection();
+        else stopHoleDetection();
+      }
     });
     return () => {
       unsub();

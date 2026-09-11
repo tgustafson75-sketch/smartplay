@@ -6,6 +6,7 @@ import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { getHoleGeometry, fetchCourseGeometry, getCachedGeometry, type HoleGeometry } from '../../services/courseGeometryService';
 import { peekFix, getLastFix, resolveGreenCoords } from '../../services/smartFinderService';
+import { isValidGolfCoord } from '../../utils/coordGuard';
 import { haversineYards, projectToAxis } from '../../utils/geoDistance';
 
 // Curated screenshot fallback for local courses Tim has playtested. The
@@ -520,9 +521,34 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
       const holeRecord = useRoundStore.getState().courseHoles.find(h => h.hole === currentHole);
       let pctAlong: number | null = null;
       let yardsToGreen: number | null = null;
-      if (fix && holeRecord && (holeRecord.teeLat || holeRecord.teeLng) && (holeRecord.middleLat || holeRecord.middleLng)) {
-        const tee = { lat: holeRecord.teeLat, lng: holeRecord.teeLng };
-        const green = { lat: holeRecord.middleLat, lng: holeRecord.middleLng };
+      /**
+       * 2026-09-10 — THE OTHER HALF OF THIS COMPONENT.
+       *
+       * The hero-image branch above already goes through `resolveGreenCoords` (truth → Mark Green
+       * override → courseHoles → geometry cache → AI-derived). This branch — the curated local
+       * photo, the one that runs precisely when there is NO geometry — still read
+       * `holeRecord.middleLat` raw, behind a truthy `||`. For every golfcourseapi course those are
+       * literal 0, so the test failed, `yardsToGreen` stayed null, and the player got a hole photo
+       * with NO yardage badge and no position bar — on the exact courses that need it most.
+       *
+       * A zero green is also the one that must never reach haversine: {0,0} is a real point in the
+       * Gulf of Guinea and returns ~10M yards rather than an error. Both ends now go through the
+       * same cascade and the same coordinate guard as everywhere else.
+       * [[no-half-fixes-enforce-every-surface]]
+       */
+      const green = (() => {
+        try {
+          const m = resolveGreenCoords(currentHole).middle;
+          if (m && isValidGolfCoord(m.lat, m.lng)) return m;
+        } catch { /* fall through to the record */ }
+        return holeRecord && isValidGolfCoord(holeRecord.middleLat, holeRecord.middleLng)
+          ? { lat: holeRecord.middleLat, lng: holeRecord.middleLng }
+          : null;
+      })();
+      const tee = holeRecord && isValidGolfCoord(holeRecord.teeLat, holeRecord.teeLng)
+        ? { lat: holeRecord.teeLat, lng: holeRecord.teeLng }
+        : null;
+      if (fix && tee && green) {
         const total = haversineYards(tee, green);
         const fromPlayer = haversineYards(fix.location, green);
         if (total > 0 && Number.isFinite(fromPlayer)) {

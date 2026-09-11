@@ -279,24 +279,34 @@ export const changeSettingHandler: IntentHandler = {
         return ack(`Distances in ${unit} now.`, ['distance_unit:' + unit]);
       }
 
-      // 2026-07-29 (audit — VOICE-F5) — SmartVision imagery toggle (satellite aerial vs static hole
-      // photo) was tap-only. "show me the satellite / aerial view" → gps; "static / drawn / hole photo"
-      // → curated; "auto / best" → auto. Setter: setSmartVisionImagery('curated'|'gps'|'auto').
+      /**
+       * 2026-09-10 — THIS CONFIRMED A CHANGE IT COULD NOT MAKE.
+       *
+       * The 2026-07-29 handler called setSmartVisionImagery and replied "SmartVision showing
+       * satellite aerial now." Nothing in app/smartvision.tsx has ever read that value — the only
+       * reader in the app was the owner-logs diagnostics dump. So the caddie asserted a change,
+       * every time, and the screen was identical before and after.
+       *
+       * The setting is dead BY DESIGN, not by neglect. Tim closed it on 2026-08-11 — "do we get rid
+       * of the static setting in SmartVision? ... it's always satellite, but it goes live and
+       * updates when you're in a live round" — and __tests__/regression/smartvision-imagery-single-
+       * path.test.ts has guarded that decision ever since (`expect(src).not.toContain
+       * ('s.smartVisionImagery')`). Wiring it back up would reverse a call he already made.
+       *
+       * So the command now tells the truth instead of pretending. A caddie that says "it already
+       * is" is a caddie; one that says "done!" and changes nothing is a defect.
+       * [[feels-like-a-real-caddie]] [[illustration-data-points]]
+       */
       case 'imagery':
       case 'imagery_mode':
       case 'satellite_view':
       case 'map_view':
       case 'smartvision_imagery': {
-        const raw = String(rawValue ?? setting).toLowerCase();
-        const mode: 'curated' | 'gps' | 'auto' | null =
-          /\b(satellite|aerial|sat|gps|real)\b/.test(raw) ? 'gps' :
-          /\b(static|drawn|photo|curated|diagram|map)\b/.test(raw) ? 'curated' :
-          /\b(auto|automatic|best|default)\b/.test(raw) ? 'auto' :
-          null;
-        if (mode === null) return clarify('Satellite view or the static hole photo?');
-        useSettingsStore.getState().setSmartVisionImagery(mode);
-        const label = mode === 'gps' ? 'satellite aerial' : mode === 'curated' ? 'the static hole photo' : 'auto (best available)';
-        return ack(`SmartVision showing ${label} now.`, ['smartvision_imagery:' + mode]);
+        return ack(
+          'SmartVision is always the live satellite view — it updates as you move during a round. ' +
+          'Holes with no coordinates fall back to a stored aerial photo on their own.',
+          ['smartvision_imagery:always_satellite'],
+        );
       }
 
       default:

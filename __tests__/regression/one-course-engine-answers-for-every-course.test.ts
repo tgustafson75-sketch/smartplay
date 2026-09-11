@@ -90,7 +90,11 @@ describe('the pin/tee resolver answers from one cascade for every course', () =>
   it('reaches courseHoles without a provider gate standing in front of it', () => {
     // The removed legs sat between the override check and this line. If a provider ever returns
     // above it again for a subset of courses, the same session-order non-determinism returns.
-    for (const fn of ['resolveGreenCoords', 'resolveTeeCoords']) {
+    // 2026-09-10 — resolveGreenCoords is now a thin field-test tracing wrapper around
+    // resolveGreenCoordsInner, which holds the cascade. The invariant is about the CASCADE, so the
+    // window has to point at the function that contains it; pointing it at the wrapper would make
+    // this guard pass on a body that no longer reads courseHoles at all.
+    for (const fn of ['resolveGreenCoordsInner', 'resolveTeeCoords']) {
       const start = finder.indexOf(`function ${fn}`);
       expect(start).toBeGreaterThan(-1);
       // Cut at the next top-level declaration, not at the first `\n}` — these functions open with a

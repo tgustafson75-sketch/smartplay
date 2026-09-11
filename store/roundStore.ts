@@ -1033,8 +1033,22 @@ export const useRoundStore = create<RoundState>()(
         try {
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           const rt = require('../services/roundTrace') as typeof import('../services/roundTrace');
-          rt.startRoundTrace(course || 'round');
-          rt.trace('round', 'start', { course, holes: holes?.length ?? 0, nineHole: !!options?.nineHole });
+          /**
+           * 2026-09-10 — the owner field-test toggle is read HERE, once, at round start.
+           *
+           * Reading it per-event would let it change mid-round and produce a trace that is deep for
+           * part of a round and shallow for the rest — a report whose gaps mean "the toggle moved",
+           * not "nothing happened". A field test is a whole round or it is not one.
+           */
+          const fieldTest = (() => {
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              return (require('./settingsStore') as typeof import('./settingsStore'))
+                .useSettingsStore.getState().ownerFieldTest === true;
+            } catch { return false; }
+          })();
+          rt.startRoundTrace(course || 'round', fieldTest);
+          rt.trace('round', 'start', { course, holes: holes?.length ?? 0, nineHole: !!options?.nineHole, fieldTest });
         } catch { /* tracing never blocks a round */ }
         /**
          * 2026-09-03 — a round IS the "signs up" event for a referral.

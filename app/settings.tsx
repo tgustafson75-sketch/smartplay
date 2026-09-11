@@ -168,6 +168,8 @@ export default function Settings() {
   // store defaults are unchanged (auto-shot OFF, auto-advance ON), so behavior is identical
   // until the user opts in.
   const autoShotDetection = useSettingsStore(s => s.autoShotDetection);
+  const ownerFieldTest = useSettingsStore(s => s.ownerFieldTest);
+  const setOwnerFieldTest = useSettingsStore(s => s.setOwnerFieldTest);
   const setAutoShotDetection = useSettingsStore(s => s.setAutoShotDetection);
   const autoHoleAdvance = useSettingsStore(s => s.autoHoleAdvance);
   const setAutoHoleAdvance = useSettingsStore(s => s.setAutoHoleAdvance);
@@ -1245,7 +1247,7 @@ export default function Settings() {
               plays is worse than telling them plainly. */}
           <ToggleRow
             label="Auto Shot Detection"
-            sub="GPS auto-logs where each shot was hit. OFF by default — it can over-count on cart rounds. While it's off, nothing is recorded unless you log shots by voice, so View hole and the round recap will have no shots to show."
+            sub="GPS auto-logs where each shot was hit. OFF by default — it can over-count on cart rounds. Riding in a cart, shots are logged quietly with no club and the caddie never interrupts; walking, it asks what you hit. While it's off, nothing is recorded unless you log shots by voice, so View hole and the round recap will have no shots to show."
             value={autoShotDetection}
             onValueChange={confirmToggle('Auto Shot Detection', setAutoShotDetection)}
           />
@@ -2151,6 +2153,16 @@ export default function Settings() {
                     </View>
                     <Ionicons name="bug-outline" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
+                  {/* 2026-09-10 (Tim — "give me an owners tool toggle that will track a round I play
+                      for all key touchpoints to look for errors and issues and opportunities through
+                      a full real test round"). Read ONCE at round start, so a field test is a whole
+                      round or it is not one. */}
+                  <ToggleRow
+                    label="Field Test This Round"
+                    sub="Traces every key touchpoint of your next round — which green tier answered, why a shot was or wasn't logged, why hole advance held — then emails a findings report (errors, issues and opportunities) at the end, with the full timeline underneath. Reads the toggle when you START a round. Costs nothing when off."
+                    value={ownerFieldTest}
+                    onValueChange={confirmToggle('Field Test', setOwnerFieldTest)}
+                  />
                   {/* 2026-09-09 (Tim — "put my checklists of to dos on the phone in owners tool").
                       First row in Owner Tools on purpose: it is the one that has something to say. */}
                   <TouchableOpacity

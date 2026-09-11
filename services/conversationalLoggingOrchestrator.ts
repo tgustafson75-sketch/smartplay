@@ -110,10 +110,22 @@ class ConversationalLoggingOrchestrator {
   }
 
   private handleShotEvent(event: ShotEvent): void {
-    if (this.suspended) return;
-    if (this.state.kind !== 'idle') return; // already handling a shot
+    /**
+     * 2026-09-10 — a field test has to be able to tell "no shot was detected" from "a shot was
+     * detected and then dropped". Those are different bugs with the same symptom (an empty card),
+     * and today's cart-suppression defect hid inside exactly that ambiguity for months. Each early
+     * return now names itself.
+     */
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const rt = require('./roundTrace') as typeof import('./roundTrace');
+    rt.traceDeep('shot', 'auto_detected', {
+      yards: event.estimated_distance_yards ?? null,
+      state: this.state.kind,
+    });
+    if (this.suspended) { rt.traceDeep('shot', 'auto_dropped', { why: 'suspended' }); return; }
+    if (this.state.kind !== 'idle') { rt.traceDeep('shot', 'auto_dropped', { why: 'busy', state: this.state.kind }); return; }
     const round = useRoundStore.getState();
-    if (!round.isRoundActive) return;
+    if (!round.isRoundActive) { rt.traceDeep('shot', 'auto_dropped', { why: 'no_active_round' }); return; }
 
     // 2026-05-19 — suppress auto-fire in cart mode. Tim's finding from
     // yesterday's Sunnyvale round: "every time the cart moves we record
@@ -149,7 +161,34 @@ class ConversationalLoggingOrchestrator {
       ownerSentinel('orchestrator.walkingDetector', e);
     }
     if (effectiveCart) {
-      console.log('[orchestrator] auto-fire suppressed (cart mode effective) — use manual log');
+      /**
+       * 2026-09-10 (Tim, Hemet: "auto score and other auto settings still have flaws") — THE
+       * TOGGLE WAS A NO-OP FOR 95% OF PLAYERS, INCLUDING HIM.
+       *
+       * This was a bare `return`. shotDetectionService has exactly ONE subscriber — this handler —
+       * so a `return` here is not "suppress the prompt", it is "discard the shot". And `cartMode`
+       * DEFAULTS TO TRUE by the app's own cart-is-default principle (~95% of golfers ride), while
+       * `isEffectiveCartMode` short-circuits `true` on the manual setting. So switching Auto Shot
+       * Detection ON and riding a cart — the default configuration — detected every shot correctly
+       * and threw all of them away, silently, all round. The setting's own subtitle promises "GPS
+       * auto-logs where each shot was hit".
+       *
+       * The 2026-05-19 finding behind the suppression is still true and is NOT being reverted: a
+       * cart stops for many non-shot reasons, so a cart stop must never drive the spoken "what did
+       * you hit?" prompt. But that is an argument about INTERRUPTING, not about recording.
+       *
+       * Tim's call, 2026-09-10: log it silently and never prompt. The shot lands on the card where
+       * he can see and correct it, and the caddie stays quiet. [[no-push-nagging-no-ads]]
+       *
+       * `logged_via` is deliberately LEFT UNSET. It means "the player told us, by voice or tap",
+       * and nobody told us this — caddieRewards keys off exactly that to refuse points for
+       * GPS-only shots, which is the honest outcome for a shot the player never confirmed.
+       * [[illustration-data-points]]
+       */
+      console.log('[orchestrator] cart mode — logging shot untagged, no prompt');
+      rt.traceDeep('shot', 'auto_logged_silent', { hole: round.currentHole, why: 'cart_mode' });
+      this.logUntagged(event, round.currentHole, undefined, true)
+        .catch(err => ownerSentinel('orchestrator.cartUntaggedLog', err));
       return;
     }
     // 2026-05-17 — Audit C "B" P1 fix: also suppress when the latest
@@ -167,6 +206,7 @@ class ConversationalLoggingOrchestrator {
       const speed = getLastFix()?.speed ?? 0;
       if (speed > 4.0) {
         console.log(`[orchestrator] auto-fire suppressed (gps speed ${speed.toFixed(1)} m/s)`);
+        rt.traceDeep('shot', 'auto_dropped', { why: 'gps_speed', speed: Number(speed.toFixed(1)) });
         return;
       }
     } catch (e) {
@@ -348,12 +388,17 @@ class ConversationalLoggingOrchestrator {
     return shot;
   }
 
-  private async logUntagged(event: ShotEvent, hole: number, raw?: string): Promise<ShotResult> {
+  /**
+   * `silent` — the cart-mode auto-log path (2026-09-10). The shot is real GPS evidence but the
+   * player never confirmed it, so it carries no `logged_via` and gets its own id prefix, which
+   * keeps it distinguishable on the card and in any later audit from a shot somebody spoke.
+   */
+  private async logUntagged(event: ShotEvent, hole: number, raw?: string, silent = false): Promise<ShotResult> {
     const round = useRoundStore.getState();
     const idx = round.shots.length;
     const startLoc = await this.resolveStartLocation(event);
     const shot: ShotResult = {
-      id: `voice-untagged-${event.timestamp}`,
+      id: `${silent ? 'auto' : 'voice'}-untagged-${event.timestamp}`,
       feel: null,
       direction: null,
       shape: null,
@@ -362,7 +407,8 @@ class ConversationalLoggingOrchestrator {
       timestamp: event.timestamp,
       acousticContact: null,
       raw_utterance: raw ?? '',
-      logged_via: 'voice',
+      // Unset on the silent path — see the note above; nobody spoke or tapped this one.
+      ...(silent ? {} : { logged_via: 'voice' as const }),
       gps_location: startLoc,
       start_location: startLoc,
       end_location: null,

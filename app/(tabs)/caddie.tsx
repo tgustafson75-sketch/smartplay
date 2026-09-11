@@ -1308,20 +1308,61 @@ export default function CaddieTab() {
     if (!isRoundActive || !_proactive_kevin_enabled || localMode) return; // Local Mode = no proactive (#10)
     const storeNow = useRoundStore.getState();
     const holesPlayed = Object.keys(storeNow.scores).length;
-    if (holesPlayed < 3) return; // streaks require at least 3 holes
+    /**
+     * 2026-09-10 — this gate used to be `< 3` with the comment "streaks require at least 3 holes".
+     * That is a STREAK rule, and it was being enforced one layer above the streaks — so when
+     * `notable_hole` was added (a single-hole trigger), nothing could reach it for the first two
+     * holes of every round. Each streak trigger already guards itself on `recentScores.length >= 3`,
+     * which is the owner of that rule. [[two-owners-is-the-root-cause]]
+     */
+    if (holesPlayed < 1) return;
     // Build recentScores (last 3, relative to par) for the proactive engine.
     const scoreEntries = Object.entries(storeNow.scores)
       .map(([h, s]) => {
         const par = holePar(Number(h)) ?? 4;
-        return { hole: Number(h), offset: s - par };
+        return { hole: Number(h), strokes: s, par: holePar(Number(h)), offset: s - par };
       })
       .sort((a, b) => a.hole - b.hole);
     const recentScores = scoreEntries.slice(-3).map(e => e.offset);
     const ghostDelta = useGhostStore.getState().overall_delta ?? null;
+    /**
+     * 2026-09-10 — the hole he just finished, with his own history on it. See proactiveKevin's
+     * `notable_hole`: a par is only worth a word if a par is rare FOR HIM.
+     */
+    const lastEntry = scoreEntries[scoreEntries.length - 1] ?? null;
+    const lastHole = (() => {
+      if (!lastEntry) return null;
+      const hist = (() => {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const m = require('../../services/caddieMemoryRetrieval') as typeof import('../../services/caddieMemoryRetrieval');
+          return m.getHoleScoringHistory({ courseId: storeNow.activeCourseId ?? null, hole: lastEntry.hole });
+        } catch { return null; }
+      })();
+      /**
+       * The day's character measured from the OTHER holes. Including the hole being judged would
+       * let a good hole dilute the very baseline it is being compared against — on hole 2 a single
+       * par would drag the average under the bar and silence the trigger that the par is for.
+       * Null until there are at least two prior holes to average.
+       */
+      const prior = scoreEntries.slice(0, -1);
+      const roundAvgOffset = prior.length >= 2
+        ? prior.reduce((a, e) => a + e.offset, 0) / prior.length
+        : null;
+      return {
+        hole: lastEntry.hole,
+        strokes: lastEntry.strokes,
+        par: lastEntry.par ?? hist?.par ?? null,
+        avgScore: hist?.avgScore ?? null,
+        played: hist?.played ?? null,
+        roundAvgOffset,
+      };
+    })();
     const trigger = shouldFireProactive({
       holesPlayed,
       currentHole: storeNow.currentHole,
       recentScores,
+      lastHole,
       ghostDelta,
       dominantMiss: usePlayerProfileStore.getState().dominantMiss ?? null,
       firstName: usePlayerProfileStore.getState().firstName || '',

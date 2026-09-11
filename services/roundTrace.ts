@@ -10,7 +10,7 @@
  * whether the watch was heard from) and puts the tick-by-tick underneath. The summary is what
  * answers "did it work"; the timeline is what answers "why not".
  */
-import { useRoundTraceStore, type TraceEvent, type TraceRow } from '../store/roundTraceStore';
+import { useRoundTraceStore, MAX_ROWS, MAX_ROWS_DEEP, type TraceEvent, type TraceRow } from '../store/roundTraceStore';
 import { isTestRunner } from './isTestRunner';
 
 /**
@@ -25,9 +25,30 @@ export function trace(event: TraceEvent, tag: string, data?: TraceRow['data']): 
   } catch { /* tracing must never affect the app */ }
 }
 
-/** Begin tracing a round. */
-export function startRoundTrace(label: string): void {
-  try { useRoundTraceStore.getState().start(label); } catch { /* non-fatal */ }
+/**
+ * Record one tick ONLY during an owner field-test round.
+ *
+ * 2026-09-10 (Tim: "give me an owners tool toggle that will track a round I play for all key
+ * touchpoints to look for errors and issues and opportunities through a full real test round").
+ *
+ * Every normal round is already traced. What a field test adds is the DECISION POINTS — not "the
+ * yardage was 148" but "the yardage was 148 because tier 3 answered and tiers 1 and 2 were empty";
+ * not "no shot was logged" but "a shot was detected and then dropped, here is the gate that dropped
+ * it". Those are far too chatty for every round and are the entire point of one.
+ *
+ * Same contract as `trace`: never throws, never awaits, one boolean read when the mode is off.
+ */
+export function traceDeep(event: TraceEvent, tag: string, data?: TraceRow['data']): void {
+  try {
+    const s = useRoundTraceStore.getState();
+    if (!s.deep) return;
+    s.push(event, tag, data);
+  } catch { /* tracing must never affect the app */ }
+}
+
+/** Begin tracing a round. `deep` turns on owner field-test instrumentation. */
+export function startRoundTrace(label: string, deep = false): void {
+  try { useRoundTraceStore.getState().start(label, deep); } catch { /* non-fatal */ }
 }
 
 const pad = (n: number, w: number) => String(n).padStart(w, '0');
@@ -88,7 +109,14 @@ export function formatRoundTrace(): string {
 
   const summary = [
     `ROUND TRACE — ${s.label ?? 'round'}`,
-    `duration ${stamp(dur)} · ${rows.length} events${rows.length >= 2000 ? ' (buffer full — earliest rows dropped)' : ''}`,
+    /**
+     * 2026-09-10 — the "buffer full" note compared against a HARDCODED 2000 while the store owns
+     * the ceiling, and field-test mode raised that ceiling to 20,000. Left as it was, a full
+     * field-test buffer (which HAS dropped its earliest rows) would print no warning at all, and a
+     * 2,000-row field-test trace that dropped nothing would claim it had. Ask the store.
+     * [[two-owners-is-the-root-cause]]
+     */
+    `duration ${stamp(dur)} · ${rows.length} events${rows.length >= (s.deep ? MAX_ROWS_DEEP : MAX_ROWS) ? ' (buffer full — earliest rows dropped)' : ''}`,
     '',
     'SUMMARY',
     `  course geometry   ${geometry ? `${geometry.data?.holes ?? '?'} holes, ${geometry.data?.greens ?? '?'} greens, ${geometry.data?.tees ?? '?'} tees (${geometry.data?.source ?? 'unknown'})` : 'NEVER BUILT'}`,
@@ -189,8 +217,25 @@ export async function sendRoundTrace(reporter: string): Promise<boolean> {
 
 async function sendRoundTraceOnce(reporter: string, key: string): Promise<boolean> {
   const store = useRoundTraceStore.getState();
-  const body = formatRoundTrace();
-  const label = store.label ?? 'round';
+  /**
+   * 2026-09-10 — the FIELD REPORT leads, the timeline follows.
+   *
+   * Same principle the trace summary was built on and one level up: a field-test round produces
+   * thousands of rows, and the finding is never the row you happen to scroll to. The analysis goes
+   * at the TOP of the email so the first thing read is "hole 7 never resolved a green" rather than
+   * hole 1's first GPS fix. The timeline stays underneath, because the summary answers "what broke"
+   * and only the timeline answers "why".
+   */
+  const fieldReport = (() => {
+    if (!store.deep) return '';
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const fr = require('./roundFieldReport') as typeof import('./roundFieldReport');
+      return fr.formatFieldReport(store.rows) + '\n' + '='.repeat(60) + '\n\n';
+    } catch { return ''; }
+  })();
+  const body = fieldReport + formatRoundTrace();
+  const label = (store.deep ? 'FIELD TEST — ' : '') + (store.label ?? 'round');
   store.stop();
   try {
     // Lazy requires: this runs once per round, and importing the whole API/platform surface at

@@ -406,6 +406,38 @@ export function mergeMemoryIntoContext(existing: string | null, memoryBlock: str
  * from memory ("you usually tee 7-iron here; favor left") instead of going
  * silent. Sync, never throws; returns null when there's nothing learned yet.
  */
+/**
+ * 2026-09-10 — the player's own scoring history on ONE hole, as numbers rather than prose.
+ *
+ * getCourseHoleGuidance already reads this record, but it returns a composed sentence and drops
+ * `scoringAvg`/`played` on the floor. proactiveKevin's `notable_hole` trigger has to COMPARE
+ * against them ("a full stroke better than the way you usually play it"), so it needs the figures.
+ * Reading the CNS store stays here, in the one module that owns retrieval, rather than being
+ * re-derived at a screen. [[two-owners-is-the-root-cause]]
+ *
+ * Returns null when the CNS is off, the hole is unknown, or it has never been recorded — `played`
+ * of 0 is a real answer ("never seen it"), so callers get the record and decide their own bar.
+ */
+export function getHoleScoringHistory(input: {
+  playerId?: string;
+  courseId: string | null;
+  hole: number | null;
+}): { avgScore: number | null; played: number; par: number | null } | null {
+  if (!CNS_RETRIEVAL_ENABLED || !input.courseId || input.hole == null) return null;
+  try {
+    const p = useCaddieMemoryStore.getState().getPlayer(input.playerId);
+    const hm = p.courses[input.courseId]?.holes[input.hole];
+    if (!hm) return null;
+    return {
+      avgScore: typeof hm.scoringAvg === 'number' && Number.isFinite(hm.scoringAvg) ? hm.scoringAvg : null,
+      played: typeof hm.played === 'number' && Number.isFinite(hm.played) ? hm.played : 0,
+      par: typeof hm.par === 'number' && Number.isFinite(hm.par) ? hm.par : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function getCourseHoleGuidance(input: {
   playerId?: string;
   courseId: string | null;

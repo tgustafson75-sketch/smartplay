@@ -193,8 +193,16 @@ function activeRoundMatches(courseId: string): boolean {
   } catch { return false; }
 }
 
-/** This hole's green, from the app's own cascade when there's a round, else the seeded cache. */
-function greenForHole(courseId: string, hole: number): LatLng | null {
+/**
+ * This hole's green, from the app's own cascade when there's a round, else the seeded cache.
+ *
+ * 2026-09-10 — EXPORTED so holeReconciliation (the "Refresh GPS" button) reads greens the same
+ * way this detector does. It was still calling getHoleGeometry directly and requiring BOTH tee and
+ * green from the cache, so on any golfcourseapi course it scored zero holes and answered "no hole
+ * geometry available" — the manual remedy a player is told to use when auto-advance drifts was dead
+ * for exactly the courses where auto-advance drifts. [[two-owners-is-the-root-cause]]
+ */
+export function greenForHole(courseId: string, hole: number): LatLng | null {
   if (activeRoundMatches(courseId)) {
     try {
       const m = resolveGreenCoords(hole).middle;
@@ -206,7 +214,7 @@ function greenForHole(courseId: string, hole: number): LatLng | null {
 }
 
 /** A candidate hole's tee, same cascade. courseHoles carries it for every golfcourseapi course. */
-function teeForHole(courseId: string, hole: number): LatLng | null {
+export function teeForHole(courseId: string, hole: number): LatLng | null {
   if (activeRoundMatches(courseId)) {
     try {
       const t = resolveTeeCoords(hole).tee;
@@ -217,7 +225,37 @@ function teeForHole(courseId: string, hole: number): LatLng | null {
   return t && isValidGolfCoord(t.lat, t.lng) ? t : null;
 }
 
+/**
+ * 2026-09-10 — every detection verdict, with its reason, during an owner field-test round.
+ *
+ * `reason` already existed on every one of the eleven return paths and went nowhere — it was read
+ * by a devLog and thrown away. That is why "auto hole advance isn't working" has never been
+ * answerable after the fact: the app knew precisely why it held, on every single fix, and told
+ * nobody. The wrapper records it so a field report can say "held 214 times on hole 7, all of them
+ * 'no current-hole green geometry'".
+ */
 export function detectCurrentHole(
+  position: LatLng,
+  courseId: string | null,
+  currentHole: number,
+  scoresByHole: Record<number, number>,
+): DetectionResult {
+  const out = detectCurrentHoleInner(position, courseId, currentHole, scoresByHole);
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const rt = require('./roundTrace') as typeof import('./roundTrace');
+    rt.traceDeep('gps', 'hole_detect', {
+      from: currentHole,
+      to: out.hole_number,
+      advance: out.transition_recommended,
+      confidence: out.confidence,
+      reason: out.reason ?? null,
+    });
+  } catch { /* tracing never affects detection */ }
+  return out;
+}
+
+function detectCurrentHoleInner(
   position: LatLng,
   courseId: string | null,
   currentHole: number,

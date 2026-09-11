@@ -98,7 +98,10 @@ describe('it is wired into the round, with zero setup', () => {
   const store = read('store/roundStore.ts');
 
   it('starts itself when a round starts', () => {
-    expect(store).toContain("rt.startRoundTrace(course || 'round')");
+    // 2026-09-10 — the call now carries the owner field-test flag as a second argument. The
+    // invariant this guards is unchanged (the trace starts ITSELF from startRound, zero setup), so
+    // the anchor is matched up to the label rather than pinned to the exact argument list.
+    expect(store).toContain("rt.startRoundTrace(course || 'round'");
   });
 
   it('records holes, scores and the end', () => {

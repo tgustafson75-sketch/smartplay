@@ -41,6 +41,7 @@ import { fetchCourseContent } from './courseContentService';
 import { fetchCourseIntelligence } from './courseIntelligenceService';
 import { prefetchHoles, isMapboxConfigured, type HoleImageryInput } from './mapboxImagery';
 import type { CourseHole } from '../store/roundStore';
+import { isValidGolfCoord } from '../utils/coordGuard';
 
 type PrefetchArgs = {
   courseId: string;
@@ -189,11 +190,23 @@ function buildTileInputs(courseId: string, holes: TileHole[]): HoleImageryInput[
   return holes
     .map((h) => {
       const geo = getHoleGeometry(courseId, h.hole);
-      const tee = geo?.tee
-        ?? (typeof h.teeLat === 'number' && typeof h.teeLng === 'number' ? { lat: h.teeLat, lng: h.teeLng } : null);
-      const green = geo?.green
-        ?? (typeof h.middleLat === 'number' && typeof h.middleLng === 'number' ? { lat: h.middleLat, lng: h.middleLng } : null);
+      /**
+       * 2026-09-10 — `typeof h.middleLat === 'number'` was the whole check, and ZERO IS A NUMBER.
+       *
+       * courseToHoles writes `middleLat: 0, middleLng: 0` for every hole of every golfcourseapi
+       * course (the free tier ships tees and null greens), so this built `{ lat: 0, lng: 0 }` — a
+       * truthy object, which sails past `if (!tee || !green)`. Every such course then requested
+       * eighteen Mapbox satellite tiles of NULL ISLAND in the Gulf of Guinea, cached them as that
+       * course's hole imagery, and burned the tile quota doing it.
+       *
+       * utils/coordGuard is the single owner of "is this a real course coordinate", and its own
+       * header says to apply it at every boundary where coordinates enter the pipeline — this is
+       * one, and it was missed. [[two-owners-is-the-root-cause]]
+       */
+      const tee = geo?.tee ?? (isValidGolfCoord(h.teeLat, h.teeLng) ? { lat: h.teeLat, lng: h.teeLng } : null);
+      const green = geo?.green ?? (isValidGolfCoord(h.middleLat, h.middleLng) ? { lat: h.middleLat, lng: h.middleLng } : null);
       if (!tee || !green) return null;
+      if (!isValidGolfCoord(tee.lat, tee.lng) || !isValidGolfCoord(green.lat, green.lng)) return null;
       return {
         courseId,
         holeNumber: h.hole,

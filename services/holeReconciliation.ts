@@ -20,6 +20,7 @@
  */
 
 import { getHoleGeometry } from './courseGeometryService';
+import { greenForHole, teeForHole } from './holeDetection';
 import { haversineYards } from '../utils/geoDistance';
 import { useRoundStore } from '../store/roundStore';
 import { getSustainedHeading } from './courseDataOrchestrator';
@@ -95,12 +96,30 @@ export function reconcileCurrentHole(fix: GpsFix, force = false): ReconcileResul
   const startHole = isTwiceAround ? 10 : 1;
   const scores: HoleScore[] = [];
   for (let h = startHole; h <= total; h++) {
+    /**
+     * 2026-09-10 — this read the geometry CACHE directly and required BOTH a tee and a green from
+     * it. On a golfcourseapi course the cache has no greens (courseToHoles writes zeros, and the
+     * OSM build is network-gated), so `continue` fired on all 18 holes, `scores` came back empty,
+     * and Refresh GPS answered "no hole geometry available" every time — on precisely the courses
+     * where hole detection drifts and the player reaches for it. It also could not see a player's
+     * own Mark Green override or a newly AI-derived green.
+     *
+     * holeDetection was moved onto the app cascade earlier today; this is the same fix in the
+     * manual remedy, reusing that module's helpers rather than growing a third copy of the rule.
+     * A hole with a tee but no green still scores — off the tee alone, which is strictly better
+     * than skipping the hole entirely. [[no-half-fixes-enforce-every-surface]]
+     */
     const geom = getHoleGeometry(round.activeCourseId, h);
-    if (!geom?.tee || !geom?.green) continue;
-    const dTee = haversineYards({ lat: fix.lat, lng: fix.lng }, geom.tee);
-    const dGreen = haversineYards({ lat: fix.lat, lng: fix.lng }, geom.green);
+    const tee = teeForHole(round.activeCourseId, h);
+    const green = greenForHole(round.activeCourseId, h);
+    if (!tee && !green) continue;
+    const dTee = tee ? haversineYards({ lat: fix.lat, lng: fix.lng }, tee) : Infinity;
+    const dGreen = green ? haversineYards({ lat: fix.lat, lng: fix.lng }, green) : Infinity;
     let score = Math.min(dTee, dGreen);
-    if (sustained != null && geom.bearing_deg != null) {
+    if (!Number.isFinite(score)) continue;
+    // The heading bonus is a refinement, not a requirement — when the cache has no geometry for
+    // this hole there is no bearing to compare, and the hole still scores on distance alone.
+    if (sustained != null && geom?.bearing_deg != null) {
       const delta = Math.abs(((sustained - geom.bearing_deg) % 360 + 540) % 360 - 180);
       if (delta <= HEADING_TOL_DEG) score = Math.max(0, score - HEADING_BONUS_YD);
     }

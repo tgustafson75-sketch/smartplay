@@ -74,6 +74,13 @@ const STATED_TTL_MS = 5 * 60 * 1000; // 5 min — stale after that
 export function resolveYardage(holeNumberArg?: number): ResolvedYardage {
   const round = useRoundStore.getState();
   const hole = holeNumberArg ?? round.currentHole;
+  return traceResolved(hole, resolveYardageInner(hole, round));
+}
+
+function resolveYardageInner(
+  hole: number,
+  round: ReturnType<typeof useRoundStore.getState>,
+): ResolvedYardage {
   const now = Date.now();
 
   // Tier 3 — user-stated. Highest precedence when fresh + same hole.
@@ -246,6 +253,28 @@ export function resolveYardage(holeNumberArg?: number): ResolvedYardage {
  * Convenience for Kevin's brain context — returns a compact blob the
  * prompt can quote ("Reading 168 from the static card — GPS is soft").
  */
+/**
+ * 2026-09-10 — every resolved yardage, with the tier that produced it, during a field-test round.
+ *
+ * `resolveYardage` is called from thirteen surfaces on a 3-4s cadence, so this is deliberately the
+ * ONE place it is recorded rather than at each caller — a caller that forgot would leave a hole in
+ * the report shaped exactly like "this surface never asked". Off, it is one boolean read.
+ */
+function traceResolved(hole: number, r: ResolvedYardage): ResolvedYardage {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const rt = require('./roundTrace') as typeof import('./roundTrace');
+    rt.traceDeep('gps', 'yardage_tier', {
+      hole,
+      value: r.value,
+      source: r.source,
+      confidence: r.confidence,
+      fallback: r.is_fallback,
+    });
+  } catch { /* never affects the number */ }
+  return r;
+}
+
 export function buildYardageInsight(): {
   yardage: number | null;
   source: YardageSource;
