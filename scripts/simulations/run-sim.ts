@@ -2633,7 +2633,14 @@ check('Smart Finder Scene Read: meta scene + measured wind → caddie brain (OTA
       /SENSOR TRUTH \(measured/.test(ctx) &&
       // wired into Smart Finder: capture → resize → readScene → result card
       /import\('\.\.\/services\/sceneReadService'\)/.test(sf) && /readScene\(\{ imageBase64/.test(sf) &&
-      /Read the scene/i.test(sf) && /SCENE READ/.test(sf)
+      /**
+       * 2026-09-11 — `/Read the scene/i` was VACUOUS and had been since it was written: those words
+       * exist in this file only inside a comment (app/smartfinder.tsx:939), never in rendered text.
+       * It passed by matching the guard's own documentation. Exposed when the i18n pass made these
+       * checks comment-blind. Replaced with the dismiss affordance, which is real, visible to a
+       * screen reader, and resolves through en.json. [[strip-comments-before-a-guard-matches]]
+       */
+      saysToPlayer(sf, 'Scene read. Tap to dismiss.') && saysToPlayer(sf, 'SCENE READ')
     );
   })(),
   'scene read snaps the view, grounds it in measured wind/temp via /api/kevin multimodal, renders + speaks the mental approach; no fabricated wind; OTA-safe');
@@ -3067,7 +3074,7 @@ check('Smart Motion: re-analyze the kept clip + auto-update on cold start (Tim)'
       /const reanalyze = useCallback\(\(\) => \{/.test(sm) &&
       /void runAnalysis\(clipUri, segmentsRef\.current\[0\]\)/.test(sm) &&
       /onPress=\{reanalyze\}/.test(sm) &&
-      /accessibilityLabel="Re-analyze this swing"/.test(sm) &&
+      /accessibilityLabel=\{t\('swinglab_smartmotion\.accessibility_label\.re_analyze_this_swing'\)\}/.test(sm) &&
       // auto-apply OTA on cold start, manual only later
       /autoAppliedRef\.current = true;\s*\n\s*void applyUpdate\(\)/.test(upd) &&
       /sinceLaunchMs < 20_000/.test(upd) &&
@@ -3097,7 +3104,7 @@ check('Practice points: conservative, per-drill, awarded on drill save → dashb
       /usePracticePointsStore\.getState\(\)\.awardPracticePoints\(\{/.test(sm) &&
       // surfaced on the dashboard, per-drill, hidden until earned
       /practiceTotal > 0 &&/.test(dash) &&
-      /PRACTICE POINTS/.test(dash) &&
+      saysToPlayer(dash, 'PRACTICE POINTS') &&
       /getDrillEntry\(id\)\?\.title/.test(dash)
     );
   })(),
@@ -3706,7 +3713,7 @@ check('Tester round 2: typed reply always shows, keyboard dismiss, Harry not sel
       /site: 'handsFree-route\.conversational'/.test(ls) &&
       /const shown = caption\(text, \d+\);/.test(ls) &&
       // 2 — the on-screen input bar can minimize the keyboard while typing
-      /accessibilityLabel="Hide keyboard"/.test(bottombar) && /Keyboard\.dismiss\(\)/.test(bottombar) &&
+      /accessibilityLabel=\{t\('caddie_caddie_bottom_bar\.accessibility_label\.hide_keyboard'\)\}/.test(bottombar) && /Keyboard\.dismiss\(\)/.test(bottombar) &&
       // 3 — Harry is NOT a selectable base persona for the custom caddie
       !/id: 'harry'/.test(cc) &&
       // 4 — the drill-name banner fades out after 5s instead of overlapping the cards
@@ -5099,11 +5106,11 @@ check('Settings: branded icons on every category section (mockup, layout unchang
   (() => {
     const s = read('app/settings.tsx');
     return (
-      /title="Caddie" icon="bag-outline"/.test(s) &&
-      /title="Round Experience" icon="flag-outline"/.test(s) &&
-      /title="Voice & Conversation" icon="mic-outline"/.test(s) &&
-      /title="Owner Tools" icon="construct-outline"/.test(s) &&
-      /title="Reset" icon="refresh-outline"/.test(s)
+      /title=\{t\('settings\.title\.caddie'\)\} icon="bag-outline"/.test(s) &&
+      /title=\{t\('settings\.title\.round_experience'\)\} icon="flag-outline"/.test(s) &&
+      /title=\{t\('settings\.title\.voice_conversation'\)\} icon="mic-outline"/.test(s) &&
+      /title=\{t\('settings\.title\.owner_tools'\)\} icon="construct-outline"/.test(s) &&
+      /title=\{t\('settings\.title\.reset'\)\} icon="refresh-outline"/.test(s)
     );
   })(),
   'every settings section header has a branded icon; logic + toggles untouched');
@@ -5255,7 +5262,7 @@ check('Play: opening a searched course shows loading + a retry hint (no silent d
   'tapping a searched/API course that fails to open (network / null record) shows an "opening…" state then a retry hint, instead of the row silently doing nothing');
 
 check('Play: an AI-identified course offers a scorecard-photo path (dead-end → playable)',
-  (() => /Add it from a scorecard photo to play with yardages/.test(read('app/(tabs)/play.tsx')))(),
+  (() => saysToPlayer(read('app/(tabs)/play.tsx'), 'Add it from a scorecard photo to play with yardages'))(),
   "a tester whose home course isn't in the DB can add it from a scorecard photo right on the AI card, instead of only a 'visit/book' link");
 
 check('TightLie: analysis failure shows a human caddie line, never a raw JS error',
@@ -5326,7 +5333,7 @@ check('Practice reps credited per club (honest volume, not distance)',
       /addReps:/.test(store) && /repsFor:/.test(store) &&
       /reps: Partial<Record<ClubName, number>>/.test(store) &&
       /useClubStatsStore\.getState\(\)\.addReps\(cn, segsForAnalysis\.length/.test(sm) &&
-      /PRACTICE VOLUME/.test(screen)
+      saysToPlayer(screen, 'PRACTICE VOLUME')
     );
   })(),
   'Smart Motion swings credit per-club reps; surfaced as PRACTICE VOLUME; never a distance');
@@ -5403,8 +5410,9 @@ check('Round history surfaces on the dashboard (Tim: "it doesn\'t go anywhere")'
     const dash = read('app/(tabs)/dashboard.tsx');
     return (
       // The RENDERED label, case-exact. /Recent Rounds/ matched only a comment, so a renamed
-      // section heading could never have failed this.
-      /RECENT ROUNDS/.test(readCode('app/(tabs)/dashboard.tsx')) &&
+      // section heading could never have failed this. 2026-09-11: resolves through en.json now that
+      // the label is a t() key — still comment-blind, so the original point stands.
+      saysToPlayer(dash, 'RECENT ROUNDS') &&
       /\[\.\.\.roundHistory\]\.reverse\(\)\.slice\(0, 6\)/.test(dash) &&
       /router\.push\(`\/recap\/\$\{r\.id\}`/.test(dash) &&      // tap → recap
       /r\.scoreVsPar === 0 \? 'E'/.test(dash) &&                // vs-par display
@@ -6117,7 +6125,18 @@ check('SmartPump third rail: workout import → TRAINING → PERFORMANCE dashboa
       // Dashboard reads the store, builds the series, and renders the third card.
       /useWorkoutStore/.test(dash) &&
       /computeWorkoutPerformance/.test(dash) &&
-      saysToPlayer(dash, "TRAINING \u2192 PERFORMANCE") &&
+      /**
+       * 2026-09-11 — this asserted a card that NO LONGER EXISTS. dashboard.tsx:1376 records that the
+       * PERFORMANCE and "TRAINING → PERFORMANCE" cards "were folded into the single PROGRESS graph";
+       * the phrase survived only in that comment, which is why the prose-assertion LOCK had it
+       * baselined. A baselined prose-only assertion is not a guard — it was hiding the fact that the
+       * surface it names had been removed.
+       *
+       * Now asserts what the workout rail actually renders into: the PROGRESS graph, plus the series
+       * builder feeding it. That is the real invariant — "imported training reaches the dashboard" —
+       * rather than the name of a card that was merged away.
+       */
+      saysToPlayer(dash, 'PROGRESS') &&
       // Ingest service + settings entry point + server route all present.
       /ingestSmartPumpExport/.test(read('services/smartPumpIngest.ts')) &&
       // 2026-08-22 — asserts the ENTRY POINTS, not the name of the inner call. Settings now goes
@@ -6231,7 +6250,7 @@ check('Acoustic Listening only while recording AND actually metering',
 
 check('Calibration auto-applies after a clean read',
   /Auto-apply: the user shouldn't have to tap/.test(read('app/swinglab/calibrate.tsx')) &&
-    /Dialed in ✓/.test(read('app/swinglab/calibrate.tsx')),
+    saysToPlayer(read('app/swinglab/calibrate.tsx'), 'Dialed in ✓'),
   'save+apply+confirm without a separate tap');
 
 check('Acoustic card always tappable to (re)calibrate',
@@ -6268,7 +6287,7 @@ check('Voice club-change + scan work on Smart Motion (no cage session needed)',
 const ownerProfileSrc = read('store/playerProfileStore.ts');
 check('Owner tools restorable: hotmail allow-listed + settings email input',
   /t\.gustafson@hotmail\.com/.test(ownerProfileSrc) &&
-    /Account email/.test(read('app/settings.tsx')) && /setAccountEmail/.test(read('app/settings.tsx')),
+    saysToPlayer(read('app/settings.tsx'), 'Account email') && /setAccountEmail/.test(read('app/settings.tsx')),
   'owner can set email in Settings to unlock Owner Tools (issue log / voice misses / harness)');
 
 // ─── 2026-06-09: feels engine + putt mode ──────────────────────────────────
@@ -6653,7 +6672,7 @@ check('Audit fix: upload never strands on "Saving…" if ingest throws',
     const u = read('app/swinglab/upload.tsx');
     // ingest is wrapped; on throw it restores the form + alerts (no infinite spinner)
     return /try \{\s*\n\s*sessionId = await ingestVideoFromPick\(\{/.test(u) &&
-      /\} catch \(e\) \{[\s\S]{0,180}setStep\('metadata'\);[\s\S]{0,120}Alert\.alert\('Upload failed'/.test(u);
+      /\} catch \(e\) \{[\s\S]{0,220}setStep\('metadata'\);[\s\S]{0,160}Alert\.alert\(t\('swinglab_upload\.alert\.upload_failed'\)/.test(u);
   })(),
   'a rejected video ingest restores the editable upload form + shows an alert instead of hanging on the Saving spinner forever (tonight\'s 2nd-video-source path)');
 
@@ -6775,7 +6794,7 @@ check('Practice→performance: honest connection card (association, gated, no fa
     // 2026-08-06 (Tim — "there should be ONE graph not multiple") — the three correlation cards collapsed
     // into a SINGLE PROGRESS graph: score-vs-par (outcome) with the chosen effort line overlaid.
     const dashOk =
-      /PROGRESS/.test(dash) &&
+      saysToPlayer(dash, 'PROGRESS') &&
       /computePracticeImpact\(\{/.test(dash) &&
       // one chart: score-vs-par primary (lower better) + the selected effort as an OVERLAY
       /data=\{activeProgress\.score\}/.test(dash) &&
@@ -6821,7 +6840,7 @@ check('Practice history: dashboard list → detail with per-club striation + tem
     const drillHistory = /usePracticeSessionStore\.getState\(\)\.recordCompletedSession\(\{/.test(sm);
     // dashboard surfaces the history list and navigates to the detail route
     const dashOk =
-      /PRACTICE HISTORY/.test(dash) &&
+      saysToPlayer(dash, 'PRACTICE HISTORY') &&
       /recentSessions = useMemo\(\(\) => practiceHistory\.slice\(0, 6\)/.test(dash) &&
       /router\.push\(`\/practice\/\$\{s\.id\}`/.test(dash);
     // detail screen renders the two primitives off real session data
@@ -8280,7 +8299,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /const span = Math\.max\(0\.001, liveBall\.y - EFFORT_TOP_CAP\)/.test(smSrc2) &&        // top cap = 100% effort
       // 2026-07-04 (drift reconcile) — the readout moved into the shot-map deck
       // (components/smartmotion/ShotMapPage.tsx renders the EFFORT stat).
-      /Stat label="EFFORT" value=\{effortPct != null \? `\$\{effortPct\}%` : '—'\}/.test(read('components/smartmotion/ShotMapPage.tsx')),
+      /Stat label=\{t\('smartmotion_shot_map_page\.label\.effort'\)\} value=\{effortPct != null \? `\$\{effortPct\}%` : '—'\}/.test(read('components/smartmotion/ShotMapPage.tsx')),
     'server grades against declared effort from ball→target geometry; the DTL target is DRAGGABLE in setup and the shot-map deck shows the live EFFORT stat — the interactive geometry↔tempo Tim expected');
 
   check('SmartMotion: putt CUP flag replaces the stuck PUTT MODE pill; future card sits at the bottom',
@@ -8295,7 +8314,10 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /targetKind === 'cup'/.test(read('components/swinglab/PracticeTargetingCard.tsx')) &&
       // COMING SOON now appears AFTER the feels-engine block (bottom of the page),
       // i.e. after "HOW'D IT FEEL?" in source order.
-      smSrc2.indexOf('>COMING SOON<') > smSrc2.indexOf('HOW&apos;D IT FEEL?') &&
+      // 2026-09-11 — both labels are t() keys now, so the ORDER is checked by key position. The
+      // invariant is unchanged: "what we can't do yet" must not sit above the real read.
+      smSrc2.indexOf("swinglab_smartmotion.smart_motion.coming_soon")
+        > smSrc2.indexOf("swinglab_smartmotion.smart_motion.how_d_it_feel") &&
       // right-rail badges carry a shadow so they read on bright backgrounds.
       /shadowColor: '#000', shadowOpacity: 0\.55/.test(smSrc2),
     'the stuck PUTT MODE pill is removed; putt mode shows a draggable CUP flag (targetKind cup); the COMING SOON card moved to the bottom of page 2; rail badges get a shadow halo');
@@ -8657,7 +8679,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /estimatedCarryYds: estCarry/.test(smSrc2) &&
       // 2026-07-04 (drift reconcile) — the CARRY display moved into the shot-map deck.
       // 2026-07-07 (audit M2) — relabeled "PLAN CARRY" so a projection isn't shown as an outcome.
-      /Stat label="PLAN CARRY" value=\{`~\$\{estCarry\}y`\}/.test(read('components/smartmotion/ShotMapPage.tsx')) &&
+      /Stat label=\{t\('smartmotion_shot_map_page\.label\.plan_carry'\)\} value=\{`~\$\{estCarry\}y`\}/.test(read('components/smartmotion/ShotMapPage.tsx')) &&
       /source=\{ICON_RAIL\.calibrate\}/.test(smSrc2) &&                  // rail badges wired
       /source=\{ICON_CTRL\.playpause\}/.test(smSrc2) &&                  // control badges wired
       /styles\.toolBtnBare/.test(smSrc2),                               // bare buttons (icon's own circle = button)
@@ -9394,7 +9416,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'single / multi-consensus / fallback all map analysis.strengths → PrimaryIssue.strengths, capped + trimmed');
 
   check('Strengths: card leads with a "WHAT\'S WORKING" block above the fault',
-    cardSrc.includes('WHAT&apos;S WORKING') &&
+    saysToPlayer(cardSrc, "WHAT'S WORKING") &&
       /hasStrengths/.test(cardSrc) &&
       cardSrc.indexOf('hasStrengths &&') < cardSrc.indexOf("primary_fault === 'inconclusive'"),
     'strengths render above the fault branches — positive first (honesty-gated: hidden when empty)');
@@ -14344,7 +14366,7 @@ check('Smart Motion: "go again" asked DURING analysis is queued, never dropped',
       // and a review-phase effect drains it, once, into the real go-again
       /if \(phase !== 'review' \|\| !queuedGoAgainRef\.current\) return;\s*queuedGoAgainRef\.current = false;\s*beginNextRecording\(\);/.test(sm) &&
       // the NEW SET control itself still exists and still auto-saves the set it leaves
-      /accessibilityLabel="New set — saves this one and records again"/.test(sm) &&
+      /accessibilityLabel=\{t\('swinglab_smartmotion\.accessibility_label\.new_set_saves_this_one'\)\}/.test(sm) &&
       /persistReviewRef\.current\(false\)/.test(sm)
     );
   })(),
@@ -14804,7 +14826,7 @@ check(
   check(
     'HEALTH: the recap screen actually renders it',
     /\{recap\.effort && \(/.test(readCode('app/recap/[round_id].tsx')) &&
-      /THE WALK/.test(read('app/recap/[round_id].tsx')),
+      saysToPlayer(read('app/recap/[round_id].tsx'), 'THE WALK'),
     'a reader nothing renders is the same orphan wearing a different name',
   );
 
@@ -15328,7 +15350,7 @@ check(
   check(
     'CLIPS: the uri is re-anchored at OPEN, and a missing file is said plainly',
     /const uri = await resolveClipUri\(stored\);/.test(recap) &&
-      /if \(!uri\) \{[\s\S]{0,260}?Alert\.alert\('Clip not on this device'/.test(recap),
+      /if \(!uri\) \{[\s\S]{0,300}?Alert\.alert\(t\('recap\.alert\.clip_not_on_this_device'\)/.test(recap),
     'iOS regenerates the app container UUID on reinstall, so a stored absolute path is stale — resolveClipUri re-anchors it, and null means genuinely gone, which is worth saying rather than opening a player onto a black rectangle',
   );
   check(
@@ -15789,12 +15811,12 @@ check(
     'SHOT SHAPES: a tile opens the lesson, and RECORD is the second tap',
     /onPress=\{\(\) => setTeaching\(s\)\}/.test(screen) &&
       !/onPress=\{\(\) => pick\(s\)\}/.test(screen) &&
-      /Record 3 of these/.test(screen),
+      saysToPlayer(screen, 'Record 3 of these'),
     'tapping a shot no longer starts a recording of a skill the app never taught',
   );
   check(
     'SHOT SHAPES: the lesson is a step, not a gate',
-    /I know this one — just record/.test(screen),
+    saysToPlayer(screen, 'I know this one — just record'),
     'a golfer who already has the shot must never be made to sit through the lesson twice',
   );
   const defs = readCode('services/practice/shotShapes.ts');
