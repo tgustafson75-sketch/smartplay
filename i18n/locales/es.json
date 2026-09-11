@@ -177,7 +177,9 @@
     "discard_title": "¿Descartar esta ronda?",
     "discard_body": "Todos los golpes, puntajes y planes de esta ronda se eliminarán. Esto no se puede deshacer.",
     "cancel": "Cancelar",
-    "discard_everything": "Descartar todo"
+    "discard_everything": "Descartar todo",
+    "walking": "Caminando",
+    "cart": "Carrito"
   },
   "swinglab": {
     "practice": "PRÁCTICA",
