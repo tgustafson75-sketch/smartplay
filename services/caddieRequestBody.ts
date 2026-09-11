@@ -136,7 +136,20 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
    */
   const currentHole = safe(() => r.currentHole ?? null, null);
   const activeCourseId = safe(() => r.activeCourseId ?? null, null);
-  const club = safe(() => r.club ?? null, null);
+  /**
+   * 2026-09-10 — the declared club EXPIRES, and the rule lives in one place.
+   *
+   * This read `r.club` raw. `club` is only cleared at round start, round end and by an explicit
+   * change — never by a hole change and never by time — so a club named on hole 3 was still being
+   * sent to the brain as the player's current club on hole 18. services/shotClubResolver has always
+   * applied a 12-minute window to exactly this value when deciding what a SHOT was hit with; the
+   * caddie's own prompt was the looser of the two owners. [[two-owners-is-the-root-cause]]
+   */
+  const club = safe(() => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const m = require('./shotClubResolver') as typeof import('./shotClubResolver');
+    return m.declaredClubIfFresh();
+  }, null);
 
   /**
    * The learned-memory slice merged with the caller's live block. This is also where the measured

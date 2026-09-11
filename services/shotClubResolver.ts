@@ -25,6 +25,28 @@ import { normalizeClub } from './clubNormalize';
 const FRESH_MS = 12 * 60 * 1000;
 
 /**
+ * 2026-09-10 — THE SAME FRESHNESS RULE, FOR THE CADDIE'S PROMPT.
+ *
+ * This file has always expired a declared club after FRESH_MS when deciding what club a SHOT was
+ * hit with. services/caddieRequestBody read `round.club` RAW, with no window at all — so a player
+ * who said "7 iron" on hole 3 had it sent to the brain as their current club on hole 18, while this
+ * resolver had long since stopped believing it. Two owners of "is this club still current", and the
+ * looser one was the one talking to the caddie.
+ *
+ * Exported rather than copied: a second `12 * 60 * 1000` somewhere else is the same defect waiting
+ * for the day somebody tunes one of them. [[two-owners-is-the-root-cause]]
+ */
+export function declaredClubIfFresh(nowMs = Date.now()): string | null {
+  try {
+    const round = useRoundStore.getState();
+    if (round.club == null || round.clubSetAt == null) return null;
+    return nowMs - round.clubSetAt <= FRESH_MS ? round.club : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * 2026-08-17 (Tim — "shot recommendation in club has always been an issue… make sure it's all
  * cleaned") — TWO defects lived in this file's own comparison, under a header describing the fix.
  *
