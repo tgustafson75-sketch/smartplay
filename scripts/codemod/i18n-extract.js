@@ -221,10 +221,36 @@ function transformFile(absPath) {
         reason: `component ${name} has a concise arrow body — needs a block to hold the hook` });
       return null;
     }
-    // Already has `t` in scope?
-    const hasT = fn.scope.hasBinding('t') ||
-      new RegExp(`useTranslation\\(`).test(src.slice(body.start, body.end));
-    if (!hasT) componentsNeedingHook.set(fn.node, { bodyStart: body.start + 1, name });
+    /**
+     * `t` MAY ALREADY BE TAKEN — and if it is, rewriting is unsafe.
+     *
+     * The first write run produced 6 TypeScript errors, all of this shape: app/tournament.tsx binds
+     * `const t = title.trim()` and tutorial-upload.tsx binds a thumbnail to `t`. The original check
+     * asked only "is `t` in scope?", found those, concluded the hook was already present, and
+     * rewrote the strings anyway — so `t('key')` resolved to a String and a TournamentTeam.
+     * "A binding exists" and "the translation function exists" are not the same question.
+     *
+     * So: accept a `t` that comes from useTranslation(), refuse any other and report it. Renaming
+     * the caller's variable to free up `t` would be a codemod silently editing code that has
+     * nothing to do with i18n.
+     */
+    // Resolve from the VIOLATION's scope, not the component's: the shadowing `const t` that broke
+    // the first run lives in an inner callback, which the component's own scope cannot see.
+    const binding = nodePath.scope.getBinding('t') ?? fn.scope.getBinding('t');
+    if (binding) {
+      const init = binding.path.node?.init;
+      const fromUseTranslation =
+        init?.type === 'CallExpression' && init.callee?.name === 'useTranslation';
+      if (!fromUseTranslation) {
+        skipped.push({ file: rel, line, text: decodeEntities(rawText).trim().slice(0, 60),
+          reason: `\`t\` is already bound to something else in ${name} — rewriting would shadow the translation function` });
+        return null;
+      }
+      return name;   // real t() already in scope
+    }
+    if (!new RegExp('useTranslation\\(').test(src.slice(body.start, body.end))) {
+      componentsNeedingHook.set(fn.node, { bodyStart: body.start + 1, name });
+    }
     return name;
   }
 
@@ -392,6 +418,32 @@ const report = {
   parseFailures: failedFiles.length,
 };
 console.log(JSON.stringify(report, null, 2));
+
+/**
+ * WRITE THE ENGLISH VALUES TOO — the rewrite is not finished without them.
+ *
+ * Replacing "View Recent Rounds" with t('scorecard.text.view_recent_rounds') and stopping there
+ * leaves the app rendering the raw key to an ENGLISH user. i18next falls back to the key when it
+ * resolves nothing, so the failure is visible on every screen and in every locale at once. The
+ * English value is not a translation decision — it is the literal that was just removed — so it
+ * belongs in the same commit as the removal.
+ */
+if (WRITE && newKeyValues.size) {
+  const enRaw = JSON.parse(fs.readFileSync(EN_PATH, 'utf8'));
+  let added = 0;
+  for (const [dotted, value] of newKeyValues) {
+    const parts = dotted.split('.');
+    let node = enRaw;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (typeof node[parts[i]] !== 'object' || node[parts[i]] === null) node[parts[i]] = {};
+      node = node[parts[i]];
+    }
+    const leaf = parts[parts.length - 1];
+    if (!(leaf in node)) { node[leaf] = value; added++; }
+  }
+  fs.writeFileSync(EN_PATH, `${JSON.stringify(enRaw, null, 2)}\n`, 'utf8');
+  console.log(`\nen.json: +${added} keys`);
+}
 
 fs.writeFileSync(path.join(ROOT, 'scripts/codemod/.i18n-newkeys.json'),
   JSON.stringify(Object.fromEntries([...newKeyValues].sort()), null, 2));

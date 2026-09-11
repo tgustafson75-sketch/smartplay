@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import PALMS_IMAGES from '../data/palmsImages';
 import type { Landmark } from '../services/landmarks';
+import { useTranslation } from 'react-i18next';
 
 const STORAGE_KEY = 'landmark_curate_draft';
 const COURSE_ID = 'palms';
@@ -28,6 +29,7 @@ function generateId(course_id: string, hole_number: number, name: string): strin
 }
 
 export default function LandmarkCurateScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const imgW = Math.floor(width * IMAGE_WIDTH_RATIO);
@@ -72,7 +74,7 @@ export default function LandmarkCurateScreen() {
   }, [imgW, imgH]);
 
   const handleAddLandmark = () => {
-    if (!form.name.trim()) { Alert.alert('Name required'); return; }
+    if (!form.name.trim()) { Alert.alert(t('landmark_curate.alert.name_required')); return; }
     const lm: Landmark = {
       id: generateId(COURSE_ID, selectedHole, form.name),
       course_id: COURSE_ID,
@@ -98,7 +100,7 @@ export default function LandmarkCurateScreen() {
   const handleExport = () => {
     const json = JSON.stringify(landmarks, null, 2);
     setExported(json);
-    Alert.alert('Export ready', 'JSON shown below. Copy it to data/landmarks/palms.json');
+    Alert.alert(t('landmark_curate.alert.export_ready'), t('landmark_curate.alert.json_shown_below_copy_it'));
   };
 
   const holeList = landmarks.filter(l => l.hole_number === selectedHole);
@@ -107,16 +109,16 @@ export default function LandmarkCurateScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backText}>← Back</Text>
+          <Text style={styles.backText}>{t('landmark_curate.landmark_curate_screen.back')}</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Landmark Curator — Palms</Text>
+        <Text style={styles.title}>{t('landmark_curate.landmark_curate_screen.landmark_curator_palms')}</Text>
         <View style={styles.backBtn} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
 
         {/* HOLE SELECTOR */}
-        <Text style={styles.section}>HOLE</Text>
+        <Text style={styles.section}>{t('landmark_curate.landmark_curate_screen.hole')}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.holeScroll}>
           <View style={styles.holeRow}>
             {Array.from({ length: 9 }, (_, i) => i + 1).map(h => (
@@ -134,7 +136,7 @@ export default function LandmarkCurateScreen() {
         </ScrollView>
 
         {/* HOLE IMAGE — tap to place */}
-        <Text style={styles.section}>TAP IMAGE TO PLACE</Text>
+        <Text style={styles.section}>{t('landmark_curate.landmark_curate_screen.tap_image_to_place')}</Text>
         <TouchableOpacity activeOpacity={0.95} onPress={handleImageTap}>
           <View style={{ width: imgW, height: imgH, borderRadius: 10, overflow: 'hidden', position: 'relative' }}>
             {holeImage ? (
@@ -168,18 +170,18 @@ export default function LandmarkCurateScreen() {
         )}
 
         {/* ADD FORM */}
-        <Text style={styles.section}>ADD LANDMARK</Text>
+        <Text style={styles.section}>{t('landmark_curate.landmark_curate_screen.add_landmark')}</Text>
         <View style={styles.formCard}>
           <TextInput
             style={styles.input}
-            placeholder="Name (e.g. Left Bunker)"
+            placeholder={t('landmark_curate.placeholder.name_e_g_left_bunker')}
             placeholderTextColor="#4b5563"
             value={form.name}
             onChangeText={t => setForm(f => ({ ...f, name: t }))}
           />
           <TextInput
             style={styles.input}
-            placeholder="Description"
+            placeholder={t('landmark_curate.placeholder.description')}
             placeholderTextColor="#4b5563"
             value={form.description}
             onChangeText={t => setForm(f => ({ ...f, description: t }))}
@@ -241,12 +243,12 @@ export default function LandmarkCurateScreen() {
 
         {/* EXPORT */}
         <TouchableOpacity style={styles.exportBtn} onPress={handleExport}>
-          <Text style={styles.exportBtnText}>Export JSON</Text>
+          <Text style={styles.exportBtnText}>{t('landmark_curate.landmark_curate_screen.export_json')}</Text>
         </TouchableOpacity>
 
         {exported && (
           <View style={styles.exportCard}>
-            <Text style={styles.exportLabel}>data/landmarks/palms.json</Text>
+            <Text style={styles.exportLabel}>{t('landmark_curate.landmark_curate_screen.data_landmarks_palms_json')}</Text>
             <ScrollView horizontal>
               <Text style={styles.exportText} selectable>{exported}</Text>
             </ScrollView>

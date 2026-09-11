@@ -25,6 +25,7 @@ import {
   pickForTopTracer, parseTopTracerScreenshot, sortedClubs,
   type TopTracerParseResult, type TopTracerClubRow,
 } from '../../services/topTracerImport';
+import { useTranslation } from 'react-i18next';
 
 type Phase =
   | { kind: 'pick' }
@@ -34,6 +35,7 @@ type Phase =
   | { kind: 'error'; message: string; retryable: boolean };
 
 export default function RangeImportScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors: c } = useTheme();
   const setManual = useClubStatsStore(s => s.setManual);
@@ -111,14 +113,13 @@ export default function RangeImportScreen() {
       <SafeAreaView style={[styles.root, { backgroundColor: c.background }]} edges={['top']}>
         <View style={styles.header}>
           <BackBtn />
-          <Text style={[styles.pageTitle, { color: c.text_primary }]}>Range Import</Text>
+          <Text style={[styles.pageTitle, { color: c.text_primary }]}>{t('swinglab_range_import.range_import_screen.range_import')}</Text>
         </View>
         <View style={styles.pickBody}>
           <Ionicons name="golf-outline" size={52} color={c.accent} style={styles.pickIcon} />
-          <Text style={[styles.pickHeadline, { color: c.text_primary }]}>Import TopTracer data</Text>
+          <Text style={[styles.pickHeadline, { color: c.text_primary }]}>{t('swinglab_range_import.range_import_screen.import_toptracer_data')}</Text>
           <Text style={[styles.pickSub, { color: c.text_muted }]}>
-            Choose a TopTracer Range screenshot showing the club data table.
-            Kevin will use the flat-carry numbers to calibrate your distance recommendations.
+            {t('swinglab_range_import.range_import_screen.choose_a_toptracer_range_screenshot')}
           </Text>
           <TouchableOpacity
             style={[styles.pickBtn, { backgroundColor: c.accent }]}
@@ -126,10 +127,10 @@ export default function RangeImportScreen() {
             accessibilityRole="button"
           >
             <Ionicons name="image-outline" size={18} color="#06281b" />
-            <Text style={styles.pickBtnText}>Choose screenshot</Text>
+            <Text style={styles.pickBtnText}>{t('swinglab_range_import.range_import_screen.choose_screenshot')}</Text>
           </TouchableOpacity>
           <Text style={[styles.pickHint, { color: c.text_muted }]}>
-            Works with the side-view table (Flat Carry / Total / Speed) and the overhead radar scatter view.
+            {t('swinglab_range_import.range_import_screen.works_with_the_side_view')}
           </Text>
         </View>
       </SafeAreaView>
@@ -142,14 +143,14 @@ export default function RangeImportScreen() {
       <SafeAreaView style={[styles.root, { backgroundColor: c.background }]} edges={['top']}>
         <View style={styles.header}>
           <BackBtn />
-          <Text style={[styles.pageTitle, { color: c.text_primary }]}>Range Import</Text>
+          <Text style={[styles.pageTitle, { color: c.text_primary }]}>{t('swinglab_range_import.range_import_screen.range_import')}</Text>
         </View>
         <View style={styles.loadBody}>
           {phase.uri ? (
             <Image source={{ uri: phase.uri }} style={[styles.previewThumb, { borderColor: c.border }]} resizeMode="cover" />
           ) : null}
           <ActivityIndicator size="large" color={c.accent} style={styles.spinner} />
-          <Text style={[styles.loadText, { color: c.text_muted }]}>Reading your TopTracer data…</Text>
+          <Text style={[styles.loadText, { color: c.text_muted }]}>{t('swinglab_range_import.range_import_screen.reading_your_toptracer_data')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -161,11 +162,11 @@ export default function RangeImportScreen() {
       <SafeAreaView style={[styles.root, { backgroundColor: c.background }]} edges={['top']}>
         <View style={styles.header}>
           <BackBtn />
-          <Text style={[styles.pageTitle, { color: c.text_primary }]}>Range Import</Text>
+          <Text style={[styles.pageTitle, { color: c.text_primary }]}>{t('swinglab_range_import.range_import_screen.range_import')}</Text>
         </View>
         <View style={styles.pickBody}>
           <Ionicons name="alert-circle-outline" size={48} color={c.error ?? '#F87171'} style={styles.pickIcon} />
-          <Text style={[styles.pickHeadline, { color: c.text_primary }]}>Couldn&apos;t read screenshot</Text>
+          <Text style={[styles.pickHeadline, { color: c.text_primary }]}>{t('swinglab_range_import.range_import_screen.couldn_t_read_screenshot')}</Text>
           <Text style={[styles.pickSub, { color: c.text_muted }]}>{phase.message}</Text>
           {phase.retryable ? (
             <TouchableOpacity
@@ -173,7 +174,7 @@ export default function RangeImportScreen() {
               onPress={onReset}
               accessibilityRole="button"
             >
-              <Text style={styles.pickBtnText}>Try another screenshot</Text>
+              <Text style={styles.pickBtnText}>{t('swinglab_range_import.range_import_screen.try_another_screenshot')}</Text>
             </TouchableOpacity>
           ) : null}
         </View>
@@ -187,7 +188,7 @@ export default function RangeImportScreen() {
       <SafeAreaView style={[styles.root, { backgroundColor: c.background }]} edges={['top']}>
         <View style={styles.header}>
           <BackBtn />
-          <Text style={[styles.pageTitle, { color: c.text_primary }]}>Range Import</Text>
+          <Text style={[styles.pageTitle, { color: c.text_primary }]}>{t('swinglab_range_import.range_import_screen.range_import')}</Text>
         </View>
         <View style={styles.pickBody}>
           <Ionicons name="checkmark-circle" size={52} color={c.accent} style={styles.pickIcon} />
@@ -195,21 +196,21 @@ export default function RangeImportScreen() {
             {phase.applied} distance{phase.applied === 1 ? '' : 's'} applied
           </Text>
           <Text style={[styles.pickSub, { color: c.text_muted }]}>
-            Kevin&apos;s club recommendations are now calibrated to your real TopTracer carry numbers.
+            {t('swinglab_range_import.range_import_screen.kevin_s_club_recommendations_are')}
           </Text>
           <TouchableOpacity
             style={[styles.pickBtn, { backgroundColor: c.accent }]}
             onPress={onReset}
             accessibilityRole="button"
           >
-            <Text style={styles.pickBtnText}>Import another session</Text>
+            <Text style={styles.pickBtnText}>{t('swinglab_range_import.range_import_screen.import_another_session')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.secondaryBtn, { borderColor: c.border }]}
             onPress={() => router.back()}
             accessibilityRole="button"
           >
-            <Text style={[styles.secondaryBtnText, { color: c.text_secondary }]}>Done</Text>
+            <Text style={[styles.secondaryBtnText, { color: c.text_secondary }]}>{t('swinglab_range_import.range_import_screen.done')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -227,7 +228,7 @@ export default function RangeImportScreen() {
     <SafeAreaView style={[styles.root, { backgroundColor: c.background }]} edges={['top']}>
       <View style={styles.header}>
         <BackBtn />
-        <Text style={[styles.pageTitle, { color: c.text_primary }]}>Range Import</Text>
+        <Text style={[styles.pageTitle, { color: c.text_primary }]}>{t('swinglab_range_import.range_import_screen.range_import')}</Text>
       </View>
       <ScrollView contentContainerStyle={styles.confirmScroll}>
 
@@ -252,10 +253,10 @@ export default function RangeImportScreen() {
           <View style={[styles.clubGrid, { backgroundColor: c.surface, borderColor: c.border }]}>
             {/* Header */}
             <View style={[styles.clubRow, styles.clubHeader, { backgroundColor: c.surface_elevated ?? c.surface, borderBottomColor: c.border }]}>
-              <Text style={[styles.clubCell, styles.colClub, { color: c.text_muted }]}>CLUB</Text>
-              <Text style={[styles.clubCell, styles.colCarry, { color: c.text_muted }]}>CARRY</Text>
-              <Text style={[styles.clubCell, styles.colTotal, { color: c.text_muted }]}>TOTAL</Text>
-              <Text style={[styles.clubCell, styles.colSpeed, { color: c.text_muted }]}>SPD</Text>
+              <Text style={[styles.clubCell, styles.colClub, { color: c.text_muted }]}>{t('scorecard.col_club')}</Text>
+              <Text style={[styles.clubCell, styles.colCarry, { color: c.text_muted }]}>{t('swinglab_range_import.range_import_screen.carry')}</Text>
+              <Text style={[styles.clubCell, styles.colTotal, { color: c.text_muted }]}>{t('scorecard.total')}</Text>
+              <Text style={[styles.clubCell, styles.colSpeed, { color: c.text_muted }]}>{t('swinglab_range_import.range_import_screen.spd')}</Text>
             </View>
             {rows.map((row, i) => <ClubDataRow key={i} row={row} c={c} />)}
           </View>
@@ -271,7 +272,7 @@ export default function RangeImportScreen() {
         {/* Warnings */}
         {result.warnings.length > 0 ? (
           <View style={[styles.warnBox, { backgroundColor: c.surface, borderColor: c.border }]}>
-            <Text style={[styles.warnTitle, { color: c.text_muted }]}>NOTES</Text>
+            <Text style={[styles.warnTitle, { color: c.text_muted }]}>{t('swinglab_range_import.range_import_screen.notes')}</Text>
             {result.warnings.map((w, i) => (
               <Text key={i} style={[styles.warnLine, { color: c.text_muted }]}>• {w}</Text>
             ))}
@@ -279,7 +280,7 @@ export default function RangeImportScreen() {
         ) : null}
 
         <Text style={[styles.applyNote, { color: c.text_muted }]}>
-          Flat-carry numbers will calibrate Kevin&apos;s club recommendations. You can update or clear these any time in Settings → My Bag.
+          {t('swinglab_range_import.range_import_screen.flat_carry_numbers_will_calibrate')}
         </Text>
 
         {/* CTA */}
@@ -297,7 +298,7 @@ export default function RangeImportScreen() {
             onPress={onReset}
             accessibilityRole="button"
           >
-            <Text style={[styles.applyBtnText, { color: c.text_muted }]}>No distances to apply — try another screenshot</Text>
+            <Text style={[styles.applyBtnText, { color: c.text_muted }]}>{t('swinglab_range_import.range_import_screen.no_distances_to_apply_try')}</Text>
           </TouchableOpacity>
         )}
         <TouchableOpacity
@@ -305,7 +306,7 @@ export default function RangeImportScreen() {
           onPress={onReset}
           accessibilityRole="button"
         >
-          <Text style={[styles.secondaryBtnText, { color: c.text_secondary }]}>Choose a different screenshot</Text>
+          <Text style={[styles.secondaryBtnText, { color: c.text_secondary }]}>{t('swinglab_range_import.range_import_screen.choose_a_different_screenshot')}</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

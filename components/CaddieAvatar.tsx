@@ -151,6 +151,7 @@ const HARRY_AVATARS: Record<AvatarKey, ImageSourcePropType> = {
  * surviving edits that thought they had removed it. One owner now.
  */
 import type { Persona } from '../lib/persona';
+import { useTranslation } from 'react-i18next';
 
 function getAvatarSet(persona: Persona): Record<AvatarKey, ImageSourcePropType> {
   switch (persona) {
@@ -398,6 +399,7 @@ export default function CaddieAvatar({
   customPortraitB64,
   hideInternalText = false,
 }: CaddieAvatarProps) {
+  const { t } = useTranslation();
   // Resolve persona: explicit prop wins, else fall back to gender → kevin/serena.
   const resolvedPersona: Persona = persona ?? (gender === 'female' ? 'serena' : 'kevin');
   const fill = fillMode ?? 'contain';
@@ -884,8 +886,8 @@ export default function CaddieAvatar({
         onPress={onTap}
         activeOpacity={0.7}
         accessibilityRole="button"
-        accessibilityLabel="Tap to talk to your caddie"
-        accessibilityHint="Starts recording. Tap again to stop."
+        accessibilityLabel={t('caddie_avatar.accessibility_label.tap_to_talk_to_your')}
+        accessibilityHint={t('caddie_avatar.accessibility_hint.starts_recording_tap_again_to')}
         // Audit follow-up (2026-05-13) — accessibilityState communicates
         // listening / thinking / speaking to screen readers so a
         // VoiceOver / TalkBack user knows the caddie is mid-response

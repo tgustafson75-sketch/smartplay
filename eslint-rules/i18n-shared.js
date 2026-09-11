@@ -58,6 +58,20 @@ const OWNER_SCREEN_PATTERNS = [
   /(^|\/)app\/author\//,
   /(^|\/)app\/swing-sessions-debug\.tsx$/,
   /(^|\/)app\/simround-auto\.tsx$/,
+  /**
+   * 2026-09-11 — added after the first write run translated app/owner-checklist.tsx, which is
+   * owner-only end to end (`isOwnerEmail` gates the whole render). These five gate their ENTIRE
+   * screen on owner status, so every string in them is text only Tim will ever read.
+   *
+   * NOT excluded, deliberately, even though they contain owner-gated SECTIONS: app/settings.tsx
+   * (239 player-facing strings), app/paywall.tsx (the purchase screen), app/(tabs)/dashboard.tsx
+   * and app/_layout.tsx. A screen that merely contains an owner block is still a player screen —
+   * excluding those would have silently left the two most-read screens in the app in English.
+   */
+  /(^|\/)app\/owner-[\w-]+\.tsx$/,
+  /(^|\/)app\/harness\.tsx$/,
+  /(^|\/)app\/coach-knowledge\.tsx$/,
+  /(^|\/)app\/mark-green\.tsx$/,
 ];
 
 function isOwnerScreen(relPath) {

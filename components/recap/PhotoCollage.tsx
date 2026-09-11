@@ -11,8 +11,10 @@ import {
   StyleSheet, useWindowDimensions, Pressable,
 } from 'react-native';
 import type { RoundPhoto } from '../../store/roundStore';
+import { useTranslation } from 'react-i18next';
 
 export default function PhotoCollage({ photos }: { photos: RoundPhoto[] }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState<number | null>(null);
   // Subscribe so the lightbox resizes when Z Fold opens/closes.
   const { width: screenW } = useWindowDimensions();
@@ -21,7 +23,7 @@ export default function PhotoCollage({ photos }: { photos: RoundPhoto[] }) {
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.label}>MOMENTS</Text>
+      <Text style={styles.label}>{t('recap_photo_collage.photo_collage.moments')}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
         {photos.map((p, i) => (
           <TouchableOpacity key={i} onPress={() => setExpanded(i)} style={styles.thumbWrap}>

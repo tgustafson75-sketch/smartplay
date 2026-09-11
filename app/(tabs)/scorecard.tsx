@@ -749,15 +749,15 @@ export default function Scorecard() {
             style={[styles.emptyRound, { borderColor: c.border, backgroundColor: c.surface }]}
             onPress={() => router.push('/(tabs)/dashboard' as never)}
             accessibilityRole="button"
-            accessibilityLabel="Go to the dashboard to see your recent rounds"
+            accessibilityLabel={t('scorecard.accessibility_label.go_to_the_dashboard_to')}
           >
             <AppIcon name="golf-outline" size={34} color={c.text_muted} />
-            <Text style={[styles.emptyRoundTitle, { color: c.text_primary }]}>No round in progress</Text>
+            <Text style={[styles.emptyRoundTitle, { color: c.text_primary }]}>{t('dashboard.no_round')}</Text>
             <Text style={[styles.emptyRoundBody, { color: c.text_muted }]}>
-              Start a round from the Caddie tab. Your finished rounds are saved on the dashboard.
+              {t('scorecard.text.start_a_round_from_the')}
             </Text>
             <View style={styles.emptyRoundCta}>
-              <Text style={[styles.emptyRoundCtaText, { color: c.accent }]}>View Recent Rounds</Text>
+              <Text style={[styles.emptyRoundCtaText, { color: c.accent }]}>{t('scorecard.text.view_recent_rounds')}</Text>
               <AppIcon name="chevron-forward" size={16} color={c.accent} />
             </View>
           </TouchableOpacity>
@@ -773,7 +773,7 @@ export default function Scorecard() {
             already writing to (previously write-only). Shows nothing when playing solo. */}
         {guests.length > 0 && (
           <View style={styles.partnersRow}>
-            <Text style={[styles.partnersLabel, { color: c.text_muted }]}>PLAYING WITH</Text>
+            <Text style={[styles.partnersLabel, { color: c.text_muted }]}>{t('scorecard.text.playing_with')}</Text>
             <View style={styles.partnersChips}>
               {/*
                 2026-09-10 (Tim) — LONG-PRESS A PARTNER TO REMOVE THEM.
@@ -794,7 +794,7 @@ export default function Scorecard() {
                   onLongPress={() => {
                     Alert.alert(
                       `Remove ${g.displayName}?`,
-                      'They came from something you said. Removing them only affects this round.',
+                      t('scorecard.alert.they_came_from_something_you'),
                       [
                         { text: 'Keep', style: 'cancel' },
                         {
@@ -999,7 +999,7 @@ export default function Scorecard() {
               {clubUsage.map(item => (
                 <View key={item.club} style={[styles.clubRow, { borderBottomColor: c.border }]}>
                   <Text style={[styles.clubCell, styles.clubColClub, { color: c.text_primary }]}>
-                    {item.club}{item.estimated ? <Text style={{ color: c.text_muted, fontWeight: '600' }}> ~est</Text> : null}
+                    {item.club}{item.estimated ? <Text style={{ color: c.text_muted, fontWeight: '600' }}> {t('scorecard.text.est')}</Text> : null}
                   </Text>
                   <Text style={[styles.clubCell, styles.clubColCount, { color: c.text_secondary }]}>×{item.count}</Text>
                   <Text style={[styles.clubCell, styles.clubColAvg, { color: item.avg != null ? c.accent : c.text_muted }]}>
@@ -1027,7 +1027,7 @@ export default function Scorecard() {
               {courseClubUsage.map(item => (
                 <View key={item.club} style={[styles.clubRow, { borderBottomColor: c.border }]}>
                   <Text style={[styles.clubCell, styles.clubColClub, { color: c.text_primary }]}>
-                    {item.club}{item.estimated ? <Text style={{ color: c.text_muted, fontWeight: '600' }}> ~est</Text> : null}
+                    {item.club}{item.estimated ? <Text style={{ color: c.text_muted, fontWeight: '600' }}> {t('scorecard.text.est')}</Text> : null}
                   </Text>
                   <Text style={[styles.clubCell, styles.clubColCount, { color: c.text_secondary }]}>×{item.count}</Text>
                   <Text style={[styles.clubCell, styles.clubColAvg, { color: item.avg != null ? c.accent : c.text_muted }]}>

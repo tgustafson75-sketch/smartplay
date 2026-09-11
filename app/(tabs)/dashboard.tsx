@@ -796,7 +796,7 @@ export default function Dashboard() {
           <TouchableOpacity
             onPress={() => router.push('/profile' as never)}
             accessibilityRole="button"
-            accessibilityLabel="Open profile"
+            accessibilityLabel={t('dashboard.accessibility_label.open_profile')}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 14, flex: 1, minWidth: 0 }}
           >
             <View style={[styles.avatar, { borderColor: colors.accent, backgroundColor: colors.accent_muted, overflow: 'hidden' }]}>
@@ -821,7 +821,7 @@ export default function Dashboard() {
             onPress={() => router.push('/settings' as never)}
             hitSlop={10}
             accessibilityRole="button"
-            accessibilityLabel="Open settings"
+            accessibilityLabel={t('dashboard.accessibility_label.open_settings')}
             style={[styles.gearBtn, { borderColor: colors.accent }]}
           >
             <Ionicons name="settings-outline" size={18} color={colors.accent} />
@@ -837,15 +837,15 @@ export default function Dashboard() {
           style={[styles.sharedCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', gap: 12 }]}
           onPress={() => router.push('/messages' as never)}
           accessibilityRole="button"
-          accessibilityLabel="Open Messages"
+          accessibilityLabel={t('dashboard.accessibility_label.open_messages')}
         >
           <View style={{ width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent_muted }}>
             <AppIcon name="chatbubbles-outline" size={22} color={colors.accent} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.sharedTitle, { color: colors.text_primary }]}>Messages</Text>
+            <Text style={[styles.sharedTitle, { color: colors.text_primary }]}>{t('dashboard.text.messages')}</Text>
             <Text style={[styles.sharedMeta, { color: colors.text_muted }]} numberOfLines={1}>
-              Message your golfers — foursome, coach, friends
+              {t('dashboard.text.message_your_golfers_foursome_coach')}
             </Text>
           </View>
           <AppIcon name="chevron-forward" size={18} color={colors.text_muted} />
@@ -870,14 +870,14 @@ export default function Dashboard() {
             style={[styles.sharedCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}
             onPress={() => router.push('/swinglab/coach-lesson' as never)}
             accessibilityRole="button"
-            accessibilityLabel="Open Coach Caddie lessons"
+            accessibilityLabel={t('dashboard.accessibility_label.open_coach_caddie_lessons')}
           >
             <View style={styles.sharedHeader}>
               <View style={{ width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent_muted }}>
                 <AppIcon name="school-outline" size={22} color={colors.accent} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.sharedLabel, { color: colors.text_muted }]}>LESSONS</Text>
+                <Text style={[styles.sharedLabel, { color: colors.text_muted }]}>{t('dashboard.text.lessons')}</Text>
                 <Text style={[styles.sharedTitle, { color: colors.text_primary }]} numberOfLines={1}>
                   {lastLessonSession.label}
                 </Text>
@@ -915,9 +915,9 @@ export default function Dashboard() {
                   onPress={() => router.push('/swinglab/coach-mode' as never)}
                   style={[styles.sharedAction, { backgroundColor: colors.accent, borderColor: colors.accent }]}
                   accessibilityRole="button"
-                  accessibilityLabel="Open Coach Mode"
+                  accessibilityLabel={t('dashboard.accessibility_label.open_coach_mode')}
                 >
-                  <Text style={styles.sharedActionText}>Coach Mode</Text>
+                  <Text style={styles.sharedActionText}>{t('swinglab.card_coach-mode_title')}</Text>
                 </TouchableOpacity>
               ) : null}
             </View>
@@ -962,7 +962,7 @@ export default function Dashboard() {
           onPress={() => router.push('/profile/custom-caddie' as never)}
           style={[styles.selfieCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}
           accessibilityRole="button"
-          accessibilityLabel="Try a new look — selfie + AI portrait"
+          accessibilityLabel={t('dashboard.accessibility_label.try_a_new_look_selfie')}
         >
           <View style={[styles.selfieIcon, { backgroundColor: colors.accent_muted }]}>
             <Ionicons name="sparkles-outline" size={20} color={colors.accent} />
@@ -970,7 +970,7 @@ export default function Dashboard() {
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={[styles.selfieTitle, { color: colors.text_primary }]}>{t('dashboard.try_new_look')}</Text>
             <Text style={[styles.selfieSub, { color: colors.text_muted }]} numberOfLines={1}>
-              Selfie + AI — see yourself as your caddie
+              {t('dashboard.text.selfie_ai_see_yourself_as')}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
@@ -1026,7 +1026,7 @@ export default function Dashboard() {
             style={[styles.noRoundCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}
             onPress={() => router.push('/(tabs)/play' as never)}
             accessibilityRole="button"
-            accessibilityLabel="Pick a course on the Play tab"
+            accessibilityLabel={t('dashboard.accessibility_label.pick_a_course_on_the')}
             activeOpacity={0.85}
           >
             <Ionicons name="flag-outline" size={26} color={colors.accent} />
@@ -1110,7 +1110,7 @@ export default function Dashboard() {
         {practiceTotal > 0 && (
           <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.practiceHeader}>
-              <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>PRACTICE POINTS</Text>
+              <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>{t('dashboard.text.practice_points')}</Text>
               <Text style={[styles.practiceTotal, { color: colors.accent_lime }]}>{practiceTotal}</Text>
             </View>
             {topDrills.map(([id, rec]) => (
@@ -1135,10 +1135,10 @@ export default function Dashboard() {
           style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
           onPress={() => router.push('/practice/fit-profile' as never)}
           accessibilityRole="button"
-          accessibilityLabel="Open My Bag and Fit Profile"
+          accessibilityLabel={t('dashboard.accessibility_label.open_my_bag_and_fit')}
         >
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>MY BAG</Text>
+            <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>{t('dashboard.text.my_bag')}</Text>
             <Ionicons name="chevron-forward" size={16} color={colors.text_muted} />
           </View>
           {bagClubs.length > 0 ? (
@@ -1156,7 +1156,7 @@ export default function Dashboard() {
             </View>
           ) : (
             <Text style={[styles.impactHeadline, { color: colors.text_primary }]}>
-              Set up your bag — tap to enter your carry distances. Powers your fit profile and the caddie&apos;s club calls.
+              {t('dashboard.text.set_up_your_bag_tap')}
             </Text>
           )}
         </TouchableOpacity>
@@ -1165,7 +1165,7 @@ export default function Dashboard() {
             striation + tempo trend. The visible half of the practice ledger. */}
         {recentSessions.length > 0 && (
           <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.practiceLabel, { color: colors.text_muted, marginBottom: 8 }]}>PRACTICE HISTORY</Text>
+            <Text style={[styles.practiceLabel, { color: colors.text_muted, marginBottom: 8 }]}>{t('dashboard.text.practice_history')}</Text>
             {recentSessions.map((s) => {
               const label = s.label ?? (s.focus ? s.focus.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : s.kind === 'open_range' ? 'Open Range' : 'Practice');
               const balls = s.swingCount ?? s.swings.length;
@@ -1200,7 +1200,7 @@ export default function Dashboard() {
             router.push('/(tabs)/caddie' as never);
           }}
           accessibilityRole="button"
-          accessibilityLabel="Talk to your caddie about your game"
+          accessibilityLabel={t('dashboard.accessibility_label.talk_to_your_caddie_about')}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <Ionicons name="chatbubbles" size={22} color="#88F700" />
@@ -1224,7 +1224,7 @@ export default function Dashboard() {
         {activeProgress && (
           <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>PROGRESS</Text>
+              <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>{t('dashboard.text.progress')}</Text>
               {/* Source toggle — only the sources that actually have data are offered. */}
               {progressSources.length > 1 && (
                 <View style={{ flexDirection: 'row', gap: 4 }}>
@@ -1302,7 +1302,7 @@ export default function Dashboard() {
         {faultWorkouts.length > 0 && (
           <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>TRAIN YOUR SWING</Text>
+              <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>{t('dashboard.text.train_your_swing')}</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
                 <TouchableOpacity
                   onPress={onMarkWorkoutsDone}
@@ -1320,19 +1320,19 @@ export default function Dashboard() {
                     {loggedFaultWorkAt ? 'LOGGED' : 'MARK DONE'}
                   </Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={onExportWorkouts} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel="Export these exercises">
+                <TouchableOpacity onPress={onExportWorkouts} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel={t('dashboard.accessibility_label.export_these_exercises')}>
                   <Ionicons name="share-outline" size={18} color={colors.accent} />
                 </TouchableOpacity>
                 {/* 2026-08-22 — bring a SmartPump export IN from the card the work is about, not
                     only from Settings. Pairs with the share icon: send exercises out, bring the
                     completed sessions back. */}
-                <TouchableOpacity onPress={onImportSmartPump} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel="Import workouts from SmartPump">
+                <TouchableOpacity onPress={onImportSmartPump} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel={t('dashboard.accessibility_label.import_workouts_from_smartpump')}>
                   <Ionicons name="download-outline" size={18} color={colors.accent} />
                 </TouchableOpacity>
               </View>
             </View>
             <Text style={[styles.impactHeadline, { color: colors.text_primary, textTransform: 'capitalize' }]}>{faultLabel}</Text>
-            <Text style={[styles.practiceLabel, { color: colors.text_muted, marginTop: 2, marginBottom: 8 }]}>Exercises that help this fault</Text>
+            <Text style={[styles.practiceLabel, { color: colors.text_muted, marginTop: 2, marginBottom: 8 }]}>{t('dashboard.text.exercises_that_help_this_fault')}</Text>
             {faultWorkouts.map((e, i) => {
               // 2026-07-26 (Tim) — a tagged exercise video plays IN-APP (/drill-video) and awards a
               // one-time +5 on full watch. Stable key per exercise so the anti-farm ledger is consistent.
@@ -1386,7 +1386,7 @@ export default function Dashboard() {
         <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{t('dashboard.recent_shots')}</Text>
         {recentShots.length === 0 ? (
           <Text style={[styles.emptyLine, { color: colors.text_muted }]}>
-            No shots logged yet — log a shot from the Caddie tab.
+            {t('dashboard.text.no_shots_logged_yet_log')}
           </Text>
         ) : (
           <ShotTimeline maxRows={5} />
@@ -1397,7 +1397,7 @@ export default function Dashboard() {
             go anywhere." Golfshot-style: date · course · score · vs-par, tap → recap. */}
         {roundHistory.length > 0 && (
           <>
-            <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>RECENT ROUNDS</Text>
+            <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{t('dashboard.text.recent_rounds')}</Text>
             <View style={styles.roundHistoryList}>
               {[...roundHistory].reverse().slice(0, 6).map((r) => {
                 const d = new Date(r.endedAt || r.startedAt);
@@ -1431,7 +1431,7 @@ export default function Dashboard() {
                     </View>
                     <TouchableOpacity
                       onPress={() => Alert.alert(
-                        'Delete round?',
+                        t('dashboard.alert.delete_round'),
                         `${r.courseName ?? 'Round'} · ${dateStr}`,
                         [
                           { text: 'Cancel', style: 'cancel' },

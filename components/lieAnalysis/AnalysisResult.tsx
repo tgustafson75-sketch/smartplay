@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import type { LieAnalysis, RiskRewardCall } from '../../services/lieAnalysisService';
+import { useTranslation } from 'react-i18next';
 
 type Props = {
   imageUri: string;
@@ -51,6 +52,7 @@ const CONFIDENCE_LABEL: Record<LieAnalysis['confidence_level'], string> = {
 export default function AnalysisResult({
   imageUri, analysis, speaking, onReplay, onGotIt, onTryAgain, riskReward,
 }: Props) {
+  const { t } = useTranslation();
   return (
     <ScrollView contentContainerStyle={styles.scroll}>
       <Image source={{ uri: imageUri }} style={styles.thumb} resizeMode="cover" />
@@ -62,7 +64,7 @@ export default function AnalysisResult({
             {CONFIDENCE_LABEL[analysis.confidence_level]}
           </Text>
           {analysis.conservative_call && (
-            <View style={styles.tag}><Text style={styles.tagText}>SAFE PLAY</Text></View>
+            <View style={styles.tag}><Text style={styles.tagText}>{t('lie_analysis_analysis_result.analysis_result.safe_play')}</Text></View>
           )}
         </View>
 
@@ -71,21 +73,21 @@ export default function AnalysisResult({
 
         {analysis.recommended_club && (
           <View style={styles.clubRow}>
-            <Text style={styles.clubLabel}>CLUB</Text>
+            <Text style={styles.clubLabel}>{t('scorecard.col_club')}</Text>
             <Text style={styles.clubValue}>{analysis.recommended_club}</Text>
           </View>
         )}
 
         {analysis.alternative_play && (
           <View style={styles.altBlock}>
-            <Text style={styles.altLabel}>ALTERNATIVE</Text>
+            <Text style={styles.altLabel}>{t('lie_analysis_analysis_result.analysis_result.alternative')}</Text>
             <Text style={styles.altText}>{analysis.alternative_play}</Text>
           </View>
         )}
 
         {analysis.goal_aware_note && (
           <View style={styles.goalBlock}>
-            <Text style={styles.goalLabel}>FOR YOUR GOAL</Text>
+            <Text style={styles.goalLabel}>{t('lie_analysis_analysis_result.analysis_result.for_your_goal')}</Text>
             <Text style={styles.goalText}>{analysis.goal_aware_note}</Text>
           </View>
         )}
@@ -93,7 +95,7 @@ export default function AnalysisResult({
         {riskReward && (
           <View style={styles.strategyBlock}>
             <View style={styles.strategyHeaderRow}>
-              <Text style={styles.strategyHeaderLabel}>STRATEGY</Text>
+              <Text style={styles.strategyHeaderLabel}>{t('play.strategy')}</Text>
               <View style={[styles.bandTag, { borderColor: RISK_COLOR[riskReward.band] }]}>
                 <Text style={[styles.bandTagText, { color: RISK_COLOR[riskReward.band] }]}>
                   {RISK_LABEL[riskReward.band]}
@@ -115,10 +117,10 @@ export default function AnalysisResult({
           <Text style={styles.actionBtnText}>{speaking ? '■ Stop' : '▶ Replay'}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.actionBtn, styles.actionBtnPrimary]} onPress={onGotIt}>
-          <Text style={[styles.actionBtnText, styles.actionBtnTextPrimary]}>Got it</Text>
+          <Text style={[styles.actionBtnText, styles.actionBtnTextPrimary]}>{t('lie_analysis_analysis_result.analysis_result.got_it')}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionBtn} onPress={onTryAgain}>
-          <Text style={styles.actionBtnText}>Try again</Text>
+          <Text style={styles.actionBtnText}>{t('lie_analysis_analysis_result.analysis_result.try_again')}</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>

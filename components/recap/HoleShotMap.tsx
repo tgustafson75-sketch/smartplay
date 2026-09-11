@@ -5,6 +5,7 @@ import type { ShotResult, ShotLocation } from '../../store/roundStore';
 import type { HoleGeometry } from '../../services/courseGeometryService';
 import { haversineYards, projectToAxis } from '../../utils/geoDistance';
 import type { ShotConfirmation } from '../../services/round/shotSwingConfirm';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Phase B — Hole-level shot map.
@@ -75,6 +76,7 @@ export default function HoleShotMap({
   prevDisabled,
   nextDisabled,
 }: Props) {
+  const { t } = useTranslation();
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
 
   const { origin, destination } = pickAxis(shots, geometry);
@@ -135,7 +137,7 @@ export default function HoleShotMap({
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={onClose} style={styles.headerBtn} accessibilityRole="button">
-          <Text style={styles.headerBtnText}>← Back</Text>
+          <Text style={styles.headerBtnText}>{t('recap_hole_shot_map.hole_shot_map.back')}</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Hole {hole}</Text>
         <View style={styles.headerBtn} />
@@ -174,7 +176,7 @@ export default function HoleShotMap({
                     fontSize={10}
                     textAnchor="middle"
                   >
-                    TEE
+                    {t('recap_hole_shot_map.hole_shot_map.tee')}
                   </SvgText>
                   {/* Green */}
                   <Circle cx={projected.greenXY.sx} cy={projected.greenXY.sy} r={10} fill="#003d20" stroke="#00C896" strokeWidth={1.5} />
@@ -185,7 +187,7 @@ export default function HoleShotMap({
                     fontSize={10}
                     textAnchor="middle"
                   >
-                    GREEN
+                    {t('recap_hole_shot_map.hole_shot_map.green')}
                   </SvgText>
                 </>
               )}
@@ -256,7 +258,7 @@ export default function HoleShotMap({
         {(!origin || !destination) && (
           <View style={styles.emptyOverlay}>
             <Text style={styles.emptyText}>
-              No locations recorded for this hole yet.
+              {t('recap_hole_shot_map.hole_shot_map.no_locations_recorded_for_this')}
             </Text>
           </View>
         )}
@@ -284,11 +286,11 @@ export default function HoleShotMap({
               </Text>
             )}
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>CLUB</Text>
+              <Text style={styles.detailLabel}>{t('scorecard.col_club')}</Text>
               <Text style={styles.detailValue}>{selected.club ?? '—'}</Text>
             </View>
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>DISTANCE</Text>
+              <Text style={styles.detailLabel}>{t('recap_hole_shot_map.hole_shot_map.distance')}</Text>
               <Text style={styles.detailValue}>
                 {/* Show the distance recorded at shot time — never a
                     render-time recalc (it can drift from the stored value
@@ -297,7 +299,7 @@ export default function HoleShotMap({
               </Text>
             </View>
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>OUTCOME</Text>
+              <Text style={styles.detailLabel}>{t('recap_hole_shot_map.hole_shot_map.outcome')}</Text>
               <Text style={styles.detailValue}>
                 {selected.feel ?? selected.outcome ?? '—'}
                 {selected.direction ? ' · ' + selected.direction : ''}
@@ -308,7 +310,7 @@ export default function HoleShotMap({
             ) : null}
           </>
         ) : (
-          <Text style={styles.detailHint}>Tap a shot marker to see details.</Text>
+          <Text style={styles.detailHint}>{t('recap_hole_shot_map.hole_shot_map.tap_a_shot_marker_to')}</Text>
         )}
       </View>
 
@@ -319,7 +321,7 @@ export default function HoleShotMap({
           disabled={prevDisabled}
         >
           <Text style={[styles.holeNavBtnText, prevDisabled && styles.holeNavBtnTextDisabled]}>
-            ← Prev hole
+            {t('recap_hole_shot_map.hole_shot_map.prev_hole')}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -328,7 +330,7 @@ export default function HoleShotMap({
           disabled={nextDisabled}
         >
           <Text style={[styles.holeNavBtnText, nextDisabled && styles.holeNavBtnTextDisabled]}>
-            Next hole →
+            {t('recap_hole_shot_map.hole_shot_map.next_hole')}
           </Text>
         </TouchableOpacity>
       </View>

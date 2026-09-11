@@ -1,4 +1,5 @@
 import { Image, View, Text, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 /**
  * SmartPlay Caddie watermark overlay for video / thumbnail surfaces.
@@ -30,6 +31,7 @@ export default function VideoWatermark({
   size = 36,
   opacity = 0.85,
 }: Props): React.ReactElement {
+  const { t } = useTranslation();
   const positionStyle = positionStyles[position];
   return (
     <View pointerEvents="none" style={[styles.wrap, positionStyle, { opacity }]}>
@@ -39,7 +41,7 @@ export default function VideoWatermark({
         resizeMode="cover"
       />
       <Text style={[styles.wordmark, { fontSize: Math.round(size * 0.28) }]}>
-        SmartPlay Caddie
+        {t('brand.app_name')}
       </Text>
     </View>
   );

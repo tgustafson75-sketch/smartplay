@@ -66,6 +66,7 @@ import {
 
 import type { VoiceState } from '../CaddieAvatar';
 import { holeData as resolvedHoleData } from '../../services/smartFinderService';
+import { useTranslation } from 'react-i18next';
 
 export interface CockpitCaddieScreenProps {
   /** Current voice pipeline state from useVoiceCaddie (parent owns). */
@@ -95,6 +96,7 @@ export default function CockpitCaddieScreen({
   onOpenSmartVision,
   onOpenSmartFinder,
 }: CockpitCaddieScreenProps) {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
 
@@ -526,10 +528,10 @@ export default function CockpitCaddieScreen({
             onPress={handleWhatsThePlay}
             style={[styles.playButton, { borderColor: colors.accent, backgroundColor: colors.accent_muted }]}
             accessibilityRole="button"
-            accessibilityLabel="What's the play here — strategic recommendation from the caddie brain"
+            accessibilityLabel={t('caddie_cockpit_caddie_screen.accessibility_label.what_s_the_play_here')}
           >
             <Text style={[styles.playButtonText, { color: colors.accent }]}>
-              ⛳  What&apos;s the play?
+              {t('caddie_cockpit_caddie_screen.cockpit_caddie_screen.what_s_the_play')}
             </Text>
           </Pressable>
         )}
@@ -563,7 +565,7 @@ export default function CockpitCaddieScreen({
         {/* Round-active hint at the bottom when no round running. */}
         {!isRoundActive && (
           <Text style={[styles.inactiveHint, { color: colors.text_muted }]}>
-            Start a round from the Play tab to enable live yardages.
+            {t('caddie_cockpit_caddie_screen.cockpit_caddie_screen.start_a_round_from_the')}
           </Text>
         )}
       </ScrollView>

@@ -21,10 +21,12 @@ import {
   type CourseImportResult,
 } from '../services/courseImport';
 import { useToastStore } from '../store/toastStore';
+import { useTranslation } from 'react-i18next';
 
 type Phase = 'intro' | 'parsing' | 'confirm' | 'error';
 
 export default function AddCourseScreen() {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>('intro');
@@ -64,22 +66,22 @@ export default function AddCourseScreen() {
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back">
+        <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('add_course.accessibility_label.back')}>
           <AppIcon name="chevron-back" size={26} color={colors.text_primary} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text_primary }]}>Add course from photo</Text>
+        <Text style={[styles.title, { color: colors.text_primary }]}>{t('add_course.add_course_screen.add_course_from_photo')}</Text>
         <View style={{ width: 26 }} />
       </View>
 
       {phase === 'intro' && (
         <View style={styles.center}>
           <AppIcon name="camera-outline" size={48} color={colors.accent} />
-          <Text style={[styles.lead, { color: colors.text_primary }]}>Snap or pick a scorecard</Text>
+          <Text style={[styles.lead, { color: colors.text_primary }]}>{t('add_course.add_course_screen.snap_or_pick_a_scorecard')}</Text>
           <Text style={[styles.sub, { color: colors.text_secondary }]}>
-            Course not in the database? Take a clear photo of the scorecard (par + yardage rows) and I’ll build the course so you can play it.
+            {t('add_course.add_course_screen.course_not_in_the_database')}
           </Text>
           <TouchableOpacity style={[styles.cta, { backgroundColor: colors.accent }]} onPress={pickAndParse}>
-            <Text style={styles.ctaText}>Pick scorecard photo</Text>
+            <Text style={styles.ctaText}>{t('add_course.add_course_screen.pick_scorecard_photo')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -87,7 +89,7 @@ export default function AddCourseScreen() {
       {phase === 'parsing' && (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.accent} />
-          <Text style={[styles.sub, { color: colors.text_secondary, marginTop: 16 }]}>Reading the card…</Text>
+          <Text style={[styles.sub, { color: colors.text_secondary, marginTop: 16 }]}>{t('add_course.add_course_screen.reading_the_card')}</Text>
         </View>
       )}
 
@@ -96,7 +98,7 @@ export default function AddCourseScreen() {
           <AppIcon name="alert-circle-outline" size={44} color={colors.error ?? '#e5484d'} />
           <Text style={[styles.sub, { color: colors.text_secondary }]}>{errorMsg}</Text>
           <TouchableOpacity style={[styles.cta, { backgroundColor: colors.accent }]} onPress={() => setPhase('intro')}>
-            <Text style={styles.ctaText}>Try again</Text>
+            <Text style={styles.ctaText}>{t('add_course.add_course_screen.try_again')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -108,13 +110,13 @@ export default function AddCourseScreen() {
             {result.tee_name ? `${result.tee_name} tees · ` : ''}{readCount} holes read{withYardage < readCount ? ` · ${withYardage} with yardage` : ''}
           </Text>
           {result.confidence === 'low' && (
-            <Text style={[styles.warn, { color: colors.error ?? '#e5484d' }]}>Low confidence — double-check the numbers before saving.</Text>
+            <Text style={[styles.warn, { color: colors.error ?? '#e5484d' }]}>{t('add_course.add_course_screen.low_confidence_double_check_the')}</Text>
           )}
           <View style={[styles.tableHead, { borderColor: colors.border }]}>
-            <Text style={[styles.cellH, { color: colors.text_secondary, flex: 1 }]}>HOLE</Text>
-            <Text style={[styles.cellH, { color: colors.text_secondary, flex: 1 }]}>PAR</Text>
-            <Text style={[styles.cellH, { color: colors.text_secondary, flex: 2 }]}>YARDS</Text>
-            <Text style={[styles.cellH, { color: colors.text_secondary, flex: 1 }]}>HCP</Text>
+            <Text style={[styles.cellH, { color: colors.text_secondary, flex: 1 }]}>{t('add_course.add_course_screen.hole')}</Text>
+            <Text style={[styles.cellH, { color: colors.text_secondary, flex: 1 }]}>{t('scorecard.par')}</Text>
+            <Text style={[styles.cellH, { color: colors.text_secondary, flex: 2 }]}>{t('add_course.add_course_screen.yards')}</Text>
+            <Text style={[styles.cellH, { color: colors.text_secondary, flex: 1 }]}>{t('add_course.add_course_screen.hcp')}</Text>
           </View>
           {result.holes.map((h) => (
             <View key={h.hole} style={[styles.row, { borderColor: colors.border }]}>
@@ -125,10 +127,10 @@ export default function AddCourseScreen() {
             </View>
           ))}
           <TouchableOpacity style={[styles.cta, { backgroundColor: colors.accent, marginTop: 20 }]} onPress={save}>
-            <Text style={styles.ctaText}>Save course</Text>
+            <Text style={styles.ctaText}>{t('add_course.add_course_screen.save_course')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.retry} onPress={() => setPhase('intro')}>
-            <Text style={[styles.retryText, { color: colors.text_secondary }]}>Pick a different photo</Text>
+            <Text style={[styles.retryText, { color: colors.text_secondary }]}>{t('add_course.add_course_screen.pick_a_different_photo')}</Text>
           </TouchableOpacity>
         </ScrollView>
       )}

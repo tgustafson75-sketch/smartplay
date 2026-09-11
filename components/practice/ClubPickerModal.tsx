@@ -22,6 +22,7 @@ import { Modal, View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'rea
 import { Ionicons } from '@expo/vector-icons';
 import { useSwingSessionStore } from '../../store/swingSessionStore';
 import type { ClubId } from '../../services/clubRecognition';
+import { useTranslation } from 'react-i18next';
 
 type ClubOption = { label: string; value: ClubId };
 
@@ -70,6 +71,7 @@ interface ClubPickerModalProps {
 }
 
 export default function ClubPickerModal(props: ClubPickerModalProps = {}) {
+  const { t } = useTranslation();
   const clubMenuOpen = useSwingSessionStore(s => s.clubMenuOpen);
   const setClubMenuOpen = useSwingSessionStore(s => s.setClubMenuOpen);
   const setActiveClub = useSwingSessionStore(s => s.setActiveClub);
@@ -98,12 +100,12 @@ export default function ClubPickerModal(props: ClubPickerModalProps = {}) {
       <View style={styles.backdrop}>
         <View style={styles.sheet}>
           <View style={styles.header}>
-            <Text style={styles.title}>Pick a club</Text>
+            <Text style={styles.title}>{t('practice_club_picker_modal.club_picker_modal.pick_a_club')}</Text>
             <TouchableOpacity
               onPress={handleClose}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               accessibilityRole="button"
-              accessibilityLabel="Close club picker"
+              accessibilityLabel={t('practice_club_picker_modal.accessibility_label.close_club_picker')}
             >
               <Ionicons name="close" size={22} color="#9ca3af" />
             </TouchableOpacity>

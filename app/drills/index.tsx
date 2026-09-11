@@ -27,6 +27,7 @@ import { useCaddieMemoryStore } from '../../store/caddieMemoryStore';
 import { yourFaultFirst } from '../../services/practice/yourFaultFirst';
 import { QuickTutorial } from '../../components/QuickTutorial';
 import { SCREEN_HELP } from '../../services/screenHelp';
+import { useTranslation } from 'react-i18next';
 
 // 2026-08-06 (Tim — "remove Randy from Chipping"). The CHIPPING card STAYS — it is de-branded from
 // Randy Chang into a Caddie chipping lesson (see data/drillCatalog.ts).
@@ -38,6 +39,7 @@ import { SCREEN_HELP } from '../../services/screenHelp';
 const HIDDEN_DRILL_IDS: ReadonlySet<string> = new Set<string>([]);
 
 export default function DrillsIndex() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   // 2026-05-26 — Fix DE: ScrollView paddingBottom was a hardcoded
@@ -97,11 +99,11 @@ export default function DrillsIndex() {
           onPress={() => router.back()}
           hitSlop={10}
           accessibilityRole="button"
-          accessibilityLabel="Back to SwingLab"
+          accessibilityLabel={t('drills.accessibility_label.back_to_swinglab')}
           style={styles.backBtn}
         >
           <Ionicons name="chevron-back" size={22} color={colors.accent} />
-          <Text style={[styles.backText, { color: colors.accent }]}>SwingLab</Text>
+          <Text style={[styles.backText, { color: colors.accent }]}>{t('swinglab.tut_title')}</Text>
         </Pressable>
         {/* 2026-07-06 (Tim carry-over #1) — removed the decorative caddie-badge
             Image that sat UPPER-RIGHT here. It was non-tappable branding that
@@ -114,14 +116,13 @@ export default function DrillsIndex() {
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={[styles.eyebrow, { color: colors.accent }]}>DRILLS</Text>
-        <Text style={[styles.title, { color: colors.text_primary }]}>Common Faults</Text>
+        <Text style={[styles.eyebrow, { color: colors.accent }]}>{t('drills.drills_index.drills')}</Text>
+        <Text style={[styles.title, { color: colors.text_primary }]}>{t('drills.drills_index.common_faults')}</Text>
         <Text style={[styles.subtitle, { color: yours ? colors.accent : colors.text_muted }]}>
           {yours ? yours.line : null}
         </Text>
         <Text style={[styles.subtitle, { color: colors.text_muted }]}>
-          Each issue has a Primary Issue, Common Faults, 2-3 drills, and pro-instruction
-          video links. Tap to dive in.
+          {t('drills.drills_index.each_issue_has_a_primary')}
         </Text>
 
         {/* 2-COL GRID — the fault catalog in pairs. Tank's card is hidden (HIDDEN_DRILL_IDS); the chipping

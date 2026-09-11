@@ -731,6 +731,53 @@ const read = (rel: string) => {
   }
 };
 
+/**
+ * 2026-09-11 (release 1.5) — DOES THIS SCREEN STILL SAY THIS TO THE PLAYER?
+ *
+ * The phase-2 codemod replaced 2,044 English literals with t() calls, so 26 guards that grepped a
+ * source file for a sentence went red at once. Every one of them was asserting the right thing —
+ * "the no-round scorecard offers a way to recent rounds" — through the wrong proxy: the presence of
+ * characters in a .tsx file.
+ *
+ * This resolves the question the guards actually mean. The text counts as present if the file still
+ * holds the literal, OR if the file calls t('some.key') and en.json maps that key to the text. So a
+ * guard keeps working whether or not a string has been through the codemod yet, and it still fails
+ * if the sentence is deleted outright — which is the regression it exists to catch.
+ *
+ * It deliberately does NOT accept a key whose en.json value is missing: a t() call pointing at
+ * nothing renders the raw key to the player, and that must read as a failure, not a pass.
+ */
+const enLocale: Record<string, unknown> = (() => {
+  try { return JSON.parse(readBulk(path.resolve(__dirname, '../../i18n/locales/en.json'))); }
+  catch { return {}; }
+})();
+const enValueFor = (key: string): string | undefined => {
+  const v = key.split('.').reduce<unknown>(
+    (acc, part) => (acc && typeof acc === 'object' ? (acc as Record<string, unknown>)[part] : undefined),
+    enLocale,
+  );
+  return typeof v === 'string' ? v : undefined;
+};
+const saysToPlayer = (src: string, text: string): boolean => {
+  /**
+   * COMMENT-BLIND, and that is the whole point.
+   *
+   * The prose-assertion LOCK caught this within minutes of the codemod landing: moving
+   * "PRACTICE HISTORY" out of the JSX and into a locale key left the sentence behind in a COMMENT in
+   * the same file, so seven guards kept passing while the thing they guard had moved. A guard that
+   * matches its own documentation cannot fail. Strip comments before deciding anything.
+   * [[strip-comments-before-a-guard-matches]]
+   */
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+  if (code.includes(text)) return true;
+  const norm = text.trim().replace(/\s+/g, ' ');
+  for (const m of code.matchAll(/\bt\(\s*['"`]([\w.]+)['"`]/g)) {
+    const v = enValueFor(m[1]);
+    if (v && v.replace(/\s+/g, ' ').includes(norm)) return true;
+  }
+  return false;
+};
+
 // Tempo / transition (vision-derived, acoustic-verified)
 check('poseAnalysisApi exports deriveSwingTempo',
   /export\s+async\s+function\s+deriveSwingTempo/.test(read('services/poseAnalysisApi.ts')),
@@ -2586,7 +2633,14 @@ check('Smart Finder Scene Read: meta scene + measured wind → caddie brain (OTA
       /SENSOR TRUTH \(measured/.test(ctx) &&
       // wired into Smart Finder: capture → resize → readScene → result card
       /import\('\.\.\/services\/sceneReadService'\)/.test(sf) && /readScene\(\{ imageBase64/.test(sf) &&
-      /Read the scene/i.test(sf) && /SCENE READ/.test(sf)
+      /**
+       * 2026-09-11 — `/Read the scene/i` was VACUOUS and had been since it was written: those words
+       * exist in this file only inside a comment (app/smartfinder.tsx:939), never in rendered text.
+       * It passed by matching the guard's own documentation. Exposed when the i18n pass made these
+       * checks comment-blind. Replaced with the dismiss affordance, which is real, visible to a
+       * screen reader, and resolves through en.json. [[strip-comments-before-a-guard-matches]]
+       */
+      saysToPlayer(sf, 'Scene read. Tap to dismiss.') && saysToPlayer(sf, 'SCENE READ')
     );
   })(),
   'scene read snaps the view, grounds it in measured wind/temp via /api/kevin multimodal, renders + speaks the mental approach; no fabricated wind; OTA-safe');
@@ -3020,7 +3074,7 @@ check('Smart Motion: re-analyze the kept clip + auto-update on cold start (Tim)'
       /const reanalyze = useCallback\(\(\) => \{/.test(sm) &&
       /void runAnalysis\(clipUri, segmentsRef\.current\[0\]\)/.test(sm) &&
       /onPress=\{reanalyze\}/.test(sm) &&
-      /accessibilityLabel="Re-analyze this swing"/.test(sm) &&
+      /accessibilityLabel=\{t\('swinglab_smartmotion\.accessibility_label\.re_analyze_this_swing'\)\}/.test(sm) &&
       // auto-apply OTA on cold start, manual only later
       /autoAppliedRef\.current = true;\s*\n\s*void applyUpdate\(\)/.test(upd) &&
       /sinceLaunchMs < 20_000/.test(upd) &&
@@ -3050,7 +3104,7 @@ check('Practice points: conservative, per-drill, awarded on drill save → dashb
       /usePracticePointsStore\.getState\(\)\.awardPracticePoints\(\{/.test(sm) &&
       // surfaced on the dashboard, per-drill, hidden until earned
       /practiceTotal > 0 &&/.test(dash) &&
-      /PRACTICE POINTS/.test(dash) &&
+      saysToPlayer(dash, 'PRACTICE POINTS') &&
       /getDrillEntry\(id\)\?\.title/.test(dash)
     );
   })(),
@@ -3659,7 +3713,7 @@ check('Tester round 2: typed reply always shows, keyboard dismiss, Harry not sel
       /site: 'handsFree-route\.conversational'/.test(ls) &&
       /const shown = caption\(text, \d+\);/.test(ls) &&
       // 2 — the on-screen input bar can minimize the keyboard while typing
-      /accessibilityLabel="Hide keyboard"/.test(bottombar) && /Keyboard\.dismiss\(\)/.test(bottombar) &&
+      /accessibilityLabel=\{t\('caddie_caddie_bottom_bar\.accessibility_label\.hide_keyboard'\)\}/.test(bottombar) && /Keyboard\.dismiss\(\)/.test(bottombar) &&
       // 3 — Harry is NOT a selectable base persona for the custom caddie
       !/id: 'harry'/.test(cc) &&
       // 4 — the drill-name banner fades out after 5s instead of overlapping the cards
@@ -3687,7 +3741,7 @@ check('First-run tour: auto on the first few opens, skippable, replayable from S
       /useOnboardingTourStore\.getState\(\)\.noteAppOpen\(\)/.test(layout) &&
       /if \(useOnboardingTourStore\.getState\(\)\.shouldAutoShow\(\)\) setShowTour\(true\)/.test(caddie) &&
       /steps=\{ONBOARDING_TOUR_STEPS\}/.test(caddie) && /completeTour\(\)/.test(caddie) &&
-      /relaunchTour\(\)/.test(settings) && /Show Me Around/.test(settings) &&
+      /relaunchTour\(\)/.test(settings) && saysToPlayer(settings, "Show Me Around") &&
       // MEASURED spotlights: a target registry + a measure hook, real elements instrumented, and the
       // overlay cuts a hole over the measured bounds (with a geometry fallback).
       /export function setTourTarget/.test(read('store/tourTargets.ts')) &&
@@ -4957,7 +5011,7 @@ check('Scorecard empty state taps through to the dashboard',
   // card now navigates to the dashboard with an explicit affordance.
   (() => {
     const sc = read('app/(tabs)/scorecard.tsx');
-    return /onPress=\{\(\) => router\.push\('\/\(tabs\)\/dashboard' as never\)\}/.test(sc) && /View Recent Rounds/.test(sc);
+    return /onPress=\{\(\) => router\.push\('\/\(tabs\)\/dashboard' as never\)\}/.test(sc) && saysToPlayer(sc, "View Recent Rounds");
   })(),
   'no-round scorecard navigates to the dashboard instead of a dead "Recent Rounds" link');
 
@@ -5039,8 +5093,8 @@ check('Coach Mode: selected-player hero + real day-streak metric (mockup)',
   (() => {
     const cm = read('app/swinglab/coach-mode.tsx');
     return (
-      /const dayStreak = useMemo/.test(cm) && /swings logged/.test(cm) &&
-      /heroCard/.test(cm) && /Day streak/.test(cm) &&
+      /const dayStreak = useMemo/.test(cm) && saysToPlayer(cm, "swings logged") &&
+      /heroCard/.test(cm) && saysToPlayer(cm, "Day streak") &&
       /streak broken if no session today\/yesterday/.test(cm)
     );
   })(),
@@ -5052,11 +5106,11 @@ check('Settings: branded icons on every category section (mockup, layout unchang
   (() => {
     const s = read('app/settings.tsx');
     return (
-      /title="Caddie" icon="bag-outline"/.test(s) &&
-      /title="Round Experience" icon="flag-outline"/.test(s) &&
-      /title="Voice & Conversation" icon="mic-outline"/.test(s) &&
-      /title="Owner Tools" icon="construct-outline"/.test(s) &&
-      /title="Reset" icon="refresh-outline"/.test(s)
+      /title=\{t\('settings\.title\.caddie'\)\} icon="bag-outline"/.test(s) &&
+      /title=\{t\('settings\.title\.round_experience'\)\} icon="flag-outline"/.test(s) &&
+      /title=\{t\('settings\.title\.voice_conversation'\)\} icon="mic-outline"/.test(s) &&
+      /title=\{t\('settings\.title\.owner_tools'\)\} icon="construct-outline"/.test(s) &&
+      /title=\{t\('settings\.title\.reset'\)\} icon="refresh-outline"/.test(s)
     );
   })(),
   'every settings section header has a branded icon; logic + toggles untouched');
@@ -5072,7 +5126,7 @@ check('SwingLab hub: mockup-driven sections + Smart Motion hero + branded featur
       /function SmartMotionHero/.test(sl) &&
       /ANALYZE & IMPROVE/.test(sl) && /PRACTICE BETTER/.test(sl) && /PLAY SMARTER/.test(sl) &&
       /feature-smartmotion\.png/.test(sl) &&
-      /Swing Analysis/.test(sl) && /Acoustic Detection/.test(sl) && /Body Mechanics/.test(sl)
+      saysToPlayer(sl, "Swing Analysis") && saysToPlayer(sl, "Acoustic Detection") && saysToPlayer(sl, "Body Mechanics")
     );
   })(),
   'sectioned layout: Smart Motion hero (branded feature row) + the three intent sections');
@@ -5201,14 +5255,14 @@ check('Play: opening a searched course shows loading + a retry hint (no silent d
     const p = read('app/(tabs)/play.tsx');
     return (
       /setSelectError\(/.test(p) &&                 // failure path sets a user-facing hint
-      /Opening course…/.test(p) &&                  // fresh-load feedback (card spinner only shows post-select)
+      saysToPlayer(p, "Opening course\u2026") &&                  // fresh-load feedback (card spinner only shows post-select)
       /!selectedLoading && selectError/.test(p)     // the hint is actually rendered
     );
   })(),
   'tapping a searched/API course that fails to open (network / null record) shows an "opening…" state then a retry hint, instead of the row silently doing nothing');
 
 check('Play: an AI-identified course offers a scorecard-photo path (dead-end → playable)',
-  (() => /Add it from a scorecard photo to play with yardages/.test(read('app/(tabs)/play.tsx')))(),
+  (() => saysToPlayer(read('app/(tabs)/play.tsx'), 'Add it from a scorecard photo to play with yardages'))(),
   "a tester whose home course isn't in the DB can add it from a scorecard photo right on the AI card, instead of only a 'visit/book' link");
 
 check('TightLie: analysis failure shows a human caddie line, never a raw JS error',
@@ -5279,7 +5333,7 @@ check('Practice reps credited per club (honest volume, not distance)',
       /addReps:/.test(store) && /repsFor:/.test(store) &&
       /reps: Partial<Record<ClubName, number>>/.test(store) &&
       /useClubStatsStore\.getState\(\)\.addReps\(cn, segsForAnalysis\.length/.test(sm) &&
-      /PRACTICE VOLUME/.test(screen)
+      saysToPlayer(screen, 'PRACTICE VOLUME')
     );
   })(),
   'Smart Motion swings credit per-club reps; surfaced as PRACTICE VOLUME; never a distance');
@@ -5356,8 +5410,9 @@ check('Round history surfaces on the dashboard (Tim: "it doesn\'t go anywhere")'
     const dash = read('app/(tabs)/dashboard.tsx');
     return (
       // The RENDERED label, case-exact. /Recent Rounds/ matched only a comment, so a renamed
-      // section heading could never have failed this.
-      /RECENT ROUNDS/.test(readCode('app/(tabs)/dashboard.tsx')) &&
+      // section heading could never have failed this. 2026-09-11: resolves through en.json now that
+      // the label is a t() key — still comment-blind, so the original point stands.
+      saysToPlayer(dash, 'RECENT ROUNDS') &&
       /\[\.\.\.roundHistory\]\.reverse\(\)\.slice\(0, 6\)/.test(dash) &&
       /router\.push\(`\/recap\/\$\{r\.id\}`/.test(dash) &&      // tap → recap
       /r\.scoreVsPar === 0 \? 'E'/.test(dash) &&                // vs-par display
@@ -5670,7 +5725,7 @@ check('Hotel Mode: gyro rep detector reads swings + putts, never fabricates from
     // Wiring: hub card + screen + CNS/points crediting present.
     const scr = read('app/swinglab/indoor.tsx');
     const wired = /route: '\/swinglab\/indoor'/.test(read('app/(tabs)/swinglab.tsx')) &&
-      /recordSwingMetrics/.test(scr) && /awardPracticePoints/.test(scr) && /no ball flight is claimed indoors/i.test(scr);
+      /recordSwingMetrics/.test(scr) && /awardPracticePoints/.test(scr) && saysToPlayer(scr, "no ball flight is claimed indoors");
     return swingsOk && puttsOk && noise === 0 && wired;
   })(),
   'the real IndoorRepDetector reads 5/5 synthetic swings (sane tempo, ≥80 consistency) and 4/4 putts with an accel/decel call, produces ZERO reps from hand jitter, and the screen is wired to the hub + points + CNS with the honest no-ball-flight label');
@@ -6070,7 +6125,18 @@ check('SmartPump third rail: workout import → TRAINING → PERFORMANCE dashboa
       // Dashboard reads the store, builds the series, and renders the third card.
       /useWorkoutStore/.test(dash) &&
       /computeWorkoutPerformance/.test(dash) &&
-      /TRAINING → PERFORMANCE/.test(dash) &&
+      /**
+       * 2026-09-11 — this asserted a card that NO LONGER EXISTS. dashboard.tsx:1376 records that the
+       * PERFORMANCE and "TRAINING → PERFORMANCE" cards "were folded into the single PROGRESS graph";
+       * the phrase survived only in that comment, which is why the prose-assertion LOCK had it
+       * baselined. A baselined prose-only assertion is not a guard — it was hiding the fact that the
+       * surface it names had been removed.
+       *
+       * Now asserts what the workout rail actually renders into: the PROGRESS graph, plus the series
+       * builder feeding it. That is the real invariant — "imported training reaches the dashboard" —
+       * rather than the name of a card that was merged away.
+       */
+      saysToPlayer(dash, 'PROGRESS') &&
       // Ingest service + settings entry point + server route all present.
       /ingestSmartPumpExport/.test(read('services/smartPumpIngest.ts')) &&
       // 2026-08-22 — asserts the ENTRY POINTS, not the name of the inner call. Settings now goes
@@ -6080,7 +6146,7 @@ check('SmartPump third rail: workout import → TRAINING → PERFORMANCE dashboa
       /importSmartPumpWithFeedback/.test(read('services/smartPumpIngest.ts')) &&
       /importSmartPumpWithFeedback/.test(read('app/settings.tsx')) &&
       /importSmartPumpWithFeedback/.test(dash) &&
-      /Import workouts from SmartPump/.test(dash) &&
+      saysToPlayer(dash, "Import workouts from SmartPump") &&
       !/no_workouts_found/.test(dash) &&
       !/no_workouts_found/.test(read('app/settings.tsx')) &&
       /\/api\/workout-import/.test(read('services/smartPumpIngest.ts')) &&
@@ -6184,7 +6250,7 @@ check('Acoustic Listening only while recording AND actually metering',
 
 check('Calibration auto-applies after a clean read',
   /Auto-apply: the user shouldn't have to tap/.test(read('app/swinglab/calibrate.tsx')) &&
-    /Dialed in ✓/.test(read('app/swinglab/calibrate.tsx')),
+    saysToPlayer(read('app/swinglab/calibrate.tsx'), 'Dialed in ✓'),
   'save+apply+confirm without a separate tap');
 
 check('Acoustic card always tappable to (re)calibrate',
@@ -6221,7 +6287,7 @@ check('Voice club-change + scan work on Smart Motion (no cage session needed)',
 const ownerProfileSrc = read('store/playerProfileStore.ts');
 check('Owner tools restorable: hotmail allow-listed + settings email input',
   /t\.gustafson@hotmail\.com/.test(ownerProfileSrc) &&
-    /Account email/.test(read('app/settings.tsx')) && /setAccountEmail/.test(read('app/settings.tsx')),
+    saysToPlayer(read('app/settings.tsx'), 'Account email') && /setAccountEmail/.test(read('app/settings.tsx')),
   'owner can set email in Settings to unlock Owner Tools (issue log / voice misses / harness)');
 
 // ─── 2026-06-09: feels engine + putt mode ──────────────────────────────────
@@ -6594,7 +6660,7 @@ check('Bilateral: link two angles → merged read (impact-anchored, honest 2D)',
       // impact anchor read from the shot's detectionOffsetSeconds
       /s\.shots\?\.\[0\]\?\.detectionOffsetSeconds/.test(view);
     const entryOk =
-      /Link a second angle \(bilateral\)/.test(detail) &&
+      saysToPlayer(detail, "Link a second angle (bilateral)") &&
       /router\.push\(`\/swinglab\/bilateral\?a=\$\{swing_id\}&b=\$\{os\.id\}`/.test(detail);
     return svcOk && viewOk && entryOk;
   })(),
@@ -6606,7 +6672,7 @@ check('Audit fix: upload never strands on "Saving…" if ingest throws',
     const u = read('app/swinglab/upload.tsx');
     // ingest is wrapped; on throw it restores the form + alerts (no infinite spinner)
     return /try \{\s*\n\s*sessionId = await ingestVideoFromPick\(\{/.test(u) &&
-      /\} catch \(e\) \{[\s\S]{0,180}setStep\('metadata'\);[\s\S]{0,120}Alert\.alert\('Upload failed'/.test(u);
+      /\} catch \(e\) \{[\s\S]{0,220}setStep\('metadata'\);[\s\S]{0,160}Alert\.alert\(t\('swinglab_upload\.alert\.upload_failed'\)/.test(u);
   })(),
   'a rejected video ingest restores the editable upload form + shows an alert instead of hanging on the Saving spinner forever (tonight\'s 2nd-video-source path)');
 
@@ -6692,7 +6758,7 @@ check('Upload angle picker: imported clip read at its true angle (DTL vs face-on
     const store = read('store/swingSessionStore.ts');
     const uiOk =
       /const \[angle, setAngle\] = useState<'down_the_line' \| 'face_on'>\('down_the_line'\)/.test(screen) &&
-      /CAMERA ANGLE/.test(screen) &&
+      saysToPlayer(screen, "CAMERA ANGLE") &&
       /onPress=\{\(\) => setAngle\('face_on'\)\}/.test(screen) &&
       /angleOverride: angle/.test(screen);
     const svcOk =
@@ -6728,7 +6794,7 @@ check('Practice→performance: honest connection card (association, gated, no fa
     // 2026-08-06 (Tim — "there should be ONE graph not multiple") — the three correlation cards collapsed
     // into a SINGLE PROGRESS graph: score-vs-par (outcome) with the chosen effort line overlaid.
     const dashOk =
-      /PROGRESS/.test(dash) &&
+      saysToPlayer(dash, 'PROGRESS') &&
       /computePracticeImpact\(\{/.test(dash) &&
       // one chart: score-vs-par primary (lower better) + the selected effort as an OVERLAY
       /data=\{activeProgress\.score\}/.test(dash) &&
@@ -6774,7 +6840,7 @@ check('Practice history: dashboard list → detail with per-club striation + tem
     const drillHistory = /usePracticeSessionStore\.getState\(\)\.recordCompletedSession\(\{/.test(sm);
     // dashboard surfaces the history list and navigates to the detail route
     const dashOk =
-      /PRACTICE HISTORY/.test(dash) &&
+      saysToPlayer(dash, 'PRACTICE HISTORY') &&
       /recentSessions = useMemo\(\(\) => practiceHistory\.slice\(0, 6\)/.test(dash) &&
       /router\.push\(`\/practice\/\$\{s\.id\}`/.test(dash);
     // detail screen renders the two primitives off real session data
@@ -7097,14 +7163,14 @@ check('Honesty: putt distance + placeholder course layout are flagged as estimat
     return (
       // putt distance shows ~N and an EST label (was a bare number + "FEET")
       /distanceFeet != null \? `~\$\{distanceFeet\}` : '—'/.test(sf) &&
-      /FEET \(EST\)/.test(sf) &&
+      saysToPlayer(sf, "FEET (EST)") &&
       // course detail flags the generic placeholder layout + clears it on real data
       /const \[layoutEstimated, setLayoutEstimated\] = useState\(false\)/.test(cd) &&
       /setLayoutEstimated\(!realHoles\)/.test(cd) &&
       // 2026-06-16 — API enrichment now preserves the curated location (no town
       // flap) but still clears the estimate flag when real layout lands.
       /setCourse\(prev => \(prev \? \{ \.\.\.c, location: prev\.location, club_name: prev\.club_name \} : c\)\);\s*setLayoutEstimated\(false\)/.test(cd) &&
-      /Estimated layout — full course data not available yet\./.test(cd)
+      saysToPlayer(cd, "Estimated layout — full course data not available yet.")
     );
   })(),
   'the uncalibrated putt distance reads as an estimate (~N, FEET (EST)) and an un-catalogued course shows an "Estimated layout" banner instead of presenting the 18×par-4×380y placeholder as a real scorecard');
@@ -8233,7 +8299,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /const span = Math\.max\(0\.001, liveBall\.y - EFFORT_TOP_CAP\)/.test(smSrc2) &&        // top cap = 100% effort
       // 2026-07-04 (drift reconcile) — the readout moved into the shot-map deck
       // (components/smartmotion/ShotMapPage.tsx renders the EFFORT stat).
-      /Stat label="EFFORT" value=\{effortPct != null \? `\$\{effortPct\}%` : '—'\}/.test(read('components/smartmotion/ShotMapPage.tsx')),
+      /Stat label=\{t\('smartmotion_shot_map_page\.label\.effort'\)\} value=\{effortPct != null \? `\$\{effortPct\}%` : '—'\}/.test(read('components/smartmotion/ShotMapPage.tsx')),
     'server grades against declared effort from ball→target geometry; the DTL target is DRAGGABLE in setup and the shot-map deck shows the live EFFORT stat — the interactive geometry↔tempo Tim expected');
 
   check('SmartMotion: putt CUP flag replaces the stuck PUTT MODE pill; future card sits at the bottom',
@@ -8248,7 +8314,10 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /targetKind === 'cup'/.test(read('components/swinglab/PracticeTargetingCard.tsx')) &&
       // COMING SOON now appears AFTER the feels-engine block (bottom of the page),
       // i.e. after "HOW'D IT FEEL?" in source order.
-      smSrc2.indexOf('>COMING SOON<') > smSrc2.indexOf('HOW&apos;D IT FEEL?') &&
+      // 2026-09-11 — both labels are t() keys now, so the ORDER is checked by key position. The
+      // invariant is unchanged: "what we can't do yet" must not sit above the real read.
+      smSrc2.indexOf("swinglab_smartmotion.smart_motion.coming_soon")
+        > smSrc2.indexOf("swinglab_smartmotion.smart_motion.how_d_it_feel") &&
       // right-rail badges carry a shadow so they read on bright backgrounds.
       /shadowColor: '#000', shadowOpacity: 0\.55/.test(smSrc2),
     'the stuck PUTT MODE pill is removed; putt mode shows a draggable CUP flag (targetKind cup); the COMING SOON card moved to the bottom of page 2; rail badges get a shadow halo');
@@ -8610,7 +8679,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /estimatedCarryYds: estCarry/.test(smSrc2) &&
       // 2026-07-04 (drift reconcile) — the CARRY display moved into the shot-map deck.
       // 2026-07-07 (audit M2) — relabeled "PLAN CARRY" so a projection isn't shown as an outcome.
-      /Stat label="PLAN CARRY" value=\{`~\$\{estCarry\}y`\}/.test(read('components/smartmotion/ShotMapPage.tsx')) &&
+      /Stat label=\{t\('smartmotion_shot_map_page\.label\.plan_carry'\)\} value=\{`~\$\{estCarry\}y`\}/.test(read('components/smartmotion/ShotMapPage.tsx')) &&
       /source=\{ICON_RAIL\.calibrate\}/.test(smSrc2) &&                  // rail badges wired
       /source=\{ICON_CTRL\.playpause\}/.test(smSrc2) &&                  // control badges wired
       /styles\.toolBtnBare/.test(smSrc2),                               // bare buttons (icon's own circle = button)
@@ -9347,7 +9416,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'single / multi-consensus / fallback all map analysis.strengths → PrimaryIssue.strengths, capped + trimmed');
 
   check('Strengths: card leads with a "WHAT\'S WORKING" block above the fault',
-    cardSrc.includes('WHAT&apos;S WORKING') &&
+    saysToPlayer(cardSrc, "WHAT'S WORKING") &&
       /hasStrengths/.test(cardSrc) &&
       cardSrc.indexOf('hasStrengths &&') < cardSrc.indexOf("primary_fault === 'inconclusive'"),
     'strengths render above the fault branches — positive first (honesty-gated: hidden when empty)');
@@ -9458,7 +9527,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
         /s\.manual\[club\] != null\) out\[club\] = Math\.round\(s\.manual\[club\]! \+ ROLL_YARDS\[club\]\)/.test(store) &&
         /useClubStatsStore\.getState\(\)\.setManual/.test(screen) &&
         /yards: st\.carryFor\(c\), measured: st\.hasCarry\(c\), stated: st\.hasManual\(c\)/.test(screen) &&
-        /MY BAG/.test(dash) && /router\.push\('\/practice\/fit-profile'/.test(dash)
+        saysToPlayer(dash, "MY BAG") && /router\.push\('\/practice\/fit-profile'/.test(dash)
       );
     })(),
     'editable My Bag: store setManual/distanceFor → Fit Profile ladder + dashboard card + caddie yardages');
@@ -9552,7 +9621,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'flop vs a high read = on; vs a low read = off; no departure = honest "couldn\'t read"; feedback never claims roll/check/release (single point can\'t see it)');
 }
 
-// ─── Voice racing on swing navigation (2026-06-15, Tim) ─────────────────────────
+// ─── Voice racing on swing navigation (2026-06-15, Tim) ─────────────────────────────────────────────────────────
 check('Swing detail: stops voice on swing CHANGE, not just unmount (no late-catch-up racing)',
   (() => {
     const src = read('app/swinglab/swing/[swing_id].tsx');
@@ -14297,7 +14366,7 @@ check('Smart Motion: "go again" asked DURING analysis is queued, never dropped',
       // and a review-phase effect drains it, once, into the real go-again
       /if \(phase !== 'review' \|\| !queuedGoAgainRef\.current\) return;\s*queuedGoAgainRef\.current = false;\s*beginNextRecording\(\);/.test(sm) &&
       // the NEW SET control itself still exists and still auto-saves the set it leaves
-      /accessibilityLabel="New set — saves this one and records again"/.test(sm) &&
+      /accessibilityLabel=\{t\('swinglab_smartmotion\.accessibility_label\.new_set_saves_this_one'\)\}/.test(sm) &&
       /persistReviewRef\.current\(false\)/.test(sm)
     );
   })(),
@@ -14757,7 +14826,7 @@ check(
   check(
     'HEALTH: the recap screen actually renders it',
     /\{recap\.effort && \(/.test(readCode('app/recap/[round_id].tsx')) &&
-      /THE WALK/.test(read('app/recap/[round_id].tsx')),
+      saysToPlayer(read('app/recap/[round_id].tsx'), 'THE WALK'),
     'a reader nothing renders is the same orphan wearing a different name',
   );
 
@@ -15281,7 +15350,7 @@ check(
   check(
     'CLIPS: the uri is re-anchored at OPEN, and a missing file is said plainly',
     /const uri = await resolveClipUri\(stored\);/.test(recap) &&
-      /if \(!uri\) \{[\s\S]{0,260}?Alert\.alert\('Clip not on this device'/.test(recap),
+      /if \(!uri\) \{[\s\S]{0,300}?Alert\.alert\(t\('recap\.alert\.clip_not_on_this_device'\)/.test(recap),
     'iOS regenerates the app container UUID on reinstall, so a stored absolute path is stale — resolveClipUri re-anchors it, and null means genuinely gone, which is worth saying rather than opening a player onto a black rectangle',
   );
   check(
@@ -15742,12 +15811,12 @@ check(
     'SHOT SHAPES: a tile opens the lesson, and RECORD is the second tap',
     /onPress=\{\(\) => setTeaching\(s\)\}/.test(screen) &&
       !/onPress=\{\(\) => pick\(s\)\}/.test(screen) &&
-      /Record 3 of these/.test(screen),
+      saysToPlayer(screen, 'Record 3 of these'),
     'tapping a shot no longer starts a recording of a skill the app never taught',
   );
   check(
     'SHOT SHAPES: the lesson is a step, not a gate',
-    /I know this one — just record/.test(screen),
+    saysToPlayer(screen, 'I know this one — just record'),
     'a golfer who already has the shot must never be made to sit through the lesson twice',
   );
   const defs = readCode('services/practice/shotShapes.ts');

@@ -116,6 +116,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 // illustration-data rule — the mockup's "78%" is illustrative only).
 import { composeShotRead } from '../services/cnsShotRead';
 import { bagDistances } from '../services/shotStrategy';
+import { useTranslation } from 'react-i18next';
 
 // ─── Geo helpers ──────────────────────────────────────────────────
 
@@ -333,6 +334,7 @@ function Marker({ kind, x, y, draggable, onDragLive, onDragEnd }: {
 const svDeriveAttempts = new Set<string>();
 
 export default function SmartVisionScreen() {
+  const { t } = useTranslation();
   // 2026-09-06 — remote kill switch. Redirects to the Caddie screen if `smartvision` is off, whether it
   // was already off on entry or flips off while this screen is open. No message, by instruction.
   useFlagGate('smartvision');
@@ -2289,7 +2291,7 @@ export default function SmartVisionScreen() {
             {geometry?.estimated && !preferCurated ? (
               <View style={styles.estimatedBadge}>
                 <Ionicons name="sparkles" size={9} color="#0a0a0a" />
-                <Text style={styles.estimatedBadgeText}>AI ESTIMATE</Text>
+                <Text style={styles.estimatedBadgeText}>{t('smartvision.smart_vision_screen.ai_estimate')}</Text>
               </View>
             ) : null}
           </View>
@@ -2305,9 +2307,9 @@ export default function SmartVisionScreen() {
             satellite now; the bundled photo is an automatic fallback for holes with no coordinates.
             The badge below just reports which one you're looking at — it isn't a control. */}
         {imagerySource === 'curated' ? (
-          <View style={styles.modeBtn} accessibilityRole="text" accessibilityLabel="Showing a bundled hole photo — no live coordinates for this hole yet">
+          <View style={styles.modeBtn} accessibilityRole="text" accessibilityLabel={t('smartvision.accessibility_label.showing_a_bundled_hole_photo')}>
             <Ionicons name="image" size={20} color="#ffffff" />
-            <Text style={styles.modeBtnText}>Bundled</Text>
+            <Text style={styles.modeBtnText}>{t('smartvision.smart_vision_screen.bundled')}</Text>
           </View>
         ) : null}
       </View>
@@ -2376,8 +2378,7 @@ export default function SmartVisionScreen() {
             <Ionicons name="location-outline" size={30} color="#00C896" style={{ marginBottom: 10 }} />
             <Text style={styles.canvasFallbackTitle}>{courseName ?? 'Locating…'}</Text>
             <Text style={styles.canvasFallbackSub}>
-              Waiting on your location to drop the satellite aerial. Make sure Location is on — the moment
-              I get a GPS fix, the map appears here with live front / middle / back yardages.
+              {t('smartvision.smart_vision_screen.waiting_on_your_location_to')}
             </Text>
           </View>
         )}
@@ -2823,15 +2824,15 @@ export default function SmartVisionScreen() {
             actually moved off the tee (>10y) so the panel reads tee→cart THEN cart→green. */}
         {carryYards != null && carryYards > 10 && (
           <>
-            <YdCell label="CARRY" value={carryYards} stacked={isSplit} />
+            <YdCell label={t('smartvision.label.carry')} value={carryYards} stacked={isSplit} />
             <View style={isSplit ? styles.dividerHorizontal : styles.divider} />
           </>
         )}
-        <YdCell label="FRONT" value={yardages.front} stacked={isSplit} />
+        <YdCell label={t('smartvision.label.front')} value={yardages.front} stacked={isSplit} />
         <View style={isSplit ? styles.dividerHorizontal : styles.divider} />
-        <YdCell label="MIDDLE" value={yardages.middle} emphasis stacked={isSplit} />
+        <YdCell label={t('smartvision.label.middle')} value={yardages.middle} emphasis stacked={isSplit} />
         <View style={isSplit ? styles.dividerHorizontal : styles.divider} />
-        <YdCell label="BACK" value={yardages.back} stacked={isSplit} />
+        <YdCell label={t('smartvision.label.back')} value={yardages.back} stacked={isSplit} />
         {/* 2026-05-17 — Bluegolf-style yardage book. Origin = tee for
             planning; per-bunker / per-water polygon distances. Only
             renders on the landscape side panel (vertical space); the

@@ -24,6 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
 import { useToolsMenuStore } from '../../../store/toolsMenuStore';
 import type { VoiceState } from '../../CaddieAvatar';
+import { useTranslation } from 'react-i18next';
 
 export interface BrandHeaderProps {
   voiceState: VoiceState;
@@ -34,6 +35,7 @@ export interface BrandHeaderProps {
 }
 
 export function BrandHeader({ voiceState, onMicPress }: BrandHeaderProps) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const openTools = useToolsMenuStore((s) => s.open);
   // 2026-06-25 (Tim) — width-based wordmark sizing (adjustsFontSizeToFit doesn't
@@ -66,8 +68,8 @@ export function BrandHeader({ voiceState, onMicPress }: BrandHeaderProps) {
         onPress={onMicPress}
         hitSlop={4}
         accessibilityRole="button"
-        accessibilityLabel="Talk to caddie"
-        accessibilityHint="Starts recording. Tap again to stop."
+        accessibilityLabel={t('cockpit_brand_header.accessibility_label.talk_to_caddie')}
+        accessibilityHint={t('cockpit_brand_header.accessibility_hint.starts_recording_tap_again_to')}
         style={({ pressed }) => [styles.micRow, { opacity: pressed ? 0.7 : 1 }]}
       >
         <View
@@ -95,8 +97,8 @@ export function BrandHeader({ voiceState, onMicPress }: BrandHeaderProps) {
               width (which pushed CADDIE off-screen and slid the block over the
               badge). Nested Text keeps the accent/white split. */}
           <Text style={[styles.wordmark, { fontSize: compact ? 15 : 18, letterSpacing: compact ? 1.2 : 2.5 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-            <Text style={{ color: colors.accent }}>SMARTPLAY</Text>
-            <Text style={{ color: colors.text_primary }}> CADDIE</Text>
+            <Text style={{ color: colors.accent }}>{t('cockpit_brand_header.brand_header.smartplay')}</Text>
+            <Text style={{ color: colors.text_primary }}> {t('cockpit_brand_header.brand_header.caddie')}</Text>
           </Text>
           <Text style={[styles.tagline, { color: colors.text_muted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
             {/* 2026-08-12 (Tim — "there's something when you first tap the mic that comes up real
@@ -121,7 +123,7 @@ export function BrandHeader({ voiceState, onMicPress }: BrandHeaderProps) {
         onPress={openTools}
         hitSlop={10}
         accessibilityRole="button"
-        accessibilityLabel="Open tools menu"
+        accessibilityLabel={t('cockpit_brand_header.accessibility_label.open_tools_menu')}
         style={({ pressed }) => [
           styles.toolsPill,
           { borderColor: colors.border, opacity: pressed ? 0.6 : 1 },

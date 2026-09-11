@@ -114,6 +114,7 @@ import { ErrorBoundary } from '../components/ErrorBoundary';
 // 2026-05-21 — Consolidation 4: routine status logs gated.
 import { devLog } from '../services/devLog';
 import { genderForPersona } from '../services/caddieGender';
+import { useTranslation } from 'react-i18next';
 
 // Phase Y — whenRoundStoreHydrated lives in store/roundStore.ts (was
 // inlined here originally; audit moved it to remove a brittle
@@ -231,6 +232,7 @@ const DEBUG_ROUTES: ReadonlySet<string> = new Set([
 ]);
 
 function AppNavigator() {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   // 2026-05-27 — Fix EA: read screenshot-mode flag once at the root so
   // the StatusBar hidden binding is single-source. Selector keeps the
@@ -785,8 +787,8 @@ function AppNavigator() {
     if (!isBuildUnsupported(NATIVE_BUILD_NUMBER)) return;
     nudgedThisLaunch.current = true;
     Alert.alert(
-      'Update available',
-      'You\u2019re on an older version of SmartPlay Caddie. Updating gets you the latest fixes \u2014 you can keep playing on this one for now.',
+      t('layout.alert.update_available'),
+      t('layout.alert.you_re_on_an_older'),
       [{ text: 'OK' }],
     );
   }, [minSupportedBuild]);

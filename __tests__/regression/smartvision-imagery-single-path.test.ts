@@ -19,6 +19,26 @@
 import fs from 'fs';
 import path from 'path';
 
+/**
+ * 2026-09-11 (release 1.5) — THE STRING MOVED; THE GUARD FOLLOWS IT, STRENGTHENED.
+ *
+ * The phase-2 codemod replaced this screen's English literals with t() calls, so an assertion that
+ * greps the source for the sentence can no longer find it. The invariant being protected is not
+ * "this file contains these characters" — it is "this screen still says this to the player".
+ *
+ * So the check is now in two halves, which together are STRICTER than the single grep was: the
+ * screen must call t() with the expected key in the expected structural position, AND that key must
+ * resolve to the expected English in i18n/locales/en.json. The old form could be satisfied by a
+ * comment quoting the sentence; this one cannot.
+ */
+function enValue(key: string): string {
+  const en = JSON.parse(
+    fs.readFileSync(path.join(__dirname, '../../i18n/locales/en.json'), 'utf8'),
+  ) as Record<string, unknown>;
+  return key.split('.').reduce<unknown>((acc, part) => (acc as Record<string, unknown>)?.[part], en) as string;
+}
+
+
 const src = fs.readFileSync(path.join(__dirname, '../../app/smartvision.tsx'), 'utf8');
 const settings = fs.readFileSync(path.join(__dirname, '../../store/settingsStore.ts'), 'utf8');
 
@@ -74,7 +94,9 @@ describe('the live tile leads and the photo is the fallback', () => {
 
   it('still ends at an honest empty state rather than a green screen', () => {
     expect(effect).toContain("setImagerySource('none')");
-    expect(src).toContain('Waiting on your location to drop the satellite aerial');
+    expect(src).toContain("t('smartvision.smart_vision_screen.waiting_on_your_location_to')");
+    expect(enValue('smartvision.smart_vision_screen.waiting_on_your_location_to'))
+      .toContain('Waiting on your location to drop the satellite aerial');
   });
 
   it('clears the previous hole tile so no wrong-hole image can flash', () => {

@@ -26,6 +26,7 @@ import type { HoleGeometry, LandmarkFeature } from '../../services/courseGeometr
 // same code path.
 import { haversineYards as canonicalHaversineYards } from '../../utils/geoDistance';
 import { isValidGolfCoord, type LatLng } from '../../utils/coordGuard';
+import { useTranslation } from 'react-i18next';
 
 function haversineYards(a: LatLng, b: LatLng): number {
   if (!isValidGolfCoord(a.lat, a.lng) || !isValidGolfCoord(b.lat, b.lng)) {
@@ -101,6 +102,7 @@ export default function YardageBookPanel({
   filterInPlay = true,
   originLabel = 'tee',
 }: YardageBookPanelProps) {
+  const { t } = useTranslation();
   const rows: Row[] = useMemo(() => {
     if (!geometry || !origin) return [];
     const out: Row[] = [];
@@ -164,7 +166,7 @@ export default function YardageBookPanel({
   if (rows.length === 0) {
     return (
       <View style={styles.empty}>
-        <Text style={styles.emptyText}>No landmarks for this hole.</Text>
+        <Text style={styles.emptyText}>{t('smartvision_yardage_book_panel.yardage_book_panel.no_landmarks_for_this_hole')}</Text>
       </View>
     );
   }
@@ -172,7 +174,7 @@ export default function YardageBookPanel({
   return (
     <View style={styles.wrap}>
       <View style={styles.titleRow}>
-        <Text style={styles.title}>YARDAGE BOOK</Text>
+        <Text style={styles.title}>{t('smartvision_yardage_book_panel.yardage_book_panel.yardage_book')}</Text>
         <Text style={styles.titleQualifier} numberOfLines={1}>from {originLabel}</Text>
       </View>
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>

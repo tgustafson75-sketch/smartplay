@@ -177,7 +177,9 @@
     "discard_title": "放弃这局？",
     "discard_body": "本局的所有击球、成绩和计划都将删除。此操作无法撤销。",
     "cancel": "取消",
-    "discard_everything": "全部放弃"
+    "discard_everything": "全部放弃",
+    "walking": "步行",
+    "cart": "球车"
   },
   "swinglab": {
     "practice": "练习",

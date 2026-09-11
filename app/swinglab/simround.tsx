@@ -31,6 +31,7 @@ import { useCaddieMemoryStore } from '../../store/caddieMemoryStore';
 import { usePracticePointsStore } from '../../store/practicePointsStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useRoundStore, type RoundRecord } from '../../store/roundStore';
+import { useTranslation } from 'react-i18next';
 
 const NEON = '#88F700';
 const SIM_COURSES = ['webster-dudley', 'spessard-holland'];
@@ -51,6 +52,7 @@ function callLine(persona: string, kind: 'flush' | 'good' | 'poor' | 'trees' | '
 }
 
 export default function SwingSimScreen() {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const router = useRouter();
   const persona = useSettingsStore((s) => s.caddiePersonality);
@@ -365,11 +367,11 @@ export default function SwingSimScreen() {
   return (
     <SafeAreaView style={s.root}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => { stopSensor(); router.back(); }} accessibilityRole="button" accessibilityLabel="Exit sim">
+        <TouchableOpacity onPress={() => { stopSensor(); router.back(); }} accessibilityRole="button" accessibilityLabel={t('swinglab_simround.accessibility_label.exit_sim')}>
           <Ionicons name="chevron-back" size={26} color="#fff" />
         </TouchableOpacity>
         <View style={{ alignItems: 'center' }}>
-          <Text style={s.title}>SWINGSIM</Text>
+          <Text style={s.title}>{t('swinglab_simround.swing_sim_screen.swingsim')}</Text>
           <Text style={s.simBadge}>{ghost && stage !== 'lobby' ? `VS ${ghost.name.toUpperCase()}` : 'SIM ROUND · NOT REAL STATS'}</Text>
         </View>
         {ghostDiff ? (
@@ -381,7 +383,7 @@ export default function SwingSimScreen() {
 
       {stage === 'lobby' ? (
         <ScrollView contentContainerStyle={{ padding: 20 }}>
-          <Text style={s.lobbyLead}>Your real bag. Your real tendencies. Your real tempo. A full round from wherever you’re standing.</Text>
+          <Text style={s.lobbyLead}>{t('swinglab_simround.swing_sim_screen.your_real_bag_your_real')}</Text>
           {SIM_COURSES.map((id) => {
             const c = COURSES.find((x) => x.id === id)!;
             return (
@@ -401,11 +403,11 @@ export default function SwingSimScreen() {
           {/* OPPONENT — race your past self (ghost) or a family member */}
           {ghostRounds.length > 0 || familyOpponents.length > 0 ? (
             <View style={{ marginTop: 16 }}>
-              <Text style={s.ghostHeader}>🏆 PLAY AN OPPONENT</Text>
-              <Text style={s.ghostSub}>Race your own past round here, or a family member. They play their card; you swing.</Text>
+              <Text style={s.ghostHeader}>{t('swinglab_simround.swing_sim_screen.play_an_opponent')}</Text>
+              <Text style={s.ghostSub}>{t('swinglab_simround.swing_sim_screen.race_your_own_past_round')}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
                 <TouchableOpacity style={[s.ghostChip, !ghost && s.ghostChipActive]} onPress={() => setGhost(null)} accessibilityRole="button">
-                  <Text style={[s.ghostChipText, !ghost && { color: '#0b1220' }]}>SOLO</Text>
+                  <Text style={[s.ghostChipText, !ghost && { color: '#0b1220' }]}>{t('swinglab_simround.swing_sim_screen.solo')}</Text>
                 </TouchableOpacity>
                 {ghostRounds.map((r) => {
                   const active = ghost?.kind === 'ghost' && ghost.name === ghostLabel(r);
@@ -431,15 +433,15 @@ export default function SwingSimScreen() {
               </ScrollView>
             </View>
           ) : null}
-          {bag.some((b) => !b.learned) ? <Text style={s.honest}>* standard yardage — tell me your real number (“my 7-iron goes 165”) and the sim uses yours.</Text> : null}
-          <TouchableOpacity style={s.teeOff} onPress={() => { setScorecard([]); beginHole(0); }} accessibilityRole="button" accessibilityLabel="Tee off">
+          {bag.some((b) => !b.learned) ? <Text style={s.honest}>{t('swinglab_simround.swing_sim_screen.standard_yardage_tell_me_your')}</Text> : null}
+          <TouchableOpacity style={s.teeOff} onPress={() => { setScorecard([]); beginHole(0); }} accessibilityRole="button" accessibilityLabel={t('swinglab_simround.accessibility_label.tee_off')}>
             <Text style={s.teeOffText}>{ghost ? 'TEE OFF vs GHOST' : 'TEE OFF'}</Text>
           </TouchableOpacity>
-          <Text style={s.honest}>Swing the phone like a club when prompted. Every swing is a real tempo rep — it all feeds your caddie.</Text>
+          <Text style={s.honest}>{t('swinglab_simround.swing_sim_screen.swing_the_phone_like_a')}</Text>
         </ScrollView>
       ) : stage === 'final' ? (
         <ScrollView contentContainerStyle={{ padding: 20 }}>
-          <Text style={s.flyPar}>FINAL</Text>
+          <Text style={s.flyPar}>{t('swinglab_simround.swing_sim_screen.final')}</Text>
           <Text style={s.finalScore}>{toPar === 0 ? 'EVEN' : toPar > 0 ? `+${toPar}` : `${toPar}`}</Text>
           {ghostDiff ? (
             <View style={s.ghostVerdict}>
@@ -460,8 +462,8 @@ export default function SwingSimScreen() {
               <Text style={s.scName}>{scoreName(h.strokes, h.par)}</Text>
             </View>
           ); })}
-          <TouchableOpacity style={s.teeOff} onPress={() => { setScorecard([]); beginHole(0); }} accessibilityRole="button"><Text style={s.teeOffText}>RUN IT BACK</Text></TouchableOpacity>
-          <TouchableOpacity style={s.ghostBtn} onPress={() => router.back()} accessibilityRole="button"><Text style={s.ghostText}>Clubhouse</Text></TouchableOpacity>
+          <TouchableOpacity style={s.teeOff} onPress={() => { setScorecard([]); beginHole(0); }} accessibilityRole="button"><Text style={s.teeOffText}>{t('swinglab_simround.swing_sim_screen.run_it_back')}</Text></TouchableOpacity>
+          <TouchableOpacity style={s.ghostBtn} onPress={() => router.back()} accessibilityRole="button"><Text style={s.ghostText}>{t('swinglab_simround.swing_sim_screen.clubhouse')}</Text></TouchableOpacity>
         </ScrollView>
       ) : (
         <View style={{ flex: 1 }}>
@@ -508,8 +510,8 @@ export default function SwingSimScreen() {
           <View style={s.deck}>
             <View style={s.hudRow}>
               <View style={s.hudStat}><Text style={s.hudValue}>{stage === 'putt' ? `${puttFt}ft` : `${remaining}y`}</Text><Text style={s.hudLabel}>{stage === 'putt' ? 'TO THE CUP' : 'TO THE PIN'}</Text></View>
-              <View style={s.hudStat}><Text style={s.hudValue}>{strokes}</Text><Text style={s.hudLabel}>STROKES</Text></View>
-              <View style={s.hudStat}><Text style={s.hudValue}>{lie.toUpperCase()}</Text><Text style={s.hudLabel}>LIE</Text></View>
+              <View style={s.hudStat}><Text style={s.hudValue}>{strokes}</Text><Text style={s.hudLabel}>{t('swinglab_simround.swing_sim_screen.strokes')}</Text></View>
+              <View style={s.hudStat}><Text style={s.hudValue}>{lie.toUpperCase()}</Text><Text style={s.hudLabel}>{t('swinglab_simround.swing_sim_screen.lie')}</Text></View>
             </View>
             {stage === 'shot' || stage === 'result' ? (
               <>
@@ -520,12 +522,12 @@ export default function SwingSimScreen() {
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
-                <TouchableOpacity style={[s.swingBtn, armed && s.swingBtnArmed]} onPress={() => (armed ? null : arm('swing'))} accessibilityRole="button" accessibilityLabel="Arm the swing">
+                <TouchableOpacity style={[s.swingBtn, armed && s.swingBtnArmed]} onPress={() => (armed ? null : arm('swing'))} accessibilityRole="button" accessibilityLabel={t('swinglab_simround.accessibility_label.arm_the_swing')}>
                   <Text style={[s.swingBtnText, armed && { color: NEON }]}>{armed ? 'SWING THE PHONE — I\'M WATCHING' : `ARM ${club.toUpperCase()}`}</Text>
                 </TouchableOpacity>
               </>
             ) : stage === 'putt' ? (
-              <TouchableOpacity style={[s.swingBtn, armed && s.swingBtnArmed]} onPress={() => (armed ? null : arm('putt'))} accessibilityRole="button" accessibilityLabel="Arm the putt">
+              <TouchableOpacity style={[s.swingBtn, armed && s.swingBtnArmed]} onPress={() => (armed ? null : arm('putt'))} accessibilityRole="button" accessibilityLabel={t('swinglab_simround.accessibility_label.arm_the_putt')}>
                 <Text style={[s.swingBtnText, armed && { color: NEON }]}>{armed ? 'STROKE IT — I\'M WATCHING' : 'ARM THE PUTT'}</Text>
               </TouchableOpacity>
             ) : stage === 'holeout' ? (

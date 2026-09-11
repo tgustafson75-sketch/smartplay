@@ -22,6 +22,7 @@ import { startMeteredRecording, type MeteringHandle } from '../../services/swing
 import { detectStrikes, type DetectedStrike } from '../../services/swing/strikeDetector';
 import { TRANSIENT_THRESHOLD_DB } from '../../constants/cageDetection';
 import { useAcousticCalibrationStore } from '../../store/acousticCalibrationStore';
+import { useTranslation } from 'react-i18next';
 
 const TARGET_STRIKES = 10;
 
@@ -35,6 +36,7 @@ const ENVS: { key: Env; label: string; icon: React.ComponentProps<typeof Ionicon
 ];
 
 export default function CalibrateAcoustics() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -67,7 +69,7 @@ export default function CalibrateAcoustics() {
     if (!micPerm?.granted) {
       const r = await requestMicPerm();
       if (!r.granted) {
-        Alert.alert('Microphone needed', 'Calibration listens to your ball strikes. Allow microphone access to record.');
+        Alert.alert(t('swinglab_calibrate.alert.microphone_needed'), t('swinglab_calibrate.alert.calibration_listens_to_your_ball'));
         return;
       }
     }
@@ -81,7 +83,7 @@ export default function CalibrateAcoustics() {
       meteringRef.current = await startMeteredRecording((s) => setLiveDb(s.dB));
     } catch (e) {
       setPhase('idle');
-      Alert.alert('Could not start', e instanceof Error ? e.message : String(e));
+      Alert.alert(t('swinglab_calibrate.alert.could_not_start'), e instanceof Error ? e.message : String(e));
       return;
     }
     const startedAt = Date.now();
@@ -117,7 +119,7 @@ export default function CalibrateAcoustics() {
       res = detectStrikes(samples, { minRecordingMs: 1500, minDebounceMs: 350, noisyFloorDb, thresholdDb: TRANSIENT_THRESHOLD_DB });
     } catch (e) {
       setPhase('idle');
-      Alert.alert('Calibration failed', e instanceof Error ? e.message : String(e));
+      Alert.alert(t('swinglab_calibrate.alert.calibration_failed'), e instanceof Error ? e.message : String(e));
       return;
     }
     if (res.kind === 'too-short') {
@@ -154,7 +156,7 @@ export default function CalibrateAcoustics() {
     const ok = applyCalibration(id);
     if (ok) {
       Alert.alert(
-        'Dialed in ✓',
+        t('swinglab_calibrate.alert.dialed_in'),
         `Smart Motion is tuned to your ${env} — read ${r.strikes.length} strike${r.strikes.length === 1 ? '' : 's'}. It'll detect your swings automatically now.`,
         [{ text: 'Done', onPress: () => router.back() }],
       );
@@ -177,7 +179,7 @@ export default function CalibrateAcoustics() {
     });
     const ok = applyCalibration(id);
     if (ok) {
-      Alert.alert('Calibrated', `Smart Motion is tuned to your ${env}. It will now detect your strikes automatically.`, [
+      Alert.alert(t('swinglab_calibrate.alert.calibrated'), `Smart Motion is tuned to your ${env}. It will now detect your strikes automatically.`, [
         { text: 'Done', onPress: () => router.back() },
       ]);
     } else {
@@ -192,10 +194,10 @@ export default function CalibrateAcoustics() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background, paddingTop: insets.top + 8, paddingBottom: insets.bottom + 16 }]}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back">
+        <Pressable onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('swinglab_calibrate.accessibility_label.back')}>
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </Pressable>
-        <Text style={[styles.title, { color: colors.text_primary }]}>Calibrate Acoustics</Text>
+        <Text style={[styles.title, { color: colors.text_primary }]}>{t('swinglab_calibrate.calibrate_acoustics.calibrate_acoustics')}</Text>
         <View style={{ width: 26 }} />
       </View>
 
@@ -204,7 +206,7 @@ export default function CalibrateAcoustics() {
       </Text>
 
       {/* Environment */}
-      <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>WHERE ARE YOU?</Text>
+      <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>{t('swinglab_calibrate.calibrate_acoustics.where_are_you')}</Text>
       <View style={styles.envRow}>
         {ENVS.map((e) => {
           const sel = e.key === env;
@@ -260,23 +262,23 @@ export default function CalibrateAcoustics() {
       {phase === 'recording' ? (
         <Pressable onPress={() => void stop()} style={[styles.btn, { backgroundColor: colors.error }]}>
           <Ionicons name="stop" size={18} color="#fff" />
-          <Text style={styles.btnText}>Done</Text>
+          <Text style={styles.btnText}>{t('swinglab_calibrate.calibrate_acoustics.done')}</Text>
         </Pressable>
       ) : phase === 'done' ? (
         <View style={{ gap: 10 }}>
           <Pressable onPress={saveAndApply} disabled={detectedCount < 1} style={[styles.btn, { backgroundColor: detectedCount < 1 ? colors.border : colors.accent }]}>
             <Ionicons name="checkmark" size={18} color="#06281b" />
-            <Text style={[styles.btnText, { color: '#06281b' }]}>Save & apply</Text>
+            <Text style={[styles.btnText, { color: '#06281b' }]}>{t('swinglab_calibrate.calibrate_acoustics.save_apply')}</Text>
           </Pressable>
           <Pressable onPress={() => void start()} style={[styles.btnOutline, { borderColor: colors.border }]}>
             <Ionicons name="refresh" size={16} color={colors.text_secondary} />
-            <Text style={[styles.btnOutlineText, { color: colors.text_secondary }]}>Retake</Text>
+            <Text style={[styles.btnOutlineText, { color: colors.text_secondary }]}>{t('swinglab_calibrate.calibrate_acoustics.retake')}</Text>
           </Pressable>
         </View>
       ) : (
         <Pressable onPress={() => void start()} style={[styles.btn, { backgroundColor: colors.accent }]}>
           {!micPerm ? <ActivityIndicator color="#06281b" /> : <Ionicons name="radio-button-on" size={18} color="#06281b" />}
-          <Text style={[styles.btnText, { color: '#06281b' }]}>Record</Text>
+          <Text style={[styles.btnText, { color: '#06281b' }]}>{t('swinglab_calibrate.calibrate_acoustics.record')}</Text>
         </Pressable>
       )}
     </View>

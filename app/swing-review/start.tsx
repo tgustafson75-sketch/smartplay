@@ -12,8 +12,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { startReviewSession , getShotsForReview } from '../../services/cageReview';
 import { REVIEW_MODES, type ReviewSession } from '../../types/practiceReview';
+import { useTranslation } from 'react-i18next';
 
 export default function CageReviewStart() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { session_id } = useLocalSearchParams<{ session_id: string }>();
   const { sessionHistory } = useSwingSessionStore();
@@ -27,12 +29,12 @@ export default function CageReviewStart() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Text style={styles.backText}>← Back</Text>
+            <Text style={styles.backText}>{t('swing_review_start.cage_review_start.back')}</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>Session not found</Text>
-          <Text style={styles.emptyText}>This session may have been cleared from history.</Text>
+          <Text style={styles.emptyTitle}>{t('swing_review_start.cage_review_start.session_not_found')}</Text>
+          <Text style={styles.emptyText}>{t('swing_review_start.cage_review_start.this_session_may_have_been')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -43,12 +45,12 @@ export default function CageReviewStart() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Text style={styles.backText}>← Back</Text>
+            <Text style={styles.backText}>{t('swing_review_start.cage_review_start.back')}</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>No swings logged</Text>
-          <Text style={styles.emptyText}>No swings were detected this session. Start another session to use review mode.</Text>
+          <Text style={styles.emptyTitle}>{t('swing_review_start.cage_review_start.no_swings_logged')}</Text>
+          <Text style={styles.emptyText}>{t('swing_review_start.cage_review_start.no_swings_were_detected_this')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -76,9 +78,9 @@ export default function CageReviewStart() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backText}>← Back</Text>
+          <Text style={styles.backText}>{t('swing_review_start.cage_review_start.back')}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Review with Kevin</Text>
+        <Text style={styles.headerTitle}>{t('swing_review_start.cage_review_start.review_with_kevin')}</Text>
         <View style={styles.backBtn} />
       </View>
 
@@ -87,7 +89,7 @@ export default function CageReviewStart() {
           {session.club} · {session.shots.length} shots
         </Text>
 
-        <Text style={styles.sectionLabel}>REVIEW MODE</Text>
+        <Text style={styles.sectionLabel}>{t('swing_review_start.cage_review_start.review_mode')}</Text>
 
         {REVIEW_MODES.map(mode => (
           <TouchableOpacity

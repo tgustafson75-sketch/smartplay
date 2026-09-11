@@ -30,12 +30,14 @@ import { usePracticePointsStore } from '../../store/practicePointsStore';
 import { usePracticeSessionStore } from '../../store/practiceSessionStore';
 import { useCaddieMemoryStore } from '../../store/caddieMemoryStore';
 import { useToastStore } from '../../store/toastStore';
+import { useTranslation } from 'react-i18next';
 
 const NEON = '#88F700';
 
 type Stage = 'intro' | 'live' | 'summary';
 
 export default function IndoorHotelModeScreen() {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const router = useRouter();
   const [mode, setMode] = useState<IndoorMode>('swing');
@@ -187,12 +189,12 @@ export default function IndoorHotelModeScreen() {
     <SafeAreaView style={s.root}>
       {/* Header */}
       <View style={s.header}>
-        <TouchableOpacity onPress={() => { stopSensor(); router.back(); }} accessibilityRole="button" accessibilityLabel="Back">
+        <TouchableOpacity onPress={() => { stopSensor(); router.back(); }} accessibilityRole="button" accessibilityLabel={t('swinglab_indoor.accessibility_label.back')}>
           <Ionicons name="chevron-back" size={26} color="#fff" />
         </TouchableOpacity>
         <View style={{ alignItems: 'center' }}>
-          <Text style={s.title}>HOTEL MODE</Text>
-          <Text style={s.subtitle}>tempo anywhere · no ball needed</Text>
+          <Text style={s.title}>{t('swinglab_indoor.indoor_hotel_mode_screen.hotel_mode')}</Text>
+          <Text style={s.subtitle}>{t('swinglab_indoor.indoor_hotel_mode_screen.tempo_anywhere_no_ball_needed')}</Text>
         </View>
         <View style={{ width: 26 }} />
       </View>
@@ -225,10 +227,10 @@ export default function IndoorHotelModeScreen() {
                 : 'Grip it lightly like a putter and make real strokes. I\'ll read the rhythm and whether you accelerate through.'}
             </Text>
           </View>
-          <TouchableOpacity style={s.startBtn} onPress={start} accessibilityRole="button" accessibilityLabel="Start">
-            <Text style={s.startBtnText}>START</Text>
+          <TouchableOpacity style={s.startBtn} onPress={start} accessibilityRole="button" accessibilityLabel={t('swinglab_indoor.accessibility_label.start')}>
+            <Text style={s.startBtnText}>{t('swinglab_indoor.indoor_hotel_mode_screen.start')}</Text>
           </TouchableOpacity>
-          <Text style={s.honestLine}>Rhythm & tempo only — no ball flight is claimed indoors.</Text>
+          <Text style={s.honestLine}>{t('swinglab_indoor.indoor_hotel_mode_screen.rhythm_tempo_only_no_ball')}</Text>
         </View>
       ) : stage === 'live' ? (
         <View style={s.centerWrap}>
@@ -269,8 +271,8 @@ export default function IndoorHotelModeScreen() {
           </View>
           <Text style={s.repCount}>{reps.length} {reps.length === 1 ? 'rep' : 'reps'}</Text>
 
-          <TouchableOpacity style={s.doneBtn} onPress={finish} accessibilityRole="button" accessibilityLabel="Finish set">
-            <Text style={s.doneBtnText}>DONE — READ MY SET</Text>
+          <TouchableOpacity style={s.doneBtn} onPress={finish} accessibilityRole="button" accessibilityLabel={t('swinglab_indoor.accessibility_label.finish_set')}>
+            <Text style={s.doneBtnText}>{t('swinglab_indoor.indoor_hotel_mode_screen.done_read_my_set')}</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -284,29 +286,29 @@ export default function IndoorHotelModeScreen() {
             </View>
             <View style={s.statCard}>
               <Text style={s.statValue}>{summary.consistency != null ? `${summary.consistency}` : '—'}</Text>
-              <Text style={s.statLabel}>CONSISTENCY / 100</Text>
+              <Text style={s.statLabel}>{t('swinglab_indoor.indoor_hotel_mode_screen.consistency_100')}</Text>
             </View>
             <View style={s.statCard}>
               <Text style={s.statValue}>{summary.reps}</Text>
-              <Text style={s.statLabel}>REPS READ</Text>
+              <Text style={s.statLabel}>{t('swinglab_indoor.indoor_hotel_mode_screen.reps_read')}</Text>
             </View>
             <View style={s.statCard}>
               <Text style={s.statValue}>{summary.smoothCount}/{summary.reps}</Text>
-              <Text style={s.statLabel}>SMOOTH TRANSITIONS</Text>
+              <Text style={s.statLabel}>{t('swinglab_indoor.indoor_hotel_mode_screen.smooth_transitions')}</Text>
             </View>
           </View>
 
           {mode === 'putt' && summary.decelCount != null && summary.reps > 0 ? (
             <View style={[s.holdCard, { marginTop: 14 }]}>
               <Text style={s.holdTitle}>{summary.decelCount === 0 ? 'Accelerating through — that\'s the stroke.' : `${summary.decelCount} of ${summary.reps} decelerated into the ball`}</Text>
-              <Text style={s.holdText}>Decel is the classic three-putt move. Shorter backstroke, accelerate through the strike.</Text>
+              <Text style={s.holdText}>{t('swinglab_indoor.indoor_hotel_mode_screen.decel_is_the_classic_three')}</Text>
             </View>
           ) : null}
 
           {/* Per-rep strip */}
           {reps.length > 0 ? (
             <View style={{ marginTop: 14 }}>
-              <Text style={s.sectionLabel}>EVERY REP</Text>
+              <Text style={s.sectionLabel}>{t('swinglab_indoor.indoor_hotel_mode_screen.every_rep')}</Text>
               {reps.map((r, i) => (
                 <View key={i} style={s.repRow}>
                   <Text style={s.repIdx}>{i + 1}</Text>
@@ -320,13 +322,13 @@ export default function IndoorHotelModeScreen() {
             </View>
           ) : null}
 
-          <TouchableOpacity style={[s.startBtn, { marginTop: 20 }]} onPress={start} accessibilityRole="button" accessibilityLabel="Run another set">
-            <Text style={s.startBtnText}>RUN IT BACK</Text>
+          <TouchableOpacity style={[s.startBtn, { marginTop: 20 }]} onPress={start} accessibilityRole="button" accessibilityLabel={t('swinglab_indoor.accessibility_label.run_another_set')}>
+            <Text style={s.startBtnText}>{t('swinglab_indoor.indoor_hotel_mode_screen.run_it_back')}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={s.ghostBtn} onPress={() => { stopSensor(); router.back(); }} accessibilityRole="button" accessibilityLabel="Done">
-            <Text style={s.ghostBtnText}>Done for tonight</Text>
+          <TouchableOpacity style={s.ghostBtn} onPress={() => { stopSensor(); router.back(); }} accessibilityRole="button" accessibilityLabel={t('swinglab_indoor.accessibility_label.done')}>
+            <Text style={s.ghostBtnText}>{t('swinglab_indoor.indoor_hotel_mode_screen.done_for_tonight')}</Text>
           </TouchableOpacity>
-          <Text style={s.honestLine}>Rhythm & tempo only — no ball flight is claimed indoors. Reps feed your caddie&apos;s one tempo picture.</Text>
+          <Text style={s.honestLine}>{t('swinglab_indoor.indoor_hotel_mode_screen.rhythm_tempo_only_no_ball_2')}</Text>
         </ScrollView>
       )}
     </SafeAreaView>

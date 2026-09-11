@@ -24,6 +24,7 @@ import { getLastFix as getSmartFinderLastFix } from '../services/smartFinderServ
 import { getLastFix as getGpsLastFix, getOneShotFix } from '../services/gpsManager';
 import { track } from '../services/analytics';
 import type { ShotOutcome } from '../types/shot';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   visible: boolean;
@@ -74,6 +75,7 @@ function snapshotLocation(): { loc: ShotLocation | null; ageMs: number | null; a
 }
 
 export default function QuickLogShotSheet({ visible, onClose }: Props) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const isRoundActive = useRoundStore(s => s.isRoundActive);
@@ -185,7 +187,7 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
               Log shot · hole {holeOverride ?? currentHole}
             </Text>
             <TouchableOpacity onPress={onClose}>
-              <Text style={[styles.cancel, { color: colors.text_muted }]}>Cancel</Text>
+              <Text style={[styles.cancel, { color: colors.text_muted }]}>{t('play.cancel')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -227,7 +229,7 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
               );
             })()}
 
-            <Text style={[styles.label, { color: colors.text_muted, marginTop: 12 }]}>Hole</Text>
+            <Text style={[styles.label, { color: colors.text_muted, marginTop: 12 }]}>{t('quick_log_shot_sheet.text.hole')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View style={[styles.chipRow, { flexWrap: 'nowrap' }]}>
                 {Array.from({ length: courseHolesCount }, (_, i) => i + 1).map(h => {
@@ -253,7 +255,7 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
               </View>
             </ScrollView>
 
-            <Text style={[styles.label, { color: colors.text_muted, marginTop: 12 }]}>Club</Text>
+            <Text style={[styles.label, { color: colors.text_muted, marginTop: 12 }]}>{t('quick_log_shot_sheet.text.club')}</Text>
             <View style={styles.chipRow}>
               {CLUBS.map(c => (
                 <TouchableOpacity
@@ -274,7 +276,7 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
               ))}
             </View>
 
-            <Text style={[styles.label, { color: colors.text_muted, marginTop: 12 }]}>Distance (yards, optional)</Text>
+            <Text style={[styles.label, { color: colors.text_muted, marginTop: 12 }]}>{t('quick_log_shot_sheet.text.distance_yards_optional')}</Text>
             <TextInput
               value={distance}
               onChangeText={setDistance}
@@ -287,7 +289,7 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
               ]}
             />
 
-            <Text style={[styles.label, { color: colors.text_muted, marginTop: 12 }]}>Outcome</Text>
+            <Text style={[styles.label, { color: colors.text_muted, marginTop: 12 }]}>{t('quick_log_shot_sheet.text.outcome')}</Text>
             <View style={styles.chipRow}>
               {OUTCOMES.map(o => (
                 <TouchableOpacity
@@ -308,7 +310,7 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
               ))}
             </View>
 
-            <Text style={[styles.label, { color: colors.text_muted, marginTop: 12 }]}>Direction (optional)</Text>
+            <Text style={[styles.label, { color: colors.text_muted, marginTop: 12 }]}>{t('quick_log_shot_sheet.text.direction_optional')}</Text>
             <View style={styles.chipRow}>
               {DIRECTIONS.map(d => (
                 <TouchableOpacity

@@ -34,6 +34,7 @@ import { useFlag } from '../../store/flagStore';
 import {
   markChevronNav, consumeChevronNav, pushForward, popForward, hasForward, clearForward,
 } from '../../services/navHistory';
+import { useTranslation } from 'react-i18next';
 
 // Brand neon green (matches the caddie voice-state cue).
 const NEON = '#88F700';
@@ -58,6 +59,7 @@ export interface CaddieBottomBarProps {
 }
 
 export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: CaddieBottomBarProps) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const pathname = usePathname();
   const listeningState = useListeningSessionStore((s) => s.state);
@@ -116,7 +118,7 @@ export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: 
   return (
     <View style={s.bar} ref={barTarget.ref} onLayout={barTarget.onLayout}>
       {/* ‹ universal page back */}
-      <TouchableOpacity onPress={goBack} style={s.chevron} accessibilityRole="button" accessibilityLabel="Back"
+      <TouchableOpacity onPress={goBack} style={s.chevron} accessibilityRole="button" accessibilityLabel={t('caddie_caddie_bottom_bar.accessibility_label.back')}
         hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
         <Ionicons name="chevron-back" size={24} color={ON_BAR_TEXT} />
       </TouchableOpacity>
@@ -133,7 +135,7 @@ export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: 
         onPress={onMic}
         style={[s.mic, isListening && s.micActive]}
         accessibilityRole="button"
-        accessibilityLabel="Tap to talk to your caddie"
+        accessibilityLabel={t('caddie_caddie_bottom_bar.accessibility_label.tap_to_talk_to_your')}
       >
         <Image source={MIC_CADDIE} style={s.micImg} resizeMode="contain" />
       </TouchableOpacity>
@@ -151,24 +153,24 @@ export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: 
         onBlur={() => setFocused(false)}
         blurOnSubmit={false}
         editable={!busy}
-        accessibilityLabel="Type a question or command for your caddie"
+        accessibilityLabel={t('caddie_caddie_bottom_bar.accessibility_label.type_a_question_or_command')}
       />
 
       {text.trim() ? (
-        <TouchableOpacity onPress={submit} style={s.send} accessibilityRole="button" accessibilityLabel="Send to caddie">
+        <TouchableOpacity onPress={submit} style={s.send} accessibilityRole="button" accessibilityLabel={t('caddie_caddie_bottom_bar.accessibility_label.send_to_caddie')}>
           <Ionicons name="arrow-up" size={18} color="#0d1a0d" />
         </TouchableOpacity>
       ) : focused ? (
         // Keyboard is up with an empty field → tap to minimize it (tester request).
         <TouchableOpacity onPress={() => Keyboard.dismiss()} style={s.chevron}
-          accessibilityRole="button" accessibilityLabel="Hide keyboard"
+          accessibilityRole="button" accessibilityLabel={t('caddie_caddie_bottom_bar.accessibility_label.hide_keyboard')}
           hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
           <Ionicons name="chevron-down" size={24} color={ON_BAR_TEXT} />
         </TouchableOpacity>
       ) : (
         // › universal page forward (disabled/dim when there's nowhere forward)
         <TouchableOpacity onPress={goForward} disabled={!canForward} style={[s.chevron, { opacity: canForward ? 1 : 0.3 }]}
-          accessibilityRole="button" accessibilityLabel="Forward"
+          accessibilityRole="button" accessibilityLabel={t('caddie_caddie_bottom_bar.accessibility_label.forward')}
           hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
           <Ionicons name="chevron-forward" size={24} color={ON_BAR_TEXT} />
         </TouchableOpacity>

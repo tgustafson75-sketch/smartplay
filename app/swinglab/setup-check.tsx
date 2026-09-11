@@ -26,12 +26,14 @@ import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { getCaddieName } from '../../lib/persona';
 import { speak, stopSpeaking } from '../../services/voiceService';
 import { getApiBaseUrl } from '../../services/apiBase';
+import { useTranslation } from 'react-i18next';
 
 const apiUrl = getApiBaseUrl();
 
 type Phase = 'camera' | 'analyzing' | 'result';
 
 export default function SetupCheckScreen() {
+  const { t } = useTranslation();
   useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -128,7 +130,7 @@ export default function SetupCheckScreen() {
   const header = (title: string) => (
     <View style={styles.header}>
       <TouchableOpacity onPress={() => safeBack()} style={styles.headerBtn}>
-        <Text style={styles.headerBtnText}>← Back</Text>
+        <Text style={styles.headerBtnText}>{t('swinglab_setup_check.setup_check_screen.back')}</Text>
       </TouchableOpacity>
       <Text style={styles.headerTitle}>{title}</Text>
       <View style={styles.headerBtn} />
@@ -142,12 +144,12 @@ export default function SetupCheckScreen() {
         {header('SETUP CHECK')}
         <View style={styles.gateBox}>
           <Ionicons name="construct-outline" size={40} color="#00C896" />
-          <Text style={styles.gateTitle}>Almost ready</Text>
+          <Text style={styles.gateTitle}>{t('swinglab_setup_check.setup_check_screen.almost_ready')}</Text>
           <Text style={styles.gateBody}>
-            The pre-round Setup Check turns on with the next update. It&apos;ll read your address — grip, stance, ball position — and give you one thing to dial in before the first tee.
+            {t('swinglab_setup_check.setup_check_screen.the_pre_round_setup_check')}
           </Text>
           <TouchableOpacity style={styles.gateBtn} onPress={() => safeBack()}>
-            <Text style={styles.gateBtnText}>Got it</Text>
+            <Text style={styles.gateBtnText}>{t('swinglab_setup_check.setup_check_screen.got_it')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -160,7 +162,7 @@ export default function SetupCheckScreen() {
         {header('SETUP CHECK')}
         <View style={styles.gateBox}>
           <ActivityIndicator color="#00C896" />
-          <Text style={[styles.gateBody, { marginTop: 12 }]}>Checking camera permission…</Text>
+          <Text style={[styles.gateBody, { marginTop: 12 }]}>{t('swinglab_setup_check.setup_check_screen.checking_camera_permission')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -170,8 +172,8 @@ export default function SetupCheckScreen() {
       <SafeAreaView style={styles.container}>
         {header('SETUP CHECK')}
         <View style={styles.gateBox}>
-          <Text style={styles.gateTitle}>Camera Access</Text>
-          <Text style={styles.gateBody}>Setup Check needs the camera to read your address position. The photo only leaves your device to be analyzed.</Text>
+          <Text style={styles.gateTitle}>{t('swinglab_setup_check.setup_check_screen.camera_access')}</Text>
+          <Text style={styles.gateBody}>{t('swinglab_setup_check.setup_check_screen.setup_check_needs_the_camera')}</Text>
           <TouchableOpacity
             style={styles.gateBtn}
             onPress={async () => {
@@ -202,10 +204,10 @@ export default function SetupCheckScreen() {
         ) : (
           <View style={styles.gateBox}>
             <Ionicons name="eye-off-outline" size={40} color="#9ca3af" />
-            <Text style={styles.gateTitle}>Couldn&apos;t read your setup</Text>
+            <Text style={styles.gateTitle}>{t('swinglab_setup_check.setup_check_screen.couldn_t_read_your_setup')}</Text>
             <Text style={styles.gateBody}>{result.reason}</Text>
             <TouchableOpacity style={styles.gateBtn} onPress={retake}>
-              <Text style={styles.gateBtnText}>Retake</Text>
+              <Text style={styles.gateBtnText}>{t('swinglab_setup_check.setup_check_screen.retake')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -222,7 +224,7 @@ export default function SetupCheckScreen() {
         <TouchableOpacity onPress={() => safeBack()} style={styles.iconBtn}>
           <Ionicons name="chevron-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.cameraTitle}>SETUP CHECK</Text>
+        <Text style={styles.cameraTitle}>{t('swinglab_setup_check.setup_check_screen.setup_check')}</Text>
         <TouchableOpacity onPress={() => setFacing(f => (f === 'back' ? 'front' : 'back'))} style={styles.iconBtn} disabled={phase === 'analyzing'}>
           <Ionicons name="camera-reverse-outline" size={22} color="#fff" />
         </TouchableOpacity>
@@ -246,7 +248,7 @@ export default function SetupCheckScreen() {
       {phase === 'camera' && countdown != null && (
         <TouchableOpacity style={styles.countdownOverlay} activeOpacity={1} onPress={handleShutter}>
           <Text style={styles.countdownNumber}>{countdown}</Text>
-          <Text style={styles.countdownHint}>Get into your address · tap to cancel</Text>
+          <Text style={styles.countdownHint}>{t('swinglab_setup_check.setup_check_screen.get_into_your_address_tap')}</Text>
         </TouchableOpacity>
       )}
 
@@ -277,7 +279,7 @@ export default function SetupCheckScreen() {
         ) : (
           <View style={styles.analyzingBox}>
             <ActivityIndicator color="#00C896" />
-            <Text style={styles.analyzingText}>Reading your setup…</Text>
+            <Text style={styles.analyzingText}>{t('swinglab_setup_check.setup_check_screen.reading_your_setup')}</Text>
           </View>
         )}
       </View>

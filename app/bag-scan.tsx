@@ -19,6 +19,7 @@ import { safeBack } from '../services/safeBack';
 import { scanBagFromVideo, type ScannedClub } from '../services/bagScan';
 import { useClubBagStore } from '../store/clubBagStore';
 import type { ClubId } from '../services/clubRecognition';
+import { useTranslation } from 'react-i18next';
 
 type EditableClub = ScannedClub & { include: boolean };
 type Phase = 'idle' | 'scanning' | 'review';
@@ -26,6 +27,7 @@ type Phase = 'idle' | 'scanning' | 'review';
 const VIDEO_MAX_SECONDS = 10;
 
 export default function BagScanScreen() {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const registerClub = useClubBagStore((s) => s.registerClub);
   const [phase, setPhase] = useState<Phase>('idle');
@@ -86,17 +88,17 @@ export default function BagScanScreen() {
   return (
     <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => safeBack()} style={s.headerBtn} accessibilityRole="button" accessibilityLabel="Back">
+        <TouchableOpacity onPress={() => safeBack()} style={s.headerBtn} accessibilityRole="button" accessibilityLabel={t('bag_scan.accessibility_label.back')}>
           <Ionicons name="chevron-back" size={24} color={colors.text_primary} />
         </TouchableOpacity>
-        <Text style={s.title}>Scan My Bag</Text>
+        <Text style={s.title}>{t('bag_scan.bag_scan_screen.scan_my_bag')}</Text>
         <View style={s.headerBtn} />
       </View>
 
       {phase === 'scanning' ? (
         <View style={s.center}>
           <ActivityIndicator size="large" color={colors.accent} />
-          <Text style={s.dim}>Reading your clubs…</Text>
+          <Text style={s.dim}>{t('bag_scan.bag_scan_screen.reading_your_clubs')}</Text>
         </View>
       ) : phase === 'review' ? (
         <>
@@ -121,9 +123,9 @@ export default function BagScanScreen() {
                   />
                 </View>
                 <View style={s.fieldRow}>
-                  <TextInput style={s.field} value={c.brand} onChangeText={(v) => edit(i, 'brand', v)} placeholder="Brand" placeholderTextColor={colors.text_muted} />
-                  <TextInput style={s.field} value={c.model} onChangeText={(v) => edit(i, 'model', v)} placeholder="Model" placeholderTextColor={colors.text_muted} />
-                  <TextInput style={[s.field, { flex: 0.5 }]} value={c.loft} onChangeText={(v) => edit(i, 'loft', v)} placeholder="Loft" placeholderTextColor={colors.text_muted} />
+                  <TextInput style={s.field} value={c.brand} onChangeText={(v) => edit(i, 'brand', v)} placeholder={t('bag_scan.placeholder.brand')} placeholderTextColor={colors.text_muted} />
+                  <TextInput style={s.field} value={c.model} onChangeText={(v) => edit(i, 'model', v)} placeholder={t('bag_scan.placeholder.model')} placeholderTextColor={colors.text_muted} />
+                  <TextInput style={[s.field, { flex: 0.5 }]} value={c.loft} onChangeText={(v) => edit(i, 'loft', v)} placeholder={t('bag_scan.placeholder.loft')} placeholderTextColor={colors.text_muted} />
                 </View>
               </View>
             ))}
@@ -141,12 +143,12 @@ export default function BagScanScreen() {
       ) : (
         <View style={s.center}>
           <Ionicons name="videocam-outline" size={48} color={colors.accent} />
-          <Text style={s.pitch}>Record a slow pan across your clubs</Text>
-          <Text style={s.dim}>Keep the heads in view and well-lit. A few seconds is plenty — we read the set from the video, so you don&apos;t have to photograph each club.</Text>
+          <Text style={s.pitch}>{t('bag_scan.bag_scan_screen.record_a_slow_pan_across')}</Text>
+          <Text style={s.dim}>{t('bag_scan.bag_scan_screen.keep_the_heads_in_view')}</Text>
           {error && <Text style={s.err}>{error}</Text>}
           <TouchableOpacity onPress={recordAndScan} style={s.primaryBtn} accessibilityRole="button">
             <Ionicons name="videocam" size={18} color="#0d1a0d" />
-            <Text style={s.primaryText}>Record my bag</Text>
+            <Text style={s.primaryText}>{t('bag_scan.bag_scan_screen.record_my_bag')}</Text>
           </TouchableOpacity>
         </View>
       )}

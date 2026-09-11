@@ -8,6 +8,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import type { HoleComparison, MatchedShot } from '../../types/plan';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   comparison: HoleComparison;
@@ -35,11 +36,12 @@ function resultColor(r: MatchedShot['result']): string {
 }
 
 export default function OutcomeCard({ comparison }: Props) {
+  const { t } = useTranslation();
   if (comparison.matched_shots.length === 0) return null;
 
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>OUTCOME</Text>
+      <Text style={styles.title}>{t('recap_outcome_card.outcome_card.outcome')}</Text>
       <View style={styles.rows}>
         {comparison.matched_shots.map((m, i) => {
           const shot = m.actual_shot;
@@ -54,7 +56,7 @@ export default function OutcomeCard({ comparison }: Props) {
                 <Text style={styles.shotIdx}>Shot {i + 1}</Text>
               </View>
               <View style={styles.col}>
-                <Text style={styles.colHead}>ACTUAL</Text>
+                <Text style={styles.colHead}>{t('recap_outcome_card.outcome_card.actual')}</Text>
                 <Text style={styles.colValue}>
                   {actualClub}
                   {dir ? ' · ' + dir : ''}

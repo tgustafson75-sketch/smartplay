@@ -93,4 +93,5 @@ SmartPlay_VO_*.mp3
 _handoff
 
 # i18n codemod scratch output — regenerable, see docs/I18N-1.5.md
-scripts/codemod/.i18n-*.json
+scripts/codemod/.i18n-newkeys.json
+scripts/codemod/.i18n-skipped.json

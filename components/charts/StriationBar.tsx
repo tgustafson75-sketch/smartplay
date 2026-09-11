@@ -11,6 +11,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Rect } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 
 export interface StriationSegment {
   label: string;
@@ -30,12 +31,13 @@ export interface StriationBarProps {
 const DEFAULT_PALETTE = ['#34d399', '#60a5fa', '#fbbf24', '#f472b6', '#a78bfa', '#fb923c', '#22d3ee', '#a3e635'];
 
 export default function StriationBar({ segments, width, height = 18, colors = DEFAULT_PALETTE }: StriationBarProps) {
+  const { t } = useTranslation();
   const valid = segments.filter((s) => s.value > 0);
   const total = valid.reduce((sum, s) => sum + s.value, 0);
   if (valid.length === 0 || total <= 0) {
     return (
       <View style={[styles.emptyWrap, { width }]}>
-        <Text style={styles.emptyText}>No per-club breakdown yet</Text>
+        <Text style={styles.emptyText}>{t('charts_striation_bar.striation_bar.no_per_club_breakdown_yet')}</Text>
       </View>
     );
   }

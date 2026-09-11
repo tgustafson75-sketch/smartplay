@@ -22,6 +22,7 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
 
 export interface FrontMiddleBack {
   front: number | null;
@@ -52,6 +53,7 @@ export function DistanceCard({
   unit = 'yards',
   onPressOpenRangefinder,
 }: DistanceCardProps) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
 
   const middle = fmb?.middle ?? baseYardage ?? null;
@@ -97,7 +99,7 @@ export function DistanceCard({
     >
       <View style={styles.headerRow}>
         <Text style={[styles.label, { color: colors.text_primary }]}>
-          <Text style={{ color: colors.accent }}>SMART </Text>FINDER
+          <Text style={{ color: colors.accent }}>{t('cockpit_distance_card.distance_card.smart')} </Text>{t('cockpit_distance_card.distance_card.finder')}
         </Text>
         {isScorecardFallback || isEstimated ? (
           <View style={[styles.scorecardPill, { borderColor: colors.text_muted }]}>
@@ -123,9 +125,9 @@ export function DistanceCard({
       </Text>
 
       <View style={[styles.fmbRow, { borderTopColor: colors.border }]}>
-        <FmbCell label="FRONT" value={front} accent />
-        <FmbCell label="CENTER" value={middle} hero />
-        <FmbCell label="BACK" value={back} accent />
+        <FmbCell label={t('cockpit_distance_card.label.front')} value={front} accent />
+        <FmbCell label={t('cockpit_distance_card.label.center')} value={middle} hero />
+        <FmbCell label={t('cockpit_distance_card.label.back')} value={back} accent />
       </View>
     </Pressable>
   );

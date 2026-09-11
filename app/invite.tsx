@@ -28,6 +28,7 @@ import {
   type ReferralStatus,
   type ClaimResult,
 } from '../services/billing/referral';
+import { useTranslation } from 'react-i18next';
 
 const CLAIM_MESSAGE: Record<ClaimResult, string> = {
   claimed: "You're in — thank your friend. They'll be rewarded once you've played a round.",
@@ -38,6 +39,7 @@ const CLAIM_MESSAGE: Record<ClaimResult, string> = {
 };
 
 export default function InviteScreen() {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const [status, setStatus] = useState<ReferralStatus | null>(null);
   const [link, setLink] = useState<string | null>(null);
@@ -118,59 +120,58 @@ export default function InviteScreen() {
   return (
     <SafeAreaView style={s.screen} edges={['top']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => safeBack()} accessibilityRole="button" accessibilityLabel="Back" hitSlop={10}>
+        <TouchableOpacity onPress={() => safeBack()} accessibilityRole="button" accessibilityLabel={t('invite.accessibility_label.back')} hitSlop={10}>
           <Ionicons name="chevron-back" size={26} color={colors.text_primary} />
         </TouchableOpacity>
-        <Text style={s.title}>Invite a friend</Text>
+        <Text style={s.title}>{t('invite.invite_screen.invite_a_friend')}</Text>
       </View>
 
       <ScrollView contentContainerStyle={s.body} keyboardShouldPersistTaps="handled">
         <Text style={s.lead}>{rewardLine}</Text>
         <Text style={s.sub}>
-          They have to actually get out and play — an install on its own doesn&apos;t count, which is what keeps
-          this fair for everyone.
+          {t('invite.invite_screen.they_have_to_actually_get')}
         </Text>
 
         <View style={s.card}>
-          <Text style={s.label}>YOUR CODE</Text>
+          <Text style={s.label}>{t('invite.invite_screen.your_code')}</Text>
           {loading ? (
             <ActivityIndicator color={colors.accent} />
           ) : status?.code ? (
             <>
               <Text style={s.code} selectable>{status.code}</Text>
               <TouchableOpacity style={[s.btn, !link && s.btnDisabled]} onPress={onShare} disabled={!link} accessibilityRole="button">
-                <Text style={s.btnText}>Share my invite</Text>
+                <Text style={s.btnText}>{t('invite.invite_screen.share_my_invite')}</Text>
               </TouchableOpacity>
               <View style={s.counts}>
                 <View style={s.countItem}>
                   <Text style={s.countVal}>{status.qualified}</Text>
-                  <Text style={s.countLbl}>PLAYED</Text>
+                  <Text style={s.countLbl}>{t('invite.invite_screen.played')}</Text>
                 </View>
                 <View style={s.countItem}>
                   <Text style={s.countVal}>{status.pending}</Text>
-                  <Text style={s.countLbl}>NOT YET</Text>
+                  <Text style={s.countLbl}>{t('invite.invite_screen.not_yet')}</Text>
                 </View>
               </View>
             </>
           ) : (
             // No code means no signal or the feature is off server-side. Say so plainly rather than
             // showing an empty box that reads as a broken screen.
-            <Text style={s.offline}>Your invite code will appear here once you&apos;re back online.</Text>
+            <Text style={s.offline}>{t('invite.invite_screen.your_invite_code_will_appear')}</Text>
           )}
         </View>
 
         <View style={s.card}>
-          <Text style={s.label}>GOT A CODE?</Text>
+          <Text style={s.label}>{t('invite.invite_screen.got_a_code')}</Text>
           <TextInput
             style={s.input}
             value={entry}
             onChangeText={(t) => setEntry(t.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
-            placeholder="ABC123XYZ0"
+            placeholder={t('invite.placeholder.abc123xyz0')}
             placeholderTextColor={colors.text_muted}
             autoCapitalize="characters"
             autoCorrect={false}
             maxLength={10}
-            accessibilityLabel="Invite code"
+            accessibilityLabel={t('invite.accessibility_label.invite_code')}
           />
           <TouchableOpacity
             style={[s.btn, (entry.length !== 10 || claiming) && s.btnDisabled]}

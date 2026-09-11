@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Phase D-1 — Banner for the Course Detail screen.
@@ -14,19 +15,20 @@ type Props = {
 };
 
 export default function CourseDetailBanner({ onMenuPress }: Props) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.bar, { paddingTop: insets.top + 8 }]}>
       <View style={styles.avatarDot} />
       <View style={styles.brand}>
-        <Text style={styles.brandName}>SmartPlay<Text style={styles.brandSub}> Caddie</Text></Text>
+        <Text style={styles.brandName}>{t('course_course_detail_banner.course_detail_banner.smartplay')}<Text style={styles.brandSub}> {t('course_course_detail_banner.course_detail_banner.caddie')}</Text></Text>
       </View>
       <TouchableOpacity
         onPress={onMenuPress}
         hitSlop={10}
         style={styles.menuBtn}
         accessibilityRole="button"
-        accessibilityLabel="Menu"
+        accessibilityLabel={t('course_course_detail_banner.accessibility_label.menu')}
       >
         <View style={styles.dot} />
         <View style={styles.dot} />

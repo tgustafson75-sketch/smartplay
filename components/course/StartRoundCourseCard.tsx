@@ -17,6 +17,7 @@ import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeome
 import { fetchCourseContent } from '../../services/courseContentService';
 import { getCourseImageryUrl } from '../../services/mapboxImagery';
 import type { Course } from '../../types/course';
+import { useTranslation } from 'react-i18next';
 
 type Props = {
   /** Course id (golfcourseapi). Pass null for local-only manual courses. */
@@ -26,6 +27,7 @@ type Props = {
 };
 
 export default function StartRoundCourseCard({ courseId, courseName }: Props) {
+  const { t } = useTranslation();
   const [course, setCourse] = useState<Course | null>(null);
   const [holesForModal, setHolesForModal] = useState<ModalHole[]>([]);
   const [heroUrl, setHeroUrl] = useState<string | null>(null);
@@ -124,7 +126,7 @@ export default function StartRoundCourseCard({ courseId, courseName }: Props) {
             // "aerial unavailable" placeholder, NOT an infinite spinner.
             <View style={[styles.hero, styles.heroPlaceholder]}>
               <AppIcon name="image-outline" size={26} color="#3a5245" />
-              <Text style={styles.heroUnavailable}>Aerial unavailable</Text>
+              <Text style={styles.heroUnavailable}>{t('course_start_round_course_card.start_round_course_card.aerial_unavailable')}</Text>
             </View>
           )}
           <View style={styles.heroOverlay}>
@@ -137,7 +139,7 @@ export default function StartRoundCourseCard({ courseId, courseName }: Props) {
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               style={styles.infoBtn}
               accessibilityRole="button"
-              accessibilityLabel="Open course details"
+              accessibilityLabel={t('course_start_round_course_card.accessibility_label.open_course_details')}
             >
               <AppIcon name="information-circle" size={26} color="#00C896" />
             </TouchableOpacity>
@@ -146,11 +148,11 @@ export default function StartRoundCourseCard({ courseId, courseName }: Props) {
 
         {tee && (
           <View style={styles.statsStrip}>
-            <Stat label="HOLES" value={String(tee.holes.length)} />
-            <Stat label="PAR" value={String(tee.par_total)} />
-            <Stat label="YARDS" value={tee.total_yards.toLocaleString()} />
-            {tee.course_rating != null ? <Stat label="RATING" value={tee.course_rating.toFixed(1)} /> : null}
-            {tee.slope_rating != null ? <Stat label="SLOPE" value={String(tee.slope_rating)} /> : null}
+            <Stat label={t('scorecard.holes')} value={String(tee.holes.length)} />
+            <Stat label={t('scorecard.par')} value={String(tee.par_total)} />
+            <Stat label={t('course_start_round_course_card.label.yards')} value={tee.total_yards.toLocaleString()} />
+            {tee.course_rating != null ? <Stat label={t('course_start_round_course_card.label.rating')} value={tee.course_rating.toFixed(1)} /> : null}
+            {tee.slope_rating != null ? <Stat label={t('course_start_round_course_card.label.slope')} value={String(tee.slope_rating)} /> : null}
           </View>
         )}
       </View>

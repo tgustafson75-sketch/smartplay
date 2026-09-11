@@ -22,6 +22,7 @@ import { Video, ResizeMode, Audio, type AVPlaybackStatus } from 'expo-av';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSettingsStore } from '../store/settingsStore';
+import { useTranslation } from 'react-i18next';
 
 // Cap how long we'll sit on this screen no matter what. 5s video + 2s
 // safety margin. If playback hasn't reported didJustFinish by then we
@@ -29,6 +30,7 @@ import { useSettingsStore } from '../store/settingsStore';
 const HARD_TIMEOUT_MS = 7_000;
 
 export default function IntroVideoScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: screenW, height: screenH } = useWindowDimensions();
@@ -117,7 +119,7 @@ export default function IntroVideoScreen() {
   };
 
   return (
-    <View style={styles.container} accessibilityLabel="Intro video">
+    <View style={styles.container} accessibilityLabel={t('intro_video.accessibility_label.intro_video')}>
       <Video
         ref={videoRef}
         source={require('../assets/intro/intro_video.mp4')}
@@ -140,10 +142,10 @@ export default function IntroVideoScreen() {
           onPress={() => exit('skipped')}
           style={[styles.skipBtn, { top: insets.top + 12 }]}
           accessibilityRole="button"
-          accessibilityLabel="Skip intro video"
+          accessibilityLabel={t('intro_video.accessibility_label.skip_intro_video')}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
-          <Text style={styles.skipText}>Skip</Text>
+          <Text style={styles.skipText}>{t('intro_video.intro_video_screen.skip')}</Text>
         </TouchableOpacity>
       )}
     </View>

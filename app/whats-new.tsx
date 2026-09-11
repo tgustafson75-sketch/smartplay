@@ -14,8 +14,10 @@ import Constants from 'expo-constants';
 import { useTheme } from '../contexts/ThemeContext';
 import { WHATS_NEW } from '../services/knowledgeBase/whatsNew';
 import { useWhatsNewStore } from '../store/whatsNewStore';
+import { useTranslation } from 'react-i18next';
 
 export default function WhatsNewScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const seenCount = useWhatsNewStore((s) => s.seenCount);
@@ -65,16 +67,16 @@ export default function WhatsNewScreen() {
   return (
     <SafeAreaView style={s.root} edges={['top']}>
       <View style={s.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button" accessibilityLabel="Back">
+        <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('whats_new.accessibility_label.back')}>
           <Ionicons name="chevron-back" size={26} color={colors.text_primary} />
         </Pressable>
-        <Text style={s.headerTitle}>What’s New</Text>
+        <Text style={s.headerTitle}>{t('whats_new.whats_new_screen.what_s_new')}</Text>
         <View style={s.versionPill}><Text style={s.versionText}>v{version}</Text></View>
       </View>
       <ScrollView contentContainerStyle={s.body}>
-        <Text style={s.intro}>The latest updates to SmartPlay Caddie. You can also just ask your caddie “what’s new?” anytime.</Text>
+        <Text style={s.intro}>{t('whats_new.whats_new_screen.the_latest_updates_to_smartplay')}</Text>
         {WHATS_NEW.length === 0 ? (
-          <Text style={s.empty}>No updates yet.</Text>
+          <Text style={s.empty}>{t('whats_new.whats_new_screen.no_updates_yet')}</Text>
         ) : (
           WHATS_NEW.map((e, i) => (
             <View key={i} style={s.card}>
@@ -83,7 +85,7 @@ export default function WhatsNewScreen() {
                 <View style={s.whenRow}>
                   <Text style={s.when}>{e.when}</Text>
                   {i < unseenAtOpen ? (
-                    <View style={s.newTag}><Text style={s.newTagText}>NEW</Text></View>
+                    <View style={s.newTag}><Text style={s.newTagText}>{t('whats_new.whats_new_screen.new')}</Text></View>
                   ) : null}
                 </View>
                 <Text style={s.note}>{e.note}</Text>

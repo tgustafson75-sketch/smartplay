@@ -137,7 +137,6 @@ export const PROSE_ASSERTION_BASELINE: readonly string[] = [
   "Segmentation: rebounds filtered, sessions can\\ :: services/swing/strikeDetector.ts :: /same strike group — the earlier peak \\(impact\\) already kept/",
   "SmartFinder: a double-tap magnifies the aim point without st :: app/smartfinder.tsx :: /baseZoomRef\\.current = next; \\/\\/ keep pinch continuing/",
   "SmartMotion review opens PAUSED (no autoplay-vs-analysis cra :: app/swinglab/smartmotion.tsx :: /useState\\(true\\); \\/\\/ review play\\/pause — starts PAUSED/",
-  "SmartPump third rail: workout import → TRAINING → PERFORMANC :: app/(tabs)/dashboard.tsx :: /TRAINING → PERFORMANCE/",
   "Tempo: accel+gyro fusion refines the through-swing but safel :: app/swinglab/indoor.tsx :: /\\/\\* accel is a bonus — gyro tempo works without it \\*\\//",
   "Voice: greetings/check-ins route to the BRAIN (no canned poo :: services/intents/index.ts :: /\\/\\/ voiceCommandRouter\\.registerHandler\\(socialGreetingHandler\\);/",
 ];

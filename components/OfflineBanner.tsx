@@ -19,10 +19,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useConnectivityStore, reportOnline } from '../store/connectivityStore';
 import { getApiBaseUrl } from '../services/apiBase';
+import { useTranslation } from 'react-i18next';
 
 const apiUrl = getApiBaseUrl();
 
 export function OfflineBanner() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const isOnline = useConnectivityStore((s) => s.isOnline);
 
@@ -69,7 +71,7 @@ export function OfflineBanner() {
     <View style={[styles.wrap, { paddingTop: insets.top + 4 }]} pointerEvents="none">
       <View style={styles.pill}>
         <Ionicons name="cloud-offline-outline" size={14} color="#fff" />
-        <Text style={styles.text}>No signal — working offline</Text>
+        <Text style={styles.text}>{t('offline_banner.text.no_signal_working_offline')}</Text>
       </View>
     </View>
   );

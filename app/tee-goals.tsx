@@ -19,6 +19,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useRoundStore, type TeeColor } from '../store/roundStore';
 import { useTeeGoalStore } from '../store/teeGoalStore';
 import { evaluateTeeGoal, describeTeeGoal, type TeeScoreGoal } from '../services/goals/teeScoreGoal';
+import { useTranslation } from 'react-i18next';
 
 const TEES: { key: TeeColor; label: string; dot: string }[] = [
   { key: 'red', label: 'Reds', dot: '#ef4444' },
@@ -31,6 +32,7 @@ const TARGETS_18 = [100, 90, 85, 80];
 const TARGETS_9 = [55, 50, 45, 40];
 
 export default function TeeGoalsScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const history = useRoundStore((s) => s.roundHistory);
@@ -80,49 +82,49 @@ export default function TeeGoalsScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text_primary }]}>Tee Goals</Text>
+        <Text style={[styles.title, { color: colors.text_primary }]}>{t('tee_goals.tee_goals_screen.tee_goals')}</Text>
         <View style={{ width: 26 }} />
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
         {/* Builder */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.label, { color: colors.text_muted }]}>TEE</Text>
+          <Text style={[styles.label, { color: colors.text_muted }]}>{t('tee_goals.tee_goals_screen.tee')}</Text>
           <View style={styles.chipRow}>
             {TEES.map((t) => (
               <Chip key={t.key} active={tee === t.key} label={t.label} dot={t.dot} onPress={() => setTee(t.key)} />
             ))}
           </View>
 
-          <Text style={[styles.label, { color: colors.text_muted }]}>HOLES</Text>
+          <Text style={[styles.label, { color: colors.text_muted }]}>{t('scorecard.holes')}</Text>
           <View style={styles.chipRow}>
-            <Chip active={!nine} label="18 holes" onPress={() => { setNine(false); setTarget(90); }} />
-            <Chip active={nine} label="Front 9" onPress={() => { setNine(true); setTarget(50); }} />
+            <Chip active={!nine} label={t('tee_goals.label.18_holes')} onPress={() => { setNine(false); setTarget(90); }} />
+            <Chip active={nine} label={t('tee_goals.label.front_9')} onPress={() => { setNine(true); setTarget(50); }} />
           </View>
 
-          <Text style={[styles.label, { color: colors.text_muted }]}>TARGET</Text>
+          <Text style={[styles.label, { color: colors.text_muted }]}>{t('tee_goals.tee_goals_screen.target')}</Text>
           <View style={styles.chipRow}>
             {targets.map((t) => (
               <Chip key={t} active={!beatPar && target === t} label={`Break ${t}`} onPress={() => { setBeatPar(false); setTarget(t); }} />
             ))}
-            <Chip active={beatPar} label="Break par" onPress={() => setBeatPar(true)} />
+            <Chip active={beatPar} label={t('tee_goals.label.break_par')} onPress={() => setBeatPar(true)} />
           </View>
 
           <TouchableOpacity
             style={[styles.addBtn, { backgroundColor: colors.accent }]}
             onPress={create}
             accessibilityRole="button"
-            accessibilityLabel="Add this tee goal"
+            accessibilityLabel={t('tee_goals.accessibility_label.add_this_tee_goal')}
           >
             <Ionicons name="add-circle" size={18} color="#0a1410" />
-            <Text style={styles.addBtnText}>Add challenge</Text>
+            <Text style={styles.addBtnText}>{t('tee_goals.tee_goals_screen.add_challenge')}</Text>
           </TouchableOpacity>
         </View>
 
         {/* Active goals */}
         {progress.length === 0 ? (
           <Text style={[styles.empty, { color: colors.text_muted }]}>
-            No challenges yet. Build one above — like “Break 90 from the reds.”
+            {t('tee_goals.tee_goals_screen.no_challenges_yet_build_one')}
           </Text>
         ) : (
           progress.map((p) => (

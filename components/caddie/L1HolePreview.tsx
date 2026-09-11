@@ -21,6 +21,7 @@ import { useCourseCaptureStore } from '../../store/courseCaptureStore';
 import { resolveCaptureUri } from '../../services/courseCaptureIngest';
 import { getHoleImageryUrl, getCenteredImageryUrl } from '../../services/mapboxImagery';
 import { useGeometryStatusStore } from '../../store/geometryStatusStore';
+import { useTranslation } from 'react-i18next';
 
 const REFRESH_MS = 4_000;
 const DEFAULT_W = 320;
@@ -101,6 +102,7 @@ const HoleFrame: React.FC<{
 );
 
 export default function L1HolePreview({ onOpenSmartVision, width, height, badgeTop = 8 }: Props) {
+  const { t } = useTranslation();
   const propW = width ?? DEFAULT_W;
   const propH = height ?? DEFAULT_H;
   // Measured container size — the source of truth once laid out (robust to Fold resize). The width/
@@ -407,7 +409,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
                 on a clean dark base so only OUR label reads, not the baked-in number. */}
             <View style={styles.planScrim} pointerEvents="none" />
             <View style={styles.planLabelWrap} pointerEvents="none">
-              <Text style={styles.placeholderSubLight}>Tap to plan this hole.</Text>
+              <Text style={styles.placeholderSubLight}>{t('caddie_l1_hole_preview.l1_hole_preview.tap_to_plan_this_hole')}</Text>
             </View>
           </ImageBackground>
           {/* 2026-07-28 (Tim — "branded badge not showing") — the Course/Hole/Distance badge was only on
@@ -429,7 +431,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
           <ImageBackground source={{ uri: previewTileUrl }} style={[styles.wrap, wrapDims]} imageStyle={styles.imgRadius} resizeMode="cover">
             <View style={styles.planScrim} pointerEvents="none" />
             <View style={styles.planLabelWrap} pointerEvents="none">
-              <Text style={styles.placeholderSubLight}>Tap to plan this hole.</Text>
+              <Text style={styles.placeholderSubLight}>{t('caddie_l1_hole_preview.l1_hole_preview.tap_to_plan_this_hole')}</Text>
             </View>
           </ImageBackground>
           {compact ? null : <HoleBrandBadge course={previewCourseLabel} hole={1} distanceYds={previewDist} style={{ top: badgeTop, right: 8 }} />}
@@ -439,8 +441,8 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
     return (
       <HoleFrame onPress={onOpenSmartVision} onLayout={setMeasuredDims}>
         <View style={[styles.wrap, wrapDims, styles.placeholder]}>
-          <Text style={styles.placeholderText}>SMARTVISION</Text>
-          <Text style={styles.placeholderSub}>Pick a course on the Play tab to plan.</Text>
+          <Text style={styles.placeholderText}>{t('caddie_l1_hole_preview.l1_hole_preview.smartvision')}</Text>
+          <Text style={styles.placeholderSub}>{t('caddie_l1_hole_preview.l1_hole_preview.pick_a_course_on_the')}</Text>
         </View>
       </HoleFrame>
     );
@@ -581,8 +583,8 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
       <HoleFrame onPress={onOpenSmartVision} onLayout={setMeasuredDims}>
         <View style={[styles.wrap, wrapDims, styles.placeholder]}>
           <Text style={styles.placeholderText}>HOLE {currentHole}</Text>
-          <Text style={styles.placeholderSub}>Preview coming for this course.</Text>
-          <Text style={styles.placeholderCta}>Tap to open SmartVision →</Text>
+          <Text style={styles.placeholderSub}>{t('caddie_l1_hole_preview.l1_hole_preview.preview_coming_for_this_course')}</Text>
+          <Text style={styles.placeholderCta}>{t('caddie_l1_hole_preview.l1_hole_preview.tap_to_open_smartvision')}</Text>
         </View>
       </HoleFrame>
     );
@@ -636,9 +638,9 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
               stroke="#1e3a28" strokeWidth={1} strokeDasharray="4 4"
             />
             <Circle cx={teePos.sx} cy={teePos.sy} r={4} fill="#6b7280" />
-            <SvgText x={teePos.sx} y={teePos.sy + 13} fill="#9ca3af" fontSize={8} textAnchor="middle">TEE</SvgText>
+            <SvgText x={teePos.sx} y={teePos.sy + 13} fill="#9ca3af" fontSize={8} textAnchor="middle">{t('caddie_l1_hole_preview.l1_hole_preview.tee')}</SvgText>
             <Circle cx={greenPos.sx} cy={greenPos.sy} r={7} fill="#003d20" stroke="#00C896" strokeWidth={1.2} />
-            <SvgText x={greenPos.sx} y={greenPos.sy - 11} fill="#00C896" fontSize={8} textAnchor="middle">GREEN</SvgText>
+            <SvgText x={greenPos.sx} y={greenPos.sy - 11} fill="#00C896" fontSize={8} textAnchor="middle">{t('caddie_l1_hole_preview.l1_hole_preview.green')}</SvgText>
           </>
           {/* Player position overlay */}
           {playerPos && (

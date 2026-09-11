@@ -38,6 +38,7 @@ import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useCoachLessonStore } from '../../store/coachLessonStore';
 import { displayCaddieName } from '../../services/caddieResolver';
 import { getApiBaseUrl } from '../../services/apiBase';
+import { useTranslation } from 'react-i18next';
 
 /** This screen paints a permanent black background (video review), so its contents are pinned to the
  *  dark palette rather than themed. theme/tokens.ts dark text_primary / text_muted. */
@@ -62,6 +63,7 @@ const REARM_MS = 900;        // beat after feedback before re-arming the next wi
 const OPENER_LEAD_MS = 2600; // let the short spoken opener land before the first window opens
 
 export default function CoachLessonScreen() {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const [kind, setKind] = useState<Kind>('menu');
   const [error, setError] = useState<string | null>(null);
@@ -482,7 +484,7 @@ export default function CoachLessonScreen() {
     return (
       <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
         <View style={s.header}>
-          <TouchableOpacity onPress={() => safeBack()} style={s.headerBtn} accessibilityRole="button" accessibilityLabel="Back">
+          <TouchableOpacity onPress={() => safeBack()} style={s.headerBtn} accessibilityRole="button" accessibilityLabel={t('swinglab_coach_lesson.accessibility_label.back')}>
             <Ionicons name="chevron-back" size={24} color={ON_BLACK_TEXT} />
           </TouchableOpacity>
           {/**
@@ -506,13 +508,13 @@ export default function CoachLessonScreen() {
         </View>
         <ScrollView contentContainerStyle={{ padding: 16 }}>
           <TouchableOpacity style={s.heroCard} onPress={startDiagnostic} accessibilityRole="button">
-            <View style={s.heroTop}><Ionicons name="school" size={22} color="#0d1a0d" /><Text style={s.heroTag}>AI LESSON</Text></View>
-            <Text style={s.heroTitle}>Get a real lesson</Text>
-            <Text style={s.heroSub}>Your caddie watches a swing, finds the one thing costing you the most, and coaches you through it like a pro — feel, drill, and checkpoints.</Text>
-            <View style={s.heroCta}><Text style={s.heroCtaText}>Start lesson</Text><Ionicons name="arrow-forward" size={16} color="#0d1a0d" /></View>
+            <View style={s.heroTop}><Ionicons name="school" size={22} color="#0d1a0d" /><Text style={s.heroTag}>{t('swinglab_coach_lesson.coach_lesson_screen.ai_lesson')}</Text></View>
+            <Text style={s.heroTitle}>{t('swinglab_coach_lesson.coach_lesson_screen.get_a_real_lesson')}</Text>
+            <Text style={s.heroSub}>{t('swinglab_coach_lesson.coach_lesson_screen.your_caddie_watches_a_swing')}</Text>
+            <View style={s.heroCta}><Text style={s.heroCtaText}>{t('swinglab_coach_lesson.coach_lesson_screen.start_lesson')}</Text><Ionicons name="arrow-forward" size={16} color="#0d1a0d" /></View>
           </TouchableOpacity>
 
-          <Text style={s.sectionLabel}>GUIDED SESSIONS</Text>
+          <Text style={s.sectionLabel}>{t('swinglab_coach_lesson.coach_lesson_screen.guided_sessions')}</Text>
           {LESSON_PLANS.map((p) => (
             <TouchableOpacity key={p.id} style={s.planRow} onPress={() => startPlan(p)} accessibilityRole="button">
               <View style={{ flex: 1 }}><Text style={s.focusLabel}>{p.label}</Text><Text style={s.planBlurb}>{p.blurb}</Text></View>
@@ -520,7 +522,7 @@ export default function CoachLessonScreen() {
             </TouchableOpacity>
           ))}
 
-          <Text style={s.sectionLabel}>SINGLE FOCUS</Text>
+          <Text style={s.sectionLabel}>{t('swinglab_coach_lesson.coach_lesson_screen.single_focus')}</Text>
           {LESSON_FOCUSES.map((f) => (
             <TouchableOpacity key={f.id} style={s.focusRow} onPress={() => pickFocus(f)} accessibilityRole="button">
               <Text style={s.focusLabel}>{f.label}</Text>
@@ -546,7 +548,7 @@ export default function CoachLessonScreen() {
 
       {/* Header over the camera. */}
       <View style={s.headerOverlay}>
-        <TouchableOpacity onPress={() => endSession()} style={s.headerBtn} accessibilityRole="button" accessibilityLabel="End lesson">
+        <TouchableOpacity onPress={() => endSession()} style={s.headerBtn} accessibilityRole="button" accessibilityLabel={t('swinglab_coach_lesson.accessibility_label.end_lesson')}>
           <Ionicons name="chevron-back" size={24} color="#fff" />
         </TouchableOpacity>
         <View style={s.livePill}>
@@ -559,9 +561,9 @@ export default function CoachLessonScreen() {
       {/* Phase chip (watching / reading) — subtle, over the camera, replaces the black spinner. */}
       <View style={s.phaseWrap} pointerEvents="none">
         {phase === 'reading' ? (
-          <View style={s.phaseChip}><ActivityIndicator size="small" color="#fff" /><Text style={s.phaseChipText}>Reading that one…</Text></View>
+          <View style={s.phaseChip}><ActivityIndicator size="small" color="#fff" /><Text style={s.phaseChipText}>{t('swinglab_coach_lesson.coach_lesson_screen.reading_that_one')}</Text></View>
         ) : phase === 'watching' && !paused ? (
-          <View style={s.phaseChip}><Ionicons name="eye" size={14} color="#fff" /><Text style={s.phaseChipText}>Watching</Text></View>
+          <View style={s.phaseChip}><Ionicons name="eye" size={14} color="#fff" /><Text style={s.phaseChipText}>{t('swinglab_coach_lesson.coach_lesson_screen.watching')}</Text></View>
         ) : null}
       </View>
 
@@ -583,22 +585,22 @@ export default function CoachLessonScreen() {
           // Diagnostic: tap-to-swing on the live camera; decision points stay explicit.
           <>
             {dxStage === 'intro' && phase !== 'reading' && (
-              <TouchableOpacity style={s.ctrlPrimary} onPress={recordDiagnostic}><Ionicons name="videocam" size={18} color="#0d1a0d" /><Text style={s.ctrlPrimaryText}>Record a baseline swing</Text></TouchableOpacity>
+              <TouchableOpacity style={s.ctrlPrimary} onPress={recordDiagnostic}><Ionicons name="videocam" size={18} color="#0d1a0d" /><Text style={s.ctrlPrimaryText}>{t('swinglab_coach_lesson.coach_lesson_screen.record_a_baseline_swing')}</Text></TouchableOpacity>
             )}
             {dxStage === 'reps' && !pendingProgress && phase !== 'reading' && (
-              <TouchableOpacity style={s.ctrlPrimary} onPress={recordDiagnostic}><Ionicons name="videocam" size={18} color="#0d1a0d" /><Text style={s.ctrlPrimaryText}>Swing</Text></TouchableOpacity>
+              <TouchableOpacity style={s.ctrlPrimary} onPress={recordDiagnostic}><Ionicons name="videocam" size={18} color="#0d1a0d" /><Text style={s.ctrlPrimaryText}>{t('swinglab_coach_lesson.coach_lesson_screen.swing')}</Text></TouchableOpacity>
             )}
             {dxStage === 'progress' && (
               <>
-                <TouchableOpacity style={s.ctrlPrimary} onPress={takeNextPriority}><Ionicons name="arrow-forward-circle" size={18} color="#0d1a0d" /><Text style={s.ctrlPrimaryText}>Take on the next thing</Text></TouchableOpacity>
-                <TouchableOpacity style={s.ctrlGhost} onPress={finishToHomework}><Text style={s.ctrlGhostText}>Bank it & finish</Text></TouchableOpacity>
+                <TouchableOpacity style={s.ctrlPrimary} onPress={takeNextPriority}><Ionicons name="arrow-forward-circle" size={18} color="#0d1a0d" /><Text style={s.ctrlPrimaryText}>{t('swinglab_coach_lesson.coach_lesson_screen.take_on_the_next_thing')}</Text></TouchableOpacity>
+                <TouchableOpacity style={s.ctrlGhost} onPress={finishToHomework}><Text style={s.ctrlGhostText}>{t('swinglab_coach_lesson.coach_lesson_screen.bank_it_finish')}</Text></TouchableOpacity>
               </>
             )}
             {dxStage === 'homework' && (
-              <TouchableOpacity style={s.ctrlPrimary} onPress={() => endSession()}><Ionicons name="flag" size={18} color="#0d1a0d" /><Text style={s.ctrlPrimaryText}>Got it — end lesson</Text></TouchableOpacity>
+              <TouchableOpacity style={s.ctrlPrimary} onPress={() => endSession()}><Ionicons name="flag" size={18} color="#0d1a0d" /><Text style={s.ctrlPrimaryText}>{t('swinglab_coach_lesson.coach_lesson_screen.got_it_end_lesson')}</Text></TouchableOpacity>
             )}
             {(dxStage === 'intro' || dxStage === 'reps') && (
-              <TouchableOpacity style={s.ctrlGhost} onPress={() => endSession()}><Text style={s.ctrlGhostText}>End lesson</Text></TouchableOpacity>
+              <TouchableOpacity style={s.ctrlGhost} onPress={() => endSession()}><Text style={s.ctrlGhostText}>{t('swinglab_coach_lesson.coach_lesson_screen.end_lesson')}</Text></TouchableOpacity>
             )}
           </>
         ) : (

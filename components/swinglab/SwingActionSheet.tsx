@@ -33,6 +33,7 @@ import * as Sharing from 'expo-sharing';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSwingSessionStore, type SwingShot } from '../../store/swingSessionStore';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   visible: boolean;
@@ -64,6 +65,7 @@ export default function SwingActionSheet({
   onStartCompare,
   multiShotSessionAvailable,
 }: Props) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const updateShotTags = useSwingSessionStore(s => s.updateShotTags);
   const markShotGoodRep = useSwingSessionStore(s => s.markShotGoodRep);
@@ -101,13 +103,13 @@ export default function SwingActionSheet({
 
   const handleShare = async () => {
     if (!shot.clipUri) {
-      Alert.alert('Nothing to share', 'This swing has no video file attached.');
+      Alert.alert(t('swinglab_swing_action_sheet.alert.nothing_to_share'), t('swinglab_swing_action_sheet.alert.this_swing_has_no_video'));
       return;
     }
     try {
       const available = await Sharing.isAvailableAsync();
       if (!available) {
-        Alert.alert('Sharing unavailable', 'Sharing is not available on this device.');
+        Alert.alert(t('swinglab_swing_action_sheet.alert.sharing_unavailable'), t('swinglab_swing_action_sheet.alert.sharing_is_not_available_on'));
         return;
       }
       // Note: shares the master video URI. Per-clip mp4 extraction is
@@ -125,8 +127,8 @@ export default function SwingActionSheet({
 
   const handleDelete = () => {
     Alert.alert(
-      'Delete this swing?',
-      'The video clip stays in the session, but this swing entry will be removed from the analysis.',
+      t('swinglab_swing_action_sheet.alert.delete_this_swing'),
+      t('swinglab_swing_action_sheet.alert.the_video_clip_stays_in'),
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -163,24 +165,24 @@ export default function SwingActionSheet({
 
               {mode === 'main' && (
                 <ScrollView showsVerticalScrollIndicator={false}>
-                  <Text style={[styles.title, { color: colors.text_primary }]}>Manage swing</Text>
+                  <Text style={[styles.title, { color: colors.text_primary }]}>{t('swinglab_swing_action_sheet.swing_action_sheet.manage_swing')}</Text>
 
                   <View style={styles.repRow}>
                     <RepBtn
                       active={shot.isGoodRep === true}
                       icon="star"
-                      label="Good rep"
+                      label={t('swinglab_swing_action_sheet.label.good_rep')}
                       onPress={() => handleGoodRep(shot.isGoodRep === true ? null : true)}
                     />
                     <RepBtn
                       active={shot.isGoodRep === false}
                       icon="close-circle"
-                      label="Bad rep"
+                      label={t('swinglab_swing_action_sheet.label.bad_rep')}
                       onPress={() => handleGoodRep(shot.isGoodRep === false ? null : false)}
                     />
                   </View>
 
-                  <ActionRow icon="pricetags-outline" label="Edit tags" onPress={() => setMode('tags')} />
+                  <ActionRow icon="pricetags-outline" label={t('swinglab_swing_action_sheet.label.edit_tags')} onPress={() => setMode('tags')} />
                   <ActionRow
                     icon="document-text-outline"
                     label={shot.userNotes ? 'Edit note' : 'Add note'}
@@ -189,53 +191,53 @@ export default function SwingActionSheet({
                   {multiShotSessionAvailable && onStartCompare && (
                     <ActionRow
                       icon="git-compare-outline"
-                      label="Compare with another swing"
+                      label={t('swinglab_swing_action_sheet.label.compare_with_another_swing')}
                       onPress={() => {
                         onStartCompare(shot.id);
                         onClose();
                       }}
                     />
                   )}
-                  <ActionRow icon="share-outline" label="Share swing" onPress={handleShare} />
-                  <ActionRow icon="trash-outline" label="Delete swing" tone="danger" onPress={handleDelete} />
+                  <ActionRow icon="share-outline" label={t('swinglab_swing_action_sheet.label.share_swing')} onPress={handleShare} />
+                  <ActionRow icon="trash-outline" label={t('swinglab_swing_action_sheet.label.delete_swing')} tone="danger" onPress={handleDelete} />
 
                   <TouchableOpacity onPress={onClose} style={styles.cancelBtn}>
-                    <Text style={[styles.cancelText, { color: colors.text_muted }]}>Close</Text>
+                    <Text style={[styles.cancelText, { color: colors.text_muted }]}>{t('swinglab_swing_action_sheet.swing_action_sheet.close')}</Text>
                   </TouchableOpacity>
                 </ScrollView>
               )}
 
               {mode === 'tags' && (
                 <ScrollView showsVerticalScrollIndicator={false}>
-                  <Text style={[styles.title, { color: colors.text_primary }]}>Edit tags</Text>
+                  <Text style={[styles.title, { color: colors.text_primary }]}>{t('swinglab_swing_action_sheet.swing_action_sheet.edit_tags')}</Text>
 
                   <TagSection
-                    label="FEEL"
+                    label={t('swinglab_swing_action_sheet.label.feel')}
                     options={FEEL_OPTIONS}
                     value={shot.feel}
                     onPress={v => handleTagSet('feel', v)}
                   />
                   <TagSection
-                    label="SHAPE"
+                    label={t('swinglab_swing_action_sheet.label.shape')}
                     options={SHAPE_OPTIONS}
                     value={shot.shape}
                     onPress={v => handleTagSet('shape', v)}
                   />
                   <TagSection
-                    label="CONTACT"
+                    label={t('swinglab_swing_action_sheet.label.contact')}
                     options={CONTACT_OPTIONS}
                     value={shot.contact}
                     onPress={v => handleTagSet('contact', v)}
                   />
                   <TagSection
-                    label="DIRECTION"
+                    label={t('swinglab_swing_action_sheet.label.direction')}
                     options={DIRECTION_OPTIONS}
                     value={shot.direction}
                     onPress={v => handleTagSet('direction', v)}
                   />
 
                   <TouchableOpacity onPress={() => setMode('main')} style={styles.cancelBtn}>
-                    <Text style={[styles.cancelText, { color: colors.text_muted }]}>‹ Back</Text>
+                    <Text style={[styles.cancelText, { color: colors.text_muted }]}>{t('swinglab_swing_action_sheet.swing_action_sheet.back')}</Text>
                   </TouchableOpacity>
                 </ScrollView>
               )}
@@ -248,7 +250,7 @@ export default function SwingActionSheet({
                   <TextInput
                     value={noteDraft}
                     onChangeText={setNoteDraft}
-                    placeholder="What did you feel? What would you change?"
+                    placeholder={t('swinglab_swing_action_sheet.placeholder.what_did_you_feel_what')}
                     placeholderTextColor={colors.text_muted}
                     multiline
                     maxLength={280}
@@ -266,13 +268,13 @@ export default function SwingActionSheet({
                       onPress={() => setMode('main')}
                       style={[styles.noteBtn, { borderColor: colors.border }]}
                     >
-                      <Text style={[styles.noteBtnText, { color: colors.text_muted }]}>Cancel</Text>
+                      <Text style={[styles.noteBtnText, { color: colors.text_muted }]}>{t('play.cancel')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={handleSaveNote}
                       style={[styles.noteBtn, { backgroundColor: colors.accent }]}
                     >
-                      <Text style={[styles.noteBtnText, { color: '#fff' }]}>Save</Text>
+                      <Text style={[styles.noteBtnText, { color: '#fff' }]}>{t('swinglab_swing_action_sheet.swing_action_sheet.save')}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>

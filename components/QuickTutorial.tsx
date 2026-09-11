@@ -38,6 +38,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSettingsStore } from '../store/settingsStore';
 import { speak } from '../services/voiceService';
 import { getApiBaseUrl } from '../services/apiBase';
+import { useTranslation } from 'react-i18next';
 // 2026-06-14 (Tim) — quick instructions are SILENT pop-up cards by default (out of the
 // caddie's voice path). A 🔊 button plays the narration ON DEMAND only — accessibility
 // without ever clashing with the caddie's voice profile.
@@ -68,6 +69,7 @@ export function QuickTutorial({
   onDismiss,
   iconName = 'school-outline',
 }: QuickTutorialProps) {
+  const { t } = useTranslation();
   const tutorialsSeen = useSettingsStore(s => s.tutorialsSeen);
   const markTutorialSeen = useSettingsStore(s => s.markTutorialSeen);
   const introOpens = useSettingsStore(s => s.introOpens);
@@ -125,7 +127,7 @@ export function QuickTutorial({
                 onPress={playNarration}
                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                 accessibilityRole="button"
-                accessibilityLabel="Read these instructions aloud"
+                accessibilityLabel={t('quick_tutorial.accessibility_label.read_these_instructions_aloud')}
                 style={styles.speakerBtn}
               >
                 <Ionicons name="volume-high" size={20} color="#88F700" />
@@ -139,16 +141,16 @@ export function QuickTutorial({
             style={styles.gotItBtn}
             onPress={handleDismiss}
             accessibilityRole="button"
-            accessibilityLabel="Got it, dismiss tutorial"
+            accessibilityLabel={t('quick_tutorial.accessibility_label.got_it_dismiss_tutorial')}
           >
-            <Text style={styles.gotItText}>Got it</Text>
+            <Text style={styles.gotItText}>{t('quick_tutorial.text.got_it')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={handleDismiss}
             accessibilityRole="button"
-            accessibilityLabel="Skip tutorial"
+            accessibilityLabel={t('quick_tutorial.accessibility_label.skip_tutorial')}
           >
-            <Text style={styles.skipText}>Skip</Text>
+            <Text style={styles.skipText}>{t('quick_tutorial.text.skip')}</Text>
           </TouchableOpacity>
         </View>
       </View>

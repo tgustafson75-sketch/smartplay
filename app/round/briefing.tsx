@@ -25,10 +25,12 @@ import { ROUND_MODE_LABELS } from '../../types/patterns';
 import { getApiBaseUrl } from '../../services/apiBase';
 import { useCaddieMemoryStore } from '../../store/caddieMemoryStore';
 import { awaitCourseIntelligence } from '../../services/courseIntelligenceService';
+import { useTranslation } from 'react-i18next';
 
 type Phase = 'thinking' | 'speaking' | 'done';
 
 export default function BriefingScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -315,7 +317,7 @@ export default function BriefingScreen() {
             <Animated.View style={[styles.dot, { opacity: dot2 }]} />
             <Animated.View style={[styles.dot, { opacity: dot3 }]} />
           </View>
-          <Text style={styles.thinkingLabel}>Reading the course...</Text>
+          <Text style={styles.thinkingLabel}>{t('round_briefing.briefing_screen.reading_the_course')}</Text>
         </Animated.View>
 
         {/* Brief text — fades in once loaded */}

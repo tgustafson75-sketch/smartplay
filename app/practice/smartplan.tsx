@@ -26,6 +26,7 @@ import {
   PRACTICE_GOALS,
   type PracticeLocation,
 } from '../../services/practice/goalPlan';
+import { useTranslation } from 'react-i18next';
 
 const DAYS = [2, 3, 4, 5];
 const MINUTES = [20, 45, 60, 90];
@@ -37,6 +38,7 @@ const LOCATIONS: { key: PracticeLocation; label: string }[] = [
 ];
 
 export default function SmartPlanScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const startSession = usePracticeSessionStore((s) => s.startSession);
@@ -96,33 +98,33 @@ export default function SmartPlanScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text_primary }]}>SmartPlan</Text>
+        <Text style={[styles.title, { color: colors.text_primary }]}>{t('practice_smartplan.smart_plan_screen.smartplan')}</Text>
         <View style={{ width: 26 }} />
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
-        <Text style={[styles.label, { color: colors.text_muted }]}>GOAL</Text>
+        <Text style={[styles.label, { color: colors.text_muted }]}>{t('practice_smartplan.smart_plan_screen.goal')}</Text>
         <View style={styles.chipRow}>
           {PRACTICE_GOALS.map((g) => (
             <Chip key={g.key} active={goal === g.key} label={g.label} onPress={() => setGoal(g.key)} />
           ))}
         </View>
 
-        <Text style={[styles.label, { color: colors.text_muted }]}>DAYS / WEEK</Text>
+        <Text style={[styles.label, { color: colors.text_muted }]}>{t('practice_smartplan.smart_plan_screen.days_week')}</Text>
         <View style={styles.chipRow}>
           {DAYS.map((d) => (
             <Chip key={d} active={days === d} label={`${d}`} onPress={() => setDays(d)} />
           ))}
         </View>
 
-        <Text style={[styles.label, { color: colors.text_muted }]}>MINUTES / SESSION</Text>
+        <Text style={[styles.label, { color: colors.text_muted }]}>{t('practice_smartplan.smart_plan_screen.minutes_session')}</Text>
         <View style={styles.chipRow}>
           {MINUTES.map((m) => (
             <Chip key={m} active={minutes === m} label={`${m}`} onPress={() => setMinutes(m)} />
           ))}
         </View>
 
-        <Text style={[styles.label, { color: colors.text_muted }]}>WHERE</Text>
+        <Text style={[styles.label, { color: colors.text_muted }]}>{t('practice_smartplan.smart_plan_screen.where')}</Text>
         <View style={styles.chipRow}>
           {LOCATIONS.map((l) => (
             <Chip key={l.key} active={location === l.key} label={l.label} onPress={() => setLocation(l.key)} />
@@ -166,20 +168,20 @@ export default function SmartPlanScreen() {
 
         {/* 2026-07-04 (Tim) — free-text goals + challenges the CADDIE reads + considers
             all week. Feeds buildPipecatContext so guidance is steered toward these. */}
-        <Text style={[styles.label, { color: colors.text_muted }]}>GOALS & CHALLENGES · your caddie reads this</Text>
+        <Text style={[styles.label, { color: colors.text_muted }]}>{t('practice_smartplan.smart_plan_screen.goals_challenges_your_caddie_reads')}</Text>
         <TextInput
           style={[styles.narrative, { color: colors.text_primary, borderColor: colors.border, backgroundColor: colors.surface }]}
           value={narrative}
           onChangeText={setNarrative}
           multiline
-          placeholder="e.g. Round Saturday — want to stop the double-cross off the tee and get my speed on lag putts. Only have ~3 hrs this week."
+          placeholder={t('practice_smartplan.placeholder.e_g_round_saturday_want')}
           placeholderTextColor={colors.text_muted}
           textAlignVertical="top"
         />
 
         {reminders.length > 0 && (
           <>
-            <Text style={[styles.label, { color: colors.text_muted }]}>REMINDERS · say &quot;remind me to…&quot;</Text>
+            <Text style={[styles.label, { color: colors.text_muted }]}>{t('practice_smartplan.smart_plan_screen.reminders_say_remind_me_to')}</Text>
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               {reminders.map((r) => (
                 <View key={r.id} style={[styles.dayRow, { borderBottomColor: colors.border }]}>

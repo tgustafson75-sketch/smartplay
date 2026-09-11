@@ -39,6 +39,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Defs, LinearGradient, Stop, Rect, Circle, Line } from 'react-native-svg';
 import type { TempoResult } from '../../services/smartTempo';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
 
 interface TempoPatchProps {
   result: TempoResult;
@@ -92,6 +93,7 @@ function PatchRow({
 }
 
 export default function TempoPatch({ result }: TempoPatchProps) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   if (!result) return null;
 
@@ -117,7 +119,7 @@ export default function TempoPatch({ result }: TempoPatchProps) {
     <View style={styles.wrap}>
       {/* YOUR TEMPO label row */}
       <View style={styles.labelRow}>
-        <Text style={[styles.rowLabel, { color: colors.text_primary }]}>YOUR TEMPO</Text>
+        <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('swinglab_tempo_patch.tempo_patch.your_tempo')}</Text>
         <Text style={[styles.rowRatio, { color: colors.accent_lime }]}>{result.ratioLabel}</Text>
       </View>
 
@@ -153,17 +155,17 @@ export default function TempoPatch({ result }: TempoPatchProps) {
       {/* segment ms readout — real measured values */}
       <View style={styles.segRow}>
         <View style={styles.seg}>
-          <Text style={[styles.segLabel, { color: colors.text_muted }]}>BACKSWING</Text>
+          <Text style={[styles.segLabel, { color: colors.text_muted }]}>{t('swinglab_tempo_patch.tempo_patch.backswing')}</Text>
           <Text style={[styles.segVal, { color: colors.accent_lime }]}>{result.backswingMs} ms</Text>
         </View>
         <Text style={[styles.segDiv, { color: colors.text_muted }]}>·</Text>
         <View style={styles.seg}>
-          <Text style={[styles.segLabel, { color: colors.text_muted }]}>DOWNSWING</Text>
+          <Text style={[styles.segLabel, { color: colors.text_muted }]}>{t('swinglab_tempo_patch.tempo_patch.downswing')}</Text>
           <Text style={[styles.segVal, { color: colors.accent_amber }]}>{result.downswingMs} ms</Text>
         </View>
         <Text style={[styles.segDiv, { color: colors.text_muted }]}>·</Text>
         <View style={styles.seg}>
-          <Text style={[styles.segLabel, { color: colors.text_muted }]}>RATIO</Text>
+          <Text style={[styles.segLabel, { color: colors.text_muted }]}>{t('swinglab_tempo_patch.tempo_patch.ratio')}</Text>
           <Text style={[styles.segVal, { color: colors.text_primary }]}>{result.ratioLabel}</Text>
         </View>
       </View>

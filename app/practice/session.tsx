@@ -23,10 +23,12 @@ import { usePracticeSessionStore } from '../../store/practiceSessionStore';
 import { summarizeOpenRange } from '../../services/practice/openRangeStats';
 import { PRACTICE_FOCUSES, getFocus, buildInterleavedPlan, focusClubsForBag } from '../../services/practice/sessionPlan';
 import { useClubBagStore } from '../../store/clubBagStore';
+import { useTranslation } from 'react-i18next';
 
 const DEFAULT_REPS = 12;
 
 export default function SessionRunnerScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const active = usePracticeSessionStore((s) => s.active);
@@ -65,7 +67,7 @@ export default function SessionRunnerScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text_primary }]}>Focused Practice</Text>
+        <Text style={[styles.title, { color: colors.text_primary }]}>{t('practice_session.session_runner_screen.focused_practice')}</Text>
         <View style={{ width: 26 }} />
       </View>
 
@@ -73,8 +75,7 @@ export default function SessionRunnerScreen() {
         {!focusSession ? (
           <>
             <Text style={[styles.intro, { color: colors.text_secondary }]}>
-              Pick what today is. Each one rotates clubs or targets so you practice like you play — not 60 balls
-              at one flag.
+              {t('practice_session.session_runner_screen.pick_what_today_is_each')}
             </Text>
             {PRACTICE_FOCUSES.map((f) => (
               <TouchableOpacity
@@ -116,9 +117,9 @@ export default function SessionRunnerScreen() {
               style={[styles.primaryBtn, { backgroundColor: colors.accent }]}
               onPress={endSession}
               accessibilityRole="button"
-              accessibilityLabel="Finish the session"
+              accessibilityLabel={t('practice_session.accessibility_label.finish_the_session')}
             >
-              <Text style={styles.primaryBtnText}>Finish</Text>
+              <Text style={styles.primaryBtnText}>{t('practice_session.session_runner_screen.finish')}</Text>
             </TouchableOpacity>
           </>
         ) : (
@@ -148,10 +149,10 @@ export default function SessionRunnerScreen() {
               style={[styles.primaryBtn, { backgroundColor: colors.accent }]}
               onPress={() => router.push('/swinglab/smartmotion')}
               accessibilityRole="button"
-              accessibilityLabel="Record this swing in Smart Motion"
+              accessibilityLabel={t('practice_session.accessibility_label.record_this_swing_in_smart')}
             >
               <Ionicons name="videocam-outline" size={18} color="#0a1410" />
-              <Text style={styles.primaryBtnText}>Record this ball</Text>
+              <Text style={styles.primaryBtnText}>{t('practice_session.session_runner_screen.record_this_ball')}</Text>
             </TouchableOpacity>
 
             {summary && summary.total > 0 && (
@@ -162,9 +163,9 @@ export default function SessionRunnerScreen() {
               style={[styles.endBtn, { borderColor: colors.border }]}
               onPress={endSession}
               accessibilityRole="button"
-              accessibilityLabel="End the session early"
+              accessibilityLabel={t('practice_session.accessibility_label.end_the_session_early')}
             >
-              <Text style={[styles.endBtnText, { color: colors.text_secondary }]}>End early</Text>
+              <Text style={[styles.endBtnText, { color: colors.text_secondary }]}>{t('practice_session.session_runner_screen.end_early')}</Text>
             </TouchableOpacity>
           </>
         )}

@@ -21,8 +21,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useRoundStore, eligibleHandicapRounds } from '../store/roundStore';
+import { useTranslation } from 'react-i18next';
 
 export default function ProfileScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const name = usePlayerProfileStore(s => s.name);
@@ -44,7 +46,7 @@ export default function ProfileScreen() {
       // 2026-07-06 (audit P0) — canonical filter also excludes sim rounds.
       const eligible = eligibleHandicapRounds(rounds);
       if (eligible.length < 3) {
-        Alert.alert('Need more rounds', `Recalculation needs at least 3 complete 9- or 18-hole rounds. You have ${eligible.length}. Import your round history to seed it.`);
+        Alert.alert(t('profile.alert.need_more_rounds'), `Recalculation needs at least 3 complete 9- or 18-hole rounds. You have ${eligible.length}. Import your round history to seed it.`);
         return;
       }
       const differentials = calcMod.rebuildDifferentialsFromHistory(eligible);
@@ -52,12 +54,12 @@ export default function ProfileScreen() {
       const result = calcMod.estimateNewIndex(differentials);
       if (result.newIndex != null) {
         usePlayerProfileStore.getState().setHandicapIndex(result.newIndex);
-        Alert.alert('Handicap Updated', `New Index: ${result.newIndex.toFixed(1)}\n\n${result.estimateNote}`);
+        Alert.alert(t('profile.alert.handicap_updated'), `New Index: ${result.newIndex.toFixed(1)}\n\n${result.estimateNote}`);
       } else {
-        Alert.alert('Could not compute', result.estimateNote);
+        Alert.alert(t('profile.alert.could_not_compute'), result.estimateNote);
       }
     } catch (e) {
-      Alert.alert('Recalculation failed', e instanceof Error ? e.message : String(e));
+      Alert.alert(t('profile.alert.recalculation_failed'), e instanceof Error ? e.message : String(e));
     }
   }, []);
 
@@ -67,8 +69,8 @@ export default function ProfileScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={10} style={styles.headerIcon}>
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text_primary }]}>Profile</Text>
-        <TouchableOpacity onPress={() => router.push('/settings' as never)} hitSlop={10} style={styles.headerIcon} accessibilityLabel="Edit profile details">
+        <Text style={[styles.title, { color: colors.text_primary }]}>{t('profile.profile_screen.profile')}</Text>
+        <TouchableOpacity onPress={() => router.push('/settings' as never)} hitSlop={10} style={styles.headerIcon} accessibilityLabel={t('profile.accessibility_label.edit_profile_details')}>
           <Ionicons name="create-outline" size={22} color={colors.accent} />
         </TouchableOpacity>
       </View>
@@ -83,17 +85,17 @@ export default function ProfileScreen() {
           <View style={styles.statRow}>
             <View style={styles.stat}>
               <Text style={[styles.statValue, { color: colors.accent }]}>{indexLabel}</Text>
-              <Text style={[styles.statLabel, { color: colors.text_muted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>HANDICAP INDEX</Text>
+              <Text style={[styles.statLabel, { color: colors.text_muted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('profile.profile_screen.handicap_index')}</Text>
             </View>
             <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
             <View style={styles.stat}>
               <Text style={[styles.statValue, { color: colors.text_primary }]}>{roundsTracked}</Text>
-              <Text style={[styles.statLabel, { color: colors.text_muted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>ROUNDS</Text>
+              <Text style={[styles.statLabel, { color: colors.text_muted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('profile.profile_screen.rounds')}</Text>
             </View>
             <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
             <View style={styles.stat}>
               <Text style={[styles.statValue, { color: colors.text_primary }]}>{diffCount}</Text>
-              <Text style={[styles.statLabel, { color: colors.text_muted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>DIFFERENTIALS</Text>
+              <Text style={[styles.statLabel, { color: colors.text_muted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('profile.profile_screen.differentials')}</Text>
             </View>
           </View>
           <View style={styles.metaRow}>
@@ -103,15 +105,15 @@ export default function ProfileScreen() {
         </View>
 
         {/* Import on-ramp */}
-        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>BRING IN YOUR HISTORY</Text>
+        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{t('profile.profile_screen.bring_in_your_history')}</Text>
         <TouchableOpacity
           style={[styles.actionCard, { backgroundColor: colors.surface, borderColor: colors.accent }]}
           onPress={() => router.push('/import-rounds-list' as never)}
         >
           <Ionicons name="list-outline" size={22} color={colors.accent} />
           <View style={{ flex: 1 }}>
-            <Text style={[styles.actionTitle, { color: colors.text_primary }]}>Import round history</Text>
-            <Text style={[styles.actionSub, { color: colors.text_muted }]}>Screenshot your rounds list from Golfshot, 18Birdies, or GHIN — import them all at once and seed your index.</Text>
+            <Text style={[styles.actionTitle, { color: colors.text_primary }]}>{t('profile.profile_screen.import_round_history')}</Text>
+            <Text style={[styles.actionSub, { color: colors.text_muted }]}>{t('profile.profile_screen.screenshot_your_rounds_list_from')}</Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
         </TouchableOpacity>
@@ -122,22 +124,22 @@ export default function ProfileScreen() {
         >
           <Ionicons name="document-text-outline" size={22} color={colors.accent} />
           <View style={{ flex: 1 }}>
-            <Text style={[styles.actionTitle, { color: colors.text_primary }]}>Import one scorecard</Text>
-            <Text style={[styles.actionSub, { color: colors.text_muted }]}>A single round, hole-by-hole — a scorecard photo or app screenshot.</Text>
+            <Text style={[styles.actionTitle, { color: colors.text_primary }]}>{t('profile.profile_screen.import_one_scorecard')}</Text>
+            <Text style={[styles.actionSub, { color: colors.text_muted }]}>{t('profile.profile_screen.a_single_round_hole_by')}</Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
         </TouchableOpacity>
 
         {/* Handicap tools */}
-        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>HANDICAP</Text>
+        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{t('profile.profile_screen.handicap')}</Text>
         <TouchableOpacity
           style={[styles.actionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
           onPress={onRecalculate}
         >
           <Ionicons name="calculator-outline" size={22} color={colors.accent} />
           <View style={{ flex: 1 }}>
-            <Text style={[styles.actionTitle, { color: colors.text_primary }]}>Recalculate from history</Text>
-            <Text style={[styles.actionSub, { color: colors.text_muted }]}>Rebuild your index (best 8 of last 20 differentials) from every complete round on record.</Text>
+            <Text style={[styles.actionTitle, { color: colors.text_primary }]}>{t('profile.profile_screen.recalculate_from_history')}</Text>
+            <Text style={[styles.actionSub, { color: colors.text_muted }]}>{t('profile.profile_screen.rebuild_your_index_best_8')}</Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
         </TouchableOpacity>
@@ -148,8 +150,8 @@ export default function ProfileScreen() {
         >
           <Ionicons name="create-outline" size={22} color={colors.accent} />
           <View style={{ flex: 1 }}>
-            <Text style={[styles.actionTitle, { color: colors.text_primary }]}>Edit profile details</Text>
-            <Text style={[styles.actionSub, { color: colors.text_muted }]}>Name, GHIN number, handicap index, goal, and more.</Text>
+            <Text style={[styles.actionTitle, { color: colors.text_primary }]}>{t('profile.profile_screen.edit_profile_details')}</Text>
+            <Text style={[styles.actionSub, { color: colors.text_muted }]}>{t('profile.profile_screen.name_ghin_number_handicap_index')}</Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
         </TouchableOpacity>

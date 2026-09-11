@@ -20,6 +20,7 @@ import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { postingInputsFor, postedDifferentialFor, computeRoundHandicap, estimateNewIndex, computeScoreDifferential, expectedNineDifferential } from '../../services/handicapCalculator';
 import { getBundledHoles } from '../../data/courses';
 import { holePar } from '../../services/smartFinderService';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Phase V — confidence band for the Index estimate. WHS itself doesn't
@@ -43,6 +44,7 @@ const CONFIDENCE_LABELS: Record<IndexConfidence, string> = {
 };
 
 export default function HandicapImpactCard({ roundId }: { roundId: string | null }) {
+  const { t } = useTranslation();
   const router = useRouter();
   const handicapIndex = usePlayerProfileStore(s => s.handicap_index);
   const recentDifferentials = usePlayerProfileStore(s => s.recent_differentials);
@@ -202,20 +204,20 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
       <View style={[styles.card, styles.cardSetup]}>
         <View style={styles.headerRow}>
           <AppIcon name="stats-chart-outline" size={18} color="#00C896" />
-          <Text style={styles.headerTitle}>Track Your Index</Text>
+          <Text style={styles.headerTitle}>{t('recap_handicap_impact_card.handicap_impact_card.track_your_index')}</Text>
         </View>
         <Text style={styles.impact}>
-          Set your Handicap Index once and SmartPlay tracks it automatically after each round — Score Differential, Course Handicap, the works.
+          {t('recap_handicap_impact_card.handicap_impact_card.set_your_handicap_index_once')}
         </Text>
         <View style={styles.ctaRow}>
           <TouchableOpacity
             style={[styles.cta, styles.ctaPrimary]}
             onPress={() => router.push('/settings' as never)}
           >
-            <Text style={styles.ctaPrimaryText}>Set Index</Text>
+            <Text style={styles.ctaPrimaryText}>{t('recap_handicap_impact_card.handicap_impact_card.set_index')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.cta} onPress={() => setDismissed(true)}>
-            <Text style={styles.ctaText}>Not now</Text>
+            <Text style={styles.ctaText}>{t('recap_handicap_impact_card.handicap_impact_card.not_now')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -229,7 +231,7 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
       <View style={styles.card}>
         <View style={styles.headerRow}>
           <AppIcon name="stats-chart-outline" size={18} color="#00C896" />
-          <Text style={styles.headerTitle}>Handicap Impact</Text>
+          <Text style={styles.headerTitle}>{t('recap_handicap_impact_card.handicap_impact_card.handicap_impact')}</Text>
         </View>
         <Text style={styles.impact}>
           {holesPlayed} {holesPlayed === 1 ? 'hole' : 'holes'} in the books — finish 9 or 18 to post a Score Differential to your Index. The round&apos;s saved either way.
@@ -243,15 +245,15 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
     <View style={styles.card}>
       <View style={styles.headerRow}>
         <AppIcon name="stats-chart-outline" size={18} color="#00C896" />
-        <Text style={styles.headerTitle}>Handicap Impact</Text>
+        <Text style={styles.headerTitle}>{t('recap_handicap_impact_card.handicap_impact_card.handicap_impact')}</Text>
       </View>
 
       <View style={styles.statsRow}>
-        <Stat label="DIFFERENTIAL" value={result.score_differential.toFixed(1)} accent />
+        <Stat label={t('recap_handicap_impact_card.label.differential')} value={result.score_differential.toFixed(1)} accent />
         {result.adjusted_gross_score !== result.raw_score && (
-          <Stat label="ADJUSTED" value={String(result.adjusted_gross_score)} sub={`raw ${result.raw_score}`} />
+          <Stat label={t('recap_handicap_impact_card.label.adjusted')} value={String(result.adjusted_gross_score)} sub={`raw ${result.raw_score}`} />
         )}
-        <Stat label="COURSE HCP" value={String(result.course_handicap)} />
+        <Stat label={t('recap_handicap_impact_card.label.course_hcp')} value={String(result.course_handicap)} />
       </View>
 
       <Text style={styles.impact}>{result.estimated_index_impact}</Text>
@@ -293,16 +295,16 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
               setJustPosted(true);
             }}
           >
-            <Text style={styles.ctaPrimaryText}>Post to my Index</Text>
+            <Text style={styles.ctaPrimaryText}>{t('recap_handicap_impact_card.handicap_impact_card.post_to_my_index')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.cta} onPress={() => setDismissed(true)}>
-            <Text style={styles.ctaText}>Just save the round</Text>
+            <Text style={styles.ctaText}>{t('recap_handicap_impact_card.handicap_impact_card.just_save_the_round')}</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <View style={styles.posted}>
           <AppIcon name="checkmark-circle" size={16} color="#00C896" />
-          <Text style={styles.postedText}>Posted. Your Index updated.</Text>
+          <Text style={styles.postedText}>{t('recap_handicap_impact_card.handicap_impact_card.posted_your_index_updated')}</Text>
         </View>
       )}
     </View>

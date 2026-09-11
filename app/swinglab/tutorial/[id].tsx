@@ -18,8 +18,10 @@ import { clubLabel } from '../../../services/clubRecognition';
 import { useSettingsStore } from '../../../store/settingsStore';
 import { getCaddieName } from '../../../lib/persona';
 import { setActiveSurface, clearActiveSurface } from '../../../services/activeSurfaceRegistry';
+import { useTranslation } from 'react-i18next';
 
 export default function TutorialDetail() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -41,14 +43,14 @@ export default function TutorialDetail() {
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>
-            <Text style={[styles.back, { color: colors.accent }]}>‹ Back</Text>
+            <Text style={[styles.back, { color: colors.accent }]}>{t('swinglab_tutorial.tutorial_detail.back')}</Text>
           </TouchableOpacity>
-          <Text style={[styles.title, { color: colors.text_primary }]}>Tutorial</Text>
+          <Text style={[styles.title, { color: colors.text_primary }]}>{t('swinglab_tutorial.tutorial_detail.tutorial')}</Text>
           <View style={{ width: 60 }} />
         </View>
         <View style={styles.emptyCard}>
-          <Text style={[styles.emptyTitle, { color: colors.text_primary }]}>Tutorial not found.</Text>
-          <Text style={[styles.emptyBody, { color: colors.text_muted }]}>It may have been deleted.</Text>
+          <Text style={[styles.emptyTitle, { color: colors.text_primary }]}>{t('swinglab_tutorial.tutorial_detail.tutorial_not_found')}</Text>
+          <Text style={[styles.emptyBody, { color: colors.text_muted }]}>{t('swinglab_tutorial.tutorial_detail.it_may_have_been_deleted')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -58,7 +60,7 @@ export default function TutorialDetail() {
     const ok = setActive(tutorial.id, next);
     if (!ok && next) {
       Alert.alert(
-        'Active tutorials full',
+        t('swinglab_tutorial.alert.active_tutorials_full'),
         `You can have up to ${MAX_ACTIVE_TUTORIALS} tutorials active at once. Deactivate one in the library before activating this one.`,
       );
     }
@@ -66,8 +68,8 @@ export default function TutorialDetail() {
 
   const onDelete = () => {
     Alert.alert(
-      'Delete tutorial?',
-      'The teaching summary and practice context will be removed.',
+      t('swinglab_tutorial.alert.delete_tutorial'),
+      t('swinglab_tutorial.alert.the_teaching_summary_and_practice'),
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: () => {
@@ -82,7 +84,7 @@ export default function TutorialDetail() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Text style={[styles.back, { color: colors.accent }]}>‹ Back</Text>
+          <Text style={[styles.back, { color: colors.accent }]}>{t('swinglab_tutorial.tutorial_detail.back')}</Text>
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.text_primary }]} numberOfLines={1}>
           {tutorial.title}
@@ -94,7 +96,7 @@ export default function TutorialDetail() {
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.label, { color: colors.text_muted }]}>ACTIVE PRACTICE CONTEXT</Text>
+              <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_tutorial.tutorial_detail.active_practice_context')}</Text>
               <Text style={[styles.subText, { color: colors.text_secondary, marginTop: 4 }]}>
                 {tutorial.is_active
                   ? `${caddieName} will reference this lesson during your rounds.`
@@ -111,7 +113,7 @@ export default function TutorialDetail() {
         </View>
 
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.label, { color: colors.text_muted }]}>TEACHING FOCUS</Text>
+          <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_tutorial.tutorial_detail.teaching_focus')}</Text>
           <Text style={[styles.body, { color: colors.text_primary, marginTop: 6 }]}>
             {tutorial.teaching_focus}
           </Text>
@@ -124,7 +126,7 @@ export default function TutorialDetail() {
 
         {tutorial.key_cues.length > 0 && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.label, { color: colors.text_muted }]}>KEY CUES</Text>
+            <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_tutorial.tutorial_detail.key_cues')}</Text>
             {tutorial.key_cues.map((cue, i) => (
               <View key={i} style={styles.cueRow}>
                 <Text style={[styles.bullet, { color: colors.accent }]}>•</Text>
@@ -136,7 +138,7 @@ export default function TutorialDetail() {
 
         {tutorial.target_clubs.length > 0 && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.label, { color: colors.text_muted }]}>TARGET CLUBS</Text>
+            <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_tutorial.tutorial_detail.target_clubs')}</Text>
             <View style={styles.clubRow}>
               {tutorial.target_clubs.map(c => (
                 <View key={c} style={[styles.clubPill, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
@@ -151,7 +153,7 @@ export default function TutorialDetail() {
 
         {tutorial.target_situations.length > 0 && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.label, { color: colors.text_muted }]}>WHEN IT APPLIES</Text>
+            <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_tutorial.tutorial_detail.when_it_applies')}</Text>
             {tutorial.target_situations.map((s, i) => (
               <View key={i} style={styles.cueRow}>
                 <Text style={[styles.bullet, { color: colors.accent }]}>•</Text>
@@ -163,7 +165,7 @@ export default function TutorialDetail() {
 
         {tutorial.player_notes && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.label, { color: colors.text_muted }]}>YOUR NOTES</Text>
+            <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_tutorial.tutorial_detail.your_notes')}</Text>
             <Text style={[styles.subText, { color: colors.text_secondary, marginTop: 6 }]}>
               {tutorial.player_notes}
             </Text>
@@ -171,7 +173,7 @@ export default function TutorialDetail() {
         )}
 
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.label, { color: colors.text_muted }]}>EXTRACTION CONFIDENCE</Text>
+          <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_tutorial.tutorial_detail.extraction_confidence')}</Text>
           <Text style={[styles.body, { color: colors.text_primary, marginTop: 6 }]}>
             {tutorial.extraction_confidence}
           </Text>
@@ -186,7 +188,7 @@ export default function TutorialDetail() {
           style={[styles.deleteBtn, { borderColor: colors.error }]}
           onPress={onDelete}
         >
-          <Text style={[styles.deleteText, { color: colors.error }]}>Delete Tutorial</Text>
+          <Text style={[styles.deleteText, { color: colors.error }]}>{t('swinglab_tutorial.tutorial_detail.delete_tutorial')}</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

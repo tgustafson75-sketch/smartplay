@@ -841,6 +841,17 @@ You are in CADDIE mode — on the course, mid-round. Your voice is:
     const LANG_ENFORCEMENT: Record<string, string> = {
       es: 'CRITICAL: Respond ONLY in Spanish (español). Every word, every sentence. The user has explicitly set Spanish as their language. Do NOT respond in English even if the transcribed input looks English — the user is speaking Spanish.',
       zh: 'CRITICAL: Respond ONLY in Chinese (中文). Every word, every sentence. The user has explicitly set Chinese as their language. Do NOT respond in English even if the transcribed input looks English — the user is speaking Chinese.',
+      /**
+       * 2026-09-11 (release 1.5) — ja/ko added.
+       *
+       * This map is NOT locale-agnostic and never was: `LANG_ENFORCEMENT[language] ?? ''` means a
+       * language with no entry gets an EMPTY rule, so the brain would have answered a Japanese
+       * player in English with nothing anywhere reporting a problem. A missing key here is silent,
+       * which is why adding the locale to the app without adding it here would have looked like it
+       * worked right up until someone spoke Japanese.
+       */
+      ja: 'CRITICAL: Respond ONLY in Japanese (日本語). Every word, every sentence. The user has explicitly set Japanese as their language. Do NOT respond in English even if the transcribed input looks English — the user is speaking Japanese. Use natural spoken Japanese, not textbook formality: this is a caddie talking to a player between shots.',
+      ko: 'CRITICAL: Respond ONLY in Korean (한국어). Every word, every sentence. The user has explicitly set Korean as their language. Do NOT respond in English even if the transcribed input looks English — the user is speaking Korean. Use natural spoken Korean at a polite-casual register (해요체), not formal written style: this is a caddie talking to a player between shots.',
     };
     const langRule = LANG_ENFORCEMENT[language] ?? '';
 

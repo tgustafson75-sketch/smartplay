@@ -31,6 +31,7 @@ import CompareReferencePickerSheet from '../../components/swinglab/CompareRefere
 import YouTubeReferenceModal from '../../components/swinglab/YouTubeReferenceModal';
 import type { PoseEstimate } from '../../services/poseEstimator';
 import type { SimilarMatch } from '../../services/swingDatabase';
+import { useTranslation } from 'react-i18next';
 
 const FILTERS: { id: LibraryFilter; label: string }[] = [
   { id: 'all', label: 'All' },
@@ -48,6 +49,7 @@ const DATE_FILTERS: { id: DateFilter; label: string }[] = [
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export default function SwingLibrary() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const sessionHistory = useSwingSessionStore(s => s.sessionHistory);
@@ -345,8 +347,8 @@ export default function SwingLibrary() {
 
   const onLongPress = (id: string) => {
     Alert.alert(
-      'Delete swing?',
-      'This removes it from your library. The original video on your phone is unaffected.',
+      t('swinglab_library.alert.delete_swing'),
+      t('swinglab_library.alert.this_removes_it_from_your'),
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: () => deleteSession(id) },
@@ -370,11 +372,11 @@ export default function SwingLibrary() {
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           style={styles.headerIcon}
           accessibilityRole="button"
-          accessibilityLabel="Back"
+          accessibilityLabel={t('swinglab_library.accessibility_label.back')}
         >
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text_primary }]}>Swing Library</Text>
+        <Text style={[styles.title, { color: colors.text_primary }]}>{t('swinglab.card_library_title')}</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           {/* 2026-05-23 — YouTube reference. Cross-platform modal
               replacing the iOS-only Alert.prompt hack: URL input
@@ -388,7 +390,7 @@ export default function SwingLibrary() {
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             style={styles.headerIcon}
             accessibilityRole="button"
-            accessibilityLabel="Add a YouTube reference swing"
+            accessibilityLabel={t('swinglab_library.accessibility_label.add_a_youtube_reference_swing')}
           >
             <Ionicons name="logo-youtube" size={22} color={colors.accent} />
           </TouchableOpacity>
@@ -397,7 +399,7 @@ export default function SwingLibrary() {
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             style={styles.headerIcon}
             accessibilityRole="button"
-            accessibilityLabel="Upload a swing"
+            accessibilityLabel={t('swinglab_library.accessibility_label.upload_a_swing')}
           >
             <Ionicons name="cloud-upload-outline" size={22} color={colors.accent} />
           </TouchableOpacity>
@@ -444,7 +446,7 @@ export default function SwingLibrary() {
             (showAdvancedFilters || advancedFiltersActive) && { backgroundColor: colors.accent_muted, borderColor: colors.accent },
           ]}
           accessibilityRole="button"
-          accessibilityLabel="Toggle advanced filters"
+          accessibilityLabel={t('swinglab_library.accessibility_label.toggle_advanced_filters')}
         >
           <Ionicons
             name="options-outline"
@@ -562,7 +564,7 @@ export default function SwingLibrary() {
         <View style={styles.emptyWrap}>
           <ActivityIndicator size="small" color={colors.accent} />
           <Text style={[styles.emptyBody, { color: colors.text_muted, marginTop: 12 }]}>
-            Loading library…
+            {t('swinglab_library.swing_library.loading_library')}
           </Text>
         </View>
       ) : entries.length === 0 ? (
@@ -587,7 +589,7 @@ export default function SwingLibrary() {
               style={[styles.cta, { backgroundColor: colors.accent }]}
               onPress={clearAllFilters}
             >
-              <Text style={styles.ctaText}>Clear filters</Text>
+              <Text style={styles.ctaText}>{t('swinglab_library.swing_library.clear_filters')}</Text>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
@@ -595,7 +597,7 @@ export default function SwingLibrary() {
               onPress={() => router.push('/swinglab/smartmotion' as never)}
             >
               <Ionicons name="videocam" size={18} color="#0d1a0d" style={{ marginRight: 8 }} />
-              <Text style={styles.ctaText}>Record a swing</Text>
+              <Text style={styles.ctaText}>{t('swinglab_library.swing_library.record_a_swing')}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -675,7 +677,7 @@ export default function SwingLibrary() {
                     if (status && !status.video) {
                       return (
                         <Text style={[styles.rowIssue, { color: '#ef4444' }]} numberOfLines={1}>
-                          Video file unavailable on this device
+                          {t('swinglab_library.swing_library.video_file_unavailable_on_this')}
                         </Text>
                       );
                     }
@@ -696,7 +698,7 @@ export default function SwingLibrary() {
                     if (status === 'failed') {
                       return (
                         <Text style={[styles.rowIssue, { color: '#f59e0b' }]} numberOfLines={1}>
-                          Needs retry — tap to re-analyze
+                          {t('swinglab_library.swing_library.needs_retry_tap_to_re')}
                         </Text>
                       );
                     }
@@ -718,7 +720,7 @@ export default function SwingLibrary() {
                     }}
                     style={styles.compareBtn}
                     accessibilityRole="button"
-                    accessibilityLabel="More actions for this swing"
+                    accessibilityLabel={t('swinglab_library.accessibility_label.more_actions_for_this_swing')}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
                     <Ionicons name="ellipsis-horizontal" size={20} color={colors.text_muted} />
@@ -768,7 +770,7 @@ export default function SwingLibrary() {
                       }}
                     >
                       <Ionicons name="git-compare-outline" size={20} color={colors.text_primary} />
-                      <Text style={[styles.menuLabel, { color: colors.text_primary }]}>Compare</Text>
+                      <Text style={[styles.menuLabel, { color: colors.text_primary }]}>{t('swinglab_library.swing_library.compare')}</Text>
                     </TouchableOpacity>
                   )}
                   <TouchableOpacity
@@ -780,10 +782,10 @@ export default function SwingLibrary() {
                     }}
                   >
                     <Ionicons name="trash-outline" size={20} color="#ef4444" />
-                    <Text style={[styles.menuLabel, { color: '#ef4444' }]}>Delete</Text>
+                    <Text style={[styles.menuLabel, { color: '#ef4444' }]}>{t('swinglab_library.swing_library.delete')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.menuCancel} onPress={closeMenu}>
-                    <Text style={[styles.menuCancelText, { color: colors.text_muted }]}>Cancel</Text>
+                    <Text style={[styles.menuCancelText, { color: colors.text_muted }]}>{t('play.cancel')}</Text>
                   </TouchableOpacity>
                 </View>
               </TouchableOpacity>

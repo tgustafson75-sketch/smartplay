@@ -17,6 +17,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { sendMessage, fetchThread, type ChatMessage } from '../services/messaging';
 import { MESSAGING_ENABLED } from '../constants/featureFlags';
+import { useTranslation } from 'react-i18next';
 
 const RECIP_KEY = 'msg_recipient_v1';
 
@@ -30,6 +31,7 @@ export default function MessagesScreen() {
 }
 
 function MessagesScreenInner() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const myEmail = (usePlayerProfileStore(s => s.email) ?? '').trim().toLowerCase();
@@ -94,20 +96,20 @@ function MessagesScreenInner() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Back">
+        <TouchableOpacity onPress={() => router.back()} accessibilityRole="button" accessibilityLabel={t('messages.accessibility_label.back')}>
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text_primary }]}>Messages</Text>
+        <Text style={[styles.title, { color: colors.text_primary }]}>{t('messages.messages_screen_inner.messages')}</Text>
         <View style={{ width: 26 }} />
       </View>
 
       {/* Recipient */}
       <View style={[styles.recipRow, { borderColor: colors.border }]}>
-        <Text style={[styles.recipLabel, { color: colors.text_muted }]}>To</Text>
+        <Text style={[styles.recipLabel, { color: colors.text_muted }]}>{t('messages.messages_screen_inner.to')}</Text>
         <TextInput
           value={recipient}
           onChangeText={setRecipient}
-          placeholder="their account email"
+          placeholder={t('messages.placeholder.their_account_email')}
           placeholderTextColor={colors.text_muted}
           autoCapitalize="none"
           keyboardType="email-address"
@@ -116,9 +118,9 @@ function MessagesScreenInner() {
       </View>
 
       {!myEmail ? (
-        <View style={styles.center}><Text style={[styles.note, { color: colors.text_muted }]}>Set your account email in Settings to message.</Text></View>
+        <View style={styles.center}><Text style={[styles.note, { color: colors.text_muted }]}>{t('messages.messages_screen_inner.set_your_account_email_in')}</Text></View>
       ) : !recipOk ? (
-        <View style={styles.center}><Text style={[styles.note, { color: colors.text_muted }]}>Enter the other person&apos;s account email above to start a thread.</Text></View>
+        <View style={styles.center}><Text style={[styles.note, { color: colors.text_muted }]}>{t('messages.messages_screen_inner.enter_the_other_person_s')}</Text></View>
       ) : (
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={8}>
           <FlatList
@@ -131,14 +133,14 @@ function MessagesScreenInner() {
             ListEmptyComponent={
               loading
                 ? <ActivityIndicator color={colors.accent} style={{ marginTop: 24 }} />
-                : <Text style={[styles.note, { color: colors.text_muted, textAlign: 'center', marginTop: 24 }]}>No messages yet. Say hi 👋</Text>
+                : <Text style={[styles.note, { color: colors.text_muted, textAlign: 'center', marginTop: 24 }]}>{t('messages.messages_screen_inner.no_messages_yet_say_hi')}</Text>
             }
           />
           <View style={[styles.inputRow, { borderColor: colors.border, backgroundColor: colors.background }]}>
             <TextInput
               value={draft}
               onChangeText={setDraft}
-              placeholder="Message"
+              placeholder={t('messages.placeholder.message')}
               placeholderTextColor={colors.text_muted}
               multiline
               style={[styles.input, { color: colors.text_primary, backgroundColor: colors.surface_elevated, borderColor: colors.border }]}
@@ -148,7 +150,7 @@ function MessagesScreenInner() {
               disabled={!draft.trim() || sending}
               style={[styles.sendBtn, { backgroundColor: draft.trim() && !sending ? colors.accent : colors.border }]}
               accessibilityRole="button"
-              accessibilityLabel="Send message"
+              accessibilityLabel={t('messages.accessibility_label.send_message')}
             >
               {sending
                 ? <ActivityIndicator color="#06281c" size="small" />

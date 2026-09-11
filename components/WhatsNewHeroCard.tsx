@@ -13,10 +13,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { WHATS_NEW } from '../services/knowledgeBase/whatsNew';
 import { useWhatsNewStore } from '../store/whatsNewStore';
+import { useTranslation } from 'react-i18next';
 
 const MAX_SHOWN = 6;
 
 export default function WhatsNewHeroCard() {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const seenCount = useWhatsNewStore((s) => s.seenCount);
   const markAllSeen = useWhatsNewStore((s) => s.markAllSeen);
@@ -33,12 +35,12 @@ export default function WhatsNewHeroCard() {
       <View style={styles.headerRow}>
         <View style={styles.titleWrap}>
           <Ionicons name="sparkles" size={18} color={colors.accent} />
-          <Text style={[styles.title, { color: colors.text_primary }]}>What&apos;s New</Text>
+          <Text style={[styles.title, { color: colors.text_primary }]}>{t('whats_new_hero_card.text.what_s_new')}</Text>
           <View style={[styles.countPill, { backgroundColor: colors.accent }]}>
             <Text style={styles.countText}>{unseen.length}</Text>
           </View>
         </View>
-        <TouchableOpacity onPress={markAllSeen} hitSlop={10} accessibilityRole="button" accessibilityLabel="Dismiss what's new">
+        <TouchableOpacity onPress={markAllSeen} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('whats_new_hero_card.accessibility_label.dismiss_what_s_new')}>
           <Ionicons name="close" size={20} color={colors.text_muted} />
         </TouchableOpacity>
       </View>
@@ -70,7 +72,7 @@ export default function WhatsNewHeroCard() {
       ) : null}
 
       <TouchableOpacity onPress={markAllSeen} style={[styles.gotIt, { borderColor: colors.accent }]} accessibilityRole="button">
-        <Text style={[styles.gotItText, { color: colors.accent }]}>Got it</Text>
+        <Text style={[styles.gotItText, { color: colors.accent }]}>{t('whats_new_hero_card.text.got_it')}</Text>
       </TouchableOpacity>
     </View>
   );

@@ -30,6 +30,7 @@ import { cleanArc, catmullRomBezier } from '../../services/swing/smoothArc';
 import { translateRig } from '../../services/cage/targetRig';
 import { Ionicons } from '@expo/vector-icons';
 import type { ThemeColors } from '../../theme/tokens';
+import { useTranslation } from 'react-i18next';
 
 interface BallArea { x: number; y: number; r: number }
 interface TargetPoint { x: number; y: number }
@@ -58,6 +59,7 @@ export default function PracticeTargetingCard({
   colors, frameUri, ballArea, target, onChangeBallArea, onChangeTarget,
   onAutoDetectBall, autoDetecting,
 }: Props) {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<PlacementMode>(null);
   const close = () => setMode(null);
 
@@ -66,10 +68,9 @@ export default function PracticeTargetingCard({
 
   return (
     <View style={[styles.card, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-      <Text style={[styles.eyebrow, { color: colors.accent }]}>CAGE TARGETING</Text>
+      <Text style={[styles.eyebrow, { color: colors.accent }]}>{t('swinglab_practice_targeting_card.practice_targeting_card.cage_targeting')}</Text>
       <Text style={[styles.helper, { color: colors.text_muted }]}>
-        Mark where your ball sat and where you were aiming. Used as a visual reference
-        on playback — and feeds future shot-quality reads.
+        {t('swinglab_practice_targeting_card.practice_targeting_card.mark_where_your_ball_sat')}
       </Text>
 
       <View style={styles.row}>
@@ -115,7 +116,7 @@ export default function PracticeTargetingCard({
             { borderColor: colors.accent, opacity: autoDetecting ? 0.5 : pressed ? 0.7 : 1 },
           ]}
           accessibilityRole="button"
-          accessibilityLabel="Auto-detect ball position"
+          accessibilityLabel={t('swinglab_practice_targeting_card.accessibility_label.auto_detect_ball_position')}
         >
           <Ionicons name="sparkles-outline" size={14} color={colors.accent} />
           <Text style={[styles.autoBtnText, { color: colors.accent }]}>
@@ -132,10 +133,10 @@ export default function PracticeTargetingCard({
           }}
           style={styles.clearBtn}
           accessibilityRole="button"
-          accessibilityLabel="Clear markers"
+          accessibilityLabel={t('swinglab_practice_targeting_card.accessibility_label.clear_markers')}
         >
           <Ionicons name="close-circle-outline" size={14} color={colors.text_muted} />
-          <Text style={[styles.clearBtnText, { color: colors.text_muted }]}>Clear markers</Text>
+          <Text style={[styles.clearBtnText, { color: colors.text_muted }]}>{t('swinglab_practice_targeting_card.practice_targeting_card.clear_markers')}</Text>
         </Pressable>
       )}
 
@@ -170,6 +171,7 @@ function PlacementModal({
   onCommitBall: (b: BallArea) => void;
   onCommitTarget: (t: TargetPoint) => void;
 }) {
+  const { t } = useTranslation();
   const { width: winW, height: winH } = useWindowDimensions();
   // 16:9 aspect ratio for the frame display; centered in the window
   // with letterbox space above/below for the action bar + safe area.
@@ -227,7 +229,7 @@ function PlacementModal({
     <Modal visible animationType="fade" transparent onRequestClose={onCancel}>
       <View style={modalStyles.backdrop}>
         <View style={modalStyles.header}>
-          <Pressable onPress={onCancel} hitSlop={14} accessibilityRole="button" accessibilityLabel="Cancel">
+          <Pressable onPress={onCancel} hitSlop={14} accessibilityRole="button" accessibilityLabel={t('play.cancel')}>
             <Ionicons name="close" size={26} color="#ffffff" />
           </Pressable>
           <Text style={modalStyles.title}>{title}</Text>
@@ -236,9 +238,9 @@ function PlacementModal({
             disabled={!draft}
             hitSlop={14}
             accessibilityRole="button"
-            accessibilityLabel="Save placement"
+            accessibilityLabel={t('swinglab_practice_targeting_card.accessibility_label.save_placement')}
           >
-            <Text style={[modalStyles.done, { color: draft ? tint : '#666' }]}>Done</Text>
+            <Text style={[modalStyles.done, { color: draft ? tint : '#666' }]}>{t('swinglab_practice_targeting_card.placement_modal.done')}</Text>
           </Pressable>
         </View>
 
@@ -319,6 +321,7 @@ export function CageTargetingOverlay({
    *  cup so the ball→cup line is the putt line). */
   targetKind?: 'aim' | 'cup';
 }) {
+  const { t } = useTranslation();
   const [size, setSize] = useState({ w: 0, h: 0 });
   if (!ballArea && !target) return null;
   const { w, h } = size;
@@ -458,7 +461,7 @@ export function CageTargetingOverlay({
         <View style={[overlayStyles.pillWrap, { left: targetLine.x2, top: targetLine.y2 - 30 }]}>
           <View style={[overlayStyles.pill, overlayStyles.pinPill]}>
             <Ionicons name="flag" size={12} color="#06281b" />
-            <Text style={[overlayStyles.pillText, { color: '#06281b' }]}>CUP</Text>
+            <Text style={[overlayStyles.pillText, { color: '#06281b' }]}>{t('swinglab_practice_targeting_card.cage_targeting_overlay.cup')}</Text>
           </View>
           <View style={overlayStyles.caret} />
         </View>
@@ -467,7 +470,7 @@ export function CageTargetingOverlay({
         <View style={[overlayStyles.pillWrap, { left: puttGeom.x, top: puttGeom.pinY - 30 }]}>
           <View style={[overlayStyles.pill, overlayStyles.pinPill]}>
             <Ionicons name="flag" size={12} color="#06281b" />
-            <Text style={[overlayStyles.pillText, { color: '#06281b' }]}>PIN</Text>
+            <Text style={[overlayStyles.pillText, { color: '#06281b' }]}>{t('swinglab_practice_targeting_card.cage_targeting_overlay.pin')}</Text>
           </View>
           <View style={overlayStyles.caret} />
         </View>
@@ -553,6 +556,7 @@ export function MultiPointTraceOverlay({
   } | null;
   color: string;
 }) {
+  const { t } = useTranslation();
   const [size, setSize] = useState({ w: 0, h: 0 });
   if (!trace || trace.tier === 'none' || trace.measured.length < 2) return null;
   const { w, h } = size;
@@ -669,7 +673,7 @@ export function MultiPointTraceOverlay({
         <View style={traceStyles.legend} pointerEvents="none">
           <View style={traceStyles.legendRow}>
             <View style={[traceStyles.solidSwatch, { backgroundColor: color }]} />
-            <Text style={traceStyles.legendText}>Measured</Text>
+            <Text style={traceStyles.legendText}>{t('swinglab_practice_targeting_card.multi_point_trace_overlay.measured')}</Text>
           </View>
           {projStr && (
             <View style={traceStyles.legendRow}>
@@ -678,7 +682,7 @@ export function MultiPointTraceOverlay({
                 <View style={[traceStyles.dash, { backgroundColor: color }]} />
                 <View style={[traceStyles.dash, { backgroundColor: color }]} />
               </View>
-              <Text style={traceStyles.legendText}>Projected</Text>
+              <Text style={traceStyles.legendText}>{t('swinglab_practice_targeting_card.multi_point_trace_overlay.projected')}</Text>
             </View>
           )}
         </View>

@@ -17,6 +17,7 @@ import { usePracticeSessionStore } from '../../store/practiceSessionStore';
 import { summarizeOpenRange } from '../../services/practice/openRangeStats';
 import StriationBar from '../../components/charts/StriationBar';
 import TrendChart from '../../components/charts/TrendChart';
+import { useTranslation } from 'react-i18next';
 
 function fmtDate(ms: number): string {
   try {
@@ -30,6 +31,7 @@ function fmtTime(ms: number): string {
 }
 
 export default function PracticeSessionDetail() {
+  const { t } = useTranslation();
   const { sessionId } = useLocalSearchParams<{ sessionId?: string }>();
   const router = useRouter();
   const { colors } = useTheme();
@@ -56,7 +58,7 @@ export default function PracticeSessionDetail() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={24} color={colors.text_primary} />
         </TouchableOpacity>
-        <Text style={[styles.emptyText, { color: colors.text_muted }]}>Practice session not found.</Text>
+        <Text style={[styles.emptyText, { color: colors.text_muted }]}>{t('practice.practice_session_detail.practice_session_not_found')}</Text>
       </View>
     );
   }
@@ -67,7 +69,7 @@ export default function PracticeSessionDetail() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 48, paddingHorizontal: 16 }}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Back">
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel={t('practice.accessibility_label.back')}>
           <Ionicons name="chevron-back" size={24} color={colors.text_primary} />
         </TouchableOpacity>
 
@@ -89,7 +91,7 @@ export default function PracticeSessionDetail() {
         {/* Per-club striation — where the reps went. */}
         {summary && summary.byClub.length > 0 ? (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.cardLabel, { color: colors.text_muted }]}>BY CLUB</Text>
+            <Text style={[styles.cardLabel, { color: colors.text_muted }]}>{t('practice.practice_session_detail.by_club')}</Text>
             <StriationBar
               width={300}
               segments={summary.byClub.map((c) => ({
@@ -104,10 +106,10 @@ export default function PracticeSessionDetail() {
         {/* Within-session tempo trend (improvement read). */}
         {tempoSeries.length >= 2 ? (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.cardLabel, { color: colors.text_muted }]}>TEMPO THROUGH THE SESSION</Text>
+            <Text style={[styles.cardLabel, { color: colors.text_muted }]}>{t('practice.practice_session_detail.tempo_through_the_session')}</Text>
             {/* tighter (more repeatable) is better → lower spread; we just show the line. */}
-            <TrendChart data={tempoSeries} width={300} height={70} color={colors.accent} emptyText="Not enough tempo reads" />
-            <Text style={[styles.caption, { color: colors.text_muted }]}>Backswing:downswing ratio per ball.</Text>
+            <TrendChart data={tempoSeries} width={300} height={70} color={colors.accent} emptyText={t('practice.empty_text.not_enough_tempo_reads')} />
+            <Text style={[styles.caption, { color: colors.text_muted }]}>{t('practice.practice_session_detail.backswing_downswing_ratio_per_ball')}</Text>
           </View>
         ) : null}
 

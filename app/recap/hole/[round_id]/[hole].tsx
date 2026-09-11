@@ -11,6 +11,7 @@ import type { ShotResult } from '../../../../store/roundStore';
 import { useWatchStore } from '../../../../store/watchStore';
 import { groupSwingsByHole, type RoundSwing } from '../../../../services/round/roundSwingRead';
 import { confirmShotsWithSwings, confirmationSummary } from '../../../../services/round/shotSwingConfirm';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Per-hole shot map screen. Reachable from the recap surface via the "View hole" affordance.
@@ -18,6 +19,7 @@ import { confirmShotsWithSwings, confirmationSummary } from '../../../../service
  * from courseGeometryService.
  */
 export default function HoleShotMapScreen() {
+  const { t } = useTranslation();
   const params = useLocalSearchParams<{ round_id: string; hole: string }>();
   const router = useRouter();
   const round_id = params.round_id;
@@ -168,21 +170,21 @@ export default function HoleShotMapScreen() {
   if (shotsForHole.length === 0 && swingsForHole.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Back">
-          <Text style={styles.backText}>← Back</Text>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel={t('recap_hole.accessibility_label.back')}>
+          <Text style={styles.backText}>{t('recap_hole.hole_shot_map_screen.back')}</Text>
         </TouchableOpacity>
         {staticHoleImage ? (
           <>
             <Image source={staticHoleImage} style={styles.staticHero} resizeMode="cover" />
             <View style={styles.empty}>
               <Text style={styles.emptyTitle}>Hole {hole}</Text>
-              <Text style={styles.emptyText}>No shots were tracked on this hole this round — here&apos;s the hole.</Text>
+              <Text style={styles.emptyText}>{t('recap_hole.hole_shot_map_screen.no_shots_were_tracked_on')}</Text>
             </View>
           </>
         ) : (
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>No shots logged on hole {hole}</Text>
-            <Text style={styles.emptyText}>Open a hole you actually played.</Text>
+            <Text style={styles.emptyText}>{t('recap_hole.hole_shot_map_screen.open_a_hole_you_actually')}</Text>
           </View>
         )}
       </SafeAreaView>
@@ -222,8 +224,7 @@ export default function HoleShotMapScreen() {
             swing to an IMU.
           */}
           <Text style={styles.swingNote}>
-            Every swing the watch measured here — practice swings included. Tempo is the honest on-course
-            reading; club speed needs a calibrated capture in Smart Motion.
+            {t('recap_hole.hole_shot_map_screen.every_swing_the_watch_measured')}
           </Text>
         </View>
       ) : null}

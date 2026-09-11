@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
+import { useTranslation } from 'react-i18next';
 
 const KEVIN_BADGE = require('../../assets/avatars/smartplay_caddie_badge.png');
 
@@ -31,6 +32,7 @@ type Props = {
 export default function KevinCoachBox({
   body, accent = 'coach', onTap, onDismiss, minimized,
 }: Props) {
+  const { t } = useTranslation();
   const trustLevel = useTrustLevelStore(s => s.level);
   const [dismissed, setDismissed] = useState(false);
 
@@ -44,7 +46,7 @@ export default function KevinCoachBox({
       <View style={[styles.minimizedRow, { borderColor: accentColor }]}>
         <View style={[styles.minimizedDot, { backgroundColor: accentColor }]} />
         <Text style={[styles.minimizedText, { color: accentColor }]}>
-          KEVIN · standing by
+          {t('swinglab_kevin_coach_box.kevin_coach_box.kevin_standing_by')}
         </Text>
       </View>
     );
@@ -71,7 +73,7 @@ export default function KevinCoachBox({
         style={styles.closeBtn}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         accessibilityRole="button"
-        accessibilityLabel="Dismiss Kevin for this session"
+        accessibilityLabel={t('swinglab_kevin_coach_box.accessibility_label.dismiss_kevin_for_this_session')}
       >
         <Text style={styles.closeText}>✕</Text>
       </TouchableOpacity>

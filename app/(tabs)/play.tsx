@@ -697,13 +697,13 @@ export default function PlayTab() {
          * nothing worth writing down". Same rule as the caddie's mic — if we opened the microphone,
          * we owe an answer either way.
          */
-        toast('Didn\'t catch that — tap the mic and try again.');
+        toast(t('play.alert.didn_t_catch_that_tap'));
       }
     } catch (e) {
       console.log('[play] notes dictation failed', e);
       // Includes the 20s hard timeout above, which is precisely the case where the player has been
       // holding the phone waiting and has the least reason to guess.
-      toast('Dictation had trouble. Tap the mic to try again, or type it.');
+      toast(t('play.alert.dictation_had_trouble_tap_the'));
     } finally {
       setNotesDictating(false);
     }
@@ -1786,7 +1786,7 @@ export default function PlayTab() {
                   <Text style={styles.heroHistoryText} numberOfLines={1}>{historyLine}</Text>
                 </View>
                 <View style={styles.heroStartBtn}>
-                  <Text style={styles.heroStartBtnText}>Start round</Text>
+                  <Text style={styles.heroStartBtnText}>{t('play.play_tab.start_round')}</Text>
                   <AppIcon name="arrow-forward" size={15} color="#001b12" />
                 </View>
               </View>
@@ -1851,7 +1851,7 @@ export default function PlayTab() {
                 );
               }}
               accessibilityRole="button"
-              accessibilityLabel="End round"
+              accessibilityLabel={t('play.accessibility_label.end_round')}
             >
               <Text style={styles.endRoundBtnText}>{t('play.end_round')}</Text>
             </TouchableOpacity>
@@ -1881,7 +1881,7 @@ export default function PlayTab() {
             onPress={() => void refreshLocation({ retries: 1 })}
             disabled={locating}
             accessibilityRole="button"
-            accessibilityLabel="Refresh nearby courses from your current location"
+            accessibilityLabel={t('play.accessibility_label.refresh_nearby_courses_from_your')}
           >
             <AppIcon name={locating ? 'sync' : 'locate-outline'} size={20} color="#00C896" />
           </TouchableOpacity>
@@ -1902,8 +1902,8 @@ export default function PlayTab() {
           <View style={styles.atCourseBanner}>
             <AppIcon name="golf" size={14} color="#00C896" />
             <Text style={styles.atCourseBannerText} numberOfLines={2}>
-              You&apos;re at{' '}
-              <Text style={styles.atCourseBannerStrong}>{atCourse.course.club_name.split(/\s[—-]\s/)[0]}</Text> · which course?
+              {t('play.play_tab.you_re_at')}{' '}
+              <Text style={styles.atCourseBannerStrong}>{atCourse.course.club_name.split(/\s[—-]\s/)[0]}</Text> {t('play.play_tab.which_course')}
             </Text>
             {[atCourse.course, atCourse.sibling].map((c) => (
               <TouchableOpacity
@@ -1927,7 +1927,7 @@ export default function PlayTab() {
           >
             <AppIcon name="golf" size={14} color="#00C896" />
             <Text style={styles.atCourseBannerText} numberOfLines={2}>
-              You&apos;re at <Text style={styles.atCourseBannerStrong}>{atCourse.course.club_name}</Text> · tap to start your round
+              {t('play.play_tab.you_re_at')} <Text style={styles.atCourseBannerStrong}>{atCourse.course.club_name}</Text> {t('play.play_tab.tap_to_start_your_round')}
             </Text>
             <AppIcon name="chevron-forward" size={14} color="#00C896" />
           </TouchableOpacity>
@@ -1961,7 +1961,7 @@ export default function PlayTab() {
                 onLongPress={() => {
                   if (!c.id.startsWith('custom:')) return;
                   Alert.alert(
-                    'Remove this course?',
+                    t('play.alert.remove_this_course'),
                     `"${c.club_name}" was added from a scorecard photo. Removing it won't affect rounds you've already played.`,
                     [
                       { text: 'Keep', style: 'cancel' },
@@ -2060,7 +2060,7 @@ export default function PlayTab() {
           style={[styles.searchInput, { marginTop: 8 }]}
           value={locationQuery}
           onChangeText={(v) => { setLocationQuery(v); locationQueryRef.current = v; }}
-          placeholder="City, State (optional) — narrows the search"
+          placeholder={t('play.placeholder.city_state_optional_narrows_the')}
           placeholderTextColor="#3a5a40"
           onSubmitEditing={onSearch}
           returnKeyType="search"
@@ -2071,9 +2071,9 @@ export default function PlayTab() {
           style={styles.addFromPhotoBtn}
           onPress={() => router.push('/add-course' as never)}
           accessibilityRole="button"
-          accessibilityLabel="Add a course from a scorecard photo"
+          accessibilityLabel={t('play.accessibility_label.add_a_course_from_a')}
         >
-          <Text style={styles.addFromPhotoText}>＋  Course not listed? Add from a scorecard photo</Text>
+          <Text style={styles.addFromPhotoText}>{t('play.play_tab.course_not_listed_add_from')}</Text>
         </TouchableOpacity>
 
         {/* 2026-08-07 (Tim) — GPS auto-detected nearby courses (course engine → Google Places), shown when
@@ -2081,7 +2081,7 @@ export default function PlayTab() {
             a typed result. Makes the search section location-aware instead of type-only. */}
         {!hasSearched && !searching && nearbyApiCourses.length > 0 && (
           <>
-            <Text style={[styles.sectionLabel, { marginTop: 14 }]}>Courses near you</Text>
+            <Text style={[styles.sectionLabel, { marginTop: 14 }]}>{t('play.play_tab.courses_near_you')}</Text>
             {nearbyApiCourses.map(r => (
               <TouchableOpacity
                 key={r.id}
@@ -2114,18 +2114,18 @@ export default function PlayTab() {
         {searching && (
           <View style={styles.statusRow}>
             <ActivityIndicator color="#00C896" size="small" />
-            <Text style={styles.statusText}>Searching…</Text>
+            <Text style={styles.statusText}>{t('play.play_tab.searching')}</Text>
           </View>
         )}
         {!searching && searchError && <Text style={styles.statusErr}>{searchError}</Text>}
         {/* Min-length hint — fires only when the user has started typing
             but hasn't reached the 3-char threshold the API requires. */}
         {!searching && !searchError && query.length > 0 && query.trim().length < 3 && (
-          <Text style={styles.statusText}>Type at least 3 letters to search.</Text>
+          <Text style={styles.statusText}>{t('play.play_tab.type_at_least_3_letters')}</Text>
         )}
         {/* Pre-search hint — only when input is genuinely empty. */}
         {!searching && !searchError && results.length === 0 && query.length === 0 && !hasSearched && (
-          <Text style={styles.statusText}>Type a course or city name to search.</Text>
+          <Text style={styles.statusText}>{t('play.play_tab.type_a_course_or_city')}</Text>
         )}
         {/* Post-search empty results — distinct from the pre-search hint
             so the user knows the request actually ran. */}
@@ -2137,7 +2137,7 @@ export default function PlayTab() {
             <View style={styles.aiCourseCard}>
               <View style={styles.aiCourseHeader}>
                 <AppIcon name="sparkles-outline" size={16} color="#00C896" />
-                <Text style={styles.aiCourseBadge}>AI-identified · no GPS overlay yet</Text>
+                <Text style={styles.aiCourseBadge}>{t('play.play_tab.ai_identified_no_gps_overlay')}</Text>
               </View>
               <Text style={styles.aiCourseName} numberOfLines={2}>{aiResult.club_name || aiResult.name}</Text>
               {!!aiResult.location && <Text style={styles.aiCourseMeta}>{aiResult.location}</Text>}
@@ -2156,7 +2156,7 @@ export default function PlayTab() {
                 </TouchableOpacity>
               </View>
               <Text style={styles.aiCourseNote}>
-                Not in our course database, so live GPS yardages aren&apos;t available for it yet — but your caddie knows the course and can talk strategy.
+                {t('play.play_tab.not_in_our_course_database')}
               </Text>
               {/* 2026-07-27 (tester UX) — don't dead-end a tester whose home course isn't bundled:
                   offer the scorecard-photo path so they can actually play it with yardages. */}
@@ -2164,9 +2164,9 @@ export default function PlayTab() {
                 style={[styles.addFromPhotoBtn, { marginTop: 12 }]}
                 onPress={() => router.push('/add-course' as never)}
                 accessibilityRole="button"
-                accessibilityLabel="Add this course from a scorecard photo to play it"
+                accessibilityLabel={t('play.accessibility_label.add_this_course_from_a')}
               >
-                <Text style={styles.addFromPhotoText}>＋  Add it from a scorecard photo to play with yardages</Text>
+                <Text style={styles.addFromPhotoText}>{t('play.play_tab.add_it_from_a_scorecard')}</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -2210,7 +2210,7 @@ export default function PlayTab() {
         {selectedLoading && !selected && (
           <View style={styles.statusRow}>
             <ActivityIndicator color="#00C896" size="small" />
-            <Text style={styles.statusText}>Opening course…</Text>
+            <Text style={styles.statusText}>{t('play.play_tab.opening_course')}</Text>
           </View>
         )}
         {!selectedLoading && selectError && <Text style={styles.statusErr}>{selectError}</Text>}
@@ -2268,13 +2268,13 @@ export default function PlayTab() {
                   <AppIcon name="book-outline" size={14} color="#00C896" />
                   <Text style={styles.actionBtnText}>{t('play.log')}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.actionBtn} onPress={handleCourseLayout} accessibilityRole="button" accessibilityLabel="Course layout">
+                <TouchableOpacity style={styles.actionBtn} onPress={handleCourseLayout} accessibilityRole="button" accessibilityLabel={t('play.accessibility_label.course_layout')}>
                   <AppIcon name="list-outline" size={14} color="#00C896" />
-                  <Text style={styles.actionBtnText}>Layout</Text>
+                  <Text style={styles.actionBtnText}>{t('play.play_tab.layout')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.actionBtn} onPress={handleBookTeeTime} accessibilityRole="button" accessibilityLabel={`Find tee times at ${selected.club_name ?? selected.course_name ?? 'this course'}`}>
                   <AppIcon name="calendar-outline" size={14} color="#00C896" />
-                  <Text style={styles.actionBtnText}>Tee Times</Text>
+                  <Text style={styles.actionBtnText}>{t('play.play_tab.tee_times')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -2350,7 +2350,7 @@ export default function PlayTab() {
                 style={[styles.chip, { flexDirection: 'row', alignItems: 'center' }]}
                 onPress={() => router.push('/tournament' as never)}
                 accessibilityRole="button"
-                accessibilityLabel="Tournament Mode — group play setup"
+                accessibilityLabel={t('play.accessibility_label.tournament_mode_group_play_setup')}
               >
                 <AppIcon name="trophy" size={13} color="#00C896" />
                 <Text style={[styles.chipText, { marginLeft: 5 }]}>{t('play.tournament')}</Text>
@@ -2362,10 +2362,10 @@ export default function PlayTab() {
                 style={[styles.chip, { flexDirection: 'row', alignItems: 'center' }]}
                 onPress={() => router.push('/tee-goals' as never)}
                 accessibilityRole="button"
-                accessibilityLabel="Round challenge — break a score from a tee"
+                accessibilityLabel={t('play.accessibility_label.round_challenge_break_a_score')}
               >
                 <AppIcon name="flag" size={13} color="#00C896" />
-                <Text style={[styles.chipText, { marginLeft: 5 }]}>Challenge</Text>
+                <Text style={[styles.chipText, { marginLeft: 5 }]}>{t('play.play_tab.challenge')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -2377,7 +2377,7 @@ export default function PlayTab() {
                 style={[styles.chip, { flexDirection: 'row', alignItems: 'center' }, setupTransport === 'walking' && styles.chipActive]}
                 onPress={() => setSetupTransport('walking')}
                 accessibilityRole="button"
-                accessibilityLabel="Walking this round"
+                accessibilityLabel={t('play.accessibility_label.walking_this_round')}
               >
                 <AppIcon name="walk" size={14} color={setupTransport === 'walking' ? '#0a1410' : '#00C896'} />
                 <Text style={[styles.chipText, { marginLeft: 5 }, setupTransport === 'walking' && styles.chipTextActive]}>{t('play.walking', { defaultValue: 'Walking' })}</Text>
@@ -2386,7 +2386,7 @@ export default function PlayTab() {
                 style={[styles.chip, { flexDirection: 'row', alignItems: 'center' }, setupTransport === 'cart' && styles.chipActive]}
                 onPress={() => setSetupTransport('cart')}
                 accessibilityRole="button"
-                accessibilityLabel="Riding a cart this round"
+                accessibilityLabel={t('play.accessibility_label.riding_a_cart_this_round')}
               >
                 <AppIcon name="car-sport" size={14} color={setupTransport === 'cart' ? '#0a1410' : '#00C896'} />
                 <Text style={[styles.chipText, { marginLeft: 5 }, setupTransport === 'cart' && styles.chipTextActive]}>{t('play.cart', { defaultValue: 'Cart' })}</Text>
@@ -2465,7 +2465,7 @@ export default function PlayTab() {
                   style={styles.notesActionBtn}
                   onPress={() => { notesInputRef.current?.blur(); }}
                   accessibilityRole="button"
-                  accessibilityLabel="Done editing notes"
+                  accessibilityLabel={t('play.accessibility_label.done_editing_notes')}
                 >
                   <AppIcon name="checkmark" size={18} color="#00C896" />
                 </TouchableOpacity>

@@ -27,6 +27,7 @@ import { computeLeaderboard, leaderboardAsText } from '../services/tournament/co
 import { captureUtterance } from '../services/voiceService';
 import { useSettingsStore } from '../store/settingsStore';
 import { getApiBaseUrl } from '../services/apiBase';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Parse a spoken name list into up to 5 trimmed, title-cased first names.
@@ -68,6 +69,7 @@ const FORMAT_HINT: Record<TournamentFormat, string> = {
 const ALL_FORMATS: TournamentFormat[] = ['scramble', 'best_ball', 'stableford', 'skins', 'match_play', 'stroke'];
 
 export default function TournamentScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const phase = useTournamentStore(s => s.phase);
 
@@ -75,15 +77,15 @@ export default function TournamentScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Text style={styles.back}>‹ Back</Text>
+          <Text style={styles.back}>{t('tournament.tournament_screen.back')}</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Tournament</Text>
+        <Text style={styles.title}>{t('play.tournament')}</Text>
         <View style={{ width: 60 }} />
       </View>
       <View style={styles.tabRow}>
-        <PhaseBtn label="Setup" active={phase === 'setup'} onPress={() => useTournamentStore.getState().setPhase('setup')} />
-        <PhaseBtn label="Scoring" active={phase === 'scoring'} onPress={() => useTournamentStore.getState().setPhase('scoring')} />
-        <PhaseBtn label="Leaderboard" active={phase === 'leaderboard'} onPress={() => useTournamentStore.getState().setPhase('leaderboard')} />
+        <PhaseBtn label={t('tournament.label.setup')} active={phase === 'setup'} onPress={() => useTournamentStore.getState().setPhase('setup')} />
+        <PhaseBtn label={t('tournament.label.scoring')} active={phase === 'scoring'} onPress={() => useTournamentStore.getState().setPhase('scoring')} />
+        <PhaseBtn label={t('tournament.label.leaderboard')} active={phase === 'leaderboard'} onPress={() => useTournamentStore.getState().setPhase('leaderboard')} />
       </View>
       {phase === 'setup' && <SetupPanel />}
       {phase === 'scoring' && <ScoringPanel />}
@@ -103,6 +105,7 @@ function PhaseBtn({ label, active, onPress }: { label: string; active: boolean; 
 // ─── SETUP ────────────────────────────────────────────────────────
 
 function SetupPanel() {
+  const { t } = useTranslation();
   const state = useTournamentStore();
   // 2026-05-24 — Per-team voice-roster mic. State tracks which team is
   // currently capturing so other team mics gray out and the user can
@@ -119,7 +122,7 @@ function SetupPanel() {
       if (!transcript) return;
       const names = parseRosterNames(transcript);
       if (names.length === 0) {
-        Alert.alert('No names heard', 'Try again — say up to five first names.');
+        Alert.alert(t('tournament.alert.no_names_heard'), t('tournament.alert.try_again_say_up_to'));
         return;
       }
       // Populate left-to-right. addPlayer when we run out of slots; cap
@@ -136,7 +139,7 @@ function SetupPanel() {
       }
     } catch (e) {
       console.log('[tournament] roster mic failed (non-fatal):', e);
-      Alert.alert('Voice not available', 'Try again, or type names manually.');
+      Alert.alert(t('tournament.alert.voice_not_available'), t('tournament.alert.try_again_or_type_names'));
     } finally {
       setRecordingTeamId(null);
     }
@@ -144,11 +147,11 @@ function SetupPanel() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 80 }} keyboardShouldPersistTaps="handled">
-        <Text style={styles.sectionLabel}>NAME + COURSE</Text>
-        <TextInput style={styles.textInput} value={state.label} onChangeText={state.setLabel} placeholder="Tournament name (e.g. Bandon Trip)" placeholderTextColor="#4b5563" />
-        <TextInput style={styles.textInput} value={state.courseName} onChangeText={state.setCourseName} placeholder="Course (free text)" placeholderTextColor="#4b5563" />
+        <Text style={styles.sectionLabel}>{t('tournament.setup_panel.name_course')}</Text>
+        <TextInput style={styles.textInput} value={state.label} onChangeText={state.setLabel} placeholder={t('tournament.placeholder.tournament_name_e_g_bandon')} placeholderTextColor="#4b5563" />
+        <TextInput style={styles.textInput} value={state.courseName} onChangeText={state.setCourseName} placeholder={t('tournament.placeholder.course_free_text')} placeholderTextColor="#4b5563" />
 
-        <Text style={styles.sectionLabel}>FORMAT</Text>
+        <Text style={styles.sectionLabel}>{t('play.format')}</Text>
         {ALL_FORMATS.map(f => (
           <TouchableOpacity
             key={f}
@@ -164,7 +167,7 @@ function SetupPanel() {
           </TouchableOpacity>
         ))}
 
-        <Text style={styles.sectionLabel}>TEAMS</Text>
+        <Text style={styles.sectionLabel}>{t('tournament.setup_panel.teams')}</Text>
         {state.teams.map((t, ti) => (
           <View key={t.id} style={styles.teamCard}>
             <View style={styles.teamHeaderRow}>
@@ -216,15 +219,15 @@ function SetupPanel() {
         {state.teams.length < 5 && !(state.format === 'match_play' && state.teams.length >= 2) && (
           <TouchableOpacity onPress={state.addTeam} style={styles.addTeamBtn}>
             <Ionicons name="add-circle" size={20} color="#00C896" />
-            <Text style={styles.addTeamText}>Add team</Text>
+            <Text style={styles.addTeamText}>{t('tournament.setup_panel.add_team')}</Text>
           </TouchableOpacity>
         )}
         {state.format === 'match_play' && (
-          <Text style={styles.matchPlayHint}>Match Play is head-to-head — exactly 2 teams.</Text>
+          <Text style={styles.matchPlayHint}>{t('tournament.setup_panel.match_play_is_head_to')}</Text>
         )}
 
-        <Text style={styles.sectionLabel}>HOLE PARS</Text>
-        <Text style={styles.subHint}>Defaults to par 4. Tap a hole to cycle through 3 / 4 / 5.</Text>
+        <Text style={styles.sectionLabel}>{t('tournament.setup_panel.hole_pars')}</Text>
+        <Text style={styles.subHint}>{t('tournament.setup_panel.defaults_to_par_4_tap')}</Text>
         <View style={styles.parGrid}>
           {state.holes.map(h => (
             <TouchableOpacity
@@ -239,17 +242,17 @@ function SetupPanel() {
         </View>
 
         <TouchableOpacity style={styles.startBtn} onPress={() => useTournamentStore.getState().setPhase('scoring')}>
-          <Text style={styles.startBtnText}>Start Scoring →</Text>
+          <Text style={styles.startBtnText}>{t('tournament.setup_panel.start_scoring')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => Alert.alert('Reset tournament?', 'Clear all teams, players, scores. Cannot be undone.', [
+          onPress={() => Alert.alert(t('tournament.alert.reset_tournament'), t('tournament.alert.clear_all_teams_players_scores'), [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Reset', style: 'destructive', onPress: () => useTournamentStore.getState().resetTournament() },
           ])}
           style={styles.resetLink}
         >
-          <Text style={styles.resetLinkText}>Reset tournament</Text>
+          <Text style={styles.resetLinkText}>{t('tournament.setup_panel.reset_tournament')}</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -259,6 +262,7 @@ function SetupPanel() {
 // ─── SCORING ────────────────────────────────────────────────────────
 
 function ScoringPanel() {
+  const { t } = useTranslation();
   const state = useTournamentStore();
   const hole = state.currentHole;
   const par = state.holes.find(h => h.hole === hole)?.par ?? 4;
@@ -295,7 +299,7 @@ function ScoringPanel() {
         ))}
         <View style={{ height: 20 }} />
         <TouchableOpacity style={styles.startBtn} onPress={() => state.setPhase('leaderboard')}>
-          <Text style={styles.startBtnText}>View Leaderboard →</Text>
+          <Text style={styles.startBtnText}>{t('tournament.scoring_panel.view_leaderboard')}</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -303,11 +307,12 @@ function ScoringPanel() {
 }
 
 function TeamScoreRow({ teamId, hole, par }: { teamId: string; hole: number; par: number }) {
+  const { t } = useTranslation();
   const score = useTournamentStore(s => s.teamScores[`${teamId}.${hole}`] ?? null);
   const set = useTournamentStore(s => s.setTeamScore);
   return (
     <View style={styles.scoreEntryRow}>
-      <Text style={styles.scoreEntryLabel}>Score</Text>
+      <Text style={styles.scoreEntryLabel}>{t('dashboard.score')}</Text>
       <Stepper value={score} suggested={par} onChange={(v) => set(teamId, hole, v)} />
     </View>
   );
@@ -348,6 +353,7 @@ function Stepper({ value, suggested, onChange }: { value: number | null; suggest
 // ─── LEADERBOARD ───────────────────────────────────────────────────
 
 function LeaderboardPanel() {
+  const { t } = useTranslation();
   const state = useTournamentStore();
   const result = useMemo(() => computeLeaderboard(state), [state]);
   const onShare = useCallback(async () => {
@@ -381,7 +387,7 @@ function LeaderboardPanel() {
         </View>
         <TouchableOpacity onPress={onShare} style={styles.shareBtn}>
           <Ionicons name="share-outline" size={18} color="#060f09" />
-          <Text style={styles.shareBtnText}>Share</Text>
+          <Text style={styles.shareBtnText}>{t('scorecard.share')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -397,7 +403,7 @@ function LeaderboardPanel() {
       ))}
 
       <TouchableOpacity style={styles.startBtn} onPress={() => state.setPhase('scoring')}>
-        <Text style={styles.startBtnText}>← Back to Scoring</Text>
+        <Text style={styles.startBtnText}>{t('tournament.leaderboard_panel.back_to_scoring')}</Text>
       </TouchableOpacity>
     </ScrollView>
   );

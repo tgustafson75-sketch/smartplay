@@ -21,6 +21,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useClubStatsStore } from '../store/clubStatsStore';
 import { composeBallFit, ballFitVerdict, type BallProfile } from '../services/cnsBallFitting';
+import { useTranslation } from 'react-i18next';
 
 const PROFILE_LABEL: Record<BallProfile, string> = {
   tour: 'Tour',
@@ -30,6 +31,7 @@ const PROFILE_LABEL: Record<BallProfile, string> = {
 };
 
 export default function BallFitScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
 
@@ -76,7 +78,7 @@ export default function BallFitScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text_primary }]}>Ball Fit</Text>
+        <Text style={[styles.title, { color: colors.text_primary }]}>{t('ball_fit.ball_fit_screen.ball_fit')}</Text>
         <View style={{ width: 26 }} />
       </View>
 
@@ -101,7 +103,7 @@ export default function BallFitScreen() {
 
         {/* Representative balls */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>BALLS IN THIS CATEGORY</Text>
+          <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>{t('ball_fit.ball_fit_screen.balls_in_this_category')}</Text>
           {fit.examples.map((e) => (
             <Text key={e} style={[styles.example, { color: colors.text_primary }]}>• {e}</Text>
           ))}
@@ -111,12 +113,12 @@ export default function BallFitScreen() {
         {/* 2026-07-23 (Tim — Bag Vision 2b) — YOUR BALL vs your data. Record the ball you game
             and get an honest owned-vs-recommended read (aligned / worth trialing / unknown). */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: ballVerdict.aligned === false ? '#f5a623' : colors.border }]}>
-          <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>YOUR BALL</Text>
+          <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>{t('ball_fit.ball_fit_screen.your_ball')}</Text>
           <TextInput
             style={[styles.ballInput, { color: colors.text_primary, borderColor: colors.border, backgroundColor: colors.background }]}
             value={currentBall}
             onChangeText={(v) => { setCurrentBall(v); setCurrentBallStore(v.trim() ? v.trim() : null); }}
-            placeholder="The ball you play (e.g. Titleist Pro V1)"
+            placeholder={t('ball_fit.placeholder.the_ball_you_play_e')}
             placeholderTextColor={colors.text_muted}
           />
           <Text style={[styles.why, { color: colors.text_primary }]}>{ballVerdict.line}</Text>

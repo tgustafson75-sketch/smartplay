@@ -38,8 +38,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getDrillEntry } from '../../data/drillCatalog';
 import { getInstructorVideo } from '../../data/instructorVideos';
+import { useTranslation } from 'react-i18next';
 
 export default function DrillDetail() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const { issue } = useLocalSearchParams<{ issue?: string }>();
@@ -60,12 +62,12 @@ export default function DrillDetail() {
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={22} color={colors.accent} />
-            <Text style={[styles.backText, { color: colors.accent }]}>Drills</Text>
+            <Text style={[styles.backText, { color: colors.accent }]}>{t('swinglab.card_drills_title')}</Text>
           </Pressable>
         </View>
         <View style={styles.notFound}>
           <Text style={[styles.notFoundText, { color: colors.text_muted }]}>
-            Drill not found. Pull back to the Drills index.
+            {t('drills.drill_detail.drill_not_found_pull_back')}
           </Text>
         </View>
       </SafeAreaView>
@@ -83,11 +85,11 @@ export default function DrillDetail() {
           onPress={() => router.back()}
           hitSlop={10}
           accessibilityRole="button"
-          accessibilityLabel="Back to Drills"
+          accessibilityLabel={t('drills.accessibility_label.back_to_drills')}
           style={styles.backBtn}
         >
           <Ionicons name="chevron-back" size={22} color={colors.accent} />
-          <Text style={[styles.backText, { color: colors.accent }]}>Drills</Text>
+          <Text style={[styles.backText, { color: colors.accent }]}>{t('swinglab.card_drills_title')}</Text>
         </Pressable>
         {/* 2026-07-06 (Tim carry-over #1) — removed the decorative caddie-badge
             Image that sat UPPER-RIGHT here. Non-tappable branding reusing the mic
@@ -95,7 +97,7 @@ export default function DrillDetail() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.eyebrow, { color: colors.accent }]}>DRILL</Text>
+        <Text style={[styles.eyebrow, { color: colors.accent }]}>{t('drills.drill_detail.drill')}</Text>
         <Text style={[styles.title, { color: colors.text_primary }]}>{entry.title}</Text>
         <Text style={[styles.missLine, { color: '#F0C030' }]}>{entry.missPattern}</Text>
 
@@ -110,19 +112,19 @@ export default function DrillDetail() {
             <Image source={entry.cardImage} style={styles.illustration} resizeMode="contain" />
             <View style={[styles.zoomBadge, { backgroundColor: colors.accent_muted, borderColor: colors.accent }]}>
               <Ionicons name="search" size={14} color={colors.accent} />
-              <Text style={[styles.zoomBadgeText, { color: colors.accent }]}>Tap to zoom</Text>
+              <Text style={[styles.zoomBadgeText, { color: colors.accent }]}>{t('drills.drill_detail.tap_to_zoom')}</Text>
             </View>
           </Pressable>
         )}
 
         {/* PRIMARY ISSUE box */}
-        <Text style={[styles.sectionLabel, { color: colors.accent }]}>PRIMARY ISSUE</Text>
+        <Text style={[styles.sectionLabel, { color: colors.accent }]}>{t('drills.drill_detail.primary_issue')}</Text>
         <View style={[styles.primaryBox, { borderColor: colors.accent, backgroundColor: colors.accent_muted }]}>
           <Text style={[styles.primaryText, { color: colors.text_primary }]}>{entry.primary}</Text>
         </View>
 
         {/* COMMON FAULTS */}
-        <Text style={[styles.sectionLabel, { color: colors.accent }]}>COMMON FAULTS</Text>
+        <Text style={[styles.sectionLabel, { color: colors.accent }]}>{t('drills.drill_detail.common_faults')}</Text>
         <View style={styles.faultsList}>
           {entry.commonFaults.map((fault) => (
             <View key={fault} style={styles.faultItem}>
@@ -133,7 +135,7 @@ export default function DrillDetail() {
         </View>
 
         {/* DRILLS */}
-        <Text style={[styles.sectionLabel, { color: colors.accent }]}>DRILLS</Text>
+        <Text style={[styles.sectionLabel, { color: colors.accent }]}>{t('drills.drill_detail.drills')}</Text>
         <View style={styles.drillsList}>
           {entry.drills.map((drill) => (
             <View
@@ -187,17 +189,17 @@ export default function DrillDetail() {
             generic illustration. */}
         {entry.tipsImage && (
           <>
-            <Text style={[styles.sectionLabel, { color: '#F0C030' }]}>COACH&apos;S TIPS</Text>
+            <Text style={[styles.sectionLabel, { color: '#F0C030' }]}>{t('drills.drill_detail.coach_s_tips')}</Text>
             <Pressable
               onPress={() => setTipsZoomOpen(true)}
               accessibilityRole="button"
-              accessibilityLabel="Coach's Tips infographic. Tap to zoom."
+              accessibilityLabel={t('drills.accessibility_label.coach_s_tips_infographic_tap')}
               style={styles.illustrationWrap}
             >
               <Image source={entry.tipsImage} style={styles.illustration} resizeMode="contain" />
               <View style={[styles.zoomBadge, { backgroundColor: 'rgba(240,192,48,0.18)', borderColor: '#F0C030' }]}>
                 <Ionicons name="search" size={14} color="#F0C030" />
-                <Text style={[styles.zoomBadgeText, { color: '#F0C030' }]}>Tap to zoom</Text>
+                <Text style={[styles.zoomBadgeText, { color: '#F0C030' }]}>{t('drills.drill_detail.tap_to_zoom')}</Text>
               </View>
             </Pressable>
           </>
@@ -212,7 +214,7 @@ export default function DrillDetail() {
             the try-drill CTA ALSO hidden). No url → no WATCH card; the drill's own coaching steps below
             ARE the lesson. */}
         {!!video.url && (<>
-        <Text style={[styles.sectionLabel, { color: colors.accent }]}>WATCH</Text>
+        <Text style={[styles.sectionLabel, { color: colors.accent }]}>{t('drills.drill_detail.watch')}</Text>
         <TouchableOpacity
           onPress={() => router.push({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -269,7 +271,7 @@ export default function DrillDetail() {
               onPress={() => setZoomOpen(false)}
               hitSlop={14}
               accessibilityRole="button"
-              accessibilityLabel="Close illustration"
+              accessibilityLabel={t('drills.accessibility_label.close_illustration')}
               style={styles.zoomCloseBtn}
             >
               <Ionicons name="close" size={28} color="#ffffff" />
@@ -296,7 +298,7 @@ export default function DrillDetail() {
               onPress={() => setTipsZoomOpen(false)}
               hitSlop={14}
               accessibilityRole="button"
-              accessibilityLabel="Close Coach's Tips"
+              accessibilityLabel={t('drills.accessibility_label.close_coach_s_tips')}
               style={styles.zoomCloseBtn}
             >
               <Ionicons name="close" size={28} color="#ffffff" />

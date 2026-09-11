@@ -77,6 +77,7 @@ import type { PoseEstimate } from '../../../services/poseEstimator';
 import type { SwingComparison } from '../../../services/swingComparisonEngine';
 import { getApiBaseUrl } from '../../../services/apiBase';
 import { titleForUpload } from '../../../services/swing/swingTitle';
+import { useTranslation } from 'react-i18next';
 
 // 2026-06-12 — shared Smart Motion control badges, so Library video controls match
 // the SmartMotion review badges (whole-app control consistency).
@@ -105,6 +106,7 @@ const STATUS_COPY: Record<AnalysisStatus, string> = {
 };
 
 export default function SwingDetail() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const { swing_id, watch } = useLocalSearchParams<{ swing_id: string; watch?: string }>();
@@ -1740,13 +1742,13 @@ export default function SwingDetail() {
 
   const shareSessionVideo = async () => {
     if (!shot?.clipUri) {
-      Alert.alert('Nothing to share', 'This session has no video file.');
+      Alert.alert(t('swinglab_swing.alert.nothing_to_share'), t('swinglab_swing.alert.this_session_has_no_video'));
       return;
     }
     try {
       const available = await Sharing.isAvailableAsync();
       if (!available) {
-        Alert.alert('Sharing unavailable', 'Sharing is not available on this device.');
+        Alert.alert(t('swinglab_swing.alert.sharing_unavailable'), t('swinglab_swing.alert.sharing_is_not_available_on'));
         return;
       }
       // 2026-06-23 (smoke-test) — re-anchor the clip URI before sharing so a stale
@@ -1758,7 +1760,7 @@ export default function SwingDetail() {
       });
     } catch (e) {
       console.log('[swing-detail] session share failed', e);
-      Alert.alert('Share failed', 'Could not share the video. The file may no longer be on this device.');
+      Alert.alert(t('swinglab_swing.alert.share_failed'), t('swinglab_swing.alert.could_not_share_the_video'));
     }
   };
 
@@ -1777,7 +1779,7 @@ export default function SwingDetail() {
    * against the wrong frame is worse than no skeleton. [[illustration-data-points]]
    */
   const handleShareLink = async () => {
-    if (!shot?.clipUri) { Alert.alert('Nothing to share', 'This session has no video file.'); return; }
+    if (!shot?.clipUri) { Alert.alert(t('swinglab_swing.alert.nothing_to_share'), t('swinglab_swing.alert.this_session_has_no_video')); return; }
     useToastStore.getState().show('Building your link…');
     try {
       const { createSwingShare } = await import('../../../services/swingShare');
@@ -1813,7 +1815,7 @@ export default function SwingDetail() {
           : r.reason === 'no_clip' ? 'The video file is no longer on this device.'
           : 'The link could not be created.';
         logExportFailure('share_link', r.reason);
-        Alert.alert('Could not create the link', why);
+        Alert.alert(t('swinglab_swing.alert.could_not_create_the_link'), why);
         return;
       }
       await Share.share(
@@ -1823,13 +1825,13 @@ export default function SwingDetail() {
       ).catch(() => { /* sheet dismissed */ });
     } catch (e) {
       logExportFailure('share_link', e instanceof Error ? e.message : String(e));
-      Alert.alert('Could not create the link', 'Something went wrong building the link.');
+      Alert.alert(t('swinglab_swing.alert.could_not_create_the_link'), t('swinglab_swing.alert.something_went_wrong_building_the'));
     }
   };
 
   const handleSessionShare = async () => {
     if (!shot?.clipUri) {
-      Alert.alert('Nothing to share', 'This session has no video file.');
+      Alert.alert(t('swinglab_swing.alert.nothing_to_share'), t('swinglab_swing.alert.this_session_has_no_video'));
       return;
     }
     // 2026-08-06 (Tim — "when I export a recorded swing to someone there's NO report with it even though it
@@ -1840,8 +1842,8 @@ export default function SwingDetail() {
     const hasReport = (session?.analysis_status ?? 'pending') === 'ok' && !!session?.primary_issue;
     if (hasReport) {
       Alert.alert(
-        'Share swing',
-        'Send a link that plays the swing with the analysis, the report as a PDF, or just the video?',
+        t('swinglab_swing.alert.share_swing'),
+        t('swinglab_swing.alert.send_a_link_that_plays'),
         [
           // 2026-08-31 — the LINK first: it carries the report AND the swing in motion, opens on any
           // phone without an app, and is the only one of these three that can sell the product.
@@ -1875,7 +1877,7 @@ export default function SwingDetail() {
   // separately, so the saved video is clean — no skeleton/markup baked in).
   const handleSaveToPhotos = async () => {
     if (!shot?.clipUri) {
-      Alert.alert('Nothing to save', 'This session has no video file.');
+      Alert.alert(t('swinglab_swing.alert.nothing_to_save'), t('swinglab_swing.alert.this_session_has_no_video'));
       return;
     }
     try {
@@ -1913,7 +1915,7 @@ export default function SwingDetail() {
        */
       const reason = e instanceof Error ? e.message : String(e);
       logExportFailure('save_video', reason, { hasClip: !!shot?.clipUri });
-      Alert.alert('Save failed', `Could not save the video. ${reason.slice(0, 120)}`);
+      Alert.alert(t('swinglab_swing.alert.save_failed'), `Could not save the video. ${reason.slice(0, 120)}`);
     }
   };
 
@@ -1926,7 +1928,7 @@ export default function SwingDetail() {
   // absent, the overlay is toggled off, or the composite can't render.
   const handleGrabFrame = async () => {
     if (!shot?.clipUri) {
-      Alert.alert('Nothing to capture', 'This session has no video file.');
+      Alert.alert(t('swinglab_swing.alert.nothing_to_capture'), t('swinglab_swing.alert.this_session_has_no_video'));
       return;
     }
     try {
@@ -1973,7 +1975,7 @@ export default function SwingDetail() {
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
       logExportFailure('grab_frame', reason, { hasClip: !!shot?.clipUri });
-      Alert.alert('Capture failed', `Could not grab this frame. ${reason.slice(0, 120)}`);
+      Alert.alert(t('swinglab_swing.alert.capture_failed'), `Could not grab this frame. ${reason.slice(0, 120)}`);
     }
   };
 
@@ -2174,7 +2176,7 @@ export default function SwingDetail() {
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.center}>
           <ActivityIndicator size="small" color={colors.accent} />
-          <Text style={{ color: colors.text_muted, marginTop: 12 }}>Loading swing…</Text>
+          <Text style={{ color: colors.text_muted, marginTop: 12 }}>{t('swinglab_swing.swing_detail.loading_swing')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -2183,9 +2185,9 @@ export default function SwingDetail() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.center}>
-          <Text style={{ color: colors.text_primary }}>Swing not found.</Text>
+          <Text style={{ color: colors.text_primary }}>{t('swinglab_swing.swing_detail.swing_not_found')}</Text>
           <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 20 }}>
-            <Text style={{ color: colors.accent }}>‹ Back</Text>
+            <Text style={{ color: colors.accent }}>{t('swinglab_swing.swing_detail.back')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -2195,23 +2197,23 @@ export default function SwingDetail() {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.center}>
-          <Text style={{ color: colors.text_primary, fontWeight: '600', marginBottom: 8 }}>Video unavailable</Text>
+          <Text style={{ color: colors.text_primary, fontWeight: '600', marginBottom: 8 }}>{t('swinglab_swing.swing_detail.video_unavailable')}</Text>
           <Text style={{ color: colors.text_muted, textAlign: 'center', marginBottom: 20, paddingHorizontal: 24 }}>
-            The video file is missing from this device. You can delete this entry or re-upload the clip.
+            {t('swinglab_swing.swing_detail.the_video_file_is_missing')}
           </Text>
           <TouchableOpacity
             onPress={() => {
-              Alert.alert('Delete this swing?', 'The metadata will be removed. You can re-upload the clip later.', [
+              Alert.alert(t('swinglab_swing.alert.delete_this_swing'), t('swinglab_swing.alert.the_metadata_will_be_removed'), [
                 { text: 'Cancel', style: 'cancel' },
                 { text: 'Delete', style: 'destructive', onPress: () => { useSwingSessionStore.getState().deleteSession(swing_id); router.back(); } },
               ]);
             }}
             style={{ marginBottom: 12, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: colors.surface, borderRadius: 8, borderWidth: 1, borderColor: colors.border }}
           >
-            <Text style={{ color: colors.error }}>Delete Entry</Text>
+            <Text style={{ color: colors.error }}>{t('swinglab_swing.swing_detail.delete_entry')}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => router.back()}>
-            <Text style={{ color: colors.accent }}>‹ Back</Text>
+            <Text style={{ color: colors.accent }}>{t('swinglab_swing.swing_detail.back')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -2539,7 +2541,7 @@ export default function SwingDetail() {
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Text style={[styles.back, { color: colors.accent }]}>‹ Back</Text>
+            <Text style={[styles.back, { color: colors.accent }]}>{t('swinglab_swing.swing_detail.back')}</Text>
           </TouchableOpacity>
           <View style={{ flex: 1, minWidth: 0, alignItems: 'center', paddingHorizontal: 6 }}>
             <Text style={[styles.title, { color: colors.text_primary, flex: 0, maxWidth: '100%' }]} numberOfLines={1}>
@@ -2606,7 +2608,7 @@ export default function SwingDetail() {
                 onPress={handleExportReport}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 accessibilityRole="button"
-                accessibilityLabel="Export swing report PDF"
+                accessibilityLabel={t('swinglab_swing.accessibility_label.export_swing_report_pdf')}
               >
                 <Ionicons name="document-text-outline" size={22} color={colors.accent} />
               </TouchableOpacity>
@@ -2615,7 +2617,7 @@ export default function SwingDetail() {
               onPress={handleGrabFrame}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               accessibilityRole="button"
-              accessibilityLabel="Save the current frame to your phone Photos"
+              accessibilityLabel={t('swinglab_swing.accessibility_label.save_the_current_frame_to')}
             >
               <Ionicons name="image-outline" size={22} color={colors.accent} />
             </TouchableOpacity>
@@ -2623,7 +2625,7 @@ export default function SwingDetail() {
               onPress={handleSaveToPhotos}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               accessibilityRole="button"
-              accessibilityLabel="Save this swing video to your phone Photos"
+              accessibilityLabel={t('swinglab_swing.accessibility_label.save_this_swing_video_to')}
             >
               <Ionicons name="download-outline" size={22} color={colors.accent} />
             </TouchableOpacity>
@@ -2631,7 +2633,7 @@ export default function SwingDetail() {
               onPress={handleSessionShare}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               accessibilityRole="button"
-              accessibilityLabel="Share this swing"
+              accessibilityLabel={t('swinglab_swing.accessibility_label.share_this_swing')}
             >
               <Ionicons name="share-outline" size={22} color={colors.accent} />
             </TouchableOpacity>
@@ -2646,7 +2648,7 @@ export default function SwingDetail() {
               Pick a swing below to compare with swing {String((session.shots.findIndex(x => x.id === leftShot.id) + 1)).padStart(2, '0')}.
             </Text>
             <TouchableOpacity onPress={exitCompare} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={[styles.compareBannerCancel, { color: colors.accent }]}>Cancel</Text>
+              <Text style={[styles.compareBannerCancel, { color: colors.accent }]}>{t('play.cancel')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -2655,9 +2657,9 @@ export default function SwingDetail() {
         {isComparing && leftShot && rightShot && (
           <View style={[styles.compareCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.compareHeader}>
-              <Text style={[styles.compareLabel, { color: colors.text_muted }]}>COMPARE</Text>
+              <Text style={[styles.compareLabel, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.compare')}</Text>
               <TouchableOpacity onPress={exitCompare}>
-                <Text style={[styles.compareExit, { color: colors.accent }]}>Done</Text>
+                <Text style={[styles.compareExit, { color: colors.accent }]}>{t('swinglab_swing.swing_detail.done')}</Text>
               </TouchableOpacity>
             </View>
             <View style={styles.compareRow}>
@@ -2699,15 +2701,15 @@ export default function SwingDetail() {
             <View style={styles.compareControls}>
               <TouchableOpacity onPress={playBoth} style={[styles.compareCtrl, { backgroundColor: colors.accent }]}>
                 <Ionicons name="play" size={16} color="#fff" />
-                <Text style={styles.compareCtrlText}>Play both</Text>
+                <Text style={styles.compareCtrlText}>{t('swinglab_swing.swing_detail.play_both')}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={pauseBoth} style={[styles.compareCtrl, { borderColor: colors.border, borderWidth: 1.5 }]}>
                 <Ionicons name="pause" size={16} color={colors.text_primary} />
-                <Text style={[styles.compareCtrlText, { color: colors.text_primary }]}>Pause</Text>
+                <Text style={[styles.compareCtrlText, { color: colors.text_primary }]}>{t('swinglab_swing.swing_detail.pause')}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={restartBoth} style={[styles.compareCtrl, { borderColor: colors.border, borderWidth: 1.5 }]}>
                 <Ionicons name="refresh" size={16} color={colors.text_primary} />
-                <Text style={[styles.compareCtrlText, { color: colors.text_primary }]}>Restart</Text>
+                <Text style={[styles.compareCtrlText, { color: colors.text_primary }]}>{t('swinglab_swing.swing_detail.restart')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2825,7 +2827,7 @@ export default function SwingDetail() {
                     }}
                     style={{ marginTop: 14, paddingHorizontal: 18, paddingVertical: 9, borderRadius: 20, borderWidth: 1.5, borderColor: '#88F700' }}
                   >
-                    <Text style={{ color: '#88F700', fontSize: 13, fontWeight: '800' }}>Retry</Text>
+                    <Text style={{ color: '#88F700', fontSize: 13, fontWeight: '800' }}>{t('swinglab_swing.swing_detail.retry')}</Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -2889,7 +2891,7 @@ export default function SwingDetail() {
                 onLayout={(e) => setSeekBarW(e.nativeEvent.layout.width)}
                 style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 26, justifyContent: 'flex-end' }}
                 accessibilityRole="adjustable"
-                accessibilityLabel="Seek bar — tap to jump to a point in the swing"
+                accessibilityLabel={t('swinglab_swing.accessibility_label.seek_bar_tap_to_jump')}
               >
                 <View style={{ height: 4, backgroundColor: 'rgba(255,255,255,0.25)' }}>
                   <View style={{ height: 4, width: `${duration && duration > 0 ? winFrac(position) * 100 : 0}%`, backgroundColor: '#88F700' }} />
@@ -2908,7 +2910,7 @@ export default function SwingDetail() {
                   onLayout={(e) => { scrubTrackWRef.current = e.nativeEvent.layout.width; }}
                   style={{ height: 28, justifyContent: 'center' }}
                   accessibilityRole="adjustable"
-                  accessibilityLabel="Scrubber — drag to move through the swing"
+                  accessibilityLabel={t('swinglab_swing.accessibility_label.scrubber_drag_to_move_through')}
                 >
                   <View style={{ height: 5, borderRadius: 3, backgroundColor: 'rgba(148,163,184,0.28)', overflow: 'visible' }}>
                     {(() => {
@@ -2952,22 +2954,22 @@ export default function SwingDetail() {
                     {fmtClock(Math.max(0, position - winStartSec))} / {fmtClock(winSpanSec)}
                   </Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-                    <TouchableOpacity onPress={() => void scrubTo(winStartSec)} style={{ width: 38, height: 40, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel="Restart">
+                    <TouchableOpacity onPress={() => void scrubTo(winStartSec)} style={{ width: 38, height: 40, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel={t('swinglab_swing.accessibility_label.restart')}>
                       <Ionicons name="play-skip-back" size={19} color={colors.text_primary} />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => seekBy(-2)} style={{ width: 38, height: 40, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel="Back 2 seconds">
+                    <TouchableOpacity onPress={() => seekBy(-2)} style={{ width: 38, height: 40, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel={t('swinglab_swing.accessibility_label.back_2_seconds')}>
                       <Ionicons name="play-back" size={20} color={colors.text_primary} />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => seekBy(-FRAME_SEC)} style={{ width: 34, height: 40, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel="Previous frame">
+                    <TouchableOpacity onPress={() => seekBy(-FRAME_SEC)} style={{ width: 34, height: 40, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel={t('swinglab_swing.accessibility_label.previous_frame')}>
                       <Ionicons name="caret-back-outline" size={17} color={colors.text_muted} />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={togglePlayPause} style={{ width: 46, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: colors.accent_muted, marginHorizontal: 2 }} accessibilityRole="button" accessibilityLabel={isPlaying ? 'Pause' : 'Play'}>
                       <Ionicons name={isPlaying ? 'pause' : 'play'} size={22} color={colors.accent} />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => seekBy(FRAME_SEC)} style={{ width: 34, height: 40, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel="Next frame">
+                    <TouchableOpacity onPress={() => seekBy(FRAME_SEC)} style={{ width: 34, height: 40, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel={t('swinglab_swing.accessibility_label.next_frame')}>
                       <Ionicons name="caret-forward-outline" size={17} color={colors.text_muted} />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => seekBy(2)} style={{ width: 38, height: 40, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel="Forward 2 seconds">
+                    <TouchableOpacity onPress={() => seekBy(2)} style={{ width: 38, height: 40, alignItems: 'center', justifyContent: 'center' }} accessibilityRole="button" accessibilityLabel={t('swinglab_swing.accessibility_label.forward_2_seconds')}>
                       <Ionicons name="play-forward" size={20} color={colors.text_primary} />
                     </TouchableOpacity>
                   </View>
@@ -2990,39 +2992,39 @@ export default function SwingDetail() {
                   style={[styles.toggleBtn, { flexDirection: 'row' }, showSkeleton && { backgroundColor: colors.accent }]}
                   onPress={() => setShowSkeleton(v => !v)}
                   accessibilityRole="button"
-                  accessibilityLabel="Toggle body overlay"
+                  accessibilityLabel={t('swinglab_swing.accessibility_label.toggle_body_overlay')}
                 >
                   <Ionicons name="body-outline" size={14} color={showSkeleton ? '#fff' : colors.text_muted} style={{ marginRight: 6 }} />
-                  <Text style={[styles.toggleText, showSkeleton && { color: '#fff' }]}>Body</Text>
+                  <Text style={[styles.toggleText, showSkeleton && { color: '#fff' }]}>{t('swinglab_swing.swing_detail.body')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.toggleBtn, { flexDirection: 'row' }, showTrace && { backgroundColor: colors.accent }]}
                   onPress={() => setShowTrace(v => !v)}
                   accessibilityRole="button"
-                  accessibilityLabel="Toggle swing trace"
+                  accessibilityLabel={t('swinglab_swing.accessibility_label.toggle_swing_trace')}
                 >
                   <Ionicons name="analytics-outline" size={14} color={showTrace ? '#fff' : colors.text_muted} style={{ marginRight: 6 }} />
-                  <Text style={[styles.toggleText, showTrace && { color: '#fff' }]}>Swing Trace</Text>
+                  <Text style={[styles.toggleText, showTrace && { color: '#fff' }]}>{t('swinglab_swing.swing_detail.swing_trace')}</Text>
                 </TouchableOpacity>
                 {(session?.ball_area_norm || session?.target_norm) && (
                   <TouchableOpacity
                     style={[styles.toggleBtn, { flexDirection: 'row' }, showTargets && { backgroundColor: colors.accent }]}
                     onPress={() => setShowTargets(v => !v)}
                     accessibilityRole="button"
-                    accessibilityLabel="Toggle ball box and aim line"
+                    accessibilityLabel={t('swinglab_swing.accessibility_label.toggle_ball_box_and_aim')}
                   >
                     <Ionicons name="locate-outline" size={14} color={showTargets ? '#fff' : colors.text_muted} style={{ marginRight: 6 }} />
-                    <Text style={[styles.toggleText, showTargets && { color: '#fff' }]}>Targets</Text>
+                    <Text style={[styles.toggleText, showTargets && { color: '#fff' }]}>{t('swinglab_swing.swing_detail.targets')}</Text>
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity
                   style={[styles.toggleBtn, { flexDirection: 'row' }, motionOnly && { backgroundColor: colors.accent }]}
                   onPress={() => setMotionOnly(v => !v)}
                   accessibilityRole="button"
-                  accessibilityLabel="Toggle motion-only view (hide the golfer, keep the skeleton)"
+                  accessibilityLabel={t('swinglab_swing.accessibility_label.toggle_motion_only_view_hide')}
                 >
                   <Ionicons name="walk-outline" size={14} color={motionOnly ? '#fff' : colors.text_muted} style={{ marginRight: 6 }} />
-                  <Text style={[styles.toggleText, motionOnly && { color: '#fff' }]}>Motion Only</Text>
+                  <Text style={[styles.toggleText, motionOnly && { color: '#fff' }]}>{t('swinglab_swing.swing_detail.motion_only')}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -3035,7 +3037,7 @@ export default function SwingDetail() {
         {/* Issue timestamp anchors */}
         {issueTimestamps.length > 0 && session.primary_issue && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.label, { color: colors.text_muted }]}>FAULT MOMENT</Text>
+            <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.fault_moment')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
               {issueTimestamps.map((ts, i) => (
                 <TouchableOpacity
@@ -3047,7 +3049,7 @@ export default function SwingDetail() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-            <Text style={[styles.tsHint, { color: colors.text_muted }]}>The frame the diagnosis was read from — tap to jump there.</Text>
+            <Text style={[styles.tsHint, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.the_frame_the_diagnosis_was')}</Text>
           </View>
         )}
 
@@ -3065,10 +3067,10 @@ export default function SwingDetail() {
           {analysisStatus === 'pending' && (
             session.source === 'uploaded_video' ? (
               <View style={[styles.analyzingCard, { backgroundColor: colors.surface, borderColor: colors.border, flexDirection: 'column', alignItems: 'stretch', gap: 12 }]}>
-                <Text style={[styles.analyzingText, { color: colors.text_primary }]}>Analyzing your swing</Text>
+                <Text style={[styles.analyzingText, { color: colors.text_primary }]}>{t('swinglab_swing.swing_detail.analyzing_your_swing')}</Text>
                 <SwingAnalysisSteps />
                 <Text style={[styles.analyzingSub, { color: colors.text_muted }]}>
-                  About a minute — you can stay on this screen.
+                  {t('swinglab_swing.swing_detail.about_a_minute_you_can')}
                 </Text>
                 {/* 2026-07-21 (BETA — analysis P0) — early manual escape so a slow/stuck upload
                     analysis is never a spinner with no way out. */}
@@ -3078,28 +3080,28 @@ export default function SwingDetail() {
                     disabled={analyzeInFlightRef.current}
                     style={[styles.failedBtn, { borderColor: colors.accent, alignSelf: 'flex-start', opacity: analyzeInFlightRef.current ? 0.5 : 1 }]}
                     accessibilityRole="button"
-                    accessibilityLabel="Retry analysis"
+                    accessibilityLabel={t('swinglab_swing.accessibility_label.retry_analysis')}
                   >
                     <Ionicons name="refresh" size={16} color={colors.accent} style={{ marginRight: 6 }} />
-                    <Text style={[styles.failedBtnText, { color: colors.accent }]}>Taking a while? Tap to retry</Text>
+                    <Text style={[styles.failedBtnText, { color: colors.accent }]}>{t('swinglab_swing.swing_detail.taking_a_while_tap_to')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
             ) : (
               <View style={[styles.analyzingCard, { backgroundColor: colors.surface, borderColor: colors.border, flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
-                <Text style={[styles.analyzingText, { color: colors.text_primary }]}>Ready to analyze</Text>
+                <Text style={[styles.analyzingText, { color: colors.text_primary }]}>{t('swinglab_swing.swing_detail.ready_to_analyze')}</Text>
                 <Text style={[styles.analyzingSub, { color: colors.text_muted }]}>
-                  Your swing is saved. Analysis runs when you choose — tap to analyze this swing.
+                  {t('swinglab_swing.swing_detail.your_swing_is_saved_analysis')}
                 </Text>
                 <TouchableOpacity
                   onPress={onReanalyze}
                   disabled={analyzeInFlightRef.current}
                   style={[styles.failedBtn, { borderColor: colors.accent, alignSelf: 'flex-start', opacity: analyzeInFlightRef.current ? 0.5 : 1 }]}
                   accessibilityRole="button"
-                  accessibilityLabel="Analyze this swing"
+                  accessibilityLabel={t('swinglab_swing.accessibility_label.analyze_this_swing')}
                 >
                   <Ionicons name="sparkles-outline" size={16} color={colors.accent} style={{ marginRight: 6 }} />
-                  <Text style={[styles.failedBtnText, { color: colors.accent }]}>Analyze this swing</Text>
+                  <Text style={[styles.failedBtnText, { color: colors.accent }]}>{t('swinglab_swing.swing_detail.analyze_this_swing')}</Text>
                 </TouchableOpacity>
               </View>
             )
@@ -3112,7 +3114,7 @@ export default function SwingDetail() {
                   {STATUS_COPY[analysisStatus]}
                 </Text>
                 <Text style={[styles.analyzingSub, { color: colors.text_muted }]}>
-                  About 60 seconds. You can stay on this screen.
+                  {t('swinglab_swing.swing_detail.about_60_seconds_you_can')}
                 </Text>
               </View>
             </View>
@@ -3120,7 +3122,7 @@ export default function SwingDetail() {
 
           {analysisStatus === 'failed' && (
             <View style={[styles.failedCard, { backgroundColor: colors.surface, borderColor: '#ef4444' }]}>
-              <Text style={[styles.failedTitle, { color: '#ef4444' }]}>Couldn&apos;t analyze this one</Text>
+              <Text style={[styles.failedTitle, { color: '#ef4444' }]}>{t('swinglab_swing.swing_detail.couldn_t_analyze_this_one')}</Text>
               <Text style={[styles.failedBody, { color: colors.text_primary }]}>
                 {session.analysis_error ?? "I had trouble watching this one — could be lighting, angle, or video quality."}
               </Text>
@@ -3130,13 +3132,13 @@ export default function SwingDetail() {
                   onPress={onReanalyze}
                   disabled={reanalyzing}
                 >
-                  <Text style={[styles.failedBtnText, { color: colors.accent }]}>Try again with new analysis</Text>
+                  <Text style={[styles.failedBtnText, { color: colors.accent }]}>{t('swinglab_swing.swing_detail.try_again_with_new_analysis')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.failedBtn, { borderColor: colors.border }]}
                   onPress={() => router.replace('/swinglab/upload' as never)}
                 >
-                  <Text style={[styles.failedBtnText, { color: colors.text_muted }]}>Upload another</Text>
+                  <Text style={[styles.failedBtnText, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.upload_another')}</Text>
                 </TouchableOpacity>
               </View>
               {/* Last-resort manual fallback — ONLY here, never the default
@@ -3144,7 +3146,7 @@ export default function SwingDetail() {
                   (very long clip, multiple swings it couldn't separate), let
                   the player scrub to the swing and analyze just that window. */}
               <Text style={[styles.tsHint, { color: colors.text_muted, marginTop: 12 }]}>
-                Still no read? Scrub the video to your swing, then:
+                {t('swinglab_swing.swing_detail.still_no_read_scrub_the')}
               </Text>
               <TouchableOpacity
                 style={[styles.failedBtn, { borderColor: colors.accent, opacity: reanalyzing ? 0.5 : 1, marginTop: 8, alignSelf: 'flex-start' }]}
@@ -3165,9 +3167,9 @@ export default function SwingDetail() {
               (hidden while pending/analyzing/failed — those states show their own CTA). */}
           {session.source === 'uploaded_video' && analysisStatus !== 'pending' && analysisStatus !== 'failed' && !reanalyzing ? (
             <View style={[styles.analyzingCard, { backgroundColor: colors.surface, borderColor: colors.border, flexDirection: 'column', alignItems: 'stretch', gap: 10, marginTop: 12 }]}>
-              <Text style={[styles.analyzingText, { color: colors.text_primary }]}>Swing-Point Analyzer</Text>
+              <Text style={[styles.analyzingText, { color: colors.text_primary }]}>{t('swinglab_swing.swing_detail.swing_point_analyzer')}</Text>
               <Text style={[styles.analyzingSub, { color: colors.text_muted }]}>
-                Want a specific part? Play, pause, and scrub to the exact moment — then analyze just that portion.
+                {t('swinglab_swing.swing_detail.want_a_specific_part_play')}
               </Text>
               <TouchableOpacity
                 onPress={onAnalyzeAtPosition}
@@ -3286,7 +3288,7 @@ export default function SwingDetail() {
                         })}
                         style={styles.faultThumbWrap}
                         accessibilityRole="button"
-                        accessibilityLabel="See the moment of the fault"
+                        accessibilityLabel={t('swinglab_swing.accessibility_label.see_the_moment_of_the')}
                       >
                         <Image source={{ uri: faultUri }} style={styles.faultThumb} resizeMode="cover" />
                         <View style={styles.faultThumbBadge}>
@@ -3316,7 +3318,7 @@ export default function SwingDetail() {
               style={[styles.reanalyzeBtn, { borderColor: colors.border, marginTop: 8 }]}
               onPress={() => setActionShotId(shot.id)}
             >
-              <Text style={[styles.reanalyzeText, { color: colors.text_muted }]}>Manage swing</Text>
+              <Text style={[styles.reanalyzeText, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.manage_swing')}</Text>
             </TouchableOpacity>
           )}
 
@@ -3338,7 +3340,7 @@ export default function SwingDetail() {
                 onReanalyze();
               }}
             >
-              <Text style={[styles.reanalyzeText, { color: colors.accent }]}>This is a putt — read it as one</Text>
+              <Text style={[styles.reanalyzeText, { color: colors.accent }]}>{t('swinglab_swing.swing_detail.this_is_a_putt_read')}</Text>
             </TouchableOpacity>
           )}
 
@@ -3347,11 +3349,11 @@ export default function SwingDetail() {
           <Modal visible={linkPickerOpen} transparent animationType="slide" onRequestClose={() => setLinkPickerOpen(false)}>
             <View style={styles.linkBackdrop}>
               <View style={[styles.linkSheet, { backgroundColor: colors.surface }]}>
-                <Text style={[styles.linkTitle, { color: colors.text_primary }]}>Pick the other angle</Text>
-                <Text style={[styles.linkSub, { color: colors.text_muted }]}>Choose the same swing from the other camera (one down-the-line, one face-on).</Text>
+                <Text style={[styles.linkTitle, { color: colors.text_primary }]}>{t('swinglab_swing.swing_detail.pick_the_other_angle')}</Text>
+                <Text style={[styles.linkSub, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.choose_the_same_swing_from')}</Text>
                 <ScrollView style={{ maxHeight: 360 }}>
                   {otherSessions.length === 0 ? (
-                    <Text style={[styles.linkSub, { color: colors.text_muted, paddingVertical: 16 }]}>No other swings yet — upload the second angle first.</Text>
+                    <Text style={[styles.linkSub, { color: colors.text_muted, paddingVertical: 16 }]}>{t('swinglab_swing.swing_detail.no_other_swings_yet_upload')}</Text>
                   ) : otherSessions.map((os) => {
                     const ang = os.upload?.angleOverride;
                     const angLabel = ang === 'face_on' ? 'FACE-ON' : ang === 'down_the_line' ? 'DTL' : '—';
@@ -3373,7 +3375,7 @@ export default function SwingDetail() {
                   })}
                 </ScrollView>
                 <TouchableOpacity onPress={() => setLinkPickerOpen(false)} style={styles.linkCancel}>
-                  <Text style={[styles.linkCancelText, { color: colors.text_muted }]}>Cancel</Text>
+                  <Text style={[styles.linkCancelText, { color: colors.text_muted }]}>{t('play.cancel')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -3385,14 +3387,14 @@ export default function SwingDetail() {
           <Modal visible={datePickerOpen} transparent animationType="slide" onRequestClose={() => setDatePickerOpen(false)}>
             <View style={styles.linkBackdrop}>
               <View style={[styles.linkSheet, { backgroundColor: colors.surface }]}>
-                <Text style={[styles.linkTitle, { color: colors.text_primary }]}>Compare to an earlier swing</Text>
+                <Text style={[styles.linkTitle, { color: colors.text_primary }]}>{t('swinglab_swing.swing_detail.compare_to_an_earlier_swing')}</Text>
                 {/* 2026-07-27 (full-app audit) — honest copy: don't name specific metrics. "tempo" isn't in
                     the comparison at all (no tempo field on the biomech), and coil/hip-slide are nulled on
                     the default down-the-line angle, so naming them over-promised. State what it does. */}
-                <Text style={[styles.linkSub, { color: colors.text_muted }]}>Pick a past swing — I&apos;ll show what got better or worse across the mechanics your camera angle captured.</Text>
+                <Text style={[styles.linkSub, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.pick_a_past_swing_i')}</Text>
                 <ScrollView style={{ maxHeight: 360 }}>
                   {comparableSessions.length === 0 ? (
-                    <Text style={[styles.linkSub, { color: colors.text_muted, paddingVertical: 16 }]}>No other analyzed swings yet — analyze another swing first.</Text>
+                    <Text style={[styles.linkSub, { color: colors.text_muted, paddingVertical: 16 }]}>{t('swinglab_swing.swing_detail.no_other_analyzed_swings_yet')}</Text>
                   ) : comparableSessions.map((os) => {
                     const club = os.currentClub ?? os.club ?? 'swing';
                     const d = (() => { try { return new Date(os.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch { return ''; } })();
@@ -3409,7 +3411,7 @@ export default function SwingDetail() {
                   })}
                 </ScrollView>
                 <TouchableOpacity onPress={() => setDatePickerOpen(false)} style={styles.linkCancel}>
-                  <Text style={[styles.linkCancelText, { color: colors.text_muted }]}>Cancel</Text>
+                  <Text style={[styles.linkCancelText, { color: colors.text_muted }]}>{t('play.cancel')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -3423,15 +3425,15 @@ export default function SwingDetail() {
           <Modal visible={golferSheetOpen} transparent animationType="slide" onRequestClose={() => setGolferSheetOpen(false)}>
             <View style={styles.linkBackdrop}>
               <View style={[styles.linkSheet, { backgroundColor: colors.surface }]}>
-                <Text style={[styles.linkTitle, { color: colors.text_primary }]}>Who hit this swing?</Text>
-                <Text style={[styles.linkSub, { color: colors.text_muted }]}>Tag the golfer so this swing files under the right person.</Text>
+                <Text style={[styles.linkTitle, { color: colors.text_primary }]}>{t('swinglab_swing.swing_detail.who_hit_this_swing')}</Text>
+                <Text style={[styles.linkSub, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.tag_the_golfer_so_this')}</Text>
                 <ScrollView style={{ maxHeight: 360 }}>
                   {/* You (account holder) */}
                   <TouchableOpacity
                     style={[styles.linkRow, { borderColor: colors.border }]}
                     onPress={() => assignGolfer(accountHolderPlayerId)}
                   >
-                    <Text style={[styles.linkRowText, { color: colors.text_primary }]} numberOfLines={1}>You (account holder)</Text>
+                    <Text style={[styles.linkRowText, { color: colors.text_primary }]} numberOfLines={1}>{t('swinglab_swing.swing_detail.you_account_holder')}</Text>
                     {currentPlayerId === accountHolderPlayerId ? (
                       <Ionicons name="checkmark" size={18} color={colors.accent} />
                     ) : null}
@@ -3456,7 +3458,7 @@ export default function SwingDetail() {
                     style={[styles.linkRow, { borderColor: colors.border }]}
                     onPress={() => assignGolfer(OTHER_PLAYER_ID)}
                   >
-                    <Text style={[styles.linkRowText, { color: colors.text_primary }]} numberOfLines={1}>Other (someone else)</Text>
+                    <Text style={[styles.linkRowText, { color: colors.text_primary }]} numberOfLines={1}>{t('swinglab_swing.swing_detail.other_someone_else')}</Text>
                     {currentPlayerId === OTHER_PLAYER_ID ? (
                       <Ionicons name="checkmark" size={18} color={colors.accent} />
                     ) : null}
@@ -3467,7 +3469,7 @@ export default function SwingDetail() {
                       <TextInput
                         value={newGolferName}
                         onChangeText={setNewGolferName}
-                        placeholder="Golfer's name"
+                        placeholder={t('swinglab_swing.placeholder.golfer_s_name')}
                         placeholderTextColor={colors.text_muted}
                         autoFocus
                         returnKeyType="done"
@@ -3475,7 +3477,7 @@ export default function SwingDetail() {
                         style={{ flex: 1, marginRight: 10, color: colors.text_primary, fontSize: 14, fontWeight: '600', paddingVertical: 2 }}
                       />
                       <TouchableOpacity onPress={onAddGolferSubmit} disabled={!newGolferName.trim()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        <Text style={[styles.linkRowBadge, { color: newGolferName.trim() ? colors.accent : colors.text_muted }]}>ADD</Text>
+                        <Text style={[styles.linkRowBadge, { color: newGolferName.trim() ? colors.accent : colors.text_muted }]}>{t('swinglab_swing.swing_detail.add')}</Text>
                       </TouchableOpacity>
                     </View>
                   ) : (
@@ -3483,7 +3485,7 @@ export default function SwingDetail() {
                       style={[styles.linkRow, { borderColor: colors.border }]}
                       onPress={() => setAddGolferOpen(true)}
                     >
-                      <Text style={[styles.linkRowText, { color: colors.accent }]} numberOfLines={1}>+ Add golfer…</Text>
+                      <Text style={[styles.linkRowText, { color: colors.accent }]} numberOfLines={1}>{t('swinglab_swing.swing_detail.add_golfer')}</Text>
                     </TouchableOpacity>
                   )}
                   {/* FUTURE: biometric auto-register (face/body signature from swing frames → match to family member). Stubbed per Tim 2026-06-23 — needs consent decision before building. See memory: golfer biometric stub. */}
@@ -3491,12 +3493,12 @@ export default function SwingDetail() {
                     style={[styles.linkRow, { borderColor: colors.border, opacity: 0.4 }]}
                     pointerEvents="none"
                   >
-                    <Text style={[styles.linkRowText, { color: colors.text_muted }]} numberOfLines={1}>✨ Auto-detect golfer · Coming soon</Text>
+                    <Text style={[styles.linkRowText, { color: colors.text_muted }]} numberOfLines={1}>{t('swinglab_swing.swing_detail.auto_detect_golfer_coming_soon')}</Text>
                     <Ionicons name="scan-outline" size={16} color={colors.text_muted} />
                   </View>
                 </ScrollView>
                 <TouchableOpacity onPress={() => { setGolferSheetOpen(false); setAddGolferOpen(false); setNewGolferName(''); }} style={styles.linkCancel}>
-                  <Text style={[styles.linkCancelText, { color: colors.text_muted }]}>Cancel</Text>
+                  <Text style={[styles.linkCancelText, { color: colors.text_muted }]}>{t('play.cancel')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -3507,15 +3509,15 @@ export default function SwingDetail() {
           <Modal visible={angleSheetOpen} transparent animationType="slide" onRequestClose={() => setAngleSheetOpen(false)}>
             <View style={styles.linkBackdrop}>
               <View style={[styles.linkSheet, { backgroundColor: colors.surface }]}>
-                <Text style={[styles.linkTitle, { color: colors.text_primary }]}>Camera angle</Text>
-                <Text style={[styles.linkSub, { color: colors.text_muted }]}>How was this swing filmed? Changing it re-reads the swing with the right metrics.</Text>
+                <Text style={[styles.linkTitle, { color: colors.text_primary }]}>{t('swinglab_swing.swing_detail.camera_angle')}</Text>
+                <Text style={[styles.linkSub, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.how_was_this_swing_filmed')}</Text>
                 <TouchableOpacity
                   style={[styles.linkRow, { borderColor: colors.border }]}
                   onPress={() => assignAngle('down_the_line')}
                 >
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.linkRowText, { color: colors.text_primary }]}>Down-the-line</Text>
-                    <Text style={[styles.linkSub, { color: colors.text_muted }]}>Behind the golfer, looking toward the target — reads swing plane / club path.</Text>
+                    <Text style={[styles.linkSub, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.behind_the_golfer_looking_toward')}</Text>
                   </View>
                   {session.upload?.angleOverride === 'down_the_line' ? <Ionicons name="checkmark" size={18} color={colors.accent} /> : null}
                 </TouchableOpacity>
@@ -3525,12 +3527,12 @@ export default function SwingDetail() {
                 >
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.linkRowText, { color: colors.text_primary }]}>Face-on</Text>
-                    <Text style={[styles.linkSub, { color: colors.text_muted }]}>Facing the golfer — reads weight shift / hip rotation / sway.</Text>
+                    <Text style={[styles.linkSub, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.facing_the_golfer_reads_weight')}</Text>
                   </View>
                   {session.upload?.angleOverride === 'face_on' ? <Ionicons name="checkmark" size={18} color={colors.accent} /> : null}
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => setAngleSheetOpen(false)} style={styles.linkCancel}>
-                  <Text style={[styles.linkCancelText, { color: colors.text_muted }]}>Cancel</Text>
+                  <Text style={[styles.linkCancelText, { color: colors.text_muted }]}>{t('play.cancel')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -3586,9 +3588,9 @@ export default function SwingDetail() {
                   || session.primary_issue.issue_id === 'tentative_read')
                 && (
                 <View style={[styles.failedCard, { backgroundColor: colors.surface, borderColor: '#f59e0b', marginTop: 10 }]}>
-                  <Text style={[styles.failedTitle, { color: '#f59e0b' }]}>Want a second look?</Text>
+                  <Text style={[styles.failedTitle, { color: '#f59e0b' }]}>{t('swinglab_swing.swing_detail.want_a_second_look')}</Text>
                   <Text style={[styles.failedBody, { color: colors.text_primary }]}>
-                    Re-analyzing with a fresh pass sometimes catches what the first read missed — especially if the angle or lighting was borderline.
+                    {t('swinglab_swing.swing_detail.re_analyzing_with_a_fresh')}
                   </Text>
                   <View style={styles.failedBtnRow}>
                     <TouchableOpacity
@@ -3596,7 +3598,7 @@ export default function SwingDetail() {
                       onPress={onReanalyze}
                       disabled={reanalyzing}
                     >
-                      <Text style={[styles.failedBtnText, { color: '#f59e0b' }]}>Re-analyze this swing</Text>
+                      <Text style={[styles.failedBtnText, { color: '#f59e0b' }]}>{t('swinglab_swing.swing_detail.re_analyze_this_swing')}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -3615,10 +3617,10 @@ export default function SwingDetail() {
                 style={[styles.linkAngleBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
                 onPress={() => setLinkPickerOpen(true)}
                 accessibilityRole="button"
-                accessibilityLabel="Link a second camera angle of this swing"
+                accessibilityLabel={t('swinglab_swing.accessibility_label.link_a_second_camera_angle')}
               >
                 <Ionicons name="git-compare-outline" size={18} color={colors.accent} />
-                <Text style={[styles.linkAngleText, { color: colors.text_primary }]}>Link a second angle (bilateral)</Text>
+                <Text style={[styles.linkAngleText, { color: colors.text_primary }]}>{t('swinglab_swing.swing_detail.link_a_second_angle_bilateral')}</Text>
               </TouchableOpacity>
               {/* 2026-05-23 (Fix #5) — DrillCard gated on
                   drill_recommendation being non-null for putting
@@ -3684,7 +3686,7 @@ export default function SwingDetail() {
                   <View style={[commentaryStyles.card, { borderColor: colors.border, backgroundColor: colors.surface }]}>
                     <View style={commentaryStyles.headerRow}>
                       <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.accent} />
-                      <Text style={[commentaryStyles.label, { color: colors.accent }]}>YOUR COMMENTARY</Text>
+                      <Text style={[commentaryStyles.label, { color: colors.accent }]}>{t('swinglab_swing.swing_detail.your_commentary')}</Text>
                     </View>
                     <Text style={[commentaryStyles.body, { color: colors.text_primary }]}>{transcript}</Text>
                   </View>
@@ -3813,23 +3815,23 @@ export default function SwingDetail() {
               ) : null}
               {session.smart_motion_shot_map && (session.smart_motion_shot_map.effortPct != null || session.smart_motion_shot_map.estCarry != null || session.smart_motion_shot_map.trace) ? (
                 <View style={[styles.biomechCard, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 12 }]}>
-                  <Text style={[styles.biomechLabel, { color: colors.accent }]}>SHOT MAP</Text>
+                  <Text style={[styles.biomechLabel, { color: colors.accent }]}>{t('swinglab_swing.swing_detail.shot_map')}</Text>
                   <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
                     {session.smart_motion_shot_map.effortPct != null ? (
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.biomechSub, { color: colors.text_muted }]}>EFFORT</Text>
+                        <Text style={[styles.biomechSub, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.effort')}</Text>
                         <Text style={[styles.biomechRow, { color: colors.text_primary, fontWeight: '900' }]}>{session.smart_motion_shot_map.effortPct}%</Text>
                       </View>
                     ) : null}
                     {session.smart_motion_shot_map.estCarry != null ? (
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.biomechSub, { color: colors.text_muted }]}>CARRY</Text>
+                        <Text style={[styles.biomechSub, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.carry')}</Text>
                         <Text style={[styles.biomechRow, { color: colors.text_primary, fontWeight: '900' }]}>~{session.smart_motion_shot_map.estCarry} yds</Text>
                       </View>
                     ) : null}
                     {session.smart_motion_shot_map.trace ? (
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.biomechSub, { color: colors.text_muted }]}>LAUNCH</Text>
+                        <Text style={[styles.biomechSub, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.launch')}</Text>
                         <Text style={[styles.biomechRow, { color: colors.text_primary, fontWeight: '900' }]}>
                           {session.smart_motion_shot_map.trace.side === 'left' ? `${session.smart_motion_shot_map.trace.divergenceDeg}° L`
                             : session.smart_motion_shot_map.trace.side === 'right' ? `${session.smart_motion_shot_map.trace.divergenceDeg}° R`
@@ -3850,7 +3852,7 @@ export default function SwingDetail() {
                   (setSessionFeel) but never shown anywhere. Surface it with the read. */}
               {session.feel_note && session.feel_note.trim() ? (
                 <View style={[styles.biomechCard, { backgroundColor: colors.surface, borderColor: colors.border, marginTop: 12 }]}>
-                  <Text style={[styles.biomechLabel, { color: colors.accent }]}>HOW IT FELT</Text>
+                  <Text style={[styles.biomechLabel, { color: colors.accent }]}>{t('swinglab_swing.swing_detail.how_it_felt')}</Text>
                   <Text style={[styles.biomechRow, { color: colors.text_primary, marginTop: 6 }]}>{session.feel_note}</Text>
                 </View>
               ) : null}
@@ -3859,7 +3861,7 @@ export default function SwingDetail() {
                 onPress={onReanalyze}
                 disabled={reanalyzing}
               >
-                <Text style={[styles.reanalyzeText, { color: colors.text_muted }]}>Re-analyze with latest</Text>
+                <Text style={[styles.reanalyzeText, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.re_analyze_with_latest')}</Text>
               </TouchableOpacity>
               {/* 2026-05-23 — Auto-suggested comparisons.
                   Animated card: fade + slide-up entry when matches
@@ -3885,10 +3887,10 @@ export default function SwingDetail() {
                   style={[styles.reanalyzeBtn, { borderColor: colors.accent, marginTop: 8 }]}
                   onPress={onCompareTo}
                   accessibilityRole="button"
-                  accessibilityLabel="Compare this swing to a reference swing"
+                  accessibilityLabel={t('swinglab_swing.accessibility_label.compare_this_swing_to_a')}
                 >
                   <Text style={[styles.reanalyzeText, { color: colors.accent }]}>
-                    ⇄  Compare to a reference swing
+                    {t('swinglab_swing.swing_detail.compare_to_a_reference_swing')}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -3899,10 +3901,10 @@ export default function SwingDetail() {
                   style={[styles.reanalyzeBtn, { borderColor: colors.accent, marginTop: 8 }]}
                   onPress={() => setDatePickerOpen(true)}
                   accessibilityRole="button"
-                  accessibilityLabel="Compare this swing to an earlier swing to see your progress"
+                  accessibilityLabel={t('swinglab_swing.accessibility_label.compare_this_swing_to_an')}
                 >
                   <Text style={[styles.reanalyzeText, { color: colors.accent }]}>
-                    📈  Compare to an earlier swing
+                    {t('swinglab_swing.swing_detail.compare_to_an_earlier_swing_2')}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -3913,7 +3915,7 @@ export default function SwingDetail() {
         {/* Metadata */}
         {session.upload && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.label, { color: colors.text_muted }]}>DETAILS</Text>
+            <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.details')}</Text>
             <Text style={[styles.detailLine, { color: colors.text_primary }]}>Club: {session.club}</Text>
             {session.upload.swinger ? (
               <Text style={[styles.detailLine, { color: colors.text_primary }]}>Swinger: {session.upload.swinger}</Text>
@@ -3932,7 +3934,7 @@ export default function SwingDetail() {
             opening the action sheet. */}
         {actionShot?.userNotes && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.label, { color: colors.text_muted }]}>NOTE</Text>
+            <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.note')}</Text>
             <Text style={[styles.detailLine, { color: colors.text_primary }]}>{actionShot.userNotes}</Text>
           </View>
         )}
@@ -3993,7 +3995,7 @@ export default function SwingDetail() {
           style={styles.faultModalBackdrop}
           onPress={() => setFaultFrameModal(null)}
           accessibilityRole="button"
-          accessibilityLabel="Close fault frame view"
+          accessibilityLabel={t('swinglab_swing.accessibility_label.close_fault_frame_view')}
         >
           {faultFrameModal && (() => {
             const reference = getSwingReference(faultFrameModal.detected_issue);
@@ -4003,7 +4005,7 @@ export default function SwingDetail() {
                 {hasReference ? (
                   <View style={styles.faultModalSideBySide}>
                     <View style={styles.faultModalPane}>
-                      <Text style={styles.faultModalPaneLabel}>YOUR SWING</Text>
+                      <Text style={styles.faultModalPaneLabel}>{t('swinglab_swing.swing_detail.your_swing')}</Text>
                       <Image
                         source={{ uri: faultFrameModal.uri }}
                         style={styles.faultModalPaneImage}
@@ -4043,7 +4045,7 @@ export default function SwingDetail() {
                   </View>
                 ) : null}
                 <View style={styles.faultModalCloseHint}>
-                  <Text style={styles.faultModalCloseHintText}>Tap to close</Text>
+                  <Text style={styles.faultModalCloseHintText}>{t('swinglab_swing.swing_detail.tap_to_close')}</Text>
                 </View>
               </View>
             );
@@ -4148,6 +4150,7 @@ function CageTargetingSlot({ session }: { session: import('../../../store/swingS
  * instruction. Same save discipline: the setter reports, and a miss keeps the draft on screen.
  */
 function FeelNoteCard({ sessionId, initialNote }: { sessionId: string; initialNote: string | null }) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const setSessionFeel = useSwingSessionStore(s => s.setSessionFeel);
   const [editing, setEditing] = React.useState(false);
@@ -4178,14 +4181,14 @@ function FeelNoteCard({ sessionId, initialNote }: { sessionId: string; initialNo
         style={[coachNoteStyles.card, { borderColor: colors.border, backgroundColor: colors.surface }]}
         onPress={() => setEditing(true)}
         accessibilityRole="button"
-        accessibilityLabel="Add how the swing felt"
+        accessibilityLabel={t('swinglab_swing.accessibility_label.add_how_the_swing_felt')}
       >
         <View style={coachNoteStyles.headerRow}>
           <Ionicons name="body-outline" size={16} color={colors.accent} />
-          <Text style={[coachNoteStyles.label, { color: colors.accent }]}>HOW IT FELT</Text>
+          <Text style={[coachNoteStyles.label, { color: colors.accent }]}>{t('swinglab_swing.feel_note_card.how_it_felt')}</Text>
         </View>
         <Text style={[coachNoteStyles.placeholder, { color: colors.text_muted }]}>
-          Your read, in your words — &ldquo;felt good, sliced right, need to finish all the way around&rdquo;.
+          {t('swinglab_swing.feel_note_card.your_read_in_your_words')}
         </Text>
       </TouchableOpacity>
     );
@@ -4195,7 +4198,7 @@ function FeelNoteCard({ sessionId, initialNote }: { sessionId: string; initialNo
     <View style={[coachNoteStyles.card, { borderColor: colors.border, backgroundColor: colors.surface }]}>
       <View style={coachNoteStyles.headerRow}>
         <Ionicons name="body-outline" size={16} color={colors.accent} />
-        <Text style={[coachNoteStyles.label, { color: colors.accent }]}>HOW IT FELT</Text>
+        <Text style={[coachNoteStyles.label, { color: colors.accent }]}>{t('swinglab_swing.feel_note_card.how_it_felt')}</Text>
       </View>
       {editing ? (
         <>
@@ -4203,17 +4206,17 @@ function FeelNoteCard({ sessionId, initialNote }: { sessionId: string; initialNo
             style={[coachNoteStyles.input, { color: colors.text_primary, borderColor: colors.border }]}
             value={draft}
             onChangeText={setDraft}
-            placeholder="Felt good — sliced right, need to finish all the way around."
+            placeholder={t('swinglab_swing.placeholder.felt_good_sliced_right_need')}
             placeholderTextColor={colors.text_muted}
             multiline
             autoFocus
           />
           <View style={coachNoteStyles.actionsRow}>
             <TouchableOpacity onPress={() => { setDraft(initialNote ?? ''); setEditing(false); }} accessibilityRole="button">
-              <Text style={[coachNoteStyles.label, { color: colors.text_muted }]}>CANCEL</Text>
+              <Text style={[coachNoteStyles.label, { color: colors.text_muted }]}>{t('swinglab_swing.feel_note_card.cancel')}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={onSave} accessibilityRole="button">
-              <Text style={[coachNoteStyles.label, { color: colors.accent }]}>SAVE</Text>
+              <Text style={[coachNoteStyles.label, { color: colors.accent }]}>{t('swinglab_swing.feel_note_card.save')}</Text>
             </TouchableOpacity>
           </View>
         </>
@@ -4227,6 +4230,7 @@ function FeelNoteCard({ sessionId, initialNote }: { sessionId: string; initialNo
 }
 
 function CoachNoteCard({ sessionId, initialNote }: { sessionId: string; initialNote: string | null }) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const setSessionCoachNote = useSwingSessionStore(s => s.setSessionCoachNote);
   const [editing, setEditing] = React.useState(false);
@@ -4298,20 +4302,20 @@ function CoachNoteCard({ sessionId, initialNote }: { sessionId: string; initialN
       >
         <View style={coachNoteStyles.headerRow}>
           <Ionicons name="create-outline" size={16} color={colors.accent} />
-          <Text style={[coachNoteStyles.label, { color: colors.accent }]}>COACH NOTE</Text>
+          <Text style={[coachNoteStyles.label, { color: colors.accent }]}>{t('swinglab_swing.coach_note_card.coach_note')}</Text>
         </View>
         <Text style={[coachNoteStyles.placeholder, { color: colors.text_muted }]}>
-          Type or speak your read — &ldquo;hips stalled at impact&rdquo;, &ldquo;came over the top&rdquo;.
+          {t('swinglab_swing.coach_note_card.type_or_speak_your_read')}
         </Text>
         <View style={coachNoteStyles.entryRow}>
           <TouchableOpacity
             onPress={() => setEditing(true)}
             style={[coachNoteStyles.entryBtn, { borderColor: colors.accent }]}
             accessibilityRole="button"
-            accessibilityLabel="Type a coach note"
+            accessibilityLabel={t('swinglab_swing.accessibility_label.type_a_coach_note')}
           >
             <Ionicons name="keypad-outline" size={16} color={colors.accent} />
-            <Text style={[coachNoteStyles.entryBtnText, { color: colors.accent }]}>Type</Text>
+            <Text style={[coachNoteStyles.entryBtnText, { color: colors.accent }]}>{t('swinglab_swing.coach_note_card.type')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => { void onMicTap(); }}
@@ -4338,11 +4342,11 @@ function CoachNoteCard({ sessionId, initialNote }: { sessionId: string; initialN
         onPress={() => setEditing(true)}
         style={[coachNoteStyles.card, { borderColor: colors.accent, backgroundColor: colors.surface }]}
         accessibilityRole="button"
-        accessibilityLabel="Edit coach note"
+        accessibilityLabel={t('swinglab_swing.accessibility_label.edit_coach_note')}
       >
         <View style={coachNoteStyles.headerRow}>
           <Ionicons name="create-outline" size={16} color={colors.accent} />
-          <Text style={[coachNoteStyles.label, { color: colors.accent }]}>COACH NOTE</Text>
+          <Text style={[coachNoteStyles.label, { color: colors.accent }]}>{t('swinglab_swing.coach_note_card.coach_note')}</Text>
         </View>
         <Text style={[coachNoteStyles.body, { color: colors.text_primary }]}>{initialNote}</Text>
       </TouchableOpacity>
@@ -4353,12 +4357,12 @@ function CoachNoteCard({ sessionId, initialNote }: { sessionId: string; initialN
     <View style={[coachNoteStyles.card, { borderColor: colors.accent, backgroundColor: colors.surface }]}>
       <View style={coachNoteStyles.headerRow}>
         <Ionicons name="create-outline" size={16} color={colors.accent} />
-        <Text style={[coachNoteStyles.label, { color: colors.accent }]}>COACH NOTE</Text>
+        <Text style={[coachNoteStyles.label, { color: colors.accent }]}>{t('swinglab_swing.coach_note_card.coach_note')}</Text>
       </View>
       <TextInput
         value={draft}
         onChangeText={setDraft}
-        placeholder="Your read on the swing — say it like you'd say it to the player."
+        placeholder={t('swinglab_swing.placeholder.your_read_on_the_swing')}
         placeholderTextColor={colors.text_muted}
         multiline
         autoFocus
@@ -4368,8 +4372,8 @@ function CoachNoteCard({ sessionId, initialNote }: { sessionId: string; initialN
         ]}
       />
       <View style={coachNoteStyles.actionsRow}>
-        <TouchableOpacity onPress={onCancel} accessibilityRole="button" accessibilityLabel="Cancel">
-          <Text style={[coachNoteStyles.cancelText, { color: colors.text_muted }]}>Cancel</Text>
+        <TouchableOpacity onPress={onCancel} accessibilityRole="button" accessibilityLabel={t('play.cancel')}>
+          <Text style={[coachNoteStyles.cancelText, { color: colors.text_muted }]}>{t('play.cancel')}</Text>
         </TouchableOpacity>
         <View style={coachNoteStyles.actionsRight}>
           <TouchableOpacity
@@ -4387,9 +4391,9 @@ function CoachNoteCard({ sessionId, initialNote }: { sessionId: string; initialN
             onPress={onSave}
             style={[coachNoteStyles.saveBtn, { backgroundColor: colors.accent }]}
             accessibilityRole="button"
-            accessibilityLabel="Save coach note"
+            accessibilityLabel={t('swinglab_swing.accessibility_label.save_coach_note')}
           >
-            <Text style={coachNoteStyles.saveBtnText}>Save</Text>
+            <Text style={coachNoteStyles.saveBtnText}>{t('swinglab_swing.coach_note_card.save')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -4747,6 +4751,7 @@ function AutoSuggestCard({
   onSelect: (m: SimilarMatch) => void;
   colors: ReturnType<typeof useTheme>['colors'];
 }) {
+  const { t } = useTranslation();
   const fade = useRef(new Animated.Value(0)).current;
   const slide = useRef(new Animated.Value(12)).current;
 
@@ -4780,7 +4785,7 @@ function AutoSuggestCard({
       ]}
     >
       <View style={autoSuggestStyles.headerRow}>
-        <Text style={[styles.label, { color: colors.accent }]}>SUGGESTED COMPARISONS</Text>
+        <Text style={[styles.label, { color: colors.accent }]}>{t('swinglab_swing.auto_suggest_card.suggested_comparisons')}</Text>
         <View style={[autoSuggestStyles.countPill, { borderColor: colors.border }]}>
           <Text style={[autoSuggestStyles.countText, { color: colors.text_muted }]}>
             {matches.length} {matches.length === 1 ? 'MATCH' : 'MATCHES'}
@@ -4788,7 +4793,7 @@ function AutoSuggestCard({
         </View>
       </View>
       <Text style={[styles.subtleHint, { color: colors.text_muted }]}>
-        Closest references in your library. Tap to see side-by-side.
+        {t('swinglab_swing.auto_suggest_card.closest_references_in_your_library')}
       </Text>
       <View style={autoSuggestStyles.chipColumn}>
         {matches.map((m, i) => (
@@ -4816,6 +4821,7 @@ function AutoSuggestChip({
   onPress: () => void;
   colors: ReturnType<typeof useTheme>['colors'];
 }) {
+  const { t } = useTranslation();
   const press = useRef(new Animated.Value(0)).current;
   const onPressIn = () => {
     Animated.timing(press, { toValue: 1, duration: 100, useNativeDriver: true }).start();
@@ -4866,7 +4872,7 @@ function AutoSuggestChip({
             </Text>
             {isBest ? (
               <View style={[autoSuggestStyles.bestTag, { borderColor: tierColor }]}>
-                <Text style={[autoSuggestStyles.bestTagText, { color: tierColor }]}>BEST</Text>
+                <Text style={[autoSuggestStyles.bestTagText, { color: tierColor }]}>{t('swinglab_swing.auto_suggest_chip.best')}</Text>
               </View>
             ) : null}
           </View>

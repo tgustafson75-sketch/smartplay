@@ -7,6 +7,7 @@ import { useTheme } from '../../../contexts/ThemeContext';
 import { useSwingSessionStore } from '../../../store/swingSessionStore';
 import { useFamilyStore } from '../../../store/familyStore';
 import { useResolvedImageUri } from '../../../hooks/useResolvedImageUri';
+import { useTranslation } from 'react-i18next';
 
 // 2026-07-06 (elite audit) — thumbnails (fault frames) are persisted as
 // ABSOLUTE file:// paths and iOS regenerates the container UUID on every
@@ -27,6 +28,7 @@ type SwingRow = {
 };
 
 export default function PlayerLibraryScreen() {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ player_id?: string }>();
@@ -61,7 +63,7 @@ export default function PlayerLibraryScreen() {
           onPress={() => router.back()}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           accessibilityRole="button"
-          accessibilityLabel="Back"
+          accessibilityLabel={t('swinglab_player_library.accessibility_label.back')}
         >
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
@@ -71,9 +73,9 @@ export default function PlayerLibraryScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {!hasHydrated ? (
-          <Text style={[styles.emptyText, { color: colors.text_muted }]}>Loading swings…</Text>
+          <Text style={[styles.emptyText, { color: colors.text_muted }]}>{t('swinglab_player_library.player_library_screen.loading_swings')}</Text>
         ) : swings.length === 0 ? (
-          <Text style={[styles.emptyText, { color: colors.text_muted }]}>No swings tagged to this player yet.</Text>
+          <Text style={[styles.emptyText, { color: colors.text_muted }]}>{t('swinglab_player_library.player_library_screen.no_swings_tagged_to_this')}</Text>
         ) : (
           swings.map(s => (
             <TouchableOpacity

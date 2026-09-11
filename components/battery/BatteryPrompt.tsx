@@ -20,8 +20,10 @@ import { useTrustLevelStore } from '../../store/trustLevelStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speak } from '../../services/voiceService';
 import { getApiBaseUrl } from '../../services/apiBase';
+import { useTranslation } from 'react-i18next';
 
 export default function BatteryPrompt() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const trustLevel = useTrustLevelStore(s => s.level);
   // Audit 101 / W9 — per-field selectors. Prior code subscribed to the
@@ -60,10 +62,10 @@ export default function BatteryPrompt() {
         <Ionicons name="battery-half-outline" size={18} color="#fbbf24" />
         <Text style={styles.bannerText}>Phone at {pctText}. Save battery this round?</Text>
         <TouchableOpacity onPress={acceptBatterySaver} style={styles.bannerYes}>
-          <Text style={styles.bannerYesText}>Yes</Text>
+          <Text style={styles.bannerYesText}>{t('battery_battery_prompt.battery_prompt.yes')}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={declineBatterySaver} style={styles.bannerNo}>
-          <Text style={styles.bannerNoText}>No</Text>
+          <Text style={styles.bannerNoText}>{t('battery_battery_prompt.battery_prompt.no')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -78,14 +80,14 @@ export default function BatteryPrompt() {
             <Text style={styles.headerTitle}>Battery at {pctText}</Text>
           </View>
           <Text style={styles.body}>
-            Want me to slow down TightLie and stretch the battery for the rest of the round?
+            {t('battery_battery_prompt.battery_prompt.want_me_to_slow_down')}
           </Text>
           <View style={styles.row}>
             <TouchableOpacity style={[styles.btn, styles.btnYes]} onPress={acceptBatterySaver}>
-              <Text style={styles.btnYesText}>Yes, save battery</Text>
+              <Text style={styles.btnYesText}>{t('battery_battery_prompt.battery_prompt.yes_save_battery')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.btn} onPress={declineBatterySaver}>
-              <Text style={styles.btnText}>Keep going</Text>
+              <Text style={styles.btnText}>{t('battery_battery_prompt.battery_prompt.keep_going')}</Text>
             </TouchableOpacity>
           </View>
         </View>

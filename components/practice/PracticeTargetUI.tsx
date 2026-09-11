@@ -14,6 +14,7 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import type { GestureResponderEvent } from 'react-native';
 import type { TargetHitType } from '../../store/acousticCalibrationStore';
+import { useTranslation } from 'react-i18next';
 
 export interface HitPosition {
   hitType: TargetHitType;
@@ -43,6 +44,7 @@ export function PracticeTargetUI({
   cageFt = 10,
   canvasFt = 3,
 }: Props) {
+  const { t } = useTranslation();
   const [pendingDot, setPendingDot] = useState<{ px: number; py: number; type: TargetHitType } | null>(null);
 
   const canvasRatio = canvasFt / cageFt;
@@ -91,17 +93,17 @@ export function PracticeTargetUI({
       onPress={handlePress}
       disabled={disabled}
       style={[s.wrap, { width: size, height: size }, disabled && s.wrapDisabled]}
-      accessibilityLabel="Tap where the ball hit"
+      accessibilityLabel={t('practice_practice_target_ui.accessibility_label.tap_where_the_ball_hit')}
       accessibilityRole="button"
     >
       {/* Green netting background */}
       <View style={[StyleSheet.absoluteFill, s.netting]} />
 
       {/* Netting label hints */}
-      <Text style={[s.netLabel, { top: 10, left: 10 }]}>NET</Text>
-      <Text style={[s.netLabel, { top: 10, right: 10 }]}>NET</Text>
-      <Text style={[s.netLabel, { bottom: 10, left: 10 }]}>NET</Text>
-      <Text style={[s.netLabel, { bottom: 10, right: 10 }]}>NET</Text>
+      <Text style={[s.netLabel, { top: 10, left: 10 }]}>{t('practice_practice_target_ui.practice_target_ui.net')}</Text>
+      <Text style={[s.netLabel, { top: 10, right: 10 }]}>{t('practice_practice_target_ui.practice_target_ui.net')}</Text>
+      <Text style={[s.netLabel, { bottom: 10, left: 10 }]}>{t('practice_practice_target_ui.practice_target_ui.net')}</Text>
+      <Text style={[s.netLabel, { bottom: 10, right: 10 }]}>{t('practice_practice_target_ui.practice_target_ui.net')}</Text>
 
       {/* White canvas square */}
       <View style={[s.canvas, { left: canvasOffset, top: canvasOffset, width: canvasPx, height: canvasPx }]}>
@@ -118,7 +120,7 @@ export function PracticeTargetUI({
         </View>
 
         {/* Canvas label */}
-        <Text style={s.canvasLabel}>CANVAS</Text>
+        <Text style={s.canvasLabel}>{t('practice_practice_target_ui.practice_target_ui.canvas')}</Text>
       </View>
 
       {/* Hit dot — appears after tap */}
@@ -139,7 +141,7 @@ export function PracticeTargetUI({
       {/* Disabled overlay */}
       {disabled && (
         <View style={[StyleSheet.absoluteFill, s.disabledOverlay]}>
-          <Text style={s.disabledText}>HIT A SHOT FIRST</Text>
+          <Text style={s.disabledText}>{t('practice_practice_target_ui.practice_target_ui.hit_a_shot_first')}</Text>
         </View>
       )}
     </Pressable>

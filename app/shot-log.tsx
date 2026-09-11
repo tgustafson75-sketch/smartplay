@@ -20,8 +20,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useRoundStore } from '../store/roundStore';
 import ShotTimeline from '../components/caddie/ShotTimeline';
+import { useTranslation } from 'react-i18next';
 
 export default function ShotLogScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const shotCount = useRoundStore(s => s.shots.length);
@@ -34,18 +36,18 @@ export default function ShotLogScreen() {
           onPress={() => router.back()}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           accessibilityRole="button"
-          accessibilityLabel="Back"
+          accessibilityLabel={t('shot_log.accessibility_label.back')}
         >
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text_primary }]}>Shot Log</Text>
+        <Text style={[styles.title, { color: colors.text_primary }]}>{t('shot_log.shot_log_screen.shot_log')}</Text>
         <View style={{ width: 26 }} />
       </View>
 
       {shotCount === 0 ? (
         <View style={styles.empty}>
           <Ionicons name="golf-outline" size={40} color={colors.text_muted} />
-          <Text style={[styles.emptyTitle, { color: colors.text_primary }]}>No shots logged yet</Text>
+          <Text style={[styles.emptyTitle, { color: colors.text_primary }]}>{t('shot_log.shot_log_screen.no_shots_logged_yet')}</Text>
           <Text style={[styles.emptyBody, { color: colors.text_muted }]}>
             {isRoundActive
               ? 'Say "log this shot — 7 iron, 165, straight" to capture one. Shots land here as you go.'

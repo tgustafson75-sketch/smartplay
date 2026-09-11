@@ -45,8 +45,10 @@ import { useFlag } from '../../store/flagStore';
 import { triggerPaywall } from '../../services/paywallGuard';
 import { openYouTubeChannel } from '../../services/youtubeLinks';
 import { promptEndRound } from '../../services/round/endRoundFlow';
+import { useTranslation } from 'react-i18next';
 
 export function GlobalToolsMenu() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const isOpen = useToolsMenuStore((s) => s.isOpen);
@@ -164,15 +166,15 @@ export function GlobalToolsMenu() {
       void forceMarkPosition().catch(() => undefined);
       if (fix?.accuracy_m != null) {
         void markGpsRefreshNow();
-        Alert.alert('GPS refreshed', `Fresh fix at ±${Math.round(fix.accuracy_m)}m.`);
+        Alert.alert(t('tools_global_tools_menu.alert.gps_refreshed'), `Fresh fix at ±${Math.round(fix.accuracy_m)}m.`);
       } else if (fix) {
         void markGpsRefreshNow();
-        Alert.alert('GPS refreshed', 'Fresh fix acquired.');
+        Alert.alert(t('tools_global_tools_menu.alert.gps_refreshed'), t('tools_global_tools_menu.alert.fresh_fix_acquired'));
       } else {
-        Alert.alert('GPS Refresh', "Couldn't get a fresh fix. Step into the open and try again.");
+        Alert.alert(t('tools_global_tools_menu.alert.gps_refresh'), t('tools_global_tools_menu.alert.couldn_t_get_a_fresh'));
       }
     } catch {
-      Alert.alert('GPS refresh failed', 'Step into open sky and try again.');
+      Alert.alert(t('tools_global_tools_menu.alert.gps_refresh_failed'), t('tools_global_tools_menu.alert.step_into_open_sky_and'));
     }
   });
 
@@ -212,7 +214,7 @@ export function GlobalToolsMenu() {
           onPress={() => undefined}
           style={[styles.sheet, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}
         >
-          <Text style={[styles.title, { color: colors.text_muted }]}>TOOLS</Text>
+          <Text style={[styles.title, { color: colors.text_muted }]}>{t('tools_global_tools_menu.global_tools_menu.tools')}</Text>
 
           <ScrollView showsVerticalScrollIndicator={false}>
             {/* ─── PRESENCE & VOICE ───────────────────────────────
@@ -258,7 +260,7 @@ export function GlobalToolsMenu() {
             <SectionHeader colors={colors}>GPS & ROUND</SectionHeader>
             <Row
               icon="compass-outline"
-              label="GPS Refresh"
+              label={t('tools_global_tools_menu.label.gps_refresh')}
               sub={`Last refresh: ${formatRefreshAge(lastGpsRefreshAt)}`}
               onPress={refreshGps}
               colors={colors}
@@ -274,7 +276,7 @@ export function GlobalToolsMenu() {
                 />
                 <Row
                   icon="location-outline"
-                  label="Mark Location"
+                  label={t('tools_global_tools_menu.label.mark_location')}
                   sub="Capture real GPS for this hole"
                   onPress={() => {
                     useToolsMenuStore.getState().close();
@@ -288,14 +290,14 @@ export function GlobalToolsMenu() {
                     PRACTICE made it look like a between-rounds tool. */}
                 <Row
                   icon="list-outline"
-                  label="Shot Log"
+                  label={t('tools_global_tools_menu.label.shot_log')}
                   sub="Every shot this round"
                   onPress={() => nav('/shot-log')}
                   colors={colors}
                 />
                 <Row
                   icon="flag-outline"
-                  label="End Round"
+                  label={t('play.end_round')}
                   sub="Finish and save the scorecard"
                   onPress={endRoundAction}
                   colors={colors}
@@ -315,7 +317,7 @@ export function GlobalToolsMenu() {
 {flagSwingLab && (
             <Row
               icon="golf-outline"
-              label="SwingLab"
+              label={t('swinglab.tut_title')}
               sub="SmartMotion · drills · library"
               onPress={() => nav('/(tabs)/swinglab')}
               colors={colors}
@@ -327,7 +329,7 @@ export function GlobalToolsMenu() {
 {flagSmartVision && (
             <Row
               icon="telescope-outline"
-              label="SmartVision"
+              label={t('tools_global_tools_menu.label.smartvision')}
               sub="Analyze the hole"
               onPress={() => navOrPaywall('smartvision', '/smartvision')}
               colors={colors}
@@ -336,7 +338,7 @@ export function GlobalToolsMenu() {
 {flagSmartFinder && (
             <Row
               icon="locate-outline"
-              label="SmartFinder"
+              label={t('tools_global_tools_menu.label.smartfinder')}
               sub="Rangefinder · tap to lock distance"
               onPress={() => navOrPaywall('smartfinder', '/smartfinder')}
               colors={colors}
@@ -349,7 +351,7 @@ export function GlobalToolsMenu() {
 {flagSmartFinder && (
             <Row
               icon="eye-outline"
-              label="Smart Play"
+              label={t('tools_global_tools_menu.label.smart_play')}
               sub="What's the smart play? · caddie reads the scene"
               onPress={() => navOrPaywall('smartfinder', '/smartfinder?autoread=1')}
               colors={colors}
@@ -361,7 +363,7 @@ export function GlobalToolsMenu() {
 {flagLieAnalysis && (
             <Row
               icon="fitness-outline"
-              label="TightLie"
+              label={t('tools_global_tools_menu.label.tightlie')}
               sub="Photo your lie · how to play it"
               onPress={() => nav('/lie-analysis')}
               colors={colors}
@@ -373,7 +375,7 @@ export function GlobalToolsMenu() {
 {flagSwingAnalysis && (
             <Row
               icon="golf-outline"
-              label="Upload a Swing or Putt"
+              label={t('tools_global_tools_menu.label.upload_a_swing_or_putt')}
               sub="Video upload · swing + putt analysis"
               onPress={() => nav('/swinglab/upload')}
               colors={colors}
@@ -389,7 +391,7 @@ export function GlobalToolsMenu() {
                 for different things read as a bug. Behavior unchanged. */}
             <Row
               icon={coachModeEnabled ? 'people' : 'people-outline'}
-              label="Shared Sessions"
+              label={t('tools_global_tools_menu.label.shared_sessions')}
               sub={coachModeEnabled ? 'On — shared sessions visible' : 'Off — tap to enable shared sessions'}
               onPress={() => fire(() => {
                 setCoachModeEnabled(!coachModeEnabled);
@@ -402,14 +404,14 @@ export function GlobalToolsMenu() {
             <SectionHeader colors={colors}>HELP</SectionHeader>
             <Row
               icon="sparkles-outline"
-              label="Your Caddie"
+              label={t('tools_global_tools_menu.label.your_caddie')}
               sub="Selfie → AI portrait + voice"
               onPress={() => nav('/profile/custom-caddie')}
               colors={colors}
             />
             <Row
               icon="library-outline"
-              label="Tutorials"
+              label={t('tools_global_tools_menu.label.tutorials')}
               sub="How each tool works"
               onPress={() => nav('/tutorials')}
               colors={colors}
@@ -423,14 +425,14 @@ export function GlobalToolsMenu() {
             />
             <Row
               icon="book-outline"
-              label="Rules & Handicap"
+              label={t('tools_global_tools_menu.label.rules_handicap')}
               sub="Quick reference + WHS calculator"
               onPress={() => nav('/reference')}
               colors={colors}
             />
             <Row
               icon="logo-youtube"
-              label="YouTube Channel"
+              label={t('tools_global_tools_menu.label.youtube_channel')}
               sub="@smartplaycaddie"
               onPress={() => fire(() => { void openYouTubeChannel('@smartplaycaddie').catch(() => undefined); })}
               colors={colors}
@@ -440,38 +442,38 @@ export function GlobalToolsMenu() {
             <SectionHeader colors={colors}>APP</SectionHeader>
             <Row
               icon="settings-outline"
-              label="Settings"
+              label={t('tools_global_tools_menu.label.settings')}
               sub="Profile, voice, language, theme"
               onPress={() => nav('/settings')}
               colors={colors}
             />
             <Row
               icon="cloud-download-outline"
-              label="App Refresh"
+              label={t('tools_global_tools_menu.label.app_refresh')}
               sub="Check for and apply the latest OTA update"
               onPress={() => fire(async () => {
                 try {
                   const Updates = await import('expo-updates');
                   if (!Updates.isEnabled) {
-                    Alert.alert('App Refresh', 'Updates are not enabled in this build. Reinstall the latest APK to start receiving over-the-air updates.');
+                    Alert.alert(t('tools_global_tools_menu.alert.app_refresh'), t('tools_global_tools_menu.alert.updates_are_not_enabled_in'));
                     return;
                   }
                   const result = await Updates.checkForUpdateAsync();
                   if (!result.isAvailable) {
-                    Alert.alert('App Refresh', "You're on the latest build. Nothing to fetch.");
+                    Alert.alert(t('tools_global_tools_menu.alert.app_refresh'), t('tools_global_tools_menu.alert.you_re_on_the_latest'));
                     return;
                   }
                   await Updates.fetchUpdateAsync();
                   Alert.alert(
-                    'App Refresh',
-                    'A new bundle was downloaded. Restart now to apply it?',
+                    t('tools_global_tools_menu.alert.app_refresh'),
+                    t('tools_global_tools_menu.alert.a_new_bundle_was_downloaded'),
                     [
                       { text: 'Later', style: 'cancel' },
                       { text: 'Restart now', style: 'default', onPress: () => { void Updates.reloadAsync(); } },
                     ],
                   );
                 } catch {
-                  Alert.alert('App Refresh', 'Refresh failed. Try again in a moment.');
+                  Alert.alert(t('tools_global_tools_menu.alert.app_refresh'), t('tools_global_tools_menu.alert.refresh_failed_try_again_in'));
                 }
               })}
               colors={colors}
@@ -485,7 +487,7 @@ export function GlobalToolsMenu() {
               { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
             ]}
           >
-            <Text style={[styles.closeText, { color: colors.text_muted }]}>Close</Text>
+            <Text style={[styles.closeText, { color: colors.text_muted }]}>{t('tools_global_tools_menu.global_tools_menu.close')}</Text>
           </Pressable>
         </Pressable>
       </Pressable>

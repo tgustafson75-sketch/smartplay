@@ -7,6 +7,7 @@ import React from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { SetupCheckResult } from '../../services/swing/setupCheck';
+import { useTranslation } from 'react-i18next';
 
 type Props = {
   result: SetupCheckResult;
@@ -18,6 +19,7 @@ type Props = {
 };
 
 export default function SetupCheckCard({ result, imageUri, speaking, onReplay, onTryAgain, onDone }: Props) {
+  const { t } = useTranslation();
   // A "keep" cue (sound setup, nothing to change) reads better as affirmation
   // than as a "tweak". Detect the server's KEEP phrasing to label it honestly.
   const adj = (result.adjustment ?? '').trim();
@@ -31,7 +33,7 @@ export default function SetupCheckCard({ result, imageUri, speaking, onReplay, o
 
       {result.strengths.length > 0 ? (
         <View style={styles.block}>
-          <Text style={[styles.label, { color: '#3FB950' }]}>WHAT&apos;S DIALED IN</Text>
+          <Text style={[styles.label, { color: '#3FB950' }]}>{t('swinglab_setup_check_card.setup_check_card.what_s_dialed_in')}</Text>
           {result.strengths.map((s, i) => (
             <View key={i} style={styles.row}>
               <Ionicons name="checkmark-circle" size={16} color="#3FB950" style={styles.rowIcon} />
@@ -52,7 +54,7 @@ export default function SetupCheckCard({ result, imageUri, speaking, onReplay, o
 
       {result.drill && !isKeep ? (
         <View style={styles.block}>
-          <Text style={[styles.label, { color: '#7dd3a8' }]}>QUICK REHEARSAL</Text>
+          <Text style={[styles.label, { color: '#7dd3a8' }]}>{t('swinglab_setup_check_card.setup_check_card.quick_rehearsal')}</Text>
           <Text style={styles.rowText}>{result.drill}</Text>
         </View>
       ) : null}
@@ -62,7 +64,7 @@ export default function SetupCheckCard({ result, imageUri, speaking, onReplay, o
       <View style={styles.actions}>
         <TouchableOpacity style={styles.btn} onPress={onTryAgain} accessibilityRole="button">
           <Ionicons name="camera-outline" size={16} color="#9ca3af" />
-          <Text style={styles.btnText}>Retake</Text>
+          <Text style={styles.btnText}>{t('swinglab_setup_check_card.setup_check_card.retake')}</Text>
         </TouchableOpacity>
         {onReplay ? (
           <TouchableOpacity style={styles.btn} onPress={onReplay} accessibilityRole="button">
@@ -71,7 +73,7 @@ export default function SetupCheckCard({ result, imageUri, speaking, onReplay, o
           </TouchableOpacity>
         ) : null}
         <TouchableOpacity style={[styles.btn, styles.btnPrimary]} onPress={onDone} accessibilityRole="button">
-          <Text style={[styles.btnText, styles.btnTextPrimary]}>Let&apos;s go</Text>
+          <Text style={[styles.btnText, styles.btnTextPrimary]}>{t('swinglab_setup_check_card.setup_check_card.let_s_go')}</Text>
           <Ionicons name="arrow-forward" size={16} color="#00C896" />
         </TouchableOpacity>
       </View>

@@ -22,6 +22,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { ClubId } from '../../services/clubRecognition';
 import { fullCarryYards } from '../../services/swing/carryEstimate';
+import { useTranslation } from 'react-i18next';
 
 export interface ShotTrace {
   side: 'left' | 'right' | 'straight';
@@ -82,6 +83,7 @@ export function ShotMapPage({
   width: number;
   style?: StyleProp<ViewStyle>;
 }) {
+  const { t } = useTranslation();
   // Lateral fraction (−1 left … +1 right), capped at ~25° = full deflection.
   /**
    * 2026-08-26 (adversarial pass) — `lateral` collapsed TWO different states onto 0: a trace that
@@ -110,11 +112,11 @@ export function ShotMapPage({
     >
       <View style={styles.headerRow}>
         <Ionicons name="map-outline" size={16} color={colors.accent} />
-        <Text style={[styles.header, { color: colors.text_primary }]}>SHOT MAP</Text>
+        <Text style={[styles.header, { color: colors.text_primary }]}>{t('smartmotion_shot_map_page.shot_map_page.shot_map')}</Text>
         <View style={{ flex: 1 }} />
         <Pressable onPress={onBack} hitSlop={8} style={[styles.backChip, { borderColor: colors.border }]}>
           <Ionicons name="chevron-back" size={14} color={colors.text_muted} />
-          <Text style={[styles.backChipText, { color: colors.text_muted }]}>Capture</Text>
+          <Text style={[styles.backChipText, { color: colors.text_muted }]}>{t('smartmotion_shot_map_page.shot_map_page.capture')}</Text>
         </Pressable>
       </View>
 
@@ -161,6 +163,7 @@ function CourseMap({
   dirLabel: string | null;
   colors: ThemeColors;
 }) {
+  const { t } = useTranslation();
   // Scale the field to the club's full carry (so a 7-iron map isn't driver-sized),
   // floored so a tiny club still reads. estCarry is the partial-effort estimate.
   const full = fullCarryYards(club, handicap, learnedCarry);
@@ -218,17 +221,17 @@ function CourseMap({
           {/* 2026-07-07 (audit M2) — this is a PLANNED carry (full-club distance ×
               your target effort), NOT a measured outcome. Label it so a chunk that
               flew 30y isn't shown here as "~129y CARRY" like a real result. */}
-          <Stat label="PLAN CARRY" value={`~${estCarry}y`} colors={colors} est />
-          <Stat label="DIRECTION" value={dirLabel ?? 'not read'} colors={colors} est={!!dirLabel} />
-          <Stat label="EFFORT" value={effortPct != null ? `${effortPct}%` : '—'} colors={colors} />
+          <Stat label={t('smartmotion_shot_map_page.label.plan_carry')} value={`~${estCarry}y`} colors={colors} est />
+          <Stat label={t('smartmotion_shot_map_page.label.direction')} value={dirLabel ?? 'not read'} colors={colors} est={!!dirLabel} />
+          <Stat label={t('smartmotion_shot_map_page.label.effort')} value={effortPct != null ? `${effortPct}%` : '—'} colors={colors} />
         </View>
       ) : (
         <Text style={[styles.empty, { color: colors.text_muted }]}>
-          Set your target effort on the capture screen, then record a down-the-line swing — your shot plots here from the effort estimate and the ball-trace start direction.
+          {t('smartmotion_shot_map_page.course_map.set_your_target_effort_on')}
         </Text>
       )}
       <Text style={[styles.note, { color: colors.text_muted }]}>
-        Estimated from your club × effort and the acoustic-anchored trace. Refines as your real carry data builds.
+        {t('smartmotion_shot_map_page.course_map.estimated_from_your_club_effort')}
       </Text>
     </View>
   );
@@ -247,6 +250,7 @@ function CageBullseye({
   colors: ThemeColors;
   isDark: boolean;
 }) {
+  const { t } = useTranslation();
   const rings = [1, 0.74, 0.5, 0.28];
   const hasImpact = dirLabel != null;
   const lime = limeFor(isDark);
@@ -288,16 +292,16 @@ function CageBullseye({
 
       {/* Confirmable geometry */}
       <View style={[styles.geoCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-        <Text style={[styles.geoTitle, { color: colors.text_muted }]}>CONFIRM YOUR CAGE SETUP</Text>
-        <Stepper label="Ball → canvas" value={canvasFeet} unit="ft" onChange={onChangeCanvasFeet} min={1} colors={colors} />
-        <Stepper label="Camera behind you" value={cameraBehindFeet} unit="ft" onChange={onChangeCameraBehindFeet} min={0} colors={colors} />
+        <Text style={[styles.geoTitle, { color: colors.text_muted }]}>{t('smartmotion_shot_map_page.cage_bullseye.confirm_your_cage_setup')}</Text>
+        <Stepper label={t('smartmotion_shot_map_page.label.ball_canvas')} value={canvasFeet} unit="ft" onChange={onChangeCanvasFeet} min={1} colors={colors} />
+        <Stepper label={t('smartmotion_shot_map_page.label.camera_behind_you')} value={cameraBehindFeet} unit="ft" onChange={onChangeCameraBehindFeet} min={0} colors={colors} />
         <View style={[styles.totalRow, { borderTopColor: colors.border }]}>
-          <Text style={[styles.totalLabel, { color: colors.text_secondary }]}>Throw distance</Text>
+          <Text style={[styles.totalLabel, { color: colors.text_secondary }]}>{t('smartmotion_shot_map_page.cage_bullseye.throw_distance')}</Text>
           <Text style={[styles.totalValue, { color: colors.accent }]}>{Math.max(1, canvasFeet + cameraBehindFeet)} ft</Text>
         </View>
       </View>
       <Text style={[styles.note, { color: colors.text_muted }]}>
-        Lateral start comes from the acoustic-anchored trace; depth + height on the bullseye sharpen with higher-frame-rate capture. Line the rings up over your net&apos;s bullseye.
+        {t('smartmotion_shot_map_page.cage_bullseye.lateral_start_comes_from_the')}
       </Text>
     </View>
   );

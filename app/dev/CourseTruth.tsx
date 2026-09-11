@@ -37,12 +37,14 @@ import {
   type LatLng,
 } from '../../services/courseTruth';
 import { useRoundStore } from '../../store/roundStore';
+import { useTranslation } from 'react-i18next';
 
 const GPS_POLL_MS = 1500;
 
 type GpsState = { lat: number; lng: number; accuracy_m: number | null; at: number } | null;
 
 export default function CourseTruthScreen() {
+  const { t } = useTranslation();
   const params = useLocalSearchParams<{ courseId?: string; hole?: string }>();
   const courseId = String(params.courseId ?? '').trim() || 'unknown';
   const hole = Math.max(1, Math.min(18, parseInt(String(params.hole ?? '1'), 10) || 1));
@@ -171,39 +173,39 @@ export default function CourseTruthScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Ionicons name="flag" size={22} color="#00C896" />
-          <Text style={styles.title}>Course Truth</Text>
+          <Text style={styles.title}>{t('dev_course_truth.course_truth_screen.course_truth')}</Text>
           <Text style={styles.subtitle}>
             {courseId} · Hole {hole}
           </Text>
           <Text style={styles.note}>
-            Walk to the center of the green, tap I&apos;m Here, then Save.
+            {t('dev_course_truth.course_truth_screen.walk_to_the_center_of')}
           </Text>
         </View>
 
-        <Section label="GPS (live)">
+        <Section label={t('dev_course_truth.label.gps_live')}>
           <CoordRow
             color="#F5A623"
-            label="You are here"
+            label={t('dev_course_truth.label.you_are_here')}
             lat={gps?.lat ?? null}
             lng={gps?.lng ?? null}
             extra={gps?.accuracy_m != null ? `±${gps.accuracy_m.toFixed(1)}m` : null}
           />
         </Section>
 
-        <Section label="Cached (courseHoles)">
+        <Section label={t('dev_course_truth.label.cached_courseholes')}>
           <CoordRow
             color="#E74C3C"
-            label="API middle"
+            label={t('dev_course_truth.label.api_middle')}
             lat={apiCoord?.lat ?? null}
             lng={apiCoord?.lng ?? null}
             extra={null}
           />
         </Section>
 
-        <Section label="Saved truth">
+        <Section label={t('dev_course_truth.label.saved_truth')}>
           <CoordRow
             color="#00C896"
-            label="True center"
+            label={t('dev_course_truth.label.true_center')}
             lat={saved?.lat ?? null}
             lng={saved?.lng ?? null}
             extra={savedAt ? `${Math.round((Date.now() - savedAt) / 60_000)}m ago` : null}
@@ -215,10 +217,10 @@ export default function CourseTruthScreen() {
           )}
         </Section>
 
-        <Section label="Working truth (unsaved)">
+        <Section label={t('dev_course_truth.label.working_truth_unsaved')}>
           <CoordRow
             color="#3498DB"
-            label="Pending"
+            label={t('dev_course_truth.label.pending')}
             lat={truth?.lat ?? null}
             lng={truth?.lng ?? null}
             extra={null}
@@ -226,7 +228,7 @@ export default function CourseTruthScreen() {
           <View style={styles.manualRow}>
             <TextInput
               style={styles.manualInput}
-              placeholder="Lat"
+              placeholder={t('dev_course_truth.placeholder.lat')}
               placeholderTextColor="#6b7280"
               keyboardType="numbers-and-punctuation"
               value={manualLat}
@@ -234,35 +236,35 @@ export default function CourseTruthScreen() {
             />
             <TextInput
               style={styles.manualInput}
-              placeholder="Lng"
+              placeholder={t('dev_course_truth.placeholder.lng')}
               placeholderTextColor="#6b7280"
               keyboardType="numbers-and-punctuation"
               value={manualLng}
               onChangeText={setManualLng}
             />
             <TouchableOpacity style={styles.applyBtn} onPress={applyManual}>
-              <Text style={styles.applyBtnText}>Apply</Text>
+              <Text style={styles.applyBtnText}>{t('dev_course_truth.course_truth_screen.apply')}</Text>
             </TouchableOpacity>
           </View>
         </Section>
 
         <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#F5A623' }]} onPress={snapToGps} disabled={!gps}>
           <Ionicons name="navigate" size={18} color="#0d1a0d" />
-          <Text style={styles.actionText}>I&apos;m Here</Text>
+          <Text style={styles.actionText}>{t('dev_course_truth.course_truth_screen.i_m_here')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#00C896' }]} onPress={save} disabled={!truth}>
           <Ionicons name="save" size={18} color="#0d1a0d" />
-          <Text style={styles.actionText}>Save Truth</Text>
+          <Text style={styles.actionText}>{t('dev_course_truth.course_truth_screen.save_truth')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#1a1a1a', borderColor: '#444', borderWidth: 1 }]} onPress={clear} disabled={!saved}>
           <Ionicons name="trash" size={16} color="#ef4444" />
-          <Text style={[styles.actionText, { color: '#ef4444' }]}>Clear Saved</Text>
+          <Text style={[styles.actionText, { color: '#ef4444' }]}>{t('dev_course_truth.course_truth_screen.clear_saved')}</Text>
         </TouchableOpacity>
 
         <Text style={styles.footnote}>
-          Map drag pending react-native-maps (ships with next EAS Build).
+          {t('dev_course_truth.course_truth_screen.map_drag_pending_react_native')}
         </Text>
       </ScrollView>
     </SafeAreaView>

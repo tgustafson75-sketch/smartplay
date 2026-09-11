@@ -17,7 +17,12 @@ const DG_BASE = 'https://api.deepgram.com/v1/listen';
 const DG_TIMEOUT_MS = 12_000;
 
 // Language map for Deepgram BCP-47 codes
-const DG_LANG: Record<string, string> = { en: 'en', es: 'es', zh: 'zh-CN' };
+/**
+ * 2026-09-11 (release 1.5) — ja/ko added. Deepgram nova-2 supports both; the codes are plain
+ * two-letter for Japanese and Korean, unlike Chinese which needs the region ('zh-CN').
+ * An unknown code falls back to 'en' below rather than failing the request.
+ */
+const DG_LANG: Record<string, string> = { en: 'en', es: 'es', zh: 'zh-CN', ja: 'ja', ko: 'ko' };
 
 // Golf + product vocabulary for Deepgram keyword boosting (replaces Whisper prompt)
 const DG_KEYWORDS = [

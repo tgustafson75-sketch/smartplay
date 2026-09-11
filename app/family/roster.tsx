@@ -38,6 +38,7 @@ import {
   type SkillLevel,
   type AgeBand,
 } from '../../store/familyStore';
+import { useTranslation } from 'react-i18next';
 
 const RELATIONSHIPS: { id: FamilyRelationship; label: string }[] = [
   { id: 'child', label: 'Child' },
@@ -71,6 +72,7 @@ const BAND_LABEL: Record<AgeBand, string> = {
 };
 
 export default function FamilyRosterScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   // 2026-05-22 — Roster editor shows FAMILY members only (kids,
@@ -116,7 +118,7 @@ export default function FamilyRosterScreen() {
   const onSave = () => {
     const trimmed = draft.firstName.trim();
     if (!trimmed) {
-      Alert.alert('Name required', 'Enter a first name before saving.');
+      Alert.alert(t('family_roster.alert.name_required'), t('family_roster.alert.enter_a_first_name_before'));
       return;
     }
     const ageNum = draft.age.trim() ? Math.max(1, Math.min(120, parseInt(draft.age, 10))) : null;
@@ -152,7 +154,7 @@ export default function FamilyRosterScreen() {
       setDraft((d) => ({ ...d, avatar_photo_uri: styled ?? uri }));
       if (!styled) useToastStore.getState().show('Used your selfie — AI styling unavailable.');
     };
-    Alert.alert('Profile photo', 'Add a selfie, or let AI style it into a caddie or pro golfer.', [
+    Alert.alert(t('family_roster.alert.profile_photo'), t('family_roster.alert.add_a_selfie_or_let'), [
       { text: 'Take selfie', onPress: () => void setSelfie() },
       { text: 'AI caddie avatar', onPress: () => void setStyled('caddie') },
       { text: 'AI pro-golfer avatar', onPress: () => void setStyled('pro') },
@@ -164,7 +166,7 @@ export default function FamilyRosterScreen() {
   const onRemove = () => {
     if (!editingId) return;
     Alert.alert(
-      'Remove from family?',
+      t('family_roster.alert.remove_from_family'),
       `${draft.firstName} will be removed from your roster. Their swing history stays on device but won't be tagged anymore.`,
       [
         { text: 'Cancel', style: 'cancel' },
@@ -190,11 +192,11 @@ export default function FamilyRosterScreen() {
     <SafeAreaView edges={['top']} style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBack}>
-          <Text style={[styles.headerBackText, { color: colors.accent }]}>← Settings</Text>
+          <Text style={[styles.headerBackText, { color: colors.accent }]}>{t('family_roster.family_roster_screen.settings')}</Text>
         </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.text_primary }]}>Family Coaching</Text>
+        <Text style={[styles.headerTitle, { color: colors.text_primary }]}>{t('family_roster.family_roster_screen.family_coaching')}</Text>
         <Pressable onPress={openAdd} hitSlop={10} style={styles.headerAdd}>
-          <Text style={[styles.headerAddText, { color: colors.accent }]}>＋ Add</Text>
+          <Text style={[styles.headerAddText, { color: colors.accent }]}>{t('family_roster.family_roster_screen.add')}</Text>
         </Pressable>
       </View>
 
@@ -202,16 +204,16 @@ export default function FamilyRosterScreen() {
         {roster.length === 0 ? (
           <View style={[styles.empty, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.emptyTitle, { color: colors.text_primary }]}>
-              Add your first family member
+              {t('family_roster.family_roster_screen.add_your_first_family_member')}
             </Text>
             <Text style={[styles.emptyHint, { color: colors.text_muted }]}>
-              Coaches kids + partners + friends with age-appropriate feedback. Record their swings hands-free on the glasses: &quot;Record Emma&apos;s swing.&quot;
+              {t('family_roster.family_roster_screen.coaches_kids_partners_friends_with')}
             </Text>
             <Pressable
               onPress={openAdd}
               style={[styles.primaryBtn, { backgroundColor: colors.accent }]}
             >
-              <Text style={styles.primaryBtnText}>＋ Add a family member</Text>
+              <Text style={styles.primaryBtnText}>{t('family_roster.family_roster_screen.add_a_family_member')}</Text>
             </Pressable>
           </View>
         ) : (
@@ -248,18 +250,18 @@ export default function FamilyRosterScreen() {
                   hitSlop={8}
                   style={[styles.rowEdit, { borderColor: colors.border }]}
                 >
-                  <Text style={[styles.rowEditText, { color: colors.text_muted }]}>Edit</Text>
+                  <Text style={[styles.rowEditText, { color: colors.text_muted }]}>{t('family_roster.family_roster_screen.edit')}</Text>
                 </Pressable>
               </View>
             ))}
             <View style={[styles.tipCard, { borderColor: colors.border }]}>
-              <Text style={[styles.tipTitle, { color: colors.text_primary }]}>Hands-free flow</Text>
+              <Text style={[styles.tipTitle, { color: colors.text_primary }]}>{t('family_roster.family_roster_screen.hands_free_flow')}</Text>
               <Text style={[styles.tipBody, { color: colors.text_muted }]}>
-                Once a member is on the roster, you can say:
-                {'\n'}• &quot;Coach Emma&apos;s swing&quot; — starts a tagged recording
-                {'\n'}• &quot;Analyze Emma&apos;s swing&quot; — runs the junior analyzer + speaks the result
-                {'\n'}• &quot;How&apos;s Emma&apos;s progress?&quot; — reads recent trend
-                {'\n'}• &quot;Stop recording&quot; — ends the family session
+                {t('family_roster.family_roster_screen.once_a_member_is_on')}
+                {'\n'}{t('family_roster.family_roster_screen.coach_emma_s_swing_starts')}
+                {'\n'}{t('family_roster.family_roster_screen.analyze_emma_s_swing_runs')}
+                {'\n'}{t('family_roster.family_roster_screen.how_s_emma_s_progress')}
+                {'\n'}{t('family_roster.family_roster_screen.stop_recording_ends_the_family')}
               </Text>
             </View>
           </>
@@ -274,34 +276,34 @@ export default function FamilyRosterScreen() {
                 {editingId ? 'Edit member' : 'Add member'}
               </Text>
               <Pressable onPress={() => setEditorOpen(false)} hitSlop={10}>
-                <Text style={[styles.modalClose, { color: colors.text_muted }]}>Close</Text>
+                <Text style={[styles.modalClose, { color: colors.text_muted }]}>{t('family_roster.family_roster_screen.close')}</Text>
               </Pressable>
             </View>
 
             <ScrollView contentContainerStyle={styles.modalBody}>
               <DraftField
-                label="First name"
+                label={t('family_roster.label.first_name')}
                 value={draft.firstName}
                 onChange={(v) => setDraft((d) => ({ ...d, firstName: v }))}
-                placeholder="Emma"
+                placeholder={t('family_roster.placeholder.emma')}
                 colors={colors}
               />
               <DraftField
-                label="Nickname (optional)"
+                label={t('family_roster.label.nickname_optional')}
                 value={draft.nickname}
                 onChange={(v) => setDraft((d) => ({ ...d, nickname: v }))}
-                placeholder="Buddy / Champ / Emma-bug"
+                placeholder={t('family_roster.placeholder.buddy_champ_emma_bug')}
                 colors={colors}
               />
               <DraftPicker
-                label="Relationship"
+                label={t('family_roster.label.relationship')}
                 value={draft.relationship}
                 options={RELATIONSHIPS.map((r) => ({ id: r.id, label: r.label }))}
                 onChange={(v) => setDraft((d) => ({ ...d, relationship: v as FamilyRelationship }))}
                 colors={colors}
               />
               <DraftField
-                label="Age"
+                label={t('family_roster.label.age')}
                 value={draft.age}
                 onChange={(v) => setDraft((d) => ({ ...d, age: v.replace(/[^0-9]/g, '').slice(0, 3) }))}
                 placeholder="9"
@@ -309,14 +311,14 @@ export default function FamilyRosterScreen() {
                 colors={colors}
               />
               <DraftPicker
-                label="Skill"
+                label={t('family_roster.label.skill')}
                 value={draft.skillLevel}
                 options={SKILL_LEVELS.map((s) => ({ id: s.id, label: s.label }))}
                 onChange={(v) => setDraft((d) => ({ ...d, skillLevel: v as SkillLevel }))}
                 colors={colors}
               />
               <DraftPicker
-                label="Handedness"
+                label={t('family_roster.label.handedness')}
                 value={draft.handedness}
                 options={HANDEDNESS.map((h) => ({ id: h.id, label: h.label }))}
                 onChange={(v) => setDraft((d) => ({ ...d, handedness: v as FamilyMember['handedness'] }))}
@@ -334,7 +336,7 @@ export default function FamilyRosterScreen() {
                   onPress={onDraftPhoto}
                   style={{ flex: 1, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.accent, backgroundColor: colors.accent_muted, alignItems: 'center' }}
                   accessibilityRole="button"
-                  accessibilityLabel="Add or change profile photo"
+                  accessibilityLabel={t('family_roster.accessibility_label.add_or_change_profile_photo')}
                 >
                   <Text style={{ color: colors.accent, fontWeight: '700', fontSize: 13 }}>
                     {draft.avatar_photo_uri ? 'Change photo' : 'Add selfie / AI avatar'}
@@ -356,13 +358,13 @@ export default function FamilyRosterScreen() {
                     onPress={onArchive}
                     style={[styles.secondaryBtn, { borderColor: colors.border }]}
                   >
-                    <Text style={[styles.secondaryBtnText, { color: colors.text_muted }]}>Archive</Text>
+                    <Text style={[styles.secondaryBtnText, { color: colors.text_muted }]}>{t('family_roster.family_roster_screen.archive')}</Text>
                   </Pressable>
                   <Pressable
                     onPress={onRemove}
                     style={[styles.secondaryBtn, { borderColor: '#7f1d1d' }]}
                   >
-                    <Text style={[styles.secondaryBtnText, { color: '#f87171' }]}>Remove…</Text>
+                    <Text style={[styles.secondaryBtnText, { color: '#f87171' }]}>{t('family_roster.family_roster_screen.remove')}</Text>
                   </Pressable>
                 </View>
               )}
@@ -463,9 +465,10 @@ function DraftPicker({
 function EmojiPicker({
   value, onChange, colors,
 }: { value: string; onChange: (e: string) => void } & ColorProps) {
+  const { t } = useTranslation();
   return (
     <View style={styles.field}>
-      <Text style={[styles.fieldLabel, { color: colors.text_muted }]}>Avatar</Text>
+      <Text style={[styles.fieldLabel, { color: colors.text_muted }]}>{t('family_roster.emoji_picker.avatar')}</Text>
       <View style={styles.emojiRow}>
         {EMOJI_PALETTE.map((e) => {
           const active = e === value;

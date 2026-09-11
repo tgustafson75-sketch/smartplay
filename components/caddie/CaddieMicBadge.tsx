@@ -30,6 +30,7 @@ import {
   TRUST_LEVEL_SLIDER_ORDER,
   type TrustLevel,
 } from '../../store/trustLevelStore';
+import { useTranslation } from 'react-i18next';
 
 export interface CaddieMicBadgeProps {
   /** Outer circle size in px. Default 56 matches the brand badge. */
@@ -72,6 +73,7 @@ export function CaddieMicBadge({
   accessibilityLabel,
   hideTrustChip = true,
 }: CaddieMicBadgeProps) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const listeningState = useListeningSessionStore((s) => s.state);
   const trustLevel = useTrustLevelStore((s) => s.level) as TrustLevel;
@@ -181,7 +183,7 @@ export function CaddieMicBadge({
         hitSlop={8}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel ?? (isListening ? 'Stop talking to caddie' : 'Tap to talk to caddie')}
-        accessibilityHint="Starts recording. Tap again to stop."
+        accessibilityHint={t('caddie_caddie_mic_badge.accessibility_hint.starts_recording_tap_again_to')}
         style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
       >
         {content}

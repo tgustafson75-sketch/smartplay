@@ -36,6 +36,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useSettingsStore, type Persona } from '../store/settingsStore';
 import { signalGreetingComplete } from './greeting';
+import { useTranslation } from 'react-i18next';
 
 type CaddiePick = {
   id: Persona;
@@ -52,6 +53,7 @@ const CADDIES: CaddiePick[] = [
 ];
 
 export default function WelcomeScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors, spacing, radii } = useTheme();
   const styles = useMemo(() => makeStyles(colors, spacing, radii), [colors, spacing, radii]);
@@ -120,8 +122,8 @@ export default function WelcomeScreen() {
       // from a dead button unless it says so.
       console.log('[path1:onboard] blocked reason=terms_not_accepted');
       Alert.alert(
-        'Acceptance required',
-        'Please review the Terms & Acceptance section and tick the agreement checkbox before continuing.',
+        t('welcome.alert.acceptance_required'),
+        t('welcome.alert.please_review_the_terms_acceptance'),
       );
       return;
     }
@@ -189,21 +191,21 @@ export default function WelcomeScreen() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.headerBlock}>
             <Text style={[styles.title, { color: colors.text_primary }]}>
-              Welcome to SmartPlay Caddie
+              {t('welcome.welcome_screen.welcome_to_smartplay_caddie')}
             </Text>
             <Text style={[styles.subtitle, { color: colors.text_muted }]}>
-              Set up your profile so your caddie knows who they&apos;re working with. Everything below is optional.
+              {t('welcome.welcome_screen.set_up_your_profile_so')}
             </Text>
           </View>
 
-          <Text style={[styles.fieldLabel, { color: colors.accent }]}>YOUR NAME</Text>
+          <Text style={[styles.fieldLabel, { color: colors.accent }]}>{t('welcome.welcome_screen.your_name')}</Text>
           <TextInput
             style={[styles.input, {
               color: colors.text_primary, borderColor: colors.border, backgroundColor: colors.surface,
             }]}
             value={name}
             onChangeText={setLocalName}
-            placeholder="First name"
+            placeholder={t('welcome.placeholder.first_name')}
             placeholderTextColor={colors.text_muted}
             autoCapitalize="words"
             returnKeyType="next"
@@ -230,7 +232,7 @@ export default function WelcomeScreen() {
             })}
           </View>
 
-          <Text style={[styles.fieldLabel, { color: colors.accent, marginTop: spacing.lg }]}>HANDICAP (OPTIONAL)</Text>
+          <Text style={[styles.fieldLabel, { color: colors.accent, marginTop: spacing.lg }]}>{t('welcome.welcome_screen.handicap_optional')}</Text>
           <TextInput
             style={[styles.input, {
               color: colors.text_primary, borderColor: colors.border, backgroundColor: colors.surface,
@@ -243,7 +245,7 @@ export default function WelcomeScreen() {
             returnKeyType="done"
           />
 
-          <Text style={[styles.fieldLabel, { color: colors.accent, marginTop: spacing.lg }]}>PICK YOUR CADDIE</Text>
+          <Text style={[styles.fieldLabel, { color: colors.accent, marginTop: spacing.lg }]}>{t('welcome.welcome_screen.pick_your_caddie')}</Text>
           <View style={styles.caddieList}>
             {CADDIES.map(c => {
               const isActive = caddie === c.id;
@@ -270,7 +272,7 @@ export default function WelcomeScreen() {
             })}
           </View>
           <Text style={[styles.fineprint, { color: colors.text_muted }]}>
-            You can change this anytime in Settings.
+            {t('welcome.welcome_screen.you_can_change_this_anytime')}
           </Text>
 
           {/* 2026-05-22 — Terms & Acceptance gate. Required before
@@ -284,7 +286,7 @@ export default function WelcomeScreen() {
             { backgroundColor: colors.surface, borderColor: colors.border },
           ]}>
             <Text style={[styles.fieldLabel, { color: colors.accent, marginBottom: spacing.sm }]}>
-              TERMS &amp; ACCEPTANCE
+              {t('welcome.welcome_screen.terms_acceptance')}
             </Text>
             <ScrollView
               style={styles.termsScroll}
@@ -293,7 +295,7 @@ export default function WelcomeScreen() {
               nestedScrollEnabled
             >
               <Text style={[styles.termsBody, { color: colors.text_primary }]}>
-                By creating a SmartPlay Caddie account and using the platform, you acknowledge and agree that:
+                {t('welcome.welcome_screen.by_creating_a_smartplay_caddie')}
               </Text>
               {[
                 'SmartPlay Caddie provides AI-generated golf guidance, analytics, recommendations, and coaching insights for informational and entertainment purposes only.',
@@ -315,19 +317,19 @@ export default function WelcomeScreen() {
                 style={[styles.termsLink, { borderColor: colors.border }]}
                 onPress={openTerms}
                 accessibilityRole="button"
-                accessibilityLabel="View Full Terms"
+                accessibilityLabel={t('welcome.accessibility_label.view_full_terms')}
               >
                 <Ionicons name="document-text-outline" size={13} color={colors.accent} />
-                <Text style={[styles.termsLinkText, { color: colors.accent }]}>View Full Terms</Text>
+                <Text style={[styles.termsLinkText, { color: colors.accent }]}>{t('welcome.welcome_screen.view_full_terms')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.termsLink, { borderColor: colors.border }]}
                 onPress={openPrivacy}
                 accessibilityRole="button"
-                accessibilityLabel="Privacy Policy"
+                accessibilityLabel={t('welcome.accessibility_label.privacy_policy')}
               >
                 <Ionicons name="shield-checkmark-outline" size={13} color={colors.accent} />
-                <Text style={[styles.termsLinkText, { color: colors.accent }]}>Privacy Policy</Text>
+                <Text style={[styles.termsLinkText, { color: colors.accent }]}>{t('welcome.welcome_screen.privacy_policy')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -341,7 +343,7 @@ export default function WelcomeScreen() {
               }}
               accessibilityRole="checkbox"
               accessibilityState={{ checked: termsAccepted }}
-              accessibilityLabel="I have read and agree to the Terms of Service and Privacy Policy"
+              accessibilityLabel={t('welcome.accessibility_label.i_have_read_and_agree')}
               activeOpacity={0.7}
             >
               <View style={[
@@ -352,7 +354,7 @@ export default function WelcomeScreen() {
                 {termsAccepted && <Ionicons name="checkmark" size={16} color="#ffffff" />}
               </View>
               <Text style={[styles.termsAcceptText, { color: colors.text_primary }]}>
-                I have read and agree to the Terms of Service and Privacy Policy.
+                {t('welcome.welcome_screen.i_have_read_and_agree')}
               </Text>
             </TouchableOpacity>
             {termsAccepted && (
@@ -376,7 +378,7 @@ export default function WelcomeScreen() {
               accessibilityLabel={termsAccepted ? 'Get started' : 'Get started — disabled until terms accepted'}
               accessibilityState={{ disabled: !termsAccepted }}
             >
-              <Text style={styles.ctaText}>Get started</Text>
+              <Text style={styles.ctaText}>{t('welcome.welcome_screen.get_started')}</Text>
             </TouchableOpacity>
           </Animated.View>
 
@@ -387,10 +389,10 @@ export default function WelcomeScreen() {
             style={styles.tourBtn}
             onPress={() => router.push('/quick-start' as never)}
             accessibilityRole="button"
-            accessibilityLabel="Open the Quick Start Guide"
+            accessibilityLabel={t('welcome.accessibility_label.open_the_quick_start_guide')}
           >
             <Text style={[styles.tourBtnText, { color: colors.text_muted }]}>
-              First time? Read the Quick Start guide →
+              {t('welcome.welcome_screen.first_time_read_the_quick')}
             </Text>
           </TouchableOpacity>
         </ScrollView>

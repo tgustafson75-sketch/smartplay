@@ -30,6 +30,7 @@ import { getDialog } from '../services/dialogEngine';
 import { useTrustLevelStore } from '../store/trustLevelStore';
 import { getApiBaseUrl } from '../services/apiBase';
 import { useFlagGate } from '../hooks/useFlagGate';
+import { useTranslation } from 'react-i18next';
 
 const apiUrl = getApiBaseUrl();
 
@@ -45,6 +46,7 @@ const apiUrl = getApiBaseUrl();
 type Phase = 'opener' | 'opener_listening' | 'camera' | 'analyzing' | 'result' | 'low_quality' | 'no_network' | 'error';
 
 export default function LieAnalysisScreen() {
+  const { t } = useTranslation();
   // 2026-09-06 — remote kill switch. Redirects to the Caddie screen if `lie_analysis` is off, whether it
   // was already off on entry or flips off while this screen is open. No message, by instruction.
   useFlagGate('lie_analysis');
@@ -343,9 +345,9 @@ export default function LieAnalysisScreen() {
         <CourseDetailBanner />
         <View style={styles.permBox}>
           <ActivityIndicator color="#00C896" />
-          <Text style={[styles.permText, { marginTop: 12 }]}>Checking camera permission…</Text>
+          <Text style={[styles.permText, { marginTop: 12 }]}>{t('lie_analysis.lie_analysis_screen.checking_camera_permission')}</Text>
           <TouchableOpacity style={styles.permLink} onPress={() => safeBack()}>
-            <Text style={styles.permLinkText}>← Back</Text>
+            <Text style={styles.permLinkText}>{t('lie_analysis.lie_analysis_screen.back')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -356,9 +358,9 @@ export default function LieAnalysisScreen() {
       <SafeAreaView style={styles.container}>
         <CourseDetailBanner />
         <View style={styles.permBox}>
-          <Text style={styles.permTitle}>Camera Access</Text>
+          <Text style={styles.permTitle}>{t('lie_analysis.lie_analysis_screen.camera_access')}</Text>
           <Text style={styles.permText}>
-            TightLie needs the camera to look at your shot. The photo never leaves your device except to be analyzed.
+            {t('lie_analysis.lie_analysis_screen.tightlie_needs_the_camera_to')}
           </Text>
           <TouchableOpacity
             style={styles.permBtn}
@@ -377,10 +379,10 @@ export default function LieAnalysisScreen() {
             </Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.permLink} onPress={() => Linking.openSettings()}>
-            <Text style={styles.permLinkText}>Open Settings</Text>
+            <Text style={styles.permLinkText}>{t('lie_analysis.lie_analysis_screen.open_settings')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.permLink} onPress={() => safeBack()}>
-            <Text style={styles.permLinkText}>← Back</Text>
+            <Text style={styles.permLinkText}>{t('lie_analysis.lie_analysis_screen.back')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -393,9 +395,9 @@ export default function LieAnalysisScreen() {
         <CourseDetailBanner />
         <View style={styles.header}>
           <TouchableOpacity onPress={() => safeBack()} style={styles.headerBtn}>
-            <Text style={styles.headerBtnText}>← Back</Text>
+            <Text style={styles.headerBtnText}>{t('lie_analysis.lie_analysis_screen.back')}</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>TightLie</Text>
+          <Text style={styles.headerTitle}>{t('lie_analysis.lie_analysis_screen.tightlie')}</Text>
           <View style={styles.headerBtn} />
         </View>
         <AnalysisResult
@@ -439,9 +441,9 @@ export default function LieAnalysisScreen() {
         <CourseDetailBanner />
         <View style={styles.header}>
           <TouchableOpacity onPress={() => safeBack()} style={styles.headerBtn}>
-            <Text style={styles.headerBtnText}>← Back</Text>
+            <Text style={styles.headerBtnText}>{t('lie_analysis.lie_analysis_screen.back')}</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>TightLie</Text>
+          <Text style={styles.headerTitle}>{t('lie_analysis.lie_analysis_screen.tightlie')}</Text>
           <View style={styles.headerBtn} />
         </View>
         <View style={styles.errorBox}>
@@ -449,16 +451,16 @@ export default function LieAnalysisScreen() {
           <Text style={styles.errorBody}>{body}</Text>
           <View style={styles.errorActions}>
             <TouchableOpacity style={styles.actionBtn} onPress={() => { setAnalysis(null); setImageUri(null); setPhase('camera'); }}>
-              <Text style={styles.actionBtnText}>Try again</Text>
+              <Text style={styles.actionBtnText}>{t('lie_analysis.lie_analysis_screen.try_again')}</Text>
             </TouchableOpacity>
             {phase === 'no_network' && (
               <TouchableOpacity style={[styles.actionBtn, styles.actionBtnPrimary]} onPress={handleSaveForLater}>
-                <Text style={[styles.actionBtnText, styles.actionBtnTextPrimary]}>Save for later</Text>
+                <Text style={[styles.actionBtnText, styles.actionBtnTextPrimary]}>{t('lie_analysis.lie_analysis_screen.save_for_later')}</Text>
               </TouchableOpacity>
             )}
             {phase !== 'no_network' && imageUri && (
               <TouchableOpacity style={[styles.actionBtn, styles.actionBtnPrimary]} onPress={handleRetry}>
-                <Text style={[styles.actionBtnText, styles.actionBtnTextPrimary]}>Re-analyze same photo</Text>
+                <Text style={[styles.actionBtnText, styles.actionBtnTextPrimary]}>{t('lie_analysis.lie_analysis_screen.re_analyze_same_photo')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -477,11 +479,11 @@ export default function LieAnalysisScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => safeBack()} style={styles.headerBtn}>
-            <Text style={styles.headerBtnText}>← Back</Text>
+            <Text style={styles.headerBtnText}>{t('lie_analysis.lie_analysis_screen.back')}</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>SmartPlay</Text>
+          <Text style={styles.headerTitle}>{t('lie_analysis.lie_analysis_screen.smartplay')}</Text>
           <TouchableOpacity onPress={handleSkipOpener} style={styles.headerBtn}>
-            <Text style={styles.headerBtnText}>Skip</Text>
+            <Text style={styles.headerBtnText}>{t('lie_analysis.lie_analysis_screen.skip')}</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.openerBody}>
@@ -497,7 +499,7 @@ export default function LieAnalysisScreen() {
               : `${getCaddieName(caddiePersonality)} is greeting you.`}
           </Text>
           <TouchableOpacity onPress={handleSkipOpener} style={styles.openerSkipBtn}>
-            <Text style={styles.openerSkipText}>Skip to camera</Text>
+            <Text style={styles.openerSkipText}>{t('lie_analysis.lie_analysis_screen.skip_to_camera')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -514,7 +516,7 @@ export default function LieAnalysisScreen() {
         <TouchableOpacity onPress={() => safeBack()} style={styles.iconBtn}>
           <Text style={styles.iconBtnText}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.cameraTitle}>LIE ANALYSIS</Text>
+        <Text style={styles.cameraTitle}>{t('lie_analysis.lie_analysis_screen.lie_analysis')}</Text>
         <View style={styles.iconBtn} />
       </View>
 
@@ -523,7 +525,7 @@ export default function LieAnalysisScreen() {
           before the photo. Tap to clear. */}
       {phase === 'camera' && playerNotes && (
         <View style={[styles.playerNotesChip, { top: insets.top + 60 }]}>
-          <Text style={styles.playerNotesLabel}>YOU SAID</Text>
+          <Text style={styles.playerNotesLabel}>{t('lie_analysis.lie_analysis_screen.you_said')}</Text>
           <Text style={styles.playerNotesText} numberOfLines={2}>
             &ldquo;{playerNotes}&rdquo;
           </Text>
@@ -536,7 +538,7 @@ export default function LieAnalysisScreen() {
       {/* First-use instruction */}
       {phase === 'camera' && (
         <View style={styles.instructionBox} pointerEvents="none">
-          <Text style={styles.instructionText}>Point at your lie and tap capture</Text>
+          <Text style={styles.instructionText}>{t('lie_analysis.lie_analysis_screen.point_at_your_lie_and')}</Text>
         </View>
       )}
 
@@ -551,7 +553,7 @@ export default function LieAnalysisScreen() {
             style={[styles.strategyToggle, includeStrategy && styles.strategyToggleOn]}
             accessibilityRole="switch"
             accessibilityState={{ checked: includeStrategy }}
-            accessibilityLabel="Include strategy in the lie read"
+            accessibilityLabel={t('lie_analysis.accessibility_label.include_strategy_in_the_lie')}
           >
             <View style={[styles.strategyDot, includeStrategy && styles.strategyDotOn]} />
             <Text style={[styles.strategyToggleText, includeStrategy && styles.strategyToggleTextOn]}>
@@ -560,7 +562,7 @@ export default function LieAnalysisScreen() {
           </TouchableOpacity>
           {includeStrategy && (
             <Text style={styles.strategyHint}>
-              Adds risk-band + alt play from course geometry
+              {t('lie_analysis.lie_analysis_screen.adds_risk_band_alt_play')}
             </Text>
           )}
         </View>
@@ -575,7 +577,7 @@ export default function LieAnalysisScreen() {
         ) : (
           <View style={styles.analyzingBox}>
             <ActivityIndicator color="#00C896" />
-            <Text style={styles.analyzingText}>Analyzing…</Text>
+            <Text style={styles.analyzingText}>{t('lie_analysis.lie_analysis_screen.analyzing')}</Text>
           </View>
         )}
       </View>

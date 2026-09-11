@@ -14,6 +14,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useSwingSessionStore, type SwingSession } from '../../store/swingSessionStore';
 import { mergeBilateral, type BilateralSwingInput, type BilateralAngleRead } from '../../services/swing/bilateralMerge';
 import { useResolvedImageUri } from '../../hooks/useResolvedImageUri';
+import { useTranslation } from 'react-i18next';
 
 function fmtDate(ms: number): string {
   try { return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; }
@@ -100,6 +101,7 @@ function FrameTile({ session, fallbackLabel }: { session: SwingSession | null; f
 }
 
 export default function BilateralReview() {
+  const { t } = useTranslation();
   const { a, b } = useLocalSearchParams<{ a?: string; b?: string }>();
   const router = useRouter();
   const { colors } = useTheme();
@@ -122,7 +124,7 @@ export default function BilateralReview() {
   );
 
   const back = (
-    <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel="Back">
+    <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityRole="button" accessibilityLabel={t('swinglab_bilateral.accessibility_label.back')}>
       <Ionicons name="chevron-back" size={24} color={colors.text_primary} />
     </TouchableOpacity>
   );
@@ -131,7 +133,7 @@ export default function BilateralReview() {
     return (
       <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + 12 }]}>
         {back}
-        <Text style={[styles.empty, { color: colors.text_muted }]}>Couldn&apos;t load both swings to link.</Text>
+        <Text style={[styles.empty, { color: colors.text_muted }]}>{t('swinglab_bilateral.bilateral_review.couldn_t_load_both_swings')}</Text>
       </View>
     );
   }
@@ -142,6 +144,7 @@ export default function BilateralReview() {
     r.strengths.length > 0 ? r.strengths : r.cleanNote ? [r.cleanNote] : [];
 
   const AngleCard = ({ r }: { r: BilateralAngleRead }) => {
+  const { t } = useTranslation();
     const wins = positives(r);
     return (
       <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -151,13 +154,13 @@ export default function BilateralReview() {
         <Text style={[styles.sub, { color: colors.text_muted }]}>{r.label} · reads {r.reads}</Text>
         {wins.length > 0 ? (
           <View style={styles.winBlock}>
-            <Text style={[styles.winLabel, { color: '#3FB950' }]}>WHAT&apos;S WORKING</Text>
+            <Text style={[styles.winLabel, { color: '#3FB950' }]}>{t('swinglab_bilateral.angle_card.what_s_working')}</Text>
             {wins.map((w, i) => (
               <Text key={i} style={[styles.win, { color: colors.text_primary }]}>✓ {w}</Text>
             ))}
           </View>
         ) : null}
-        {r.faultName ? <Text style={[styles.fault, { color: colors.text_primary }]}>{r.faultName}</Text> : <Text style={[styles.sub, { color: colors.text_muted }]}>No fault flagged from this angle.</Text>}
+        {r.faultName ? <Text style={[styles.fault, { color: colors.text_primary }]}>{r.faultName}</Text> : <Text style={[styles.sub, { color: colors.text_muted }]}>{t('swinglab_bilateral.angle_card.no_fault_flagged_from_this')}</Text>}
         {r.breakdown ? <Text style={[styles.body, { color: colors.text_primary }]}>{r.breakdown}</Text> : null}
         {r.fix ? <Text style={[styles.fix, { color: colors.accent }]}>Fix: {r.fix}</Text> : null}
       </View>
@@ -169,7 +172,7 @@ export default function BilateralReview() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: 48, paddingHorizontal: 16 }}>
         {back}
-        <Text style={[styles.title, { color: colors.text_primary }]}>Bilateral read</Text>
+        <Text style={[styles.title, { color: colors.text_primary }]}>{t('swinglab_bilateral.bilateral_review.bilateral_read')}</Text>
         <Text style={[styles.headline, { color: colors.text_primary }]}>{read.headline}</Text>
 
         {/* Side-by-side biplane: same swing, two angles together. */}

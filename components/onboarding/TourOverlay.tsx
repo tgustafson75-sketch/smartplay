@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getTourTarget, subscribeTourTargets, getTourTargetsVersion, type TourRect } from '../../store/tourTargets';
+import { useTranslation } from 'react-i18next';
 
 export type TourAnchor = 'center' | 'bottomBar' | 'micBottomLeft' | 'toolsTopRight';
 
@@ -31,6 +32,7 @@ export interface TourStep {
 interface Rect { x: number; y: number; w: number; h: number }
 
 export function TourOverlay({ steps, onDone }: { steps: TourStep[]; onDone: () => void }) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -118,13 +120,13 @@ export function TourOverlay({ steps, onDone }: { steps: TourStep[]; onDone: () =
           </View>
 
           <View style={s.actions}>
-            <TouchableOpacity onPress={onDone} accessibilityRole="button" accessibilityLabel="Skip the tour" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={s.skip}>Skip</Text>
+            <TouchableOpacity onPress={onDone} accessibilityRole="button" accessibilityLabel={t('onboarding_tour_overlay.accessibility_label.skip_the_tour')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={s.skip}>{t('onboarding_tour_overlay.tour_overlay.skip')}</Text>
             </TouchableOpacity>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               {i > 0 && (
-                <TouchableOpacity onPress={() => setI(i - 1)} style={s.backBtn} accessibilityRole="button" accessibilityLabel="Previous">
-                  <Text style={s.backText}>Back</Text>
+                <TouchableOpacity onPress={() => setI(i - 1)} style={s.backBtn} accessibilityRole="button" accessibilityLabel={t('onboarding_tour_overlay.accessibility_label.previous')}>
+                  <Text style={s.backText}>{t('onboarding_tour_overlay.tour_overlay.back')}</Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity

@@ -32,8 +32,10 @@ import type { PrimaryIssue, DrillRecommendation } from '../../store/swingSession
 import { activateMediaSession, deactivateMediaSession } from '../../services/mediaKeyBridge';
 import { practiceLog } from '../../services/practiceTelemetry';
 import { getApiBaseUrl } from '../../services/apiBase';
+import { useTranslation } from 'react-i18next';
 
 export default function CageSummary() {
+  const { t } = useTranslation();
   const router = useRouter();
   const trustLevel = useTrustLevelStore(s => s.level);
   const [analyzing, setAnalyzing] = useState(false);
@@ -276,7 +278,7 @@ export default function CageSummary() {
       >
         {/* HEADER */}
         <View style={styles.header}>
-          <Text style={styles.title}>Session Complete</Text>
+          <Text style={styles.title}>{t('practice_session_summary.cage_summary.session_complete')}</Text>
           <Text style={styles.subtitle}>{session.club + ' · ' + total + ' shots'}</Text>
         </View>
 
@@ -297,7 +299,7 @@ export default function CageSummary() {
         {analyzing && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 4, marginBottom: 10 }}>
             <Text style={{ color: '#c2cad4', fontSize: 12, fontStyle: 'italic' }}>
-              Analyzing swings…
+              {t('practice_session_summary.cage_summary.analyzing_swings')}
             </Text>
           </View>
         )}
@@ -309,13 +311,13 @@ export default function CageSummary() {
 
         {/* KEVIN DEBRIEF */}
         <View style={styles.debriefCard}>
-          <Text style={styles.debriefLabel}>KEVIN</Text>
+          <Text style={styles.debriefLabel}>{t('practice_session_summary.cage_summary.kevin')}</Text>
           <Text style={styles.debriefText}>
             {session.summary ?? 'Good session. Keep building.'}
           </Text>
           {session.rootCause && (
             <View style={styles.rootCause}>
-              <Text style={styles.rootCauseLabel}>FOCUS AREA</Text>
+              <Text style={styles.rootCauseLabel}>{t('practice_session_summary.cage_summary.focus_area')}</Text>
               <Text style={styles.rootCauseText}>{session.rootCause}</Text>
             </View>
           )}
@@ -347,7 +349,7 @@ export default function CageSummary() {
         {/* TREND */}
         {pattern.trend !== 'insufficient' && (
           <View style={styles.trendCard}>
-            <Text style={styles.trendLabel}>TREND THIS SESSION</Text>
+            <Text style={styles.trendLabel}>{t('practice_session_summary.cage_summary.trend_this_session')}</Text>
             <Text style={[
               styles.trendValue,
               {
@@ -365,7 +367,7 @@ export default function CageSummary() {
         {/* WATCH DATA CARD */}
         {watchConnected && watchSummary && watchSummary.swings.length > 0 && (
           <View style={styles.watchCard}>
-            <Text style={styles.watchLabel}>⌚ WATCH DATA</Text>
+            <Text style={styles.watchLabel}>{t('practice_session_summary.cage_summary.watch_data')}</Text>
 
             <View style={styles.watchStats}>
               <View style={styles.watchStat}>
@@ -375,8 +377,8 @@ export default function CageSummary() {
                 ]}>
                   {watchSummary.averageTempo.toFixed(1) + ':1'}
                 </Text>
-                <Text style={styles.watchStatLabel}>Avg Tempo</Text>
-                <Text style={styles.watchStatSub}>Ideal: 3:1</Text>
+                <Text style={styles.watchStatLabel}>{t('practice_session_summary.cage_summary.avg_tempo')}</Text>
+                <Text style={styles.watchStatSub}>{t('practice_session_summary.cage_summary.ideal_3_1')}</Text>
               </View>
 
               <View style={styles.watchStat}>
@@ -386,16 +388,16 @@ export default function CageSummary() {
                 ]}>
                   {Math.round(watchSummary.earlyTransitionRate * 100) + '%'}
                 </Text>
-                <Text style={styles.watchStatLabel}>Early Trans.</Text>
-                <Text style={styles.watchStatSub}>Under 30% good</Text>
+                <Text style={styles.watchStatLabel}>{t('practice_session_summary.cage_summary.early_trans')}</Text>
+                <Text style={styles.watchStatSub}>{t('practice_session_summary.cage_summary.under_30_good')}</Text>
               </View>
 
               <View style={styles.watchStat}>
                 <Text style={styles.watchStatValue}>
                   {Math.round(watchSummary.averageClubSpeed) + ' mph'}
                 </Text>
-                <Text style={styles.watchStatLabel}>Est Speed</Text>
-                <Text style={styles.watchStatSub}>Estimated</Text>
+                <Text style={styles.watchStatLabel}>{t('practice_session_summary.cage_summary.est_speed')}</Text>
+                <Text style={styles.watchStatSub}>{t('practice_session_summary.cage_summary.estimated')}</Text>
               </View>
             </View>
 
@@ -410,7 +412,7 @@ export default function CageSummary() {
         {/* NEXT DRILL */}
         {pattern.kevinNextDrill && (
           <View style={styles.drillCard}>
-            <Text style={styles.drillLabel}>WORK ON THIS NEXT</Text>
+            <Text style={styles.drillLabel}>{t('practice_session_summary.cage_summary.work_on_this_next')}</Text>
             <Text style={styles.drillText}>{pattern.kevinNextDrill}</Text>
           </View>
         )}
@@ -418,7 +420,7 @@ export default function CageSummary() {
         {/* DOMINANT MISS */}
         {Boolean(session.dominantMiss) && (
           <View style={styles.missCard}>
-            <Text style={styles.missLabel}>DOMINANT MISS</Text>
+            <Text style={styles.missLabel}>{t('practice_session_summary.cage_summary.dominant_miss')}</Text>
             <Text style={styles.missValue}>
               {getDominantMissLabel(session.dominantMiss ?? null)}
             </Text>
@@ -427,7 +429,7 @@ export default function CageSummary() {
 
         {/* SHOT DOTS */}
         <View style={styles.dotsCard}>
-          <Text style={styles.dotsLabel}>SHOT BY SHOT</Text>
+          <Text style={styles.dotsLabel}>{t('practice_session_summary.cage_summary.shot_by_shot')}</Text>
           <View style={styles.dotsRow}>
             {shots.map((shot, i) => {
               const color =
@@ -449,28 +451,28 @@ export default function CageSummary() {
             params: { session_id: session.id },
           } as never)}
         >
-          <Text style={styles.reviewBtnText}>Review with Kevin</Text>
+          <Text style={styles.reviewBtnText}>{t('practice_session_summary.cage_summary.review_with_kevin')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.goAgainBtn}
           onPress={() => router.replace('/practice-session' as never)}
         >
-          <Text style={styles.goAgainText}>Go Again</Text>
+          <Text style={styles.goAgainText}>{t('practice_session_summary.cage_summary.go_again')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.historyBtn}
           onPress={() => router.replace('/practice-session/history' as never)}
         >
-          <Text style={styles.historyBtnText}>View All Sessions</Text>
+          <Text style={styles.historyBtnText}>{t('practice_session_summary.cage_summary.view_all_sessions')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.doneBtn}
           onPress={() => router.replace('/(tabs)/caddie' as never)}
         >
-          <Text style={styles.doneBtnText}>Back to Kevin</Text>
+          <Text style={styles.doneBtnText}>{t('practice_session_summary.cage_summary.back_to_kevin')}</Text>
         </TouchableOpacity>
 
       </ScrollView>

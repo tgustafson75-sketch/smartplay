@@ -36,6 +36,7 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useUnifiedVisionContext } from '../hooks/useUnifiedVisionContext';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   /** Optional tap handler — typically opens the Caddie surface for a
@@ -49,6 +50,7 @@ interface Props {
 }
 
 export default function SmartVisionLiveStrategy({ onPress, alwaysShow = false }: Props) {
+  const { t } = useTranslation();
   const ctx = useUnifiedVisionContext();
   if (!ctx) return null;
   if (!alwaysShow && !ctx.rich) return null;
@@ -109,7 +111,7 @@ export default function SmartVisionLiveStrategy({ onPress, alwaysShow = false }:
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel="Live strategy — tap for caddie's read"
+      accessibilityLabel={t('smart_vision_live_strategy.accessibility_label.live_strategy_tap_for_caddie')}
     >
       {inner}
     </Pressable>

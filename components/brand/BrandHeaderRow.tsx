@@ -26,6 +26,7 @@ import { useBrandRevealStore } from '../../store/brandRevealStore';
 // SmartMotion + Cage Mode) uses the same ring / halo / mic-icon
 // affordance.
 import { CaddieMicBadge } from '../caddie/CaddieMicBadge';
+import { useTranslation } from 'react-i18next';
 
 export const BRAND_BADGE_SIZE = 56;
 
@@ -83,6 +84,7 @@ export interface BrandHeaderRowProps {
 }
 
 export function BrandHeaderRow({ tagline = BRAND_TAGLINE, onLogoPress, hideToolsPill = false, hideLogoMicIcon = false }: BrandHeaderRowProps) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const openTools = useToolsMenuStore((s) => s.open);
   // 2026-06-25 (Tim — wordmark clips on a narrow fold) — adjustsFontSizeToFit does
@@ -127,8 +129,8 @@ export function BrandHeaderRow({ tagline = BRAND_TAGLINE, onLogoPress, hideTools
             single-line fit. CADDIE stays pure white in dark / black in light for
             max contrast (the Z-Fold grey-wordmark fix). */}
         <Text style={[styles.name1, { fontSize: wmFont, letterSpacing: wmSpacing }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
-          <Text style={{ color: colors.accent }}>SMARTPLAY</Text>
-          <Text style={{ color: isDarkBackground(colors.background) ? '#FFFFFF' : '#000000' }}> CADDIE</Text>
+          <Text style={{ color: colors.accent }}>{t('brand_brand_header_row.brand_header_row.smartplay')}</Text>
+          <Text style={{ color: isDarkBackground(colors.background) ? '#FFFFFF' : '#000000' }}> {t('brand_brand_header_row.brand_header_row.caddie')}</Text>
         </Text>
         <Text style={[styles.tagline, { color: colors.text_muted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
           {tagline}
@@ -144,7 +146,7 @@ export function BrandHeaderRow({ tagline = BRAND_TAGLINE, onLogoPress, hideTools
           onPress={openTools}
           hitSlop={10}
           accessibilityRole="button"
-          accessibilityLabel="Open tools menu"
+          accessibilityLabel={t('brand_brand_header_row.accessibility_label.open_tools_menu')}
           style={({ pressed }) => [
             styles.toolsPill,
             { borderColor: colors.border, opacity: pressed ? 0.6 : 1 },

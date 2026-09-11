@@ -19,6 +19,7 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import { useFamilyStore, ageBand } from '../store/familyStore';
 import type { JuniorSwingAnalysis } from '../services/juniorSwingAnalyzer';
+import { useTranslation } from 'react-i18next';
 
 export interface JuniorSwingResultCardProps {
   analysis: JuniorSwingAnalysis;
@@ -39,6 +40,7 @@ const BAND_BG: Record<string, string> = {
 export default function JuniorSwingResultCard({
   analysis, compact = false, onPress,
 }: JuniorSwingResultCardProps) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const member = useFamilyStore((s) => s.getMember(analysis.memberId));
   const dateStr = formatTimestamp(analysis.timestamp);
@@ -77,25 +79,25 @@ export default function JuniorSwingResultCard({
 
       {!compact && analysis.next_focus && (
         <View style={[styles.focusBox, { borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.08)' }]}>
-          <Text style={[styles.focusLabel, { color: '#fbbf24' }]}>NEXT TIME</Text>
+          <Text style={[styles.focusLabel, { color: '#fbbf24' }]}>{t('junior_swing_result_card.text.next_time')}</Text>
           <Text style={[styles.focusBody, { color: colors.text_primary }]}>{analysis.next_focus}</Text>
         </View>
       )}
 
       {!compact && analysis.fun_drill && (
         <View style={[styles.focusBox, { borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,0.10)' }]}>
-          <Text style={[styles.focusLabel, { color: '#c4b5fd' }]}>TRY THIS GAME</Text>
+          <Text style={[styles.focusLabel, { color: '#c4b5fd' }]}>{t('junior_swing_result_card.text.try_this_game')}</Text>
           <Text style={[styles.focusBody, { color: colors.text_primary }]}>{analysis.fun_drill}</Text>
         </View>
       )}
 
       {!compact && (
         <View style={styles.fundRow}>
-          <FundItem label="Grip" value={analysis.fundamentals.grip} colors={colors} />
-          <FundItem label="Stance" value={analysis.fundamentals.stance} colors={colors} />
-          <FundItem label="Head" value={analysis.fundamentals.head_movement} colors={colors} />
-          <FundItem label="Tempo" value={analysis.fundamentals.tempo} colors={colors} />
-          <FundItem label="Balance" value={analysis.fundamentals.balance} colors={colors} />
+          <FundItem label={t('junior_swing_result_card.label.grip')} value={analysis.fundamentals.grip} colors={colors} />
+          <FundItem label={t('junior_swing_result_card.label.stance')} value={analysis.fundamentals.stance} colors={colors} />
+          <FundItem label={t('junior_swing_result_card.label.head')} value={analysis.fundamentals.head_movement} colors={colors} />
+          <FundItem label={t('junior_swing_result_card.label.tempo')} value={analysis.fundamentals.tempo} colors={colors} />
+          <FundItem label={t('junior_swing_result_card.label.balance')} value={analysis.fundamentals.balance} colors={colors} />
         </View>
       )}
 

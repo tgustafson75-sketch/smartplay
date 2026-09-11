@@ -26,6 +26,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { useTheme } from '../contexts/ThemeContext';
 import { usePracticePointsStore } from '../store/practicePointsStore';
 import { useToastStore } from '../store/toastStore';
+import { useTranslation } from 'react-i18next';
 
 const HAS_NATIVE_WEBVIEW = hasNativeWebView(WebView);
 
@@ -39,6 +40,7 @@ function extractVideoId(u: string | undefined): string | null {
 /** IFrame-API player HTML — fires postMessage('ended') on state 0 (ENDED). */
 
 export default function DrillVideo() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const params = useLocalSearchParams<{
@@ -144,7 +146,7 @@ export default function DrillVideo() {
               accessibilityRole="button"
             >
               <Ionicons name="logo-youtube" size={18} color="#88F700" />
-              <Text style={styles.errorActionText}>Find it on YouTube</Text>
+              <Text style={styles.errorActionText}>{t('drill_video.text.find_it_on_youtube')}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -165,12 +167,12 @@ export default function DrillVideo() {
       ) : videoId ? (
         <View style={styles.empty}>
           <Ionicons name="play-circle" size={40} color="#88F700" />
-          <Text style={[styles.emptyText, { color: colors.text_secondary }]}>Opening the video…</Text>
+          <Text style={[styles.emptyText, { color: colors.text_secondary }]}>{t('drill_video.text.opening_the_video')}</Text>
         </View>
       ) : (
         <View style={styles.empty}>
           <Ionicons name="alert-circle-outline" size={40} color={colors.text_muted} />
-          <Text style={[styles.emptyText, { color: colors.text_secondary }]}>Couldn’t load this video.</Text>
+          <Text style={[styles.emptyText, { color: colors.text_secondary }]}>{t('drill_video.text.couldn_t_load_this_video')}</Text>
         </View>
       )}
 
@@ -184,7 +186,7 @@ export default function DrillVideo() {
           {finished && (
             <View style={styles.finishedRow}>
               <Ionicons name="checkmark-circle" size={16} color="#88F700" />
-              <Text style={styles.finishedText}>Nice — watched it through. Ready to groove it?</Text>
+              <Text style={styles.finishedText}>{t('drill_video.text.nice_watched_it_through_ready')}</Text>
             </View>
           )}
           {params.drillId ? (
@@ -193,7 +195,7 @@ export default function DrillVideo() {
               activeOpacity={0.85}
               style={[styles.tryBtn, { backgroundColor: finished ? '#88F700' : 'rgba(136,247,0,0.18)', borderColor: '#88F700' }]}
               accessibilityRole="button"
-              accessibilityLabel="Try this drill in Smart Motion"
+              accessibilityLabel={t('drill_video.accessibility_label.try_this_drill_in_smart')}
             >
               <Ionicons name="videocam-outline" size={18} color={finished ? '#06140b' : '#88F700'} />
               <Text style={[styles.tryBtnText, { color: finished ? '#06140b' : '#88F700' }]}>
@@ -206,7 +208,7 @@ export default function DrillVideo() {
 
       <View style={styles.footer}>
         <Ionicons name="shield-checkmark-outline" size={13} color="#88F700" />
-        <Text style={styles.footerText}>Clean player · finish it for practice points</Text>
+        <Text style={styles.footerText}>{t('drill_video.text.clean_player_finish_it_for')}</Text>
       </View>
     </SafeAreaView>
   );

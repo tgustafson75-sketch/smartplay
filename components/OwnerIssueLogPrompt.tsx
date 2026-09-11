@@ -12,6 +12,7 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useIssueLogStore, type IssueLogKind } from '../store/issueLogStore';
 import { exportAllIssues } from '../services/issueLogExport';
+import { useTranslation } from 'react-i18next';
 
 const THRESHOLD = 5;
 // Real failures only — boot breadcrumbs + manual user notes don't count toward the nudge.
@@ -21,6 +22,7 @@ const FAILURE_KINDS: ReadonlySet<IssueLogKind> = new Set<IssueLogKind>([
 ]);
 
 export function OwnerIssueLogPrompt(): React.ReactElement | null {
+  const { t } = useTranslation();
   const entries = useIssueLogStore(s => s.entries);
   const lastExportedAt = useIssueLogStore(s => s.lastExportedAt);
   const [dismissedAtCount, setDismissedAtCount] = useState<number | null>(null);
@@ -49,7 +51,7 @@ export function OwnerIssueLogPrompt(): React.ReactElement | null {
         ⚠ {unsent} issues logged
       </Text>
       <Text style={{ color: '#cbd5e1', fontSize: 13, marginBottom: 12 }}>
-        Send them to the team so we can fix the voice / GPS flow. One tap opens the email — just hit Send.
+        {t('owner_issue_log_prompt.text.send_them_to_the_team')}
       </Text>
       <View style={{ flexDirection: 'row', gap: 10 }}>
         <TouchableOpacity
@@ -57,7 +59,7 @@ export function OwnerIssueLogPrompt(): React.ReactElement | null {
           onPress={() => setDismissedAtCount(unsent)}
           disabled={sending}
         >
-          <Text style={{ color: '#c2cad4', fontWeight: '600' }}>Later</Text>
+          <Text style={{ color: '#c2cad4', fontWeight: '600' }}>{t('owner_issue_log_prompt.text.later')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={{ flex: 1.4, paddingVertical: 11, borderRadius: 10, alignItems: 'center', backgroundColor: '#f59e0b' }}
@@ -75,7 +77,7 @@ export function OwnerIssueLogPrompt(): React.ReactElement | null {
         >
           {sending
             ? <ActivityIndicator size="small" color="#1f2937" />
-            : <Text style={{ color: '#1f2937', fontWeight: '800' }}>Send now</Text>}
+            : <Text style={{ color: '#1f2937', fontWeight: '800' }}>{t('owner_issue_log_prompt.text.send_now')}</Text>}
         </TouchableOpacity>
       </View>
     </View>
