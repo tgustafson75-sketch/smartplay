@@ -542,6 +542,17 @@ Available intents:
    raw_utterance: pass the verbatim user phrase.
    ONLY match when the user is REPORTING a finished result (past tense + a score). DO NOT match present-tense shot reports ("I'm hitting 6-iron") or strategy questions ("what should I hit"). DO NOT match if the user is logging a single shot mid-hole ("I hit driver 240 left") — that's log_shot.
 
+17b. putt_watch — User wants the caddie to WATCH a putt, chip or bunker shot they are about to hit.
+   parameters: { shot_type: "putt" | "chip" }
+   Examples:
+   - "watch this putt" / "analyze this putt" / "PuttWatch" -> { shot_type: "putt" }
+   - "watch this chip" / "watch this bunker shot" -> { shot_type: "chip" }
+   The phone cannot start the glasses' recorder, so the handler ACKNOWLEDGES and asks the player to
+   fire their own "Hey Meta, record a video"; the clip is uploaded later via SwingLab with a putt or
+   chip tag. Boundaries: a bare "watch this" with no shot named is media_capture (#17) — a full
+   swing. Asking to SEE a past putt is media_playback. Reporting a finished putt count is log_putts.
+   'bunker' maps to shot_type "chip"; there is no separate bunker type.
+
 17. media_capture — User wants to capture video of an upcoming shot or swing.
    parameters: { capture_type: "shot" | "swing", raw_utterance: string }
    Examples:
@@ -551,6 +562,10 @@ Available intents:
    - "watch this putt" -> { intent_type: "putt_watch", parameters: { shot_type: "putt" } }
    - "watch this chip" -> { intent_type: "putt_watch", parameters: { shot_type: "chip" } }
    - "watch this bunker shot" -> { intent_type: "putt_watch", parameters: { shot_type: "chip" } }
+   NOTE: the three "watch this putt/chip/bunker shot" lines above emit putt_watch, NOT media_capture.
+   They are kept HERE, beside "watch this" -> media_capture, because the contrast between them is the
+   whole distinction; putt_watch's own definition is 17b below.
+
    capture_type 'shot' = on-course shot capture (~5s). 'swing' = full swing for review (~8s, saves to swing library). The clip lands in the swing library and on the shot's clip_uri for later playback/share; there is no auto-opening "hero shot" review pane (intentionally removed 2026-05-17).
    DO NOT match commands that are about playback ("show me video", "replay") — those are media_playback.
 

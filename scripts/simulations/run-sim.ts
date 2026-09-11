@@ -426,13 +426,42 @@ import * as path from 'path';
 const voiceIntentPath = path.resolve(__dirname, '../../api/voice-intent.ts');
 const voiceIntentSrc = fs.readFileSync(voiceIntentPath, 'utf-8');
 
-// All 18 intent types should be enumerated in the union type at the bottom.
-const expectedIntents = [
-  'open_tool', 'query_status', 'change_setting', 'navigate', 'help', 'acknowledge',
-  'rules_query', 'handicap_query', 'set_trust_quiet', 'set_trust_companion',
-  'in_round_diagnostic', 'club_change', 'club_query', 'club_menu',
-  'log_shot', 'media_capture', 'media_playback', 'unknown',
-];
+/**
+ * 2026-09-10 — DERIVED FROM THE HANDLERS, because a hardcoded list could not catch the defect this
+ * guard exists for.
+ *
+ * This was a static list of 18 intent names. The failure it is meant to prevent is a handler the
+ * CLASSIFIER has never been told about — and that failure arrives by someone ADDING a handler, which
+ * a hardcoded list does not know about either. It has happened twice: `log_score` (2026-05-21, the
+ * handler was complete and voice could not reach it) and `set_club_distance` (2026-08-19, wired with
+ * a precheck regex for eleven days while the cloud classifier had no such intent to emit and the
+ * caddie "agreed pleasantly and stored nothing"). On both days this guard was green.
+ *
+ * Reading the handler files makes the guard grow by itself: register a handler and it is checked
+ * from that moment, with no second list to remember. [[break-test-every-guard-you-write]]
+ * [[two-owners-is-the-root-cause]]
+ */
+const intentsDir = path.resolve(__dirname, '../../services/intents');
+const declaredIntents = (() => {
+  const found = new Map<string, string>();
+  for (const f of fs.readdirSync(intentsDir)) {
+    if (!f.endsWith('.ts') || f === 'index.ts') continue;
+    const src = fs.readFileSync(path.join(intentsDir, f), 'utf-8');
+    for (const m of src.matchAll(/intent_type:\s*'([a-z_]+)'/g)) {
+      if (!found.has(m[1])) found.set(m[1], f);
+    }
+  }
+  return found;
+})();
+check(
+  'LOCK: the intent guard reads the handlers, so it grows when they do',
+  declaredIntents.size >= 40,
+  declaredIntents.size >= 40
+    ? `${declaredIntents.size} intent types found across the handler files`
+    : `only ${declaredIntents.size} found — the scan broke, and a broken scan passes every check below`,
+);
+// 'unknown' is a classifier fall-through with no handler file; keep it asserted explicitly.
+const expectedIntents = [...declaredIntents.keys(), 'unknown'];
 
 for (const intent of expectedIntents) {
   // 2026-08-08 — the prompt's tail union is now INTERPOLATED from INTENT_TYPE_ENUM (can't drift), so
@@ -444,8 +473,18 @@ for (const intent of expectedIntents) {
 
 // Each intent should also have an example block (with at least 'Examples:' label nearby).
 for (const intent of expectedIntents.filter((i) => i !== 'unknown')) {
-  // Look for the intent name at the start of a numbered item.
-  const present = new RegExp(`\\d+\\. ${intent}`).test(voiceIntentSrc);
+  /**
+   * 2026-09-10 — the heading numbers are not flat integers.
+   *
+   * This matched `\d+\. name` only. The prompt has grown sub-sections — "3.5 state_yardage",
+   * "3.36b owner_checklist", "15c. set_club_distance", "15d. remove_club" — so the moment the guard
+   * was widened from its hardcoded 18 to every registered handler, it reported sixteen intents as
+   * undocumented that are all documented. A guard that cries wolf gets switched off, which is the
+   * same outcome as not having one. [[break-test-every-guard-you-write]]
+   *
+   * Matches a numbered heading of any depth at the start of a line, then the intent name.
+   */
+  const present = new RegExp(`^\\s*[0-9][0-9a-z.]*\\.?\\s+${intent}\\b`, 'm').test(voiceIntentSrc);
   check(`voice-intent prompt documents '${intent}'`, present, present ? 'documented' : 'NO prompt section');
 }
 
