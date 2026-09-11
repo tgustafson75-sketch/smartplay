@@ -835,6 +835,9 @@ export async function purgeCourseGeometry(courseId?: string): Promise<void> {
     if (courseId) {
       memCache.delete(courseId);
       inflight.delete(courseId);
+      // 2026-09-10 — a purge means "go and get it again", so the empty-build cooldown must not
+      // outlive it; otherwise "clear and refresh" does nothing for up to 90 seconds.
+      lastUnservableBuildAt.delete(courseId);
       geometryStatus().markDone(courseId);
       await AsyncStorage.removeItem(cacheKey(courseId)).catch(() => undefined);
       console.log('[courseGeometry] purged', courseId);
@@ -842,6 +845,7 @@ export async function purgeCourseGeometry(courseId?: string): Promise<void> {
     }
     memCache.clear();
     inflight.clear();
+    lastUnservableBuildAt.clear();
     // Clearing `inflight` orphans any build waiting on a slot — its release would then never come and
     // the cap would be permanently down two. Wake the waiters and reset the count with it.
     while (waitingForSlot.length) waitingForSlot.shift()?.();
@@ -880,6 +884,37 @@ export async function fetchCourseGeometry(
    */
   const pending = inflight.get(courseId);
   if (pending) return pending;
+
+  /**
+   * 2026-09-10 (Tim, mid-round: "Static pill coming on and off ... mostly happens when courses
+   * like today and Lakes last week are wrong") — THE FLICKER, AND THE TRAFFIC BEHIND IT.
+   *
+   * holeDetection's tick calls this for the active course on EVERY GPS fix — a 4-second cadence —
+   * as an opportunistic cache warm. On a course whose build produces nothing servable (no greens:
+   * Hemet, Lakes), `cacheIsServable` is false, so nothing short-circuits and each tick after the
+   * previous build finishes starts ANOTHER full build. Each one calls markBuilding on the way in
+   * and markDone on the way out, and the data-strip pill reads exactly that:
+   *     liveYardage != null ? 'LIVE' : geometryBuilding[courseId] ? 'MAPPING…' : 'STATIC'
+   * So the badge oscillated MAPPING…/STATIC for the whole round — and only on courses that were
+   * "wrong", because a course with greens resolves a live yardage and never reaches that branch.
+   * That is precisely the symptom, and it also means continuous Overpass builds all round.
+   *
+   * scheduleGeometryRecheck already guards against this for ITS path, with a two-attempt cap and a
+   * comment naming the same badge-relighting complaint from Berlin. The opportunistic caller
+   * bypassed that entirely. The bound belongs HERE, in the one function every caller goes through,
+   * rather than in whichever path last got burned. [[two-owners-is-the-root-cause]]
+   *
+   * A servable cache is unaffected — it short-circuits inside anyway. This only stops us from
+   * re-asking for a course we just failed to build, and it recovers on its own after the cooldown
+   * (and immediately if geometry arrives by the derived/AI path, which has its own trigger).
+   */
+  const cachedNow = memCache.get(courseId);
+  if (!(cachedNow && cacheIsServable(cachedNow))) {
+    const lastEmpty = lastUnservableBuildAt.get(courseId) ?? 0;
+    if (lastEmpty > 0 && Date.now() - lastEmpty < EMPTY_BUILD_COOLDOWN_MS) {
+      return Promise.resolve(getCachedGeometry(courseId));
+    }
+  }
   // 2026-08-13 — `inflight` still owns dedupe; it now also PUBLISHES so the UI can see the build.
   // Deleting from a module-level Map told nobody, which is why a finished build never lifted the
   // STATIC badge or re-ran the yardage resolver. See store/geometryStatusStore.ts.
@@ -895,7 +930,13 @@ export async function fetchCourseGeometry(
    * The commit that introduced it claimed the slot was "held only for the fetch". It wasn't. It is
    * now — see withBuildSlot() around the two fetch() calls below. Cache reads never queue.
    */
-  const run = fetchCourseGeometryInner(courseId, options).finally(() => {
+  const run = fetchCourseGeometryInner(courseId, options).then((result) => {
+    // Record whether this build actually produced something worth serving. An empty answer arms the
+    // cooldown above; a good one clears it so the course is never held back once it works.
+    if (mappedHoleCount(result) > 0) lastUnservableBuildAt.delete(courseId);
+    else lastUnservableBuildAt.set(courseId, Date.now());
+    return result;
+  }).finally(() => {
     inflight.delete(courseId);
     geometryStatus().markDone(courseId);
   });
@@ -1251,6 +1292,17 @@ async function fetchCourseGeometryInner(
  * into a background retry loop on the player's battery.
  */
 const RECHECK_DELAYS_MS = [30_000, 90_000] as const;
+
+/**
+ * 2026-09-10 — how long to leave a course alone after a build that produced no servable geometry.
+ *
+ * Deliberately the SAME 90s as the outer RECHECK delay above, so the opportunistic caller and the
+ * scheduled recheck cannot disagree about how hard to push a course that cannot answer. Long enough
+ * to stop a 4-second tick from hammering Overpass for a whole round; short enough that a course
+ * which starts working is picked up within a hole.
+ */
+const EMPTY_BUILD_COOLDOWN_MS = 90_000;
+const lastUnservableBuildAt: Map<string, number> = new Map();
 const recheckAttempts: Map<string, number> = new Map();
 
 function scheduleGeometryRecheck(
@@ -1384,6 +1436,8 @@ async function refreshGeometryInBackground(courseId: string): Promise<void> {
 /** Test/debug only. */
 export function _clearGeometryCache(): void {
   memCache.clear();
+  // Test seam: leaving the cooldown armed would make a seeded rebuild silently no-op.
+  lastUnservableBuildAt.clear();
 }
 
 /** 2026-05-18 — Test/debug only. Seed a synthetic CourseGeometry into

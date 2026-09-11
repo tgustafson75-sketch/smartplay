@@ -115,6 +115,26 @@ const FIX_STALENESS_MS = 30_000;
 // onPoorSignal callbacks so the caddie / UI can speak a recovery hint.
 const POOR_SIGNAL_SUSTAINED_MS = 45_000;
 
+/**
+ * 2026-09-10 — THE THRESHOLD THIS GATE WAS ALWAYS SUPPOSED TO USE.
+ *
+ * The comment above and services/gpsConfidenceAsk both describe this callout as the
+ * "weak (>15m) sustained 45s" gate. The code compared `lastFix.accuracy_m` against
+ * OUTLIER_ACCURACY_M (90) — the value processFix uses to REJECT a fix outright, so a fix worse
+ * than 90 can never become lastFix and the comparison was unreachable.
+ *
+ * Net effect, both halves wrong: the caddie NEVER asked "GPS is soft here — what hole are you on?"
+ * when GPS was genuinely soft (16-90m, the entire case the flow exists for), and the only way the
+ * gate could fire was `acc == null` — i.e. no fix at all, which includes the cold-lock window on
+ * the first tee (this file's own comment puts cold re-acquisition at 30-60s against a 45s gate).
+ * Standing on the first tee waiting for a lock, Kevin asked what hole you were on.
+ *
+ * 15 mirrors the 'weak' band in smartFinderService.classifyAccuracy. It is duplicated rather than
+ * imported because smartFinderService imports THIS module and a cycle would be worse; a regression
+ * test asserts the two cannot drift.
+ */
+const WEAK_ACCURACY_M = 15;
+
 let subscription: Location.LocationSubscription | null = null;
 let appStateSub: { remove: () => void } | null = null;
 let lastTickAt = 0;
@@ -876,7 +896,17 @@ function evaluateMode() {
   // accuracy worse than the pipeline gate (i.e. fixes the pipeline
   // is REJECTING). Reset when the fix recovers.
   const acc = lastFix?.accuracy_m ?? null;
-  const isPoor = acc == null || acc > OUTLIER_ACCURACY_M;
+  /**
+   * 2026-09-10 — a REAL fix whose accuracy is in the weak band. See WEAK_ACCURACY_M.
+   *
+   * Deliberately NOT firing on "no fix at all": that is cold lock at round start, and it is already
+   * reported by getGpsHealth ('never_ticked' / 'stale') and the UI banner. Firing here too is how
+   * the first tee became the most likely moment for this question. Nor on a null accuracy — a
+   * SmartVision tap-to-place writes a fix with accuracy_m null BY DESIGN (the player just told us
+   * exactly where they are), and treating the most confident position in the app as poor signal is
+   * backwards. [[overstrict-gate-lens]]
+   */
+  const isPoor = lastFix != null && acc != null && acc >= WEAK_ACCURACY_M;
   if (isPoor) {
     if (poorSinceTs == null) poorSinceTs = now;
     else if (poorAlertedAt == null && now - poorSinceTs >= POOR_SIGNAL_SUSTAINED_MS) {
