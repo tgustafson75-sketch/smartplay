@@ -17,13 +17,12 @@
  */
 
 import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
-import { watchDeviceLabel } from './watchBridge';
+import { watchDeviceLabel , sendSwingFeedback } from './watchBridge';
 import { useWatchStore } from '../store/watchStore';
 import { acquireWatchDataLayer, releaseWatchDataLayer, isWatchDataLayerListening } from './watchDataLayer';
 import { useClubSelectionStore } from '../store/clubSelectionStore';
 import { useSwingSessionStore } from '../store/swingSessionStore';
 import { normalizeClub } from './clubNormalize';
-import { sendSwingFeedback } from './watchBridge';
 import { useSettingsStore } from '../store/settingsStore';
 import { interpretWristSwing } from './watchWristInterpretation';
 
@@ -69,7 +68,7 @@ interface WatchSwingEvent {
   // Per-axis capture (present only on watch builds ≥ 2026-07-29 + a matching phone native module).
   peakGyro?: { x: number; y: number; z: number };
   impactAccelAxes?: { x: number; y: number; z: number };
-  downswingProfile?: Array<{ t: number; x: number; y: number; z: number }>;
+  downswingProfile?: { t: number; x: number; y: number; z: number }[];
 }
 
 interface WatchConnectionEvent {
@@ -108,7 +107,7 @@ export async function initWatchSwingBridge(): Promise<boolean> {
   if (!NativeMod) return false;
   if (started) return true;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     emitter = new NativeEventEmitter(NativeMod as any);
 
     swingSub = emitter.addListener('onWatchSwing', (e: WatchSwingEvent) => {

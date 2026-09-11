@@ -1,5 +1,5 @@
 import { resolveYardage, resolvedToFmb } from '../yardageResolver';
-import { holePar } from '../smartFinderService';
+import { holePar , getGreenYardages, resolveGreenCoords } from '../smartFinderService';
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import { useRoundStore } from '../../store/roundStore';
 import { useGhostStore } from '../../store/ghostStore';
@@ -11,7 +11,6 @@ import { getCurrentLocation, getGreenCentroid, getTeeCentroid } from '../shotLoc
 import { fetchWeatherAt, getCachedWeather, type WeatherSnapshot } from '../weatherService';
 import { playsLikeDistance, playsLikePhrase } from '../../utils/playsLike';
 import type { ShotLocation } from '../../store/roundStore';
-import { getGreenYardages, resolveGreenCoords } from '../smartFinderService';
 // 2026-05-24 — Flow A (GPS-verify) — getOneShotFix is the only GPS
 // accessor that exposes accuracy_m. Importing directly from gpsManager
 // for the yardage handler enrichment (accuracy_m surfaces in

@@ -50,7 +50,7 @@ export interface SwingAnalysisDebugEntry {
   // or repeated escalations without diving into Vercel logs.
   provider?: string | null;
   escalation_reason?: string | null;
-  attempts?: Array<{ provider: string; elapsed_ms: number; ok: boolean; error: string | null; score: number }> | null;
+  attempts?: { provider: string; elapsed_ms: number; ok: boolean; error: string | null; score: number }[] | null;
 }
 
 interface SwingAnalysisDebugState {

@@ -52,7 +52,7 @@ export default function NativeModulesDebug() {
   // native modules on mount so the full list renders immediately on open — no manual Refresh needed.
   // The lazy loaders only register when their bridge is first imported (Glasses/SmartMotion), so cold
   // this screen showed a partial/empty list until you tapped Refresh. Now it's complete on arrival.
-  useEffect(() => { refresh(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  useEffect(() => { refresh();   }, []);
 
   const shareDump = async () => {
     try {

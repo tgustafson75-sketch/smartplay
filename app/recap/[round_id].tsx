@@ -28,6 +28,28 @@ import { captureRef } from 'react-native-view-shot';
 import { loadRecap } from '../../services/planStorage';
 import { synthesizeRecapFromRecord } from '../../services/recapSynth';
 import { getBundledHoles } from '../../data/courses';
+import { speak, stopSpeaking, isSpeaking } from '../../services/voiceService';
+import { checkContent } from '../../services/contentGuardrail';
+import { useSettingsStore } from '../../store/settingsStore';
+import { getCaddieName } from '../../lib/persona';
+import { useRoundStore } from '../../store/roundStore';
+import { Video, ResizeMode } from 'expo-av';
+import { resolveClipUri } from '../../services/videoUpload';
+import { useVoiceLogStore } from '../../store/voiceLogStore';
+import { useIssueLogStore } from '../../store/issueLogStore';
+import PhotoCollage from '../../components/recap/PhotoCollage';
+import HandicapImpactCard from '../../components/recap/HandicapImpactCard';
+import OutcomeCard from '../../components/recap/OutcomeCard';
+import { track } from '../../services/analytics';
+import { buildShareCardProps } from '../../services/shareCardGenerator';
+import { computeRecapHero } from '../../services/recapHero';
+import { buildNarrationScript } from '../../services/recapNarration';
+import RoundShareCard from '../../components/RoundShareCard';
+import type { RoundRecap, HoleComparison } from '../../types/plan';
+import type { GhostHoleResult } from '../../types/ghost';
+import type { RoundPhoto } from '../../store/roundStore';
+import { getApiBaseUrl } from '../../services/apiBase';
+import { useTranslation } from 'react-i18next';
 
 // 2026-07-01 (Tim — recap showed "Unknown Course / 0 holes" for a real 18-hole round) — the
 // archived recap can be degraded (generated at round-end before the course/scores resolved), while
@@ -127,28 +149,6 @@ const sg = StyleSheet.create({
   totalLab: { color: '#6b7280', fontSize: 11, fontWeight: '800', letterSpacing: 1 },
   totalVal: { color: '#ffffff', fontSize: 18, fontWeight: '900', fontVariant: ['tabular-nums'] },
 });
-import { speak, stopSpeaking, isSpeaking } from '../../services/voiceService';
-import { checkContent } from '../../services/contentGuardrail';
-import { useSettingsStore } from '../../store/settingsStore';
-import { getCaddieName } from '../../lib/persona';
-import { useRoundStore } from '../../store/roundStore';
-import { Video, ResizeMode } from 'expo-av';
-import { resolveClipUri } from '../../services/videoUpload';
-import { useVoiceLogStore } from '../../store/voiceLogStore';
-import { useIssueLogStore } from '../../store/issueLogStore';
-import PhotoCollage from '../../components/recap/PhotoCollage';
-import HandicapImpactCard from '../../components/recap/HandicapImpactCard';
-import OutcomeCard from '../../components/recap/OutcomeCard';
-import { track } from '../../services/analytics';
-import { buildShareCardProps } from '../../services/shareCardGenerator';
-import { computeRecapHero } from '../../services/recapHero';
-import { buildNarrationScript } from '../../services/recapNarration';
-import RoundShareCard from '../../components/RoundShareCard';
-import type { RoundRecap, HoleComparison } from '../../types/plan';
-import type { GhostHoleResult } from '../../types/ghost';
-import type { RoundPhoto } from '../../store/roundStore';
-import { getApiBaseUrl } from '../../services/apiBase';
-import { useTranslation } from 'react-i18next';
 
 // Day 1 fix — module-level stable empty array, so a round with no photos hands the
 // same reference down every render instead of a fresh `[]`. The selector that used to

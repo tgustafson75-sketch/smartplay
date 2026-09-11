@@ -15,7 +15,7 @@ export interface RoundEndSnapshot {
   played: number;
   /** Captured BEFORE endRound() — it resets scores/courseHoles/activeCourse. */
   scores: Record<number, number>;
-  courseHoles: Array<{ hole: number; par: number }>;
+  courseHoles: { hole: number; par: number }[];
   activeCourse: string | null;
 }
 

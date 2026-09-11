@@ -971,7 +971,7 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
 
     /** Front / middle / back to the green, the three numbers a caddie is actually asked for. */
     greenYardages: safe(() => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+       
       // 2026-09-10 — one owner. The brain must reason over the SAME number the screens show.
       const { resolveYardage, resolvedToFmb } = require('./yardageResolver') as typeof import('./yardageResolver');
       const y = resolvedToFmb(resolveYardage(currentHole)) ?? { front: null, middle: null, back: null, reason: 'no_hole' as const };

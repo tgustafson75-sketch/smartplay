@@ -26,89 +26,89 @@
 
 import type { GreetingFilename } from './kevinGreeting';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 type AssetModule = any;
 
 // Kevin — legacy path. These files are Kevin's recorded voice from the
 // original implementation. Other personas have their own subdirectories.
 export const GREETING_ASSETS: Record<GreetingFilename, AssetModule> = {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'universal_01.mp3':  require('../assets/audio/greetings/universal_01.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'universal_02.mp3':  require('../assets/audio/greetings/universal_02.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'universal_03.mp3':  require('../assets/audio/greetings/universal_03.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'morning_01.mp3':    require('../assets/audio/greetings/morning_01.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'morning_02.mp3':    require('../assets/audio/greetings/morning_02.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'evening_01.mp3':    require('../assets/audio/greetings/evening_01.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'evening_02.mp3':    require('../assets/audio/greetings/evening_02.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'weekend_01.mp3':    require('../assets/audio/greetings/weekend_01.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'weekend_02.mp3':    require('../assets/audio/greetings/weekend_02.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'first_launch.mp3':  require('../assets/audio/greetings/first_launch.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'returning.mp3':     require('../assets/audio/greetings/returning.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'demo_mode.mp3':     require('../assets/audio/greetings/demo_mode.mp3'),
 };
 
 const SERENA_GREETING_ASSETS: Record<GreetingFilename, AssetModule> = {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'universal_01.mp3':  require('../assets/audio/greetings/serena/universal_01.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'universal_02.mp3':  require('../assets/audio/greetings/serena/universal_02.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'universal_03.mp3':  require('../assets/audio/greetings/serena/universal_03.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'morning_01.mp3':    require('../assets/audio/greetings/serena/morning_01.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'morning_02.mp3':    require('../assets/audio/greetings/serena/morning_02.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'evening_01.mp3':    require('../assets/audio/greetings/serena/evening_01.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'evening_02.mp3':    require('../assets/audio/greetings/serena/evening_02.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'weekend_01.mp3':    require('../assets/audio/greetings/serena/weekend_01.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'weekend_02.mp3':    require('../assets/audio/greetings/serena/weekend_02.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'first_launch.mp3':  require('../assets/audio/greetings/serena/first_launch.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'returning.mp3':     require('../assets/audio/greetings/serena/returning.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'demo_mode.mp3':     require('../assets/audio/greetings/serena/demo_mode.mp3'),
 };
 
 const HARRY_GREETING_ASSETS: Record<GreetingFilename, AssetModule> = {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'universal_01.mp3':  require('../assets/audio/greetings/harry/universal_01.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'universal_02.mp3':  require('../assets/audio/greetings/harry/universal_02.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'universal_03.mp3':  require('../assets/audio/greetings/harry/universal_03.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'morning_01.mp3':    require('../assets/audio/greetings/harry/morning_01.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'morning_02.mp3':    require('../assets/audio/greetings/harry/morning_02.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'evening_01.mp3':    require('../assets/audio/greetings/harry/evening_01.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'evening_02.mp3':    require('../assets/audio/greetings/harry/evening_02.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'weekend_01.mp3':    require('../assets/audio/greetings/harry/weekend_01.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'weekend_02.mp3':    require('../assets/audio/greetings/harry/weekend_02.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'first_launch.mp3':  require('../assets/audio/greetings/harry/first_launch.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'returning.mp3':     require('../assets/audio/greetings/harry/returning.mp3'),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   'demo_mode.mp3':     require('../assets/audio/greetings/harry/demo_mode.mp3'),
 };
 

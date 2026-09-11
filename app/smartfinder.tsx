@@ -40,18 +40,6 @@ import { useClubStatsStore, CLUB_ORDER } from '../store/clubStatsStore';
 // SF fix #3 — the 4-tier yardage resolver, so a number the player STATED
 // ("I'm 150 out") wins over the GPS/scorecard middle on the target overlay.
 import { resolveYardage, resolvedToFmb } from '../services/yardageResolver';
-
-/** The resolved yardage in this screen's existing GreenYardages shape — one owner, one number. */
-function resolvedToGreenYardages(hole: number): GreenYardages {
-  const fmb = resolvedToFmb(resolveYardage(hole));
-  return {
-    front: fmb?.front ?? null,
-    middle: fmb?.middle ?? null,
-    back: fmb?.back ?? null,
-    hole_number: hole,
-    reason: fmb?.reason ?? 'no_hole',
-  };
-}
 import { useSmartFinderStore, type SmartFinderMode } from '../store/smartFinderStore';
 import {
   peekFix,
@@ -92,6 +80,18 @@ import { featureOnAimLine } from '../services/aimedFeature';
 import { useFlagGate } from '../hooks/useFlagGate';
 import { buildAimCandidates } from '../services/aimCandidates';
 import { useTranslation } from 'react-i18next';
+
+/** The resolved yardage in this screen's existing GreenYardages shape — one owner, one number. */
+function resolvedToGreenYardages(hole: number): GreenYardages {
+  const fmb = resolvedToFmb(resolveYardage(hole));
+  return {
+    front: fmb?.front ?? null,
+    middle: fmb?.middle ?? null,
+    back: fmb?.back ?? null,
+    hole_number: hole,
+    reason: fmb?.reason ?? 'no_hole',
+  };
+}
 
 const REFRESH_MS = 3_000;
 const CANVAS_W_FRACTION = 0.92;
@@ -1301,7 +1301,7 @@ function TargetCameraOverlay({
       compass_heading: Math.round(heading),
       tap_y_normalized: 0.52,
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [locked, targetYards, yards.middle]);
   // 2026-06-23 — Hole switch: clear any manual tilt placement + re-seed the
   // target from the new hole's GPS so hole N's aim doesn't bleed into hole N+1.

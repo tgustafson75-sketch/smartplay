@@ -108,7 +108,7 @@ export async function transcribeVideoAudioDetailed(
       uri: videoUri,
       name: 'upload.mp4',
       type: 'video/mp4',
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
     } as any);
     form.append('language', language);
 

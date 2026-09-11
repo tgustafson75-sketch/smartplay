@@ -1836,7 +1836,7 @@ export const useRoundStore = create<RoundState>()(
           })(),
           // 2026-08-12 — mail the round trace. Fire-and-forget AFTER the record is assembled, so a
           // slow or failed send can never delay or block saving the round itself.
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
+           
           ...(() => { try {
             const rt = require('../services/roundTrace') as typeof import('../services/roundTrace');
             rt.trace('round', 'end', { holes: scoredEntries.length, score: scoredEntries.reduce((a, [, sc]) => a + sc, 0) });

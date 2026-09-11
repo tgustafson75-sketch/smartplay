@@ -248,11 +248,11 @@ export async function estimatePose(input: PoseEstimateRequest): Promise<PoseEsti
           // we tag the first as address + last as impact and leave
           // the middle untagged so computeBiomechanics returns what
           // it can without forcing wrong positions.
-          const positionByIndex: Array<PoseFrame['position']> = poseFrames.length >= 5
+          const positionByIndex: PoseFrame['position'][] = poseFrames.length >= 5
             ? ['P1_address', 'P2_takeaway', 'P4_top', 'P6_impact', 'P10_finish']
             : poseFrames.length === 3
               ? ['P1_address', 'P4_top', 'P6_impact']
-              : ['P1_address', undefined, undefined, undefined, 'P6_impact'].slice(0, poseFrames.length) as Array<PoseFrame['position']>;
+              : ['P1_address', undefined, undefined, undefined, 'P6_impact'].slice(0, poseFrames.length) as PoseFrame['position'][];
           const tagged = poseFrames.map((f, i) => ({ ...f, position: positionByIndex[i] }));
           const adjusted = adjustFrames(tagged, ageBand, lefty);
           let bio: SwingBiomechanics | null = null;

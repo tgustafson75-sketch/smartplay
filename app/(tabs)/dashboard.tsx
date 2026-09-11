@@ -70,12 +70,6 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { getCaddieName } from '../../lib/persona';
 import { useCaddieMemoryStore } from '../../store/caddieMemoryStore';
 import { setScreenContext } from '../../services/screenContext';
-
-// 2026-07-08 (Tim — the get-to-know can't be an interrogation; "answer, don't interview")
-// — primes the caddie to INVITE the golfer to talk and then LISTEN, not run a Q&A. What
-// they volunteer is ingested to the CNS narrative (narrativeIngest).
-const GET_TO_KNOW_FOCUS =
-  'the player wants to tell you about their game so you get to know them. Open with ONE short, warm line inviting them to talk (e.g. "Tell me about your game — how you practice, what you\'re chasing"), then LISTEN. Do NOT interrogate or run a checklist of questions. Acknowledge what they volunteer so they know you heard it. They lead; you listen and remember.';
 // 2026-06-04 — Progress card (Points + Tier) removed from dashboard
 // alongside the Highlights Card rework. pointsStore import dropped.
 import { generateKevinRead } from '../../services/kevinReadService';
@@ -87,6 +81,12 @@ import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
 import AppIcon from '../../components/AppIcon';
 import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
+
+// 2026-07-08 (Tim — the get-to-know can't be an interrogation; "answer, don't interview")
+// — primes the caddie to INVITE the golfer to talk and then LISTEN, not run a Q&A. What
+// they volunteer is ingested to the CNS narrative (narrativeIngest).
+const GET_TO_KNOW_FOCUS =
+  'the player wants to tell you about their game so you get to know them. Open with ONE short, warm line inviting them to talk (e.g. "Tell me about your game — how you practice, what you\'re chasing"), then LISTEN. Do NOT interrogate or run a checklist of questions. Acknowledge what they volunteer so they know you heard it. They lead; you listen and remember.';
 
 export default function Dashboard() {
   const router = useRouter();
@@ -1345,7 +1345,7 @@ export default function Dashboard() {
                     {e.video && videoKey && (
                       <TouchableOpacity
                         onPress={() => router.push({
-                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                           
                           pathname: '/drill-video' as any,
                           params: { url: e.video!.url, title: e.video!.title, instructor: e.video!.source ?? '', drillId: videoKey, drillName: e.name },
                         })}

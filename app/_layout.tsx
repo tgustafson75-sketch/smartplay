@@ -23,15 +23,6 @@ import { useRoundStore, whenRoundStoreHydrated } from '../store/roundStore';
 import { stopSpeaking, getLastSpeakStartedAt } from '../services/voiceService';
 import { setProactiveLineComposer } from '../services/proactiveLineRegistry';
 import { generateProactiveLine } from '../services/conversationalBrain';
-
-/**
- * 2026-09-01 — the app layer owns the brain, so it is what answers a store's request for a line.
- * Registered at module scope, once, before any persona switch can happen.
- */
-setProactiveLineComposer(async (directive, opts) => {
-  const r = await generateProactiveLine(directive, opts);
-  return r.text ?? null;
-});
 // 2026-05-27 — Fix EA: screenshot mode flag drives the global StatusBar
 // hidden prop so the user can capture clean shots without the phone's
 // top chrome (time / battery / wifi).
@@ -115,6 +106,15 @@ import { ErrorBoundary } from '../components/ErrorBoundary';
 import { devLog } from '../services/devLog';
 import { genderForPersona } from '../services/caddieGender';
 import { useTranslation } from 'react-i18next';
+
+/**
+ * 2026-09-01 — the app layer owns the brain, so it is what answers a store's request for a line.
+ * Registered at module scope, once, before any persona switch can happen.
+ */
+setProactiveLineComposer(async (directive, opts) => {
+  const r = await generateProactiveLine(directive, opts);
+  return r.text ?? null;
+});
 
 // Phase Y — whenRoundStoreHydrated lives in store/roundStore.ts (was
 // inlined here originally; audit moved it to remove a brittle

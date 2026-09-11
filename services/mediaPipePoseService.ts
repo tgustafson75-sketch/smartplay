@@ -320,7 +320,7 @@ export function smoothPoseFrames(frames: PoseFrame[]): PoseFrame | null {
 //
 // The result mirrors COCO_17 order in poseAnalysisApi.ts so that file's
 // `normalizeKeypoints` consumes our output without changes.
-const BLAZEPOSE_TO_COCO17: Array<{ name: string; blazeIdx: number }> = [
+const BLAZEPOSE_TO_COCO17: { name: string; blazeIdx: number }[] = [
   { name: 'nose',           blazeIdx: 0 },
   { name: 'left_eye',       blazeIdx: 2 },
   { name: 'right_eye',      blazeIdx: 5 },

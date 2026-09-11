@@ -460,7 +460,7 @@ const ALL_APP_FEATURES: AppFeature[] = [
 // from there. Only id/title/aliases live here (the card reads its own practice
 // config from data/drillCatalog), so there's no duplicated drill data to drift.
 // "Tempo" is intentionally omitted: the richer Smart Tempo screen (above) owns it.
-const DRILLS: ReadonlyArray<{ id: string; title: string; aliases: string[] }> = [
+const DRILLS: readonly { id: string; title: string; aliases: string[] }[] = [
   { id: 'over_the_top',          title: 'Over the Top',          aliases: ['over the top', 'coming over the top', 'casting', 'over the top fix'] },
   { id: 'swing_path_outside_in', title: 'Outside-In Path',       aliases: ['outside in', 'outside-in', 'outside in path', 'slice path'] },
   { id: 'swing_path_inside_out', title: 'Inside-Out Path',       aliases: ['inside out', 'inside-out', 'inside out path', 'hook path'] },

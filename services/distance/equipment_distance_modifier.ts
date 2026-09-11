@@ -56,7 +56,7 @@ const TIER_CONFIDENCE: Readonly<Record<EquipmentDistanceTier, number>> = {
 const REACH_FLOOR = 0.7;  // must carry at least 70% of the target
 const REACH_CEILING = 1.6; // and not be a wild over-club
 
-function pickClosestClub(targetYards: number, candidates: Array<{ club: string; carryYards: number }>): { club: string; carryYards: number } | null {
+function pickClosestClub(targetYards: number, candidates: { club: string; carryYards: number }[]): { club: string; carryYards: number } | null {
   if (!Number.isFinite(targetYards) || targetYards <= 0 || candidates.length === 0) return null;
 
   const sorted = [...candidates].sort((a, b) => b.carryYards - a.carryYards);

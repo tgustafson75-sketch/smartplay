@@ -1800,7 +1800,7 @@ export default function SmartVisionScreen() {
         .catch(() => undefined);
     });
     return () => registerSmartVisionRead(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   // 2026-06-13 (Tim #6) — Golfshot-style layup planning. The hole's playing

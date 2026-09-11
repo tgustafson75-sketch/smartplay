@@ -19,27 +19,6 @@ import { subscribeEarbudTap } from './earbudControl';
 import { isSmartMotionRecording, emitSmartMotionCommand } from './smartMotionRecordBus';
 import { getCurrentRoute } from './audioRoutingService';
 import { routeQuery } from './responseRouter';
-// 2026-08-06 (Tim — "no more pre-canned speech; use a subtle earcon, no words" during the think gap). The
-// "thinking" earcon: a soft NON-VERBAL tone played ONCE when a turn will take a beat, replacing the old
-// spoken filler words ("Let me see...", "Looking at those swings...") — the loudest canned-speech surface.
-// Reuses an already-bundled tone so it ships OTA (no new binary needed). [[feels-like-a-real-caddie]]
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const THINKING_EARCON: number = require('../assets/audio/tempo/tick.mp3');
-const THINKING_EARCON_MS = 180;
-// 2026-08-06 (Tim — "when I tap the earbud there's no beep/haptic telling me the caddie is LISTENING; the
-// phone's 40 yards away in the cart so I can't see the indicator or feel the phone haptic — I just talk and
-// hope"). A distinct "I'm listening" earcon played THROUGH THE AUDIO ROUTE (the earbud, where his ears are)
-// the instant the mic opens — the audible go-ahead the phone haptic can't give when the phone is far away.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const LISTENING_EARCON: number = require('../assets/audio/tempo/tock.mp3');
-const LISTENING_EARCON_MS = 200;
-// 2026-08-07 (Tim — "then user will tap again with ANOTHER sound confirming"). A SECOND, DISTINCT tone
-// (a crisp tick vs the listening tock) played the instant a tap-again ENDS the utterance — the audible
-// "got it, I'm on it" the earbud user needs when the phone's in the cart. Pairs with the spoken capture
-// ack below (the caddie then confirms it heard). [[feels-like-a-real-caddie]]
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const GOTIT_EARCON: number = require('../assets/audio/tempo/tick.mp3');
-const GOTIT_EARCON_MS = 180;
 import { getActiveSurface } from './activeSurfaceRegistry';
 import { precheckLocalIntent } from './localIntentPrecheck';
 import { resolvePendingCourseUtterance } from './pendingDisambiguation';
@@ -48,6 +27,27 @@ import type { AppContext, VoiceIntent } from '../types/voiceIntent';
 import { getApiBaseUrl, isConnectionWarmed, getConnectionEvidence } from './apiBase';
 import { tryAnswerOpenQuestion } from './pendingPuttAsk';
 import { isFlagEnabled } from '../store/flagStore';
+// 2026-08-06 (Tim — "no more pre-canned speech; use a subtle earcon, no words" during the think gap). The
+// "thinking" earcon: a soft NON-VERBAL tone played ONCE when a turn will take a beat, replacing the old
+// spoken filler words ("Let me see...", "Looking at those swings...") — the loudest canned-speech surface.
+// Reuses an already-bundled tone so it ships OTA (no new binary needed). [[feels-like-a-real-caddie]]
+ 
+const THINKING_EARCON: number = require('../assets/audio/tempo/tick.mp3');
+const THINKING_EARCON_MS = 180;
+// 2026-08-06 (Tim — "when I tap the earbud there's no beep/haptic telling me the caddie is LISTENING; the
+// phone's 40 yards away in the cart so I can't see the indicator or feel the phone haptic — I just talk and
+// hope"). A distinct "I'm listening" earcon played THROUGH THE AUDIO ROUTE (the earbud, where his ears are)
+// the instant the mic opens — the audible go-ahead the phone haptic can't give when the phone is far away.
+ 
+const LISTENING_EARCON: number = require('../assets/audio/tempo/tock.mp3');
+const LISTENING_EARCON_MS = 200;
+// 2026-08-07 (Tim — "then user will tap again with ANOTHER sound confirming"). A SECOND, DISTINCT tone
+// (a crisp tick vs the listening tock) played the instant a tap-again ENDS the utterance — the audible
+// "got it, I'm on it" the earbud user needs when the phone's in the cart. Pairs with the spoken capture
+// ack below (the caddie then confirms it heard). [[feels-like-a-real-caddie]]
+ 
+const GOTIT_EARCON: number = require('../assets/audio/tempo/tick.mp3');
+const GOTIT_EARCON_MS = 180;
 
 // 2026-07-25 (Tim — "first ask errors every time") — cold-aware brain timeout, mirroring useVoiceCaddie.
 // The FIRST turn after launch is cold on the Lambda + provider SDK + tool rounds; a fixed 30s aborts it.

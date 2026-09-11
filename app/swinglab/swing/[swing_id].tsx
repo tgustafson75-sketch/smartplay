@@ -912,7 +912,7 @@ export default function SwingDetail() {
       } catch { /* best-effort — falls back to wrist trace */ }
     })();
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [hasPose, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, shot?.detectionMethod, shot?.detectionOffsetSeconds, poseImpactMs, duration, showSkeleton, showTrace, isPlaying, session?.club_arc, shot?.club_arc, selectedShotIdx]);
 
   // 2026-07-06 (Tim carry-over #2) — bake the overlay INTO an exported still.
@@ -1568,7 +1568,7 @@ export default function SwingDetail() {
     const hi = winEndRef.current > lo ? Math.min(d, winEndRef.current) : d;
     const target = Math.max(lo, Math.min(hi, positionRef.current + deltaSec));
     void scrubTo(target);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, []);
   // Live refs so the once-created PanResponder + the jog buttons read current
   // position/duration without stale closures.

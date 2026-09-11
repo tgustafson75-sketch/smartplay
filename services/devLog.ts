@@ -30,7 +30,7 @@ export function devLog(...args: unknown[]): void {
    * hit it. `typeof` never throws on an undeclared identifier, which is the whole point of using it.
    */
   if (typeof __DEV__ !== 'undefined' && __DEV__) {
-    // eslint-disable-next-line no-console
+     
     console.log(...args);
   }
 }

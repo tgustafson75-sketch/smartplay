@@ -93,7 +93,7 @@ function subscribeOnce(): void {
   // NativeEventEmitter's first-arg type isn't publicly exported in
   // older RN typings; cast to `any` here to avoid plumbing the
   // private NativeModule interface from react-native internals.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   emitter = new NativeEventEmitter(NativeMod as any);
   emitter.addListener('MetaWearableFrame', (payload: FramePayload) => {
     try {

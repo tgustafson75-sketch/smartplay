@@ -562,12 +562,12 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
     await new Promise(r => setTimeout(r, 50));
 
     const results: { swing_id: string; analysis: import('./poseDetection').SwingAnalysis }[] = [];
-    const perSwingOutcomes: Array<{ swing_id: string; kind: string; detail?: string }> = [];
+    const perSwingOutcomes: { swing_id: string; kind: string; detail?: string }[] = [];
     // 2026-07-01 (audit M3) — session-level fault frame was promoted inside runOne,
     // so in parallel mode whichever swing FINISHED LAST won — the featured frame was
     // chosen by completion order, not swing order. Collect candidates here and pick
     // deterministically (first swing with a real display frame) after all swings run.
-    const faultCandidates: Array<{ index: number; uri: string | null; frameIndex: number | null; fraction: number | null }> = [];
+    const faultCandidates: { index: number; uri: string | null; frameIndex: number | null; fraction: number | null }[] = [];
 
     store.setSessionAnalysisStatus(sessionId, 'analyzing_pose');
     uploadLog('pose-detection-start', { swings_to_analyze: swings.length }, sessionId);

@@ -1,5 +1,28 @@
 import { getApiBaseUrl } from './apiBase';
 import { mergeSwingDetections } from './swing/swingSegmentation';
+
+/**
+ * Sample 5 key frames from a swing clip via expo-video-thumbnails. Each
+ * frame is extracted at a normalized time fraction (5%, 30%, 55%, 80%, 95%
+ * of the clip — covers address through follow-through), resized + JPEG-
+ * compressed via expo-image-manipulator, and returned as base64 ready for
+ * the vision endpoint. Each frame carries its own `time_sec` so consumers
+ * can anchor detected-issue timestamps for Phase R temporal alignment.
+ *
+ * Duration is probed via expo-av before sampling. If the probe fails or
+ * returns nothing usable, falls back to a 2-second window (typical cage
+ * capture length). Returns empty array on any failure — consumer treats
+ * as `no_frames`.
+ */
+import * as VT from '../utils/videoThumbnail'; // serialized wrapper (native retriever crash fix)
+import { acquireClipCopy, acquireExistingClipCopy, isPooledCopy } from './swing/sharedClipCopy';
+import * as ImageManipulator from 'expo-image-manipulator';
+import { Audio } from 'expo-av';
+// 2026-06-07 (audit) — share the circuit breaker + reactive connectivity
+// signal with the voice paths so weak-signal range sessions short-circuit
+// instead of paying full timeout+retry per swing.
+import { recordSuccess, recordFailure } from './voiceCircuitBreaker';
+import { reportOnline, reportNetworkFailure } from '../store/connectivityStore';
 /**
  * Phase K — Pose detection client.
  *
@@ -183,29 +206,6 @@ const REQUEST_TIMEOUT_MS = 63_000;
 // the safety net. 55s fits inside Vercel's 60s function maxDuration
 // while giving the server room to complete the deep dive.
 const TENTATIVE_TIMEOUT_MS = 55_000;
-
-/**
- * Sample 5 key frames from a swing clip via expo-video-thumbnails. Each
- * frame is extracted at a normalized time fraction (5%, 30%, 55%, 80%, 95%
- * of the clip — covers address through follow-through), resized + JPEG-
- * compressed via expo-image-manipulator, and returned as base64 ready for
- * the vision endpoint. Each frame carries its own `time_sec` so consumers
- * can anchor detected-issue timestamps for Phase R temporal alignment.
- *
- * Duration is probed via expo-av before sampling. If the probe fails or
- * returns nothing usable, falls back to a 2-second window (typical cage
- * capture length). Returns empty array on any failure — consumer treats
- * as `no_frames`.
- */
-import * as VT from '../utils/videoThumbnail'; // serialized wrapper (native retriever crash fix)
-import { acquireClipCopy, acquireExistingClipCopy, isPooledCopy } from './swing/sharedClipCopy';
-import * as ImageManipulator from 'expo-image-manipulator';
-import { Audio } from 'expo-av';
-// 2026-06-07 (audit) — share the circuit breaker + reactive connectivity
-// signal with the voice paths so weak-signal range sessions short-circuit
-// instead of paying full timeout+retry per swing.
-import { recordSuccess, recordFailure } from './voiceCircuitBreaker';
-import { reportOnline, reportNetworkFailure } from '../store/connectivityStore';
 
 // Phase V.6 diagnostic — single grep target. Filter via:
 //   adb logcat | grep V6-DIAG
@@ -608,7 +608,7 @@ export async function extractKeyFrames(
         });
       }
     }
-    const perFrameOutcomes: Array<{ idx: number; t_ms: number; ok: boolean; raw_uri_tail?: string; raw_size?: number; b64_kb?: number; error?: string }> = [];
+    const perFrameOutcomes: { idx: number; t_ms: number; ok: boolean; raw_uri_tail?: string; raw_size?: number; b64_kb?: number; error?: string }[] = [];
     const frames = await Promise.all(
       frameFractions.map(async (t, i) => {
         const timeMs = windowStartMs + Math.round(windowDurationMs * t);
@@ -1105,7 +1105,7 @@ const LOCATE_SWINGS_TIMEOUT_MS = 30_000;
 export async function locateSwings(
   clipUri: string,
   durationMs: number,
-): Promise<Array<{ timeSec: number; confidence: 'high' | 'low' }>> {
+): Promise<{ timeSec: number; confidence: 'high' | 'low' }[]> {
   try {
     const out = await locateSwingsImpl(clipUri, durationMs);
     try {
@@ -1129,7 +1129,7 @@ export async function locateSwings(
 async function locateSwingsImpl(
   clipUri: string,
   durationMs: number,
-): Promise<Array<{ timeSec: number; confidence: 'high' | 'low' }>> {
+): Promise<{ timeSec: number; confidence: 'high' | 'low' }[]> {
   const apiUrl = getApiBaseUrl();
   if (!apiUrl || durationMs < LOCATE_MIN_CLIP_MS) {
     logLocate('range_locate_skip', { reason: durationMs < LOCATE_MIN_CLIP_MS ? 'clip_too_short' : 'no_api_url', dur_ms: durationMs });
@@ -1182,7 +1182,7 @@ async function locateSwingsImpl(
       logLocate('range_locate_fallback', { reason: 'server_' + res.status, coarse_frames: frames.length });
       return [];
     }
-    const data = (await res.json()) as { swings?: Array<{ time_sec?: number; confidence?: string }> };
+    const data = (await res.json()) as { swings?: { time_sec?: number; confidence?: string }[] };
     const durSec = durationMs / 1000;
     const raw = (data.swings ?? [])
       .filter((s) => typeof s.time_sec === 'number' && Number.isFinite(s.time_sec))
@@ -1626,7 +1626,7 @@ export async function analyzeSwing(
       // and the full attempts array. Owner debug screen can render
       // the orchestration decision tree at a glance.
       const debugAny = data._debug as Record<string, unknown> | undefined;
-      const attemptsArr = Array.isArray(debugAny?.attempts) ? debugAny.attempts as Array<{ provider: string; elapsed_ms: number; ok: boolean; error: string | null; score: number }> : null;
+      const attemptsArr = Array.isArray(debugAny?.attempts) ? debugAny.attempts as { provider: string; elapsed_ms: number; ok: boolean; error: string | null; score: number }[] : null;
       dbg.useSwingAnalysisDebugStore.getState().record({
         at: Date.now(),
         framesSent: wireFrames.length,

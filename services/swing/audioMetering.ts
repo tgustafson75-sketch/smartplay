@@ -1,7 +1,6 @@
 import { Audio } from 'expo-av';
 import type { MeterSample } from './strikeDetector';
-import { registerExternalMicCheck, registerExternalMicRelease } from '../voiceService';
-import { setAudioModeSerial } from '../voiceService';
+import { registerExternalMicCheck, registerExternalMicRelease , setAudioModeSerial } from '../voiceService';
 
 /**
  * Audio metering recorder — wraps expo-av Audio.Recording with

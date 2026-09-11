@@ -38,7 +38,7 @@ import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useConversationLog } from '../store/conversationLogStore';
 import { getLastFix } from './gpsManager';
 import { haversineYards, bearingDegrees } from '../utils/geoDistance';
-import { resolveGreenCoords, classifyAccuracy } from './smartFinderService';
+import { resolveGreenCoords, classifyAccuracy , holeData as resolvedHoleData } from './smartFinderService';
 // 2026-06-12 — Offline caddie Tier 1: the player's REAL logged bag distances, used to
 // CALL A CLUB locally when the cloud brain is unreachable. Honest by construction —
 // bagDistances() only returns clubs the player has actually tracked. [[offline-caddie-plan]]
@@ -55,7 +55,6 @@ import { playsLikeDistance } from '../utils/playsLike';
 // OFFLINE from the persisted book, not a network fetch. [[course-book-cns]]
 import { useCaddieMemoryStore } from '../store/caddieMemoryStore';
 import { STANDARD_LADDER, CLUB_LABEL } from './standardBag';
-import { holeData as resolvedHoleData } from './smartFinderService';
 
 /**
  * 2026-08-11 (adversarial audit) — ONE bag builder for every spoken reply in this file.

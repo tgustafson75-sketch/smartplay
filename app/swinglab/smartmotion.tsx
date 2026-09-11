@@ -646,7 +646,7 @@ export default function SmartMotion() {
   // per-pillar caddie (cage pillar), NOT the raw global pick — otherwise the SAME swing narrated live vs
   // uploaded (videoUpload already uses getActiveCaddie) is a different caddie, and a Tank-disabled global
   // leaks Tank. Recomputes when the persona/assignments change (settings dep via the hook above).
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   const analysisCaddie = React.useMemo(() => {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -4019,7 +4019,7 @@ export default function SmartMotion() {
               calibrationApplied: !!thresholdDb,
               samples: samples.length,
             }, 'diag');
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
+             
           } catch { /* a diagnostic must never break a recording */ }
         }
         if (res.kind === 'ok' && res.strikes.length > 0) {

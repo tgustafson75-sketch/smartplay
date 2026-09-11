@@ -256,7 +256,7 @@ const SCEN_10: Scenario = {
   category: 'high',
   run: () => runWithAsserts('H10', 'Voice intent dispatch — 10 phrases', async (a) => {
     const tEn = M.seedLanguage('en');
-    const phrases: Array<{ intent_type: string; parameters?: Record<string, unknown>; raw_text: string }> = [
+    const phrases: { intent_type: string; parameters?: Record<string, unknown>; raw_text: string }[] = [
       { intent_type: 'ask_golf_father', parameters: { topic: 'rules', subtopic: 'red_vs_yellow' }, raw_text: 'red vs yellow' },
       { intent_type: 'ask_golf_father', parameters: { topic: 'course_management', subtopic: 'flag_or_center' }, raw_text: 'flag or center' },
       { intent_type: 'ask_golf_father', parameters: { topic: 'rules', subtopic: 'nearest_point_relief' }, raw_text: 'cart path relief' },
@@ -287,7 +287,7 @@ const SCEN_11: Scenario = {
   run: () => runWithAsserts('H11', 'Meta album mock', async (a) => {
     try {
       const ML = (await import('expo-media-library').catch(() => null)) as
-        | { getAlbumsAsync?: (opts?: unknown) => Promise<Array<{ title: string; assetCount: number }>> }
+        | { getAlbumsAsync?: (opts?: unknown) => Promise<{ title: string; assetCount: number }[]> }
         | null;
       if (!ML || typeof ML.getAlbumsAsync !== 'function') {
         a.skip('expo-media-library bundled', 'native module not bundled in this build');

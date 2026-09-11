@@ -1,6 +1,12 @@
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import { isShelved } from '../releaseSurface';
 import { isRouteKilled } from '../../store/flagStore';
+import type { ToolAction } from '../../types/toolAction';
+// 2026-06-24 — APP-FEATURE CATALOG as the routing source of truth. The explicit
+// classifier-name map below stays (existing tool routes), but any tool_name or
+// raw transcript that matches a catalog alias also routes deterministically —
+// this is what makes "open smart tempo" / "the tempo drill card" land correctly.
+import { lookupFeature } from '../knowledgeBase/appCatalog';
 
 /**
  * Some gated tools are expressed as an action TYPE rather than a path (open_smartvision emits the
@@ -17,12 +23,6 @@ function actionIsKilled(a: ToolAction | { type: 'navigate'; path: string }): boo
   const route = ACTION_TYPE_TO_ROUTE[a.type];
   return route ? isRouteKilled(route) : false;
 }
-import type { ToolAction } from '../../types/toolAction';
-// 2026-06-24 — APP-FEATURE CATALOG as the routing source of truth. The explicit
-// classifier-name map below stays (existing tool routes), but any tool_name or
-// raw transcript that matches a catalog alias also routes deterministically —
-// this is what makes "open smart tempo" / "the tempo drill card" land correctly.
-import { lookupFeature } from '../knowledgeBase/appCatalog';
 
 // 2026-05-25 — Fix E/O: voice-direct in-place mark for tee/green.
 // Returns IntentResult when the mark was captured (so the caller skips

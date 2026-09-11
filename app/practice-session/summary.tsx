@@ -1,7 +1,4 @@
 import React, { useEffect, useState } from 'react';
-// 2026-07-24 (full-app audit) — session ids whose summary has already credited points/relationship,
-// so a remount (e.g. re-triggered by the voice end_session intent) can't double-award.
-const creditedCageSummaries = new Set<string>();
 import {
   View,
   Text,
@@ -33,6 +30,9 @@ import { activateMediaSession, deactivateMediaSession } from '../../services/med
 import { practiceLog } from '../../services/practiceTelemetry';
 import { getApiBaseUrl } from '../../services/apiBase';
 import { useTranslation } from 'react-i18next';
+// 2026-07-24 (full-app audit) — session ids whose summary has already credited points/relationship,
+// so a remount (e.g. re-triggered by the voice end_session intent) can't double-award.
+const creditedCageSummaries = new Set<string>();
 
 export default function CageSummary() {
   const { t } = useTranslation();

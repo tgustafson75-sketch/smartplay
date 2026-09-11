@@ -89,37 +89,6 @@ import { isOpenerClaimed, claimOpenerSlot } from '../../services/openerGuard';
 import { TourOverlay, type TourStep } from '../../components/onboarding/TourOverlay';
 import { useOnboardingTourStore } from '../../store/onboardingTourStore';
 import { useTourTarget } from '../../hooks/useTourTarget';
-
-// 2026-08-01 (tester — "first 3 uses: a skippable icon-by-icon highlight of the tools + how to talk").
-// The caddie tab is the home surface, so the first-run tour lives here. Full guided pass: meet the
-// caddie → how to talk/ask for anything → the tools → getting around → go.
-const ONBOARDING_TOUR_STEPS: TourStep[] = [
-  {
-    key: 'welcome', anchor: 'center', icon: 'golf-outline',
-    title: 'Meet your caddie',
-    body: "It's a real caddie in your pocket — reads your yardage, calls your club, watches your swing, and keeps your head in the game. Quick tour so you know where everything is.",
-  },
-  {
-    key: 'talk', anchor: 'micBottomLeft', targetId: 'caddie.mic', icon: 'mic',
-    title: 'Just talk to it',
-    body: 'Tap the mic to talk, or type in the bar — and ask for ANYTHING: "what\'s my yardage?", "what club here?", "open SmartVision", "start a lesson", or just chat. No menus to hunt through.',
-  },
-  {
-    key: 'tools', anchor: 'toolsTopRight', targetId: 'caddie.tools', icon: 'apps-outline',
-    title: 'Your tools',
-    body: 'This ••• opens your tools — SmartVision (GPS + aim your shot), SmartFinder, and SwingLab for your swing. Tap it any time, or just ask your caddie to open one.',
-  },
-  {
-    key: 'around', anchor: 'bottomBar', targetId: 'caddie.bar', icon: 'chevron-forward',
-    title: 'Get around',
-    body: 'This bar is always with you on every screen — the mic to talk, and the arrows to move back and forward. The caddie is one tap away, wherever you are.',
-  },
-  {
-    key: 'go', anchor: 'center', icon: 'checkmark-circle-outline',
-    title: "You're set",
-    body: "That's it — talk to your caddie like a person and it'll help on every screen. You can replay this anytime from Settings. Let's play.",
-  },
-];
 // Phase Y — shotDetectionService lifecycle moved to app/_layout.tsx so it
 // survives tab focus changes. Only the orchestrator's runtime configure()
 // stays here (apiUrl/voice/language can change at any time).
@@ -165,6 +134,37 @@ import { getApiBaseUrl } from '../../services/apiBase';
 import { buildRoundEndSummary } from '../../services/roundEndSummary';
 import { holePar, holeData as resolvedHoleData } from '../../services/smartFinderService';
 import { useTranslation } from 'react-i18next';
+
+// 2026-08-01 (tester — "first 3 uses: a skippable icon-by-icon highlight of the tools + how to talk").
+// The caddie tab is the home surface, so the first-run tour lives here. Full guided pass: meet the
+// caddie → how to talk/ask for anything → the tools → getting around → go.
+const ONBOARDING_TOUR_STEPS: TourStep[] = [
+  {
+    key: 'welcome', anchor: 'center', icon: 'golf-outline',
+    title: 'Meet your caddie',
+    body: "It's a real caddie in your pocket — reads your yardage, calls your club, watches your swing, and keeps your head in the game. Quick tour so you know where everything is.",
+  },
+  {
+    key: 'talk', anchor: 'micBottomLeft', targetId: 'caddie.mic', icon: 'mic',
+    title: 'Just talk to it',
+    body: 'Tap the mic to talk, or type in the bar — and ask for ANYTHING: "what\'s my yardage?", "what club here?", "open SmartVision", "start a lesson", or just chat. No menus to hunt through.',
+  },
+  {
+    key: 'tools', anchor: 'toolsTopRight', targetId: 'caddie.tools', icon: 'apps-outline',
+    title: 'Your tools',
+    body: 'This ••• opens your tools — SmartVision (GPS + aim your shot), SmartFinder, and SwingLab for your swing. Tap it any time, or just ask your caddie to open one.',
+  },
+  {
+    key: 'around', anchor: 'bottomBar', targetId: 'caddie.bar', icon: 'chevron-forward',
+    title: 'Get around',
+    body: 'This bar is always with you on every screen — the mic to talk, and the arrows to move back and forward. The caddie is one tap away, wherever you are.',
+  },
+  {
+    key: 'go', anchor: 'center', icon: 'checkmark-circle-outline',
+    title: "You're set",
+    body: "That's it — talk to your caddie like a person and it'll help on every screen. You can replay this anytime from Settings. Let's play.",
+  },
+];
 
 const NULL_HUD = { hole: null, par: null, yards: null, wind: null, playsLike: null };
 
@@ -629,7 +629,7 @@ export default function CaddieTab() {
       const { resolveYardage } = require('../../services/yardageResolver') as typeof import('../../services/yardageResolver');
       return resolveYardage(currentHole);
     } catch { return null; }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     // geometryCompletions: re-resolve when a course map finishes building. Without it this memo
     // holds the static-card answer for the rest of the round even after the greens arrive.
   }, [isRoundActive, currentHole, markTick, userStatedYardage, geometryCompletions]);
@@ -695,7 +695,7 @@ export default function CaddieTab() {
       const fix = getLastFix();
       return fix ? { lat: fix.location.lat, lng: fix.location.lng } : null;
     } catch { return null; }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     // geometryCompletions — front/middle/back and the green coord all come from geometry. My first
     // pass added this to the two yardage memos only; the guard below caught the other three. Same
     // defect, five places.
@@ -709,7 +709,7 @@ export default function CaddieTab() {
       const mid = g?.middle;
       return mid ? { lat: mid.lat, lng: mid.lng } : null;
     } catch { return null; }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     // geometryCompletions — front/middle/back and the green coord all come from geometry. My first
     // pass added this to the two yardage memos only; the guard below caught the other three. Same
     // defect, five places.
@@ -1397,7 +1397,7 @@ export default function CaddieTab() {
       }
       })();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [_scores, isRoundActive, _proactive_kevin_enabled, localMode, apiUrl]);
 
   // FIX M9 — proactive Kevin: hole-transition triggers (front_9_summary at hole 10,
@@ -1451,7 +1451,7 @@ export default function CaddieTab() {
       }
       })();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [currentHole, isRoundActive, _proactive_kevin_enabled, localMode, apiUrl]);
 
   // FIX M6 — GPS stop-detection proactive: subscribe to movementMode and fire a
@@ -2424,7 +2424,7 @@ export default function CaddieTab() {
     // analysis; without the pre-reset snapshot it always returned the
     // "0 holes" fallback.
     scores: Record<number, number>;
-    courseHoles: Array<{ hole: number; par: number }>;
+    courseHoles: { hole: number; par: number }[];
     activeCourse: string | null;
   }, roundId?: string) => {
     const total = snapshot?.total ?? getTotalScore();

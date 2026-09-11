@@ -144,7 +144,7 @@ export async function requestHealthPermissions(
     // literal union that we satisfy at runtime via HC_RECORD_TYPE
     // but can't prove at the type level without re-declaring every
     // record-type literal here.
-    const grantedRaw = (await hc.requestPermission(requested as unknown as Parameters<typeof hc.requestPermission>[0])) as Array<{ recordType: string }>;
+    const grantedRaw = (await hc.requestPermission(requested as unknown as Parameters<typeof hc.requestPermission>[0])) as { recordType: string }[];
     const grantedTypes = new Set(grantedRaw.map((g) => g.recordType));
     const granted: HealthPermissionKey[] = [];
     const denied: HealthPermissionKey[] = [];
@@ -166,7 +166,7 @@ export async function getGrantedHealthPermissions(): Promise<HealthPermissionKey
   if (!(await isHealthAvailable())) return [];
   try {
     const hc = await import('react-native-health-connect');
-    const granted = (await hc.getGrantedPermissions()) as Array<{ recordType: string }>;
+    const granted = (await hc.getGrantedPermissions()) as { recordType: string }[];
     const grantedTypes = new Set(granted.map((g) => g.recordType));
     const out: HealthPermissionKey[] = [];
     for (const [key, type] of Object.entries(HC_RECORD_TYPE)) {

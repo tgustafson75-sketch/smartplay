@@ -17,17 +17,11 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, TextInput, TouchableOpacity, StyleSheet, Keyboard, Platform, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-
-// 2026-07-24 (Tim) — THE caddie mic mark: the neon SmartPlay caddie SPEAKING (head + sound waves),
-// cropped out of the brand logo (ring + name removed). It literally shows the caddie talking → the
-// perfect, on-brand tap-to-talk button.
-const MIC_CADDIE = require('../../assets/icons/caddie/mic-caddie.png');
 import * as Haptics from 'expo-haptics';
 import { router, usePathname } from 'expo-router';
 import { useTheme } from '../../contexts/ThemeContext';
 import { safeBack } from '../../services/safeBack';
-import { toggle as toggleListening } from '../../services/listeningSession';
-import { handleTranscribedUtterance } from '../../services/listeningSession';
+import { toggle as toggleListening , handleTranscribedUtterance } from '../../services/listeningSession';
 import { useTourTarget } from '../../hooks/useTourTarget';
 import { useListeningSessionStore } from '../../store/listeningSessionStore';
 import { useFlag } from '../../store/flagStore';
@@ -35,6 +29,11 @@ import {
   markChevronNav, consumeChevronNav, pushForward, popForward, hasForward, clearForward,
 } from '../../services/navHistory';
 import { useTranslation } from 'react-i18next';
+
+// 2026-07-24 (Tim) — THE caddie mic mark: the neon SmartPlay caddie SPEAKING (head + sound waves),
+// cropped out of the brand logo (ring + name removed). It literally shows the caddie talking → the
+// perfect, on-brand tap-to-talk button.
+const MIC_CADDIE = require('../../assets/icons/caddie/mic-caddie.png');
 
 // Brand neon green (matches the caddie voice-state cue).
 const NEON = '#88F700';

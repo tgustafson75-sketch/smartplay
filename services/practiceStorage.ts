@@ -71,7 +71,7 @@ type AcousticLabels = Pick<ReviewLabels, 'strike_location' | 'contact_quality'>;
 
 const _pendingEvents = new Map<
   string,
-  Array<{ offset: number; method: 'audio_transient' | 'manual'; acoustic: AcousticLabels | null }>
+  { offset: number; method: 'audio_transient' | 'manual'; acoustic: AcousticLabels | null }[]
 >();
 
 export async function createSession(): Promise<SwingSession> {

@@ -289,7 +289,7 @@ export async function prefetchHoles(
  */
 export type CourseImageryInput = {
   courseId: string | null;
-  holes: Array<{ tee: { lat: number; lng: number } | null; green: { lat: number; lng: number } | null }>;
+  holes: { tee: { lat: number; lng: number } | null; green: { lat: number; lng: number } | null }[];
 };
 
 export function getCourseImageryUrl(
@@ -299,7 +299,7 @@ export function getCourseImageryUrl(
 ): string | null {
   if (!MAPBOX_TOKEN) return null;
   // Collect all valid coords
-  const coords: Array<{ lat: number; lng: number }> = [];
+  const coords: { lat: number; lng: number }[] = [];
   for (const h of input.holes) {
     if (h.tee) coords.push(h.tee);
     if (h.green) coords.push(h.green);

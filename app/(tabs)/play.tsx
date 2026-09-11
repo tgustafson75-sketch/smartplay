@@ -50,12 +50,11 @@ import { prefetchFoundCourses, locateNearbyCourses } from '../../services/course
 import { getBundledHoles, getBundledCourseCentroid } from '../../data/courses';
 import { useCustomCourseStore } from '../../store/customCourseStore';
 import { useGeometryStatusStore } from '../../store/geometryStatusStore';
-import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
+import { fetchCourseGeometry, getHoleGeometry , getCachedGeometry } from '../../services/courseGeometryService';
 import { lookupCoursePlaces } from '../../services/coursePlaces';
 import { prefetchCourseImagery } from '../../services/roundPrefetch';
 import { getCourseImageryUrl, getCenteredImageryUrl } from '../../services/mapboxImagery';
 import { isValidGolfCoord } from '../../utils/coordGuard';
-import { getCachedGeometry } from '../../services/courseGeometryService';
 // 2026-09-06 — the eleven bundled-image thumbnail imports are gone. Every one of those maps has
 // been {} since 2026-08-25, so each `X_HOLE_IMAGES[1]` resolved to undefined and courseThumb()'s
 // lat/lng rescue was already drawing the card. All 41 courses now build the same way:

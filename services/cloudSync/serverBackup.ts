@@ -166,7 +166,7 @@ async function serverRestoreAttempt(keyOverride?: string, secretOverride?: strin
     const json = (await res.json().catch(() => ({}))) as { ok?: boolean; found?: boolean; data?: unknown; error?: string };
     if (!json.ok) return { ok: false, restored: 0, reason: json.error ?? `http_${res.status}` };
     if (!json.found || json.data == null || typeof json.data !== 'object') return { ok: false, restored: 0, reason: 'not_found' };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const restored = await applySnapshot(json.data as any);
     return { ok: true, restored };
   } catch (e) {

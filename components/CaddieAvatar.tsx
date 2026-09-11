@@ -20,6 +20,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // mode regressions we'd need to verify visually.
 import { useTheme } from '../contexts/ThemeContext';
 
+// 2026-08-25 (Tim) — TANK_AVATARS removed with the persona. The map was only reachable when Tank
+// was the active caddie, which is no longer selectable, and its portraits are a real person's
+// likeness. The 12 tank_v2_* assets were deleted with it.
+
+/**
+ * 2026-08-25 — was a SIXTH local copy of this union. Six files each declared their own Persona
+ * type, so removing a persona had to be remembered six times — which is exactly why 'tank' kept
+ * surviving edits that thought they had removed it. One owner now.
+ */
+import type { Persona } from '../lib/persona';
+import { useTranslation } from 'react-i18next';
+
 // 2026-07-18 (Tim) — brand voice-state icons (neon #88F700), shown off to the caddie's RIGHT
 // (user's LEFT) so the state cue never covers the caddie's face.
 const STATE_ICONS = {
@@ -140,18 +152,6 @@ const HARRY_AVATARS: Record<AvatarKey, ImageSourcePropType> = {
   kevin_wincing:       require('../assets/avatars/harry_expressive_exasperated.jpg'),
   kevin_self_critical: require('../assets/avatars/harry_moods_downcast.jpg'),
 };
-
-// 2026-08-25 (Tim) — TANK_AVATARS removed with the persona. The map was only reachable when Tank
-// was the active caddie, which is no longer selectable, and its portraits are a real person's
-// likeness. The 12 tank_v2_* assets were deleted with it.
-
-/**
- * 2026-08-25 — was a SIXTH local copy of this union. Six files each declared their own Persona
- * type, so removing a persona had to be remembered six times — which is exactly why 'tank' kept
- * surviving edits that thought they had removed it. One owner now.
- */
-import type { Persona } from '../lib/persona';
-import { useTranslation } from 'react-i18next';
 
 function getAvatarSet(persona: Persona): Record<AvatarKey, ImageSourcePropType> {
   switch (persona) {

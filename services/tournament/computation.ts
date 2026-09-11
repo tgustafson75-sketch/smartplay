@@ -29,7 +29,7 @@ export interface LeaderboardRow {
   highIsBetter: boolean;
   /** Per-hole detail for the format. Holes where this team has no entry
    *  yet are omitted. UI uses this for the expand-row drill-down. */
-  holes: Array<{ hole: number; value: number | null; note?: string }>;
+  holes: { hole: number; value: number | null; note?: string }[];
 }
 
 export interface LeaderboardResult {
@@ -167,7 +167,7 @@ function rowsSkins(state: TournamentState): LeaderboardRow[] {
   // skin to the next hole. We accumulate skins per team here; the row's
   // primary metric is "skins won".
   const skinsByTeam: Record<string, number> = {};
-  const holeAttribByTeam: Record<string, Array<{ hole: number; value: number | null; note?: string }>> = {};
+  const holeAttribByTeam: Record<string, { hole: number; value: number | null; note?: string }[]> = {};
   for (const t of state.teams) {
     skinsByTeam[t.id] = 0;
     holeAttribByTeam[t.id] = state.holes.map(h => ({ hole: h.hole, value: null }));
@@ -176,7 +176,7 @@ function rowsSkins(state: TournamentState): LeaderboardRow[] {
   let carry = 0;
   for (const h of state.holes) {
     let bestScore: number | null = null;
-    let winners: Array<{ teamId: string; playerIdx: number; score: number }> = [];
+    let winners: { teamId: string; playerIdx: number; score: number }[] = [];
     for (const t of state.teams) {
       const n = activePlayerCount(t);
       for (let p = 0; p < n; p++) {

@@ -118,7 +118,7 @@ function apiKey(): string {
   return Platform.OS === 'ios' ? IOS_KEY : ANDROID_KEY;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 type AnySdk = any;
 
 let cachedSdk: AnySdk | null = null;

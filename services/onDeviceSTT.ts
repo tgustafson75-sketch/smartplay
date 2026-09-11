@@ -35,7 +35,7 @@ const LANG_TAG: Record<STTLanguage, string> = {
 // Minimal shape of the bits we use — kept local so nothing imports the package
 // statically (which would defeat the runtime guard).
 interface ResultEvent {
-  results?: Array<{ transcript?: string }>;
+  results?: { transcript?: string }[];
   isFinal?: boolean;
 }
 interface Subscription { remove: () => void }

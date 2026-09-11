@@ -765,7 +765,7 @@ function swingRecoveryEnvelope(
   };
 }
 
-function prioritizeSwingFocus(metrics: Array<{ label: string; direction: string; match_score: number; verdict: string }>): { primary: string; secondary: string | null } {
+function prioritizeSwingFocus(metrics: { label: string; direction: string; match_score: number; verdict: string }[]): { primary: string; secondary: string | null } {
   const weak = metrics
     .filter((m) => m.direction === 'worse')
     .sort((a, b) => a.match_score - b.match_score);
@@ -900,7 +900,7 @@ async function runSwingCompare(req: SwingCompareRequest, persona: Persona, ctx: 
 
   const cmp = compareMod.compareSwings({ current, reference, kind, club: req.club });
   const profile = usePlayerProfileStore.getState();
-  const priorities = prioritizeSwingFocus(cmp.metrics as Array<{ label: string; direction: string; match_score: number; verdict: string }>);
+  const priorities = prioritizeSwingFocus(cmp.metrics as { label: string; direction: string; match_score: number; verdict: string }[]);
   const complexity = deriveComplexityLevel(profile);
   const mobility = hasMobilityFlag(profile);
   const adaptedVoice = adaptSwingVoice(cmp.voice_summary, priorities, complexity, mobility);

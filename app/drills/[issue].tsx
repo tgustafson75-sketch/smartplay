@@ -217,7 +217,7 @@ export default function DrillDetail() {
         <Text style={[styles.sectionLabel, { color: colors.accent }]}>{t('drills.drill_detail.watch')}</Text>
         <TouchableOpacity
           onPress={() => router.push({
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             pathname: '/drill-video' as any,
             params: {
               url: video.url,

@@ -84,7 +84,7 @@ async function toDataUrl(uri: string | null, mime: string): Promise<string | nul
 /** SmartPlay logo as a data URL (bundled asset → base64). */
 async function logoDataUrl(): Promise<string | null> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+     
     const asset = Asset.fromModule(require('../assets/images/icon.png'));
     await asset.downloadAsync();
     return asset.localUri ? toDataUrl(asset.localUri, 'image/png') : null;

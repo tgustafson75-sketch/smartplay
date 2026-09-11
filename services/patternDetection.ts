@@ -289,7 +289,7 @@ export interface PatternShift {
  *   • api/briefing.ts (pre-round mention when shift active)
  */
 export function detectPatternShift(
-  rounds: Array<{ shots: Array<{ direction: string | null; club: string | null }> }>,
+  rounds: { shots: { direction: string | null; club: string | null }[] }[],
 ): PatternShift | null {
   if (rounds.length < 4) return null;
 

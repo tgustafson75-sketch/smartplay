@@ -519,16 +519,16 @@ export interface MultiReferenceInput {
   /** Named references to compare against. Each gets its own
    *  SwingComparison. UI typically renders them as a horizontal card
    *  carousel. */
-  references: Array<{
+  references: {
     label: string;
     estimate: PoseEstimate;
     kind?: CompareKind;
-  }>;
+  }[];
 }
 
 export interface MultiReferenceComparison {
   /** Per-reference results, sorted by overall_match desc. */
-  results: Array<{ label: string; comparison: SwingComparison }>;
+  results: { label: string; comparison: SwingComparison }[];
   /** Highest match across all references. UI uses this as the
    *  headline number ("83% match to your best swing"). */
   best_match: { label: string; overall: number } | null;

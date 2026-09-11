@@ -40,7 +40,7 @@ export interface SwingMetrics {
   axisCapture?: {
     peakGyro: { x: number; y: number; z: number };
     impactAccel: { x: number; y: number; z: number };
-    downswing: Array<{ t: number; x: number; y: number; z: number }>;
+    downswing: { t: number; x: number; y: number; z: number }[];
   };
 }
 

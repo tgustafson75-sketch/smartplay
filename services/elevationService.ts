@@ -104,7 +104,7 @@ export function getCachedPlaysLikeElevation(
 }
 
 /** Fire-and-forget warm of a pair of points so the sync reader has them next turn. */
-export function warmElevation(points: Array<{ lat: number; lng: number }>): void {
+export function warmElevation(points: { lat: number; lng: number }[]): void {
   for (const pt of points) {
     if (!Number.isFinite(pt?.lat) || !Number.isFinite(pt?.lng)) continue;
     if (cache.has(key(pt.lat, pt.lng))) continue;

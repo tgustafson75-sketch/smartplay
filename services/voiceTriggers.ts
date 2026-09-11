@@ -72,7 +72,7 @@ export function initVoiceTriggers(): () => void {
   }
   inited = true;
 
-  const subscriptions: Array<{ remove: () => void }> = [];
+  const subscriptions: { remove: () => void }[] = [];
 
   // 1. Bluetooth headset media-button tap → notifyEarbudTap.
   //    The native module emits 'onRemoteControl' with { type: 'play' |

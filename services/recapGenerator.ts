@@ -23,7 +23,7 @@ function shotResult(shot: ShotResult): MatchedShot['result'] {
   return 'unclassified';
 }
 
-const MARKER_ORDER: Array<MatchedShot['plan_marker']> = ['tee', 'approach', 'pin'];
+const MARKER_ORDER: MatchedShot['plan_marker'][] = ['tee', 'approach', 'pin'];
 
 function buildHoleComparison(
   holeNumber: number,
@@ -83,15 +83,15 @@ export async function generateRecap(
     // Phase U Component 1+2 — recap context enrichment.
     cageContext?: {
       recent_sessions_count: number;
-      primary_issues: Array<{ issue_name: string; severity: string; occurrence_count: number; session_date: string }>;
-      drill_recommendations?: Array<{ drill_name: string; target_issue: string }>;
+      primary_issues: { issue_name: string; severity: string; occurrence_count: number; session_date: string }[];
+      drill_recommendations?: { drill_name: string; target_issue: string }[];
       most_recent_session_date?: string | null;
     } | null;
     preRoundNotes?: string | null;
     // Phase V Component 2 — Arena practice context
     arenaContext?: {
       recent_sessions_count: number;
-      recent_sessions: Array<{ reason: string; points: number; date: string }>;
+      recent_sessions: { reason: string; points: number; date: string }[];
       most_recent_date?: string | null;
     } | null;
     // Phase BR Component 9 — active tutorial practice context, pre-formatted
@@ -142,7 +142,7 @@ export async function generateRecap(
     }));
 
   // Call /api/recap for Kevin summaries
-  let holeSummaries: Array<{ hole_number: number; summary: string }> = [];
+  let holeSummaries: { hole_number: number; summary: string }[] = [];
   let overallSummary = 'Round complete. Keep building.';
 
   try {
@@ -180,7 +180,7 @@ export async function generateRecap(
 
     if (res.ok) {
       const data = await res.json() as {
-        hole_summaries: Array<{ hole_number: number; summary: string }>;
+        hole_summaries: { hole_number: number; summary: string }[];
         overall_summary: string;
       };
       holeSummaries = data.hole_summaries ?? [];

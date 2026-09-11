@@ -81,10 +81,10 @@ export class TempoMetronome {
     if (this.ready) return;
     try {
       const tick = new Audio.Sound();
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+       
       await tick.loadAsync(require('../assets/audio/tempo/tick.mp3'));
       const tock = new Audio.Sound();
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+       
       await tock.loadAsync(require('../assets/audio/tempo/tock.mp3'));
       this.tick = tick;
       this.tock = tock;

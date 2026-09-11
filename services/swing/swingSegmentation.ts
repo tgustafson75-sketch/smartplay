@@ -30,13 +30,13 @@ import type { DetectedStrike } from './strikeDetector';
 export const MIN_SWING_SEP_SEC = 2.5;
 
 export function mergeSwingDetections(
-  raw: Array<{ timeSec: number; confidence: 'high' | 'low' }>,
+  raw: { timeSec: number; confidence: 'high' | 'low' }[],
   minSepSec: number = MIN_SWING_SEP_SEC,
-): Array<{ timeSec: number; confidence: 'high' | 'low' }> {
+): { timeSec: number; confidence: 'high' | 'low' }[] {
   if (raw.length <= 1) return raw;
   const sorted = [...raw].sort((a, b) => a.timeSec - b.timeSec);
-  const out: Array<{ timeSec: number; confidence: 'high' | 'low' }> = [];
-  let group: Array<{ timeSec: number; confidence: 'high' | 'low' }> = [sorted[0]];
+  const out: { timeSec: number; confidence: 'high' | 'low' }[] = [];
+  let group: { timeSec: number; confidence: 'high' | 'low' }[] = [sorted[0]];
   const flush = () => {
     const mid = group[Math.floor(group.length / 2)]; // median time ≈ impact
     const conf: 'high' | 'low' = group.some((g) => g.confidence === 'high') ? 'high' : 'low';
@@ -207,7 +207,7 @@ export function segmentsFromStrikes(
  * from the visual locator. Reuses segmentsFromStrikes for windowing/clamping.
  */
 export function segmentsFromVideoSwings(
-  swings: Array<{ timeSec: number; confidence: 'high' | 'medium' | 'low' }>,
+  swings: { timeSec: number; confidence: 'high' | 'medium' | 'low' }[],
   durationMs: number,
   opts?: SegmentOptions,
 ): SwingSegment[] {
@@ -249,7 +249,7 @@ export const STRIKE_VIDEO_TOLERANCE_MS = 600;
  */
 export function correlateStrikesWithVideo(
   strikes: DetectedStrike[],
-  videoSwings: Array<{ timeSec: number; confidence: 'high' | 'medium' | 'low' }>,
+  videoSwings: { timeSec: number; confidence: 'high' | 'medium' | 'low' }[],
   durationMs: number,
   opts?: SegmentOptions & { toleranceMs?: number; recoverUnmatchedHighConf?: boolean },
 ): SwingSegment[] {

@@ -142,11 +142,11 @@ export interface SwingMetric {
    *  1B (acoustic) and watch integration will populate this so a
    *  future "agreement boost" rule ("two sensors agree within 5% →
    *  confidence='high'") drops in without any schema change. */
-  sources?: Array<{
+  sources?: {
     source: MetricSource;
     value: number;
     confidence: number;
-  }>;
+  }[];
 }
 
 // 2026-05-24 — Map continuous confidence into the discrete bucket the
@@ -671,7 +671,7 @@ function clubSpeedFromPose(
   // being exactly right. Taking the max over both labels is handedness-agnostic and
   // can't regress right-handers (their left wrist already wins). [[left-handed-support]]
   const peakForWrist = (name: 'left_wrist' | 'right_wrist'): { peak: number; avgScore: number; count: number } | null => {
-    const w: Array<{ x: number; y: number; t: number; score: number }> = [];
+    const w: { x: number; y: number; t: number; score: number }[] = [];
     for (const f of frames) {
       const k = f.keypoints.find((kp) => kp.name === name);
       if (k && k.score >= 0.3) w.push({ x: k.x, y: k.y, t: f.timestampMs, score: k.score });

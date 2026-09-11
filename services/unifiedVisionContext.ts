@@ -58,7 +58,7 @@ export interface UnifiedHoleGeometry {
   greenBack: { lat: number; lng: number } | null;
   /** Hole hazards (water, bunkers) with their GPS centroids — caller
    *  can derive carry yardages by combining with player GPS. */
-  hazards: Array<{ kind: string; lat: number; lng: number }>;
+  hazards: { kind: string; lat: number; lng: number }[];
   /** Carry / front-middle-back yardages from current player position.
    *  Pre-computed here so consumers don't each re-derive the same
    *  spherical-distance math. */
@@ -192,7 +192,7 @@ export async function getUnifiedVisionContext(): Promise<UnifiedVisionContext> {
           greenFront: g.green_front ?? null,
           greenBack: g.green_back ?? null,
           hazards: Array.isArray(g.hazards)
-            ? (g.hazards as Array<Record<string, unknown>>)
+            ? (g.hazards as Record<string, unknown>[])
                 .map((h) => {
                   const loc = (h as { location?: { lat: number; lng: number } }).location;
                   const lat = typeof (h as { lat?: number }).lat === 'number' ? (h as { lat: number }).lat : loc?.lat;

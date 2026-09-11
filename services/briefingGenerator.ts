@@ -22,12 +22,12 @@ interface BriefingParams {
   // Phase V.7+ — last 1-3 cage sessions so the first-tee briefing can
   // reference recent practice ("let's see if Tuesday's driver work holds up")
   // instead of starting cold every round.
-  recentCageSessions?: Array<{
+  recentCageSessions?: {
     club: string;
     dominantMiss: string | null;
     rootCause: string | null;
     date: string;
-  }>;
+  }[];
   voiceGender?: VoiceGender;
   // 2026-05-21 — Fix Q: pass the active persona so the briefing renders
   // in the user's selected caddie's voice + system prompt. Without it the
@@ -36,7 +36,7 @@ interface BriefingParams {
   // Fix B2 — player's focus note for the round
   roundNotes?: string;
   // Fix M3 — course scorecard data
-  courseHoles?: Array<{ hole: number; par: number; yards: number }>;
+  courseHoles?: { hole: number; par: number; yards: number }[];
   courseRating?: number;
   courseSlope?: number;
   // Fix M4 — web-search course intelligence brief

@@ -233,7 +233,7 @@ export async function initWatchCaddieBridge(): Promise<boolean> {
      */
     await acquireWatchDataLayer('caddie');
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     emitter = new NativeEventEmitter(NativeMod as any);
 
     // Outbound: every watchBridge send now ships to the watch on one path.

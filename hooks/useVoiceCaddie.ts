@@ -492,7 +492,7 @@ function buildPreRoundShortcutIntent(transcript: string): { intent_type: 'open_t
   const familyHomeCourse = usePlayerProfileStore.getState().homeCourse?.trim() ?? '';
 
   const toolText = stripLeadIn(cleaned.replace(/^(?:open|show|pull up|go to|launch|bring up|take me to)\s+(?:me\s+)?/i, ''));
-  const toolMatchers: Array<{ tool_name: string; aliases: string[] }> = [
+  const toolMatchers: { tool_name: string; aliases: string[] }[] = [
     { tool_name: 'smartvision', aliases: ['smart vision', 'smartvision', 'vision', 'analyze the hole', 'read the hole'] },
     { tool_name: 'smartfinder', aliases: ['smart finder', 'smartfinder', 'finder', 'rangefinder', 'course map', 'hole map', 'show me the course', 'show the course'] },
     // 2026-06-29 (Tim — "natural caddie, not a prompting system") — REMOVED the vague
@@ -737,7 +737,7 @@ export const useVoiceCaddie = ({
         console.log('[fillerLibrary] init failed', e);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   // 2026-06-10 — Warm the voice-pipeline Lambdas when a voice surface mounts AND
@@ -795,7 +795,7 @@ export const useVoiceCaddie = ({
       recordingRef.current = null;
       if (rec) { void rec.stopAndUnloadAsync().catch(() => undefined); }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   const {

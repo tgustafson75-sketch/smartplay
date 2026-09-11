@@ -68,7 +68,7 @@ function handleWatchCommand(command: WatchCommand): void {
 // ─── Lifecycle ───────────────────────────────────────────────────────────
 
 let started = false;
-const unsubs: Array<() => void> = [];
+const unsubs: (() => void)[] = [];
 
 /**
  * Wire the orchestrator. Idempotent — calling twice is a no-op. Called

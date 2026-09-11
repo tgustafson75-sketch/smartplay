@@ -1604,9 +1604,9 @@ export function getPersonaAnswer(persona: Persona, question: string, context?: R
  * top entries into the coach's system-prompt knowledge block without
  * collapsing to a single answer (the brain riffs across them).
  */
-export function findRelevantPersonaKBEntries(question: string, limit = 3): Array<{ entry: PersonaKBEntry; score: number }> {
+export function findRelevantPersonaKBEntries(question: string, limit = 3): { entry: PersonaKBEntry; score: number }[] {
   if (!question || question.length < 3) return [];
-  const scored: Array<{ entry: PersonaKBEntry; score: number }> = [];
+  const scored: { entry: PersonaKBEntry; score: number }[] = [];
   for (const entry of PERSONA_KB) {
     const score = scoreMatch(question, entry.questionPatterns);
     if (score >= 40) scored.push({ entry, score });

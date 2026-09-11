@@ -110,7 +110,7 @@ export async function clearAllForCourse(courseId: string): Promise<void> {
   notifyAll();
 }
 
-export function listOverridesForCourse(courseId: string): Array<{ hole: number; override: TeeOverride }> {
+export function listOverridesForCourse(courseId: string): { hole: number; override: TeeOverride }[] {
   if (!hydrated) void rehydrate().then(() => notifyAll());
   if (!cached) return [];
   const byHole = cached[courseId];

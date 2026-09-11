@@ -21,6 +21,7 @@
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { getApiBaseUrl } from './apiBase';
+import type { RoundListImportResult } from './roundImportRules';
 
 // 2026-07-06 (audit) — read at fetch time, not module load: a module-scope
 // snapshot would defeat the mid-session dual-host failover (see apiBase.ts).
@@ -219,7 +220,6 @@ export {
   normalizeImportedList,
   buildListPersistInput,
 } from './roundImportRules';
-import type { RoundListImportResult } from './roundImportRules';
 
 export type ParseListResult =
   | { kind: 'ok'; result: RoundListImportResult }

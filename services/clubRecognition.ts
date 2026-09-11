@@ -24,6 +24,10 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { track } from './analytics';
 
+// The pure bag-reconcile logic lives in its own dependency-free module (testable in node).
+import { reconcileClubWithBag } from './clubBagReconcile';
+import { digitizeNumberWords, normalizeClub } from './clubNormalize';
+
 // Catalog matches the legacy CLUBS array in app/practice-session/index.tsx so values
 // stored in cageStore.activeSession.club / clubSegments[].club_id line up
 // with what the manual selector grid writes today. New tokens added for
@@ -37,10 +41,6 @@ export type ClubId =
   | 'unknown';
 
 export type ClubType = 'iron' | 'wedge' | 'hybrid' | 'wood' | 'driver' | 'putter' | 'unknown';
-
-// The pure bag-reconcile logic lives in its own dependency-free module (testable in node).
-import { reconcileClubWithBag } from './clubBagReconcile';
-import { digitizeNumberWords, normalizeClub } from './clubNormalize';
 export { reconcileClubWithBag } from './clubBagReconcile';
 
 export interface ClubRecognitionResult {

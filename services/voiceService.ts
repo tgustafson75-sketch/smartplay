@@ -1629,7 +1629,7 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
 // pronounced correctly because the -ed/-ing/-s endings cue the verb
 // form for the TTS model. If we ever hit a heteronym beyond "record",
 // add it to HETERONYM_FIXES.
-const HETERONYM_FIXES: ReadonlyArray<[RegExp, string]> = [
+const HETERONYM_FIXES: readonly [RegExp, string][] = [
   // record (verb) → capture. \b word-boundary, case-insensitive,
   // skip the inflected forms.
   [/\brecord\b(?!ed|ing|s)/gi, 'capture'],

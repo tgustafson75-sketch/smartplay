@@ -79,7 +79,7 @@ const SLOT_SET: ReadonlySet<string> = new Set(ALL_CADDIE_SLOTS);
  * runtime can render an honest "clip not ready" state instead of
  * crashing on a missing require path.
  */
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const KEVIN_CLIPS: Record<CaddieSlot, number | null> = {
   intro:     require('../assets/caddie/kevin/intro.mp4'),
   bestround: require('../assets/caddie/kevin/bestround.mp4'),
