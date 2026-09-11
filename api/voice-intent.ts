@@ -70,6 +70,14 @@ const INTENT_TYPE_ENUM = [
   // 130", "put my driver at 250" — reached the cloud classifier, which had no such intent to
   // emit, and fell to conversational. The caddie agreed pleasantly and stored nothing.
   'set_club_distance',
+  /**
+   * 2026-09-10 (Tim: "I am tired of half done work") — the bag had no exit. A store sweep found
+   * clubBagStore.removeClub and clearBag called by NOTHING, while three paths ADD (the guided
+   * camera scan twice, plus app/bag-scan). A club the recogniser got wrong stayed in the bag
+   * permanently, feeding the fit profile, the practice picker and club recommendation, with
+   * reinstalling the app as the only remedy.
+   */
+  'remove_club',
 ] as const;
 
 const VOICE_INTENT_SCHEMA: StructuredSchema = {
@@ -421,6 +429,19 @@ Available intents:
    parameters: {}
    Examples: "show clubs", "club menu", "switch club", "change club", "open the club picker"
    Use this when the user wants to PICK from a list (vs club_change which already names a specific club).
+
+15d. remove_club — User wants a club TAKEN OUT of their bag. The bag is built by camera scan, so
+   this is how a misrecognised club gets corrected. Only claim an explicit removal.
+   parameters: { club_phrase: string }
+   Examples:
+   - "take the 7 wood out of my bag" -> { club_phrase: "7 wood" }
+   - "remove the 3 hybrid from my bag" -> { club_phrase: "3 hybrid" }
+   - "I don't carry a 2 iron" -> { club_phrase: "2 iron" }
+   - "get rid of the 60 degree" -> { club_phrase: "60 degree" }
+   Boundaries: a DISTANCE statement is set_club_distance (#15c) — "my 7 iron goes 165" changes a
+   yardage, not the bag's contents. A shot report is log_shot (#16). "I didn't hit the 7 iron" is
+   about one swing and is NOT a removal. Do NOT emit this for "take the driver out" said as club
+   SELECTION on a tee — removal talks about the bag, selection talks about the shot.
 
 15c. set_club_distance — User is TELLING the caddie how far a club of theirs goes, as a standing
    fact about their bag. Declarative, present tense, one club, one number. This REGISTERS the

@@ -2493,7 +2493,27 @@ export const useRoundStore = create<RoundState>()(
         // 2026-08-09 (club-use logic) — the caddie's pending club REC clears with the hole too: advice
         // for the approach on 5 must never attribute a club to a shot on 6 (the shot-club resolver
         // arbitrates declared-vs-advised by recency; hole change hard-expires the advice side).
-        const clearStated = prevHole !== clamped ? { userStatedYardage: null, pendingKevinRec: null } : {};
+        /**
+         * 2026-09-10 — `pendingLieAnalysis` EXPIRES WITH THE HOLE TOO.
+         *
+         * This cleared the stated yardage and the pending club advice on a hole change for exactly
+         * the reason stated above — a number for the approach on 5 must not attribute to a shot on
+         * 6 — and then left the LIE READ behind. `clearPendingLieAnalysis` exists for this and was
+         * called by nothing, anywhere (found by a store-wide orphan sweep).
+         *
+         * The leak is worse than the other two because the field is PERSISTED (see partialize) and
+         * carries no timestamp. Analyse a lie, then don't log a shot — which is the common case,
+         * since the read is the point — and "ball sitting down in thick rough" is still in the
+         * caddie payload on hole 12, and gets stamped onto whatever shot is eventually logged
+         * (`lie_analysis: shot.lie_analysis ?? s.pendingLieAnalysis`). It corrupts the live advice
+         * AND the shot history. Only startRound and endRound ever cleared it.
+         *
+         * A lie is a fact about one ball in one place. It cannot outlive the hole.
+         * [[orphans-are-live-bugs-not-dead-code]] [[a-field-that-is-sometimes-a-placeholder]]
+         */
+        const clearStated = prevHole !== clamped
+          ? { userStatedYardage: null, pendingKevinRec: null, pendingLieAnalysis: null }
+          : {};
         set({ currentHole: clamped, currentYardage: holeData?.distance ?? null, ...clearStated });
         if (prevHole !== clamped) {
           console.log(`[path2:round] hole transition prev=${prevHole} next=${clamped}`);
@@ -3008,6 +3028,20 @@ export const useRoundStore = create<RoundState>()(
           return {
             shots: [...backfilled, enriched],
             pendingLieAnalysis: enriched.lie_analysis ? null : s.pendingLieAnalysis,
+            /**
+             * 2026-09-10 — A STATED YARDAGE IS SPENT BY THE SHOT IT WAS STATED FOR.
+             *
+             * The field's own contract (see its declaration) reads "until next shot logged OR next
+             * hole declared". The hole half was enforced in setCurrentHole; the SHOT half never
+             * was — logShot did not touch it. So "I'm 142" before the approach stayed the Tier 3
+             * anchor at `confidence: 'high'`, beating live GPS, for the NEXT shot on the same hole
+             * too. Chip from 15 yards after a stated 142 and the caddie was still clubbing off 142.
+             * Bounded by the 5-minute TTL, which is why it reads as intermittent rather than broken.
+             *
+             * A number the player gave for one shot describes that shot. Once it is logged, the
+             * live tier is the honest owner again. [[two-owners-is-the-root-cause]]
+             */
+            userStatedYardage: null,
             // 2026-07-25 — snapshot for voice "undo": remove THIS shot by id. (A penalty
             // is logShot + logScore, so logScore's snapshot overwrites this — "undo" after
             // a penalty reverts the score bump, which is the sensible thing to hear.)
