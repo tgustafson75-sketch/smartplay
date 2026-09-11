@@ -70,37 +70,16 @@ jobs:
           echo "head=$HEAD" >> "$GITHUB_OUTPUT"
           echo "Comparing $BASE...$HEAD"
 
-      - name: Lint for hardcoded user-facing strings
+      - name: Lint for hardcoded user-facing strings (changed lines only)
+        env:
+          I18N_BASE: ${{ steps.range.outputs.base }}
+          I18N_HEAD: ${{ steps.range.outputs.head }}
         run: |
           set -euo pipefail
-          if [ "$LINT_SCOPE" = "all" ]; then
-            echo "Scope: whole repo"
-            npx eslint "app/**/*.tsx" "components/**/*.tsx" --rule '{}' 2>/dev/null || true
-            npx eslint "app/**/*.tsx" "components/**/*.tsx"
-            exit $?
-          fi
-
-          BASE='${{ steps.range.outputs.base }}'
-          HEAD='${{ steps.range.outputs.head }}'
-          # Added/Copied/Modified/Renamed — never Deleted, whose path no longer exists to lint.
-          #
-          # `:(glob)` is REQUIRED, not stylistic. Under git's default wildmatch, `app/**/*.tsx`
-          # matches only NESTED files — it silently skips app/settings.tsx and app/_layout.tsx, i.e.
-          # every top-level screen, including the one holding the largest concentration of hardcoded
-          # strings in the app. Verified by diffing the same range both ways: the default form
-          # returned 3 files where `:(glob)` returned 5. A guard that reads its own empty output as
-          # success is the failure this whole release is about.
-          FILES="$(git diff --name-only --diff-filter=ACMR "$BASE" "$HEAD" \
-            -- ':(glob)app/**/*.tsx' ':(glob)components/**/*.tsx' || true)"
-
-          if [ -z "$FILES" ]; then
-            echo "No screen files changed — nothing for this guard to check."
-            exit 0
-          fi
-
-          echo "--- linting changed screen files ---"
-          echo "$FILES"
-          echo "$FILES" | tr '\n' '\0' | xargs -0 npx eslint
+          # Same script the pre-commit hook runs, so CI and the hook cannot disagree about what
+          # counts as a new violation. Pre-existing backlog in a touched file is not this push's
+          # fault; a newly ADDED hardcoded string is, wherever it lands.
+          node scripts/i18n-changed-lines.mjs
 
       - name: Explain a failure
         if: failure()

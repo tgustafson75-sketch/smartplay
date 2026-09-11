@@ -38,6 +38,34 @@ const BASELINE = join(root, '.ota-native-baseline.json');
  * actually authored in.
  */
 const NATIVE_DIRS = ['android-native', 'ios-native', 'plugins', 'targets', 'wear-os-app', 'ios', 'android', 'patches'];
+
+/**
+ * 2026-09-11 — DIRECTORIES .easignore EXCLUDES CANNOT REACH A BINARY, SO THEY MUST NOT MOVE THE
+ * FINGERPRINT.
+ *
+ * `ios/` and `android/` are prebuild OUTPUT in this CNG project, and `.easignore` lines 35-36 keep
+ * them out of the tarball uploaded to EAS — the build server regenerates them from app.json and
+ * plugins/. They existed locally only as leftovers from a `expo-updates fingerprint:generate` run.
+ *
+ * Deleting those leftovers — a pure cleanup that cannot change any artifact — moved this hash and
+ * refused a prose-only OTA. That is worse than a false alarm: the only documented ways past it are
+ * "ship a store build" or "re-record the baseline", and re-recording for a reason the note does not
+ * cover is how a guard quietly becomes a rubber stamp. So the fingerprint now covers exactly what
+ * can reach the build: anything .easignore excludes is skipped.
+ *
+ * Read from .easignore rather than hardcoded, so the two cannot drift.
+ */
+const easIgnored = (() => {
+  try {
+    return readFileSync(join(root, '.easignore'), 'utf8')
+      .split('\n').map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('#'))
+      .map((l) => l.replace(/\/$/, ''))
+      .filter(Boolean);
+  } catch { return []; }
+})();
+const isExcludedFromBuild = (relPath) =>
+  easIgnored.some((pat) => relPath === pat || relPath.startsWith(`${pat}/`));
 const NATIVE_FILES = ['app.json', 'app.config.js', 'app.config.ts', 'eas.json'];
 /** Build output and caches are derived, not authored — hashing them would make every run differ. */
 const SKIP_DIRS = new Set(['build', 'node_modules', '.gradle', 'Pods', 'DerivedData', '.cxx', 'generated']);
@@ -61,6 +89,7 @@ function walk(dir, out) {
 function fingerprint() {
   const files = [];
   for (const d of NATIVE_DIRS) {
+    if (isExcludedFromBuild(d)) continue;   // .easignore keeps it out of the build entirely
     const abs = join(root, d);
     if (existsSync(abs) && statSync(abs).isDirectory()) walk(abs, files);
   }

@@ -1213,8 +1213,8 @@ export default function SmartMotion() {
    * `record_swing` voice tool and the cage all arrive at this screen, and an allowlist of entry
    * points would have to be right five times. One screen, every door.
    *
-   * INERT TODAY. SUBSCRIPTIONS_ENABLED is false, so canAccess returns true and this never fires —
-   * it exists so the switch does what its own documentation promises when it is finally thrown.
+   * Whether this fires depends on the switch in services/featureAccess; that value is pinned by
+   * __tests__/logic/edition-matrix.test.ts and is deliberately not restated here.
    */
   useEffect(() => {
     if (canAccess('cage_mode', profile.subscription_status)) return;

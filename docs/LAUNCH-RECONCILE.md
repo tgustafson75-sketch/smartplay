@@ -161,6 +161,35 @@ report rests on the direct build-commit diffs above, not on that baseline.
 
 ## 2. runtimeVersion reconciliation — **PASS**
 
+> ## ⚠️ READ THIS BEFORE YOU "IMPROVE" runtimeVersion ⚠️
+>
+> **This app is OTA-capable purely because `runtimeVersion` is the literal string `"1.0.0"`.**
+>
+> `{"policy": "fingerprint"}` is the modern Expo default, and sooner or later someone — Tim, a future
+> session, a well-meaning PR — will change it to that because it looks more correct. **Every OTA
+> after that change would publish successfully and reach zero users.**
+>
+> Why, precisely: Expo delivers an update to a binary only when the runtimeVersions are EQUAL. Under
+> a fingerprint policy that value becomes a hash of the native surface. The store binaries were built
+> at fingerprint `63e11599…` (iOS 26). HEAD's fingerprint has **already moved** — measured
+> 2026-09-11, it is `de36e437…`, four sources different (§1). So the first OTA under a fingerprint
+> policy would be published for `de36e437…`, every installed phone would ask for `63e11599…`, and the
+> server would correctly answer *no update available*.
+>
+> `eas update` prints **"Published!"** with a green tick. The dashboard shows the update. Nothing
+> errors. The only symptom is users reporting a bug you believe you already fixed.
+>
+> **Changing runtimeVersion is a STORE RELEASE, not an OTA.** Every existing install stops receiving
+> updates the moment it changes, and only a new binary from the store resumes them.
+>
+> `app.json` is strict JSON and cannot carry a comment, so the warning lives where it will actually
+> be seen: **`__tests__/regression/runtimeversion-must-stay-a-literal.test.ts`** fails the build if
+> the literal is replaced, the policy shape appears, the updates URL changes, or
+> `fallbackToCacheTimeout` moves off 0. Break-tested — it fails on `{"policy":"fingerprint"}`.
+> If that test ever goes red, do not update the expected value.
+
+
+
 | Item | Value | Source |
 |---|---|---|
 | Policy | **none — a literal string, not a policy object** | `app.json` → `expo.runtimeVersion` |
@@ -375,10 +404,19 @@ permission, entitlement, SDK level, icon or scheme change. The only native-path 
 metadata, a submission-config field, and an Android-only constant already present in the Android
 bundle.
 
-**Publish to branch `production`.** Preview and production must be published sequentially, never in
-parallel. Prefer `npm run ota:preview` / `npm run ota:production` over a bare `eas update` — those
-scripts run `scripts/ota-preflight.mjs` first, which refuses an OTA whose native fingerprint moved
-while `runtimeVersion` stayed `1.0.0`. A bare `npx eas update` skips that check entirely.
+**Publish to branch `production`, and publish it with `npm run ota:production`. Nothing else.**
+
+This is a standing rule, not a preference (Tim, 2026-09-11: *"npm run ota:production only"*). Those
+npm scripts run `scripts/ota-preflight.mjs` first, which refuses an OTA whose native fingerprint
+moved while `runtimeVersion` stayed `1.0.0` — the case that crashes the store build on launch, where
+it can no longer download the fix. **A bare `npx eas update` skips that check entirely.** It was
+skipped once already, on 2026-09-11, against a build live in 176 countries; the update happened to be
+safe, but nothing verified that until afterwards.
+
+Preview and production are published SEQUENTIALLY, never in parallel.
+
+After a STORE BUILD ships, run `npm run ota:baseline` to re-record the native fingerprint — that is
+the moment the installed shell catches up with the source.
 
 **Two things this verdict does not cover:**
 
