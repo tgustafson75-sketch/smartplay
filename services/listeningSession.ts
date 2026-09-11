@@ -46,7 +46,7 @@ import { resolvePendingCourseUtterance } from './pendingDisambiguation';
 import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 import type { AppContext, VoiceIntent } from '../types/voiceIntent';
 import { getApiBaseUrl, isConnectionWarmed, getConnectionEvidence } from './apiBase';
-import { isAwaitingPutts, awaitingPuttsHole, parsePuttAnswer, clearAwaitingPutts } from './pendingPuttAsk';
+import { tryAnswerPendingPutts } from './pendingPuttAsk';
 import { isFlagEnabled } from '../store/flagStore';
 
 // 2026-07-25 (Tim — "first ask errors every time") — cold-aware brain timeout, mirroring useVoiceCaddie.
@@ -1182,23 +1182,18 @@ async function openSession() {
      * classification, so without this a bare "two" here becomes a score exactly as it did on the
      * tap path. Same shared state and strict parser as the on-screen mic.
      */
-    if (isAwaitingPutts()) {
-      const answered = parsePuttAnswer(utterance);
-      if (answered !== null) {
-        const rs = useRoundStore.getState();
-        rs.logPutts(awaitingPuttsHole() ?? voicePuttsHole(rs), answered);
-        clearAwaitingPutts();
-        const line = `Got it — ${answered} putt${answered !== 1 ? 's' : ''}.`;
+    {
+      const answered = tryAnswerPendingPutts(utterance);
+      if (answered) {
         if ((state as SessionState) === 'thinking') setSessionStateMirror('responding');
         if (settings.voiceEnabled) {
           await stopSpeaking().catch(() => {});
-          await speak(line, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
+          await speak(answered.line, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
             .catch((e) => console.log('[listeningSession] putt-answer speak failed', e));
         }
         setSessionStateMirror('idle');
         return;
       }
-      clearAwaitingPutts();
     }
 
     let intent: VoiceIntent | null = precheckLocalIntent(utterance);

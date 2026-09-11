@@ -83,18 +83,29 @@ describe('answering "two" means two putts', () => {
 });
 
 describe('EVERY voice surface consults it — one path covered is how this bug survived', () => {
+  // 2026-09-11 — the intercept itself is now ONE function (pendingPuttAsk.tryAnswerPendingPutts).
+  // It used to be hand-copied per surface, and hooks/useCaddieTabMic never received a copy — which
+  // is why "bogey / how many putts / 2" still came back an eagle a month after the "fix".
   it('the on-screen mic checks BEFORE any classification', () => {
     const src = read('hooks/useVoiceCaddie.ts');
-    const intercept = src.indexOf('if (isAwaitingPutts()) {');
+    const intercept = src.indexOf('tryAnswerPendingPutts(transcript)');
     const bypasses = src.indexOf('const bypass = checkBypasses(transcript);');
     expect(intercept).toBeGreaterThan(-1);
     // Bypasses, the local precheck and the classifier will all read a bare number as a score.
     expect(intercept).toBeLessThan(bypasses);
   });
 
+  it('the caddie-tab mic checks before it reaches the brain — the path that never had one', () => {
+    const src = read('hooks/useCaddieTabMic.ts');
+    const intercept = src.indexOf('tryAnswerPendingPutts(transcript)');
+    const brain = src.indexOf('const turn = await askCaddie({');
+    expect(intercept).toBeGreaterThan(-1);
+    expect(intercept).toBeLessThan(brain);
+  });
+
   it('the earbud / global-mic path checks before ITS classification', () => {
     const src = read('services/listeningSession.ts');
-    const intercept = src.indexOf('if (isAwaitingPutts()) {');
+    const intercept = src.indexOf('tryAnswerPendingPutts(utterance)');
     const precheck = src.indexOf('let intent: VoiceIntent | null = precheckLocalIntent(utterance);');
     expect(intercept).toBeGreaterThan(-1);
     expect(intercept).toBeLessThan(precheck);
@@ -105,7 +116,8 @@ describe('EVERY voice surface consults it — one path covered is how this bug s
     // The original: /putt/i.test(lastKevinText) && /\?/.test(lastKevinText) — a second definition of
     // "is a putt question open", which is exactly how one path got fixed and the rest didn't.
     expect(src).not.toContain('const awaitingPutts = /putt/i.test(lastKevinText)');
-    expect(src.split('if (isAwaitingPutts()) {').length - 1).toBeGreaterThanOrEqual(2);
+    // Both the follow-up loop and the primary path route through the shared owner.
+    expect(src.split('tryAnswerPendingPutts(').length - 1).toBeGreaterThanOrEqual(2);
   });
 
   it('both places the caddie ASKS mark the question open', () => {
@@ -118,9 +130,16 @@ describe('EVERY voice surface consults it — one path covered is how this bug s
   });
 
   it('a non-answer clears it too — the player has moved on', () => {
-    const src = read('hooks/useVoiceCaddie.ts');
-    const start = src.indexOf('if (isAwaitingPutts()) {');
-    expect(src.slice(start, start + 2200)).toContain('clearAwaitingPutts();');
+    // Now a property of the shared owner rather than of each copy.
+    const src = read('services/pendingPuttAsk.ts');
+    const fn = src.slice(src.indexOf('export function tryAnswerPendingPutts'));
+    expect(fn.slice(0, fn.indexOf('\n}'))).toContain('clearAwaitingPutts();');
+  });
+
+  it('the caddie asking in his OWN words opens the question, from one place', () => {
+    // markAwaitingPutts used to be reachable only through logScoreHandler / logPuttsHandler, so a
+    // brain-worded "how many putts?" left the next bare number to be read as a score.
+    expect(read('services/caddieBrain.ts')).toContain('noteCaddieAskedForPutts(text');
   });
 });
 

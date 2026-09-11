@@ -10239,9 +10239,16 @@ check('Logic universal: voice yardage + putts + swing-caddie match every other p
       // #2 putts land on the SCORED hole, not the nav hole. 2026-08-12 — now stronger: the hole is
       // captured when the caddie ASKS (awaitingPuttsHole), with voicePuttsHole as the fallback, so an
       // answer given after a hole change still lands where the score did.
-      /awaitingPuttsHole\(\) \?\? voicePuttsHole\(rs\)/.test(vc) &&
+      // 2026-09-11 — this hole choice moved into the shared intercept with everything else, so it is
+      // made ONCE instead of per surface.
+      /awaitingPuttsHole\(\) \?\? voicePuttsHole\(rs\)/.test(read('services/pendingPuttAsk.ts')) &&
       // ...and the answer is intercepted on EVERY surface before anything can read it as a score.
-      /isAwaitingPutts\(\)/.test(vc) && /isAwaitingPutts\(\)/.test(read('services/listeningSession.ts')) &&
+      // 2026-09-11 — the intercept moved into pendingPuttAsk.tryAnswerPendingPutts, ONE owner, after
+      // the caddie-tab mic was found never to have received a hand-copied one. Assert every
+      // transcript path calls the owner rather than that each carries its own isAwaitingPutts().
+      /tryAnswerPendingPutts\(/.test(vc) &&
+      /tryAnswerPendingPutts\(/.test(read('services/listeningSession.ts')) &&
+      /tryAnswerPendingPutts\(/.test(read('hooks/useCaddieTabMic.ts')) &&
       // 2026-09-01 — the 'cage' pillar is now 'practice'. It covers ALL swing work, not a venue.
       /getActiveCaddieForPillar\('practice'\)/.test(sm) &&                      // #3 narration = active caddie
       /caddie_name: analysisCaddie/.test(sm) && !/caddie_name: caddiePersonality/.test(sm)

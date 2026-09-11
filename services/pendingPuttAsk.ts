@@ -86,3 +86,53 @@ export function parsePuttAnswer(transcript: string): number | null {
 
   return null;
 }
+
+/**
+ * 2026-09-11 (Tim, ~50th report: "I say I got a bogey, it asks how many putts, I say 2, and it still
+ * says eagle") — ONE INTERCEPT, NOT THREE COPIES.
+ *
+ * The 08-12 fix moved "a putt question is open" out of a loop-local variable into this module, then
+ * hand-copied the INTERCEPT into two of the three transcript paths. hooks/useCaddieTabMic — the
+ * caddie-tab mic, the surface he uses most — never got one, so a bare "2" answered there went
+ * straight to the score parser: a 2 on a par 4 is an eagle, and it overwrote the bogey he had just
+ * logged correctly. Two copies kept in step by hand is how the third one gets forgotten.
+ *
+ * The whole decision lives here now. A surface calls this before classifying anything and either
+ * gets back the line to speak (the answer was claimed and logged) or null (not an answer — fall
+ * through, so "no, I made a five" still corrects the caddie).
+ */
+export function tryAnswerPendingPutts(transcript: string): { line: string; putts: number; hole: number } | null {
+  if (!isAwaitingPutts()) return null;
+  const putts = parsePuttAnswer(transcript);
+  if (putts === null) {
+    // The question was open and this was NOT an answer to it. Close it — a bare number three turns
+    // later is a score again, which is what it almost certainly is.
+    clearAwaitingPutts();
+    return null;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const rs = (require('../store/roundStore') as typeof import('../store/roundStore')).useRoundStore.getState();
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { voicePuttsHole } = require('../store/voiceScoringHole') as typeof import('../store/voiceScoringHole');
+  const hole = awaitingPuttsHole() ?? voicePuttsHole(rs);
+  rs.logPutts(hole, putts);
+  clearAwaitingPutts();
+  return { line: `Got it — ${putts} putt${putts !== 1 ? 's' : ''}.`, putts, hole };
+}
+
+/**
+ * 2026-09-11 — THE CADDIE ASKING IN HIS OWN WORDS COUNTS AS ASKING.
+ *
+ * markAwaitingPutts was called from logScoreHandler and logPuttsHandler only. When the BRAIN asked
+ * — "nice, how many putts on that one?" — nothing marked the question open, so the next bare number
+ * was a score again. That is the same defect the 08-12 fix was written for, reached by a different
+ * door. Every surface that speaks a caddie reply passes it through here.
+ */
+const PUTT_QUESTION = /\bputt(s|ed)?\b[^.?!]*\?|\?[^.?!]*\bputt(s|ed)?\b|how many putts/i;
+
+export function noteCaddieAskedForPutts(reply: string | null | undefined, hole: number | null): void {
+  const text = String(reply ?? '');
+  if (!text.includes('?')) return;
+  if (!PUTT_QUESTION.test(text)) return;
+  markAwaitingPutts(hole);
+}

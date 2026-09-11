@@ -46,7 +46,7 @@ import type { ToolAction } from '../types/toolAction';
 import { useSmartVision } from '../contexts/SmartVisionContext';
 import { useKevinPresence } from '../contexts/KevinPresenceContext';
 import { useRoundStore, voicePuttsHole } from '../store/roundStore';
-import { isAwaitingPutts, awaitingPuttsHole, parsePuttAnswer, clearAwaitingPutts } from '../services/pendingPuttAsk';
+import { tryAnswerPendingPutts } from '../services/pendingPuttAsk';
 import { resolveYardage } from '../services/yardageResolver';
 import { useSettingsStore } from '../store/settingsStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
@@ -1363,23 +1363,18 @@ export const useVoiceCaddie = ({
          * "putt". Two copies of "is a putt question open?" is how the original fix ended up covering
          * one path — this one — and missing every other. [[no-half-fixes-enforce-every-surface]]
          */
-        if (isAwaitingPutts()) {
-          const parsed = parsePuttAnswer(trimmed);
-          if (parsed !== null) {
-            const rs = useRoundStore.getState();
-            rs.logPutts(awaitingPuttsHole() ?? voicePuttsHole(rs), parsed);
-            clearAwaitingPutts();
+        {
+          const answered = tryAnswerPendingPutts(trimmed);
+          if (answered) {
             recordUserTurn(trimmed);
-            const confirmLine = `Got it — ${parsed} putt${parsed !== 1 ? 's' : ''}.`;
-            onResponseReceived(confirmLine);
-            recordKevinTurn(confirmLine);
+            onResponseReceived(answered.line);
+            recordKevinTurn(answered.line);
             wrappedOnVoiceStateChange('speaking');
             await stopSpeaking();
-            void speakDeviceNotice(confirmLine, language, voiceGender);
+            void speakDeviceNotice(answered.line, language, voiceGender);
             wrappedOnVoiceStateChange('idle');
             return;
           }
-          clearAwaitingPutts();
         }
 
         // 2026-07-27 — the caddie just asked WHICH of several matching courses (voice quick-round
@@ -2301,27 +2296,19 @@ export const useVoiceCaddie = ({
        * explicit putt phrase is claimed, so "no, I made a five" still falls through and the player
        * can always correct the caddie. [[no-half-fixes-enforce-every-surface]]
        */
-      if (isAwaitingPutts()) {
-        const answered = parsePuttAnswer(transcript);
-        if (answered !== null) {
-          const rs = useRoundStore.getState();
-          const hole = awaitingPuttsHole() ?? voicePuttsHole(rs);
-          rs.logPutts(hole, answered);
-          clearAwaitingPutts();
+      {
+        const answered = tryAnswerPendingPutts(transcript);
+        if (answered) {
           recordUserTurn(transcript);
-          const line = `Got it — ${answered} putt${answered !== 1 ? 's' : ''}.`;
-          onResponseReceived(line);
-          recordKevinTurn(line);
+          onResponseReceived(answered.line);
+          recordKevinTurn(answered.line);
           wrappedOnVoiceStateChange('speaking');
           await stopSpeaking();
-          await speakResponse(line);
+          await speakResponse(answered.line);
           wrappedOnVoiceStateChange('idle');
           isProcessingRef.current = false;
           return;
         }
-        // Anything that isn't a putt count means the moment has passed — a player who answers a
-        // different question has moved on, and leaving the flag up would swallow their next number.
-        clearAwaitingPutts();
       }
 
       const bypass = checkBypasses(transcript);

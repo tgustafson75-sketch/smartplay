@@ -104,6 +104,24 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
     // reason the caddie used to lose the thread when the player switched from earbud to typing.
     appendConversationTurn(extras.message, text);
 
+    /**
+     * 2026-09-11 — THE CADDIE ASKING IN HIS OWN WORDS COUNTS AS ASKING.
+     *
+     * markAwaitingPutts was called only from logScoreHandler and logPuttsHandler, so when the BRAIN
+     * asked — "nice, how many putts on that one?" — nothing marked the question open and the next
+     * bare "2" was read as a score again. On a par 4 that is an eagle over a bogey he just gave
+     * correctly, which is the exact report, reached by a different door.
+     *
+     * It lives HERE rather than at the five askCaddie call sites, because hand-copying this is what
+     * left the caddie-tab mic without a putt intercept for a month. One brain, one place.
+     */
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { noteCaddieAskedForPutts } = require('./pendingPuttAsk') as typeof import('./pendingPuttAsk');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const rs = (require('../store/roundStore') as typeof import('../store/roundStore')).useRoundStore.getState();
+      noteCaddieAskedForPutts(text, rs.isRoundActive ? rs.currentHole : null);
+    } catch { /* never let this affect the turn */ }
     return { text, audioBase64: raw.audioBase64 ?? null, toolActions };
   } catch {
     return null;

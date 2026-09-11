@@ -110,6 +110,30 @@ export function useCaddieTabMic({
     // even when NO tool fires. Best-effort; never blocks the turn.
     try { if (transcript.trim()) useConversationLog.getState().logUser(transcript.trim(), Date.now()); } catch { /* CNS capture is best-effort */ }
 
+    /**
+     * 2026-09-11 — THE OPEN PUTT QUESTION, on this surface too.
+     *
+     * This is the third transcript path and the only one the 08-12 fix never reached, which is why
+     * "bogey" → "how many putts?" → "2" still came back an eagle: a bare 2 went to the score parser
+     * and overwrote the score he had just given correctly. Runs before the brain, like the other two.
+     */
+    {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { tryAnswerPendingPutts } = require('../services/pendingPuttAsk') as typeof import('../services/pendingPuttAsk');
+      const answered = tryAnswerPendingPutts(transcript);
+      if (answered) {
+        onVoiceStateChange?.('speaking');
+        const s0 = useSettingsStore.getState();
+        if (s0.voiceEnabled) {
+          await speak(answered.line, s0.voiceGender, s0.language, getApiBaseUrl(), { userInitiated: true })
+            .catch(() => { /* spoken best-effort — the putt is already logged */ });
+        }
+        onVoiceStateChange?.('idle');
+        turnInFlightRef.current = false;
+        return;
+      }
+    }
+
     onVoiceStateChange?.('thinking');
 
     // Once we've spoken a real response, a later throw (e.g. from auto-listen) must NOT be treated
