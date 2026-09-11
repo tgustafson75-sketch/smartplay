@@ -11,16 +11,13 @@ import { PRICING } from '../lib/pricing';
  * the lite and full versions" was therefore not a reconciliation job — the
  * distinction did not exist anywhere in the code.
  *
- * ⚠️ NOTHING IS GATED TODAY, AND NO CLOCK IS RUNNING. ⚠️
+ * The state of the switch is NOT described here. __tests__/logic/edition-matrix.test.ts pins it,
+ * and that test is the statement of truth — it fails when the value changes, which prose cannot do.
  *
- * Tim, 2026-08-19: "don't put the paywall in for testers yet or start a 30 day
- * clock." `SUBSCRIPTIONS_ENABLED` stays false, so:
- *   - `canAccess()` returns true for every feature, in every state
- *   - `trialDaysLeft()` returns null and no trial timer is consulted or started
- *   - the paywall route renders nothing
- * `__tests__/logic/edition-matrix.test.ts` pins all of that. This file is the
- * MECHANISM, built and tested behind the switch, so turning it on later is a
- * one-line change rather than a refactor under deadline pressure.
+ * (2026-09-11: this paragraph used to assert the paywall was off and no clock was running. It had
+ * been false since the switch was flipped, and it was still sitting here on the day the app shipped
+ * with billing live. Deleted rather than corrected: prose that asserts runtime state goes stale
+ * silently, and rewriting it only resets the clock on the next person to trust it.)
  *
  * WHERE THE LINE IS DRAWN (decided 2026-08-19)
  * --------------------------------------------
@@ -179,9 +176,9 @@ export function trialDaysLeft(trial_started_at: number | null): number | null {
    * 2026-08-29 — WAS A HARDCODED 7, AND lib/pricing.ts SAYS 14.
    *
    * The paywall promises "14-day free trial" in three separate places, reads PRICING.trialDays for
-   * all of them, and then this gate cut the caddie off on day 7. Invisible only because
-   * SUBSCRIPTIONS_ENABLED is false — it would have landed the moment the switch flipped, on the
-   * people who had just paid, which is the worst possible audience for it.
+   * all of them, and then this gate cut the caddie off on day 7. It was invisible only while billing
+   * was still off, and would have landed the moment the switch flipped — on the people who had just
+   * paid, which is the worst possible audience for it.
    *
    * Two owners of one number, with no arbiter, exactly like the stated-yardage band. lib/pricing is
    * the source of truth (it is what the customer was shown and what the App Store Connect
@@ -218,7 +215,7 @@ export function featuresIn(edition: Edition): FeatureKey[] {
  *
  * DEGRADES, NEVER GOES DARK. A blocked turn raises the paywall rather than returning silence — a
  * caddie that simply stops answering reads as broken, which is the opposite of what a paywall is
- * for. Inert today: SUBSCRIPTIONS_ENABLED is false, so this returns true for everyone.
+ * for.
  */
 export function mayTalkToCaddie(): boolean {
   try {

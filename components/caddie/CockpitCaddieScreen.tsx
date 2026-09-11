@@ -78,9 +78,8 @@ export interface CockpitCaddieScreenProps {
   // through the parent's PAYWALL-GATED handlers (openSmartVision /
   // the gated /smartfinder push), exactly like the standard layout.
   // The cockpit previously router.push'd both directly, bypassing the
-  // canAccess/triggerPaywall gate the standard buttons enforce. With
-  // SUBSCRIPTIONS_ENABLED=false today these are no-ops, but wiring the
-  // shared handler keeps cockpit honest if subscriptions turn on.
+  // canAccess/triggerPaywall gate the standard buttons enforce. Wiring the
+  // shared handler keeps cockpit honest whatever the billing switch says.
   // Optional so the component still renders if a caller omits them
   // (falls back to a plain push).
   /** Parent's gated SmartVision opener (caddie.tsx openSmartVision). */

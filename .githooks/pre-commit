@@ -47,17 +47,23 @@ fi
 # guard ran on `pull_request` in a repo where work goes straight to main, so it protected a path
 # nobody used. Two translation campaigns decayed for want of exactly this check.
 #
-# STAGED SCREEN FILES ONLY. Linting the whole repo would fail on the 2,732-violation backlog
-# (docs/I18N-AUDIT.md) and this hook would be bypassed within a day, which is how the last campaign
-# died. Once the phase-2 codemod clears the backlog this can widen to the full repo.
+# CHANGED LINES ONLY, not changed FILES.
+#
+# 2026-09-11 — the first version linted whole staged files, and it blocked a PROSE-ONLY comment
+# deletion in app/swinglab/smartmotion.tsx by reporting that file's 39 pre-existing violations. That
+# is the exact death this gate was built to avoid: a guard that punishes unrelated work gets
+# --no-verify'd within a day, and then it guards nothing. The backlog lives on the
+# release/1.5-localization branch until the codemod lands, so until then the rule is simply: do not
+# ADD a hardcoded string. Touching a legacy file is not adding one.
 STAGED_TSX="$(git diff --cached --name-only --diff-filter=ACMR \
   -- ':(glob)app/**/*.tsx' ':(glob)components/**/*.tsx')"
 if [ -n "$STAGED_TSX" ]; then
   printf 'pre-commit: i18n guard... '
-  if OUT=$(printf '%s\n' "$STAGED_TSX" | tr '\n' '\0' | xargs -0 npx eslint 2>&1); then
+  # CHANGED LINES ONLY — see the note above. node reads the staged diff itself.
+  if OUT=$(node scripts/i18n-changed-lines.mjs 2>&1); then
     printf 'clean\n'
   else
-    printf 'FAILED\n\n%s\n\n' "$(echo "$OUT" | grep -E 'i18n/no-hardcoded|^/' | head -40)"
+    printf 'FAILED\n\n%s\n\n' "$OUT"
     echo 'Commit blocked: a user-facing string is not going through t().'
     echo 'Every one of these is a sentence a Japanese or Korean player would read in English.'
     echo 'Wrap it in t(...) and add the key to i18n/locales/*.json, or --no-verify in a genuine emergency.'

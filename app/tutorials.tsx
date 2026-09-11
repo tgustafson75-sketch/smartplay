@@ -24,9 +24,8 @@ type Tutorial = {
 /**
  * 2026-09-03 — the trial card only exists when there IS a trial.
  *
- * 1.0 ships with SUBSCRIPTIONS_ENABLED false (paywall off, nothing restricted, so Play review needs
- * no bypass account). With the ladder unlocked, planTrialExtension correctly answers 'not_on_trial'
- * and the light-use offer never fires — which is right, but it would have left a tutorial telling
+ * When subscriptions are off, planTrialExtension answers 'not_on_trial' and the light-use offer
+ * never fires — which is right, but it would have left a tutorial telling
  * the player "if your trial runs out we add another week" about a trial they do not have. A
  * tutorial that describes a feature the build cannot reach is worse than no tutorial: it is the app
  * lying to someone who went looking for help. [[no-deferred-wiring-placeholders]]

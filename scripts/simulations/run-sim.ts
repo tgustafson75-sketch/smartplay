@@ -4397,7 +4397,7 @@ check('LOCK: the trial length has ONE owner',
    *
    * lib/pricing.ts said `trialDays: 14`, the paywall read it in three places and the caddie spoke it
    * aloud — and services/featureAccess.trialDaysLeft counted down from a hardcoded 7 of its own.
-   * Invisible only because SUBSCRIPTIONS_ENABLED is false; it would have landed the day the switch
+   * It was invisible only while billing was still off, and would have landed the day the switch
    * flipped, on the people who had just paid.
    *
    * Same shape as the stated-yardage band below: two owners of one number and no arbiter. This
@@ -14979,11 +14979,10 @@ check(
 /**
  * ─── 2026-09-03 — A TUTORIAL MUST NOT DESCRIBE A FEATURE THE BUILD CANNOT REACH ────────────────
  *
- * 1.0 ships with SUBSCRIPTIONS_ENABLED false — paywall off, nothing restricted, so Play review needs
- * no bypass account and "no sign-in required" is simply true. planTrialExtension then correctly
- * answers 'not_on_trial' and the light-use offer never fires. Correct, but it would have left a
- * tutorial card telling the player "if your trial runs out we add another week" about a trial that
- * does not exist in their build — the app lying to someone who went looking for help.
+ * When subscriptions are off, planTrialExtension answers 'not_on_trial' and the light-use offer
+ * never fires. Correct, but it would have left a tutorial card telling the player "if your trial
+ * runs out we add another week" about a trial that does not exist in their build — the app lying to
+ * someone who went looking for help.
  */
 {
   const tut = readCode('app/tutorials.tsx');

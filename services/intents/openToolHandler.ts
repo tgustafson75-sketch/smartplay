@@ -573,7 +573,7 @@ export const openToolHandler: IntentHandler = {
         // 2026-07-10 (audit N2) — a catalog match to a PAYWALLED tool must emit its gated
         // action type (open_smartvision/open_smartfinder), which the dispatcher runs the
         // canAccess/triggerPaywall check on. A bare `navigate` to the route skipped that gate
-        // (inert while SUBSCRIPTIONS_ENABLED is false, a real bypass the moment billing is on).
+        // (a real bypass whenever billing is on).
         const GATED_ROUTE_ACTION: Record<string, ToolAction> = {
           '/smartvision': { type: 'open_smartvision' },
           '/smartfinder': { type: 'open_smartfinder' },
