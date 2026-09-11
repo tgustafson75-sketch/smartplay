@@ -565,6 +565,35 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * three, and the sentence "3 wood, because it leaves 145, and 145 is your 8 iron" is worth
      * nothing at all if the 145 is wrong. [[arithmetic-belongs-in-code-not-the-model]]
      */
+    /**
+     * 2026-09-11 (Tim) — THE BRAIN IS TOLD THE DECISION, NOT ASKED TO RE-DERIVE IT.
+     *
+     * The local engine already chose the club, the plays-like number, the room on the green and —
+     * now — what the lie allows. None of it was sent. The brain got bag, yardage and wind and worked
+     * the club out again in prose, which is the arithmetic-in-the-model problem this codebase has
+     * lost to repeatedly, and it meant the caddie could SAY a different club from the one the screen
+     * was showing.
+     *
+     * `lieOffer` is the half that only exists here. Tim: "Caddie can offer — we could go with an iron
+     * here to get out, or if you feel we have a good lie, let's go with hybrid. That way no computer
+     * vision is needed. Could offer user to open TightLie for a full analysis."
+     * [[arithmetic-belongs-in-code-not-the-model]]
+     */
+    shotRead: safe(() => {
+      const { decideShot } = require('./caddieDecision') as typeof import('./caddieDecision');
+      const r0 = decideShot({ rawYards: workingYards }).shot;
+      if (!r0) return null;
+      return {
+        club: r0.club,
+        rawYards: r0.rawYards,
+        playsLikeYards: r0.playsLikeYards,
+        why: r0.why,
+        greenRoomNote: r0.greenRoomNote,
+        tendencyNote: r0.tendencyNote,
+        lieOffer: r0.lieOffer,
+      };
+    }, null),
+
     holePlan: safe(() => {
       /**
        * Composed by services/holePlanLive, NOT here — because components/HolePlanChip shows the

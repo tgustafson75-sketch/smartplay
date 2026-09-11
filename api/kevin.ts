@@ -308,6 +308,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       playProfile = null,
       clubCall = null,
       holePlan = null,
+      shotRead = null,
       transportMode = null,
       currentLocationType = null,
       riskMode = null,
@@ -1255,6 +1256,39 @@ ${(() => {
     return `${lines.join('\n')}\n`;
   }
   return '';
+})()}${(() => {
+  const sr = shotRead as {
+    club?: string | null; rawYards?: number | null; playsLikeYards?: number | null;
+    why?: string[]; greenRoomNote?: string | null; tendencyNote?: string | null;
+    lieOffer?: { safeClub?: string; ifGoodLieClub?: string; say?: string; cameraWouldHelp?: boolean } | null;
+  } | null;
+  if (!sr || !sr.club) return '';
+  /**
+   * 2026-09-11 (Tim) — THE READ THE APP ALREADY MADE.
+   *
+   * This club was chosen on the device from the player's real bag, the plays-like number, the risk
+   * posture, the room behind the pin, how he covers an in-between yardage, and what the lie allows.
+   * The brain was previously handed the raw parts and asked to work it out again in prose — which is
+   * how the caddie ends up naming a different club from the one on the screen.
+   *
+   * THE LIE OFFER is the part only the player can settle. The app cannot reliably see what the ball
+   * is sitting on (currentLocationType defaults to 'fairway'), so rather than guess, the caddie asks
+   * — and TightLie is there for the full read when he wants it.
+   */
+  const bits = [
+    `THE READ (computed on the device — do NOT recompute it, and do not name a different club):`,
+    `Club: ${sr.club}${sr.playsLikeYards != null && sr.playsLikeYards !== sr.rawYards ? ` · ${sr.rawYards} plays ${sr.playsLikeYards}` : sr.rawYards != null ? ` · ${sr.rawYards} yards` : ''}`,
+    sr.why?.length ? `Why: ${sr.why.join('; ')}` : null,
+    sr.greenRoomNote ? `Green: ${sr.greenRoomNote}` : null,
+    sr.tendencyNote ? `Him: ${sr.tendencyNote}` : null,
+  ].filter(Boolean);
+  if (sr.lieOffer?.say) {
+    bits.push(
+      `LIE UNKNOWN — OFFER, DO NOT GUESS. We cannot see what the ball is sitting on, and a ${sr.lieOffer.ifGoodLieClub} out of a bad lie is the miss. Put it to him roughly like this, in your own words: "${sr.lieOffer.say}"`,
+      `He is standing over the ball and knows the answer; his reply settles it. If he wants certainty rather than a feel, offer TightLie — the lie camera — for a full read. Offer ONCE; if he has already answered, just go with his club.`,
+    );
+  }
+  return `${bits.join('\n')}\n`;
 })()}${(() => {
   const hp = holePlan as {
     par?: number; holeYards?: number; playingFor?: string; targetScore?: number;

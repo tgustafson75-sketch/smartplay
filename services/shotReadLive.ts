@@ -43,6 +43,8 @@ export interface ShotReadInputs {
   dominantMiss?: string | null;
   holeLineNote?: string | null;
   nearestHazard?: { label: string; yards: number } | null;
+  /** What the ball is sitting on — from TightLie's read or the player's own words. */
+  lie?: import('./clubCharacter').Lie;
   risk?: ShotRiskMode;
   isCompetition?: boolean;
   pastScoreNote?: string | null;
@@ -142,6 +144,32 @@ export function liveShotReadInputs(known: CallerKnown): ShotReadInputs {
       const { usePlayerProfileStore } = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
       return (usePlayerProfileStore.getState().distanceControl ?? undefined) as never;
     }, undefined as never),
+
+    /**
+     * 2026-09-11 (Tim — "we already have TightLie for this very thing") — THE LIE READ, TIED IN.
+     *
+     * TightLie has produced a full lie analysis since Phase 409 and written it to
+     * roundStore.pendingLieAnalysis, which reached the caddie's PROMPT as prose and reached the club
+     * picker not at all. askGolfFatherHandler's own header has said "lie — pendingLieAnalysis
+     * exists; not wired" the whole time.
+     *
+     * So the tool was built, the player was already using it, and the one decision it should change
+     * never saw it. Its description is read into the structured lie the picker understands, and the
+     * player's own words about the hole are read the same way — because a golfer saying "I'm in the
+     * rough sitting down" is a lie read that costs nobody a camera.
+     *
+     * The analysis is cleared on hole change and consumed on shot log, so it cannot outlive the shot
+     * it describes. [[close-the-loop-strategy]]
+     */
+    lie: safe(() => {
+      const { lieFromWords } = require('./clubCharacter') as typeof import('./clubCharacter');
+      const la = round?.pendingLieAnalysis as { situation_description?: string } | null;
+      const fromCamera = lieFromWords(la?.situation_description ?? null);
+      if (fromCamera !== 'unknown') return fromCamera;
+      // Then what he told us about this hole, in his own words.
+      const note = hole != null ? (round?.holeNotes?.[hole] as string | undefined) : undefined;
+      return lieFromWords(note ?? null);
+    }, 'unknown' as never),
 
     /** Nearest trouble ahead on the line, when the hole is mapped. */
     nearestHazard: safe(() => {

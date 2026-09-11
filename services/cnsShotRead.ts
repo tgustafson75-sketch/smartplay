@@ -45,6 +45,18 @@ export interface ShotRead {
   tendencyNote: string | null;
   /** Past-performance line — populated ONLY when isCompetition. */
   pastPerfNote: string | null;
+  /**
+   * 2026-09-11 (Tim) — THE LIE QUESTION, ASKED RATHER THAN GUESSED.
+   *
+   * "Caddie can offer: 'we could go with an iron here to get out, or if you feel we have a good lie,
+   * let's go with hybrid.' That way no computer vision is needed. Could offer user to open TightLie
+   * for a full analysis."
+   *
+   * Present only when the lie is UNKNOWN and the club the yardage wants is lie-sensitive — a wood or
+   * a driver off the deck — and the bag holds a more forgiving club at the same number. Null the
+   * rest of the time, because an offer made every shot is nagging.
+   */
+  lieOffer: import('./clubCharacter').LieChoice | null;
 }
 
 // Standard carry ladder — the honest fallback when the player hasn't logged a
@@ -77,6 +89,37 @@ const STANDARD_LADDER = SHARED_LADDER;
 const LADDER_LABEL = SHARED_CLUB_LABEL as Record<string, string>;
 
 
+/**
+ * THE PLAYER'S LADDER, IN ONE VOCABULARY — the one owner of the standard-chart merge.
+ *
+ * 2026-09-11 — extracted because a SECOND consumer appeared (the unknown-lie offer) and reading the
+ * raw bag instead produced nothing at all. This file's own note names the trap: bagDistances() keys
+ * are ClubName ('7I', '3W'); the ladder is LABELLED ('7 Iron', '3 Wood'). The offer looked up
+ * `bag['5 Wood']`, got undefined, and silently never fired — a defect that a source-reading test
+ * would have called wired. Anything reasoning about "which club at this number" has to start here.
+ * [[two-owners-is-the-root-cause]]
+ */
+function mergedLadder(bag: Partial<Record<string, number>>): {
+  merged: Map<string, number>; measured: Set<string>;
+} {
+  const bagScale = personalBagScale(bag as Partial<Record<string, number>>) ?? 1;
+  const merged = new Map<string, number>();
+  for (const [club, yds] of STANDARD_LADDER) merged.set(club, Math.round(yds * bagScale));
+  // Track which clubs are the PLAYER'S OWN number vs. the chart, so the spoken "why" can't claim a
+  // standard-ladder figure as his measured carry ([[illustration-data-points]] — real signals only).
+  const measured = new Set<string>();
+  for (const [club, d] of Object.entries(bag)) {
+    if (typeof d === 'number' && d > 0) {
+      // A measured club REPLACES its chart counterpart rather than sitting beside it, which is what
+      // "override club by club" has to mean.
+      const label = LADDER_LABEL[club] ?? club;
+      merged.set(label, d);
+      measured.add(label);
+    }
+  }
+  return { merged, measured };
+}
+
 /** Closest club to the plays-like number — prefers the player's real bag, falls
  *  back to the standard ladder. Pushes a learned-carry "why" line when real. */
 /**
@@ -100,6 +143,17 @@ interface GapContext {
   greenFrontYards?: number | null;
   greenBackYards?: number | null;
   nearestHazard?: { label: string; yards: number } | null;
+  /**
+   * 2026-09-11 (Tim) — WHAT THE BALL IS SITTING ON.
+   *
+   * "I carry a 5 wood, a 5 iron, and a 5 hybrid. They all have different purpose. If Caddie knows I
+   * am not on the fairway and likely not a great lie, don't suggest the wood based on distance."
+   *
+   * This picker had no concept of a lie, so three clubs that go the same number were one club to it.
+   * Set ONLY from a real signal — TightLie's read, or the player's own words. An unknown lie makes
+   * no claim: it must not penalise the wood, because that would be inventing a bad lie.
+   */
+  lie?: import('./clubCharacter').Lie;
 }
 
 function pickClub(playsLikeYards: number, bag: Partial<Record<string, number>>, why: string[], risk: ShotRiskMode = 'normal', gap: GapContext = {}): string | null {
@@ -127,24 +181,7 @@ function pickClub(playsLikeYards: number, bag: Partial<Record<string, number>>, 
    * HAS logged still wins outright below; this only fills the ones he hasn't, using the ratio his
    * own clubs prove. See services/standardBag.personalBagScale.
    */
-  const bagScale = personalBagScale(bag as Partial<Record<string, number>>) ?? 1;
-  const merged = new Map<string, number>();
-  for (const [club, yds] of STANDARD_LADDER) merged.set(club, Math.round(yds * bagScale));
-  // Track which clubs are the PLAYER'S OWN number vs. the chart, so the spoken "why" can't claim a
-  // standard-ladder figure as his measured carry ([[illustration-data-points]] — real signals only).
-  const measured = new Set<string>();
-  for (const [club, d] of Object.entries(bag)) {
-    if (typeof d === 'number' && d > 0) {
-      // 2026-08-11 (re-check) — TWO VOCABULARIES. bagDistances() keys are ClubName ('7I', '3W'),
-      // the ladder is labelled ('7 Iron', '3 Wood'). Merging raw would ADD '7I':165 next to the
-      // chart's '7 Iron':155 — the same club twice, skewing the bag extremes and letting the
-      // spoken line read "7I" instead of "7 iron". Map onto the ladder's label so a measured club
-      // REPLACES its chart counterpart, which is what "override club by club" has to mean.
-      const label = LADDER_LABEL[club] ?? club;
-      merged.set(label, d);
-      measured.add(label);
-    }
-  }
+  const { merged, measured } = mergedLadder(bag);
   const real = [...merged.entries()] as [string, number][];
   if (real.length > 0) {
     let best: [string, number] | null = null;
@@ -183,6 +220,45 @@ function pickClub(playsLikeYards: number, bag: Partial<Record<string, number>>, 
       if (entry[1] < shortest[1]) shortest = entry;
     }
     if (best) {
+      /**
+       * 2026-09-11 (Tim) — THE LIE COMES BEFORE THE YARDAGE.
+       *
+       * "If Caddie knows I am not on the fairway and likely not a great lie, don't suggest the wood
+       * based on distance. The iron is better to get out, but user and caddie can consider if the
+       * lie allows better for the hybrid."
+       *
+       * Fires ONLY on a known lie — TightLie's read or the player's own words. An unknown lie makes
+       * no claim and this whole block is skipped, because inventing a bad lie to justify a shorter
+       * club is the same fabrication as inventing a good one.
+       *
+       * It swaps CLASS, never distance band: the replacement is the most playable club within a
+       * normal club's reach of the number, so this can never hand back something wildly short.
+       */
+      const lie = gap.lie ?? 'unknown';
+      if (lie !== 'unknown') {
+        const cc = require('./clubCharacter') as typeof import('./clubCharacter');
+        const bestPlay = cc.playabilityFromLie(best[0], lie);
+        if (bestPlay != null && bestPlay < cc.POOR_FROM_LIE) {
+          const LIE_SWAP_TOLERANCE = 20;
+          let swap: [string, number] | null = null;
+          let swapPlay = bestPlay;
+          for (const e of real) {
+            if (Math.abs(e[1] - playsLikeYards) > LIE_SWAP_TOLERANCE) continue;
+            const p = cc.playabilityFromLie(e[0], lie);
+            if (p == null || p <= swapPlay) continue;
+            // Prefer the more playable club; break ties toward the one closest to the number.
+            if (!swap || p > swapPlay || Math.abs(e[1] - playsLikeYards) < Math.abs(swap[1] - playsLikeYards)) {
+              swap = e; swapPlay = p;
+            }
+          }
+          if (swap && swap[0] !== best[0]) {
+            const line = cc.describeLieChoice(swap[0], best[0], lie);
+            if (line) why.unshift(line);
+            return swap[0];
+          }
+        }
+      }
+
       // 2026-06-27 — honest read at the BAG EXTREMES. The closest club to a
       // too-big / too-small number is already `longest` / `shortest`, so the club
       // returned is unchanged; only the "why" is more honest. Lead with it
@@ -325,11 +401,13 @@ export function composeShotRead(input: {
   greenBackYards?: number | null;
   /** How this player covers an in-between yardage (playerProfileStore.distanceControl). */
   distanceControl?: 'full_swings' | 'some_partials' | 'dial_down';
+  /** What the ball is sitting on — TightLie's read, or the player's words. */
+  lie?: import('./clubCharacter').Lie;
 }): ShotRead | null {
   const {
     rawYards, weather, shotBearingDeg, elevationDeltaFeet = 0,
     bag = {}, dominantMiss, holeLineNote, nearestHazard, isCompetition, pastScoreNote,
-    greenFrontYards = null, greenBackYards = null, distanceControl,
+    greenFrontYards = null, greenBackYards = null, distanceControl, lie,
   } = input;
   if (rawYards == null || !Number.isFinite(rawYards)) return null;
 
@@ -359,7 +437,7 @@ export function composeShotRead(input: {
 
   // 2) Club — the answer. Pushes a learned-carry why line when the bag is real.
   const club = pickClub(playsLikeYards, bag, why, input.risk ?? 'normal', {
-    distanceControl, greenFrontYards, greenBackYards, nearestHazard,
+    distanceControl, greenFrontYards, greenBackYards, nearestHazard, lie,
   });
 
   // 3) Hazard — only when it's actually in play for this shot (ahead, within reach).
@@ -419,6 +497,20 @@ export function composeShotRead(input: {
     why,
     hazardNote,
     greenRoomNote,
+    /**
+     * The player standing over the ball knows the lie better than any sensor, and answering costs
+     * him one word. TightLie remains the full read when he wants it — this is the version that needs
+     * no camera. [[feels-like-a-real-caddie]]
+     */
+    lieOffer: (() => {
+      try {
+        const cc = require('./clubCharacter') as typeof import('./clubCharacter');
+        // The picker speaks LABELS ('5 Wood'), so the offer must look up the same ladder it chose
+        // from — not the raw ClubName-keyed bag, which is how this silently never fired.
+        const ladder = Object.fromEntries(mergedLadder(bag).merged) as Record<string, number>;
+        return club ? cc.offerFromUnknownLie({ yardageClub: club, bag: ladder, lie }) : null;
+      } catch { return null; }
+    })(),
     tendencyNote,
     pastPerfNote,
   };
