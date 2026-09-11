@@ -28,6 +28,38 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Sep 2026',
+    note: 'You can take a club back out of your bag. Scanning adds clubs, and until now nothing removed them \u2014 so a club the camera got wrong stayed in your bag for good, quietly shaping what the caddie told you to hit.',
+    howTo: 'Say "take the 7 wood out of my bag".',
+  },
+  {
+    when: 'Sep 2026',
+    note: 'Your caddie forgets a lie read once you have moved on. A look at your lie on one hole used to stay in the caddie\u2019s head for the rest of the round, and got attached to a later shot \u2014 so advice on the 12th could be built on the rough you were in on the 4th.',
+  },
+  {
+    when: 'Sep 2026',
+    note: 'A yardage you tell the caddie now applies to that shot only. Saying "I\u2019m 142" used to stick for your next shot on the same hole too \u2014 so a chip from 15 yards could still be clubbed off 142.',
+  },
+  {
+    when: 'Sep 2026',
+    note: 'Your playing partners leave when the round does, and you can drop one mid-round if a name came out wrong. They used to linger for a day, so partners from the morning turned up on an afternoon round.',
+    howTo: 'Press and hold a name under PLAYING WITH on the scorecard to remove it.',
+  },
+  {
+    when: 'Sep 2026',
+    note: 'A course you added from a scorecard photo can be removed. A misread card used to stay in your course list for good, and scanning it again added a second copy instead of replacing it.',
+    howTo: 'Press and hold the course in your list, then confirm.',
+  },
+  {
+    when: 'Sep 2026',
+    note: 'Your profile now has the fields the app was already asking for: your typical miss, where you are in your golf, your home course, and the round mode you usually play. They were being read all along and there was nowhere to set them \u2014 so your home course never pre-selected and the caddie never adjusted how it explained things.',
+    howTo: 'Settings, under Profile.',
+  },
+  {
+    when: 'Sep 2026',
+    note: 'Your practice week starts clean. A new week used to still show last week\u2019s ticks, and the moment you ticked anything the rest vanished.',
+  },
+  {
+    when: 'Sep 2026',
     note: 'Auto Shot Detection now works from a cart. If you ride — most people do — it was switched on and quietly recording nothing at all. Your shots are now written to the card as you play, with no club and no interruption, so your round has shots in it when you finish.',
     howTo: 'Settings, Round Experience, Auto Shot Detection. Riding, it logs quietly; walking, the caddie asks what you hit. Either way you can correct a shot on the scorecard.',
   },
