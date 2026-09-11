@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { PrimaryIssue } from '../../store/swingSessionStore';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Phase J — Primary Issue Card.
@@ -46,6 +47,7 @@ const SEVERITY_LABEL: Record<PrimaryIssue['severity'], string> = {
 };
 
 export default function PrimaryIssueCard({ issue, totalShots }: Props) {
+  const { t } = useTranslation();
   // 2026-05-24 — Progressive-disclosure state for layman_explanation.
   // Collapsed by default per spec; the expert term stays the always-
   // visible headline (trust), and the plain-language line is revealed
@@ -57,9 +59,9 @@ export default function PrimaryIssueCard({ issue, totalShots }: Props) {
   if (!issue) {
     return (
       <View style={[styles.card, styles.cardPlaceholder]}>
-        <Text style={styles.placeholderHeader}>SWING ANALYSIS</Text>
+        <Text style={styles.placeholderHeader}>{t('swinglab_primary_issue_card.primary_issue_card.swing_analysis')}</Text>
         <Text style={styles.placeholderBody}>
-          Detailed swing analysis is coming soon. Once pose detection is on, the primary issue from your session will land here.
+          {t('swinglab_primary_issue_card.primary_issue_card.detailed_swing_analysis_is_coming')}
         </Text>
       </View>
     );
@@ -161,7 +163,7 @@ export default function PrimaryIssueCard({ issue, totalShots }: Props) {
 
       {hasStrengths && (
         <View style={styles.strengthsBox}>
-          <Text style={styles.strengthsLabel}>WHAT&apos;S WORKING</Text>
+          <Text style={styles.strengthsLabel}>{t('swinglab_primary_issue_card.primary_issue_card.what_s_working')}</Text>
           {strengths.map((s, i) => (
             <View key={i} style={styles.strengthRow}>
               <Ionicons name="checkmark-circle" size={15} color="#3FB950" style={{ marginRight: 6, marginTop: 1 }} />
@@ -181,7 +183,7 @@ export default function PrimaryIssueCard({ issue, totalShots }: Props) {
         <View style={styles.firstDominoBox}>
           <View style={styles.firstDominoHeader}>
             <Ionicons name="git-branch-outline" size={14} color="#00C896" style={{ marginRight: 6 }} />
-            <Text style={styles.firstDominoLabel}>START HERE — FIRST DOMINO</Text>
+            <Text style={styles.firstDominoLabel}>{t('swinglab_primary_issue_card.primary_issue_card.start_here_first_domino')}</Text>
           </View>
           <Text style={styles.firstDominoText}>
             Work on <Text style={styles.firstDominoEmph}>{issue.name.toLowerCase()}</Text> first. Fix this one thing and {symptomsList.toLowerCase()} should settle down with it.
@@ -203,23 +205,23 @@ export default function PrimaryIssueCard({ issue, totalShots }: Props) {
             feel_cue layout (no primary_fault present). */}
       {issue.primary_fault === 'inconclusive' ? (
         <View style={styles.inconclusiveBox}>
-          <Text style={styles.sectionLabel}>NOT ENOUGH TO READ YET</Text>
+          <Text style={styles.sectionLabel}>{t('swinglab_primary_issue_card.primary_issue_card.not_enough_to_read_yet')}</Text>
           <Text style={styles.body}>
-            I couldn&apos;t read this recording clearly. Try a clearer angle (down-the-line from behind, or face-on from the front) so I can give you a specific fix.
+            {t('swinglab_primary_issue_card.primary_issue_card.i_couldn_t_read_this')}
           </Text>
         </View>
       ) : issue.primary_fault === 'no_dominant_fault' && issue.fix && issue.drill ? (
         <>
           <View style={styles.noDominantBox}>
-            <Text style={styles.sectionLabel}>NO DOMINANT FAULT</Text>
+            <Text style={styles.sectionLabel}>{t('swinglab_primary_issue_card.primary_issue_card.no_dominant_fault')}</Text>
             <Text style={styles.body}>
-              I read the swing — nothing dominant jumped out. Here&apos;s the strongest area to work on next.
+              {t('swinglab_primary_issue_card.primary_issue_card.i_read_the_swing_nothing')}
             </Text>
           </View>
 
           {issue.evidence ? (
             <>
-              <Text style={[styles.sectionLabel, styles.evidenceLabel]}>EVIDENCE</Text>
+              <Text style={[styles.sectionLabel, styles.evidenceLabel]}>{t('swinglab_primary_issue_card.primary_issue_card.evidence')}</Text>
               <View style={styles.evidenceBox}>
                 <Text style={styles.evidenceText}>{issue.evidence}</Text>
               </View>
@@ -228,17 +230,17 @@ export default function PrimaryIssueCard({ issue, totalShots }: Props) {
 
           {issue.cause ? (
             <>
-              <Text style={styles.sectionLabel}>OBSERVED</Text>
+              <Text style={styles.sectionLabel}>{t('swinglab_primary_issue_card.primary_issue_card.observed')}</Text>
               <Text style={styles.body}>{issue.cause}</Text>
             </>
           ) : null}
 
-          <Text style={[styles.sectionLabel, styles.fixLabel]}>WORK ON</Text>
+          <Text style={[styles.sectionLabel, styles.fixLabel]}>{t('swinglab_primary_issue_card.primary_issue_card.work_on')}</Text>
           <View style={styles.fixBox}>
             <Text style={styles.fixText}>{issue.fix}</Text>
           </View>
 
-          <Text style={[styles.sectionLabel, styles.drillLabel]}>DRILL</Text>
+          <Text style={[styles.sectionLabel, styles.drillLabel]}>{t('swinglab_primary_issue_card.primary_issue_card.drill')}</Text>
           <View style={styles.drillBox}>
             <Text style={styles.drillText}>{issue.drill}</Text>
           </View>
@@ -247,32 +249,32 @@ export default function PrimaryIssueCard({ issue, totalShots }: Props) {
         <>
           {issue.evidence ? (
             <>
-              <Text style={[styles.sectionLabel, styles.evidenceLabel]}>EVIDENCE</Text>
+              <Text style={[styles.sectionLabel, styles.evidenceLabel]}>{t('swinglab_primary_issue_card.primary_issue_card.evidence')}</Text>
               <View style={styles.evidenceBox}>
                 <Text style={styles.evidenceText}>{issue.evidence}</Text>
               </View>
             </>
           ) : null}
 
-          <Text style={styles.sectionLabel}>CAUSE</Text>
+          <Text style={styles.sectionLabel}>{t('swinglab_primary_issue_card.primary_issue_card.cause')}</Text>
           <Text style={styles.body}>{issue.cause || breakdown}</Text>
 
-          <Text style={[styles.sectionLabel, styles.fixLabel]}>FIX</Text>
+          <Text style={[styles.sectionLabel, styles.fixLabel]}>{t('swinglab_primary_issue_card.primary_issue_card.fix')}</Text>
           <View style={styles.fixBox}>
             <Text style={styles.fixText}>{issue.fix}</Text>
           </View>
 
-          <Text style={[styles.sectionLabel, styles.drillLabel]}>DRILL</Text>
+          <Text style={[styles.sectionLabel, styles.drillLabel]}>{t('swinglab_primary_issue_card.primary_issue_card.drill')}</Text>
           <View style={styles.drillBox}>
             <Text style={styles.drillText}>{issue.drill}</Text>
           </View>
         </>
       ) : (
         <>
-          <Text style={styles.sectionLabel}>WHAT&apos;S HAPPENING</Text>
+          <Text style={styles.sectionLabel}>{t('swinglab_primary_issue_card.primary_issue_card.what_s_happening')}</Text>
           <Text style={styles.body}>{breakdown}</Text>
 
-          <Text style={[styles.sectionLabel, styles.feelLabel]}>FEEL CUE</Text>
+          <Text style={[styles.sectionLabel, styles.feelLabel]}>{t('swinglab_primary_issue_card.primary_issue_card.feel_cue')}</Text>
           <View style={styles.feelBox}>
             <Text style={styles.feelText}>{issue.feel_cue}</Text>
           </View>

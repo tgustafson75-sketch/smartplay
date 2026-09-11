@@ -50,6 +50,7 @@ import { speak } from '../../services/voiceService';
 import { getCaddieName } from '../../lib/persona';
 import { getApiBaseUrl } from '../../services/apiBase';
 import { useResolvedImageUri } from '../../hooks/useResolvedImageUri';
+import { useTranslation } from 'react-i18next';
 
 const COACH_TUTORIAL_KEY = 'coach_mode';
 
@@ -63,6 +64,7 @@ const SwingRowThumb = ({ uri }: { uri: string }) => {
 };
 
 export default function CoachMode() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const apiUrl = getApiBaseUrl();
@@ -211,7 +213,7 @@ export default function CoachMode() {
     };
     Alert.alert(
       `${m.firstName}'s photo`,
-      'Add a selfie, or let AI style it into a caddie or pro golfer.',
+      t('swinglab_coach_mode.alert.add_a_selfie_or_let'),
       [
         { text: 'Take selfie', onPress: () => void setSelfie() },
         { text: 'AI caddie avatar', onPress: () => void setStylized('caddie') },
@@ -250,7 +252,7 @@ export default function CoachMode() {
   // instruction card instead of taking a tap action.
   const startPhoneCapture = () => {
     if (!activeMember) {
-      Alert.alert('Pick a player first', 'Tap a player or add one to get started.');
+      Alert.alert(t('swinglab_coach_mode.alert.pick_a_player_first'), t('swinglab_coach_mode.alert.tap_a_player_or_add'));
       return;
     }
     router.push('/swinglab/smartmotion' as never);
@@ -272,12 +274,12 @@ export default function CoachMode() {
           onPress={exitCoachMode}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           accessibilityRole="button"
-          accessibilityLabel="Exit Coach Mode"
+          accessibilityLabel={t('swinglab_coach_mode.accessibility_label.exit_coach_mode')}
         >
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
         <View style={{ flex: 1, alignItems: 'center' }}>
-          <Text style={[styles.title, { color: colors.text_primary }]}>Coach Mode</Text>
+          <Text style={[styles.title, { color: colors.text_primary }]}>{t('swinglab.card_coach-mode_title')}</Text>
           <Text style={[styles.headerSub, { color: colors.text_muted }]}>
             {roster.length} {roster.length === 1 ? 'player' : 'players'} · {totalSwingsLogged} swings logged
           </Text>
@@ -286,7 +288,7 @@ export default function CoachMode() {
           onPress={() => setTutorialOpen(true)}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           accessibilityRole="button"
-          accessibilityLabel="Show tutorial again"
+          accessibilityLabel={t('swinglab_coach_mode.accessibility_label.show_tutorial_again')}
         >
           <Ionicons name="help-circle-outline" size={22} color={colors.text_muted} />
         </TouchableOpacity>
@@ -294,7 +296,7 @@ export default function CoachMode() {
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* PLAYER PICKER */}
-        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>PLAYER</Text>
+        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{t('swinglab_coach_mode.coach_mode.player')}</Text>
         {roster.length > 0 && (
           <View style={styles.rosterWrap}>
             {/* "Me" card — resets perspective to the account holder */}
@@ -313,11 +315,11 @@ export default function CoachMode() {
                       meSelected && { backgroundColor: colors.accent_muted },
                     ]}
                     accessibilityRole="button"
-                    accessibilityLabel="Switch to your own swings"
+                    accessibilityLabel={t('swinglab_coach_mode.accessibility_label.switch_to_your_own_swings')}
                     accessibilityState={{ selected: meSelected }}
                   >
                     <GolferAvatar firstName="Me" photoUri={null} size={40} ringColor={meSelected ? colors.accent : undefined} />
-                    <Text style={[styles.memberName, { color: colors.text_primary }]} numberOfLines={1}>Me</Text>
+                    <Text style={[styles.memberName, { color: colors.text_primary }]} numberOfLines={1}>{t('swinglab_coach_mode.coach_mode.me')}</Text>
                     {meSelected && <Ionicons name="checkmark-circle" size={16} color={colors.accent} />}
                   </TouchableOpacity>
                 </View>
@@ -366,7 +368,7 @@ export default function CoachMode() {
                     accessibilityLabel={`${m.firstName} Player Library`}
                   >
                     <Ionicons name="library-outline" size={13} color={colors.text_muted} />
-                    <Text style={[styles.playerLibraryBtnText, { color: colors.text_muted }]}>Player Library</Text>
+                    <Text style={[styles.playerLibraryBtnText, { color: colors.text_muted }]}>{t('swinglab_coach_mode.coach_mode.player_library')}</Text>
                   </TouchableOpacity>
                 </View>
               );
@@ -389,18 +391,18 @@ export default function CoachMode() {
             <View style={styles.heroStatsRow}>
               <View style={styles.heroStat}>
                 <Text style={[styles.heroStatValue, { color: colors.text_primary }]}>{playerSwingCount}</Text>
-                <Text style={[styles.heroStatLabel, { color: colors.text_muted }]}>Swings</Text>
+                <Text style={[styles.heroStatLabel, { color: colors.text_muted }]}>{t('swinglab_coach_mode.coach_mode.swings')}</Text>
               </View>
               <View style={styles.heroStat}>
                 <Text style={[styles.heroStatValue, { color: colors.text_primary }]}>{lastCaptureLabel}</Text>
-                <Text style={[styles.heroStatLabel, { color: colors.text_muted }]}>Last capture</Text>
+                <Text style={[styles.heroStatLabel, { color: colors.text_muted }]}>{t('swinglab_coach_mode.coach_mode.last_capture')}</Text>
               </View>
               <View style={styles.heroStat}>
                 <View style={styles.heroStreakRow}>
                   {dayStreak > 0 ? <Ionicons name="flame" size={15} color="#f5a623" /> : null}
                   <Text style={[styles.heroStatValue, { color: colors.text_primary }]}>{dayStreak}</Text>
                 </View>
-                <Text style={[styles.heroStatLabel, { color: colors.text_muted }]}>Day streak</Text>
+                <Text style={[styles.heroStatLabel, { color: colors.text_muted }]}>{t('swinglab_coach_mode.coach_mode.day_streak')}</Text>
               </View>
             </View>
           </View>
@@ -408,13 +410,13 @@ export default function CoachMode() {
 
         {/* QUICK-ADD */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.label, { color: colors.text_muted }]}>QUICK-ADD A PLAYER</Text>
+          <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_coach_mode.coach_mode.quick_add_a_player')}</Text>
           <View style={styles.quickAddRow}>
             <TextInput
               style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text_primary }]}
               value={newPlayerName}
               onChangeText={setNewPlayerName}
-              placeholder="First name (e.g. Mike)"
+              placeholder={t('swinglab_coach_mode.placeholder.first_name_e_g_mike')}
               placeholderTextColor={colors.text_muted}
               returnKeyType="done"
               onSubmitEditing={quickAddPlayer}
@@ -432,7 +434,7 @@ export default function CoachMode() {
               onPress={quickAddPlayer}
               disabled={!newPlayerName.trim()}
               accessibilityRole="button"
-              accessibilityLabel="Add player"
+              accessibilityLabel={t('swinglab_coach_mode.accessibility_label.add_player')}
             >
               <Ionicons
                 name="add"
@@ -444,7 +446,7 @@ export default function CoachMode() {
         </View>
 
         {/* CAPTURE BUTTONS */}
-        <Text style={[styles.sectionHeader, { color: colors.text_muted, marginTop: 16 }]}>CAPTURE</Text>
+        <Text style={[styles.sectionHeader, { color: colors.text_muted, marginTop: 16 }]}>{t('swinglab_coach_mode.coach_mode.capture')}</Text>
         <TouchableOpacity
           style={[
             styles.captureCard,
@@ -457,15 +459,15 @@ export default function CoachMode() {
           onPress={startPhoneCapture}
           disabled={!activeMember}
           accessibilityRole="button"
-          accessibilityLabel="Record with phone camera"
+          accessibilityLabel={t('swinglab_coach_mode.accessibility_label.record_with_phone_camera')}
         >
           <View style={[styles.captureIcon, { backgroundColor: colors.accent_muted, borderColor: colors.accent }]}>
             <Ionicons name="phone-portrait-outline" size={26} color={colors.accent} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[styles.captureTitle, { color: colors.text_primary }]}>Record with phone</Text>
+            <Text style={[styles.captureTitle, { color: colors.text_primary }]}>{t('swinglab_coach_mode.coach_mode.record_with_phone')}</Text>
             <Text style={[styles.captureSub, { color: colors.text_muted }]}>
-              Tap to open SmartMotion. Full swing analysis runs automatically.
+              {t('swinglab_coach_mode.coach_mode.tap_to_open_smartmotion_full')}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
@@ -485,7 +487,7 @@ export default function CoachMode() {
             <Ionicons name="glasses-outline" size={26} color={colors.accent} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[styles.captureTitle, { color: colors.text_primary }]}>Record with glasses</Text>
+            <Text style={[styles.captureTitle, { color: colors.text_primary }]}>{t('swinglab_coach_mode.coach_mode.record_with_glasses')}</Text>
             <Text style={[styles.captureSub, { color: colors.text_muted }]}>
               Say &ldquo;{caddieName}, record this&rdquo; while you&apos;re watching the swing.
               I&apos;ll capture and analyze.
@@ -500,10 +502,10 @@ export default function CoachMode() {
               {activeMember.firstName.toUpperCase()}&apos;S SWINGS
             </Text>
             {!hasHydrated ? (
-              <Text style={[styles.emptyHint, { color: colors.text_muted }]}>Loading…</Text>
+              <Text style={[styles.emptyHint, { color: colors.text_muted }]}>{t('swinglab_coach_mode.coach_mode.loading')}</Text>
             ) : playerSwings.length === 0 ? (
               <Text style={[styles.emptyHint, { color: colors.text_muted }]}>
-                No swings yet. Capture one above and it&apos;ll land here.
+                {t('swinglab_coach_mode.coach_mode.no_swings_yet_capture_one')}
               </Text>
             ) : (
               playerSwings.map(sess => {
@@ -571,33 +573,33 @@ export default function CoachMode() {
             <View style={styles.modalIconWrap}>
               <Ionicons name="school-outline" size={32} color={colors.accent} />
             </View>
-            <Text style={[styles.modalTitle, { color: colors.text_primary }]}>Coach Mode</Text>
+            <Text style={[styles.modalTitle, { color: colors.text_primary }]}>{t('swinglab.card_coach-mode_title')}</Text>
             <Text style={[styles.modalLine, { color: colors.text_primary }]}>
-              1. Pick the player you&apos;re coaching.
+              {t('swinglab_coach_mode.coach_mode.1_pick_the_player_you')}
             </Text>
             <Text style={[styles.modalLine, { color: colors.text_primary }]}>
-              2. Point glasses or phone at their swing.
+              {t('swinglab_coach_mode.coach_mode.2_point_glasses_or_phone')}
             </Text>
             <Text style={[styles.modalLine, { color: colors.text_primary }]}>
               3. Say &ldquo;{caddieName}, record this&rdquo; — I&apos;ll break it down.
             </Text>
             <Text style={[styles.modalLine, { color: colors.text_primary }]}>
-              4. Add your own coach notes alongside the AI read.
+              {t('swinglab_coach_mode.coach_mode.4_add_your_own_coach')}
             </Text>
             <TouchableOpacity
               style={[styles.modalBtn, { backgroundColor: colors.accent }]}
               onPress={dismissTutorial}
               accessibilityRole="button"
-              accessibilityLabel="Got it, dismiss tutorial"
+              accessibilityLabel={t('swinglab_coach_mode.accessibility_label.got_it_dismiss_tutorial')}
             >
-              <Text style={styles.modalBtnText}>Got it</Text>
+              <Text style={styles.modalBtnText}>{t('swinglab_coach_mode.coach_mode.got_it')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={dismissTutorial}
               accessibilityRole="button"
-              accessibilityLabel="Skip tutorial"
+              accessibilityLabel={t('swinglab_coach_mode.accessibility_label.skip_tutorial')}
             >
-              <Text style={[styles.modalSkip, { color: colors.text_muted }]}>Skip</Text>
+              <Text style={[styles.modalSkip, { color: colors.text_muted }]}>{t('swinglab_coach_mode.coach_mode.skip')}</Text>
             </TouchableOpacity>
           </View>
         </View>

@@ -30,6 +30,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import type { SwingComparison, MetricDelta } from '../../services/swingComparisonEngine';
 import { unreadableMetrics } from '../../services/swingComparisonEngine';
 import type { ReferenceSwing } from '../../services/swingDatabase';
+import { useTranslation } from 'react-i18next';
 
 export interface ComparisonResultSheetProps {
   visible: boolean;
@@ -50,6 +51,7 @@ const SCREEN_HEIGHT = Dimensions.get('window').height;
 export default function ComparisonResultSheet({
   visible, result, reference, onClose, onCompareAnother,
 }: ComparisonResultSheetProps) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
 
   // Slide-up animation. Native driver enabled — Animated.Value driven
@@ -163,7 +165,7 @@ export default function ComparisonResultSheet({
               <Text style={[styles.matchValue, { color: matchColor }]}>
                 {hasMatch ? result.overall_match : '—'}
               </Text>
-              <Text style={[styles.matchLabel, { color: matchColor }]}>MATCH</Text>
+              <Text style={[styles.matchLabel, { color: matchColor }]}>{t('swinglab_comparison_result_sheet.comparison_result_sheet.match')}</Text>
             </View>
             <View style={styles.headerText}>
               <Text style={[styles.headerHint, { color: colors.text_muted }]}>
@@ -178,7 +180,7 @@ export default function ComparisonResultSheet({
                 {reference.club ? `  ·  ${reference.club}` : ''}
               </Text>
             </View>
-            <Pressable onPress={handleClose} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close comparison">
+            <Pressable onPress={handleClose} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('swinglab_comparison_result_sheet.accessibility_label.close_comparison')}>
               <Ionicons name="close" size={22} color={colors.text_muted} />
             </Pressable>
           </View>
@@ -206,7 +208,7 @@ export default function ComparisonResultSheet({
                 <View style={styles.benchmarkHeader}>
                   <Ionicons name="flag-outline" size={14} color={colors.accent} />
                   <Text style={[styles.benchmarkTitle, { color: colors.text_primary }]}>
-                    vs the tour benchmark (directional)
+                    {t('swinglab_comparison_result_sheet.comparison_result_sheet.vs_the_tour_benchmark_directional')}
                   </Text>
                 </View>
                 <Text style={[styles.benchmarkFraming, { color: colors.text_muted }]}>
@@ -214,7 +216,7 @@ export default function ComparisonResultSheet({
                 </Text>
                 {result.benchmark.focuses.length === 0 ? (
                   <Text style={[styles.benchmarkFocusNote, { color: colors.text_secondary }]}>
-                    Looks tour-standard on everything we could measure — inside the benchmark range.
+                    {t('swinglab_comparison_result_sheet.comparison_result_sheet.looks_tour_standard_on_everything')}
                   </Text>
                 ) : (
                   result.benchmark.focuses.slice(0, 3).map((f, i) => (
@@ -236,7 +238,7 @@ export default function ComparisonResultSheet({
             ) : null}
 
             {/* Per-metric side-by-side bars */}
-            <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>SIDE BY SIDE</Text>
+            <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>{t('swinglab_comparison_result_sheet.comparison_result_sheet.side_by_side')}</Text>
             {renderableMetrics.length === 0 ? (
               <Text style={[styles.emptyHint, { color: colors.text_muted }]}>
                 {hasMatch
@@ -294,10 +296,10 @@ export default function ComparisonResultSheet({
                     { borderColor: colors.accent, opacity: pressed ? 0.7 : 1 },
                   ]}
                   accessibilityRole="button"
-                  accessibilityLabel="Compare against another reference"
+                  accessibilityLabel={t('swinglab_comparison_result_sheet.accessibility_label.compare_against_another_reference')}
                 >
                   <Text style={[styles.secondaryBtnText, { color: colors.accent }]}>
-                    Compare another
+                    {t('swinglab_comparison_result_sheet.comparison_result_sheet.compare_another')}
                   </Text>
                 </Pressable>
               ) : null}
@@ -308,9 +310,9 @@ export default function ComparisonResultSheet({
                   { backgroundColor: colors.accent, opacity: pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] },
                 ]}
                 accessibilityRole="button"
-                accessibilityLabel="Done"
+                accessibilityLabel={t('swinglab_comparison_result_sheet.accessibility_label.done')}
               >
-                <Text style={styles.primaryBtnText}>Done</Text>
+                <Text style={styles.primaryBtnText}>{t('swinglab_comparison_result_sheet.comparison_result_sheet.done')}</Text>
               </Pressable>
             </View>
           </ScrollView>
@@ -326,6 +328,7 @@ function MetricBar({ metric, colors }: {
   metric: MetricDelta;
   colors: ReturnType<typeof useTheme>['colors'];
 }) {
+  const { t } = useTranslation();
   const fillAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -363,10 +366,10 @@ function MetricBar({ metric, colors }: {
       </View>
       <View style={styles.metricValues}>
         <Text style={[styles.metricValueLeft, { color: colors.text_secondary }]}>
-          you · <Text style={{ color: colors.text_primary, fontWeight: '800' }}>{formatValue(metric.current)}</Text>
+          {t('swinglab_comparison_result_sheet.metric_bar.you')} <Text style={{ color: colors.text_primary, fontWeight: '800' }}>{formatValue(metric.current)}</Text>
         </Text>
         <Text style={[styles.metricValueRight, { color: colors.text_secondary }]}>
-          ref · <Text style={{ color: colors.text_primary, fontWeight: '800' }}>{formatValue(metric.reference)}</Text>
+          {t('swinglab_comparison_result_sheet.metric_bar.ref')} <Text style={{ color: colors.text_primary, fontWeight: '800' }}>{formatValue(metric.reference)}</Text>
         </Text>
       </View>
       <View style={[styles.metricTrack, { backgroundColor: colors.surface_elevated }]}>

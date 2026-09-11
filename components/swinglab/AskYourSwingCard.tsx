@@ -40,6 +40,7 @@ import {
 } from '../../services/voiceService';
 import { getApiBaseUrl } from '../../services/apiBase';
 import { useResolvedImageUri } from '../../hooks/useResolvedImageUri';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   session: SwingSession;
@@ -65,6 +66,7 @@ function resolveFrameUri(session: SwingSession): string | null {
 }
 
 export default function AskYourSwingCard({ session }: Props) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
   const voiceGender = useSettingsStore(s => s.voiceGender);
@@ -229,7 +231,7 @@ export default function AskYourSwingCard({ session }: Props) {
             { backgroundColor: question.trim().length > 0 && !busy ? colors.accent : colors.surface_elevated },
           ]}
           accessibilityRole="button"
-          accessibilityLabel="Send question"
+          accessibilityLabel={t('swinglab_ask_your_swing_card.accessibility_label.send_question')}
         >
           {busy ? (
             <ActivityIndicator size="small" color="#0d1a0d" />
@@ -239,7 +241,7 @@ export default function AskYourSwingCard({ session }: Props) {
               <Text style={[
                 styles.sendBtnText,
                 { color: question.trim().length > 0 ? '#0d1a0d' : colors.text_muted },
-              ]}>Ask</Text>
+              ]}>{t('swinglab_ask_your_swing_card.ask_your_swing_card.ask')}</Text>
             </>
           )}
         </TouchableOpacity>

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import type { DrillRecommendation } from '../../store/swingSessionStore';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Phase J — Drill recommendation card paired with PrimaryIssueCard.
@@ -20,14 +21,15 @@ type Props = {
 };
 
 export default function DrillCard({ recommendation }: Props) {
+  const { t } = useTranslation();
   const router = useRouter();
 
   if (!recommendation) {
     return (
       <View style={[styles.card, styles.cardPlaceholder]}>
-        <Text style={styles.placeholderHeader}>DRILL RECOMMENDATION</Text>
+        <Text style={styles.placeholderHeader}>{t('swinglab_drill_card.drill_card.drill_recommendation')}</Text>
         <Text style={styles.placeholderBody}>
-          Drill suggestions will appear here once swing analysis is available.
+          {t('swinglab_drill_card.drill_card.drill_suggestions_will_appear_here')}
         </Text>
       </View>
     );
@@ -35,7 +37,7 @@ export default function DrillCard({ recommendation }: Props) {
 
   return (
     <View style={styles.card}>
-      <Text style={styles.header}>RECOMMENDED DRILL</Text>
+      <Text style={styles.header}>{t('swinglab_drill_card.drill_card.recommended_drill')}</Text>
       <Text style={styles.title}>{recommendation.drill_name}</Text>
       <Text style={styles.reason}>{recommendation.reason}</Text>
       <TouchableOpacity
@@ -54,7 +56,7 @@ export default function DrillCard({ recommendation }: Props) {
         accessibilityRole="button"
         accessibilityLabel={`Open ${recommendation.drill_name} drill`}
       >
-        <Text style={styles.ctaText}>Open Drill →</Text>
+        <Text style={styles.ctaText}>{t('swinglab_drill_card.drill_card.open_drill')}</Text>
       </TouchableOpacity>
     </View>
   );

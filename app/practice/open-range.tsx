@@ -21,8 +21,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { usePracticeSessionStore } from '../../store/practiceSessionStore';
 import { summarizeOpenRange } from '../../services/practice/openRangeStats';
+import { useTranslation } from 'react-i18next';
 
 export default function OpenRangeScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const active = usePracticeSessionStore((s) => s.active);
@@ -38,7 +40,7 @@ export default function OpenRangeScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text_primary }]}>Open Range</Text>
+        <Text style={[styles.title, { color: colors.text_primary }]}>{t('practice_open_range.open_range_screen.open_range')}</Text>
         <View style={{ width: 26 }} />
       </View>
 
@@ -46,20 +48,18 @@ export default function OpenRangeScreen() {
         {!active ? (
           <>
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.cardTitle, { color: colors.text_primary }]}>Practice with intent</Text>
+              <Text style={[styles.cardTitle, { color: colors.text_primary }]}>{t('practice_open_range.open_range_screen.practice_with_intent')}</Text>
               <Text style={[styles.body, { color: colors.text_secondary }]}>
-                Sixty balls with one club and five good ones isn’t practice. Start a session and every ball you
-                hit in Smart Motion tallies here — on-line rate, tempo repeatability, and a nudge when you’re
-                grinding one club.
+                {t('practice_open_range.open_range_screen.sixty_balls_with_one_club')}
               </Text>
               <TouchableOpacity
                 style={[styles.primaryBtn, { backgroundColor: colors.accent }]}
                 onPress={() => startSession('open_range', { environment: 'range' })}
                 accessibilityRole="button"
-                accessibilityLabel="Start an open range session"
+                accessibilityLabel={t('practice_open_range.accessibility_label.start_an_open_range_session')}
               >
                 <Ionicons name="golf-outline" size={18} color="#0a1410" />
-                <Text style={styles.primaryBtnText}>Start Open Range</Text>
+                <Text style={styles.primaryBtnText}>{t('practice_open_range.open_range_screen.start_open_range')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -68,7 +68,7 @@ export default function OpenRangeScreen() {
                 rendered as "No balls logged yet this session." on this screen. */}
             {history.some((s) => s.kind === 'open_range') && (
               <View style={{ gap: 8 }}>
-                <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>RECENT SESSIONS</Text>
+                <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>{t('practice_open_range.open_range_screen.recent_sessions')}</Text>
                 {history.filter((s) => s.kind === 'open_range').slice(0, 6).map((s) => {
                   const sum = summarizeOpenRange(s.swings);
                   return (
@@ -88,18 +88,18 @@ export default function OpenRangeScreen() {
         ) : (
           <>
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.accent }]}>
-              <Text style={[styles.sectionLabel, { color: colors.accent }]}>LIVE · OPEN RANGE</Text>
+              <Text style={[styles.sectionLabel, { color: colors.accent }]}>{t('practice_open_range.open_range_screen.live_open_range')}</Text>
               <Text style={[styles.headline, { color: colors.text_primary }]}>{summary?.headline}</Text>
               <View style={styles.statRow}>
-                <Stat label="BALLS" value={`${summary?.total ?? 0}`} colors={colors} />
-                <Stat label="FLIGHT SEEN" value={`${summary?.flightSeen ?? 0}`} colors={colors} />
+                <Stat label={t('practice_open_range.label.balls')} value={`${summary?.total ?? 0}`} colors={colors} />
+                <Stat label={t('practice_open_range.label.flight_seen')} value={`${summary?.flightSeen ?? 0}`} colors={colors} />
                 <Stat
-                  label="ON LINE"
+                  label={t('practice_open_range.label.on_line')}
                   value={summary && summary.flightSeen > 0 ? `${summary.onLine}/${summary.flightSeen}` : '—'}
                   colors={colors}
                 />
                 <Stat
-                  label="TEMPO"
+                  label={t('practice_open_range.label.tempo')}
                   value={summary?.tempoConsistency != null ? `${Math.round(summary.tempoConsistency * 100)}%` : '—'}
                   colors={colors}
                 />
@@ -116,7 +116,7 @@ export default function OpenRangeScreen() {
 
             {summary && summary.byClub.length > 0 && (
               <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>BY CLUB</Text>
+                <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>{t('practice_open_range.open_range_screen.by_club')}</Text>
                 {summary.byClub.map((c) => (
                   <View key={c.club} style={[styles.clubRow, { borderBottomColor: colors.border }]}>
                     <Text style={[styles.clubName, { color: colors.text_primary }]}>{c.club}</Text>
@@ -133,19 +133,19 @@ export default function OpenRangeScreen() {
               style={[styles.primaryBtn, { backgroundColor: colors.accent }]}
               onPress={() => router.push('/swinglab/smartmotion')}
               accessibilityRole="button"
-              accessibilityLabel="Open Smart Motion to record a swing"
+              accessibilityLabel={t('practice_open_range.accessibility_label.open_smart_motion_to_record')}
             >
               <Ionicons name="videocam-outline" size={18} color="#0a1410" />
-              <Text style={styles.primaryBtnText}>Record a swing</Text>
+              <Text style={styles.primaryBtnText}>{t('practice_open_range.open_range_screen.record_a_swing')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.endBtn, { borderColor: colors.border }]}
               onPress={endSession}
               accessibilityRole="button"
-              accessibilityLabel="End the open range session"
+              accessibilityLabel={t('practice_open_range.accessibility_label.end_the_open_range_session')}
             >
-              <Text style={[styles.endBtnText, { color: colors.text_secondary }]}>End session</Text>
+              <Text style={[styles.endBtnText, { color: colors.text_secondary }]}>{t('practice_open_range.open_range_screen.end_session')}</Text>
             </TouchableOpacity>
           </>
         )}

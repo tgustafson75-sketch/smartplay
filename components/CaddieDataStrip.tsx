@@ -22,6 +22,7 @@ import { useRoundStore } from '../store/roundStore';
 // the moment a score is logged (logScore → ghostStore.updateHole). Only
 // renders when a ghost is active; defensive against null ghostRecord.
 import { useGhostStore } from '../store/ghostStore';
+import { useTranslation } from 'react-i18next';
 
 export interface CaddieDataStripProps {
   yardage: number | null;
@@ -78,6 +79,7 @@ export default function CaddieDataStrip({
   scoreVsPar: _scoreVsPar = null,
   onPress,
 }: CaddieDataStripProps) {
+  const { t } = useTranslation();
   void _totalScore; void _scoreVsPar;
   const lastCellLabel = 'STROKE';
   const lastCellValue = String(stroke);
@@ -257,14 +259,14 @@ export default function CaddieDataStrip({
           <View style={styles.gridRow}>
             {/* HOLE cell with manual ◀/▶ — Fix O. */}
             <View style={styles.gridCell}>
-              <Text style={styles.cellLabel}>HOLE</Text>
+              <Text style={styles.cellLabel}>{t('caddie_data_strip.text.hole')}</Text>
               <View style={styles.holeNavRow}>
                 <Pressable
                   onPress={handleHolePrev}
                   disabled={hole.current <= (hole.first ?? 1)}
                   hitSlop={14}
                   accessibilityRole="button"
-                  accessibilityLabel="Previous hole"
+                  accessibilityLabel={t('caddie_data_strip.accessibility_label.previous_hole')}
                   style={styles.holeNavBtn}
                 >
                   <Ionicons
@@ -279,7 +281,7 @@ export default function CaddieDataStrip({
                   disabled={hole.current >= hole.total}
                   hitSlop={14}
                   accessibilityRole="button"
-                  accessibilityLabel="Next hole"
+                  accessibilityLabel={t('caddie_data_strip.accessibility_label.next_hole')}
                   style={styles.holeNavBtn}
                 >
                   <Ionicons
@@ -292,7 +294,7 @@ export default function CaddieDataStrip({
             </View>
             <Animated.View style={[styles.dot, { opacity: dotAnims[0] }]} />
             <View style={styles.gridCell}>
-              <Text style={styles.cellLabel}>PLAYS</Text>
+              <Text style={styles.cellLabel}>{t('caddie_data_strip.text.plays')}</Text>
               <Text style={[styles.cellValue, { fontSize: 22 }]}>
                 {playsLike != null ? String(playsLike) : '—'}
                 {playsLike != null && playsLikeDelta ? (
@@ -375,14 +377,14 @@ export default function CaddieDataStrip({
               Tapping the value text between the arrows still expands
               the cockpit, so the affordance doesn't get hijacked. */}
           <View style={styles.cell}>
-            <Text style={styles.cellLabel}>HOLE</Text>
+            <Text style={styles.cellLabel}>{t('caddie_data_strip.text.hole')}</Text>
             <View style={styles.holeNavRow}>
               <Pressable
                 onPress={handleHolePrev}
                 disabled={hole.current <= (hole.first ?? 1)}
                 hitSlop={14}
                 accessibilityRole="button"
-                accessibilityLabel="Previous hole"
+                accessibilityLabel={t('caddie_data_strip.accessibility_label.previous_hole')}
                 style={styles.holeNavBtn}
               >
                 <Ionicons
@@ -397,7 +399,7 @@ export default function CaddieDataStrip({
                 disabled={hole.current >= hole.total}
                 hitSlop={14}
                 accessibilityRole="button"
-                accessibilityLabel="Next hole"
+                accessibilityLabel={t('caddie_data_strip.accessibility_label.next_hole')}
                 style={styles.holeNavBtn}
               >
                 <Ionicons

@@ -147,6 +147,7 @@ import { analyzePutt, type PuttingAnalysis } from '../../services/puttingAnalysi
 import { ShotMapPage } from '../../components/smartmotion/ShotMapPage';
 import { getApiBaseUrl } from '../../services/apiBase';
 import { drillFocusRead } from '../../services/swing/drillFocusRead';
+import { useTranslation } from 'react-i18next';
 
 const RECORDING_MAX_SECONDS = 60; // practice / course — open window, player swings freely
 const RANGE_RECORDING_MAX_SECONDS = 120; // range — longer window for a multi-swing session
@@ -556,6 +557,7 @@ const toolCardStyles = StyleSheet.create({
 // ─── screen ──────────────────────────────────────────────────────────
 
 export default function SmartMotion() {
+  const { t } = useTranslation();
   // 2026-09-06 — remote kill switch. Redirects to the Caddie screen if `cage_capture` is off, whether it
   // was already off on entry or flips off while this screen is open. No message, by instruction.
   useFlagGate('cage_capture');
@@ -3738,7 +3740,7 @@ export default function SmartMotion() {
     if (!micPerm?.granted) {
       const r = await requestMicPerm();
       if (!r.granted) {
-        Alert.alert('Microphone needed', 'Smart Motion listens for ball strikes to detect your swings. Allow microphone access to record.');
+        Alert.alert(t('swinglab_smartmotion.alert.microphone_needed'), t('swinglab_smartmotion.alert.smart_motion_listens_for_ball'));
         return;
       }
     }
@@ -5021,10 +5023,10 @@ export default function SmartMotion() {
     return (
       <View style={[styles.root, styles.center, { padding: 24 }]}>
         <Ionicons name="camera-outline" size={48} color={colors.accent} />
-        <Text style={[styles.permTitle, { color: colors.text_primary }]}>Camera access needed</Text>
-        <Text style={[styles.permBody, { color: colors.text_muted }]}>Smart Motion records your swing to analyze it.</Text>
+        <Text style={[styles.permTitle, { color: colors.text_primary }]}>{t('swinglab_smartmotion.smart_motion.camera_access_needed')}</Text>
+        <Text style={[styles.permBody, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.smart_motion_records_your_swing')}</Text>
         <Pressable onPress={() => void requestCamPerm()} style={[styles.primaryBtn, { backgroundColor: colors.accent }]}>
-          <Text style={[styles.primaryBtnText, { color: '#06281b' }]}>Grant access</Text>
+          <Text style={[styles.primaryBtnText, { color: '#06281b' }]}>{t('swinglab_smartmotion.smart_motion.grant_access')}</Text>
         </Pressable>
       </View>
     );
@@ -5039,7 +5041,7 @@ export default function SmartMotion() {
     phase === 'recording' ? (
       // Stop as the matching green-circle badge (Tim's set), with a faint red fill so
       // "recording — tap to stop" still reads as live/urgent against the rest of the bar.
-      <TactilePressable haptic="medium" onPress={() => void stopRecording()} style={[styles.toolBtnBare, styles.barBtnStop]} accessibilityRole="button" accessibilityLabel="Stop recording">
+      <TactilePressable haptic="medium" onPress={() => void stopRecording()} style={[styles.toolBtnBare, styles.barBtnStop]} accessibilityRole="button" accessibilityLabel={t('swinglab_smartmotion.accessibility_label.stop_recording')}>
         <Image source={ICON_CTRL.stop} style={{ width: 56, height: 56 }} resizeMode="contain" />
       </TactilePressable>
     ) : isReview ? (
@@ -5059,7 +5061,7 @@ export default function SmartMotion() {
         {/* 2026-06-13 (Tim) — RE-ANALYZE the kept clip instead of re-recording.
             Glows on a NO-READ so the failure state points you here, not at a
             wasted re-swing. */}
-        <TactilePressable onPress={reanalyze} disabled={!clipUri} style={[styles.toolBtnBare, !!analysisError && styles.toolBtnBareActive]} accessibilityRole="button" accessibilityLabel="Re-analyze this swing">
+        <TactilePressable onPress={reanalyze} disabled={!clipUri} style={[styles.toolBtnBare, !!analysisError && styles.toolBtnBareActive]} accessibilityRole="button" accessibilityLabel={t('swinglab_smartmotion.accessibility_label.re_analyze_this_swing')}>
           <Ionicons name="refresh" size={24} color={analysisError ? colors.accent : '#fff'} />
         </TactilePressable>
         {/* 2026-07-07 (Tim — "still hard to start a new session") — the two decisions
@@ -5067,23 +5069,23 @@ export default function SmartMotion() {
             first (persistReviewToLibrary in beginNextRecording), so it's one obvious
             tap to keep rolling without losing anything. */}
         <View style={styles.ctrlLabeled}>
-          <TactilePressable onPress={confirmSave} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel="Save to library">
+          <TactilePressable onPress={confirmSave} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel={t('swinglab_smartmotion.accessibility_label.save_to_library')}>
             <Image source={ICON_CTRL.save} style={styles.toolIconFull} resizeMode="contain" />
           </TactilePressable>
-          <Text style={styles.ctrlLabelText}>SAVE</Text>
+          <Text style={styles.ctrlLabelText}>{t('swinglab_smartmotion.smart_motion.save')}</Text>
         </View>
-        <TactilePressable onPress={discardSwing} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel="Delete swing">
+        <TactilePressable onPress={discardSwing} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel={t('swinglab_smartmotion.accessibility_label.delete_swing')}>
           <Image source={ICON_CTRL.delete} style={styles.toolIconFull} resizeMode="contain" />
         </TactilePressable>
         <View style={styles.ctrlLabeled}>
-          <TactilePressable onPress={() => beginNextRecording()} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel="New set — saves this one and records again">
+          <TactilePressable onPress={() => beginNextRecording()} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel={t('swinglab_smartmotion.accessibility_label.new_set_saves_this_one')}>
             <Image source={ICON_CTRL.record} style={styles.toolIconFull} resizeMode="contain" />
           </TactilePressable>
-          <Text style={[styles.ctrlLabelText, { color: '#88F700' }]}>NEW SET</Text>
+          <Text style={[styles.ctrlLabelText, { color: '#88F700' }]}>{t('swinglab_smartmotion.smart_motion.new_set')}</Text>
         </View>
       </View>
     ) : phase === 'setup' ? (
-      <TactilePressable haptic="medium" onPress={() => void startRecording()} style={[styles.toolBtnBare, styles.barBtnRecord]} accessibilityRole="button" accessibilityLabel="Record">
+      <TactilePressable haptic="medium" onPress={() => void startRecording()} style={[styles.toolBtnBare, styles.barBtnRecord]} accessibilityRole="button" accessibilityLabel={t('swinglab_smartmotion.accessibility_label.record')}>
         <Image source={ICON_CTRL.record} style={{ width: 56, height: 56 }} resizeMode="contain" />
       </TactilePressable>
     ) : (
@@ -5311,9 +5313,9 @@ export default function SmartMotion() {
             <View style={styles.clubScanBox}>
               {clubScanCount > 0
                 ? <Text style={styles.clubScanCount}>{clubScanCount}</Text>
-                : <Text style={styles.clubScanReading}>Reading…</Text>}
+                : <Text style={styles.clubScanReading}>{t('swinglab_smartmotion.smart_motion.reading')}</Text>}
             </View>
-            <Text style={styles.clubScanHint}>Hold the club SOLE flat in the box · keep it steady</Text>
+            <Text style={styles.clubScanHint}>{t('swinglab_smartmotion.smart_motion.hold_the_club_sole_flat')}</Text>
           </View>
         )}
 
@@ -5341,7 +5343,7 @@ export default function SmartMotion() {
             against this intended effort, so a deliberate half-swing isn't a "fault". */}
         {isReview && showResults && !isPutt && effortPct != null ? (
           <View style={[styles.effortPill, { top: insets.top + 150 }]} pointerEvents="none">
-            <Text style={styles.tempoPillLabel}>EFFORT</Text>
+            <Text style={styles.tempoPillLabel}>{t('swinglab_smartmotion.smart_motion.effort')}</Text>
             <Text style={[styles.tempoPillValue, { color: '#88F700' }]}>{effortPct}%</Text>
             <Text style={styles.tempoPillUnit}>shot</Text>
           </View>
@@ -5349,7 +5351,7 @@ export default function SmartMotion() {
 
         {/* Smart Capture — tap exposed video to freeze + mark up. */}
         {isReview && clipUri ? (
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setAnnotateOpen(true)} accessibilityRole="button" accessibilityLabel="Freeze and mark up this swing" />
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setAnnotateOpen(true)} accessibilityRole="button" accessibilityLabel={t('swinglab_smartmotion.accessibility_label.freeze_and_mark_up_this')} />
         ) : null}
 
         {/* Attached skeletal overlay — real keypoints tracked to playback.
@@ -5483,7 +5485,7 @@ export default function SmartMotion() {
               setPlaceBallMode(false);
             }}
             accessibilityRole="button"
-            accessibilityLabel="Tap where your ball is"
+            accessibilityLabel={t('swinglab_smartmotion.accessibility_label.tap_where_your_ball_is')}
           />
         ) : null}
 
@@ -5507,7 +5509,7 @@ export default function SmartMotion() {
 
         {/* TOP BAR (interactive) */}
         <View style={[styles.topBar, { paddingTop: insets.top + 6 }]}>
-          <Pressable onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back">
+          <Pressable onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('swinglab_smartmotion.accessibility_label.back')}>
             <Ionicons name="chevron-back" size={26} color={colors.accent} />
           </Pressable>
           <CaddieMicBadge size={36} />
@@ -5605,7 +5607,7 @@ export default function SmartMotion() {
             </TactilePressable>
             {railExpanded ? (
               <View style={styles.toolCard}>
-                <Text style={styles.toolCardHeader}>SETUP TOOLS</Text>
+                <Text style={styles.toolCardHeader}>{t('swinglab_smartmotion.smart_motion.setup_tools')}</Text>
                 <ToolCardRow
                   icon={<Image source={ICON_RAIL.calibrate} style={styles.toolCardIcon} resizeMode="contain" />}
                   title={calibrated ? 'Re-calibrate' : 'Calibrate'}
@@ -5615,7 +5617,7 @@ export default function SmartMotion() {
                 />
                 <ToolCardRow
                   icon={scanningClub ? <Ionicons name="sync" size={26} color={colors.accent} /> : <Image source={ICON_CLUB} style={styles.toolCardIcon} resizeMode="contain" />}
-                  title="Scan club"
+                  title={t('swinglab_smartmotion.title.scan_club')}
                   desc="Hold the sole to the camera"
                   disabled={scanningClub || clubScanActive}
                   onPress={() => { setRailExpanded(false); void startClubScan(); }}
@@ -5751,9 +5753,9 @@ export default function SmartMotion() {
               {shotShapeVerdict.match === 'on' ? '✓ ' : ''}{shotShapeDef.name.toUpperCase()}
             </Text>
             <View style={styles.shotShapeRow}>
-              <Text style={styles.shotShapeLeg}>WENT FOR <Text style={styles.shotShapeVal}>{shotShapeVerdict.intendedHeight}</Text></Text>
+              <Text style={styles.shotShapeLeg}>{t('swinglab_smartmotion.smart_motion.went_for')} <Text style={styles.shotShapeVal}>{shotShapeVerdict.intendedHeight}</Text></Text>
               <Ionicons name="arrow-forward" size={12} color="#9ca3af" />
-              <Text style={styles.shotShapeLeg}>READ <Text style={[styles.shotShapeVal, { color: shotShapeVerdict.match === 'on' ? '#3FB950' : shotShapeVerdict.match === 'close' ? '#f5a623' : '#ef4444' }]}>{shotShapeVerdict.actualHeight}</Text></Text>
+              <Text style={styles.shotShapeLeg}>{t('swinglab_smartmotion.smart_motion.read')} <Text style={[styles.shotShapeVal, { color: shotShapeVerdict.match === 'on' ? '#3FB950' : shotShapeVerdict.match === 'close' ? '#f5a623' : '#ef4444' }]}>{shotShapeVerdict.actualHeight}</Text></Text>
             </View>
             <Text style={styles.shotShapeFeedback}>{shotShapeVerdict.feedback}</Text>
           </View>
@@ -5839,7 +5841,7 @@ export default function SmartMotion() {
         {phase === 'setup' && placeBallMode ? (
           <View style={[styles.placeHint, { bottom: insets.bottom + 24, backgroundColor: colors.overlay }]} pointerEvents="none">
             <Ionicons name="hand-left-outline" size={15} color={colors.accent} />
-            <Text style={[styles.placeHintText, { color: colors.accent }]}>Tap the floor where your ball is</Text>
+            <Text style={[styles.placeHintText, { color: colors.accent }]}>{t('swinglab_smartmotion.smart_motion.tap_the_floor_where_your')}</Text>
           </View>
         ) : (
         /**
@@ -5926,7 +5928,7 @@ export default function SmartMotion() {
                     onPress={() => setExpandedCard(null)}
                     style={styles.cardExpandedHeader}
                     accessibilityRole="button"
-                    accessibilityLabel="Back to all four cards"
+                    accessibilityLabel={t('swinglab_smartmotion.accessibility_label.back_to_all_four_cards')}
                   >
                     <Ionicons name="chevron-back" size={16} color={colors.accent} />
                     <Text style={[styles.cardExpandedTitle, { color: colors.accent }]}>
@@ -5942,16 +5944,16 @@ export default function SmartMotion() {
                     {expandedCard === 'breakdown' ? (
                       poseRead.usable
                         ? <SwingBreakdownCard read={poseRead} variant="overlay" />
-                        : <Text style={[styles.cardEmptyNote, { color: colors.text_muted }]}>No measured pose read for this swing.</Text>
+                        : <Text style={[styles.cardEmptyNote, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.no_measured_pose_read_for')}</Text>
                     ) : null}
                     {expandedCard === 'speed' ? (
                       <>
                         <View style={styles.speedRow}>
                           {/* 2026-07-07 (audit M1) — a number only when DERIVED from THIS swing; a
                               handicap-table lookup is identical for every swing and carries no signal. */}
-                          <SpeedStat label="CLUB" value={isSwingDerived(metrics.club_speed.source) && metrics.club_speed.value != null ? String(metrics.club_speed.value) : null} unit="mph" estimate={!isTruthGrade(metrics.club_speed.source)} style={{ flex: 1 }} />
-                          <SpeedStat label="BALL" value={isSwingDerived(metrics.ball_speed.source) && metrics.ball_speed.value != null ? String(metrics.ball_speed.value) : null} unit="mph" estimate={!isTruthGrade(metrics.ball_speed.source)} style={{ flex: 1 }} />
-                          <SpeedStat label="CARRY" value={isSwingDerived(metrics.carry_yards.source) && metrics.carry_yards.value != null ? String(metrics.carry_yards.value) : null} unit="yds" estimate={!isTruthGrade(metrics.carry_yards.source)} style={{ flex: 1 }} />
+                          <SpeedStat label={t('scorecard.col_club')} value={isSwingDerived(metrics.club_speed.source) && metrics.club_speed.value != null ? String(metrics.club_speed.value) : null} unit="mph" estimate={!isTruthGrade(metrics.club_speed.source)} style={{ flex: 1 }} />
+                          <SpeedStat label={t('swinglab_smartmotion.label.ball')} value={isSwingDerived(metrics.ball_speed.source) && metrics.ball_speed.value != null ? String(metrics.ball_speed.value) : null} unit="mph" estimate={!isTruthGrade(metrics.ball_speed.source)} style={{ flex: 1 }} />
+                          <SpeedStat label={t('swinglab_smartmotion.label.carry')} value={isSwingDerived(metrics.carry_yards.source) && metrics.carry_yards.value != null ? String(metrics.carry_yards.value) : null} unit="yds" estimate={!isTruthGrade(metrics.carry_yards.source)} style={{ flex: 1 }} />
                         </View>
                         <TempoBar ratio={tempo?.ratio ?? null} />
                         {tempo?.ratio != null && tempo.backswingMs != null && tempo.downswingMs != null ? (
@@ -6019,7 +6021,7 @@ export default function SmartMotion() {
         {phase === 'setup' && !isPutt && effortRaw != null ? (
             <View style={styles.planRow}>
               <View style={styles.planCard}>
-                <Text style={styles.planLabel}>EFFORT</Text>
+                <Text style={styles.planLabel}>{t('swinglab_smartmotion.smart_motion.effort')}</Text>
                 <Text style={styles.planValue} numberOfLines={1}>{effortRaw != null ? `${effortRaw}%` : '—'}</Text>
                 <View style={styles.planSeg}>
                   {Array.from({ length: 6 }).map((_, i) => {
@@ -6029,7 +6031,7 @@ export default function SmartMotion() {
                 </View>
               </View>
               <View style={styles.planCard}>
-                <Text style={styles.planLabel}>CARRY</Text>
+                <Text style={styles.planLabel}>{t('swinglab_smartmotion.smart_motion.carry')}</Text>
                 <Text style={styles.planValue} numberOfLines={1}>{estCarry != null ? `~${estCarry}` : '—'}</Text>
                 <Text style={styles.planUnit}>{estCarry != null ? 'yds' : ''}</Text>
               </View>
@@ -6040,7 +6042,7 @@ export default function SmartMotion() {
                   [[illustration-data-points]] */}
               {aimRead && isPutt ? (
                 <View style={styles.planCard}>
-                  <Text style={styles.planLabel}>AIM</Text>
+                  <Text style={styles.planLabel}>{t('swinglab_smartmotion.smart_motion.aim')}</Text>
                   <Text
                     style={[styles.planValue, styles.planValueText, { color: aimRead === 'STRAIGHT' ? colors.accent : '#f5c451' }]}
                     numberOfLines={1}
@@ -6057,7 +6059,7 @@ export default function SmartMotion() {
               deck row. Non-drill setup only (drills set their own swing count). */}
           {!isDrill && phase === 'setup' ? (
             <View style={styles.swingRow}>
-              <Text style={styles.swingRowLabel}>SWINGS</Text>
+              <Text style={styles.swingRowLabel}>{t('swinglab_smartmotion.smart_motion.swings')}</Text>
               {([null, 1, 3, 5] as const).map((n) => {
                 const active = targetSwings === n;
                 return (
@@ -6133,7 +6135,7 @@ export default function SmartMotion() {
               right-side icon rail (rendered over the camera) so the bottom
               stays clear of the ball box. A one-line hint shows when placing. */}
           {phase === 'setup' && placeBallMode ? (
-            <Text style={[styles.setupHintLine, { color: colors.accent }]}>Tap where your ball sits</Text>
+            <Text style={[styles.setupHintLine, { color: colors.accent }]}>{t('swinglab_smartmotion.smart_motion.tap_where_your_ball_sits')}</Text>
           ) : null}
 
           {!isReview ? (
@@ -6210,11 +6212,11 @@ export default function SmartMotion() {
     >
       <View style={styles.cardHeaderRow}>
         <Ionicons name="bulb-outline" size={16} color={colors.accent} />
-        <Text style={[styles.cardHeader, { color: colors.text_primary }]}>ANALYSIS</Text>
+        <Text style={[styles.cardHeader, { color: colors.text_primary }]}>{t('swinglab_smartmotion.smart_motion.analysis')}</Text>
         <View style={{ flex: 1 }} />
         <Pressable onPress={() => pagerRef.current?.scrollTo({ x: 0, animated: true })} hitSlop={8} style={styles.backChip}>
           <Ionicons name="chevron-back" size={14} color={colors.text_muted} />
-          <Text style={[styles.backChipText, { color: colors.text_muted }]}>Capture</Text>
+          <Text style={[styles.backChipText, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.capture')}</Text>
         </Pressable>
       </View>
 
@@ -6264,15 +6266,15 @@ export default function SmartMotion() {
               <Text style={[styles.insightText, { color: colors.text_primary }]}>{puttAnalysis.caddieComment}</Text>
             </View>
             <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-              <Text style={[styles.insightLabel, { color: colors.text_muted }]}>LINE</Text>
+              <Text style={[styles.insightLabel, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.line')}</Text>
               <Text style={[styles.insightText, { color: colors.text_secondary }]}>{puttAnalysis.recommendation.line}</Text>
             </View>
             <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-              <Text style={[styles.insightLabel, { color: colors.text_muted }]}>SPEED / FEEL</Text>
+              <Text style={[styles.insightLabel, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.speed_feel')}</Text>
               <Text style={[styles.insightText, { color: colors.text_secondary }]}>{puttAnalysis.recommendation.speedFeel}</Text>
             </View>
             <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-              <Text style={[styles.insightLabel, { color: colors.text_muted }]}>CUE</Text>
+              <Text style={[styles.insightLabel, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.cue')}</Text>
               <Text style={[styles.insightText, { color: colors.text_secondary }]}>{puttAnalysis.recommendation.technicalCue}</Text>
             </View>
           </>
@@ -6299,8 +6301,8 @@ export default function SmartMotion() {
           return (
             <>
               <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-                <Text style={[styles.insightLabel, { color: colors.text_muted }]}>WHAT WE READ</Text>
-                <Text style={[styles.insightText, { color: colors.text_secondary }]}>Couldn’t get a full coaching read on this clip, but your motion showed:</Text>
+                <Text style={[styles.insightLabel, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.what_we_read')}</Text>
+                <Text style={[styles.insightText, { color: colors.text_secondary }]}>{t('swinglab_smartmotion.smart_motion.couldn_t_get_a_full')}</Text>
               </View>
               {partial.map((line, i) => (
                 <Text key={i} style={[styles.insightBody, { color: colors.text_secondary, backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>{line}</Text>
@@ -6312,7 +6314,7 @@ export default function SmartMotion() {
         <>
           {faultHeadline ? (
             <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-              <Text style={[styles.insightLabel, { color: colors.text_muted }]}>TOP FOCUS</Text>
+              <Text style={[styles.insightLabel, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.top_focus')}</Text>
               <Text style={[styles.insightHeadline, { color: colors.text_primary }]}>{faultHeadline.toUpperCase()}</Text>
               <Text style={[styles.insightConf, { color: colors.text_muted }]}>Confidence: {analysis.confidence ?? '—'}</Text>
               {/*
@@ -6336,21 +6338,21 @@ export default function SmartMotion() {
 
           {analysis.cause ? (
             <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-              <Text style={[styles.insightLabel, { color: colors.text_muted }]}>WHY IT HAPPENS</Text>
+              <Text style={[styles.insightLabel, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.why_it_happens')}</Text>
               <Text style={[styles.insightText, { color: colors.text_secondary }]}>{analysis.cause}</Text>
             </View>
           ) : null}
 
           {analysis.fix ? (
             <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.accent }]}>
-              <Text style={[styles.insightLabel, { color: colors.accent }]}>THE FIX</Text>
+              <Text style={[styles.insightLabel, { color: colors.accent }]}>{t('swinglab_smartmotion.smart_motion.the_fix')}</Text>
               <Text style={[styles.insightText, { color: colors.text_primary }]}>{analysis.fix}</Text>
             </View>
           ) : null}
 
           {analysis.drill ? (
             <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-              <Text style={[styles.insightLabel, { color: colors.text_muted }]}>RECOMMENDED DRILL</Text>
+              <Text style={[styles.insightLabel, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.recommended_drill')}</Text>
               <Text style={[styles.insightText, { color: colors.text_secondary }]}>{analysis.drill}</Text>
             </View>
           ) : null}
@@ -6367,12 +6369,12 @@ export default function SmartMotion() {
 
           <Pressable onPress={openDrills} style={[styles.secondaryBtn, { borderColor: colors.accent }]}>
             <Ionicons name="library-outline" size={16} color={colors.accent} />
-            <Text style={[styles.secondaryBtnText, { color: colors.accent }]}>Open drills</Text>
+            <Text style={[styles.secondaryBtnText, { color: colors.accent }]}>{t('swinglab_smartmotion.smart_motion.open_drills')}</Text>
           </Pressable>
 
           <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
             <View style={styles.noteHeadRow}>
-              <Text style={[styles.insightLabel, { color: colors.text_muted }]}>COACH NOTES</Text>
+              <Text style={[styles.insightLabel, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.coach_notes')}</Text>
               <View style={{ flex: 1 }} />
               <Pressable
                 onPress={() => dictate('note', (t) => setCoachNote((p) => (p ? `${p} ${t}` : t)))}
@@ -6395,7 +6397,7 @@ export default function SmartMotion() {
             />
             <Pressable onPress={saveCoachNote} style={[styles.secondaryBtn, { borderColor: colors.border, marginTop: 8 }]}>
               <Ionicons name="save-outline" size={15} color={colors.text_secondary} />
-              <Text style={[styles.secondaryBtnText, { color: colors.text_secondary }]}>Save note</Text>
+              <Text style={[styles.secondaryBtnText, { color: colors.text_secondary }]}>{t('swinglab_smartmotion.smart_motion.save_note')}</Text>
             </Pressable>
           </View>
 
@@ -6412,7 +6414,7 @@ export default function SmartMotion() {
       {isReview ? (
         <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
           <View style={styles.noteHeadRow}>
-            <Text style={[styles.insightLabel, { color: colors.text_muted }]}>HOW&apos;D IT FEEL?</Text>
+            <Text style={[styles.insightLabel, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.how_d_it_feel')}</Text>
             <View style={{ flex: 1 }} />
             <Pressable
               onPress={() => dictate('feel', (t) => setFeelText((p) => (p ? `${p} ${t}` : t)))}
@@ -6454,15 +6456,15 @@ export default function SmartMotion() {
           the BOTTOM (Tim) so what we CAN'T do yet never sits above the real read. */}
       {!isPutt ? (
         <View style={[styles.comingCard, { borderColor: colors.border }]}>
-          <Text style={[styles.insightLabel, { color: colors.text_muted }]}>COMING SOON</Text>
+          <Text style={[styles.insightLabel, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.coming_soon')}</Text>
           <View style={styles.comingRow}>
             <View style={styles.comingItem}>
               <Image source={ICON_METRIC.face} style={styles.comingImg} resizeMode="contain" />
-              <Text style={[styles.comingItemLabel, { color: isDark ? '#88F700' : '#2f7d12' }]}>FACE ANGLE</Text>
+              <Text style={[styles.comingItemLabel, { color: isDark ? '#88F700' : '#2f7d12' }]}>{t('swinglab_smartmotion.smart_motion.face_angle')}</Text>
             </View>
           </View>
           <Text style={[styles.comingNote, { color: colors.text_muted }]}>
-            Face angle needs higher-frame-rate capture (240fps+) or an added camera source (e.g. a GoPro feed) to measure reliably — on the roadmap. (Smash factor now shows as an estimate above.)
+            {t('swinglab_smartmotion.smart_motion.face_angle_needs_higher_frame')}
           </Text>
         </View>
       ) : null}
@@ -6544,7 +6546,7 @@ export default function SmartMotion() {
             <Video source={{ uri: clipUri }} style={StyleSheet.absoluteFill} resizeMode={ResizeMode.CONTAIN} shouldPlay={false} useNativeControls={false} />
           ) : null}
           <VideoAnnotationOverlay topOffset={insets.top + 60} />
-          <Pressable onPress={() => setAnnotateOpen(false)} style={[styles.markupClose, { top: insets.top + 8 }]} accessibilityRole="button" accessibilityLabel="Close markup">
+          <Pressable onPress={() => setAnnotateOpen(false)} style={[styles.markupClose, { top: insets.top + 8 }]} accessibilityRole="button" accessibilityLabel={t('swinglab_smartmotion.accessibility_label.close_markup')}>
             <Ionicons name="close" size={26} color="#fff" />
           </Pressable>
         </View>

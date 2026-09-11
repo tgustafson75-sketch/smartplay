@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
 
 /**
  * 2026-07-14 (Tim — "these status updates are on-brand, use them in the full app") — the staged
@@ -29,6 +30,7 @@ type Props = {
 };
 
 export default function SwingAnalysisSteps({ steps = DEFAULT_STEPS, intervalMs = 1400, done = false }: Props) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const [active, setActive] = useState(0);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -45,7 +47,7 @@ export default function SwingAnalysisSteps({ steps = DEFAULT_STEPS, intervalMs =
   }, [done, intervalMs, steps.length]);
 
   return (
-    <View style={styles.wrap} accessibilityLabel="Analyzing your swing">
+    <View style={styles.wrap} accessibilityLabel={t('swinglab_swing_analysis_steps.accessibility_label.analyzing_your_swing')}>
       {steps.map((label, i) => {
         const state = done || i < active ? 'done' : i === active ? 'active' : 'pending';
         const lit = state !== 'pending';

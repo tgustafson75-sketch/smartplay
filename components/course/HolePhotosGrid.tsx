@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, Image, TouchableOpacity, Modal, StyleSheet, useWindowDimensions, FlatList, type ImageSourcePropType } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
 
 type HolePhoto = {
   hole_number: number;
@@ -27,6 +28,7 @@ type Props = {
  * them today), renders a quiet placeholder rather than hiding the section.
  */
 export default function HolePhotosGrid({ photos }: Props) {
+  const { t } = useTranslation();
   const { width } = useWindowDimensions();
   const { colors } = useTheme();
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
@@ -38,7 +40,7 @@ export default function HolePhotosGrid({ photos }: Props) {
   if (photos.length === 0) {
     return (
       <View style={[styles.placeholderWrap, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <Text style={[styles.placeholderText, { color: colors.text_muted }]}>Hole photos coming soon.</Text>
+        <Text style={[styles.placeholderText, { color: colors.text_muted }]}>{t('course_hole_photos_grid.hole_photos_grid.hole_photos_coming_soon')}</Text>
       </View>
     );
   }
@@ -111,7 +113,7 @@ export default function HolePhotosGrid({ photos }: Props) {
             )}
           />
           <TouchableOpacity onPress={() => setActiveIdx(null)} style={styles.viewerClose}>
-            <Text style={styles.viewerCloseText}>Close</Text>
+            <Text style={styles.viewerCloseText}>{t('course_hole_photos_grid.hole_photos_grid.close')}</Text>
           </TouchableOpacity>
         </View>
       </Modal>

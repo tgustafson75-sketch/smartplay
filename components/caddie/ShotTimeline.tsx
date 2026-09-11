@@ -26,6 +26,7 @@ import React, { useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoundStore, type ShotResult } from '../../store/roundStore';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   /** Optional cap on rows rendered. Default 8 — enough to see the
@@ -81,6 +82,7 @@ function directionTag(direction: ShotResult['direction'] | null | undefined): st
 }
 
 export default function ShotTimeline({ maxRows = DEFAULT_MAX_ROWS, holeOnly = false }: Props) {
+  const { t } = useTranslation();
   const shots = useRoundStore(s => s.shots);
   const currentHole = useRoundStore(s => s.currentHole);
 
@@ -94,7 +96,7 @@ export default function ShotTimeline({ maxRows = DEFAULT_MAX_ROWS, holeOnly = fa
   return (
     <View style={styles.wrap}>
       <View style={styles.headerRow}>
-        <Text style={styles.headerLabel}>SHOTS</Text>
+        <Text style={styles.headerLabel}>{t('caddie_shot_timeline.shot_timeline.shots')}</Text>
         <Text style={styles.headerCount}>{rows.length} of {shots.length}</Text>
       </View>
       <ScrollView

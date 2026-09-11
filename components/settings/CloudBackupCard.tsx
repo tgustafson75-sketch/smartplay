@@ -17,6 +17,7 @@ import * as Updates from 'expo-updates';
 import { useTheme } from '../../contexts/ThemeContext';
 import { exportBackupToFile, importBackupFromFile } from '../../services/cloudSync/localBackup';
 import { useServerBackupStore, serverBackupNow, serverRestore } from '../../services/cloudSync/serverBackup';
+import { useTranslation } from 'react-i18next';
 
 function timeAgo(ms: number | null): string {
   if (!ms) return 'never';
@@ -28,6 +29,7 @@ function timeAgo(ms: number | null): string {
 }
 
 export default function CloudBackupCard() {
+  const { t } = useTranslation();
   const { colors } = useTheme();
 
   // 2026-07-06 (elite audit) — reload IMMEDIATELY after a successful restore.
@@ -41,7 +43,7 @@ export default function CloudBackupCard() {
     try {
       await Updates.reloadAsync();
     } catch {
-      Alert.alert('Restart needed', 'Your data was restored. Close and reopen the app to finish applying it.');
+      Alert.alert(t('settings_cloud_backup_card.alert.restart_needed'), t('settings_cloud_backup_card.alert.your_data_was_restored_close'));
     }
   };
 
@@ -50,7 +52,7 @@ export default function CloudBackupCard() {
     setFileBusy(true);
     const r = await exportBackupToFile();
     setFileBusy(false);
-    if (!r.ok && r.reason !== 'canceled') Alert.alert('Couldn’t save backup', r.reason ?? 'Export failed.');
+    if (!r.ok && r.reason !== 'canceled') Alert.alert(t('settings_cloud_backup_card.alert.couldn_t_save_backup'), r.reason ?? 'Export failed.');
   };
   const onImportFile = async () => {
     setFileBusy(true);
@@ -63,7 +65,7 @@ export default function CloudBackupCard() {
       const msg = r.reason === 'not_a_backup' ? 'That file isn’t a SmartPlay backup.'
         : r.reason === 'newer_version' ? 'That backup was made by a newer version of the app. Update SmartPlay, then restore.'
         : r.reason ?? 'Import failed.';
-      Alert.alert('Couldn’t restore', msg);
+      Alert.alert(t('settings_cloud_backup_card.alert.couldn_t_restore'), msg);
     }
   };
 
@@ -81,8 +83,8 @@ export default function CloudBackupCard() {
   const commitCredentials = (verb: string): { k: string; sec: string } | null => {
     const k = keyInput.trim().toLowerCase();
     const sec = secretInput.trim();
-    if (!k) { Alert.alert('Add a Backup ID', `Enter an email as your Backup ID to ${verb}.`); return null; }
-    if (sec.length < 4) { Alert.alert('Add a passphrase', 'Choose a passphrase of at least 4 characters. You’ll need the SAME email + passphrase to restore on another phone.'); return null; }
+    if (!k) { Alert.alert(t('settings_cloud_backup_card.alert.add_a_backup_id'), `Enter an email as your Backup ID to ${verb}.`); return null; }
+    if (sec.length < 4) { Alert.alert(t('settings_cloud_backup_card.alert.add_a_passphrase'), t('settings_cloud_backup_card.alert.choose_a_passphrase_of_at')); return null; }
     setBackupKey(k);
     setSecret(sec);
     return { k, sec };
@@ -93,8 +95,8 @@ export default function CloudBackupCard() {
     setServerBusy(true);
     const r = await serverBackupNow({ force: true });
     setServerBusy(false);
-    if (r.ok) Alert.alert('Backed up', 'Your data is saved to your account. It’ll auto-back-up from now on. Keep your email + passphrase to restore on a new phone.');
-    else Alert.alert('Backup failed', r.reason === 'not_configured' ? 'Cloud isn’t reachable yet — the file backup above still protects you.' : (r.reason ?? 'Try again.'));
+    if (r.ok) Alert.alert(t('settings_cloud_backup_card.alert.backed_up'), t('settings_cloud_backup_card.alert.your_data_is_saved_to'));
+    else Alert.alert(t('settings_cloud_backup_card.alert.backup_failed'), r.reason === 'not_configured' ? 'Cloud isn’t reachable yet — the file backup above still protects you.' : (r.reason ?? 'Try again.'));
   };
   const onServerRestore = async () => {
     const creds = commitCredentials('restore');
@@ -103,7 +105,7 @@ export default function CloudBackupCard() {
     const r = await serverRestore(creds.k, creds.sec);
     setServerBusy(false);
     if (r.ok) await reloadAfterRestore();
-    else Alert.alert('Nothing to restore', r.reason === 'not_found' ? 'No backup found for that email + passphrase. Double-check both — they must match what you backed up with.' : (r.reason ?? 'Restore failed.'));
+    else Alert.alert(t('settings_cloud_backup_card.alert.nothing_to_restore'), r.reason === 'not_found' ? 'No backup found for that email + passphrase. Double-check both — they must match what you backed up with.' : (r.reason ?? 'Restore failed.'));
   };
 
   const s = makeStyles(colors);
@@ -112,36 +114,33 @@ export default function CloudBackupCard() {
     <View style={s.card}>
       <View style={s.headerRow}>
         <Ionicons name="save-outline" size={20} color={colors.accent} style={{ marginRight: 8 }} />
-        <Text style={s.title}>Backup & Restore</Text>
+        <Text style={s.title}>{t('settings_cloud_backup_card.cloud_backup_card.backup_restore')}</Text>
       </View>
 
       {/* ── Local file backup — ALWAYS available, no account/config needed ── */}
       <Text style={s.muted}>
-        Save a backup file of your rounds, bag, caddie memory, courses + settings. Keep it in Files / Drive /
-        email — restore it any time, even on a new phone. No account needed.
+        {t('settings_cloud_backup_card.cloud_backup_card.save_a_backup_file_of')}
       </Text>
       <View style={s.btnRow}>
         <TouchableOpacity style={[s.btn, { backgroundColor: colors.accent }]} onPress={onExportFile} disabled={fileBusy}>
-          {fileBusy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Save backup file</Text>}
+          {fileBusy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>{t('settings_cloud_backup_card.cloud_backup_card.save_backup_file')}</Text>}
         </TouchableOpacity>
         <TouchableOpacity style={[s.btn, s.btnOutline, { borderColor: colors.accent }]} onPress={onImportFile} disabled={fileBusy}>
-          <Text style={[s.btnText, { color: colors.accent }]}>Restore from file</Text>
+          <Text style={[s.btnText, { color: colors.accent }]}>{t('settings_cloud_backup_card.cloud_backup_card.restore_from_file')}</Text>
         </TouchableOpacity>
       </View>
 
       <View style={s.divider} />
       <View style={s.headerRow}>
         <Ionicons name="cloud-outline" size={18} color={colors.text_secondary} style={{ marginRight: 8 }} />
-        <Text style={[s.title, { fontSize: 14 }]}>Auto-backup to your account</Text>
+        <Text style={[s.title, { fontSize: 14 }]}>{t('settings_cloud_backup_card.cloud_backup_card.auto_backup_to_your_account')}</Text>
       </View>
       <Text style={s.muted}>
-        Pick a Backup ID (your email) and a passphrase. Your data auto-backs-up and restores on ANY phone with
-        the same pair — that’s what makes a new phone pick up right where you left off. The email alone won’t
-        unlock your data without the passphrase, so keep the passphrase somewhere safe — we can’t recover it.
+        {t('settings_cloud_backup_card.cloud_backup_card.pick_a_backup_id_your')}
       </Text>
       <TextInput
         style={s.input}
-        placeholder="you@example.com"
+        placeholder={t('settings_cloud_backup_card.placeholder.you_example_com')}
         placeholderTextColor={colors.text_muted}
         value={keyInput}
         onChangeText={setKeyInput}
@@ -152,7 +151,7 @@ export default function CloudBackupCard() {
       <View style={[s.input, { flexDirection: 'row', alignItems: 'center', paddingVertical: 0 }]}>
         <TextInput
           style={{ flex: 1, color: colors.text_primary, fontSize: 15, paddingVertical: 10 }}
-          placeholder="Passphrase (keep it safe)"
+          placeholder={t('settings_cloud_backup_card.placeholder.passphrase_keep_it_safe')}
           placeholderTextColor={colors.text_muted}
           value={secretInput}
           onChangeText={setSecretInput}
@@ -178,10 +177,10 @@ export default function CloudBackupCard() {
       </View>
       <View style={s.btnRow}>
         <TouchableOpacity style={[s.btn, { backgroundColor: colors.accent }]} onPress={onServerBackup} disabled={serverBusy}>
-          {serverBusy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>Back up now</Text>}
+          {serverBusy ? <ActivityIndicator color="#fff" /> : <Text style={s.btnText}>{t('settings_cloud_backup_card.cloud_backup_card.back_up_now')}</Text>}
         </TouchableOpacity>
         <TouchableOpacity style={[s.btn, s.btnOutline, { borderColor: colors.accent }]} onPress={onServerRestore} disabled={serverBusy}>
-          <Text style={[s.btnText, { color: colors.accent }]}>Restore</Text>
+          <Text style={[s.btnText, { color: colors.accent }]}>{t('settings_cloud_backup_card.cloud_backup_card.restore')}</Text>
         </TouchableOpacity>
       </View>
     </View>

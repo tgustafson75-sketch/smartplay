@@ -283,8 +283,8 @@ export default function Settings() {
         // it (Alert with the two steps + an Open-Meta-AI button) instead of a transient toast.
         if ((code || msg).toUpperCase().includes('ELIGIBLE') || (code || '').toUpperCase().includes('SESSION')) {
           Alert.alert(
-            'Glasses not authorized yet',
-            'The app + registration check out — this is the Meta side. Two switches:\n\n1. Meta AI app → Settings → App Info → tap the version number 5× → turn ON Developer Mode.\n2. Make sure the glasses are paired on the t.gustafson@hotmail.com account (the developer-app owner).\n\nThen try the toggle again.',
+            t('settings.alert.glasses_not_authorized_yet'),
+            t('settings.alert.the_app_registration_check_out'),
             [
               { text: 'Open Meta AI', onPress: () => { Linking.openURL('fb-mwa://').catch(() => Linking.openURL('https://www.meta.com/smart-glasses/app/').catch(() => {})); } },
               { text: 'OK', style: 'cancel' },
@@ -337,7 +337,7 @@ export default function Settings() {
       const eligible = roundMod.eligibleHandicapRounds(rounds);
       if (eligible.length < 3) {
         Alert.alert(
-          'Need more rounds',
+          t('settings.alert.need_more_rounds'),
           `Recalculation needs at least 3 complete 9- or 18-hole rounds. You have ${eligible.length}. Play more rounds or import past rounds (Settings → Help → Import Past Round). Partial rounds (10-17 holes) aren't counted.`,
         );
         return;
@@ -355,15 +355,15 @@ export default function Settings() {
         profileMod.setHandicapIndex(result.newIndex);
         setEditIndex(String(result.newIndex));
         Alert.alert(
-          'Handicap Updated',
+          t('settings.alert.handicap_updated'),
           `New Index: ${result.newIndex.toFixed(1)}\n\n${result.estimateNote}`,
         );
       } else {
-        Alert.alert('Could not compute', result.estimateNote);
+        Alert.alert(t('settings.alert.could_not_compute'), result.estimateNote);
       }
     } catch (e) {
       console.log('[settings] recalculate handicap threw:', e);
-      Alert.alert('Recalculation failed', e instanceof Error ? e.message : String(e));
+      Alert.alert(t('settings.alert.recalculation_failed'), e instanceof Error ? e.message : String(e));
     }
   }, []);
   // 2026-06-16 — Meta glasses voice-log import (v1: JSON file, active
@@ -682,9 +682,9 @@ export default function Settings() {
             onPress={() => router.back()}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Text style={[styles.backText, { color: colors.accent }]}>‹ Back</Text>
+            <Text style={[styles.backText, { color: colors.accent }]}>{t('settings.text.back')}</Text>
           </TouchableOpacity>
-          <Text style={[styles.title, { color: colors.text_primary }]}>Settings</Text>
+          <Text style={[styles.title, { color: colors.text_primary }]}>{t('settings.text.settings')}</Text>
           <View style={{ width: 60 }} />
         </View>
 
@@ -696,7 +696,7 @@ export default function Settings() {
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholder="Search settings"
+            placeholder={t('settings.placeholder.search_settings')}
             placeholderTextColor={colors.text_muted}
             autoCorrect={false}
             autoCapitalize="none"
@@ -711,7 +711,7 @@ export default function Settings() {
 
         {/* PROFILE — slim card when saved, full edit form when expanded
             (auto-expanded if no name on file). 2026-05-18. */}
-        <SectionHeader title="Profile" />
+        <SectionHeader title={t('settings.title.profile')} />
         {!profileExpanded && name?.trim() ? (
           <View style={[
             styles.profileSlim,
@@ -737,7 +737,7 @@ export default function Settings() {
               onPress={() => setProfileExpanded(true)}
               hitSlop={10}
               accessibilityRole="button"
-              accessibilityLabel="Edit profile"
+              accessibilityLabel={t('settings.accessibility_label.edit_profile')}
               style={[styles.profileSlimGear, { borderColor: colors.accent }]}
             >
               {/* 2026-05-28 — Fix FB: settings-outline icon to match
@@ -761,7 +761,7 @@ export default function Settings() {
             <TouchableOpacity
               onPress={() => setProfileExpanded(false)}
               accessibilityRole="button"
-              accessibilityLabel="Minimize profile"
+              accessibilityLabel={t('settings.accessibility_label.minimize_profile')}
               hitSlop={10}
               style={{
                 position: 'absolute',
@@ -782,17 +782,17 @@ export default function Settings() {
             </TouchableOpacity>
           ) : null}
 
-          <Text style={inputLblStyle}>Name</Text>
+          <Text style={inputLblStyle}>{t('settings.text.name')}</Text>
           <TextInput
             style={inputFldStyle}
             value={editName}
             onChangeText={setEditName}
-            placeholder="Your name"
+            placeholder={t('settings.placeholder.your_name')}
             placeholderTextColor="#374151"
             autoCapitalize="words"
           />
 
-          <Text style={inputLblStyle}>Handicap</Text>
+          <Text style={inputLblStyle}>{t('settings.text.handicap')}</Text>
           <TextInput
             style={inputFldStyle}
             value={editHandicap}
@@ -802,13 +802,13 @@ export default function Settings() {
             placeholderTextColor="#374151"
           />
 
-          <Text style={inputLblStyle}>Personal Best</Text>
+          <Text style={inputLblStyle}>{t('settings.text.personal_best')}</Text>
           <TextInput
             style={inputFldStyle}
             value={editBest}
             onChangeText={setEditBest}
             keyboardType="numeric"
-            placeholder="Best round score"
+            placeholder={t('settings.placeholder.best_round_score')}
             placeholderTextColor="#374151"
           />
 
@@ -816,7 +816,7 @@ export default function Settings() {
               Highlights card. longestDrive auto-updates from logShot when
               a Driver shot beats the current high (see roundStore.logShot);
               longestPutt is manual until a putt-distance source lands. */}
-          <Text style={inputLblStyle}>Longest Drive (yards)</Text>
+          <Text style={inputLblStyle}>{t('settings.text.longest_drive_yards')}</Text>
           <TextInput
             style={inputFldStyle}
             value={editLongestDrive}
@@ -826,10 +826,10 @@ export default function Settings() {
             placeholderTextColor="#374151"
           />
           <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -8, marginBottom: 8 }]}>
-            Updated automatically as you log Driver shots.
+            {t('settings.text.updated_automatically_as_you_log')}
           </Text>
 
-          <Text style={inputLblStyle}>Longest Putt (yards)</Text>
+          <Text style={inputLblStyle}>{t('settings.text.longest_putt_yards')}</Text>
           <TextInput
             style={inputFldStyle}
             value={editLongestPutt}
@@ -839,10 +839,10 @@ export default function Settings() {
             placeholderTextColor="#374151"
           />
           <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -8, marginBottom: 8 }]}>
-            Manual entry for now.
+            {t('settings.text.manual_entry_for_now')}
           </Text>
 
-          <Text style={inputLblStyle}>Handicap Index (USGA)</Text>
+          <Text style={inputLblStyle}>{t('settings.text.handicap_index_usga')}</Text>
           <TextInput
             style={inputFldStyle}
             value={editIndex}
@@ -869,7 +869,7 @@ export default function Settings() {
             onPress={onRecalculateHandicap}
           >
             <Text style={[styles.recalcBtnText, { color: colors.accent }]}>
-              Recalculate from Round History
+              {t('settings.text.recalculate_from_round_history')}
             </Text>
           </TouchableOpacity>
           <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -4, marginBottom: 8 }]}>
@@ -877,7 +877,7 @@ export default function Settings() {
                 has been untrue since rebuildDifferentialsFromHistory started reading each round's
                 own baseRating and baseSlope. It understated the app's own accuracy to the player, on
                 the screen that explains how their handicap is worked out. */}
-            Uses the WHS best-8-of-20 average across your last 20 rounds (live + imported). Uses each course&apos;s real rating and slope where we have them, and a neutral 72.0 / 113 where we don&apos;t — close to GHIN but not official.
+            {t('settings.text.uses_the_whs_best_8')}
           </Text>
 
           {/* 2026-05-26 — Fix AB Phase 1: GHIN # capture. We store the
@@ -885,7 +885,7 @@ export default function Settings() {
               can auto-pull official handicap + posted-scores history.
               Until then it's informational (brain prompt + tournament
               hints). */}
-          <Text style={inputLblStyle}>GHIN Number</Text>
+          <Text style={inputLblStyle}>{t('settings.text.ghin_number')}</Text>
           <TextInput
             style={inputFldStyle}
             value={editGhin}
@@ -898,10 +898,10 @@ export default function Settings() {
             placeholderTextColor="#374151"
           />
           <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -8, marginBottom: 8 }]}>
-            Optional. We&apos;ll pull your official handicap + score history once GHIN integration ships.
+            {t('settings.text.optional_we_ll_pull_your')}
           </Text>
 
-          <Text style={inputLblStyle}>Account email</Text>
+          <Text style={inputLblStyle}>{t('settings.text.account_email')}</Text>
           <TextInput
             style={inputFldStyle}
             value={editEmail}
@@ -909,28 +909,28 @@ export default function Settings() {
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
-            placeholder="you@email.com"
+            placeholder={t('settings.placeholder.you_email_com')}
             placeholderTextColor="#374151"
           />
           <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -8, marginBottom: 8 }]}>
             Optional. {isOwnerEmail(editEmail) ? '✓ Owner Tools unlocked.' : 'Owner devices: enter your owner email to unlock Owner Tools.'}
           </Text>
 
-          <Text style={inputLblStyle}>Goal</Text>
+          <Text style={inputLblStyle}>{t('settings.text.goal')}</Text>
           <TextInput
             style={inputFldStyle}
             value={editGoal}
             onChangeText={setEditGoal}
-            placeholder="e.g. Break 90"
+            placeholder={t('settings.placeholder.e_g_break_90')}
             placeholderTextColor="#374151"
           />
 
-          <Text style={inputLblStyle}>Physical Note</Text>
+          <Text style={inputLblStyle}>{t('settings.text.physical_note')}</Text>
           <TextInput
             style={inputFldStyle}
             value={editLimitation}
             onChangeText={setEditLimitation}
-            placeholder="e.g. Bad left knee"
+            placeholder={t('settings.placeholder.e_g_bad_left_knee')}
             placeholderTextColor="#374151"
           />
 
@@ -947,20 +947,20 @@ export default function Settings() {
 
           {role === 'instructor' ? (
             <>
-              <Text style={inputLblStyle}>Credentials (shown on swing reports you send)</Text>
+              <Text style={inputLblStyle}>{t('settings.text.credentials_shown_on_swing_reports')}</Text>
               <TextInput
                 style={inputFldStyle}
                 value={editCreds}
                 onChangeText={setEditCreds}
                 onBlur={() => setCoachCredentials(editCreds)}
-                placeholder="e.g. LPGA Class A · 25 yrs"
+                placeholder={t('settings.placeholder.e_g_lpga_class_a')}
                 placeholderTextColor={colors.text_muted}
               />
             </>
           ) : null}
 
           <PillRow
-            label="Handedness"
+            label={t('settings.label.handedness')}
             options={[
               { label: 'Right', value: 'right' },
               { label: 'Left', value: 'left' },
@@ -970,7 +970,7 @@ export default function Settings() {
           />
 
           <PillRow
-            label="Dominant Miss"
+            label={t('settings.label.dominant_miss')}
             options={[
               { label: 'Left', value: 'left' },
               { label: 'Straight', value: 'straight' },
@@ -981,7 +981,7 @@ export default function Settings() {
           />
 
           <PillRow
-            label="Preferred Tee"
+            label={t('settings.label.preferred_tee')}
             options={[
               { label: 'Front', value: 'front' },
               { label: 'Middle', value: 'middle' },
@@ -1002,7 +1002,7 @@ export default function Settings() {
               dominantMiss from it, so setting this keeps the two in step rather than splitting
               them. Read by ball-fit's ball recommendation. */}
           <PillRow
-            label="Typical Miss"
+            label={t('settings.label.typical_miss')}
             options={[
               { label: 'Slice', value: 'slice' },
               { label: 'Hook', value: 'hook' },
@@ -1019,7 +1019,7 @@ export default function Settings() {
           {/* Drives coachingAdaptation's tone + complexity, which until now ALWAYS fell to the
               default branch — the caddie could not adapt how it explained things to anyone. */}
           <PillRow
-            label="Where You're At"
+            label={t('settings.label.where_you_re_at')}
             options={[
               { label: 'Starting', value: 'starting' },
               { label: 'Improving', value: 'improving' },
@@ -1032,7 +1032,7 @@ export default function Settings() {
 
           {/* The mode Kevin assumes when a round starts (contextSynthesizer). */}
           <PillRow
-            label="Default Round Mode"
+            label={t('settings.label.default_round_mode')}
             options={[
               { label: 'Break 100', value: 'break_100' },
               { label: 'Break 90', value: 'break_90' },
@@ -1045,13 +1045,13 @@ export default function Settings() {
 
           {/* Read by play.tsx to default-select your course, by smartvision as a last-resort
               courseId, and by contextSynthesizer. Commits on blur, like Credentials above. */}
-          <Text style={inputLblStyle}>Home Course</Text>
+          <Text style={inputLblStyle}>{t('settings.text.home_course')}</Text>
           <TextInput
             style={inputFldStyle}
             value={editHomeCourse}
             onChangeText={setEditHomeCourse}
             onBlur={() => setHomeCourse(editHomeCourse.trim() || null)}
-            placeholder="e.g. Hemet Golf Club"
+            placeholder={t('settings.placeholder.e_g_hemet_golf_club')}
             placeholderTextColor={colors.text_muted}
           />
 
@@ -1063,7 +1063,7 @@ export default function Settings() {
             perfectly right. Left unset we don't guess -- we hold to one internally consistent set.
           */}
           <PillRow
-            label="Course Rating Set"
+            label={t('settings.label.course_rating_set')}
             options={[
               { label: "Men's", value: 'm' },
               { label: "Women's", value: 'f' },
@@ -1075,14 +1075,14 @@ export default function Settings() {
 
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TouchableOpacity style={[styles.saveBtn, { flex: 1 }]} onPress={handleSaveProfile}>
-              <Text style={styles.saveBtnText}>Save Profile</Text>
+              <Text style={styles.saveBtnText}>{t('settings.text.save_profile')}</Text>
             </TouchableOpacity>
             {name?.trim() ? (
               <TouchableOpacity
                 style={[styles.saveBtn, { flex: 0, paddingHorizontal: 14, backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border }]}
                 onPress={() => setProfileExpanded(false)}
               >
-                <Text style={[styles.saveBtnText, { color: colors.text_muted }]}>Cancel</Text>
+                <Text style={[styles.saveBtnText, { color: colors.text_muted }]}>{t('play.cancel')}</Text>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -1091,9 +1091,9 @@ export default function Settings() {
         )}
 
         {/* CADDIE TEAM — Phase 105 per-pillar assignments */}
-        <CollapsibleSection title="Caddie" icon="bag-outline">
+        <CollapsibleSection title={t('settings.title.caddie')} icon="bag-outline">
           <Text style={[styles.sectionIntro, { color: colors.text_muted }]}>
-            Four caddies, one team. Each part of your game can have a different caddie. We&apos;ve set sensible defaults — change anything anytime.
+            {t('settings.text.four_caddies_one_team_each')}
           </Text>
 
           {/* 2026-07-08 (Tim — "it has to be talking to Kevin, not typing on a keyboard")
@@ -1107,7 +1107,7 @@ export default function Settings() {
               router.push('/(tabs)/caddie' as never);
             }}
             accessibilityRole="button"
-            accessibilityLabel="Talk to your caddie so it gets to know you"
+            accessibilityLabel={t('settings.accessibility_label.talk_to_your_caddie_so')}
           >
             <View style={styles.rowText}>
               <Text style={labelStyle}>Let {caddieName} get to know you</Text>
@@ -1119,7 +1119,7 @@ export default function Settings() {
           </TouchableOpacity>
 
           <PillRow
-            label="Round (on-course)  ·  default Kevin"
+            label={t('settings.label.round_on_course_default_kevin')}
             options={[
               { label: 'Kevin', value: 'kevin' },
               { label: 'Serena', value: 'serena' },
@@ -1129,7 +1129,7 @@ export default function Settings() {
           />
 
           <PillRow
-            label="Practice  ·  default Serena"
+            label={t('settings.label.practice_default_serena')}
             options={[
               { label: 'Serena', value: 'serena' },
               { label: 'Kevin', value: 'kevin' },
@@ -1139,7 +1139,7 @@ export default function Settings() {
           />
 
           <PillRow
-            label="Drills (SwingLab)  ·  default Serena"
+            label={t('settings.label.drills_swinglab_default_serena')}
             options={[
               { label: 'Serena', value: 'serena' },
               { label: 'Kevin', value: 'kevin' },
@@ -1149,7 +1149,7 @@ export default function Settings() {
           />
 
           <PillRow
-            label="Play / Arena  ·  default Kevin"
+            label={t('settings.label.play_arena_default_kevin')}
             options={[
               { label: 'Kevin', value: 'kevin' },
               { label: 'Serena', value: 'serena' },
@@ -1159,12 +1159,12 @@ export default function Settings() {
           />
 
           <TouchableOpacity onPress={resetCaddieAssignments} style={styles.linkBtn}>
-            <Text style={[styles.linkBtnText, { color: colors.accent }]}>Reset to defaults</Text>
+            <Text style={[styles.linkBtnText, { color: colors.accent }]}>{t('settings.text.reset_to_defaults')}</Text>
           </TouchableOpacity>
 
           {/* Phase 106 — caddie team handoff suggestions */}
           <PillRow
-            label="Team suggestions  ·  default On"
+            label={t('settings.label.team_suggestions_default_on')}
             options={[
               { label: 'On', value: 'on' },
               { label: 'Card only', value: 'soft' },
@@ -1174,12 +1174,12 @@ export default function Settings() {
             onSelect={(v) => setCaddieSuggestions(v as 'on' | 'soft' | 'off')}
           />
           <Text style={[styles.sectionIntro, { color: colors.text_muted, marginTop: 4 }]}>
-            When a teammate is better suited, your active caddie can suggest a handoff. &quot;Card only&quot; shows the visual offer without a voice line. &quot;Off&quot; disables suggestions entirely.
+            {t('settings.text.when_a_teammate_is_better')}
           </Text>
 
           {/* Phase 107 — GPS quality debug overlay (dev / Tim only by default) */}
           <PillRow
-            label="GPS quality overlay (dev)  ·  default Off"
+            label={t('settings.label.gps_quality_overlay_dev_default')}
             options={[
               { label: 'Off', value: 'off' },
               { label: 'On', value: 'on' },
@@ -1188,13 +1188,13 @@ export default function Settings() {
             onSelect={(v) => setGpsQualityDebugOverlay(v === 'on')}
           />
           <Text style={[styles.sectionIntro, { color: colors.text_muted, marginTop: 4 }]}>
-            Top-left badge during a round showing live accuracy + GPS mode + outlier count. Use during the Garmin comparison test.
+            {t('settings.text.top_left_badge_during_a')}
           </Text>
 
           {/* 2026-06-10 — caddie persona controls merged in from the old
               "{caddieName}'s Voice" card so every caddie setting lives here. */}
           <Text style={[styles.sectionIntro, { color: colors.text_muted, marginTop: 8 }]}>
-            Manually override the active caddie (the team auto-selects per pillar — this picks who speaks right now).
+            {t('settings.text.manually_override_the_active_caddie')}
           </Text>
           {/* 2026-07-04 (elite-clean audit) — this pill duplicated the Tools-menu
               persona cycler but DIVERGED: it omitted 'custom' and never synced
@@ -1202,7 +1202,7 @@ export default function Settings() {
               was active left useCustomCaddie=true → stale avatar/voice overrides.
               Now mirrors the cycler: same ACTIVE_PERSONAS set + the same sync. */}
           <PillRow
-            label="Active Caddie"
+            label={t('settings.label.active_caddie')}
             options={[
               { label: 'Kevin', value: 'kevin' },
               { label: 'Serena', value: 'serena' },
@@ -1222,7 +1222,7 @@ export default function Settings() {
           />
 
           <PillRow
-            label="Response Style"
+            label={t('settings.label.response_style')}
             options={[
               { label: 'Brief', value: 'short' },
               { label: 'Normal', value: 'neutral' },
@@ -1239,7 +1239,7 @@ export default function Settings() {
               compounds the settings-within-settings fatigue. */}
 
           <ToggleRow
-            label="Greet me on launch"
+            label={t('settings.label.greet_me_on_launch')}
             sub={`${caddieName} says hello when you open the app`}
             value={kevinGreetingEnabled}
             onValueChange={confirmToggle('Launch Greeting', setKevinGreetingEnabled)}
@@ -1248,7 +1248,7 @@ export default function Settings() {
         </CollapsibleSection>
 
         {/* ROUND EXPERIENCE */}
-        <CollapsibleSection title="Round Experience" icon="flag-outline">
+        <CollapsibleSection title={t('settings.title.round_experience')} icon="flag-outline">
           {/* 2026-05-19 — trust slider moved INLINE here. Was a routed
               sub-screen at /settings/trust-level that created the
               settings-within-settings pattern Tim called out. The full
@@ -1293,7 +1293,7 @@ export default function Settings() {
           </View>
 
           <ToggleRow
-            label="Skip Pre-Round Briefing"
+            label={t('settings.label.skip_pre_round_briefing')}
             sub={`Go straight to the round without ${caddieName}'s intro`}
             value={skip_briefings}
             onValueChange={confirmToggle('Skip Pre-Round Briefing', setSkipBriefings)}
@@ -1308,19 +1308,19 @@ export default function Settings() {
             onValueChange={confirmToggle(`Proactive ${caddieName}`, setProactiveKevinEnabled)}
           />
           <ToggleRow
-            label="Riding in a cart"
+            label={t('settings.label.riding_in_a_cart')}
             sub="Tunes shot detection for cart play. Walking is the default."
             value={cartMode}
             onValueChange={confirmToggle('Cart Mode', setCartMode)}
           />
           <ToggleRow
-            label="Auto Hole Advance"
+            label={t('settings.label.auto_hole_advance')}
             sub="GPS moves you to the next hole automatically. Off = step through yourself."
             value={autoHoleAdvance}
             onValueChange={confirmToggle('Auto Hole Advance', setAutoHoleAdvance)}
           />
           <ToggleRow
-            label="Interactive Round"
+            label={t('settings.label.interactive_round')}
             sub="Caddie speaks a read when you stop walking mid-hole. Off (default) = it stays quiet and waits for you to ask; it still auto-briefs at the tee."
             value={interactiveRound}
             onValueChange={confirmToggle('Interactive Round', setInteractiveRound)}
@@ -1332,7 +1332,7 @@ export default function Settings() {
               over-count on a cart round, and silently flipping a data-quality default the day someone
               plays is worse than telling them plainly. */}
           <ToggleRow
-            label="Auto Shot Detection"
+            label={t('settings.label.auto_shot_detection')}
             sub="GPS auto-logs where each shot was hit. OFF by default — it can over-count on cart rounds. Riding in a cart, shots are logged quietly with no club and the caddie never interrupts; walking, it asks what you hit. While it's off, nothing is recorded unless you log shots by voice, so View hole and the round recap will have no shots to show."
             value={autoShotDetection}
             onValueChange={confirmToggle('Auto Shot Detection', setAutoShotDetection)}
@@ -1344,20 +1344,20 @@ export default function Settings() {
             controlled via the Trust spectrum (L1 Quiet = Cockpit + tap-to-talk,
             L2 Companion = reactive, L3 Active = volunteers). voiceEnabled
             field stays in the store as an internal kill switch. */}
-        <CollapsibleSection title="Voice & Conversation" icon="mic-outline">
+        <CollapsibleSection title={t('settings.title.voice_conversation')} icon="mic-outline">
           {/* 2026-05-30 — Fix FY: Local Mode toggle. Conservation +
               stability mode — proactive speech off, brain calls pinned
               to Haiku (the cheapest/fastest tier), navigation intents
               resolved locally. GPS, yardage, scorecard untouched.
               Honest framing in the sub-line — not a warning. */}
           <ToggleRow
-            label="Local Mode"
+            label={t('settings.label.local_mode')}
             sub={`Battery saver for weak signal. ${caddieName} only speaks when asked; GPS + yardages unchanged.`}
             value={localMode}
             onValueChange={confirmToggle('Local Mode', setLocalMode)}
           />
           <ToggleRow
-            label="Active Listening"
+            label={t('settings.label.active_listening')}
             sub={localMode
               ? `Paused in Local Mode (tap-to-talk only).`
               : `${caddieName} listens automatically during rounds — just talk. Tap the pill to mute.`}
@@ -1372,7 +1372,7 @@ export default function Settings() {
               Explicit toggle (not name-detection) so the other family
               members (Bea, Lily, Daniella) don't trip it. */}
           <ToggleRow
-            label="Cecily Mode"
+            label={t('settings.label.cecily_mode')}
             sub={`Kid-friendly chat for Cecily — any topic, warm and simple.`}
             value={cecilyMode}
             onValueChange={confirmToggle('Cecily Mode', setCecilyMode)}
@@ -1383,7 +1383,7 @@ export default function Settings() {
               gate + silence-twice cap. Useful for sustained chats
               ("teach me about lag") without re-tapping the mic. */}
           <ToggleRow
-            label="Continuous Conversation"
+            label={t('settings.label.continuous_conversation')}
             sub={`Keeps the mic open between turns so you can talk back without re-tapping. Say "I'm good" to end.`}
             value={continuousConversationMode}
             onValueChange={confirmToggle('Continuous Conversation', setContinuousConversationMode)}
@@ -1400,7 +1400,7 @@ export default function Settings() {
           {/* 2026-06-10 — Caption moved here from Display (it's about caddie
               speech, and was the only "voice" thing living under Display). */}
           <ToggleRow
-            label="Caption caddie speech"
+            label={t('settings.label.caption_caddie_speech')}
             sub="Show what the caddie is saying on screen during voice playback. Auto-on for Bluetooth audio."
             value={ttsCaptions}
             onValueChange={setTtsCaptions}
@@ -1422,12 +1422,12 @@ export default function Settings() {
             below used to live under separate "Display" and
             "Accessibility & Pacing" headers; merged into one header
             since both control how you SEE or HEAR the app. */}
-        <CollapsibleSection title="Language & Display" icon="desktop-outline">
+        <CollapsibleSection title={t('settings.title.language_display')} icon="desktop-outline">
 
           {/* 2026-06-10 — Language moved here from the caddie-voice card: it's
               app-wide (and people look for it under display/language, not voice). */}
           <PillRow
-            label="Language"
+            label={t('settings.label.language')}
             options={[
               { label: 'English', value: 'en' },
               { label: 'Español', value: 'es' },
@@ -1437,11 +1437,11 @@ export default function Settings() {
             onSelect={(v) => setLanguage(v as 'en' | 'es' | 'zh')}
           />
           <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -4, marginBottom: 8 }]}>
-            Changes your caddie&apos;s voice + responses now. On-screen text is still being translated and stays in English for the moment.
+            {t('settings.text.changes_your_caddie_s_voice')}
           </Text>
 
           <PillRow
-            label="Theme"
+            label={t('settings.label.theme')}
             options={[
               { label: 'System', value: 'system' },
               { label: 'Light', value: 'light' },
@@ -1452,7 +1452,7 @@ export default function Settings() {
           />
 
           <ToggleRow
-            label="High Contrast"
+            label={t('settings.label.high_contrast')}
             sub="Pure black/white backgrounds + stronger borders for sunlight readability"
             value={highContrast}
             onValueChange={setHighContrast}
@@ -1465,7 +1465,7 @@ export default function Settings() {
               bottom nav bar still shows until next APK build (needs
               expo-navigation-bar native dep, not OTA-able). */}
           <ToggleRow
-            label="Screenshot mode (hide top bar)"
+            label={t('settings.label.screenshot_mode_hide_top_bar')}
             sub={
               Platform.OS === 'android'
                 ? 'Hides the top status bar for clean screenshots. The bottom nav bar still shows in this build — crop or wait for the next app update.'
@@ -1477,14 +1477,14 @@ export default function Settings() {
           {/* PGA HOPE follow-up (A1) — large-text upgrade for low-vision
               participants. Bumps caption + briefing font sizes. */}
           <ToggleRow
-            label="Large Text"
+            label={t('settings.label.large_text')}
             sub="Bigger captions and briefing text — helpful in bright sun or for low-vision users"
             value={largeText}
             onValueChange={setLargeText}
           />
 
           <ToggleRow
-            label="Simple briefing"
+            label={t('settings.label.simple_briefing')}
             sub={
               simpleBriefingUserTouched
                 ? 'One card at a time, slower pacing. Larger text on the briefing screen.'
@@ -1539,7 +1539,7 @@ export default function Settings() {
           })}
 
           <PillRow
-            label="Distance Unit"
+            label={t('settings.label.distance_unit')}
             options={[
               { label: 'Yards', value: 'yards' },
               { label: 'Meters', value: 'meters' },
@@ -1554,7 +1554,7 @@ export default function Settings() {
             "Watch Connected" thinking it pulled real Samsung Health data
             when it was sim-only. Now: label is explicit, toggle is
             disabled, and the description names exactly what's missing. */}
-        <CollapsibleSection title="Devices & Health" icon="watch-outline">
+        <CollapsibleSection title={t('settings.title.devices_health')} icon="watch-outline">
           <View style={rowDivStyle}>
             <View style={styles.rowText}>
               <Text style={labelStyle}>
@@ -1610,7 +1610,7 @@ export default function Settings() {
               on casting / early release). Set it once — it just tags every swing. */}
           <View style={rowDivStyle}>
             <View style={styles.rowText}>
-              <Text style={labelStyle}>Watch on trail arm</Text>
+              <Text style={labelStyle}>{t('settings.text.watch_on_trail_arm')}</Text>
               <Text style={subStyle}>
                 {watchWrist === 'trail'
                   ? 'Trail wrist (your release side) — best for spotting casting / early release. Club speed is a rougher estimate from here.'
@@ -1626,7 +1626,7 @@ export default function Settings() {
           </View>
           <View style={rowDivStyle}>
             <View style={styles.rowText}>
-              <Text style={labelStyle}>Health Connect heartbeat</Text>
+              <Text style={labelStyle}>{t('settings.text.health_connect_heartbeat')}</Text>
               <Text style={subStyle}>
                 {watchHealthSnapshot?.hasData
                   ? `Latest sample: ${watchHealthSnapshot.heartRateAvg != null ? `${watchHealthSnapshot.heartRateAvg} bpm` : 'heart rate unavailable'} · ${watchHealthSnapshot.steps} steps · ${Math.round(watchHealthSnapshot.distanceMeters)} m`
@@ -1647,9 +1647,9 @@ export default function Settings() {
               point); toggle off if it fights your music's play/pause. */}
           <View style={rowDivStyle}>
             <View style={styles.rowText}>
-              <Text style={labelStyle}>Earbud button → talk to caddie</Text>
+              <Text style={labelStyle}>{t('settings.text.earbud_button_talk_to_caddie')}</Text>
               <Text style={subStyle}>
-                Tap your earbud (or BT remote) button anytime — even from the home screen — and the caddie starts listening. Works hands-free without opening anything. Turn off only if it interferes with pausing music.
+                {t('settings.text.tap_your_earbud_or_bt')}
               </Text>
             </View>
             <Switch
@@ -1677,16 +1677,9 @@ export default function Settings() {
             <>
           <View style={rowDivStyle}>
             <View style={styles.rowText}>
-              <Text style={labelStyle}>Ray-Ban Meta temple tap · Works</Text>
+              <Text style={labelStyle}>{t('settings.text.ray_ban_meta_temple_tap')}</Text>
               <Text style={subStyle}>
-                2026-09-01 (Tim: &quot;temple tap on meta glasses is working&quot;, and &quot;yes they do have an
-                SDK and we have it already&quot;) — this row said BLOCKED because Meta exposed no SDK.
-                Wrong on both halves. Meta ships the Device Access Toolkit and it is INTEGRATED here
-                (MetaWearablesFrameModule + metaWearablesBridge, POV frames into the caddie brain);
-                it needs the glasses build profile, not permission from Meta. And the temple tap does
-                not depend on it at all: the glasses pair as a Bluetooth audio device, so a tap
-                arrives as an ordinary media-key press and the earbud bridge already handles it,
-                which is why it works today. Controlled by the earbud tap-to-talk switch above.-mic + Active Listening is the path: pair the glasses for Bluetooth audio and the caddie hears you hands-free.
+                {t('settings.text.2026_09_01_tim_temple')}
               </Text>
             </View>
           </View>
@@ -1703,7 +1696,7 @@ export default function Settings() {
               build (DAT plugin no-op'd) never is. So this stays hidden exactly where it always was. */}
           {isMetaWearablesAvailable() ? (
             <ToggleRow
-              label="Connect Ray-Ban Glasses"
+              label={t('settings.label.connect_ray_ban_glasses')}
               sub={
                 glasses.streaming
                   ? `Streaming from ${glasses.device || 'your glasses'} — ${caddieName} sees your point of view.`
@@ -1723,10 +1716,10 @@ export default function Settings() {
             style={rowDivStyle}
             onPress={onImportMetaGlassesLog}
             accessibilityRole="button"
-            accessibilityLabel="Import Meta glasses voice log"
+            accessibilityLabel={t('settings.accessibility_label.import_meta_glasses_voice_log')}
           >
             <View style={styles.rowText}>
-              <Text style={labelStyle}>Import Meta glasses voice log</Text>
+              <Text style={labelStyle}>{t('settings.text.import_meta_glasses_voice_log')}</Text>
               <Text style={subStyle}>
                 Pick a Meta View JSON export of your &quot;Hey Meta&quot; voice exchanges. We match each one to the hole you were on so {caddieName} can recall what the glasses said during this round. Start a round first — only exchanges inside the active round&apos;s window are imported.
               </Text>
@@ -1743,12 +1736,12 @@ export default function Settings() {
             style={rowDivStyle}
             onPress={onImportSmartPump}
             accessibilityRole="button"
-            accessibilityLabel="Import SmartPump golf workouts"
+            accessibilityLabel={t('settings.accessibility_label.import_smartpump_golf_workouts')}
           >
             <View style={styles.rowText}>
-              <Text style={labelStyle}>Import SmartPump golf workouts</Text>
+              <Text style={labelStyle}>{t('settings.text.import_smartpump_golf_workouts')}</Text>
               <Text style={subStyle}>
-                Pick your SmartPump workout export (PDF, image, or JSON/CSV). We read the dated golf workouts and chart your TRAINING → PERFORMANCE on the dashboard — whether the gym work is showing up in your scoring. Re-import any time; we skip duplicates.
+                {t('settings.text.pick_your_smartpump_workout_export')}
               </Text>
             </View>
             <Ionicons name="barbell-outline" size={20} color={colors.accent} />
@@ -1759,9 +1752,9 @@ export default function Settings() {
               declined earlier. (Data & Privacy relocated just below.) */}
           <View style={rowDivStyle}>
             <View style={styles.rowText}>
-              <Text style={labelStyle}>Use Health Connect during rounds</Text>
+              <Text style={labelStyle}>{t('settings.text.use_health_connect_during_rounds')}</Text>
               <Text style={subStyle}>
-                Reads step count, heart rate, distance walked, and active calories during your round (Galaxy Watch, Fitbit, or phone pedometer via Android Health Connect). Used for the walking-vs-cart detector, automatic shot detection, and round-summary stats. All data stays on your phone unless you opt into backend sync. Android only today; iOS / HealthKit comes later.
+                {t('settings.text.reads_step_count_heart_rate')}
               </Text>
             </View>
             <Switch
@@ -1811,12 +1804,12 @@ export default function Settings() {
               })();
             }}
             accessibilityRole="button"
-            accessibilityLabel="Connect Health Data"
+            accessibilityLabel={t('settings.accessibility_label.connect_health_data')}
           >
             <View style={styles.rowText}>
-              <Text style={labelStyle}>Connect Health Data</Text>
+              <Text style={labelStyle}>{t('settings.text.connect_health_data')}</Text>
               <Text style={subStyle}>
-                Tap to grant SmartPlay read access to your Health Connect data (steps, heart rate, distance, calories). Required for the walking-vs-cart detector to use real step counts. If you skip this, cart/walk detection still works using GPS + your manual Cart Mode toggle.
+                {t('settings.text.tap_to_grant_smartplay_read')}
               </Text>
             </View>
           </TouchableOpacity>
@@ -1847,20 +1840,20 @@ export default function Settings() {
             the player's data. Sits just above Data & Privacy. */}
         {sectionMatchesQuery('Backup & Restore', 'backup restore sync cloud account email file export import') ? <CloudBackupCard /> : null}
 
-        <CollapsibleSection title="Data & Privacy" icon="shield-outline">
+        <CollapsibleSection title={t('settings.title.data_privacy')} icon="shield-outline">
           <View style={rowDivStyle}>
             <View style={styles.rowText}>
-              <Text style={labelStyle}>What we send for AI coaching</Text>
+              <Text style={labelStyle}>{t('settings.text.what_we_send_for_ai')}</Text>
               <Text style={subStyle}>
-                When you talk to your caddie, we send your message plus your first name, handicap, and (if set) GHIN to the AI service that powers the coaching, so the advice is personalized. We send your GPS location to a weather service to factor wind and temperature into yardages. We don’t sell your data.
+                {t('settings.text.when_you_talk_to_your')}
               </Text>
             </View>
           </View>
           <View style={rowDivStyle}>
             <View style={styles.rowText}>
-              <Text style={labelStyle}>Stored on this phone</Text>
+              <Text style={labelStyle}>{t('settings.text.stored_on_this_phone')}</Text>
               <Text style={subStyle}>
-                Your rounds, scores, swing clips, bag distances, and profile live on this device. Your GHIN number is kept in memory for the session only — it isn’t written to disk — until encrypted-at-rest storage ships.
+                {t('settings.text.your_rounds_scores_swing_clips')}
               </Text>
             </View>
           </View>
@@ -1869,7 +1862,7 @@ export default function Settings() {
               fingerprint, isolated from any other data, off unless you turn
               it on. Helps Tim see which features get used. */}
           <ToggleRow
-            label="Help improve SmartPlay"
+            label={t('settings.label.help_improve_smartplay')}
             sub="Share anonymous usage — which features you use, never your name, scores, or location. Off by default."
             value={analyticsOptIn}
             onValueChange={confirmToggle('Anonymous usage sharing', setAnalyticsOptIn)}
@@ -1878,36 +1871,36 @@ export default function Settings() {
               vs. issue reports (which include your email + diagnostics). Previously bundled, so PII rode
               the "course maps" consent silently. Now each is its own honest, separately-controllable toggle. */}
           <ToggleRow
-            label="Share course maps"
+            label={t('settings.label.share_course_maps')}
             sub="Contribute the hole layouts your phone maps so other golfers get them instantly. Coordinates only — never your scores or personal data. On for beta; turn off anytime."
             value={shareCommunityData}
             onValueChange={confirmToggle('Course map sharing', setShareCommunityData)}
           />
           <ToggleRow
-            label="Auto-send my issue reports"
+            label={t('settings.label.auto_send_my_issue_reports')}
             sub="When you log a bug, send it to the team automatically so it gets fixed faster. Includes your email (so we can follow up) and app diagnostics — never your scores. On for beta; turn off anytime."
             value={shareDiagnostics}
             onValueChange={confirmToggle('Issue report sharing', setShareDiagnostics)}
           />
           {/* 2026-09-03 — invite a friend (app/invite.tsx). Sits here rather than in Help because it
               is a thing the player DOES, not a thing they read. */}
-          <TouchableOpacity style={[rowDivStyle, { alignItems: 'center' }]} onPress={() => router.push('/invite' as never)} accessibilityRole="button" accessibilityLabel="Invite a friend">
-            <View style={styles.rowText}><Text style={labelStyle}>Invite a friend</Text></View>
+          <TouchableOpacity style={[rowDivStyle, { alignItems: 'center' }]} onPress={() => router.push('/invite' as never)} accessibilityRole="button" accessibilityLabel={t('settings.accessibility_label.invite_a_friend')}>
+            <View style={styles.rowText}><Text style={labelStyle}>{t('settings.text.invite_a_friend')}</Text></View>
             <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
           </TouchableOpacity>
           {/* 2026-07-18 — real in-app legal documents (app/legal.tsx). */}
           <TouchableOpacity style={[rowDivStyle, { alignItems: 'center' }]} onPress={() => router.push('/legal?doc=privacy' as never)} accessibilityRole="button">
-            <View style={styles.rowText}><Text style={labelStyle}>Privacy Policy</Text></View>
+            <View style={styles.rowText}><Text style={labelStyle}>{t('settings.text.privacy_policy')}</Text></View>
             <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
           </TouchableOpacity>
           <TouchableOpacity style={[rowDivStyle, { alignItems: 'center' }]} onPress={() => router.push('/legal?doc=terms' as never)} accessibilityRole="button">
-            <View style={styles.rowText}><Text style={labelStyle}>Terms of Service</Text></View>
+            <View style={styles.rowText}><Text style={labelStyle}>{t('settings.text.terms_of_service')}</Text></View>
             <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
           </TouchableOpacity>
         </CollapsibleSection>
 
         {/* Phase AI — Help / Support section. Single canonical contact. */}
-        <CollapsibleSection title="Help & About" icon="help-circle-outline">
+        <CollapsibleSection title={t('settings.title.help_about')} icon="help-circle-outline">
           {/* 2026-08-01 (tester — first-run tour). Replay the guided icon-by-icon tour on demand. */}
           <TouchableOpacity
             style={styles.aboutRow}
@@ -1916,11 +1909,11 @@ export default function Settings() {
               router.push('/(tabs)/caddie' as never);
             }}
             accessibilityRole="button"
-            accessibilityLabel="Replay the guided tour"
+            accessibilityLabel={t('settings.accessibility_label.replay_the_guided_tour')}
           >
-            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Show Me Around</Text>
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>{t('settings.text.show_me_around')}</Text>
             <Text style={[styles.aboutValue, { color: colors.accent }]}>
-              Replay the tour →
+              {t('settings.text.replay_the_tour')}
             </Text>
           </TouchableOpacity>
           {/* Phase 411 — Quick Start Guide. Same content as the PDF
@@ -1930,11 +1923,11 @@ export default function Settings() {
             style={styles.aboutRow}
             onPress={() => router.push('/quick-start' as never)}
             accessibilityRole="button"
-            accessibilityLabel="Open the Quick Start Guide"
+            accessibilityLabel={t('settings.accessibility_label.open_the_quick_start_guide')}
           >
-            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Quick Start Guide</Text>
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>{t('settings.text.quick_start_guide')}</Text>
             <Text style={[styles.aboutValue, { color: colors.accent }]}>
-              How to use the app →
+              {t('settings.text.how_to_use_the_app')}
             </Text>
           </TouchableOpacity>
           {/* 2026-06-11 — Round import moved to its proper home: the Profile
@@ -1944,11 +1937,11 @@ export default function Settings() {
             style={styles.aboutRow}
             onPress={() => router.push('/profile' as never)}
             accessibilityRole="button"
-            accessibilityLabel="Import past rounds from your Profile"
+            accessibilityLabel={t('settings.accessibility_label.import_past_rounds_from_your')}
           >
-            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Import Past Rounds</Text>
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>{t('settings.text.import_past_rounds')}</Text>
             <Text style={[styles.aboutValue, { color: colors.accent }]}>
-              In Profile · history + handicap →
+              {t('settings.text.in_profile_history_handicap')}
             </Text>
           </TouchableOpacity>
           {/* 2026-05-22 — Family Coaching roster + library link. Single
@@ -1959,11 +1952,11 @@ export default function Settings() {
             style={styles.aboutRow}
             onPress={() => router.push('/family/roster' as never)}
             accessibilityRole="button"
-            accessibilityLabel="Open Family Coaching"
+            accessibilityLabel={t('settings.accessibility_label.open_family_coaching')}
           >
-            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Family Coaching</Text>
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>{t('settings.text.family_coaching')}</Text>
             <Text style={[styles.aboutValue, { color: colors.accent }]}>
-              Roster + Swing Library →
+              {t('settings.text.roster_swing_library')}
             </Text>
           </TouchableOpacity>
           {/* 2026-06-30 (Tim) — minimal in-app messaging.
@@ -1973,11 +1966,11 @@ export default function Settings() {
             style={styles.aboutRow}
             onPress={() => router.push('/messages' as never)}
             accessibilityRole="button"
-            accessibilityLabel="Open Messages"
+            accessibilityLabel={t('settings.accessibility_label.open_messages')}
           >
-            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Messages</Text>
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>{t('settings.text.messages')}</Text>
             <Text style={[styles.aboutValue, { color: colors.accent }]}>
-              Message a golfer →
+              {t('settings.text.message_a_golfer')}
             </Text>
           </TouchableOpacity>
           )}
@@ -1989,11 +1982,11 @@ export default function Settings() {
             style={styles.aboutRow}
             onPress={() => router.push('/family/captain' as never)}
             accessibilityRole="button"
-            accessibilityLabel="Open Team Captain"
+            accessibilityLabel={t('settings.accessibility_label.open_team_captain')}
           >
-            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Team Captain</Text>
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>{t('settings.text.team_captain')}</Text>
             <Text style={[styles.aboutValue, { color: colors.accent }]}>
-              Teammates + Coaches →
+              {t('settings.text.teammates_coaches')}
             </Text>
           </TouchableOpacity>
           {/* Phase 411 — Share Feedback shortcut. Pre-fills email
@@ -2015,17 +2008,17 @@ export default function Settings() {
                 );
               Linking.openURL(url).catch(() => {
                 Alert.alert(
-                  'Email',
-                  'Could not open your email client. Reach support at support@smartplaycaddie.com',
+                  t('settings.alert.email'),
+                  t('settings.alert.could_not_open_your_email'),
                 );
               });
             }}
             accessibilityRole="button"
-            accessibilityLabel="Share feedback with the SmartPlay Caddie team"
+            accessibilityLabel={t('settings.accessibility_label.share_feedback_with_the_smartplay')}
           >
-            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Share Feedback</Text>
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>{t('settings.text.share_feedback')}</Text>
             <Text style={[styles.aboutValue, { color: colors.accent }]}>
-              Email with prompts pre-filled →
+              {t('settings.text.email_with_prompts_pre_filled')}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -2035,15 +2028,15 @@ export default function Settings() {
                 encodeURIComponent('SmartPlay Caddie Pro Support Request');
               Linking.openURL(url).catch(() => {
                 Alert.alert(
-                  'Email',
-                  'Could not open your email client. Reach support at support@smartplaycaddie.com',
+                  t('settings.alert.email'),
+                  t('settings.alert.could_not_open_your_email'),
                 );
               });
             }}
           >
-            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Contact Support</Text>
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>{t('settings.text.contact_support')}</Text>
             <Text style={[styles.aboutValue, { color: colors.accent }]}>
-              support@smartplaycaddie.com →
+              {t('settings.text.support_smartplaycaddie_com')}
             </Text>
           </TouchableOpacity>
           {/* Phase 410 — Privacy disclosure. PGA Hope graduates and any
@@ -2055,27 +2048,27 @@ export default function Settings() {
             onPress={() => {
               Linking.openURL('https://smartplaycaddie.com/privacy').catch(() => {
                 Alert.alert(
-                  'Privacy Policy',
-                  'Couldn\'t open the browser. Visit smartplaycaddie.com/privacy from any browser.',
+                  t('settings.alert.privacy_policy'),
+                  t('settings.alert.couldn_t_open_the_browser'),
                 );
               });
             }}
             accessibilityRole="button"
-            accessibilityLabel="Open privacy policy"
+            accessibilityLabel={t('settings.accessibility_label.open_privacy_policy')}
           >
-            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Privacy Policy</Text>
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>{t('settings.text.privacy_policy')}</Text>
             <Text style={[styles.aboutValue, { color: colors.accent }]}>
-              smartplaycaddie.com/privacy →
+              {t('settings.text.smartplaycaddie_com_privacy')}
             </Text>
           </TouchableOpacity>
 
           {/* 2026-06-10 — About merged into Help & About. */}
           <View style={styles.aboutRow}>
-            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>App</Text>
-            <Text style={[styles.aboutValue, { color: colors.text_primary }]}>SmartPlay Caddie Pro</Text>
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>{t('settings.text.app')}</Text>
+            <Text style={[styles.aboutValue, { color: colors.text_primary }]}>{t('settings.text.smartplay_caddie_pro')}</Text>
           </View>
           <View style={styles.aboutRow}>
-            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Version</Text>
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>{t('settings.text.version')}</Text>
             {/* 2026-07-04 (elite-clean audit, menu finding #15) — was hardcoded "2.0.0"
                 while app.json says 1.0.0. Read the REAL version from the expo config. */}
             <Text style={[styles.aboutValue, { color: colors.text_primary }]}>
@@ -2085,11 +2078,11 @@ export default function Settings() {
           {/* 2026-07-01 (Tim) — live OTA bundle stamp so you can confirm you're on the current
               update before judging a fix (OTA lands on cold start; this proves which one you have). */}
           <View style={styles.aboutRow}>
-            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Update</Text>
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>{t('settings.text.update')}</Text>
             <Text style={[styles.aboutValue, { color: colors.text_primary }]} selectable>{buildStamp}</Text>
           </View>
           <View style={styles.aboutRow}>
-            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Caddie</Text>
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>{t('settings.text.caddie')}</Text>
             <Text style={[styles.aboutValue, { color: colors.text_primary }]}>
               {caddieName}
             </Text>
@@ -2097,8 +2090,8 @@ export default function Settings() {
           {/* 2026-05-24 v1.2 — Company attribution. Built by SmartPlay AI (the company).
               The caddies are equal personas — none is "the face" in the About row. */}
           <View style={styles.aboutRow}>
-            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>Built by</Text>
-            <Text style={[styles.aboutValue, { color: colors.text_primary }]}>SmartPlay AI</Text>
+            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>{t('settings.text.built_by')}</Text>
+            <Text style={[styles.aboutValue, { color: colors.text_primary }]}>{t('settings.text.smartplay_ai')}</Text>
           </View>
           {/* 2026-08-25 — the fourth glasses surface: one-time Meta View setup instructions in
               Help & About. Shelved with the rest, from the same owner, so the release does not
@@ -2129,10 +2122,10 @@ export default function Settings() {
             style={styles.resetRow}
             onPress={() => router.push('/owner-logs' as never)}
             accessibilityRole="button"
-            accessibilityLabel="Open Issue Log"
+            accessibilityLabel={t('settings.accessibility_label.open_issue_log')}
           >
             <View style={{ flex: 1 }}>
-              <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Issue Log</Text>
+              <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.issue_log')}</Text>
               <Text style={[styles.rowSub, { color: colors.text_muted }]}>
                 Say &quot;{caddieName}, log this: ...&quot; to capture an issue.
                 Tap to review + export the log to support@smartplaycaddie.com.
@@ -2147,13 +2140,12 @@ export default function Settings() {
             style={styles.resetRow}
             onPress={() => router.push('/coach-knowledge' as never)}
             accessibilityRole="button"
-            accessibilityLabel="Open Coach Knowledge"
+            accessibilityLabel={t('settings.accessibility_label.open_coach_knowledge')}
           >
             <View style={{ flex: 1 }}>
-              <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Coach Knowledge</Text>
+              <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.coach_knowledge')}</Text>
               <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                Coach refinements saved via &quot;remember this&quot; voice trigger.
-                Per-entry + bulk export to support@smartplaycaddie.com.
+                {t('settings.text.coach_refinements_saved_via_remember')}
               </Text>
             </View>
             <Ionicons name="bulb-outline" size={20} color={colors.text_muted} />
@@ -2170,7 +2162,7 @@ export default function Settings() {
             if (!showOwner) return null;
             return (
               <>
-                <CollapsibleSection title="Owner Tools" icon="construct-outline">
+                <CollapsibleSection title={t('settings.title.owner_tools')} icon="construct-outline">
                   {/* 2026-05-24 v1.2.1 — Glasses Mode toggle. Pre-
                       configures the audio session for background
                       Bluetooth so the caddie's voice routes to Ray-Ban
@@ -2208,8 +2200,8 @@ export default function Settings() {
                     onPress={() => {
                       const stamp = new Date().toISOString();
                       Alert.alert(
-                        'Send a test error?',
-                        'Fires one real error into Sentry so you can confirm you get notified. Nothing in the app breaks.',
+                        t('settings.alert.send_a_test_error'),
+                        t('settings.alert.fires_one_real_error_into'),
                         [
                           { text: 'Cancel', style: 'cancel' },
                           {
@@ -2224,8 +2216,8 @@ export default function Settings() {
                                 throw new Error(`SmartPlay owner test error · ${stamp}`);
                               }, 0);
                               Alert.alert(
-                                'Sent',
-                                'Check Sentry, and check whether you got an email or push. If Sentry shows it but you were not notified, the alert RULE is off — not the reporting.',
+                                t('settings.alert.sent'),
+                                t('settings.alert.check_sentry_and_check_whether'),
                               );
                             },
                           },
@@ -2233,12 +2225,12 @@ export default function Settings() {
                       );
                     }}
                     accessibilityRole="button"
-                    accessibilityLabel="Send a test error to Sentry"
+                    accessibilityLabel={t('settings.accessibility_label.send_a_test_error_to')}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Send Test Error</Text>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.send_test_error')}</Text>
                       <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        Fires one real error into Sentry so you can confirm error alerts still reach you. Nothing breaks.
+                        {t('settings.text.fires_one_real_error_into')}
                       </Text>
                     </View>
                     <Ionicons name="bug-outline" size={20} color={colors.text_muted} />
@@ -2248,7 +2240,7 @@ export default function Settings() {
                       a full real test round"). Read ONCE at round start, so a field test is a whole
                       round or it is not one. */}
                   <ToggleRow
-                    label="Field Test This Round"
+                    label={t('settings.label.field_test_this_round')}
                     sub="Traces every key touchpoint of your next round — which green tier answered, why a shot was or wasn't logged, why hole advance held — then emails a findings report (errors, issues and opportunities) at the end, with the full timeline underneath. Reads the toggle when you START a round. Costs nothing when off."
                     value={ownerFieldTest}
                     onValueChange={confirmToggle('Field Test', setOwnerFieldTest)}
@@ -2259,14 +2251,14 @@ export default function Settings() {
                     style={styles.resetRow}
                     onPress={() => router.push('/owner-checklist' as never)}
                     accessibilityRole="button"
-                    accessibilityLabel="Open my checklist"
+                    accessibilityLabel={t('settings.accessibility_label.open_my_checklist')}
                   >
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.rowLabel, { color: colors.text_primary }]}>
                         Checklist{checklistOpen > 0 ? ` · ${checklistOpen} open` : ''}
                       </Text>
                       <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        Field tests and ship steps, ticked off as you go. Reminds you on launch, and the caddie will read it out — &quot;what&apos;s on my checklist&quot;.
+                        {t('settings.text.field_tests_and_ship_steps')}
                       </Text>
                     </View>
                     <Ionicons name="checkbox-outline" size={20} color={colors.text_muted} />
@@ -2275,12 +2267,12 @@ export default function Settings() {
                     style={styles.resetRow}
                     onPress={() => router.push('/owner-card' as never)}
                     accessibilityRole="button"
-                    accessibilityLabel="Open my digital business card"
+                    accessibilityLabel={t('settings.accessibility_label.open_my_digital_business_card')}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>My Card</Text>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.my_card')}</Text>
                       <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        Your digital business card — QR to the download, tap to call, email or share. Ask the caddie for &quot;my card&quot;.
+                        {t('settings.text.your_digital_business_card_qr')}
                       </Text>
                     </View>
                     <Ionicons name="id-card-outline" size={20} color={colors.text_muted} />
@@ -2289,12 +2281,12 @@ export default function Settings() {
                     style={styles.resetRow}
                     onPress={() => router.push('/author/reference-assets' as never)}
                     accessibilityRole="button"
-                    accessibilityLabel="Open Train the Trainer reference authoring"
+                    accessibilityLabel={t('settings.accessibility_label.open_train_the_trainer_reference')}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Train the Trainer</Text>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.train_the_trainer')}</Text>
                       <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        Capture example photos + narrative for fault references (open face, over-the-top, etc.) that train the analysis.
+                        {t('settings.text.capture_example_photos_narrative_for')}
                       </Text>
                     </View>
                     <Ionicons name="school-outline" size={20} color={colors.text_muted} />
@@ -2322,12 +2314,12 @@ export default function Settings() {
                     style={styles.resetRow}
                     onPress={() => router.push('/owner-logs' as never)}
                     accessibilityRole="button"
-                    accessibilityLabel="Open Issue Log"
+                    accessibilityLabel={t('settings.accessibility_label.open_issue_log')}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Issue Log</Text>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.issue_log')}</Text>
                       <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        Logged issues (voice &quot;log this: …&quot; + manual). Owner Claude-triage + export inside.
+                        {t('settings.text.logged_issues_voice_log_this')}
                       </Text>
                     </View>
                     <Ionicons name="bug-outline" size={20} color={colors.text_muted} />
@@ -2339,12 +2331,12 @@ export default function Settings() {
                     style={styles.resetRow}
                     onPress={() => router.push('/harness' as never)}
                     accessibilityRole="button"
-                    accessibilityLabel="View scenario harness"
+                    accessibilityLabel={t('settings.accessibility_label.view_scenario_harness')}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Scenario Harness</Text>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.scenario_harness')}</Text>
                       <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        17 scenarios (9 critical + 5 high-value + 3 nice-to-have) — exercises real stores via the production voice router.
+                        {t('settings.text.17_scenarios_9_critical_5')}
                       </Text>
                     </View>
                     <Ionicons name="flask-outline" size={20} color={colors.text_muted} />
@@ -2358,12 +2350,12 @@ export default function Settings() {
                     style={styles.resetRow}
                     onPress={() => router.push('/voice-misses' as never)}
                     accessibilityRole="button"
-                    accessibilityLabel="View voice misses log"
+                    accessibilityLabel={t('settings.accessibility_label.view_voice_misses_log')}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Voice Misses</Text>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.voice_misses')}</Text>
                       <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        Phrasings that didn&apos;t match a handler. Field testing surfaces the gaps here for review.
+                        {t('settings.text.phrasings_that_didn_t_match')}
                       </Text>
                     </View>
                     <Ionicons name="mic-off-outline" size={20} color={colors.text_muted} />
@@ -2384,12 +2376,12 @@ export default function Settings() {
                       } catch (e) { console.log('[settings] sim round start failed:', e); }
                     }}
                     accessibilityRole="button"
-                    accessibilityLabel="Start a sim round"
+                    accessibilityLabel={t('settings.accessibility_label.start_a_sim_round')}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Sim Round (Palms · 9)</Text>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.sim_round_palms_9')}</Text>
                       <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        Voice-narrated practice round on simulated GPS. Say &quot;start a sim round&quot; works too. Never touches your handicap or learned data.
+                        {t('settings.text.voice_narrated_practice_round_on')}
                       </Text>
                     </View>
                     <Ionicons name="game-controller-outline" size={20} color={colors.text_muted} />
@@ -2403,12 +2395,12 @@ export default function Settings() {
                     style={styles.resetRow}
                     onPress={() => router.push('/simround-auto' as never)}
                     accessibilityRole="button"
-                    accessibilityLabel="Auto sim round, silent"
+                    accessibilityLabel={t('settings.accessibility_label.auto_sim_round_silent')}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Auto Sim Round (silent)</Text>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.auto_sim_round_silent')}</Text>
                       <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        Plays a full round by itself — no voice — using your learned club distances and miss tendency. Watches hole advance, scoring and yardages, then exports the report. Never touches your handicap or learned data.
+                        {t('settings.text.plays_a_full_round_by')}
                       </Text>
                     </View>
                     <Ionicons name="play-forward-outline" size={20} color={colors.text_muted} />
@@ -2422,12 +2414,12 @@ export default function Settings() {
                     style={styles.resetRow}
                     onPress={() => router.push('/swinglab/tutorials' as never)}
                     accessibilityRole="button"
-                    accessibilityLabel="Manage coach tutorials"
+                    accessibilityLabel={t('settings.accessibility_label.manage_coach_tutorials')}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Coach Tutorials</Text>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.coach_tutorials')}</Text>
                       <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        Curate + upload instruction videos for the tutorial library.
+                        {t('settings.text.curate_upload_instruction_videos_for')}
                       </Text>
                     </View>
                     <Ionicons name="school-outline" size={20} color={colors.text_muted} />
@@ -2441,12 +2433,12 @@ export default function Settings() {
                     style={styles.resetRow}
                     onPress={() => router.push('/swing-analysis-debug' as never)}
                     accessibilityRole="button"
-                    accessibilityLabel="View swing analysis telemetry"
+                    accessibilityLabel={t('settings.accessibility_label.view_swing_analysis_telemetry')}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Swing Analysis Telemetry</Text>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.swing_analysis_telemetry')}</Text>
                       <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        Last swing: frames sent vs. server image blocks. PASS proves the multi-frame pipe end-to-end.
+                        {t('settings.text.last_swing_frames_sent_vs')}
                       </Text>
                     </View>
                     <Ionicons name="film-outline" size={20} color={colors.text_muted} />
@@ -2461,8 +2453,8 @@ export default function Settings() {
                     style={styles.resetRow}
                     onPress={() => {
                       Alert.alert(
-                        'Reset Tutorials',
-                        'Every first-run tutorial will replay on next entry. Continue?',
+                        t('settings.alert.reset_tutorials'),
+                        t('settings.alert.every_first_run_tutorial_will'),
                         [
                           { text: 'Cancel', style: 'cancel' },
                           {
@@ -2476,12 +2468,12 @@ export default function Settings() {
                       );
                     }}
                     accessibilityRole="button"
-                    accessibilityLabel="Reset all first-run tutorials"
+                    accessibilityLabel={t('settings.accessibility_label.reset_all_first_run_tutorials')}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Reset Tutorials</Text>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.reset_tutorials')}</Text>
                       <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        Replay every feature&apos;s 3-line first-run tutorial on next entry. Owner test path.
+                        {t('settings.text.replay_every_feature_s_3')}
                       </Text>
                     </View>
                     <Ionicons name="refresh-outline" size={20} color={colors.text_muted} />
@@ -2490,13 +2482,12 @@ export default function Settings() {
                     style={styles.resetRow}
                     onPress={() => router.push('/gps-test' as never)}
                     accessibilityRole="button"
-                    accessibilityLabel="Open GPS Test Bench"
+                    accessibilityLabel={t('settings.accessibility_label.open_gps_test_bench')}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>GPS Test Bench</Text>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.gps_test_bench')}</Text>
                       <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        Drop an anchor at your current position, walk, watch the yards tick.
-                        Use this in a parking lot to verify GPS independent of course geometry.
+                        {t('settings.text.drop_an_anchor_at_your')}
                       </Text>
                     </View>
                     <Ionicons name="locate-outline" size={20} color={colors.text_muted} />
@@ -2509,12 +2500,12 @@ export default function Settings() {
                     style={styles.resetRow}
                     onPress={() => router.push('/native-modules-debug' as never)}
                     accessibilityRole="button"
-                    accessibilityLabel="Open native modules debug"
+                    accessibilityLabel={t('settings.accessibility_label.open_native_modules_debug')}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Native Modules</Text>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.native_modules')}</Text>
                       <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        On-device module status + the capture-engine A/B flag lives here.
+                        {t('settings.text.on_device_module_status_the')}
                       </Text>
                     </View>
                     <Ionicons name="hardware-chip-outline" size={20} color={colors.text_muted} />
@@ -2526,12 +2517,12 @@ export default function Settings() {
                     style={styles.resetRow}
                     onPress={() => router.push('/swing-sessions-debug' as never)}
                     accessibilityRole="button"
-                    accessibilityLabel="Open swing sessions debug hub"
+                    accessibilityLabel={t('settings.accessibility_label.open_swing_sessions_debug_hub')}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Swing Sessions Debug</Text>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.swing_sessions_debug')}</Text>
                       <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        Debug hub — captured swing tuples + links to the other debug screens.
+                        {t('settings.text.debug_hub_captured_swing_tuples')}
                       </Text>
                     </View>
                     <Ionicons name="construct-outline" size={20} color={colors.text_muted} />
@@ -2548,12 +2539,12 @@ export default function Settings() {
                     style={styles.resetRow}
                     onPress={() => router.push('/subscription-debug' as never)}
                     accessibilityRole="button"
-                    accessibilityLabel="Open subscription debug"
+                    accessibilityLabel={t('settings.accessibility_label.open_subscription_debug')}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Subscription Debug</Text>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.subscription_debug')}</Text>
                       <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        Subscription + trial state, the 30-day promotion, and Force Paywall (for the App Store review screenshot).
+                        {t('settings.text.subscription_trial_state_the_30')}
                       </Text>
                     </View>
                     <Ionicons name="card-outline" size={20} color={colors.text_muted} />
@@ -2576,12 +2567,12 @@ export default function Settings() {
                     style={styles.resetRow}
                     onPress={() => router.push('/mark-green' as never)}
                     accessibilityRole="button"
-                    accessibilityLabel="Open Mark Location tool"
+                    accessibilityLabel={t('settings.accessibility_label.open_mark_location_tool')}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Mark Location</Text>
+                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.mark_location')}</Text>
                       <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        Walk to a tee box OR green center and capture its real GPS coords. Toggle inside picks which one. Fixes yardages for any hole shipping with placeholder data.
+                        {t('settings.text.walk_to_a_tee_box')}
                       </Text>
                     </View>
                     <Ionicons name="location" size={20} color={colors.text_muted} />
@@ -2595,15 +2586,15 @@ export default function Settings() {
         {/* Reset / Sign Out — until real auth lands, this is the
             functional equivalent for testers who want to start fresh
             (new persona, clear stored profile, fresh trial state). */}
-        <CollapsibleSection title="Reset" icon="refresh-outline">
+        <CollapsibleSection title={t('settings.title.reset')} icon="refresh-outline">
           <TouchableOpacity
             style={styles.resetRow}
             accessibilityRole="button"
-            accessibilityLabel="Reset all app data and start fresh"
+            accessibilityLabel={t('settings.accessibility_label.reset_all_app_data_and')}
             onPress={() => {
               Alert.alert(
-                'Reset App Data',
-                'This clears your profile, round history, settings, practice sessions, and saved swings. Your installed app stays — you start fresh on next open. Continue?',
+                t('settings.alert.reset_app_data'),
+                t('settings.alert.this_clears_your_profile_round'),
                 [
                   { text: 'Cancel', style: 'cancel' },
                   {
@@ -2615,12 +2606,12 @@ export default function Settings() {
                         const keys = await AsyncStorage.getAllKeys();
                         await AsyncStorage.multiRemove(keys);
                         Alert.alert(
-                          'Reset complete',
-                          'Force-close the app (swipe out of recents) and reopen to start fresh.',
+                          t('settings.alert.reset_complete'),
+                          t('settings.alert.force_close_the_app_swipe'),
                           [{ text: 'OK' }],
                         );
                       } catch (e) {
-                        Alert.alert('Reset failed', e instanceof Error ? e.message : String(e));
+                        Alert.alert(t('settings.alert.reset_failed'), e instanceof Error ? e.message : String(e));
                       }
                     },
                   },
@@ -2629,9 +2620,9 @@ export default function Settings() {
             }}
           >
             <View style={{ flex: 1 }}>
-              <Text style={[styles.rowLabel, { color: '#f87171' }]}>Reset App Data</Text>
+              <Text style={[styles.rowLabel, { color: '#f87171' }]}>{t('settings.text.reset_app_data')}</Text>
               <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                Clear your profile, rounds, settings, and saved swings. Use this to start fresh.
+                {t('settings.text.clear_your_profile_rounds_settings')}
               </Text>
             </View>
             <Ionicons name="trash-outline" size={20} color="#f87171" />
@@ -2653,6 +2644,7 @@ export default function Settings() {
 // without requiring a real course visit.
 
 function DeveloperToolsSection({ cardStyle, colors }: { cardStyle: object[]; colors: ThemeColors }) {
+  const { t } = useTranslation();
   const walks = getAvailableWalks();
   const [walkState, setWalkState] = useState<SimulatedWalkState | null>(null);
   const [active, setActive] = useState(isSimulatedActive());
@@ -2670,14 +2662,14 @@ function DeveloperToolsSection({ cardStyle, colors }: { cardStyle: object[]; col
       <Text style={{
         color: '#F5A623', fontSize: 11, fontWeight: '700', letterSpacing: 1.5,
         textTransform: 'uppercase', paddingHorizontal: 20, marginTop: 20, marginBottom: 8,
-      }}>Developer Tools (dev build)</Text>
+      }}>{t('settings.developer_tools_section.developer_tools_dev_build')}</Text>
 
       <View style={cardStyle}>
         <Text style={{ color: colors.text_primary, fontSize: 13, fontWeight: '700', marginBottom: 8 }}>
-          Simulated GPS Walk
+          {t('settings.developer_tools_section.simulated_gps_walk')}
         </Text>
         <Text style={{ color: colors.text_muted, fontSize: 12, lineHeight: 17, marginBottom: 12 }}>
-          Replaces the real GPS source with a pre-built waypoint trace. Use to verify hole detection + distance calculations without driving to a course. Console logs every waypoint reached.
+          {t('settings.developer_tools_section.replaces_the_real_gps_source')}
         </Text>
 
         {!active ? (
@@ -2700,7 +2692,7 @@ function DeveloperToolsSection({ cardStyle, colors }: { cardStyle: object[]; col
           <View style={{ gap: 8 }}>
             <View style={{ backgroundColor: colors.accent_muted, borderColor: colors.accent, borderWidth: 1, borderRadius: 10, padding: 12 }}>
               <Text style={{ color: colors.accent, fontSize: 12, fontWeight: '800', letterSpacing: 0.5 }}>
-                ● SIM ACTIVE
+                {t('settings.developer_tools_section.sim_active')}
               </Text>
               {walkState ? (
                 <>
@@ -2722,7 +2714,7 @@ function DeveloperToolsSection({ cardStyle, colors }: { cardStyle: object[]; col
               style={{ backgroundColor: colors.surface_elevated, borderColor: colors.error, borderWidth: 1, borderRadius: 10, paddingVertical: 12, alignItems: 'center' }}
               onPress={() => stopSimulatedWalk()}
             >
-              <Text style={{ color: colors.error, fontSize: 13, fontWeight: '800' }}>Stop Simulated Walk</Text>
+              <Text style={{ color: colors.error, fontSize: 13, fontWeight: '800' }}>{t('settings.developer_tools_section.stop_simulated_walk')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -2892,6 +2884,7 @@ function GlassesModeRow({ colors }: { colors: ThemeColors }) {
 // what share of spoken asks the caddie answered ON-DEVICE (instant/offline/0-token)
 // vs escalated to the cloud. Should trend UP as the CNS brain grows. Tap to reset.
 function VoiceHitRateRow({ colors }: { colors: ThemeColors }) {
+  const { t } = useTranslation();
   const local = useVoiceHitRateStore((s) => s.local);
   const cloud = useVoiceHitRateStore((s) => s.cloud);
   const reset = useVoiceHitRateStore((s) => s.reset);
@@ -2902,7 +2895,7 @@ function VoiceHitRateRow({ colors }: { colors: ThemeColors }) {
       style={styles.resetRow}
       onPress={() =>
         Alert.alert(
-          'Reset voice hit-rate?',
+          t('settings.alert.reset_voice_hit_rate'),
           `Local ${pct}% — ${local} on-device / ${cloud} cloud (${total} asks).`,
           [
             { text: 'Cancel', style: 'cancel' },
@@ -2911,10 +2904,10 @@ function VoiceHitRateRow({ colors }: { colors: ThemeColors }) {
         )
       }
       accessibilityRole="button"
-      accessibilityLabel="Voice local hit-rate; tap to reset"
+      accessibilityLabel={t('settings.accessibility_label.voice_local_hit_rate_tap')}
     >
       <View style={{ flex: 1 }}>
-        <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Voice Local Hit-Rate</Text>
+        <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.voice_hit_rate_row.voice_local_hit_rate')}</Text>
         <Text style={[styles.rowSub, { color: colors.text_muted }]}>
           {total === 0
             ? 'No voice asks yet. Answered on-device vs escalated to the cloud — should climb as the brain learns.'
@@ -2927,18 +2920,19 @@ function VoiceHitRateRow({ colors }: { colors: ThemeColors }) {
 }
 
 function FeelCaptureRow({ colors }: { colors: ThemeColors }) {
+  const { t } = useTranslation();
   const feelCaptureEnabled = useSettingsStore((s) => s.feelCaptureEnabled);
   const setFeelCaptureEnabled = useSettingsStore((s) => s.setFeelCaptureEnabled);
   return (
     <View style={[styles.resetRow, { marginBottom: 8 }]}>
       <View style={{ flex: 1 }}>
-        <Text style={[styles.rowLabel, { color: colors.text_primary }]}>Feel Capture (dev)</Text>
+        <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.feel_capture_row.feel_capture_dev')}</Text>
         <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-          Transcribe each swing&apos;s clip audio + pair with the analysis. Owner-only — never fires on production users. Review tuples at /swing-sessions-debug.
+          {t('settings.feel_capture_row.transcribe_each_swing_s_clip')}
         </Text>
         {feelCaptureEnabled && (
           <Text style={[styles.rowSub, { color: colors.accent, marginTop: 6 }]}>
-            ✓ Active — capturing on every practice swing
+            {t('settings.feel_capture_row.active_capturing_on_every_practice')}
           </Text>
         )}
       </View>
@@ -2952,13 +2946,14 @@ function FeelCaptureRow({ colors }: { colors: ThemeColors }) {
 }
 
 function AiProviderRow({ colors }: { colors: ThemeColors }) {
+  const { t } = useTranslation();
   const aiProvider = useSettingsStore((s) => s.aiProvider);
   const setAiProvider = useSettingsStore((s) => s.setAiProvider);
   const isOpenAI = aiProvider === 'openai';
   return (
     <View style={[styles.resetRow, { marginBottom: 8 }]}>
       <View style={{ flex: 1 }}>
-        <Text style={[styles.rowLabel, { color: colors.text_primary }]}>AI Brain Provider</Text>
+        <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.ai_provider_row.ai_brain_provider')}</Text>
         <Text style={[styles.rowSub, { color: colors.text_muted }]}>
           {isOpenAI
             ? 'OpenAI (gpt-4o / gpt-4o-mini) — strong reasoning, single vendor.'

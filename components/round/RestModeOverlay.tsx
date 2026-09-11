@@ -4,6 +4,7 @@ import { usePathname } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useRestModeStore } from '../../store/restModeStore';
 import { useRoundStore } from '../../store/roundStore';
+import { useTranslation } from 'react-i18next';
 
 /**
  * 2026-06-13 — Rest overlay (Tim #8 battery drain). 2026-07-24 — extended to EVERY screen (Tim:
@@ -32,6 +33,7 @@ function RestKeepAwake() {
 }
 
 export function RestModeOverlay() {
+  const { t } = useTranslation();
   const active = useRestModeStore((s) => s.active);
   const enterRest = useRestModeStore((s) => s.enterRest);
   const exitRest = useRestModeStore((s) => s.exitRest);
@@ -85,7 +87,7 @@ export function RestModeOverlay() {
           <Text style={styles.gpsText}>{isRoundActive ? 'GPS LIVE · RESTING' : 'RESTING · TAP TO WAKE'}</Text>
         </View>
         {isRoundActive && currentHole ? <Text style={styles.hole}>HOLE {currentHole}</Text> : null}
-        <Text style={styles.hint}>Tap anywhere to wake</Text>
+        <Text style={styles.hint}>{t('round_rest_mode_overlay.rest_mode_overlay.tap_anywhere_to_wake')}</Text>
       </View>
     </Pressable>
   );

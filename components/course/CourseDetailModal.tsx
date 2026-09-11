@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getHoleThumbnailUrl, getCourseImageryUrl } from '../../services/mapboxImagery';
+import { useTranslation } from 'react-i18next';
 
 export type ModalHole = {
   hole_number: number;
@@ -36,6 +37,7 @@ type Props = {
 };
 
 export default function CourseDetailModal({ visible, onClose, courseName, location, holes }: Props) {
+  const { t } = useTranslation();
   // Subscribe to dimensions so Z Fold reconfigure refreshes the aerial size.
   const { width: screenW } = useWindowDimensions();
   // 2026-09-06 (Tim — one course engine, no per-course branches) — the `isPalms` substring match is
@@ -64,17 +66,17 @@ export default function CourseDetailModal({ visible, onClose, courseName, locati
 
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
           {/* Course-wide aerial — one path for every course. */}
-          <Text style={styles.sectionLabel}>COURSE AERIAL</Text>
+          <Text style={styles.sectionLabel}>{t('course_course_detail_modal.course_detail_modal.course_aerial')}</Text>
           {courseUrl ? (
             <Image source={{ uri: courseUrl }} style={styles.courseAerial} resizeMode="cover" />
           ) : (
             <View style={[styles.courseAerial, styles.placeholderTile]}>
-              <Text style={styles.placeholderText}>Aerial unavailable</Text>
+              <Text style={styles.placeholderText}>{t('course_course_detail_modal.course_detail_modal.aerial_unavailable')}</Text>
             </View>
           )}
 
           {/* Hole-by-hole */}
-          <Text style={[styles.sectionLabel, { marginTop: 22 }]}>HOLE BY HOLE</Text>
+          <Text style={[styles.sectionLabel, { marginTop: 22 }]}>{t('course_course_detail_modal.course_detail_modal.hole_by_hole')}</Text>
           {holes.map(h => {
             const thumbUrl = getHoleThumbnailUrl({
               courseId: null,
@@ -103,7 +105,7 @@ export default function CourseDetailModal({ visible, onClose, courseName, locati
                   {h.note ? (
                     <Text style={styles.holeNote} numberOfLines={3}>{h.note}</Text>
                   ) : (
-                    <Text style={styles.holeNoteMuted}>No note for this hole.</Text>
+                    <Text style={styles.holeNoteMuted}>{t('course_course_detail_modal.course_detail_modal.no_note_for_this_hole')}</Text>
                   )}
                 </View>
               </View>

@@ -22,8 +22,10 @@ import { recommendBall } from '../../services/ballFitting';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { safeBack } from '../../services/safeBack';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 
 export default function FitProfileScreen() {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const router = useRouter();
   // 2026-07-24 (club-logic unification) — re-render trigger; the memos read current carry/total via getState.
@@ -163,7 +165,7 @@ export default function FitProfileScreen() {
         <TouchableOpacity onPress={() => safeBack()} style={styles.headerBtn} accessibilityRole="button">
           <Ionicons name="chevron-back" size={24} color={colors.text_primary} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text_primary }]}>Fit Profile</Text>
+        <Text style={[styles.headerTitle, { color: colors.text_primary }]}>{t('practice_fit_profile.fit_profile_screen.fit_profile')}</Text>
         <View style={styles.headerBtn} />
       </View>
 
@@ -181,10 +183,10 @@ export default function FitProfileScreen() {
           onPress={() => router.push('/bag-scan' as never)}
           style={[styles.scanBagBtn, { backgroundColor: colors.surface, borderColor: colors.accent }]}
           accessibilityRole="button"
-          accessibilityLabel="Scan my bag with video to populate clubs"
+          accessibilityLabel={t('practice_fit_profile.accessibility_label.scan_my_bag_with_video')}
         >
           <Ionicons name="videocam-outline" size={18} color={colors.accent} />
-          <Text style={[styles.scanBagText, { color: colors.accent }]}>Scan my bag with video</Text>
+          <Text style={[styles.scanBagText, { color: colors.accent }]}>{t('practice_fit_profile.fit_profile_screen.scan_my_bag_with_video')}</Text>
         </TouchableOpacity>
 
         {/* 2026-07-29 (Tim — Arccos Air trial) — seed the distance ladder from an Arccos club-averages
@@ -193,21 +195,21 @@ export default function FitProfileScreen() {
           onPress={() => router.push('/arccos-import' as never)}
           style={[styles.scanBagBtn, { backgroundColor: colors.surface, borderColor: colors.accent_sky, marginTop: -4 }]}
           accessibilityRole="button"
-          accessibilityLabel="Import my club distances from an Arccos screenshot"
+          accessibilityLabel={t('practice_fit_profile.accessibility_label.import_my_club_distances_from')}
         >
           <Ionicons name="cloud-download-outline" size={18} color={colors.accent_sky} />
-          <Text style={[styles.scanBagText, { color: colors.accent_sky }]}>Import distances from Arccos</Text>
+          <Text style={[styles.scanBagText, { color: colors.accent_sky }]}>{t('practice_fit_profile.fit_profile_screen.import_distances_from_arccos')}</Text>
         </TouchableOpacity>
 
         {/* 2026-07-23 (Tim — Bag Vision Phase 2) — FIT GAP: your owned bag vs your data. */}
         {fitGap.ownedCount > 0 && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.accent }]}>
-            <Text style={[styles.cardLabel, { color: colors.accent }]}>FIT GAP · YOUR BAG vs YOUR DATA</Text>
+            <Text style={[styles.cardLabel, { color: colors.accent }]}>{t('practice_fit_profile.fit_profile_screen.fit_gap_your_bag_vs')}</Text>
             <Text style={[styles.confText, { color: colors.text_muted, marginBottom: 8 }]}>
               {fitGap.ownedCount} clubs in your bag · {fitGap.dialedCount} with a carry set
             </Text>
             {fitGap.findings.length === 0 ? (
-              <Text style={[styles.gapText, { color: colors.text_primary }]}>Your bag matches your distances — no gaps or redundancies to flag.</Text>
+              <Text style={[styles.gapText, { color: colors.text_primary }]}>{t('practice_fit_profile.fit_profile_screen.your_bag_matches_your_distances')}</Text>
             ) : (
               fitGap.findings.map((f, i) => {
                 const icon = f.kind === 'undialed' ? 'create-outline'
@@ -232,7 +234,7 @@ export default function FitProfileScreen() {
         {/* GAPS */}
         {profile.gaps.length > 0 && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#f5a623' }]}>
-            <Text style={[styles.cardLabel, { color: '#f5a623' }]}>GAPS TO FILL</Text>
+            <Text style={[styles.cardLabel, { color: '#f5a623' }]}>{t('practice_fit_profile.fit_profile_screen.gaps_to_fill')}</Text>
             {profile.gaps.map((g, i) => (
               <Text key={i} style={[styles.gapText, { color: colors.text_primary }]}>
                 {g.gapYards} yd between your {g.upper} and {g.lower} — a club-and-a-half hole around {g.centerYards} yds.
@@ -244,7 +246,7 @@ export default function FitProfileScreen() {
         {/* OVERLAPS */}
         {profile.overlaps.length > 0 && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.cardLabel, { color: colors.text_muted }]}>DOING THE SAME JOB</Text>
+            <Text style={[styles.cardLabel, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.doing_the_same_job')}</Text>
             {profile.overlaps.map((o, i) => (
               <Text key={i} style={[styles.gapText, { color: colors.text_primary }]}>
                 {o.longer} and {o.shorter} carry within {o.gapYards} yds — one may be redundant.
@@ -255,20 +257,20 @@ export default function FitProfileScreen() {
 
         {/* FLEX + BALL — honest directional layers (starting points). */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.cardLabel, { color: '#22d3ee' }]}>SHAFT FLEX</Text>
+          <Text style={[styles.cardLabel, { color: '#22d3ee' }]}>{t('practice_fit_profile.fit_profile_screen.shaft_flex')}</Text>
           {flex ? (
             <>
               <Text style={[styles.fitValue, { color: colors.text_primary }]}>{flex.flex}</Text>
               <Text style={[styles.gapText, { color: colors.text_muted }]}>{flex.note}</Text>
             </>
           ) : (
-            <Text style={[styles.gapText, { color: colors.text_muted }]}>Track a few driver shots and I&apos;ll give you an honest flex starting point (from your real carry, not a guess).</Text>
+            <Text style={[styles.gapText, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.track_a_few_driver_shots')}</Text>
           )}
         </View>
 
         {/* RECOMMENDED BALL — honest, DIRECTIONAL fit from readable game data. */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.accent_sky }]}>
-          <Text style={[styles.cardLabel, { color: colors.accent_sky }]}>RECOMMENDED BALL</Text>
+          <Text style={[styles.cardLabel, { color: colors.accent_sky }]}>{t('practice_fit_profile.fit_profile_screen.recommended_ball')}</Text>
           {ball.lowInfo ? (
             <>
               <Text style={[styles.fitValue, { color: colors.text_primary }]}>{ball.headline}</Text>
@@ -296,15 +298,15 @@ export default function FitProfileScreen() {
               {/* Characteristics — '—' where we have no honest read (never fabricated). */}
               <View style={styles.charRow}>
                 <View style={styles.charCell}>
-                  <Text style={[styles.charLabel, { color: colors.text_muted }]}>SPIN</Text>
+                  <Text style={[styles.charLabel, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.spin')}</Text>
                   <Text style={[styles.charValue, { color: colors.text_primary }]}>{ball.characteristics.spin}</Text>
                 </View>
                 <View style={styles.charCell}>
-                  <Text style={[styles.charLabel, { color: colors.text_muted }]}>FEEL</Text>
+                  <Text style={[styles.charLabel, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.feel')}</Text>
                   <Text style={[styles.charValue, { color: colors.text_primary }]}>{ball.characteristics.feel}</Text>
                 </View>
                 <View style={[styles.charCell, { flex: 1.4 }]}>
-                  <Text style={[styles.charLabel, { color: colors.text_muted }]}>COVER</Text>
+                  <Text style={[styles.charLabel, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.cover')}</Text>
                   <Text style={[styles.charValue, { color: colors.text_primary }]}>{ball.characteristics.cover}</Text>
                 </View>
               </View>
@@ -328,7 +330,7 @@ export default function FitProfileScreen() {
         {/* PRACTICE VOLUME — honest rep credit per club (not a measured carry). */}
         {repList.length > 0 && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.cardLabel, { color: colors.accent }]}>PRACTICE VOLUME</Text>
+            <Text style={[styles.cardLabel, { color: colors.accent }]}>{t('practice_fit_profile.fit_profile_screen.practice_volume')}</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
               {repList.map((r) => (
                 <View key={r.club} style={[styles.repPill, { borderColor: colors.border }]}>
@@ -337,12 +339,12 @@ export default function FitProfileScreen() {
                 </View>
               ))}
             </View>
-            <Text style={[styles.gapText, { color: colors.text_muted }]}>Reps you&apos;ve logged in practice — work credited per club. Volume, not a measured carry.</Text>
+            <Text style={[styles.gapText, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.reps_you_ve_logged_in')}</Text>
           </View>
         )}
 
         {/* LADDER — your bag. Tap any non-tracked club to set your carry. */}
-        <Text style={[styles.cardLabel, { color: colors.text_muted, marginTop: 16, marginBottom: 8, marginLeft: 4 }]}>YOUR BAG · TAP A CLUB TO SET ITS CARRY</Text>
+        <Text style={[styles.cardLabel, { color: colors.text_muted, marginTop: 16, marginBottom: 8, marginLeft: 4 }]}>{t('practice_fit_profile.fit_profile_screen.your_bag_tap_a_club')}</Text>
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, paddingVertical: 4 }]}>
           {profile.ladder.map((c) => {
             if (editingClub === c.club) {
@@ -362,11 +364,11 @@ export default function FitProfileScreen() {
                       style={[styles.editInput, { color: colors.text_primary, borderColor: colors.accent }]}
                       accessibilityLabel={`Carry distance for ${c.club} in yards`}
                     />
-                    <TouchableOpacity onPress={() => saveEdit(c.club)} style={styles.editBtn} accessibilityRole="button" accessibilityLabel="Save">
+                    <TouchableOpacity onPress={() => saveEdit(c.club)} style={styles.editBtn} accessibilityRole="button" accessibilityLabel={t('practice_fit_profile.accessibility_label.save')}>
                       <Ionicons name="checkmark" size={20} color="#3FB950" />
                     </TouchableOpacity>
                     {c.stated ? (
-                      <TouchableOpacity onPress={() => clearEdit(c.club)} style={styles.editBtn} accessibilityRole="button" accessibilityLabel="Remove">
+                      <TouchableOpacity onPress={() => clearEdit(c.club)} style={styles.editBtn} accessibilityRole="button" accessibilityLabel={t('practice_fit_profile.accessibility_label.remove')}>
                         <Ionicons name="trash-outline" size={16} color={colors.text_muted} />
                       </TouchableOpacity>
                     ) : null}
@@ -420,7 +422,7 @@ export default function FitProfileScreen() {
             );
           })}
           <Text style={[styles.legend, { color: colors.text_muted }]}>
-            ● tracked from your shots · ◆ you set it · ○ estimate — tap a club to set your carry
+            {t('practice_fit_profile.fit_profile_screen.tracked_from_your_shots_you')}
           </Text>
         </View>
 

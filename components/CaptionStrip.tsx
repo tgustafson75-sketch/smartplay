@@ -19,8 +19,10 @@ import { subscribeToCaption, getCurrentCaption, subscribeToSpeaking, isSpeaking 
 import { useSettingsStore } from '../store/settingsStore';
 import { getCurrentRoute, subscribeRouteChanges, type AudioRoute } from '../services/audioRoutingService';
 import { useCaddieBarReserve } from './GlobalCaddieBar';
+import { useTranslation } from 'react-i18next';
 
 export default function CaptionStrip(): React.ReactElement | null {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { width: screenW } = useWindowDimensions();
   const ttsCaptions = useSettingsStore(s => s.ttsCaptions);
@@ -131,8 +133,8 @@ export default function CaptionStrip(): React.ReactElement | null {
     promptShownThisSession.current = true;
     s.setTtsCaptionsBluetoothPrompt('asked');
     Alert.alert(
-      'Captions on for Bluetooth audio',
-      'You’re on Bluetooth — caddie speech is hard to hear in carts. Want to keep captions on after you disconnect too?',
+      t('caption_strip.alert.captions_on_for_bluetooth_audio'),
+      t('caption_strip.alert.you_re_on_bluetooth_caddie'),
       [
         { text: 'Don’t ask again', style: 'destructive', onPress: () => s.setTtsCaptionsBluetoothPrompt('never') },
         { text: 'Just for Bluetooth', style: 'cancel' },

@@ -46,6 +46,7 @@ import {
 import { TempoMetronome, type MetronomeMode } from '../../services/tempoMetronome';
 import TempoPatch from '../../components/swinglab/TempoPatch';
 import { setScreenContext, clearScreenContext } from '../../services/screenContext';
+import { useTranslation } from 'react-i18next';
 
 // ─── Phase model ───────────────────────────────────────────────────────
 type PhaseKey = 'backswingStartSec' | 'topSec' | 'impactSec';
@@ -77,6 +78,7 @@ function ratingColor(rating: TempoRating, c: ReturnType<typeof useTheme>['colors
 }
 
 export default function SmartTempoScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const params = useLocalSearchParams<{ swing_id?: string; clipUri?: string; tempoMode?: string }>();
@@ -466,7 +468,7 @@ export default function SmartTempoScreen() {
       <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]}>
         <View style={styles.center}>
           <ActivityIndicator color={colors.accent} />
-          <Text style={{ color: colors.text_muted, marginTop: 12 }}>Loading swing…</Text>
+          <Text style={{ color: colors.text_muted, marginTop: 12 }}>{t('swinglab_smart_tempo.smart_tempo_screen.loading_swing')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -481,11 +483,11 @@ export default function SmartTempoScreen() {
             : router.back())}
           hitSlop={10}
           style={styles.headerIcon}
-          accessibilityLabel="Back"
+          accessibilityLabel={t('swinglab_smart_tempo.accessibility_label.back')}
         >
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </Pressable>
-        <Text style={[styles.title, { color: colors.text_primary }]}>Smart Tempo</Text>
+        <Text style={[styles.title, { color: colors.text_primary }]}>{t('swinglab_smart_tempo.smart_tempo_screen.smart_tempo')}</Text>
         <View style={styles.headerIcon}>
           <Ionicons name="speedometer-outline" size={20} color={colors.accent_amber} />
         </View>
@@ -495,22 +497,20 @@ export default function SmartTempoScreen() {
         // ─── A) ENTRY ────────────────────────────────────────────────────
         <ScrollView contentContainerStyle={styles.entryBody}>
           <Text style={[styles.blurb, { color: colors.text_muted }]}>
-            Smart Tempo opens your camera, records the swing, and reads your REAL
-            backswing:downswing ratio against the tour 3:1 — then plays it back so you can
-            HEAR and SEE the difference. No guessing, only your real marks.
+            {t('swinglab_smart_tempo.smart_tempo_screen.smart_tempo_opens_your_camera')}
           </Text>
 
           <Pressable
             onPress={() => launchCamera(false)}
             style={[styles.primaryBtn, { backgroundColor: colors.accent }]}
             accessibilityRole="button"
-            accessibilityLabel="Open the camera and record a swing"
+            accessibilityLabel={t('swinglab_smart_tempo.accessibility_label.open_the_camera_and_record')}
           >
             <Ionicons name="videocam" size={20} color="#06281b" />
-            <Text style={styles.primaryBtnText}>Open camera</Text>
+            <Text style={styles.primaryBtnText}>{t('swinglab_smart_tempo.smart_tempo_screen.open_camera')}</Text>
           </Pressable>
           <Text style={[styles.metHint, { color: colors.text_muted }]}>
-            Records a swing and brings you straight to your tempo read.
+            {t('swinglab_smart_tempo.smart_tempo_screen.records_a_swing_and_brings')}
           </Text>
 
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
@@ -519,23 +519,23 @@ export default function SmartTempoScreen() {
             onPress={() => { setBrowsing(true); setPickerOpen(true); }}
             style={[styles.secondaryBtn, { borderColor: colors.border }]}
             accessibilityRole="button"
-            accessibilityLabel="Pick a swing from your library"
+            accessibilityLabel={t('swinglab_smart_tempo.accessibility_label.pick_a_swing_from_your')}
           >
             <Ionicons name="albums-outline" size={18} color={colors.accent_sky} />
-            <Text style={[styles.secondaryBtnText, { color: colors.text_primary }]}>Pick from library</Text>
+            <Text style={[styles.secondaryBtnText, { color: colors.text_primary }]}>{t('swinglab_smart_tempo.smart_tempo_screen.pick_from_library')}</Text>
           </Pressable>
 
           <Pressable
             onPress={() => router.push('/swinglab/tempo-trainer' as never)}
             style={[styles.secondaryBtn, { borderColor: colors.border }]}
             accessibilityRole="button"
-            accessibilityLabel="Open the tempo metronome to swing to a 3:1 beat"
+            accessibilityLabel={t('swinglab_smart_tempo.accessibility_label.open_the_tempo_metronome_to')}
           >
             <Ionicons name="musical-notes-outline" size={18} color={colors.accent_amber} />
-            <Text style={[styles.secondaryBtnText, { color: colors.text_primary }]}>Swing to a 3:1 beat</Text>
+            <Text style={[styles.secondaryBtnText, { color: colors.text_primary }]}>{t('swinglab_smart_tempo.smart_tempo_screen.swing_to_a_3_1')}</Text>
           </Pressable>
           <Text style={[styles.metHint, { color: colors.text_muted }]}>
-            Practice the rhythm to the metronome, then record to measure it.
+            {t('swinglab_smart_tempo.smart_tempo_screen.practice_the_rhythm_to_the')}
           </Text>
         </ScrollView>
       ) : (
@@ -600,7 +600,7 @@ export default function SmartTempoScreen() {
               onLayout={(e) => setSeekBarW(e.nativeEvent.layout.width)}
               style={styles.seekHit}
               accessibilityRole="adjustable"
-              accessibilityLabel="Seek bar — tap to jump to a point in the swing"
+              accessibilityLabel={t('swinglab_smart_tempo.accessibility_label.seek_bar_tap_to_jump')}
             >
               <View style={styles.seekTrack}>
                 <View style={[styles.seekFill, { width: `${duration && duration > 0 ? Math.max(0, Math.min(100, (position / duration) * 100)) : 0}%` }]} />
@@ -667,7 +667,7 @@ export default function SmartTempoScreen() {
                       {isAuto ? 'auto' : marks[p.key]!.toFixed(2) + 's'}
                     </Text>
                   ) : (
-                    <Text style={[styles.tabState, { color: colors.text_muted }]}>tap to mark</Text>
+                    <Text style={[styles.tabState, { color: colors.text_muted }]}>{t('swinglab_smart_tempo.smart_tempo_screen.tap_to_mark')}</Text>
                   )}
                 </Pressable>
               );
@@ -696,8 +696,7 @@ export default function SmartTempoScreen() {
             <View style={[styles.nudge, { borderColor: colors.accent_amber }]}>
               <Ionicons name="swap-vertical-outline" size={18} color={colors.accent_amber} />
               <Text style={[styles.nudgeText, { color: colors.text_primary }]}>
-                These marks are out of order — backswing must come before the top, and the top
-                before impact. Re-mark the one that’s off.
+                {t('swinglab_smart_tempo.smart_tempo_screen.these_marks_are_out_of')}
               </Text>
             </View>
           )}
@@ -706,7 +705,7 @@ export default function SmartTempoScreen() {
             const rc = ratingColor(result.rating, colors);
             return (
               <View style={[styles.resultCard, { borderColor: rc, backgroundColor: colors.surface }]}>
-                <Text style={[styles.resultEyebrow, { color: colors.text_muted }]}>TEMPO RATING</Text>
+                <Text style={[styles.resultEyebrow, { color: colors.text_muted }]}>{t('swinglab_smart_tempo.smart_tempo_screen.tempo_rating')}</Text>
                 <Text style={[styles.resultRating, { color: rc }]}>{result.ratingLabel}</Text>
                 <View style={styles.ratioBig}>
                   <Text style={[styles.ratioBigNum, { color: rc }]}>{result.ratioLabel}</Text>
@@ -715,16 +714,16 @@ export default function SmartTempoScreen() {
                 <Text style={[styles.coaching, { color: colors.text_secondary }]}>{result.coaching}</Text>
 
                 <View style={[styles.dataBlock, { borderColor: colors.border }]}>
-                  <DataCell label="Backswing" value={`${result.backswingMs} ms`} colors={colors} />
-                  <DataCell label="Downswing" value={`${result.downswingMs} ms`} colors={colors} />
-                  <DataCell label="Ratio" value={result.ratioLabel} colors={colors} accent={rc} />
+                  <DataCell label={t('swinglab_smart_tempo.label.backswing')} value={`${result.backswingMs} ms`} colors={colors} />
+                  <DataCell label={t('swinglab_smart_tempo.label.downswing')} value={`${result.downswingMs} ms`} colors={colors} />
+                  <DataCell label={t('swinglab_smart_tempo.label.ratio')} value={result.ratioLabel} colors={colors} accent={rc} />
                 </View>
 
                 {/* ── Tempo Patch — your real marks vs the ideal 3:1 ── */}
                 <TempoPatch result={result} />
 
                 {/* ── Metronome compare — HEAR actual vs ideal ── */}
-                <Text style={[styles.metroEyebrow, { color: colors.text_muted }]}>HEAR YOUR TEMPO</Text>
+                <Text style={[styles.metroEyebrow, { color: colors.text_muted }]}>{t('swinglab_smart_tempo.smart_tempo_screen.hear_your_tempo')}</Text>
                 <View style={styles.metroRow}>
                   {([
                     { mode: 'actual' as const, label: 'Your tempo', icon: 'person-outline' as const },
@@ -755,7 +754,7 @@ export default function SmartTempoScreen() {
                     onPress={() => (replaying ? (stopReplay(), void videoRef.current?.pauseAsync()) : void replayTempo())}
                     style={[styles.resultBtn, { borderColor: colors.accent }]}
                     accessibilityRole="button"
-                    accessibilityLabel="Replay your tempo"
+                    accessibilityLabel={t('swinglab_smart_tempo.accessibility_label.replay_your_tempo')}
                   >
                     <Ionicons name={replaying ? 'stop' : 'repeat'} size={18} color={colors.accent} />
                     <Text style={[styles.resultBtnText, { color: colors.accent }]}>{replaying ? 'Stop' : 'Replay Tempo'}</Text>
@@ -764,10 +763,10 @@ export default function SmartTempoScreen() {
                     onPress={openSave}
                     style={[styles.resultBtn, { backgroundColor: colors.accent, borderColor: colors.accent }]}
                     accessibilityRole="button"
-                    accessibilityLabel="Save this tempo to your library"
+                    accessibilityLabel={t('swinglab_smart_tempo.accessibility_label.save_this_tempo_to_your')}
                   >
                     <Ionicons name="bookmark" size={18} color="#06281b" />
-                    <Text style={[styles.resultBtnText, { color: '#06281b' }]}>Save</Text>
+                    <Text style={[styles.resultBtnText, { color: '#06281b' }]}>{t('swinglab_smart_tempo.smart_tempo_screen.save')}</Text>
                   </Pressable>
                 </View>
               </View>
@@ -777,7 +776,7 @@ export default function SmartTempoScreen() {
           {/* Pick a different swing */}
           <Pressable onPress={() => setPickerOpen(true)} style={styles.swapLink} hitSlop={8}>
             <Ionicons name="albums-outline" size={14} color={colors.accent_sky} />
-            <Text style={[styles.swapLinkText, { color: colors.accent_sky }]}>Pick a different swing</Text>
+            <Text style={[styles.swapLinkText, { color: colors.accent_sky }]}>{t('swinglab_smart_tempo.smart_tempo_screen.pick_a_different_swing')}</Text>
           </Pressable>
         </ScrollView>
       )}
@@ -787,14 +786,14 @@ export default function SmartTempoScreen() {
         <View style={styles.modalBackdrop}>
           <View style={[styles.modalSheet, { backgroundColor: colors.surface }]}>
             <View style={styles.modalHead}>
-              <Text style={[styles.modalTitle, { color: colors.text_primary }]}>Pick a swing</Text>
+              <Text style={[styles.modalTitle, { color: colors.text_primary }]}>{t('swinglab_smart_tempo.smart_tempo_screen.pick_a_swing')}</Text>
               <Pressable onPress={() => setPickerOpen(false)} hitSlop={10}>
                 <Ionicons name="close" size={24} color={colors.text_muted} />
               </Pressable>
             </View>
             {libraryEntries.length === 0 ? (
               <Text style={[styles.modalEmpty, { color: colors.text_muted }]}>
-                No swings with video yet. Record one first.
+                {t('swinglab_smart_tempo.smart_tempo_screen.no_swings_with_video_yet')}
               </Text>
             ) : (
               <ScrollView style={{ maxHeight: 420 }}>
@@ -830,11 +829,11 @@ export default function SmartTempoScreen() {
       <Modal visible={saveOpen} animationType="fade" transparent onRequestClose={() => setSaveOpen(false)}>
         <View style={styles.modalBackdrop}>
           <View style={[styles.saveSheet, { backgroundColor: colors.surface }]}>
-            <Text style={[styles.modalTitle, { color: colors.text_primary, marginBottom: 12 }]}>Save tempo</Text>
+            <Text style={[styles.modalTitle, { color: colors.text_primary, marginBottom: 12 }]}>{t('swinglab_smart_tempo.smart_tempo_screen.save_tempo')}</Text>
             <TextInput
               value={saveName}
               onChangeText={setSaveName}
-              placeholder="Name this swing"
+              placeholder={t('swinglab_smart_tempo.placeholder.name_this_swing')}
               placeholderTextColor={colors.text_muted}
               style={[styles.saveInput, { borderColor: colors.border, color: colors.text_primary }]}
               maxLength={60}
@@ -846,14 +845,14 @@ export default function SmartTempoScreen() {
             )}
             <View style={styles.saveActions}>
               <Pressable onPress={() => setSaveOpen(false)} style={[styles.saveCancel, { borderColor: colors.border }]} disabled={saving}>
-                <Text style={{ color: colors.text_muted, fontWeight: '700' }}>Cancel</Text>
+                <Text style={{ color: colors.text_muted, fontWeight: '700' }}>{t('play.cancel')}</Text>
               </Pressable>
               <Pressable
                 onPress={() => void doSave()}
                 style={[styles.saveConfirm, { backgroundColor: colors.accent, opacity: saving ? 0.6 : 1 }]}
                 disabled={saving}
               >
-                {saving ? <ActivityIndicator color="#06281b" size="small" /> : <Text style={{ color: '#06281b', fontWeight: '900' }}>Save</Text>}
+                {saving ? <ActivityIndicator color="#06281b" size="small" /> : <Text style={{ color: '#06281b', fontWeight: '900' }}>{t('swinglab_smart_tempo.smart_tempo_screen.save')}</Text>}
               </Pressable>
             </View>
           </View>

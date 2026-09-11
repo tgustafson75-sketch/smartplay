@@ -23,8 +23,10 @@ import {
   declineBatterySaver,
   type BatteryState,
 } from '../../services/batteryMonitor';
+import { useTranslation } from 'react-i18next';
 
 export function BatterySaverPrompt() {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [bs, setBs] = useState<BatteryState | null>(null);
@@ -43,25 +45,25 @@ export function BatterySaverPrompt() {
           </Text>
         </View>
         <Text style={[styles.body, { color: colors.text_secondary }]}>
-          Ease GPS to stretch your round? Yardages stay accurate — they just refresh a touch slower.
+          {t('battery_battery_saver_prompt.battery_saver_prompt.ease_gps_to_stretch_your')}
         </Text>
         <View style={styles.btnRow}>
           <Pressable
             onPress={declineBatterySaver}
             style={[styles.btn, { borderColor: colors.border }]}
             accessibilityRole="button"
-            accessibilityLabel="Keep full GPS power"
+            accessibilityLabel={t('battery_battery_saver_prompt.accessibility_label.keep_full_gps_power')}
           >
-            <Text style={[styles.btnText, { color: colors.text_secondary }]}>Keep full power</Text>
+            <Text style={[styles.btnText, { color: colors.text_secondary }]}>{t('battery_battery_saver_prompt.battery_saver_prompt.keep_full_power')}</Text>
           </Pressable>
           <Pressable
             onPress={acceptBatterySaver}
             style={[styles.btn, { backgroundColor: colors.accent, borderColor: colors.accent }]}
             accessibilityRole="button"
-            accessibilityLabel="Turn on battery saver"
+            accessibilityLabel={t('battery_battery_saver_prompt.accessibility_label.turn_on_battery_saver')}
           >
             <Ionicons name="leaf-outline" size={15} color="#06281b" />
-            <Text style={[styles.btnText, { color: '#06281b', fontWeight: '800' }]}>Save battery</Text>
+            <Text style={[styles.btnText, { color: '#06281b', fontWeight: '800' }]}>{t('battery_battery_saver_prompt.battery_saver_prompt.save_battery')}</Text>
           </Pressable>
         </View>
       </View>

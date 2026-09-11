@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
 
 type HoleRow = {
   hole_number: number;
@@ -35,6 +36,7 @@ type Props = {
  * the copy makes the data source visible.
  */
 export default function HoleGuide({ holes, notesLoading }: Props) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const sorted = [...holes].sort((a, b) => a.hole_number - b.hole_number);
   const parTotal = sorted.reduce((a, h) => a + h.par, 0);
@@ -76,9 +78,9 @@ export default function HoleGuide({ holes, notesLoading }: Props) {
     <View style={styles.wrap}>
       <View style={[styles.headerRow, dynamicStyles.headerBorder]}>
         <Text style={[styles.h, dynamicStyles.header, styles.colHole]}>#</Text>
-        <Text style={[styles.h, dynamicStyles.header, styles.colPar]}>PAR</Text>
-        <Text style={[styles.h, dynamicStyles.header, styles.colYds]}>YDS</Text>
-        <Text style={[styles.h, dynamicStyles.header, styles.colNote]}>NOTE</Text>
+        <Text style={[styles.h, dynamicStyles.header, styles.colPar]}>{t('scorecard.par')}</Text>
+        <Text style={[styles.h, dynamicStyles.header, styles.colYds]}>{t('course_hole_guide.hole_guide.yds')}</Text>
+        <Text style={[styles.h, dynamicStyles.header, styles.colNote]}>{t('course_hole_guide.hole_guide.note')}</Text>
       </View>
       {sorted.map((h, i) => {
         const parTint =
@@ -148,7 +150,7 @@ export default function HoleGuide({ holes, notesLoading }: Props) {
         );
       })}
       <View style={[styles.row, styles.totalRow, dynamicStyles.totalBorder]}>
-        <Text style={[styles.cell, styles.colHole, dynamicStyles.totalLabel]}>TOTAL</Text>
+        <Text style={[styles.cell, styles.colHole, dynamicStyles.totalLabel]}>{t('scorecard.total')}</Text>
         <Text style={[styles.cell, styles.colPar, dynamicStyles.totalVal, styles.totalValSize]}>{parTotal}</Text>
         <Text style={[styles.cell, styles.colYds, dynamicStyles.totalVal, styles.totalValSize]}>{ydsTotal}</Text>
         <Text style={[styles.cell, styles.colNote]} />

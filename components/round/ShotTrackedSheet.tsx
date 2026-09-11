@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { CLUB_ORDER, type ClubName } from '../../store/clubStatsStore';
 import type { ShotTrackResult } from '../../services/shotTracking';
+import { useTranslation } from 'react-i18next';
 
 export function ClubScrollPicker({
   value,
@@ -50,6 +51,7 @@ export default function ShotTrackedSheet({
   onCorrectClub: (club: ClubName) => void;
   onDismiss: () => void;
 }) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const [editing, setEditing] = useState(false);
   const [club, setClub] = useState<ClubName | null>(result.club);
@@ -62,9 +64,9 @@ export default function ShotTrackedSheet({
     <View style={[styles.sheet, { backgroundColor: colors.surface, borderColor: colors.accent }]}>
       <View style={styles.row}>
         <Ionicons name="golf" size={18} color={colors.accent} />
-        <Text style={[styles.title, { color: colors.text_primary }]}>SHOT TRACKED</Text>
+        <Text style={[styles.title, { color: colors.text_primary }]}>{t('round_shot_tracked_sheet.shot_tracked_sheet.shot_tracked')}</Text>
         <View style={{ flex: 1 }} />
-        <Pressable onPress={onDismiss} hitSlop={10} accessibilityRole="button" accessibilityLabel="Confirm tracked shot">
+        <Pressable onPress={onDismiss} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('round_shot_tracked_sheet.accessibility_label.confirm_tracked_shot')}>
           <Ionicons name="checkmark-circle" size={26} color={colors.accent} />
         </Pressable>
       </View>
@@ -86,7 +88,7 @@ export default function ShotTrackedSheet({
 
         <View style={styles.stat}>
           <Text style={[styles.statValue, { color: colors.accent }]}>{result.approachYards != null ? result.approachYards : '—'}</Text>
-          <Text style={[styles.statLabel, { color: colors.text_muted }]}>TO PIN</Text>
+          <Text style={[styles.statLabel, { color: colors.text_muted }]}>{t('round_shot_tracked_sheet.shot_tracked_sheet.to_pin')}</Text>
         </View>
       </View>
 

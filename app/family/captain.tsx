@@ -42,6 +42,7 @@ import {
   realGradedHistory,
   type JuniorSwingAnalysis,
 } from '../../services/juniorSwingAnalyzer';
+import { useTranslation } from 'react-i18next';
 
 type CaptainRoleId = 'teammate' | 'coach';
 
@@ -65,6 +66,7 @@ const BAND_LABEL: Record<AgeBand, string> = {
 };
 
 export default function CaptainScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
 
@@ -116,7 +118,7 @@ export default function CaptainScreen() {
   const onSave = () => {
     const trimmed = draft.firstName.trim();
     if (!trimmed) {
-      Alert.alert('Name required', 'Enter a first name before saving.');
+      Alert.alert(t('family_captain.alert.name_required'), t('family_captain.alert.enter_a_first_name_before'));
       return;
     }
     const ageNum = draft.age.trim() ? Math.max(1, Math.min(120, parseInt(draft.age, 10))) : null;
@@ -147,7 +149,7 @@ export default function CaptainScreen() {
   const onRemove = () => {
     if (!editingId) return;
     Alert.alert(
-      'Remove from team?',
+      t('family_captain.alert.remove_from_team'),
       `${draft.firstName} will be removed. Their swing history stays on device but won't be tagged anymore.`,
       [
         { text: 'Cancel', style: 'cancel' },
@@ -166,22 +168,22 @@ export default function CaptainScreen() {
     <SafeAreaView edges={['top']} style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBack}>
-          <Text style={[styles.headerBackText, { color: colors.accent }]}>← Back</Text>
+          <Text style={[styles.headerBackText, { color: colors.accent }]}>{t('family_captain.captain_screen.back')}</Text>
         </Pressable>
-        <Text style={[styles.headerTitle, { color: colors.text_primary }]}>Team Captain</Text>
+        <Text style={[styles.headerTitle, { color: colors.text_primary }]}>{t('family_captain.captain_screen.team_captain')}</Text>
         <View style={styles.headerBack} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
         {/* Team name */}
         <View style={[styles.teamCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.teamLabel, { color: colors.text_muted }]}>TEAM</Text>
+          <Text style={[styles.teamLabel, { color: colors.text_muted }]}>{t('family_captain.captain_screen.team')}</Text>
           {editingTeam ? (
             <View style={styles.teamEditRow}>
               <TextInput
                 value={draftTeam}
                 onChangeText={setDraftTeam}
-                placeholder="Heritage HS Varsity Girls"
+                placeholder={t('family_captain.placeholder.heritage_hs_varsity_girls')}
                 placeholderTextColor={colors.text_muted}
                 style={[
                   styles.teamInput,
@@ -193,7 +195,7 @@ export default function CaptainScreen() {
                 onPress={() => { setTeamName(draftTeam.trim()); setEditingTeam(false); }}
                 style={[styles.smallBtn, { backgroundColor: colors.accent }]}
               >
-                <Text style={styles.smallBtnText}>Save</Text>
+                <Text style={styles.smallBtnText}>{t('family_captain.captain_screen.save')}</Text>
               </Pressable>
             </View>
           ) : (
@@ -206,9 +208,9 @@ export default function CaptainScreen() {
         </View>
 
         {/* Coaches section */}
-        <SectionHeader title="Coaches" onAdd={() => openAdd('coach')} colors={colors} />
+        <SectionHeader title={t('family_captain.title.coaches')} onAdd={() => openAdd('coach')} colors={colors} />
         {coaches.length === 0 ? (
-          <EmptyRow message="Add coach contacts so you can reach them with one tap." colors={colors} />
+          <EmptyRow message={t('family_captain.message.add_coach_contacts_so_you')} colors={colors} />
         ) : (
           coaches.map((c) => (
             <CoachRow
@@ -222,10 +224,10 @@ export default function CaptainScreen() {
         )}
 
         {/* Teammates section */}
-        <SectionHeader title="Teammates" onAdd={() => openAdd('teammate')} colors={colors} />
+        <SectionHeader title={t('family_captain.title.teammates')} onAdd={() => openAdd('teammate')} colors={colors} />
         {teammates.length === 0 ? (
           <EmptyRow
-            message="Add teammates to track their swings + send hands-free coaching during practice."
+            message={t('family_captain.message.add_teammates_to_track_their')}
             colors={colors}
           />
         ) : (
@@ -254,12 +256,12 @@ export default function CaptainScreen() {
 
         {/* Captain voice tips */}
         <View style={[styles.tipCard, { borderColor: colors.border }]}>
-          <Text style={[styles.tipTitle, { color: colors.text_primary }]}>Captain voice flow</Text>
+          <Text style={[styles.tipTitle, { color: colors.text_primary }]}>{t('family_captain.captain_screen.captain_voice_flow')}</Text>
           <Text style={[styles.tipBody, { color: colors.text_muted }]}>
-            • &quot;Coach Mia&apos;s swing&quot; — starts a tagged recording for Mia
-            {'\n'}• &quot;Analyze Mia&apos;s swing&quot; — runs analysis + speaks feedback
-            {'\n'}• &quot;How&apos;s the team doing?&quot; (TBD) — team-wide trend roll-up
-            {'\n'}• &quot;Stop recording&quot; — ends the session
+            {t('family_captain.captain_screen.coach_mia_s_swing_starts')}
+            {'\n'}{t('family_captain.captain_screen.analyze_mia_s_swing_runs')}
+            {'\n'}{t('family_captain.captain_screen.how_s_the_team_doing')}
+            {'\n'}{t('family_captain.captain_screen.stop_recording_ends_the_session')}
           </Text>
         </View>
       </ScrollView>
@@ -289,14 +291,15 @@ function BroadcastCard({
   teamName: string;
   colors: ReturnType<typeof useTheme>['colors'];
 }) {
+  const { t } = useTranslation();
   const [message, setMessage] = useState('');
 
   if (recipients.length === 0) {
     return (
       <View style={[styles.broadcastEmpty, { borderColor: colors.border, backgroundColor: colors.surface }]}>
-        <Text style={[styles.broadcastTitle, { color: colors.text_primary }]}>Team Broadcast</Text>
+        <Text style={[styles.broadcastTitle, { color: colors.text_primary }]}>{t('family_captain.broadcast_card.team_broadcast')}</Text>
         <Text style={[styles.broadcastHint, { color: colors.text_muted }]}>
-          Add phone numbers to coaches or teammates to enable one-tap SMS to the team.
+          {t('family_captain.broadcast_card.add_phone_numbers_to_coaches')}
         </Text>
       </View>
     );
@@ -305,7 +308,7 @@ function BroadcastCard({
   const send = () => {
     const text = message.trim();
     if (!text) {
-      Alert.alert('Empty message', 'Type a message before sending.');
+      Alert.alert(t('family_captain.alert.empty_message'), t('family_captain.alert.type_a_message_before_sending'));
       return;
     }
     // SMS URI format: sms:[phones,joined]?body=[encoded]. iOS + Android
@@ -316,7 +319,7 @@ function BroadcastCard({
     const body = encodeURIComponent(text);
     const url = `sms:${addr}?body=${body}`;
     Linking.openURL(url).catch(() => {
-      Alert.alert("Couldn't open Messages", 'Try copying the message manually.');
+      Alert.alert(t('family_captain.alert.couldn_t_open_messages'), t('family_captain.alert.try_copying_the_message_manually'));
     });
   };
 
@@ -350,7 +353,7 @@ function BroadcastCard({
   return (
     <View style={[styles.broadcastCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
       <View style={styles.broadcastHeader}>
-        <Text style={[styles.broadcastTitle, { color: colors.text_primary }]}>Team Broadcast</Text>
+        <Text style={[styles.broadcastTitle, { color: colors.text_primary }]}>{t('family_captain.broadcast_card.team_broadcast')}</Text>
         <Text style={[styles.broadcastCount, { color: colors.text_muted }]}>
           {recipients.length} number{recipients.length === 1 ? '' : 's'}
         </Text>
@@ -373,7 +376,7 @@ function BroadcastCard({
       <TextInput
         value={message}
         onChangeText={setMessage}
-        placeholder="Practice tomorrow 3pm — Heritage range. Wear team polos."
+        placeholder={t('family_captain.placeholder.practice_tomorrow_3pm_heritage_range')}
         placeholderTextColor={colors.text_muted}
         multiline
         style={[styles.broadcastInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text_primary }]}
@@ -383,7 +386,7 @@ function BroadcastCard({
           onPress={send}
           style={[styles.primaryBtn, { backgroundColor: colors.accent, flex: 1 }]}
         >
-          <Text style={styles.primaryBtnText}>📨 Open Messages</Text>
+          <Text style={styles.primaryBtnText}>{t('family_captain.broadcast_card.open_messages')}</Text>
         </Pressable>
       </View>
     </View>
@@ -398,11 +401,12 @@ function SectionHeader({
   title: string; onAdd: () => void;
   colors: ReturnType<typeof useTheme>['colors'];
 }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.sectionHeader}>
       <Text style={[styles.sectionTitle, { color: colors.text_muted }]}>{title.toUpperCase()}</Text>
       <Pressable onPress={onAdd} hitSlop={10}>
-        <Text style={[styles.sectionAdd, { color: colors.accent }]}>＋ Add</Text>
+        <Text style={[styles.sectionAdd, { color: colors.accent }]}>{t('family_captain.section_header.add')}</Text>
       </Pressable>
     </View>
   );
@@ -426,6 +430,7 @@ function CoachRow({
   member: FamilyMember; colors: ReturnType<typeof useTheme>['colors'];
   onEdit: () => void; onOpen: () => void;
 }) {
+  const { t } = useTranslation();
   const phone = member.contact?.phone ?? null;
   const email = member.contact?.email ?? null;
 
@@ -459,12 +464,12 @@ function CoachRow({
       <View style={styles.contactRow}>
         {phone && (
           <>
-            <ContactBtn label="Call" onPress={() => callPhone('call')} colors={colors} />
-            <ContactBtn label="Text" onPress={() => callPhone('text')} colors={colors} />
+            <ContactBtn label={t('family_captain.label.call')} onPress={() => callPhone('call')} colors={colors} />
+            <ContactBtn label={t('family_captain.label.text')} onPress={() => callPhone('text')} colors={colors} />
           </>
         )}
-        {email && <ContactBtn label="Email" onPress={openEmail} colors={colors} />}
-        <ContactBtn label="Edit" onPress={onEdit} colors={colors} muted />
+        {email && <ContactBtn label={t('family_captain.label.email')} onPress={openEmail} colors={colors} />}
+        <ContactBtn label={t('family_captain.label.edit')} onPress={onEdit} colors={colors} muted />
       </View>
     </View>
   );
@@ -476,6 +481,7 @@ function TeammateRow({
   member: FamilyMember; colors: ReturnType<typeof useTheme>['colors'];
   onEdit: () => void; onOpen: () => void;
 }) {
+  const { t } = useTranslation();
   const band = ageBand(member.age);
   return (
     <View style={[styles.row, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -507,7 +513,7 @@ function TeammateRow({
         hitSlop={8}
         style={[styles.rowEdit, { borderColor: colors.border }]}
       >
-        <Text style={[styles.rowEditText, { color: colors.text_muted }]}>Edit</Text>
+        <Text style={[styles.rowEditText, { color: colors.text_muted }]}>{t('family_captain.teammate_row.edit')}</Text>
       </Pressable>
     </View>
   );
@@ -625,6 +631,7 @@ function EditorModal({
   onSave: () => void; onArchive: () => void; onRemove: () => void; onClose: () => void;
   colors: ReturnType<typeof useTheme>['colors'];
 }) {
+  const { t } = useTranslation();
   const update = <K extends keyof EditableDraft>(k: K, v: EditableDraft[K]) => setDraft({ ...draft, [k]: v });
   const isCoach = draft.relationship === 'coach';
 
@@ -636,23 +643,23 @@ function EditorModal({
             {isEdit ? 'Edit' : 'Add'} {isCoach ? 'coach' : 'teammate'}
           </Text>
           <Pressable onPress={onClose} hitSlop={10}>
-            <Text style={[styles.modalClose, { color: colors.text_muted }]}>Close</Text>
+            <Text style={[styles.modalClose, { color: colors.text_muted }]}>{t('family_captain.editor_modal.close')}</Text>
           </Pressable>
         </View>
 
         <ScrollView contentContainerStyle={styles.modalBody}>
-          <DraftField label="First name" value={draft.firstName} onChange={(v) => update('firstName', v)} placeholder="Mia" colors={colors} />
-          <DraftField label="Nickname (optional)" value={draft.nickname} onChange={(v) => update('nickname', v)} placeholder="Mimi / Killer" colors={colors} />
-          <DraftField label="Team role" value={draft.team_role} onChange={(v) => update('team_role', v)} placeholder={isCoach ? 'Head Coach' : 'Senior · #1'} colors={colors} />
-          <DraftField label="Team" value={draft.team} onChange={(v) => update('team', v)} placeholder="Heritage HS Varsity Girls" colors={colors} />
+          <DraftField label={t('family_captain.label.first_name')} value={draft.firstName} onChange={(v) => update('firstName', v)} placeholder={t('family_captain.placeholder.mia')} colors={colors} />
+          <DraftField label={t('family_captain.label.nickname_optional')} value={draft.nickname} onChange={(v) => update('nickname', v)} placeholder={t('family_captain.placeholder.mimi_killer')} colors={colors} />
+          <DraftField label={t('family_captain.label.team_role')} value={draft.team_role} onChange={(v) => update('team_role', v)} placeholder={isCoach ? 'Head Coach' : 'Senior · #1'} colors={colors} />
+          <DraftField label={t('family_captain.label.team')} value={draft.team} onChange={(v) => update('team', v)} placeholder={t('family_captain.placeholder.heritage_hs_varsity_girls')} colors={colors} />
 
           {!isCoach && (
-            <DraftField label="Age" value={draft.age} onChange={(v) => update('age', v.replace(/[^0-9]/g, '').slice(0, 3))} placeholder="16" keyboardType="number-pad" colors={colors} />
+            <DraftField label={t('family_captain.label.age')} value={draft.age} onChange={(v) => update('age', v.replace(/[^0-9]/g, '').slice(0, 3))} placeholder="16" keyboardType="number-pad" colors={colors} />
           )}
 
           {!isCoach && (
             <DraftPicker
-              label="Skill"
+              label={t('family_captain.label.skill')}
               value={draft.skillLevel}
               options={SKILL_LEVELS.map((s) => ({ id: s.id, label: s.label }))}
               onChange={(v) => update('skillLevel', v as SkillLevel)}
@@ -662,7 +669,7 @@ function EditorModal({
 
           {!isCoach && (
             <DraftPicker
-              label="Handedness"
+              label={t('family_captain.label.handedness')}
               value={draft.handedness}
               options={HANDEDNESS.map((h) => ({ id: h.id, label: h.label }))}
               onChange={(v) => update('handedness', v as FamilyMember['handedness'])}
@@ -672,13 +679,13 @@ function EditorModal({
 
           {isCoach && (
             <>
-              <DraftField label="Phone" value={draft.phone} onChange={(v) => update('phone', v)} placeholder="(555) 123-4567" keyboardType="number-pad" colors={colors} />
-              <DraftField label="Email" value={draft.email} onChange={(v) => update('email', v)} placeholder="coach@heritagehs.edu" colors={colors} />
+              <DraftField label={t('family_captain.label.phone')} value={draft.phone} onChange={(v) => update('phone', v)} placeholder="(555) 123-4567" keyboardType="number-pad" colors={colors} />
+              <DraftField label={t('family_captain.label.email')} value={draft.email} onChange={(v) => update('email', v)} placeholder={t('family_captain.placeholder.coach_heritagehs_edu')} colors={colors} />
             </>
           )}
 
           <View style={styles.field}>
-            <Text style={[styles.fieldLabel, { color: colors.text_muted }]}>Avatar</Text>
+            <Text style={[styles.fieldLabel, { color: colors.text_muted }]}>{t('family_captain.editor_modal.avatar')}</Text>
             <View style={styles.emojiRow}>
               {EMOJI_PALETTE.map((e) => {
                 const active = e === draft.avatar_emoji;
@@ -701,10 +708,10 @@ function EditorModal({
           {isEdit && (
             <View style={styles.dangerRow}>
               <Pressable onPress={onArchive} style={[styles.secondaryBtn, { borderColor: colors.border }]}>
-                <Text style={[styles.secondaryBtnText, { color: colors.text_muted }]}>Archive</Text>
+                <Text style={[styles.secondaryBtnText, { color: colors.text_muted }]}>{t('family_captain.editor_modal.archive')}</Text>
               </Pressable>
               <Pressable onPress={onRemove} style={[styles.secondaryBtn, { borderColor: '#7f1d1d' }]}>
-                <Text style={[styles.secondaryBtnText, { color: '#f87171' }]}>Remove…</Text>
+                <Text style={[styles.secondaryBtnText, { color: '#f87171' }]}>{t('family_captain.editor_modal.remove')}</Text>
               </Pressable>
             </View>
           )}

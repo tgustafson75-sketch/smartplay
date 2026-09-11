@@ -26,6 +26,7 @@ import { getCaddieName } from '../../lib/persona';
 import { getApiBaseUrl } from '../../services/apiBase';
 import { safeBack } from '../../services/safeBack';
 import { ACCENT_SKY } from '../../theme/tokens';
+import { useTranslation } from 'react-i18next';
 
 const DURATIONS = [10, 20, 30] as const;
 const FOCI: { key: PreroundFocus; label: string }[] = [
@@ -36,6 +37,7 @@ const FOCI: { key: PreroundFocus; label: string }[] = [
 const FALLBACK_BRIEF = 'Course is set up. You know what to do. One target at a time, commit to each shot, and let the warm-up carry over. Go play.';
 
 export default function PreroundWarmUp() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -152,17 +154,17 @@ export default function PreroundWarmUp() {
         <TouchableOpacity onPress={() => safeBack()} style={styles.headerBtn} accessibilityRole="button">
           <Ionicons name="chevron-back" size={24} color={colors.text_primary} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text_primary }]}>Pre-Round Warm Up</Text>
+        <Text style={[styles.headerTitle, { color: colors.text_primary }]}>{t('practice_preround.preround_warm_up.pre_round_warm_up')}</Text>
         <View style={styles.headerBtn} />
       </View>
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 32 }}>
         <Text style={[styles.subtitle, { color: colors.text_muted }]}>
-          Pick the time you&apos;ve actually got — I&apos;ll build the warm-up to fit and end you on a good one.
+          {t('practice_preround.preround_warm_up.pick_the_time_you_ve')}
         </Text>
 
         {/* Time budget */}
-        <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>HOW LONG DO YOU HAVE?</Text>
+        <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>{t('practice_preround.preround_warm_up.how_long_do_you_have')}</Text>
         <View style={styles.chipRow}>
           {DURATIONS.map((d) => (
             <TouchableOpacity
@@ -179,7 +181,7 @@ export default function PreroundWarmUp() {
         </View>
 
         {/* Focus */}
-        <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>TODAY&apos;S FOCUS</Text>
+        <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>{t('practice_preround.preround_warm_up.today_s_focus')}</Text>
         <View style={styles.chipRow}>
           {FOCI.map((f) => (
             <TouchableOpacity
@@ -197,7 +199,7 @@ export default function PreroundWarmUp() {
         {/* Honest readiness — completion-derived, never fabricated. */}
         <View style={[styles.readyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={styles.readyTop}>
-            <Text style={[styles.readyLabel, { color: colors.text_muted }]}>READINESS</Text>
+            <Text style={[styles.readyLabel, { color: colors.text_muted }]}>{t('practice_preround.preround_warm_up.readiness')}</Text>
             <Text style={[styles.readyCount, { color: allDone ? '#3FB950' : colors.text_primary }]}>
               {completed.size} of {plan.steps.length} · ~{plan.allocated} min
             </Text>
@@ -206,7 +208,7 @@ export default function PreroundWarmUp() {
             <View style={[styles.readyFill, { width: `${Math.round(readiness * 100)}%` }]} />
           </View>
           {allDone ? (
-            <Text style={styles.readyDone}>You&apos;re ready — go play.</Text>
+            <Text style={styles.readyDone}>{t('practice_preround.preround_warm_up.you_re_ready_go_play')}</Text>
           ) : null}
         </View>
 

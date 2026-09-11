@@ -70,6 +70,7 @@ function scoreVsParColor(score: number | null | undefined, par: number | undefin
   return '#ef4444';                // double+
 }
 function RecapScorecardGrid({ holes, parByHole }: { holes: HoleComparison[]; parByHole: Record<number, number> }) {
+  const { t } = useTranslation();
   const scoreByHole: Record<number, number | null> = {};
   for (const h of holes) scoreByHole[h.hole_number] = h.actual_score;
   const nums = holes.map((h) => h.hole_number).sort((a, b) => a - b);
@@ -104,10 +105,10 @@ function RecapScorecardGrid({ holes, parByHole }: { holes: HoleComparison[]; par
   const vsPar = hasPar && totPar ? totScore - totPar : null;
   return (
     <View style={sg.wrap}>
-      {front.length > 0 && <Nine ns={front} label="OUT" />}
-      {back.length > 0 && <Nine ns={back} label="IN" />}
+      {front.length > 0 && <Nine ns={front} label={t('recap.label.out')} />}
+      {back.length > 0 && <Nine ns={back} label={t('recap.label.in')} />}
       <View style={sg.totalRow}>
-        <Text style={sg.totalLab}>TOTAL</Text>
+        <Text style={sg.totalLab}>{t('scorecard.total')}</Text>
         <Text style={sg.totalVal}>{totScore || '·'}{vsPar != null ? `   ${vsPar >= 0 ? '+' : ''}${vsPar}` : ''}</Text>
       </View>
     </View>
@@ -147,6 +148,7 @@ import type { RoundRecap, HoleComparison } from '../../types/plan';
 import type { GhostHoleResult } from '../../types/ghost';
 import type { RoundPhoto } from '../../store/roundStore';
 import { getApiBaseUrl } from '../../services/apiBase';
+import { useTranslation } from 'react-i18next';
 
 // Day 1 fix — module-level stable empty array, so a round with no photos hands the
 // same reference down every render instead of a fresh `[]`. The selector that used to
@@ -199,6 +201,7 @@ function AnimatedHoleCard({
   onViewHole: (hole: number) => void;
   parByHole: Record<number, number>;
 }) {
+  const { t } = useTranslation();
   const opacity = useSharedValue(0);
   const translateY = useSharedValue(20);
 
@@ -256,7 +259,7 @@ function AnimatedHoleCard({
         accessibilityLabel={`View detail for hole ${hc.hole_number}`}
         hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
       >
-        <Text style={styles.viewHoleBtnText}>View hole →</Text>
+        <Text style={styles.viewHoleBtnText}>{t('recap.animated_hole_card.view_hole')}</Text>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -265,21 +268,22 @@ function AnimatedHoleCard({
 // ─── Three-column ghost row ───────────────────────────────────────────────────
 
 function GhostRow({ ghostResult }: { ghostResult: GhostHoleResult; holeNum: number }) {
+  const { t } = useTranslation();
   const { ghost_score, current_score, delta } = ghostResult;
   return (
     <View style={styles.ghostRow}>
       <View style={styles.ghostCol}>
-        <Text style={styles.ghostColLabel}>GHOST</Text>
+        <Text style={styles.ghostColLabel}>{t('recap.ghost_row.ghost')}</Text>
         <Text style={styles.ghostColVal}>{ghost_score ?? '—'}</Text>
       </View>
       <View style={styles.ghostDivider} />
       <View style={styles.ghostCol}>
-        <Text style={styles.ghostColLabel}>YOURS</Text>
+        <Text style={styles.ghostColLabel}>{t('recap.ghost_row.yours')}</Text>
         <Text style={styles.ghostColVal}>{current_score}</Text>
       </View>
       <View style={styles.ghostDivider} />
       <View style={styles.ghostCol}>
-        <Text style={styles.ghostColLabel}>VS GHOST</Text>
+        <Text style={styles.ghostColLabel}>{t('recap.ghost_row.vs_ghost')}</Text>
         <Text style={[styles.ghostColDelta, { color: deltaColor(delta) }]}>{deltaLabel(delta)}</Text>
       </View>
     </View>
@@ -289,6 +293,7 @@ function GhostRow({ ghostResult }: { ghostResult: GhostHoleResult; holeNum: numb
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function RecapScreen() {
+  const { t } = useTranslation();
   const { round_id } = useLocalSearchParams<{ round_id: string }>();
   const router = useRouter();
   const { voiceGender, voiceEnabled, caddiePersonality } = useSettingsStore();
@@ -347,12 +352,12 @@ export default function RecapScreen() {
     try {
       const uri = await resolveClipUri(stored);
       if (!uri) {
-        Alert.alert('Clip not on this device', 'That video was recorded on a previous install and is no longer stored here. The shot and its stats are still yours.');
+        Alert.alert(t('recap.alert.clip_not_on_this_device'), t('recap.alert.that_video_was_recorded_on'));
         return;
       }
       setOpenClip({ uri, label });
     } catch {
-      Alert.alert('Could not open that clip', 'Something went wrong reading the video file.');
+      Alert.alert(t('recap.alert.could_not_open_that_clip'), t('recap.alert.something_went_wrong_reading_the'));
     } finally {
       setClipLoading(false);
     }
@@ -492,8 +497,8 @@ export default function RecapScreen() {
 
   const handleDelete = useCallback(() => {
     Alert.alert(
-      'Delete round?',
-      'This removes the round from your history and rebuilds your handicap. This cannot be undone.',
+      t('recap.alert.delete_round'),
+      t('recap.alert.this_removes_the_round_from'),
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -514,13 +519,13 @@ export default function RecapScreen() {
       const uri = await captureRef(cardRef, { format: 'png', quality: 1, result: 'tmpfile' });
       const canShare = await Sharing.isAvailableAsync();
       if (!canShare) {
-        Alert.alert('Share not available', 'Native share is not supported on this device.');
+        Alert.alert(t('recap.alert.share_not_available'), t('recap.alert.native_share_is_not_supported'));
         return;
       }
       await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share this round' });
       track('round_shared', { round_id: recap.round_id, mode: recap.mode });
     } catch {
-      Alert.alert('Could not generate share card', 'Try again in a moment.');
+      Alert.alert(t('recap.alert.could_not_generate_share_card'), t('recap.alert.try_again_in_a_moment'));
     } finally {
       setSharing(false);
     }
@@ -560,14 +565,14 @@ export default function RecapScreen() {
       const { uri } = await Print.printToFileAsync({ html, base64: false });
       const canShare = await Sharing.isAvailableAsync();
       if (!canShare) {
-        Alert.alert('Share not available', 'Native share is not supported on this device.');
+        Alert.alert(t('recap.alert.share_not_available'), t('recap.alert.native_share_is_not_supported'));
         return;
       }
       await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Save round recap as PDF' });
       track('round_shared_pdf', { round_id: recap.round_id, mode: recap.mode });
     } catch (e) {
       console.warn('[recap] pdf export failed:', e);
-      Alert.alert('Could not generate PDF', 'Try again in a moment.');
+      Alert.alert(t('recap.alert.could_not_generate_pdf'), t('recap.alert.try_again_in_a_moment'));
     } finally {
       setSharing(false);
     }
@@ -630,8 +635,8 @@ export default function RecapScreen() {
       <SafeAreaView style={styles.container}>
         {/* 2026-07-23 (QA) — back affordance so a nonexistent/deleted round_id (mergeRecap null →
             up to 30s poll) isn't an escape-only spinner. */}
-        <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 16, paddingVertical: 12 }} accessibilityRole="button" accessibilityLabel="Back">
-          <Text style={{ color: '#00C896', fontSize: 16, fontWeight: '700' }}>‹ Back</Text>
+        <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 16, paddingVertical: 12 }} accessibilityRole="button" accessibilityLabel={t('recap.accessibility_label.back')}>
+          <Text style={{ color: '#00C896', fontSize: 16, fontWeight: '700' }}>{t('recap.recap_screen.back')}</Text>
         </TouchableOpacity>
         <ActivityIndicator color="#00C896" style={{ marginTop: 80 }} />
       </SafeAreaView>
@@ -643,7 +648,7 @@ export default function RecapScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => safeBack()} style={styles.backBtn}>
-            <Text style={styles.backText}>← Back</Text>
+            <Text style={styles.backText}>{t('recap.recap_screen.back_2')}</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={handleDelete} style={styles.backBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Ionicons name="trash-outline" size={20} color="#ef4444" />
@@ -657,7 +662,7 @@ export default function RecapScreen() {
               style={styles.emptyBtn}
               onPress={() => { setTimedOut(false); setLoading(true); setRetryNonce(n => n + 1); }}
             >
-              <Text style={styles.emptyBtnText}>Try again</Text>
+              <Text style={styles.emptyBtnText}>{t('recap.recap_screen.try_again')}</Text>
             </TouchableOpacity>
           ) : null}
           <TouchableOpacity style={styles.emptyBtn} onPress={() => router.replace('/(tabs)/caddie' as never)}>
@@ -700,9 +705,9 @@ export default function RecapScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => safeBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>← Back</Text>
+          <Text style={styles.backText}>{t('recap.recap_screen.back_2')}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Round Recap</Text>
+        <Text style={styles.headerTitle}>{t('recap.recap_screen.round_recap')}</Text>
         <TouchableOpacity onPress={handleDelete} style={styles.backBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Ionicons name="trash-outline" size={20} color="#ef4444" />
         </TouchableOpacity>
@@ -734,18 +739,18 @@ export default function RecapScreen() {
               <Text style={styles.modeLabel}>{MODE_LABELS[recap.mode] ?? recap.mode}</Text>
               <View style={styles.scoreRow}>
                 <View style={styles.scoreItem}>
-                  <Text style={styles.scoreLabel}>SCORE</Text>
+                  <Text style={styles.scoreLabel}>{t('scorecard.score')}</Text>
                   <Text style={styles.scoreValue}>{recap.total_score}</Text>
                 </View>
                 {/* 2026-06-04 — total_planned_score removed with HolePlan. */}
                 {ghost && (
                   <View style={styles.scoreItem}>
-                    <Text style={styles.scoreLabel}>GHOST</Text>
+                    <Text style={styles.scoreLabel}>{t('recap.recap_screen.ghost')}</Text>
                     <Text style={styles.scoreValue}>{ghost.ghost_total}</Text>
                   </View>
                 )}
                 <View style={styles.scoreItem}>
-                  <Text style={styles.scoreLabel}>HOLES</Text>
+                  <Text style={styles.scoreLabel}>{t('scorecard.holes')}</Text>
                   <Text style={styles.scoreValue}>{recap.hole_comparisons.length}</Text>
                 </View>
               </View>
@@ -754,7 +759,7 @@ export default function RecapScreen() {
             {/* Ghost match banner */}
             {ghost && (
               <View style={[styles.ghostBanner, { borderColor: deltaColor(ghostDelta) }]}>
-                <Text style={styles.ghostBannerLabel}>GHOST MATCH</Text>
+                <Text style={styles.ghostBannerLabel}>{t('recap.recap_screen.ghost_match')}</Text>
                 <Text style={styles.ghostBannerName}>{ghost.ghost_round_label}</Text>
                 <Text style={[styles.ghostBannerDelta, { color: deltaColor(ghostDelta) }]}>
                   {ghostDelta === 0 ? 'Dead even'
@@ -771,30 +776,30 @@ export default function RecapScreen() {
                 Health Connect permissions — without it we were collecting heart rate for nobody. */}
             {recap.effort && (
               <View style={styles.effortCard}>
-                <Text style={styles.effortLabel}>THE WALK</Text>
+                <Text style={styles.effortLabel}>{t('recap.recap_screen.the_walk')}</Text>
                 <View style={styles.effortRow}>
                   {recap.effort.distanceMiles >= 0.1 && (
                     <View style={styles.effortItem}>
                       <Text style={styles.effortValue}>{recap.effort.distanceMiles}</Text>
-                      <Text style={styles.effortUnit}>MILES</Text>
+                      <Text style={styles.effortUnit}>{t('recap.recap_screen.miles')}</Text>
                     </View>
                   )}
                   {recap.effort.steps > 0 && (
                     <View style={styles.effortItem}>
                       <Text style={styles.effortValue}>{recap.effort.steps.toLocaleString('en-US')}</Text>
-                      <Text style={styles.effortUnit}>STEPS</Text>
+                      <Text style={styles.effortUnit}>{t('recap.recap_screen.steps')}</Text>
                     </View>
                   )}
                   {recap.effort.heartRateAvg != null && (
                     <View style={styles.effortItem}>
                       <Text style={styles.effortValue}>{recap.effort.heartRateAvg}</Text>
-                      <Text style={styles.effortUnit}>AVG BPM</Text>
+                      <Text style={styles.effortUnit}>{t('recap.recap_screen.avg_bpm')}</Text>
                     </View>
                   )}
                   {recap.effort.activeCalories > 0 && (
                     <View style={styles.effortItem}>
                       <Text style={styles.effortValue}>{recap.effort.activeCalories.toLocaleString('en-US')}</Text>
-                      <Text style={styles.effortUnit}>CALORIES</Text>
+                      <Text style={styles.effortUnit}>{t('recap.recap_screen.calories')}</Text>
                     </View>
                   )}
                 </View>
@@ -807,17 +812,17 @@ export default function RecapScreen() {
                 "what did the round do to you" rather than "what did you score". */}
             {tempoStory?.headline && (
               <View style={styles.effortCard}>
-                <Text style={styles.effortLabel}>TEMPO</Text>
+                <Text style={styles.effortLabel}>{t('recap.recap_screen.tempo')}</Text>
                 <Text style={styles.tempoHeadline}>{tempoStory.headline}</Text>
                 {(tempoStory.earlyAvg != null && tempoStory.lateAvg != null) && (
                   <View style={styles.effortRow}>
                     <View style={styles.effortItem}>
                       <Text style={styles.effortValue}>{tempoStory.earlyAvg.toFixed(1)}</Text>
-                      <Text style={styles.effortUnit}>EARLY</Text>
+                      <Text style={styles.effortUnit}>{t('recap.recap_screen.early')}</Text>
                     </View>
                     <View style={styles.effortItem}>
                       <Text style={styles.effortValue}>{tempoStory.lateAvg.toFixed(1)}</Text>
-                      <Text style={styles.effortUnit}>CLOSING</Text>
+                      <Text style={styles.effortUnit}>{t('recap.recap_screen.closing')}</Text>
                     </View>
                   </View>
                 )}
@@ -828,7 +833,7 @@ export default function RecapScreen() {
                 opens it. Renders nothing when no clip was captured, which is most rounds. */}
             {clipShots.length > 0 && (
               <View style={styles.effortCard}>
-                <Text style={styles.effortLabel}>YOUR CLIPS</Text>
+                <Text style={styles.effortLabel}>{t('recap.recap_screen.your_clips')}</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.clipRow}>
                   {clipShots.map((sh) => {
                     const hole = sh.hole_number ?? sh.hole;
@@ -866,9 +871,9 @@ export default function RecapScreen() {
                     void handleNarrate();
                   }}
                   accessibilityRole="button"
-                  accessibilityLabel="Walk me through this round — caddie will narrate the highlights with hole-by-hole context"
+                  accessibilityLabel={t('recap.accessibility_label.walk_me_through_this_round')}
                 >
-                  <Text style={styles.walkthroughCtaText}>◈ Walk me through this round</Text>
+                  <Text style={styles.walkthroughCtaText}>{t('recap.recap_screen.walk_me_through_this_round')}</Text>
                   <Text style={styles.walkthroughCtaSub}>{caddieName} will guide you hole-by-hole</Text>
                 </TouchableOpacity>
               )}
@@ -905,7 +910,7 @@ export default function RecapScreen() {
                 onPress={handleShare}
                 disabled={sharing}
                 accessibilityRole="button"
-                accessibilityLabel="Share this round as an image"
+                accessibilityLabel={t('recap.accessibility_label.share_this_round_as_an')}
               >
                 <Text style={styles.shareBtnText}>
                   {sharing ? 'Generating...' : '↑ Share this round'}
@@ -918,7 +923,7 @@ export default function RecapScreen() {
                 onPress={handleSharePdf}
                 disabled={sharing}
                 accessibilityRole="button"
-                accessibilityLabel="Save this round as a PDF for your file"
+                accessibilityLabel={t('recap.accessibility_label.save_this_round_as_a')}
               >
                 <Text style={styles.shareBtnText}>
                   {sharing ? 'Generating...' : '⤓ Save as PDF'}
@@ -929,7 +934,7 @@ export default function RecapScreen() {
             {/* Key moments */}
             {keyMoments.length > 0 && (
               <View style={styles.keyMomentsSection}>
-                <Text style={styles.holesHeader}>KEY MOMENTS</Text>
+                <Text style={styles.holesHeader}>{t('recap.recap_screen.key_moments')}</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.keyMomentsScroll}>
                   {keyMoments.map(hc => (
                     <TouchableOpacity
@@ -967,7 +972,7 @@ export default function RecapScreen() {
                 shows hole + time + text per entry, vertically stacked. */}
             {roundNotes.length > 0 && (
               <View style={styles.notesSection}>
-                <Text style={styles.holesHeader}>NOTES FROM THIS ROUND</Text>
+                <Text style={styles.holesHeader}>{t('recap.recap_screen.notes_from_this_round')}</Text>
                 {roundNotes.map(note => {
                   const hole = note.context?.currentHole ?? null;
                   const time = new Date(note.timestamp).toLocaleTimeString([], {
@@ -990,7 +995,7 @@ export default function RecapScreen() {
 
             {offlineNotes.length > 0 && (
               <View style={styles.notesSection}>
-                <Text style={styles.holesHeader}>CAPTURED OFFLINE (no signal)</Text>
+                <Text style={styles.holesHeader}>{t('recap.recap_screen.captured_offline_no_signal')}</Text>
                 {offlineNotes.map(e => {
                   const time = new Date(e.capturedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
                   return (
@@ -1008,7 +1013,7 @@ export default function RecapScreen() {
 
             {recap.hole_comparisons.length > 0 && (
               <>
-                <Text style={styles.holesHeader}>SCORECARD</Text>
+                <Text style={styles.holesHeader}>{t('recap.recap_screen.scorecard')}</Text>
                 <RecapScorecardGrid holes={recap.hole_comparisons} parByHole={parByHole} />
               </>
             )}
@@ -1043,7 +1048,7 @@ export default function RecapScreen() {
         <View style={styles.clipBackdrop}>
           <View style={styles.clipHeader}>
             <Text style={styles.clipTitle} numberOfLines={1}>{openClip?.label ?? ''}</Text>
-            <TouchableOpacity onPress={() => setOpenClip(null)} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close clip">
+            <TouchableOpacity onPress={() => setOpenClip(null)} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('recap.accessibility_label.close_clip')}>
               <Ionicons name="close" size={28} color="#e5e7eb" />
             </TouchableOpacity>
           </View>
@@ -1059,7 +1064,7 @@ export default function RecapScreen() {
                 // The file resolved but the decoder refused it. Say so and close, rather than
                 // leaving a black rectangle the player has to guess about.
                 setOpenClip(null);
-                Alert.alert('Could not play that clip', 'The file is there but this device could not decode it.');
+                Alert.alert(t('recap.alert.could_not_play_that_clip'), t('recap.alert.the_file_is_there_but'));
               }}
             />
           )}

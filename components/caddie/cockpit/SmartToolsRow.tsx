@@ -13,6 +13,7 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ACCENT_GREEN, ACCENT_AMBER, ACCENT_SKY } from '../../../theme/tokens';
+import { useTranslation } from 'react-i18next';
 
 // Tinted pill backgrounds (~8% of each accent), kept inline so the row reads at
 // a glance. Derived from the palette constants above.
@@ -34,18 +35,19 @@ export interface SmartToolsRowProps {
 }
 
 export function SmartToolsRow({ onVision, onMotion, onPlay, onSettings, onAllTools }: SmartToolsRowProps) {
+  const { t } = useTranslation();
   return (
     <View style={styles.row}>
       <Pill
         icon="eye-outline"
-        label="Vision"
+        label={t('cockpit_smart_tools_row.label.vision')}
         color={ACCENT_GREEN}
         bg={BG_GREEN}
         onPress={onVision}
       />
       <Pill
         icon="body-outline"
-        label="Motion"
+        label={t('cockpit_smart_tools_row.label.motion')}
         color={ACCENT_SKY}
         bg={BG_SKY}
         onPress={onMotion}
@@ -56,14 +58,14 @@ export function SmartToolsRow({ onVision, onMotion, onPlay, onSettings, onAllToo
           the L4 row, voice — calls TightLie. One feature, one name. */}
       <Pill
         icon="fitness-outline"
-        label="TightLie"
+        label={t('cockpit_smart_tools_row.label.tightlie')}
         color={ACCENT_GREEN}
         bg={BG_GREEN}
         onPress={onPlay}
       />
       <Pill
         icon="settings-outline"
-        label="Settings"
+        label={t('cockpit_smart_tools_row.label.settings')}
         color={ACCENT_AMBER}
         bg={BG_AMBER}
         onPress={onSettings}
@@ -71,7 +73,7 @@ export function SmartToolsRow({ onVision, onMotion, onPlay, onSettings, onAllToo
       {onAllTools ? (
         <Pill
           icon="apps-outline"
-          label="Tools"
+          label={t('cockpit_smart_tools_row.label.tools')}
           color={ACCENT_SKY}
           bg={BG_SKY}
           onPress={onAllTools}

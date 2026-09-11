@@ -24,10 +24,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useUndoMarkStore, UNDO_WINDOW_MS } from '../store/undoMarkStore';
 import { setTeeOverride, clearTeeOverride } from '../services/courseTeeOverrides';
 import { useToastStore } from '../store/toastStore';
+import { useTranslation } from 'react-i18next';
 
 const FADE_MS = 200;
 
 export function UndoMarkBanner() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const current = useUndoMarkStore(s => s.current);
   const clear = useUndoMarkStore(s => s.clear);
@@ -111,7 +113,7 @@ export function UndoMarkBanner() {
           accessibilityLabel={`Undo Mark on hole ${active.hole}`}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
-          <Text style={styles.undoText}>UNDO</Text>
+          <Text style={styles.undoText}>{t('undo_mark_banner.text.undo')}</Text>
         </TouchableOpacity>
       </View>
     </Animated.View>

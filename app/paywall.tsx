@@ -30,8 +30,10 @@ import {
 } from '../services/billing/purchases';
 import { currentTrialExtensionOffer } from '../services/billing/trialExtensionOffer';
 import { describeTrialExtension, TRIAL_EXTENSION_DAYS } from '../services/billing/trialUsage';
+import { useTranslation } from 'react-i18next';
 
 export default function PaywallScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const fadeIn = useRef(new Animated.Value(0)).current;
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
@@ -120,8 +122,8 @@ export default function PaywallScreen() {
     if (!billingAvailable()) {
       // Honest, not a fake success. This is the state on a binary built before the billing module.
       Alert.alert(
-        'Not available yet',
-        'Subscriptions need the latest version of the app. Update from TestFlight and try again.',
+        t('paywall.alert.not_available_yet'),
+        t('paywall.alert.subscriptions_need_the_latest_version'),
         [{ text: 'OK' }],
       );
       return;
@@ -149,7 +151,7 @@ export default function PaywallScreen() {
       );
       const pkg = byType ?? byProductId ?? packages[0];
       if (!pkg) {
-        Alert.alert('Not available yet', 'The subscription is not on sale in your region yet.', [{ text: 'OK' }]);
+        Alert.alert(t('paywall.alert.not_available_yet'), t('paywall.alert.the_subscription_is_not_on'), [{ text: 'OK' }]);
         return;
       }
       const result = await purchasePackage(pkg, subscription_status);
@@ -168,8 +170,8 @@ export default function PaywallScreen() {
       }
       track('subscribe_failed', { reason: result.reason });
       Alert.alert(
-        "That didn't go through",
-        'Nothing was charged. Give it another go, or check your payment method in Settings.',
+        t('paywall.alert.that_didn_t_go_through'),
+        t('paywall.alert.nothing_was_charged_give_it'),
         [{ text: 'OK' }],
       );
     } finally {
@@ -187,8 +189,8 @@ export default function PaywallScreen() {
     track('restore_tapped');
     if (!billingAvailable()) {
       Alert.alert(
-        'Not available yet',
-        'Restoring needs the latest version of the app. Update from TestFlight and try again.',
+        t('paywall.alert.not_available_yet'),
+        t('paywall.alert.restoring_needs_the_latest_version'),
         [{ text: 'OK' }],
       );
       return;
@@ -200,16 +202,16 @@ export default function PaywallScreen() {
         if (result.trialStartedAt != null) setTrialStartedAt(result.trialStartedAt);
         setSubscriptionStatus(result.status);
         track('restore_succeeded', { status: result.status });
-        Alert.alert('Restored', `You're all set — full ${caddieName} is back.`, [{ text: 'Great' }]);
+        Alert.alert(t('paywall.alert.restored'), `You're all set — full ${caddieName} is back.`, [{ text: 'Great' }]);
         safeBack();
         return;
       }
       if (result.ok) {
         setSubscriptionStatus(result.status);
-        Alert.alert('Nothing to restore', 'No active subscription on this Apple ID.', [{ text: 'OK' }]);
+        Alert.alert(t('paywall.alert.nothing_to_restore'), t('paywall.alert.no_active_subscription_on_this'), [{ text: 'OK' }]);
         return;
       }
-      Alert.alert("Couldn't check", 'We could not reach the store just now. Try again in a moment.', [{ text: 'OK' }]);
+      Alert.alert(t('paywall.alert.couldn_t_check'), t('paywall.alert.we_could_not_reach_the'), [{ text: 'OK' }]);
     } finally {
       setBusy(false);
     }
@@ -253,7 +255,7 @@ export default function PaywallScreen() {
               subscription. Falls through to the normal paywall for everyone else. */}
           {extension?.eligible && (
             <View style={styles.extensionCard}>
-              <Text style={styles.extensionLabel}>ON THE HOUSE</Text>
+              <Text style={styles.extensionLabel}>{t('paywall.paywall_screen.on_the_house')}</Text>
               <Text style={styles.extensionBody}>{describeTrialExtension(extension.activeDays)}</Text>
               <TouchableOpacity
                 style={styles.extensionBtn}
@@ -268,7 +270,7 @@ export default function PaywallScreen() {
               >
                 <Text style={styles.extensionBtnText}>Give me another {TRIAL_EXTENSION_DAYS} days</Text>
               </TouchableOpacity>
-              <Text style={styles.extensionFootnote}>No card, no charge. Subscribe whenever you&apos;re ready.</Text>
+              <Text style={styles.extensionFootnote}>{t('paywall.paywall_screen.no_card_no_charge_subscribe')}</Text>
             </View>
           )}
 
@@ -285,7 +287,7 @@ export default function PaywallScreen() {
           </View>
 
           <View style={styles.pricingCard}>
-            <Text style={styles.pricingTitle}>SmartPlay Caddie Pro</Text>
+            <Text style={styles.pricingTitle}>{t('paywall.paywall_screen.smartplay_caddie_pro')}</Text>
             <Text style={styles.pricingPrice}>{PRICING.monthly.displayPrice} / {PRICING.monthly.period}</Text>
             <Text style={styles.pricingTrial}>
               or {PRICING.annual.displayPrice}/{PRICING.annual.period} — save {PRICING.annual.savingsPct}%
@@ -298,7 +300,7 @@ export default function PaywallScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.restoreBtn} onPress={handleRestore} disabled={busy}>
-            <Text style={styles.restoreText}>Restore Purchase</Text>
+            <Text style={styles.restoreText}>{t('paywall.paywall_screen.restore_purchase')}</Text>
           </TouchableOpacity>
 
           {/* 2026-08-30 — guideline 3.1.2 wants both documents reachable from the screen that sells
@@ -308,16 +310,16 @@ export default function PaywallScreen() {
               wire-up, not a new surface. */}
           <View style={styles.legalLinksRow}>
             <TouchableOpacity onPress={() => router.push('/legal?doc=privacy' as never)} accessibilityRole="button">
-              <Text style={styles.restoreText}>Privacy Policy</Text>
+              <Text style={styles.restoreText}>{t('paywall.paywall_screen.privacy_policy')}</Text>
             </TouchableOpacity>
             <Text style={styles.legalLinkSep}>·</Text>
             <TouchableOpacity onPress={() => router.push('/legal?doc=terms' as never)} accessibilityRole="button">
-              <Text style={styles.restoreText}>Terms of Service</Text>
+              <Text style={styles.restoreText}>{t('paywall.paywall_screen.terms_of_service')}</Text>
             </TouchableOpacity>
           </View>
 
           <Text style={styles.legalText}>
-            Subscription automatically renews unless cancelled at least 24 hours before the end of the trial period.
+            {t('paywall.paywall_screen.subscription_automatically_renews_unless_can')}
           </Text>
 
         </ScrollView>

@@ -25,6 +25,7 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
 
 export type ShotDistanceResult = 'good' | 'short' | 'long';
 export type ShotDirectionResult = 'left' | 'straight' | 'right';
@@ -48,29 +49,30 @@ export function ShotResultRow({
   onMarkShot,
   onRefreshGps,
 }: ShotResultRowProps) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const GOLD = '#F0C030';
   const BLUE = '#5DADE2';
 
   return (
     <View style={[styles.wrap, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-      <Text style={[styles.heading, { color: colors.text_muted }]}>SHOT RESULT</Text>
+      <Text style={[styles.heading, { color: colors.text_muted }]}>{t('cockpit_shot_result_row.shot_result_row.shot_result')}</Text>
 
       {/* Row 1 — distance feedback */}
       <View style={styles.row}>
-        <Pill label="✓ Good"  color={colors.accent} onPress={() => onLogDistance('good')} />
-        <Pill label="↓ Short" color={GOLD}          onPress={() => onLogDistance('short')} />
-        <Pill label="↑ Long"  color={GOLD}          onPress={() => onLogDistance('long')} />
+        <Pill label={t('cockpit_shot_result_row.label.good')}  color={colors.accent} onPress={() => onLogDistance('good')} />
+        <Pill label={t('cockpit_shot_result_row.label.short')} color={GOLD}          onPress={() => onLogDistance('short')} />
+        <Pill label={t('cockpit_shot_result_row.label.long')}  color={GOLD}          onPress={() => onLogDistance('long')} />
       </View>
 
       {/* Row 2 — direction + Mark */}
       <View style={styles.row}>
-        <Pill label="← Left"     color={BLUE}          onPress={() => onLogDirection('left')} />
-        <Pill label="↑ Straight" color={colors.accent} onPress={() => onLogDirection('straight')} />
-        <Pill label="Right →"    color={colors.error}  onPress={() => onLogDirection('right')} />
-        <Pill label="⊕ Mark"     color={GOLD}          onPress={onMarkShot} />
+        <Pill label={t('cockpit_shot_result_row.label.left')}     color={BLUE}          onPress={() => onLogDirection('left')} />
+        <Pill label={t('cockpit_shot_result_row.label.straight')} color={colors.accent} onPress={() => onLogDirection('straight')} />
+        <Pill label={t('cockpit_shot_result_row.label.right')}    color={colors.error}  onPress={() => onLogDirection('right')} />
+        <Pill label={t('cockpit_shot_result_row.label.mark')}     color={GOLD}          onPress={onMarkShot} />
         {onRefreshGps && (
-          <Pill label="📍 GPS"    color={BLUE}          onPress={onRefreshGps} />
+          <Pill label={t('cockpit_shot_result_row.label.gps')}    color={BLUE}          onPress={onRefreshGps} />
         )}
       </View>
     </View>

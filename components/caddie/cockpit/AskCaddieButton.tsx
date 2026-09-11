@@ -22,6 +22,7 @@ import React, { useEffect, useRef } from 'react';
 import { View, Text, Image, Pressable, Animated, Easing, StyleSheet } from 'react-native';
 import { useTheme } from '../../../contexts/ThemeContext';
 import type { VoiceState } from '../../CaddieAvatar';
+import { useTranslation } from 'react-i18next';
 
 export interface AskCaddieButtonProps {
   voiceState: VoiceState;
@@ -42,6 +43,7 @@ const LABEL: Record<VoiceState, string> = {
 };
 
 export function AskCaddieButton({ voiceState, onTap }: AskCaddieButtonProps) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const isActive =
     voiceState === 'arming' ||
@@ -66,7 +68,7 @@ export function AskCaddieButton({ voiceState, onTap }: AskCaddieButtonProps) {
           android_ripple={{ color: 'rgba(0,200,150,0.18)' }}
           accessibilityRole="button"
           accessibilityLabel={LABEL[voiceState] ?? 'Tap to ask Caddie'}
-          accessibilityHint="Starts recording. Tap again to stop."
+          accessibilityHint={t('cockpit_ask_caddie_button.accessibility_hint.starts_recording_tap_again_to')}
           style={styles.pressable}
         >
           <View style={styles.badgeWrap}>

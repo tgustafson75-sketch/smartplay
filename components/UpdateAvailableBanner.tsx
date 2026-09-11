@@ -11,6 +11,7 @@ import {
 } from '../services/autoUpdate';
 import { useRoundStore } from '../store/roundStore';
 import { useListeningSessionStore } from '../store/listeningSessionStore';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Auto-update banner. Ported from V3 components/UpdateAvailableBanner.
@@ -25,6 +26,7 @@ import { useListeningSessionStore } from '../store/listeningSessionStore';
  * conversation isn't interrupted by a banner.
  */
 export function UpdateAvailableBanner() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const [status, setStatus] = useState<UpdateStatus | null>(null);
@@ -93,9 +95,9 @@ export function UpdateAvailableBanner() {
       >
         <Ionicons name="cloud-download-outline" size={20} color={colors.accent} />
         <View style={styles.body}>
-          <Text style={[styles.title, { color: colors.text_primary }]}>Update ready</Text>
+          <Text style={[styles.title, { color: colors.text_primary }]}>{t('update_available_banner.text.update_ready')}</Text>
           <Text style={[styles.sub, { color: colors.text_muted }]}>
-            Tap to reload with the latest fixes.
+            {t('update_available_banner.text.tap_to_reload_with_the')}
           </Text>
         </View>
         <Pressable
@@ -103,16 +105,16 @@ export function UpdateAvailableBanner() {
           style={[styles.applyBtn, { backgroundColor: colors.accent }]}
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel="Apply update now"
+          accessibilityLabel={t('update_available_banner.accessibility_label.apply_update_now')}
         >
-          <Text style={[styles.applyText, { color: '#000' }]}>Update</Text>
+          <Text style={[styles.applyText, { color: '#000' }]}>{t('update_available_banner.text.update')}</Text>
         </Pressable>
         <Pressable
           onPress={() => setDismissed(true)}
           hitSlop={10}
           style={styles.dismissBtn}
           accessibilityRole="button"
-          accessibilityLabel="Dismiss update banner"
+          accessibilityLabel={t('update_available_banner.accessibility_label.dismiss_update_banner')}
         >
           <Ionicons name="close" size={18} color={colors.text_muted} />
         </Pressable>

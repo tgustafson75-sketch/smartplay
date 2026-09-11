@@ -26,6 +26,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import type { PuttingAnalysis } from '../../services/puttingAnalysisService';
 import PuttReadLine from './PuttReadLine';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   analysis: PuttingAnalysis;
@@ -38,20 +39,21 @@ interface Props {
 }
 
 export default function PuttingAnalysisCard({ analysis, clipUri, clipDurationSec }: Props) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const tier = scoreTier(analysis.overallScore);
   return (
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={[styles.label, { color: colors.accent }]}>PUTTING</Text>
+        <Text style={[styles.label, { color: colors.accent }]}>{t('swinglab_putting_analysis_card.putting_analysis_card.putting')}</Text>
         {/* 2026-05-23 — Glasses badge: surfaces when this putting
             analysis was (or could be) enriched with Ray-Ban Meta POV
             frames. Renders nothing on non-DAT builds. */}
         <GlassesStatusBadge />
         <View style={[styles.scoreBadge, { borderColor: tier.color }]}>
           <Text style={[styles.scoreValue, { color: tier.color }]}>{analysis.overallScore}</Text>
-          <Text style={[styles.scoreLabel, { color: tier.color }]}>SCORE</Text>
+          <Text style={[styles.scoreLabel, { color: tier.color }]}>{t('scorecard.score')}</Text>
         </View>
       </View>
 
@@ -68,7 +70,7 @@ export default function PuttingAnalysisCard({ analysis, clipUri, clipDurationSec
           treat low-confidence numbers as gospel. */}
       {analysis.partialCapture && (
         <Text style={[styles.subtitle, { color: '#fbbf24', fontStyle: 'italic' }]}>
-          Approximate read — limited capture. Coaching is conservative.
+          {t('swinglab_putting_analysis_card.putting_analysis_card.approximate_read_limited_capture_coaching')}
         </Text>
       )}
 
@@ -84,32 +86,32 @@ export default function PuttingAnalysisCard({ analysis, clipUri, clipDurationSec
       </View>
 
       {/* Setup row */}
-      <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>SETUP</Text>
+      <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>{t('swinglab_putting_analysis_card.putting_analysis_card.setup')}</Text>
       <View style={styles.fieldRow}>
-        <Field label="Alignment" value={fmt(analysis.setup.alignment)} colors={colors} />
-        <Field label="Ball position" value={fmt(analysis.setup.ballPosition)} colors={colors} />
-        <Field label="Stance" value={fmt(analysis.setup.stanceWidth)} colors={colors} />
-        <Field label="Grip" value={fmt(analysis.setup.gripPressure)} colors={colors} />
-        <Field label="Quality" value={`${analysis.setup.quality}`} colors={colors} accent />
+        <Field label={t('swinglab_putting_analysis_card.label.alignment')} value={fmt(analysis.setup.alignment)} colors={colors} />
+        <Field label={t('swinglab_putting_analysis_card.label.ball_position')} value={fmt(analysis.setup.ballPosition)} colors={colors} />
+        <Field label={t('swinglab_putting_analysis_card.label.stance')} value={fmt(analysis.setup.stanceWidth)} colors={colors} />
+        <Field label={t('swinglab_putting_analysis_card.label.grip')} value={fmt(analysis.setup.gripPressure)} colors={colors} />
+        <Field label={t('swinglab_putting_analysis_card.label.quality')} value={`${analysis.setup.quality}`} colors={colors} accent />
       </View>
 
       {/* Stroke row */}
-      <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>STROKE</Text>
+      <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>{t('swinglab_putting_analysis_card.putting_analysis_card.stroke')}</Text>
       <View style={styles.fieldRow}>
-        <Field label="Path" value={fmt(analysis.stroke.path)} colors={colors} />
-        <Field label="Tempo" value={fmt(analysis.stroke.tempo)} colors={colors} warn={analysis.stroke.tempo === 'decelerating' || analysis.stroke.tempo === 'jerky'} />
-        <Field label="Face @ impact" value={fmt(analysis.stroke.faceAngleAtImpact)} colors={colors} />
-        <Field label="Quality" value={`${analysis.stroke.quality}`} colors={colors} accent />
+        <Field label={t('swinglab_putting_analysis_card.label.path')} value={fmt(analysis.stroke.path)} colors={colors} />
+        <Field label={t('swinglab_putting_analysis_card.label.tempo')} value={fmt(analysis.stroke.tempo)} colors={colors} warn={analysis.stroke.tempo === 'decelerating' || analysis.stroke.tempo === 'jerky'} />
+        <Field label={t('swinglab_putting_analysis_card.label.face_impact')} value={fmt(analysis.stroke.faceAngleAtImpact)} colors={colors} />
+        <Field label={t('swinglab_putting_analysis_card.label.quality')} value={`${analysis.stroke.quality}`} colors={colors} accent />
       </View>
       {analysis.stroke.deceleration && (
         <Text style={[styles.flagWarn, { color: '#fbbf24' }]}>
-          ⚠ Deceleration through impact — commit + accelerate
+          {t('swinglab_putting_analysis_card.putting_analysis_card.deceleration_through_impact_commit_accelerat')}
         </Text>
       )}
 
       {/* Read accuracy */}
       <View style={[styles.readBox, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-        <Text style={[styles.readLabel, { color: colors.text_muted }]}>YOUR READ</Text>
+        <Text style={[styles.readLabel, { color: colors.text_muted }]}>{t('swinglab_putting_analysis_card.putting_analysis_card.your_read')}</Text>
         <Text style={[styles.readBody, { color: colors.text_primary }]}>
           {analysis.readAccuracy.wasCorrect ? '✓ Lined up with what the slope said.' : '✗ Off by a bit.'}
           {analysis.readAccuracy.suggestedAdjustment ? `  ${analysis.readAccuracy.suggestedAdjustment}` : ''}
@@ -117,7 +119,7 @@ export default function PuttingAnalysisCard({ analysis, clipUri, clipDurationSec
       </View>
 
       {/* Recommendation block */}
-      <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>RECOMMENDATION</Text>
+      <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>{t('swinglab_putting_analysis_card.putting_analysis_card.recommendation')}</Text>
       <View style={[styles.recBox, { borderColor: colors.accent, backgroundColor: colors.accent_muted }]}>
         <Text style={[styles.recPrimary, { color: colors.accent }]}>{analysis.recommendation.line}</Text>
         <Text style={[styles.recSecondary, { color: colors.text_primary }]}>{analysis.recommendation.speedFeel}</Text>

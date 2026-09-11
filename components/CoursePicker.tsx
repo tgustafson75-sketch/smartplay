@@ -9,6 +9,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { searchCourses } from '../services/golfCourseApi';
+import { useTranslation } from 'react-i18next';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,6 +47,7 @@ const LOCAL_COURSES: PickedCourse[] = [
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CoursePicker({ onSelect, selected, onInfo }: Props) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<{ id: string; club_name: string; course_name: string; location: string }[]>([]);
   // 2026-06-04 — Many golfcourseapi results share club names (e.g. multiple
@@ -114,7 +116,7 @@ export default function CoursePicker({ onSelect, selected, onInfo }: Props) {
       {/* Search input */}
       <TextInput
         style={styles.input}
-        placeholder="Search any US course..."
+        placeholder={t('course_picker.placeholder.search_any_us_course')}
         placeholderTextColor="#4b5563"
         value={query}
         onChangeText={setQuery}
@@ -147,7 +149,7 @@ export default function CoursePicker({ onSelect, selected, onInfo }: Props) {
         </View>
       )}
       {!loading && searched && !searchError && results.length === 0 && (
-        <Text style={styles.noResults}>No courses found. Try a different name or city.</Text>
+        <Text style={styles.noResults}>{t('course_picker.text.no_courses_found_try_a')}</Text>
       )}
 
       {!loading && results.length > 0 && (
@@ -184,7 +186,7 @@ export default function CoursePicker({ onSelect, selected, onInfo }: Props) {
       {/* Local courses + manual option */}
       {!loading && query.trim().length < 3 && (
         <View style={styles.localSection}>
-          <Text style={styles.localLabel}>RECENT / LOCAL</Text>
+          <Text style={styles.localLabel}>{t('course_picker.text.recent_local')}</Text>
           {LOCAL_COURSES.map((c) => (
             <TouchableOpacity
               key={c.id}
@@ -193,7 +195,7 @@ export default function CoursePicker({ onSelect, selected, onInfo }: Props) {
               activeOpacity={0.75}
             >
               <Text style={styles.resultName}>{c.name}</Text>
-              <Text style={styles.resultSub}>Local data</Text>
+              <Text style={styles.resultSub}>{t('course_picker.text.local_data')}</Text>
             </TouchableOpacity>
           ))}
           <TouchableOpacity
@@ -201,7 +203,7 @@ export default function CoursePicker({ onSelect, selected, onInfo }: Props) {
             onPress={() => onSelect(null)}
             activeOpacity={0.75}
           >
-            <Text style={styles.skipText}>Skip — manual round (no course data)</Text>
+            <Text style={styles.skipText}>{t('course_picker.text.skip_manual_round_no_course')}</Text>
           </TouchableOpacity>
         </View>
       )}

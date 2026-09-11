@@ -29,6 +29,7 @@ import {
   pickFromLibrary, parseRoundScreenshot, buildPersistInput,
   type RoundImportResult,
 } from '../services/roundImport';
+import { useTranslation } from 'react-i18next';
 
 type Phase =
   | { kind: 'pick' }
@@ -37,6 +38,7 @@ type Phase =
   | { kind: 'error'; uri: string | null; message: string; retryable: boolean };
 
 export default function ImportRoundScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const addImportedRound = useRoundStore(s => s.addImportedRound);
@@ -100,24 +102,23 @@ export default function ImportRoundScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={10} style={styles.headerIcon}>
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text_primary }]}>Import Past Round</Text>
+        <Text style={[styles.title, { color: colors.text_primary }]}>{t('import_round.import_round_screen.import_past_round')}</Text>
         <View style={styles.headerIcon} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
         {phase.kind === 'pick' && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.cardTitle, { color: colors.text_primary }]}>Bring in a past round</Text>
+            <Text style={[styles.cardTitle, { color: colors.text_primary }]}>{t('import_round.import_round_screen.bring_in_a_past_round')}</Text>
             <Text style={[styles.cardBody, { color: colors.text_muted }]}>
-              Pick a screenshot from Golfshot, 18Birdies, GHIN, the USGA app, or a clear photo of a paper scorecard.
-              SmartPlay reads the holes, scores, and putts so the round counts toward your stats.
+              {t('import_round.import_round_screen.pick_a_screenshot_from_golfshot')}
             </Text>
             <TouchableOpacity
               style={[styles.primaryBtn, { backgroundColor: colors.accent }]}
               onPress={onPick}
             >
               <Ionicons name="image-outline" size={18} color="#0d1a0d" />
-              <Text style={styles.primaryBtnText}>Choose screenshot</Text>
+              <Text style={styles.primaryBtnText}>{t('import_round.import_round_screen.choose_screenshot')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -127,10 +128,10 @@ export default function ImportRoundScreen() {
             <Image source={{ uri: phase.uri }} style={styles.previewSmall} resizeMode="cover" />
             <ActivityIndicator size="large" color={colors.accent} style={{ marginTop: 16 }} />
             <Text style={[styles.cardBody, { color: colors.text_primary, marginTop: 12 }]}>
-              Reading the scorecard…
+              {t('import_round.import_round_screen.reading_the_scorecard')}
             </Text>
             <Text style={[styles.cardSub, { color: colors.text_muted }]}>
-              This usually takes 4-10 seconds.
+              {t('import_round.import_round_screen.this_usually_takes_4_10')}
             </Text>
           </View>
         )}
@@ -147,7 +148,7 @@ export default function ImportRoundScreen() {
 
         {phase.kind === 'error' && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#ef4444' }]}>
-            <Text style={[styles.cardTitle, { color: '#ef4444' }]}>Import failed</Text>
+            <Text style={[styles.cardTitle, { color: '#ef4444' }]}>{t('import_round.import_round_screen.import_failed')}</Text>
             <Text style={[styles.cardBody, { color: colors.text_primary }]}>{phase.message}</Text>
             {phase.retryable && (
               <TouchableOpacity
@@ -155,14 +156,14 @@ export default function ImportRoundScreen() {
                 onPress={onPick}
               >
                 <Ionicons name="refresh-outline" size={18} color="#0d1a0d" />
-                <Text style={styles.primaryBtnText}>Try a different screenshot</Text>
+                <Text style={styles.primaryBtnText}>{t('import_round.import_round_screen.try_a_different_screenshot')}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
               style={[styles.secondaryBtn, { borderColor: colors.border }]}
               onPress={() => router.back()}
             >
-              <Text style={[styles.secondaryBtnText, { color: colors.text_primary }]}>Done</Text>
+              <Text style={[styles.secondaryBtnText, { color: colors.text_primary }]}>{t('import_round.import_round_screen.done')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -180,6 +181,7 @@ function ConfirmCard({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
   const scoredHoles = result.holes.filter(h => typeof h.score === 'number');
   const totalScore = result.total_score
     ?? scoredHoles.reduce((acc, h) => acc + (h.score ?? 0), 0);
@@ -231,7 +233,7 @@ function ConfirmCard({
         </View>
       )}
 
-      <Text style={[styles.holesHeader, { color: colors.text_muted }]}>HOLES</Text>
+      <Text style={[styles.holesHeader, { color: colors.text_muted }]}>{t('scorecard.holes')}</Text>
       <View style={styles.holesGrid}>
         {result.holes.map(h => (
           <View key={h.hole} style={[styles.holeCell, { borderColor: colors.border, backgroundColor: colors.surface_elevated }]}>
@@ -250,7 +252,7 @@ function ConfirmCard({
       </View>
 
       <Text style={[styles.confidenceTag, { color: colors.text_muted }]}>
-        Read confidence: <Text style={{
+        {t('import_round.confirm_card.read_confidence')} <Text style={{
           color: result.confidence === 'high' ? colors.accent : result.confidence === 'low' ? '#F5A623' : colors.text_primary,
           fontWeight: '800',
         }}>{result.confidence}</Text>
@@ -261,13 +263,13 @@ function ConfirmCard({
         onPress={onConfirm}
       >
         <Ionicons name="checkmark-circle-outline" size={18} color="#0d1a0d" />
-        <Text style={styles.primaryBtnText}>Add to history</Text>
+        <Text style={styles.primaryBtnText}>{t('import_round.confirm_card.add_to_history')}</Text>
       </TouchableOpacity>
       <TouchableOpacity
         style={[styles.secondaryBtn, { borderColor: colors.border }]}
         onPress={onCancel}
       >
-        <Text style={[styles.secondaryBtnText, { color: colors.text_primary }]}>Cancel</Text>
+        <Text style={[styles.secondaryBtnText, { color: colors.text_primary }]}>{t('play.cancel')}</Text>
       </TouchableOpacity>
     </View>
   );

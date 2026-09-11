@@ -36,6 +36,7 @@ import {
   type CageTargetSample,
   type TargetHitType,
 } from '../../store/acousticCalibrationStore';
+import { useTranslation } from 'react-i18next';
 
 type Phase = 'idle' | 'listening' | 'confirming' | 'saved';
 
@@ -59,6 +60,7 @@ const HIT_TYPE_COLOR: Record<TargetHitType, string> = {
 };
 
 export default function CageTargetCalibration() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
 
@@ -170,7 +172,7 @@ export default function CageTargetCalibration() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text_primary }]}>Target Calibration</Text>
+        <Text style={[styles.title, { color: colors.text_primary }]}>{t('practice_session_target_calibration.cage_target_calibration.target_calibration')}</Text>
         <View style={{ width: 26 }} />
       </View>
 
@@ -179,7 +181,7 @@ export default function CageTargetCalibration() {
         {/* Status bar */}
         <View style={[styles.statusBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.statusCount, { color: colors.text_primary }]}>{sessionCount}</Text>
-          <Text style={[styles.statusLabel, { color: colors.text_secondary }]}>shots logged</Text>
+          <Text style={[styles.statusLabel, { color: colors.text_secondary }]}>{t('practice_session_target_calibration.cage_target_calibration.shots_logged')}</Text>
           <View style={styles.statusDivider} />
           <View style={[styles.statusDot, { backgroundColor: '#00C896' }]} />
           <Text style={[styles.statusLabel, { color: colors.text_secondary }]}>{centerCount} center</Text>
@@ -196,15 +198,15 @@ export default function CageTargetCalibration() {
           {phase === 'listening' && (
             <>
               <View style={[styles.listeningPulse, { borderColor: colors.accent }]} />
-              <Text style={[styles.instruction, { color: colors.text_primary }]}>Hit a shot</Text>
+              <Text style={[styles.instruction, { color: colors.text_primary }]}>{t('practice_session_target_calibration.cage_target_calibration.hit_a_shot')}</Text>
               <Text style={[styles.instructionSub, { color: colors.text_secondary }]}>
-                Listening for impact…
+                {t('practice_session_target_calibration.cage_target_calibration.listening_for_impact')}
               </Text>
             </>
           )}
           {phase === 'confirming' && !pendingSave && (
             <>
-              <Text style={[styles.instruction, { color: colors.text_primary }]}>Tap where it hit</Text>
+              <Text style={[styles.instruction, { color: colors.text_primary }]}>{t('practice_session_target_calibration.cage_target_calibration.tap_where_it_hit')}</Text>
               <Text style={[styles.instructionSub, { color: colors.text_secondary }]}>
                 Peak: {lastPeakDb != null ? `${lastPeakDb.toFixed(1)} dBFS` : '—'}
               </Text>
@@ -223,11 +225,11 @@ export default function CageTargetCalibration() {
             </>
           )}
           {phase === 'saved' && (
-            <Text style={[styles.instruction, { color: '#00C896' }]}>Saved ✓</Text>
+            <Text style={[styles.instruction, { color: '#00C896' }]}>{t('practice_session_target_calibration.cage_target_calibration.saved')}</Text>
           )}
           {phase === 'idle' && (
             <Text style={[styles.instructionSub, { color: colors.text_secondary }]}>
-              Tap Start to begin
+              {t('practice_session_target_calibration.cage_target_calibration.tap_start_to_begin')}
             </Text>
           )}
         </View>
@@ -252,12 +254,12 @@ export default function CageTargetCalibration() {
                   <Text style={[styles.actionBtnText, { color: colors.text_secondary }]}>Re-tap</Text>
                 </Pressable>
                 <Pressable style={[styles.actionBtn, { backgroundColor: '#00C896' }]} onPress={confirmSave}>
-                  <Text style={[styles.actionBtnText, { color: '#000' }]}>Save shot</Text>
+                  <Text style={[styles.actionBtnText, { color: '#000' }]}>{t('practice_session_target_calibration.cage_target_calibration.save_shot')}</Text>
                 </Pressable>
               </>
             ) : (
               <Pressable style={[styles.actionBtn, styles.actionBtnSecondary]} onPress={discardShot}>
-                <Text style={[styles.actionBtnText, { color: colors.text_secondary }]}>Discard / retry</Text>
+                <Text style={[styles.actionBtnText, { color: colors.text_secondary }]}>{t('practice_session_target_calibration.cage_target_calibration.discard_retry')}</Text>
               </Pressable>
             )}
           </View>
@@ -268,7 +270,7 @@ export default function CageTargetCalibration() {
             style={[styles.startBtn, { backgroundColor: colors.accent }]}
             onPress={() => { void startListening(); }}
           >
-            <Text style={styles.startBtnText}>Start</Text>
+            <Text style={styles.startBtnText}>{t('practice_session_target_calibration.cage_target_calibration.start')}</Text>
           </TouchableOpacity>
         )}
 
@@ -325,8 +327,8 @@ export default function CageTargetCalibration() {
 
         {/* Footer hint */}
         <Text style={[styles.footerHint, { color: colors.text_secondary }]}>
-          Each shot saves the WAV + your confirmed location for spectral pattern analysis.
-          {'\n'}Aim for 10+ canvas hits and 5+ net hits for a useful dataset.
+          {t('practice_session_target_calibration.cage_target_calibration.each_shot_saves_the_wav')}
+          {'\n'}{t('practice_session_target_calibration.cage_target_calibration.aim_for_10_canvas_hits')}
         </Text>
 
       </ScrollView>

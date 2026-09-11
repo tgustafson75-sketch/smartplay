@@ -44,6 +44,7 @@ import { Ionicons } from '@expo/vector-icons';
 // into a clean line, a sloppy loop snaps to a clean focus circle. Conservative
 // classifier — ambiguous strokes (scribbles, curves, arrows) stay freehand.
 import { classifyStroke } from '../../utils/geometryFitting';
+import { useTranslation } from 'react-i18next';
 
 // 2026-05-26 — Fix DX: two new coach tools.
 //  - 'straight' = swing-plane / spine / shaft alignment guide.
@@ -86,6 +87,7 @@ interface PendingTwoPoint {
 const COLORS: ShapeColor[] = ['#ffffff', '#00C896', '#ef4444', '#f59e0b'];
 
 export default function VideoAnnotationOverlay({ topOffset = 60 }: { topOffset?: number }) {
+  const { t } = useTranslation();
   const [enabled, setEnabled] = useState(false);
   const [visible, setVisible] = useState(true);
   const [tool, setTool] = useState<Tool>('freehand');
@@ -446,22 +448,22 @@ export default function VideoAnnotationOverlay({ topOffset = 60 }: { topOffset?:
           {enabled && (
             <>
               {/* 2026-07-09 — Select: tap a mark to select, then Delete (direct editing). */}
-              <ToolPill icon="hand-left-outline" active={tool === 'select'} onPress={() => setTool('select')} accessibilityLabel="Select a mark" />
-              <ToolPill icon="brush" active={tool === 'freehand'} onPress={() => { setSelectedId(null); setTool('freehand'); }} accessibilityLabel="Freehand" />
-              <ToolPill icon="ellipse-outline" active={tool === 'circle'} onPress={() => setTool('circle')} accessibilityLabel="Circle" />
-              <ToolPill icon="remove-outline" active={tool === 'line'} onPress={() => setTool('line')} accessibilityLabel="Line segment" />
+              <ToolPill icon="hand-left-outline" active={tool === 'select'} onPress={() => setTool('select')} accessibilityLabel={t('swinglab_video_annotation_overlay.accessibility_label.select_a_mark')} />
+              <ToolPill icon="brush" active={tool === 'freehand'} onPress={() => { setSelectedId(null); setTool('freehand'); }} accessibilityLabel={t('swinglab_video_annotation_overlay.accessibility_label.freehand')} />
+              <ToolPill icon="ellipse-outline" active={tool === 'circle'} onPress={() => setTool('circle')} accessibilityLabel={t('swinglab_video_annotation_overlay.accessibility_label.circle')} />
+              <ToolPill icon="remove-outline" active={tool === 'line'} onPress={() => setTool('line')} accessibilityLabel={t('swinglab_video_annotation_overlay.accessibility_label.line_segment')} />
               {/* 2026-05-26 — Fix DX: 'straight' = swing-plane / spine /
                   shaft alignment guide. Drag to define angle; rendered
                   line extends edge-to-edge with an angle-from-horizontal
                   readout. Pairs with 'roi' below for CT-scanner-style
                   measurement workflow Tim's 25-year medical imaging
                   muscle memory expects. */}
-              <ToolPill icon="git-network-outline" active={tool === 'straight'} onPress={() => setTool('straight')} accessibilityLabel="Straight alignment line" />
-              <ToolPill icon="aperture-outline" active={tool === 'roi'} onPress={() => setTool('roi')} accessibilityLabel="ROI region" />
-              <ToolPill icon="text-outline" active={tool === 'text'} onPress={() => setTool('text')} accessibilityLabel="Text label" />
+              <ToolPill icon="git-network-outline" active={tool === 'straight'} onPress={() => setTool('straight')} accessibilityLabel={t('swinglab_video_annotation_overlay.accessibility_label.straight_alignment_line')} />
+              <ToolPill icon="aperture-outline" active={tool === 'roi'} onPress={() => setTool('roi')} accessibilityLabel={t('swinglab_video_annotation_overlay.accessibility_label.roi_region')} />
+              <ToolPill icon="text-outline" active={tool === 'text'} onPress={() => setTool('text')} accessibilityLabel={t('swinglab_video_annotation_overlay.accessibility_label.text_label')} />
               {/* 2026-07-09 — Calibrate: drag a ring over the ball (1.68") to unlock real
                   inch readouts on ROI measurements. Green pill when a scale is set. */}
-              <ToolPill icon="golf-outline" label={pxPerInch ? 'SCALED' : undefined} active={tool === 'calibrate' || !!pxPerInch} onPress={() => { setSelectedId(null); setTool('calibrate'); }} accessibilityLabel="Calibrate scale to the ball" />
+              <ToolPill icon="golf-outline" label={pxPerInch ? 'SCALED' : undefined} active={tool === 'calibrate' || !!pxPerInch} onPress={() => { setSelectedId(null); setTool('calibrate'); }} accessibilityLabel={t('swinglab_video_annotation_overlay.accessibility_label.calibrate_scale_to_the_ball')} />
             </>
           )}
         </View>
@@ -480,14 +482,14 @@ export default function VideoAnnotationOverlay({ topOffset = 60 }: { topOffset?:
             ))}
             {/* Delete the selected mark (from the Select tool) — distinct from Clear all. */}
             {selectedId ? (
-              <ToolPill icon="close-circle" label="DELETE" active onPress={deleteSelected} accessibilityLabel="Delete selected mark" />
+              <ToolPill icon="close-circle" label={t('swinglab_video_annotation_overlay.label.delete')} active onPress={deleteSelected} accessibilityLabel={t('swinglab_video_annotation_overlay.accessibility_label.delete_selected_mark')} />
             ) : null}
-            <ToolPill icon="arrow-undo-outline" onPress={undo} accessibilityLabel="Undo" />
-            <ToolPill icon="trash-outline" onPress={clearAll} accessibilityLabel="Clear all" />
+            <ToolPill icon="arrow-undo-outline" onPress={undo} accessibilityLabel={t('swinglab_video_annotation_overlay.accessibility_label.undo')} />
+            <ToolPill icon="trash-outline" onPress={clearAll} accessibilityLabel={t('swinglab_video_annotation_overlay.accessibility_label.clear_all')} />
             <ToolPill
               icon={visible ? 'eye-outline' : 'eye-off-outline'}
               onPress={() => setVisible(v => !v)}
-              accessibilityLabel="Toggle visibility"
+              accessibilityLabel={t('swinglab_video_annotation_overlay.accessibility_label.toggle_visibility')}
             />
           </View>
         )}
@@ -574,7 +576,7 @@ export default function VideoAnnotationOverlay({ topOffset = 60 }: { topOffset?:
                   <React.Fragment key={s.id}>
                     <Circle cx={s.cx} cy={s.cy} r={s.r} stroke="#88F700" strokeWidth={2} fill="#88F700" fillOpacity={0.10} />
                     <Rect x={s.cx - 34} y={labelY - 10} width={68} height={16} rx={4} fill="rgba(0,0,0,0.6)" />
-                    <SvgText x={s.cx} y={labelY + 2} fill="#88F700" fontSize="10" fontWeight="800" textAnchor="middle">BALL 1.68&quot;</SvgText>
+                    <SvgText x={s.cx} y={labelY + 2} fill="#88F700" fontSize="10" fontWeight="800" textAnchor="middle">{t('swinglab_video_annotation_overlay.video_annotation_overlay.ball_1_68')}</SvgText>
                   </React.Fragment>
                 );
               }
@@ -663,11 +665,11 @@ export default function VideoAnnotationOverlay({ topOffset = 60 }: { topOffset?:
       <Modal visible={textInputModal != null} transparent animationType="fade" onRequestClose={() => setTextInputModal(null)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Label</Text>
+            <Text style={styles.modalTitle}>{t('swinglab_video_annotation_overlay.video_annotation_overlay.label')}</Text>
             <TextInput
               value={textDraft}
               onChangeText={setTextDraft}
-              placeholder="early extension"
+              placeholder={t('swinglab_video_annotation_overlay.placeholder.early_extension')}
               placeholderTextColor="#64748b"
               autoFocus
               style={styles.modalInput}
@@ -676,10 +678,10 @@ export default function VideoAnnotationOverlay({ topOffset = 60 }: { topOffset?:
             />
             <View style={styles.modalActions}>
               <TouchableOpacity onPress={() => { setTextDraft(''); setTextInputModal(null); }}>
-                <Text style={styles.modalCancel}>Cancel</Text>
+                <Text style={styles.modalCancel}>{t('play.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={commitText} style={styles.modalSave}>
-                <Text style={styles.modalSaveText}>Add</Text>
+                <Text style={styles.modalSaveText}>{t('swinglab_video_annotation_overlay.video_annotation_overlay.add')}</Text>
               </TouchableOpacity>
             </View>
           </View>

@@ -24,6 +24,7 @@ import AppIcon from '../../components/AppIcon';
 import { getDialog } from '../../services/dialogEngine';
 import { getMostRecentSpaceConfiguration, type SpaceConfiguration } from '../../services/spaceAssessment';
 import { practiceLog } from '../../services/practiceTelemetry';
+import { useTranslation } from 'react-i18next';
 
 // Phase I — short club label for the Coach intro template
 const CLUB_LABELS: Record<string, string> = {
@@ -53,6 +54,7 @@ const CLUBS = [
 ];
 
 export default function CageIndex() {
+  const { t } = useTranslation();
   useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   const router = useRouter();
 
@@ -81,7 +83,7 @@ export default function CageIndex() {
   const handleStart = () => {
     if (!selectedClub) {
       practiceLog('cage-index-start', 'fail', { reason: 'no-club-selected' });
-      Alert.alert('Select a club', 'Pick a club before starting.');
+      Alert.alert(t('practice_session.alert.select_a_club'), t('practice_session.alert.pick_a_club_before_starting'));
       return;
     }
     practiceLog('cage-index-start', 'ok', { club: selectedClub, route: '/practice-session/session' });
@@ -103,9 +105,9 @@ export default function CageIndex() {
             onPress={() => router.back()}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Text style={styles.backText}>‹ Back</Text>
+            <Text style={styles.backText}>{t('practice_session.cage_index.back')}</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>Cage Mode</Text>
+          <Text style={styles.title}>{t('practice_session.cage_index.cage_mode')}</Text>
           <View style={{ width: 60 }} />
         </View>
 
@@ -129,24 +131,24 @@ export default function CageIndex() {
             <View style={styles.spaceHeader}>
               <AppIcon name="scan-outline" size={18} color="#00C896" />
               <Text style={styles.spaceLabel}>{savedSpace.label.toUpperCase()}</Text>
-              <Text style={styles.spaceRescan}>Re-scan ›</Text>
+              <Text style={styles.spaceRescan}>{t('practice_session.cage_index.re_scan')}</Text>
             </View>
             <Text style={styles.spaceSummary}>{savedSpace.assessment.summary || 'Saved.'}</Text>
             {savedSpace.assessment.recommended_setup?.mat_position ? (
               <View style={styles.spaceRow}>
-                <Text style={styles.spaceTag}>MAT</Text>
+                <Text style={styles.spaceTag}>{t('practice_session.cage_index.mat')}</Text>
                 <Text style={styles.spaceVal}>{savedSpace.assessment.recommended_setup.mat_position}</Text>
               </View>
             ) : null}
             {savedSpace.assessment.recommended_setup?.aim_direction ? (
               <View style={styles.spaceRow}>
-                <Text style={styles.spaceTag}>AIM</Text>
+                <Text style={styles.spaceTag}>{t('practice_session.cage_index.aim')}</Text>
                 <Text style={styles.spaceVal}>{savedSpace.assessment.recommended_setup.aim_direction}</Text>
               </View>
             ) : null}
             {savedSpace.assessment.camera_position?.dtl_placement ? (
               <View style={styles.spaceRow}>
-                <Text style={styles.spaceTag}>PHONE</Text>
+                <Text style={styles.spaceTag}>{t('practice_session.cage_index.phone')}</Text>
                 <Text style={styles.spaceVal}>{savedSpace.assessment.camera_position.dtl_placement}</Text>
               </View>
             ) : null}
@@ -159,8 +161,8 @@ export default function CageIndex() {
           >
             <AppIcon name="scan-outline" size={20} color="#00C896" />
             <View style={{ flex: 1 }}>
-              <Text style={styles.scanPromptTitle}>Scan your space</Text>
-              <Text style={styles.scanPromptSub}>30 seconds. Kevin tells you where to put your mat, phone, and which drills work here.</Text>
+              <Text style={styles.scanPromptTitle}>{t('practice_session.cage_index.scan_your_space')}</Text>
+              <Text style={styles.scanPromptSub}>{t('practice_session.cage_index.30_seconds_kevin_tells_you')}</Text>
             </View>
             <AppIcon name="chevron-forward" size={18} color="#6b7280" />
           </TouchableOpacity>
@@ -235,12 +237,12 @@ export default function CageIndex() {
           </View>
           <View style={styles.devicePill}>
             <AppIcon name="musical-notes-outline" size={16} color="#6b7280" />
-            <Text style={styles.deviceLabel}>Sound On</Text>
+            <Text style={styles.deviceLabel}>{t('practice_session.cage_index.sound_on')}</Text>
           </View>
         </View>
 
         {/* CLUB SELECTOR */}
-        <Text style={styles.sectionLabel}>Select Club</Text>
+        <Text style={styles.sectionLabel}>{t('practice_session.cage_index.select_club')}</Text>
 
         {clubConfidence !== undefined && (
           <View style={styles.confidenceBadge}>
@@ -271,7 +273,7 @@ export default function CageIndex() {
         {/* LAST SESSION */}
         {lastSession && (
           <View style={styles.lastSession}>
-            <Text style={styles.lastSessionLabel}>LAST SESSION</Text>
+            <Text style={styles.lastSessionLabel}>{t('practice_session.cage_index.last_session')}</Text>
             <Text style={styles.lastSessionText}>
               {lastSession.club + ' · ' + lastSession.shots.length + ' shots' +
                 (lastSession.dominantMiss ? ' · Miss: ' + lastSession.dominantMiss : '')}
@@ -285,13 +287,13 @@ export default function CageIndex() {
             style={styles.historyBtn}
             onPress={() => router.push('/practice-session/history' as never)}
           >
-            <Text style={styles.historyBtnText}>View Session History →</Text>
+            <Text style={styles.historyBtnText}>{t('practice_session.cage_index.view_session_history')}</Text>
           </TouchableOpacity>
         )}
 
         {/* START */}
         <TouchableOpacity style={styles.startBtn} onPress={handleStart} activeOpacity={0.85}>
-          <Text style={styles.startBtnText}>Start Session</Text>
+          <Text style={styles.startBtnText}>{t('practice_session.cage_index.start_session')}</Text>
         </TouchableOpacity>
 
         {/* TARGET CALIBRATION — acoustic dataset builder */}
@@ -301,7 +303,7 @@ export default function CageIndex() {
           activeOpacity={0.8}
         >
           <AppIcon name="radio-button-on-outline" size={18} color="#6b7280" />
-          <Text style={styles.calibrateTargetText}>Target Calibration</Text>
+          <Text style={styles.calibrateTargetText}>{t('practice_session.cage_index.target_calibration')}</Text>
         </TouchableOpacity>
 
       </ScrollView>
@@ -322,11 +324,11 @@ export default function CageIndex() {
             style={{ width: '100%', alignItems: 'center' }}
           >
           <TouchableOpacity activeOpacity={1} style={calStyles.card}>
-            <Text style={calStyles.title}>CAGE DISTANCE</Text>
+            <Text style={calStyles.title}>{t('practice_session.cage_index.cage_distance')}</Text>
             <Text style={calStyles.body}>
-              Walk to a reference target in your cage and tell me how far it is from your hitting position.
+              {t('practice_session.cage_index.walk_to_a_reference_target')}
             </Text>
-            <Text style={calStyles.label}>Yards</Text>
+            <Text style={calStyles.label}>{t('practice_session.cage_index.yards')}</Text>
             <TextInput
               style={calStyles.input}
               value={calibrationInput}
@@ -338,7 +340,7 @@ export default function CageIndex() {
             />
             <View style={calStyles.actions}>
               <TouchableOpacity onPress={() => setCalibrationOpen(false)} style={calStyles.btn}>
-                <Text style={calStyles.btnText}>Cancel</Text>
+                <Text style={calStyles.btnText}>{t('play.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => {
@@ -350,7 +352,7 @@ export default function CageIndex() {
                 }}
                 style={[calStyles.btn, calStyles.btnPrimary]}
               >
-                <Text style={[calStyles.btnText, calStyles.btnTextPrimary]}>Save</Text>
+                <Text style={[calStyles.btnText, calStyles.btnTextPrimary]}>{t('practice_session.cage_index.save')}</Text>
               </TouchableOpacity>
             </View>
           </TouchableOpacity>

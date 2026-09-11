@@ -11,8 +11,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { analyzeSession, getDominantMissLabel } from '../../services/patternEngine';
+import { useTranslation } from 'react-i18next';
 
 export default function CageHistory() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { sessionHistory } = useSwingSessionStore();
   // 2026-05-23 — Hydration guard. Same pattern as library.tsx — wait
@@ -30,14 +32,14 @@ export default function CageHistory() {
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>
-            <Text style={styles.backText}>‹ Back</Text>
+            <Text style={styles.backText}>{t('practice_session_history.cage_history.back')}</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>Session History</Text>
+          <Text style={styles.title}>{t('practice_session_history.cage_history.session_history')}</Text>
           <View style={{ width: 60 }} />
         </View>
         <View style={styles.empty}>
           <ActivityIndicator size="small" color="#00C896" />
-          <Text style={[styles.emptySub, { marginTop: 12 }]}>Loading sessions…</Text>
+          <Text style={[styles.emptySub, { marginTop: 12 }]}>{t('practice_session_history.cage_history.loading_sessions')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -48,15 +50,15 @@ export default function CageHistory() {
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>
-            <Text style={styles.backText}>‹ Back</Text>
+            <Text style={styles.backText}>{t('practice_session_history.cage_history.back')}</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>Session History</Text>
+          <Text style={styles.title}>{t('practice_session_history.cage_history.session_history')}</Text>
           <View style={{ width: 60 }} />
         </View>
         <View style={styles.empty}>
-          <Text style={styles.emptyText}>No sessions yet.</Text>
+          <Text style={styles.emptyText}>{t('practice_session_history.cage_history.no_sessions_yet')}</Text>
           <Text style={styles.emptySub}>
-            Complete a cage session to see your history here.
+            {t('practice_session_history.cage_history.complete_a_cage_session_to')}
           </Text>
         </View>
       </SafeAreaView>
@@ -71,9 +73,9 @@ export default function CageHistory() {
       >
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>
-            <Text style={styles.backText}>‹ Back</Text>
+            <Text style={styles.backText}>{t('practice_session_history.cage_history.back')}</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>History</Text>
+          <Text style={styles.title}>{t('practice_session_history.cage_history.history')}</Text>
           <View style={{ width: 60 }} />
         </View>
 
@@ -160,21 +162,21 @@ export default function CageHistory() {
                         <Text style={[styles.detailValue, { fontSize: 13 }]}>
                           {getDominantMissLabel(pattern.dominantMiss)}
                         </Text>
-                        <Text style={styles.detailLabel}>Miss</Text>
+                        <Text style={styles.detailLabel}>{t('practice_session_history.cage_history.miss')}</Text>
                       </View>
                     )}
                   </View>
 
                   {session.summary && (
                     <View style={styles.kevinSummary}>
-                      <Text style={styles.kevinLabel}>KEVIN</Text>
+                      <Text style={styles.kevinLabel}>{t('practice_session_history.cage_history.kevin')}</Text>
                       <Text style={styles.kevinText}>{session.summary}</Text>
                     </View>
                   )}
 
                   {session.rootCause && (
                     <View style={styles.rootCause}>
-                      <Text style={styles.rootCauseLabel}>FOCUS AREA</Text>
+                      <Text style={styles.rootCauseLabel}>{t('practice_session_history.cage_history.focus_area')}</Text>
                       <Text style={styles.rootCauseText}>{session.rootCause}</Text>
                     </View>
                   )}
@@ -186,7 +188,7 @@ export default function CageHistory() {
                       params: { session_id: session.id },
                     } as never)}
                   >
-                    <Text style={styles.reviewBtnText}>Review with Kevin</Text>
+                    <Text style={styles.reviewBtnText}>{t('practice_session_history.cage_history.review_with_kevin')}</Text>
                   </TouchableOpacity>
                 </View>
               )}

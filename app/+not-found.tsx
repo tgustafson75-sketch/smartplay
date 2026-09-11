@@ -12,13 +12,15 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Link, Stack } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 
 export default function NotFound() {
+  const { t } = useTranslation();
   return (
     <>
       <Stack.Screen options={{ title: 'Not found' }} />
       <View style={styles.container}>
-        <Text style={styles.title}>Page not found.</Text>
+        <Text style={styles.title}>{t('not_found.text.page_not_found')}</Text>
         <Link href="/(tabs)/caddie" style={styles.link}>
           Back to Caddie
         </Link>

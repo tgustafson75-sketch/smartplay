@@ -20,6 +20,7 @@ import { youtubePlayerHtml, parsePlayerMessage, isEmbedBlocked, hasNativeWebView
 import { openYouTubeSearch } from '../services/youtubeLinks';
 import * as WebBrowser from 'expo-web-browser';
 import { useTheme } from '../contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
 
 // 2026-06-13 — OTA-safe: react-native-webview is a NATIVE module. On a build that
 // predates it (the current installed APK), render-then-crash isn't acceptable, so we
@@ -28,6 +29,7 @@ import { useTheme } from '../contexts/ThemeContext';
 const HAS_NATIVE_WEBVIEW = hasNativeWebView(WebView);
 
 export default function Jukebox() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const { videoId, title } = useLocalSearchParams<{ videoId?: string; title?: string }>();
@@ -85,7 +87,7 @@ export default function Jukebox() {
               accessibilityRole="button"
             >
               <Ionicons name="logo-youtube" size={18} color="#88F700" />
-              <Text style={styles.errorActionText}>Find it on YouTube</Text>
+              <Text style={styles.errorActionText}>{t('jukebox.text.find_it_on_youtube')}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -112,14 +114,14 @@ export default function Jukebox() {
         <View style={styles.empty}>
           <Ionicons name="musical-notes-outline" size={40} color={colors.text_muted} />
           <Text style={[styles.emptyText, { color: colors.text_secondary }]}>
-            Couldn’t find that song. Try asking again with the artist too.
+            {t('jukebox.text.couldn_t_find_that_song')}
           </Text>
         </View>
       )}
 
       <View style={styles.footer}>
         <Ionicons name="shield-checkmark-outline" size={13} color="#88F700" />
-        <Text style={styles.footerText}>Clean player · just the song</Text>
+        <Text style={styles.footerText}>{t('jukebox.text.clean_player_just_the_song')}</Text>
       </View>
     </SafeAreaView>
   );

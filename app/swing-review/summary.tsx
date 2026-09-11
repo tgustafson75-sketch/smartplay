@@ -18,8 +18,10 @@ import type { ReviewSession } from '../../types/practiceReview';
 import type { VocabularyProfile } from '../../types/vocabulary';
 import type { ReviewLabels } from '../../store/swingSessionStore';
 import { getApiBaseUrl } from '../../services/apiBase';
+import { useTranslation } from 'react-i18next';
 
 export default function CageReviewSummary() {
+  const { t } = useTranslation();
   const { review_session_id } = useLocalSearchParams<{ review_session_id: string }>();
   const router = useRouter();
   const { sessionHistory } = useSwingSessionStore();
@@ -99,8 +101,8 @@ export default function CageReviewSummary() {
     return (
       <SafeAreaView style={styles.container}>
         {/* 2026-07-23 (QA) — a back affordance so a slow/hung load is never an inescapable spinner. */}
-        <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 16, paddingVertical: 12 }} accessibilityRole="button" accessibilityLabel="Back">
-          <Text style={{ color: '#00C896', fontSize: 16, fontWeight: '700' }}>‹ Back</Text>
+        <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 16, paddingVertical: 12 }} accessibilityRole="button" accessibilityLabel={t('swing_review_summary.accessibility_label.back')}>
+          <Text style={{ color: '#00C896', fontSize: 16, fontWeight: '700' }}>{t('swing_review_summary.cage_review_summary.back')}</Text>
         </TouchableOpacity>
         <ActivityIndicator color="#00C896" style={{ marginTop: 80 }} />
       </SafeAreaView>
@@ -115,14 +117,14 @@ export default function CageReviewSummary() {
 
         {/* HEADER */}
         <View style={styles.header}>
-          <Text style={styles.title}>Review Complete</Text>
+          <Text style={styles.title}>{t('swing_review_summary.cage_review_summary.review_complete')}</Text>
           <Text style={styles.subtitle}>{labeledCount} shot{labeledCount !== 1 ? 's' : ''} labeled</Text>
         </View>
 
         {/* KEVIN VOCABULARY SUMMARY */}
         {profile?.kevin_summary && (
           <View style={styles.kevinCard}>
-            <Text style={styles.kevinLabel}>KEVIN</Text>
+            <Text style={styles.kevinLabel}>{t('swing_review_summary.cage_review_summary.kevin')}</Text>
             <Text style={styles.kevinText}>{profile.kevin_summary}</Text>
           </View>
         )}
@@ -130,7 +132,7 @@ export default function CageReviewSummary() {
         {/* STRIKE DISTRIBUTION */}
         {strikeDistribution.length > 0 && (
           <>
-            <Text style={styles.sectionLabel}>STRIKE LOCATION</Text>
+            <Text style={styles.sectionLabel}>{t('swing_review_summary.cage_review_summary.strike_location')}</Text>
             <View style={styles.distCard}>
               {strikeDistribution.map(({ loc, count }) => (
                 <View key={loc} style={styles.distRow}>
@@ -158,7 +160,7 @@ export default function CageReviewSummary() {
         {/* CONTACT QUALITY */}
         {qualityDistribution.length > 0 && (
           <>
-            <Text style={styles.sectionLabel}>CONTACT QUALITY</Text>
+            <Text style={styles.sectionLabel}>{t('swing_review_summary.cage_review_summary.contact_quality')}</Text>
             <View style={styles.distCard}>
               {qualityDistribution.map(({ q, count }) => (
                 <View key={q} style={styles.distRow}>
@@ -186,11 +188,11 @@ export default function CageReviewSummary() {
         {/* VOCABULARY PROFILE */}
         {profile && (
           <>
-            <Text style={styles.sectionLabel}>YOUR VOCABULARY</Text>
+            <Text style={styles.sectionLabel}>{t('swing_review_summary.cage_review_summary.your_vocabulary')}</Text>
             <View style={styles.vocabCard}>
               {profile.observed_terminology.strike_terms.length > 0 && (
                 <View style={styles.vocabRow}>
-                  <Text style={styles.vocabRowLabel}>Strike</Text>
+                  <Text style={styles.vocabRowLabel}>{t('swing_review_summary.cage_review_summary.strike')}</Text>
                   <Text style={styles.vocabTerms}>
                     {profile.observed_terminology.strike_terms.join(', ')}
                   </Text>
@@ -198,7 +200,7 @@ export default function CageReviewSummary() {
               )}
               {profile.observed_terminology.contact_terms.length > 0 && (
                 <View style={styles.vocabRow}>
-                  <Text style={styles.vocabRowLabel}>Contact</Text>
+                  <Text style={styles.vocabRowLabel}>{t('swing_review_summary.cage_review_summary.contact')}</Text>
                   <Text style={styles.vocabTerms}>
                     {profile.observed_terminology.contact_terms.join(', ')}
                   </Text>
@@ -206,7 +208,7 @@ export default function CageReviewSummary() {
               )}
               {profile.observed_terminology.diagnostic_terms.length > 0 && (
                 <View style={styles.vocabRow}>
-                  <Text style={styles.vocabRowLabel}>Diagnosis</Text>
+                  <Text style={styles.vocabRowLabel}>{t('swing_review_summary.cage_review_summary.diagnosis')}</Text>
                   <Text style={styles.vocabTerms}>
                     {profile.observed_terminology.diagnostic_terms.join(', ')}
                   </Text>
@@ -214,7 +216,7 @@ export default function CageReviewSummary() {
               )}
               {profile.observed_terminology.feel_terms.length > 0 && (
                 <View style={styles.vocabRow}>
-                  <Text style={styles.vocabRowLabel}>Feel</Text>
+                  <Text style={styles.vocabRowLabel}>{t('swing_review_summary.cage_review_summary.feel')}</Text>
                   <Text style={styles.vocabTerms}>
                     {profile.observed_terminology.feel_terms.join(', ')}
                   </Text>
@@ -229,7 +231,7 @@ export default function CageReviewSummary() {
           style={styles.doneBtn}
           onPress={() => router.replace('/(tabs)/swinglab' as never)}
         >
-          <Text style={styles.doneBtnText}>Done</Text>
+          <Text style={styles.doneBtnText}>{t('swing_review_summary.cage_review_summary.done')}</Text>
         </TouchableOpacity>
 
       </ScrollView>

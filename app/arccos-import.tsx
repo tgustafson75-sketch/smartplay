@@ -19,11 +19,13 @@ import { useTheme } from '../contexts/ThemeContext';
 import { safeBack } from '../services/safeBack';
 import { importArccosDistances, arccosRowsToBagUpdates, type ArccosDistanceKind } from '../services/arccosImport';
 import { useClubStatsStore, type ClubName } from '../store/clubStatsStore';
+import { useTranslation } from 'react-i18next';
 
 type EditableRow = { club: ClubName; yards: string; include: boolean };
 type Phase = 'idle' | 'scanning' | 'review';
 
 export default function ArccosImportScreen() {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const [phase, setPhase] = useState<Phase>('idle');
   const [unit, setUnit] = useState<'carry' | 'total'>('total');
@@ -97,7 +99,7 @@ export default function ArccosImportScreen() {
         <TouchableOpacity onPress={() => safeBack()} style={styles.headerBtn} accessibilityRole="button">
           <Ionicons name="chevron-back" size={24} color={colors.text_primary} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text_primary }]}>Import from Arccos</Text>
+        <Text style={[styles.headerTitle, { color: colors.text_primary }]}>{t('arccos_import.arccos_import_screen.import_from_arccos')}</Text>
         <View style={styles.headerBtn} />
       </View>
 
@@ -105,28 +107,25 @@ export default function ArccosImportScreen() {
         {phase === 'idle' && (
           <>
             <Text style={[styles.lead, { color: colors.text_primary }]}>
-              Seed your bag from Arccos.
+              {t('arccos_import.arccos_import_screen.seed_your_bag_from_arccos')}
             </Text>
             <Text style={[styles.body, { color: colors.text_muted }]}>
-              In the Arccos app, open your <Text style={{ fontWeight: '800' }}>Smart Club Distances</Text> screen and take a
-              screenshot. Pick it here and I&apos;ll read every club average into your bag — so the Caddie has your real
-              numbers, not chart defaults.
+              {t('arccos_import.arccos_import_screen.in_the_arccos_app_open')} <Text style={{ fontWeight: '800' }}>{t('arccos_import.arccos_import_screen.smart_club_distances')}</Text> {t('arccos_import.arccos_import_screen.screen_and_take_a_screenshot')}
             </Text>
             <View style={[styles.tipCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <Ionicons name="bulb-outline" size={16} color={colors.accent} />
               <Text style={[styles.tipText, { color: colors.text_secondary }]}>
-                For the truest numbers, tag your clubs by hand in Arccos during your rounds — Arccos Air otherwise
-                guesses the club from distance, which makes the averages less reliable.
+                {t('arccos_import.arccos_import_screen.for_the_truest_numbers_tag')}
               </Text>
             </View>
             <TouchableOpacity
               onPress={pickAndImport}
               style={[styles.primaryBtn, { backgroundColor: colors.accent }]}
               accessibilityRole="button"
-              accessibilityLabel="Pick an Arccos screenshot to import distances"
+              accessibilityLabel={t('arccos_import.accessibility_label.pick_an_arccos_screenshot_to')}
             >
               <Ionicons name="images-outline" size={18} color="#0a1410" />
-              <Text style={styles.primaryBtnText}>Pick Arccos screenshot</Text>
+              <Text style={styles.primaryBtnText}>{t('arccos_import.arccos_import_screen.pick_arccos_screenshot')}</Text>
             </TouchableOpacity>
             {error ? <Text style={[styles.error, { color: '#f5a623' }]}>{error}</Text> : null}
           </>
@@ -136,7 +135,7 @@ export default function ArccosImportScreen() {
           <View style={styles.scanning}>
             <ActivityIndicator size="large" color={colors.accent} />
             <Text style={[styles.body, { color: colors.text_muted, textAlign: 'center', marginTop: 14 }]}>
-              Reading your club distances…
+              {t('arccos_import.arccos_import_screen.reading_your_club_distances')}
             </Text>
           </View>
         )}
@@ -152,13 +151,13 @@ export default function ArccosImportScreen() {
               </View>
             ) : (
               <Text style={[styles.body, { color: colors.text_muted, marginTop: 4 }]}>
-                Confirm the numbers, then add them to your bag. Toggle off anything that misread.
+                {t('arccos_import.arccos_import_screen.confirm_the_numbers_then_add')}
               </Text>
             )}
 
             {/* Unit — Arccos's default club average is a TOTAL (includes roll). */}
             <View style={styles.unitRow}>
-              <Text style={[styles.unitLabel, { color: colors.text_muted }]}>These are</Text>
+              <Text style={[styles.unitLabel, { color: colors.text_muted }]}>{t('arccos_import.arccos_import_screen.these_are')}</Text>
               <View style={[styles.segment, { borderColor: colors.border }]}>
                 {(['total', 'carry'] as const).map((u) => (
                   <TouchableOpacity
@@ -211,14 +210,14 @@ export default function ArccosImportScreen() {
               disabled={includedCount === 0}
               style={[styles.primaryBtn, { backgroundColor: includedCount === 0 ? colors.border : colors.accent, marginTop: 16 }]}
               accessibilityRole="button"
-              accessibilityLabel="Add these distances to my bag"
+              accessibilityLabel={t('arccos_import.accessibility_label.add_these_distances_to_my')}
             >
               <Ionicons name="golf-outline" size={18} color="#0a1410" />
               <Text style={styles.primaryBtnText}>{applied ? 'Update bag' : `Add ${includedCount} to my bag`}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity onPress={pickAndImport} style={styles.secondaryBtn} accessibilityRole="button">
-              <Text style={[styles.secondaryText, { color: colors.text_muted }]}>Pick a different screenshot</Text>
+              <Text style={[styles.secondaryText, { color: colors.text_muted }]}>{t('arccos_import.arccos_import_screen.pick_a_different_screenshot')}</Text>
             </TouchableOpacity>
           </>
         )}

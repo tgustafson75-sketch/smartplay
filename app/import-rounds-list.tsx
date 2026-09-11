@@ -26,6 +26,7 @@ import {
   pickFromLibrary, parseRoundListScreenshot, normalizeImportedList, buildListPersistInput,
   type NormalizedListRound,
 } from '../services/roundImport';
+import { useTranslation } from 'react-i18next';
 
 type Phase =
   | { kind: 'pick' }
@@ -34,6 +35,7 @@ type Phase =
   | { kind: 'error'; message: string; retryable: boolean };
 
 export default function ImportRoundsListScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const addImportedRound = useRoundStore(s => s.addImportedRound);
@@ -132,25 +134,23 @@ export default function ImportRoundsListScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={10} style={styles.headerIcon}>
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text_primary }]}>Import Round History</Text>
+        <Text style={[styles.title, { color: colors.text_primary }]}>{t('import_rounds_list.import_rounds_list_screen.import_round_history')}</Text>
         <View style={styles.headerIcon} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
         {phase.kind === 'pick' && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.cardTitle, { color: colors.text_primary }]}>Bring in a whole season</Text>
+            <Text style={[styles.cardTitle, { color: colors.text_primary }]}>{t('import_rounds_list.import_rounds_list_screen.bring_in_a_whole_season')}</Text>
             <Text style={[styles.cardBody, { color: colors.text_muted }]}>
-              Open your rounds list in Golfshot, 18Birdies, or GHIN and screenshot it. SmartPlay reads every round on the
-              screen and adds them to your history and handicap. Scores in the 40s are treated as 9-hole rounds (you can
-              flip any of them), and in-progress rounds with no score are skipped.
+              {t('import_rounds_list.import_rounds_list_screen.open_your_rounds_list_in')}
             </Text>
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.accent }]} onPress={onPick}>
               <Ionicons name="list-outline" size={18} color="#0d1a0d" />
-              <Text style={styles.primaryBtnText}>Choose a list screenshot</Text>
+              <Text style={styles.primaryBtnText}>{t('import_rounds_list.import_rounds_list_screen.choose_a_list_screenshot')}</Text>
             </TouchableOpacity>
             <Text style={[styles.cardSub, { color: colors.text_muted, marginTop: 12 }]}>
-              More than one screen of history? Import one, then come back and add the next.
+              {t('import_rounds_list.import_rounds_list_screen.more_than_one_screen_of')}
             </Text>
           </View>
         )}
@@ -159,8 +159,8 @@ export default function ImportRoundsListScreen() {
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, alignItems: 'center' }]}>
             <Image source={{ uri: phase.uri }} style={styles.previewSmall} resizeMode="cover" />
             <ActivityIndicator size="large" color={colors.accent} style={{ marginTop: 16 }} />
-            <Text style={[styles.cardBody, { color: colors.text_primary, marginTop: 12 }]}>Reading your rounds…</Text>
-            <Text style={[styles.cardSub, { color: colors.text_muted }]}>This usually takes 5-12 seconds.</Text>
+            <Text style={[styles.cardBody, { color: colors.text_primary, marginTop: 12 }]}>{t('import_rounds_list.import_rounds_list_screen.reading_your_rounds')}</Text>
+            <Text style={[styles.cardSub, { color: colors.text_muted }]}>{t('import_rounds_list.import_rounds_list_screen.this_usually_takes_5_12')}</Text>
           </View>
         )}
 
@@ -216,23 +216,23 @@ export default function ImportRoundsListScreen() {
               <Text style={styles.primaryBtnText}>Add {phase.rounds.length} round{phase.rounds.length === 1 ? '' : 's'} to history</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.border }]} onPress={() => setPhase({ kind: 'pick' })}>
-              <Text style={[styles.secondaryBtnText, { color: colors.text_primary }]}>Cancel</Text>
+              <Text style={[styles.secondaryBtnText, { color: colors.text_primary }]}>{t('play.cancel')}</Text>
             </TouchableOpacity>
           </View>
         )}
 
         {phase.kind === 'error' && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#ef4444' }]}>
-            <Text style={[styles.cardTitle, { color: '#ef4444' }]}>Import failed</Text>
+            <Text style={[styles.cardTitle, { color: '#ef4444' }]}>{t('import_rounds_list.import_rounds_list_screen.import_failed')}</Text>
             <Text style={[styles.cardBody, { color: colors.text_primary }]}>{phase.message}</Text>
             {phase.retryable && (
               <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.accent }]} onPress={onPick}>
                 <Ionicons name="refresh-outline" size={18} color="#0d1a0d" />
-                <Text style={styles.primaryBtnText}>Try another screenshot</Text>
+                <Text style={styles.primaryBtnText}>{t('import_rounds_list.import_rounds_list_screen.try_another_screenshot')}</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.border }]} onPress={() => router.back()}>
-              <Text style={[styles.secondaryBtnText, { color: colors.text_primary }]}>Done</Text>
+              <Text style={[styles.secondaryBtnText, { color: colors.text_primary }]}>{t('import_rounds_list.import_rounds_list_screen.done')}</Text>
             </TouchableOpacity>
           </View>
         )}

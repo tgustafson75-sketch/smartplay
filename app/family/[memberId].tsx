@@ -35,6 +35,7 @@ import {
 import JuniorSwingResultCard from '../../components/JuniorSwingResultCard';
 import JuniorSwingCompare from '../../components/JuniorSwingCompare';
 import JuniorSwingTrendChart from '../../components/JuniorSwingTrendChart';
+import { useTranslation } from 'react-i18next';
 
 const BAND_LABEL: Record<AgeBand, string> = {
   tiny: 'Tiny',
@@ -44,6 +45,7 @@ const BAND_LABEL: Record<AgeBand, string> = {
 };
 
 export default function FamilyMemberScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const { memberId } = useLocalSearchParams<{ memberId: string }>();
@@ -83,14 +85,14 @@ export default function FamilyMemberScreen() {
       <SafeAreaView edges={['top']} style={[styles.root, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBack}>
-            <Text style={[styles.headerBackText, { color: colors.accent }]}>← Back</Text>
+            <Text style={[styles.headerBackText, { color: colors.accent }]}>{t('family.family_member_screen.back')}</Text>
           </Pressable>
-          <Text style={[styles.headerTitle, { color: colors.text_primary }]}>Member not found</Text>
+          <Text style={[styles.headerTitle, { color: colors.text_primary }]}>{t('family.family_member_screen.member_not_found')}</Text>
           <View style={styles.headerBack} />
         </View>
         <View style={styles.empty}>
           <Text style={[styles.emptyText, { color: colors.text_muted }]}>
-            This roster entry was removed. Add them again from Settings → Family Coaching.
+            {t('family.family_member_screen.this_roster_entry_was_removed')}
           </Text>
         </View>
       </SafeAreaView>
@@ -165,7 +167,7 @@ export default function FamilyMemberScreen() {
     <SafeAreaView edges={['top']} style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerBack}>
-          <Text style={[styles.headerBackText, { color: colors.accent }]}>← Back</Text>
+          <Text style={[styles.headerBackText, { color: colors.accent }]}>{t('family.family_member_screen.back')}</Text>
         </Pressable>
         <Text style={[styles.headerTitle, { color: colors.text_primary }]} numberOfLines={1}>
           {member.firstName}
@@ -176,7 +178,7 @@ export default function FamilyMemberScreen() {
           style={styles.headerBack}
         >
           <Text style={[styles.headerBackText, { color: colors.text_muted, textAlign: 'right' }]}>
-            Edit
+            {t('family.family_member_screen.edit')}
           </Text>
         </Pressable>
       </View>
@@ -252,7 +254,7 @@ export default function FamilyMemberScreen() {
                 {analyzing ? (
                   <ActivityIndicator color={colors.accent} />
                 ) : (
-                  <Text style={[styles.secondaryBtnText, { color: colors.accent }]}>Analyze last clip</Text>
+                  <Text style={[styles.secondaryBtnText, { color: colors.accent }]}>{t('family.family_member_screen.analyze_last_clip')}</Text>
                 )}
               </Pressable>
             )}
@@ -269,7 +271,7 @@ export default function FamilyMemberScreen() {
                 {comparing ? (
                   <ActivityIndicator color="#a78bfa" />
                 ) : (
-                  <Text style={[styles.secondaryBtnText, { color: '#a78bfa' }]}>Compare to last</Text>
+                  <Text style={[styles.secondaryBtnText, { color: '#a78bfa' }]}>{t('family.family_member_screen.compare_to_last')}</Text>
                 )}
               </Pressable>
             )}
@@ -299,12 +301,12 @@ export default function FamilyMemberScreen() {
               </View>
             )}
 
-            <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>LATEST SWING</Text>
+            <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>{t('family.family_member_screen.latest_swing')}</Text>
             <JuniorSwingResultCard analysis={latest} />
 
             {earlier && (
               <>
-                <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>VS EARLIER</Text>
+                <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>{t('family.family_member_screen.vs_earlier')}</Text>
                 <JuniorSwingCompare
                   left={earlier}
                   right={latest}
@@ -330,7 +332,7 @@ export default function FamilyMemberScreen() {
         ) : (
           <View style={[styles.empty, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.emptyTitle, { color: colors.text_primary }]}>
-              First swing coming up
+              {t('family.family_member_screen.first_swing_coming_up')}
             </Text>
             <Text style={[styles.emptyText, { color: colors.text_muted }]}>
               Tap &quot;Record {member.firstName}&apos;s swing&quot; above (or say it), capture on the glasses or phone, then &quot;Analyze {member.firstName}&apos;s swing.&quot; We&apos;ll start tracking progress from there.

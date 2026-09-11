@@ -164,6 +164,7 @@ import type { RulesDecision } from '../../types/penalty';
 import { getApiBaseUrl } from '../../services/apiBase';
 import { buildRoundEndSummary } from '../../services/roundEndSummary';
 import { holePar, holeData as resolvedHoleData } from '../../services/smartFinderService';
+import { useTranslation } from 'react-i18next';
 
 const NULL_HUD = { hole: null, par: null, yards: null, wind: null, playsLike: null };
 
@@ -194,6 +195,7 @@ async function proactiveLineFor(trigger: { directive: string; message: string })
 let openerPlayedThisProcess = false;
 
 export default function CaddieTab() {
+  const { t } = useTranslation();
   useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -3235,8 +3237,8 @@ export default function CaddieTab() {
   const _handleChangeModePress = () => {
     const options: RoundMode[] = ['break_100', 'break_90', 'break_80', 'free_play'];
     Alert.alert(
-      'Change Mode',
-      "Kevin's recommendations will adjust.",
+      t('caddie.alert.change_mode'),
+      t('caddie.alert.kevin_s_recommendations_will_adjust'),
       [
         ...options
           .filter(m => m !== mode)
@@ -3352,7 +3354,7 @@ export default function CaddieTab() {
           router.push('/smartfinder' as never);
         }}
         accessibilityRole="button"
-        accessibilityLabel="Open Smart Finder rangefinder"
+        accessibilityLabel={t('caddie.accessibility_label.open_smart_finder_rangefinder')}
       >
         <AppIcon name="locate-outline" size={22} color="#00C896" />
       </TouchableOpacity>
@@ -3637,7 +3639,7 @@ export default function CaddieTab() {
               onPress={() => router.push('/settings' as never)}
               hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
               accessibilityRole="button"
-              accessibilityLabel="Local Mode is on. Tap to open Settings."
+              accessibilityLabel={t('caddie.accessibility_label.local_mode_is_on_tap')}
               style={[styles.navBtn, { paddingHorizontal: 4 }]}
             >
               <Ionicons name="leaf-outline" size={20} color="#00C896" />
@@ -3663,7 +3665,7 @@ export default function CaddieTab() {
             // sectioned GlobalToolsMenu the ••• pill on every other tab uses.
             onPress={() => useToolsMenuStore.getState().open()}
             accessibilityRole="button"
-            accessibilityLabel="Open the Tools menu"
+            accessibilityLabel={t('caddie.accessibility_label.open_the_tools_menu')}
             hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }}
           >
             <Ionicons name="ellipsis-horizontal" size={18} color="#00C896" />
@@ -3730,7 +3732,7 @@ export default function CaddieTab() {
           onPress={() => triggerPaywall('trial_expired_banner', () => router.push('/paywall' as never))}
         >
           <Text style={[styles.trialBannerText, styles.trialBannerExpiredText]}>
-            Trial ended — Subscribe
+            {t('caddie.caddie_tab.trial_ended_subscribe')}
           </Text>
         </TouchableOpacity>
       )}
@@ -3917,7 +3919,7 @@ export default function CaddieTab() {
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <AppIcon name="warning-outline" size={14} color="#fbbf24" />
-            <Text style={styles.penaltyQuickBtnText}>+Penalty</Text>
+            <Text style={styles.penaltyQuickBtnText}>{t('caddie.caddie_tab.penalty')}</Text>
           </View>
         </TouchableOpacity>
       )}
@@ -3949,7 +3951,7 @@ export default function CaddieTab() {
           onPress={() => router.push('/(tabs)/play' as never)}
           activeOpacity={0.88}
         >
-          <Text style={styles.startRoundText}>Start Round</Text>
+          <Text style={styles.startRoundText}>{t('play.start_round')}</Text>
         </TouchableOpacity>
       </Animated.View>
 
@@ -3970,7 +3972,7 @@ export default function CaddieTab() {
           >
           <View style={styles.sheet}>
             <View style={styles.handle} />
-            <Text style={styles.sheetTitle}>Start Round</Text>
+            <Text style={styles.sheetTitle}>{t('play.start_round')}</Text>
             <ScrollView
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
@@ -3980,7 +3982,7 @@ export default function CaddieTab() {
               contentContainerStyle={{ paddingBottom: 80 }}
             >
 
-            <Text style={styles.sheetLabel}>Course</Text>
+            <Text style={styles.sheetLabel}>{t('caddie.caddie_tab.course')}</Text>
             <CoursePicker
               selected={selectedPickedCourse}
               onSelect={setSelectedPickedCourse}
@@ -4003,7 +4005,7 @@ export default function CaddieTab() {
               />
             )}
 
-            <Text style={styles.sheetLabel}>Holes</Text>
+            <Text style={styles.sheetLabel}>{t('dashboard.holes')}</Text>
             <View style={styles.pillRow}>
               {([
                 { label: '18 Holes', value: false },
@@ -4032,7 +4034,7 @@ export default function CaddieTab() {
                 back to the front nine if the loaded course turns out to be short. */}
             {nineHole && getCourseHoleCount(selectedPickedCourse?.id, 18) >= 18 && (
               <>
-                <Text style={styles.sheetLabel}>Which nine</Text>
+                <Text style={styles.sheetLabel}>{t('caddie.caddie_tab.which_nine')}</Text>
                 <View style={styles.pillRow}>
                   {([
                     { label: 'Front (1-9)',  value: false },
@@ -4052,7 +4054,7 @@ export default function CaddieTab() {
               </>
             )}
 
-            <Text style={styles.sheetLabel}>Format</Text>
+            <Text style={styles.sheetLabel}>{t('caddie.caddie_tab.format')}</Text>
             <View style={styles.pillRow}>
               {([
                 { label: 'Casual',      value: false },
@@ -4073,7 +4075,7 @@ export default function CaddieTab() {
               ))}
             </View>
 
-            <Text style={styles.sheetLabel}>Mode</Text>
+            <Text style={styles.sheetLabel}>{t('caddie.caddie_tab.mode')}</Text>
             <View style={[styles.modeGrid, W > 500 && styles.modeGridWide]}>
               {((['break_100', 'break_90', 'break_80', 'free_play'] as RoundMode[]).map(m => (
                 <TouchableOpacity
@@ -4117,10 +4119,10 @@ export default function CaddieTab() {
 
               return (
                 <View style={styles.ghostPickerSection}>
-                  <Text style={styles.sheetLabel}>Play against a past round?</Text>
-                  <Text style={styles.ghostPickerSub}>Optional — Kevin runs the match hole by hole.</Text>
+                  <Text style={styles.sheetLabel}>{t('caddie.caddie_tab.play_against_a_past_round')}</Text>
+                  <Text style={styles.ghostPickerSub}>{t('caddie.caddie_tab.optional_kevin_runs_the_match')}</Text>
                   {eligible.length === 0 ? (
-                    <Text style={styles.ghostPickerEmpty}>No past rounds on this course yet. Play one to unlock ghost mode.</Text>
+                    <Text style={styles.ghostPickerEmpty}>{t('caddie.caddie_tab.no_past_rounds_on_this')}</Text>
                   ) : (
                     <>
                       <TouchableOpacity
@@ -4128,7 +4130,7 @@ export default function CaddieTab() {
                         onPress={() => setSelectedGhostId(null)}
                       >
                         <Text style={[styles.ghostRowText, selectedGhostId === null && styles.ghostRowTextSelected]}>
-                          Solo round (skip)
+                          {t('caddie.caddie_tab.solo_round_skip')}
                         </Text>
                         {selectedGhostId === null && <Text style={styles.ghostRowCheck}>✓</Text>}
                       </TouchableOpacity>
@@ -4155,13 +4157,13 @@ export default function CaddieTab() {
 
             {/* Notes for Caddie — typed or voice-dictated, surfaces to Kevin's
                 round-context analysis on briefings and during play. */}
-            <Text style={styles.sheetLabel}>Notes for Kevin</Text>
+            <Text style={styles.sheetLabel}>{t('caddie.caddie_tab.notes_for_kevin')}</Text>
             <View style={styles.notesWrap}>
               <TextInput
                 style={styles.notesInput}
                 value={roundNotes}
                 onChangeText={setRoundNotes}
-                placeholder="Conditions, focus, anything Kevin should know…"
+                placeholder={t('caddie.placeholder.conditions_focus_anything_kevin_should')}
                 placeholderTextColor="#4b5563"
                 multiline
                 numberOfLines={3}
@@ -4181,7 +4183,7 @@ export default function CaddieTab() {
                   }
                 }}
                 accessibilityRole="button"
-                accessibilityLabel="Dictate notes"
+                accessibilityLabel={t('caddie.accessibility_label.dictate_notes')}
               >
                 <AppIcon name={notesDictating ? 'radio-outline' : 'mic'} size={18} color="#00C896" />
               </TouchableOpacity>
@@ -4193,7 +4195,7 @@ export default function CaddieTab() {
                   style={styles.findTeeBtn}
                   onPress={() => { void openTeeTimeSearch(selectedPickedCourse.name); }}
                 >
-                  <Text style={styles.findTeeBtnText}>Find Tee Time</Text>
+                  <Text style={styles.findTeeBtnText}>{t('caddie.caddie_tab.find_tee_time')}</Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity
@@ -4228,22 +4230,22 @@ export default function CaddieTab() {
         >
           <View style={{ backgroundColor: '#111827', borderRadius: 16, padding: 20, borderWidth: 1, borderColor: '#1f2937' }}>
             <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 4 }}>
-              No signal — ask me anyway
+              {t('caddie.caddie_tab.no_signal_ask_me_anyway')}
             </Text>
             <Text style={{ color: '#c2cad4', fontSize: 13, marginBottom: 6 }}>
-              I can’t hear you without a connection, but I can still answer yardages, club calls and the basics from what’s on your phone.
+              {t('caddie.caddie_tab.i_can_t_hear_you')}
             </Text>
             {/* 2026-06-28 (Tim) — the keyboard's own dictation mic (Gboard / iOS) is a
                 reliable, often-offline talk-to-text that works in this box for free —
                 more dependable than our network/on-device STT. Make it discoverable. */}
             <Text style={{ color: '#00C896', fontSize: 12, fontWeight: '600', marginBottom: 14 }}>
-              🎤 Prefer to talk? Tap the mic on your keyboard, then Send.
+              {t('caddie.caddie_tab.prefer_to_talk_tap_the')}
             </Text>
             <TextInput
               style={{ backgroundColor: '#0b0f17', color: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#1f2937', padding: 12, fontSize: 15, minHeight: 44 }}
               value={offlineFallbackText}
               onChangeText={setOfflineFallbackText}
-              placeholder="Type, or tap 🎤 on the keyboard to talk…"
+              placeholder={t('caddie.placeholder.type_or_tap_on_the')}
               placeholderTextColor="#4b5563"
               autoFocus
               returnKeyType="send"
@@ -4254,13 +4256,13 @@ export default function CaddieTab() {
                 style={{ flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#374151' }}
                 onPress={() => { setOfflineFallbackText(''); setOfflineFallbackOpen(false); }}
               >
-                <Text style={{ color: '#c2cad4', fontWeight: '600' }}>Close</Text>
+                <Text style={{ color: '#c2cad4', fontWeight: '600' }}>{t('caddie.caddie_tab.close')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={{ flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', backgroundColor: '#00C896' }}
                 onPress={handleOfflineAsk}
               >
-                <Text style={{ color: '#04241c', fontWeight: '700' }}>Ask</Text>
+                <Text style={{ color: '#04241c', fontWeight: '700' }}>{t('caddie.caddie_tab.ask')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -4298,7 +4300,7 @@ export default function CaddieTab() {
             >
 
             {/* ── Shot logging ── */}
-            <Text style={styles.sheetLabel}>Log Shot</Text>
+            <Text style={styles.sheetLabel}>{t('caddie.caddie_tab.log_shot')}</Text>
             <View style={styles.directionRow}>
               {(['left', 'straight', 'right'] as const).map(dir => (
                 <TouchableOpacity
@@ -4340,13 +4342,13 @@ export default function CaddieTab() {
                   style={styles.rulesChoiceBtn}
                   onPress={() => handleRulesChoice('play_forward')}
                 >
-                  <Text style={styles.rulesChoiceBtnText}>Play Forward{'\n'}(+1 stroke)</Text>
+                  <Text style={styles.rulesChoiceBtnText}>{t('caddie.caddie_tab.play_forward')}{'\n'}{t('caddie.caddie_tab.1_stroke')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.rulesChoiceBtn}
                   onPress={() => handleRulesChoice('stroke_and_distance')}
                 >
-                  <Text style={styles.rulesChoiceBtnText}>Stroke & Distance{'\n'}(+2 strokes)</Text>
+                  <Text style={styles.rulesChoiceBtnText}>{t('caddie.caddie_tab.stroke_distance')}{'\n'}{t('caddie.caddie_tab.2_strokes')}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -4365,7 +4367,7 @@ export default function CaddieTab() {
               </View>
             )}
 
-            <Text style={styles.sheetLabel}>Score</Text>
+            <Text style={styles.sheetLabel}>{t('dashboard.score')}</Text>
             <View style={styles.scoreRow}>
               <TouchableOpacity
                 style={styles.scoreBtn}
@@ -4382,7 +4384,7 @@ export default function CaddieTab() {
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.sheetLabel}>Putts</Text>
+            <Text style={styles.sheetLabel}>{t('scorecard.putts_label')}</Text>
             <View style={styles.scoreRow}>
               <TouchableOpacity
                 style={styles.scoreBtn}
@@ -4404,7 +4406,7 @@ export default function CaddieTab() {
               onPress={handleLogHole}
               disabled={holeScore === 0}
             >
-              <Text style={styles.startBtnText}>Log Score</Text>
+              <Text style={styles.startBtnText}>{t('caddie.caddie_tab.log_score')}</Text>
             </TouchableOpacity>
 
             {isRoundActive && (
@@ -4437,7 +4439,7 @@ export default function CaddieTab() {
                   if (roundId) router.push(`/recap/feelings?roundId=${roundId}` as never);
                 }}
               >
-                <Text style={styles.endRoundText}>End Round</Text>
+                <Text style={styles.endRoundText}>{t('play.end_round')}</Text>
               </TouchableOpacity>
             )}
             </ScrollView>
@@ -4452,7 +4454,7 @@ export default function CaddieTab() {
       {!showTour && (
         <QuickTutorial
           slug="caddie_intro"
-          title="Caddie"
+          title={t('caddie.title.caddie')}
           lines={[
             "This is your round home — start a round, see live yardages, log shots.",
             "Tap the mic badge or call my name to ask anything during the round.",

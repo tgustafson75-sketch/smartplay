@@ -731,6 +731,53 @@ const read = (rel: string) => {
   }
 };
 
+/**
+ * 2026-09-11 (release 1.5) — DOES THIS SCREEN STILL SAY THIS TO THE PLAYER?
+ *
+ * The phase-2 codemod replaced 2,044 English literals with t() calls, so 26 guards that grepped a
+ * source file for a sentence went red at once. Every one of them was asserting the right thing —
+ * "the no-round scorecard offers a way to recent rounds" — through the wrong proxy: the presence of
+ * characters in a .tsx file.
+ *
+ * This resolves the question the guards actually mean. The text counts as present if the file still
+ * holds the literal, OR if the file calls t('some.key') and en.json maps that key to the text. So a
+ * guard keeps working whether or not a string has been through the codemod yet, and it still fails
+ * if the sentence is deleted outright — which is the regression it exists to catch.
+ *
+ * It deliberately does NOT accept a key whose en.json value is missing: a t() call pointing at
+ * nothing renders the raw key to the player, and that must read as a failure, not a pass.
+ */
+const enLocale: Record<string, unknown> = (() => {
+  try { return JSON.parse(readBulk(path.resolve(__dirname, '../../i18n/locales/en.json'))); }
+  catch { return {}; }
+})();
+const enValueFor = (key: string): string | undefined => {
+  const v = key.split('.').reduce<unknown>(
+    (acc, part) => (acc && typeof acc === 'object' ? (acc as Record<string, unknown>)[part] : undefined),
+    enLocale,
+  );
+  return typeof v === 'string' ? v : undefined;
+};
+const saysToPlayer = (src: string, text: string): boolean => {
+  /**
+   * COMMENT-BLIND, and that is the whole point.
+   *
+   * The prose-assertion LOCK caught this within minutes of the codemod landing: moving
+   * "PRACTICE HISTORY" out of the JSX and into a locale key left the sentence behind in a COMMENT in
+   * the same file, so seven guards kept passing while the thing they guard had moved. A guard that
+   * matches its own documentation cannot fail. Strip comments before deciding anything.
+   * [[strip-comments-before-a-guard-matches]]
+   */
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+  if (code.includes(text)) return true;
+  const norm = text.trim().replace(/\s+/g, ' ');
+  for (const m of code.matchAll(/\bt\(\s*['"`]([\w.]+)['"`]/g)) {
+    const v = enValueFor(m[1]);
+    if (v && v.replace(/\s+/g, ' ').includes(norm)) return true;
+  }
+  return false;
+};
+
 // Tempo / transition (vision-derived, acoustic-verified)
 check('poseAnalysisApi exports deriveSwingTempo',
   /export\s+async\s+function\s+deriveSwingTempo/.test(read('services/poseAnalysisApi.ts')),
@@ -3687,7 +3734,7 @@ check('First-run tour: auto on the first few opens, skippable, replayable from S
       /useOnboardingTourStore\.getState\(\)\.noteAppOpen\(\)/.test(layout) &&
       /if \(useOnboardingTourStore\.getState\(\)\.shouldAutoShow\(\)\) setShowTour\(true\)/.test(caddie) &&
       /steps=\{ONBOARDING_TOUR_STEPS\}/.test(caddie) && /completeTour\(\)/.test(caddie) &&
-      /relaunchTour\(\)/.test(settings) && /Show Me Around/.test(settings) &&
+      /relaunchTour\(\)/.test(settings) && saysToPlayer(settings, "Show Me Around") &&
       // MEASURED spotlights: a target registry + a measure hook, real elements instrumented, and the
       // overlay cuts a hole over the measured bounds (with a geometry fallback).
       /export function setTourTarget/.test(read('store/tourTargets.ts')) &&
@@ -4957,7 +5004,7 @@ check('Scorecard empty state taps through to the dashboard',
   // card now navigates to the dashboard with an explicit affordance.
   (() => {
     const sc = read('app/(tabs)/scorecard.tsx');
-    return /onPress=\{\(\) => router\.push\('\/\(tabs\)\/dashboard' as never\)\}/.test(sc) && /View Recent Rounds/.test(sc);
+    return /onPress=\{\(\) => router\.push\('\/\(tabs\)\/dashboard' as never\)\}/.test(sc) && saysToPlayer(sc, "View Recent Rounds");
   })(),
   'no-round scorecard navigates to the dashboard instead of a dead "Recent Rounds" link');
 
@@ -5039,8 +5086,8 @@ check('Coach Mode: selected-player hero + real day-streak metric (mockup)',
   (() => {
     const cm = read('app/swinglab/coach-mode.tsx');
     return (
-      /const dayStreak = useMemo/.test(cm) && /swings logged/.test(cm) &&
-      /heroCard/.test(cm) && /Day streak/.test(cm) &&
+      /const dayStreak = useMemo/.test(cm) && saysToPlayer(cm, "swings logged") &&
+      /heroCard/.test(cm) && saysToPlayer(cm, "Day streak") &&
       /streak broken if no session today\/yesterday/.test(cm)
     );
   })(),
@@ -5072,7 +5119,7 @@ check('SwingLab hub: mockup-driven sections + Smart Motion hero + branded featur
       /function SmartMotionHero/.test(sl) &&
       /ANALYZE & IMPROVE/.test(sl) && /PRACTICE BETTER/.test(sl) && /PLAY SMARTER/.test(sl) &&
       /feature-smartmotion\.png/.test(sl) &&
-      /Swing Analysis/.test(sl) && /Acoustic Detection/.test(sl) && /Body Mechanics/.test(sl)
+      saysToPlayer(sl, "Swing Analysis") && saysToPlayer(sl, "Acoustic Detection") && saysToPlayer(sl, "Body Mechanics")
     );
   })(),
   'sectioned layout: Smart Motion hero (branded feature row) + the three intent sections');
@@ -5201,7 +5248,7 @@ check('Play: opening a searched course shows loading + a retry hint (no silent d
     const p = read('app/(tabs)/play.tsx');
     return (
       /setSelectError\(/.test(p) &&                 // failure path sets a user-facing hint
-      /Opening course…/.test(p) &&                  // fresh-load feedback (card spinner only shows post-select)
+      saysToPlayer(p, "Opening course\u2026") &&                  // fresh-load feedback (card spinner only shows post-select)
       /!selectedLoading && selectError/.test(p)     // the hint is actually rendered
     );
   })(),
@@ -5670,7 +5717,7 @@ check('Hotel Mode: gyro rep detector reads swings + putts, never fabricates from
     // Wiring: hub card + screen + CNS/points crediting present.
     const scr = read('app/swinglab/indoor.tsx');
     const wired = /route: '\/swinglab\/indoor'/.test(read('app/(tabs)/swinglab.tsx')) &&
-      /recordSwingMetrics/.test(scr) && /awardPracticePoints/.test(scr) && /no ball flight is claimed indoors/i.test(scr);
+      /recordSwingMetrics/.test(scr) && /awardPracticePoints/.test(scr) && saysToPlayer(scr, "no ball flight is claimed indoors");
     return swingsOk && puttsOk && noise === 0 && wired;
   })(),
   'the real IndoorRepDetector reads 5/5 synthetic swings (sane tempo, ≥80 consistency) and 4/4 putts with an accel/decel call, produces ZERO reps from hand jitter, and the screen is wired to the hub + points + CNS with the honest no-ball-flight label');
@@ -6070,7 +6117,7 @@ check('SmartPump third rail: workout import → TRAINING → PERFORMANCE dashboa
       // Dashboard reads the store, builds the series, and renders the third card.
       /useWorkoutStore/.test(dash) &&
       /computeWorkoutPerformance/.test(dash) &&
-      /TRAINING → PERFORMANCE/.test(dash) &&
+      saysToPlayer(dash, "TRAINING \u2192 PERFORMANCE") &&
       // Ingest service + settings entry point + server route all present.
       /ingestSmartPumpExport/.test(read('services/smartPumpIngest.ts')) &&
       // 2026-08-22 — asserts the ENTRY POINTS, not the name of the inner call. Settings now goes
@@ -6080,7 +6127,7 @@ check('SmartPump third rail: workout import → TRAINING → PERFORMANCE dashboa
       /importSmartPumpWithFeedback/.test(read('services/smartPumpIngest.ts')) &&
       /importSmartPumpWithFeedback/.test(read('app/settings.tsx')) &&
       /importSmartPumpWithFeedback/.test(dash) &&
-      /Import workouts from SmartPump/.test(dash) &&
+      saysToPlayer(dash, "Import workouts from SmartPump") &&
       !/no_workouts_found/.test(dash) &&
       !/no_workouts_found/.test(read('app/settings.tsx')) &&
       /\/api\/workout-import/.test(read('services/smartPumpIngest.ts')) &&
@@ -6594,7 +6641,7 @@ check('Bilateral: link two angles → merged read (impact-anchored, honest 2D)',
       // impact anchor read from the shot's detectionOffsetSeconds
       /s\.shots\?\.\[0\]\?\.detectionOffsetSeconds/.test(view);
     const entryOk =
-      /Link a second angle \(bilateral\)/.test(detail) &&
+      saysToPlayer(detail, "Link a second angle (bilateral)") &&
       /router\.push\(`\/swinglab\/bilateral\?a=\$\{swing_id\}&b=\$\{os\.id\}`/.test(detail);
     return svcOk && viewOk && entryOk;
   })(),
@@ -6692,7 +6739,7 @@ check('Upload angle picker: imported clip read at its true angle (DTL vs face-on
     const store = read('store/swingSessionStore.ts');
     const uiOk =
       /const \[angle, setAngle\] = useState<'down_the_line' \| 'face_on'>\('down_the_line'\)/.test(screen) &&
-      /CAMERA ANGLE/.test(screen) &&
+      saysToPlayer(screen, "CAMERA ANGLE") &&
       /onPress=\{\(\) => setAngle\('face_on'\)\}/.test(screen) &&
       /angleOverride: angle/.test(screen);
     const svcOk =
@@ -7097,14 +7144,14 @@ check('Honesty: putt distance + placeholder course layout are flagged as estimat
     return (
       // putt distance shows ~N and an EST label (was a bare number + "FEET")
       /distanceFeet != null \? `~\$\{distanceFeet\}` : '—'/.test(sf) &&
-      /FEET \(EST\)/.test(sf) &&
+      saysToPlayer(sf, "FEET (EST)") &&
       // course detail flags the generic placeholder layout + clears it on real data
       /const \[layoutEstimated, setLayoutEstimated\] = useState\(false\)/.test(cd) &&
       /setLayoutEstimated\(!realHoles\)/.test(cd) &&
       // 2026-06-16 — API enrichment now preserves the curated location (no town
       // flap) but still clears the estimate flag when real layout lands.
       /setCourse\(prev => \(prev \? \{ \.\.\.c, location: prev\.location, club_name: prev\.club_name \} : c\)\);\s*setLayoutEstimated\(false\)/.test(cd) &&
-      /Estimated layout — full course data not available yet\./.test(cd)
+      saysToPlayer(cd, "Estimated layout — full course data not available yet.")
     );
   })(),
   'the uncalibrated putt distance reads as an estimate (~N, FEET (EST)) and an un-catalogued course shows an "Estimated layout" banner instead of presenting the 18×par-4×380y placeholder as a real scorecard');
@@ -9458,7 +9505,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
         /s\.manual\[club\] != null\) out\[club\] = Math\.round\(s\.manual\[club\]! \+ ROLL_YARDS\[club\]\)/.test(store) &&
         /useClubStatsStore\.getState\(\)\.setManual/.test(screen) &&
         /yards: st\.carryFor\(c\), measured: st\.hasCarry\(c\), stated: st\.hasManual\(c\)/.test(screen) &&
-        /MY BAG/.test(dash) && /router\.push\('\/practice\/fit-profile'/.test(dash)
+        saysToPlayer(dash, "MY BAG") && /router\.push\('\/practice\/fit-profile'/.test(dash)
       );
     })(),
     'editable My Bag: store setManual/distanceFor → Fit Profile ladder + dashboard card + caddie yardages');
@@ -9552,7 +9599,7 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'flop vs a high read = on; vs a low read = off; no departure = honest "couldn\'t read"; feedback never claims roll/check/release (single point can\'t see it)');
 }
 
-// ─── Voice racing on swing navigation (2026-06-15, Tim) ─────────────────────────
+// ─── Voice racing on swing navigation (2026-06-15, Tim) ─────────────────────────────────────────────────────────
 check('Swing detail: stops voice on swing CHANGE, not just unmount (no late-catch-up racing)',
   (() => {
     const src = read('app/swinglab/swing/[swing_id].tsx');

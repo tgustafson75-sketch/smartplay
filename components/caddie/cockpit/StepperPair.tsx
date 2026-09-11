@@ -14,6 +14,7 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
 
 export interface StepperPairProps {
   holeNumber: number;
@@ -40,6 +41,7 @@ export function StepperPair({
   onChangeShots,
   onChangePutts,
 }: StepperPairProps) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
 
   // Score-to-par label below the SHOTS cell. Birdie/Par/Bogey/etc.
@@ -67,7 +69,7 @@ export function StepperPair({
   return (
     <View style={styles.row}>
       <Cell
-        label="HOLE"
+        label={t('cockpit_stepper_pair.label.hole')}
         value={String(holeNumber)}
         sub={`Par ${par}`}
         colors={colors}
@@ -75,7 +77,7 @@ export function StepperPair({
         onPlus={() => onChangeHole(Math.min(totalHoles, holeNumber + 1))}
       />
       <Cell
-        label="SHOTS"
+        label={t('cockpit_stepper_pair.label.shots')}
         value={typeof shots === 'number' ? String(shots) : '—'}
         sub={diffLabel}
         subColor={diffColor}
@@ -84,7 +86,7 @@ export function StepperPair({
         onPlus={() => onChangeShots((shots ?? 0) + 1)}
       />
       <Cell
-        label="PUTTS"
+        label={t('scorecard.putts')}
         value={typeof putts === 'number' ? String(putts) : '—'}
         sub={puttsLabel}
         colors={colors}

@@ -91,6 +91,7 @@ import { effectiveEyeHeightM, observeCalibration } from '../services/rangefinder
 import { featureOnAimLine } from '../services/aimedFeature';
 import { useFlagGate } from '../hooks/useFlagGate';
 import { buildAimCandidates } from '../services/aimCandidates';
+import { useTranslation } from 'react-i18next';
 
 const REFRESH_MS = 3_000;
 const CANVAS_W_FRACTION = 0.92;
@@ -108,6 +109,7 @@ const CANVAS_W_FRACTION = 0.92;
  * the standard header.
  */
 export default function SmartFinder() {
+  const { t } = useTranslation();
   // 2026-09-06 — remote kill switch. Redirects to the Caddie screen if `smartfinder` is off, whether it
   // was already off on entry or flips off while this screen is open. No message, by instruction.
   useFlagGate('smartfinder');
@@ -326,9 +328,9 @@ export default function SmartFinder() {
     <SafeAreaView style={styles.svgContainer}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => safeBack()} style={styles.headerBtn}>
-          <Text style={styles.headerBtnText}>← Caddie</Text>
+          <Text style={styles.headerBtnText}>{t('smartfinder.smart_finder.caddie')}</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>SmartFinder</Text>
+        <Text style={styles.title}>{t('smartfinder.smart_finder.smartfinder')}</Text>
         <View style={[styles.headerBtn, { flexDirection: 'row', alignItems: 'center', gap: 10 }]}>
           <GPSQuality reading={gps} showText />
         </View>
@@ -340,19 +342,19 @@ export default function SmartFinder() {
           onPress={() => setMode('target')}
           style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#003d20', borderRadius: 20, borderWidth: 1, borderColor: '#00C896' }}
           accessibilityRole="button"
-          accessibilityLabel="Switch to camera view"
+          accessibilityLabel={t('smartfinder.accessibility_label.switch_to_camera_view')}
         >
           <Ionicons name="camera-outline" size={16} color="#00C896" />
-          <Text style={{ color: '#00C896', fontSize: 13, fontWeight: '700' }}>Camera</Text>
+          <Text style={{ color: '#00C896', fontSize: 13, fontWeight: '700' }}>{t('smartfinder.smart_finder.camera')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => setMode('putt')}
           style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#0a1e12', borderRadius: 20, borderWidth: 1, borderColor: '#1e3a28' }}
           accessibilityRole="button"
-          accessibilityLabel="Switch to putt camera"
+          accessibilityLabel={t('smartfinder.accessibility_label.switch_to_putt_camera')}
         >
           <Ionicons name="golf-outline" size={16} color="#9ca3af" />
-          <Text style={{ color: '#c2cad4', fontSize: 13, fontWeight: '700' }}>Putt</Text>
+          <Text style={{ color: '#c2cad4', fontSize: 13, fontWeight: '700' }}>{t('smartfinder.smart_finder.putt')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -382,9 +384,9 @@ export default function SmartFinder() {
             accessibilityState={{ disabled: prevHole == null }}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Text style={[styles.holeBtnText, prevHole == null && styles.holeBtnTextDisabled]}>← Prev</Text>
+            <Text style={[styles.holeBtnText, prevHole == null && styles.holeBtnTextDisabled]}>{t('smartfinder.smart_finder.prev')}</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => setHolePickerOpen(true)} accessibilityRole="button" accessibilityLabel="Pick hole">
+          <TouchableOpacity onPress={() => setHolePickerOpen(true)} accessibilityRole="button" accessibilityLabel={t('smartfinder.accessibility_label.pick_hole')}>
             <Text style={styles.holeNavLabel}>HOLE {currentHole} ▾</Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -396,7 +398,7 @@ export default function SmartFinder() {
             accessibilityState={{ disabled: nextHole == null }}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Text style={[styles.holeBtnText, nextHole == null && styles.holeBtnTextDisabled]}>Next →</Text>
+            <Text style={[styles.holeBtnText, nextHole == null && styles.holeBtnTextDisabled]}>{t('smartfinder.smart_finder.next')}</Text>
           </TouchableOpacity>
         </View>
         )}
@@ -420,9 +422,9 @@ export default function SmartFinder() {
           <TouchableOpacity
             onPress={() => setOffCourse(true)}
             accessibilityRole="button"
-            accessibilityLabel="Practice measure — measure distances without a hole"
+            accessibilityLabel={t('smartfinder.accessibility_label.practice_measure_measure_distances_without')}
           >
-            <Text style={styles.practiceToggle}>PRACTICE MEASURE</Text>
+            <Text style={styles.practiceToggle}>{t('smartfinder.smart_finder.practice_measure')}</Text>
           </TouchableOpacity>
         )}
 
@@ -435,9 +437,9 @@ export default function SmartFinder() {
             style={styles.refreshGpsBtn}
             onPress={() => { void refreshGpsAndReconcile(); }}
             accessibilityRole="button"
-            accessibilityLabel="Refresh GPS — reconcile current hole"
+            accessibilityLabel={t('smartfinder.accessibility_label.refresh_gps_reconcile_current_hole')}
           >
-            <Text style={styles.refreshGpsBtnText}>📍  Refresh GPS / Where am I?</Text>
+            <Text style={styles.refreshGpsBtnText}>{t('smartfinder.smart_finder.refresh_gps_where_am_i')}</Text>
           </TouchableOpacity>
         )}
 
@@ -495,6 +497,7 @@ function CameraSmartFinder({
   height: number;
   autoRead?: boolean;
 }) {
+  const { t } = useTranslation();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
@@ -822,9 +825,9 @@ function CameraSmartFinder({
       <SafeAreaView style={styles.cameraContainer}>
         <View style={styles.permBox}>
           <ActivityIndicator color="#00C896" />
-          <Text style={[styles.permText, { marginTop: 12 }]}>Checking camera permission…</Text>
+          <Text style={[styles.permText, { marginTop: 12 }]}>{t('smartfinder.camera_smart_finder.checking_camera_permission')}</Text>
           <TouchableOpacity style={styles.backLink} onPress={onClose}>
-            <Text style={styles.backLinkText}>← Back</Text>
+            <Text style={styles.backLinkText}>{t('smartfinder.camera_smart_finder.back')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -835,9 +838,9 @@ function CameraSmartFinder({
     return (
       <SafeAreaView style={styles.cameraContainer}>
         <View style={styles.permBox}>
-          <Text style={styles.permTitle}>Camera Access</Text>
+          <Text style={styles.permTitle}>{t('smartfinder.camera_smart_finder.camera_access')}</Text>
           <Text style={styles.permText}>
-            SmartFinder uses the camera to aim at your target. Your camera feed never leaves your device.
+            {t('smartfinder.camera_smart_finder.smartfinder_uses_the_camera_to')}
           </Text>
           <TouchableOpacity
             style={styles.permBtn}
@@ -851,7 +854,7 @@ function CameraSmartFinder({
             </Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.backLink} onPress={onClose}>
-            <Text style={styles.backLinkText}>← Back</Text>
+            <Text style={styles.backLinkText}>{t('smartfinder.camera_smart_finder.back')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -949,7 +952,7 @@ function CameraSmartFinder({
               onPress={() => { void runSceneRead(); }}
               style={[sfStyles.toolOrb, sceneReading && sfStyles.toolOrbBusy]}
               accessibilityRole="button"
-              accessibilityLabel="AI Read — snap and read how to play this shot"
+              accessibilityLabel={t('smartfinder.accessibility_label.ai_read_snap_and_read')}
             >
               <Ionicons name={sceneReading ? 'sync' : 'eye'} size={22} color="#88F700" />
             </TouchableOpacity>
@@ -969,7 +972,7 @@ function CameraSmartFinder({
               }}
               style={[sfStyles.toolOrb, (recording || capturing) && { opacity: 0.4 }]}
               accessibilityRole="button"
-              accessibilityLabel="Take a photo and add it to this hole"
+              accessibilityLabel={t('smartfinder.accessibility_label.take_a_photo_and_add')}
             >
               <Ionicons name={capturing ? 'sync' : 'camera'} size={22} color="#88F700" />
             </TouchableOpacity>
@@ -996,7 +999,7 @@ function CameraSmartFinder({
           style={styles.cameraIconBtn}
           onPress={onClose}
           accessibilityRole="button"
-          accessibilityLabel="Close camera and return"
+          accessibilityLabel={t('smartfinder.accessibility_label.close_camera_and_return')}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
           <Text style={styles.cameraIconText}>←</Text>
@@ -1049,11 +1052,11 @@ function CameraSmartFinder({
             borderColor: 'rgba(136,247,0,0.35)', padding: 16,
           }}
           accessibilityRole="button"
-          accessibilityLabel="Scene read. Tap to dismiss."
+          accessibilityLabel={t('smartfinder.accessibility_label.scene_read_tap_to_dismiss')}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
             <Ionicons name="eye" size={14} color="#88F700" />
-            <Text style={{ color: '#88F700', fontSize: 10, fontWeight: '900', letterSpacing: 1.2 }}>SCENE READ</Text>
+            <Text style={{ color: '#88F700', fontSize: 10, fontWeight: '900', letterSpacing: 1.2 }}>{t('smartfinder.camera_smart_finder.scene_read')}</Text>
             <View style={{ flex: 1 }} />
             <Ionicons name="close" size={16} color="rgba(255,255,255,0.5)" />
           </View>
@@ -1212,6 +1215,7 @@ function TargetCameraOverlay({
   /** Double-tap on the scene: aim there AND magnify. The camera + its zoom live in the parent. */
   onPrecisionRead?: (point: { xNorm: number; yNorm: number }) => void;
 }) {
+  const { t } = useTranslation();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   // SF fix #3 (owner Tim — "user-stated yardage ignored") — the target overlay
@@ -1771,7 +1775,7 @@ function TargetCameraOverlay({
             MapView path's static-distance caption copy/style (geometryMsgText).
             Hidden when reason === 'ok' (live). */}
         {yards.reason !== 'ok' && targetYards != null && (
-          <Text style={styles.targetStaticCaption}>scorecard distance · aim not live</Text>
+          <Text style={styles.targetStaticCaption}>{t('smartfinder.target_camera_overlay.scorecard_distance_aim_not_live')}</Text>
         )}
         {/* 2026-06-25 (Tim — declutter) — COMPACT-by-default intel card. At rest it
             shows only the answer: club + yardage + one safe-side line. The full
@@ -1841,21 +1845,21 @@ function TargetCameraOverlay({
             <>
               <View style={styles.targetIntelTopRow}>
                 <View style={styles.targetIntelMetric}>
-                  <Text style={styles.targetIntelLabel}>RAW</Text>
+                  <Text style={styles.targetIntelLabel}>{t('smartfinder.target_camera_overlay.raw')}</Text>
                   <Text style={styles.targetIntelValue}>{targetYards ?? '—'}</Text>
                 </View>
                 <View style={styles.targetIntelMetric}>
-                  <Text style={styles.targetIntelLabel}>PLAYS</Text>
+                  <Text style={styles.targetIntelLabel}>{t('smartfinder.target_camera_overlay.plays')}</Text>
                   <Text style={styles.targetIntelValueAccent}>{effectiveYards ?? '—'}</Text>
                 </View>
                 <View style={styles.targetIntelMetric}>
-                  <Text style={styles.targetIntelLabel}>CLUB</Text>
+                  <Text style={styles.targetIntelLabel}>{t('scorecard.col_club')}</Text>
                   {/* SF fix #1 — single-source on shotRead.club so the card can
                       NEVER show two different clubs. */}
                   <Text style={styles.targetIntelValue}>{shotRead?.club ?? adjustedClub ?? '—'}</Text>
                 </View>
                 <View style={styles.targetIntelMetric}>
-                  <Text style={styles.targetIntelLabel}>CONF</Text>
+                  <Text style={styles.targetIntelLabel}>{t('smartfinder.target_camera_overlay.conf')}</Text>
                   <Text style={styles.targetIntelValue}>{confidenceLabel}</Text>
                 </View>
               </View>
@@ -1921,6 +1925,7 @@ function TargetCameraOverlay({
 }
 
 function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGranted: boolean }) {
+  const { t } = useTranslation();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const pitchRef = useRef(0);
@@ -2075,7 +2080,7 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
             <View style={{ position: 'absolute', left: '50%', width: 1.5, height: 14, backgroundColor: 'rgba(255,255,255,0.55)', top: -4, marginLeft: -0.75 }} />
             <View style={{ position: 'absolute', left: `${50 + Math.max(-45, Math.min(45, (liveSlopePct ?? 0) * 5))}%`, width: 12, height: 12, borderRadius: 6, marginLeft: -6, backgroundColor: slopeColor(liveSlopePct) }} />
           </View>
-          <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 9, marginTop: 6, fontWeight: '600' }}>estimate · hold steady over the line</Text>
+          <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 9, marginTop: 6, fontWeight: '600' }}>{t('smartfinder.putt_camera_overlay.estimate_hold_steady_over_the')}</Text>
         </View>
       </View>
 
@@ -2123,9 +2128,9 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
           fix as the target-mode strip; these two consumers were missed). */}
       <View style={[styles.bottomPanel, { paddingBottom: 10 }]} pointerEvents="box-none">
         {!pointA ? (
-          <Text style={styles.instructionText}>Tap your ball position (point A)</Text>
+          <Text style={styles.instructionText}>{t('smartfinder.putt_camera_overlay.tap_your_ball_position_point')}</Text>
         ) : !pointB ? (
-          <Text style={styles.instructionText}>Tap the hole (point B)</Text>
+          <Text style={styles.instructionText}>{t('smartfinder.putt_camera_overlay.tap_the_hole_point_b')}</Text>
         ) : (
           <>
             <View style={styles.puttResultRow}>
@@ -2133,26 +2138,26 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
                 <Text style={styles.puttResultValue}>{distanceFeet != null ? `~${distanceFeet}` : '—'}</Text>
                 {/* 2026-06-14 (audit) — mark the uncalibrated pixel→feet heuristic as an
                     estimate, like SLOPE/READ; it's a rough visual reference, not a measure. */}
-                <Text style={styles.puttResultLabel}>FEET (EST)</Text>
+                <Text style={styles.puttResultLabel}>{t('smartfinder.putt_camera_overlay.feet_est')}</Text>
               </View>
               <View style={styles.puttDivider} />
               <View style={styles.puttResultItem}>
                 <Text style={[styles.puttResultValue, { color: slopeColor(slopePct) }]}>
                   {slopePct != null ? `${slopePct > 0 ? '+' : ''}${slopePct}%` : '—'}
                 </Text>
-                <Text style={styles.puttResultLabel}>SLOPE</Text>
+                <Text style={styles.puttResultLabel}>{t('smartfinder.putt_camera_overlay.slope')}</Text>
               </View>
             </View>
             <Text style={styles.puttHint}>{slopePct != null ? readSlope(slopePct) : 'Hold phone level over ball to read slope.'}</Text>
             {puttRead ? (
               <View style={{ marginTop: 10, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#00C896', backgroundColor: 'rgba(0,200,150,0.12)' }}>
-                <Text style={{ color: '#00C896', fontSize: 10, fontWeight: '900', letterSpacing: 1 }}>YOUR READ</Text>
+                <Text style={{ color: '#00C896', fontSize: 10, fontWeight: '900', letterSpacing: 1 }}>{t('smartfinder.putt_camera_overlay.your_read')}</Text>
                 <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700', marginTop: 3 }}>{puttRead}</Text>
-                <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 9, marginTop: 5 }}>estimate from phone tilt — trust your own read too</Text>
+                <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 9, marginTop: 5 }}>{t('smartfinder.putt_camera_overlay.estimate_from_phone_tilt_trust')}</Text>
               </View>
             ) : null}
             <TouchableOpacity style={styles.clearBtn} onPress={reset}>
-              <Text style={styles.clearBtnText}>Reset</Text>
+              <Text style={styles.clearBtnText}>{t('smartfinder.putt_camera_overlay.reset')}</Text>
             </TouchableOpacity>
           </>
         )}
@@ -2201,23 +2206,24 @@ function readSlope(pct: number): string {
 // ─── Target view (SVG tap-to-target) ─────────────────────────────────────────
 
 function TargetView({ geometry, width }: { geometry: HoleGeometry | null; width: number }) {
+  const { t } = useTranslation();
   const styles = useStyles();
   const [tap, setTap] = useState<{ xPx: number; yPx: number; yards: number; approx: boolean } | null>(null);
 
   if (!geometry || !geometry.tee || !geometry.green) {
-    return <View style={styles.canvasWrap}><Text style={styles.empty}>Course geometry isn&apos;t available for this hole.</Text></View>;
+    return <View style={styles.canvasWrap}><Text style={styles.empty}>{t('smartfinder.target_view.course_geometry_isn_t_available')}</Text></View>;
   }
   const tee = geometry.tee;
   const green = geometry.green;
   const fix = getLastFix();
   if (!fix) {
-    return <View style={styles.canvasWrap}><Text style={styles.empty}>Waiting for GPS — make sure location permission is granted.</Text></View>;
+    return <View style={styles.canvasWrap}><Text style={styles.empty}>{t('smartfinder.target_view.waiting_for_gps_make_sure')}</Text></View>;
   }
   const axisYards = haversineYards(tee, green);
   // 2026-07-20 (white-screen guard) — `<= 0` misses NaN (NaN <= 0 is false); a non-finite
   // tee/green coordinate would flow into the target-canvas <Circle>/<Line> and crash
   // react-native-svg. `!(axisYards > 0)` rejects NaN/Infinity too.
-  if (!(axisYards > 0)) return <View style={styles.canvasWrap}><Text style={styles.empty}>Hole geometry invalid.</Text></View>;
+  if (!(axisYards > 0)) return <View style={styles.canvasWrap}><Text style={styles.empty}>{t('smartfinder.target_view.hole_geometry_invalid')}</Text></View>;
 
   // 2026-07-24 (audit — SVG NaN parity with L1HolePreview) — a non-finite projection (e.g. a bad
   // fix.location) would flow through xRange = Math.max(60, NaN) = NaN into the SVG and white-screen.
@@ -2257,16 +2263,16 @@ function TargetView({ geometry, width }: { geometry: HoleGeometry | null; width:
 
   return (
     <View style={styles.canvasWrap}>
-      <Text style={styles.canvasHint}>Tap anywhere on the hole to get yardage.</Text>
+      <Text style={styles.canvasHint}>{t('smartfinder.target_view.tap_anywhere_on_the_hole')}</Text>
       <Svg width={width} height={canvasH + halfPad * 2} onPress={handlePress as never}>
         <Rect x={0} y={0} width={width} height={canvasH + halfPad * 2} fill="#0a1f12" rx={12} />
         <Line x1={teePos.sx} y1={teePos.sy} x2={greenPos.sx} y2={greenPos.sy} stroke="#1e3a28" strokeWidth={1} strokeDasharray="4 4" />
         <Circle cx={teePos.sx} cy={teePos.sy} r={6} fill="#6b7280" />
-        <SvgText x={teePos.sx} y={teePos.sy + 18} fill="#9ca3af" fontSize={10} textAnchor="middle">TEE</SvgText>
+        <SvgText x={teePos.sx} y={teePos.sy + 18} fill="#9ca3af" fontSize={10} textAnchor="middle">{t('smartfinder.target_view.tee')}</SvgText>
         <Circle cx={greenPos.sx} cy={greenPos.sy} r={10} fill="#003d20" stroke="#00C896" strokeWidth={1.5} />
-        <SvgText x={greenPos.sx} y={greenPos.sy - 14} fill="#00C896" fontSize={10} textAnchor="middle">GREEN</SvgText>
+        <SvgText x={greenPos.sx} y={greenPos.sy - 14} fill="#00C896" fontSize={10} textAnchor="middle">{t('smartfinder.target_view.green')}</SvgText>
         <Circle cx={playerPos.sx} cy={playerPos.sy} r={7} fill="#F5A623" stroke="#0a1f12" strokeWidth={2} />
-        <SvgText x={playerPos.sx} y={playerPos.sy + 22} fill="#F5A623" fontSize={9} textAnchor="middle" fontWeight="700">YOU</SvgText>
+        <SvgText x={playerPos.sx} y={playerPos.sy + 22} fill="#F5A623" fontSize={9} textAnchor="middle" fontWeight="700">{t('smartfinder.target_view.you')}</SvgText>
         {tap && (
           <>
             <Path d={`M ${playerPos.sx} ${playerPos.sy} L ${tap.xPx} ${tap.yPx}`} stroke="#ffffff" strokeWidth={1.5} strokeDasharray="3 3" />
@@ -2276,7 +2282,7 @@ function TargetView({ geometry, width }: { geometry: HoleGeometry | null; width:
         )}
       </Svg>
       {tap && <Text style={styles.tapResult}>{tap.yards} yards to tap</Text>}
-      {tap && tap.approx && <Text style={styles.tapResult}>Approximate due to GPS quality.</Text>}
+      {tap && tap.approx && <Text style={styles.tapResult}>{t('smartfinder.target_view.approximate_due_to_gps_quality')}</Text>}
     </View>
   );
 }
@@ -2290,6 +2296,7 @@ function MapView({
   weather: WeatherSnapshot | null;
   shotBearingDeg: number | null;
 }) {
+  const { t } = useTranslation();
   const styles = useStyles();
   const router = useRouter();
   if (!geometry || !geometry.tee || !geometry.green) {
@@ -2320,11 +2327,11 @@ function MapView({
       <View style={styles.canvasWrap}>
         <View style={styles.standardWrap}>
           <View style={styles.standardRow}>
-            <BigCell label="FRONT" value={yards.front} playsLikeValue={playsLike(yards.front)} />
+            <BigCell label={t('smartfinder.label.front')} value={yards.front} playsLikeValue={playsLike(yards.front)} />
             <View style={styles.standardDivider} />
-            <BigCell label="MIDDLE" value={yards.middle} playsLikeValue={playsLike(yards.middle)} emphasis />
+            <BigCell label={t('smartfinder.label.middle')} value={yards.middle} playsLikeValue={playsLike(yards.middle)} emphasis />
             <View style={styles.standardDivider} />
-            <BigCell label="BACK" value={yards.back} playsLikeValue={playsLike(yards.back)} />
+            <BigCell label={t('smartfinder.label.back')} value={yards.back} playsLikeValue={playsLike(yards.back)} />
           </View>
           {geometryMsg && (
             <View style={styles.geometryMsgRow}>
@@ -2343,7 +2350,7 @@ function MapView({
                   style={styles.markGreenBtn}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.markGreenBtnText}>Mark this green for live yardages</Text>
+                  <Text style={styles.markGreenBtnText}>{t('smartfinder.map_view.mark_this_green_for_live')}</Text>
                 </TouchableOpacity>
               ) : null}
             </View>
@@ -2351,7 +2358,7 @@ function MapView({
         </View>
         {geometry && geometry.hazards.length > 0 && (
           <View style={styles.hazardList}>
-            <Text style={styles.hazardHeading}>HAZARDS</Text>
+            <Text style={styles.hazardHeading}>{t('smartfinder.map_view.hazards')}</Text>
             {geometry.hazards.map((h, i) => (
               <Text key={i} style={styles.hazardItem}>• {h.label}</Text>
             ))}
@@ -2388,6 +2395,7 @@ function HolePickerModal({
   onClose: () => void;
   width: number;
 }) {
+  const { t } = useTranslation();
   const styles = useStyles();
   const cols = width >= 700 ? 6 : 3;
   const cellWidth = Math.floor((Math.min(width, 480) - 32 - (cols - 1) * 8) / cols);
@@ -2395,7 +2403,7 @@ function HolePickerModal({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <TouchableOpacity style={styles.pickerScrim} activeOpacity={1} onPress={onClose}>
         <TouchableOpacity activeOpacity={1} style={styles.pickerCard}>
-          <Text style={styles.pickerTitle}>JUMP TO HOLE</Text>
+          <Text style={styles.pickerTitle}>{t('smartfinder.hole_picker_modal.jump_to_hole')}</Text>
           <View style={styles.pickerGrid}>
             {holes.map(h => {
               const active = h === currentHole;
@@ -2413,7 +2421,7 @@ function HolePickerModal({
             })}
           </View>
           <TouchableOpacity onPress={onClose} style={styles.pickerCloseBtn}>
-            <Text style={styles.pickerCloseText}>Close</Text>
+            <Text style={styles.pickerCloseText}>{t('smartfinder.hole_picker_modal.close')}</Text>
           </TouchableOpacity>
         </TouchableOpacity>
       </TouchableOpacity>

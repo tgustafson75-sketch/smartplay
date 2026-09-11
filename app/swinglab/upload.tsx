@@ -26,6 +26,7 @@ import { useFamilyStore } from '../../store/familyStore';
 import { speak, configureAudioForSpeech } from '../../services/voiceService';
 import { getApiBaseUrl } from '../../services/apiBase';
 import { useFlagGate } from '../../hooks/useFlagGate';
+import { useTranslation } from 'react-i18next';
 
 const CLUBS = ['Driver', '3W', '5W', 'Hybrid', '4i', '5i', '6i', '7i', '8i', '9i', 'PW', 'GW', 'SW', 'LW', 'Putter'];
 const TAGS: { id: SwingTag; label: string }[] = [
@@ -38,6 +39,7 @@ const TAGS: { id: SwingTag; label: string }[] = [
 ];
 
 export default function UploadSwing() {
+  const { t } = useTranslation();
   // 2026-09-06 — remote kill switch. Redirects to the Caddie screen if `swing_analysis` is off, whether it
   // was already off on entry or flips off while this screen is open. No message, by instruction.
   useFlagGate('swing_analysis');
@@ -140,11 +142,11 @@ export default function UploadSwing() {
     const result = await pickVideo();
     if (result.kind === 'cancelled') return;
     if (result.kind === 'permission_denied') {
-      Alert.alert('Permission needed', 'Allow access to your video library to upload swings.');
+      Alert.alert(t('swinglab_upload.alert.permission_needed'), t('swinglab_upload.alert.allow_access_to_your_video'));
       return;
     }
     if (result.kind === 'error') {
-      Alert.alert('Upload failed', result.message);
+      Alert.alert(t('swinglab_upload.alert.upload_failed'), result.message);
       return;
     }
     setUri(result.uri);
@@ -218,7 +220,7 @@ export default function UploadSwing() {
       console.log('[upload] ingest failed:', e);
       uploadLog('save-failed', { error: e instanceof Error ? e.message : String(e) });
       setStep('metadata');
-      Alert.alert('Upload failed', "Couldn't save that video. Please try again.");
+      Alert.alert(t('swinglab_upload.alert.upload_failed'), t('swinglab_upload.alert.couldn_t_save_that_video'));
       // 2026-07-24 (audit) — RESET the in-flight guard on the failure path, else the entry guard
       // (saveInFlightRef.current) makes every subsequent "Add to Library" tap a silent no-op → the
       // retry the Alert asks for is impossible without leaving + re-entering the screen.
@@ -255,9 +257,9 @@ export default function UploadSwing() {
        <View style={isWide ? { width: '100%', maxWidth: WIDE_CONTENT_MAX_WIDTH } : undefined}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Text style={[styles.back, { color: colors.accent }]}>‹ Back</Text>
+            <Text style={[styles.back, { color: colors.accent }]}>{t('swinglab_upload.upload_swing.back')}</Text>
           </TouchableOpacity>
-          <Text style={[styles.title, { color: colors.text_primary }]}>Upload Swing</Text>
+          <Text style={[styles.title, { color: colors.text_primary }]}>{t('swinglab_upload.upload_swing.upload_swing')}</Text>
           <View style={{ width: 60 }} />
         </View>
 
@@ -267,11 +269,10 @@ export default function UploadSwing() {
               Pick a swing video from your phone. Cap is {MAX_FILE_SIZE_MB}MB.
             </Text>
             <Text style={[styles.copySub, { color: colors.text_muted }]}>
-              Videos with coaching audio (a coach&apos;s voice over the swing) play with the audio
-              preserved during review. You can toggle to the caddie&apos;s analysis voice anytime.
+              {t('swinglab_upload.upload_swing.videos_with_coaching_audio_a')}
             </Text>
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.accent }]} onPress={onPick}>
-              <Text style={styles.primaryBtnText}>Pick Video</Text>
+              <Text style={styles.primaryBtnText}>{t('swinglab_upload.upload_swing.pick_video')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -279,14 +280,14 @@ export default function UploadSwing() {
         {step === 'metadata' && uri && (
           <>
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.label, { color: colors.text_muted }]}>VIDEO</Text>
+              <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_upload.upload_swing.video')}</Text>
               <Text style={[styles.value, { color: colors.text_primary }]} numberOfLines={1}>
                 {durationSec ? `${durationSec.toFixed(1)}s` : 'Loaded'}{hasAudio ? ' · audio detected' : ' · no audio'}
               </Text>
             </View>
 
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.label, { color: colors.text_muted }]}>CLUB</Text>
+              <Text style={[styles.label, { color: colors.text_muted }]}>{t('scorecard.col_club')}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
                 {CLUBS.map(c => (
                   <TouchableOpacity
@@ -309,19 +310,19 @@ export default function UploadSwing() {
             </View>
 
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.label, { color: colors.text_muted }]}>NOTES (OPTIONAL)</Text>
+              <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_upload.upload_swing.notes_optional')}</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text_primary }]}
                 value={notes}
                 onChangeText={setNotes}
-                placeholder="e.g. range session, working on tempo"
+                placeholder={t('swinglab_upload.placeholder.e_g_range_session_working')}
                 placeholderTextColor={colors.text_muted}
                 multiline
               />
             </View>
 
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.label, { color: colors.text_muted }]}>WHO&apos;S SWINGING?</Text>
+              <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_upload.upload_swing.who_s_swinging')}</Text>
               {/* 2026-05-26 — Fix AS: quick-tap chip row of known
                   swingers (account holder + family roster + prior
                   upload names). Tap to fill; free-text still works. */}
@@ -360,7 +361,7 @@ export default function UploadSwing() {
                 style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text_primary }]}
                 value={swinger}
                 onChangeText={setSwinger}
-                placeholder="Me"
+                placeholder={t('swinglab_upload.placeholder.me')}
                 placeholderTextColor={colors.text_muted}
               />
             </View>
@@ -372,7 +373,7 @@ export default function UploadSwing() {
                 Defaults to "Someone else" when a family member is
                 active in the family roster; "You" otherwise. */}
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.label, { color: colors.text_muted }]}>PERSPECTIVE</Text>
+              <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_upload.upload_swing.perspective')}</Text>
               <View style={styles.tagRow}>
                 <TouchableOpacity
                   style={[
@@ -386,7 +387,7 @@ export default function UploadSwing() {
                     styles.pillText,
                     { color: colors.text_muted },
                     perspective === 'pov_self' && { color: colors.accent, fontWeight: '700' },
-                  ]}>👤 You (POV)</Text>
+                  ]}>{t('swinglab_upload.upload_swing.you_pov')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
@@ -400,7 +401,7 @@ export default function UploadSwing() {
                     styles.pillText,
                     { color: colors.text_muted },
                     perspective === 'watching_someone' && { color: colors.accent, fontWeight: '700' },
-                  ]}>👥 Someone else</Text>
+                  ]}>{t('swinglab_upload.upload_swing.someone_else')}</Text>
                 </TouchableOpacity>
               </View>
               <Text style={[styles.helperText, { color: colors.text_muted }]}>
@@ -414,7 +415,7 @@ export default function UploadSwing() {
                 A face-on import (iPad/GoPro of the same swing) MUST be tagged face-on,
                 or the engine reads it as DTL and withholds face-on metrics. */}
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.label, { color: colors.text_muted }]}>CAMERA ANGLE</Text>
+              <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_upload.upload_swing.camera_angle')}</Text>
               <View style={styles.tagRow}>
                 <TouchableOpacity
                   style={[
@@ -428,7 +429,7 @@ export default function UploadSwing() {
                     styles.pillText,
                     { color: colors.text_muted },
                     angle === 'down_the_line' && { color: colors.accent, fontWeight: '700' },
-                  ]}>Down the line</Text>
+                  ]}>{t('swinglab_upload.upload_swing.down_the_line')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
@@ -456,7 +457,7 @@ export default function UploadSwing() {
                 to the putting analyzer (puttingAnalysisService) instead
                 of Phase K's full-body swing pose pipeline. */}
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.label, { color: colors.text_muted }]}>CAPTURE DEVICE</Text>
+              <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_upload.upload_swing.capture_device')}</Text>
               <View style={styles.tagRow}>
                 <TouchableOpacity
                   style={[
@@ -470,7 +471,7 @@ export default function UploadSwing() {
                     styles.pillText,
                     { color: colors.text_muted },
                     sourceDevice === 'phone' && { color: colors.accent, fontWeight: '700' },
-                  ]}>📱 Phone</Text>
+                  ]}>{t('swinglab_upload.upload_swing.phone')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
@@ -484,23 +485,23 @@ export default function UploadSwing() {
                     styles.pillText,
                     { color: colors.text_muted },
                     sourceDevice === 'meta_glasses' && { color: colors.accent, fontWeight: '700' },
-                  ]}>🕶️ Meta Glasses</Text>
+                  ]}>{t('swinglab_upload.upload_swing.meta_glasses')}</Text>
                 </TouchableOpacity>
               </View>
               {sourceDevice === 'meta_glasses' && perspective === 'pov_self' && (
                 <Text style={[styles.helperText, { color: colors.text_muted }]}>
-                  POV downward video — routes to PuttingLab analysis (face / stroke / read).
+                  {t('swinglab_upload.upload_swing.pov_downward_video_routes_to')}
                 </Text>
               )}
               {sourceDevice === 'meta_glasses' && perspective === 'watching_someone' && (
                 <Text style={[styles.helperText, { color: colors.text_muted }]}>
-                  Outward camera — routes to full swing analysis (fault + drill).
+                  {t('swinglab_upload.upload_swing.outward_camera_routes_to_full')}
                 </Text>
               )}
             </View>
 
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.label, { color: colors.text_muted }]}>TAG</Text>
+              <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_upload.upload_swing.tag')}</Text>
               <View style={styles.tagRow}>
                 {TAGS.map(t => (
                   <TouchableOpacity
@@ -523,7 +524,7 @@ export default function UploadSwing() {
             </View>
 
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.accent }]} onPress={onSave}>
-              <Text style={styles.primaryBtnText}>Add to Library</Text>
+              <Text style={styles.primaryBtnText}>{t('swinglab_upload.upload_swing.add_to_library')}</Text>
             </TouchableOpacity>
           </>
         )}
@@ -531,7 +532,7 @@ export default function UploadSwing() {
         {step === 'saving' && (
           <View style={styles.savingCard}>
             <ActivityIndicator size="large" color={colors.accent} />
-            <Text style={[styles.copy, { color: colors.text_primary, marginTop: 16 }]}>Saving…</Text>
+            <Text style={[styles.copy, { color: colors.text_primary, marginTop: 16 }]}>{t('swinglab_upload.upload_swing.saving')}</Text>
           </View>
         )}
        </View>

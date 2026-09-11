@@ -28,6 +28,7 @@ import { Audio } from 'expo-av';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useCaddieMemoryStore } from '../../store/caddieMemoryStore';
 import { readOwnTempo } from '../../services/practice/tempoSelfRead';
+import { useTranslation } from 'react-i18next';
 
 // Canonical SmartPlay neon green — the brand accent (mirrors colors.accent, pinned
 // here for the ratio badges so they read the same in either theme).
@@ -84,6 +85,7 @@ const MODE_CARDS: {
 ];
 
 export default function TempoTrainerScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
 
@@ -226,15 +228,15 @@ export default function TempoTrainerScreen() {
     return (
       <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerIcon} accessibilityLabel="Back">
+          <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerIcon} accessibilityLabel={t('swinglab_tempo_trainer.accessibility_label.back')}>
             <Ionicons name="chevron-back" size={26} color={colors.accent} />
           </Pressable>
-          <Text style={[styles.title, { color: colors.text_primary }]}>Tempo Trainer & Analysis</Text>
+          <Text style={[styles.title, { color: colors.text_primary }]}>{t('swinglab_tempo_trainer.tempo_trainer_screen.tempo_trainer_analysis')}</Text>
           <View style={styles.headerIcon} />
         </View>
 
         <ScrollView contentContainerStyle={styles.menuBody} showsVerticalScrollIndicator={false}>
-          <Text style={[styles.h1, { color: colors.text_primary }]}>Choose your training mode</Text>
+          <Text style={[styles.h1, { color: colors.text_primary }]}>{t('swinglab_tempo_trainer.tempo_trainer_screen.choose_your_training_mode')}</Text>
           {/*
             2026-08-25 — the drill's opening line is now about THEIR swing, not a generic invitation.
             selfRead is honest by construction: under MIN_SAMPLES it asks for more swings instead of
@@ -284,20 +286,19 @@ export default function TempoTrainerScreen() {
               { backgroundColor: colors.surface, borderColor: GOLD, opacity: pressed ? 0.9 : 1 },
             ]}
             accessibilityRole="button"
-            accessibilityLabel="GolfFather personal swing analysis"
+            accessibilityLabel={t('swinglab_tempo_trainer.accessibility_label.golffather_personal_swing_analysis')}
           >
             <View style={styles.cardTop}>
               <View style={[styles.cardIcon, { backgroundColor: 'rgba(232,178,58,0.14)' }]}>
                 <Ionicons name="ribbon" size={22} color={GOLD} />
               </View>
-              <Text style={[styles.cardTitle, { color: colors.text_primary }]}>GolfFather Personal Swing Analysis</Text>
+              <Text style={[styles.cardTitle, { color: colors.text_primary }]}>{t('swinglab_tempo_trainer.tempo_trainer_screen.golffather_personal_swing_analysis')}</Text>
               <View style={[styles.ratioBadge, { backgroundColor: 'rgba(232,178,58,0.16)', borderColor: GOLD }]}>
-                <Text style={[styles.ratioBadgeText, { color: GOLD }]}>PREMIUM</Text>
+                <Text style={[styles.ratioBadgeText, { color: GOLD }]}>{t('swinglab_tempo_trainer.tempo_trainer_screen.premium')}</Text>
               </View>
             </View>
             <Text style={[styles.cardBlurb, { color: colors.text_muted }]}>
-              Record a swing and your caddie reads YOUR real tempo, positions, and the fault
-              that&apos;s costing you — no guessing, only what the swing actually shows.
+              {t('swinglab_tempo_trainer.tempo_trainer_screen.record_a_swing_and_your')}
             </Text>
           </Pressable>
         </ScrollView>
@@ -310,7 +311,7 @@ export default function TempoTrainerScreen() {
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={styles.header}>
-        <Pressable onPress={backToMenu} hitSlop={10} style={styles.headerIcon} accessibilityLabel="Back to training modes">
+        <Pressable onPress={backToMenu} hitSlop={10} style={styles.headerIcon} accessibilityLabel={t('swinglab_tempo_trainer.accessibility_label.back_to_training_modes')}>
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </Pressable>
         <Text style={[styles.title, { color: colors.text_primary }]}>{modeTitle}</Text>
@@ -360,7 +361,7 @@ export default function TempoTrainerScreen() {
         </View>
 
         {/* Tempo presets */}
-        <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>TEMPO</Text>
+        <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>{t('swinglab_tempo_trainer.tempo_trainer_screen.tempo')}</Text>
         <View style={styles.presetRow}>
           {presets.map((p) => {
             const sel = p.key === presetKey;
@@ -392,7 +393,7 @@ export default function TempoTrainerScreen() {
         </Pressable>
 
         <Text style={[styles.foot, { color: colors.text_muted }]}>
-          Tip: this plays through the speaker — use it standalone, or on headphones when recording in cage mode (so the strike mic won&apos;t hear the tones).
+          {t('swinglab_tempo_trainer.tempo_trainer_screen.tip_this_plays_through_the')}
         </Text>
       </View>
     </SafeAreaView>

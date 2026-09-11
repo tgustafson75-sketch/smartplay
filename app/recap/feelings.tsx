@@ -9,6 +9,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useRoundStore } from '../../store/roundStore';
+import { useTranslation } from 'react-i18next';
 
 // ─── Chip row data ─────────────────────────────────────────────────────────────
 
@@ -52,6 +53,7 @@ function Chip({
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function FeelingsScreen() {
+  const { t } = useTranslation();
   const { roundId } = useLocalSearchParams<{ roundId: string }>();
   const router = useRouter();
   const updateRoundRecord = useRoundStore(s => s.updateRoundRecord);
@@ -90,12 +92,12 @@ export default function FeelingsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>How&apos;d it feel out there?</Text>
-        <Text style={styles.subtitle}>Optional — helps your caddie personalize feedback.</Text>
+        <Text style={styles.title}>{t('recap_feelings.feelings_screen.how_d_it_feel_out')}</Text>
+        <Text style={styles.subtitle}>{t('recap_feelings.feelings_screen.optional_helps_your_caddie_personalize')}</Text>
 
         {/* Energy */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>ENERGY</Text>
+          <Text style={styles.sectionLabel}>{t('recap_feelings.feelings_screen.energy')}</Text>
           <View style={styles.chipRow}>
             {ENERGY_OPTIONS.map(opt => (
               <Chip
@@ -110,7 +112,7 @@ export default function FeelingsScreen() {
 
         {/* Focus */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>FOCUS</Text>
+          <Text style={styles.sectionLabel}>{t('recap_feelings.feelings_screen.focus')}</Text>
           <View style={styles.chipRow}>
             {FOCUS_OPTIONS.map(opt => (
               <Chip
@@ -125,7 +127,7 @@ export default function FeelingsScreen() {
 
         {/* Vibe */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>VIBE</Text>
+          <Text style={styles.sectionLabel}>{t('recap_feelings.feelings_screen.vibe')}</Text>
           <View style={styles.chipRow}>
             {VIBE_OPTIONS.map(opt => (
               <Chip
@@ -141,8 +143,8 @@ export default function FeelingsScreen() {
         {/* Weather — optional */}
         <View style={styles.section}>
           <View style={styles.sectionLabelRow}>
-            <Text style={styles.sectionLabel}>WEATHER</Text>
-            <Text style={styles.optionalTag}>OPTIONAL</Text>
+            <Text style={styles.sectionLabel}>{t('recap_feelings.feelings_screen.weather')}</Text>
+            <Text style={styles.optionalTag}>{t('recap_feelings.feelings_screen.optional')}</Text>
           </View>
           <View style={styles.chipRow}>
             {WEATHER_OPTIONS.map(opt => (
@@ -161,9 +163,9 @@ export default function FeelingsScreen() {
           style={styles.saveBtn}
           onPress={handleSave}
           accessibilityRole="button"
-          accessibilityLabel="Save post-round feelings and view recap"
+          accessibilityLabel={t('recap_feelings.accessibility_label.save_post_round_feelings_and')}
         >
-          <Text style={styles.saveBtnText}>Save &amp; See Recap</Text>
+          <Text style={styles.saveBtnText}>{t('recap_feelings.feelings_screen.save_see_recap')}</Text>
         </TouchableOpacity>
 
         {/* Skip link */}
@@ -171,9 +173,9 @@ export default function FeelingsScreen() {
           style={styles.skipBtn}
           onPress={handleSkip}
           accessibilityRole="button"
-          accessibilityLabel="Skip and go straight to recap"
+          accessibilityLabel={t('recap_feelings.accessibility_label.skip_and_go_straight_to')}
         >
-          <Text style={styles.skipBtnText}>Skip</Text>
+          <Text style={styles.skipBtnText}>{t('recap_feelings.feelings_screen.skip')}</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

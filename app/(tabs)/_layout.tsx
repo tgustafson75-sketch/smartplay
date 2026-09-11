@@ -7,6 +7,7 @@ import { TourOverlay, type TourStep } from '../../components/onboarding/TourOver
 import { DASHBOARD_TOUR_STEPS, PLAY_TOUR_STEPS, SCORECARD_TOUR_STEPS, SWINGLAB_TOUR_STEPS } from '../../constants/tabTours';
 import { useTabTour } from '../../hooks/useTabTour';
 import { useFlag } from '../../store/flagStore';
+import { useTranslation } from 'react-i18next';
 
 // 2026-07-30 (Tim — "Show me around on SwingLab + basics on all main tabs"). One host that shows the
 // FOCUSED tab's short basics tour (the caddie tab runs its own richer tour on its screen). Reuses the same
@@ -67,6 +68,7 @@ function CaddieTabIcon({ focused, label }: { focused: boolean; label: string }) 
 }
 
 export default function TabLayout() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const swinglabEnabled = useFlag('swinglab');
   const isRoundActive = useRoundStore(s => s.isRoundActive);
@@ -110,7 +112,7 @@ export default function TabLayout() {
           // active tab obvious). Previously Play and SwingLab both used
           // 'golf' which made the row read as duplicates.
           tabBarIcon: ({ focused }) => (
-            <CaddieTabIcon focused={focused} label="Caddie" />
+            <CaddieTabIcon focused={focused} label={t('layout.label.caddie')} />
           ),
         }}
       />
@@ -118,7 +120,7 @@ export default function TabLayout() {
         name="play"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon iconName={focused ? 'golf' : 'golf-outline'} label="Play" focused={focused} />
+            <TabIcon iconName={focused ? 'golf' : 'golf-outline'} label={t('layout.label.play')} focused={focused} />
           ),
         }}
       />
@@ -129,7 +131,7 @@ export default function TabLayout() {
             // list = lined-paper scorecard look, more literal than 'flag'
             <TabIcon
               iconName={focused ? 'list' : 'list-outline'}
-              label="Score"
+              label={t('dashboard.score')}
               focused={focused}
               showDot={isRoundActive}
             />
@@ -153,7 +155,7 @@ export default function TabLayout() {
             // (concentric circles + arrow) and reads as "practice /
             // precision work" — matches SwingLab's cage + drill theme.
             // A custom branded asset can replace this later.
-            <TabIcon mcIconName="bullseye-arrow" label="Swing" focused={focused} />
+            <TabIcon mcIconName="bullseye-arrow" label={t('layout.label.swing')} focused={focused} />
           ),
         }}
       />
@@ -161,7 +163,7 @@ export default function TabLayout() {
         name="dashboard"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon iconName={focused ? 'stats-chart' : 'stats-chart-outline'} label="Stats" focused={focused} />
+            <TabIcon iconName={focused ? 'stats-chart' : 'stats-chart-outline'} label={t('layout.label.stats')} focused={focused} />
           ),
         }}
       />

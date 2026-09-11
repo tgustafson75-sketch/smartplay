@@ -43,6 +43,7 @@ import {
   type YouTubePreview,
 } from '../../services/swingDatabase';
 import { useToastStore } from '../../store/toastStore';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   visible: boolean;
@@ -53,6 +54,7 @@ interface Props {
 }
 
 export default function YouTubeReferenceModal({ visible, onClose, defaultClub = null }: Props) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
 
   // Form state.
@@ -168,14 +170,14 @@ export default function YouTubeReferenceModal({ visible, onClose, defaultClub = 
 
           <View style={styles.headerRow}>
             <Ionicons name="logo-youtube" size={20} color="#ef4444" />
-            <Text style={[styles.heading, { color: colors.text_primary }]}>Add YouTube reference</Text>
+            <Text style={[styles.heading, { color: colors.text_primary }]}>{t('swinglab_you_tube_reference_modal.you_tube_reference_modal.add_youtube_reference')}</Text>
             <Pressable onPress={onClose} hitSlop={10}>
-              <Text style={[styles.closeText, { color: colors.text_muted }]}>Close</Text>
+              <Text style={[styles.closeText, { color: colors.text_muted }]}>{t('swinglab_you_tube_reference_modal.you_tube_reference_modal.close')}</Text>
             </Pressable>
           </View>
 
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scroll}>
-            <Text style={[styles.fieldLabel, { color: colors.text_muted }]}>YOUTUBE URL OR VIDEO ID</Text>
+            <Text style={[styles.fieldLabel, { color: colors.text_muted }]}>{t('swinglab_you_tube_reference_modal.you_tube_reference_modal.youtube_url_or_video_id')}</Text>
             <TextInput
               value={url}
               onChangeText={setUrl}
@@ -191,7 +193,7 @@ export default function YouTubeReferenceModal({ visible, onClose, defaultClub = 
             {previewing && !preview ? (
               <View style={styles.previewLoading}>
                 <ActivityIndicator color={colors.accent} />
-                <Text style={[styles.previewLoadingText, { color: colors.text_muted }]}>Reading the URL…</Text>
+                <Text style={[styles.previewLoadingText, { color: colors.text_muted }]}>{t('swinglab_you_tube_reference_modal.you_tube_reference_modal.reading_the_url')}</Text>
               </View>
             ) : null}
 
@@ -226,7 +228,7 @@ export default function YouTubeReferenceModal({ visible, onClose, defaultClub = 
                   {preview.alreadyExists ? (
                     <View style={[styles.existsBadge, { borderColor: '#fbbf24' }]}>
                       <Text style={[styles.existsBadgeText, { color: '#fbbf24' }]}>
-                        ALREADY IN YOUR LIBRARY
+                        {t('swinglab_you_tube_reference_modal.you_tube_reference_modal.already_in_your_library')}
                       </Text>
                     </View>
                   ) : null}
@@ -237,7 +239,7 @@ export default function YouTubeReferenceModal({ visible, onClose, defaultClub = 
             {/* Editable fields — only render when we have a valid preview. */}
             {previewOK && preview?.kind === 'ok' && !preview.alreadyExists ? (
               <>
-                <Text style={[styles.fieldLabel, { color: colors.text_muted }]}>LABEL</Text>
+                <Text style={[styles.fieldLabel, { color: colors.text_muted }]}>{t('swinglab_you_tube_reference_modal.you_tube_reference_modal.label')}</Text>
                 <TextInput
                   value={label}
                   onChangeText={setLabel}
@@ -248,17 +250,17 @@ export default function YouTubeReferenceModal({ visible, onClose, defaultClub = 
 
                 <View style={styles.fieldRow}>
                   <View style={styles.fieldHalf}>
-                    <Text style={[styles.fieldLabel, { color: colors.text_muted }]}>PRO NAME</Text>
+                    <Text style={[styles.fieldLabel, { color: colors.text_muted }]}>{t('swinglab_you_tube_reference_modal.you_tube_reference_modal.pro_name')}</Text>
                     <TextInput
                       value={proName}
                       onChangeText={setProName}
-                      placeholder="e.g. Scottie Scheffler"
+                      placeholder={t('swinglab_you_tube_reference_modal.placeholder.e_g_scottie_scheffler')}
                       placeholderTextColor={colors.text_muted}
                       style={[styles.input, { color: colors.text_primary, borderColor: colors.border, backgroundColor: colors.background }]}
                     />
                   </View>
                   <View style={styles.fieldHalf}>
-                    <Text style={[styles.fieldLabel, { color: colors.text_muted }]}>CLUB</Text>
+                    <Text style={[styles.fieldLabel, { color: colors.text_muted }]}>{t('scorecard.col_club')}</Text>
                     <TextInput
                       value={club}
                       onChangeText={setClub}
@@ -283,7 +285,7 @@ export default function YouTubeReferenceModal({ visible, onClose, defaultClub = 
                 },
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Add YouTube reference to your library"
+              accessibilityLabel={t('swinglab_you_tube_reference_modal.accessibility_label.add_youtube_reference_to_your')}
             >
               {saving ? (
                 <ActivityIndicator color="#0a1410" />
@@ -297,7 +299,7 @@ export default function YouTubeReferenceModal({ visible, onClose, defaultClub = 
             </Pressable>
 
             <Text style={[styles.footnote, { color: colors.text_muted }]}>
-              We store the link + thumbnail only — no video data is downloaded. You can delete the reference any time.
+              {t('swinglab_you_tube_reference_modal.you_tube_reference_modal.we_store_the_link_thumbnail')}
             </Text>
           </ScrollView>
         </View>

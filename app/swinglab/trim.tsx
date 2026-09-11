@@ -36,12 +36,14 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { runPhaseKOnSession } from '../../services/videoUpload';
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
+import { useTranslation } from 'react-i18next';
 
 // Heuristic default window: last 4 seconds. Right ~70% of the time for
 // instructor-style clips (talking head preroll, swing at the end).
 const DEFAULT_WINDOW_SEC = 4;
 
 export default function TrimScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const { isWide } = useDeviceLayout();
@@ -121,13 +123,13 @@ export default function TrimScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
         <View style={styles.errorBox}>
           <Text style={[styles.errorText, { color: colors.text_primary }]}>
-            Couldn&apos;t load that swing.
+            {t('swinglab_trim.trim_screen.couldn_t_load_that_swing')}
           </Text>
           <TouchableOpacity
             style={[styles.primaryBtn, { backgroundColor: colors.accent, marginTop: 12 }]}
             onPress={() => router.replace('/swinglab/library' as never)}
           >
-            <Text style={styles.primaryBtnText}>Back to library</Text>
+            <Text style={styles.primaryBtnText}>{t('swinglab_trim.trim_screen.back_to_library')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -140,9 +142,9 @@ export default function TrimScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => router.replace('/swinglab/library' as never)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Text style={[styles.back, { color: colors.accent }]}>‹ Library</Text>
+          <Text style={[styles.back, { color: colors.accent }]}>{t('swinglab_trim.trim_screen.library')}</Text>
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text_primary }]}>Mark the Swing</Text>
+        <Text style={[styles.title, { color: colors.text_primary }]}>{t('swinglab_trim.trim_screen.mark_the_swing')}</Text>
         <View style={{ width: 60 }} />
       </View>
 
@@ -171,7 +173,7 @@ export default function TrimScreen() {
         </View>
 
         <View style={[styles.windowCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.windowHeader, { color: colors.text_muted }]}>SWING WINDOW</Text>
+          <Text style={[styles.windowHeader, { color: colors.text_muted }]}>{t('swinglab_trim.trim_screen.swing_window')}</Text>
           <View style={styles.windowRow}>
             <Text style={[styles.windowLabel, { color: colors.text_primary }]}>
               {startSec.toFixed(1)}s
@@ -185,7 +187,7 @@ export default function TrimScreen() {
             </Text>
           </View>
           <Text style={[styles.windowHint, { color: colors.text_muted }]}>
-            Scrub the video to the start of your swing, tap &quot;Set Start.&quot; Scrub to the end of your follow-through, tap &quot;Set End.&quot; Or use the default window below.
+            {t('swinglab_trim.trim_screen.scrub_the_video_to_the')}
           </Text>
         </View>
 
@@ -228,7 +230,7 @@ export default function TrimScreen() {
           disabled={submitting}
         >
           <Text style={[styles.secondaryBtnText, { color: colors.text_muted }]}>
-            Skip — Analyze Whole Clip
+            {t('swinglab_trim.trim_screen.skip_analyze_whole_clip')}
           </Text>
         </TouchableOpacity>
       </ScrollView>

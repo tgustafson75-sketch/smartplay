@@ -53,6 +53,7 @@ import ClubPickerModal from './practice/ClubPickerModal';
 // in services/acousticImpactDetector now.
 import { METER_INTERVAL_MS } from '../constants/cageDetection';
 import { PUMP_DRILL } from '../data/drillProtocols';
+import { useTranslation } from 'react-i18next';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -105,6 +106,7 @@ const PICKER_DRILLS: CageDrillContext[] = [
 ];
 
 export default function PracticeSessionOverlay({ onComplete, onCancel, drill }: Props) {
+  const { t } = useTranslation();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   // Audit fix: was `width > 500` only, which mis-identified some tablets
@@ -549,7 +551,7 @@ export default function PracticeSessionOverlay({ onComplete, onCancel, drill }: 
   if (phase === 'requesting') {
     return (
       <SafeAreaView style={styles.container}>
-        <Text style={styles.requestingText}>Requesting camera access…</Text>
+        <Text style={styles.requestingText}>{t('practice_session_overlay.text.requesting_camera_access')}</Text>
       </SafeAreaView>
     );
   }
@@ -563,14 +565,14 @@ export default function PracticeSessionOverlay({ onComplete, onCancel, drill }: 
           <TouchableOpacity style={styles.cancelBtn} onPress={onCancel} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Ionicons name="close" size={22} color="#6b7280" />
           </TouchableOpacity>
-          <Text style={styles.previewTitle}>Cage Session</Text>
+          <Text style={styles.previewTitle}>{t('labels.cage_session')}</Text>
           <TouchableOpacity
             style={styles.flipBtn}
             onPress={() => setCameraFacing((f) => (f === 'back' ? 'front' : 'back'))}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Ionicons name="camera-reverse-outline" size={20} color="#00C896" />
-            <Text style={styles.flipBtnText}>Flip</Text>
+            <Text style={styles.flipBtnText}>{t('practice_session_overlay.text.flip')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -595,7 +597,7 @@ export default function PracticeSessionOverlay({ onComplete, onCancel, drill }: 
 
           <View style={styles.cameraOverlayHint}>
             <Text style={styles.cameraOverlayHintText}>
-              Place phone so you stand inside the figure. Backswing top + follow-through must fit between the dashed lines.
+              {t('practice_session_overlay.text.place_phone_so_you_stand')}
             </Text>
           </View>
         </View>
@@ -606,7 +608,7 @@ export default function PracticeSessionOverlay({ onComplete, onCancel, drill }: 
             the recording will render the drill-info strip when started.
             Free Practice clears any selection. */}
         <View style={styles.drillPickerWrap}>
-          <Text style={styles.drillPickerLabel}>DRILL (OPTIONAL)</Text>
+          <Text style={styles.drillPickerLabel}>{t('practice_session_overlay.text.drill_optional')}</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -619,12 +621,12 @@ export default function PracticeSessionOverlay({ onComplete, onCancel, drill }: 
               ]}
               onPress={() => setActiveDrill(null)}
               accessibilityRole="button"
-              accessibilityLabel="Free practice — no drill structure"
+              accessibilityLabel={t('practice_session_overlay.accessibility_label.free_practice_no_drill_structure')}
             >
               <Text style={[
                 styles.drillPickerChipText,
                 activeDrill === null && styles.drillPickerChipTextActive,
-              ]}>Free</Text>
+              ]}>{t('practice_session_overlay.text.free')}</Text>
             </TouchableOpacity>
             {PICKER_DRILLS.map(d => (
               <TouchableOpacity
@@ -649,7 +651,7 @@ export default function PracticeSessionOverlay({ onComplete, onCancel, drill }: 
         {!meterAvailable && (
           <View style={styles.warnBanner}>
             <Text style={styles.warnText}>
-              Microphone unavailable — auto-detection off. Use &quot;Log swing&quot; manually.
+              {t('practice_session_overlay.text.microphone_unavailable_auto_detection_off')}
             </Text>
           </View>
         )}
@@ -660,7 +662,7 @@ export default function PracticeSessionOverlay({ onComplete, onCancel, drill }: 
           activeOpacity={0.8}
         >
           <Ionicons name="ellipse" size={18} color="#060f09" />
-          <Text style={styles.startBtnText}>Start Recording</Text>
+          <Text style={styles.startBtnText}>{t('practice_session_overlay.text.start_recording')}</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -686,7 +688,7 @@ export default function PracticeSessionOverlay({ onComplete, onCancel, drill }: 
         </View>
       </View>
       {!meterAvailable && (
-        <Text style={styles.manualOnlyBadge}>Auto-detect off — log manually</Text>
+        <Text style={styles.manualOnlyBadge}>{t('practice_session_overlay.text.auto_detect_off_log_manually')}</Text>
       )}
 
       {/* Phase 402 — current-club chip + ID-club camera button. Always
@@ -717,7 +719,7 @@ export default function PracticeSessionOverlay({ onComplete, onCancel, drill }: 
             accessibilityLabel={`Advance to next step of ${activeDrill.title} drill`}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Text style={styles.drillStripBtnText}>Next ›</Text>
+            <Text style={styles.drillStripBtnText}>{t('practice_session_overlay.text.next')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -746,14 +748,14 @@ export default function PracticeSessionOverlay({ onComplete, onCancel, drill }: 
           <View style={styles.silhouetteArcBottom} />
           <View style={styles.silhouetteHintWrap}>
             <Text style={styles.silhouetteHintText}>
-              Stand inside the figure. Full backswing + follow-through fit between the dashed lines.
+              {t('practice_session_overlay.text.stand_inside_the_figure_full')}
             </Text>
           </View>
         </View>
 
         <View style={styles.liveBadgeRow}>
           <View style={styles.liveDot} />
-          <Text style={styles.liveText}>LIVE</Text>
+          <Text style={styles.liveText}>{t('practice_session_overlay.text.live')}</Text>
           <TouchableOpacity
             style={styles.smallFlipBtn}
             onPress={() => setCameraFacing((f) => (f === 'back' ? 'front' : 'back'))}
@@ -775,7 +777,7 @@ export default function PracticeSessionOverlay({ onComplete, onCancel, drill }: 
           activeOpacity={0.75}
         >
           <Ionicons name="golf-outline" size={20} color="#00C896" />
-          <Text style={styles.logSwingText}>Log swing</Text>
+          <Text style={styles.logSwingText}>{t('practice_session_overlay.text.log_swing')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity

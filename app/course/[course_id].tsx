@@ -37,6 +37,7 @@ import { getApiBaseUrl } from '../../services/apiBase';
 import { useCourseCaptureStore } from '../../store/courseCaptureStore';
 import { getLocalHoleImage } from '../../data/localCourseImages';
 import type { Course } from '../../types/course';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Course Detail — legacy long-scroll format.
@@ -57,6 +58,7 @@ import type { Course } from '../../types/course';
  * Mapbox (Palms uses curated bundled screenshots as the override).
  */
 export default function CourseDetailScreen() {
+  const { t } = useTranslation();
   // 2026-08-12 — the player's Preferred Tee (Settings → Profile). Drives which tee set's yardages
   // this course renders and, downstream, the numbers the caddie clubs off.
   const preferredTee = usePlayerProfileStore((st) => st.preferredTee);
@@ -501,15 +503,15 @@ export default function CourseDetailScreen() {
         <CourseDetailBanner />
         <View style={styles.loadingState}>
           <Text style={{ color: '#e5e7eb', fontSize: 15, fontWeight: '700', textAlign: 'center', marginBottom: 14, paddingHorizontal: 28, lineHeight: 21 }}>
-            Couldn&apos;t load this course — check your connection and try again.
+            {t('course.course_detail_screen.couldn_t_load_this_course')}
           </Text>
           <TouchableOpacity
             onPress={() => router.back()}
             style={{ paddingHorizontal: 22, paddingVertical: 11, borderRadius: 10, borderWidth: 1, borderColor: '#00C896' }}
             accessibilityRole="button"
-            accessibilityLabel="Back to courses"
+            accessibilityLabel={t('course.accessibility_label.back_to_courses')}
           >
-            <Text style={{ color: '#00C896', fontSize: 14, fontWeight: '800' }}>Back to courses</Text>
+            <Text style={{ color: '#00C896', fontSize: 14, fontWeight: '800' }}>{t('course.course_detail_screen.back_to_courses')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -521,7 +523,7 @@ export default function CourseDetailScreen() {
       <View style={styles.container}>
         <CourseDetailBanner />
         <View style={styles.loadingState}>
-          <Text style={styles.emptyText}>This course doesn&apos;t have detailed data yet.</Text>
+          <Text style={styles.emptyText}>{t('course.course_detail_screen.this_course_doesn_t_have')}</Text>
         </View>
       </View>
     );
@@ -538,9 +540,9 @@ export default function CourseDetailScreen() {
           onPress={() => router.back()}
           style={styles.back}
           accessibilityRole="button"
-          accessibilityLabel="Back to courses list"
+          accessibilityLabel={t('course.accessibility_label.back_to_courses_list')}
         >
-          <Text style={styles.backText}>‹ Courses</Text>
+          <Text style={styles.backText}>{t('course.course_detail_screen.courses')}</Text>
         </TouchableOpacity>
 
         {/* Phase 405b — V3-reference clean header. The 16:9 hero image
@@ -568,7 +570,7 @@ export default function CourseDetailScreen() {
               layout as the real scorecard. Flag it; clears when real data loads. */}
           {layoutEstimated && (
             <Text style={styles.estimatedLayoutNote}>
-              Estimated layout — full course data not available yet.
+              {t('course.course_detail_screen.estimated_layout_full_course_data')}
             </Text>
           )}
         </View>
@@ -577,7 +579,7 @@ export default function CourseDetailScreen() {
             the V3 reference (no chevron, no collapse). */}
         {content?.caddie_tips && content.caddie_tips.length > 0 ? (
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>CADDIE TIPS</Text>
+            <Text style={styles.sectionLabel}>{t('course.course_detail_screen.caddie_tips')}</Text>
             {content.caddie_tips.map((tip, i) => (
               <View key={i} style={styles.tipRow}>
                 <Text style={styles.tipBullet}>•</Text>
@@ -587,8 +589,8 @@ export default function CourseDetailScreen() {
           </View>
         ) : contentLoading ? (
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>CADDIE TIPS</Text>
-            <Text style={styles.aboutLoading}>Loading…</Text>
+            <Text style={styles.sectionLabel}>{t('course.course_detail_screen.caddie_tips')}</Text>
+            <Text style={styles.aboutLoading}>{t('course.course_detail_screen.loading')}</Text>
           </View>
         ) : null}
 
@@ -596,7 +598,7 @@ export default function CourseDetailScreen() {
             badge per the V3 reference. No collapse — always visible
             when photos exist. */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>HOLE PHOTOS</Text>
+          <Text style={styles.sectionLabel}>{t('course.course_detail_screen.hole_photos')}</Text>
           <HolePhotosGrid
             photos={holePhotos.map(p => ({
               hole_number: p.hole_number,
@@ -609,7 +611,7 @@ export default function CourseDetailScreen() {
 
         {/* Hole guide */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>HOLE GUIDE</Text>
+          <Text style={styles.sectionLabel}>{t('course.course_detail_screen.hole_guide')}</Text>
           <HoleGuide holes={holeRows} notesLoading={contentLoading && !content} />
         </View>
 
@@ -624,19 +626,19 @@ export default function CourseDetailScreen() {
           style={[styles.cta, { backgroundColor: colors.surface_elevated, borderWidth: 1, borderColor: colors.border }]}
           onPress={handleBookTeeTime}
           accessibilityRole="button"
-          accessibilityLabel="Book a tee time at this course"
+          accessibilityLabel={t('course.accessibility_label.book_a_tee_time_at')}
         >
           <Ionicons name="calendar-outline" size={16} color={colors.text_primary} style={{ marginRight: 6 }} />
-          <Text style={[styles.ctaBookText, { color: colors.text_primary }]}>Book Tee Time</Text>
+          <Text style={[styles.ctaBookText, { color: colors.text_primary }]}>{t('course.course_detail_screen.book_tee_time')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.cta, styles.ctaStart]}
           onPress={handleStartRound}
           accessibilityRole="button"
-          accessibilityLabel="Start a new round at this course"
+          accessibilityLabel={t('course.accessibility_label.start_a_new_round_at')}
         >
           <Ionicons name="flag" size={16} color="#0d1a0d" style={{ marginRight: 6 }} />
-          <Text style={styles.ctaStartText}>Start Round Here</Text>
+          <Text style={styles.ctaStartText}>{t('course.course_detail_screen.start_round_here')}</Text>
         </TouchableOpacity>
       </View>
     </View>

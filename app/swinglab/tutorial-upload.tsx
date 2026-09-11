@@ -31,6 +31,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { getCaddieName } from '../../lib/persona';
 import type { ClubId } from '../../services/clubRecognition';
 import { getApiBaseUrl } from '../../services/apiBase';
+import { useTranslation } from 'react-i18next';
 
 const CLUBS: { label: string; value: ClubId }[] = [
   { label: 'Driver', value: 'DR' },
@@ -49,6 +50,7 @@ const CLUBS: { label: string; value: ClubId }[] = [
 ];
 
 export default function TutorialUpload() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const apiUrl = getApiBaseUrl();
@@ -73,7 +75,7 @@ export default function TutorialUpload() {
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert('Permission needed', 'Allow video library access to attach a tutorial video.');
+        Alert.alert(t('swinglab_tutorial_upload.alert.permission_needed'), t('swinglab_tutorial_upload.alert.allow_video_library_access_to'));
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -97,7 +99,7 @@ export default function TutorialUpload() {
         setFrameUri(m.uri);
       } catch (_) { /* frame is optional */ }
     } catch (e) {
-      Alert.alert('Pick failed', e instanceof Error ? e.message : String(e));
+      Alert.alert(t('swinglab_tutorial_upload.alert.pick_failed'), e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -174,9 +176,9 @@ export default function TutorialUpload() {
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Text style={[styles.back, { color: colors.accent }]}>‹ Back</Text>
+            <Text style={[styles.back, { color: colors.accent }]}>{t('swinglab_tutorial_upload.tutorial_upload.back')}</Text>
           </TouchableOpacity>
-          <Text style={[styles.title, { color: colors.text_primary }]}>Add Tutorial</Text>
+          <Text style={[styles.title, { color: colors.text_primary }]}>{t('swinglab_tutorial_upload.tutorial_upload.add_tutorial')}</Text>
           <View style={{ width: 60 }} />
         </View>
 
@@ -184,7 +186,7 @@ export default function TutorialUpload() {
           <View style={styles.savingCard}>
             <ActivityIndicator size="large" color={colors.accent} />
             <Text style={[styles.copy, { color: colors.text_primary, marginTop: 16 }]}>
-              Reading the lesson…
+              {t('swinglab_tutorial_upload.tutorial_upload.reading_the_lesson')}
             </Text>
           </View>
         ) : (
@@ -194,8 +196,7 @@ export default function TutorialUpload() {
                 Capture a coaching lesson so {caddieName} can reference it during your rounds.
               </Text>
               <Text style={[styles.copySub, { color: colors.text_muted }]}>
-                Attach the source video if you have it. A title plus a few notes about
-                what the coach is teaching is enough for now.
+                {t('swinglab_tutorial_upload.tutorial_upload.attach_the_source_video_if')}
               </Text>
               <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: videoUri ? colors.surface_elevated : colors.accent }]} onPress={onPickVideo}>
                 <Text style={[styles.primaryBtnText, videoUri ? { color: colors.accent } : null]}>
@@ -205,41 +206,41 @@ export default function TutorialUpload() {
             </View>
 
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.label, { color: colors.text_muted }]}>TITLE</Text>
+              <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_tutorial_upload.tutorial_upload.title')}</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text_primary }]}
                 value={title}
                 onChangeText={setTitle}
-                placeholder="Marc — shallow attack on wedges"
+                placeholder={t('swinglab_tutorial_upload.placeholder.marc_shallow_attack_on_wedges')}
                 placeholderTextColor={colors.text_muted}
               />
             </View>
 
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.label, { color: colors.text_muted }]}>INSTRUCTOR (OPTIONAL)</Text>
+              <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_tutorial_upload.tutorial_upload.instructor_optional')}</Text>
               <TextInput
                 style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text_primary }]}
                 value={instructor}
                 onChangeText={setInstructor}
-                placeholder="Marc Solomon"
+                placeholder={t('swinglab_tutorial_upload.placeholder.marc_solomon')}
                 placeholderTextColor={colors.text_muted}
               />
             </View>
 
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.label, { color: colors.text_muted }]}>NOTES — WHAT IS THE LESSON ABOUT?</Text>
+              <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_tutorial_upload.tutorial_upload.notes_what_is_the_lesson')}</Text>
               <TextInput
                 style={[styles.input, styles.notesInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.text_primary }]}
                 value={notes}
                 onChangeText={setNotes}
-                placeholder="Keep the club low through impact. Weight forward. Less wrist."
+                placeholder={t('swinglab_tutorial_upload.placeholder.keep_the_club_low_through')}
                 placeholderTextColor={colors.text_muted}
                 multiline
               />
             </View>
 
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[styles.label, { color: colors.text_muted }]}>TARGET CLUBS (OPTIONAL)</Text>
+              <Text style={[styles.label, { color: colors.text_muted }]}>{t('swinglab_tutorial_upload.tutorial_upload.target_clubs_optional')}</Text>
               <Text style={[styles.copySub, { color: colors.text_muted, marginTop: 4, marginBottom: 8 }]}>
                 Tap any clubs this lesson directly applies to. {caddieName} will reference the
                 lesson on shots with those clubs.
@@ -267,7 +268,7 @@ export default function TutorialUpload() {
             </View>
 
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.accent, marginTop: 18 }]} onPress={onAnalyze}>
-              <Text style={styles.primaryBtnText}>Analyze + Save</Text>
+              <Text style={styles.primaryBtnText}>{t('swinglab_tutorial_upload.tutorial_upload.analyze_save')}</Text>
             </TouchableOpacity>
           </>
         )}

@@ -20,6 +20,7 @@ import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
 import JuniorSwingResultCard from './JuniorSwingResultCard';
 import type { JuniorSwingAnalysis } from '../services/juniorSwingAnalyzer';
+import { useTranslation } from 'react-i18next';
 
 export interface JuniorSwingCompareProps {
   left: JuniorSwingAnalysis | null;
@@ -36,6 +37,7 @@ export default function JuniorSwingCompare({
   rightLabel = 'Latest',
   onPressLeft, onPressRight,
 }: JuniorSwingCompareProps) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
 
   const delta = useMemo(() => {
@@ -97,7 +99,7 @@ export default function JuniorSwingCompare({
           {left ? (
             <JuniorSwingResultCard analysis={left} onPress={onPressLeft} />
           ) : (
-            <EmptyPane colors={colors} message="No earlier swing recorded yet." />
+            <EmptyPane colors={colors} message={t('junior_swing_compare.message.no_earlier_swing_recorded_yet')} />
           )}
         </View>
         <View style={styles.pane}>
@@ -105,7 +107,7 @@ export default function JuniorSwingCompare({
           {right ? (
             <JuniorSwingResultCard analysis={right} onPress={onPressRight} />
           ) : (
-            <EmptyPane colors={colors} message="Record one to compare." />
+            <EmptyPane colors={colors} message={t('junior_swing_compare.message.record_one_to_compare')} />
           )}
         </View>
       </ScrollView>

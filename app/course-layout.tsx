@@ -15,11 +15,13 @@ import AppIcon from '../components/AppIcon';
 import { getBundledHoles } from '../data/courses';
 import { getCourse as getApiCourse, courseToHoles } from '../services/golfCourseApi';
 import { useRoundStore, type CourseHole } from '../store/roundStore';
+import { useTranslation } from 'react-i18next';
 
 function sumPar(holes: CourseHole[]): number { return holes.reduce((s, h) => s + (h.par || 0), 0); }
 function sumYds(holes: CourseHole[]): number { return holes.reduce((s, h) => s + (h.distance > 0 ? h.distance : 0), 0); }
 
 export default function CourseLayoutScreen() {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ courseId?: string; name?: string }>();
@@ -77,7 +79,7 @@ export default function CourseLayoutScreen() {
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back">
+        <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('course_layout.accessibility_label.back')}>
           <AppIcon name="chevron-back" size={26} color={colors.text_primary} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.text_primary }]} numberOfLines={1}>{courseName}</Text>
@@ -89,14 +91,14 @@ export default function CourseLayoutScreen() {
       ) : sorted.length === 0 ? (
         <View style={styles.center}>
           <AppIcon name="map-outline" size={40} color={colors.text_secondary} />
-          <Text style={[styles.empty, { color: colors.text_secondary }]}>No hole data for this course yet.</Text>
+          <Text style={[styles.empty, { color: colors.text_secondary }]}>{t('course_layout.course_layout_screen.no_hole_data_for_this')}</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
           <View style={[styles.headRow, { borderColor: colors.border }]}>
-            <Text style={[styles.cellH, styles.cHole, { color: colors.text_secondary }]}>HOLE</Text>
-            <Text style={[styles.cellH, styles.cPar, { color: colors.text_secondary }]}>PAR</Text>
-            <Text style={[styles.cellH, styles.cYds, { color: colors.text_secondary }]}>YARDS</Text>
+            <Text style={[styles.cellH, styles.cHole, { color: colors.text_secondary }]}>{t('course_layout.course_layout_screen.hole')}</Text>
+            <Text style={[styles.cellH, styles.cPar, { color: colors.text_secondary }]}>{t('scorecard.par')}</Text>
+            <Text style={[styles.cellH, styles.cYds, { color: colors.text_secondary }]}>{t('course_layout.course_layout_screen.yards')}</Text>
           </View>
           {renderRows(front)}
           {front.length > 0 && summary('OUT', front)}
@@ -105,7 +107,7 @@ export default function CourseLayoutScreen() {
           {summary('TOTAL', sorted)}
           {!hasYards && (
             <Text style={[styles.note, { color: colors.text_secondary }]}>
-              Yardages fill in from the scorecard or GPS once available.
+              {t('course_layout.course_layout_screen.yardages_fill_in_from_the')}
             </Text>
           )}
         </ScrollView>

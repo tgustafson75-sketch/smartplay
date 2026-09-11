@@ -16,6 +16,7 @@ import { useVocabularyProfileStore, type VocabularyEntry } from '../store/vocabu
 import { useRelationshipStore } from '../store/relationshipStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { getCaddieName } from '../lib/persona';
+import { useTranslation } from 'react-i18next';
 
 interface DecodedMeaning {
   club: string | null;
@@ -40,6 +41,7 @@ function meaningSummary(meaning: DecodedMeaning): string {
 }
 
 export default function KevinLearningScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const { width: W } = useWindowDimensions();
@@ -62,7 +64,7 @@ export default function KevinLearningScreen() {
 
   const handleForget = (phrase: string) => {
     Alert.alert(
-      'Forget this phrase?',
+      t('kevin_learning.alert.forget_this_phrase'),
       `${caddieName} will stop weighting "${phrase}" toward its current meaning.`,
       [
         { text: 'Cancel', style: 'cancel' },
@@ -118,7 +120,7 @@ export default function KevinLearningScreen() {
         {/* TOP PHRASES */}
         {sortedEntries.length > 0 && (
           <>
-            <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>Top phrases</Text>
+            <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{t('kevin_learning.kevin_learning_screen.top_phrases')}</Text>
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               {sortedEntries.map((entry, i) => {
                 const meaning = decodeSignature(entry.meaning_signature);
@@ -160,7 +162,7 @@ export default function KevinLearningScreen() {
             style={[styles.resetBtn, { borderColor: colors.border }]}
             onPress={handleResetAll}
           >
-            <Text style={[styles.resetText, { color: '#ef4444' }]}>Reset all learned phrases</Text>
+            <Text style={[styles.resetText, { color: '#ef4444' }]}>{t('kevin_learning.kevin_learning_screen.reset_all_learned_phrases')}</Text>
           </TouchableOpacity>
         )}
 

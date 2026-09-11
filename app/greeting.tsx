@@ -49,6 +49,7 @@ import { getGreetingAssetForPersona } from '../services/kevinGreetingManifest';
 // own audio — no separate playLocalFile to race the screen transition.
 import { getCaddieClip } from '../services/getCaddieClip';
 import { getApiBaseUrl } from '../services/apiBase';
+import { useTranslation } from 'react-i18next';
 
 // 2026-06-03 — Greeting-complete signal exported for future consumers.
 // Resolves when ANY greeting playback path sets
@@ -90,6 +91,7 @@ const ENTER_DURATION_MS = 300;
 // now fades out and routes; no slide animation to a target frame.
 
 export default function GreetingScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const _insets = useSafeAreaInsets();
   const { colors } = useTheme();
@@ -516,7 +518,7 @@ export default function GreetingScreen() {
   }, [phase, reduceMotion, useKevinIntroVideo]);
 
   return (
-    <TouchableWithoutFeedback onPress={handleSkip} accessibilityLabel="Skip greeting">
+    <TouchableWithoutFeedback onPress={handleSkip} accessibilityLabel={t('greeting.accessibility_label.skip_greeting')}>
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         {/* Phase AR follow-up v2 — true viewport centering. Earlier version
             put avatar + caption as siblings in a justifyContent:center

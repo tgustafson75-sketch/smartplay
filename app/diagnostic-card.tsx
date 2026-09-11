@@ -35,6 +35,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { speak, stopSpeaking } from '../services/voiceService';
 import { getCaddieName } from '../lib/persona';
 import { getApiBaseUrl } from '../services/apiBase';
+import { useTranslation } from 'react-i18next';
 
 const apiUrl = getApiBaseUrl();
 
@@ -71,6 +72,7 @@ function parseReasoning(text: string): { causes: string[]; tryNow: string[]; wor
 }
 
 export default function DiagnosticCard() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors, spacing, radii } = useTheme();
   const params = useLocalSearchParams<{ pattern?: string; reasoning?: string }>();
@@ -106,14 +108,14 @@ export default function DiagnosticCard() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Ionicons name="chevron-back" size={26} color={colors.text_primary} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text_primary }]}>Mid-Round Diagnostic</Text>
+        <Text style={[styles.headerTitle, { color: colors.text_primary }]}>{t('diagnostic_card.text.mid_round_diagnostic')}</Text>
         <View style={styles.backBtn} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Pattern user described */}
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>WHAT YOU DESCRIBED</Text>
+          <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>{t('diagnostic_card.text.what_you_described')}</Text>
           <Text style={[styles.sectionBody, { color: colors.text_primary }]}>{pattern || '—'}</Text>
         </View>
 
@@ -122,7 +124,7 @@ export default function DiagnosticCard() {
           <>
             {sections.causes.length > 0 && (
               <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <Text style={[styles.sectionLabel, { color: colors.accent }]}>LIKELY CAUSES</Text>
+                <Text style={[styles.sectionLabel, { color: colors.accent }]}>{t('diagnostic_card.text.likely_causes')}</Text>
                 {sections.causes.map((c, i) => (
                   <View key={i} style={styles.bullet}>
                     <Text style={[styles.bulletDot, { color: colors.accent }]}>•</Text>
@@ -133,7 +135,7 @@ export default function DiagnosticCard() {
             )}
             {sections.tryNow.length > 0 && (
               <View style={[styles.section, { backgroundColor: colors.surface, borderColor: '#facc15' }]}>
-                <Text style={[styles.sectionLabel, { color: '#facc15' }]}>TRY THIS ROUND</Text>
+                <Text style={[styles.sectionLabel, { color: '#facc15' }]}>{t('diagnostic_card.text.try_this_round')}</Text>
                 {sections.tryNow.map((c, i) => (
                   <View key={i} style={styles.bullet}>
                     <Text style={[styles.bulletDot, { color: '#facc15' }]}>•</Text>
@@ -144,7 +146,7 @@ export default function DiagnosticCard() {
             )}
             {sections.workOn.length > 0 && (
               <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>WORTH WORKING ON</Text>
+                <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>{t('diagnostic_card.text.worth_working_on')}</Text>
                 {sections.workOn.map((c, i) => (
                   <View key={i} style={styles.bullet}>
                     <Text style={[styles.bulletDot, { color: colors.text_muted }]}>•</Text>

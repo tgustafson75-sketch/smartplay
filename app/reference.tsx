@@ -23,10 +23,12 @@ import {
   computeCourseHandicap, computeScoreDifferential, netDoubleBogeyCap,
 } from '../services/handicapCalculator';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
+import { useTranslation } from 'react-i18next';
 
 type Tab = 'rules' | 'handicap' | 'glossary';
 
 export default function ReferenceScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { rule } = useLocalSearchParams<{ rule?: string }>();
   // 2026-05-17 — Rules tab is the default on mount; deep-link `?rule=`
@@ -60,16 +62,16 @@ export default function ReferenceScreen() {
       >
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Text style={styles.back}>‹ Back</Text>
+          <Text style={styles.back}>{t('reference.reference_screen.back')}</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Reference</Text>
+        <Text style={styles.title}>{t('reference.reference_screen.reference')}</Text>
         <View style={{ width: 60 }} />
       </View>
 
       <View style={styles.tabRow}>
-        <TabBtn label="Rules" active={tab === 'rules'} onPress={() => setTab('rules')} />
-        <TabBtn label="Handicap" active={tab === 'handicap'} onPress={() => setTab('handicap')} />
-        <TabBtn label="Glossary" active={tab === 'glossary'} onPress={() => setTab('glossary')} />
+        <TabBtn label={t('reference.label.rules')} active={tab === 'rules'} onPress={() => setTab('rules')} />
+        <TabBtn label={t('reference.label.handicap')} active={tab === 'handicap'} onPress={() => setTab('handicap')} />
+        <TabBtn label={t('reference.label.glossary')} active={tab === 'glossary'} onPress={() => setTab('glossary')} />
       </View>
 
       {tab === 'rules' && (
@@ -80,7 +82,7 @@ export default function ReferenceScreen() {
               style={styles.searchInput}
               value={query}
               onChangeText={setQuery}
-              placeholder="Search rules (e.g. 'embedded ball')"
+              placeholder={t('reference.placeholder.search_rules_e_g_embedded')}
               placeholderTextColor="#3a5a40"
             />
           </View>
@@ -124,6 +126,7 @@ function TabBtn({ label, active, onPress }: { label: string; active: boolean; on
 }
 
 function RuleRow({ rule, expanded, onToggle }: { rule: RuleEntry; expanded: boolean; onToggle: () => void }) {
+  const { t } = useTranslation();
   return (
     <TouchableOpacity style={[styles.ruleCard, expanded && styles.ruleCardExpanded]} onPress={onToggle} activeOpacity={0.85}>
       <View style={styles.ruleHeader}>
@@ -133,10 +136,10 @@ function RuleRow({ rule, expanded, onToggle }: { rule: RuleEntry; expanded: bool
       <Text style={styles.ruleSummary}>{rule.rule_summary}</Text>
       {expanded && (
         <View style={styles.ruleDetail}>
-          <Section label="THE FULL RULE" body={rule.detailed_explanation} />
-          <Section label="TACTICAL ADVICE" body={rule.tactical_advice} />
+          <Section label={t('reference.label.the_full_rule')} body={rule.detailed_explanation} />
+          <Section label={t('reference.label.tactical_advice')} body={rule.tactical_advice} />
           {rule.common_misconceptions && (
-            <Section label="COMMON MISCONCEPTION" body={rule.common_misconceptions} accent="#fbbf24" />
+            <Section label={t('reference.label.common_misconception')} body={rule.common_misconceptions} accent="#fbbf24" />
           )}
           <Text style={styles.officialRef}>{rule.official_reference}</Text>
         </View>
@@ -155,6 +158,7 @@ function Section({ label, body, accent = '#00C896' }: { label: string; body: str
 }
 
 function HandicapPanel() {
+  const { t } = useTranslation();
   const idx = usePlayerProfileStore(s => s.handicap_index);
   const setIdx = usePlayerProfileStore(s => s.setHandicapIndex);
   const [indexInput, setIndexInput] = useState(idx != null ? String(idx) : '');
@@ -181,19 +185,19 @@ function HandicapPanel() {
 
   return (
     <ScrollView contentContainerStyle={styles.panelScroll}>
-      <Text style={styles.panelHeader}>WHS Calculator</Text>
-      <Text style={styles.panelSub}>Manual inputs — for what-ifs and pre-tournament prep.</Text>
+      <Text style={styles.panelHeader}>{t('reference.handicap_panel.whs_calculator')}</Text>
+      <Text style={styles.panelSub}>{t('reference.handicap_panel.manual_inputs_for_what_ifs')}</Text>
 
-      <Field label="Handicap Index" value={indexInput} onChange={setIndexInput} placeholder="18.0" />
-      <Field label="Course Rating" value={rating} onChange={setRating} placeholder="72.0" />
-      <Field label="Slope Rating" value={slope} onChange={setSlope} placeholder="113" />
-      <Field label="Par" value={par} onChange={setPar} placeholder="72" />
-      <Field label="Score (for differential)" value={score} onChange={setScore} placeholder="optional" />
+      <Field label={t('reference.label.handicap_index')} value={indexInput} onChange={setIndexInput} placeholder="18.0" />
+      <Field label={t('reference.label.course_rating')} value={rating} onChange={setRating} placeholder="72.0" />
+      <Field label={t('reference.label.slope_rating')} value={slope} onChange={setSlope} placeholder="113" />
+      <Field label={t('scorecard.par_label')} value={par} onChange={setPar} placeholder="72" />
+      <Field label={t('reference.label.score_for_differential')} value={score} onChange={setScore} placeholder="optional" />
 
       <View style={styles.outBlock}>
-        <Out label="Course Handicap" value={ch != null ? String(ch) : '—'} />
-        <Out label="Score Differential" value={diff != null ? diff.toFixed(1) : '—'} />
-        <Out label="Net Double Bogey (avg hole)" value={ndb != null ? String(ndb) : '—'} />
+        <Out label={t('reference.label.course_handicap')} value={ch != null ? String(ch) : '—'} />
+        <Out label={t('reference.label.score_differential')} value={diff != null ? diff.toFixed(1) : '—'} />
+        <Out label={t('reference.label.net_double_bogey_avg_hole')} value={ndb != null ? String(ndb) : '—'} />
       </View>
 
       {idx == null && parsedIdx > 0 && (
@@ -231,6 +235,7 @@ function Out({ label, value }: { label: string; value: string }) {
 }
 
 function GlossaryPanel() {
+  const { t } = useTranslation();
   const TERMS = [
     { t: 'Par', d: 'Expected number of strokes for an expert golfer to play a hole.' },
     { t: 'Birdie', d: 'One stroke under par.' },
@@ -254,7 +259,7 @@ function GlossaryPanel() {
   ];
   return (
     <ScrollView contentContainerStyle={styles.panelScroll}>
-      <Text style={styles.panelHeader}>Glossary</Text>
+      <Text style={styles.panelHeader}>{t('reference.glossary_panel.glossary')}</Text>
       {TERMS.map(t => (
         <View key={t.t} style={styles.glossaryRow}>
           <Text style={styles.glossaryTerm}>{t.t}</Text>

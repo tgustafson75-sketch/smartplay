@@ -545,6 +545,7 @@ function HeroFeature({ icon, label }: { icon: ImageSourcePropType; label: string
 // Smart Motion HERO — the marquee card: branded media + CORE badge + feature row.
 // Single-card ANALYZE section → uses the brand green base directly (no graduation).
 function SmartMotionHero({ spec, accent, colors, onPress }: LauncherCardProps) {
+  const { t } = useTranslation();
   return (
     <Pressable
       onPress={onPress}
@@ -571,9 +572,9 @@ function SmartMotionHero({ spec, accent, colors, onPress }: LauncherCardProps) {
         <Ionicons name="chevron-forward" size={18} color="rgba(255,255,255,0.55)" />
       </View>
       <View style={styles.heroFeatures}>
-        <HeroFeature icon={ICON_FEAT_ANALYSIS} label="Swing Analysis" />
-        <HeroFeature icon={ICON_FEAT_ACOUSTIC} label="Acoustic Detection" />
-        <HeroFeature icon={ICON_FEAT_BODY} label="Body Mechanics" />
+        <HeroFeature icon={ICON_FEAT_ANALYSIS} label={t('swinglab.label.swing_analysis')} />
+        <HeroFeature icon={ICON_FEAT_ACOUSTIC} label={t('swinglab.label.acoustic_detection')} />
+        <HeroFeature icon={ICON_FEAT_BODY} label={t('swinglab.label.body_mechanics')} />
       </View>
     </Pressable>
   );

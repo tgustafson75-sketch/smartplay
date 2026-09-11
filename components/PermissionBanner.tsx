@@ -23,8 +23,10 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Linking, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { hasLocationPermission, requestLocationAgain } from '../services/permissionsManager';
+import { useTranslation } from 'react-i18next';
 
 export function PermissionBanner() {
+  const { t } = useTranslation();
   const [granted, setGranted] = useState<boolean | null>(null); // null = unknown (initial)
   const [busy, setBusy] = useState(false);
 
@@ -56,8 +58,8 @@ export function PermissionBanner() {
       // the recovery path. Wrapped in try/catch — Linking.openSettings
       // can throw on simulators / unusual Android skins.
       Alert.alert(
-        'Location is required',
-        "Open Settings → enable Location for SmartPlay Caddie. The app needs this for yardages, shot tracking, and hole detection.",
+        t('permission_banner.alert.location_is_required'),
+        t('permission_banner.alert.open_settings_enable_location_for'),
         [
           { text: 'Not now', style: 'cancel' },
           {
@@ -82,13 +84,13 @@ export function PermissionBanner() {
       onPress={handleTap}
       hitSlop={6}
       accessibilityRole="button"
-      accessibilityLabel="Location is off. Tap to enable so GPS, yardages, and shot tracking can work."
+      accessibilityLabel={t('permission_banner.accessibility_label.location_is_off_tap_to')}
       style={({ pressed }) => [styles.banner, pressed && styles.bannerPressed]}
     >
       <Ionicons name="location-outline" size={18} color="#0d1a0d" />
       <View style={{ flex: 1 }}>
-        <Text style={styles.title}>GPS off — tap to enable</Text>
-        <Text style={styles.body}>Yardages, shot tracking, and SmartFinder need location to work.</Text>
+        <Text style={styles.title}>{t('permission_banner.text.gps_off_tap_to_enable')}</Text>
+        <Text style={styles.body}>{t('permission_banner.text.yardages_shot_tracking_and_smartfinder')}</Text>
       </View>
       <Ionicons name="chevron-forward" size={18} color="#0d1a0d" />
     </Pressable>

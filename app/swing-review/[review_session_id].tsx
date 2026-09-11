@@ -25,6 +25,7 @@ import { speak, configureAudioForSpeech, configureAudioForRecording, stopSpeakin
 import type { ReviewSession } from '../../types/practiceReview';
 import type { SwingShot } from '../../store/swingSessionStore';
 import { getApiBaseUrl } from '../../services/apiBase';
+import { useTranslation } from 'react-i18next';
 
 const RECORDING_OPTIONS: Audio.RecordingOptions = {
   android: {
@@ -58,6 +59,7 @@ type ScreenState =
   | 'done';
 
 export default function CageReviewInterview() {
+  const { t } = useTranslation();
   const { review_session_id } = useLocalSearchParams<{ review_session_id: string }>();
   const router = useRouter();
   const { sessionHistory, updateShotLabels } = useSwingSessionStore();
@@ -371,7 +373,7 @@ export default function CageReviewInterview() {
         <View style={styles.emptyState}>
           <Text style={styles.emptyTitle}>{errorMsg ?? 'Review complete'}</Text>
           <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/practice-session' as never)}>
-            <Text style={styles.doneBtnText}>Back to Sessions</Text>
+            <Text style={styles.doneBtnText}>{t('swing_review.cage_review_interview.back_to_sessions')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -405,11 +407,11 @@ export default function CageReviewInterview() {
         {screenState === 'loading' ? (
           <View style={styles.thinkingRow}>
             <ActivityIndicator color="#00C896" size="small" />
-            <Text style={styles.thinkingText}>Kevin is thinking…</Text>
+            <Text style={styles.thinkingText}>{t('swing_review.cage_review_interview.kevin_is_thinking')}</Text>
           </View>
         ) : (
           <View style={styles.questionCard}>
-            <Text style={styles.questionLabel}>KEVIN</Text>
+            <Text style={styles.questionLabel}>{t('swing_review.cage_review_interview.kevin')}</Text>
             <Text style={styles.questionText}>{question}</Text>
           </View>
         )}
@@ -418,7 +420,7 @@ export default function CageReviewInterview() {
       {/* TRANSCRIPT (if recorded) */}
       {transcript.trim().length > 0 && screenState === 'question' && (
         <View style={styles.transcriptCard}>
-          <Text style={styles.transcriptLabel}>YOU SAID</Text>
+          <Text style={styles.transcriptLabel}>{t('swing_review.cage_review_interview.you_said')}</Text>
           <Text style={styles.transcriptText}>{transcript}</Text>
         </View>
       )}
@@ -429,18 +431,18 @@ export default function CageReviewInterview() {
           <>
             {transcript.trim().length > 0 ? (
               <TouchableOpacity style={styles.submitBtn} onPress={() => submitResponse(transcript)}>
-                <Text style={styles.submitBtnText}>Submit</Text>
+                <Text style={styles.submitBtnText}>{t('swing_review.cage_review_interview.submit')}</Text>
               </TouchableOpacity>
             ) : (
               <Animated.View style={{ transform: [{ scale: micPulse }] }}>
                 <TouchableOpacity style={styles.micBtn} onPress={startRecording}>
                   <Text style={styles.micIcon}>🎙</Text>
-                  <Text style={styles.micLabel}>Tap to respond</Text>
+                  <Text style={styles.micLabel}>{t('swing_review.cage_review_interview.tap_to_respond')}</Text>
                 </TouchableOpacity>
               </Animated.View>
             )}
             <TouchableOpacity style={styles.skipBtn} onPress={handleSkip}>
-              <Text style={styles.skipText}>Skip</Text>
+              <Text style={styles.skipText}>{t('swing_review.cage_review_interview.skip')}</Text>
             </TouchableOpacity>
           </>
         )}
@@ -448,7 +450,7 @@ export default function CageReviewInterview() {
         {screenState === 'recording' && (
           <TouchableOpacity style={[styles.micBtn, styles.micBtnActive]} onPress={stopRecording}>
             <Text style={styles.micIcon}>⏹</Text>
-            <Text style={styles.micLabel}>Tap to stop</Text>
+            <Text style={styles.micLabel}>{t('swing_review.cage_review_interview.tap_to_stop')}</Text>
           </TouchableOpacity>
         )}
 

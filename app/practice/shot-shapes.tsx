@@ -14,12 +14,14 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { SHOT_SHAPES, type ShotShapeDef } from '../../services/practice/shotShapes';
 import { safeBack } from '../../services/safeBack';
 import { ACCENT_GREEN, ACCENT_AMBER, ACCENT_SKY } from '../../theme/tokens';
+import { useTranslation } from 'react-i18next';
 
 // 2026-06-23 (Tim) — launch-height tints on the disciplined 3-color brand
 // palette (was green/orange/cyan): high=GREEN, medium=AMBER, low=SKY.
 const HEIGHT_TINT: Record<string, string> = { high: ACCENT_GREEN, medium: ACCENT_AMBER, low: ACCENT_SKY };
 
 export default function ShotShapesPicker() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
 
@@ -53,13 +55,13 @@ export default function ShotShapesPicker() {
         <TouchableOpacity onPress={() => safeBack()} style={styles.headerBtn} accessibilityRole="button">
           <Ionicons name="chevron-back" size={24} color={colors.text_primary} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text_primary }]}>What do you want to practice?</Text>
+        <Text style={[styles.headerTitle, { color: colors.text_primary }]}>{t('practice_shot_shapes.shot_shapes_picker.what_do_you_want_to')}</Text>
         <View style={styles.headerBtn} />
       </View>
 
       <ScrollView contentContainerStyle={styles.grid}>
         <Text style={[styles.sub, { color: colors.text_muted }]}>
-          Pick a shot. I&apos;ll show you when to play it and how to hit it, then record it and show you what you went for vs. what came out — launch + direction. Sense of progress, not a TrackMan.
+          {t('practice_shot_shapes.shot_shapes_picker.pick_a_shot_i_ll')}
         </Text>
         {SHOT_SHAPES.map((s) => (
           <TouchableOpacity
@@ -96,19 +98,19 @@ export default function ShotShapesPicker() {
                     />
                   </View>
                   <Text style={[styles.sheetTitle, { color: colors.text_primary }]}>{teaching.name}</Text>
-                  <TouchableOpacity onPress={() => setTeaching(null)} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel="Close">
+                  <TouchableOpacity onPress={() => setTeaching(null)} style={styles.headerBtn} accessibilityRole="button" accessibilityLabel={t('practice_shot_shapes.accessibility_label.close')}>
                     <Ionicons name="close" size={22} color={colors.text_muted} />
                   </TouchableOpacity>
                 </View>
 
                 <ScrollView style={styles.sheetScroll} contentContainerStyle={{ paddingBottom: 12 }}>
-                  <Text style={[styles.sheetLabel, { color: colors.text_muted }]}>WHEN YOU&apos;D PLAY IT</Text>
+                  <Text style={[styles.sheetLabel, { color: colors.text_muted }]}>{t('practice_shot_shapes.shot_shapes_picker.when_you_d_play_it')}</Text>
                   <Text style={[styles.sheetBody, { color: colors.text_primary }]}>{teaching.why}</Text>
 
-                  <Text style={[styles.sheetLabel, { color: colors.text_muted }]}>CLUB</Text>
+                  <Text style={[styles.sheetLabel, { color: colors.text_muted }]}>{t('scorecard.col_club')}</Text>
                   <Text style={[styles.sheetBody, { color: colors.text_primary }]}>{teaching.club}</Text>
 
-                  <Text style={[styles.sheetLabel, { color: colors.text_muted }]}>HOW TO HIT IT</Text>
+                  <Text style={[styles.sheetLabel, { color: colors.text_muted }]}>{t('practice_shot_shapes.shot_shapes_picker.how_to_hit_it')}</Text>
                   {teaching.how.map((step, i) => (
                     <View key={i} style={styles.stepRow}>
                       <Text style={[styles.stepNum, { color: HEIGHT_TINT[teaching.intendedHeight] }]}>{i + 1}</Text>
@@ -124,11 +126,11 @@ export default function ShotShapesPicker() {
                   accessibilityLabel={`Record three ${teaching.name} attempts`}
                 >
                   <Ionicons name="videocam" size={18} color="#04140b" />
-                  <Text style={styles.recordBtnText}>Record 3 of these</Text>
+                  <Text style={styles.recordBtnText}>{t('practice_shot_shapes.shot_shapes_picker.record_3_of_these')}</Text>
                 </TouchableOpacity>
                 {/* A step, never a gate — the golfer who already owns the shot skips straight past. */}
                 <TouchableOpacity onPress={() => pick(teaching)} accessibilityRole="button" style={styles.skipBtn}>
-                  <Text style={[styles.skipText, { color: colors.text_muted }]}>I know this one — just record</Text>
+                  <Text style={[styles.skipText, { color: colors.text_muted }]}>{t('practice_shot_shapes.shot_shapes_picker.i_know_this_one_just')}</Text>
                 </TouchableOpacity>
               </>
             ) : null}

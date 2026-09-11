@@ -10,6 +10,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { TERMS_OF_SERVICE, PRIVACY_POLICY } from '../constants/legalText';
+import { useTranslation } from 'react-i18next';
 
 // Split **bold** spans so we can render them inline.
 function renderInline(text: string, baseStyle: object, boldColor: string) {
@@ -23,6 +24,7 @@ function renderInline(text: string, baseStyle: object, boldColor: string) {
 }
 
 export default function LegalScreen() {
+  const { t } = useTranslation();
   const { doc } = useLocalSearchParams<{ doc?: string }>();
   const router = useRouter();
   const { colors } = useTheme();
@@ -52,7 +54,7 @@ export default function LegalScreen() {
   return (
     <SafeAreaView style={s.root} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button" accessibilityLabel="Back">
+        <Pressable onPress={() => router.back()} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('legal.accessibility_label.back')}>
           <Ionicons name="chevron-back" size={26} color={colors.text_primary} />
         </Pressable>
         <Text style={s.headerTitle}>{title}</Text>

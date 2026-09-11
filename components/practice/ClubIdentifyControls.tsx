@@ -34,6 +34,7 @@ import {
   type ClubRecognitionOutcome,
 } from '../../services/clubRecognition';
 import { getApiBaseUrl } from '../../services/apiBase';
+import { useTranslation } from 'react-i18next';
 
 // 2026-07-06 (audit) — read at fetch time, not module load: a module-scope
 // snapshot would defeat the mid-session dual-host failover (see apiBase.ts).
@@ -50,6 +51,7 @@ type LowConfState = {
 };
 
 export default function ClubIdentifyControls() {
+  const { t } = useTranslation();
   const activeSession = useSwingSessionStore(s => s.activeSession);
   const setActiveClub = useSwingSessionStore(s => s.setActiveClub);
   const setClubMenuOpen = useSwingSessionStore(s => s.setClubMenuOpen);
@@ -197,14 +199,14 @@ export default function ClubIdentifyControls() {
           onPress={runVisionCapture}
           disabled={identifying}
           accessibilityRole="button"
-          accessibilityLabel="Identify club by photographing the sole"
+          accessibilityLabel={t('practice_club_identify_controls.accessibility_label.identify_club_by_photographing_the')}
         >
           {identifying ? (
             <ActivityIndicator color="#00C896" size="small" />
           ) : (
             <>
               <Ionicons name="camera-outline" size={14} color="#00C896" />
-              <Text style={styles.idBtnText}>ID</Text>
+              <Text style={styles.idBtnText}>{t('practice_club_identify_controls.club_identify_controls.id')}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -224,10 +226,10 @@ export default function ClubIdentifyControls() {
           </Text>
           <View style={styles.bannerActions}>
             <TouchableOpacity style={styles.bannerBtn} onPress={acceptPending}>
-              <Text style={styles.bannerBtnYes}>Yes</Text>
+              <Text style={styles.bannerBtnYes}>{t('practice_club_identify_controls.club_identify_controls.yes')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.bannerBtn} onPress={openManualFromConfirm}>
-              <Text style={styles.bannerBtnNo}>Pick another</Text>
+              <Text style={styles.bannerBtnNo}>{t('practice_club_identify_controls.club_identify_controls.pick_another')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -238,7 +240,7 @@ export default function ClubIdentifyControls() {
           <Ionicons name="alert-circle-outline" size={14} color="#fbbf24" />
           <Text style={styles.bannerLowText}>{lowConf.detail}</Text>
           <TouchableOpacity style={styles.bannerBtn} onPress={openManualFromLow}>
-            <Text style={styles.bannerBtnYes}>Pick manually</Text>
+            <Text style={styles.bannerBtnYes}>{t('practice_club_identify_controls.club_identify_controls.pick_manually')}</Text>
           </TouchableOpacity>
         </View>
       )}

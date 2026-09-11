@@ -23,6 +23,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useTeamIntelligenceStore } from '../store/teamIntelligenceStore';
 import { useCustomCaddieMediaStore } from '../store/customCaddieMediaStore';
 import type { Persona } from '../store/settingsStore';
+import { useTranslation } from 'react-i18next';
 
 const PORTRAIT_FOR: Record<Persona, ImageSourcePropType> = {
   kevin:  require('../assets/avatars/kevin_portrait.jpg'),
@@ -42,6 +43,7 @@ const NAME_FOR: Record<Persona, string> = {
 };
 
 export default function CaddieSuggestionCard() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const suppression = useSettingsStore(s => s.caddieSuggestions);
@@ -103,7 +105,7 @@ export default function CaddieSuggestionCard() {
 
       {!expanded && (
         <TouchableOpacity onPress={() => setExpanded(true)} style={styles.moreBtn}>
-          <Text style={[styles.moreText, { color: colors.accent }]}>Tell me more</Text>
+          <Text style={[styles.moreText, { color: colors.accent }]}>{t('caddie_suggestion_card.text.tell_me_more')}</Text>
         </TouchableOpacity>
       )}
     </View>

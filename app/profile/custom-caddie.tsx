@@ -50,6 +50,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { phrasesByCategory, type CustomCaddiePhrase } from '../../services/customCaddieClips';
 import { matchCaddieVoiceFromPhoto, CADDIE_VOICES } from '../../services/caddieVoiceMatch';
 import { getApiBaseUrl, appKeyHeaders } from '../../services/apiBase';
+import { useTranslation } from 'react-i18next';
 
 const DEFAULT_PROMPT =
   "Stylize this person as a confident golf caddie. Keep their face recognizable. Place them on a sunny PGA-style fairway, wearing a clean caddie polo and visor, holding a golf club. Photorealistic, soft warm lighting, 9:16 portrait composition with the head and shoulders centered.";
@@ -59,6 +60,7 @@ const DEFAULT_PROMPT =
 const apiUrl = (): string => getApiBaseUrl();
 
 export default function CustomCaddieScreen() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const {
     customCaddieName,
@@ -162,7 +164,7 @@ export default function CustomCaddieScreen() {
     try {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert('Camera permission needed', 'Allow camera access to capture a selfie.');
+        Alert.alert(t('profile_custom_caddie.alert.camera_permission_needed'), t('profile_custom_caddie.alert.allow_camera_access_to_capture'));
         return;
       }
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -204,11 +206,11 @@ export default function CustomCaddieScreen() {
 
   const generateCaddie = async () => {
     if (!selfieB64) {
-      Alert.alert('Capture a selfie first', 'Tap "Take Selfie" to start.');
+      Alert.alert(t('profile_custom_caddie.alert.capture_a_selfie_first'), t('profile_custom_caddie.alert.tap_take_selfie_to_start'));
       return;
     }
     if (!prompt.trim()) {
-      Alert.alert('Prompt required', 'Describe how the caddie should look.');
+      Alert.alert(t('profile_custom_caddie.alert.prompt_required'), t('profile_custom_caddie.alert.describe_how_the_caddie_should'));
       return;
     }
     setError(null);
@@ -279,7 +281,7 @@ export default function CustomCaddieScreen() {
       if (perm.granted || perm.accessPrivileges === 'limited') {
         await ML.saveToLibraryAsync(file.uri);
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert('Saved to Photos', `Your ${label === 'caddie' ? 'caddie' : 'selfie'} is in your camera roll.`);
+        Alert.alert(t('profile_custom_caddie.alert.saved_to_photos'), `Your ${label === 'caddie' ? 'caddie' : 'selfie'} is in your camera roll.`);
         return;
       }
       // Permission denied → share-sheet fallback so the image isn't trapped.
@@ -292,17 +294,17 @@ export default function CustomCaddieScreen() {
         });
         return;
       }
-      Alert.alert('Saved', `Saved to ${file.uri}.`);
+      Alert.alert(t('profile_custom_caddie.alert.saved'), `Saved to ${file.uri}.`);
     } catch (e) {
       console.log('[customCaddie] save error', e);
-      Alert.alert('Save failed', 'Try again in a moment.');
+      Alert.alert(t('profile_custom_caddie.alert.save_failed'), t('profile_custom_caddie.alert.try_again_in_a_moment'));
     }
   };
 
   const clearAll = () => {
     Alert.alert(
-      'Clear custom caddie?',
-      'This removes your selfie and AI portrait. You can always re-create them.',
+      t('profile_custom_caddie.alert.clear_custom_caddie'),
+      t('profile_custom_caddie.alert.this_removes_your_selfie_and'),
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -379,7 +381,7 @@ export default function CustomCaddieScreen() {
       }
       const perm = await Audio.requestPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert('Microphone access needed', 'Allow microphone access to record your voice.');
+        Alert.alert(t('profile_custom_caddie.alert.microphone_access_needed'), t('profile_custom_caddie.alert.allow_microphone_access_to_record'));
         return;
       }
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -401,7 +403,7 @@ export default function CustomCaddieScreen() {
       setRecordingPhraseId(phraseId);
     } catch (e) {
       console.log('[customCaddie] startRecording failed', e);
-      Alert.alert('Recording failed', 'Try again in a moment.');
+      Alert.alert(t('profile_custom_caddie.alert.recording_failed'), t('profile_custom_caddie.alert.try_again_in_a_moment'));
       setRecordingPhraseId(null);
     }
   };
@@ -425,7 +427,7 @@ export default function CustomCaddieScreen() {
       // and we know what to delete when the user clears one.
       const dir = await ensureClipsDir();
       if (!dir) {
-        Alert.alert('Save failed', "Couldn't access storage. Try again.");
+        Alert.alert(t('profile_custom_caddie.alert.save_failed'), t('profile_custom_caddie.alert.couldn_t_access_storage_try'));
         return;
       }
       const FS = await getLegacyFS();
@@ -440,7 +442,7 @@ export default function CustomCaddieScreen() {
       setCustomCaddieClip(phraseId, finalUri);
     } catch (e) {
       console.log('[customCaddie] stopRecording failed', e);
-      Alert.alert('Save failed', "Recording didn't save. Try again.");
+      Alert.alert(t('profile_custom_caddie.alert.save_failed'), t('profile_custom_caddie.alert.recording_didn_t_save_try'));
     } finally {
       setRecordingPhraseId(null);
       // Restore playback-mode audio session so the preview / app voice
@@ -474,7 +476,7 @@ export default function CustomCaddieScreen() {
       });
     } catch (e) {
       console.log('[customCaddie] previewClip failed', e);
-      Alert.alert('Playback failed', 'Try re-recording this phrase.');
+      Alert.alert(t('profile_custom_caddie.alert.playback_failed'), t('profile_custom_caddie.alert.try_re_recording_this_phrase'));
       setPreviewingPhraseId(null);
     }
   };
@@ -483,8 +485,8 @@ export default function CustomCaddieScreen() {
     const uri = customCaddieClips[phraseId];
     if (!uri) return;
     Alert.alert(
-      'Delete recording?',
-      'The caddie will use the AI voice for this phrase until you record it again.',
+      t('profile_custom_caddie.alert.delete_recording'),
+      t('profile_custom_caddie.alert.the_caddie_will_use_the'),
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -506,7 +508,7 @@ export default function CustomCaddieScreen() {
     const ids = Object.keys(customCaddieClips);
     if (ids.length === 0) return;
     Alert.alert(
-      'Clear all recordings?',
+      t('profile_custom_caddie.alert.clear_all_recordings'),
       `Delete all ${ids.length} recorded ${ids.length === 1 ? 'phrase' : 'phrases'}.`,
       [
         { text: 'Cancel', style: 'cancel' },
@@ -543,7 +545,7 @@ export default function CustomCaddieScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Ionicons name="chevron-back" size={26} color="#00C896" />
           </TouchableOpacity>
-          <Text style={styles.title}>Your Caddie</Text>
+          <Text style={styles.title}>{t('profile_custom_caddie.custom_caddie_screen.your_caddie')}</Text>
           <View style={{ width: 26 }} />
         </View>
 
@@ -552,8 +554,7 @@ export default function CustomCaddieScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <Text style={styles.subtitle}>
-            Take a selfie and we&apos;ll generate a personal caddie in your image. Used as your
-            profile picture and your in-app caddie.
+            {t('profile_custom_caddie.custom_caddie_screen.take_a_selfie_and_we')}
           </Text>
 
           {/* Selfie row */}
@@ -566,8 +567,8 @@ export default function CustomCaddieScreen() {
               )}
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.rowLabel}>Step 1 — Selfie</Text>
-              <Text style={styles.rowSub}>Front camera, good light. Crop to a square.</Text>
+              <Text style={styles.rowLabel}>{t('profile_custom_caddie.custom_caddie_screen.step_1_selfie')}</Text>
+              <Text style={styles.rowSub}>{t('profile_custom_caddie.custom_caddie_screen.front_camera_good_light_crop')}</Text>
               <TouchableOpacity
                 style={[styles.actionBtn, busy === 'capture' && styles.actionBtnDisabled]}
                 onPress={captureSelfie}
@@ -587,20 +588,20 @@ export default function CustomCaddieScreen() {
                   activeOpacity={0.7}
                 >
                   <Ionicons name="download-outline" size={16} color="#00C896" />
-                  <Text style={styles.secondaryBtnText}>Save selfie</Text>
+                  <Text style={styles.secondaryBtnText}>{t('profile_custom_caddie.custom_caddie_screen.save_selfie')}</Text>
                 </TouchableOpacity>
               )}
             </View>
           </View>
 
           {/* Prompt */}
-          <Text style={styles.sectionLabel}>Step 2 — Describe Your Caddie</Text>
+          <Text style={styles.sectionLabel}>{t('profile_custom_caddie.custom_caddie_screen.step_2_describe_your_caddie')}</Text>
           <TextInput
             style={styles.promptInput}
             value={prompt}
             onChangeText={setPrompt}
             multiline
-            placeholder="Describe the caddie's look, outfit, setting…"
+            placeholder={t('profile_custom_caddie.placeholder.describe_the_caddie_s_look')}
             placeholderTextColor="#3a4f43"
           />
 
@@ -614,8 +615,8 @@ export default function CustomCaddieScreen() {
               )}
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.rowLabel}>Step 3 — Generate</Text>
-              <Text style={styles.rowSub}>Sends your selfie + prompt to the image model.</Text>
+              <Text style={styles.rowLabel}>{t('profile_custom_caddie.custom_caddie_screen.step_3_generate')}</Text>
+              <Text style={styles.rowSub}>{t('profile_custom_caddie.custom_caddie_screen.sends_your_selfie_prompt_to')}</Text>
               <TouchableOpacity
                 style={[
                   styles.actionBtn,
@@ -640,7 +641,7 @@ export default function CustomCaddieScreen() {
                   activeOpacity={0.7}
                 >
                   <Ionicons name="download-outline" size={16} color="#00C896" />
-                  <Text style={styles.secondaryBtnText}>Save caddie</Text>
+                  <Text style={styles.secondaryBtnText}>{t('profile_custom_caddie.custom_caddie_screen.save_caddie')}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -662,16 +663,16 @@ export default function CustomCaddieScreen() {
               way to activate the custom caddie. */}
           <View style={styles.toggleRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.rowLabel}>Name your caddie</Text>
+              <Text style={styles.rowLabel}>{t('profile_custom_caddie.custom_caddie_screen.name_your_caddie')}</Text>
               <Text style={styles.rowSub}>
-                What should they be called? Shown in the persona cycler.
+                {t('profile_custom_caddie.custom_caddie_screen.what_should_they_be_called')}
               </Text>
             </View>
           </View>
           <TextInput
             value={customCaddieName ?? ''}
             onChangeText={setCustomCaddieName}
-            placeholder="My Caddie"
+            placeholder={t('profile_custom_caddie.placeholder.my_caddie')}
             placeholderTextColor="#6b7d72"
             style={[styles.nameInput]}
             maxLength={20}
@@ -743,7 +744,7 @@ export default function CustomCaddieScreen() {
               the catalog (live conversational responses) still uses
               the AI voice — recording is purely additive. Lives in
               the SAME screen as the AI portrait (Tim's directive). */}
-          <Text style={[styles.sectionLabel, { marginTop: 18 }]}>Step 4 — Record Your Voice (optional)</Text>
+          <Text style={[styles.sectionLabel, { marginTop: 18 }]}>{t('profile_custom_caddie.custom_caddie_screen.step_4_record_your_voice')}</Text>
           <View style={styles.recorderHelpRow}>
             <Ionicons name="information-circle-outline" size={14} color="#9ca3af" />
             <Text style={styles.recorderHelp}>
@@ -756,8 +757,8 @@ export default function CustomCaddieScreen() {
           {/* 2026-07-30 (Tim — "tie my persona and tendencies to one of the caddies"). The custom
               caddie keeps its own name + face but INHERITS a real persona's personality + speaking voice,
               so it always behaves like a fully-built caddie. A matched/picked voice below still overrides. */}
-          <Text style={[styles.sectionLabel, { marginTop: 18 }]}>Base personality</Text>
-          <Text style={styles.recorderHelp}>Your caddie takes on this persona&apos;s style + voice — keep your own name and face on top.</Text>
+          <Text style={[styles.sectionLabel, { marginTop: 18 }]}>{t('profile_custom_caddie.custom_caddie_screen.base_personality')}</Text>
+          <Text style={styles.recorderHelp}>{t('profile_custom_caddie.custom_caddie_screen.your_caddie_takes_on_this')}</Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8, marginBottom: 4 }}>
             {/* 2026-08-01 (tester — "he can select Harry, this should not be possible"). Harry is a
                 DORMANT persona (not in ACTIVE_PERSONAS); it leaked back in here as a base-persona option.
@@ -792,7 +793,7 @@ export default function CustomCaddieScreen() {
           {/* 2026-07-30 (Tim — "analyze the photo for my caddie and assign a fitting OpenAI voice").
               Auto-match a speaking voice to the caddie portrait, or pick one. Applies to any line the
               caddie speaks that you haven't recorded yourself. "Auto" = the male/female default above. */}
-          <Text style={[styles.recorderHelp, { marginTop: 12 }]}>Speaking voice:</Text>
+          <Text style={[styles.recorderHelp, { marginTop: 12 }]}>{t('profile_custom_caddie.custom_caddie_screen.speaking_voice')}</Text>
           <TouchableOpacity
             onPress={async () => {
               setMatchingVoice(true); setVoiceMatchNote(null);
@@ -807,7 +808,7 @@ export default function CustomCaddieScreen() {
             disabled={matchingVoice}
             style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#00C896', backgroundColor: 'rgba(0,200,150,0.14)', marginTop: 6 }}
             accessibilityRole="button"
-            accessibilityLabel="Match voice to my caddie's look"
+            accessibilityLabel={t('profile_custom_caddie.accessibility_label.match_voice_to_my_caddie')}
           >
             {matchingVoice ? <ActivityIndicator color="#00C896" size="small" /> : <Ionicons name="sparkles-outline" size={16} color="#00C896" />}
             <Text style={{ color: '#00C896', fontWeight: '800', fontSize: 13 }}>{matchingVoice ? 'Matching…' : 'Match voice to my caddie’s look'}</Text>
@@ -881,7 +882,7 @@ export default function CustomCaddieScreen() {
                           ]}
                           hitSlop={6}
                           accessibilityRole="button"
-                          accessibilityLabel="Preview recording"
+                          accessibilityLabel={t('profile_custom_caddie.accessibility_label.preview_recording')}
                         >
                           <Ionicons name={isPreviewing ? 'volume-high' : 'play-outline'} size={16} color={isPreviewing ? '#f59e0b' : '#00C896'} />
                         </TouchableOpacity>
@@ -894,7 +895,7 @@ export default function CustomCaddieScreen() {
                           style={[styles.recorderBtn, { borderColor: '#7f1d1d' }, isRecording && { opacity: 0.35 }]}
                           hitSlop={6}
                           accessibilityRole="button"
-                          accessibilityLabel="Delete recording"
+                          accessibilityLabel={t('profile_custom_caddie.accessibility_label.delete_recording')}
                         >
                           <Ionicons name="trash-outline" size={14} color="#ef4444" />
                         </TouchableOpacity>
@@ -908,13 +909,13 @@ export default function CustomCaddieScreen() {
 
           {recordedCount > 0 && (
             <TouchableOpacity onPress={clearAllRecordings} style={styles.clearBtn} activeOpacity={0.7}>
-              <Text style={styles.clearBtnText}>Clear all recordings</Text>
+              <Text style={styles.clearBtnText}>{t('profile_custom_caddie.custom_caddie_screen.clear_all_recordings')}</Text>
             </TouchableOpacity>
           )}
 
           {(selfieB64 || customCaddiePortraitB64) && (
             <TouchableOpacity onPress={clearAll} style={styles.clearBtn} activeOpacity={0.7}>
-              <Text style={styles.clearBtnText}>Clear selfie & caddie</Text>
+              <Text style={styles.clearBtnText}>{t('profile_custom_caddie.custom_caddie_screen.clear_selfie_caddie')}</Text>
             </TouchableOpacity>
           )}
         </ScrollView>

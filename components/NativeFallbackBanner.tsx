@@ -36,8 +36,10 @@ import {
   getAllNativeModuleHealth,
   type NativeModuleHealth,
 } from '../services/nativeModuleHealth';
+import { useTranslation } from 'react-i18next';
 
 export default function NativeFallbackBanner() {
+  const { t } = useTranslation();
   const [dismissed, setDismissed] = useState(false);
   const [records, setRecords] = useState<NativeModuleHealth[]>(() => getAllNativeModuleHealth());
 
@@ -88,7 +90,7 @@ export default function NativeFallbackBanner() {
         onPress={() => setDismissed(true)}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         accessibilityRole="button"
-        accessibilityLabel="Dismiss native fallback banner"
+        accessibilityLabel={t('native_fallback_banner.accessibility_label.dismiss_native_fallback_banner')}
       >
         <Ionicons name="close" size={14} color="#fbbf24" />
       </Pressable>

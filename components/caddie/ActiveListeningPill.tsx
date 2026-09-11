@@ -21,8 +21,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useRoundStore } from '../../store/roundStore';
 import { useToastStore } from '../../store/toastStore';
+import { useTranslation } from 'react-i18next';
 
 export function ActiveListeningPill() {
+  const { t } = useTranslation();
   const autoListenEnabled = useSettingsStore(s => s.autoListenEnabled);
   const setAutoListenEnabled = useSettingsStore(s => s.setAutoListenEnabled);
   const isRoundActive = useRoundStore(s => s.isRoundActive);
@@ -63,13 +65,13 @@ export function ActiveListeningPill() {
       onPress={handleTap}
       hitSlop={8}
       accessibilityRole="button"
-      accessibilityLabel="Active Listening is on. Tap to mute."
+      accessibilityLabel={t('caddie_active_listening_pill.accessibility_label.active_listening_is_on_tap')}
       style={({ pressed }) => [styles.pill, pressed && styles.pillPressed]}
     >
       <Animated.View style={[styles.dot, { opacity: dotOpacity, transform: [{ scale: dotScale }] }]} />
       <Ionicons name="mic" size={14} color="#0d1a0d" />
-      <Text style={styles.label}>Active Listening</Text>
-      <Text style={styles.muteHint}>tap to mute</Text>
+      <Text style={styles.label}>{t('caddie_active_listening_pill.active_listening_pill.active_listening')}</Text>
+      <Text style={styles.muteHint}>{t('caddie_active_listening_pill.active_listening_pill.tap_to_mute')}</Text>
     </Pressable>
   );
 }

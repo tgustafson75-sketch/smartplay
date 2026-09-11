@@ -6,6 +6,7 @@ import AppIcon, { type IconName } from '../components/AppIcon';
 import { useSettingsStore } from '../store/settingsStore';
 import { getCaddieName } from '../lib/persona';
 import { SUBSCRIPTIONS_ENABLED, HEALTH_CONNECT_ENABLED } from '../services/featureAccess';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Tutorials surface — selectable cards by app function. Tap a card to expand
@@ -196,6 +197,7 @@ const buildTutorials = (caddieName: string, pronoun: string): Tutorial[] => {
 };
 
 export default function TutorialsScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const [openId, setOpenId] = useState<string | null>(null);
   const voiceGender = useSettingsStore(s => s.voiceGender);
@@ -208,14 +210,14 @@ export default function TutorialsScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backText}>← Back</Text>
+          <Text style={styles.backText}>{t('tutorials.tutorials_screen.back')}</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Tutorials</Text>
+        <Text style={styles.title}>{t('tutorials.tutorials_screen.tutorials')}</Text>
         <View style={styles.backBtn} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.subtitle}>Tap any card to see how it works.</Text>
+        <Text style={styles.subtitle}>{t('tutorials.tutorials_screen.tap_any_card_to_see')}</Text>
 
         {tutorials.map(t => {
           const open = openId === t.id;

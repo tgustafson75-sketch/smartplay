@@ -27,6 +27,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { speakChunked, configureAudioForSpeech } from '../../services/voiceService';
 import { safeBack } from '../../services/safeBack';
 import { getApiBaseUrl } from '../../services/apiBase';
+import { useTranslation } from 'react-i18next';
 
 type Phase = 'capture' | 'analyzing' | 'result' | 'failed';
 
@@ -40,6 +41,7 @@ const SPACE_TYPE_LABEL: Record<SpaceType, string> = {
 };
 
 export default function SpaceScanScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
   const apiUrl = getApiBaseUrl();
@@ -55,7 +57,7 @@ export default function SpaceScanScreen() {
       ? await ImagePicker.requestCameraPermissionsAsync()
       : await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
-      Alert.alert('Permission needed', mode === 'camera'
+      Alert.alert(t('swinglab_space_scan.alert.permission_needed'), mode === 'camera'
         ? 'Allow camera access to scan your practice space.'
         : 'Allow photo access to pick a space photo.');
       return;
@@ -119,12 +121,12 @@ export default function SpaceScanScreen() {
     });
     if (result.kind === 'error') {
       Alert.alert(
-        "Couldn't save",
-        "Local storage is full or unavailable. The scan stays on this screen so you can try again.",
+        t('swinglab_space_scan.alert.couldn_t_save'),
+        t('swinglab_space_scan.alert.local_storage_is_full_or'),
       );
       return;
     }
-    Alert.alert('Saved', 'Your space is saved. Cage Mode will pre-fill from it next time.');
+    Alert.alert(t('swinglab_space_scan.alert.saved'), t('swinglab_space_scan.alert.your_space_is_saved_cage'));
     router.replace('/(tabs)/swinglab' as never);
   };
 
@@ -140,9 +142,9 @@ export default function SpaceScanScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => safeBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Text style={styles.back}>‹ Back</Text>
+          <Text style={styles.back}>{t('swinglab_space_scan.space_scan_screen.back')}</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Scan Your Space</Text>
+        <Text style={styles.title}>{t('swinglab_space_scan.space_scan_screen.scan_your_space')}</Text>
         <View style={{ width: 60 }} />
       </View>
 
@@ -151,18 +153,18 @@ export default function SpaceScanScreen() {
           <>
             <View style={styles.heroCard}>
               <AppIcon name="camera-outline" size={36} color="#00C896" />
-              <Text style={styles.heroTitle}>Show me your practice space.</Text>
+              <Text style={styles.heroTitle}>{t('swinglab_space_scan.space_scan_screen.show_me_your_practice_space')}</Text>
               <Text style={styles.heroBody}>
-                One photo, 30-second read. I&apos;ll tell you where to put your mat, where your phone goes for swing capture, which drills work here, and what this space won&apos;t tell you honestly.
+                {t('swinglab_space_scan.space_scan_screen.one_photo_30_second_read')}
               </Text>
             </View>
             <TouchableOpacity style={styles.primaryBtn} onPress={() => onCapture('camera')}>
               <AppIcon name="camera" size={18} color="#0d1a0d" />
-              <Text style={styles.primaryBtnText}>Take Photo</Text>
+              <Text style={styles.primaryBtnText}>{t('swinglab_space_scan.space_scan_screen.take_photo')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.secondaryBtn} onPress={() => onCapture('library')}>
               <AppIcon name="images-outline" size={18} color="#00C896" />
-              <Text style={styles.secondaryBtnText}>Pick from Library</Text>
+              <Text style={styles.secondaryBtnText}>{t('swinglab_space_scan.space_scan_screen.pick_from_library')}</Text>
             </TouchableOpacity>
           </>
         )}
@@ -173,8 +175,8 @@ export default function SpaceScanScreen() {
             <View style={styles.analyzeRow}>
               <ActivityIndicator color="#00C896" />
               <View style={{ flex: 1 }}>
-                <Text style={styles.analyzeTitle}>Reading the space…</Text>
-                <Text style={styles.analyzeSub}>About 15 seconds.</Text>
+                <Text style={styles.analyzeTitle}>{t('swinglab_space_scan.space_scan_screen.reading_the_space')}</Text>
+                <Text style={styles.analyzeSub}>{t('swinglab_space_scan.space_scan_screen.about_15_seconds')}</Text>
               </View>
             </View>
           </View>
@@ -183,12 +185,12 @@ export default function SpaceScanScreen() {
         {phase === 'failed' && (
           <View style={[styles.heroCard, { borderColor: '#ef4444' }]}>
             <AppIcon name="alert-circle-outline" size={36} color="#ef4444" />
-            <Text style={[styles.heroTitle, { color: '#ef4444' }]}>Couldn&apos;t read the space</Text>
+            <Text style={[styles.heroTitle, { color: '#ef4444' }]}>{t('swinglab_space_scan.space_scan_screen.couldn_t_read_the_space')}</Text>
             <Text style={styles.heroBody}>
               {errorMessage ?? "Something went sideways on my end."} Try a wider shot showing the hitting area, mat, and net.
             </Text>
             <TouchableOpacity style={styles.primaryBtn} onPress={onRetake}>
-              <Text style={styles.primaryBtnText}>Try Again</Text>
+              <Text style={styles.primaryBtnText}>{t('swinglab_space_scan.space_scan_screen.try_again')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -198,20 +200,20 @@ export default function SpaceScanScreen() {
             {photoUri && <Image source={{ uri: photoUri }} style={styles.preview} resizeMode="cover" />}
 
             <View style={styles.resultCard}>
-              <Text style={styles.resultLabel}>SPACE TYPE</Text>
+              <Text style={styles.resultLabel}>{t('swinglab_space_scan.space_scan_screen.space_type')}</Text>
               <Text style={styles.resultValue}>{SPACE_TYPE_LABEL[assessment.space_type]}</Text>
               <Text style={styles.summary}>{assessment.summary}</Text>
             </View>
 
             <View style={styles.resultCard}>
-              <Text style={styles.resultLabel}>SETUP</Text>
+              <Text style={styles.resultLabel}>{t('swinglab_space_scan.space_scan_screen.setup')}</Text>
               <Bullet text={assessment.recommended_setup.mat_position} />
               <Bullet text={assessment.recommended_setup.aim_direction} />
             </View>
 
             {(assessment.camera_position.dtl_placement || assessment.camera_position.face_on_placement) && (
               <View style={styles.resultCard}>
-                <Text style={styles.resultLabel}>PHONE PLACEMENT</Text>
+                <Text style={styles.resultLabel}>{t('swinglab_space_scan.space_scan_screen.phone_placement')}</Text>
                 {assessment.camera_position.dtl_placement && (
                   <Bullet text={'Down-the-line: ' + assessment.camera_position.dtl_placement} />
                 )}
@@ -223,7 +225,7 @@ export default function SpaceScanScreen() {
 
             {assessment.recommended_drills.length > 0 && (
               <View style={styles.resultCard}>
-                <Text style={styles.resultLabel}>BEST DRILLS HERE</Text>
+                <Text style={styles.resultLabel}>{t('swinglab_space_scan.space_scan_screen.best_drills_here')}</Text>
                 <View style={styles.pillRow}>
                   {assessment.recommended_drills.map(d => (
                     <View key={d} style={styles.goodPill}>
@@ -236,7 +238,7 @@ export default function SpaceScanScreen() {
 
             {assessment.avoid_drills.length > 0 && (
               <View style={styles.resultCard}>
-                <Text style={styles.resultLabel}>SAVE FOR ANOTHER SPACE</Text>
+                <Text style={styles.resultLabel}>{t('swinglab_space_scan.space_scan_screen.save_for_another_space')}</Text>
                 {assessment.avoid_drills.map(a => (
                   <View key={a.drill_id} style={styles.avoidRow}>
                     <View style={styles.avoidPill}>
@@ -250,20 +252,20 @@ export default function SpaceScanScreen() {
 
             {assessment.safety_notes.length > 0 && (
               <View style={styles.resultCard}>
-                <Text style={styles.resultLabel}>WATCH FOR</Text>
+                <Text style={styles.resultLabel}>{t('swinglab_space_scan.space_scan_screen.watch_for')}</Text>
                 {assessment.safety_notes.map((n, i) => <Bullet key={i} text={n} />)}
               </View>
             )}
 
             {assessment.limitations.length > 0 && (
               <View style={styles.resultCard}>
-                <Text style={styles.resultLabel}>HONEST LIMITS</Text>
+                <Text style={styles.resultLabel}>{t('swinglab_space_scan.space_scan_screen.honest_limits')}</Text>
                 {assessment.limitations.map((n, i) => <Bullet key={i} text={n} muted />)}
               </View>
             )}
 
             <View style={styles.resultCard}>
-              <Text style={styles.resultLabel}>NAME THIS SPACE (OPTIONAL)</Text>
+              <Text style={styles.resultLabel}>{t('swinglab_space_scan.space_scan_screen.name_this_space_optional')}</Text>
               <TextInput
                 style={styles.labelInput}
                 value={label}
@@ -275,10 +277,10 @@ export default function SpaceScanScreen() {
 
             <TouchableOpacity style={styles.primaryBtn} onPress={onSave}>
               <AppIcon name="bookmark-outline" size={18} color="#0d1a0d" />
-              <Text style={styles.primaryBtnText}>Save Space</Text>
+              <Text style={styles.primaryBtnText}>{t('swinglab_space_scan.space_scan_screen.save_space')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.secondaryBtn} onPress={onRetake}>
-              <Text style={styles.secondaryBtnText}>Scan Again</Text>
+              <Text style={styles.secondaryBtnText}>{t('swinglab_space_scan.space_scan_screen.scan_again')}</Text>
             </TouchableOpacity>
           </>
         )}

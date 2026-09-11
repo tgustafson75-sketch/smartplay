@@ -20,6 +20,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { searchSimilarSwings, removeReferenceSwing, type SimilarMatch } from '../../services/swingDatabase';
 import type { PoseEstimate } from '../../services/poseEstimator';
 import { useResolvedImageUri } from '../../hooks/useResolvedImageUri';
+import { useTranslation } from 'react-i18next';
 
 // 2026-07-06 (elite audit) — reference thumbnails are persisted as ABSOLUTE
 // file:// paths and iOS regenerates the container UUID on every native build,
@@ -54,6 +55,7 @@ const SOURCE_LABEL: Record<string, string> = {
 export default function CompareReferencePickerSheet({
   visible, current, clubFilter, onClose, onSelect, onAddReference,
 }: CompareReferencePickerSheetProps) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const [matches, setMatches] = useState<SimilarMatch[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -103,9 +105,9 @@ export default function CompareReferencePickerSheet({
           </View>
 
           <View style={styles.headerRow}>
-            <Text style={[styles.heading, { color: colors.text_primary }]}>Compare to…</Text>
+            <Text style={[styles.heading, { color: colors.text_primary }]}>{t('swinglab_compare_reference_picker_sheet.compare_reference_picker_sheet.compare_to')}</Text>
             <Pressable onPress={onClose} hitSlop={10}>
-              <Text style={[styles.closeText, { color: colors.text_muted }]}>Close</Text>
+              <Text style={[styles.closeText, { color: colors.text_muted }]}>{t('swinglab_compare_reference_picker_sheet.compare_reference_picker_sheet.close')}</Text>
             </Pressable>
           </View>
           <Text style={[styles.subheading, { color: colors.text_muted }]}>
@@ -115,7 +117,7 @@ export default function CompareReferencePickerSheet({
           {matches === null ? (
             <View style={styles.loading}>
               <ActivityIndicator color={colors.accent} />
-              <Text style={[styles.loadingText, { color: colors.text_muted }]}>Reading the database…</Text>
+              <Text style={[styles.loadingText, { color: colors.text_muted }]}>{t('swinglab_compare_reference_picker_sheet.compare_reference_picker_sheet.reading_the_database')}</Text>
             </View>
           ) : matches.length === 0 ? (
             <View style={[styles.emptyCard, { borderColor: colors.border, backgroundColor: colors.surface_elevated }]}>
@@ -130,14 +132,14 @@ export default function CompareReferencePickerSheet({
                   onPress={onAddReference}
                   style={[styles.primaryBtn, { backgroundColor: colors.accent }]}
                 >
-                  <Text style={styles.primaryBtnText}>Add a reference swing</Text>
+                  <Text style={styles.primaryBtnText}>{t('swinglab_compare_reference_picker_sheet.compare_reference_picker_sheet.add_a_reference_swing')}</Text>
                 </Pressable>
               ) : null}
             </View>
           ) : (
             <ScrollView contentContainerStyle={styles.scroll}>
               <Text style={[styles.rowMeta, { color: colors.text_muted, paddingHorizontal: 4, paddingBottom: 6 }]}>
-                Long-press a reference you added to remove it.
+                {t('swinglab_compare_reference_picker_sheet.compare_reference_picker_sheet.long_press_a_reference_you')}
               </Text>
               {matches.map((m, i) => (
                 <Pressable
@@ -161,7 +163,7 @@ export default function CompareReferencePickerSheet({
                   onLongPress={() => {
                     if (m.reference.source === 'archetype') return;
                     Alert.alert(
-                      'Remove this reference?',
+                      t('swinglab_compare_reference_picker_sheet.alert.remove_this_reference'),
                       `"${m.reference.label}" will be removed from your comparisons. This does not affect your own swings.`,
                       [
                         { text: 'Cancel', style: 'cancel' },
@@ -215,7 +217,7 @@ export default function CompareReferencePickerSheet({
                   </View>
                   <View style={[styles.matchBadge, { borderColor: matchColor(m.similarity) }]}>
                     <Text style={[styles.matchValue, { color: matchColor(m.similarity) }]}>{m.similarity}</Text>
-                    <Text style={[styles.matchLabel, { color: matchColor(m.similarity) }]}>MATCH</Text>
+                    <Text style={[styles.matchLabel, { color: matchColor(m.similarity) }]}>{t('swinglab_compare_reference_picker_sheet.compare_reference_picker_sheet.match')}</Text>
                   </View>
                 </Pressable>
               ))}
@@ -225,7 +227,7 @@ export default function CompareReferencePickerSheet({
                   style={[styles.secondaryBtn, { borderColor: colors.border }]}
                 >
                   <Text style={[styles.secondaryBtnText, { color: colors.text_muted }]}>
-                    ＋ Add another reference
+                    {t('swinglab_compare_reference_picker_sheet.compare_reference_picker_sheet.add_another_reference')}
                   </Text>
                 </Pressable>
               ) : null}

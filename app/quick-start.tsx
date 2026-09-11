@@ -25,6 +25,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
 
 type Card = {
   icon: React.ComponentProps<typeof Ionicons>['name'];
@@ -132,6 +133,7 @@ const CARDS: Card[] = [
 ];
 
 export default function QuickStartScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors, spacing, radii } = useTheme();
@@ -153,8 +155,8 @@ export default function QuickStartScreen() {
       );
     Linking.openURL(url).catch(() => {
       Alert.alert(
-        'Email unavailable',
-        'Could not open your email client. Reach support at support@smartplaycaddie.com directly.',
+        t('quick_start.alert.email_unavailable'),
+        t('quick_start.alert.could_not_open_your_email'),
       );
     });
   };
@@ -167,17 +169,17 @@ export default function QuickStartScreen() {
           style={styles.headerBtn}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           accessibilityRole="button"
-          accessibilityLabel="Close Quick Start Guide"
+          accessibilityLabel={t('quick_start.accessibility_label.close_quick_start_guide')}
         >
           <Ionicons name="close" size={22} color={colors.text_muted} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text_primary }]}>Quick Start</Text>
+        <Text style={[styles.headerTitle, { color: colors.text_primary }]}>{t('quick_start.quick_start_screen.quick_start')}</Text>
         <View style={styles.headerBtn} />
       </View>
 
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: 32 + insets.bottom }]}>
         <Text style={[styles.lead, { color: colors.text_muted }]}>
-          A short reference for testers. Tap any section to read; come back anytime via Settings → Help → Quick Start.
+          {t('quick_start.quick_start_screen.a_short_reference_for_testers')}
         </Text>
 
         {CARDS.map((card, i) => (
@@ -224,14 +226,14 @@ export default function QuickStartScreen() {
           style={[styles.feedbackCta, { backgroundColor: colors.accent }]}
           onPress={handleFeedback}
           accessibilityRole="button"
-          accessibilityLabel="Share feedback with the SmartPlay Caddie team"
+          accessibilityLabel={t('quick_start.accessibility_label.share_feedback_with_the_smartplay')}
         >
           <Ionicons name="mail-outline" size={18} color="#0d1a0d" />
-          <Text style={styles.feedbackCtaText}>Share Feedback</Text>
+          <Text style={styles.feedbackCtaText}>{t('quick_start.quick_start_screen.share_feedback')}</Text>
         </TouchableOpacity>
 
         <Text style={[styles.feedbackSub, { color: colors.text_muted }]}>
-          Opens your mail client with helpful prompts pre-filled. Honest feedback over polite — anything you noticed is worth telling us about.
+          {t('quick_start.quick_start_screen.opens_your_mail_client_with')}
         </Text>
       </ScrollView>
     </SafeAreaView>

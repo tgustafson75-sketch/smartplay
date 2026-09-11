@@ -15,8 +15,10 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useTutorialStore, type TutorialEntry, MAX_ACTIVE_TUTORIALS } from '../../store/tutorialStore';
 import { clubLabel } from '../../services/clubRecognition';
+import { useTranslation } from 'react-i18next';
 
 export default function TutorialsLibrary() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();
   const tutorials = useTutorialStore(s => s.tutorials);
@@ -33,7 +35,7 @@ export default function TutorialsLibrary() {
         </Text>
         {item.is_active && (
           <View style={[styles.activeBadge, { backgroundColor: colors.accent_muted, borderColor: colors.accent }]}>
-            <Text style={[styles.activeBadgeText, { color: colors.accent }]}>ACTIVE</Text>
+            <Text style={[styles.activeBadgeText, { color: colors.accent }]}>{t('swinglab_tutorials.tutorials_library.active')}</Text>
           </View>
         )}
       </View>
@@ -60,11 +62,11 @@ export default function TutorialsLibrary() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Text style={[styles.back, { color: colors.accent }]}>‹ Back</Text>
+          <Text style={[styles.back, { color: colors.accent }]}>{t('swinglab_tutorials.tutorials_library.back')}</Text>
         </TouchableOpacity>
-        <Text style={[styles.title, { color: colors.text_primary }]}>Tutorials</Text>
+        <Text style={[styles.title, { color: colors.text_primary }]}>{t('swinglab_tutorials.tutorials_library.tutorials')}</Text>
         <TouchableOpacity onPress={() => router.push('/swinglab/tutorial-upload' as never)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Text style={[styles.add, { color: colors.accent }]}>+ Add</Text>
+          <Text style={[styles.add, { color: colors.accent }]}>{t('swinglab_tutorials.tutorials_library.add')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -79,16 +81,15 @@ export default function TutorialsLibrary() {
 
       {tutorials.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={[styles.emptyTitle, { color: colors.text_primary }]}>No tutorials yet.</Text>
+          <Text style={[styles.emptyTitle, { color: colors.text_primary }]}>{t('swinglab_tutorials.tutorials_library.no_tutorials_yet')}</Text>
           <Text style={[styles.emptyBody, { color: colors.text_muted }]}>
-            Add a coaching lesson — title plus a few notes about what the coach is teaching.
-            Kevin will reference active tutorials during your rounds.
+            {t('swinglab_tutorials.tutorials_library.add_a_coaching_lesson_title')}
           </Text>
           <TouchableOpacity
             style={[styles.primaryBtn, { backgroundColor: colors.accent }]}
             onPress={() => router.push('/swinglab/tutorial-upload' as never)}
           >
-            <Text style={styles.primaryBtnText}>Add First Tutorial</Text>
+            <Text style={styles.primaryBtnText}>{t('swinglab_tutorials.tutorials_library.add_first_tutorial')}</Text>
           </TouchableOpacity>
         </View>
       ) : (

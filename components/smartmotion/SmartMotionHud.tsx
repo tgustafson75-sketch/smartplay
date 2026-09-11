@@ -38,6 +38,7 @@ import type { ThemeColors } from '../../theme/tokens';
 // Type-only (erased at compile — no runtime dep on the heavy pose/analysis modules).
 import type { SwingAnalysis } from '../../services/poseDetection';
 import type { SwingBiomechanics } from '../../services/poseAnalysisApi';
+import { useTranslation } from 'react-i18next';
 
 // 2026-06-12 — acoustic status badges (Tim's set) for the pickup card header.
 const ICON_ACOUSTIC = {
@@ -88,6 +89,7 @@ export function SmartMotionHeader({
   onSettings?: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   /**
    * 2026-08-19 (Tim, from a round: "it's set to down the line and putt, not full and putt like it
@@ -108,11 +110,11 @@ export function SmartMotionHeader({
   return (
     <View style={[styles.header, { borderBottomColor: colors.border }, style]}>
       <View style={styles.headerBrand}>
-        <Text numberOfLines={1} style={[styles.brandWordmark, { color: colors.text_primary }]}>SMARTMOTION</Text>
+        <Text numberOfLines={1} style={[styles.brandWordmark, { color: colors.text_primary }]}>{t('smartmotion_smart_motion_hud.smart_motion_header.smartmotion')}</Text>
         <Text numberOfLines={1} style={[styles.brandSub, { color: colors.accent }]}>{subtitle}</Text>
       </View>
       {onSettings ? (
-        <Pressable onPress={onSettings} hitSlop={10} accessibilityRole="button" accessibilityLabel="Settings">
+        <Pressable onPress={onSettings} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('smartmotion_smart_motion_hud.accessibility_label.settings')}>
           <Ionicons name="settings-outline" size={20} color={colors.text_muted} />
         </Pressable>
       ) : null}
@@ -276,6 +278,7 @@ export function TempoBar({
   idealHigh?: number;
   style?: StyleProp<ViewStyle>;
 }) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   // Map ratio onto a 2.0–4.0 visual track.
   const trackLo = 2.0;
@@ -288,7 +291,7 @@ export function TempoBar({
   return (
     <View style={[styles.tempoWrap, { backgroundColor: colors.surface_elevated, borderColor: colors.border }, style]}>
       <View style={styles.tempoHead}>
-        <Text style={[styles.metricLabel, { color: colors.text_muted }]}>TEMPO</Text>
+        <Text style={[styles.metricLabel, { color: colors.text_muted }]}>{t('smartmotion_smart_motion_hud.tempo_bar.tempo')}</Text>
         <Text style={[styles.tempoRatio, { color: colors.text_primary }]}>
           {ratio == null ? '—' : `${ratio.toFixed(1)} : 1`}
         </Text>
@@ -379,10 +382,11 @@ const TONE_VERDICT: Record<SmTone, string> = {
 };
 
 export function BodyAnalysisRow({ items, style }: { items: BodyItem[]; style?: StyleProp<ViewStyle> }) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   return (
     <View style={[styles.bodyWrap, { backgroundColor: colors.surface_elevated, borderColor: colors.border }, style]}>
-      <Text style={[styles.metricLabel, { color: colors.text_muted, marginBottom: 8 }]}>BODY ANALYSIS</Text>
+      <Text style={[styles.metricLabel, { color: colors.text_muted, marginBottom: 8 }]}>{t('smartmotion_smart_motion_hud.body_analysis_row.body_analysis')}</Text>
       <View style={styles.bodyRow}>
         {items.map((it) => (
           <View key={it.key} style={styles.bodyItem}>
@@ -433,6 +437,7 @@ export function AcousticPickupCard({
   listening?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const active = detected && calibrated;
   const accent = active ? colors.accent : colors.text_muted;
@@ -453,7 +458,7 @@ export function AcousticPickupCard({
           style={[styles.acousticBadge, !active && { opacity: 0.6 }]}
           resizeMode="contain"
         />
-        <Text style={[styles.acousticTitle, { color: colors.text_muted }]}>ACOUSTIC PICKUP</Text>
+        <Text style={[styles.acousticTitle, { color: colors.text_muted }]}>{t('smartmotion_smart_motion_hud.acoustic_pickup_card.acoustic_pickup')}</Text>
       </View>
       <View style={[styles.meterTrack, { backgroundColor: colors.surface }]}>
         <View style={[styles.meterFill, { width: pct, backgroundColor: accent, opacity: active ? 1 : 0.5 }]} />
@@ -508,6 +513,7 @@ export function CaptureGuides({
   aspect?: number | null;
   style?: StyleProp<ViewStyle>;
 }) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const line = colors.accent;
   const labelBg = colors.overlay;
@@ -533,10 +539,10 @@ export function CaptureGuides({
       <View style={[styles.guideVLine, { borderColor: line, left: targetLeft }]} />
       <View style={[styles.guideVLine, { borderColor: line, left: ballLeft }]} />
       <View style={[styles.guideSideLabel, { left: targetLeft }]}>
-        <GuideLabel text="TARGET LINE" color={colors.text_primary} bg={labelBg} />
+        <GuideLabel text={t('smartmotion_smart_motion_hud.text.target_line')} color={colors.text_primary} bg={labelBg} />
       </View>
       <View style={[styles.guideSideLabel, { left: ballLeft }]}>
-        <GuideLabel text="BALL LINE" color={colors.text_primary} bg={labelBg} />
+        <GuideLabel text={t('smartmotion_smart_motion_hud.text.ball_line')} color={colors.text_primary} bg={labelBg} />
       </View>
       {/* Ball box is drawn by CageTargetingOverlay (single anchor) — not here. */}
     </View>
@@ -565,6 +571,7 @@ export function SwingBreakdownCard({
   variant?: 'overlay' | 'card';
   style?: StyleProp<ViewStyle>;
 }) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   if (!read.usable || read.dimensions.length === 0) return null;
   const overlay = variant === 'overlay';
@@ -575,7 +582,7 @@ export function SwingBreakdownCard({
   const noteColor = overlay ? 'rgba(255,255,255,0.78)' : colors.text_secondary;
   return (
     <View style={[styles.breakdownCard, { backgroundColor: bg, borderColor: border }, style]}>
-      <Text style={[styles.metricLabel, { color: labelColor }]}>SWING BREAKDOWN</Text>
+      <Text style={[styles.metricLabel, { color: labelColor }]}>{t('smartmotion_smart_motion_hud.swing_breakdown_card.swing_breakdown')}</Text>
       {read.dimensions.map((d) => {
         const vc = d.verdict === 'strength' ? '#88F700' : d.verdict === 'solid' ? '#7ED3A3' : d.verdict === 'watch' ? '#f59e0b' : '#ef4444';
         return (
@@ -636,6 +643,7 @@ export function FooterChips({
   onClubPress?: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   // 2026-08-19 — every chip text can SHRINK and is capped at one line. Each chip is flex:1 (a third of
   // the bar), but nothing inside was allowed to give way, so the longest value — "DIST · est 128 YDS" —
@@ -654,15 +662,15 @@ export function FooterChips({
   return (
     <View style={[styles.footer, { backgroundColor: colors.surface, borderColor: colors.border }, style]}>
       {onClubPress ? (
-        <Pressable onPress={onClubPress} style={styles.chip} accessibilityRole="button" accessibilityLabel="Set club">
-          <Text style={[styles.chipLabel, { color: 'rgba(255,255,255,0.85)' }]} numberOfLines={1}>CLUB</Text>
+        <Pressable onPress={onClubPress} style={styles.chip} accessibilityRole="button" accessibilityLabel={t('smartmotion_smart_motion_hud.accessibility_label.set_club')}>
+          <Text style={[styles.chipLabel, { color: 'rgba(255,255,255,0.85)' }]} numberOfLines={1}>{t('scorecard.col_club')}</Text>
           <Text style={[styles.chipValue, { color: club ? '#88F700' : 'rgba(255,255,255,0.55)' }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>{club ?? 'Tag ▾'}</Text>
         </Pressable>
       ) : (
-        <Chip label="CLUB" value={club ?? '—'} />
+        <Chip label={t('scorecard.col_club')} value={club ?? '—'} />
       )}
-      <Chip label="SHOT" value={shot != null ? String(shot) : '—'} />
-      <Chip label="DIST" sub={distanceYds != null && distanceEst ? 'est' : undefined} value={distanceYds != null ? `${distanceYds} YDS` : '—'} />
+      <Chip label={t('smartmotion_smart_motion_hud.label.shot')} value={shot != null ? String(shot) : '—'} />
+      <Chip label={t('smartmotion_smart_motion_hud.label.dist')} sub={distanceYds != null && distanceEst ? 'est' : undefined} value={distanceYds != null ? `${distanceYds} YDS` : '—'} />
     </View>
   );
 }

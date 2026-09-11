@@ -25,6 +25,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { requestCorePermissions, getCorePermissionsState, corePermissionsRequested, type CorePermissionsResult } from '../services/permissionsManager';
 import { useSettingsStore } from '../store/settingsStore';
+import { useTranslation } from 'react-i18next';
 
 const PERMISSIONS = [
   {
@@ -52,6 +53,7 @@ const PERMISSIONS = [
 // asked just-in-time when a round starts (store-compliant). See services/permissionsManager.ts.
 
 export default function PermissionsScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<CorePermissionsResult | null>(null);
@@ -112,9 +114,9 @@ export default function PermissionsScreen() {
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <Ionicons name="shield-checkmark-outline" size={36} color="#00C896" />
-          <Text style={styles.title}>Quick setup</Text>
+          <Text style={styles.title}>{t('permissions.permissions_screen.quick_setup')}</Text>
           <Text style={styles.subtitle}>
-            We only ask once. Allow what you want — every tool below uses these grants.
+            {t('permissions.permissions_screen.we_only_ask_once_allow')}
           </Text>
         </View>
 
@@ -142,7 +144,7 @@ export default function PermissionsScreen() {
         </View>
 
         <Text style={styles.foot}>
-          When you start a round, we&apos;ll ask once more to keep GPS running with your screen off — so yardages update in the cart.
+          {t('permissions.permissions_screen.when_you_start_a_round')}
         </Text>
 
         <TouchableOpacity
@@ -150,7 +152,7 @@ export default function PermissionsScreen() {
           onPress={handleAllowAll}
           disabled={busy}
           accessibilityRole="button"
-          accessibilityLabel="Allow camera, microphone, location, and photo library permissions"
+          accessibilityLabel={t('permissions.accessibility_label.allow_camera_microphone_location_and')}
         >
           <Text style={styles.allowBtnText}>{busy ? 'Asking…' : 'Allow all'}</Text>
         </TouchableOpacity>
@@ -159,21 +161,21 @@ export default function PermissionsScreen() {
           style={styles.skipBtn}
           onPress={handleSkip}
           accessibilityRole="button"
-          accessibilityLabel="Skip for now — set up permissions later in Settings"
+          accessibilityLabel={t('permissions.accessibility_label.skip_for_now_set_up')}
         >
-          <Text style={styles.skipText}>Skip for now</Text>
+          <Text style={styles.skipText}>{t('permissions.permissions_screen.skip_for_now')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.linkBtn}
           onPress={() => Linking.openSettings()}
           accessibilityRole="button"
-          accessibilityLabel="Open device Settings to manage permissions manually"
+          accessibilityLabel={t('permissions.accessibility_label.open_device_settings_to_manage')}
         >
-          <Text style={styles.linkText}>Open Settings</Text>
+          <Text style={styles.linkText}>{t('permissions.permissions_screen.open_settings')}</Text>
         </TouchableOpacity>
 
-        <Text style={styles.foot}>You can change any of this later in Settings.</Text>
+        <Text style={styles.foot}>{t('permissions.permissions_screen.you_can_change_any_of')}</Text>
       </ScrollView>
     </SafeAreaView>
   );

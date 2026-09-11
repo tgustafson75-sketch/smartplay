@@ -24,6 +24,7 @@ import {
   type PuttBucketStat,
   type PuttClass,
 } from '../services/putting/greenHeat';
+import { useTranslation } from 'react-i18next';
 
 const CLASS_META: Record<PuttClass, { label: string; sub: string }> = {
   approachPutt: { label: 'Approach', sub: 'green hit in reg' },
@@ -37,6 +38,7 @@ export interface GreenHeatCardProps {
 }
 
 export function GreenHeatCard({ scope = 'career', style }: GreenHeatCardProps) {
+  const { t } = useTranslation();
   const theme = useTheme();
   const c = theme.colors;
   const model = useGreenHeat(scope);
@@ -52,7 +54,7 @@ export function GreenHeatCard({ scope = 'career', style }: GreenHeatCardProps) {
   return (
     <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.border }, style]}>
       <View style={styles.headerRow}>
-        <Text style={[styles.title, { color: c.text_primary }]}>Green Heat</Text>
+        <Text style={[styles.title, { color: c.text_primary }]}>{t('green_heat_card.text.green_heat')}</Text>
         <Text style={[styles.titleSub, { color: c.text_muted }]}>
           {scope === 'round' ? 'this round' : 'putting map'}
         </Text>
@@ -62,13 +64,10 @@ export function GreenHeatCard({ scope = 'career', style }: GreenHeatCardProps) {
         /* ── HONEST COLLECTING STATE — never a fabricated heat ── */
         <View style={styles.collecting}>
           <Text style={[styles.collectingTitle, { color: c.text_primary }]}>
-            Collecting your putts
+            {t('green_heat_card.text.collecting_your_putts')}
           </Text>
           <Text style={[styles.collectingBody, { color: c.text_muted }]}>
-            Your green map fills in as you play. Log putts on each hole (the putts
-            stepper in the cockpit, the scorecard, or just tell me — “two putts”) and
-            the heat builds from your real makes and misses — no made-up data. Sim
-            rounds and holes without a putt count don’t feed it.
+            {t('green_heat_card.text.your_green_map_fills_in')}
           </Text>
           <View style={[styles.progressTrack, { backgroundColor: c.border }]}>
             <View
@@ -99,7 +98,7 @@ export function GreenHeatCard({ scope = 'career', style }: GreenHeatCardProps) {
                   {hasData ? (
                     <>
                       <Text style={styles.cellBig}>{pct(b.onePuttRate)}</Text>
-                      <Text style={styles.cellBigSub}>1-putt rate</Text>
+                      <Text style={styles.cellBigSub}>{t('green_heat_card.text.1_putt_rate')}</Text>
                       <Text style={styles.cellMeta}>
                         {b.avgPutts != null ? b.avgPutts.toFixed(2) : '—'} avg · {b.holes} hole
                         {b.holes === 1 ? '' : 's'}
@@ -111,7 +110,7 @@ export function GreenHeatCard({ scope = 'career', style }: GreenHeatCardProps) {
                       )}
                     </>
                   ) : (
-                    <Text style={styles.cellEmpty}>no holes yet</Text>
+                    <Text style={styles.cellEmpty}>{t('green_heat_card.text.no_holes_yet')}</Text>
                   )}
                 </View>
               );
@@ -122,7 +121,7 @@ export function GreenHeatCard({ scope = 'career', style }: GreenHeatCardProps) {
           <View style={styles.distRow}>
             <DistPill label="1-putt" value={model.overall.onePutt} color="#22c55e" c={c} />
             <DistPill label="2-putt" value={model.overall.twoPutt} color="#f59e0b" c={c} />
-            <DistPill label="3+ putt" value={model.overall.threePlus} color="#ef4444" c={c} />
+            <DistPill label={t('green_heat_card.label.3_putt')} value={model.overall.threePlus} color="#ef4444" c={c} />
           </View>
 
           {/* ── REAL green-roll break signal — only when measured rolls exist ── */}
