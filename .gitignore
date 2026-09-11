@@ -91,3 +91,6 @@ SmartPlay_VO_*.mp3
 # is exactly how node_modules got committed as a self-symlink on 2026-09-03 and destroyed
 # itself on every checkout for two sessions.
 _handoff
+
+# i18n codemod scratch output — regenerable, see docs/I18N-1.5.md
+scripts/codemod/.i18n-*.json

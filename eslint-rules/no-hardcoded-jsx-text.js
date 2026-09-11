@@ -27,57 +27,20 @@
  */
 'use strict';
 
-/** Components whose *children* are rendered to the player. */
-const DEFAULT_TEXT_COMPONENTS = [
-  'Text', 'RNText', 'ThemedText', 'AppText', 'Heading', 'Title', 'Subtitle',
-  'Label', 'Paragraph', 'Caption', 'Chip', 'Badge', 'Button', 'Pressable.Text',
-];
-
-/** Props whose string value is rendered or spoken to the player. */
-const DEFAULT_USER_FACING_PROPS = [
-  'title', 'label', 'placeholder', 'message', 'subtitle', 'heading', 'caption',
-  'accessibilityLabel', 'accessibilityHint', 'accessibilityValue',
-  'header', 'footer', 'emptyText', 'errorText', 'helperText', 'text',
-  'confirmLabel', 'cancelLabel', 'buttonText', 'ctaLabel', 'alt',
-];
+const {
+  TEXT_COMPONENTS, USER_FACING_PROPS, IGNORED_PROPS, ALERT_CALLEES,
+  looksLikeProse, isTextComponentName,
+} = require('./i18n-shared');
 
 /**
- * Props that carry identifiers, not prose. These are the ONLY escape hatch — see header.
- * `name` covers icon names (<Ionicons name="golf" />), `source`/`href`/`uri` are locations,
- * `testID` and `nativeID` are hooks for tests, `key`/`id` are React/DOM identity.
+ * 2026-09-11 — these lists and the prose test MOVED to ./i18n-shared so the phase-2 codemod applies
+ * the identical definition. A gate that flags what the codemod will not rewrite leaves the build
+ * red until someone disables the gate.
  */
-const DEFAULT_IGNORED_PROPS = [
-  'testID', 'nativeID', 'key', 'id', 'name', 'icon', 'iconName', 'family',
-  'style', 'className', 'variant', 'size', 'color', 'backgroundColor', 'tintColor',
-  'href', 'uri', 'source', 'src', 'to', 'route', 'pathname', 'screen',
-  'type', 'mode', 'kind', 'role', 'keyboardType', 'autoComplete', 'textContentType',
-  'resizeMode', 'entering', 'exiting', 'sharedTransitionTag', 'collapsable',
-  'accessibilityRole', 'importantForAccessibility', 'dataSet', 'format',
-];
-
-/** Call expressions whose string arguments are shown to the player. */
-const DEFAULT_ALERT_CALLEES = [
-  'Alert.alert', 'Toast.show', 'ToastAndroid.show', 'Alert.prompt', 'showToast', 'toast',
-];
-
-/**
- * A literal worth translating contains at least two letters in a row somewhere — which excludes
- * "·", "—", "%", "{{n}}", "1.5", "OK"… no: "OK" IS user-facing. Two letters is the floor because a
- * single letter is almost always an axis label or a unit, and prose is never one letter.
- */
-function looksLikeProse(raw) {
-  const s = String(raw).trim();
-  if (s.length < 2) return false;
-  if (!/[A-Za-z]{2}/.test(s)) return false;
-  // Pure identifiers — camelCase, snake_case, kebab-case, dotted paths, URLs — are not prose.
-  if (/^[a-z0-9]+([A-Z][a-z0-9]*)*$/.test(s)) return false;      // camelCase / lowercase word
-  if (/^[a-z0-9_]+$/i.test(s) && s.includes('_')) return false;   // snake_case
-  if (/^[a-z0-9-]+$/i.test(s) && s.includes('-')) return false;   // kebab-case
-  if (/^[\w.]+$/.test(s) && s.includes('.')) return false;        // dotted.path
-  if (/^https?:\/\//.test(s)) return false;
-  if (/^[#@/]/.test(s)) return false;                             // colors, handles, paths
-  return true;
-}
+const DEFAULT_TEXT_COMPONENTS = TEXT_COMPONENTS;
+const DEFAULT_USER_FACING_PROPS = USER_FACING_PROPS;
+const DEFAULT_IGNORED_PROPS = IGNORED_PROPS;
+const DEFAULT_ALERT_CALLEES = ALERT_CALLEES;
 
 function calleeName(node) {
   const c = node.callee;
@@ -122,6 +85,7 @@ module.exports = {
   create(context) {
     const opt = context.options[0] ?? {};
     const textComponents = new Set(opt.textComponents ?? DEFAULT_TEXT_COMPONENTS);
+    void textComponents; // retained for the `textComponents` option; matching goes through isTextComponentName
     const userFacingProps = new Set(opt.userFacingProps ?? DEFAULT_USER_FACING_PROPS);
     const ignoredProps = new Set(opt.ignoredProps ?? DEFAULT_IGNORED_PROPS);
     const alertCallees = new Set(opt.alertCallees ?? DEFAULT_ALERT_CALLEES);
@@ -137,10 +101,8 @@ module.exports = {
         if (!looksLikeProse(node.value)) return;
         const parent = node.parent;
         if (!parent || parent.type !== 'JSXElement') return;
-        const name = elementName(parent.openingElement);
-        // Match `Text`, `MyText`, `Text.Bold` — anything whose final segment is a text component.
-        const tail = name.split('.').pop() ?? name;
-        if (!textComponents.has(tail) && !/Text$/.test(tail)) return;
+        // `Text`, `MyText`, `Text.Bold` — shared with the codemod.
+        if (!isTextComponentName(elementName(parent.openingElement))) return;
         context.report({ node, messageId: 'jsxText', data: { text: short(node.value) } });
       },
 
@@ -161,9 +123,7 @@ module.exports = {
         for (const part of parts) {
           const raw = part.type === 'TemplateElement' ? part.value?.cooked : part.value;
           if (typeof raw !== 'string' || !looksLikeProse(raw)) continue;
-          const name = elementName(parent.openingElement);
-          const tail = name.split('.').pop() ?? name;
-          if (!textComponents.has(tail) && !/Text$/.test(tail)) continue;
+          if (!isTextComponentName(elementName(parent.openingElement))) continue;
           context.report({ node: part, messageId: 'jsxText', data: { text: short(raw) } });
         }
       },
