@@ -176,13 +176,34 @@ export function explainHandicapImpact(input: {
   }
 
   const change = Math.round((after.newIndex - before.newIndex) * 10) / 10;
+
+  /**
+   * 2026-09-11 (Tim) — ANCHOR ON THE PLAYER'S REAL INDEX; USE THE ESTIMATE ONLY FOR THE MOVEMENT.
+   *
+   * `currentIndex` was passed by the only caller (intents/handicapQueryHandler, from the profile)
+   * and then never read: the reply quoted `before.newIndex`, an index recomputed here from recent
+   * differentials. Those two numbers can differ — a WHS index from a federation, or one the player
+   * typed in, is not the same as our best-8-of-20 estimate — so the caddie could say "currently
+   * 12.4" while the dashboard said 14.2. Same fact, two owners, and the player sees both.
+   *
+   * The DELTA is still estimate-derived, because that is what a differential moves: we can only
+   * measure the change our own model predicts. So the sentence reads from the real number and
+   * applies the estimated movement to it, which keeps the arithmetic consistent AND agrees with
+   * every other surface. With no stored index we fall back to the estimate exactly as before.
+   * [[two-owners-is-the-root-cause]]
+   */
+  const anchored = typeof currentIndex === 'number' && Number.isFinite(currentIndex);
+  const base = anchored ? Math.round(currentIndex * 10) / 10 : before.newIndex;
+  const projected = anchored ? Math.round((currentIndex + change) * 10) / 10 : after.newIndex;
+  const label = anchored ? 'Index' : 'Index estimate';
+
   if (Math.abs(change) < 0.05) {
-    return `That ${newDifferential.toFixed(1)} differential — won't move your Index estimate (currently ${before.newIndex}). It wasn't one of your best 8.`;
+    return `That ${newDifferential.toFixed(1)} differential — won't move your ${label} (currently ${base}). It wasn't one of your best 8.`;
   }
   if (change < 0) {
-    return `That ${newDifferential.toFixed(1)} differential — your Index estimate drops from ${before.newIndex} to ${after.newIndex}. Trending the right way.`;
+    return `That ${newDifferential.toFixed(1)} differential — your ${label} drops from ${base} to ${projected}. Trending the right way.`;
   }
-  return `That ${newDifferential.toFixed(1)} differential — your Index estimate ticks up from ${before.newIndex} to ${after.newIndex}. One round; trends matter more than any single one.`;
+  return `That ${newDifferential.toFixed(1)} differential — your ${label} ticks up from ${base} to ${projected}. One round; trends matter more than any single one.`;
 }
 
 /**
