@@ -301,7 +301,7 @@ export default function Settings() {
     } else {
       stopMetaWearablesStreaming().catch(() => {});
     }
-  }, []);
+  }, [t]);
   const handicapIndex = usePlayerProfileStore(s => s.handicap_index);
   const setHandicapIndex = usePlayerProfileStore(s => s.setHandicapIndex);
   const handicapGender = usePlayerProfileStore(s => s.handicap_gender);
@@ -362,7 +362,7 @@ export default function Settings() {
       console.log('[settings] recalculate handicap threw:', e);
       Alert.alert(t('settings.alert.recalculation_failed'), e instanceof Error ? e.message : String(e));
     }
-  }, []);
+  }, [t]);
   // 2026-06-16 — Meta glasses voice-log import (v1: JSON file, active
   // round only). Picks the Meta View export, hands the file URI to
   // ingestMetaGlassesJson, and surfaces the IngestResult via toast.

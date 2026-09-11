@@ -788,7 +788,7 @@ function AppNavigator() {
       t('layout.alert.you_re_on_an_older'),
       [{ text: 'OK' }],
     );
-  }, [minSupportedBuild]);
+  }, [minSupportedBuild, t]);
 
   // 2026-07-30 (issue-log audit SEV-2/SEV-4 — Tim: "make sure users' apps are RECORDING and
   // sending issue logs") — flush any issues recorded in a PRIOR session on next launch. A hard

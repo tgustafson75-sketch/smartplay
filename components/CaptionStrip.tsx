@@ -141,7 +141,7 @@ export default function CaptionStrip(): React.ReactElement | null {
         { text: 'Keep them on', onPress: () => s.setTtsCaptions(true) },
       ],
     );
-  }, [audioRoute, caption, ttsCaptions]);
+  }, [audioRoute, caption, ttsCaptions, t]);
 
   // Effective visibility: explicit user setting wins; otherwise auto-on
   // while Bluetooth is the active route, unless the user said "never".

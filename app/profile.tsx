@@ -60,7 +60,7 @@ export default function ProfileScreen() {
     } catch (e) {
       Alert.alert(t('profile.alert.recalculation_failed'), e instanceof Error ? e.message : String(e));
     }
-  }, []);
+  }, [t]);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>

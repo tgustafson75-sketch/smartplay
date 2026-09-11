@@ -3846,7 +3846,7 @@ export default function SmartMotion() {
     // 2026-06-10 — When the window auto-ends (vs a manual stop), flag it so
     // stopRecording can play an audible "that's time, analyzing" cue.
     recordTimeoutRef.current = setTimeout(() => { autoStopAtLimitRef.current = true; void stopRecordingRef.current(); }, maxSec * 1000);
-  }, [micPerm, requestMicPerm]);
+  }, [micPerm, requestMicPerm, t]);
 
   const stopRecording = useCallback(async () => {
     if (stoppingRef.current) return;

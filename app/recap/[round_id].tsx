@@ -359,7 +359,7 @@ export default function RecapScreen() {
     } finally {
       setClipLoading(false);
     }
-  }, []);
+  }, [t]);
   const deleteRound = useRoundStore(s => s.deleteRound);
   // 2026-07-04 (Tim — offline log "stored for the round, ingested later") — anything
   // the player said with no signal this round, so it's reviewable here. Stable-selector
@@ -508,7 +508,7 @@ export default function RecapScreen() {
         },
       ],
     );
-  }, [round_id, deleteRound, router]);
+  }, [round_id, deleteRound, router, t]);
 
   const handleShare = useCallback(async () => {
     if (!recap || sharing) return;
@@ -527,7 +527,7 @@ export default function RecapScreen() {
     } finally {
       setSharing(false);
     }
-  }, [recap, sharing]);
+  }, [recap, sharing, t]);
 
   // PGA HOPE follow-up (B4) — pros asked for a PDF artifact for the
   // player's HOPE file. Captures the share card as PNG, embeds it in a
@@ -574,7 +574,7 @@ export default function RecapScreen() {
     } finally {
       setSharing(false);
     }
-  }, [recap, sharing]);
+  }, [recap, sharing, t]);
 
   const handlePlayAloud = useCallback(async () => {
     if (!recap) return;

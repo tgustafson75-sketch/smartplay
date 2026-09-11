@@ -706,7 +706,7 @@ export default function PlayTab() {
     } finally {
       setNotesDictating(false);
     }
-  }, [notesDictating, apiUrlForNotes, notesLanguage, toast]);
+  }, [notesDictating, apiUrlForNotes, notesLanguage, toast, t]);
   // Phase 405 wave 3 — tee box color selection. 'unspecified' until the
   // user picks. Survives the Play tab lifetime so navigating away and
   // back doesn't lose the selection.

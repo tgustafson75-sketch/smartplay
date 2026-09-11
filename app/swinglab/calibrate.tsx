@@ -88,7 +88,7 @@ export default function CalibrateAcoustics() {
     }
     const startedAt = Date.now();
     timerRef.current = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 250);
-  }, [micPerm, requestMicPerm]);
+  }, [micPerm, requestMicPerm, t]);
 
   const stop = useCallback(async () => {
     if (stoppingRef.current) return;
@@ -163,7 +163,7 @@ export default function CalibrateAcoustics() {
     } else {
       setWarn('Could not derive a calibration from those strikes — try again with cleaner contact.');
     }
-  }, [env, saveSession, applyCalibration, router]);
+  }, [env, saveSession, applyCalibration, router, t]);
 
   const saveAndApply = useCallback(() => {
     if (!result) return;
@@ -185,7 +185,7 @@ export default function CalibrateAcoustics() {
     } else {
       setWarn('Could not derive a calibration from those strikes — try again with cleaner contact.');
     }
-  }, [result, env, saveSession, applyCalibration, router]);
+  }, [result, env, saveSession, applyCalibration, router, t]);
 
   const detectedCount = result?.strikes.length ?? 0;
   // dB meter fill — map [-60, 0] dBFS to [0, 1].

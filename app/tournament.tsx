@@ -143,7 +143,7 @@ function SetupPanel() {
     } finally {
       setRecordingTeamId(null);
     }
-  }, [recordingTeamId, apiUrl, language]);
+  }, [recordingTeamId, apiUrl, language, t]);
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 80 }} keyboardShouldPersistTaps="handled">
