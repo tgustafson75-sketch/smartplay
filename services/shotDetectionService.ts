@@ -183,6 +183,28 @@ class ShotDetector {
     }
     this.running = false;
     this.samples = [];
+    /**
+     * 2026-09-10 — THE TWO TEARDOWNS DISAGREED, AND THE ROUND-END ONE LEAKED MORE.
+     *
+     * pause() (mid-round toggle off) clears lastShotEmitTime; stop() (round end) did not, and also
+     * left the transport-sensing state behind. Both are per-ROUND facts:
+     *
+     *  - lastShotEmitTime feeds a 30s emit cooldown, so a round started within 30 seconds of the
+     *    previous round's last shot had its first shot silently swallowed.
+     *
+     *  - cartEvidence / lastSensedCart are the worse one. End a cart round with lastSensedCart
+     *    true; on the next round _layout calls configure({ cartMode: settings.cartMode }), which
+     *    resets the thresholds to the WALKING profile. senseTransport then sees speed > 4, finds
+     *    cartEvidence already at its ceiling, computes sensed === lastSensedCart, and RETURNS
+     *    early — so it never re-applies the cart tuning it believes is already on. Every round
+     *    after the first cart round ran the wrong profile for its entire length.
+     *
+     * pause() deliberately does NOT reset these: a mid-round toggle leaves the player on the same
+     * course in the same transport, and re-learning that from scratch would be worse.
+     */
+    this.lastShotEmitTime = 0;
+    this.cartEvidence = 0;
+    this.lastSensedCart = null;
     // Round-end stops the underlying gpsManager too. Other subscribers
     // (smartfinder, hole-view) tear down their watches when leaving the
     // round flow on their own.
