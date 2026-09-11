@@ -52,6 +52,23 @@ interface PlayerProfileState {
    *  coach-report flow; their `name` is the instructor name. null = none. */
   coachCredentials: string | null;
   dominantMiss: 'left' | 'right' | 'straight' | null;
+  /**
+   * 2026-09-11 (Tim) — HOW THIS PLAYER COVERS AN IN-BETWEEN YARDAGE.
+   *
+   * "All I do right now is full swing and not good with dialing down yardages so I play according to
+   * my yardages and feel."
+   *
+   * Every yardage app assumes the number is the answer: 134 to the pin, here is the club closest to
+   * 134. That silently assumes you can hit any club any distance. For a player who only makes full
+   * swings, 134 is not a club — it is a CHOICE between two full swings, and which one is right
+   * depends on what the green and the trouble forgive.
+   *
+   *   'full_swings'   — picks a club and swings. An in-between number is a decision, not a dial.
+   *   'some_partials' — can take a little off. THE DEFAULT, so no existing player's reads move
+   *                     until they answer the question themselves.
+   *   'dial_down'     — comfortable flighting to a number; the nearest club really is the answer.
+   */
+  distanceControl: 'full_swings' | 'some_partials' | 'dial_down';
   // Phase BB — broader miss-type taxonomy for richer Kevin grounding.
   // Coexists with dominantMiss (which is direction-only). missType
   // captures the swing fault flavor too. Both stay populated; Kevin
@@ -223,6 +240,7 @@ interface PlayerProfileState {
   setRole: (r: 'golfer' | 'instructor' | 'student') => void;
   setCoachCredentials: (c: string | null) => void;
   setDominantMiss: (miss: 'left' | 'right' | 'straight' | null) => void;
+  setDistanceControl: (v: 'full_swings' | 'some_partials' | 'dial_down') => void;
   setMissType: (m: 'slice' | 'hook' | 'thin' | 'fat' | 'pull' | 'push' | 'varies' | null) => void;
   setExperienceContext: (e: 'starting' | 'improving' | 'returning' | 'competitive' | null) => void;
   setPhysicalLimitation: (limitation: string | null) => void;
@@ -313,6 +331,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       handedness: 'right',
       coachCredentials: null,
       dominantMiss: null,
+      distanceControl: 'some_partials' as const,
       missType: null,
       experienceContext: null,
       physicalLimitation: null,
@@ -371,6 +390,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       setRole: (r) => set({ role: r }),
       setCoachCredentials: (c) => set({ coachCredentials: c && c.trim().length > 0 ? c.trim() : null }),
       setDominantMiss: (miss) => set({ dominantMiss: miss }),
+      setDistanceControl: (v) => set({ distanceControl: v }),
       setMissType: (m) => {
         // Auto-derive directional dominantMiss from missType so older
         // code paths keying on dominantMiss keep working.

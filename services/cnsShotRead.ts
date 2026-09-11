@@ -94,7 +94,15 @@ const LADDER_LABEL = SHARED_CLUB_LABEL as Record<string, string>;
  */
 export type ShotRiskMode = 'safe' | 'normal' | 'aggressive';
 
-function pickClub(playsLikeYards: number, bag: Partial<Record<string, number>>, why: string[], risk: ShotRiskMode = 'normal'): string | null {
+/** What the gap decision is allowed to reason from. All optional; absent data means no claim. */
+interface GapContext {
+  distanceControl?: 'full_swings' | 'some_partials' | 'dial_down';
+  greenFrontYards?: number | null;
+  greenBackYards?: number | null;
+  nearestHazard?: { label: string; yards: number } | null;
+}
+
+function pickClub(playsLikeYards: number, bag: Partial<Record<string, number>>, why: string[], risk: ShotRiskMode = 'normal', gap: GapContext = {}): string | null {
   /**
    * 2026-08-11 (Tim — "the caddie suggestion in SmartVision is STILL showing a gap wedge for a 324
    * yard shot") — THE THIRD instance of the same defect, and the one actually on his screen.
@@ -194,6 +202,69 @@ function pickClub(playsLikeYards: number, bag: Partial<Record<string, number>>, 
         return shortest[0];
       }
       void measured;
+
+      /**
+       * 2026-09-11 (Tim) — "PLAYS LIKE FOR ME": AN IN-BETWEEN NUMBER IS A CHOICE, NOT A DIAL.
+       *
+       * Everything above picks the club CLOSEST to the number. That is the right answer for a player
+       * who can flight a shot to a yardage, and the wrong one for a player who makes full swings:
+       * "all I do right now is full swing and not good with dialing down yardages so I play according
+       * to my yardages and feel."
+       *
+       * For that player 138 yards is not a club. It is two full swings — the one that comes up six
+       * short and the one that goes six long — and which is correct depends on what the green and
+       * the trouble forgive. Every other app answers this with arithmetic. This answers it with the
+       * player's own bag and the room in front of them.
+       *
+       * Only fires when the number genuinely sits in a GAP (no club within GAP_MARGIN) and only for
+       * a player who told us they swing full. Everyone else keeps the nearest-club answer exactly as
+       * it was.
+       */
+      const GAP_MARGIN = 6;
+      const bestMiss = Math.abs(best[1] - playsLikeYards);
+      if (gap.distanceControl === 'full_swings' && bestMiss >= GAP_MARGIN) {
+        let shortClub: [string, number] | null = null;   // longest club still SHORT of the number
+        let longClub: [string, number] | null = null;    // shortest club still PAST it
+        for (const e of real) {
+          if (e[1] <= playsLikeYards && (!shortClub || e[1] > shortClub[1])) shortClub = e;
+          if (e[1] >= playsLikeYards && (!longClub || e[1] < longClub[1])) longClub = e;
+        }
+        if (shortClub && longClub && shortClub[0] !== longClub[0]) {
+          const overBy = Math.round(longClub[1] - playsLikeYards);
+          const shortBy = Math.round(playsLikeYards - shortClub[1]);
+          const back = typeof gap.greenBackYards === 'number' ? gap.greenBackYards : null;
+          const roomBehind = back != null ? Math.round(back - playsLikeYards) : null;
+          const hazardShort =
+            gap.nearestHazard && gap.nearestHazard.yards > 0 &&
+            gap.nearestHazard.yards < playsLikeYards &&
+            playsLikeYards - gap.nearestHazard.yards <= shortBy + 10
+              ? gap.nearestHazard : null;
+
+          let choice: [string, number];
+          let reason: string;
+          if (roomBehind != null && roomBehind >= overBy + 3) {
+            choice = longClub;
+            reason = `${roomBehind}y of green behind it`;
+          } else if (roomBehind != null && roomBehind < overBy) {
+            choice = shortClub;
+            reason = `only ${Math.max(0, roomBehind)}y behind — long is over the green`;
+          } else if (hazardShort) {
+            choice = longClub;
+            reason = `${hazardShort.label} short`;
+          } else {
+            // No geometry to reason from. Name the gap honestly and keep the nearest club rather
+            // than inventing a reason to move off it. [[illustration-data-points]]
+            why.unshift(`no full swing at ${Math.round(playsLikeYards)} — ${best[0].toLowerCase()} is your closest`);
+            if (measured.has(best[0])) why.push(`your ${best[0].toLowerCase()} carries ~${Math.round(best[1])}`);
+            return best[0];
+          }
+          why.unshift(
+            `no full swing at ${Math.round(playsLikeYards)} — ${choice[0].toLowerCase()} (${Math.round(choice[1])}), ${reason}`,
+          );
+          return choice[0];
+        }
+      }
+
       // Only call it HIS carry when it actually is; otherwise stay silent on the number rather than
       // passing a chart average off as measured.
       if (measured.has(best[0])) why.push(`your ${best[0].toLowerCase()} carries ~${Math.round(best[1])}`);
@@ -242,11 +313,13 @@ export function composeShotRead(input: {
    */
   greenFrontYards?: number | null;
   greenBackYards?: number | null;
+  /** How this player covers an in-between yardage (playerProfileStore.distanceControl). */
+  distanceControl?: 'full_swings' | 'some_partials' | 'dial_down';
 }): ShotRead | null {
   const {
     rawYards, weather, shotBearingDeg, elevationDeltaFeet = 0,
     bag = {}, dominantMiss, holeLineNote, nearestHazard, isCompetition, pastScoreNote,
-    greenFrontYards = null, greenBackYards = null,
+    greenFrontYards = null, greenBackYards = null, distanceControl,
   } = input;
   if (rawYards == null || !Number.isFinite(rawYards)) return null;
 
@@ -275,7 +348,9 @@ export function composeShotRead(input: {
   if (Math.abs(elevYds) >= 2) why.push(`${Math.abs(elevYds)} ${elevYds > 0 ? 'uphill' : 'downhill'}`);
 
   // 2) Club — the answer. Pushes a learned-carry why line when the bag is real.
-  const club = pickClub(playsLikeYards, bag, why, input.risk ?? 'normal');
+  const club = pickClub(playsLikeYards, bag, why, input.risk ?? 'normal', {
+    distanceControl, greenFrontYards, greenBackYards, nearestHazard,
+  });
 
   // 3) Hazard — only when it's actually in play for this shot (ahead, within reach).
   let hazardNote: string | null = null;

@@ -1355,6 +1355,8 @@ function TargetCameraOverlay({
   const avgCarryDriver = usePracticeStore(s => s.avgCarryDriver);
   const avgCarry3Wood = usePracticeStore(s => s.avgCarry3Wood);
   const handicap = usePlayerProfileStore(s => s.handicap);
+  /** How this player covers an in-between yardage — see cnsShotRead's gap branch. */
+  const distanceControl = usePlayerProfileStore(s => s.distanceControl);
   // 2026-08-07 (Tim) — the manual "dominant miss" is almost always null; fall back to the miss the caddie
   // has LEARNED from the player's own logged shots so the read favors the safe side automatically.
   const manualMiss = usePlayerProfileStore(s => s.dominantMiss);
@@ -1743,7 +1745,8 @@ function TargetCameraOverlay({
     // 2026-09-11 — this screen has SHOWN front/back since it was written and never told the read.
     greenFrontYards: yards.front ?? null,
     greenBackYards: yards.back ?? null,
-  }), [targetYards, weather, targetBearing, shotBearingDeg, elevationDeltaFeet, dominantMiss, holeLineNote, hazardSummary, isCompetition, yards.front, yards.back]);
+    distanceControl,
+  }), [targetYards, weather, targetBearing, shotBearingDeg, elevationDeltaFeet, dominantMiss, holeLineNote, hazardSummary, isCompetition, yards.front, yards.back, distanceControl]);
 
   return (
     <View style={StyleSheet.absoluteFill}>
