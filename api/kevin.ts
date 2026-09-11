@@ -1258,8 +1258,14 @@ ${(() => {
   }
   return '';
 })()}${(() => {
-  const rc = roundConditions as { pattern?: string | null; today?: string | null } | null;
-  if (!rc || (!rc.pattern && !rc.today)) return '';
+  const rc = roundConditions as {
+    pattern?: string | null; today?: string | null;
+    play?: {
+      value?: string; costStrokes?: number; alreadyHandled?: string | null;
+      mitigations?: string[]; mindset?: string;
+    } | null;
+  } | null;
+  if (!rc || (!rc.pattern && !rc.today && !rc.play)) return '';
   /**
    * 2026-09-11 (Tim) — WHAT HE TOLD US AFTER HIS OTHER ROUNDS.
    *
@@ -1276,7 +1282,28 @@ ${(() => {
     rc.pattern ? `Pattern: ${rc.pattern}.` : null,
     rc.today ? `AND IT APPLIES TODAY: ${rc.today}. Worth one mention if it fits naturally — set expectations, do not make him self-conscious about it, and never repeat it.` : null,
   ].filter(Boolean);
-  return `${lines.join('\n')}\n`;
+  /**
+   * 2026-09-11 (Tim) — "Maybe there are mitigation or at least mindset strategies we can derive."
+   *
+   * Only present when today is a condition he has a MEASURED penalty in. The most valuable line is
+   * `alreadyHandled`: a golfer in the cold clubs up by feel, and the app has already added the
+   * yards — saying so stops the double-count, which is a real shot saved and something no generic
+   * tip sheet can tell him.
+   *
+   * The mindset line MOVES THE TARGET. A player grinding against a fair-weather number in the cold
+   * is the spiral this app exists to interrupt.
+   */
+  const p = rc.play;
+  if (p?.mindset) {
+    lines.push(
+      `TODAY IS ${String(p.value ?? '').toUpperCase()} AND IT COSTS HIM ${p.costStrokes} — THE PLAY:`,
+      p.alreadyHandled ? `Tell him this if he talks about clubbing for it: ${p.alreadyHandled}` : null,
+      p.mitigations?.length ? `Worth saying ONCE, whichever fits the moment: ${p.mitigations.join(' / ')}` : null,
+      `Frame the round like this: ${p.mindset}`,
+      `Do NOT hand him all of that at once, and do not bring it up again unless he does. It is a frame for the round, not a lecture.`,
+    );
+  }
+  return `${lines.filter(Boolean).join('\n')}\n`;
 })()}${(() => {
   const sr = shotRead as {
     club?: string | null; rawYards?: number | null; playsLikeYards?: number | null;

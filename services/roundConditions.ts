@@ -159,3 +159,115 @@ export function findingsForToday(
     return typeof now === 'string' && now.trim().toLowerCase() === f.value.trim().toLowerCase();
   });
 }
+
+/* ────────────────────────────────────────────────────────────────────────────────────────────── */
+
+export interface ConditionPlay {
+  /** The condition this is about, in the post-round screen's own words. */
+  value: string;
+  /** How many strokes worse this player has actually averaged in it. Positive = worse. */
+  costStrokes: number;
+  /** What the app has ALREADY done to the numbers, so the player does not do it twice. */
+  alreadyHandled: string | null;
+  /** What is worth doing, in plain golf. One or two, never a list. */
+  mitigations: string[];
+  /** How to think about the round. The half Tim asked for. */
+  mindset: string;
+}
+
+/**
+ * MITIGATION AND MINDSET FOR A CONDITION THAT ACTUALLY COSTS THIS PLAYER.
+ *
+ * 2026-09-11 (Tim). "Sunny and hot should factor vs rainy and/or cold. Helps qualify the tie in. I
+ * know a lot of people that can't play well or consistently cold, especially in California. Maybe
+ * there are mitigation or at least mindset strategies we can derive."
+ *
+ * ─── TWO DIFFERENT THINGS, AND THE APP ONLY KNEW ONE ───────────────────────────────────────────
+ *
+ * Cold does two separate things to a round. It makes the BALL fly shorter — physics, and
+ * utils/playsLike has modelled it correctly for months (~0.5% per 10°F below 70). And it makes the
+ * PLAYER worse: cold hands, no turn through the ball, four layers on, and in California nobody is
+ * adapted to it because it almost never happens.
+ *
+ * The app knew the first and nothing about the second. So a golfer in the cold got a correctly
+ * lengthened yardage and no acknowledgement that the whole round was going to be harder.
+ *
+ * ─── THE MOST USEFUL THING IT CAN SAY IS "I ALREADY DID THAT" ──────────────────────────────────
+ *
+ * A golfer in the cold clubs up by feel. The app has ALREADY added the yards. Saying so stops the
+ * double-count, which is a real shot saved and something no generic tip sheet can tell you.
+ *
+ * ─── AND IT ONLY SPEAKS ON EVIDENCE ────────────────────────────────────────────────────────────
+ *
+ * Returns null unless THIS player has a measured penalty in THIS condition. Generic cold-weather
+ * advice for someone who plays fine in the cold is the filler this app refuses.
+ */
+export function conditionPlay(finding: ConditionFinding | null | undefined): ConditionPlay | null {
+  if (!finding || finding.key !== 'weather' || finding.deltaStrokes <= 0) return null;
+  const v = finding.value.trim().toLowerCase();
+  const cost = Math.abs(finding.deltaStrokes);
+
+  const shared = {
+    value: finding.value,
+    costStrokes: cost,
+    /**
+     * The mindset line is the same shape every time on purpose: the target MOVES. Smart bogey golf
+     * measures a round against what is achievable today, and a player grinding against a fair-weather
+     * number in the cold is the spiral this app exists to interrupt. [[smartplay-core-ethos]]
+     */
+    mindset: `You average ${cost} ${cost === 1 ? 'stroke' : 'strokes'} worse in this. That is not today going wrong — that is what this costs you. Play to a number ${Math.round(cost)} higher and it is a good round, not a bad one.`,
+  };
+
+  if (v === 'cold') {
+    return {
+      ...shared,
+      alreadyHandled: 'The yardages already have the cold in them — the ball flies shorter and the plays-like number accounts for it. Do not club up twice.',
+      mitigations: [
+        'Keep your hands warm between shots — grip is the first thing cold takes.',
+        'Swing smoother, not harder. Cold muscles do not turn as far, and trying to make up the distance is where the miss comes from.',
+      ],
+    };
+  }
+  if (v === 'rainy') {
+    return {
+      ...shared,
+      alreadyHandled: null,
+      mitigations: [
+        'Take one more club and swing easier — wet grooves spin less and the ball comes off dead.',
+        'There is no roll. Every number is a carry number today.',
+      ],
+    };
+  }
+  if (v === 'hot') {
+    return {
+      ...shared,
+      alreadyHandled: 'The ball is flying further in this heat and the plays-like number already has it.',
+      mitigations: [
+        'Drink before you are thirsty — the back nine is where heat shows up in the score, not the front.',
+      ],
+    };
+  }
+  if (v === 'windy') {
+    return {
+      ...shared,
+      alreadyHandled: 'The wind is already in the number — it is measured off your shot direction, not guessed.',
+      mitigations: [
+        'Swing easier into it. Hard swings add spin and the wind eats them.',
+        'Take the low side of every number and let it run.',
+      ],
+    };
+  }
+  return null;
+}
+
+/** The play for TODAY, when today is a condition that has cost this player before. */
+export function playForToday(
+  findings: ConditionFinding[],
+  current: Partial<Record<ConditionKey, string | null | undefined>>,
+): ConditionPlay | null {
+  for (const f of findingsForToday(findings, current)) {
+    const p = conditionPlay(f);
+    if (p) return p;
+  }
+  return null;
+}

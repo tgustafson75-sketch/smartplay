@@ -16,7 +16,15 @@ import { useTranslation } from 'react-i18next';
 const ENERGY_OPTIONS = ['High', 'Medium', 'Low'] as const;
 const FOCUS_OPTIONS  = ['Locked In', 'OK', 'Off'] as const;
 const VIBE_OPTIONS   = ['Great', 'Solid', 'Rough'] as const;
-const WEATHER_OPTIONS = ['Sunny', 'Cloudy', 'Windy', 'Hot', 'Cold'] as const;
+/**
+ * 2026-09-11 (Tim) — "Sunny and hot should factor vs rainy and/or cold."
+ *
+ * RAINY was missing, so rain could never be recorded at all — the one condition a golfer will
+ * always remember about a round had no box to tick. The order runs benign → adverse, because the
+ * answers are compared against each other and a player scanning the row should see the shape of the
+ * question. [[illustration-data-points]]
+ */
+const WEATHER_OPTIONS = ['Sunny', 'Cloudy', 'Windy', 'Rainy', 'Hot', 'Cold'] as const;
 
 type EnergyOption  = typeof ENERGY_OPTIONS[number];
 type FocusOption   = typeof FOCUS_OPTIONS[number];

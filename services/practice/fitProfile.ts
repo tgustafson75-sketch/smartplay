@@ -23,6 +23,16 @@ export interface FitClubInput {
   /** 2026-06-15 (Tim — My Bag) — True = the player STATED this carry (editable
    *  bag), as opposed to measured-from-shots or a standard-chart estimate. */
   stated?: boolean;
+  /**
+   * 2026-09-11 (Tim — "make sure this works both ways with fit profile in dashboard") — HOW OFTEN HE
+   * ACTUALLY SWINGS IT, across rounds, range, drills, video and the watch.
+   *
+   * This did not exist until today: clubStatsStore's rep tally had one writer, the range screen. It
+   * is what turns an OVERLAP from a curiosity into an answer — two clubs doing the same job is a
+   * shrug, but two clubs doing the same job where one of them never comes out of the bag is the
+   * club to drop. Optional: absent means no claim. [[illustration-data-points]]
+   */
+  uses?: number;
 }
 
 export interface FitGap {
@@ -37,6 +47,12 @@ export interface FitOverlap {
   shorter: string;
   longer: string;
   gapYards: number;   // how close they carry
+  /**
+   * Of the two, the one he barely swings — the honest bench candidate. Null when usage is unknown
+   * or the two are used comparably, because "you carry two similar clubs" is not a recommendation
+   * and telling someone to drop a club they actually use is how a feature loses trust.
+   */
+  benchCandidate?: string | null;
 }
 
 export interface FitProfile {
@@ -77,6 +93,11 @@ const OVERLAP_YARDS = 7;
 
 const DISCLAIMER =
   'A data-grown starting point from your tracked distances — not a launch-monitor fit. Bring it to a fitter to dial the specs.';
+
+/** The busier of an overlapping pair needs at least this many swings before the quiet one is idle. */
+const BENCH_MIN_USES = 6;
+/** And the quiet one has to be genuinely quiet — a quarter of the other's volume or less. */
+const BENCH_SHARE = 0.25;
 
 export function composeFitProfile(clubs: FitClubInput[]): FitProfile {
   /**
@@ -128,7 +149,19 @@ export function composeFitProfile(clubs: FitClubInput[]): FitProfile {
         centerYards: Math.round((longer.yards + shorter.yards) / 2),
       });
     } else if (d <= OVERLAP_YARDS && realBound) {
-      overlaps.push({ shorter: shorter.club, longer: longer.club, gapYards: d });
+      /**
+       * 2026-09-11 — which of the pair he actually swings. Needs BOTH to be known and one to be
+       * clearly less used; a near-tie is not a finding, and an unknown is never one.
+       */
+      const uL = typeof longer.uses === 'number' ? longer.uses : null;
+      const uS = typeof shorter.uses === 'number' ? shorter.uses : null;
+      let benchCandidate: string | null = null;
+      if (uL != null && uS != null && (uL > 0 || uS > 0)) {
+        const lo = Math.min(uL, uS);
+        const hi = Math.max(uL, uS);
+        if (hi >= BENCH_MIN_USES && lo <= hi * BENCH_SHARE) benchCandidate = uL < uS ? longer.club : shorter.club;
+      }
+      overlaps.push({ shorter: shorter.club, longer: longer.club, gapYards: d, benchCandidate });
     }
   }
 

@@ -67,6 +67,14 @@ export interface CaddieDecision {
    */
   conditions: string | null;
   todayMatches: string | null;
+  /**
+   * 2026-09-11 (Tim) — "Maybe there are mitigation or at least mindset strategies we can derive."
+   *
+   * Present only when TODAY is a condition this player has a MEASURED penalty in. Carries what the
+   * app has already done to the numbers (so he does not club up twice), what is worth doing, and
+   * the target the round should actually be measured against.
+   */
+  conditionPlay: import('./roundConditions').ConditionPlay | null;
 }
 
 
@@ -119,6 +127,7 @@ export function decideShot(known: CallerKnown = { rawYards: null }): CaddieDecis
     cues: safe(() => composeCues(profile), []),
     conditions: safe(() => composeConditions().all, null),
     todayMatches: safe(() => composeConditions().today, null),
+    conditionPlay: safe(() => composeConditions().play, null),
   };
 }
 
@@ -128,12 +137,16 @@ export function decideShot(known: CallerKnown = { rawYards: null }): CaddieDecis
  * Today's weather comes from the app's own measurement rather than waiting to be told: the player
  * answers the weather question at the END of a round, which is no use during one.
  */
-function composeConditions(): { all: string | null; today: string | null } {
+function composeConditions(): {
+  all: string | null;
+  today: string | null;
+  play: import('./roundConditions').ConditionPlay | null;
+} {
   const { useRoundStore } = require('../store/roundStore') as typeof import('../store/roundStore');
   const rc = require('./roundConditions') as typeof import('./roundConditions');
   const r = useRoundStore.getState();
   const findings = rc.conditionFindings((r.roundHistory ?? []) as never);
-  if (findings.length === 0) return { all: null, today: null };
+  if (findings.length === 0) return { all: null, today: null, play: null };
 
   const weatherNow = safe(() => {
     const { getCachedWeatherEvenIfStale } = require('./weatherService') as typeof import('./weatherService');
@@ -142,12 +155,21 @@ function composeConditions(): { all: string | null; today: string | null } {
     if (!fix || fix.lat == null || fix.lng == null) return null;
     const w = getCachedWeatherEvenIfStale({ lat: fix.lat, lng: fix.lng });
     if (!w) return null;
-    // Mapped onto the SAME words the post-round screen offers, or the buckets can never match.
+    /**
+     * Mapped onto the SAME words the post-round screen offers, or the buckets can never match.
+     *
+     * Order is by how much the condition actually changes a round, not by severity of weather: rain
+     * and cold beat wind because they change the ball AND the player, and a golfer will name them
+     * as THE thing about the round. Sunny is last because it is the baseline, not a finding.
+     */
     const mph = typeof w.wind_speed_mph === 'number' ? w.wind_speed_mph : 0;
     const f = typeof w.temp_f === 'number' ? w.temp_f : null;
-    if (mph >= 12) return 'Windy';
-    if (f != null && f >= 85) return 'Hot';
+    const cond = typeof w.conditions === 'string' ? w.conditions.toLowerCase() : '';
+    if (/rain|drizzle|shower|thunderstorm/.test(cond)) return 'Rainy';
     if (f != null && f <= 50) return 'Cold';
+    if (f != null && f >= 85) return 'Hot';
+    if (mph >= 12) return 'Windy';
+    if (/clear|sun/.test(cond)) return 'Sunny';
     return null;
   }, null);
 
@@ -155,6 +177,7 @@ function composeConditions(): { all: string | null; today: string | null } {
   return {
     all: rc.describeConditions(findings, 2),
     today: rc.describeConditions(today, 1),
+    play: rc.playForToday(findings, { weather: weatherNow }),
   };
 }
 
@@ -188,7 +211,28 @@ function composeProfile(): PlayProfile | null {
   ) || null;
   const rounds = safe(() => useRelationshipStore.getState().roundsTogether ?? 0, 0);
 
+  /**
+   * 2026-09-11 (Tim — "make sure this works both ways with fit profile in dashboard") — THE BAG
+   * GAPS, WHICH THE CADDIE COULD NEVER SEE.
+   *
+   * playProfile has had a measured weakness line for gaps — "N real gaps in your set, some numbers
+   * have no full swing" — and `bagGapCount` had NO WRITER anywhere in the app. services/practice/
+   * fitProfile computes the gaps and app/practice/fit-profile was its only caller, so the dashboard
+   * knew and the caddie did not, and that branch could never fire. Same shape as distanceControl:
+   * a reader with no writer. [[sweep-the-missing-half-not-the-unused-export]]
+   */
+  const bagGapCount = safe(() => {
+    const { composeFitProfile } = require('./practice/fitProfile') as typeof import('./practice/fitProfile');
+    const { useClubStatsStore, CLUB_ORDER } = require('../store/clubStatsStore') as typeof import('../store/clubStatsStore');
+    const st = useClubStatsStore.getState();
+    const clubs = CLUB_ORDER
+      .filter((c) => c !== 'Putter')
+      .map((c) => ({ club: c, yards: st.carryFor(c), measured: st.hasCarry(c), stated: st.hasManual(c) }));
+    return composeFitProfile(clubs as never).gaps.length;
+  }, null);
+
   return composePlayProfile({
+    bagGapCount,
     level: deriveComplexityLevel({
       handicap: p.handicap ?? null,
       experienceContext: p.experienceContext ?? null,

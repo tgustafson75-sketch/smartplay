@@ -72,7 +72,13 @@ export default function FitProfileScreen() {
       // 2026-07-27 (full-app audit) — "measured" = hasCarry (real/stated CARRY), NOT hasSamples (true for
       // GPS-total-only clubs whose carry is a total−roll ESTIMATE). Matches the dashboard + ball-fit fix;
       // otherwise the whole pre-v2-migration cohort's total-only clubs over-claim "measured" here.
-      .map((c) => ({ club: c, yards: st.carryFor(c), measured: st.hasCarry(c), stated: st.hasManual(c) }));
+      // 2026-09-11 — uses come from the rep tally every source now writes (round shot, range rep,
+      // drill, uploaded video, watch swing). Before today it had ONE writer and this screen could
+      // not tell a club he lives on from one that never leaves the bag.
+      .map((c) => ({
+        club: c, yards: st.carryFor(c), measured: st.hasCarry(c), stated: st.hasManual(c),
+        uses: st.repsFor(c),
+      }));
     return composeFitProfile(clubs);
     // recompute when tracked stats OR the stated bag change
     // eslint-disable-next-line react-hooks/exhaustive-deps

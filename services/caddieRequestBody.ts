@@ -593,8 +593,8 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     roundConditions: safe(() => {
       const { decideShot } = require('./caddieDecision') as typeof import('./caddieDecision');
       const d = decideShot({ rawYards: workingYards });
-      if (!d.conditions && !d.todayMatches) return null;
-      return { pattern: d.conditions, today: d.todayMatches };
+      if (!d.conditions && !d.todayMatches && !d.conditionPlay) return null;
+      return { pattern: d.conditions, today: d.todayMatches, play: d.conditionPlay };
     }, null),
 
     shotRead: safe(() => {
