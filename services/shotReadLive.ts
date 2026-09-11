@@ -45,6 +45,8 @@ export interface ShotReadInputs {
   nearestHazard?: { label: string; yards: number } | null;
   /** What the ball is sitting on — from TightLie's read or the player's own words. */
   lie?: import('./clubCharacter').Lie;
+  /** Clean-strike rate for a ladder-labelled club, or null when not enough rated swings. */
+  confidenceFor?: (ladderLabel: string) => number | null;
   risk?: ShotRiskMode;
   isCompetition?: boolean;
   pastScoreNote?: string | null;
@@ -170,6 +172,39 @@ export function liveShotReadInputs(known: CallerKnown): ShotReadInputs {
       const note = hole != null ? (round?.holeNotes?.[hole] as string | undefined) : undefined;
       return lieFromWords(note ?? null);
     }, 'unknown' as never),
+
+    /**
+     * 2026-09-11 (Tim) — HOW WELL HE ACTUALLY STRIKES EACH CLUB.
+     *
+     * "Each club in the bag essentially has characteristics real and received… sometimes feel for
+     * the lie or situation or comfort level."
+     *
+     * relationshipStore.confidenceByClub is the received half and it is genuinely measured: the
+     * clean-strike rate over recent RATED swings, written by services/clubConfidence, gated at three
+     * so it is never a guess. It reached one practice-screen badge and never a club decision.
+     *
+     * THE VOCABULARY IS TRANSLATED HERE, at the boundary, because only here are both sides known.
+     * The store is keyed by whatever a swing session called the club; cnsShotRead's ladder is
+     * LABELLED ('7 Iron'). Handing the raw map across is precisely how the lie offer silently never
+     * fired earlier today. [[two-owners-is-the-root-cause]]
+     */
+    confidenceFor: safe(() => {
+      const { useRelationshipStore } = require('../store/relationshipStore') as typeof import('../store/relationshipStore');
+      const { normalizeClub } = require('./clubNormalize') as typeof import('./clubNormalize');
+      const { CLUB_LABEL } = require('./standardBag') as typeof import('./standardBag');
+      const raw = useRelationshipStore.getState().confidenceByClub ?? {};
+      const byLabel: Record<string, number> = {};
+      for (const [k, v] of Object.entries(raw)) {
+        if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+        const canon = normalizeClub(k);
+        const label = canon ? ((CLUB_LABEL as Record<string, string>)[canon] ?? canon) : k;
+        byLabel[label] = v;
+      }
+      return (label: string) => {
+        const v = byLabel[label];
+        return typeof v === 'number' && Number.isFinite(v) ? v : null;
+      };
+    }, undefined as never),
 
     /** Nearest trouble ahead on the line, when the hole is mapped. */
     nearestHazard: safe(() => {

@@ -67,6 +67,12 @@ export interface ShotRead {
 const STANDARD_LADDER = SHARED_LADDER;
 
 /**
+ * How far apart two clubs' clean-strike rates must be before comfort decides between them.
+ * Fifteen points is a real difference in how a player catches a club; anything less is noise.
+ */
+const CONFIDENCE_MARGIN = 0.15;
+
+/**
  * 2026-08-11 — ClubName (the stores' vocabulary) → the STANDARD_LADDER's label. Without this the
  * merge produces duplicates ('7I' AND '7 Iron') and the caddie speaks a store key at the player.
  */
@@ -154,6 +160,22 @@ interface GapContext {
    * no claim: it must not penalise the wood, because that would be inventing a bad lie.
    */
   lie?: import('./clubCharacter').Lie;
+  /**
+   * 2026-09-11 (Tim) — THE "RECEIVED" HALF OF A CLUB'S CHARACTER.
+   *
+   * "Each club in the bag essentially has characteristics real and received… sometimes feel for the
+   * lie or situation or comfort level."
+   *
+   * relationshipStore.confidenceByClub has held a real, measured number since 2026-07-09 — the
+   * clean-strike rate over a player's recent RATED swings with that club, gated at three so it is
+   * never a guess. It reached one practice-screen badge and never the club decision.
+   *
+   * Passed as a FUNCTION, not a map, on purpose: the store keys and this file's ladder speak
+   * different vocabularies, and handing over a raw map is exactly how the lie offer silently never
+   * fired earlier today. The caller owns the translation, because only the caller knows both sides.
+   * Returns null when there is not enough rated data — and null must never break a tie.
+   */
+  confidenceFor?: (ladderLabel: string) => number | null;
 }
 
 function pickClub(playsLikeYards: number, bag: Partial<Record<string, number>>, why: string[], risk: ShotRiskMode = 'normal', gap: GapContext = {}): string | null {
@@ -208,12 +230,26 @@ function pickClub(playsLikeYards: number, bag: Partial<Record<string, number>>, 
         risk === 'safe' ? (entry[1] > (best?.[1] ?? -Infinity) ? true : false)
         : risk === 'aggressive' ? (entry[1] < (best?.[1] ?? Infinity) ? true : false)
         : null;
+      /**
+       * 2026-09-11 — COMFORT BREAKS A DEAD HEAT, and nothing more.
+       *
+       * It sits BELOW posture deliberately: a posture is a stance the player or the caddie chose,
+       * and a measured tendency must not overrule a choice. It only speaks when the strike rates
+       * differ MATERIALLY — a couple of points is noise, and noise must never pick a club.
+       */
+      const cNew = gap.confidenceFor?.(entry[0]) ?? null;
+      const cBest = best ? (gap.confidenceFor?.(best[0]) ?? null) : null;
+      const confidenceBreak =
+        cNew != null && cBest != null && Math.abs(cNew - cBest) >= CONFIDENCE_MARGIN
+          ? cNew > cBest
+          : null;
       const better =
         dNew < dBest - 1 ? true
         : dNew > dBest + 1 ? false
         : newIsMeasured && !bestIsMeasured ? true      // near-tie: measured beats chart
         : !newIsMeasured && bestIsMeasured ? false
         : postureBreak !== null ? postureBreak         // near-tie, same provenance: posture decides
+        : confidenceBreak !== null ? confidenceBreak   // still tied: the club he actually strikes
         : dNew < dBest;                                 // same provenance: closest wins
       if (!best || better) best = entry;
       if (entry[1] > longest[1]) longest = entry;
@@ -403,11 +439,13 @@ export function composeShotRead(input: {
   distanceControl?: 'full_swings' | 'some_partials' | 'dial_down';
   /** What the ball is sitting on — TightLie's read, or the player's words. */
   lie?: import('./clubCharacter').Lie;
+  /** Clean-strike rate for a LADDER-LABELLED club, or null when not enough rated swings. */
+  confidenceFor?: (ladderLabel: string) => number | null;
 }): ShotRead | null {
   const {
     rawYards, weather, shotBearingDeg, elevationDeltaFeet = 0,
     bag = {}, dominantMiss, holeLineNote, nearestHazard, isCompetition, pastScoreNote,
-    greenFrontYards = null, greenBackYards = null, distanceControl, lie,
+    greenFrontYards = null, greenBackYards = null, distanceControl, lie, confidenceFor,
   } = input;
   if (rawYards == null || !Number.isFinite(rawYards)) return null;
 
@@ -437,7 +475,7 @@ export function composeShotRead(input: {
 
   // 2) Club — the answer. Pushes a learned-carry why line when the bag is real.
   const club = pickClub(playsLikeYards, bag, why, input.risk ?? 'normal', {
-    distanceControl, greenFrontYards, greenBackYards, nearestHazard, lie,
+    distanceControl, greenFrontYards, greenBackYards, nearestHazard, lie, confidenceFor,
   });
 
   // 3) Hazard — only when it's actually in play for this shot (ahead, within reach).
