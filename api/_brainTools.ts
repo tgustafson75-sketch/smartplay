@@ -244,13 +244,13 @@ export const BRAIN_TOOLS: AiToolDef[] = [
     description: 'The player tells you the distance they have — "I\'m 150 out", "about 172 to the pin", "we\'ve got 90 in". Record it as the working number for this shot: it is measured or paced by them and BEATS the GPS estimate. Call it as well as answering. If the SAME sentence also asks what to hit or what the play is ("I\'m 150 out, what should I hit"), that is a shot question too — give the club out loud AND call recommend_club. Logging their number is not an answer to their question, and a silent turn reads as being ignored.',
     parameters: {
       type: 'object',
-      properties: { yards: { type: 'integer', description: 'The distance they stated, in yards.' } },
+      properties: { yards: { type: 'integer', description: 'The distance they stated, in yards. NOT a wedge loft — "the 60" / "my 56" are CLUBS and belong to club_change.' } },
       required: ['yards'],
     },
   },
   {
     name: 'club_change',
-    description: 'The player says which club they are using or switching to — "I\'m hitting my 7", "going with the 52 wedge", "switched to hybrid". Record it so the shot is attributed to the right club. Call it as well as answering.',
+    description: 'The player says which club they are using or switching to — "I\'m hitting my 7", "going with the 52 wedge", "switched to hybrid", "give me the 60". Record it so the shot is attributed to the right club. Call it as well as answering. WEDGES ARE NAMED BY LOFT: "the 60" / "my 56" / "a 52" are CLUBS (60-degree lob, 56 sand, 52 gap), NOT yardages — a number with "the", "my" or "a" in front of it is a club every time. "60 out" / "from 60" / "I\'m 60" ARE yardages and belong to state_yardage.',
     parameters: {
       type: 'object',
       properties: { club: { type: 'string', description: 'The club they named, in their words ("7 iron", "52 wedge", "hybrid").' } },

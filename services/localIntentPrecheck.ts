@@ -459,7 +459,13 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
     const cdm = t.match(/\b(?:how far(?:\s+do\s+i\s+(?:hit|carry))?(?:\s+does)?(?:\s+is)?|what(?:'s|s|\s+is))\s+my\s+(.+?)(?:\s+(?:go|going|carry|carrying))?\??$/i);
     if (cdm) {
       const clubPhrase = cdm[1].trim();
-      if (/\b(driver|wood|hybrid|iron|wedge|pitching|sand|lob|gap|approach|utility|pw|sw|lw|gw|aw|\d\s?h|\d\s?i|\d\s?w)\b/i.test(clubPhrase)) {
+      /**
+       * 2026-09-11 (Tim) — "how far do I hit my 60" fell through here, because this test wants a club
+       * WORD and a golfer naming a wedge says its LOFT. clubFromLoftPhrase reads the grammar rather
+       * than the number: a determiner in front ("my 60") is a club, a yardage word behind it is not.
+       */
+      const loftClub = (require('./clubNormalize') as typeof import('./clubNormalize')).clubFromLoftPhrase(clubPhrase);
+      if (loftClub || /\b(driver|wood|hybrid|iron|wedge|pitching|sand|lob|gap|approach|utility|pw|sw|lw|gw|aw|\d\s?h|\d\s?i|\d\s?w)\b/i.test(clubPhrase)) {
         return intent(t, 'query_status', { query_topic: 'club_distance', club_phrase: clubPhrase });
       }
     }

@@ -205,3 +205,51 @@ export function isFullSwingClub(raw: string | null | undefined): boolean {
   const n = normalizeClub(raw);
   return n != null && n !== 'Putter';
 }
+
+/**
+ * "THE 60" IS A CLUB. "60 OUT" IS A YARDAGE.
+ *
+ * 2026-09-11 (Tim). "Please make sure Caddie knows 60 and lob wedge are the same thing — 60 degree
+ * wedge, that is — so it doesn't catch 60 as yardage like it sometimes likes to do with numbers.
+ * I'm asking you to make Pinocchio caddie a real boy."
+ *
+ * normalizeClub has mapped lofts to wedges for a long time, but only when it is handed a CLUB field.
+ * Its own comment says the phrase parser deliberately does NOT do this, "since a bare number in a
+ * sentence is far more likely a yardage" — which is true, and is exactly why the caddie heard "hit
+ * the 60" as sixty yards.
+ *
+ * The number is not the discriminator. THE GRAMMAR IS. A golfer says "the 60", "my 56", "a 52" for a
+ * club and "60 out", "from 60", "60 to the pin", "I'm 60" for a distance, and they do not mix the
+ * two up — a determiner in front of the number, or the word degree behind it, is a club every time.
+ *
+ * Deliberately narrow: 46-64 only, which is the wedge range. "the 7" is not handled here because a
+ * 7 could be an iron or a wood and guessing would corrupt a real club's learned data — the same
+ * reason normalizeClub returns null for a bare "iron".
+ *
+ * Returns null whenever it is not sure, and null means the sentence keeps its old reading.
+ */
+export function clubFromLoftPhrase(raw: string | null | undefined): ClubName | null {
+  if (!raw) return null;
+  const t = digitizeNumberWords(String(raw).toLowerCase());
+
+  // "60 degree", "60°", "60 deg wedge" — explicit, no determiner needed.
+  let m = t.match(/\b(\d{2})(?:\.\d)?\s*(?:°|deg\b|degree[s]?\b)/);
+  if (m) return wedgeForLoft(Number(m[1]));
+
+  // "60 wedge" / "56 sand" — the club word is right there.
+  m = t.match(/\b(\d{2})\s*(?:wedge|wedg)\b/);
+  if (m) return wedgeForLoft(Number(m[1]));
+
+  /**
+   * A determiner in front of it: "the 60", "my 56", "a 52", "his 58".
+   *
+   * Guarded against the yardage readings a golfer actually says. "hit the 60" is a club; "hit it 60"
+   * is a distance and has no determiner, so it never reaches here — but "the 60 yards" and "the 60
+   * to the pin" would, and must not be claimed.
+   */
+  m = t.match(/\b(?:the|my|a|an|his|her|your|our)\s+(\d{2})\b/);
+  if (!m) return null;
+  const after = t.slice((m.index ?? 0) + m[0].length, (m.index ?? 0) + m[0].length + 18);
+  if (/^\s*(?:yard|yd|y\b|out\b|in\b|to\b|from\b|away|left|short|past|over|deep)/.test(after)) return null;
+  return wedgeForLoft(Number(m[1]));
+}

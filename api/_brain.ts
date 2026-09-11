@@ -210,7 +210,26 @@ export function mentalGameBlock(): string {
  * FROM. So it fires only on an explicit advice cue attached to a named club, and never on general
  * club talk ("your 7-iron goes 165") or on a question back to the player ("what's the distance?").
  */
+/**
+ * 2026-09-11 (Tim) — "make sure Caddie knows 60 and lob wedge are the same thing… so it doesn't
+ * catch 60 as yardage like it sometimes likes to do with numbers."
+ *
+ * This list is how the server works out which club the CADDIE just recommended, so it can be
+ * stamped and paired with the outcome. It knew every wedge by NAME and none by LOFT — and a golfer,
+ * and a caddie talking to one, says "the 60". So "I'd go with the 60" recorded no club at all.
+ *
+ * Guarded the same way the client's clubFromLoftPhrase is: a determiner in front of the number, or
+ * the word degree behind it. "60 out" and "from 60" are yardages and match neither. Loft families
+ * follow the bag's own mapping (46-49 PW, 50-53 GW, 54-57 SW, 58-64 LW).
+ */
+const LOFT_CUE = String.raw`(?:(?:the|my|a|an|his|her|your|our)\s+(?:LOFTS)|(?:LOFTS)\s*(?:°|deg|degree[s]?|wedge))`;
+const loftRx = (lofts: string) => new RegExp(LOFT_CUE.replace(/LOFTS/g, lofts), 'i');
+
 const CLUB_PATTERNS: Array<[RegExp, string]> = [
+  [loftRx('58|59|60|61|62|63|64'), 'lob wedge'],
+  [loftRx('54|55|56|57'), 'sand wedge'],
+  [loftRx('50|51|52|53'), 'gap wedge'],
+  [loftRx('46|47|48|49'), 'pitching wedge'],
   [/\bdriver\b/i, 'driver'],
   [/\b(?:3|three)[ -]?wood\b/i, '3 wood'],
   [/\b(?:5|five)[ -]?wood\b/i, '5 wood'],
