@@ -10240,10 +10240,22 @@ check('LOCK: issue reports carry an anonymous install id, attached once, with no
      * system now), so the install id rides as a Sentry TAG instead — which is strictly better,
      * because a tag is filterable and a subject line is not.
      */
-    const surfaced = /install_id: installId \?\? 'unknown',/.test(exp);
-    return owned && attachedOnce && noSchemaRisk && surfaced;
+    /**
+     * 2026-09-10 — the TAG moved to services/issueFeedback, the shared sender both callers of
+     * /api/issue-report now use. services/roundTrace POSTs its own entry and never joined
+     * issueLogExport's list, so the round trace — and the owner Field Test report built on it — had
+     * no Sentry mirror at all and therefore no install id to filter by. Same property, new owner,
+     * and now asserted for BOTH senders rather than the one that happened to have it.
+     */
+    const fb = read('services/issueFeedback.ts');
+    const rt = read('services/roundTrace.ts');
+    const surfaced = /install_id: opts\.installId \?\? 'unknown',/.test(fb);
+    const bothSendersUseIt = /sendIssueFeedback\(/.test(exp) && /sendIssueFeedback\(/.test(rt);
+    // the round trace must still attach its own id — it mints one separately from issueLogExport
+    const traceAttaches = /getInstallId\(\)/.test(rt) && /installId/.test(rt);
+    return owned && attachedOnce && noSchemaRisk && surfaced && bothSendersUseIt && traceAttaches;
   })(),
-  'one owner mints/persists the install id, it is attached once at the send path inside context (no migration), and it is surfaced as a filterable Sentry tag');
+  'one owner mints/persists the install id, it is attached once at the send path inside context (no migration), and it is surfaced as a filterable Sentry tag — by BOTH senders to /api/issue-report, not just the issue log');
 
 // 2026-08-14 (Tim's round at Berlin — white screens at the course, and when it loaded the app was a
 // brick: loaded but unresponsive to any tap). That is the JS thread pegged, and this is what pegged it.

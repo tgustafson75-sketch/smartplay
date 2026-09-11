@@ -58,6 +58,16 @@ describe('concurrent auto-sends coalesce', () => {
   });
 
   it('a crash still is not sent as feedback — Sentry already has it as an exception', () => {
-    expect(code).toContain("if (e.kind === 'app_error') continue;");
+    /**
+     * 2026-09-10 — the skip moved into services/issueFeedback, the shared sender both callers of
+     * /api/issue-report now use (roundTrace POSTs its own entry and had been missing the Sentry
+     * mirror entirely). Same invariant, new owner.
+     */
+    const fb = fs.readFileSync(
+      path.join(__dirname, '../../services/issueFeedback.ts'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+    expect(fb).toMatch(/if \(entry\.kind === 'app_error'\) return;/);
+    // and this file must route through it rather than keeping a private copy
+    expect(code).toMatch(/sendIssueFeedback\(/);
   });
 });

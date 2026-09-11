@@ -78,11 +78,25 @@ describe('the round trace is sent once, and arrives with its contents', () => {
    * loses exactly what this test exists to protect.
    */
   it('and the renderer no longer silently drops a non-object details', () => {
-    const exp = fs.readFileSync(path.join(root, 'services', 'issueLogExport.ts'), 'utf8');
-    const code = exp.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    /**
+     * 2026-09-10 — the renderer moved AGAIN, to services/issueFeedback, because there are TWO
+     * senders to /api/issue-report and only one had it. services/roundTrace POSTs its own entry
+     * (`details: { trace: body }` — the exact shape this test protects) and never joined
+     * issueLogExport's list, so the round trace had no Sentry mirror at all. Same assertion,
+     * third home; the shape it defends has not changed.
+     */
+    const fb = fs.readFileSync(path.join(root, 'services', 'issueFeedback.ts'), 'utf8');
+    const code = fb.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
     expect(code).toMatch(/typeof details === 'string'/);
     expect(code).toMatch(/JSON\.stringify\(details/);
-    // and the naive interpolation must not come back
-    expect(code).not.toMatch(/\$\{e\.details\}/);
+    // and the naive interpolation must not come back, in EITHER sender
+    expect(code).not.toMatch(/\$\{entry\.details\}/);
+    const exp = fs.readFileSync(path.join(root, 'services', 'issueLogExport.ts'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    expect(exp).not.toMatch(/\$\{e\.details\}/);
+    const rt = fs.readFileSync(path.join(root, 'services', 'roundTrace.ts'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    // the round trace must route through the shared sender, not hand-roll a third copy
+    expect(rt).toMatch(/sendIssueFeedback\(/);
   });
 });

@@ -14,8 +14,8 @@ import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { getApiBaseUrl, appKeyHeaders } from './apiBase';
 import { getInstallId } from './installId';
+import { sendIssueFeedback } from './issueFeedback';
 import { isTestRunner } from './isTestRunner';
-import * as Sentry from '@sentry/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // App-key gate → shared appKeyHeaders() (services/apiBase.ts), mirrors api/_appKey.ts on the server.
@@ -175,18 +175,6 @@ export function scheduleIssueAutoSend(): void {
 }
 
 /**
- * Compose the feedback body without losing a structured `details`.
- *
- * A string rides through untouched; anything else is JSON so the round trace survives. An
- * unserialisable value (a cycle) degrades to the text alone rather than throwing away the report.
- */
-function renderDetails(text: string, details: unknown): string {
-  if (details == null) return text;
-  if (typeof details === 'string') return `${text}\n\n${details}`;
-  try { return `${text}\n\n${JSON.stringify(details, null, 2)}`; } catch { return text; }
-}
-
-/**
  * 2026-09-09 (72-hour triple-check) — ONE SEND AT A TIME, which "one event, one alert" assumed and
  * never enforced.
  *
@@ -284,42 +272,19 @@ async function autoSendIssuesInner(): Promise<boolean> {
        */
       for (const e of unsent) {
         /**
-         * 2026-09-06 — DO NOT SEND A CRASH AS FEEDBACK. Sentry's own global handler already captured
-         * `uncaught_js_error` as a fatal EXCEPTION, with a real stack. Sending the issue-log copy as
-         * user feedback puts the same crash in the project twice under two different shapes — which
-         * is exactly what Tim saw: "Error anonymous(index.android)" at 11:32:07 and
-         * "User Feedback: SmartPlay owner test e..." at 11:32:50, one event, two entries.
+         * 2026-09-10 — the captureFeedback body moved to services/issueFeedback so the OTHER sender
+         * to this endpoint (services/roundTrace, which POSTs its own entry and never joins this
+         * list) applies the same rule. It had been missing it since the 2026-09-06 merge, so the
+         * round trace — and the owner Field Test report built on it — reached Supabase and nowhere
+         * else. Third time a second sender missed this one's treatment; see that file's header.
          *
-         * The whole reason to merge the log into Sentry was ONE fingerprint space. Duplicating the
-         * events we already had there would undo that on the first crash.
+         * Behaviour here is unchanged: crashes are still skipped, `details` is still stringified
+         * rather than interpolated, and the call is still individually guarded.
          */
-        if (e.kind === 'app_error') continue;
-        try {
-          const ctx = (e.context && typeof e.context === 'object' ? e.context : {}) as Record<string, unknown>;
-          Sentry.captureFeedback({
-            /**
-             * 2026-09-06 — `details` is typed loose and IS an object on the round-trace path
-             * (`details: { trace: body }`). Template-interpolating it yields "[object Object]" and
-             * silently loses the trace — the exact regression
-             * the-issue-inbox-carries-only-real-issues.test.ts was written for, which is how this
-             * was caught. Stringify a non-string; never interpolate it.
-             */
-            message: renderDetails(e.text, e.details),
-            name: reporter,
-            source: 'issue-log',
-            tags: {
-              install_id: installId ?? 'unknown',
-              platform: Platform.OS,
-              // The round context the triage side needs to reproduce: which course, which hole,
-              // mid-round or not. Already on every entry — this just carries it across.
-              course_id: String(ctx.courseId ?? 'none'),
-              hole: String(ctx.currentHole ?? 'none'),
-              round_active: String(ctx.isRoundActive ?? false),
-              route: String(ctx.route ?? 'unknown'),
-              app_version: String(ctx.appVersion ?? 'unknown'),
-            },
-          });
-        } catch { /* telemetry only; the entry is already stored server-side */ }
+        sendIssueFeedback(
+          { text: e.text, details: e.details, kind: e.kind, context: e.context },
+          { reporter, installId: installId ?? null },
+        );
       }
       console.log('[issueLogExport] auto-sent', unsent.length, 'issues');
       return true;

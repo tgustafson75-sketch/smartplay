@@ -27,6 +27,17 @@ const src = fs.readFileSync(
   path.join(__dirname, '../../services/issueLogExport.ts'), 'utf8');
 const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
+/**
+ * 2026-09-10 — the captureFeedback body moved to services/issueFeedback so BOTH senders to
+ * /api/issue-report apply it. services/roundTrace POSTs its own entry and never joins
+ * issueLogExport's list, so it had been missing the Sentry mirror entirely since 2026-09-06.
+ *
+ * The invariants below are unchanged and still asserted — they just live in the new owner now.
+ */
+const feedbackSrc = fs.readFileSync(
+  path.join(__dirname, '../../services/issueFeedback.ts'), 'utf8');
+const feedbackCode = feedbackSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
 describe('an entry is sent once, not once per launch', () => {
   it('remembers what it sent across launches', () => {
     expect(code).toContain("const SENT_IDS_KEY = 'issue-log-sent-ids-v1';");
@@ -63,14 +74,20 @@ describe('an entry is sent once, not once per launch', () => {
 
 describe('a crash is reported once, by the handler that has the stack', () => {
   it('skips app_error when sending user feedback', () => {
-    expect(code).toContain("if (e.kind === 'app_error') continue;");
+    // Now a per-entry early return in the shared sender rather than a `continue` in the loop.
+    expect(feedbackCode).toMatch(/if \(entry\.kind === 'app_error'\) return;/);
   });
 
-  it('the skip is inside the feedback loop, not the send', () => {
+  it('the skip is inside the feedback send, not around it', () => {
     // It must NOT stop the crash reaching Supabase or the log — only the duplicate Sentry feedback.
+    // The skip must therefore be PER ENTRY and before captureFeedback, never wrapped around the POST.
+    expect(feedbackCode.indexOf("if (entry.kind === 'app_error') return;"))
+      .toBeLessThan(feedbackCode.indexOf('captureFeedback'));
+    // and issueLogExport must still call it once per entry, inside the loop
     const loop = code.slice(code.indexOf('for (const e of unsent) {'));
-    expect(loop.indexOf("if (e.kind === 'app_error') continue;"))
-      .toBeLessThan(loop.indexOf('captureFeedback'));
+    expect(loop).toMatch(/sendIssueFeedback\(/);
+    // the POST must already have succeeded — the call stays inside the ok-branch
+    expect(code.indexOf('sendIssueFeedback(')).toBeGreaterThan(code.indexOf('if (res.ok)'));
     // app_error stays reportable: it still goes to the server in the payload above.
     expect(code).toContain("'voice_miss', 'app_error',");
   });

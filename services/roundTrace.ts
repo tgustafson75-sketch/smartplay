@@ -169,10 +169,14 @@ export function _resetRoundTraceSendGuard(): void {
 }
 
 /**
- * Mail the finished trace, then clear it.
+ * SEND the finished trace, then clear it.
  *
- * Reuses /api/issue-report — the transport already wired to reach Tim's inbox — rather than adding a
- * second delivery path that could rot separately. Sent as ONE entry, not hundreds: a round's trace
+ * 2026-09-10 — this said "mail" and "reach Tim's inbox". The server emailer was deleted on
+ * 2026-09-06 ("one inbox — issue log goes to Sentry, email path removed"), so for four days these
+ * comments described a delivery mechanism that no longer existed. /api/issue-report now writes the
+ * durable row to Supabase, and the CLIENT mirrors the entry into Sentry — which is where it is
+ * actually read. Reuses that one transport rather than adding a second path that could rot
+ * separately. Sent as ONE entry, not hundreds: a round's trace
  * is a single document, and splitting it across entries would interleave it with real errors in the
  * email and destroy the ordering that makes it readable.
  *
@@ -261,16 +265,31 @@ async function sendRoundTraceOnce(reporter: string, key: string): Promise<boolea
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getInstallId } = require('./installId') as typeof import('./installId');
     const installId = await getInstallId().catch(() => null);
+    /**
+     * 2026-09-10 — ONE context object, used by the POST and by the Sentry mirror below.
+     *
+     * These were briefly written out twice, and the two copies had already disagreed: the POST said
+     * `kind: 'round_trace'` unconditionally while the mirror said `field_test` for a deep run, so
+     * the same entry would have carried two different kinds in Supabase and in Sentry. That is the
+     * very defect this change exists to close, one level down. Build it once.
+     *
+     * `kind` is what makes an owner field-test report filterable out of the ordinary trace noise,
+     * so it has to be the DEEP-aware value — and `store.stop()` above clears only `active`, leaving
+     * `deep` readable here.
+     */
+    const entryContext: Record<string, unknown> = { kind: store.deep ? 'field_test' : 'round_trace' };
+    if (installId) entryContext.installId = installId;
+    const entryText = `ROUND TRACE — ${label}`;
     const res = await fetch(`${base.replace(/\/+$/, '')}/api/issue-report`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...appKeyHeaders() },
       body: JSON.stringify({
         entries: [{
           id: `trace_${Date.now()}`,
-          text: `ROUND TRACE — ${label}`,
+          text: entryText,
           reporter,
           platform: Platform.OS,
-          context: installId ? { kind: 'round_trace', installId } : { kind: 'round_trace' },
+          context: entryContext,
           /**
            * 2026-09-04 — WAS `details: body`, a bare string, and the whole trace was discarded.
            *
@@ -286,6 +305,29 @@ async function sendRoundTraceOnce(reporter: string, key: string): Promise<boolea
       signal: AbortSignal.timeout(20_000),
     });
     if (res.ok) {
+      /**
+       * 2026-09-10 — THE TRACE ALSO GOES TO SENTRY, like every other issue entry.
+       *
+       * The 2026-09-06 refactor merged the issue log into Sentry and DELETED the server emailer.
+       * It was wired into services/issueLogExport — and this is a SECOND sender that POSTs its own
+       * entry and never joins that list, so the round trace (and the owner Field Test report built
+       * on it) landed in Supabase and nowhere else. The comments in this file still said "mail"
+       * and "emailed" four days after the email path stopped existing.
+       *
+       * Third time a second sender missed the first one's treatment (test-runner guard 08-29,
+       * consent check 09-05, this). The rule now lives in services/issueFeedback and both call it.
+       *
+       * After the POST and inside the ok-branch on purpose: Supabase stays the durable record and a
+       * Sentry outage must not cost the trace. [[a-finding-that-cannot-leave-the-device]]
+       */
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const fb = require('./issueFeedback') as typeof import('./issueFeedback');
+        fb.sendIssueFeedback(
+          { text: entryText, details: { trace: body }, context: entryContext },
+          { reporter, installId },
+        );
+      } catch { /* telemetry only; the trace is already stored server-side */ }
       lastSentKey = key;
       lastSentAt = Date.now();
       store.clear();
