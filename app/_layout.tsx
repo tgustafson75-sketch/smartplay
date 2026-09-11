@@ -82,7 +82,7 @@ import { initBatteryMonitor } from '../services/batteryMonitor';
 import { shotDetectionService } from '../services/shotDetectionService';
 import { conversationalLoggingOrchestrator } from '../services/conversationalLoggingOrchestrator';
 import { subscribeToMark } from '../services/positionMarkBus';
-import { setMarkedFix } from '../services/smartFinderService';
+import { setMarkedFix, startSmartFinderGpsTracking } from '../services/smartFinderService';
 import BatteryPrompt from '../components/battery/BatteryPrompt';
 // 2026-05-21 — Fix Q (Path B): subscribeActiveSurface, mapSurfaceToPillar,
 // and speakHandoff are no longer needed at this layer — persona switches
@@ -1290,6 +1290,29 @@ function AppNavigator() {
       // others so the UI can show a cart/walking indicator from the
       // first hole.
       startMovementModeDetector();
+      /**
+       * 2026-09-10 — THE LIVE-FIX FAN-OUT WAS A SIDE EFFECT OF SHOT DETECTION.
+       *
+       * `startSmartFinderGpsTracking()` is what feeds `subscribeFixChange`, and its ONLY caller
+       * was shotDetectionService.start() — which only runs when `autoShotDetection` is true, and
+       * that setting defaults FALSE. So on a default install the fan-out never started and every
+       * subscribeFixChange consumer got nothing.
+       *
+       * That includes the watch. services/watchCaddieBridge subscribes to it for the fix-driven
+       * pin-yardage push added on 2026-09-10 for Tim's "the watch yardage is not updating" —
+       * which means that fix was inert unless he had also switched Auto Shot Detection on, and the
+       * watch fell back to its 18-second timer. app/smartvision's position marker has no backstop
+       * at all. The caddie tab and the cockpit survived only because each carries its own poll.
+       *
+       * The same shape is already documented sixty lines above for gpsManager itself ("the
+       * _layout shot-detection subscriber only starts GPS when autoShotDetection is ON (off by
+       * default)") — that was fixed for the resumed-round case and the fan-out was left behind.
+       *
+       * Live yardages are not a shot-detection feature. Idempotent and persistent by design, so
+       * starting it with the round is safe and it survives round-end's subscriber clear.
+       * [[two-owners-is-the-root-cause]]
+       */
+      startSmartFinderGpsTracking();
     }
     const unsubRound = useRoundStore.subscribe((s) => {
       if (s.isRoundActive === active) return;
@@ -1299,6 +1322,9 @@ function AppNavigator() {
         startHoleDetection();
         startOffCourseDetector();
         startMovementModeDetector();
+        // See the note on the initial-active branch above: the live-fix fan-out is not a
+        // shot-detection feature and must not be gated behind its setting.
+        startSmartFinderGpsTracking();
         // Clear last round's reward dedupe so new tee shots / 1-putts
         // can fire again. Fires only on inactive→active transition.
         if (!wasActive) resetCaddieRewardsForRound();
