@@ -305,10 +305,42 @@ export async function downloadCourse(input: {
     return { ok: true, courseId: input.courseId, fresh: false };
   }
 
+  /**
+   * 2026-09-10 — REMEMBER THE `place:` ID WE WERE ASKED FOR, or we re-ask the network every launch.
+   *
+   * prefetchFoundCourses builds `place:<place_id>` and skips a course when isCourseDownloaded says
+   * we own it — but resolveCourse returns the BUNDLED slug or the golfcourseapi id, and
+   * markDownloaded stores under that. So `isCourseDownloaded('place:…')` is false forever and the
+   * nearby-course prefetch re-attempts up to three owned courses on every launch.
+   *
+   * The cost is smaller than it looks and worth stating precisely: the early return below catches it
+   * immediately after `resolveCourse`, so the heavy chain (geometry + content + intelligence + 18
+   * tiles) does NOT re-run. What repeats is one golfcourseapi SEARCH per course per launch — on a
+   * rate-limited free tier, on the morning the player is about to tee off.
+   *
+   * Recording the alias makes the cheap check work. Safe because `downloaded` is never rendered as a
+   * list — the only consumers are isDownloaded() and a hydration probe — so an alias row cannot show
+   * up as a duplicate course anywhere. [[two-owners-is-the-root-cause]]
+   */
+  const aliasId = input.courseId && input.courseId.startsWith('place:') ? input.courseId : null;
+  const rememberAlias = (resolvedId: string, name: string, holeCount: number, greens?: number) => {
+    if (!aliasId || aliasId === resolvedId) return;
+    try {
+      useDownloadedCoursesStore.getState().markDownloaded({
+        courseId: aliasId, name, holeCount, at: Date.now(), greens,
+      });
+    } catch { /* an alias is an optimisation; never fail a download over it */ }
+  };
+
   const resolved = await resolveCourse(input.name, input.courseId ?? null);
   if (!resolved) return { ok: false, reason: 'unresolved' };
   const { courseId, courseName, holes, rating, slope } = resolved;
-  if (store.isDownloaded(courseId) && !needsGeometry(courseId)) return { ok: true, courseId, fresh: false };
+  if (store.isDownloaded(courseId) && !needsGeometry(courseId)) {
+    // Already ours under its real id — record the alias so the next launch skips before the search.
+    rememberAlias(courseId, courseName, holes.length,
+      useDownloadedCoursesStore.getState().downloaded[courseId]?.greens);
+    return { ok: true, courseId, fresh: false };
+  }
 
   store.markDownloading(courseId, courseName, 0.1);
   try {
@@ -340,6 +372,7 @@ export async function downloadCourse(input: {
       console.warn(`[courseDownload] ${courseName} downloaded with ZERO greens — yardages will be estimates until geometry builds`);
     }
     store.markDownloaded({ courseId, name: courseName, holeCount: holes.length, at: Date.now(), greens });
+    rememberAlias(courseId, courseName, holes.length, greens);
     return { ok: true, courseId, fresh: true };
   } catch (e) {
     store.clearDownloading(courseId);

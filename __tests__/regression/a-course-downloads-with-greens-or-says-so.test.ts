@@ -87,6 +87,11 @@ describe('a course downloads with greens, or says it did not', () => {
     // Honest degradation is the product rule; refusing the download would be worse than a course
     // that plays on estimates.
     expect(download).toMatch(/greens === 0[\s\S]{0,300}console\.warn/);
-    expect(download).toMatch(/markDownloaded\(\{[\s\S]{0,160}greens \}\);\s*\n\s*return \{ ok: true/);
+    // 2026-09-10 — was an ADJACENCY assertion (markDownloaded immediately followed by the return).
+    // The alias write for `place:` ids now sits between them, which changes nothing about the
+    // invariant: the course is recorded WITH its green count and still returns ok. Assert the two
+    // facts, not the whitespace between them.
+    expect(download).toMatch(/markDownloaded\(\{[\s\S]{0,160}greens \}\);/);
+    expect(download).toMatch(/markDownloaded\(\{[\s\S]{0,400}return \{ ok: true, courseId, fresh: true \}/);
   });
 });
