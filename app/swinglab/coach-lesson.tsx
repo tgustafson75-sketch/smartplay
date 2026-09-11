@@ -561,7 +561,7 @@ export default function CoachLessonScreen() {
       {/* Phase chip (watching / reading) — subtle, over the camera, replaces the black spinner. */}
       <View style={s.phaseWrap} pointerEvents="none">
         {phase === 'reading' ? (
-          <View style={s.phaseChip}><ActivityIndicator size="small" color="#fff" /><Text style={s.phaseChipText}>{t('swinglab_coach_lesson.coach_lesson_screen.reading_that_one')}</Text></View>
+          <View style={s.phaseChip}><ActivityIndicator size="small" color="#fff" /><Text style={s.phaseChipText}>{t('swinglab_coach_lesson.coach_lesson_screen.reading_that_clip')}</Text></View>
         ) : phase === 'watching' && !paused ? (
           <View style={s.phaseChip}><Ionicons name="eye" size={14} color="#fff" /><Text style={s.phaseChipText}>{t('swinglab_coach_lesson.coach_lesson_screen.watching')}</Text></View>
         ) : null}
@@ -571,7 +571,7 @@ export default function CoachLessonScreen() {
       <View style={s.captionWrap} pointerEvents="box-none">
         {isDiag && dxStage === 'reps' && priority && (
           <View style={s.drillChip}>
-            <Text style={s.drillChipLabel}>DRILL · {priority.fault.drill.name.toUpperCase()}</Text>
+            <Text style={s.drillChipLabel}>{t('swinglab_coach_lesson.coach_lesson_screen.drill', { name: priority.fault.drill.name.toUpperCase() })}</Text>
             <Text style={s.drillChipHow}>{priority.fault.drill.how}</Text>
           </View>
         )}

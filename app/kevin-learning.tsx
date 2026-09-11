@@ -104,9 +104,7 @@ export default function KevinLearningScreen() {
           <Text style={[styles.heroNumber, { color: colors.accent }]}>
             {phraseCount}
           </Text>
-          <Text style={[styles.heroLabel, { color: colors.text_primary }]}>
-            {phraseCount === 1 ? 'phrase' : 'phrases'} learned
-          </Text>
+          <Text style={[styles.heroLabel, { color: colors.text_primary }]}>{t('kevin_learning.kevin_learning_screen.phrase_learned', { count: phraseCount })}</Text>
           <Text style={[styles.heroSub, { color: colors.text_muted }]}>
             from {totalShotsParsed} shots {roundsTogether > 0 ? `across ${roundsTogether} ${roundsTogether === 1 ? 'round' : 'rounds'}` : ''}
           </Text>

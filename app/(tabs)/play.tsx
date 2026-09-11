@@ -2168,9 +2168,7 @@ export default function PlayTab() {
               </TouchableOpacity>
             </View>
           ) : (
-            <Text style={styles.statusText}>
-              No courses found for &quot;{query.trim()}&quot;. Try a different name.
-            </Text>
+            <Text style={styles.statusText}>{t('play.play_tab.no_courses_found_for_try', { query: query.trim() })}</Text>
           )
         )}
 

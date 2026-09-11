@@ -107,9 +107,7 @@ export default function CageReviewStart() {
         ))}
 
         {selectedMode && (
-          <Text style={styles.previewText}>
-            Kevin will review {previewCount} shot{previewCount !== 1 ? 's' : ''} with you.
-          </Text>
+          <Text style={styles.previewText}>{t('swing_review_start.cage_review_start.kevin_will_review_shot_with', { count: previewCount })}</Text>
         )}
 
         <TouchableOpacity

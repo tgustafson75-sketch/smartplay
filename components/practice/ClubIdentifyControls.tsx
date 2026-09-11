@@ -221,9 +221,7 @@ export default function ClubIdentifyControls() {
 
       {pendingConfirm && (
         <View style={[styles.banner, styles.bannerConfirm]}>
-          <Text style={styles.bannerConfirmText}>
-            Looks like your {clubLabel(pendingConfirm.club_id)} — confirm?
-          </Text>
+          <Text style={styles.bannerConfirmText}>{t('practice_club_identify_controls.club_identify_controls.looks_like_your_confirm', { club_id: clubLabel(pendingConfirm.club_id) })}</Text>
           <View style={styles.bannerActions}>
             <TouchableOpacity style={styles.bannerBtn} onPress={acceptPending}>
               <Text style={styles.bannerBtnYes}>{t('practice_club_identify_controls.club_identify_controls.yes')}</Text>

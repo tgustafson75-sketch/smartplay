@@ -202,7 +202,7 @@ function HandicapPanel() {
 
       {idx == null && parsedIdx > 0 && (
         <TouchableOpacity style={styles.savePill} onPress={() => setIdx(parsedIdx)}>
-          <Text style={styles.savePillText}>Save {parsedIdx.toFixed(1)} as my Index</Text>
+          <Text style={styles.savePillText}>{t('reference.handicap_panel.save_as_my_index', { parsed_idx: parsedIdx.toFixed(1) })}</Text>
         </TouchableOpacity>
       )}
     </ScrollView>

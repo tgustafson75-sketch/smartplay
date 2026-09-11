@@ -233,9 +233,7 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
           <AppIcon name="stats-chart-outline" size={18} color="#00C896" />
           <Text style={styles.headerTitle}>{t('recap_handicap_impact_card.handicap_impact_card.handicap_impact')}</Text>
         </View>
-        <Text style={styles.impact}>
-          {holesPlayed} {holesPlayed === 1 ? 'hole' : 'holes'} in the books — finish 9 or 18 to post a Score Differential to your Index. The round&apos;s saved either way.
-        </Text>
+        <Text style={styles.impact}>{t('recap_handicap_impact_card.handicap_impact_card.hole_in_the_books_finish', { count: holesPlayed })}</Text>
       </View>
     );
   }
@@ -267,9 +265,7 @@ export default function HandicapImpactCard({ roundId }: { roundId: string | null
         return (
           <View style={[styles.confidenceRow, { borderColor: CONFIDENCE_COLORS[conf] }]}>
             <View style={[styles.confidenceDot, { backgroundColor: CONFIDENCE_COLORS[conf] }]} />
-            <Text style={[styles.confidenceText, { color: CONFIDENCE_COLORS[conf] }]}>
-              {CONFIDENCE_LABELS[conf]} · {n} round{n === 1 ? '' : 's'} on file
-            </Text>
+            <Text style={[styles.confidenceText, { color: CONFIDENCE_COLORS[conf] }]}>{t('recap_handicap_impact_card.text.round_on_file', { count: n, conf: CONFIDENCE_LABELS[conf] })}</Text>
           </View>
         );
       })()}

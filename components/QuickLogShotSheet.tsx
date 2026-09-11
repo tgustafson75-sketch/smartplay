@@ -183,9 +183,7 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
           ]}
         >
           <View style={styles.headerRow}>
-            <Text style={[styles.title, { color: colors.text_primary }]}>
-              Log shot · hole {holeOverride ?? currentHole}
-            </Text>
+            <Text style={[styles.title, { color: colors.text_primary }]}>{t('quick_log_shot_sheet.text.log_shot_hole', { current_hole: holeOverride ?? currentHole })}</Text>
             <TouchableOpacity onPress={onClose}>
               <Text style={[styles.cancel, { color: colors.text_muted }]}>{t('play.cancel')}</Text>
             </TouchableOpacity>

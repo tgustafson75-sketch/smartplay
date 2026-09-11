@@ -103,7 +103,7 @@ export default function SessionRunnerScreen() {
         ) : complete ? (
           <>
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.accent }]}>
-              <Text style={[styles.sectionLabel, { color: colors.accent }]}>SESSION COMPLETE · {focus?.label?.toUpperCase()}</Text>
+              <Text style={[styles.sectionLabel, { color: colors.accent }]}>{t('practice_session.session_runner_screen.session_complete', { label: focus?.label?.toUpperCase() })}</Text>
               <Text style={[styles.headline, { color: colors.text_primary }]}>{summary?.headline}</Text>
             </View>
             {summary && summary.insights.length > 0 && (
@@ -125,7 +125,7 @@ export default function SessionRunnerScreen() {
         ) : (
           <>
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.accent }]}>
-              <Text style={[styles.sectionLabel, { color: colors.accent }]}>{focus?.label?.toUpperCase()} · BALL {done + 1} OF {total}</Text>
+              <Text style={[styles.sectionLabel, { color: colors.accent }]}>{t('practice_session.session_runner_screen.ball_of', { label: focus?.label?.toUpperCase(), done: done + 1, total })}</Text>
               <Text style={[styles.repClub, { color: colors.text_primary }]}>{currentRep?.club}</Text>
               {currentRep?.switchClub && done > 0 ? (
                 <Text style={[styles.switchCue, { color: colors.accent_amber }]}>{t('practice_session.session_runner_screen.switch_clubs', { club: currentRep.club })}</Text>

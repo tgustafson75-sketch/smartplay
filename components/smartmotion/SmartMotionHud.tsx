@@ -305,7 +305,7 @@ export function TempoBar({
           <View style={[styles.tempoMarker, { left: `${pos * 100}%`, backgroundColor: inIdeal ? colors.success : colors.warning }]} />
         ) : null}
       </View>
-      <Text style={[styles.tempoRange, { color: colors.text_muted }]}>IDEAL {idealLow.toFixed(1)}–{idealHigh.toFixed(1)}</Text>
+      <Text style={[styles.tempoRange, { color: colors.text_muted }]}>{t('smartmotion_smart_motion_hud.tempo_bar.ideal', { ideal_low: idealLow.toFixed(1), ideal_high: idealHigh.toFixed(1) })}</Text>
     </View>
   );
 }

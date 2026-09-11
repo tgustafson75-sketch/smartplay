@@ -237,7 +237,7 @@ export default function LandmarkCurateScreen() {
           const count = landmarks.filter(l => l.hole_number === h).length;
           if (count === 0) return null;
           return (
-            <Text key={h} style={styles.summaryLine}>H{h}: {count} landmark{count !== 1 ? 's' : ''}</Text>
+            <Text key={h} style={styles.summaryLine}>{t('landmark_curate.text.h_landmark', { count, h })}</Text>
           );
         })}
 

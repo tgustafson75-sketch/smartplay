@@ -2635,9 +2635,7 @@ export default function SwingDetail() {
         {isPickingCompareTarget && leftShot && (
           <View style={[styles.compareBanner, { backgroundColor: colors.accent_muted, borderColor: colors.accent }]}>
             <Ionicons name="git-compare-outline" size={18} color={colors.accent} />
-            <Text style={[styles.compareBannerText, { color: colors.accent }]} numberOfLines={2}>
-              Pick a swing below to compare with swing {String((session.shots.findIndex(x => x.id === leftShot.id) + 1)).padStart(2, '0')}.
-            </Text>
+            <Text style={[styles.compareBannerText, { color: colors.accent }]} numberOfLines={2}>{t('swinglab_swing.swing_detail.pick_a_swing_below_to', { pad_start: String((session.shots.findIndex(x => x.id === leftShot.id) + 1)).padStart(2, '0') })}</Text>
             <TouchableOpacity onPress={exitCompare} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Text style={[styles.compareBannerCancel, { color: colors.accent }]}>{t('play.cancel')}</Text>
             </TouchableOpacity>
@@ -3113,7 +3111,7 @@ export default function SwingDetail() {
 
           {analysisStatus === 'failed' && (
             <View style={[styles.failedCard, { backgroundColor: colors.surface, borderColor: '#ef4444' }]}>
-              <Text style={[styles.failedTitle, { color: '#ef4444' }]}>{t('swinglab_swing.swing_detail.couldn_t_analyze_this_one')}</Text>
+              <Text style={[styles.failedTitle, { color: '#ef4444' }]}>{t('swinglab_swing.swing_detail.couldn_t_analyze_this_clip')}</Text>
               <Text style={[styles.failedBody, { color: colors.text_primary }]}>
                 {session.analysis_error ?? "I had trouble watching this one — could be lighting, angle, or video quality."}
               </Text>
@@ -3144,9 +3142,7 @@ export default function SwingDetail() {
                 onPress={onAnalyzeAtPosition}
                 disabled={reanalyzing}
               >
-                <Text style={[styles.failedBtnText, { color: colors.accent }]}>
-                  Analyze the swing at 0:{Math.floor(position).toString().padStart(2, '0')}
-                </Text>
+                <Text style={[styles.failedBtnText, { color: colors.accent }]}>{t('swinglab_swing.swing_detail.analyze_the_swing_at_0', { pad_start: Math.floor(position).toString().padStart(2, '0') })}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -3170,9 +3166,7 @@ export default function SwingDetail() {
                 accessibilityLabel={`Analyze the swing at ${Math.floor(position)} seconds`}
               >
                 <Ionicons name="sparkles-outline" size={16} color={colors.accent} style={{ marginRight: 6 }} />
-                <Text style={[styles.failedBtnText, { color: colors.accent }]}>
-                  Analyze the swing at 0:{Math.floor(position).toString().padStart(2, '0')}
-                </Text>
+                <Text style={[styles.failedBtnText, { color: colors.accent }]}>{t('swinglab_swing.swing_detail.analyze_the_swing_at_0', { pad_start: Math.floor(position).toString().padStart(2, '0') })}</Text>
               </TouchableOpacity>
             </View>
           ) : null}
@@ -3915,7 +3909,7 @@ export default function SwingDetail() {
               <Text style={[styles.detailLine, { color: colors.text_primary }]}>{t('swinglab_swing.swing_detail.tag', { tag: session.upload.tag })}</Text>
             ) : null}
             {duration != null ? (
-              <Text style={[styles.detailLine, { color: colors.text_muted }]}>Duration: {duration.toFixed(1)}s · Position: {position.toFixed(1)}s</Text>
+              <Text style={[styles.detailLine, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.duration_s_position_s', { duration: duration.toFixed(1), position: position.toFixed(1) })}</Text>
             ) : null}
           </View>
         )}
@@ -4776,9 +4770,7 @@ function AutoSuggestCard({
       <View style={autoSuggestStyles.headerRow}>
         <Text style={[styles.label, { color: colors.accent }]}>{t('swinglab_swing.auto_suggest_card.suggested_comparisons')}</Text>
         <View style={[autoSuggestStyles.countPill, { borderColor: colors.border }]}>
-          <Text style={[autoSuggestStyles.countText, { color: colors.text_muted }]}>
-            {matches.length} {matches.length === 1 ? 'MATCH' : 'MATCHES'}
-          </Text>
+          <Text style={[autoSuggestStyles.countText, { color: colors.text_muted }]}>{t('swinglab_swing.auto_suggest_card.match', { count: matches.length })}</Text>
         </View>
       </View>
       <Text style={[styles.subtleHint, { color: colors.text_muted }]}>

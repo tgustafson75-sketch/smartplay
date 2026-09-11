@@ -354,13 +354,9 @@ function BroadcastCard({
     <View style={[styles.broadcastCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
       <View style={styles.broadcastHeader}>
         <Text style={[styles.broadcastTitle, { color: colors.text_primary }]}>{t('family_captain.broadcast_card.team_broadcast')}</Text>
-        <Text style={[styles.broadcastCount, { color: colors.text_muted }]}>
-          {recipients.length} number{recipients.length === 1 ? '' : 's'}
-        </Text>
+        <Text style={[styles.broadcastCount, { color: colors.text_muted }]}>{t('family_captain.broadcast_card.number', { count: recipients.length })}</Text>
       </View>
-      <Text style={[styles.broadcastHint, { color: colors.text_muted }]}>
-        Sends through your phone&apos;s Messages app to {teamName || 'the team'}. No data leaves the device.
-      </Text>
+      <Text style={[styles.broadcastHint, { color: colors.text_muted }]}>{t('family_captain.broadcast_card.sends_through_your_phone_s', { team: teamName || 'the team' })}</Text>
       {/* Template pills — tap to draft. Edit before send. */}
       <View style={styles.templateRow}>
         {templates.map((t) => (

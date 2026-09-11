@@ -268,7 +268,7 @@ export default function HoleShotMap({
       <View style={styles.detailCard}>
         {selected ? (
           <>
-            <Text style={styles.detailHole}>Shot {selectedIdx! + 1}</Text>
+            <Text style={styles.detailHole}>{t('recap_hole_shot_map.hole_shot_map.shot', { selected_idx: selectedIdx! + 1 })}</Text>
             {/*
               2026-08-14 — the watch line, shown only when a swing actually corroborated this shot.
               Tempo is the honest on-course number (roundSwingRead's argument: an uncalibrated wrist

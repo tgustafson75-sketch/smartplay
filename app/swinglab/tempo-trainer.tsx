@@ -339,9 +339,7 @@ export default function TempoTrainerScreen() {
           {/* 2026-08-25 — what they actually swing, beside what they are training to. The whole
               point of the refinement: the target and the measurement finally in one view. */}
           {selfRead.known && selfRead.ratio != null ? (
-            <Text style={[styles.ratioUnit, { color: colors.text_muted }]}>
-              {'   '}yours {selfRead.ratio.toFixed(1)} : 1
-            </Text>
+            <Text style={[styles.ratioUnit, { color: colors.text_muted }]}>{t('swinglab_tempo_trainer.tempo_trainer_screen.yours_1', { value: '   ', ratio: selfRead.ratio.toFixed(1) })}</Text>
           ) : null}
         </View>
 

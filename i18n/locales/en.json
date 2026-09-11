@@ -191,7 +191,8 @@
       "reset_app_data": "Reset App Data",
       "clear_your_profile_rounds_settings": "Clear your profile, rounds, settings, and saved swings. Use this to start fresh.",
       "learning": "{{caddieName}} Learning",
-      "vocabulary_has_picked_up_from": "Vocabulary {{caddieName}} has picked up from your shot phrasing. Review entries, correct miscoded meanings."
+      "vocabulary_has_picked_up_from": "Vocabulary {{caddieName}} has picked up from your shot phrasing. Review entries, correct miscoded meanings.",
+      "handicap_goal": "Handicap {{handicap}} · Goal {{goal}}"
     },
     "placeholder": {
       "search_settings": "Search settings",
@@ -298,7 +299,8 @@
       "replaces_the_real_gps_source": "Replaces the real GPS source with a pre-built waypoint trace. Use to verify hole detection + distance calculations without driving to a course. Console logs every waypoint reached.",
       "sim_active": "● SIM ACTIVE",
       "stop_simulated_walk": "Stop Simulated Walk",
-      "next": "Next: {{next_label}}"
+      "next": "Next: {{next_label}}",
+      "waypoint_through": "Waypoint {{waypoint_index}} · {{fraction_through}}% through"
     },
     "voice_hit_rate_row": {
       "voice_local_hit_rate": "Voice Local Hit-Rate"
@@ -372,7 +374,8 @@
       "start_a_round_from_the": "Start a round from the Caddie tab. Your finished rounds are saved on the dashboard.",
       "view_recent_rounds": "View Recent Rounds",
       "playing_with": "PLAYING WITH",
-      "est": "~est"
+      "est": "~est",
+      "your_bag": "YOUR BAG · {{active_course}}"
     },
     "alert": {
       "they_came_from_something_you": "They came from something you said. Removing them only affects this round."
@@ -431,7 +434,15 @@
       "train_your_swing": "TRAIN YOUR SWING",
       "exercises_that_help_this_fault": "Exercises that help this fault",
       "no_shots_logged_yet_log": "No shots logged yet — log a shot from the Caddie tab.",
-      "recent_rounds": "RECENT ROUNDS"
+      "recent_rounds": "RECENT ROUNDS",
+      "day_one": "{{count}} day",
+      "day_other": "{{count}} days",
+      "handicap_goal": "Handicap {{handicap}} · Goal {{goal}}",
+      "golfer_one": "{{count}} golfer",
+      "golfer_other": "{{count}} golfers",
+      "mph": "{{wind_speed_mph}} mph",
+      "ball_one": "{{d}} · {{count}} ball",
+      "ball_other": "{{d}} · {{count}} balls"
     },
     "alert": {
       "delete_round": "Delete round?"
@@ -507,7 +518,8 @@
       "opening_course": "Opening course…",
       "layout": "Layout",
       "tee_times": "Tee Times",
-      "challenge": "Challenge"
+      "challenge": "Challenge",
+      "no_courses_found_for_try": "No courses found for \"{{query}}\". Try a different name."
     },
     "accessibility_label": {
       "end_round": "End round",
@@ -659,7 +671,9 @@
       "record_a_slow_pan_across": "Record a slow pan across your clubs",
       "keep_the_heads_in_view": "Keep the heads in view and well-lit. A few seconds is plenty — we read the set from the video, so you don't have to photograph each club.",
       "record_my_bag": "Record my bag",
-      "add_to_my_bag": "Add {{includedCount}} to my bag"
+      "add_to_my_bag": "Add {{includedCount}} to my bag",
+      "club_detected_fix_any_make_one": "{{count}} club detected. Fix any make/model and untick anything wrong before adding.",
+      "club_detected_fix_any_make_other": "{{count}} clubs detected. Fix any make/model and untick anything wrong before adding."
     },
     "placeholder": {
       "brand": "Brand",
@@ -781,6 +795,10 @@
       "drills": "DRILLS",
       "common_faults": "Common Faults",
       "each_issue_has_a_primary": "Each issue has a Primary Issue, Common Faults, 2-3 drills, and pro-instruction video links. Tap to dive in."
+    },
+    "drill_card": {
+      "drill_one": "{{count}} drill",
+      "drill_other": "{{count}} drills"
     }
   },
   "family": {
@@ -797,7 +815,9 @@
       "open_s_swing_library_everything": "Open {{firstName}}'s swing library — everything you've captured in Smart Motion or Coach Mode.",
       "say_coach_s_swing_to": "Say \"Coach {{firstName}}'s swing\" to start a tagged recording on the glasses, then \"Analyze {{firstName}}'s swing\" to hear the feedback.",
       "history": "HISTORY ({{length}})",
-      "tap_record_s_swing_above": "Tap \"Record {{firstName}}'s swing\" above (or say it), capture on the glasses or phone, then \"Analyze {{firstName}}'s swing.\" We'll start tracking progress from there."
+      "tap_record_s_swing_above": "Tap \"Record {{firstName}}'s swing\" above (or say it), capture on the glasses or phone, then \"Analyze {{firstName}}'s swing.\" We'll start tracking progress from there.",
+      "recorded_swing_one": "{{count}} recorded swing",
+      "recorded_swing_other": "{{count}} recorded swings"
     }
   },
   "family_captain": {
@@ -839,7 +859,10 @@
     "broadcast_card": {
       "team_broadcast": "Team Broadcast",
       "add_phone_numbers_to_coaches": "Add phone numbers to coaches or teammates to enable one-tap SMS to the team.",
-      "open_messages": "📨 Open Messages"
+      "open_messages": "📨 Open Messages",
+      "number_one": "{{count}} number",
+      "number_other": "{{count}} numbers",
+      "sends_through_your_phone_s": "Sends through your phone's Messages app to {{team}}. No data leaves the device."
     },
     "section_header": {
       "add": "＋ Add"
@@ -947,7 +970,11 @@
       "this_usually_takes_5_12": "This usually takes 5-12 seconds.",
       "import_failed": "Import failed",
       "try_another_screenshot": "Try another screenshot",
-      "done": "Done"
+      "done": "Done",
+      "round_found_one": "{{count}} round found",
+      "round_found_other": "{{count}} rounds found",
+      "add_round_to_history_one": "Add {{count}} round to history",
+      "add_round_to_history_other": "Add {{count}} rounds to history"
     }
   },
   "intro_video": {
@@ -982,7 +1009,8 @@
     "text": {
       "find_it_on_youtube": "Find it on YouTube",
       "couldn_t_find_that_song": "Couldn’t find that song. Try asking again with the artist too.",
-      "clean_player_just_the_song": "Clean player · just the song"
+      "clean_player_just_the_song": "Clean player · just the song",
+      "opening": "Opening {{song}}…"
     }
   },
   "kevin_learning": {
@@ -994,7 +1022,9 @@
       "reset_all_learned_phrases": "Reset all learned phrases",
       "s_learning": "{{caddieName}}'s Learning",
       "once_you_start_logging_shots": "Once you start logging shots by voice, {{caddieName}} will start picking up the words you actually use.",
-      "uses_these_phrases_to_understand": "{{caddieName}} uses these phrases to understand your specific way of describing shots. Forgetting a phrase removes its weight; the next time you say it, {{caddieName}} parses it fresh."
+      "uses_these_phrases_to_understand": "{{caddieName}} uses these phrases to understand your specific way of describing shots. Forgetting a phrase removes its weight; the next time you say it, {{caddieName}} parses it fresh.",
+      "phrase_learned_one": "phrase learned",
+      "phrase_learned_other": "phrases learned"
     }
   },
   "landmark_curate": {
@@ -1020,6 +1050,10 @@
     "placeholder": {
       "name_e_g_left_bunker": "Name (e.g. Left Bunker)",
       "description": "Description"
+    },
+    "text": {
+      "h_landmark_one": "H{{h}}: {{count}} landmark",
+      "h_landmark_other": "H{{h}}: {{count}} landmarks"
     }
   },
   "legal": {
@@ -1092,7 +1126,8 @@
       "subscription_automatically_renews_unless_can": "Subscription automatically renews unless cancelled at least 24 hours before the end of the trial period.",
       "give_me_another_days": "Give me another {{TRIAL_EXTENSION_DAYS}} days",
       "or_save": "or {{displayPrice}}/{{period}} — save {{savingsPct}}%",
-      "free_for_days": "Free for {{trialDays}} days"
+      "free_for_days": "Free for {{trialDays}} days",
+      "day_free_trial_cancel_anytime": "{{paywall_subhead}}{{n}} {{trial_days}}-day free trial. Cancel anytime."
     }
   },
   "permissions": {
@@ -1155,7 +1190,9 @@
       "finish": "Finish",
       "record_this_ball": "Record this ball",
       "end_early": "End early",
-      "switch_clubs": "↻ Switch clubs — {{club}}"
+      "switch_clubs": "↻ Switch clubs — {{club}}",
+      "session_complete": "SESSION COMPLETE · {{label}}",
+      "ball_of": "{{label}} · BALL {{done}} OF {{total}}"
     },
     "accessibility_label": {
       "finish_the_session": "Finish the session",
@@ -1202,7 +1239,9 @@
       "aim_for_10_canvas_hits": "Aim for 10+ canvas hits and 5+ net hits for a useful dataset.",
       "center": "{{centerCount}} center",
       "net": "{{netCount}} net",
-      "hit_distribution_canvas_shots": "Hit distribution ({{length}} canvas shots)"
+      "hit_distribution_canvas_shots": "Hit distribution ({{length}} canvas shots)",
+      "edge": "{{center_count}} edge",
+      "center_edge_net": "{{center_count}} center · {{center_count2}} edge · {{net_count}} net"
     }
   },
   "practice": {
@@ -1338,7 +1377,9 @@
       "recalculate_from_history": "Recalculate from history",
       "rebuild_your_index_best_8": "Rebuild your index (best 8 of last 20 differentials) from every complete round on record.",
       "edit_profile_details": "Edit profile details",
-      "name_ghin_number_handicap_index": "Name, GHIN number, handicap index, goal, and more."
+      "name_ghin_number_handicap_index": "Name, GHIN number, handicap index, goal, and more.",
+      "ghin": "GHIN {{ghin}}",
+      "goal": "Goal {{goal}}"
     },
     "accessibility_label": {
       "edit_profile_details": "Edit profile details"
@@ -1503,7 +1544,9 @@
       "open_a_hole_you_actually": "Open a hole you actually played.",
       "every_swing_the_watch_measured": "Every swing the watch measured here — practice swings included. Tempo is the honest on-course reading; club speed needs a calibrated capture in Smart Motion.",
       "hole": "Hole {{hole}}",
-      "no_shots_logged_on_hole": "No shots logged on hole {{hole}}"
+      "no_shots_logged_on_hole": "No shots logged on hole {{hole}}",
+      "watch_swing_on_this_hole_one": "WATCH · {{count}} SWING ON THIS HOLE",
+      "watch_swing_on_this_hole_other": "WATCH · {{count}} SWINGS ON THIS HOLE"
     }
   },
   "reference": {
@@ -1532,7 +1575,8 @@
     },
     "handicap_panel": {
       "whs_calculator": "WHS Calculator",
-      "manual_inputs_for_what_ifs": "Manual inputs — for what-ifs and pre-tournament prep."
+      "manual_inputs_for_what_ifs": "Manual inputs — for what-ifs and pre-tournament prep.",
+      "save_as_my_index": "Save {{parsed_idx}} as my Index"
     },
     "glossary_panel": {
       "glossary": "Glossary"
@@ -1654,7 +1698,8 @@
       "submit": "Submit",
       "tap_to_respond": "Tap to respond",
       "skip": "Skip",
-      "tap_to_stop": "Tap to stop"
+      "tap_to_stop": "Tap to stop",
+      "shot_of": "Shot {{reviewed_count}} of {{total_count}}"
     }
   },
   "swing_review_start": {
@@ -1666,7 +1711,9 @@
       "no_swings_were_detected_this": "No swings were detected this session. Start another session to use review mode.",
       "review_with_kevin": "Review with Kevin",
       "review_mode": "REVIEW MODE",
-      "shots": "{{club}} · {{length}} shots"
+      "shots": "{{club}} · {{length}} shots",
+      "kevin_will_review_shot_with_one": "Kevin will review {{count}} shot with you.",
+      "kevin_will_review_shot_with_other": "Kevin will review {{count}} shots with you."
     }
   },
   "swing_review_summary": {
@@ -1684,7 +1731,9 @@
       "contact": "Contact",
       "diagnosis": "Diagnosis",
       "feel": "Feel",
-      "done": "Done"
+      "done": "Done",
+      "shot_labeled_one": "{{count}} shot labeled",
+      "shot_labeled_other": "{{count}} shots labeled"
     }
   },
   "swinglab_bilateral": {
@@ -1725,7 +1774,8 @@
       "strikes_detected_target": "strikes detected (target {{TARGET_STRIKES}})",
       "listening_s": "LISTENING · {{elapsed}}s",
       "hit_your_strikes_then_tap": "Hit your {{TARGET_STRIKES}} strikes, then tap Done",
-      "tap_record_then_take_strikes": "Tap Record, then take {{TARGET_STRIKES}} strikes"
+      "tap_record_then_take_strikes": "Tap Record, then take {{TARGET_STRIKES}} strikes",
+      "active_calibration_floor_db_threshold": "✓ Active calibration: floor {{noise_floor_db}} dB · threshold {{transient_threshold_db}} dB"
     }
   },
   "swinglab_coach_lesson": {
@@ -1740,14 +1790,15 @@
       "start_lesson": "Start lesson",
       "guided_sessions": "GUIDED SESSIONS",
       "single_focus": "SINGLE FOCUS",
-      "reading_that_one": "Reading that one…",
       "watching": "Watching",
       "record_a_baseline_swing": "Record a baseline swing",
       "swing": "Swing",
       "take_on_the_next_thing": "Take on the next thing",
       "bank_it_finish": "Bank it & finish",
       "got_it_end_lesson": "Got it — end lesson",
-      "end_lesson": "End lesson"
+      "end_lesson": "End lesson",
+      "drill": "DRILL · {{name}}",
+      "reading_that_clip": "Reading that one…"
     }
   },
   "swinglab_coach_mode": {
@@ -1778,14 +1829,17 @@
       "tap_to_open_smartmotion_full": "Tap to open SmartMotion. Full swing analysis runs automatically.",
       "record_with_glasses": "Record with glasses",
       "loading": "Loading…",
-      "no_swings_yet_capture_one": "No swings yet. Capture one above and it'll land here.",
       "1_pick_the_player_you": "1. Pick the player you're coaching.",
       "2_point_glasses_or_phone": "2. Point glasses or phone at their swing.",
       "4_add_your_own_coach": "4. Add your own coach notes alongside the AI read.",
       "got_it": "Got it",
       "skip": "Skip",
       "say_record_this_while_you": "Say “{{caddieName}}, record this” while you're watching the swing. I'll capture and analyze.",
-      "3_say_record_this_i": "3. Say “{{caddieName}}, record this” — I'll break it down."
+      "3_say_record_this_i": "3. Say “{{caddieName}}, record this” — I'll break it down.",
+      "player_swings_logged_one": "{{count}} player · {{total_swings_logged}} swings logged",
+      "player_swings_logged_other": "{{count}} players · {{total_swings_logged}} swings logged",
+      "s_swings": "{{first_name}}'S SWINGS",
+      "no_swings_yet_capture": "No swings yet. Capture one above and it'll land here."
     },
     "placeholder": {
       "first_name_e_g_mike": "First name (e.g. Mike)"
@@ -1812,7 +1866,11 @@
       "every_rep": "EVERY REP",
       "run_it_back": "RUN IT BACK",
       "done_for_tonight": "Done for tonight",
-      "rhythm_tempo_only_no_ball_2": "Rhythm & tempo only — no ball flight is claimed indoors. Reps feed your caddie's one tempo picture."
+      "rhythm_tempo_only_no_ball_2": "Rhythm & tempo only — no ball flight is claimed indoors. Reps feed your caddie's one tempo picture.",
+      "benchmark_1": "benchmark {{benchmark}}:1",
+      "rep_one": "{{count}} rep",
+      "rep_other": "{{count}} reps",
+      "avg_tempo_bench_1": "AVG TEMPO · bench {{benchmark}}:1"
     }
   },
   "swinglab_library": {
@@ -1835,6 +1893,10 @@
       "needs_retry_tap_to_re": "Needs retry — tap to re-analyze",
       "compare": "Compare",
       "delete": "Delete"
+    },
+    "text": {
+      "swing_one": "{{date_str}} · {{count}} swing",
+      "swing_other": "{{date_str}} · {{count}} swings"
     }
   },
   "swinglab_player_library": {
@@ -1865,7 +1927,13 @@
       "notes": "NOTES",
       "flat_carry_numbers_will_calibrate": "Flat-carry numbers will calibrate Kevin's club recommendations. You can update or clear these any time in Settings → My Bag.",
       "no_distances_to_apply_try": "No distances to apply — try another screenshot",
-      "choose_a_different_screenshot": "Choose a different screenshot"
+      "choose_a_different_screenshot": "Choose a different screenshot",
+      "distance_applied_one": "{{count}} distance applied",
+      "distance_applied_other": "{{count}} distances applied",
+      "confidence": "{{confidence}} CONFIDENCE",
+      "not_matched_to_a_known": "{{display_name}} — not matched to a known club; excluded from import.",
+      "apply_distance_one": "Apply {{count}} distance",
+      "apply_distance_other": "Apply {{count}} distances"
     }
   },
   "swinglab_setup_check": {
@@ -1995,20 +2063,23 @@
       "how_d_it_feel": "HOW'D IT FEEL?",
       "coming_soon": "COMING SOON",
       "face_angle": "FACE ANGLE",
-      "face_angle_needs_higher_frame": "Face angle needs higher-frame-rate capture (240fps+) or an added camera source (e.g. a GoPro feed) to measure reliably — on the roadmap. (Smash factor now shows as an estimate above.)"
+      "face_angle_needs_higher_frame": "Face angle needs higher-frame-rate capture (240fps+) or an added camera source (e.g. a GoPro feed) to measure reliably — on the roadmap. (Smash factor now shows as an estimate above.)",
+      "s_s_left": "{{recorded_seconds}}s · {{recorded_seconds2}}s left",
+      "swing_of": "SWING {{selected_swing}} OF {{segments}}",
+      "confidence": "Confidence: {{confidence}}"
     },
     "accessibility_label": {
       "stop_recording": "Stop recording",
       "re_analyze_this_swing": "Re-analyze this swing",
       "save_to_library": "Save to library",
       "delete_swing": "Delete swing",
-      "new_set_saves_this_one": "New set — saves this one and records again",
       "record": "Record",
       "freeze_and_mark_up_this": "Freeze and mark up this swing",
       "tap_where_your_ball_is": "Tap where your ball is",
       "back": "Back",
       "back_to_all_four_cards": "Back to all four cards",
-      "close_markup": "Close markup"
+      "close_markup": "Close markup",
+      "new_set_saves_this_set": "New set — saves this one and records again"
     },
     "title": {
       "scan_club": "Scan club"
@@ -2046,7 +2117,8 @@
       "honest_limits": "HONEST LIMITS",
       "name_this_space_optional": "NAME THIS SPACE (OPTIONAL)",
       "save_space": "Save Space",
-      "scan_again": "Scan Again"
+      "scan_again": "Scan Again",
+      "try_a_wider_shot_showing": "{{end}} Try a wider shot showing the hitting area, mat, and net."
     }
   },
   "swinglab_swing": {
@@ -2094,7 +2166,6 @@
       "your_swing_is_saved_analysis": "Your swing is saved. Analysis runs when you choose — tap to analyze this swing.",
       "analyze_this_swing": "Analyze this swing",
       "about_60_seconds_you_can": "About 60 seconds. You can stay on this screen.",
-      "couldn_t_analyze_this_one": "Couldn't analyze this one",
       "try_again_with_new_analysis": "Try again with new analysis",
       "upload_another": "Upload another",
       "still_no_read_scrub_the": "Still no read? Scrub the video to your swing, then:",
@@ -2139,7 +2210,11 @@
       "yds": "~{{estCarry}} yds",
       "club": "Club: {{club}}",
       "swinger": "Swinger: {{swinger}}",
-      "tag": "Tag: {{tag}}"
+      "tag": "Tag: {{tag}}",
+      "pick_a_swing_below_to": "Pick a swing below to compare with swing {{pad_start}}.",
+      "analyze_the_swing_at_0": "Analyze the swing at 0:{{pad_start}}",
+      "duration_s_position_s": "Duration: {{duration}}s · Position: {{position}}s",
+      "couldn_t_analyze_this_clip": "Couldn't analyze this one"
     },
     "accessibility_label": {
       "export_swing_report_pdf": "Export swing report PDF",
@@ -2188,7 +2263,9 @@
     },
     "auto_suggest_card": {
       "suggested_comparisons": "SUGGESTED COMPARISONS",
-      "closest_references_in_your_library": "Closest references in your library. Tap to see side-by-side."
+      "closest_references_in_your_library": "Closest references in your library. Tap to see side-by-side.",
+      "match_one": "{{count}} MATCH",
+      "match_other": "{{count}} MATCHES"
     },
     "auto_suggest_chip": {
       "best": "BEST"
@@ -2207,7 +2284,8 @@
       "premium": "PREMIUM",
       "record_a_swing_and_your": "Record a swing and your caddie reads YOUR real tempo, positions, and the fault that's costing you — no guessing, only what the swing actually shows.",
       "tempo": "TEMPO",
-      "tip_this_plays_through_the": "Tip: this plays through the speaker — use it standalone, or on headphones when recording in cage mode (so the strike mic won't hear the tones)."
+      "tip_this_plays_through_the": "Tip: this plays through the speaker — use it standalone, or on headphones when recording in cage mode (so the strike mic won't hear the tones).",
+      "yours_1": "{{value}}yours {{ratio}} : 1"
     }
   },
   "swinglab_trim": {
@@ -2218,7 +2296,10 @@
       "mark_the_swing": "Mark the Swing",
       "swing_window": "SWING WINDOW",
       "scrub_the_video_to_the": "Scrub the video to the start of your swing, tap \"Set Start.\" Scrub to the end of your follow-through, tap \"Set End.\" Or use the default window below.",
-      "skip_analyze_whole_clip": "Skip — Analyze Whole Clip"
+      "skip_analyze_whole_clip": "Skip — Analyze Whole Clip",
+      "set_start_s": "Set Start ({{position}}s)",
+      "set_end_s": "Set End ({{position}}s)",
+      "analyze_this_window_s": "Analyze This Window ({{window_sec}}s)"
     }
   },
   "swinglab_tutorial_upload": {
@@ -2321,7 +2402,7 @@
       "tee": "TEE",
       "target": "TARGET",
       "add_challenge": "Add challenge",
-      "no_challenges_yet_build_one": "No challenges yet. Build one above — like “Break 90 from the reds.”"
+      "no_challenges_yet_build": "No challenges yet. Build one above — like “Break 90 from the reds.”"
     },
     "label": {
       "18_holes": "18 holes",
@@ -2397,7 +2478,8 @@
       "privacy_policy": "Privacy Policy",
       "i_have_read_and_agree": "I have read and agree to the Terms of Service and Privacy Policy.",
       "get_started": "Get started",
-      "first_time_read_the_quick": "First time? Read the Quick Start guide →"
+      "first_time_read_the_quick": "First time? Read the Quick Start guide →",
+      "accepted": "Accepted {{to_locale_string}}"
     },
     "placeholder": {
       "first_name": "First name"
@@ -2472,7 +2554,8 @@
       "collecting_your_putts": "Collecting your putts",
       "your_green_map_fills_in": "Your green map fills in as you play. Log putts on each hole (the putts stepper in the cockpit, the scorecard, or just tell me — “two putts”) and the heat builds from your real makes and misses — no made-up data. Sim rounds and holes without a putt count don’t feed it.",
       "1_putt_rate": "1-putt rate",
-      "no_holes_yet": "no holes yet"
+      "no_holes_yet": "no holes yet",
+      "3_putt": "{{three_putt_rate}} 3-putt+"
     },
     "label": {
       "3_putt": "3+ putt"
@@ -2508,6 +2591,9 @@
   "native_fallback_banner": {
     "accessibility_label": {
       "dismiss_native_fallback_banner": "Dismiss native fallback banner"
+    },
+    "text": {
+      "cloud_mode_unavailable_on_this": "Cloud mode — {{missing_labels}} unavailable on this build."
     }
   },
   "offline_banner": {
@@ -2551,7 +2637,9 @@
       "next": "Next ›",
       "stand_inside_the_figure_full": "Stand inside the figure. Full backswing + follow-through fit between the dashed lines.",
       "live": "LIVE",
-      "log_swing": "Log swing"
+      "log_swing": "Log swing",
+      "swing_one": "swing",
+      "swing_other": "swings"
     },
     "accessibility_label": {
       "free_practice_no_drill_structure": "Free practice — no drill structure"
@@ -2563,7 +2651,8 @@
       "club": "Club",
       "distance_yards_optional": "Distance (yards, optional)",
       "outcome": "Outcome",
-      "direction_optional": "Direction (optional)"
+      "direction_optional": "Direction (optional)",
+      "log_shot_hole": "Log shot · hole {{current_hole}}"
     }
   },
   "quick_tutorial": {
@@ -2583,6 +2672,11 @@
     },
     "smart_vision_live_strategy": {
       "watch_dominant_miss": "Watch: dominant miss {{dominantMiss}}"
+    },
+    "text": {
+      "hazard_one": "⚠ {{count}} hazard",
+      "hazard_other": "⚠ {{count}} hazards",
+      "glasses": "👁 Glasses · {{value}}"
     }
   },
   "undo_mark_banner": {
@@ -2836,7 +2930,8 @@
       "id": "ID",
       "yes": "Yes",
       "pick_another": "Pick another",
-      "pick_manually": "Pick manually"
+      "pick_manually": "Pick manually",
+      "looks_like_your_confirm": "Looks like your {{club_id}} — confirm?"
     }
   },
   "practice_club_picker_modal": {
@@ -2866,12 +2961,18 @@
       "handicap_impact": "Handicap Impact",
       "post_to_my_index": "Post to my Index",
       "just_save_the_round": "Just save the round",
-      "posted_your_index_updated": "Posted. Your Index updated."
+      "posted_your_index_updated": "Posted. Your Index updated.",
+      "hole_in_the_books_finish_one": "{{count}} hole in the books — finish 9 or 18 to post a Score Differential to your Index. The round's saved either way.",
+      "hole_in_the_books_finish_other": "{{count}} holes in the books — finish 9 or 18 to post a Score Differential to your Index. The round's saved either way."
     },
     "label": {
       "differential": "DIFFERENTIAL",
       "adjusted": "ADJUSTED",
       "course_hcp": "COURSE HCP"
+    },
+    "text": {
+      "round_on_file_one": "{{conf}} · {{count}} round on file",
+      "round_on_file_other": "{{conf}} · {{count}} rounds on file"
     }
   },
   "recap_hole_shot_map": {
@@ -2885,13 +2986,17 @@
       "tap_a_shot_marker_to": "Tap a shot marker to see details.",
       "prev_hole": "← Prev hole",
       "next_hole": "Next hole →",
-      "hole": "Hole {{hole}}"
+      "hole": "Hole {{hole}}",
+      "shot": "Shot {{selected_idx}}"
     }
   },
   "recap_outcome_card": {
     "outcome_card": {
       "outcome": "OUTCOME",
       "actual": "ACTUAL"
+    },
+    "text": {
+      "shot": "Shot {{i}}"
     }
   },
   "recap_photo_collage": {
@@ -2937,7 +3042,8 @@
       "auto_backup_to_your_account": "Auto-backup to your account",
       "pick_a_backup_id_your": "Pick a Backup ID (your email) and a passphrase. Your data auto-backs-up and restores on ANY phone with the same pair — that’s what makes a new phone pick up right where you left off. The email alone won’t unlock your data without the passphrase, so keep the passphrase somewhere safe — we can’t recover it.",
       "back_up_now": "Back up now",
-      "restore": "Restore"
+      "restore": "Restore",
+      "last_cloud_backup": "Last cloud backup: {{server_last_at}}"
     },
     "placeholder": {
       "you_example_com": "you@example.com",
@@ -2965,7 +3071,8 @@
       "confirm_your_cage_setup": "CONFIRM YOUR CAGE SETUP",
       "throw_distance": "Throw distance",
       "lateral_start_comes_from_the": "Lateral start comes from the acoustic-anchored trace; depth + height on the bullseye sharpen with higher-frame-rate capture. Line the rings up over your net's bullseye.",
-      "est_preview_start": "est · preview · {{dirLabel}} start"
+      "est_preview_start": "est · preview · {{dirLabel}} start",
+      "ft": "{{camera_behind_feet}} ft"
     }
   },
   "smartmotion_smart_motion_hud": {
@@ -2977,7 +3084,8 @@
       "set_club": "Set club"
     },
     "tempo_bar": {
-      "tempo": "TEMPO"
+      "tempo": "TEMPO",
+      "ideal": "IDEAL {{ideal_low}}–{{ideal_high}}"
     },
     "body_analysis_row": {
       "body_analysis": "BODY ANALYSIS"
@@ -3179,7 +3287,8 @@
       "downswing": "DOWNSWING",
       "ratio": "RATIO",
       "ms": "{{backswingMs}} ms",
-      "ms_2": "{{downswingMs}} ms"
+      "ms_2": "{{downswingMs}} ms",
+      "ideal_1": "IDEAL {{target_ratio}}:1"
     }
   },
   "swinglab_video_annotation_overlay": {

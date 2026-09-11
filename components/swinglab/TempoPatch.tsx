@@ -147,9 +147,7 @@ export default function TempoPatch({ result }: TempoPatchProps) {
 
       {/* IDEAL label + point legend — target follows the mode (3:1 / ~2:1). */}
       <View style={styles.labelRow}>
-        <Text style={[styles.rowLabelDim, { color: colors.text_muted }]}>
-          IDEAL {targetRatio.toFixed(0)}:1
-        </Text>
+        <Text style={[styles.rowLabelDim, { color: colors.text_muted }]}>{t('swinglab_tempo_patch.tempo_patch.ideal_1', { target_ratio: targetRatio.toFixed(0) })}</Text>
       </View>
 
       {/* segment ms readout — real measured values */}

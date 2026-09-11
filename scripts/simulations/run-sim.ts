@@ -752,11 +752,24 @@ const enLocale: Record<string, unknown> = (() => {
   catch { return {}; }
 })();
 const enValueFor = (key: string): string | undefined => {
-  const v = key.split('.').reduce<unknown>(
+  const read = (k: string) => k.split('.').reduce<unknown>(
     (acc, part) => (acc && typeof acc === 'object' ? (acc as Record<string, unknown>)[part] : undefined),
     enLocale,
   );
-  return typeof v === 'string' ? v : undefined;
+  const direct = read(key);
+  if (typeof direct === 'string') return direct;
+  /**
+   * 2026-09-11 — PLURAL KEYS. i18next stores `x_one` / `x_other` and selects between them by
+   * `count`; the call site names only `x`, so a direct lookup finds nothing and a guard asserting
+   * the sentence goes red although the text is present in both forms. Fall back to the plural
+   * members. (`_other` first: it is the form every locale has, including ja and ko, which do not
+   * inflect for number at all.)
+   */
+  for (const suffix of ['_other', '_one']) {
+    const v = read(`${key}${suffix}`);
+    if (typeof v === 'string') return v;
+  }
+  return undefined;
 };
 const saysToPlayer = (src: string, text: string): boolean => {
   /**
@@ -5028,7 +5041,7 @@ check('Recap Handicap Impact: no differential on an incomplete round (was -33 on
       /postedHoles: 9 \| 18 \| null = \(round\?\.handicapHoles === 9 \|\| round\?\.handicapHoles === 18\)/.test(card) &&
       /const isPostable = postedHoles != null && !round\?\.simulated/.test(card) &&
       /handicapIndex == null \|\| !round \|\| !isPostable/.test(card) &&
-      /finish 9 or 18 to post a Score Differential/.test(card)
+      saysToPlayer(card, 'finish 9 or 18 to post a Score Differential')
     );
   })(),
   'a partial round shows an honest message, not a bogus negative differential');
@@ -5082,7 +5095,7 @@ check('Dashboard: real day-streak metric surfaced',
   // (consecutive days with a round OR practice session) shows as a flame pill.
   (() => {
     const d = read('app/(tabs)/dashboard.tsx');
-    return /const dayStreak = useMemo/.test(d) && /streakPill/.test(d) && /day\{dayStreak === 1 \? '' : 's'\}/.test(d);
+    return /const dayStreak = useMemo/.test(d) && /streakPill/.test(d) && /t\('dashboard\.text\.day', \{ count: dayStreak \}\)/.test(d)   // pluralised by i18next, not by a ternary;
   })(),
   'dashboard shows a real consecutive-day streak (round or practice), honest from dates');
 
@@ -5529,8 +5542,7 @@ check('Course bag optimizer Part A — per-course club usage (Tim)',
     return (
       /r\.courseId === activeCourseId && !r\.id\.startsWith\('imported_'\)/.test(sc) && // by course, no imports
       /const courseClubUsage: ClubAgg\[\] = useMemo/.test(sc) &&
-      /YOUR BAG · \{activeCourse\.toUpperCase\(\)\}/.test(sc) &&
-      /see action here/.test(sc) &&
+      saysToPlayer(sc, 'YOUR BAG') && saysToPlayer(sc, 'see action here') &&
       /pattern still forming/.test(sc) // honest until enough rounds
     );
   })(),
@@ -14376,7 +14388,7 @@ check('Smart Motion: "go again" asked DURING analysis is queued, never dropped',
       // and a review-phase effect drains it, once, into the real go-again
       /if \(phase !== 'review' \|\| !queuedGoAgainRef\.current\) return;\s*queuedGoAgainRef\.current = false;\s*beginNextRecording\(\);/.test(sm) &&
       // the NEW SET control itself still exists and still auto-saves the set it leaves
-      /accessibilityLabel=\{t\('swinglab_smartmotion\.accessibility_label\.new_set_saves_this_one'\)\}/.test(sm) &&
+      /accessibilityLabel=\{t\('swinglab_smartmotion\.accessibility_label\.new_set_saves_this_set'\)\}/.test(sm) &&
       /persistReviewRef\.current\(false\)/.test(sm)
     );
   })(),

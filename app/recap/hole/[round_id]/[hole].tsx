@@ -206,9 +206,7 @@ export default function HoleShotMapScreen() {
       />
       {swingsForHole.length > 0 ? (
         <View style={styles.swingBlock}>
-          <Text style={styles.swingHeader}>
-            WATCH · {swingsForHole.length} SWING{swingsForHole.length === 1 ? '' : 'S'} ON THIS HOLE
-          </Text>
+          <Text style={styles.swingHeader}>{t('recap_hole.hole_shot_map_screen.watch_swing_on_this_hole', { count: swingsForHole.length })}</Text>
           {confirmLine ? <Text style={styles.swingConfirm}>{confirmLine}</Text> : null}
           {swingsForHole.map((s, i) => (
             <View key={`${s.timestamp}-${i}`} style={styles.swingRow}>

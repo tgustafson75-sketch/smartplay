@@ -209,9 +209,7 @@ export default function FamilyMemberScreen() {
             accessibilityRole="button"
             accessibilityLabel={`View ${member.firstName}'s recorded swings`}
           >
-            <Text style={[styles.ctaTitle, { color: colors.text_primary }]}>
-              {recordedCount} recorded swing{recordedCount === 1 ? '' : 's'}
-            </Text>
+            <Text style={[styles.ctaTitle, { color: colors.text_primary }]}>{t('family.family_member_screen.recorded_swing', { count: recordedCount })}</Text>
             <Text style={[styles.ctaHint, { color: colors.text_muted }]}>{t('family.family_member_screen.open_s_swing_library_everything', { firstName: member.firstName })}</Text>
           </Pressable>
         )}

@@ -726,9 +726,7 @@ export default function Settings() {
               <Text style={[styles.profileSlimName, { color: colors.text_primary }]} numberOfLines={1}>
                 {name.trim()}
               </Text>
-              <Text style={[styles.profileSlimMeta, { color: colors.text_muted }]} numberOfLines={1}>
-                Handicap {handicapIndex != null ? handicapIndex.toFixed(1) : (handicap || '—')} · Goal {goal || '—'}
-              </Text>
+              <Text style={[styles.profileSlimMeta, { color: colors.text_muted }]} numberOfLines={1}>{t('settings.text.handicap_goal', { handicap: handicapIndex != null ? handicapIndex.toFixed(1) : (handicap || '—'), goal: goal || '—' })}</Text>
             </View>
             <TouchableOpacity
               onPress={() => setProfileExpanded(true)}
@@ -2682,9 +2680,7 @@ function DeveloperToolsSection({ cardStyle, colors }: { cardStyle: object[]; col
               </Text>
               {walkState ? (
                 <>
-                  <Text style={{ color: colors.text_primary, fontSize: 12, marginTop: 6 }}>
-                    Waypoint {walkState.waypoint_index + 1} · {(walkState.fraction_through * 100).toFixed(0)}% through
-                  </Text>
+                  <Text style={{ color: colors.text_primary, fontSize: 12, marginTop: 6 }}>{t('settings.developer_tools_section.waypoint_through', { waypoint_index: walkState.waypoint_index + 1, fraction_through: (walkState.fraction_through * 100).toFixed(0) })}</Text>
                   <Text style={{ color: colors.text_muted, fontSize: 11, marginTop: 2 }}>
                     {walkState.current_lat.toFixed(5)}, {walkState.current_lng.toFixed(5)}
                   </Text>

@@ -775,7 +775,7 @@ export default function Dashboard() {
             {dayStreak > 0 && (
               <View style={styles.streakPill}>
                 <Ionicons name="flame" size={13} color={colors.accent_amber} />
-                <Text style={styles.streakPillText}>{dayStreak} day{dayStreak === 1 ? '' : 's'}</Text>
+                <Text style={styles.streakPillText}>{t('dashboard.text.day', { count: dayStreak })}</Text>
               </View>
             )}
             {totalPoints > 0 && (
@@ -810,9 +810,7 @@ export default function Dashboard() {
               <Text style={[styles.profileName, { color: colors.text_primary }]} numberOfLines={1}>
                 {welcomeName}
               </Text>
-              <Text style={[styles.profileMeta, { color: colors.text_muted }]} numberOfLines={1}>
-                Handicap {handicap_index != null ? handicap_index.toFixed(1) : (handicap || '—')} · Goal {goal || '—'}
-              </Text>
+              <Text style={[styles.profileMeta, { color: colors.text_muted }]} numberOfLines={1}>{t('dashboard.text.handicap_goal', { handicap: handicap_index != null ? handicap_index.toFixed(1) : (handicap || '—'), goal: goal || '—' })}</Text>
             </View>
           </TouchableOpacity>
           <TouchableOpacity
@@ -895,9 +893,7 @@ export default function Dashboard() {
             <View style={styles.sharedHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.sharedLabel, { color: colors.text_muted }]}>{t('dashboard.shared_group')}</Text>
-                <Text style={[styles.sharedTitle, { color: colors.text_primary }]} numberOfLines={1}>
-                  {coachableRoster.length} golfer{coachableRoster.length === 1 ? '' : 's'}
-                </Text>
+                <Text style={[styles.sharedTitle, { color: colors.text_primary }]} numberOfLines={1}>{t('dashboard.text.golfer', { count: coachableRoster.length })}</Text>
                 <Text style={[styles.sharedMeta, { color: colors.text_muted }]} numberOfLines={1}>
                   {activeFamilyMember ? `Active: ${activeFamilyMember.firstName}` : 'Tap a golfer to review swings'}
                 </Text>
@@ -1059,9 +1055,7 @@ export default function Dashboard() {
                   <Ionicons name="arrow-up" size={28} color={colors.text_muted} />
                 </View>
               )}
-              <Text style={[styles.weatherWind, { color: colors.text_muted }]}>
-                {Math.round(weather.wind_speed_mph)} mph
-              </Text>
+              <Text style={[styles.weatherWind, { color: colors.text_muted }]}>{t('dashboard.text.mph', { wind_speed_mph: Math.round(weather.wind_speed_mph) })}</Text>
             </View>
           </View>
         )}
@@ -1177,9 +1171,7 @@ export default function Dashboard() {
                   accessibilityLabel={`Open practice session ${label}`}
                 >
                   <Text style={[styles.practiceDrill, { color: colors.text_primary }]} numberOfLines={1}>{label}</Text>
-                  <Text style={[styles.practiceDrillPts, { color: colors.text_muted }]}>
-                    {d} · {balls} {balls === 1 ? 'ball' : 'balls'}
-                  </Text>
+                  <Text style={[styles.practiceDrillPts, { color: colors.text_muted }]}>{t('dashboard.text.ball', { count: balls, d })}</Text>
                 </TouchableOpacity>
               );
             })}

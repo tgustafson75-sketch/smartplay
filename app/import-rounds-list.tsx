@@ -165,9 +165,7 @@ export default function ImportRoundsListScreen() {
 
         {phase.kind === 'confirm' && (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.cardTitle, { color: colors.text_primary }]}>
-              {phase.rounds.length} round{phase.rounds.length === 1 ? '' : 's'} found
-            </Text>
+            <Text style={[styles.cardTitle, { color: colors.text_primary }]}>{t('import_rounds_list.import_rounds_list_screen.round_found', { count: phase.rounds.length })}</Text>
             <Text style={[styles.cardSub, { color: colors.text_muted, marginBottom: 4 }]}>
               {phase.skippedNoScore > 0 ? `${phase.skippedNoScore} in-progress round${phase.skippedNoScore === 1 ? '' : 's'} (no score) skipped. ` : ''}
               {phase.skippedIncomplete > 0 ? `${phase.skippedIncomplete} unfinished round${phase.skippedIncomplete === 1 ? '' : 's'} (too few holes) skipped. ` : ''}
@@ -212,7 +210,7 @@ export default function ImportRoundsListScreen() {
 
             <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: colors.accent }]} onPress={onConfirm}>
               <Ionicons name="checkmark-circle-outline" size={18} color="#0d1a0d" />
-              <Text style={styles.primaryBtnText}>Add {phase.rounds.length} round{phase.rounds.length === 1 ? '' : 's'} to history</Text>
+              <Text style={styles.primaryBtnText}>{t('import_rounds_list.import_rounds_list_screen.add_round_to_history', { count: phase.rounds.length })}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.border }]} onPress={() => setPhase({ kind: 'pick' })}>
               <Text style={[styles.secondaryBtnText, { color: colors.text_primary }]}>{t('play.cancel')}</Text>

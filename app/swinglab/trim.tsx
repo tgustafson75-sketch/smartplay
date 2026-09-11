@@ -198,9 +198,7 @@ export default function TrimScreen() {
             disabled={submitting}
           >
             <Ionicons name="play-skip-back" size={16} color={colors.accent} />
-            <Text style={[styles.markerText, { color: colors.text_primary }]}>
-              Set Start ({position.toFixed(1)}s)
-            </Text>
+            <Text style={[styles.markerText, { color: colors.text_primary }]}>{t('swinglab_trim.trim_screen.set_start_s', { position: position.toFixed(1) })}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.markerBtn, { borderColor: colors.border, backgroundColor: colors.surface }]}
@@ -208,9 +206,7 @@ export default function TrimScreen() {
             disabled={submitting}
           >
             <Ionicons name="play-skip-forward" size={16} color={colors.accent} />
-            <Text style={[styles.markerText, { color: colors.text_primary }]}>
-              Set End ({position.toFixed(1)}s)
-            </Text>
+            <Text style={[styles.markerText, { color: colors.text_primary }]}>{t('swinglab_trim.trim_screen.set_end_s', { position: position.toFixed(1) })}</Text>
           </TouchableOpacity>
         </View>
 
@@ -221,7 +217,7 @@ export default function TrimScreen() {
         >
           {submitting
             ? <ActivityIndicator size="small" color="#fff" />
-            : <Text style={styles.primaryBtnText}>Analyze This Window ({windowSec.toFixed(1)}s)</Text>}
+            : <Text style={styles.primaryBtnText}>{t('swinglab_trim.trim_screen.analyze_this_window_s', { window_sec: windowSec.toFixed(1) })}</Text>}
         </TouchableOpacity>
 
         <TouchableOpacity

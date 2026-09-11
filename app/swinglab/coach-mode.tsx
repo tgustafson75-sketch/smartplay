@@ -280,9 +280,7 @@ export default function CoachMode() {
         </TouchableOpacity>
         <View style={{ flex: 1, alignItems: 'center' }}>
           <Text style={[styles.title, { color: colors.text_primary }]}>{t('swinglab.card_coach-mode_title')}</Text>
-          <Text style={[styles.headerSub, { color: colors.text_muted }]}>
-            {roster.length} {roster.length === 1 ? 'player' : 'players'} · {totalSwingsLogged} swings logged
-          </Text>
+          <Text style={[styles.headerSub, { color: colors.text_muted }]}>{t('swinglab_coach_mode.coach_mode.player_swings_logged', { count: roster.length, total_swings_logged: totalSwingsLogged })}</Text>
         </View>
         <TouchableOpacity
           onPress={() => setTutorialOpen(true)}
@@ -495,14 +493,12 @@ export default function CoachMode() {
         {/* PAST SWINGS UNDER THIS PLAYER */}
         {activeMember && (
           <>
-            <Text style={[styles.sectionHeader, { color: colors.text_muted, marginTop: 16 }]}>
-              {activeMember.firstName.toUpperCase()}&apos;S SWINGS
-            </Text>
+            <Text style={[styles.sectionHeader, { color: colors.text_muted, marginTop: 16 }]}>{t('swinglab_coach_mode.coach_mode.s_swings', { first_name: activeMember.firstName.toUpperCase() })}</Text>
             {!hasHydrated ? (
               <Text style={[styles.emptyHint, { color: colors.text_muted }]}>{t('swinglab_coach_mode.coach_mode.loading')}</Text>
             ) : playerSwings.length === 0 ? (
               <Text style={[styles.emptyHint, { color: colors.text_muted }]}>
-                {t('swinglab_coach_mode.coach_mode.no_swings_yet_capture_one')}
+                {t('swinglab_coach_mode.coach_mode.no_swings_yet_capture')}
               </Text>
             ) : (
               playerSwings.map(sess => {

@@ -53,7 +53,7 @@ export default function OutcomeCard({ comparison }: Props) {
             <View key={i} style={styles.row}>
               <View style={styles.markerCol}>
                 <Text style={styles.markerLabel}>{MARKER_LABEL[m.plan_marker]}</Text>
-                <Text style={styles.shotIdx}>Shot {i + 1}</Text>
+                <Text style={styles.shotIdx}>{t('recap_outcome_card.text.shot', { i: i + 1 })}</Text>
               </View>
               <View style={styles.col}>
                 <Text style={styles.colHead}>{t('recap_outcome_card.outcome_card.actual')}</Text>

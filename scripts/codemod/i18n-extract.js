@@ -112,6 +112,14 @@ function namespaceFor(relPath) {
 }
 
 /** First few words of the text, as a readable slug. */
+/**
+ * i18next reads a trailing _zero/_one/_two/_few/_many/_other as a PLURAL FORM, not as part of the
+ * name. A sentence ending in the word "one" ("Capture one above") slugs to `…capture_one`, which is
+ * indistinguishable from the singular half of a plural pair — and would resolve strangely the moment
+ * anyone passed `count` to it. Five such keys were generated before this was noticed.
+ */
+const PLURAL_SUFFIXES = ['zero', 'one', 'two', 'few', 'many', 'other'];
+
 function slugFor(text) {
   const words = decodeEntities(text).trim().toLowerCase()
     .replace(/[^a-z0-9\s]+/g, ' ')

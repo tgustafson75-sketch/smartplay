@@ -1017,7 +1017,7 @@ export default function Scorecard() {
             recommend-a-bag-for-this-course brain function. */}
         {isRoundActive && activeCourse && courseClubUsage.length > 0 && (
           <View style={styles.section}>
-            <Text style={[styles.sectionLabel, { color: c.text_muted }]}>YOUR BAG · {activeCourse.toUpperCase()}</Text>
+            <Text style={[styles.sectionLabel, { color: c.text_muted }]}>{t('scorecard.text.your_bag', { active_course: activeCourse.toUpperCase() })}</Text>
             <View style={[styles.clubGrid, { backgroundColor: c.surface, borderColor: c.border }]}>
               <Text style={[styles.courseBagNote, { color: c.text_muted }]}>
                 {courseClubUsage.length} club{courseClubUsage.length === 1 ? '' : 's'} see action here

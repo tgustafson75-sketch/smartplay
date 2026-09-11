@@ -241,7 +241,7 @@ export default function IndoorHotelModeScreen() {
               {last ? (
                 <>
                   <Text style={s.tempoBig}>{last.tempoRatio.toFixed(1)}<Text style={s.tempoUnit}> : 1</Text></Text>
-                  <Text style={s.tempoBench}>benchmark {benchmark.toFixed(0)}:1</Text>
+                  <Text style={s.tempoBench}>{t('swinglab_indoor.indoor_hotel_mode_screen.benchmark_1', { benchmark: benchmark.toFixed(0) })}</Text>
                 </>
               ) : (
                 <Text style={s.waitingText}>{mode === 'swing' ? 'SWING WHEN READY' : 'STROKE WHEN READY'}</Text>
@@ -269,7 +269,7 @@ export default function IndoorHotelModeScreen() {
               <View key={i} style={[s.dot, { backgroundColor: r.transition === 'snatched' ? '#ef4444' : NEON }]} />
             ))}
           </View>
-          <Text style={s.repCount}>{reps.length} {reps.length === 1 ? 'rep' : 'reps'}</Text>
+          <Text style={s.repCount}>{t('swinglab_indoor.indoor_hotel_mode_screen.rep', { count: reps.length })}</Text>
 
           <TouchableOpacity style={s.doneBtn} onPress={finish} accessibilityRole="button" accessibilityLabel={t('swinglab_indoor.accessibility_label.finish_set')}>
             <Text style={s.doneBtnText}>{t('swinglab_indoor.indoor_hotel_mode_screen.done_read_my_set')}</Text>
@@ -282,7 +282,7 @@ export default function IndoorHotelModeScreen() {
           <View style={s.statGrid}>
             <View style={s.statCard}>
               <Text style={s.statValue}>{summary.avgTempo != null ? `${summary.avgTempo.toFixed(1)}:1` : '—'}</Text>
-              <Text style={s.statLabel}>AVG TEMPO · bench {benchmark.toFixed(0)}:1</Text>
+              <Text style={s.statLabel}>{t('swinglab_indoor.indoor_hotel_mode_screen.avg_tempo_bench_1', { benchmark: benchmark.toFixed(0) })}</Text>
             </View>
             <View style={s.statCard}>
               <Text style={s.statValue}>{summary.consistency != null ? `${summary.consistency}` : '—'}</Text>

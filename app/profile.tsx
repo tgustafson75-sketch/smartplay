@@ -98,8 +98,8 @@ export default function ProfileScreen() {
             </View>
           </View>
           <View style={styles.metaRow}>
-            <Text style={[styles.metaText, { color: colors.text_muted }]}>GHIN {ghin || '—'}</Text>
-            <Text style={[styles.metaText, { color: colors.text_muted }]}>Goal {goal || '—'}</Text>
+            <Text style={[styles.metaText, { color: colors.text_muted }]}>{t('profile.profile_screen.ghin', { ghin: ghin || '—' })}</Text>
+            <Text style={[styles.metaText, { color: colors.text_muted }]}>{t('profile.profile_screen.goal', { goal: goal || '—' })}</Text>
           </View>
         </View>
 

@@ -192,9 +192,7 @@ export default function RangeImportScreen() {
         </View>
         <View style={styles.pickBody}>
           <Ionicons name="checkmark-circle" size={52} color={c.accent} style={styles.pickIcon} />
-          <Text style={[styles.pickHeadline, { color: c.text_primary }]}>
-            {phase.applied} distance{phase.applied === 1 ? '' : 's'} applied
-          </Text>
+          <Text style={[styles.pickHeadline, { color: c.text_primary }]}>{t('swinglab_range_import.range_import_screen.distance_applied', { count: phase.applied })}</Text>
           <Text style={[styles.pickSub, { color: c.text_muted }]}>
             {t('swinglab_range_import.range_import_screen.kevin_s_club_recommendations_are')}
           </Text>
@@ -242,9 +240,7 @@ export default function RangeImportScreen() {
             {result.consistency_pct != null ? `  ·  ${result.consistency_pct}% consistency` : ''}
           </Text>
           <View style={[styles.confBadge, { backgroundColor: lowConf ? (c.error ?? '#F87171') + '22' : c.accent + '22' }]}>
-            <Text style={[styles.confBadgeText, { color: lowConf ? (c.error ?? '#F87171') : c.accent }]}>
-              {result.confidence.toUpperCase()} CONFIDENCE
-            </Text>
+            <Text style={[styles.confBadgeText, { color: lowConf ? (c.error ?? '#F87171') : c.accent }]}>{t('swinglab_range_import.range_import_screen.confidence', { confidence: result.confidence.toUpperCase() })}</Text>
           </View>
         </View>
 
@@ -264,9 +260,7 @@ export default function RangeImportScreen() {
 
         {/* Unmapped clubs note */}
         {unmapped.length > 0 ? (
-          <Text style={[styles.unmappedNote, { color: c.text_muted }]}>
-            {unmapped.map(r => r.display_name).join(', ')} — not matched to a known club; excluded from import.
-          </Text>
+          <Text style={[styles.unmappedNote, { color: c.text_muted }]}>{t('swinglab_range_import.range_import_screen.not_matched_to_a_known', { display_name: unmapped.map(r => r.display_name).join(', ') })}</Text>
         ) : null}
 
         {/* Warnings */}
@@ -290,7 +284,7 @@ export default function RangeImportScreen() {
             onPress={() => onApply(result)}
             accessibilityRole="button"
           >
-            <Text style={styles.applyBtnText}>Apply {mappable.length} distance{mappable.length === 1 ? '' : 's'}</Text>
+            <Text style={styles.applyBtnText}>{t('swinglab_range_import.range_import_screen.apply_distance', { count: mappable.length })}</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity

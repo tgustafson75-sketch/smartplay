@@ -5038,7 +5038,7 @@ export default function SmartMotion() {
           <Image source={ICON_CTRL.delete} style={styles.toolIconFull} resizeMode="contain" />
         </TactilePressable>
         <View style={styles.ctrlLabeled}>
-          <TactilePressable onPress={() => beginNextRecording()} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel={t('swinglab_smartmotion.accessibility_label.new_set_saves_this_one')}>
+          <TactilePressable onPress={() => beginNextRecording()} style={styles.toolBtnBare} accessibilityRole="button" accessibilityLabel={t('swinglab_smartmotion.accessibility_label.new_set_saves_this_set')}>
             <Image source={ICON_CTRL.record} style={styles.toolIconFull} resizeMode="contain" />
           </TactilePressable>
           <Text style={[styles.ctrlLabelText, { color: '#88F700' }]}>{t('swinglab_smartmotion.smart_motion.new_set')}</Text>
@@ -5777,7 +5777,7 @@ export default function SmartMotion() {
         {phase === 'recording' ? (
           <View style={[styles.recPill, { top: insets.top + 56, backgroundColor: colors.overlay }]} pointerEvents="none">
             <View style={[styles.recDot, { backgroundColor: colors.error }]} />
-            <Text style={styles.recText}>{recordedSeconds}s · {recordingMaxSeconds - recordedSeconds}s left</Text>
+            <Text style={styles.recText}>{t('swinglab_smartmotion.smart_motion.s_s_left', { recorded_seconds: recordedSeconds, recorded_seconds2: recordingMaxSeconds - recordedSeconds })}</Text>
           </View>
         ) : null}
 
@@ -6182,7 +6182,7 @@ export default function SmartMotion() {
 
       {isReview && segments.length > 1 ? (
         <View style={styles.swingTag}>
-          <Text style={[styles.swingTagText, { color: colors.text_muted }]}>SWING {selectedSwing + 1} OF {segments.length}</Text>
+          <Text style={[styles.swingTagText, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.swing_of', { selected_swing: selectedSwing + 1, segments: segments.length })}</Text>
           {swingAnalyzing ? <ActivityIndicator size="small" color={colors.accent} /> : null}
         </View>
       ) : null}
@@ -6276,7 +6276,7 @@ export default function SmartMotion() {
             <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
               <Text style={[styles.insightLabel, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.top_focus')}</Text>
               <Text style={[styles.insightHeadline, { color: colors.text_primary }]}>{faultHeadline.toUpperCase()}</Text>
-              <Text style={[styles.insightConf, { color: colors.text_muted }]}>Confidence: {analysis.confidence ?? '—'}</Text>
+              <Text style={[styles.insightConf, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.confidence', { confidence: analysis.confidence ?? '—' })}</Text>
               {/*
                 2026-08-25 — say it plainly when the read is rough. Reuses the existing confidence
                 line's slot rather than adding a row, and names the CAUSE in the player's terms: a

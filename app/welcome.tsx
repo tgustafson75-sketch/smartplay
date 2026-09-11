@@ -358,9 +358,7 @@ export default function WelcomeScreen() {
               </Text>
             </TouchableOpacity>
             {termsAccepted && (
-              <Text style={[styles.termsTimestamp, { color: colors.text_muted }]}>
-                Accepted {new Date(termsAcceptedAt!).toLocaleString()}
-              </Text>
+              <Text style={[styles.termsTimestamp, { color: colors.text_muted }]}>{t('welcome.welcome_screen.accepted', { to_locale_string: new Date(termsAcceptedAt!).toLocaleString() })}</Text>
             )}
           </View>
 

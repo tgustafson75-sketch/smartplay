@@ -388,9 +388,7 @@ export default function CageReviewInterview() {
       </View>
 
       <View style={styles.progressLabel}>
-        <Text style={styles.progressText}>
-          Shot {reviewedCount + 1} of {totalCount}
-        </Text>
+        <Text style={styles.progressText}>{t('swing_review.cage_review_interview.shot_of', { reviewed_count: reviewedCount + 1, total_count: totalCount })}</Text>
       </View>
 
       {/* SHOT CONTEXT */}

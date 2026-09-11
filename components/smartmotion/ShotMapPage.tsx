@@ -297,7 +297,7 @@ function CageBullseye({
         <Stepper label={t('smartmotion_shot_map_page.label.camera_behind_you')} value={cameraBehindFeet} unit="ft" onChange={onChangeCameraBehindFeet} min={0} colors={colors} />
         <View style={[styles.totalRow, { borderTopColor: colors.border }]}>
           <Text style={[styles.totalLabel, { color: colors.text_secondary }]}>{t('smartmotion_shot_map_page.cage_bullseye.throw_distance')}</Text>
-          <Text style={[styles.totalValue, { color: colors.accent }]}>{Math.max(1, canvasFeet + cameraBehindFeet)} ft</Text>
+          <Text style={[styles.totalValue, { color: colors.accent }]}>{t('smartmotion_shot_map_page.cage_bullseye.ft', { camera_behind_feet: Math.max(1, canvasFeet + cameraBehindFeet) })}</Text>
         </View>
       </View>
       <Text style={[styles.note, { color: colors.text_muted }]}>

@@ -186,9 +186,7 @@ export default function SpaceScanScreen() {
           <View style={[styles.heroCard, { borderColor: '#ef4444' }]}>
             <AppIcon name="alert-circle-outline" size={36} color="#ef4444" />
             <Text style={[styles.heroTitle, { color: '#ef4444' }]}>{t('swinglab_space_scan.space_scan_screen.couldn_t_read_the_space')}</Text>
-            <Text style={styles.heroBody}>
-              {errorMessage ?? "Something went sideways on my end."} Try a wider shot showing the hitting area, mat, and net.
-            </Text>
+            <Text style={styles.heroBody}>{t('swinglab_space_scan.space_scan_screen.try_a_wider_shot_showing', { end: errorMessage ?? "Something went sideways on my end." })}</Text>
             <TouchableOpacity style={styles.primaryBtn} onPress={onRetake}>
               <Text style={styles.primaryBtnText}>{t('swinglab_space_scan.space_scan_screen.try_again')}</Text>
             </TouchableOpacity>

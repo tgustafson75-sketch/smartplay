@@ -245,10 +245,7 @@ export default function PaywallScreen() {
           />
 
           <Text style={styles.headline}>{paywallHeadline(caddieName)}</Text>
-          <Text style={styles.subhead}>
-            {PAYWALL_SUBHEAD}{'\n'}
-            {PRICING.trialDays}-day free trial. Cancel anytime.
-          </Text>
+          <Text style={styles.subhead}>{t('paywall.paywall_screen.day_free_trial_cancel_anytime', { paywall_subhead: PAYWALL_SUBHEAD, n: '\n', trial_days: PRICING.trialDays })}</Text>
 
           {/* The player who never got out. Placed ahead of the price on purpose: the offer is the
               point of this screen for them, and a week of golf is the thing being decided, not a

@@ -104,9 +104,7 @@ export function GreenHeatCard({ scope = 'career', style }: GreenHeatCardProps) {
                         {b.holes === 1 ? '' : 's'}
                       </Text>
                       {b.threePlus > 0 && (
-                        <Text style={styles.cellLeak}>
-                          {pct(b.threePuttRate)} 3-putt+
-                        </Text>
+                        <Text style={styles.cellLeak}>{t('green_heat_card.text.3_putt', { three_putt_rate: pct(b.threePuttRate) })}</Text>
                       )}
                     </>
                   ) : (

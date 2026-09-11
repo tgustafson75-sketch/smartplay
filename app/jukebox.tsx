@@ -108,7 +108,7 @@ export default function Jukebox() {
       ) : embedUrl ? (
         <View style={styles.empty}>
           <Ionicons name="musical-notes" size={40} color="#88F700" />
-          <Text style={[styles.emptyText, { color: colors.text_secondary }]}>Opening {title || 'your song'}…</Text>
+          <Text style={[styles.emptyText, { color: colors.text_secondary }]}>{t('jukebox.text.opening', { song: title || 'your song' })}</Text>
         </View>
       ) : (
         <View style={styles.empty}>

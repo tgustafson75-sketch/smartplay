@@ -249,9 +249,7 @@ export default function CalibrateAcoustics() {
       {warn ? <Text style={[styles.warn, { color: colors.warning }]}>{warn}</Text> : null}
 
       {appliedCalibration && phase === 'idle' ? (
-        <Text style={[styles.applied, { color: colors.text_muted }]}>
-          ✓ Active calibration: floor {appliedCalibration.noiseFloorDb.toFixed(0)} dB · threshold {appliedCalibration.transientThresholdDb} dB
-        </Text>
+        <Text style={[styles.applied, { color: colors.text_muted }]}>{t('swinglab_calibrate.calibrate_acoustics.active_calibration_floor_db_threshold', { noise_floor_db: appliedCalibration.noiseFloorDb.toFixed(0), transient_threshold_db: appliedCalibration.transientThresholdDb })}</Text>
       ) : null}
 
       <View style={{ flex: 1 }} />

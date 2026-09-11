@@ -187,7 +187,7 @@ export default function CageTargetCalibration() {
           <Text style={[styles.statusLabel, { color: colors.text_secondary }]}>{t('practice_session_target_calibration.cage_target_calibration.center', { centerCount })}</Text>
           <View style={styles.statusDivider} />
           <View style={[styles.statusDot, { backgroundColor: '#f59e0b' }]} />
-          <Text style={[styles.statusLabel, { color: colors.text_secondary }]}>{canvasCount - centerCount} edge</Text>
+          <Text style={[styles.statusLabel, { color: colors.text_secondary }]}>{t('practice_session_target_calibration.cage_target_calibration.edge', { center_count: canvasCount - centerCount })}</Text>
           <View style={styles.statusDivider} />
           <View style={[styles.statusDot, { backgroundColor: '#ef4444' }]} />
           <Text style={[styles.statusLabel, { color: colors.text_secondary }]}>{t('practice_session_target_calibration.cage_target_calibration.net', { netCount })}</Text>
@@ -317,9 +317,7 @@ export default function CageTargetCalibration() {
                 );
               })}
             </View>
-            <Text style={[styles.scatterSub, { color: colors.text_secondary }]}>
-              {centerCount} center · {canvasCount - centerCount} edge · {netCount} net
-            </Text>
+            <Text style={[styles.scatterSub, { color: colors.text_secondary }]}>{t('practice_session_target_calibration.cage_target_calibration.center_edge_net', { center_count: centerCount, center_count2: canvasCount - centerCount, net_count: netCount })}</Text>
           </View>
         )}
 

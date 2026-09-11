@@ -159,6 +159,7 @@ interface DrillCardProps {
 }
 
 function DrillCard({ entry, colors, oneCol, onPress }: DrillCardProps) {
+  const { t } = useTranslation();
   return (
     <Pressable
       onPress={onPress}
@@ -198,9 +199,7 @@ function DrillCard({ entry, colors, oneCol, onPress }: DrillCardProps) {
           {entry.missPattern}
         </Text>
         <View style={styles.cardFooter}>
-          <Text style={[styles.cardDrills, { color: colors.accent }]}>
-            {entry.drills.length} drill{entry.drills.length === 1 ? '' : 's'}
-          </Text>
+          <Text style={[styles.cardDrills, { color: colors.accent }]}>{t('drills.drill_card.drill', { count: entry.drills.length })}</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.accent} />
         </View>
       </View>

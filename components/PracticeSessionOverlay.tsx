@@ -681,9 +681,7 @@ export default function PracticeSessionOverlay({ onComplete, onCancel, drill }: 
         </View>
         <View style={styles.recHeaderRight}>
           <Text style={styles.swingCountNum}>{swingCount}</Text>
-          <Text style={styles.swingCountLabel}>
-            {swingCount === 1 ? 'swing' : 'swings'}
-          </Text>
+          <Text style={styles.swingCountLabel}>{t('practice_session_overlay.text.swing', { count: swingCount })}</Text>
         </View>
       </View>
       {!meterAvailable && (

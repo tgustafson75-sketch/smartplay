@@ -182,7 +182,7 @@ export default function AskYourSwingCard({ session }: Props) {
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <View style={styles.headerRow}>
         <Ionicons name="sparkles-outline" size={16} color={colors.accent} />
-        <Text style={[styles.label, { color: colors.accent }]}>ASK {caddieName.toUpperCase()}</Text>
+        <Text style={[styles.label, { color: colors.accent }]}>{t('swinglab_ask_your_swing_card.ask_your_swing_card.ask', { caddie_name: caddieName.toUpperCase() })}</Text>
       </View>
       <Text style={[styles.helperText, { color: colors.text_muted }]}>{t('swinglab_ask_your_swing_card.ask_your_swing_card.ask_anything_about_this_swing', { caddieName })}</Text>
 

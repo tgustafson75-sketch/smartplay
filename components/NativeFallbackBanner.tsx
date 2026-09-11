@@ -83,9 +83,7 @@ export default function NativeFallbackBanner() {
   return (
     <View style={styles.banner}>
       <Ionicons name="cloud-outline" size={14} color="#fbbf24" style={{ marginRight: 6 }} />
-      <Text style={styles.text} numberOfLines={2}>
-        Cloud mode — {missingLabels.join(' + ')} unavailable on this build.
-      </Text>
+      <Text style={styles.text} numberOfLines={2}>{t('native_fallback_banner.text.cloud_mode_unavailable_on_this', { missing_labels: missingLabels.join(' + ') })}</Text>
       <Pressable
         onPress={() => setDismissed(true)}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}

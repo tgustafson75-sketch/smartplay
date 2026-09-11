@@ -68,10 +68,22 @@ function namespaceFor(rel) {
   const parent = parts.length ? parts[parts.length - 1] : '';
   return (parent && parent !== last ? `${snake(parent)}_${snake(last)}` : snake(last)) || 'screen';
 }
+/**
+ * i18next reads a trailing _zero/_one/_two/_few/_many/_other as a PLURAL FORM, not as part of the
+ * name. A sentence ending in the word "one" ("Capture one above") slugs to `…capture_one`, which is
+ * indistinguishable from the singular half of a plural pair — and would resolve strangely the moment
+ * anyone passed `count` to it. Five such keys were generated before this was noticed.
+ */
+const PLURAL_SUFFIXES = ['zero', 'one', 'two', 'few', 'many', 'other'];
+
 function slugFor(text) {
   const w = text.trim().toLowerCase().replace(/\{\{\w+\}\}/g, ' ').replace(/[^a-z0-9\s]+/g, ' ')
     .split(/\s+/).filter(Boolean);
-  return w.slice(0, 5).join('_').slice(0, 44).replace(/_+$/, '') || 'text';
+  let slug = w.slice(0, 5).join('_').slice(0, 44).replace(/_+$/, '') || 'text';
+  for (const suf of PLURAL_SUFFIXES) {
+    if (slug.endsWith(`_${suf}`)) { slug = `${slug}_text`; break; }
+  }
+  return slug;
 }
 function elementName(node) {
   const n = node?.name;

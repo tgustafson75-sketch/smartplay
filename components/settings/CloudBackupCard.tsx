@@ -168,7 +168,7 @@ export default function CloudBackupCard() {
           <Ionicons name={showSecret ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.text_muted} />
         </TouchableOpacity>
       </View>
-      <Text style={s.muted}>Last cloud backup: {timeAgo(serverLastAt)}</Text>
+      <Text style={s.muted}>{t('settings_cloud_backup_card.cloud_backup_card.last_cloud_backup', { server_last_at: timeAgo(serverLastAt) })}</Text>
       <View style={s.toggleRow}>
         <Text style={s.body}>Auto-backup</Text>
         <TouchableOpacity onPress={() => setAutoOn(!autoOn)} style={[s.toggle, { backgroundColor: autoOn ? colors.accent : colors.border }]}>

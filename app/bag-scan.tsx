@@ -103,9 +103,7 @@ export default function BagScanScreen() {
       ) : phase === 'review' ? (
         <>
           <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}>
-            <Text style={s.reviewHint}>
-              {clubs.length} club{clubs.length === 1 ? '' : 's'} detected. Fix any make/model and untick anything wrong before adding.
-            </Text>
+            <Text style={s.reviewHint}>{t('bag_scan.bag_scan_screen.club_detected_fix_any_make', { count: clubs.length })}</Text>
             {clubs.map((c, i) => (
               <View key={`${c.club_id}-${i}`} style={[s.card, !c.include && { opacity: 0.5 }]}>
                 <View style={s.cardHead}>

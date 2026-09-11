@@ -124,7 +124,7 @@ export default function TeeGoalsScreen() {
         {/* Active goals */}
         {progress.length === 0 ? (
           <Text style={[styles.empty, { color: colors.text_muted }]}>
-            {t('tee_goals.tee_goals_screen.no_challenges_yet_build_one')}
+            {t('tee_goals.tee_goals_screen.no_challenges_yet_build')}
           </Text>
         ) : (
           progress.map((p) => (

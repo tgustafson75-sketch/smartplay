@@ -118,7 +118,7 @@ export default function CageReviewSummary() {
         {/* HEADER */}
         <View style={styles.header}>
           <Text style={styles.title}>{t('swing_review_summary.cage_review_summary.review_complete')}</Text>
-          <Text style={styles.subtitle}>{labeledCount} shot{labeledCount !== 1 ? 's' : ''} labeled</Text>
+          <Text style={styles.subtitle}>{t('swing_review_summary.cage_review_summary.shot_labeled', { count: labeledCount })}</Text>
         </View>
 
         {/* KEVIN VOCABULARY SUMMARY */}

@@ -669,9 +669,7 @@ export default function SwingLibrary() {
                       </Text>
                     </View>
                   </View>
-                  <Text style={[styles.rowMeta, { color: colors.text_muted }]} numberOfLines={1}>
-                    {dateStr} · {entry.swing_count} swing{entry.swing_count === 1 ? '' : 's'}
-                  </Text>
+                  <Text style={[styles.rowMeta, { color: colors.text_muted }]} numberOfLines={1}>{t('swinglab_library.text.swing', { count: entry.swing_count, date_str: dateStr })}</Text>
                   {(() => {
                     const status = fileStatus.get(entry.session.id);
                     if (status && !status.video) {

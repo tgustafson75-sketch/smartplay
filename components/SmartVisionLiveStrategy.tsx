@@ -76,16 +76,12 @@ export default function SmartVisionLiveStrategy({ onPress, alwaysShow = false }:
       <View style={styles.signalRow}>
         {ctx.geometry.hazards.length > 0 ? (
           <View style={[styles.signal, { borderColor: '#fbbf24' }]}>
-            <Text style={[styles.signalText, { color: '#fbbf24' }]} numberOfLines={1}>
-              ⚠ {ctx.geometry.hazards.length} hazard{ctx.geometry.hazards.length === 1 ? '' : 's'}
-            </Text>
+            <Text style={[styles.signalText, { color: '#fbbf24' }]} numberOfLines={1}>{t('smart_vision_live_strategy.text.hazard', { count: ctx.geometry.hazards.length })}</Text>
           </View>
         ) : null}
         {visionLive ? (
           <View style={[styles.signal, { borderColor: '#86efac' }]}>
-            <Text style={[styles.signalText, { color: '#86efac' }]} numberOfLines={1}>
-              👁 Glasses · {ctx.vision.mode.replace('_', ' ')}
-            </Text>
+            <Text style={[styles.signalText, { color: '#86efac' }]} numberOfLines={1}>{t('smart_vision_live_strategy.text.glasses', { value: ctx.vision.mode.replace('_', ' ') })}</Text>
           </View>
         ) : null}
         {last && (last.club || last.distanceYards != null) ? (
