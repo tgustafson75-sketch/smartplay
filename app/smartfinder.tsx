@@ -20,6 +20,7 @@ import { useRoundStore } from '../store/roundStore';
 import { useGreenReadStore } from '../store/greenReadStore';
 import { composeShotRead } from '../services/cnsShotRead';
 import { liveShotReadInputs } from '../services/shotReadLive';
+import { clubForYards } from '../services/cnsShotRead';
 import { getLearnedMissDirection } from '../services/effectiveMiss';
 import { getCourseHoleGuidance } from '../services/caddieMemoryRetrieval';
 import { bagDistances } from '../services/shotStrategy';
@@ -1098,20 +1099,31 @@ function CameraSmartFinder({
 // Bottom strip shows TO TARGET <yds> with Front / Middle / Back of green
 // distances. Replaces the old top-down flat-canvas TargetView.
 
-// SF fix #2 (owner Tim — "generic hardcoded club ladder, not the learned bag") —
-// this used to map distance→club via a fixed amateur ladder, ignoring the
-// player's real/edited bag. Route it through clubStatsStore.inferClub(), which
-// picks the closest club from the player's TRACKED carries → STATED My-Bag
-// carries → STANDARD_YARDS chart (in that precedence). Same learned-bag lookup
-// the brain read (composeShotRead/bagDistances) uses, so the plan lines and the
-// headline can't recommend from different yardage tables. The old hardcoded
-// ladder remains only as an unreachable safety fallback if the store throws.
+/**
+ * SF fix #2 (owner Tim — "generic hardcoded club ladder, not the learned bag") — this used to map
+ * distance→club via a fixed amateur ladder, ignoring the player's real bag.
+ *
+ * 2026-09-11 — AND THEN IT WAS STILL A SECOND OPINION.
+ *
+ * It routed through clubStatsStore.inferClub, and the note here claimed that meant "the plan lines
+ * and the headline can't recommend from different yardage tables". True of the TABLE — both read the
+ * learned bag — and false of the DECISION. inferClub picks the nearest carry and nothing else;
+ * composeShotRead picks through pickClub, which also weighs the risk posture, the room behind the
+ * pin, and how this player covers an in-between number.
+ *
+ * So this screen showed TWO clubs for ONE shot: the read bar's, and "Aggressive: {club} to {yards}y"
+ * from here. Now both come from the same chooser, fed by the same composed facts.
+ *
+ * inferClub is not replaced anywhere else — it answers a different question ("which club was this
+ * shot probably hit with"), which is what the scorecard needs. [[two-owners-is-the-root-cause]]
+ */
 function recommendClubForDistance(yards: number | null): string | null {
   if (yards == null || yards <= 0) return null;
   try {
-    return useClubStatsStore.getState().inferClub(yards);
+    const picked = clubForYards(yards, liveShotReadInputs({ rawYards: yards }));
+    if (picked) return picked;
   } catch {
-    // fall through to the generic chart only if the store is unavailable
+    // fall through to the generic chart only if the stores are unavailable
   }
   if (yards >= 240) return 'Driver';
   if (yards >= 215) return '3 Wood';
