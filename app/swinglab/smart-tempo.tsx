@@ -548,12 +548,8 @@ export default function SmartTempoScreen() {
               size={14}
               color={isPuttMode ? colors.accent_sky : colors.accent}
             />
-            <Text style={[styles.modeChipText, { color: colors.text_primary }]}>
-              {isPuttMode ? 'Putting tempo' : 'Full-swing tempo'}
-            </Text>
-            <Text style={[styles.modeChipTarget, { color: colors.text_muted }]}>
-              {isPuttMode ? 'target ~2:1 · smooth & even' : 'target 3:1'}
-            </Text>
+            <Text style={[styles.modeChipText, { color: colors.text_primary }]}>{isPuttMode ? t('swinglab_smart_tempo.smart_tempo_screen.putting_tempo') : t('swinglab_smart_tempo.smart_tempo_screen.full_swing_tempo')}</Text>
+            <Text style={[styles.modeChipTarget, { color: colors.text_muted }]}>{isPuttMode ? t('swinglab_smart_tempo.smart_tempo_screen.target_2_1_smooth_even') : t('swinglab_smart_tempo.smart_tempo_screen.target_3_1')}</Text>
           </View>
 
           {/* Player */}

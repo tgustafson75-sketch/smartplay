@@ -399,11 +399,7 @@ export default function SmartFinder() {
               ? 'Practice measure on. Tap to go back to the course.'
               : 'Point-to-point measure, no course selected'}
           >
-            <Text style={styles.offCourseNote}>
-              {geoCourseId
-                ? 'PRACTICE MEASURE · tap to use the course'
-                : 'POINT-TO-POINT MEASURE · no course selected'}
-            </Text>
+            <Text style={styles.offCourseNote}>{geoCourseId ? t('smartfinder.smart_finder.practice_measure_tap_to_use') : t('smartfinder.smart_finder.point_to_point_measure_no')}</Text>
           </TouchableOpacity>
         )}
         {!offCourse && (
@@ -837,9 +833,7 @@ function CameraSmartFinder({
               await requestCameraPermission();
             }}
           >
-            <Text style={styles.permBtnText}>
-              {cameraPermission && !cameraPermission.canAskAgain ? 'Open Settings' : 'Allow Camera'}
-            </Text>
+            <Text style={styles.permBtnText}>{cameraPermission && !cameraPermission.canAskAgain ? t('smartfinder.camera_smart_finder.open_settings') : t('smartfinder.camera_smart_finder.allow_camera')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.backLink} onPress={onClose}>
             <Text style={styles.backLinkText}>{t('smartfinder.camera_smart_finder.back')}</Text>
@@ -1854,9 +1848,7 @@ function TargetCameraOverlay({
                   so and name what it measured off. The number is only trustworthy because of that
                   reference, so hiding it would make a better read look like the same old guess. */}
               {heightRangeRef && (
-                <Text style={styles.targetIntelLine}>
-                  Ranged off {heightRangeRef === 'flagstick' ? 'the flagstick' : 'a person'} — no tilt needed
-                </Text>
+                <Text style={styles.targetIntelLine}>{heightRangeRef === 'flagstick' ? t('smartfinder.target_camera_overlay.ranged_off_the_flagstick_no') : t('smartfinder.target_camera_overlay.ranged_off_a_person_no')}</Text>
               )}
               {!!playsLike?.windText && <Text style={styles.targetIntelLine}>{t('smartfinder.target_camera_overlay.wind', { windText: playsLike.windText })}</Text>}
               {/* 2026-06-25 — Honest REAL-elevation line. Shown ONLY when we have a
@@ -1868,9 +1860,7 @@ function TargetCameraOverlay({
                 </Text>
               )}
               {landing && (
-                <Text style={styles.targetIntelLine}>
-                  Landing: carry {landing.carry}{landing.baseline ? ' est' : ''} · total {landing.total} · ±{dispersion.yards}y ({dispersion.band})
-                </Text>
+                <Text style={styles.targetIntelLine}>{landing.baseline ? t('smartfinder.target_camera_overlay.landing_carry_est_total_y', { carry: landing.carry, total: landing.total, yards: dispersion.yards, band: dispersion.band }) : t('smartfinder.target_camera_overlay.landing_carry_total_y', { carry: landing.carry, total: landing.total, yards: dispersion.yards, band: dispersion.band })}</Text>
               )}
               {hazardSummary?.nearest ? (
                 <Text style={styles.targetIntelLine}>

@@ -374,9 +374,7 @@ export default function LieAnalysisScreen() {
               await requestCameraPermission();
             }}
           >
-            <Text style={styles.permBtnText}>
-              {cameraPermission && !cameraPermission.canAskAgain ? 'Open Settings' : 'Allow Camera'}
-            </Text>
+            <Text style={styles.permBtnText}>{cameraPermission && !cameraPermission.canAskAgain ? t('lie_analysis.lie_analysis_screen.open_settings') : t('lie_analysis.lie_analysis_screen.allow_camera')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.permLink} onPress={() => Linking.openSettings()}>
             <Text style={styles.permLinkText}>{t('lie_analysis.lie_analysis_screen.open_settings')}</Text>
@@ -490,9 +488,7 @@ export default function LieAnalysisScreen() {
           <View style={[styles.openerOrb, isListening && styles.openerOrbListening]}>
             <Text style={styles.openerOrbGlyph}>{isListening ? '◉' : '◔'}</Text>
           </View>
-          <Text style={styles.openerHeadline}>
-            {isListening ? 'Listening…' : 'Setting up…'}
-          </Text>
+          <Text style={styles.openerHeadline}>{isListening ? t('lie_analysis.lie_analysis_screen.listening') : t('lie_analysis.lie_analysis_screen.setting_up')}</Text>
           <Text style={styles.openerSub}>
             {isListening
               ? `Tell ${getCaddieName(caddiePersonality)} what you're looking at — distance, the pin, what's between you and it.`
@@ -556,9 +552,7 @@ export default function LieAnalysisScreen() {
             accessibilityLabel={t('lie_analysis.accessibility_label.include_strategy_in_the_lie')}
           >
             <View style={[styles.strategyDot, includeStrategy && styles.strategyDotOn]} />
-            <Text style={[styles.strategyToggleText, includeStrategy && styles.strategyToggleTextOn]}>
-              {includeStrategy ? 'STRATEGY ON' : 'TACTICAL ONLY'}
-            </Text>
+            <Text style={[styles.strategyToggleText, includeStrategy && styles.strategyToggleTextOn]}>{includeStrategy ? t('lie_analysis.lie_analysis_screen.strategy_on') : t('lie_analysis.lie_analysis_screen.tactical_only')}</Text>
           </TouchableOpacity>
           {includeStrategy && (
             <Text style={styles.strategyHint}>

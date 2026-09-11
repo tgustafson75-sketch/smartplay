@@ -272,9 +272,7 @@ export default function FamilyRosterScreen() {
         <View style={[styles.modalScrim, { backgroundColor: 'rgba(0,0,0,0.7)' }]}>
           <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text_primary }]}>
-                {editingId ? 'Edit member' : 'Add member'}
-              </Text>
+              <Text style={[styles.modalTitle, { color: colors.text_primary }]}>{editingId ? t('family_roster.family_roster_screen.edit_member') : t('family_roster.family_roster_screen.add_member')}</Text>
               <Pressable onPress={() => setEditorOpen(false)} hitSlop={10}>
                 <Text style={[styles.modalClose, { color: colors.text_muted }]}>{t('family_roster.family_roster_screen.close')}</Text>
               </Pressable>
@@ -338,9 +336,7 @@ export default function FamilyRosterScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={t('family_roster.accessibility_label.add_or_change_profile_photo')}
                 >
-                  <Text style={{ color: colors.accent, fontWeight: '700', fontSize: 13 }}>
-                    {draft.avatar_photo_uri ? 'Change photo' : 'Add selfie / AI avatar'}
-                  </Text>
+                  <Text style={{ color: colors.accent, fontWeight: '700', fontSize: 13 }}>{draft.avatar_photo_uri ? t('family_roster.family_roster_screen.change_photo') : t('family_roster.family_roster_screen.add_selfie_ai_avatar')}</Text>
                 </Pressable>
               </View>
 
@@ -348,9 +344,7 @@ export default function FamilyRosterScreen() {
                 onPress={onSave}
                 style={[styles.primaryBtn, { backgroundColor: colors.accent, marginTop: 18 }]}
               >
-                <Text style={styles.primaryBtnText}>
-                  {editingId ? 'Save changes' : 'Add to family'}
-                </Text>
+                <Text style={styles.primaryBtnText}>{editingId ? t('family_roster.family_roster_screen.save_changes') : t('family_roster.family_roster_screen.add_to_family')}</Text>
               </Pressable>
               {editingId && (
                 <View style={styles.dangerRow}>

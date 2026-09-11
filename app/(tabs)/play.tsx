@@ -2328,9 +2328,7 @@ export default function PlayTab() {
                   accessibilityRole="button"
                   accessibilityLabel={setupBackNine ? 'Playing the back nine' : 'Playing the front nine'}
                 >
-                  <Text style={[styles.chipText, setupBackNine && styles.chipTextActive]}>
-                    {setupBackNine ? 'Back 9' : 'Front 9'}
-                  </Text>
+                  <Text style={[styles.chipText, setupBackNine && styles.chipTextActive]}>{setupBackNine ? t('play.play_tab.back_9') : t('play.play_tab.front_9')}</Text>
                 </TouchableOpacity>
               ) : null}
               <TouchableOpacity

@@ -907,9 +907,7 @@ export default function Settings() {
             placeholder={t('settings.placeholder.you_email_com')}
             placeholderTextColor="#374151"
           />
-          <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -8, marginBottom: 8 }]}>
-            Optional. {isOwnerEmail(editEmail) ? '✓ Owner Tools unlocked.' : 'Owner devices: enter your owner email to unlock Owner Tools.'}
-          </Text>
+          <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -8, marginBottom: 8 }]}>{isOwnerEmail(editEmail) ? t('settings.text.optional_owner_tools_unlocked') : t('settings.text.optional_owner_devices_enter_your')}</Text>
 
           <Text style={inputLblStyle}>{t('settings.text.goal')}</Text>
           <TextInput
@@ -1550,9 +1548,7 @@ export default function Settings() {
         <CollapsibleSection title={t('settings.title.devices_health')} icon="watch-outline">
           <View style={rowDivStyle}>
             <View style={styles.rowText}>
-              <Text style={labelStyle}>
-                {watchDeviceLabel()} swing capture{watchBridgeAvailable ? '' : ' · needs latest build'}
-              </Text>
+              <Text style={labelStyle}>{watchBridgeAvailable ? t('settings.text.swing_capture', { watch_device_label: watchDeviceLabel() }) : t('settings.text.swing_capture_needs_latest_build', { watch_device_label: watchDeviceLabel() })}</Text>
               <Text style={subStyle}>
                 {/* 2026-08-14 (Tim — "I could not find a spot to turn on catching swing metrics during a
                     live round with my watch"). This copy only ever mentioned Smart Motion, so there was
@@ -1604,11 +1600,7 @@ export default function Settings() {
           <View style={rowDivStyle}>
             <View style={styles.rowText}>
               <Text style={labelStyle}>{t('settings.text.watch_on_trail_arm')}</Text>
-              <Text style={subStyle}>
-                {watchWrist === 'trail'
-                  ? 'Trail wrist (your release side) — best for spotting casting / early release. Club speed is a rougher estimate from here.'
-                  : 'Lead wrist (default) — the steering side, cleaner club-speed read. Toggle on if you wear the watch on your trail arm to target release faults.'}
-              </Text>
+              <Text style={subStyle}>{watchWrist === 'trail' ? t('settings.text.trail_wrist_your_release_side') : t('settings.text.lead_wrist_default_the_steering')}</Text>
             </View>
             <Switch
               value={watchWrist === 'trail'}
@@ -2934,15 +2926,8 @@ function AiProviderRow({ colors }: { colors: ThemeColors }) {
     <View style={[styles.resetRow, { marginBottom: 8 }]}>
       <View style={{ flex: 1 }}>
         <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.ai_provider_row.ai_brain_provider')}</Text>
-        <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-          {isOpenAI
-            ? 'OpenAI (gpt-4o / gpt-4o-mini) — strong reasoning, single vendor.'
-            : 'Gemini 2.5 Flash — fastest vision path, Google Search grounding.'}
-          {'\n'}TTS and STT always use OpenAI regardless of this setting.
-        </Text>
-        <Text style={[styles.rowSub, { color: colors.accent, marginTop: 4 }]}>
-          Active: {isOpenAI ? 'OpenAI' : 'Gemini'}
-        </Text>
+        <Text style={[styles.rowSub, { color: colors.text_muted }]}>{isOpenAI ? t('settings.ai_provider_row.openai_gpt_4o_gpt_4o', { n: '\n' }) : t('settings.ai_provider_row.gemini_2_5_flash_fastest', { n: '\n' })}</Text>
+        <Text style={[styles.rowSub, { color: colors.accent, marginTop: 4 }]}>{isOpenAI ? t('settings.ai_provider_row.active_openai') : t('settings.ai_provider_row.active_gemini')}</Text>
       </View>
       <Switch
         value={isOpenAI}

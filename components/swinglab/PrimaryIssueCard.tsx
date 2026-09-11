@@ -114,10 +114,7 @@ export default function PrimaryIssueCard({ issue, totalShots }: Props) {
         <Text style={styles.categoryIcon}>{CATEGORY_ICON[issue.category]}</Text>
         <View style={styles.titleCol}>
           <Text style={styles.title}>{issue.name}</Text>
-          <Text style={styles.occurrence}>
-            Detected in {issue.occurrence_count} of {totalShots} swings
-            {isTentative ? ' · tentative' : ''}
-          </Text>
+          <Text style={styles.occurrence}>{isTentative ? t('swinglab_primary_issue_card.primary_issue_card.detected_in_of_swings_tentative', { occurrence_count: issue.occurrence_count, total_shots: totalShots }) : t('swinglab_primary_issue_card.primary_issue_card.detected_in_of_swings', { occurrence_count: issue.occurrence_count, total_shots: totalShots })}</Text>
         </View>
         <View style={[styles.severityChip, { borderColor: SEVERITY_COLOR[issue.severity] }]}>
           <Text style={[styles.severityText, { color: SEVERITY_COLOR[issue.severity] }]}>
@@ -141,9 +138,7 @@ export default function PrimaryIssueCard({ issue, totalShots }: Props) {
             color="#7dd3a8"
             style={{ marginRight: 5 }}
           />
-          <Text style={styles.explainToggleText}>
-            {explainOpen ? 'Hide explanation' : 'What does this mean?'}
-          </Text>
+          <Text style={styles.explainToggleText}>{explainOpen ? t('swinglab_primary_issue_card.primary_issue_card.hide_explanation') : t('swinglab_primary_issue_card.primary_issue_card.what_does_this_mean')}</Text>
           <Ionicons
             name={explainOpen ? 'chevron-up' : 'chevron-down'}
             size={13}

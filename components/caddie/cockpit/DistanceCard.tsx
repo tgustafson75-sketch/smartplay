@@ -103,9 +103,7 @@ export function DistanceCard({
         </Text>
         {isScorecardFallback || isEstimated ? (
           <View style={[styles.scorecardPill, { borderColor: colors.text_muted }]}>
-            <Text style={[styles.scorecardPillText, { color: colors.text_muted }]}>
-              {isScorecardFallback ? 'SCORECARD' : 'EST'}
-            </Text>
+            <Text style={[styles.scorecardPillText, { color: colors.text_muted }]}>{isScorecardFallback ? t('cockpit_distance_card.distance_card.scorecard') : t('cockpit_distance_card.distance_card.est')}</Text>
           </View>
         ) : null}
         <View style={[styles.gpsBadge, { borderColor: colors.accent }]}>

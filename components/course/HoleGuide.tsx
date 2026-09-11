@@ -130,9 +130,7 @@ export default function HoleGuide({ holes, notesLoading }: Props) {
                   {h.note ?? (notesLoading ? 'loading…' : '—')}
                 </Text>
                 {hasDescription && (
-                  <Text style={[styles.descToggleHint, { color: colors.accent }]}>
-                    {isOpen ? 'Hide ▲' : 'Tap for preview ▼'}
-                  </Text>
+                  <Text style={[styles.descToggleHint, { color: colors.accent }]}>{isOpen ? t('course_hole_guide.text.hide') : t('course_hole_guide.text.tap_for_preview')}</Text>
                 )}
               </View>
             </Pressable>

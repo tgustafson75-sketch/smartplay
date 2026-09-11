@@ -134,9 +134,7 @@ export default function KevinLearningScreen() {
                       <Text style={[styles.phrase, { color: colors.text_primary }, isFold && { fontSize: 14 }]} numberOfLines={2}>
                         &quot;{entry.phrase}&quot;
                       </Text>
-                      <Text style={[styles.meaning, { color: colors.text_muted }]} numberOfLines={1}>
-                        {summary}{entry.was_corrected ? ' · corrected' : ''} · said {entry.count}×
-                      </Text>
+                      <Text style={[styles.meaning, { color: colors.text_muted }]} numberOfLines={1}>{entry.was_corrected ? t('kevin_learning.text.corrected_said', { summary, count: entry.count }) : t('kevin_learning.text.said', { summary, count: entry.count })}</Text>
                     </View>
                     <TouchableOpacity
                       onPress={() => handleForget(entry.phrase)}

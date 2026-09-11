@@ -116,9 +116,7 @@ export default function PracticeSessionDetail() {
         {/* Drill / no-sample sessions: keep it honest — show what we have. */}
         {!summary ? (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.insight, { color: colors.text_muted }]}>
-              {session.drillId ? 'Single-focus drill — reps logged toward your practice points.' : 'Session logged.'}
-            </Text>
+            <Text style={[styles.insight, { color: colors.text_muted }]}>{session.drillId ? t('practice.practice_session_detail.single_focus_drill_reps_logged') : t('practice.practice_session_detail.session_logged')}</Text>
           </View>
         ) : null}
       </ScrollView>

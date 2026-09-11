@@ -654,7 +654,7 @@ export default function RecapScreen() {
         </View>
         <View style={styles.emptyState}>
           <Text style={styles.emptyTitle}>{timedOut ? 'Recap is taking longer than usual' : 'Recap not ready yet'}</Text>
-          <Text style={styles.emptyText}>Your round data is saved{timedOut ? ' — tap Try again, or it’ll be ready next time you open the app.' : '. The recap will be available the next time you open the app.'}</Text>
+          <Text style={styles.emptyText}>{timedOut ? t('recap.recap_screen.your_round_data_is_saved') : t('recap.recap_screen.your_round_data_is_saved_2')}</Text>
           {timedOut ? (
             <TouchableOpacity
               style={styles.emptyBtn}
@@ -897,9 +897,7 @@ export default function RecapScreen() {
                     accessibilityState={{ busy: narrating }}
                     hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                   >
-                    <Text style={[styles.playBtnText, narrating && styles.playBtnTextActive]}>
-                      {narrating ? '■ Stop' : '◈ Walk me through it'}
-                    </Text>
+                    <Text style={[styles.playBtnText, narrating && styles.playBtnTextActive]}>{narrating ? t('recap.recap_screen.stop') : t('recap.recap_screen.walk_me_through_it')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -910,9 +908,7 @@ export default function RecapScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={t('recap.accessibility_label.share_this_round_as_an')}
               >
-                <Text style={styles.shareBtnText}>
-                  {sharing ? 'Generating...' : '↑ Share this round'}
-                </Text>
+                <Text style={styles.shareBtnText}>{sharing ? t('recap.recap_screen.generating') : t('recap.recap_screen.share_this_round')}</Text>
               </TouchableOpacity>
               {/* PGA HOPE follow-up (B4) — pros asked for a PDF artifact
                   for the player's HOPE file. Same card, printable. */}
@@ -923,9 +919,7 @@ export default function RecapScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={t('recap.accessibility_label.save_this_round_as_a')}
               >
-                <Text style={styles.shareBtnText}>
-                  {sharing ? 'Generating...' : '⤓ Save as PDF'}
-                </Text>
+                <Text style={styles.shareBtnText}>{sharing ? t('recap.recap_screen.generating') : t('recap.recap_screen.save_as_pdf')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -1016,9 +1010,7 @@ export default function RecapScreen() {
               </>
             )}
 
-            <Text style={styles.holesHeader}>
-              {ghost ? 'GHOST  ·  YOURS  ·  DELTA' : 'HOLE BY HOLE'}
-            </Text>
+            <Text style={styles.holesHeader}>{ghost ? t('recap.recap_screen.ghost_yours_delta') : t('recap.recap_screen.hole_by_hole')}</Text>
           </View>
         }
         renderItem={({ item, index }) => (

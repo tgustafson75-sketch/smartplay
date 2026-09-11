@@ -148,9 +148,7 @@ export default function BilateralReview() {
     const wins = positives(r);
     return (
       <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <Text style={[styles.angleLabel, { color: colors.accent }]}>
-          {r.angle === 'down_the_line' ? 'DOWN THE LINE' : 'FACE-ON'}
-        </Text>
+        <Text style={[styles.angleLabel, { color: colors.accent }]}>{r.angle === 'down_the_line' ? t('swinglab_bilateral.angle_card.down_the_line') : t('swinglab_bilateral.angle_card.face_on')}</Text>
         <Text style={[styles.sub, { color: colors.text_muted }]}>{t('swinglab_bilateral.angle_card.reads', { label: r.label, reads: r.reads })}</Text>
         {wins.length > 0 ? (
           <View style={styles.winBlock}>

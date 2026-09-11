@@ -628,9 +628,7 @@ export default function CustomCaddieScreen() {
                 {busy === 'generate' ? (
                   <ActivityIndicator color="#04140c" />
                 ) : (
-                  <Text style={styles.actionBtnText}>
-                    {customCaddiePortraitB64 ? 'Regenerate' : 'Generate Caddie'}
-                  </Text>
+                  <Text style={styles.actionBtnText}>{customCaddiePortraitB64 ? t('profile_custom_caddie.custom_caddie_screen.regenerate') : t('profile_custom_caddie.custom_caddie_screen.generate_caddie')}</Text>
                 )}
               </TouchableOpacity>
               {customCaddiePortraitB64 && (
@@ -689,11 +687,7 @@ export default function CustomCaddieScreen() {
           <View style={styles.toggleRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.rowLabel}>{isCustomActive ? `${customCaddieName ?? 'My Caddie'} is your caddie` : 'Use this caddie'}</Text>
-              <Text style={styles.rowSub}>
-                {isCustomActive
-                  ? 'Active across the app — voice, portrait, and name.'
-                  : 'Apply your voice, portrait, and name as the active caddie everywhere.'}
-              </Text>
+              <Text style={styles.rowSub}>{isCustomActive ? t('profile_custom_caddie.custom_caddie_screen.active_across_the_app_voice') : t('profile_custom_caddie.custom_caddie_screen.apply_your_voice_portrait_and')}</Text>
             </View>
           </View>
           <TouchableOpacity
@@ -730,9 +724,7 @@ export default function CustomCaddieScreen() {
               accessibilityLabel={isProfilePic ? 'Remove as profile picture' : 'Use as dashboard profile picture'}
             >
               <Ionicons name={isProfilePic ? 'checkmark-circle' : 'person-outline'} size={16} color="#00C896" />
-              <Text style={styles.profilePicBtnText}>
-                {isProfilePic ? 'Your profile picture — tap to remove' : 'Use as profile picture (dashboard icon)'}
-              </Text>
+              <Text style={styles.profilePicBtnText}>{isProfilePic ? t('profile_custom_caddie.custom_caddie_screen.your_profile_picture_tap_to') : t('profile_custom_caddie.custom_caddie_screen.use_as_profile_picture_dashboard')}</Text>
             </TouchableOpacity>
           ) : null}
 

@@ -288,11 +288,7 @@ export default function YouTubeReferenceModal({ visible, onClose, defaultClub = 
               {saving ? (
                 <ActivityIndicator color="#0a1410" />
               ) : (
-                <Text style={[styles.primaryBtnText, { color: canAdd ? '#0a1410' : colors.text_muted }]}>
-                  {preview?.kind === 'ok' && preview.alreadyExists
-                    ? 'Already in your library'
-                    : 'Add reference swing'}
-                </Text>
+                <Text style={[styles.primaryBtnText, { color: canAdd ? '#0a1410' : colors.text_muted }]}>{preview?.kind === 'ok' && preview.alreadyExists ? t('swinglab_you_tube_reference_modal.you_tube_reference_modal.already_in_your_library') : t('swinglab_you_tube_reference_modal.you_tube_reference_modal.add_reference_swing')}</Text>
               )}
             </Pressable>
 

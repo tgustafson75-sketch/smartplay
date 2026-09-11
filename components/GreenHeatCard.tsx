@@ -55,9 +55,7 @@ export function GreenHeatCard({ scope = 'career', style }: GreenHeatCardProps) {
     <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.border }, style]}>
       <View style={styles.headerRow}>
         <Text style={[styles.title, { color: c.text_primary }]}>{t('green_heat_card.text.green_heat')}</Text>
-        <Text style={[styles.titleSub, { color: c.text_muted }]}>
-          {scope === 'round' ? 'this round' : 'putting map'}
-        </Text>
+        <Text style={[styles.titleSub, { color: c.text_muted }]}>{scope === 'round' ? t('green_heat_card.text.this_round') : t('green_heat_card.text.putting_map')}</Text>
       </View>
 
       {!model.ready ? (

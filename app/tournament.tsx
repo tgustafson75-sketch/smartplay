@@ -282,7 +282,7 @@ function ScoringPanel() {
           <Ionicons name="chevron-forward" size={22} color={hole >= 18 ? '#3a5a40' : '#00C896'} />
         </TouchableOpacity>
       </View>
-      <Text style={styles.scoringFormat}>{FORMAT_LABEL[state.format]}{indiv ? ' · per-player entry' : ' · per-team entry'}</Text>
+      <Text style={styles.scoringFormat}>{indiv ? t('tournament.scoring_panel.per_player_entry', { format: FORMAT_LABEL[state.format] }) : t('tournament.scoring_panel.per_team_entry', { format: FORMAT_LABEL[state.format] })}</Text>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 80 }} keyboardShouldPersistTaps="handled">
         {state.teams.map(team => (

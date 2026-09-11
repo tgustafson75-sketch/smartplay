@@ -175,11 +175,7 @@ export default function TutorialDetail() {
           <Text style={[styles.body, { color: colors.text_primary, marginTop: 6 }]}>
             {tutorial.extraction_confidence}
           </Text>
-          <Text style={[styles.subText, { color: colors.text_muted, marginTop: 4 }]}>
-            {tutorial.extraction_confidence === 'low'
-              ? 'Adding more notes — what the coach said, swing thoughts, target clubs — will improve future re-extractions.'
-              : 'The teaching summary above was extracted from your notes by Sonnet vision.'}
-          </Text>
+          <Text style={[styles.subText, { color: colors.text_muted, marginTop: 4 }]}>{tutorial.extraction_confidence === 'low' ? t('swinglab_tutorial.tutorial_detail.adding_more_notes_what_the') : t('swinglab_tutorial.tutorial_detail.the_teaching_summary_above_was')}</Text>
         </View>
 
         <TouchableOpacity

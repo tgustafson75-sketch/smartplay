@@ -192,6 +192,7 @@ export interface MetricSpec {
 }
 
 export function MetricCard({ spec, style }: { spec: MetricSpec; style?: StyleProp<ViewStyle> }) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   return (
     <View style={[styles.metricCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }, style]}>
@@ -199,9 +200,7 @@ export function MetricCard({ spec, style }: { spec: MetricSpec; style?: StylePro
         {spec.icon ? <Ionicons name={spec.icon} size={14} color={colors.text_muted} /> : null}
         <Text style={[styles.metricLabel, { color: colors.text_muted }]} numberOfLines={1}>{spec.label}</Text>
         {spec.estimate ? (
-          <Text style={[styles.estChip, { color: colors.text_muted, borderColor: colors.border }]}>
-            {spec.confidence === 'low' ? 'est · low' : 'est'}
-          </Text>
+          <Text style={[styles.estChip, { color: colors.text_muted, borderColor: colors.border }]}>{spec.confidence === 'low' ? t('smartmotion_smart_motion_hud.metric_card.est_low') : t('smartmotion_smart_motion_hud.metric_card.est')}</Text>
         ) : null}
       </View>
       <View style={styles.metricValueRow}>

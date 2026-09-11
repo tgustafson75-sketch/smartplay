@@ -91,7 +91,7 @@ describe('SmartFinder actually calls it', () => {
 
   it('tells the user what it ranged off, and clears that on a new tap', () => {
     // An unexplained better number reads like the same old guess; a stale label is worse.
-    expect(sf).toContain('Ranged off {heightRangeRef ===');
+    expect(sf).toContain("heightRangeRef === 'flagstick' ? t('smartfinder.target_camera_overlay.ranged_off_the_flagstick_no')");
     expect(sf).toContain('setHeightRangeRef(null); // a new tap is a fresh tilt read until a scan says otherwise');
   });
 });

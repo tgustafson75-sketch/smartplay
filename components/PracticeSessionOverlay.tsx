@@ -784,9 +784,7 @@ export default function PracticeSessionOverlay({ onComplete, onCancel, drill }: 
           activeOpacity={0.8}
         >
           <Ionicons name={isEnding ? 'hourglass-outline' : 'stop-circle-outline'} size={18} color="#fca5a5" />
-          <Text style={styles.endBtnText}>
-            {isEnding ? 'Saving…' : 'End Session'}
-          </Text>
+          <Text style={styles.endBtnText}>{isEnding ? t('practice_session_overlay.text.saving') : t('practice_session_overlay.text.end_session')}</Text>
         </TouchableOpacity>
       </View>
 

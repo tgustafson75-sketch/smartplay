@@ -5736,11 +5736,7 @@ export default function SmartMotion() {
            */
           <View style={[styles.shotShapeCard, { bottom: insets.bottom + 150 }]} pointerEvents="none">
             <Text style={styles.shotShapeTitle}>{shotShapeDef.name.toUpperCase()}</Text>
-            <Text style={styles.shotShapeFeedback}>
-              {ballArea
-                ? "Couldn't read the ball leaving on this one — the shape check needs a clean launch in frame."
-                : 'Mark the ball before you swing and I can compare what you went for with what actually launched.'}
-            </Text>
+            <Text style={styles.shotShapeFeedback}>{ballArea ? t('swinglab_smartmotion.smart_motion.couldn_t_read_the_ball') : t('swinglab_smartmotion.smart_motion.mark_the_ball_before_you')}</Text>
           </View>
         ) : null}
 
@@ -6222,7 +6218,7 @@ export default function SmartMotion() {
         puttAnalysis ? (
           <>
             <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.accent }]}>
-              <Text style={[styles.insightLabel, { color: colors.accent }]}>PUTT READ{puttAnalysis.partialCapture ? ' · est' : ''}</Text>
+              <Text style={[styles.insightLabel, { color: colors.accent }]}>{puttAnalysis.partialCapture ? t('swinglab_smartmotion.smart_motion.putt_read_est') : t('swinglab_smartmotion.smart_motion.putt_read')}</Text>
               <Text style={[styles.insightText, { color: colors.text_primary }]}>{puttAnalysis.caddieComment}</Text>
             </View>
             <View style={[styles.insightCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
@@ -6283,11 +6279,7 @@ export default function SmartMotion() {
                 dead network is their problem to fix (move, reconnect), a slow server is ours.
               */}
               {locateDegraded ? (
-                <Text style={[styles.insightConf, { color: colors.accent_amber }]}>
-                  {locateDegraded === 'dead_host'
-                    ? 'Rough read — no connection while analysing, so I could not pin the swing in the clip. Re-analyse on signal for a sharper one.'
-                    : 'Rough read — I could not pin the swing in the clip this time. Re-analyse for a sharper one.'}
-                </Text>
+                <Text style={[styles.insightConf, { color: colors.accent_amber }]}>{locateDegraded === 'dead_host' ? t('swinglab_smartmotion.smart_motion.rough_read_no_connection_while') : t('swinglab_smartmotion.smart_motion.rough_read_i_could_not')}</Text>
               ) : null}
             </View>
           ) : null}

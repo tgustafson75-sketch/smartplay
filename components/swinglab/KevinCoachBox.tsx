@@ -62,9 +62,7 @@ export default function KevinCoachBox({
       >
         <Image source={KEVIN_BADGE} style={styles.avatar} resizeMode="contain" />
         <View style={styles.textCol}>
-          <Text style={[styles.label, { color: accentColor }]}>
-            {accent === 'psychologist' ? 'KEVIN' : 'COACH KEVIN'}
-          </Text>
+          <Text style={[styles.label, { color: accentColor }]}>{accent === 'psychologist' ? t('swinglab_kevin_coach_box.kevin_coach_box.kevin') : t('swinglab_kevin_coach_box.kevin_coach_box.coach_kevin')}</Text>
           <Text style={styles.body}>{body}</Text>
         </View>
       </TouchableOpacity>

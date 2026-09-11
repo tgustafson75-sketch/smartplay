@@ -221,11 +221,7 @@ export default function IndoorHotelModeScreen() {
           <View style={s.holdCard}>
             <Ionicons name="phone-portrait-outline" size={40} color={NEON} />
             <Text style={s.holdTitle}>{mode === 'swing' ? 'Grip the phone like a club' : 'Lay the phone in your lead palm'}</Text>
-            <Text style={s.holdText}>
-              {mode === 'swing'
-                ? 'Both hands, screen facing out, arms relaxed. Take real-speed practice swings — I\'ll read every one.'
-                : 'Grip it lightly like a putter and make real strokes. I\'ll read the rhythm and whether you accelerate through.'}
-            </Text>
+            <Text style={s.holdText}>{mode === 'swing' ? t('swinglab_indoor.indoor_hotel_mode_screen.both_hands_screen_facing_out') : t('swinglab_indoor.indoor_hotel_mode_screen.grip_it_lightly_like_a')}</Text>
           </View>
           <TouchableOpacity style={s.startBtn} onPress={start} accessibilityRole="button" accessibilityLabel={t('swinglab_indoor.accessibility_label.start')}>
             <Text style={s.startBtnText}>{t('swinglab_indoor.indoor_hotel_mode_screen.start')}</Text>

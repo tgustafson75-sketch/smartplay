@@ -95,8 +95,8 @@ describe('SmartFinder measures during practice', () => {
 
   it('the hole navigator stands down, and the player is told why', () => {
     expect(screen).toMatch(/\{!offCourse && \(\n\s*<View style=\{styles\.holeNav\}>/);
-    expect(screen).toMatch(/PRACTICE MEASURE/);
-    expect(screen).toMatch(/POINT-TO-POINT MEASURE/);
+    expect(screen).toMatch(/practice_measure/);
+    expect(screen).toMatch(/point_to_point_measure/);
   });
 
   it('it can be turned back off — a one-way door would be a trap', () => {

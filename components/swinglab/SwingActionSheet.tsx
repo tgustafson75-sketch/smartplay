@@ -244,9 +244,7 @@ export default function SwingActionSheet({
 
               {mode === 'note' && (
                 <View>
-                  <Text style={[styles.title, { color: colors.text_primary }]}>
-                    {shot.userNotes ? 'Edit note' : 'Add note'}
-                  </Text>
+                  <Text style={[styles.title, { color: colors.text_primary }]}>{shot.userNotes ? t('swinglab_swing_action_sheet.swing_action_sheet.edit_note') : t('swinglab_swing_action_sheet.swing_action_sheet.add_note')}</Text>
                   <TextInput
                     value={noteDraft}
                     onChangeText={setNoteDraft}

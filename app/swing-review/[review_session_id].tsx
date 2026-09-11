@@ -455,9 +455,7 @@ export default function CageReviewInterview() {
         {(screenState === 'transcribing' || screenState === 'extracting') && (
           <View style={styles.thinkingRow}>
             <ActivityIndicator color="#00C896" size="small" />
-            <Text style={styles.thinkingText}>
-              {screenState === 'transcribing' ? 'Transcribing…' : 'Labeling shot…'}
-            </Text>
+            <Text style={styles.thinkingText}>{screenState === 'transcribing' ? t('swing_review.cage_review_interview.transcribing') : t('swing_review.cage_review_interview.labeling_shot')}</Text>
           </View>
         )}
       </View>

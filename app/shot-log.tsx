@@ -48,11 +48,7 @@ export default function ShotLogScreen() {
         <View style={styles.empty}>
           <Ionicons name="golf-outline" size={40} color={colors.text_muted} />
           <Text style={[styles.emptyTitle, { color: colors.text_primary }]}>{t('shot_log.shot_log_screen.no_shots_logged_yet')}</Text>
-          <Text style={[styles.emptyBody, { color: colors.text_muted }]}>
-            {isRoundActive
-              ? 'Say "log this shot — 7 iron, 165, straight" to capture one. Shots land here as you go.'
-              : 'Start a round from the Play tab and log shots by voice or scorecard.'}
-          </Text>
+          <Text style={[styles.emptyBody, { color: colors.text_muted }]}>{isRoundActive ? t('shot_log.shot_log_screen.say_log_this_shot_7') : t('shot_log.shot_log_screen.start_a_round_from_the')}</Text>
         </View>
       ) : (
         <ShotTimeline maxRows={100} />

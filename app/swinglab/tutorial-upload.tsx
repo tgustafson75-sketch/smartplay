@@ -197,9 +197,7 @@ export default function TutorialUpload() {
                 {t('swinglab_tutorial_upload.tutorial_upload.attach_the_source_video_if')}
               </Text>
               <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: videoUri ? colors.surface_elevated : colors.accent }]} onPress={onPickVideo}>
-                <Text style={[styles.primaryBtnText, videoUri ? { color: colors.accent } : null]}>
-                  {videoUri ? '✓ Video attached — tap to change' : 'Attach Video (optional)'}
-                </Text>
+                <Text style={[styles.primaryBtnText, videoUri ? { color: colors.accent } : null]}>{videoUri ? t('swinglab_tutorial_upload.tutorial_upload.video_attached_tap_to_change') : t('swinglab_tutorial_upload.tutorial_upload.attach_video_optional')}</Text>
               </TouchableOpacity>
             </View>
 

@@ -4159,9 +4159,7 @@ export default function CaddieTab() {
                 onPress={handleStartRound}
                 disabled={!selectedPickedCourse}
               >
-                <Text style={styles.startBtnText}>
-                  {selectedPickedCourse ? 'Start Round' : 'Select a course to start'}
-                </Text>
+                <Text style={styles.startBtnText}>{selectedPickedCourse ? t('caddie.caddie_tab.start_round') : t('caddie.caddie_tab.select_a_course_to_start')}</Text>
               </TouchableOpacity>
             </View>
             </ScrollView>

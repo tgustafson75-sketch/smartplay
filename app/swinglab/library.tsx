@@ -461,9 +461,7 @@ export default function SwingLibrary() {
               { color: colors.text_muted },
               (showAdvancedFilters || advancedFiltersActive) && { color: colors.accent, fontWeight: '800' },
             ]}
-          >
-            Filters{advancedFiltersActive ? ' •' : ''}
-          </Text>
+          >{advancedFiltersActive ? t('swinglab_library.swing_library.filters') : t('swinglab_library.swing_library.filters_2')}</Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -576,14 +574,8 @@ export default function SwingLibrary() {
               color={colors.text_muted}
             />
           </View>
-          <Text style={[styles.emptyTitle, { color: colors.text_primary }]}>
-            {filtersActive ? 'No swings match' : 'No swings yet'}
-          </Text>
-          <Text style={[styles.emptyBody, { color: colors.text_muted }]}>
-            {filtersActive
-              ? 'Try clearing filters or widening the time range.'
-              : 'Record one in SmartMotion or upload a video to start building your library.'}
-          </Text>
+          <Text style={[styles.emptyTitle, { color: colors.text_primary }]}>{filtersActive ? t('swinglab_library.swing_library.no_swings_match') : t('swinglab_library.swing_library.no_swings_yet')}</Text>
+          <Text style={[styles.emptyBody, { color: colors.text_muted }]}>{filtersActive ? t('swinglab_library.swing_library.try_clearing_filters_or_widening') : t('swinglab_library.swing_library.record_one_in_smartmotion_or')}</Text>
           {filtersActive ? (
             <TouchableOpacity
               style={[styles.cta, { backgroundColor: colors.accent }]}
@@ -664,9 +656,7 @@ export default function SwingLibrary() {
                       <Text style={[
                         styles.sourceText,
                         { color: isUpload ? colors.accent : colors.text_muted },
-                      ]}>
-                        {isUpload ? 'UPLOAD' : 'CAGE'}
-                      </Text>
+                      ]}>{isUpload ? t('swinglab_library.text.upload') : t('swinglab_library.text.cage')}</Text>
                     </View>
                   </View>
                   <Text style={[styles.rowMeta, { color: colors.text_muted }]} numberOfLines={1}>{t('swinglab_library.text.swing', { count: entry.swing_count, date_str: dateStr })}</Text>

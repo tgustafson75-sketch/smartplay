@@ -240,11 +240,7 @@ export default function ComparisonResultSheet({
             {/* Per-metric side-by-side bars */}
             <Text style={[styles.sectionLabel, { color: colors.text_muted }]}>{t('swinglab_comparison_result_sheet.comparison_result_sheet.side_by_side')}</Text>
             {renderableMetrics.length === 0 ? (
-              <Text style={[styles.emptyHint, { color: colors.text_muted }]}>
-                {hasMatch
-                  ? 'Not enough biomechanics to compare metric-by-metric. The match score above is based on what data was available.'
-                  : 'Not enough biomechanics captured to compare against this reference. Record a clearer swing — full body in frame — and try again.'}
-              </Text>
+              <Text style={[styles.emptyHint, { color: colors.text_muted }]}>{hasMatch ? t('swinglab_comparison_result_sheet.comparison_result_sheet.not_enough_biomechanics_to_compare') : t('swinglab_comparison_result_sheet.comparison_result_sheet.not_enough_biomechanics_captured_to')}</Text>
             ) : (
               renderableMetrics.map((m) => (
                 <MetricBar

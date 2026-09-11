@@ -198,9 +198,7 @@ export default function DrillVideo() {
               accessibilityLabel={t('drill_video.accessibility_label.try_this_drill_in_smart')}
             >
               <Ionicons name="videocam-outline" size={18} color={finished ? '#06140b' : '#88F700'} />
-              <Text style={[styles.tryBtnText, { color: finished ? '#06140b' : '#88F700' }]}>
-                {finished ? 'Try this drill now' : 'Try this drill in Smart Motion'}
-              </Text>
+              <Text style={[styles.tryBtnText, { color: finished ? '#06140b' : '#88F700' }]}>{finished ? t('drill_video.text.try_this_drill_now') : t('drill_video.text.try_this_drill_in_smart')}</Text>
             </TouchableOpacity>
           ) : null}
         </View>

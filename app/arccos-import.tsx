@@ -145,9 +145,7 @@ export default function ArccosImportScreen() {
             {applied ? (
               <View style={[styles.successCard, { backgroundColor: colors.surface, borderColor: '#3FB950' }]}>
                 <Ionicons name="checkmark-circle" size={18} color="#3FB950" />
-                <Text style={[styles.successText, { color: colors.text_primary }]}>
-                  Added to your bag. Your Fit Profile and the Caddie now use these {unit === 'carry' ? 'carries' : 'distances'}.
-                </Text>
+                <Text style={[styles.successText, { color: colors.text_primary }]}>{unit === 'carry' ? t('arccos_import.arccos_import_screen.added_to_your_bag_your') : t('arccos_import.arccos_import_screen.added_to_your_bag_your_2')}</Text>
               </View>
             ) : (
               <Text style={[styles.body, { color: colors.text_muted, marginTop: 4 }]}>
@@ -174,11 +172,7 @@ export default function ArccosImportScreen() {
                 ))}
               </View>
             </View>
-            <Text style={[styles.unitHint, { color: colors.text_muted }]}>
-              {unit === 'total'
-                ? 'Tee-to-rest, includes roll (Arccos default). We derive your carry from it.'
-                : 'Airtime carry — stored as your stated My Bag carry.'}
-            </Text>
+            <Text style={[styles.unitHint, { color: colors.text_muted }]}>{unit === 'total' ? t('arccos_import.arccos_import_screen.tee_to_rest_includes_roll') : t('arccos_import.arccos_import_screen.airtime_carry_stored_as_your')}</Text>
 
             <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, paddingVertical: 4 }]}>
               {rows.map((r) => (

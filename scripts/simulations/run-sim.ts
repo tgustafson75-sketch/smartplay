@@ -5072,7 +5072,7 @@ check('Custom caddie portrait can be just the dashboard icon (separate from the 
       /profilePortraitB64: string \| null/.test(store) && /setProfilePortraitB64:/.test(store) &&
       /profilePortraitB64 \?/.test(dash) && /avatarImg/.test(dash) &&
       /setProfilePortraitB64\(isProfilePic \? null : portraitForPic\)/.test(cc) &&
-      /Use as profile picture/.test(cc)
+      saysToPlayer(cc, 'Use as profile picture')
     );
   })(),
   'a portrait can be the dashboard icon without activating the custom caddie persona/voice');
@@ -11840,7 +11840,7 @@ check('LOCK: a read built on a failed locate is FLAGGED, never presented as a cl
     const reports = /onAbort\?\.\(abortCause \?\? 'unknown'\)/.test(pose);
     const carries = /locate_degraded: locateDegraded/.test(pose);
     const captured = /setLocateDegraded\(result\.locate_degraded \?\? null\)/.test(screen);
-    const rendered = /locateDegraded \?/.test(screen) && /Rough read/.test(screen);
+    const rendered = /locateDegraded \?/.test(screen) && saysToPlayer(screen, 'Rough read');
     const cleared = /setLocateDegraded\(null\)/.test(screen);
     return reports && carries && captured && rendered && cleared;
   })(),

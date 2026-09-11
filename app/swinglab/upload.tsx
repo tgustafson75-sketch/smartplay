@@ -401,11 +401,7 @@ export default function UploadSwing() {
                   ]}>{t('swinglab_upload.upload_swing.someone_else')}</Text>
                 </TouchableOpacity>
               </View>
-              <Text style={[styles.helperText, { color: colors.text_muted }]}>
-                {perspective === 'pov_self'
-                  ? 'Looking down at your own setup — routes to grip / putting analysis.'
-                  : 'Watching another golfer swing — routes to full swing fault analysis.'}
-              </Text>
+              <Text style={[styles.helperText, { color: colors.text_muted }]}>{perspective === 'pov_self' ? t('swinglab_upload.upload_swing.looking_down_at_your_own') : t('swinglab_upload.upload_swing.watching_another_golfer_swing_routes')}</Text>
             </View>
 
             {/* 2026-06-14 (Tim — second video source) — camera ANGLE for this clip.
@@ -443,11 +439,7 @@ export default function UploadSwing() {
                   ]}>Face-on</Text>
                 </TouchableOpacity>
               </View>
-              <Text style={[styles.helperText, { color: colors.text_muted }]}>
-                {angle === 'down_the_line'
-                  ? 'Behind you, looking down the target line — reads path / plane / early extension.'
-                  : 'Facing you — reads weight shift / hip rotation / sway. Use this for an iPad/GoPro face-on clip.'}
-              </Text>
+              <Text style={[styles.helperText, { color: colors.text_muted }]}>{angle === 'down_the_line' ? t('swinglab_upload.upload_swing.behind_you_looking_down_the') : t('swinglab_upload.upload_swing.facing_you_reads_weight_shift')}</Text>
             </View>
 
             {/* 2026-05-22 — Capture device. Meta Ray-Ban POV video routes

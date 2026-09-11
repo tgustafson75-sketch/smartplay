@@ -138,6 +138,6 @@ describe('a back nine can be started from the Play tab', () => {
   it('the chip only appears when a nine-hole round is selected', () => {
     const play = read('app/(tabs)/play.tsx');
     expect(play).toMatch(/\{setupNineHole \? \(/);
-    expect(play).toMatch(/setupBackNine \? 'Back 9' : 'Front 9'/);
+    expect(play).toMatch(/setupBackNine \? t\('play\.play_tab\.back_9'\) : t\('play\.play_tab\.front_9'\)/);
   });
 });

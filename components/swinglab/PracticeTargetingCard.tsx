@@ -85,9 +85,7 @@ export default function PracticeTargetingCard({
           accessibilityLabel={hasBall ? 'Edit ball area' : 'Set ball area'}
         >
           <Ionicons name={hasBall ? 'ellipse' : 'ellipse-outline'} size={16} color={hasBall ? '#00C896' : colors.text_muted} />
-          <Text style={[styles.btnText, { color: hasBall ? '#00C896' : colors.text_primary }]}>
-            {hasBall ? 'Ball area set' : 'Set ball area'}
-          </Text>
+          <Text style={[styles.btnText, { color: hasBall ? '#00C896' : colors.text_primary }]}>{hasBall ? t('swinglab_practice_targeting_card.practice_targeting_card.ball_area_set') : t('swinglab_practice_targeting_card.practice_targeting_card.set_ball_area')}</Text>
         </Pressable>
 
         <Pressable
@@ -101,9 +99,7 @@ export default function PracticeTargetingCard({
           accessibilityLabel={hasTarget ? 'Edit target' : 'Set target'}
         >
           <Ionicons name={hasTarget ? 'locate' : 'locate-outline'} size={16} color={hasTarget ? '#88F700' : colors.text_muted} />
-          <Text style={[styles.btnText, { color: hasTarget ? '#88F700' : colors.text_primary }]}>
-            {hasTarget ? 'Target set' : 'Set target'}
-          </Text>
+          <Text style={[styles.btnText, { color: hasTarget ? '#88F700' : colors.text_primary }]}>{hasTarget ? t('swinglab_practice_targeting_card.practice_targeting_card.target_set') : t('swinglab_practice_targeting_card.practice_targeting_card.set_target')}</Text>
         </Pressable>
       </View>
 
@@ -119,9 +115,7 @@ export default function PracticeTargetingCard({
           accessibilityLabel={t('swinglab_practice_targeting_card.accessibility_label.auto_detect_ball_position')}
         >
           <Ionicons name="sparkles-outline" size={14} color={colors.accent} />
-          <Text style={[styles.autoBtnText, { color: colors.accent }]}>
-            {autoDetecting ? 'Detecting…' : 'Auto-detect ball'}
-          </Text>
+          <Text style={[styles.autoBtnText, { color: colors.accent }]}>{autoDetecting ? t('swinglab_practice_targeting_card.practice_targeting_card.detecting') : t('swinglab_practice_targeting_card.practice_targeting_card.auto_detect_ball')}</Text>
         </Pressable>
       )}
 
@@ -718,6 +712,7 @@ export function EditableCageTargets({
    *  stealing the gesture; false on release/terminate. */
   onDragActiveChange?: (active: boolean) => void;
 }) {
+  const { t } = useTranslation();
   const [size, setSize] = useState({ w: 0, h: 0 });
   const sizeRef = useRef(size);
   useEffect(() => { sizeRef.current = size; }, [size]);
@@ -845,9 +840,7 @@ export function EditableCageTargets({
           accessibilityLabel={locked ? 'Unlock targets to adjust' : 'Lock targets in'}
         >
           <Ionicons name={locked ? 'lock-closed' : 'lock-open'} size={13} color={locked ? '#88F700' : '#FFFFFF'} />
-          <Text style={[dragStyles.lockText, { color: locked ? '#88F700' : '#FFFFFF' }]}>
-            {locked ? 'LOCKED' : 'ADJUSTING'}
-          </Text>
+          <Text style={[dragStyles.lockText, { color: locked ? '#88F700' : '#FFFFFF' }]}>{locked ? t('swinglab_practice_targeting_card.editable_cage_targets.locked') : t('swinglab_practice_targeting_card.editable_cage_targets.adjusting')}</Text>
         </Pressable>
       )}
     </View>

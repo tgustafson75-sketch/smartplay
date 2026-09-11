@@ -2729,9 +2729,7 @@ export default function SmartVisionScreen() {
           >
             <View style={styles.shotMapToggleRow}>
               <Ionicons name="footsteps" size={12} color={showShotMap ? '#00E5FF' : '#9ca3af'} />
-              <Text style={[styles.shotMapToggleText, { color: showShotMap ? '#dff9ff' : '#9ca3af' }]}>
-                {showShotMap ? 'SHOT MAP' : 'SHOT MAP OFF'}
-              </Text>
+              <Text style={[styles.shotMapToggleText, { color: showShotMap ? '#dff9ff' : '#9ca3af' }]}>{showShotMap ? t('smartvision.smart_vision_screen.shot_map') : t('smartvision.smart_vision_screen.shot_map_off')}</Text>
             </View>
             {showShotMap ? (
               <View style={styles.shotMapLegend}>

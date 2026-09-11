@@ -121,9 +121,7 @@ export default function CompareReferencePickerSheet({
             </View>
           ) : matches.length === 0 ? (
             <View style={[styles.emptyCard, { borderColor: colors.border, backgroundColor: colors.surface_elevated }]}>
-              <Text style={[styles.emptyTitle, { color: colors.text_primary }]}>
-                {error ? 'Couldn\'t compare' : 'No references yet'}
-              </Text>
+              <Text style={[styles.emptyTitle, { color: colors.text_primary }]}>{error ? t('swinglab_compare_reference_picker_sheet.compare_reference_picker_sheet.couldn_t_compare') : t('swinglab_compare_reference_picker_sheet.compare_reference_picker_sheet.no_references_yet')}</Text>
               <Text style={[styles.emptyHint, { color: colors.text_muted }]}>
                 {error ?? 'Upload a reference swing or add a pro clip. The built-in archetypes will show up here too.'}
               </Text>

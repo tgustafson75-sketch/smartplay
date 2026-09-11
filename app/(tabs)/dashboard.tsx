@@ -878,10 +878,7 @@ export default function Dashboard() {
                   {lastLessonSession.label}
                 </Text>
                 {/* Honest: reps READ, never reps attempted, and 'good' only where a verdict said so. */}
-                <Text style={[styles.sharedMeta, { color: colors.text_muted }]} numberOfLines={1}>
-                  {`${lastLessonSession.repsGood} of ${lastLessonSession.repsRead} swing${lastLessonSession.repsRead === 1 ? '' : 's'} on plan`}
-                  {lastLessonSession.completed ? ' · finished' : ' · ended early'}
-                </Text>
+                <Text style={[styles.sharedMeta, { color: colors.text_muted }]} numberOfLines={1}>{lastLessonSession.completed ? t('dashboard.text.finished', { plan: `${lastLessonSession.repsGood} of ${lastLessonSession.repsRead} swing${lastLessonSession.repsRead === 1 ? '' : 's'} on plan` }) : t('dashboard.text.ended_early', { plan: `${lastLessonSession.repsGood} of ${lastLessonSession.repsRead} swing${lastLessonSession.repsRead === 1 ? '' : 's'} on plan` })}</Text>
               </View>
               <AppIcon name="chevron-forward" size={18} color={colors.text_muted} />
             </View>
@@ -1196,11 +1193,7 @@ export default function Dashboard() {
             <Ionicons name="chatbubbles" size={22} color="#88F700" />
             <View style={{ flex: 1 }}>
               <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>{caddieKnowsYou ? 'TELL YOUR CADDIE MORE' : 'LET YOUR CADDIE GET TO KNOW YOU'}</Text>
-              <Text style={[styles.impactHeadline, { color: colors.text_primary, marginTop: 4 }]}>
-                {caddieKnowsYou
-                  ? 'Tap, hit the mic, and just talk golf — your caddie keeps learning your game and folds it into every read, drill and plan.'
-                  : 'Tap, hit the mic, and talk to your caddie about your game — how you practice, the time you have, what you’re chasing. It listens and fits everything to YOU.'}
-              </Text>
+              <Text style={[styles.impactHeadline, { color: colors.text_primary, marginTop: 4 }]}>{caddieKnowsYou ? t('dashboard.text.tap_hit_the_mic_and') : t('dashboard.text.tap_hit_the_mic_and_2')}</Text>
             </View>
             <Ionicons name="mic" size={18} color="#88F700" />
           </View>
@@ -1306,9 +1299,7 @@ export default function Dashboard() {
                     size={18}
                     color={loggedFaultWorkAt ? colors.accent : colors.text_muted}
                   />
-                  <Text style={{ color: loggedFaultWorkAt ? colors.accent : colors.text_muted, fontSize: 11, fontWeight: '800' }}>
-                    {loggedFaultWorkAt ? 'LOGGED' : 'MARK DONE'}
-                  </Text>
+                  <Text style={{ color: loggedFaultWorkAt ? colors.accent : colors.text_muted, fontSize: 11, fontWeight: '800' }}>{loggedFaultWorkAt ? t('dashboard.text.logged') : t('dashboard.text.mark_done')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={onExportWorkouts} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel={t('dashboard.accessibility_label.export_these_exercises')}>
                   <Ionicons name="share-outline" size={18} color={colors.accent} />
@@ -1406,9 +1397,7 @@ export default function Dashboard() {
                       <Text style={[styles.roundCourse, { color: colors.text_primary }]} numberOfLines={1}>
                         {r.courseName ?? 'Round'}
                       </Text>
-                      <Text style={[styles.roundMeta, { color: colors.text_muted }]}>
-                        {dateStr} · {r.holesPlayed} holes{r.isCompetition ? ' · competition' : ''}
-                      </Text>
+                      <Text style={[styles.roundMeta, { color: colors.text_muted }]}>{r.isCompetition ? t('dashboard.text.holes_competition', { date_str: dateStr, holes_played: r.holesPlayed }) : t('dashboard.text.holes', { date_str: dateStr, holes_played: r.holesPlayed })}</Text>
                       {(recapSummaries[r.id] || r.summary) ? (
                         <Text style={[styles.roundSummary, { color: colors.text_secondary }]} numberOfLines={2}>
                           {recapSummaries[r.id] || r.summary}

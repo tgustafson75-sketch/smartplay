@@ -219,9 +219,7 @@ export default function CageIndex() {
                 setCalibrationOpen(true);
               }}
             >
-              <Text style={styles.cameraSetText}>
-                {cameraAlignment?.distance_yards != null ? 'Adjust' : 'Set Up'}
-              </Text>
+              <Text style={styles.cameraSetText}>{cameraAlignment?.distance_yards != null ? t('practice_session.text.adjust') : t('practice_session.text.set_up')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -231,9 +229,7 @@ export default function CageIndex() {
         <View style={styles.deviceRow}>
           <View style={[styles.devicePill, watchConnected && styles.devicePillActive]}>
             <AppIcon name="watch-outline" size={16} color={watchConnected ? '#60a5fa' : '#6b7280'} />
-            <Text style={[styles.deviceLabel, watchConnected && styles.deviceLabelActive]}>
-              {watchConnected ? 'Watch On' : 'Watch Off'}
-            </Text>
+            <Text style={[styles.deviceLabel, watchConnected && styles.deviceLabelActive]}>{watchConnected ? t('practice_session.cage_index.watch_on') : t('practice_session.cage_index.watch_off')}</Text>
           </View>
           <View style={styles.devicePill}>
             <AppIcon name="musical-notes-outline" size={16} color="#6b7280" />

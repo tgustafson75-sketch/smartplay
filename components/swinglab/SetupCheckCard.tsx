@@ -45,9 +45,7 @@ export default function SetupCheckCard({ result, imageUri, speaking, onReplay, o
 
       {adj ? (
         <View style={[styles.block, styles.tweakBlock, isKeep && styles.keepBlock]}>
-          <Text style={[styles.label, { color: isKeep ? '#3FB950' : '#F5A623' }]}>
-            {isKeep ? 'TAKE IT TO THE TEE' : 'ONE TWEAK'}
-          </Text>
+          <Text style={[styles.label, { color: isKeep ? '#3FB950' : '#F5A623' }]}>{isKeep ? t('swinglab_setup_check_card.setup_check_card.take_it_to_the_tee') : t('swinglab_setup_check_card.setup_check_card.one_tweak')}</Text>
           <Text style={styles.tweakText}>{adj}</Text>
         </View>
       ) : null}

@@ -4310,9 +4310,7 @@ function CoachNoteCard({ sessionId, initialNote }: { sessionId: string; initialN
             accessibilityLabel={recording ? 'Stop recording' : 'Record a coach note'}
           >
             <Ionicons name={recording ? 'stop-circle' : 'mic'} size={16} color={recording ? '#ef4444' : colors.accent} />
-            <Text style={[coachNoteStyles.entryBtnText, { color: recording ? '#ef4444' : colors.accent }]}>
-              {recording ? 'Stop' : 'Speak'}
-            </Text>
+            <Text style={[coachNoteStyles.entryBtnText, { color: recording ? '#ef4444' : colors.accent }]}>{recording ? t('swinglab_swing.coach_note_card.stop') : t('swinglab_swing.coach_note_card.speak')}</Text>
           </TouchableOpacity>
         </View>
       </View>

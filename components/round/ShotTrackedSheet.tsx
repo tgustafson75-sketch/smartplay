@@ -76,7 +76,7 @@ export default function ShotTrackedSheet({
           <Text style={[styles.statValue, { color: colors.text_primary }]}>
             {result.shotDistanceYards != null ? `${estimated ? '~' : ''}${result.shotDistanceYards}` : '—'}
           </Text>
-          <Text style={[styles.statLabel, { color: colors.text_muted }]}>YDS{estimated ? ' (est)' : ''}</Text>
+          <Text style={[styles.statLabel, { color: colors.text_muted }]}>{estimated ? t('round_shot_tracked_sheet.shot_tracked_sheet.yds_est') : t('round_shot_tracked_sheet.shot_tracked_sheet.yds')}</Text>
         </View>
 
         {/* Club chip — tap to scroll-correct. */}

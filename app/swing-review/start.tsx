@@ -118,9 +118,7 @@ export default function CageReviewStart() {
           {starting ? (
             <ActivityIndicator color="#060f09" />
           ) : (
-            <Text style={styles.startBtnText}>
-              {selectedMode ? 'Start Review' : 'Select a mode'}
-            </Text>
+            <Text style={styles.startBtnText}>{selectedMode ? t('swing_review_start.cage_review_start.start_review') : t('swing_review_start.cage_review_start.select_a_mode')}</Text>
           )}
         </TouchableOpacity>
       </ScrollView>

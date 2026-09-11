@@ -141,11 +141,7 @@ export default function CoursePicker({ onSelect, selected, onInfo }: Props) {
               most common cause is GOLFCOURSE_API_KEY missing or expired
               on the Vercel deployment — surface that explicitly so a
               tester can flag it instead of assuming the app is broken. */}
-          <Text style={styles.searchErrorHint}>
-            {searchError.toLowerCase().includes('api key') || searchError.toLowerCase().includes('not set')
-              ? 'Course-search API key is not configured on the server. Use a course from the local list below for now.'
-              : 'Check your network — or pick a course from the local list below.'}
-          </Text>
+          <Text style={styles.searchErrorHint}>{searchError.toLowerCase().includes('api key') || searchError.toLowerCase().includes('not set') ? t('course_picker.text.course_search_api_key_is') : t('course_picker.text.check_your_network_or_pick')}</Text>
         </View>
       )}
       {!loading && searched && !searchError && results.length === 0 && (
