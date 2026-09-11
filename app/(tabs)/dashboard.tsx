@@ -1299,7 +1299,24 @@ export default function Dashboard() {
                 // Primary = the OUTCOME (score vs par, lower is better → green when dropping). Overlay = the
                 // selected effort line (own scale). Warm-ups marked on the practice line. ONE graph.
                 data={activeProgress.score}
-                overlay={{ data: activeProgress.effort, color: '#22d3ee', label: activeProgress.effortLabel }}
+                /**
+                 * 2026-09-11 (Tim) — "make sure the lines have a clear label on each one, because it
+                 * really still isn't labeled in the way you can read it."
+                 *
+                 * The names were already here; they were sitting in the legend, which asks the reader
+                 * to hold a colour in their head and go find the matching line. They now ride the END
+                 * OF EACH LINE with that line's latest value in its own unit, so the two can be read
+                 * against each other — which is the entire reason they share one chart.
+                 *
+                 * The first word is the identity ('SCORE VS PAR' → SCORE, 'PRACTICE / WK' → PRACTICE);
+                 * the rest of the old label was the axis, and the axis is now implied by the unit.
+                 */
+                overlay={{
+                  data: activeProgress.effort, color: '#22d3ee', label: activeProgress.effortLabel.split(' ')[0],
+                  unit: activeProgress.deltaUnit || undefined,
+                }}
+                endLabel={activeProgress.scoreLabel.split(' ')[0]}
+                endUnit={activeProgress.scoreDeltaUnit}
                 markerIndices={activeProgress.markers}
                 markerColor="#f9a8d4"
                 markerLabel={activeProgress.markers.length ? 'warm-up' : undefined}

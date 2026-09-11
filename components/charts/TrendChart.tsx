@@ -14,7 +14,7 @@
 
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import Svg, { Path, Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
+import Svg, { Path, Circle, Defs, LinearGradient, Stop, Text as SvgText, Rect } from 'react-native-svg';
 
 export interface TrendChartProps {
   data: number[];
@@ -43,6 +43,20 @@ export interface TrendChartProps {
   markerColor?: string;
   /** Legend text for the markers, e.g. 'warm-up'. Shown with a marker swatch when markerIndices is set. */
   markerLabel?: string;
+  /**
+   * 2026-09-11 (Tim) — "Make sure the lines on the graph have a clear label on each one, because it
+   * really still isn't labeled in the way that you can read it… I trialled Arccos and they have a
+   * bunch of good graphs that I can't figure out how things intertwine. I want ONE."
+   *
+   * A legend at the top asks the reader to hold a colour in their head and find the matching line.
+   * On a two-line chart four inches wide, nobody does that. These put the NAME AND THE CURRENT VALUE
+   * at the end of the line itself, in the line's own colour and its own unit — so the two lines can
+   * be read against each other without a lookup, which is the whole point of putting them on one
+   * chart. Short: 'SCORE 12', 'BALLS 240'.
+   */
+  endLabel?: string;
+  /** Unit shown after the primary line's end value, e.g. 'over'. */
+  endUnit?: string;
   // 2026-08-06 (Tim — "there should be ONE graph not multiple"). A SECOND series overlaid on the same
   // chart (its own independent scale, so different units — practice balls vs score-vs-par — can share one
   // timeline and read as "are they moving together"). Drawn as a line in its own color with its own legend
@@ -51,6 +65,8 @@ export interface TrendChartProps {
     data: number[];
     color: string;
     label: string;
+    /** Unit for the overlay's end-of-line value, e.g. 'balls'. */
+    unit?: string;
     /** Overlay is drawn in its solid color (not trend-colored) so the two lines stay distinguishable. */
   } | null;
 }
@@ -97,6 +113,7 @@ export default function TrendChart({
   data, width, height, color = '#00C896', label, yMin, yMax,
   higherIsBetter = true, emptyText = 'Not enough data yet',
   legendDotColor, showTrend = false, deltaUnit, markerIndices, markerColor = '#38bdf8', markerLabel,
+  endLabel, endUnit,
   overlay = null,
 }: TrendChartProps) {
   const series = useMemo(
@@ -171,6 +188,34 @@ export default function TrendChart({
   // screen don't share/collide on a single <LinearGradient> id.
   const gradId = `tc-${trendColor.replace('#', '')}-${Math.round(width)}x${Math.round(height)}-${Math.round(points[0].y)}-${Math.round(last.y)}`;
 
+  /**
+   * The end-of-line tags. Built here so the geometry (and the clamping) lives with the rest of the
+   * layout maths rather than inside JSX.
+   */
+  const fmt = (v: number) => (Math.abs(v) >= 100 || v % 1 === 0 ? String(Math.round(v)) : v.toFixed(1));
+  const endTags = (() => {
+    const out: { key: string; x: number; y: number; w: number; text: string; color: string }[] = [];
+    const push = (key: string, name: string | undefined, value: number, unit: string | undefined, pt: Pt, c: string) => {
+      if (!name) return;
+      const text = `${name.toUpperCase()} ${fmt(value)}${unit ? ' ' + unit : ''}`;
+      const w = text.length * 5.2 + 8;
+      // Keep the tag inside the chart and clear of the top/bottom edges.
+      const x = Math.min(pt.x + 6, width - w - 2);
+      const y = Math.max(PAD_TOP + 9, Math.min(pt.y, height - 4));
+      out.push({ key, x, y, w, text, color: c });
+    };
+    push('primary', endLabel, series[series.length - 1], endUnit, last, trendColor);
+    if (overlayPts.length && overlay?.label) {
+      const oLast = overlayPts[overlayPts.length - 1];
+      const oVal = overlaySeries[overlaySeries.length - 1];
+      // Nudge apart when the two lines finish on top of each other, or one tag hides the other.
+      const clash = out.length > 0 && Math.abs(oLast.y - out[0].y) < 14;
+      const pt: Pt = clash ? { x: oLast.x, y: Math.min(oLast.y + 15, height - 4) } : oLast;
+      push('overlay', overlay.label, oVal, overlay.unit, pt, overlay.color);
+    }
+    return out;
+  })();
+
   return (
     <View style={{ width, height }}>
       {hasLegend ? (
@@ -221,6 +266,28 @@ export default function TrendChart({
             warm-up before a round/practice reads as a real data point on the graph. */}
         {markerPts.map((p, i) => (
           <Circle key={`mk-${i}`} cx={p.x} cy={p.y} r={4} fill="#0b1220" stroke={markerColor} strokeWidth={2} />
+        ))}
+        {/**
+          * 2026-09-11 — THE LINE SAYS WHAT IT IS, WHERE IT ENDS.
+          *
+          * Each tag carries the metric's name AND its latest value in its own unit, so two lines with
+          * different units can be read against each other on one chart instead of being two shapes
+          * you have to decode from a legend. The chip sits behind the text because a line can run
+          * underneath it. Anchored to the right edge so it cannot be clipped.
+          */}
+        {endTags.map((t) => (
+          <React.Fragment key={t.key}>
+            <Rect
+              x={t.x} y={t.y - 8} width={t.w} height={13} rx={3}
+              fill="#0b1220" fillOpacity={0.82}
+            />
+            <SvgText
+              x={t.x + 4} y={t.y + 2} fill={t.color}
+              fontSize={9} fontWeight="900" letterSpacing={0.4}
+            >
+              {t.text}
+            </SvgText>
+          </React.Fragment>
         ))}
       </Svg>
     </View>

@@ -6839,7 +6839,15 @@ check('Practice→performance: honest connection card (association, gated, no fa
       /computePracticeImpact\(\{/.test(dash) &&
       // one chart: score-vs-par primary (lower better) + the selected effort as an OVERLAY
       /data=\{activeProgress\.score\}/.test(dash) &&
-      /overlay=\{\{ data: activeProgress\.effort/.test(dash) &&
+      /**
+       * 2026-09-11 — matched `overlay={{ data: activeProgress.effort` on ONE line, so adding the
+       * end-of-line label props broke it on correct code. The property is that the effort series is
+       * overlaid on the same chart, not how the prop happens to wrap.
+       */
+      /overlay=\{\{\s*data: activeProgress\.effort/.test(dash) &&
+      // and each line now names itself at its end, with its own unit
+      /endLabel=\{activeProgress\.scoreLabel/.test(dash) &&
+      /endUnit=\{activeProgress\.scoreDeltaUnit\}/.test(dash) &&
       // 2026-08-22 — the outcome axis is per-SOURCE now (an owner-only Strike source plots strike
       // rate, where HIGHER is better). Pinning the literal `higherIsBetter={false}` asserted that
       // every source is judged like score-vs-par, which was never the property. What matters is that
