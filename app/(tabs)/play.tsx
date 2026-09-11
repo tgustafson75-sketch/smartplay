@@ -652,6 +652,12 @@ export default function PlayTab() {
   // them when consuming the pendingStartCourseId signal.
   const [setupMode, setSetupMode] = useState<RoundMode>('free_play');
   const [setupNineHole, setSetupNineHole] = useState(false);
+  /**
+   * 2026-09-10 — WHICH nine. The caddie tab's own start modal has had this since 2026-08-06; this
+   * screen never did, so a back nine launched from here started on hole 1 and never posted to the
+   * Index (see roundStore.pendingStartFactors.startHole). Only meaningful while 9-hole is on.
+   */
+  const [setupBackNine, setSetupBackNine] = useState(false);
   const [setupCompetition, setSetupCompetition] = useState(false);
   const [setupMental, setSetupMental] = useState<'fresh' | 'neutral' | 'tense'>('neutral');
   const [setupNotes, setSetupNotes] = useState('');
@@ -1603,6 +1609,7 @@ export default function PlayTab() {
       isCompetition: setupCompetition,
       mentalState: setupMental,
       notes: setupNotes,
+      startHole: (setupNineHole && setupBackNine) ? 10 : 1,
     });
     useRoundStore.getState().setPendingStartCourse(selected.id);
     router.push('/(tabs)/caddie' as never);
@@ -1623,6 +1630,7 @@ export default function PlayTab() {
       isCompetition: setupCompetition,
       mentalState: setupMental,
       notes: setupNotes,
+      startHole: (setupNineHole && setupBackNine) ? 10 : 1,
     });
     useRoundStore.getState().setPendingStartCourse(s.id);
     router.push('/(tabs)/caddie' as never);
@@ -2298,6 +2306,18 @@ export default function PlayTab() {
               >
                 <Text style={[styles.chipText, setupNineHole && styles.chipTextActive]}>{t('play.nine_hole')}</Text>
               </TouchableOpacity>
+              {setupNineHole ? (
+                <TouchableOpacity
+                  style={[styles.chip, setupBackNine && styles.chipActive]}
+                  onPress={() => setSetupBackNine(v => !v)}
+                  accessibilityRole="button"
+                  accessibilityLabel={setupBackNine ? 'Playing the back nine' : 'Playing the front nine'}
+                >
+                  <Text style={[styles.chipText, setupBackNine && styles.chipTextActive]}>
+                    {setupBackNine ? 'Back 9' : 'Front 9'}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
               <TouchableOpacity
                 style={[styles.chip, setupCompetition && styles.chipActive]}
                 onPress={() => setSetupCompetition(v => !v)}

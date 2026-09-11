@@ -320,6 +320,13 @@ export default function CaddieTab() {
   // error from forward-referencing the const.
   const runStartRoundRef = useRef<((picked: PickedCourse, opts: {
     nineHole: boolean;
+    /**
+     * 2026-09-10 — runStartRound has accepted `startHole` since the 2026-08-06 back-nine work; this
+     * REF's type did not, so the Play-tab handoff physically could not pass it and every back nine
+     * launched from that screen started on hole 1. A type that is narrower than the function it
+     * points at is a silent contract break.
+     */
+    startHole?: number;
     isCompetition: boolean;
     notes: string;
     mode: RoundMode;
@@ -384,6 +391,9 @@ export default function CaddieTab() {
           mode: factors?.mode ?? 'free_play',
           ghostRoundId: null,
           mentalState: factors?.mentalState,
+          // 2026-09-10 — carry WHICH nine across the handoff. Without it runStartRound fell to
+          // `opts.startHole ?? 1` and a back nine started from the Play tab could never post.
+          startHole: factors?.startHole ?? 1,
         });
       }
     })();

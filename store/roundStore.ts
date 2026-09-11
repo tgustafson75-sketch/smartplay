@@ -726,6 +726,16 @@ interface RoundState {
     isCompetition: boolean;
     mentalState: string;
     notes: string;
+    /**
+     * 2026-09-10 — WHICH NINE. The 2026-08-06 back-nine work landed in the caddie tab's own start
+     * modal and never in this handoff, so a round launched from the Play tab — the course-discovery
+     * surface, i.e. the common path — could only ever start on hole 1. A player teeing off on 10
+     * got roundFirstHole 1 / roundLastHole 9, was clamped back to 9 on every hole they walked to,
+     * and then the KEEP-PLAYING expansion flipped nineHoleMode false and converted the round to
+     * 18 holes — at which point computeWhsPostingScore needed 14 played, saw 9, and returned null.
+     * The back nine silently never posted to the Index.
+     */
+    startHole?: number;
   } | null;
   setPendingStartFactors: (f: {
     mode: RoundMode;
@@ -733,6 +743,7 @@ interface RoundState {
     isCompetition: boolean;
     mentalState: string;
     notes: string;
+    startHole?: number;
   } | null) => void;
   setCurrentHole: (hole: number) => void;
   setHoleNote: (hole: number, note: string) => void;
@@ -2711,7 +2722,25 @@ export const useRoundStore = create<RoundState>()(
             hole,
             score,
             putts,
-            penalties: s.penalties[hole] ?? 0,
+            /**
+             * 2026-09-10 — THIS MAP HAS NO WRITER, so it reported zero penalties forever.
+             *
+             * `addPenalty` stopped writing it deliberately ("Legacy penalties[] field intentionally
+             * NOT written — ShotResult is authoritative now") and nothing migrated this read. So a
+             * player who took three penalties had the caddie told the round had ZERO in every single
+             * request (services/caddieRequestBody sums this field), under a docstring claiming the
+             * round store "computes putts, penalties, fairways and GIR per hole and keeps them".
+             *
+             * Worse, endRound snapshots getHoleStats() into the RoundRecord — so every completed
+             * round in history recorded penalties: 0 on every hole, permanently, and ghost rounds
+             * and progress tracking inherited the zero.
+             *
+             * Read the authoritative source. [[orphans-are-live-bugs-not-dead-code]]
+             */
+            penalties: s.shots.reduce(
+              (acc, sh) => (sh.hole === hole ? acc + (sh.penalty_strokes ?? 0) : acc),
+              0,
+            ),
             fairwayHit: null,
             girHit,
           };
@@ -3281,10 +3310,30 @@ export const useRoundStore = create<RoundState>()(
         return courseHoles.find(h => h.hole === currentHole) ?? null;
       },
 
+      /**
+       * 2026-09-10 — A PENALTY WAS COUNTED TWICE: once as a swing, once as its own stroke.
+       *
+       * `addPenalty` logs a SYNTHETIC shot (`outcome: 'manual_penalty'`, `penalty_strokes: 1`) that
+       * represents no swing at all, and separately bumps `scores[hole]` by exactly one — which is
+       * the correct golf answer. This function counted that synthetic entry in `holeShots.length`
+       * AND added its penalty stroke, so it returned one MORE than the store's own score for every
+       * penalty on the hole.
+       *
+       * That mattered because this is the shot-card PREFILL (app/(tabs)/caddie.tsx): take a penalty,
+       * open the card, and the score box is already a stroke high. Tap through and handleLogHole
+       * writes it — into scoreVsPar, the WHS adjusted gross, and the Index.
+       *
+       * A real shot that ALSO carries a penalty (water, OB, stroke-and-distance from rulesEngine) is
+       * a swing plus a stroke and must still count both — which is why this excludes the
+       * penalty-ONLY outcome rather than dropping penalty_strokes from the sum.
+       * [[two-owners-is-the-root-cause]]
+       */
       computeHoleScore: (hole: number) => {
         const holeShots = get().shots.filter(s => s.hole === hole);
         if (holeShots.length === 0) return null;
-        return holeShots.length + holeShots.reduce((acc, s) => acc + (s.penalty_strokes ?? 0), 0);
+        const swings = holeShots.filter(s => s.outcome !== 'manual_penalty').length;
+        const penaltyStrokes = holeShots.reduce((acc, s) => acc + (s.penalty_strokes ?? 0), 0);
+        return swings + penaltyStrokes;
       },
     }),
     {
