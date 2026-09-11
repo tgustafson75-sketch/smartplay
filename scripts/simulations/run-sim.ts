@@ -1349,11 +1349,26 @@ check('Round start uses bundled hole GEOMETRY by name, not just for local: ids',
     return (
       /const bundledMatch = getCourse\(courseName\)/.test(c) &&
       /bundledHasCoords/.test(c) && /loadedHasCoords/.test(c) &&
-      /holes = bundledMatch\.holes/.test(c) &&
+      /**
+       * 2026-09-10 — the override must take the VALIDATED bundle, not the raw array.
+       *
+       * getCourse() returns c.holes raw; getBundledHoles() runs validateBundledTees, which zeroes
+       * any bundled tee whose measured tee→green distance disagrees with the scorecard by >35%.
+       * Measured against the bundle that day: echo-hills 7 of 8 tees rejected, greenhill 14 of 16,
+       * westlake-cc-nj 14 of 14. Taking the raw array here put every one of those back into
+       * roundStore.courseHoles, where resolveTeeCoords reads them FIRST and reports them as real.
+       *
+       * The 2026-08-07 intent this guard exists for is unchanged — a bundled course still loads its
+       * real geometry by name, whatever the entry path. It just may not load a tee that failed its
+       * own scorecard test. Asserting the validated accessor AND the absence of the raw read.
+       */
+      /holes = bundledMatchHoles/.test(c) &&
+      /getBundledHoles\(`local:\$\{bundledMatch\.id\}`\)/.test(c) &&
+      !/holes = bundledMatch\.holes/.test(c) &&
       /courseId = `local:\$\{bundledMatch\.id\}`/.test(c)
     );
   })(),
-  'a bundled course (e.g. Berlin) loads its real tee/green coords for yardage+wind no matter the entry path');
+  'a bundled course (e.g. Berlin) loads its real tee/green coords for yardage+wind no matter the entry path — from the VALIDATED bundle, so a tee that failed its own scorecard test is not re-introduced');
 
 // 2026-08-10 (Tim — "the course builder engine like Arccos HAS to work… combine our Gemini abilities
 // with golfcourse api to help"). LOCK the course-builder resilience chain so an unbundled course a

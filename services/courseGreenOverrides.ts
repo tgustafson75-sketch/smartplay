@@ -20,6 +20,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
+import { personalHoleKey } from './personalHoleKey';
 
 const KEY = 'smartplay.courseGreenOverrides.v1';
 
@@ -69,12 +70,14 @@ function notifyAll() {
 
 /** Synchronous read — returns null if no override set OR before hydration. */
 export function getGreenOverride(courseId: string, hole: number): GreenOverride | null {
+  hole = personalHoleKey(hole);
   if (!hydrated) void rehydrate().then(() => notifyAll());
   if (!cached) return null;
   return cached[courseId]?.[hole] ?? null;
 }
 
 export async function setGreenOverride(courseId: string, hole: number, loc: { lat: number; lng: number }, accuracyM?: number): Promise<void> {
+  hole = personalHoleKey(hole);
   if (!hydrated) await rehydrate();
   if (!cached) cached = {};
   if (!cached[courseId]) cached[courseId] = {};
@@ -90,6 +93,7 @@ export async function setGreenOverride(courseId: string, hole: number, loc: { la
 }
 
 export async function clearGreenOverride(courseId: string, hole: number): Promise<void> {
+  hole = personalHoleKey(hole);
   if (!hydrated) await rehydrate();
   if (!cached) return;
   if (cached[courseId]) {
@@ -123,6 +127,7 @@ export function listOverridesForCourse(courseId: string): Array<{ hole: number; 
 /** React hook — returns the override for the given (course, hole) and
  *  re-renders when ANY override changes. */
 export function useGreenOverride(courseId: string | null, hole: number | null): GreenOverride | null {
+  hole = hole == null ? null : personalHoleKey(hole);
   const [, tick] = useState(0);
   useEffect(() => {
     if (!hydrated) void rehydrate().then(() => tick((n) => n + 1));

@@ -30,6 +30,7 @@ import { getGreenOverride } from './courseGreenOverrides';
 // hole length" computation (marked tee → marked green).
 import { getTeeOverride } from './courseTeeOverrides';
 import { getCourseTruthSync } from './courseTruth';
+import { personalHoleKey } from './personalHoleKey';
 // 2026-09-06 — the golfbertApi import is gone (with the module itself); resolvers are provider-uniform.
 
 /**
@@ -410,7 +411,14 @@ function resolveGreenCoordsInner(holeNumber: number): ResolvedGreen {
   // is stored under the physical hole (1-9). On loop 2 (holes 10-18) look those personal sources up under
   // hole-9 so a green you marked on the front nine still resolves on the back nine (the geometry cache
   // already wraps; truth/override did not). courseHoles/geometry keep the raw number.
-  const personalHole = (round.twiceAround === true && holeNumber >= 10) ? holeNumber - 9 : holeNumber;
+  /**
+   * 2026-09-10 — the wrap moved INTO the override storage (services/personalHoleKey), so writers
+   * and readers agree by construction instead of by each call site remembering the rule. Kept here
+   * as a named value because courseTruth is a separate store that still takes the physical hole
+   * explicitly; the override lookups below no longer need it, and passing it is harmless because
+   * personalHoleKey is idempotent for 1-9.
+   */
+  const personalHole = personalHoleKey(holeNumber);
   // 2026-05-24 — Surveyed ground truth wins over EVERYTHING. The dev
   // screen at app/dev/CourseTruth.tsx captures on-foot GPS at the
   // green center; getCourseTruthSync reads from a cache hydrated at
@@ -523,7 +531,14 @@ export function resolveTeeCoords(holeNumber: number): {
   const courseId = resolveSmartFinderCourseId(round);
   // 2026-08-10 (logic-universality fix #4) — twice-around: personal marks (tee override) live
   // under the physical hole 1-9; wrap on loop 2 so a marked tee resolves on the back nine too.
-  const personalHole = (round.twiceAround === true && holeNumber >= 10) ? holeNumber - 9 : holeNumber;
+  /**
+   * 2026-09-10 — the wrap moved INTO the override storage (services/personalHoleKey), so writers
+   * and readers agree by construction instead of by each call site remembering the rule. Kept here
+   * as a named value because courseTruth is a separate store that still takes the physical hole
+   * explicitly; the override lookups below no longer need it, and passing it is harmless because
+   * personalHoleKey is idempotent for 1-9.
+   */
+  const personalHole = personalHoleKey(holeNumber);
   if (courseId) {
     const ov = getTeeOverride(courseId, personalHole);
     if (ov) {

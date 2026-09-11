@@ -2745,7 +2745,25 @@ export default function CaddieTab() {
       courseName = local?.name ?? picked.name;
       // 2026-07-01 (Tim) — fall back to getBundledHoles, which also resolves `custom:` scorecard
       // courses (customCourseStore). No-op for local courses that getCourse already populated.
-      holes = local?.holes ?? getBundledHoles(picked.id);
+      /**
+       * 2026-09-10 — THE ROUND LOADED THE TEES THE GEOMETRY LAYER HAD ALREADY REJECTED.
+       *
+       * `getCourse()` returns `c.holes` RAW; `getBundledHoles()` returns
+       * `validateBundledTees(c.holes)`, which zeroes any bundled tee whose measured tee→green
+       * distance disagrees with the scorecard by >35% — "dropped so the measure tool can't draw a
+       * wrong line". Preferring the raw array put every rejected tee straight into
+       * `roundStore.courseHoles`, live and unflagged.
+       *
+       * Measured today against the bundle: echo-hills (Tim's Hemet nine) 7 of 8 tees rejected,
+       * greenhill 14 of 16, westlake-cc-nj 14 of 14. `resolveTeeCoords` reads courseHoles FIRST,
+       * so holeDetection's 25-yard "am I at the next tee" gate was being measured against a point
+       * ~150 yards out in the fairway — and reported `source: 'courseHoles'`, i.e. "this is real".
+       *
+       * Same validated accessor both ways now. A hole with a zeroed tee still has its green, and
+       * every consumer already handles a missing tee honestly. [[two-owners-is-the-root-cause]]
+       */
+      const bundledValidated = getBundledHoles(picked.id);
+      holes = bundledValidated.length > 0 ? bundledValidated : (local?.holes ?? []);
 
       // 2026-06-21 — API fallback for local-image courses without a data/courses.ts entry.
       // Greenhill (and future local: courses) have bundled images + centroid but no hardcoded
@@ -2847,14 +2865,20 @@ export default function CaddieTab() {
           return b.length >= 4 && (b === q || b.includes(q) || q.includes(b));
         }) ?? null;
       })();
-      const bundledHasCoords = !!bundledMatch?.holes?.some(h => h.middleLat !== 0 && h.middleLng !== 0);
+      /**
+       * 2026-09-10 — the by-name override takes the VALIDATED bundle too. It previously read
+       * `bundledMatch.holes` raw, so a course rescued by name re-introduced exactly the tees the
+       * primary path above now rejects.
+       */
+      const bundledMatchHoles = bundledMatch ? getBundledHoles(`local:${bundledMatch.id}`) : [];
+      const bundledHasCoords = bundledMatchHoles.some(h => h.middleLat !== 0 && h.middleLng !== 0);
       const loadedHasCoords = holes.some(h => h.middleLat !== 0 && h.middleLng !== 0);
       if (bundledMatch && bundledHasCoords && !loadedHasCoords) {
-        holes = bundledMatch.holes;
+        holes = bundledMatchHoles;
         courseId = `local:${bundledMatch.id}`;
         courseName = bundledMatch.name;
         // Anchor the course location to hole 1 so offCourseDetector / geometry prewarm use the real spot.
-        const h1 = bundledMatch.holes.find(h => h.hole === 1) ?? bundledMatch.holes[0];
+        const h1 = bundledMatchHoles.find(h => h.hole === 1) ?? bundledMatchHoles[0];
         if (h1 && h1.middleLat !== 0 && h1.middleLng !== 0) {
           courseLocation = { lat: h1.teeLat || h1.middleLat, lng: h1.teeLng || h1.middleLng };
         }
