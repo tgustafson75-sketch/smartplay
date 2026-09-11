@@ -108,10 +108,31 @@ function evaluate(): void {
     else if (s > WALK_SPEED_MIN_MS) walkCount++;
     else stillCount++;
   }
+  /**
+   * 2026-09-10 — SUSTAIN_NEEDED IS 3, AND THE BUFFER CANNOT ALWAYS HOLD 3.
+   *
+   * The buffer is fed only by subscribeGps and evicted at 30s, so its occupancy is
+   * `30_000 / POLL_CONFIG[mode].intervalMs`:
+   *     active     1s  → 30 samples
+   *     walking   10s  →  3 samples   — needing 3 meant UNANIMITY; one noisy fix → 'unknown'
+   *     stationary 20s →  2 samples   — no branch could EVER reach 3, so 'stationary' was
+   *                                     unreachable exactly when the player was stationary
+   *                                     (gpsManager only enters that mode after 90s of no motion)
+   *
+   * So the cart/walking indicator blanked to unknown whenever the player stood still, and
+   * avg_speed_mps reset to -1. This file's own header names "iOS never classifies stationary" as the
+   * bug it was written to fix; the 30s eviction window re-created it on the walking/stationary
+   * cadences.
+   *
+   * Scaled to what the buffer can actually hold, never below 2 so a single noisy sample still
+   * cannot flip the mode, and CAPPED at SUSTAIN_NEEDED so active mode (4+ samples) is bit-for-bit
+   * unchanged. The 30s eviction is untouched — a parked cart still cannot hold its classification.
+   */
+  const needed = Math.min(SUSTAIN_NEEDED, Math.max(2, speedBuffer.length - 1));
   let next: MovementMode = 'unknown';
-  if (cartCount >= SUSTAIN_NEEDED) next = 'cart';
-  else if (walkCount >= SUSTAIN_NEEDED) next = 'walking';
-  else if (stillCount >= SUSTAIN_NEEDED) next = 'stationary';
+  if (cartCount >= needed) next = 'cart';
+  else if (walkCount >= needed) next = 'walking';
+  else if (stillCount >= needed) next = 'stationary';
   const cur = useMovementModeStore.getState();
   if (cur.mode !== next || Math.abs(cur.avg_speed_mps - avg) > 0.1) {
     useMovementModeStore.getState().setMode(next, avg);
