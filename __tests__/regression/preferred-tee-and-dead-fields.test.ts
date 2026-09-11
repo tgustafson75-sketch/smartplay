@@ -125,21 +125,22 @@ describe('what was inert is now wired, not deleted', () => {
 
   /**
    * 2026-09-11 — this asserted the literal `risk: useRoundStore.getState().riskMode` at all three
-   * call sites, which was the right guard for a one-fact problem. The problem turned out to be
-   * bigger: those three callers were passing 14, 7 and 6 of the read's 15 inputs, so risk was the
-   * only fact anyone had remembered to wire everywhere.
+   * shot-read call sites, which was the right guard for a one-fact problem. It turned out bigger:
+   * those callers were passing 14, 7 and 6 of the read's 15 inputs, so risk was the only fact
+   * anyone had remembered to wire everywhere.
    *
-   * They now share ONE input composer, which makes the original intent structural — and covers every
-   * fact rather than this one. What this must still reject: a caller hand-building the input object
-   * and therefore being able to omit something.
+   * Then Tim named the real shape: "reaching a decision and touching decisions at multiple points
+   * are two different things — it all needs to be orchestrated by the Caddie's brain." So the
+   * surfaces no longer compose the read at all; they ask services/caddieDecision. Risk reaching the
+   * club is now a property of the brain, which is the only thing that can lose it.
    */
-  it('every shot-read caller goes through the ONE input composer', () => {
+  it('risk reaches the club through the one brain every surface asks', () => {
     for (const f of ['app/smartvision.tsx', 'app/smartfinder.tsx', 'services/localStatusResponder.ts']) {
-      // Comments stripped first — a call site EXPLAINING the old shape must not satisfy the guard.
       const src = read(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-      expect(src).toMatch(/composeShotRead\(\s*liveShotReadInputs\(/);
-      expect(src).not.toMatch(/composeShotRead\(\s*\{/);
+      expect(src).toMatch(/decideShot\(/);
+      expect(src).not.toMatch(/composeShotRead\(/);
     }
+    expect(read('services/caddieDecision.ts')).toMatch(/composeShotRead\(liveShotReadInputs\(known\)\)/);
     expect(read('services/shotReadLive.ts')).toMatch(/risk: safe\(\(\) => \(round\?\.riskMode/);
   });
 

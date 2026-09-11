@@ -2532,7 +2532,18 @@ check('Offline caddie: the MOAT read (plays-like + club) answers LOCALLY, no net
   (() => {
     const src = read('services/localStatusResponder.ts');
     return (
-      /import \{ composeShotRead \} from '\.\/cnsShotRead'/.test(src) &&
+      /**
+       * 2026-09-11 — was `import { composeShotRead } from './cnsShotRead'`. The offline responder no
+       * longer composes the read itself; it asks services/caddieDecision like every other surface,
+       * after Tim: "it all needs to be totally orchestrated by the Caddie's brain."
+       *
+       * The property this guards is UNCHANGED and is the whole point of the scenario: the read is
+       * composed ON THE DEVICE, with no network. So it now checks that the brain it asks is itself
+       * local and synchronous — which is a stronger statement than which module it imported.
+       */
+      /import \{ decideShot \} from '\.\/caddieDecision'/.test(src) &&
+      /decideShot\(\{/.test(src) &&
+      !/\bfetch\(|await |async /.test(read('services/caddieDecision.ts')) &&
       /getCachedWeatherEvenIfStale/.test(src) &&            // cached weather feeds wind offline
       /playsLike:\s*\/\\b\(plays\?/.test(src) &&            // the plays-like matcher exists
       /if \(RX\.playsLike\.test\(t\)\) \{\s*\n\s*return composedReadReply\(lang\);/.test(src) &&

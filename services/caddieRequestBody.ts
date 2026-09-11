@@ -450,32 +450,22 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * model states a guess as a fact about someone. [[illustration-data-points]]
      */
     playProfile: safe(() => {
-      const { composePlayProfile, bogeyBudgetLine, cuesFor } = require('./playProfile') as typeof import('./playProfile');
-      const { deriveComplexityLevel } = require('./coachingAdaptation') as typeof import('./coachingAdaptation');
-      const stats = typeof r.getHoleStats === 'function' ? (r.getHoleStats() ?? []) : [];
-      const played = stats.length;
-      const penalties = stats.reduce((a: number, h: { penalties?: number }) => a + (h.penalties ?? 0), 0);
-      const putts = stats.reduce((a: number, h: { putts?: number }) => a + (h.putts ?? 0), 0);
-      const level = deriveComplexityLevel({
-        handicap: p.handicap ?? null,
-        experienceContext: p.experienceContext ?? null,
-        physicalLimitation: p.physicalLimitation ?? null,
-      });
-      const coursePar = (r.courseHoles ?? []).reduce(
-        (a: number, h: { par?: number }) => a + (h.par ?? 0), 0,
-      ) || null;
-      const profile = composePlayProfile({
-        level,
-        goal: (r.mode ?? null) as never,
-        coursePar,
-        distanceControl: p.distanceControl ?? null,
-        dominantMiss: (p.dominantMiss ?? null) as never,
-        // Per-18 rates only mean something once a round is actually under way.
-        penaltiesPerRound: played > 0 ? (penalties / played) * 18 : null,
-        puttsPerRound: played > 0 ? (putts / played) * 18 : null,
-        roundsPlayed: rel.roundsTogether ?? 0,
-      });
-      const overPar = typeof r.getScoreVsPar === 'function' ? r.getScoreVsPar() : null;
+      /**
+       * 2026-09-11 — THROUGH THE BRAIN, like the plan and the shot read beside it.
+       *
+       * This block used to compose the profile itself, from the same inputs services/caddieDecision
+       * composes it from. Two compositions of "who is this golfer" is two golfers, and the cheapest
+       * way for the caddie's words to stop matching the screens is for each to work him out
+       * separately. [[caddie-brain-lens]]
+       *
+       * The SOURCE LABELS matter more here than anywhere: a [seeded] finding is a prior about
+       * players at this level, a [measured] one is an observation about THIS player, and stating the
+       * first as the second is telling someone a guess about themselves as a fact.
+       */
+      const { decideShot } = require('./caddieDecision') as typeof import('./caddieDecision');
+      const d = decideShot({ rawYards: workingYards });
+      const profile = d.profile;
+      if (!profile) return null;
       return {
         level: profile.level,
         goal: profile.goal,
@@ -485,42 +475,15 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
         strengths: profile.strengths,
         weaknesses: profile.weaknesses,
         /**
-         * ONLY THE CUES THAT ARE STILL WORTH SAYING.
-         *
-         * Sending all of them would have the brain repeat a reminder the player has already acted
-         * on, which reads as not listening and is the nagging this app refuses outright. roundStore
-         * already records what has been spoken this round (spokenHoleEvents), so a cue that has been
-         * said twice is filtered out before the brain ever sees it — the decay happens here rather
-         * than being left to a model's discretion. [[no-push-nagging-no-ads]]
+         * Already decayed by what has been said this round — a cue the caddie has spoken twice is
+         * filtered out before the brain sees it, rather than left to a model's discretion. The decay
+         * lives in the brain so a chip and a spoken line cannot nag independently.
          */
-        cues: cuesFor(profile, safe(() => {
-          const spoken = (r.spokenHoleEvents ?? {}) as Record<string, true>;
-          const counts: Record<string, number> = {};
-          for (const c of profile.cues) {
-            counts[c.text] = Object.keys(spoken).filter((k) => k.startsWith(`cue:${c.text}`)).length;
-          }
-          return counts;
-        }, {}), 2),
-        bogeyBudget: bogeyBudgetLine(profile, overPar, played),
+        cues: d.cues,
+        bogeyBudget: d.budget,
       };
     }, null),
 
-    /**
-     * 2026-09-11 (Tim) — THE PLAYER JUST PICKED A DIFFERENT CLUB, AND THE CADDIE HAD NO IDEA.
-     *
-     * `pendingKevinRec` is written the moment the caddie calls a club and read at shot-log time by
-     * shotClubResolver. It has never once been sent to the brain. So the caddie could not know it
-     * had said "driver" ten seconds earlier, and when the player answered "I'll take the 3 wood"
-     * there was no contradiction for it to notice — it replied as if the question had arrived cold.
-     * Tim: "it goes into… I don't kind of have the context loop."
-     *
-     * That is not a model failing to be conversational. It is a model that was never told.
-     *
-     * So the STANDING call goes out every turn it is still live, and when the player has named a
-     * club of their own, services/overrideLoop turns the two into the one thing a caddie actually
-     * says while handing over a club he did not pick: how much club it is, what it leaves, and the
-     * single condition attached. [[close-the-loop-strategy]]
-     */
     clubCall: safe(() => {
       const { pendingAdviceIfFresh } = require('./shotClubResolver') as typeof import('./shotClubResolver');
       const standing = pendingAdviceIfFresh();
@@ -610,8 +573,8 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
        * plan the caddie SAYS would be the worst instance of that yet: both confidently wrong at
        * each other in the same moment. [[two-owners-is-the-root-cause]]
        */
-      const { composeLiveHolePlan } = require('./holePlanLive') as typeof import('./holePlanLive');
-      return composeLiveHolePlan().plan;
+      const { decideShot } = require('./caddieDecision') as typeof import('./caddieDecision');
+      return decideShot({ rawYards: workingYards }).plan;
     }, null),
 
     roundStats: safe(() => {

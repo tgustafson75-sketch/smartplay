@@ -18,11 +18,9 @@ import type { HolePlan } from './holePlan';
 
 export interface LiveHolePlan {
   plan: HolePlan | null;
-  /** "11 shots in hand for 12 holes" — null when the round has no goal. */
-  budgetLine: string | null;
 }
 
-const EMPTY: LiveHolePlan = { plan: null, budgetLine: null };
+const EMPTY: LiveHolePlan = { plan: null };
 
 /**
  * Compose the plan for the shot in front of the player, from live state.
@@ -102,7 +100,7 @@ export function composeLiveHolePlan(): LiveHolePlan {
       hazards: liveHazards(hole, yards),
     });
 
-    return { plan, budgetLine: budgetLine() };
+    return { plan };
   } catch {
     return EMPTY;
   }
@@ -130,32 +128,10 @@ function liveHazards(hole: number, yards: number) {
   }
 }
 
-/** The bogey budget as shots IN HAND — the same line the brain is given. */
-function budgetLine(): string | null {
-  try {
-    const { useRoundStore } = require('../store/roundStore') as typeof import('../store/roundStore');
-    const { usePlayerProfileStore } = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
-    const { composePlayProfile, bogeyBudgetLine } = require('./playProfile') as typeof import('./playProfile');
-    const { deriveComplexityLevel } = require('./coachingAdaptation') as typeof import('./coachingAdaptation');
-    const r = useRoundStore.getState();
-    const p = usePlayerProfileStore.getState();
-    const stats = typeof r.getHoleStats === 'function' ? (r.getHoleStats() ?? []) : [];
-    const coursePar = (r.courseHoles ?? []).reduce(
-      (a: number, h: { par?: number }) => a + (h.par ?? 0), 0,
-    ) || null;
-    const profile = composePlayProfile({
-      level: deriveComplexityLevel({
-        handicap: p.handicap ?? null,
-        experienceContext: p.experienceContext ?? null,
-        physicalLimitation: p.physicalLimitation ?? null,
-      }),
-      goal: (r.mode ?? null) as never,
-      coursePar,
-      distanceControl: p.distanceControl ?? null,
-    });
-    const overPar = typeof r.getScoreVsPar === 'function' ? r.getScoreVsPar() : null;
-    return bogeyBudgetLine(profile, overPar, stats.length);
-  } catch {
-    return null;
-  }
-}
+/**
+ * 2026-09-11 — a budgetLine() helper lived here and composed its OWN play profile just to work out
+ * the shots in hand. services/caddieDecision already holds the profile, so that was a second answer
+ * to "who is this golfer" built from the same inputs, a few files apart. The budget now comes from
+ * the brain's profile. Two compositions of a player is two players.
+ * [[two-owners-is-the-root-cause]]
+ */

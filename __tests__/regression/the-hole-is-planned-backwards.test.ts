@@ -244,14 +244,26 @@ describe('it is wired to the caddie AND to the screen, from ONE composer', () =>
     expect(/\bplanHole\(\{/.test(live)).toBe(true);
   });
 
-  it('the payload sends what that composer produced', () => {
+  /**
+   * 2026-09-11 — both now go through the BRAIN rather than calling the plan composer directly.
+   * The property is unchanged and stronger: what the caddie says and what the chip shows come from
+   * one decision, not two calls that happen to agree.
+   */
+  it('the payload sends the brain\'s plan', () => {
     expect(body).toMatch(/holePlan: safe\(/);
-    expect(body).toMatch(/composeLiveHolePlan\(\)\.plan/);
+    expect(body).toMatch(/decideShot\(\{ rawYards: workingYards \}\)\.plan/);
   });
 
-  it('the chip shows what that composer produced', () => {
-    expect(caddieTab).toMatch(/composeLiveHolePlan\(\)/);
+  it('the chip shows the brain\'s plan', () => {
+    expect(caddieTab).toMatch(/decideShot\(\{ rawYards: displayYardage \?\? null \}\)/);
     expect(caddieTab).toMatch(/<HolePlanChip/);
+  });
+
+  it('and only the brain composes it — no surface calls the plan composer directly', () => {
+    for (const f of ['app/(tabs)/caddie.tsx', 'services/caddieRequestBody.ts', 'components/HolePlanChip.tsx']) {
+      expect(R(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, ''))
+        .not.toMatch(/composeLiveHolePlan\(/);
+    }
   });
 
   it('plans from the working number, never from the scorecard length', () => {

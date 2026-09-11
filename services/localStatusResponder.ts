@@ -46,9 +46,8 @@ import { bagDistances } from './shotStrategy';
 // 2026-06-13 — Offline caddie: the MOAT read (club + plays-like + why) composed
 // locally so "how far does it play / plays like" works with NO network. composeShotRead
 // is pure/offline-safe; cached weather feeds the wind factor. [[smartfinder-unified-brain-read]]
-import { composeShotRead } from './cnsShotRead';
+import { decideShot } from './caddieDecision';
 import { getEffectiveDominantMiss } from './effectiveMiss';
-import { liveShotReadInputs } from './shotReadLive';
 import { getCachedWeatherEvenIfStale } from './weatherService';
 import { playsLikeDistance } from '../utils/playsLike';
 // 2026-06-14 (Tim — course book) — STATIC per-hole knowledge (note/description/
@@ -783,12 +782,12 @@ function composedReadReply(lang: LocalReplyLanguage): LocalReplyResult {
    * built from the same facts as the answer with signal. This path still owns its own measured
    * yardage and bearing to the green it resolved. [[no-half-fixes-enforce-every-surface]]
    */
-  const read = composeShotRead(liveShotReadInputs({
+  const read = decideShot({
     rawYards,
     weather: getCachedWeatherEvenIfStale(playerLoc),
     shotBearingDeg: bearingDegrees(playerLoc, green.middle),
     dominantMiss: getEffectiveDominantMiss(),
-  }));
+  }).shot;
   if (!read || read.playsLikeYards == null) {
     return { text: L[lang].noFix, queryType: 'plays_like' };
   }
@@ -834,11 +833,11 @@ function reachReply(lang: LocalReplyLanguage): LocalReplyResult {
    * missed, and the parity guard in preferred-tee-and-dead-fields caught it. That is precisely the
    * "one unwired caller is a silent half-fix" case the guard was written for.
    */
-  const read = composeShotRead(liveShotReadInputs({
+  const read = decideShot({
     rawYards,
     weather: getCachedWeatherEvenIfStale(playerLoc),
     shotBearingDeg: bearingDegrees(playerLoc, green.middle),
-  }));
+  }).shot;
   const plays = read?.playsLikeYards ?? rawYards;
   let longest = bag[0];
   for (const e of bag) if (e[1] > longest[1]) longest = e;

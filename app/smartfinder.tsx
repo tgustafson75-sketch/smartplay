@@ -18,9 +18,8 @@ import * as Location from 'expo-location';
 import { DeviceMotion } from 'expo-sensors';
 import { useRoundStore } from '../store/roundStore';
 import { useGreenReadStore } from '../store/greenReadStore';
-import { composeShotRead } from '../services/cnsShotRead';
+import { decideShot } from '../services/caddieDecision';
 import { liveShotReadInputs } from '../services/shotReadLive';
-import { clubForYards } from '../services/cnsShotRead';
 import { getLearnedMissDirection } from '../services/effectiveMiss';
 import { getCourseHoleGuidance } from '../services/caddieMemoryRetrieval';
 import { bagDistances } from '../services/shotStrategy';
@@ -1120,7 +1119,8 @@ function CameraSmartFinder({
 function recommendClubForDistance(yards: number | null): string | null {
   if (yards == null || yards <= 0) return null;
   try {
-    const picked = clubForYards(yards, liveShotReadInputs({ rawYards: yards }));
+    // 2026-09-11 — ask the brain. This screen does not choose clubs; it draws the one it is given.
+    const picked = decideShot({ rawYards: yards }).shot?.club ?? null;
     if (picked) return picked;
   } catch {
     // fall through to the generic chart only if the stores are unavailable
@@ -1384,6 +1384,8 @@ function TargetCameraOverlay({
   const handicap = usePlayerProfileStore(s => s.handicap);
   /** How this player covers an in-between yardage — see cnsShotRead's gap branch. */
   const distanceControl = usePlayerProfileStore(s => s.distanceControl);
+  // Hoisted 2026-09-11 so the decision memo can depend on it; unconditional, hook order unchanged.
+  const isCompetition = useRoundStore(s => s.isRoundActive && s.isCompetition);
   // 2026-08-07 (Tim) — the manual "dominant miss" is almost always null; fall back to the miss the caddie
   // has LEARNED from the player's own logged shots so the read favors the safe side automatically.
   const manualMiss = usePlayerProfileStore(s => s.dominantMiss);
@@ -1665,8 +1667,64 @@ function TargetCameraOverlay({
     };
   }, [targetBearing, targetYards, shotBearingDeg, weather, elevationDeltaFeet]);
 
-  const effectiveYards = playsLike?.yards ?? targetYards;
-  const recommendedClub = useMemo(() => recommendClubForDistance(effectiveYards), [effectiveYards]);
+
+  // 2026-08-07 (Tim — verifier: holeLineNote was hardcoded null). The CNS composer has a per-hole "best
+  // line" slot ("favor left — you miss right here") that beats the generic miss, and getCourseHoleGuidance
+  // already produces it from the hole's history. Wire it (was always null). Reactive on the active hole.
+  const activeHoleForLine = useRoundStore(s => (s.isRoundActive ? s.currentHole : null));
+  const activeCourseForLine = useRoundStore(s => (s.isRoundActive ? s.activeCourseId : null));
+  const holeLineNote = useMemo(() => {
+    if (activeHoleForLine == null) return null;
+    try { return getCourseHoleGuidance({ courseId: activeCourseForLine ?? null, hole: activeHoleForLine })?.bestLine ?? null; }
+    catch { return null; }
+  }, [activeHoleForLine, activeCourseForLine]);
+
+  /**
+   * 2026-09-11 — ASK THE BRAIN, DO NOT DECIDE.
+   *
+   * This screen used to compose its own read. Composing the INPUTS in one place fixed the wiring but
+   * left the shape: nine places still decided which club to recommend. decideShot is the one
+   * decision, and this screen renders its parts.
+   *
+   * It still passes what it genuinely knows better than live state — the TAPPED target rather than
+   * the middle of the green, the bearing and measured slope to that target, and the front/back it
+   * has on screen.
+   *
+   * It deliberately does NOT pass the hazard. It used to, and that made a cycle: the club came from
+   * the decision, the landing estimate came from the club, the hazard summary came from the landing,
+   * and the decision came from the hazard. TypeScript caught it. The brain composes the hazard from
+   * the same geometry anyway, which is the orchestration answer rather than a workaround — a screen
+   * should not be assembling evidence FOR the decision it is about to be handed.
+   * [[caddie-brain-lens]]
+   */
+  const decision = useMemo(() => decideShot({
+    rawYards: targetYards,
+    weather,
+    shotBearingDeg: targetBearing ?? shotBearingDeg,
+    elevationDeltaFeet,
+    holeLineNote,
+    greenFrontYards: yards.front ?? null,
+    greenBackYards: yards.back ?? null,
+  }), [targetYards, weather, targetBearing, shotBearingDeg, elevationDeltaFeet, holeLineNote, yards.front, yards.back, dominantMiss, isCompetition, distanceControl]);
+  const shotRead = decision.shot;
+
+  /**
+   * 2026-09-11 — ONE plays-like number on this screen.
+   *
+   * The read bar showed the decision's plays-like while the strategy lines below ran on a second,
+   * locally recomputed one. Same inputs, so they agreed — until one of them was ever fed something
+   * the other was not, which is precisely how every other split in this app started.
+   *
+   * The local playsLike memo stays for its WIND TEXT only. Describing the wind is not deciding
+   * anything; naming a yardage the strategy lines then club off is.
+   */
+  const effectiveYards = decision.shot?.playsLikeYards ?? playsLike?.yards ?? targetYards;
+  /**
+   * 2026-09-11 — the aggressive line IS the shot in the read bar, at the same yardage. It takes the
+   * club from the same decision rather than asking again, so the two lines on this screen cannot
+   * disagree even in principle.
+   */
+  const recommendedClub = decision.shot?.club ?? null;
   const landing = useMemo(() => estimateCarryTotal(recommendedClub, avgCarryDriver, avgCarry3Wood), [recommendedClub, avgCarryDriver, avgCarry3Wood]);
   const dispersion = useMemo(() => estimateDispersion(recommendedClub, handicap), [recommendedClub, handicap]);
 
@@ -1745,17 +1803,6 @@ function TargetCameraOverlay({
   // calculate the recommendation; it hands the live signals to the CNS composer
   // (composeShotRead) and renders the answer-first result. Pure + offline-safe, so
   // it works with no signal. Past-performance only surfaces in a competitive round.
-  const isCompetition = useRoundStore(s => s.isRoundActive && s.isCompetition);
-  // 2026-08-07 (Tim — verifier: holeLineNote was hardcoded null). The CNS composer has a per-hole "best
-  // line" slot ("favor left — you miss right here") that beats the generic miss, and getCourseHoleGuidance
-  // already produces it from the hole's history. Wire it (was always null). Reactive on the active hole.
-  const activeHoleForLine = useRoundStore(s => (s.isRoundActive ? s.currentHole : null));
-  const activeCourseForLine = useRoundStore(s => (s.isRoundActive ? s.activeCourseId : null));
-  const holeLineNote = useMemo(() => {
-    if (activeHoleForLine == null) return null;
-    try { return getCourseHoleGuidance({ courseId: activeCourseForLine ?? null, hole: activeHoleForLine })?.bestLine ?? null; }
-    catch { return null; }
-  }, [activeHoleForLine, activeCourseForLine]);
   /**
    * 2026-09-11 — through the shared composer, like every other caller.
    *
@@ -1768,16 +1815,6 @@ function TargetCameraOverlay({
    * the bearing to that target, the measured slope to it, and the front/back it has on screen.
    * `pastScoreNote` is no longer hardcoded null — it had no producer at all until today.
    */
-  const shotRead = useMemo(() => composeShotRead(liveShotReadInputs({
-    rawYards: targetYards,
-    weather,
-    shotBearingDeg: targetBearing ?? shotBearingDeg,
-    elevationDeltaFeet,
-    holeLineNote,
-    nearestHazard: hazardSummary?.nearest ?? null,
-    greenFrontYards: yards.front ?? null,
-    greenBackYards: yards.back ?? null,
-  })), [targetYards, weather, targetBearing, shotBearingDeg, elevationDeltaFeet, holeLineNote, hazardSummary, yards.front, yards.back, dominantMiss, isCompetition, distanceControl]);
 
   return (
     <View style={StyleSheet.absoluteFill}>

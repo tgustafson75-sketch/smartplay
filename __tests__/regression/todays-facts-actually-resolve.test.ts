@@ -132,10 +132,13 @@ describe('the hole plan resolves to a real plan', () => {
   });
 
   it('the bogey budget resolves too, and says shots IN HAND', () => {
+    // 2026-09-11 — the budget moved onto the brain's profile. holePlanLive used to compose its OWN
+    // play profile for this one line, which was a second answer to "who is this golfer".
     standOnTheTee();
-    const { budgetLine } = composeLiveHolePlan();
-    expect(budgetLine).not.toBeNull();
-    expect(budgetLine).toMatch(/in hand/i);
+    const { decideShot } = require('../../services/caddieDecision');
+    const budget = decideShot({ rawYards: 370 }).budget;
+    expect(budget).not.toBeNull();
+    expect(budget).toMatch(/in hand/i);
   });
 });
 

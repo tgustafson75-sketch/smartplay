@@ -18,7 +18,7 @@
  * inferClub is deliberately NOT replaced: "which club should he hit" and "which club was this shot
  * probably hit with" are different questions, and the scorecard needs the second one.
  */
-import { clubForYards } from '../../services/cnsShotRead';
+import { composeShotRead } from '../../services/cnsShotRead';
 import fs from 'fs';
 import path from 'path';
 
@@ -28,49 +28,65 @@ const code = (f: string) => fs.readFileSync(path.join(ROOT, f), 'utf8')
 
 const BAG = { Driver: 220, '3W': 200, '5I': 160, '6I': 150, '7I': 140, '8I': 130, '9I': 118, PW: 105, SW: 78 };
 
-describe('the chooser is usable without a whole read', () => {
-  it('returns a club for a real number', () => {
-    expect(clubForYards(150, { bag: BAG })).toBeTruthy();
+describe('there is exactly one chooser', () => {
+  it('the read is the only thing that names a club', () => {
+    const read = composeShotRead({ rawYards: 150, weather: null, shotBearingDeg: null, bag: BAG });
+    expect(read).not.toBeNull();
+    expect(read!.club).toBeTruthy();
   });
 
-  it('refuses a number it does not have', () => {
-    expect(clubForYards(null, { bag: BAG })).toBeNull();
-    expect(clubForYards(0, { bag: BAG })).toBeNull();
-    expect(clubForYards(Number.NaN, { bag: BAG })).toBeNull();
-  });
-
-  it('it is the SAME chooser the read bar uses — not a lookalike', () => {
-    // clubForYards must delegate to pickClub, or this whole fix is two owners again with one name.
+  /**
+   * 2026-09-11 — a `clubForYards` helper was added here and DELETED the same day. It existed so the
+   * screen could get a club without a whole read; once the screen stopped choosing at all, nothing
+   * wanted one. A second way to get a club is a second club.
+   */
+  it('no second way to get a club has reappeared', () => {
     const src = code('services/cnsShotRead.ts');
-    const at = src.indexOf('export function clubForYards(');
-    expect(at).toBeGreaterThan(-1);
-    expect(src.slice(at, at + 1200)).toMatch(/return pickClub\(/);
+    expect(src).not.toMatch(/export function clubForYards/);
+    // pickClub stays private to the engine
+    expect(src).toMatch(/^function pickClub\(/m);
+    expect(src).not.toMatch(/export function pickClub/);
   });
 
-  it('weighs what nearest-carry cannot — the distance-control gap', () => {
-    // A full-swing player between clubs is a DECISION, not a rounding. If this ever stops mattering
-    // the gap logic has been lost.
-    const full = clubForYards(155, { bag: BAG, distanceControl: 'full_swings' });
-    const dial = clubForYards(155, { bag: BAG, distanceControl: 'dial_down' });
-    expect(full).toBeTruthy();
-    expect(dial).toBeTruthy();
+  it('it weighs what nearest-carry cannot — the distance-control gap', () => {
+    const full = composeShotRead({ rawYards: 155, weather: null, shotBearingDeg: null, bag: BAG, distanceControl: 'full_swings' });
+    const dial = composeShotRead({ rawYards: 155, weather: null, shotBearingDeg: null, bag: BAG, distanceControl: 'dial_down' });
+    expect(full!.club).toBeTruthy();
+    expect(dial!.club).toBeTruthy();
   });
 });
 
 describe('the screen no longer holds a second opinion', () => {
   const sf = code('app/smartfinder.tsx');
 
-  it('its strategy lines go through the shared chooser', () => {
-    expect(sf).toMatch(/clubForYards\(yards, liveShotReadInputs\(\{ rawYards: yards \}\)\)/);
+  /**
+   * 2026-09-11 — this first asserted the screen called clubForYards directly. Tim then named the
+   * real shape: "reaching a decision and touching decisions at multiple points are two different
+   * things — it all needs to be orchestrated by the Caddie's brain." So the screen asks decideShot,
+   * and clubForYards is the brain's chooser rather than the screen's.
+   */
+  it('the aggressive line takes the club from the SAME decision the read bar shows', () => {
+    // Not a second ask at the same yardage — literally the same decision object.
+    expect(sf).toMatch(/const recommendedClub = decision\.shot\?\.club \?\? null;/);
   });
 
-  it('and no longer through the nearest-carry lookup', () => {
+  it('the conservative layup asks the brain rather than choosing locally', () => {
+    expect(sf).toMatch(/decideShot\(\{ rawYards: yards \}\)\.shot\?\.club/);
+    expect(sf).toMatch(/const conservativeClub = recommendClubForDistance\(conservativeYards\)/);
+  });
+
+  it('and never through the nearest-carry lookup', () => {
     expect(sf).not.toMatch(/inferClub\(yards\)/);
   });
 
-  it('the aggressive and conservative lines both use that one function', () => {
-    expect(sf).toMatch(/const recommendedClub = useMemo\(\(\) => recommendClubForDistance\(effectiveYards\)/);
-    expect(sf).toMatch(/const conservativeClub = recommendClubForDistance\(conservativeYards\)/);
+  /**
+   * THE DOUBLE-ADJUSTMENT THIS AVOIDS. effectiveYards is ALREADY the plays-like number. Asking the
+   * brain for a club at effectiveYards would have run the wind and slope model over it a second
+   * time. The aggressive line therefore reuses the decision rather than re-asking at that number.
+   */
+  it('never asks the brain at an already-plays-like yardage', () => {
+    expect(sf).not.toMatch(/decideShot\(\{ rawYards: effectiveYards/);
+    expect(sf).not.toMatch(/recommendClubForDistance\(effectiveYards\)/);
   });
 });
 

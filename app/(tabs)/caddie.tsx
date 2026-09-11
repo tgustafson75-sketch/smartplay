@@ -658,13 +658,11 @@ export default function CaddieTab() {
     return n;
   });
   const livePlan = useMemo(() => {
-    if (!isRoundActive) return { plan: null, budgetLine: null };
-    try {
-      const { composeLiveHolePlan } = require('../../services/holePlanLive') as typeof import('../../services/holePlanLive');
-      return composeLiveHolePlan();
-    } catch {
-      return { plan: null, budgetLine: null };
-    }
+    if (!isRoundActive) return { plan: null, budget: null };
+    // 2026-09-11 — through the brain, not around it. Same decision object the caddie speaks from.
+    const { decideShot } = require('../../services/caddieDecision') as typeof import('../../services/caddieDecision');
+    const d = decideShot({ rawYards: displayYardage ?? null });
+    return { plan: d.plan, budget: d.budget };
   }, [isRoundActive, currentHole, displayYardage, holeShotCount]);
 
   // L1 Quiet's new SmartFinder hero needs the F/M/B triplet, not just
@@ -718,16 +716,28 @@ export default function CaddieTab() {
   }, [isRoundActive, currentHole, markTick, geometryCompletions]);
   const caddieElevation = useElevationDeltaStatus(elevPlayerCoord, elevGreenCoord);
 
+  /**
+   * 2026-09-11 — the strip shows the BRAIN'S plays-like, not a second one.
+   *
+   * This recomputed the number itself with the same model and the same inputs as the shot read, so
+   * the two agreed — right up until one of them was ever fed something the other was not. That is
+   * how every split in this app has started. The strip renders what the caddie decided.
+   *
+   * The no-weather fallback stays as the last resort: elevation alone still moves the number, so an
+   * uphill shot never reads flat just because the weather cache is cold. [[caddie-brain-lens]]
+   */
   const playsLikeYardage = useMemo(() => {
     if (displayYardage == null) return displayYardage;
+    const { decideShot } = require('../../services/caddieDecision') as typeof import('../../services/caddieDecision');
+    const fromBrain = decideShot({
+      rawYards: displayYardage,
+      weather: caddieWeather,
+      shotBearingDeg: caddieShotBearing,
+      elevationDeltaFeet: caddieElevation.deltaFeet,
+    }).shot?.playsLikeYards;
+    if (typeof fromBrain === 'number' && Number.isFinite(fromBrain)) return fromBrain;
     const elevFt = caddieElevation.deltaFeet;
-    // With weather we get the full wind+temp+elevation model. With no weather we
-    // still honor real elevation so uphill/downhill never goes dark (same spirit
-    // as cnsShotRead). Flat read (elevFt === 0) leaves the number untouched.
-    if (!caddieWeather) {
-      return elevFt !== 0 ? Math.round(displayYardage + elevFt / 3) : displayYardage;
-    }
-    return playsLikeDistance(displayYardage, caddieWeather, caddieShotBearing, elevFt).plays_like_yards;
+    return elevFt !== 0 ? Math.round(displayYardage + elevFt / 3) : displayYardage;
   }, [displayYardage, caddieWeather, caddieShotBearing, caddieElevation.deltaFeet]);
 
   // Audit 101 / W1 — useShallow subscriptions (see useRoundStore note above).
@@ -3890,7 +3900,7 @@ export default function CaddieTab() {
              height, and nothing already on this screen moves by a pixel. */}
         <HolePlanChip
           plan={livePlan.plan}
-          budgetLine={livePlan.budgetLine}
+          budgetLine={livePlan.budget}
           bottomOffset={84}
           visible={isRoundActive}
         />

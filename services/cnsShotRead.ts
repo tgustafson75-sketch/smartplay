@@ -279,45 +279,15 @@ function pickClub(playsLikeYards: number, bag: Partial<Record<string, number>>, 
 }
 
 /**
- * THE ONE CLUB PICKER, for callers that need a club without a whole read.
+ * 2026-09-11 — a `clubForYards` export lived here for a few hours: a thin way to get a club without
+ * a whole read, written when app/smartfinder still chose its own club for the strategy lines.
  *
- * 2026-09-11 (Tim — "I'm sure we have disconnects"). app/smartfinder displayed TWO club
- * recommendations for the SAME shot, a few rows apart: the read bar's club from pickClub below, and
- * "Aggressive: {club} to {yards}y" from a local wrapper around clubStatsStore.inferClub. inferClub
- * is nearest-carry only — it knows nothing about the risk posture, the room behind the pin, or how
- * this player covers an in-between number. So the screen could say "8 iron" in one place and
- * "Aggressive: 7I to 158y" in the other, for one shot.
- *
- * inferClub is NOT wrong and is NOT replaced: it answers a genuinely different question — "which
- * club did he probably hit, given this distance" — which is what the scorecard needs to attribute a
- * logged shot. Choosing a club to HIT and guessing a club that WAS hit are different jobs.
- *
- * This exports the choosing one, so anything that recommends a club recommends the same club.
- * [[two-owners-is-the-root-cause]]
+ * Orchestrating the decision made it dead the same day. Surfaces now ask
+ * services/caddieDecision.decideShot and read `.shot.club`, so there is no caller that wants a club
+ * without the read it came from — and a second way to get a club is a second club. The orphan guard
+ * refused it within a minute of the last caller going away, which is exactly its job.
+ * [[orphans-are-live-bugs-not-dead-code]]
  */
-export function clubForYards(
-  playsLikeYards: number | null | undefined,
-  opts: {
-    bag?: Partial<Record<string, number>>;
-    risk?: ShotRiskMode;
-    distanceControl?: 'full_swings' | 'some_partials' | 'dial_down';
-    greenFrontYards?: number | null;
-    greenBackYards?: number | null;
-    nearestHazard?: { label: string; yards: number } | null;
-  } = {},
-): string | null {
-  if (playsLikeYards == null || !Number.isFinite(playsLikeYards) || playsLikeYards <= 0) return null;
-  // `why` is the read's narration; a caller asking only for a club discards it rather than
-  // rendering half a sentence somewhere it does not belong.
-  const why: string[] = [];
-  return pickClub(playsLikeYards, opts.bag ?? {}, why, opts.risk ?? 'normal', {
-    distanceControl: opts.distanceControl,
-    greenFrontYards: opts.greenFrontYards ?? null,
-    greenBackYards: opts.greenBackYards ?? null,
-    nearestHazard: opts.nearestHazard ?? null,
-  });
-}
-
 export function composeShotRead(input: {
   rawYards: number | null;
   weather: WeatherSnapshot | null;

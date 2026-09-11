@@ -114,8 +114,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 // pure/local/offline: club (from the player's REAL bag, ladder fallback) +
 // plays-like + a short "why" line. NO fabricated success% (per the
 // illustration-data rule — the mockup's "78%" is illustrative only).
-import { composeShotRead } from '../services/cnsShotRead';
-import { liveShotReadInputs } from '../services/shotReadLive';
+import { decideShot } from '../services/caddieDecision';
 import { bagDistances } from '../services/shotStrategy';
 import { useTranslation } from 'react-i18next';
 
@@ -1767,11 +1766,11 @@ export default function SmartVisionScreen() {
        * better: its own middle-of-green yardage, its own tee→green bearing, and its own measured
        * elevation. [[two-owners-is-the-root-cause]]
        */
-      return composeShotRead(liveShotReadInputs({
+      return decideShot({
         rawYards: yardages.middle,
         shotBearingDeg: bearing,
         elevationDeltaFeet: svElevation.deltaFeet,
-      }));
+      }).shot;
     } catch { return null; }
   }, [yardages.middle, teeCoord, greenCoord, svElevation.deltaFeet]);
 

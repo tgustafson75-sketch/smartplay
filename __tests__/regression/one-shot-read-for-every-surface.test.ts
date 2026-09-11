@@ -82,25 +82,49 @@ describe('one composer supplies every fact the read can use', () => {
   });
 });
 
-describe('no surface may hand-build the read again', () => {
-  it.each(CALLERS)('%s calls through the composer', (f) => {
+describe('no surface decides for itself — it asks the brain', () => {
+  /**
+   * 2026-09-11 (Tim) — "Reaching a decision and touching decisions at multiple points are two
+   * different things. It all needs to be totally orchestrated by the Caddie's brain."
+   *
+   * This guard originally asserted every surface called composeShotRead(liveShotReadInputs(...)).
+   * That fixed the WIRING and left the SHAPE: nine places still decided which club to recommend,
+   * merely well-fed. Feeding nine deciders the same facts is not orchestration.
+   *
+   * The property now is stronger and simpler: a surface does not call the club engine at all. It
+   * asks services/caddieDecision.decideShot and renders what comes back.
+   */
+  it.each(CALLERS)('%s asks decideShot', (f) => {
+    expect(code(f)).toMatch(/decideShot\(/);
+  });
+
+  it.each(CALLERS)('%s never calls the club engine itself', (f) => {
     const src = code(f);
-    expect(src).toMatch(/composeShotRead\(\s*liveShotReadInputs\(/);
+    expect(src).not.toMatch(/composeShotRead\(/);
   });
 
-  it.each(CALLERS)('%s has no hand-built input object left', (f) => {
-    // The second call site inside localStatusResponder — the "can I reach it" go/no-go — was missed
-    // on the first pass and caught by exactly this assertion.
-    expect(code(f)).not.toMatch(/composeShotRead\(\s*\{/);
+  it('decideShot is the ONLY place the read is composed', () => {
+    const offenders: string[] = [];
+    const walk = (d: string) => {
+      for (const e of fs.readdirSync(path.join(ROOT, d), { withFileTypes: true })) {
+        const p = `${d}/${e.name}`;
+        if (e.isDirectory()) {
+          if (['node_modules', '.git', 'dist', '.expo', 'ios', 'android', '__tests__', 'scripts'].includes(e.name)) continue;
+          walk(p);
+        } else if (/\.tsx?$/.test(e.name)) {
+          const rel = p.slice(2);
+          if (rel === 'services/cnsShotRead.ts' || rel === 'services/caddieDecision.ts') continue;
+          if (/composeShotRead\s*\(/.test(code(rel))) offenders.push(rel);
+        }
+      }
+    };
+    walk('.');
+    expect(offenders).toEqual([]);
   });
 
-  it('counts every call site, so a NEW hand-built one cannot hide behind a fixed one', () => {
-    for (const f of CALLERS) {
-      const src = code(f);
-      const total = (src.match(/composeShotRead\(/g) || []).length;
-      const composed = (src.match(/composeShotRead\(\s*liveShotReadInputs\(/g) || []).length;
-      expect(composed).toBe(total);
-    }
+  it('and the brain composes it through the one input composer', () => {
+    const brain = code('services/caddieDecision.ts');
+    expect(brain).toMatch(/composeShotRead\(liveShotReadInputs\(known\)\)/);
   });
 });
 
