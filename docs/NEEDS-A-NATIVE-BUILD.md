@@ -1,4 +1,4 @@
-# Native-build packet — status 2026-08-29
+# Native-build packet — status 2026-09-10 (was 2026-08-29)
 
 **Parked by Tim 2026-08-21; worked 2026-08-29 while the paid launch waits on an EIN.**
 One build clears the list. Three builds is three review cycles.
@@ -50,6 +50,35 @@ weak hotel Wi-Fi is worse than good 5G and a flag would lie about exactly that c
 
 ---
 
+## 5. Watch command path · **UNBUILT, and the newest item on this list**
+
+Added 2026-09-10. Tim, today: *"I thought all Kotlin builds were done."* Reasonably — the STORE
+builds were done and submitted. This landed after them.
+
+**Verified against EAS, not inferred:**
+
+| Artifact | Commit | Built |
+|---|---|---|
+| Android versionCode 26 | `ebf26637` | 2026-09-04 |
+| iOS 1.0.0 | `9fdeda03` | 2026-09-03 |
+| **watch command path** | **`b893d5ad`** | **never — 5 days after the last build** |
+
+It lives unmerged on `native/watch-command-and-capability` and changes Kotlin on BOTH ends:
+`android-native/WearSwingBridgeModule.kt` and the watch app's `MainActivity.kt`. What it fixes:
+`watchCaddieBridge` has routed `open_smartmotion` / `smartmotion_record` / `smartmotion_stop` /
+`smartmotion_toggle` since 2026-08-07, and neither end existed — the phone's native module had no
+command path and never emitted the event, and the watch's "Record swings" button only starts its own
+sensor service. Both ends missing, only the middle written.
+
+**Merge caution:** that branch also edits `services/watchCaddieBridge.ts`, and main changed the same
+file on 2026-09-10 (fix-driven pin-yardage push on `subscribeFixChange`, plus the fan-out fix that
+made it actually fire). Merge onto current main and re-read that file rather than taking either side
+wholesale.
+
+**Everything else shipped today is JS and went out by OTA — only this needs a build.**
+
+---
+
 ## Build checklist
 - [x] `getAudioRoute()` both platforms
 - [x] route-change event, both platforms, bridged and subscribed
@@ -58,5 +87,6 @@ weak hotel Wi-Fi is worse than good 5G and a flag would lie about exactly that c
 - [ ] RevenueCat public SDK keys in `eas.json`
 - [ ] Re-verify on device: `npm run probe-tools`, a voice round, earbud tap, headset plugged in
       MID-round, a sandbox purchase and a restore
+- [ ] merge `native/watch-command-and-capability` (Kotlin both ends; re-read watchCaddieBridge.ts)
 - [ ] runtimeVersion: leave at `1.0.0`. The billing code degrades safely on older binaries by
       design, so keeping the literal means existing testers keep receiving OTA fixes.

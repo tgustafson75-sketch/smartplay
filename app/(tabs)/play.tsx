@@ -838,7 +838,20 @@ export default function PlayTab() {
       let haveAny = false;
       try {
         const last = await Location.getLastKnownPositionAsync({ maxAge: 30 * 60 * 1000 });
-        if (last) {
+        /**
+         * 2026-09-10 — COORD-GUARD BOTH READS. This is the last place in the app taking a raw
+         * position from expo-location without one.
+         *
+         * utils/coordGuard's own header says to apply it "at EVERY boundary where coordinates enter
+         * the pipeline", and this is such a boundary: userPosition is the ONLY writer that unblocks
+         * discovery (see the note above), it sorts the nearby list, and it gates the arrival
+         * download on `nearest.distance_m <= 1500`. A {0,0} or NaN here does not fail loudly — it
+         * makes every course ~10M yards away, or picks the wrong nearest course and downloads it.
+         *
+         * A 30-minute-old cached fix is exactly the read most likely to hand back something stale
+         * or malformed, and it is the first one we take.
+         */
+        if (last && isValidGolfCoord(last.coords.latitude, last.coords.longitude)) {
           haveAny = true;
           setUserPosition({ lat: last.coords.latitude, lng: last.coords.longitude });
         }
@@ -851,6 +864,12 @@ export default function PlayTab() {
             Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
             new Promise<never>((_, rej) => setTimeout(() => rej(new Error('gps_timeout')), 12000)),
           ]);
+          if (!isValidGolfCoord(pos.coords.latitude, pos.coords.longitude)) {
+            // Invalid coords are a failed attempt, not a result — fall through to the backoff so
+            // the next try can still land, rather than pinning discovery to garbage.
+            console.log(`[play] rejected invalid position lat=${pos.coords.latitude} lng=${pos.coords.longitude}`);
+            throw new Error('invalid_coord');
+          }
           setUserPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude });
           return;
         } catch (e) {
