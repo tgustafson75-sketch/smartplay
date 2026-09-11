@@ -1158,6 +1158,21 @@ export const useRoundStore = create<RoundState>()(
           // first shot of a new round (resolveShotClub's 12-min freshness would otherwise carry it).
           club: null,
           clubSetAt: null,
+          /**
+           * 2026-09-10 — startRound NEVER cleared this, and the note I added to setCurrentHole
+           * earlier today claimed it did ("Only startRound and endRound ever cleared it"). That was
+           * written from the field's intent, not from this block. endRound and discardRound clear
+           * it; startRound clears its sibling `pendingKevinRec` on the line above and skips it.
+           *
+           * It is PERSISTED and carries no timestamp, and endRound is only reached by an explicit
+           * tap — a phone in a pocket ends most rounds by being killed. So a lie read taken last
+           * Saturday and never spent on a shot survives into the next round and is stamped onto its
+           * FIRST shot (`lie_analysis: shot.lie_analysis ?? s.pendingLieAnalysis`), which the
+           * hole-change expiry cannot catch because setCurrentHole does not run until hole two.
+           * A flat tee box gets clubbed as a buried lie, and the wrong lie is frozen into the
+           * permanent shot record. [[a-read-cannot-outlive-its-shot]]
+           */
+          pendingLieAnalysis: null,
           pendingKevinRec: null,
           isCompetition: options.isCompetition,
           roundNotes: options.notes,
@@ -2530,7 +2545,8 @@ export const useRoundStore = create<RoundState>()(
          * since the read is the point — and "ball sitting down in thick rough" is still in the
          * caddie payload on hole 12, and gets stamped onto whatever shot is eventually logged
          * (`lie_analysis: shot.lie_analysis ?? s.pendingLieAnalysis`). It corrupts the live advice
-         * AND the shot history. Only startRound and endRound ever cleared it.
+         * AND the shot history. Only endRound and discardRound ever cleared it — startRound did
+         * not, which I got wrong in this comment when I first wrote it; that gap is fixed above.
          *
          * A lie is a fact about one ball in one place. It cannot outlive the hole.
          * [[orphans-are-live-bugs-not-dead-code]] [[a-field-that-is-sometimes-a-placeholder]]

@@ -93,7 +93,16 @@ interface RelationshipState {
     moment: Omit<HeroMoment, 'id' | 'timestamp' | 'kevinSaid'>,
   ) => string;
 
-  updateMentalState: (holescore: number, par: number) => void;
+  /**
+   * 2026-09-10 — REMOVED. It INCREMENTED consecutiveBadHoles (`s.consecutiveBadHoles + 1`) while
+   * `recomputeMentalState` DERIVES it from the real scorecard tail, and roundStore.logScore calls
+   * the latter at the single seam every score path funnels through. Any surface calling both
+   * double-counted its own bad hole and pushed the caddie into 'spiraling' a hole early — which is
+   * the defect recomputeMentalState was written for on 2026-08-10. The 08-11 purge removed every
+   * caller but one (the cockpit stepper, found 2026-09-10); with that gone, leaving an
+   * increment-based twin in the interface is a trap for whoever wires the next scoring surface.
+   * Use recomputeMentalState, or let logScore do it for you.
+   */
   /** 2026-08-10 — DERIVE the mental state from the real scorecard tail (oldest→newest). Preferred
    *  over updateMentalState: it cannot drift when a surface forgets to report. */
   recomputeMentalState: (recent: { strokes: number; par: number }[]) => void;
@@ -181,18 +190,6 @@ export const useRelationshipStore = create<RelationshipState>()(
           firstPureShot: s.firstPureShot ?? Date.now(),
         }));
         return kevinSaid;
-      },
-
-      updateMentalState: (holescore, par) => {
-        const overPar = holescore - par;
-        set(s => {
-          const badHoles = overPar >= 2 ? s.consecutiveBadHoles + 1 : 0;
-          const mental: MentalState =
-            badHoles >= 3 ? 'spiraling' :
-            badHoles >= 2 ? 'tight' :
-            overPar <= 0  ? 'confident' : 'neutral';
-          return { consecutiveBadHoles: badHoles, currentMentalState: mental };
-        });
       },
 
       /**

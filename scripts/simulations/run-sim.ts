@@ -5117,11 +5117,22 @@ check('Round start: a non-listed API course reports GPS mapping honestly (no sil
     const c = read('app/(tabs)/caddie.tsx');
     return (
       /const isApiCourse = !picked\.isLocal;/.test(c) &&
-      /const hasMapping = !!geom && geom\.holes\.length > 0;/.test(c) &&
+      /**
+       * 2026-09-10 — this asserted `geom.holes.length > 0`, and that is what made the guard pass
+       * through the Hemet round. A golfcourseapi build returns eighteen hole ROWS whether or not
+       * any of them carries a GREEN, so "mapping landed" was true for a course that would give
+       * hole-length-minus-distance-walked all day — and the honest branch this guard exists to
+       * protect became unreachable in precisely the case it was written for.
+       *
+       * Now asserts the STRONGER rule: the claim must be counted in greens, and the row count must
+       * NOT be what decides it. [[state-what-you-measured-not-what-you-intended]]
+       */
+      /const mappedGreens = mappedHoleCount\(geom\);/.test(c) &&
+      !/hasMapping = !!geom && geom\.holes\.length > 0/.test(c) &&
       /couldn't pull full GPS mapping/.test(c)
     );
   })(),
-  'starting a round on a course resolved via golfcourseapi tells the player when GPS mapping lands (after a blank start) or that it could not be pulled — never blank distances with no explanation');
+  'starting a round on a course resolved via golfcourseapi tells the player when GPS mapping lands — counted in GREENS, not hole rows — or that it could not be pulled; never blank distances with no explanation, and never a live-distance claim over a course with no greens');
 
 // 2026-07-27 (tester UX — multi-turn wrong-course fix). The ambiguous-course question now HOLDS the
 // candidate list; the user's next utterance resolves against it directly instead of re-issuing the

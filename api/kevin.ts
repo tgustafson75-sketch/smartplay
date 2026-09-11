@@ -1216,7 +1216,24 @@ ${(() => {
   return `HOW THIS ROUND IS GOING: ${bits}${last ? `\nLast three: ${last}` : ''}\n`;
 })()}${(() => {
   const yi = yardageInsight as { yardage: number | null; source?: string; confidence?: string; reason?: string; is_fallback?: boolean } | null;
-  const base = `DISTANCE REMAINING RIGHT NOW: ${currentYardage} yards. This is the shot in front of them. It is NOT the hole's card length, and the card length is NOT the shot — never quote a scorecard yardage as the distance they are hitting.`;
+  /**
+   * 2026-09-10 — "null yards" was reaching the model.
+   *
+   * `currentYardage` defaults to null in the destructure above, and the resolver genuinely returns
+   * `value: null` when a hole has neither green geometry nor a usable card — the exact state a
+   * golfcourseapi course sits in before geometry builds. This template interpolated it regardless,
+   * so the prompt read "DISTANCE REMAINING RIGHT NOW: null yards", two sentences before the
+   * provenance line correctly said "NO RELIABLE NUMBER right now". The caddie was handed a
+   * contradiction and a literal `null` to reason about.
+   *
+   * Same shape as the 2026-08-19 scorecard bug that briefed "Black tee null yds": every value
+   * interpolated into text the caddie reads AS FACT has to state itself only when it exists.
+   * [[illustration-data-points]]
+   */
+  const haveNumber = typeof currentYardage === 'number' && Number.isFinite(currentYardage) && currentYardage > 0;
+  const base = haveNumber
+    ? `DISTANCE REMAINING RIGHT NOW: ${currentYardage} yards. This is the shot in front of them. It is NOT the hole's card length, and the card length is NOT the shot — never quote a scorecard yardage as the distance they are hitting.`
+    : `DISTANCE REMAINING RIGHT NOW: not established. Do not invent a number and do not quote the hole's card length as the distance they are hitting.`;
   if (!yi || typeof yi.source !== 'string') return base;
   /**
    * 2026-09-10 (Tim, Hemet — eighteen holes of estimates the caddie stated as measurements).

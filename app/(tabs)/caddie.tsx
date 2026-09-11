@@ -127,7 +127,7 @@ import { conversationalLoggingOrchestrator } from '../../services/conversational
 import { setActiveSurface, clearActiveSurface } from '../../services/activeSurfaceRegistry';
 import { evaluateRoundProgress } from '../../services/teamIntelligence';
 import QuickLogShotSheet from '../../components/QuickLogShotSheet';
-import { fetchCourseGeometry, isGeometryBuilding } from '../../services/courseGeometryService';
+import { fetchCourseGeometry, isGeometryBuilding, mappedHoleCount } from '../../services/courseGeometryService';
 import WindArrow from '../../components/caddie/WindArrow';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import { playsLikeDistance } from '../../utils/playsLike';
@@ -2943,7 +2943,21 @@ export default function CaddieTab() {
       void (async () => {
         try {
           const geom = await fetchCourseGeometry(courseId, { courseLocation });
-          const hasMapping = !!geom && geom.holes.length > 0;
+          /**
+           * 2026-09-10 (Tim, Hemet) — THIS ANNOUNCED LIVE DISTANCES FOR A BUILD WITH NO GREENS.
+           *
+           * `hasMapping` was `geom.holes.length > 0`. A golfcourseapi build returns eighteen hole
+           * rows whether or not any of them carries a GREEN — that is the entire Hemet failure —
+           * so the first-tee message said "GPS distances are live now" on a course where every
+           * yardage for the next four hours would be hole-length-minus-distance-walked.
+           *
+           * The rest of the engine moved to `mappedHoleCount` (holes that actually have a green)
+           * earlier today; this message was the one consumer left counting rows. It also made the
+           * honest branch below unreachable in exactly the case it was written for.
+           * [[state-what-you-measured-not-what-you-intended]]
+           */
+          const mappedGreens = mappedHoleCount(geom);
+          const hasMapping = mappedGreens > 0;
           if (isApiCourse) {
             if (hasMapping && startedWithoutHoles) {
               setCaddieResponse(`Got the map for ${courseLabel} — GPS distances are live now.`);

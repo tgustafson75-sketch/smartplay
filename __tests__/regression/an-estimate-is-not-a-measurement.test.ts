@@ -72,6 +72,18 @@ describe('an estimate is not a measurement', () => {
     expect(estimateAt).toBeLessThan(plainAt);
   });
 
+  it('never interpolates a null yardage into text the caddie reads as fact', () => {
+    // currentYardage defaults to null, and the resolver genuinely returns value:null on a hole with
+    // neither green geometry nor a usable card — so this template could render "null yards" two
+    // sentences before the provenance line said "NO RELIABLE NUMBER right now".
+    expect(kevinSrc).toMatch(/const haveNumber = typeof currentYardage === 'number'/);
+    expect(kevinSrc).toMatch(/DISTANCE REMAINING RIGHT NOW: not established/);
+    // the numeric form must be reachable only behind that check
+    const at = kevinSrc.indexOf('const haveNumber = typeof currentYardage');
+    const tail = kevinSrc.slice(at, at + 600);
+    expect(tail).toMatch(/haveNumber\s*\n?\s*\?\s*`DISTANCE REMAINING RIGHT NOW: \$\{currentYardage\}/);
+  });
+
   it('still gives a club rather than going dark on an estimate', () => {
     // Tim's standing rule: honesty is confidence + range, never a blank.
     expect(estimateBranch).toMatch(/Give the club you would give/);

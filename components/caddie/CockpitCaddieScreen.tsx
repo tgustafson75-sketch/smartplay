@@ -32,7 +32,6 @@ import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useRoundStore, roundFirstHole, roundLastHole, type ShotResult } from '../../store/roundStore';
-import { useRelationshipStore } from '../../store/relationshipStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useToastStore } from '../../store/toastStore';
@@ -264,9 +263,27 @@ export default function CockpitCaddieScreen({
     // Unmount-commit can fire AFTER endRound reset the store — logScore has no active-round guard, so
     // writing here would pollute the dead store and miss the saved round record. Drop it instead.
     if (!st.isRoundActive) return;
-    const alreadyScored = (st.scores[hole] ?? 0) > 0;
+    /**
+     * 2026-09-10 — THE LAST SURVIVOR OF THE 2026-08-11 PURGE, on the surface Tim actually scores on.
+     *
+     * This called `updateMentalState` right after `logScore`. `logScore` funnels into
+     * `recomputeMentalState`, which DERIVES consecutiveBadHoles from the real scorecard tail;
+     * `updateMentalState` then INCREMENTS on top of it (`s.consecutiveBadHoles + 1`). So every score
+     * entered on the cockpit stepper counted its own bad hole twice: two doubles derive to 2
+     * ('tight') and were bumped to 3 ('spiraling') — the caddie saying "forget the last three" one
+     * hole early, every time.
+     *
+     * That is the exact report `recomputeMentalState` was written for on 2026-08-10 ("I again had
+     * like two pars and one bogey, and it would tell me to forget the last three"). Every other
+     * score writer had this call removed then, each leaving a tombstone saying the job was finished
+     * — see app/(tabs)/caddie.tsx and services/intents/logScoreHandler.ts. This one was missed, and
+     * it was the one that mattered.
+     *
+     * `holePar` here came from a ref defaulting to 4, so on a course with no par data it also read
+     * a par-5 as a bogey — the other half of the same 08-11 finding.
+     * [[two-owners-is-the-root-cause]] [[no-half-fixes-enforce-every-surface]]
+     */
     logScore(hole, val);
-    if (!alreadyScored) useRelationshipStore.getState().updateMentalState(val, holePar);
   }, [logScore]);
   const handleStepperShots = (next: number) => {
     void Haptics.selectionAsync().catch(() => undefined);
