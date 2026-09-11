@@ -228,7 +228,18 @@ export default function GpsTestScreen() {
     void (async () => {
       try {
         await startGpsManager();
-        if (!mounted) stopGpsManager();
+        /**
+         * 2026-09-10 — the SAME guard the unmount path below already applies.
+         *
+         * This branch fires when the screen is left before startGpsManager resolves, and it called
+         * stopGpsManager unconditionally — so opening this owner screen mid-round and navigating
+         * away inside that window killed the SHARED round GPS watch, taking every yardage with it.
+         * The cleanup fifteen lines down gets it right; this race did not.
+         */
+        if (!mounted) {
+          const round = useRoundStore.getState();
+          if (!round.isRoundActive) stopGpsManager();
+        }
       } catch (e) {
         console.log('[gps-test] startGpsManager failed:', e);
       }
