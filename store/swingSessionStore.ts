@@ -904,6 +904,17 @@ function guardedCageStorage() {
   };
 }
 
+/** One guarded hop into the club model, shared by both ingest paths. */
+function recordUse(club: string | null | undefined, source: 'video' | 'range', n: number): void {
+  if (!club) return;
+  try {
+    const cn = (require('../services/clubNormalize') as typeof import('../services/clubNormalize')).normalizeClub(club);
+    if (!cn) return;
+    (require('./clubStatsStore') as typeof import('./clubStatsStore'))
+      .useClubStatsStore.getState().recordClubUse(cn, source, n);
+  } catch { /* capture is additive — it must never fail an ingest */ }
+}
+
 export const useSwingSessionStore = create<SwingSessionState>()(
   persist(
     (set, get) => ({
@@ -1169,6 +1180,17 @@ export const useSwingSessionStore = create<SwingSessionState>()(
           // member → profile email → guest fallback).
           player_id: derivePlayerId(),
         };
+        /**
+         * 2026-09-11 (Tim) — "club tendency being derived at least partially from using a club in a
+         * drill or video. We need to capture useful data from everywhere if we expect to present the
+         * user with a real Smart Play."
+         *
+         * A swing here is a real use of a real club and recorded nothing: clubStatsStore's rep tally
+         * had one writer, the range screen. AFTER the dedupe guard above, so a retried upload cannot
+         * count twice. Source 'video' is kept rather than flattened — a video swing is not a club
+         * chosen under pressure on the course. [[close-the-loop-strategy]]
+         */
+        recordUse(club, 'video', Math.max(1, 1));
         set(s => ({ sessionHistory: [...s.sessionHistory, session].slice(-50) }));
         return sessionId;
       },
@@ -1236,6 +1258,17 @@ export const useSwingSessionStore = create<SwingSessionState>()(
           // uploaded-swing path.
           player_id: derivePlayerId(),
         };
+        /**
+         * 2026-09-11 (Tim) — "club tendency being derived at least partially from using a club in a
+         * drill or video. We need to capture useful data from everywhere if we expect to present the
+         * user with a real Smart Play."
+         *
+         * A swing here is a real use of a real club and recorded nothing: clubStatsStore's rep tally
+         * had one writer, the range screen. AFTER the dedupe guard above, so a retried upload cannot
+         * count twice. Source 'range' is kept rather than flattened — a video swing is not a club
+         * chosen under pressure on the course. [[close-the-loop-strategy]]
+         */
+        recordUse(club, 'range', Math.max(1, shots?.length ?? 1));
         set(s => ({ sessionHistory: [...s.sessionHistory, session].slice(-50) }));
         return sessionId;
       },

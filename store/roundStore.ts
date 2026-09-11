@@ -3082,6 +3082,30 @@ export const useRoundStore = create<RoundState>()(
             } catch { return null; }
           })();
 
+          /**
+           * 2026-09-11 (Tim) — A SHOT ON THE COURSE IS A CLUB USE, AND IT WAS RECORDING NONE.
+           *
+           * "The which-clubs-to-carry has been weakly woven, since the shots you don't explicitly
+           * call out were not being captured in round play."
+           *
+           * clubStatsStore's rep tally had exactly ONE writer — the range swing screen. A club hit
+           * fourteen times on the course recorded zero uses, so the bag recommendation could call it
+           * idle and offer it as a swap candidate. This is the club the player CHOSE, under
+           * pressure, which is the most meaningful use there is.
+           *
+           * It records the use whether or not a carry was measured — the carry write below needs a
+           * measured number, but "he hit a 7 iron" is true regardless of whether we timed it. Sim
+           * rounds are excluded for the same reason they cannot set a longest drive.
+           */
+          if (normClub && !s.isSimRound) {
+            try {
+              (require('./clubStatsStore') as typeof import('./clubStatsStore'))
+                .useClubStatsStore.getState().recordClubUse(normClub, 'round', 1);
+            } catch (e) {
+              console.log('[roundStore] club-use record failed (non-fatal):', e);
+            }
+          }
+
           // 2026-06-04 — Auto-update longestDrive when a Driver shot with a real
           // (measured) distance beats the player's current best. Profile store is
           // dynamic-required to avoid a module cycle (playerProfileStore doesn't

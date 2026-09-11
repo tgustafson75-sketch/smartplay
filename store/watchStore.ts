@@ -101,6 +101,17 @@ export const useWatchStore = create<WatchState>()(
 
       recordSwing: (metrics) => {
         const swing: SwingMetrics = { ...metrics, timestamp: Date.now() };
+        /**
+         * 2026-09-11 (Tim — "capture useful data from everywhere") — a watch swing carries the club
+         * it was tagged with and recorded no use of it. Same hop every other swing source now makes.
+         */
+        try {
+          const cn = (require('../services/clubNormalize') as typeof import('../services/clubNormalize')).normalizeClub(swing.club);
+          if (cn) {
+            (require('./clubStatsStore') as typeof import('./clubStatsStore'))
+              .useClubStatsStore.getState().recordClubUse(cn, 'watch', 1);
+          }
+        } catch { /* additive — never fail a swing on it */ }
         set(s => ({
           lastSwing: swing,
           isSwingDetected: true,

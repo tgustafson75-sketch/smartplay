@@ -30,6 +30,12 @@ export const CLUB_ORDER = [
 ] as const;
 export type ClubName = (typeof CLUB_ORDER)[number];
 
+/**
+ * Where a club use came from. A swing is a swing — but a ROUND rep is a club chosen under pressure
+ * and a RANGE rep is a club swung in a bay, so the provenance is kept rather than flattened.
+ */
+export type ClubUseSource = 'round' | 'range' | 'drill' | 'video' | 'watch';
+
 // 2026-06-30 (audit C1/C10 — Tim: "wire learned carry to on-course distances") —
 // map the recognizer's ClubId ('DR','7I',…) to this store's ClubName so SmartMotion can
 // look up the player's REAL tracked/stated per-club carry (distanceFor / hasDistance).
@@ -166,16 +172,43 @@ interface ClubStatsState {
   total: Partial<Record<ClubName, ClubStat>>;
   /** 2026-06-15 (Tim — editable My Bag) — user-entered CARRY per club (their own numbers, day one). */
   manual: Partial<Record<ClubName, number>>;
-  /** Per-club practice REP tally — HONEST volume, NOT a distance. */
+  /** Per-club REP tally — HONEST volume, NOT a distance. Every source, not just the range. */
   reps: Partial<Record<ClubName, number>>;
+  /**
+   * 2026-09-11 (Tim) — WHERE each use came from.
+   *
+   * "The which-clubs-to-carry has been weakly woven, since the shots you don't explicitly call out
+   * were not being captured in round play… club tendency being derived at least partially from
+   * using a club in a drill or video. We need to capture useful data from everywhere if we expect
+   * to present the user with a real Smart Play."
+   *
+   * `reps` had exactly ONE writer — the range swing screen — so a club hit fourteen times on the
+   * course recorded zero uses, and drills, uploaded videos and watch swings recorded none at all.
+   * The bag recommendation then called a club "idle" and offered it as a swap candidate without
+   * knowing the player hits it constantly somewhere else.
+   *
+   * Provenance is kept rather than one flat count because the sources do not mean the same thing:
+   * a range rep says you own and swing the club, a ROUND rep says you choose it under pressure.
+   * Merging them would be the fabricated precision this app refuses. [[illustration-data-points]]
+   */
+  repsBySource: Partial<Record<ClubName, Partial<Record<ClubUseSource, number>>>>;
   /** Record a measured AIRTIME carry (acoustic/pose, range Flat-Carry, stated). */
   recordCarry: (club: ClubName, yards: number) => void;
   /** Record a GPS tee→rest TOTAL (cart-mark shot tracking — includes roll). */
   recordTotal: (club: ClubName, yards: number) => void;
   /** @deprecated back-compat alias → recordTotal (the old `record` was fed GPS totals). */
   record: (club: ClubName, yards: number) => void;
-  addReps: (club: ClubName, n: number) => void;
+  /**
+   * THE ONE WRITER for "this club was used". Every surface that sees a swing calls this — a round
+   * shot, a range rep, a drill, an uploaded video, a watch swing — so a club's volume is its real
+   * volume rather than whatever one screen happened to report.
+   */
+  recordClubUse: (club: ClubName, source: ClubUseSource, n?: number) => void;
   repsFor: (club: ClubName) => number;
+  /** Uses broken out by where they came from. Empty object for a club never swung. */
+  usesBySource: (club: ClubName) => Partial<Record<ClubUseSource, number>>;
+  /** Has this club been swung ANYWHERE? The honest test for dead weight in the bag. */
+  everUsed: (club: ClubName) => boolean;
   /** Set the player's stated CARRY for a club (My Bag). yards<=0 clears it. */
   setManual: (club: ClubName, yards: number) => void;
   clearManual: (club: ClubName) => void;
@@ -221,11 +254,21 @@ export const useClubStatsStore = create<ClubStatsState>()(
       total: {},
       manual: {},
       reps: {},
-      addReps: (club, n) => {
-        if (!Number.isFinite(n) || n <= 0) return;
-        set((s) => ({ reps: { ...s.reps, [club]: (s.reps[club] ?? 0) + Math.round(n) } }));
+      repsBySource: {},
+      recordClubUse: (club, source, n = 1) => {
+        if (!club || !Number.isFinite(n) || n <= 0) return;
+        const add = Math.round(n);
+        set((s) => ({
+          reps: { ...s.reps, [club]: (s.reps[club] ?? 0) + add },
+          repsBySource: {
+            ...s.repsBySource,
+            [club]: { ...(s.repsBySource[club] ?? {}), [source]: ((s.repsBySource[club]?.[source]) ?? 0) + add },
+          },
+        }));
       },
       repsFor: (club) => get().reps[club] ?? 0,
+      usesBySource: (club) => get().repsBySource[club] ?? {},
+      everUsed: (club) => (get().reps[club] ?? 0) > 0,
       setManual: (club, yards) => {
         set((s) => {
           const next = { ...s.manual };

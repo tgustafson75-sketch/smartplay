@@ -4437,7 +4437,7 @@ export default function SmartMotion() {
         if (cid && cid !== 'unknown') {
           const cn = clubIdToClubName(cid); // 2026-08-10 — canonical map, not a hand-rolled DR cast
           if (cn && (CLUB_ORDER as readonly string[]).includes(cn)) {
-            useClubStatsStore.getState().addReps(cn, segsForAnalysis.length || 1);
+            useClubStatsStore.getState().recordClubUse(cn, 'range', segsForAnalysis.length || 1);
           }
         }
       } catch { /* non-fatal */ }

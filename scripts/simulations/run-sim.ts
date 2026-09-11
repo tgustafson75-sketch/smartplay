@@ -5355,9 +5355,21 @@ check('Practice reps credited per club (honest volume, not distance)',
     const sm = read('app/swinglab/smartmotion.tsx');
     const screen = read('app/practice/fit-profile.tsx');
     return (
-      /addReps:/.test(store) && /repsFor:/.test(store) &&
+      /**
+       * 2026-09-11 — `addReps` was renamed `recordClubUse` and given a SOURCE, after Tim: "we need
+       * to capture useful data from everywhere if we expect to present the user with a real Smart
+       * Play." It had exactly one writer, this screen, so a club hit fourteen times on the course
+       * recorded zero uses.
+       *
+       * The property this scenario protects is unchanged — a rep is VOLUME, never a distance — and
+       * the last line still pins that. What is added is that the range is no longer the only source.
+       */
+      /recordClubUse:/.test(store) && /repsFor:/.test(store) &&
       /reps: Partial<Record<ClubName, number>>/.test(store) &&
-      /useClubStatsStore\.getState\(\)\.addReps\(cn, segsForAnalysis\.length/.test(sm) &&
+      /useClubStatsStore\.getState\(\)\.recordClubUse\(cn, 'range', segsForAnalysis\.length/.test(sm) &&
+      /recordClubUse\(normClub, 'round', 1\)/.test(read('store/roundStore.ts')) &&
+      // a rep must still never reach the distance ladder
+      !/recordClubUse\([^)]*\)\s*;\s*\n[^\n]*recordCarry/.test(store) &&
       saysToPlayer(screen, 'PRACTICE VOLUME')
     );
   })(),

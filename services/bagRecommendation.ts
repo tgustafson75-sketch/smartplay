@@ -84,8 +84,12 @@ export interface BagRecommendation {
   forming: boolean;
   /** Clubs that see action here, long → short. */
   carry: ClubUse[];
-  /** Clubs in your real (learned) bag that sat idle here — swap candidates. */
+  /** Clubs in your real (learned) bag that sat idle here. */
   idle: string[];
+  /** Of those, the ones you have never swung ANYWHERE — the real dead weight. */
+  deadWeight: string[];
+  /** Of those, the ones you do use elsewhere — leave them in the bag. */
+  idleButUsedElsewhere: string[];
   /** Distance holes you keep facing with no club that fits. */
   gaps: BagGap[];
   /** One answer-first line. */
@@ -118,6 +122,15 @@ export interface BagRecInput {
   ownedClubs: string[];
   /** Distance → best club, for attributing clubless shots. */
   inferClub: (yards: number) => string;
+  /**
+   * 2026-09-11 (Tim) — HAS HE SWUNG THIS CLUB ANYWHERE? Range, drill, video, watch or another
+   * course. Absent → treated as unknown, and the idle call stays as cautious as it was.
+   *
+   * "The which-clubs-to-carry has been weakly woven… there has always seemed to be at least a
+   * partial disconnect there." There was: a club was called idle on the evidence of THIS course
+   * alone, so a club the player hits constantly everywhere else was offered as a swap candidate.
+   */
+  everUsed?: (club: string) => boolean;
 }
 
 /**
@@ -170,7 +183,23 @@ export function composeBagRecommendation(input: BagRecInput): BagRecommendation 
   const usedSet = new Set(carry.map(c => c.club));
   // Idle = clubs in your real (logged) bag you didn't reach for here. Only
   // meaningful once we know your real bag; never fabricates a stock set.
-  const idle = ownedClubs.filter(c => c !== 'Putter' && !usedSet.has(c));
+  const idleHere = ownedClubs.filter(c => c !== 'Putter' && !usedSet.has(c));
+  /**
+   * 2026-09-11 — IDLE HERE IS NOT DEAD WEIGHT.
+   *
+   * Splitting these is the whole point of capturing club use from every source. A club that sits out
+   * at this course but gets swung on the range, in a drill, on video or at another course is a club
+   * you use — recommending a swap for it is wrong, and it is the kind of wrong that makes a player
+   * stop trusting the whole feature. A club swung NOWHERE is the dead weight Tim's moat is about:
+   * "people amass clubs that solve ONE course and carry dead weight everywhere."
+   *
+   * With no usage lookup supplied, everything stays in the cautious bucket and nothing is called
+   * dead — an unknown must never be reported as a finding. [[illustration-data-points]]
+   */
+  const everUsed = input.everUsed;
+  const deadWeight = everUsed ? idleHere.filter(c => !everUsed(c)) : [];
+  const usedElsewhere = everUsed ? idleHere.filter(c => everUsed(c)) : idleHere;
+  const idle = idleHere;
 
   // Gap detection: walk the clubs you USE (full-swing only) longest → shortest;
   // any adjacent carry gap wider than GAP_YARDS is a hole in your set.
@@ -227,7 +256,13 @@ export function composeBagRecommendation(input: BagRecInput): BagRecommendation 
   }
 
   const rationale: string[] = [];
-  if (idle.length) {
+  if (deadWeight.length) {
+    rationale.push(`Never swung: ${deadWeight.join(', ')} — not here, not on the range, not anywhere. That is the dead weight.`);
+  }
+  if (usedElsewhere.length) {
+    rationale.push(`Idle here but you do use ${usedElsewhere.length === 1 ? 'it' : 'them'}: ${usedElsewhere.join(', ')} — fine to leave in the bag.`);
+  }
+  if (idle.length && !everUsed) {
     rationale.push(`Idle here: ${idle.join(', ')} — swap candidates for a club that fits a gap.`);
   }
   for (const g of gaps) {
@@ -241,6 +276,8 @@ export function composeBagRecommendation(input: BagRecInput): BagRecommendation 
     forming,
     carry,
     idle,
+    deadWeight,
+    idleButUsedElsewhere: usedElsewhere,
     gaps,
     headline,
     rationale,
@@ -287,5 +324,11 @@ export function recommendBagForCourse(courseId: string | null): BagRecommendatio
     clubDistances: learned,
     ownedClubs,
     inferClub: (yards: number) => clubStats.inferClub(yards),
+    /**
+     * 2026-09-11 — the usage every source now records: a round shot, a range rep, a drill, an
+     * uploaded video, a watch swing. Before this, a club's only evidence of life was a logged shot
+     * at THIS course, so the idle list swept up clubs the player hits constantly elsewhere.
+     */
+    everUsed: (club: string) => clubStats.everUsed(club as never),
   });
 }
