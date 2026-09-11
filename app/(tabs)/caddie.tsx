@@ -1,24 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { courseDisplayLabel } from '../../data/courseComplexes';
 import { QuickTutorial } from '../../components/QuickTutorial';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Modal,
-  Alert,
-  Animated,
-  Easing,
-  AppState,
-  AppStateStatus,
-  ScrollView,
-  useWindowDimensions,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-  Linking,
-} from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, Alert, Animated, Easing, AppState, AppStateStatus, ScrollView, useWindowDimensions, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -48,7 +31,7 @@ import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useCustomCaddieMediaStore } from '../../store/customCaddieMediaStore';
 import { useFamilyStore } from '../../store/familyStore';
 import { useShallow } from 'zustand/react/shallow';
-import { getCaddieName, ACTIVE_PERSONAS, type Persona } from '../../lib/persona';
+import { getCaddieName } from '../../lib/persona';
 import { useRelationshipStore } from '../../store/relationshipStore';
 import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { usePointsStore } from '../../store/pointsStore';
@@ -58,7 +41,7 @@ import { useCaddieMemoryStore } from '../../store/caddieMemoryStore';
 import CoursePicker, { type PickedCourse } from '../../components/CoursePicker';
 import StartRoundCourseCard from '../../components/course/StartRoundCourseCard';
 import { openTeeTimeSearch } from '../../services/teeTimeLink';
-import { openYouTubeChannel } from '../../services/youtubeLinks';
+
 import { isSmartMotionActive, isSmartMotionRecording, emitSmartMotionCommand, emitDrillConfig, subscribeSmartMotionVoiceEvent, subscribeSmartMotionUtterance } from '../../services/smartMotionRecordBus';
 import { type RoundMode, ROUND_MODE_LABELS, ROUND_MODE_CARDS } from '../../types/patterns';
 import { getCourse as getApiCourse, courseToHoles, searchCourses } from '../../services/golfCourseApi';
@@ -96,19 +79,19 @@ import { conversationalLoggingOrchestrator } from '../../services/conversational
 import { setActiveSurface, clearActiveSurface } from '../../services/activeSurfaceRegistry';
 import { evaluateRoundProgress } from '../../services/teamIntelligence';
 import QuickLogShotSheet from '../../components/QuickLogShotSheet';
-import { fetchCourseGeometry, isGeometryBuilding, mappedHoleCount } from '../../services/courseGeometryService';
+import { fetchCourseGeometry, mappedHoleCount } from '../../services/courseGeometryService';
 import WindArrow from '../../components/caddie/WindArrow';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import { playsLikeDistance } from '../../utils/playsLike';
 import { useElevationDeltaStatus } from '../../hooks/useElevationDelta';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
-import { useToastStore } from '../../store/toastStore';
+
 import { useToolsMenuStore } from '../../store/toolsMenuStore';
 import L1HolePreview from '../../components/caddie/L1HolePreview';
 import { getFirstToolHint } from '../../services/voiceOnboardingService';
 // Phase AT — KevinHelpButton import removed; ? button no longer rendered
 // on caddie home (Tutorials in Tool menu is the discoverability path).
-import AppIcon, { type IconName } from '../../components/AppIcon';
+import AppIcon from '../../components/AppIcon';
 // ImagePicker import removed when Capture Photo was pulled from the
 // Tools menu (Tim flagged it as not belonging there). Re-add when the
 // dedicated round-active camera button surfaces it elsewhere.
@@ -469,7 +452,7 @@ export default function CaddieTab() {
   // "smash around". Collapsed to ONE layout: cockpit never renders; the
   // Active layout below is the single caddie layout for every trust level.
   // (The SmartVision↔caddie dominance toggle rides on top of this one layout.)
-  const cockpitMode = false;
+  
   // markTick increments on every position-mark event AND every 4s tick
   // during an active round so liveYardage recomputes both on push (Mark
   // fires) and pull (organic GPS movement during walking). Phase BG —
@@ -1293,7 +1276,6 @@ export default function CaddieTab() {
 
   // Bubble opacity is responseFade × silenceFade — the swap-in/out
   // fade composes with the silence-driven fade.
-  const bubbleOpacity = useRef(Animated.multiply(responseFade, silenceFade)).current;
 
   const currentPar = getCurrentPar();
 
@@ -3122,7 +3104,7 @@ export default function CaddieTab() {
     // Snapshot BEFORE logScore overwrites scores[currentHole] so editing an
     // already-scored hole doesn't double-count the mental-state coach.
     // Mirrors the once-per-hole guard at the voice score-log sites.
-    const alreadyScored = (useRoundStore.getState().scores[currentHole] ?? 0) > 0;
+    
     logScore(currentHole, holeScore);
     logPutts(currentHole, holePutts);
     useGhostStore.getState().updateHole(currentHole, holeScore);
@@ -3882,7 +3864,6 @@ export default function CaddieTab() {
           onPress={() => setShowShotCard(true)}
         />
       </Animated.View>
-
 
       {/* PENALTY QUICK-TAP — only visible when the scoring tool is open. */}
       {isRoundActive && showShotCard && (

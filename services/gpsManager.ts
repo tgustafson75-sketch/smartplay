@@ -256,7 +256,7 @@ function armStaleHardTimer(): void {
            * the position isn't changing. That's normal, not a fault, and burying the real entries
            * under it makes the log useless for the round that matters.
            */
-          const wasAccurate = (lastFix.accuracy_m ?? 999) <= 10;
+          
           const roundActive = (() => {
             try {
               return require('../store/roundStore').useRoundStore.getState().isRoundActive === true;

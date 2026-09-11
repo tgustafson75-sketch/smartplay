@@ -29,7 +29,7 @@ import { subscribeFixChange } from './smartFinderService';
 import { resolveYardage, resolvedToFmb } from './yardageResolver';
 import { useRoundStore } from '../store/roundStore';
 import { useWatchStore } from '../store/watchStore';
-import { acquireWatchDataLayer, releaseWatchDataLayer, isWatchDataLayerListening } from './watchDataLayer';
+import { acquireWatchDataLayer, releaseWatchDataLayer } from './watchDataLayer';
 import { devLog } from './devLog';
 
 // 2026-07-29 (Tim — "don't see if the app is saying watch connected, but they work perfectly").
@@ -231,7 +231,6 @@ export async function initWatchCaddieBridge(): Promise<boolean> {
      * the feature and looked like it worked.
      */
     await acquireWatchDataLayer('caddie');
-
      
     emitter = new NativeEventEmitter(NativeMod as any);
 

@@ -24,7 +24,7 @@
  */
 
 import type { IntentHandler, IntentResult } from '../../types/voiceIntent';
-import { useRoundStore, type ShotLocation } from '../../store/roundStore';
+import { useRoundStore } from '../../store/roundStore';
 // 2026-08-24 — one owner for "where is the player for this shot" (this was duplicated here
 // byte-for-byte with logShotHandler/atBallHandler; see services/shotLocationService).
 import { snapshotShotLocation as snapshotLocation } from '../shotLocationService';

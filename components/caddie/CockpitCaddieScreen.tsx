@@ -46,10 +46,7 @@ import { resolveYardage, resolvedToFmb } from '../../services/yardageResolver';
 import { useGhostStore } from '../../store/ghostStore';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getCaddieName } from '../../lib/persona';
-import {
-  subscribeFixChange,
-  type GreenYardages,
-} from '../../services/smartFinderService';
+import { subscribeFixChange } from '../../services/smartFinderService';
 import { forceMarkPosition } from '../../services/positionMarkBus';
 import { refreshGpsAndReconcile } from '../../services/refreshGpsAction';
 
@@ -255,7 +252,7 @@ export default function CockpitCaddieScreen({
   const commitPendingShots = useCallback(() => {
     const val = pendingShotsRef.current;
     const hole = pendingHoleRef.current;
-    const holePar = pendingParRef.current;
+    
     pendingShotsRef.current = null;
     pendingHoleRef.current = null;
     setPendingShots(null);

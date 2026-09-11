@@ -219,7 +219,7 @@ export interface CourseBookEntry {
 const MIN_SAMPLES = 5;          // distances stay null until this many real shots
 const SAMPLE_HALF_LIFE = 20;    // rolling-average weight (recent shots matter more)
 const MAX_REFLECTIONS = 10;
-const MAX_COURSE_NOTES = 12;
+
 const MAX_RECENT_FAULTS = 8;
 const MAX_TROUBLE = 6;
 const MAX_COURSE_TIPS = 8;        // course-wide caddie tips kept per course book entry
@@ -553,7 +553,6 @@ export const useCaddieMemoryStore = create<CaddieMemoryState>()(
           return { players: { ...s.players, [id]: { ...p, reflections, updated_at: nowMs } } };
         });
       },
-
 
       recordSwingMetrics: ({ tempoRatio, backswingMs, divergenceDeg, mishit, nowMs, playerId }) => {
         const id = pid(playerId);

@@ -39,7 +39,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRoundStore, type RoundRecord, type ShotResult } from '../store/roundStore';
-import { useSwingSessionStore, type SwingSession } from '../store/swingSessionStore';
+import { useSwingSessionStore } from '../store/swingSessionStore';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { getRecentAnalyses } from './smartAnalysisEngine';
 import { devLog } from './devLog';

@@ -11,7 +11,6 @@
  * lazy in voiceService so cold is genuinely no-op for the audio engine.
  */
 
-import { Audio } from 'expo-av';
 import { AppState } from 'react-native';
 import * as Sentry from '@sentry/react-native';
 

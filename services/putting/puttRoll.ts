@@ -57,7 +57,7 @@ export interface PuttRollAnalysis {
   trackedFraction: number;
 }
 
-const STRAIGHT_DEG = 4;            // within this of the aim line reads as straight
+            // within this of the aim line reads as straight
 const MADE_FRACTION = 0.05;        // end within 5% of frame of the hole = holed
 
 function unit(dx: number, dy: number): { x: number; y: number; len: number } {

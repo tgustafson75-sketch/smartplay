@@ -11284,8 +11284,17 @@ check('LOCK: a five-minute GPS gap RESTARTS the watch instead of waiting passive
      * placed by hand is not a satellite reading that can go stale. Both paths now require an active
      * round and skip manual marks.
      */
-    const quiet = /const wasAccurate = \(lastFix\.accuracy_m \?\? 999\) <= 10;/.test(g) &&
-      /if \(roundActive && !isManualMark\) \{/.test(g) &&
+    /**
+     * 2026-09-11 — the `wasAccurate` anchor is GONE, because the variable was.
+     *
+     * That line was the OLD condition's input (`roundActive || !wasAccurate`). The 08-14 fix
+     * replaced the condition with `roundActive && !isManualMark` and left the variable behind,
+     * computed and never read. Pinning it made this guard depend on dead code: deleting a variable
+     * nothing uses turned a GPS LOCK red without any behaviour changing.
+     *
+     * The two conditions below are what the fix actually is, and they are still asserted verbatim.
+     */
+    const quiet = /if \(roundActive && !isManualMark\) \{/.test(g) &&
       // the degrade path must be equally quiet, or the noise just moves
       /if \(!isBenignStationaryStale && !isManualMark && roundActive\) \{/.test(g);
     return selfHeals && quiet;

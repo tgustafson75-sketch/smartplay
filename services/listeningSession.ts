@@ -1,5 +1,5 @@
 import { Vibration } from 'react-native';
-import { mayTalkToCaddie } from './featureAccess';
+
 import { BRAIN_FETCH_TIMEOUT_MS as KEVIN_FETCH_TIMEOUT_MS } from '../constants/voiceTimeouts';
 import { endsAsQuestion } from './voice/endsAsQuestion';
 import { speak, speakFromBase64, stopSpeaking, captureUtteranceDetailed, releaseExternalMic, playLocalFile, stopCapture, endCaptureEarly, flashCaption, getLastSpokenLine, type CaptureBail, type CaptureResult } from './voiceService';
@@ -10,14 +10,14 @@ import { conversationalBrainTurn } from './conversationalBrain';
 import { askCaddie } from './caddieBrain';
 import { abortVoiceWarmup } from './voiceWarmup';
 import { getDialog } from './dialogEngine';
-import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_ON_US, LISTEN_CUES, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
+import { ACK_PHRASES, CADDIE_NOTICE_DIDNT_CATCH, CADDIE_NOTICE_MIC_TROUBLE, CADDIE_NOTICE_CONNECTION, CADDIE_NOTICE_ON_US, GOTIT_CUES, TRUST_L1_OPENER } from './caddieAckLines';
 import { getTrustLevel } from './trustLevelService';
-import { useRoundStore, voicePuttsHole } from '../store/roundStore';
+import { useRoundStore } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { voiceCommandRouter } from './intents';
 import { subscribeEarbudTap } from './earbudControl';
 import { isSmartMotionRecording, emitSmartMotionCommand } from './smartMotionRecordBus';
-import { getCurrentRoute } from './audioRoutingService';
+
 import { routeQuery } from './responseRouter';
 import { getActiveSurface } from './activeSurfaceRegistry';
 import { precheckLocalIntent } from './localIntentPrecheck';

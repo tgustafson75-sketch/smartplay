@@ -99,7 +99,7 @@ import { useCaddieBarReserve } from '../components/GlobalCaddieBar';
 import YardageBookPanel from '../components/smartvision/YardageBookPanel';
 import { useDeviceLayout } from '../hooks/useDeviceLayout';
 import { useElevationDeltaStatus } from '../hooks/useElevationDelta';
-import { getLocalHoleImage, getLocalHoleImageById, LOCAL_COURSE_CENTROIDS, type LocalCourseSlug } from '../data/localCourseImages';
+import { getLocalHoleImage, getLocalHoleImageById, LOCAL_COURSE_CENTROIDS } from '../data/localCourseImages';
 import { localSlugFromCourseId, resolveLocalSlug } from '../data/courseSlug';
 import { getHoleLineCalibration, calibrationToCanvas } from '../data/holeLineCalibration';
 import { getBundledHoles, getCourseHoleCount } from '../data/courses';

@@ -928,7 +928,7 @@ function holeInfoReply(lang: LocalReplyLanguage): LocalReplyResult {
 function scoreReply(lang: LocalReplyLanguage): LocalReplyResult {
   const round = useRoundStore.getState();
   const scores = (round.scores ?? {}) as Record<string, number>;
-  const courseHoles = round.courseHoles ?? [];
+  
   let totalScore = 0;
   let totalPar = 0;
   let holesPlayed = 0;

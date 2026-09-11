@@ -45,7 +45,7 @@ import type { AppContext, VoiceIntent } from '../types/voiceIntent';
 import type { ToolAction } from '../types/toolAction';
 import { useSmartVision } from '../contexts/SmartVisionContext';
 import { useKevinPresence } from '../contexts/KevinPresenceContext';
-import { useRoundStore, voicePuttsHole } from '../store/roundStore';
+import { useRoundStore } from '../store/roundStore';
 import { tryAnswerOpenQuestion } from '../services/pendingPuttAsk';
 import { resolveYardage } from '../services/yardageResolver';
 import { useSettingsStore } from '../store/settingsStore';

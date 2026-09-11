@@ -1,18 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DISPERSION_HCP_BREAKS } from '../constants/handicapTiers';
-import {
-  View,
-  Text,
-  Alert,
-  TouchableOpacity,
-  Modal,
-  StyleSheet,
-  ScrollView,
-  useWindowDimensions,
-  ActivityIndicator,
-  AppState,
-  Linking,
-} from 'react-native';
+import { View, Text, TouchableOpacity, Modal, StyleSheet, ScrollView, useWindowDimensions, ActivityIndicator, AppState, Linking } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
@@ -51,7 +39,7 @@ import {
 import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../services/courseGeometryService';
 import { refreshGpsAndReconcile } from '../services/refreshGpsAction';
 import { bearingDegrees, haversineYards, projectToAxis, unprojectFromAxis } from '../utils/geoDistance';
-import { computeHazardIntelligence, type HazardIntelligence } from '../services/hazardIntelligence';
+import { computeHazardIntelligence } from '../services/hazardIntelligence';
 import { computeDistance, computeHeightRangedDistance } from '../services/rangefinder';
 import * as Haptics from 'expo-haptics';
 import { subscribeSmartFinderCommand, setSmartFinderActive } from '../services/smartFinderCommandBus';

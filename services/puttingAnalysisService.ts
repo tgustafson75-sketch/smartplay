@@ -26,7 +26,7 @@
 import { useSettingsStore } from '../store/settingsStore';
 import { useRoundStore } from '../store/roundStore';
 import { getHoleGeometry } from './courseGeometryService';
-import { getActiveVisionContext } from './glassesVisionInput';
+
 import { getCaddieName, personaToVoiceGender } from '../lib/persona';
 import { devLog } from './devLog';
 import { getApiBaseUrl } from './apiBase';
@@ -263,7 +263,6 @@ export async function speakPuttingAnalysis(spokenRead: string | null): Promise<P
   await speakPuttRead(result);
   return result;
 }
-
 
 // ─── Public synthesizer ──────────────────────────────────────────────────
 

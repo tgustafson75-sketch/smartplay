@@ -15,7 +15,7 @@ import { mergeSwingDetections } from './swing/swingSegmentation';
  * as `no_frames`.
  */
 import * as VT from '../utils/videoThumbnail'; // serialized wrapper (native retriever crash fix)
-import { acquireClipCopy, acquireExistingClipCopy, isPooledCopy } from './swing/sharedClipCopy';
+import { acquireExistingClipCopy, isPooledCopy } from './swing/sharedClipCopy';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Audio } from 'expo-av';
 // 2026-06-07 (audit) — share the circuit breaker + reactive connectivity

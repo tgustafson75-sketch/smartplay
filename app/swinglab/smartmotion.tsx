@@ -68,12 +68,12 @@ import { useCaptureEngineStore } from '../../store/captureEngineStore';
 import { estimateCarryYards } from '../../services/swing/carryEstimate';
 // 2026-07-30 (analysis audit C2/C4) — single-flight queue wrapper, not raw expo-video-thumbnails, so the
 // address-still grab can't run a native retriever concurrently with another extractor. Drop-in re-export.
-import * as VideoThumbnails from '../../utils/videoThumbnail';
+
 import * as Haptics from 'expo-haptics';
 import { CaddieMicBadge } from '../../components/caddie/CaddieMicBadge';
 import { useTheme } from '../../contexts/ThemeContext';
 import { analyzeSwing, probeDurationMs, ANALYSIS_WORST_CASE_MS, type SwingAnalysis } from '../../services/poseDetection';
-import { evaluateSwingValidity, reconcileSwingValidity, type MeasuredSwingEvidence } from '../../services/swingValidity';
+import { reconcileSwingValidity, type MeasuredSwingEvidence } from '../../services/swingValidity';
 import { buildPoseSwingRead } from '../../services/swing/poseSwingRead';
 import { poseReadToPrimaryIssue } from '../../services/swing/poseReadVerdict';
 import { useFlagGate } from '../../hooks/useFlagGate';
@@ -83,15 +83,7 @@ import {
   isSwingDerived,
   type SwingMetricSet,
 } from '../../services/swingMetricsService';
-import {
-  extractPoseFramesFromVideo,
-  analyzeSwingFromVideo,
-  computeBiomechanicsFromFrames,
-  deriveSwingTempo,
-  type PoseFrame,
-  type SwingBiomechanics,
-  type SwingTempo,
-} from '../../services/poseAnalysisApi';
+import { extractPoseFramesFromVideo, computeBiomechanicsFromFrames, deriveSwingTempo, type PoseFrame, type SwingBiomechanics, type SwingTempo } from '../../services/poseAnalysisApi';
 import { startMeteredRecording, type MeteringHandle } from '../../services/swing/audioMetering';
 import { detectStrikes, type DetectedStrike } from '../../services/swing/strikeDetector';
 import { analyzeStrike, type AcousticAnalysis } from '../../services/acousticsAnalyzer';
@@ -113,27 +105,11 @@ import { useSettingsStore } from '../../store/settingsStore';
 import { anchorToleranceMs } from '../../services/swing/clubPathWindow';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
 import { useRoundStore } from '../../store/roundStore';
-import {
-  SmartMotionHeader,
-  CaptureGuides,
-  SpeedStat,
-  TempoBar,
-  BodyAnalysisRow,
-  AcousticPickupCard,
-  VerdictBadge,
-  FooterChips,
-  type Angle,
-  type MetricSpec,
-  ICON_BIOMECH,
-  deriveBodyItems,
-  type BodyItem,
-  type SmTone,
-  SwingBreakdownCard,
-} from '../../components/smartmotion/SmartMotionHud';
+import { SmartMotionHeader, CaptureGuides, SpeedStat, TempoBar, BodyAnalysisRow, AcousticPickupCard, VerdictBadge, FooterChips, type Angle, type MetricSpec, ICON_BIOMECH, deriveBodyItems, type SmTone, SwingBreakdownCard } from '../../components/smartmotion/SmartMotionHud';
 import { CaddieStatusStrip } from '../../components/caddie/CaddieStatusStrip';
 import ClubPickerModal, { clubIdToSmashKey, clubIdToServerKey, clubIdLabel } from '../../components/practice/ClubPickerModal';
 import { recognizeClubFromBase64, clubLabel, type ClubId } from '../../services/clubRecognition';
-import { useClubStatsStore, clubIdToClubName, CLUB_ORDER, type ClubName } from '../../store/clubStatsStore';
+import { useClubStatsStore, clubIdToClubName, CLUB_ORDER } from '../../store/clubStatsStore';
 import { speak, warmVoice, stopSpeaking, configureAudioForSpeech, captureUtterance, endCaptureEarly } from '../../services/voiceService';
 import { useClubSelectionStore } from '../../store/clubSelectionStore';
 import { useToastStore } from '../../store/toastStore';
@@ -288,7 +264,6 @@ type SmContact = {
    *  evidence: 'fat' | 'thin' | 'topped' | null. The human's read wins. */
   reportedMishit: 'fat' | 'thin' | 'topped' | null;
 };
-
 
 /**
  * 2026-08-10 (Tim — "you can see the club as easily as you can see the body… maybe we need to put a
@@ -2512,7 +2487,6 @@ export default function SmartMotion() {
       // Release the warm, on both paths: a failed persist leaves the review on rawUri, and the warm
       // must key on THAT rather than stall forever waiting for a copy that is not coming.
       markDurable(uri);
-
 
       try {
         // Coach Mode attribution: when a family member is active (coach
@@ -6741,7 +6715,6 @@ const styles = StyleSheet.create({
   verifyText: { fontSize: 12, fontWeight: '700', flexShrink: 1, textAlign: 'center' },
   ballNudge: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 10 },
   ballNudgeText: { fontSize: 12, fontWeight: '700' },
-
 
   actionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 12 },
   actionBtnText: { color: '#fff', fontWeight: '900', fontSize: 15 },

@@ -8,12 +8,7 @@
  * 2026-05-24 — Built for Tim's guys-weekend trip.
  */
 
-import type {
-  TournamentState,
-  TournamentTeam,
-  TournamentHole,
-  TournamentFormat,
-} from '../../store/tournamentStore';
+import type { TournamentState, TournamentTeam, TournamentFormat } from '../../store/tournamentStore';
 
 export interface LeaderboardRow {
   teamId: string;

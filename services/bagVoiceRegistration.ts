@@ -20,7 +20,7 @@
 import { parseSpokenClub, clubLabel } from './clubRecognition';
 import { normalizeClub } from './clubNormalize';
 import { useClubBagStore } from '../store/clubBagStore';
-import { useClubStatsStore, type ClubName } from '../store/clubStatsStore';
+import { useClubStatsStore } from '../store/clubStatsStore';
 
 export interface SpokenBagInput {
   /** Verbatim club phrases the player says they CARRY ("driver", "3 wood", "56 degree"). */

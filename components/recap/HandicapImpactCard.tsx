@@ -17,7 +17,7 @@ import { useRouter } from 'expo-router';
 import AppIcon from '../AppIcon';
 import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
-import { postingInputsFor, postedDifferentialFor, computeRoundHandicap, estimateNewIndex, computeScoreDifferential, expectedNineDifferential } from '../../services/handicapCalculator';
+import { postingInputsFor, postedDifferentialFor, computeRoundHandicap, estimateNewIndex, computeScoreDifferential } from '../../services/handicapCalculator';
 import { getBundledHoles } from '../../data/courses';
 import { holePar } from '../../services/smartFinderService';
 import { useTranslation } from 'react-i18next';

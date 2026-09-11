@@ -10,7 +10,7 @@
  * Pure / local / synchronous / offline. No React, no Node, no fetch.
  */
 
-import type { KBEntry, KBLayer, KBHonesty } from './schema';
+import type { KBEntry, KBLayer } from './schema';
 import { GOLF_KNOWLEDGE } from './modules';
 
 /** Normalize text for matching: lowercase, strip punctuation, collapse space. */

@@ -20,7 +20,7 @@ import React, { useEffect } from 'react';
 import { View, Image, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePathname, useSegments } from 'expo-router';
-import { CaddieMicBadge } from './caddie/CaddieMicBadge';
+
 import { setRouteLabel } from '../services/screenContext';
 import { useListeningSessionStore } from '../store/listeningSessionStore';
 import { MESSAGING_ENABLED } from '../constants/featureFlags';
@@ -66,9 +66,8 @@ const ROUTE_LABELS: { prefix: string; label: string }[] = [
 // is a dense full-screen aerial that owns its own top-left navigation + hole switcher; a floating mic
 // there overlaps the nav. Suppress it (the route-label baseline below still runs, so the caddie knows
 // you're on the hole view). Cleaner-nav pass for the whole mic/text-input surface is tracked separately.
-const SUPPRESS_PATH_PREFIXES = ['/swinglab/smartmotion', '/smartvision'];
+
 // Boot / full-screen flows where a floating mic would be wrong.
-const HIDE_PATH_PREFIXES = ['/intro-video', '/permissions', '/greeting', '/welcome'];
 
 function labelForPath(path: string): string | null {
   const hit = ROUTE_LABELS.find((r) => path.startsWith(r.prefix));

@@ -19,7 +19,7 @@
  */
 
 import type { IntentHandler, IntentResult } from '../../types/voiceIntent';
-import { useRoundStore, type ShotResult, type ShotLocation } from '../../store/roundStore';
+import { useRoundStore, type ShotResult } from '../../store/roundStore';
 import { parseSpokenClub, clubLabel } from '../clubRecognition';
 import { normalizeClub } from '../clubNormalize';
 // 2026-08-24 — one owner for "where is the player for this shot" (this was duplicated here

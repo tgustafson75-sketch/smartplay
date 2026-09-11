@@ -10,8 +10,8 @@
  */
 
 import i18n from '../../i18n';
-import { AssertCtx, runWithAsserts, type ScenarioReport } from './assert';
-import { ConsoleProbe, IssueEventProbe, LoopLagProbe, LAG_NOISE_FLOOR_MS, SELFTEST_SCENARIO_ID, type ProbeTrace } from './probe';
+import { runWithAsserts, type ScenarioReport } from './assert';
+import { ConsoleProbe, IssueEventProbe, LoopLagProbe, LAG_NOISE_FLOOR_MS, SELFTEST_SCENARIO_ID } from './probe';
 import * as M from './mocks';
 import { dispatchVoiceIntent } from './dispatch';
 import { useSwingSessionStore } from '../../store/swingSessionStore';
@@ -520,7 +520,6 @@ const SCEN_20: Scenario = {
 
 // ─── Registry ───────────────────────────────────────────────────────
 
-
 /**
  * SCEN_21 — THE SWING-LOCATE CHAIN, ON THE DEVICE THAT HAS TO DO IT.
  *
@@ -592,7 +591,6 @@ const SCEN_21: Scenario = {
     a.expect('no wrist means no answer', noWrist === null, `got ${JSON.stringify(noWrist)}`);
   }),
 };
-
 
 /**
  * SCEN_22 — WHERE THE TIME ACTUALLY GOES, ON THIS PHONE.
@@ -793,7 +791,6 @@ const SCEN_22: Scenario = {
     a.expect('the issue log accepts entries', after > before, `entries ${before} -> ${after}`);
   }),
 };
-
 
 /**
  * SCEN_23 — THE HONESTY GATES, WITH REAL STATE IN THE STORE.

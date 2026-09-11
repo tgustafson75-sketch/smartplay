@@ -388,4 +388,17 @@ export const ORPHAN_BASELINE: Record<string, string> = {
     'WIRE — the SYNC cache of the walking/cart reading, for a caller that cannot await. Its former pair cartModeSuggestion is NO LONGER orphaned: cart auto-detect (2026-08-30, 5f9928fb) consumes it at walkingDetector.ts:229, so the detector IS consumed now and the old "both orphaned together, nothing consumes it" verdict here was stale — as was its named blocker ("where the suggestion is shown"), since the correction is silent and shows nothing. What is still unwired is only this SYNC accessor: every live reader (conversationalLoggingOrchestrator) goes through isEffectiveCartMode instead. Delete it or give it the sync caller it was written for; it is no longer waiting on a product call.',
   'services/watchWristInterpretation.ts :: calibrateFromMeasured':
     'PARKED — see estimateClubSpeedMph; this is the calibration half.',
+
+  // ── SUPERSEDED 2026-09-11 — became visible when their dead imports were deleted ──────────────
+  'services/smartFinderService.ts :: getGreenYardages':
+    'SUPERSEDED — the ASYNC front/middle/back reader. Every live caller goes through the SYNC ' +
+    'getGreenYardagesSync instead (yardageResolver.ts:175,194 and simulatedGPS.ts:407), and ' +
+    'yardageResolver is the one owner of the tier ladder, so nothing awaits this. It was still ' +
+    'IMPORTED by intents/queryStatusHandler and never called — deleting that dead import is what ' +
+    'made the orphan visible. Delete it, or give it the async caller it was written for.',
+  'services/courseGeometryService.ts :: isGeometryBuilding':
+    'SUPERSEDED — store/geometryStatusStore replaced it, and that file says so in its own header: ' +
+    '"The caddie screen read isGeometryBuilding()" is written in the PAST tense, describing the ' +
+    'poll-based check the store was built to replace. Same story: it survived only as an unused ' +
+    'import in intents/queryStatusHandler. Delete it once nothing references the old polling shape.',
 };

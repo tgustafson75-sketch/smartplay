@@ -1,14 +1,14 @@
 import { resolveYardage, resolvedToFmb } from '../yardageResolver';
-import { holePar , getGreenYardages, resolveGreenCoords } from '../smartFinderService';
+import { holePar, resolveGreenCoords } from '../smartFinderService';
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import { useRoundStore } from '../../store/roundStore';
 import { useGhostStore } from '../../store/ghostStore';
 import { decomposeWind, shotBearingDeg } from '../windRelative';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useConversationLog } from '../../store/conversationLogStore';
-import { haversineYards, holeProgressYards, shotDistance, bearingDegrees } from '../../utils/geoDistance';
-import { getCurrentLocation, getGreenCentroid, getTeeCentroid } from '../shotLocationService';
-import { fetchWeatherAt, getCachedWeather, type WeatherSnapshot } from '../weatherService';
+import { haversineYards, holeProgressYards, shotDistance } from '../../utils/geoDistance';
+import { getCurrentLocation, getGreenCentroid } from '../shotLocationService';
+import { fetchWeatherAt, getCachedWeather } from '../weatherService';
 import { playsLikeDistance, playsLikePhrase } from '../../utils/playsLike';
 import type { ShotLocation } from '../../store/roundStore';
 // 2026-05-24 — Flow A (GPS-verify) — getOneShotFix is the only GPS
