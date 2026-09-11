@@ -2183,8 +2183,24 @@ export default function CaddieTab() {
       rules_decision: resolution.rules_decision,
     };
     logShot(shot);
-    const suggested = useRoundStore.getState().computeHoleScore(currentHole);
-    if (suggested != null) setHoleScore(suggested);
+    /**
+     * 2026-09-11 (Tim) — MARKING A DIRECTION DESCRIBES THE SHOT. IT DOES NOT SCORE THE HOLE.
+     *
+     * This used to recompute the hole from the logged shots and push the result straight into the
+     * score box: "when you mark direction when scoring it actually adds score instead of describing
+     * last shot. You score right above it, the rest is description of the shot for data and
+     * reconciliation purposes."
+     *
+     * He is right, and it is the same mistake as the auto penalty count one screen over — the app
+     * turning something the player SAID about a shot into a number on their card. Tapping "left" is
+     * telling the caddie where the ball went, for tendencies and reconciliation; it is not a claim
+     * about how many strokes the hole took.
+     *
+     * The shot is still logged (logShot above) so the data and reconciliation are unaffected. What
+     * is gone is this overwrite of a total the player owns. The card still PREFILLS from logged
+     * shots when it OPENS — a starting point offered once, not a number that moves under you while
+     * you describe a shot.
+     */
     clearShotPending();
     if (resolution.kevin_voice_line && voiceEnabled) {
       speak(resolution.kevin_voice_line, voiceGender, language, apiUrl).catch(() => {});

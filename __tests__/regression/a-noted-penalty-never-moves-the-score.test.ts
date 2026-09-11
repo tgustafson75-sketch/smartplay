@@ -34,6 +34,19 @@ describe('the app never counts a penalty for you', () => {
     expect(code(caddie)).toMatch(/penalty_strokes:\s*0\s*,/);
   });
 
+  it('describing a shot does not rewrite the score you entered', () => {
+    /**
+     * Tim: "when you mark direction when scoring it actually adds score instead of describing last
+     * shot." commitShot logged the shot and then pushed computeHoleScore straight into the score
+     * box, so tapping Left moved a total the player owns. The shot is still logged; the overwrite
+     * is gone. The prefill when the CARD OPENS is a different moment and stays.
+     */
+    const commit = code(caddie).slice(code(caddie).indexOf('const commitShot'));
+    const body = commit.slice(0, commit.indexOf('handleDirectionTap'));
+    expect(body).toContain('logShot(shot)');            // still recorded for data/reconciliation
+    expect(body).not.toMatch(/setHoleScore\(suggested\)/);
+  });
+
   it('keeps the rules VOICE — the knowledge is not what was removed', () => {
     expect(code(caddie)).toMatch(/resolution\.kevin_voice_line/);
     expect(code(caddie)).toMatch(/rules_decision:\s*resolution\.rules_decision/);
