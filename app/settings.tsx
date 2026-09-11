@@ -237,10 +237,12 @@ export default function Settings() {
      */
     missType,
     experienceContext,
+    distanceControl,
     homeCourse,
     default_mode,
     setMissType,
     setExperienceContext,
+    setDistanceControl,
     setHomeCourse,
     setDefaultMode,
     setName,
@@ -1021,6 +1023,29 @@ export default function Settings() {
             ]}
             value={experienceContext ?? ''}
             onSelect={(v) => setExperienceContext(v as 'starting' | 'improving' | 'returning' | 'competitive')}
+          />
+
+          {/**
+            * 2026-09-11 (Tim) — THE FIFTH FIELD WITH READERS AND NO WRITER, and by some distance the
+            * most expensive one. distanceControl was added to the store with a default and then
+            * wired into cnsShotRead's club gapping, the override adjustment and the hole plan — so
+            * three features were branching on a value nobody could set, and every player in the app
+            * was silently treated as 'some_partials'.
+            *
+            * Tim describes himself as the opposite: "all I do right now is full swing and not good
+            * with dialing down yardages, so I play according to my yardages and feel." He would have
+            * got the wrong plan on every hole. This is exactly the class the 2026-09-10 note above
+            * was written about, one field later. [[sweep-the-missing-half-not-the-unused-export]]
+            */}
+          <PillRow
+            label={t('settings.label.how_you_cover_a_number')}
+            options={[
+              { label: 'Full swings', value: 'full_swings' },
+              { label: 'Some partials', value: 'some_partials' },
+              { label: 'I dial down', value: 'dial_down' },
+            ]}
+            value={distanceControl ?? ''}
+            onSelect={(v) => setDistanceControl(v as 'full_swings' | 'some_partials' | 'dial_down')}
           />
 
           {/* The mode Kevin assumes when a round starts (contextSynthesizer). */}
