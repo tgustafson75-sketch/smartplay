@@ -115,7 +115,26 @@ export interface PackInput {
  * trimmed to the limit" and SAYS that is what it did rather than inventing a course-specific story.
  */
 export function packBagForCourse(input: PackInput): PackedBag {
-  const owned = (input.owned ?? []).filter(c => c && typeof c.club === 'string' && c.club.length > 0);
+  /**
+   * 2026-09-11 — DE-DUPLICATED, and found by the 100-player market sim rather than by any fixture.
+   *
+   * The sim deliberately gives ~15% of its players a duplicate club, because real bags have them —
+   * two hybrids covering one number, last year's 3 wood still in there. The packer returned
+   * "Driver, Driver" in the carry list, and worse, `leave` is computed by asking which owned clubs
+   * are not in the carry SET, so a name appearing twice vanished from both halves: 14 packed plus 1
+   * left, out of 16 owned. Two clubs simply stopped existing.
+   *
+   * Keeping the FIRST of a name preserves bag order, and it is the entry the rest of the app would
+   * have found anyway — clubBagStore is keyed by club_id, so this shape only ever arrives from a
+   * caller assembling its own list.
+   */
+  const seen = new Set<string>();
+  const owned = (input.owned ?? []).filter(c => {
+    if (!c || typeof c.club !== 'string' || c.club.length === 0) return false;
+    if (seen.has(c.club)) return false;
+    seen.add(c.club);
+    return true;
+  });
   const limit = input.limit ?? null;
   const putter = owned.find(c => isPutter(c.club));
   const swingable = owned.filter(c => !isPutter(c.club) && typeof c.yards === 'number' && c.yards > 0);

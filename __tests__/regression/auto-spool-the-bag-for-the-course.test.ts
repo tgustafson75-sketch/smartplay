@@ -191,3 +191,45 @@ describe('the demand read', () => {
     expect(demandYardages([{ par: 4, yards: 0 }, { par: 0, yards: 400 }], 250)).toEqual([]);
   });
 });
+
+describe('a bag with the same club in it twice', () => {
+  /**
+   * 2026-09-11 — FOUND BY THE 100-PLAYER MARKET SIM, not by any fixture.
+   *
+   * The sim deliberately gives ~15% of its players a duplicate club, because real bags have them:
+   * two hybrids covering one number, last year's 3 wood still in there. The packer returned
+   * "Driver, Driver" — and worse, `leave` asks which owned clubs are NOT in the carry set, so a
+   * name appearing twice vanished from both halves. Fourteen packed plus one left, out of sixteen
+   * owned: two clubs simply stopped existing.
+   */
+  const dupes: PackClub[] = [
+    { club: 'Driver', yards: 250 }, { club: 'Driver', yards: 248 },
+    { club: '7I', yards: 155 }, { club: '7I', yards: 153 },
+    { club: '5I', yards: 180 }, { club: 'PW', yards: 115 }, { club: 'SW', yards: 85 },
+    { club: 'Putter', yards: 0 },
+  ];
+  const p = packBagForCourse({ holes: par72, owned: dupes });
+
+  it('never names the same club twice in the bag', () => {
+    expect(new Set(p.carry).size).toBe(p.carry.length);
+  });
+
+  it('still accounts for every club — carry and leave partition what he owns', () => {
+    const unique = new Set(dupes.map((d) => d.club)).size;
+    expect(p.carry.length + p.leave.length).toBe(unique);
+    expect(p.carry.filter((c) => p.leave.includes(c))).toEqual([]);
+  });
+});
+
+describe('a short hitter is not given a club-name rule', () => {
+  it('packs the driver on a par-3 nine when his driver only carries 164', () => {
+    // The sim caught the opposite assumption first: "a par-3 nine must not pack the driver" is
+    // wrong for a man whose driver goes 164 into a 183-yard hole. The rule is about yardage.
+    const shortHitter: PackClub[] = [
+      { club: 'Driver', yards: 164 }, { club: '7I', yards: 109 }, { club: 'PW', yards: 75 },
+      { club: 'SW', yards: 59 }, { club: 'Putter', yards: 0 },
+    ];
+    const holes: PackHole[] = [{ par: 3, yards: 183 }, { par: 3, yards: 120 }, { par: 3, yards: 95 }];
+    expect(packBagForCourse({ holes, owned: shortHitter }).carry).toContain('Driver');
+  });
+});

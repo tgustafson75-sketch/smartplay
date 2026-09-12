@@ -38,6 +38,9 @@ import { conditionFindings, conditionPlay } from '../../services/roundConditions
 import { composePreRoundFactors } from '../../services/practice/preRoundFactors';
 import { readOverride } from '../../services/overrideLoop';
 import { composePlayProfile, bogeyBudgetLine } from '../../services/playProfile';
+import { packBagForCourse, type PackHole } from '../../services/bagPack';
+import { clubWorkStatuses, clubsNeedingWork, strongClubs, describeClubWork } from '../../services/clubWork';
+import { composePuttingRead } from '../../services/puttingRead';
 import { clubFromLoftPhrase } from '../../services/clubNormalize';
 import { composeBagRecommendation } from '../../services/bagRecommendation';
 import { clubTendencies, describeClubTendency, describeBagTendencies, type TendencyShot } from '../../services/clubTendency';
@@ -1013,6 +1016,167 @@ function stageDecisionEngines2(p: Persona) {
   }
 }
 
+
+/**
+ * 2026-09-11 — THE BAG PACKER, THE WORK STATUS AND THE PUTTING READ, run against the population.
+ *
+ * These three are the ones a unit test is least able to protect: they take a whole bag and a whole
+ * card and return a whole bag back, so the failures are compositional — a set with a hole in it, a
+ * verdict off two swings, a putting budget that turns into a plan nobody would play. Every real bug
+ * this harness has found came from driving a real persona through an engine a fixture never shaped.
+ */
+function stageBagAndPutting(p: Persona) {
+  const S = 'bag-pack/putting';
+  const owned = p.bag.map(b => ({ club: b.club, yards: b.carry }));
+  const ownedNames = new Set(owned.map(o => o.club));
+  /** The sim deliberately duplicates a club in ~15% of bags; the packer keeps the first of a name. */
+  const uniqueOwned = ownedNames.size;
+  const hasPutter = ownedNames.has('Putter');
+
+  /** Three cards a real golfer plays: a full 18, a short nine, and a par-3 nine. */
+  const cards: [string, PackHole[]][] = [
+    ['par72', Array.from({ length: 18 }, (_, i) => ({
+      par: i % 6 === 2 ? 3 : i % 6 === 3 ? 5 : 4,
+      yards: i % 6 === 2 ? int(p.rng, 120, 215) : i % 6 === 3 ? int(p.rng, 460, 560) : int(p.rng, 300, 440),
+    }))],
+    ['exec9', Array.from({ length: 9 }, () => ({ par: chance(p.rng, 0.4) ? 3 : 4, yards: int(p.rng, 110, 330) }))],
+    ['par3nine', Array.from({ length: 9 }, () => ({ par: 3, yards: int(p.rng, 70, 185) }))],
+    ['unknown', []],
+  ];
+
+  for (const [name, holes] of cards) {
+    for (const limit of [null, 14]) {
+      const pack = packBagForCourse({ holes, owned, limit, courseName: `Sim ${name}` });
+      deepCheck(p.seed, S, pack);
+
+      // It may never name a club he does not own.
+      for (const c of pack.carry) {
+        if (!ownedNames.has(c)) report(p.seed, S, 'the packer put a club he does not own in the bag', `${name}: ${c}`);
+      }
+      // Carry and leave must partition what he owns — a club cannot be in both or in neither.
+      const both = pack.carry.filter(c => pack.leave.includes(c));
+      if (both.length) report(p.seed, S, 'a club was both packed and left at home', `${name}: ${both.join(', ')}`);
+      if (pack.carry.length + pack.leave.length !== uniqueOwned) {
+        report(p.seed, S, 'the pack lost or duplicated a club', `${name}: ${pack.carry.length}+${pack.leave.length} of ${uniqueOwned} · carry ${pack.carry.join(',')} · leave ${pack.leave.join(',')}`);
+      }
+      // The putter goes in whenever he owns one — including under the competition cap.
+      if (hasPutter && owned.some(o => o.yards > 0) && !pack.carry.includes('Putter')) {
+        report(p.seed, S, 'the putter was left at home', `${name} limit=${limit}`);
+      }
+      // The cap is a cap.
+      if (limit != null && pack.carry.length > limit) {
+        report(p.seed, S, 'the competition bag broke the USGA limit', `${name}: ${pack.carry.length} clubs`);
+      }
+      // It must cite the rule exactly when it actually trimmed, and never otherwise.
+      const cites = pack.reasons.join(' ').includes('USGA');
+      if (pack.limitBit !== cites) {
+        report(p.seed, S, 'the USGA citation and the trim disagree', `${name}: bit=${pack.limitBit} cited=${cites}`);
+      }
+      /**
+       * Nothing the card cannot ask for. The first version of this asserted "a par-3 nine must not
+       * pack the driver", which the sim immediately proved wrong on a persona whose driver carries
+       * 164 — a 183-yard par 3 asks for it, and leaving it at home would be the bug. The invariant
+       * is about YARDAGE, not club names. [[a-guard-can-assert-the-broken-shape]]
+       */
+      if (holes.length > 0) {
+        const longest = Math.max(...holes.map(h => h.yards));
+        for (const c of pack.carry) {
+          const y = owned.find(o => o.club === c)?.yards ?? 0;
+          if (y > longest + 30) {
+            report(p.seed, S, 'the packer carried a club longer than any hole on the card',
+              `${name}: ${c} @ ${y}y, longest hole ${longest}y`);
+          }
+        }
+      }
+      // Nothing it says may contain a raw null.
+      for (const r of [pack.headline, ...pack.reasons]) {
+        if (/\bnull\b|\bundefined\b|NaN/.test(r)) report(p.seed, S, 'the packer printed a raw null', `${name}: ${r}`);
+      }
+    }
+  }
+
+  // ── the work status ─────────────────────────────────────────────────────────────────────────
+  const work = clubWorkStatuses({ shots: p.shots as never, normalize: normalizeClub as never });
+  deepCheck(p.seed, S, work);
+  for (const w of work) {
+    if (w.n < 6 && w.status !== 'unproven') {
+      report(p.seed, S, 'a club was judged off too few swings', `${w.club}: ${w.n} shots, ${w.status}`);
+    }
+    if (w.status === 'unproven' && (w.practice || w.mindset)) {
+      report(p.seed, S, 'an unproven club was given advice anyway', `${w.club}`);
+    }
+    if (w.strikeRate != null && (w.strikeRate < 0 || w.strikeRate > 1)) {
+      report(p.seed, S, 'strike rate out of range', `${w.club}: ${w.strikeRate}`);
+    }
+    if (w.penaltyRate < 0 || w.penaltyRate > 1) {
+      report(p.seed, S, 'penalty rate out of range', `${w.club}: ${w.penaltyRate}`);
+    }
+    for (const line of [w.line, w.practice, w.mindset]) {
+      if (line && /\bnull\b|\bundefined\b|NaN/.test(line)) {
+        report(p.seed, S, 'the work status printed a raw null', `${w.club}: ${line}`);
+      }
+    }
+  }
+  // A club cannot be both leaned on and in trouble.
+  const strongSet = new Set(strongClubs(work).map(w => w.club));
+  for (const w of clubsNeedingWork(work)) {
+    if (strongSet.has(w.club)) report(p.seed, S, 'a club was both strong and needing work', w.club);
+  }
+  const summary = describeClubWork(work);
+  if (summary && /\bnull\b|\bundefined\b|NaN/.test(summary)) {
+    report(p.seed, S, 'the work summary printed a raw null', summary);
+  }
+  if (work.length > 0 && work.every(w => w.status === 'unproven') && summary != null) {
+    report(p.seed, S, 'a summary was produced with nothing proven', `${summary}`);
+  }
+
+  // ── the putting read, and the plan it budgets ───────────────────────────────────────────────
+  for (const shape of ['good', 'average', 'poor', 'thin'] as const) {
+    const n = shape === 'thin' ? int(p.rng, 1, 8) : 18;
+    const holes = Array.from({ length: n }, () => ({
+      par: 4,
+      putts: shape === 'good' ? (chance(p.rng, 0.35) ? 1 : 2)
+        : shape === 'poor' ? (chance(p.rng, 0.4) ? 3 : 2)
+        : 2,
+    }));
+    const read = composePuttingRead(holes);
+    deepCheck(p.seed, S, read);
+    if (read.assumedPutts < 1 || read.assumedPutts > 3) {
+      report(p.seed, S, 'the putting budget was outside 1..3', `${shape}: ${read.assumedPutts}`);
+    }
+    if (read.confidence !== 'measured' && (read.lean !== 'neutral' || read.assumedPutts !== 2)) {
+      report(p.seed, S, 'an unmeasured putting read still moved the plan', `${shape}: ${read.lean}/${read.assumedPutts}`);
+    }
+    if (read.puttsPerRound != null) checkNum(p.seed, S, `putting.per18.${shape}`, read.puttsPerRound, 9, 72);
+
+    // And the plan it produces must still be a plan a golfer would play.
+    const bag: Record<string, number> = {};
+    for (const b of p.bag) bag[b.club] = b.carry;
+    for (const [par, yards] of [[3, int(p.rng, 110, 215)], [4, int(p.rng, 300, 450)], [5, int(p.rng, 470, 570)]] as [number, number][]) {
+      const plan = planHole({
+        par, holeYards: yards, bag,
+        puttsAssumed: read.assumedPutts, puttingLean: read.lean,
+        distanceControl: p.handicap > 18 ? 'full_swings' : 'some_partials',
+      });
+      if (!plan) continue;
+      deepCheck(p.seed, S, plan);
+      checkNum(p.seed, S, `plan.target.par${par}`, plan.targetScore, par - 2, par + 6);
+      // The score must be exactly what the plan's own shots and putts add up to.
+      if (plan.targetScore !== plan.steps.length + read.assumedPutts) {
+        report(p.seed, S, 'the plan score does not match its own shots plus putts',
+          `par${par} ${yards}y: ${plan.steps.length} shots + ${read.assumedPutts} putts != ${plan.targetScore}`);
+      }
+      if (/\bnull\b|\bundefined\b|NaN/.test(plan.say)) {
+        report(p.seed, S, 'the plan printed a raw null', plan.say);
+      }
+      // A neutral read must never produce putting advice.
+      if (read.lean === 'neutral' && /(Get it close|short side|two-putt it)/.test(plan.say)) {
+        report(p.seed, S, 'a neutral putting read still gave putting advice', plan.say);
+      }
+    }
+  }
+}
+
 const only = onlyArg ? Number(onlyArg.split('=')[1]) : null;
 const COUNT = Number(process.argv.find(a => a.startsWith('--n='))?.split('=')[1] ?? 100);
 const seeds = only != null ? [only] : Array.from({ length: COUNT }, (_, i) => 1000 + i * 7919);
@@ -1023,6 +1187,7 @@ const stages: [string, (p: Persona) => unknown][] = [
   ['tendencies', stageTendencies], ['range-session', stageRangeSession],
   ['round', stageRound], ['legacy-sessions', stageLegacyData], ['practice', stagePractice], ['capture', stageCapture],
   ['decision-engines', stageDecisionEngines], ['decision-engines-2', stageDecisionEngines2],
+  ['bag-pack/putting', stageBagAndPutting],
 ];
 
 for (const seed of seeds) {
