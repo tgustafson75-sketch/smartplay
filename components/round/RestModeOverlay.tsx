@@ -1,5 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Image } from 'react-native';
+
+/**
+ * 2026-09-12 (Tim) — "need the neon outline logo we use for text box added large to the rest screen.
+ * Words are hard to see alone many times."
+ *
+ * The rest screen was three lines of dim type on pure black. On a bag clip in daylight that is a
+ * blank phone with some grey text on it — you cannot tell at a glance that the app is alive, which
+ * is the ONE thing this screen exists to say. The mark reads from much further away than the words
+ * do, and it is the same neon caddie that sits in the ask bar, so the resting app still looks like
+ * the app. Same asset, one source: assets/icons/caddie/mic-caddie.png.
+ */
+const REST_MARK = require('../../assets/icons/caddie/mic-caddie.png');
 import { usePathname } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useRestModeStore } from '../../store/restModeStore';
@@ -82,6 +94,9 @@ export function RestModeOverlay() {
     >
       <RestKeepAwake />
       <View style={styles.center}>
+        {/* Outline art on a pure-black ground: the lit pixels are the neon lines only, so this costs
+            almost nothing on OLED — which is the whole point of the rest screen. */}
+        <Image source={REST_MARK} style={styles.mark} resizeMode="contain" accessible={false} />
         <View style={styles.gpsRow}>
           <View style={styles.gpsDot} />
           <Text style={styles.gpsText}>{isRoundActive ? 'GPS LIVE · RESTING' : 'RESTING · TAP TO WAKE'}</Text>
@@ -105,6 +120,8 @@ const styles = StyleSheet.create({
   },
   center: { alignItems: 'center', justifyContent: 'center', gap: 16 },
   gpsRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  // 470×250 source, held to its aspect. Large enough to read across a fairway, not a flashlight.
+  mark: { width: 240, height: 128, opacity: 0.9, marginBottom: 6 },
   gpsDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: 'rgba(0,200,150,0.55)' },
   gpsText: { color: 'rgba(0,200,150,0.5)', fontSize: 11, fontWeight: '800', letterSpacing: 1.4 },
   // Dim on purpose — few lit pixels, low power.

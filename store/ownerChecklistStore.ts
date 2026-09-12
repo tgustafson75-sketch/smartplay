@@ -31,6 +31,17 @@ export interface ChecklistItem {
   detail: string;
   done: boolean;
   doneAt: number | null;
+  /**
+   * HOW it got ticked. 'manual' means Tim tapped it and is vouching for it; 'observed' means the app
+   * saw the thing happen while he was just using it.
+   *
+   * These are NOT the same claim and the UI must not pretend they are. An observed tick says "the
+   * code path ran and succeeded", which is real evidence but is not "I looked at it and it was
+   * right" — several items ask him to LOOK at something (does the arc draw, does the trace read as
+   * one sequence). Keeping the distinction is what stops the checklist quietly turning into a list
+   * of things nobody actually checked.
+   */
+  doneVia?: 'manual' | 'observed';
 }
 
 export const GROUP_LABEL: Record<ChecklistGroup, string> = {
@@ -112,6 +123,14 @@ interface ChecklistState {
   /** Bumped when the reminder has been shown, so it nags once per launch, not once per render. */
   lastRemindedAt: number | null;
   toggle: (id: string) => void;
+  /**
+   * 2026-09-12 (Tim) — "if I unknowingly do the item practicing, playing, etc, auto mark the item
+   * completed. This is far more natural testing."
+   *
+   * Idempotent and one-way: it can tick an item but never un-tick one, so a later run of the same
+   * code path cannot undo a manual tick, and a manual tick always outranks an observation.
+   */
+  markObserved: (id: string) => void;
   resetAll: () => void;
   markReminded: () => void;
   remaining: () => ChecklistItem[];
@@ -126,6 +145,7 @@ function mergeSeed(existing: ChecklistItem[]): ChecklistItem[] {
       ...s,
       done: prev?.done ?? false,
       doneAt: prev?.doneAt ?? null,
+      doneVia: prev?.doneVia,
     };
   });
 }
@@ -138,10 +158,24 @@ export const useOwnerChecklistStore = create<ChecklistState>()(
       toggle: (id) =>
         set((s) => ({
           items: s.items.map((i) =>
-            i.id === id ? { ...i, done: !i.done, doneAt: !i.done ? Date.now() : null } : i,
+            i.id === id
+              ? { ...i, done: !i.done, doneAt: !i.done ? Date.now() : null, doneVia: !i.done ? 'manual' as const : undefined }
+              : i,
           ),
         })),
-      resetAll: () => set((s) => ({ items: s.items.map((i) => ({ ...i, done: false, doneAt: null })) })),
+      markObserved: (id) =>
+        set((s) => {
+          const item = s.items.find((i) => i.id === id);
+          // Already ticked — by hand or by an earlier observation. Never rewrite it: a manual tick
+          // is a stronger claim than an observation and must not be downgraded to 'observed'.
+          if (!item || item.done) return s;
+          return {
+            items: s.items.map((i) =>
+              i.id === id ? { ...i, done: true, doneAt: Date.now(), doneVia: 'observed' as const } : i,
+            ),
+          };
+        }),
+      resetAll: () => set((s) => ({ items: s.items.map((i) => ({ ...i, done: false, doneAt: null, doneVia: undefined })) })),
       markReminded: () => set({ lastRemindedAt: Date.now() }),
       remaining: () => get().items.filter((i) => !i.done),
     }),

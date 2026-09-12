@@ -164,6 +164,12 @@ export function findOrphanExports(): string[] {
  * you still remember what it was for — which is the entire point of this file.
  */
 export const ORPHAN_BASELINE: Record<string, string> = {
+  'services/checklistAutoTick.ts :: CHECKLIST_EVENT_MAP':
+    'TEST SURFACE, deliberately — the map IS the production data (noteChecklistEvent reads it in the ' +
+    'same module), and it is exported only so the guard can assert every item id it claims to prove ' +
+    'is a real seed id in ownerChecklistStore. Without the export the test would have to restate the ' +
+    'map, which is the shape that lets a guard pass while the real map rots. Do not wire it anywhere; ' +
+    'do not delete it.',
   // ── WIRE — built, computed, and consumed by nothing ───────────────────────────
   'services/smartVisionOverlay.ts :: distanceToTarget':
     'DUPE — a three-line Math.round(haversineYards(from, target)) with a null guard. The other four ' +

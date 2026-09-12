@@ -1654,6 +1654,18 @@ export const useSwingSessionStore = create<SwingSessionState>()(
 
       setSessionClubArc: (sessionId, arc, frame) =>
         set(s => {
+          /**
+           * 2026-09-12 — the 'club-arc-visible' checklist item. An arc with points in it means the
+           * pose read landed and the search found the clubhead, which is the failure this item was
+           * written for (the arc used to be computed BEFORE the pose read and found nothing). An
+           * empty or null arc proves nothing, so it must not tick.
+           */
+          if (arc && arc.length > 0) {
+            try {
+              (require('../services/checklistAutoTick') as typeof import('../services/checklistAutoTick'))
+                .noteChecklistEvent('swing:club-arc');
+            } catch { /* non-fatal */ }
+          }
           const apply = (session: SwingSession): SwingSession => {
             if (session.id !== sessionId) return session;
             // 2026-07-30 (analysis audit P6) — a failed re-run yields too few points; never overwrite a

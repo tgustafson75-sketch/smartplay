@@ -3505,7 +3505,9 @@ export default function CaddieTab() {
         // bottom (isRoundActive ? 168 : 108) + ib and is up to 3 lines (~104px) tall;
         // end the cells above it (never tighter than the prior 150 dropdown clearance).
         const bubbleClearance = budget.bubbleClearance + (isRoundActive ? 60 : 0);
-        const cellMaxBottom = H - Math.max(budget.heroBottom, bubbleClearance);
+        // Measured against the BOX, not the window — see CaddieBudget.boxHeight. bubbleClearance
+        // already sits above the swap inlay and the CTA, so it is the single keep-clear number.
+        const cellMaxBottom = budget.boxHeight - bubbleClearance;
         if (isWide) {
           const cellW = (W - 36) / 2;
           const cellH = Math.min(360, cellMaxBottom - cellTop);
@@ -3604,7 +3606,13 @@ export default function CaddieTab() {
         // controls. Top+bottom positioning fills the space cleanly on ANY screen size (phone → Fold-open)
         // and can never ride under the status bar again.
         const zoneTop = budget.heroTop;
-        const zoneHeight = Math.max(0, H - zoneTop - zoneBottom);
+        /**
+         * 2026-09-12 — was `H - zoneTop - zoneBottom`. H is the WINDOW; this container lives inside
+         * a box ~136dp shorter (tab bar + caddie bar + inset are siblings outside it). With the old
+         * `zoneBottom = 150 + inset` the two errors roughly cancelled; full-bleed (`heroBottom: 0`)
+         * unmasked it and told L1HolePreview it was 136dp taller than it is.
+         */
+        const zoneHeight = budget.heroHeight;
         const swap = () => {
           try { Haptics.selectionAsync().catch(() => {}); } catch { /* optional */ }
           setTrustLevel(caddiePrimary ? 1 : 3);

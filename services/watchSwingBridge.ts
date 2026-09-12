@@ -130,6 +130,15 @@ export async function initWatchSwingBridge(): Promise<boolean> {
           hole, club, tempo: Math.round((e.tempoRatio ?? 0) * 100) / 100, wrist,
         });
       } catch { /* non-fatal */ }
+      /**
+       * A swing cannot reach this line unless the watch's own Record button was pressed — the phone
+       * toggle alone does not start the sensor, which is exactly what the 'watch-record-button' item
+       * exists to find out. Ticking both watch items here means Tim discovers the answer by taking a
+       * swing rather than by working through a list.
+       */
+      try {
+        (require('./checklistAutoTick') as typeof import('./checklistAutoTick')).noteChecklistEvent('watch:swing');
+      } catch { /* non-fatal */ }
       useWatchStore.getState().recordSwing({
         hole,
         backswingMs: Math.round(e.backswingMs ?? 0),

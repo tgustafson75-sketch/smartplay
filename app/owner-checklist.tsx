@@ -100,6 +100,16 @@ export default function OwnerChecklist() {
                     ]}
                   >
                     {item.title}
+                    {/**
+                      * 2026-09-12 — an AUTO tick is the app saying "the code path ran and
+                      * succeeded". It is real evidence but it is NOT "I looked and it was right",
+                      * and several items ask exactly that. Marking it keeps the checklist honest:
+                      * without this, a screen of ticks would not distinguish what he verified from
+                      * what the app inferred while he was playing.
+                      */}
+                    {item.doneVia === 'observed'
+                      ? <Text style={[styles.autoTag, { color: colors.accent }]}>  AUTO</Text>
+                      : null}
                   </Text>
                   <Text style={[styles.rowDetail, { color: colors.text_muted }]}>{item.detail}</Text>
                 </View>
@@ -130,6 +140,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 14, minHeight: 48, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, marginBottom: 10 },
   check: { marginTop: 1 },
   rowTitle: { fontSize: 15, fontWeight: '700' },
+  autoTag: { fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   struck: { textDecorationLine: 'line-through' },
   rowDetail: { fontSize: 12, lineHeight: 17, marginTop: 4 },
   footer: { fontSize: 11, lineHeight: 16, marginTop: 4 },

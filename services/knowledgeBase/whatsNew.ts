@@ -28,14 +28,6 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Sep 2026',
-    note: 'Your caddie fills the screen properly now. There was a band of empty space under him where the picture stopped short, and the Start Round button floated in the middle of it — on a bigger phone the gap just got bigger. He now runs to the bottom on any size screen, with the hole numbers floating over him.',
-  },
-  {
-    when: 'Sep 2026',
-    note: 'Light mode looks like light mode. The bar you type in, the tab row along the bottom and the fade under your caddie were all still painted dark, so a light theme came out half and half.',
-  },
-  {
-    when: 'Sep 2026',
     note: 'You can take a club back out of your bag. Scanning adds clubs, and until now nothing removed them \u2014 so a club the camera got wrong stayed in your bag for good, quietly shaping what the caddie told you to hit.',
     howTo: 'Say "take the 7 wood out of my bag".',
   },

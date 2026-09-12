@@ -102,6 +102,17 @@ export interface CaddieBudget {
   heroBottom: number;
   /** Resolved hero height, so callers can size a child without re-deriving it. */
   heroHeight: number;
+  /**
+   * The height of THIS SCREEN'S BOX — the window minus the tab bar, the caddie bar and the inset,
+   * all of which are siblings outside it.
+   *
+   * Exposed because the tab repeatedly wrote `H - <a distance from the bottom>` to turn a
+   * bottom-anchored offset into a top-anchored one, using the WINDOW height for a coordinate inside
+   * a container ~136dp shorter. That error was masked while the bottom offsets over-reserved by
+   * about the same amount; removing the over-reservation unmasked it. Anything converting between
+   * the two edges must measure against this, never against H.
+   */
+  boxHeight: number;
   /** Start Round / primary CTA float. */
   ctaBottom: number;
   /** The swap inlay that toggles which view leads — floats ON the portrait, above the CTA. */
@@ -158,6 +169,7 @@ export function caddieLayoutBudget(chrome: CaddieChrome): CaddieBudget {
     // Full-bleed. The reference has no page under the portrait, so neither do we.
     heroBottom: 0,
     heroHeight: Math.max(0, boxHeight - heroTop),
+    boxHeight,
     ctaBottom,
     cornerBottom,
     controlsBottom: cornerBottom,

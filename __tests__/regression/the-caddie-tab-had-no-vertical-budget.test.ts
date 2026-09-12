@@ -13,6 +13,8 @@
  * Verified against the reported geometry: with the old constants the hero's base lands ~35% of the
  * window height above the bottom, which is where it sits in Tim's screenshot (~37%).
  */
+import fs from 'fs';
+import path from 'path';
 import { caddieLayoutBudget, type CaddieChrome } from '../../services/caddieLayoutBudget';
 
 const BAR = 64;   // CADDIE_BAR_RESERVE
@@ -139,5 +141,47 @@ describe('the reclaimed band is the defect Tim photographed', () => {
     expect(Math.round(((legacyHeroBottom(fold) + belowBox) / fold.H) * 100)).toBe(35);
     // Full-bleed: the portrait now runs all the way to the tab row.
     expect(Math.round(((caddieLayoutBudget(fold).heroBottom + belowBox) / fold.H) * 100)).toBe(15);
+  });
+});
+
+describe('a bottom-anchored offset is converted against the BOX, never the window', () => {
+  /**
+   * 2026-09-12 — the tab wrote `H - <distance from the bottom>` to flip a bottom-anchored offset
+   * into a top-anchored one. H is the WINDOW; the container is ~136dp shorter, because the tab bar,
+   * the caddie bar and the inset are siblings outside it. While the bottom offsets over-reserved by
+   * roughly that much the two errors cancelled and nothing looked wrong. Going full-bleed removed
+   * the over-reservation and unmasked it: L1HolePreview was handed a height 136dp larger than its
+   * own container, and the L2 cells could reach down into the Start Round button.
+   */
+  it('boxHeight is the window minus every sibling below it', () => {
+    for (const [name, c] of Object.entries(DEVICES)) {
+      const b = caddieLayoutBudget(c);
+      expect(`${name}:${b.boxHeight}`).toBe(`${name}:${c.H - TABS - BAR - c.insetBottom}`);
+    }
+  });
+
+  it('heroHeight is exactly what a top/bottom-pinned child of that box resolves to', () => {
+    for (const [name, c] of Object.entries(DEVICES)) {
+      const b = caddieLayoutBudget(c);
+      // the container is { top: heroTop, bottom: heroBottom } inside the box
+      expect(`${name}:${b.heroHeight}`).toBe(`${name}:${b.boxHeight - b.heroTop - b.heroBottom}`);
+    }
+  });
+
+  it('the box is always shorter than the window — a budget that returned H would be wrong', () => {
+    for (const [name, c] of Object.entries(DEVICES)) {
+      const b = caddieLayoutBudget(c);
+      expect(`${name}:${b.boxHeight < c.H}`).toBe(`${name}:true`);
+    }
+  });
+
+  it('the caddie tab performs no window-height conversion of its own', () => {
+    const src = fs.readFileSync(
+      path.join(__dirname, '../../app/(tabs)/caddie.tsx'), 'utf8',
+    ).replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    // Comments are stripped first: the explanation of this very bug quotes the expression.
+    expect(src).not.toMatch(/=\s*H\s*-\s*/);
+    expect(src).toMatch(/budget\.boxHeight/);
+    expect(src).toMatch(/const zoneHeight = budget\.heroHeight;/);
   });
 });

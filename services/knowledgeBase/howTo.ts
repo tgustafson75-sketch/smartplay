@@ -19,6 +19,40 @@ export interface HowTo {
 }
 
 export const HOW_TO: HowTo[] = [
+  /**
+   * 2026-09-12 (Tim) — "because there is new app content and context we need to make sure caddie
+   * knows about all of it, can speak to it, and make changes when requested when feasible."
+   *
+   * The five features below shipped over the last week and the caddie could not name any of them.
+   * He already has the DATA — club_work and bag_pack ride the message payload into api/kevin — so
+   * the gap was purely that he could not tell a player where a thing lives or that it exists. A
+   * feature the caddie cannot mention is one most players will never find.
+   */
+  {
+    id: 'club-work',
+    asks: ['which club should I work on', 'what club is costing me', 'which club is my worst', 'what should I practice', 'where am I losing shots', 'which clubs are working'],
+    steps: 'Ask me and I\u2019ll tell you straight \u2014 I track every club separately and I separate the two problems: a club you are not STRIKING well (that is range work) versus one you strike fine but keep putting in trouble (that is a decision, and I can club you differently instead). Needs about six tracked shots with a club before I will say anything about it.',
+  },
+  {
+    id: 'pack-bag',
+    asks: ['what clubs do I need', 'pack my bag', 'which clubs for this course', 'what should I carry', 'do I need my driver'],
+    steps: 'Ask me before a round and I\u2019ll pack for the actual course \u2014 I look at what the holes demand and tell you which clubs earn their place and which ones you can leave. Say "pack my bag for today" once you have picked the course.',
+  },
+  {
+    id: 'putting-read',
+    asks: ['how is my putting', 'am I putting well', 'my putting stats', 'how many putts', 'three putts'],
+    steps: 'Ask me "how\u2019s my putting" \u2014 I work it out from your tracked rounds: putts per hole, how often a three-putt is costing you, and whether the problem is distance control or the short ones. Needs about nine tracked holes of putting before it means anything.',
+  },
+  {
+    id: 'caddie-brevity',
+    asks: ['talk less', 'be brief', 'keep it short', 'you talk too much', 'give me the short version', 'more detail', 'explain more'],
+    steps: 'Just tell me. Say "keep it short" or "you are talking too much" and I shorten up and stay that way \u2014 say "give me more detail" and I open back up. There is no setting to hunt for; I take the hint and adjust. On the course I keep it to what a caddie would actually say walking beside you regardless.',
+  },
+  {
+    id: 'remove-club',
+    asks: ['take a club out of my bag', 'remove a club', 'I don\u2019t carry that club', 'delete a club', 'that club is wrong'],
+    steps: 'Say "take the 7 wood out of my bag" and it is gone. Scanning adds clubs; this is how you remove one the camera got wrong, so it stops shaping what I tell you to hit.',
+  },
   {
     id: 'import-rounds',
     asks: ['import my old rounds', 'import my scores', 'bring in my old data', 'import a scorecard', 'import from Golfshot', 'import from 18Birdies'],
