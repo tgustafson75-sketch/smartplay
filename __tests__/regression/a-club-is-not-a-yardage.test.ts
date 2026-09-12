@@ -248,3 +248,48 @@ describe('it reaches the caddie, not just the screen', () => {
     expect(k).toMatch(/Offer ONCE/);
   });
 });
+
+describe('the two the 100-player market sim found', () => {
+  /**
+   * Both were invisible to jest and to run-sim: the unit tests used one tidy bag, and a grep cannot
+   * see a club choice. They only appeared once the engines were run across 100 personas with real,
+   * sparse, scaled bags — which is what that harness is for.
+   */
+  const SPARSE = { Driver: 218, '3 Wood': 197, '5 Wood': 186, '4 Hybrid': 171, '5 Iron': 156, '6 Iron': 148, '7 Iron': 137, '8 Iron': 127, '9 Iron': 116, PW: 104, SW: 82 };
+
+  it('a shot PAST the bag still gets a playable club out of deep rough', () => {
+    // "Driver @ 312y from heavy_rough" — the swap only searched within 20 yards of the number, and
+    // from 312 the only club near 312 IS the driver, so nothing qualified and it stood.
+    const r = composeShotRead({ rawYards: 312, weather: null, shotBearingDeg: null, bag: SPARSE, lie: 'heavy_rough' })!;
+    expect(clubClassOf(r.club)).not.toBe('wood');
+    expect(clubClassOf(r.club)).not.toBe('driver');
+  });
+
+  it('and it takes the LONGEST club that gets out, not the most playable', () => {
+    // From deep rough at 312 you want the longest club that still escapes — a long iron. Preferring
+    // "most playable" hands back a wedge, which is bad golf.
+    const r = composeShotRead({ rawYards: 312, weather: null, shotBearingDeg: null, bag: SPARSE, lie: 'heavy_rough' })!;
+    expect(clubClassOf(r.club)).toBe('iron');
+    /**
+     * Asserted on the CLASS, not a bag lookup: the picker speaks the merged ladder's labels and the
+     * merge deliberately keeps standard-ladder rungs so a sparse bag cannot collapse it, so the club
+     * it names may not be a key in this fixture. My first version looked the label up in the fixture,
+     * got undefined, and failed on correct code — the two-vocabulary trap, in a test this time.
+     */
+    expect(clubClassOf(r.club)).not.toBe('wedge');
+  });
+
+  it('a mid-range shot on a sparse bag does not fall back to a wood either', () => {
+    // "3 Wood @ 158y from heavy_rough" — same empty-window fault at a different number.
+    const r = composeShotRead({ rawYards: 158, weather: null, shotBearingDeg: null, bag: SPARSE, lie: 'heavy_rough' })!;
+    expect(clubClassOf(r.club)).not.toBe('wood');
+  });
+
+  it('within reach it never hands back MORE club than the shot', () => {
+    const near = composeShotRead({ rawYards: 150, weather: null, shotBearingDeg: null, bag: SPARSE, lie: 'heavy_rough' })!;
+    const far = composeShotRead({ rawYards: 312, weather: null, shotBearingDeg: null, bag: SPARSE, lie: 'heavy_rough' })!;
+    // The 150 answer must be a shorter club than the 312 answer — the window still governs in reach.
+    expect(near.club).not.toBe(far.club);
+    expect(clubClassOf(near.club)).toBe('iron');
+  });
+});

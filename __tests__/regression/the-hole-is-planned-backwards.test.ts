@@ -315,3 +315,30 @@ describe('it is wired to the caddie AND to the screen, from ONE composer', () =>
     expect(block).toMatch(/If he wants a different club, agree with him/);
   });
 });
+
+describe('the plan reaches the green it says it reaches', () => {
+  /**
+   * The 100-player market sim: "par 4 370y: 9 Iron left 0, arithmetic says 5". clubFor accepts a
+   * club within CARRY_MARGIN — right for CHOOSING a club, since a golfer plays a 145 club from 150
+   * all day — but the plan then CLAIMED it finished at zero while the arithmetic said five.
+   *
+   * The approach must genuinely cover the number now. If nothing does, the engine plans one more
+   * shot, which is the true answer rather than a rounding of it.
+   */
+  it('the last step covers its own number', () => {
+    for (const yards of [310, 340, 370, 400, 430, 480, 520, 560]) {
+      for (const par of [4, 5]) {
+        const plan = planHole({ par, holeYards: yards, bag: BAG });
+        if (!plan) continue;
+        const covered = plan.steps.reduce((a, s) => a + s.carryYards, 0);
+        expect(covered).toBeGreaterThanOrEqual(yards);
+        expect(plan.steps[plan.steps.length - 1].leavesYards).toBe(0);
+      }
+    }
+  });
+
+  it('a par 3 the bag cannot cover produces no plan rather than a short one', () => {
+    const plan = planHole({ par: 3, holeYards: 260, bag: { '7I': 140, SW: 80 } });
+    expect(plan === null || plan.steps.reduce((a, s) => a + s.carryYards, 0) >= 260).toBe(true);
+  });
+});

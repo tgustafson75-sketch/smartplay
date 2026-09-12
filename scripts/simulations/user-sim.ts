@@ -31,6 +31,11 @@
  */
 
 import { normalizeClub, digitizeNumberWords, isFullSwingClub } from '../../services/clubNormalize';
+import { composeShotRead } from '../../services/cnsShotRead';
+import { planHole } from '../../services/holePlan';
+import { clubClassOf } from '../../services/clubCharacter';
+import { conditionFindings, conditionPlay } from '../../services/roundConditions';
+import { composePreRoundFactors } from '../../services/practice/preRoundFactors';
 import { clubTendencies, describeClubTendency, describeBagTendencies, type TendencyShot } from '../../services/clubTendency';
 import { inferCameraAngle } from '../../services/cameraAngleInference';
 import { compareSwings, unreadableMetrics } from '../../services/swingComparisonEngine';
@@ -747,6 +752,116 @@ function stageCapture(p: Persona) {
 
 // ── Runner ───────────────────────────────────────────────────────────────────────────────────────
 const onlyArg = process.argv.find(a => a.startsWith('--only='));
+
+/**
+ * 11. THE 2026-09-11 ENGINES — the shot read, the hole plan, the lie, the post-round conditions.
+ *
+ * Added after an audit found that none of them were EXERCISED here. They were covered by jest and
+ * string-matched by run-sim, and every commit that day reported "user-sim 100 players, 0 issues" —
+ * true, and not evidence about this code at all. A grep cannot see a NaN in a plan, "undefined"
+ * rendered into a caddie sentence, or a club ladder that sorts wrong for a left-hander.
+ *
+ * All four are PURE, so they run here directly on each persona's real bag.
+ */
+function stageDecisionEngines(p: Persona) {
+  const S = 'decision-engines';
+  const bag: Record<string, number> = {};
+  for (const b of p.bag) bag[b.club] = b.carry;
+
+  // ── the shot read, across the yardages a round actually produces ────────────────────────────
+  for (const yards of [312, 205, 158, 96, 41]) {
+    for (const lie of ['unknown', 'tee', 'fairway', 'light_rough', 'heavy_rough', 'sand'] as const) {
+      const read = composeShotRead({
+        rawYards: yards, weather: null, shotBearingDeg: null, bag, lie,
+        distanceControl: p.handicap > 18 ? 'full_swings' : 'some_partials',
+      });
+      if (!read) continue;
+      deepCheck(p.seed, S, read);
+      checkNum(p.seed, S, `read.playsLike@${yards}`, read.playsLikeYards, 1, 700);
+      // A club must be one the player could actually be holding.
+      if (read.club && !bag[read.club] && !/Iron|Wood|Hybrid|Wedge|Driver|PW|SW|GW|AW|LW/i.test(read.club)) {
+        report(p.seed, S, 'read returned a club that is not a club', `${read.club} @ ${yards}y`);
+      }
+      // The lie rule: a wood is the wrong tool out of sand or deep rough, at any distance.
+      if (lie === 'sand' || lie === 'heavy_rough') {
+        const k = clubClassOf(read.club);
+        if (k === 'wood' || k === 'driver') {
+          report(p.seed, S, 'a wood was recommended out of sand or deep rough', `${read.club} @ ${yards}y from ${lie}`);
+        }
+      }
+      // An offer is only ever made when the lie is genuinely unknown.
+      if (read.lieOffer && lie !== 'unknown') {
+        report(p.seed, S, 'a lie offer was made when the lie was known', `${lie} @ ${yards}y`);
+      }
+      if (read.lieOffer && read.lieOffer.safeClub === read.lieOffer.ifGoodLieClub) {
+        report(p.seed, S, 'the lie offer named the same club twice', `${read.lieOffer.safeClub}`);
+      }
+    }
+  }
+
+  // ── the hole plan, over the holes a course actually has ─────────────────────────────────────
+  for (const [par, yards] of [[3, 165], [4, 370], [4, 455], [5, 520], [5, 610]] as [number, number][]) {
+    for (const dc of ['full_swings', 'some_partials', 'dial_down'] as const) {
+      const plan = planHole({ par, holeYards: yards, bag, distanceControl: dc });
+      if (!plan) continue;
+      deepCheck(p.seed, S, plan);
+      checkNum(p.seed, S, `plan.target@${par}/${yards}`, plan.targetScore, par - 2, par + 6);
+      // Every number in the sentence must be one the previous shot produces.
+      let covered = 0;
+      for (const st of plan.steps) {
+        covered += st.carryYards;
+        const expect = Math.max(0, Math.round(yards - covered));
+        if (st.leavesYards !== expect) {
+          report(p.seed, S, 'a plan step left a number the shot before it does not produce',
+            `par ${par} ${yards}y: ${st.club} left ${st.leavesYards}, arithmetic says ${expect}`);
+        }
+        if (st.leavesYards < 0) report(p.seed, S, 'a plan left a negative yardage', `${st.club} ${st.leavesYards}`);
+      }
+      if (plan.steps[plan.steps.length - 1].leavesYards !== 0) {
+        report(p.seed, S, 'the last plan step does not reach the green', `par ${par} ${yards}y`);
+      }
+      // A driver is never hit off the deck.
+      for (const st of plan.steps.slice(1)) {
+        if (clubClassOf(st.club) === 'driver') {
+          report(p.seed, S, 'the plan hit a driver off the deck', `shot ${st.shot} on par ${par} ${yards}y`);
+        }
+      }
+    }
+  }
+
+  // ── the post-round conditions, on a synthetic history for THIS persona ──────────────────────
+  const rounds = Array.from({ length: 12 }, (_, i) => ({
+    startedAt: 1_700_000_000_000 + i * 86_400_000,
+    scoreVsPar: p.handicap + (i % 2 === 0 ? 4 : -3),
+    postRoundFeelings: { weather: i % 2 === 0 ? 'Cold' : 'Sunny', focus: i % 3 === 0 ? 'Off' : 'Locked In' },
+  }));
+  const findings = conditionFindings(rounds);
+  deepCheck(p.seed, S, findings);
+  for (const f of findings) {
+    checkNum(p.seed, S, `condition.${f.key}.delta`, f.deltaStrokes, -60, 60);
+    if (f.n < 3 || f.otherN < 3) {
+      report(p.seed, S, 'a condition finding cleared a cohort it should not have', `${f.key}=${f.value} n=${f.n} vs ${f.otherN}`);
+    }
+    const play = conditionPlay(f);
+    if (play) {
+      deepCheck(p.seed, S, play);
+      if (play.costStrokes <= 0) report(p.seed, S, 'a mitigation was offered for a condition that costs nothing', `${f.value}`);
+    }
+  }
+
+  // ── the pre-round buckets ───────────────────────────────────────────────────────────────────
+  const pre = composePreRoundFactors({
+    rounds,
+    ballTimes: rounds.filter((_, i) => i % 2 === 0).map(r => r.startedAt - 3_600_000),
+    stretchTimes: rounds.filter((_, i) => i % 3 === 0).map(r => r.startedAt - 3_600_000),
+  });
+  deepCheck(p.seed, S, pre);
+  const totalBucketed = pre.buckets.reduce((a, b) => a + b.n, 0);
+  if (totalBucketed !== rounds.length) {
+    report(p.seed, S, 'pre-round buckets did not account for every round', `${totalBucketed} of ${rounds.length}`);
+  }
+}
+
 const only = onlyArg ? Number(onlyArg.split('=')[1]) : null;
 const COUNT = Number(process.argv.find(a => a.startsWith('--n='))?.split('=')[1] ?? 100);
 const seeds = only != null ? [only] : Array.from({ length: COUNT }, (_, i) => 1000 + i * 7919);
@@ -756,6 +871,7 @@ const stages: [string, (p: Persona) => unknown][] = [
   ['club-identity', stageClubIdentity], ['bag/fitting', stageBag], ['carry', stageCarry],
   ['tendencies', stageTendencies], ['range-session', stageRangeSession],
   ['round', stageRound], ['legacy-sessions', stageLegacyData], ['practice', stagePractice], ['capture', stageCapture],
+  ['decision-engines', stageDecisionEngines],
 ];
 
 for (const seed of seeds) {

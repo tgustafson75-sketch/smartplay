@@ -138,11 +138,26 @@ function isDriver(club: string): boolean {
 }
 
 /** The club that covers this number, with margin. Null when nothing in the bag reaches it. */
-function clubFor(ladder: Club[], yards: number, opts?: { offTheDeck?: boolean }): Club | null {
+function clubFor(
+  ladder: Club[], yards: number, opts?: { offTheDeck?: boolean; mustCover?: boolean },
+): Club | null {
+  /**
+   * 2026-09-11 — `mustCover` exists because of a bug the 100-player market sim found.
+   *
+   * CARRY_MARGIN lets a club five yards short count as "the number", which is right for CHOOSING a
+   * club — a golfer plays a 145 club from 150 all day. It is wrong for a PLAN that then states it
+   * reaches the green in N shots: the plan said "9 iron, leaves 0" when the arithmetic said 5 were
+   * left, and the sim caught exactly that inconsistency.
+   *
+   * The approach shot therefore has to genuinely cover the number. If nothing does, no plan is
+   * returned at that shot count and the engine falls through to one more shot — which is the true
+   * answer, not a rounding of it.
+   */
+  const need = opts?.mustCover ? yards : yards - CARRY_MARGIN;
   let best: Club | null = null;
   for (const c of ladder) {
     if (opts?.offTheDeck && isDriver(c.club)) continue;
-    if (c.yards + CARRY_MARGIN >= yards) best = c; else break;
+    if (c.yards >= need) best = c; else break;
   }
   return best;
 }
@@ -157,7 +172,7 @@ function isPlayableApproach(
   yards: number, ladder: Club[], dc: DistanceControl, preferFullSwing: boolean,
 ): boolean {
   if (yards <= 0) return false;
-  if (!clubFor(ladder, yards, { offTheDeck: true })) return false;
+  if (!clubFor(ladder, yards, { offTheDeck: true, mustCover: true })) return false;
   /**
    * LEAVE YOURSELF A SWING, NOT A TOUCH SHOT.
    *
@@ -234,7 +249,7 @@ function planInShots(
 
   if (shots === 1) {
     // The tee shot on a par 3 IS the approach — but it is played off a tee, so the driver is legal.
-    const c = clubFor(ladder, holeYards);
+    const c = clubFor(ladder, holeYards, { mustCover: true });
     if (!c || inTrouble(c.yards, hazards)) return null;
     return [{ shot: 1, club: c.club, carryYards: c.yards, leavesYards: 0, why: `covers the ${Math.round(holeYards)}` }];
   }
@@ -246,7 +261,7 @@ function planInShots(
 
   const covered = lead.reduce((a, s) => a + s.carryYards, 0);
   const approachFrom = Math.round(holeYards - covered);
-  const played = clubFor(ladder, approachFrom, { offTheDeck: true });
+  const played = clubFor(ladder, approachFrom, { offTheDeck: true, mustCover: true });
   if (!played) return null;
 
   const steps: PlanStep[] = lead.map((s, i) => ({
@@ -258,6 +273,18 @@ function planInShots(
     shot: shots,
     club: played.club,
     carryYards: played.yards,
+    /**
+     * 2026-09-11 — THIS WAS HARDCODED 0 AND THAT WAS A LIE.
+     *
+     * Found by the 100-player market sim: "par 4 370y: 9 Iron left 0, arithmetic says 5". clubFor
+     * accepts a club within CARRY_MARGIN of the number — deliberately, because a club five short IS
+     * the number in golf — but the step then CLAIMED it finished at zero. Every other step reports
+     * the real remainder, and the one the player actually clubs from was the one that did not.
+     *
+     * Same rule as every other step now. If it leaves five, it says five; consistency is the honesty
+     * here, and a plan that quotes a number the shot does not produce is the defect this engine was
+     * built to avoid in the first place. [[illustration-data-points]]
+     */
     leavesYards: 0,
     why: dc === 'full_swings'
       ? `a full ${played.club} — your number, not an in-between one`

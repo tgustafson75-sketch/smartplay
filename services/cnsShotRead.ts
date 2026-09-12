@@ -275,17 +275,48 @@ function pickClub(playsLikeYards: number, bag: Partial<Record<string, number>>, 
         const cc = require('./clubCharacter') as typeof import('./clubCharacter');
         const bestPlay = cc.playabilityFromLie(best[0], lie);
         if (bestPlay != null && bestPlay < cc.POOR_FROM_LIE) {
-          const LIE_SWAP_TOLERANCE = 20;
+          /**
+           * 2026-09-11 — THE WINDOW HAS TO WIDEN WHEN THE SHOT IS OUT OF REACH.
+           *
+           * Found by the 100-player market sim: "Driver @ 312y from heavy_rough". The swap only
+           * looked for a more playable club within 20 yards of the number, and from 312 the only
+           * club near 312 IS the driver — so nothing qualified and the driver stood, out of deep
+           * rough, which is the exact shot Tim said not to recommend.
+           *
+           * When the number is past what the player can reach anyway, the yardage stops being the
+           * constraint: he is advancing the ball, not going for it. So the search widens to the
+           * whole bag and takes the LONGEST playable club — get it out, get it forward. Within
+           * reach, the tight window still governs, because there the yardage genuinely matters.
+           */
+          /**
+           * 2026-09-11 — REWRITTEN TWICE, BOTH TIMES BY THE 100-PLAYER MARKET SIM.
+           *
+           * First it found "Driver @ 312y from heavy_rough": the swap only looked within 20 yards of
+           * the number, and from 312 the only club near 312 IS the driver, so nothing qualified.
+           * Then it found "3 Wood @ 158y from heavy_rough" on a scaled sparse bag, for the same
+           * reason at a different number.
+           *
+           * The old rule asked for a club that was MORE PLAYABLE than the one it was replacing,
+           * which has two faults. It finds nothing when the window is empty. And it prefers the MOST
+           * playable club, so a wedge beats an iron out of deep rough — bad golf, because from 200
+           * yards in the rough you want the longest club that still gets OUT, not the one that gets
+           * out best.
+           *
+           * So: take every club that CLEARS the playability bar, and choose among those. Within
+           * reach, the one closest to the number, because the yardage still matters. Out of reach,
+           * the longest, because the job is advancing it — he cannot get there anyway.
+           */
+          const reachable = playsLikeYards <= longest[1] + 8;
           let swap: [string, number] | null = null;
-          let swapPlay = bestPlay;
           for (const e of real) {
-            if (Math.abs(e[1] - playsLikeYards) > LIE_SWAP_TOLERANCE) continue;
-            const p = cc.playabilityFromLie(e[0], lie);
-            if (p == null || p <= swapPlay) continue;
-            // Prefer the more playable club; break ties toward the one closest to the number.
-            if (!swap || p > swapPlay || Math.abs(e[1] - playsLikeYards) < Math.abs(swap[1] - playsLikeYards)) {
-              swap = e; swapPlay = p;
-            }
+            const pl = cc.playabilityFromLie(e[0], lie);
+            if (pl == null || pl < cc.POOR_FROM_LIE) continue;
+            if (reachable && e[1] > playsLikeYards + 8) continue;  // never hand back more club than the shot
+            if (!swap) { swap = e; continue; }
+            const better = reachable
+              ? Math.abs(e[1] - playsLikeYards) < Math.abs(swap[1] - playsLikeYards)
+              : e[1] > swap[1];
+            if (better) swap = e;
           }
           if (swap && swap[0] !== best[0]) {
             const line = cc.describeLieChoice(swap[0], best[0], lie);
