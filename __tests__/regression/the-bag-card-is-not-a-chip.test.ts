@@ -39,10 +39,24 @@ describe('the bag has its own card', () => {
   it('is SLIM — one value line, not the two-line factorCard', () => {
     const at = src.indexOf('  bagCard: {');
     expect(at).toBeGreaterThan(-1);
-    const style = src.slice(at, at + 320);
+    const style = src.slice(at, at + 420);
     expect(style).toMatch(/flexDirection: 'row'/);
     const pv = Number(/paddingVertical: (\d+)/.exec(style)![1]);
     expect(pv).toBeLessThanOrEqual(12);          // slim: a status row, not a settings card
+  });
+
+  it('but carries enough WEIGHT not to be skipped — it must not wear the chips\' own chrome', () => {
+    /**
+     * The first version used c.surface + c.border, which is exactly what the chips above it use, so
+     * a card meant to be its own thing looked like more of the row it had been taken out of.
+     * Tim: "needs to stand out a bit more so it doesn't get skipped."
+     */
+    const at = src.indexOf('  bagCard: {');
+    const style = src.slice(at, at + 420);
+    expect(style).toMatch(/borderLeftWidth: 3/);                 // a persistent vertical cue
+    expect(style).toMatch(/borderLeftColor: c\.accent/);
+    expect(style).toMatch(/backgroundColor: c\.surface_elevated/); // lifts off the flat chips
+    expect(style).not.toMatch(/backgroundColor: c\.surface,/);     // never back to chip chrome
   });
 });
 
@@ -60,9 +74,13 @@ describe('what the card actually says', () => {
     expect(clean).toMatch(/play\.play_tab\.bag_not_set/);
   });
 
-  it('accents ONLY on a deliberate partial bag, so a normal full bag stays quiet', () => {
+  it('the partial-bag state ESCALATES the styling rather than being the only accent', () => {
+    // 2026-09-11 second pass: the card now carries a permanent accent left edge so it is not
+    // skipped. The partial state still adds the full accent border and an accent value on top, so
+    // "you have pared this down" still reads as a change rather than as ambient colour.
     expect(clean).toMatch(/isPartialBag && styles\.bagCardActive/);
     expect(clean).toMatch(/isPartialBag && styles\.bagIconWrapActive/);
+    expect(clean).toMatch(/isPartialBag && \{ color: '#00C896' \}/);
   });
 
   it('reads the CARRIED count and the OWNED count from the store, never a constant', () => {

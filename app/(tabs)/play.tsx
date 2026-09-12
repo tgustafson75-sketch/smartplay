@@ -2620,20 +2620,38 @@ return StyleSheet.create({
    * 2026-09-11 — the bag's own slim row. Deliberately shorter than factorCard (10pt vertical, one
    * line of value) so it reads as a status you can tap, not another setting to weigh up.
    */
+  /**
+   * 2026-09-11 (Tim, second pass) — "looks better but needs to stand out a bit more so it doesn't
+   * get skipped."
+   *
+   * The first version used c.surface + c.border, which is EXACTLY what the chips above it use — so
+   * a card meant to be its own thing was wearing the chrome of the row it had just been taken out
+   * of. Weight, not decoration, is what was missing:
+   *   - an accent LEFT EDGE, always. One persistent vertical cue the eye catches on the way down
+   *     the page, and the cheapest way to say "this is not another chip" without shouting.
+   *   - surface_elevated, so it lifts off the page the chips sit flat on.
+   *   - a bigger value (15pt), because the COUNT is the thing being skipped.
+   *   - an always-tinted icon, rather than tinting only in the partial state.
+   *
+   * The partial-bag state still ESCALATES on top of that (full accent border, accent value), so the
+   * accent keeps meaning "you have pared this down" instead of becoming ambient.
+   */
   bagCard: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     marginHorizontal: 16, marginTop: 14,
-    paddingVertical: 10, paddingHorizontal: 12,
-    backgroundColor: c.surface, borderRadius: 12, borderWidth: 1, borderColor: c.border,
+    paddingVertical: 11, paddingHorizontal: 12,
+    backgroundColor: c.surface_elevated, borderRadius: 12,
+    borderWidth: 1, borderColor: c.border,
+    borderLeftWidth: 3, borderLeftColor: c.accent,
   },
-  bagCardActive: { borderColor: c.accent, backgroundColor: c.surface_elevated },
+  bagCardActive: { borderColor: c.accent, backgroundColor: 'rgba(0,200,150,0.10)' },
   bagIconWrap: {
-    width: 30, height: 30, borderRadius: 15,
-    alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface_elevated,
+    width: 32, height: 32, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,200,150,0.14)',
   },
-  bagIconWrapActive: { backgroundColor: 'rgba(0,200,150,0.16)' },
+  bagIconWrapActive: { backgroundColor: 'rgba(0,200,150,0.22)' },
   bagCardLabel: { color: c.text_muted, fontSize: 10, fontWeight: '700', letterSpacing: 1.3 },
-  bagCardValue: { color: c.text_primary, fontSize: 14, fontWeight: '800', marginTop: 1 },
+  bagCardValue: { color: c.text_primary, fontSize: 15, fontWeight: '800', marginTop: 1 },
   chip: {
     paddingHorizontal: 14, paddingVertical: 8,
     borderRadius: 20, borderWidth: 1, borderColor: c.border,
