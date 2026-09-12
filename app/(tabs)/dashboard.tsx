@@ -1921,9 +1921,9 @@ const styles = StyleSheet.create({
    * be looking at.
    */
   dashHead: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16 },
-  dashIcon: { width: 20, height: 20 },
+  dashIcon: { width: 22, height: 22 },
   dashHeadInline: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-  dashIconSm: { width: 17, height: 17 },
+  dashIconSm: { width: 21, height: 21 },
   sectionHeader: {
     fontSize: 11,
     fontWeight: '800',

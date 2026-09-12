@@ -14,6 +14,27 @@ Every branded icon in this app is the same thing:
 - Readable at **22 pixels**. That is the size it ships at — judge it there, never at
   full resolution. (Two of three FORMAT candidates died at 22px and looked fine at 256.)
 
+### ⚠️ THE RING IS A BADGE TREATMENT, NOT PART OF THE ICON
+
+The circle belongs to icons that ARE a button — Smart Motion renders its set at **46px** and its
+README says outright "the icon's OWN circle IS the button".
+
+**Inline beside a text label, STRIP THE RING.** At 17–24px the circle eats the outer ~30% of the
+glyph and carries no information, leaving the subject too small to read. Tim, on the first dashboard
+build: *"those icons are hard to see, you definitely can't tell what they are — and I'm looking with
+my fold phone open."* He was right, and size alone did not fix it: with the ring, the same icon is a
+blob at 24px; without it, it reads at 20px.
+
+So:
+| use | ring? | size |
+|---|---|---|
+| standalone button / badge (Smart Motion tools) | **keep** | 40–46px |
+| inline beside a section label (Play, Dashboard) | **strip** | 21–26px |
+
+Ringed originals are archived in `SmartPlay-Project-Files/brand/icon-originals-with-ring/` so a
+badge use can recover them. Strip programmatically: clear everything outside radius `0.40 × width`
+from centre, then bbox-crop and re-pad to a square with 4% margin.
+
 ## 2. THE SETS
 
 | folder | what | count |

@@ -2687,12 +2687,12 @@ return StyleSheet.create({
     marginHorizontal: 16, marginTop: 18, marginBottom: 10,
     paddingTop: 16, borderTopWidth: 1, borderTopColor: c.border,
   },
-  sectionIcon: { width: 22, height: 22 },
+  sectionIcon: { width: 24, height: 24 },
   sectionHeadText: {
     color: c.text_primary, fontSize: 13, fontWeight: '800', letterSpacing: 1.4,
   },
   /** The bag card's own mark — the same branded golf bag, a touch larger inside its circle. */
-  bagIcon: { width: 24, height: 24 },
+  bagIcon: { width: 26, height: 26 },
   factorGrid: {
     flexDirection: 'row', flexWrap: 'wrap', gap: 8,
     paddingHorizontal: 16,
