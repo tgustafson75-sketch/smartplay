@@ -89,6 +89,34 @@ import { BrandHeaderRow } from '../../components/brand/BrandHeaderRow';
 const GET_TO_KNOW_FOCUS =
   'the player wants to tell you about their game so you get to know them. Open with ONE short, warm line inviting them to talk (e.g. "Tell me about your game — how you practice, what you\'re chasing"), then LISTEN. Do NOT interrogate or run a checklist of questions. Acknowledge what they volunteer so they know you heard it. They lead; you listen and remember.';
 
+/**
+ * 2026-09-11 (Tim) — DASHBOARD SECTION ICONS, same style lock as the Play tab.
+ *
+ * Produced to the Smart Motion spec and extracted from one sheet, so every glyph shares a stroke,
+ * a circle and an optical weight with the seven already on the Play tab. Tinted at render with
+ * `accent_lime`, which the theme resolves per mode — the raw brand lime does not hold up on a white
+ * field, which a contact sheet on white shows plainly.
+ *
+ * The dashboard had SIXTEEN section headings and almost no icons: bare grey capitals, which is the
+ * same thing Tim flagged on the Play tab ("they get lost, there's no delineation").
+ */
+const DASH_ICON = {
+  currentRound: require('../../assets/icons/dash/dash-current-round.png'),
+  shotStats: require('../../assets/icons/dash/dash-shot-stats.png'),
+  practicePoints: require('../../assets/icons/dash/dash-practice-points.png'),
+  practiceHistory: require('../../assets/icons/dash/dash-practice-history.png'),
+  progress: require('../../assets/icons/dash/dash-progress.png'),
+  beforeRound: require('../../assets/icons/dash/dash-before-round.png'),
+  trainSwing: require('../../assets/icons/dash/dash-train-swing.png'),
+  recentShots: require('../../assets/icons/dash/dash-recent-shots.png'),
+  recentRounds: require('../../assets/icons/dash/dash-recent-rounds.png'),
+  kevinsRead: require('../../assets/icons/dash/dash-kevins-read.png'),
+  tellCaddie: require('../../assets/icons/dash/dash-tell-caddie.png'),
+  highlights: require('../../assets/icons/dash/dash-highlights.png'),
+  newLook: require('../../assets/icons/dash/dash-new-look.png'),
+  myBag: require('../../assets/icons/play/sec-your-bag.png'),
+} as const;
+
 export default function Dashboard() {
   const router = useRouter();
   const { t } = useTranslation();
@@ -1022,7 +1050,7 @@ export default function Dashboard() {
           accessibilityLabel={t('dashboard.accessibility_label.try_a_new_look_selfie')}
         >
           <View style={[styles.selfieIcon, { backgroundColor: colors.accent_muted }]}>
-            <Ionicons name="sparkles-outline" size={20} color={colors.accent} />
+            <Image source={DASH_ICON.newLook} style={styles.dashIconSm} tintColor={colors.accent_lime} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={[styles.selfieTitle, { color: colors.text_primary }]}>{t('dashboard.try_new_look')}</Text>
@@ -1034,7 +1062,10 @@ export default function Dashboard() {
         </TouchableOpacity>
 
         {/* ─── 4. CURRENT ROUND ──────────────────────────────────────── */}
-        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{t('dashboard.current_round')}</Text>
+        <View style={styles.dashHead}>
+          <Image source={DASH_ICON.currentRound} style={styles.dashIcon} tintColor={colors.accent_lime} />
+          <Text style={[styles.sectionHeader, { color: colors.text_primary, paddingHorizontal: 0 }]}>{t('dashboard.current_round')}</Text>
+        </View>
         {isRoundActive ? (
           <View style={[styles.activeCard, { backgroundColor: colors.surface_elevated, borderColor: colors.accent }]}>
             <View style={styles.activeHeader}>
@@ -1137,7 +1168,10 @@ export default function Dashboard() {
             than left looking like a source — so the tile is labelled CLEAN TEE % (dashboard
             i18n key fairway_pct) — what the data actually supports — not
             a fabricated FAIRWAY HIT %. */}
-        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{t('dashboard.shot_stats')}</Text>
+        <View style={styles.dashHead}>
+          <Image source={DASH_ICON.shotStats} style={styles.dashIcon} tintColor={colors.accent_lime} />
+          <Text style={[styles.sectionHeader, { color: colors.text_primary, paddingHorizontal: 0 }]}>{t('dashboard.shot_stats')}</Text>
+        </View>
         <View style={styles.statsRow}>
           <StatTile colors={colors} icon="golf-outline" value={String(shotStats.shotsLogged)} label={t('dashboard.shots_logged')} />
           <StatTile
@@ -1165,7 +1199,10 @@ export default function Dashboard() {
         {practiceTotal > 0 && (
           <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={styles.practiceHeader}>
-              <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>{t('dashboard.text.practice_points')}</Text>
+              <View style={styles.dashHeadInline}>
+              <Image source={DASH_ICON.practicePoints} style={styles.dashIconSm} tintColor={colors.accent_lime} />
+              <Text style={[styles.practiceLabel, { color: colors.text_primary }]}>{t('dashboard.text.practice_points')}</Text>
+            </View>
               <Text style={[styles.practiceTotal, { color: colors.accent_lime }]}>{practiceTotal}</Text>
             </View>
             {topDrills.map(([id, rec]) => (
@@ -1193,7 +1230,10 @@ export default function Dashboard() {
           accessibilityLabel={t('dashboard.accessibility_label.open_my_bag_and_fit')}
         >
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>{t('dashboard.text.my_bag')}</Text>
+            <View style={styles.dashHeadInline}>
+              <Image source={DASH_ICON.myBag} style={styles.dashIconSm} tintColor={colors.accent_lime} />
+              <Text style={[styles.practiceLabel, { color: colors.text_primary }]}>{t('dashboard.text.my_bag')}</Text>
+            </View>
             <Ionicons name="chevron-forward" size={16} color={colors.text_muted} />
           </View>
           {bagClubs.length > 0 ? (
@@ -1220,7 +1260,10 @@ export default function Dashboard() {
             striation + tempo trend. The visible half of the practice ledger. */}
         {recentSessions.length > 0 && (
           <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.practiceLabel, { color: colors.text_muted, marginBottom: 8 }]}>{t('dashboard.text.practice_history')}</Text>
+            <View style={[styles.dashHeadInline, { marginBottom: 8 }]}>
+              <Image source={DASH_ICON.practiceHistory} style={styles.dashIconSm} tintColor={colors.accent_lime} />
+              <Text style={[styles.practiceLabel, { color: colors.text_primary }]}>{t('dashboard.text.practice_history')}</Text>
+            </View>
             {recentSessions.map((s) => {
               const label = s.label ?? (s.focus ? s.focus.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : s.kind === 'open_range' ? 'Open Range' : 'Practice');
               const balls = s.swingCount ?? s.swings.length;
@@ -1258,7 +1301,10 @@ export default function Dashboard() {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <Ionicons name="chatbubbles" size={22} color="#88F700" />
             <View style={{ flex: 1 }}>
-              <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>{caddieKnowsYou ? 'TELL YOUR CADDIE MORE' : 'LET YOUR CADDIE GET TO KNOW YOU'}</Text>
+              <View style={styles.dashHeadInline}>
+                <Image source={DASH_ICON.tellCaddie} style={styles.dashIconSm} tintColor={colors.accent_lime} />
+                <Text style={[styles.practiceLabel, { color: colors.text_primary }]}>{caddieKnowsYou ? 'TELL YOUR CADDIE MORE' : 'LET YOUR CADDIE GET TO KNOW YOU'}</Text>
+              </View>
               <Text style={[styles.impactHeadline, { color: colors.text_primary, marginTop: 4 }]}>{caddieKnowsYou ? t('dashboard.text.tap_hit_the_mic_and') : t('dashboard.text.tap_hit_the_mic_and_2')}</Text>
             </View>
             <Ionicons name="mic" size={18} color="#88F700" />
@@ -1273,7 +1319,10 @@ export default function Dashboard() {
         {activeProgress && (
           <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>{t('dashboard.text.progress')}</Text>
+              <View style={styles.dashHeadInline}>
+                <Image source={DASH_ICON.progress} style={styles.dashIconSm} tintColor={colors.accent_lime} />
+                <Text style={[styles.practiceLabel, { color: colors.text_primary }]}>{t('dashboard.text.progress')}</Text>
+              </View>
               {/* Source toggle — only the sources that actually have data are offered. */}
               {progressSources.length > 1 && (
                 <View style={{ flexDirection: 'row', gap: 4 }}>
@@ -1358,10 +1407,24 @@ export default function Dashboard() {
                 scoring split — a real progress metric, shown only on the Practice view once there are ≥2
                 rounds in both cohorts. */}
             {activeProgress.key === 'practice' && (preRound.enough || preRound.buckets.some((b) => b.n > 0)) && (
-              <View style={{ marginTop: 10 }}>
-                <Text style={[styles.practiceLabel, { color: colors.text_muted, marginBottom: 4 }]}>
-                  {t('dashboard.text.before_the_round')}
-                </Text>
+              /**
+               * 2026-09-11 — 10pt was not enough once the chart grew a timeline.
+               *
+               * TrendChart draws its x-axis labels INSIDE the svg at `height - 3`, flush to the
+               * bottom edge, so the moment I added them (earlier today, for Tim's "the graph should
+               * have a timeline") this heading began colliding with "5 wks ago". Visible in his
+               * screenshot: BEFORE THE ROUND sits on top of the axis label.
+               *
+               * The gap belongs to whatever follows the chart rather than inside the chart, because
+               * TrendChart is used on other screens whose spacing is already right.
+               */
+              <View style={{ marginTop: 22 }}>
+                <View style={[styles.dashHeadInline, { marginBottom: 4 }]}>
+                  <Image source={DASH_ICON.beforeRound} style={styles.dashIconSm} tintColor={colors.accent_lime} />
+                  <Text style={[styles.practiceLabel, { color: colors.text_primary }]}>
+                    {t('dashboard.text.before_the_round')}
+                  </Text>
+                </View>
                 <Text style={[styles.practiceLabel, { color: colors.text_primary, letterSpacing: 0, marginBottom: 6 }]}>
                   {preRound.headline}
                 </Text>
@@ -1388,7 +1451,10 @@ export default function Dashboard() {
         {faultWorkouts.length > 0 && (
           <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <Text style={[styles.practiceLabel, { color: colors.text_muted }]}>{t('dashboard.text.train_your_swing')}</Text>
+              <View style={styles.dashHeadInline}>
+              <Image source={DASH_ICON.trainSwing} style={styles.dashIconSm} tintColor={colors.accent_lime} />
+              <Text style={[styles.practiceLabel, { color: colors.text_primary }]}>{t('dashboard.text.train_your_swing')}</Text>
+            </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
                 <TouchableOpacity
                   onPress={onMarkWorkoutsDone}
@@ -1467,7 +1533,10 @@ export default function Dashboard() {
             Same data, richer rendering. Caddie-tab placement comes
             next iteration; for now Dashboard gets the upgrade plus a
             full-round Shot Log entry in the ••• Tools menu. */}
-        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{t('dashboard.recent_shots')}</Text>
+        <View style={styles.dashHead}>
+          <Image source={DASH_ICON.recentShots} style={styles.dashIcon} tintColor={colors.accent_lime} />
+          <Text style={[styles.sectionHeader, { color: colors.text_primary, paddingHorizontal: 0 }]}>{t('dashboard.recent_shots')}</Text>
+        </View>
         {recentShots.length === 0 ? (
           <Text style={[styles.emptyLine, { color: colors.text_muted }]}>
             {t('dashboard.text.no_shots_logged_yet_log')}
@@ -1481,7 +1550,10 @@ export default function Dashboard() {
             go anywhere." Golfshot-style: date · course · score · vs-par, tap → recap. */}
         {roundHistory.length > 0 && (
           <>
-            <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{t('dashboard.text.recent_rounds')}</Text>
+            <View style={styles.dashHead}>
+          <Image source={DASH_ICON.recentRounds} style={styles.dashIcon} tintColor={colors.accent_lime} />
+          <Text style={[styles.sectionHeader, { color: colors.text_primary, paddingHorizontal: 0 }]}>{t('dashboard.text.recent_rounds')}</Text>
+        </View>
             <View style={styles.roundHistoryList}>
               {[...roundHistory].reverse().slice(0, 6).map((r) => {
                 const d = new Date(r.endedAt || r.startedAt);
@@ -1582,7 +1654,10 @@ export default function Dashboard() {
           accessibilityLabel={`${caddieReadLabel}. ${refreshingKevinRead ? 'Refreshing.' : 'Tap to refresh.'}`}
         >
           <View style={styles.kevinReadHeader}>
-            <Text style={[styles.aiCardTitle, { color: colors.text_primary }]}>{caddieReadLabel}</Text>
+            <View style={[styles.dashHeadInline, { marginBottom: 10 }]}>
+              <Image source={DASH_ICON.kevinsRead} style={styles.dashIconSm} tintColor={colors.accent_lime} />
+              <Text style={[styles.aiCardTitle, { color: colors.text_primary, marginBottom: 0 }]}>{caddieReadLabel}</Text>
+            </View>
             {refreshingKevinRead ? (
               <Text style={[styles.kevinReadFooter, { color: colors.accent }]}>{t('dashboard.refreshing')}</Text>
             ) : null}
@@ -1596,7 +1671,10 @@ export default function Dashboard() {
             Highlights. "—" renders when a stat is null (never show 0
             for drive/putt; 0 is meaningless, — is honest). */}
         <View style={[styles.aiCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-          <Text style={[styles.aiCardTitle, { color: colors.text_primary }]}>{t('dashboard.highlights')}</Text>
+          <View style={[styles.dashHeadInline, { marginBottom: 10 }]}>
+            <Image source={DASH_ICON.highlights} style={styles.dashIconSm} tintColor={colors.accent_lime} />
+            <Text style={[styles.aiCardTitle, { color: colors.text_primary, marginBottom: 0 }]}>{t('dashboard.highlights')}</Text>
+          </View>
           <View style={styles.highlightsGrid}>
             <View style={styles.highlightCell}>
               <Text style={[styles.highlightLabel, { color: colors.text_muted }]}>{t('dashboard.best_round')}</Text>
@@ -1834,6 +1912,18 @@ const styles = StyleSheet.create({
   selfieTitle: { fontSize: 15, fontWeight: '700' },
   selfieSub: { fontSize: 12, marginTop: 2 },
   // Section header
+  /**
+   * 2026-09-11 — the dashboard's section headings, now carrying their branded icon.
+   *
+   * Two variants because the dashboard has two kinds of heading: standalone ones that sit on the
+   * page with its 16pt gutter, and ones INSIDE a card that already has its own padding. Colours are
+   * theme tokens throughout, so they resolve in all five palettes rather than the one I happened to
+   * be looking at.
+   */
+  dashHead: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16 },
+  dashIcon: { width: 20, height: 20 },
+  dashHeadInline: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  dashIconSm: { width: 17, height: 17 },
   sectionHeader: {
     fontSize: 11,
     fontWeight: '800',
