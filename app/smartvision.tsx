@@ -358,12 +358,19 @@ export default function SmartVisionScreen() {
   const liveCourseHoles = useRoundStore(s => s.courseHoles);
   const currentHole = useRoundStore(s => s.currentHole);
   const isRoundActive = useRoundStore(s => s.isRoundActive);
-  // 2026-05-17 — pre-round planning context. When no active round but
-  // the user has picked a course on the Play tab, render SmartVision
-  // for that course's hole 1 so the user can measure + drag tee/pin
-  // and save a plan BEFORE starting the round. The plan persists in
-  // roundStore.plans and flows into the active round when startRound
-  // fires (which doesn't clear existing plans).
+  // 2026-05-17 — pre-round planning context. When no round is active but the user has picked a
+  // course on the Play tab, render SmartVision for that course's hole 1 so they can measure and drag
+  // tee/pin BEFORE starting the round.
+  //
+  // 2026-09-11 (full-app audit) — this used to claim the result "persists in roundStore.plans and
+  // flows into the active round when startRound fires". There is no `plans` field on roundStore and
+  // there never was a save-plan action anywhere in this screen; the sentence described a mechanism
+  // that does not exist, next to code that works. What actually persists is the tee/pin drag, via
+  // services/courseTeeOverrides.setTeeOverride and courseGreenOverrides.setGreenOverride, which
+  // smartFinderService reads back — so the geometry a player corrects here really does survive into
+  // the round. Deleted rather than reworded: a comment asserting runtime state goes stale again, and
+  // this one was trusted for four months. [[prose-that-asserts-runtime-state-goes-stale]]
+  // [[a-stale-header-is-a-source-someone-trusts]]
   const pendingStartCourseId = useRoundStore(s => s.pendingStartCourseId);
   const previewCourseId = useRoundStore(s => s.previewCourseId);
   const homeCourseName = usePlayerProfileStore(s => s.homeCourse);
