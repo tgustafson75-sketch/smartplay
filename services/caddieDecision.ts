@@ -55,6 +55,19 @@ export interface CaddieDecision {
   /** In-play reminders still worth saying, already decayed by what has been said. */
   cues: PlayFinding[];
   /**
+   * 2026-09-11 (Tim) — WHICH CLUBS HE IS LEANING ON AND WHICH NEED WORK.
+   *
+   * "Each club, part of its characteristics is if you need to do work on that club. If it's a strong
+   * club or something you're consistently making errors [with], you need to kinda specifically work
+   * around your mindset and approach to that club."
+   *
+   * The app knew what a club DID (clubTendency) and, separately, how well it was struck and what it
+   * cost — and never joined them, so the caddie could say your 5 wood draws and never that you are
+   * fat with it half the time. Null when nothing is proven; silence beats a sentence built out of
+   * six swings. From services/clubWork, the one owner. [[illustration-data-points]]
+   */
+  clubWork: string | null;
+  /**
    * 2026-09-11 (Tim) — WHAT THE POST-ROUND ANSWERS HAVE ACTUALLY BEEN WORTH.
    *
    * "It asks feel, weather, mindset etc but I have a suspicion that does not feed information for
@@ -144,6 +157,7 @@ export function decideShot(known: CallerKnown = { rawYards: null }): CaddieDecis
     profile,
     override: safe(() => composeOverride(known), null),
     cues: safe(() => composeCues(profile), []),
+    clubWork: safe(() => composeClubWork(), null),
     conditions: conditions.all,
     todayMatches: conditions.today,
     conditionPlay: conditions.play,
@@ -263,6 +277,21 @@ function composeBudget(profile: PlayProfile | null): string | null {
   return bogeyBudgetLine(profile, overPar, stats.length);
 }
 
+/**
+ * The bag's character: the clubs he leans on and the ones costing him. Reads the SAME shot log the
+ * ladder and the tendencies read, through the same normalizer, so the Fit Profile row and the
+ * caddie's sentence are one answer rendered twice. [[two-owners-is-the-root-cause]]
+ */
+function composeClubWork(): string | null {
+  const { useRoundStore } = require('../store/roundStore') as typeof import('../store/roundStore');
+  const { clubWorkStatuses, describeClubWork } = require('./clubWork') as typeof import('./clubWork');
+  const { normalizeClub } = require('./clubNormalize') as typeof import('./clubNormalize');
+  const r = useRoundStore.getState();
+  const shots = [...(r.roundHistory ?? []).flatMap((x) => x.shots ?? []), ...(r.shots ?? [])].slice(-400);
+  if (shots.length === 0) return null;
+  return describeClubWork(clubWorkStatuses({ shots: shots as never, normalize: normalizeClub }));
+}
+
 /** Who this golfer is. Composed from what has been measured, labelled with where it came from. */
 function composeProfile(): PlayProfile | null {
   const { useRoundStore } = require('../store/roundStore') as typeof import('../store/roundStore');
@@ -315,7 +344,21 @@ function composeProfile(): PlayProfile | null {
     dominantMiss: (p.dominantMiss ?? null) as never,
     // Per-18 rates only mean something once a round is actually under way.
     penaltiesPerRound: played > 0 ? (penalties / played) * 18 : null,
-    puttsPerRound: played > 0 ? (putts / played) * 18 : null,
+    /**
+     * 2026-09-11 (Tim — "the hole planner needs to account for user putt stats in strategy") —
+     * PUTTING WAS BLIND UNTIL HOLE TWO.
+     *
+     * This read the CURRENT round only, so on the first tee — the moment the plan is actually made —
+     * `puttsPerRound` was null for a player with fifty recorded rounds behind him, and the weakness
+     * line about putting could never fire on the tee where it mattered. services/puttingRead walks
+     * this round and then back through history, and it is the same read holePlanLive budgets the
+     * plan off, so the profile and the plan cannot disagree about how he putts.
+     * [[two-owners-is-the-root-cause]]
+     */
+    puttsPerRound: safe(() => {
+      const { livePuttingRead } = require('./puttingRead') as typeof import('./puttingRead');
+      return livePuttingRead().puttsPerRound;
+    }, played > 0 ? (putts / played) * 18 : null),
     roundsPlayed: rounds,
   });
 }

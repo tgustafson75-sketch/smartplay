@@ -89,6 +89,19 @@ export interface HolePlanInput {
   /** Putts the plan assumes. Two, unless the player's own record says otherwise. */
   puttsAssumed?: number | null;
   /**
+   * 2026-09-11 (Tim — "the hole planner needs to account for user putt stats in strategy") — WHICH
+   * WAY PUTTING PUSHES THE PLAN.
+   *
+   * Putting is not only the last two strokes; it decides what a good approach even IS. A player who
+   * three-putts from forty feet loses his strokes on the green, so the plan should spend a yard of
+   * distance to hand him a club he can get inside ten feet with. A player who two-putts from
+   * anywhere should not pay anything to avoid a long first putt.
+   *
+   * Absent or 'neutral' leaves the search exactly as it was, which is what every plan did before
+   * this existed. From services/puttingRead, which owns the read.
+   */
+  puttingLean?: 'proximity' | 'neutral' | 'aggressive' | null;
+  /**
    * Strokes already played on this hole. The caddie talks mid-hole far more than it talks on a tee,
    * and a plan that offers "par in two" to a player lying two is not a plan, it is a wrong answer.
    */
@@ -209,12 +222,14 @@ export function planHole(input: HolePlanInput): HolePlan | null {
   const putts = input.puttsAssumed != null && input.puttsAssumed > 0 ? Math.round(input.puttsAssumed) : 2;
 
   const played = Math.max(0, Math.round(input.strokesPlayed ?? 0));
+  const lean = input.puttingLean ?? 'neutral';
   const shotsForPar = Math.max(1, par - putts - played);
   const forPar = planInShots(shotsForPar, holeYards, ladder, hazards, dc);
   const steps = forPar ?? planInShots(shotsForPar + 1, holeYards, ladder, hazards, dc);
   if (!steps) return null;
 
   const targetScore = played + steps.length + putts;
+  const puttAdvice = greenAdvice(lean, steps, ladder);
   return {
     hole: input.hole ?? null,
     par,
@@ -222,7 +237,7 @@ export function planHole(input: HolePlanInput): HolePlan | null {
     playingFor: targetScore <= par ? 'par' : 'bogey',
     targetScore,
     steps: steps.map((s) => ({ ...s, shot: s.shot + played })),
-    say: sayPlan(steps, targetScore <= par ? 'par' : 'bogey', targetScore, par, putts, played),
+    say: sayPlan(steps, targetScore <= par ? 'par' : 'bogey', targetScore, par, putts, played, puttAdvice),
   };
 }
 
@@ -365,9 +380,60 @@ function searchLead(
 }
 
 /** The plan the way it gets said standing on the tee — the shape, then the number, then the score. */
+/**
+ * THE SCORING CLUBS — his shortest full swings, derived from HIS bag.
+ *
+ * Not a fixed yardage. "Inside a wedge" means something different to a man who carries a pitching
+ * wedge 135 and to one who carries it 95, and a hardcoded number would be right for neither. The
+ * four shortest clubs in the ladder is roughly the wedges plus a nine iron in a normal bag, and it
+ * scales on its own to a pared-down Sunday bag. Null when the bag is too small for the idea to mean
+ * anything. [[arithmetic-belongs-in-code-not-the-model]]
+ */
+const SCORING_CLUBS = 4;
+function scoringCeiling(ladder: Club[]): number | null {
+  const swingable = ladder.filter((c) => !isDriver(c.club));
+  if (swingable.length <= SCORING_CLUBS) return null;
+  return swingable[swingable.length - SCORING_CLUBS].yards;
+}
+
+/**
+ * 2026-09-11 (Tim — "the hole planner needs to account for user putt stats in strategy") — WHAT
+ * PUTTING CHANGES, AND WHAT IT HONESTLY DOES NOT.
+ *
+ * The first build of this made the putting lean a CONSTRAINT on the search: a poor putter's plan had
+ * to leave a scoring club. Driven against a real bag over a par 5, two par 4s and a par 3 it changed
+ * not one plan — because the search already takes the longest playable club first, so the approach
+ * it finds is ALREADY the shortest one available at that stroke count. A constraint that can only
+ * reject and never improve is a branch that cannot fire, which is the exact defect this codebase
+ * keeps digging out of its own guards. It was deleted rather than left in looking clever.
+ *
+ * The lever that genuinely exists is the BUDGET — a man who takes three putts is planning a bogey,
+ * not a par, and that flips the whole plan — plus what gets SAID standing over the approach. From
+ * 150 yards those two players want opposite advice, and it is advice about the same shot:
+ *   - the three-putter must not short-side himself, because his miss costs two shots, not one;
+ *   - the good putter can take the middle and two-putt out without a second thought.
+ * Returns null when there is nothing worth adding. [[a-toggle-that-does-nothing-for-the-default-user]]
+ */
+function greenAdvice(
+  lean: 'proximity' | 'neutral' | 'aggressive',
+  steps: PlanStep[],
+  ladder: Club[],
+): string | null {
+  if (lean === 'neutral' || steps.length === 0) return null;
+  const ceiling = scoringCeiling(ladder);
+  const approach = steps[steps.length - 1];
+  const inHand = ceiling != null && approach.carryYards <= ceiling;
+  if (lean === 'proximity') {
+    return inHand
+      ? 'Get it close from there — that is where your strokes are going.'
+      : 'Middle of the green, and nowhere near the short side — from distance a miss costs you two, not one.';
+  }
+  return inHand ? null : 'Middle of the green is plenty — you will two-putt it.';
+}
+
 function sayPlan(
   steps: PlanStep[], playingFor: 'par' | 'bogey', targetScore: number, par: number,
-  putts: number, strokesPlayed: number,
+  putts: number, strokesPlayed: number, puttAdvice: string | null,
 ): string {
   const first = steps[0];
   const approach = steps[steps.length - 1];
@@ -377,12 +443,13 @@ function sayPlan(
   // "Off the tee" is only true off the tee. Said to a player lying two it is the kind of small
   // wrongness that tells them the caddie is not actually watching. [[feels-like-a-real-caddie]]
   const from = strokesPlayed === 0 ? ' off the tee' : ' from here';
+  const tail = puttAdvice ? ` ${puttAdvice}` : '';
   if (steps.length === 1) {
-    return `${head} ${first.club} — ${first.why}. ${putts} putts and we move on.`;
+    return `${head} ${first.club} — ${first.why}.${tail} ${putts} putts and we move on.`;
   }
   const middle = steps.length > 2
     ? ` Then ${steps.slice(1, -1).map((s) => `${s.club} to ${s.leavesYards}`).join(', ')}.`
     : '';
   return `${head} ${first.club}${from} — ${first.why}, leaving ${first.leavesYards}.${middle} ` +
-    `That is ${approach.why}. ${putts} putts and we move on.`;
+    `That is ${approach.why}.${tail} ${putts} putts and we move on.`;
 }

@@ -90,6 +90,21 @@ export function composeLiveHolePlan(): LiveHolePlan {
       try { return bagDistances() as Record<string, number>; } catch { return {}; }
     })();
 
+    /**
+     * 2026-09-11 (Tim) — HIS PUTTING, WHICH THE PLAN NEVER ASKED FOR.
+     *
+     * holePlan has taken `puttsAssumed` since the day it was written and NOTHING passed it, so every
+     * plan this app has ever made assumed two putts for everyone. The putt counts were on the
+     * scorecard the whole time. One owner reads them; the plan, the profile and the brain all take
+     * the same answer. [[sweep-the-missing-half-not-the-unused-export]] [[two-owners-is-the-root-cause]]
+     */
+    const putting = (() => {
+      try {
+        const { livePuttingRead } = require('./puttingRead') as typeof import('./puttingRead');
+        return livePuttingRead();
+      } catch { return null; }
+    })();
+
     const plan = planHole({
       hole,
       par,
@@ -98,6 +113,8 @@ export function composeLiveHolePlan(): LiveHolePlan {
       strokesPlayed,
       distanceControl: (p.distanceControl ?? null) as never,
       hazards: liveHazards(hole, yards),
+      puttsAssumed: putting?.assumedPutts ?? null,
+      puttingLean: putting?.lean ?? null,
     });
 
     return { plan };

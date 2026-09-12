@@ -189,8 +189,21 @@ function makePersona(seed: number): Persona {
   const handicap = chance(rng, 0.12) ? int(rng, 27, 36) : chance(rng, 0.08) ? int(rng, 2, 7) : int(rng, 8, 26);
   const hand: 'right' | 'left' = chance(rng, 0.12) ? 'left' : 'right';
   const thinData = chance(rng, 0.25); // a quarter of the market is brand new — the honesty stress case
-  /** How much of a set he actually owns. 'full' is the old behaviour and still the common case. */
-  const setShape: 'full' | 'half' | 'starter' = chance(rng, 0.06) ? 'starter' : chance(rng, 0.1) ? 'half' : 'full';
+  /**
+   * 2026-09-11 (Tim, correcting me) — "If someone's downloading an app, they're gonna carry fourteen
+   * clubs minimum. Most of us are carrying seventeen to eighteen, sixteen."
+   *
+   * He is right and my first widening modelled the wrong market. A person who installs a caddie app
+   * is a committed golfer: they carry the legal fourteen and OWN more than that — a 58 and a 60, two
+   * hybrids, an old 3 wood in the garage — and swap between them. That inventory, not a starter set,
+   * is the shape the bag engines actually meet, and it is the whole reason a "which clubs to carry"
+   * feature exists at all.
+   *
+   * A genuinely small bag does happen, but it is a COURSE decision rather than a beginner: three
+   * clubs for a par-3 nine. It stays in the population at a realistic rate and is labelled honestly.
+   */
+  const setShape: 'full' | 'overstuffed' | 'par3_course' =
+    chance(rng, 0.04) ? 'par3_course' : chance(rng, 0.45) ? 'overstuffed' : 'full';
 
   // A bag as real players actually have one: gaps, duplicates, missing wedges, quirky names.
   const base: [string, number][] = [
@@ -200,13 +213,12 @@ function makePersona(seed: number): Persona {
     ['Pitching Wedge', 120 - handicap * 2], ['Gap Wedge', 105 - handicap * 1.8],
     ['Sand Wedge', 90 - handicap * 1.6], ['Lob Wedge', 72 - handicap * 1.4], ['Putter', 0],
   ];
-  const STARTER = new Set(['Driver', '7 Iron', 'Sand Wedge', 'Putter']);
-  const HALF = new Set(['Driver', '5 Iron', '7 Iron', '9 Iron', 'Sand Wedge', 'Putter']);
+  /** What a golfer takes to a par-3 nine: a couple of irons, a wedge, a putter. */
+  const PAR3_SET = new Set(['7 Iron', '9 Iron', 'Sand Wedge', 'Putter']);
   const bag = base
     .filter(([club]) =>
-      setShape === 'starter' ? STARTER.has(club)
-      : setShape === 'half' ? HALF.has(club)
-      : chance(rng, 0.85)) // most players are missing something
+      setShape === 'par3_course' ? PAR3_SET.has(club)
+      : chance(rng, 0.94)) // a committed golfer is rarely missing a slot
     .map(([club, carry]) => ({
       club,
       carry: Math.max(0, Math.round(carry + (rng() - 0.5) * 12)),
@@ -214,6 +226,30 @@ function makePersona(seed: number): Persona {
       stated: chance(rng, 0.3),
     }));
   if (chance(rng, 0.15) && bag.length > 2) bag.push({ ...bag[int(rng, 0, bag.length - 1)]! }); // duplicate club
+  /**
+   * 2026-09-11 (Tim) — THE OVERSTUFFED BAG, which is the common case for anyone who installs this.
+   *
+   * "Most of us are carrying seventeen to eighteen, sixteen." So nearly half the population owns MORE
+   * than the legal fourteen: the 58 and the 60, two hybrids covering one number, last year's 3 wood.
+   * That inventory is what the bag engines actually meet — overlaps to resolve, not gaps to fill —
+   * and it is the entire reason a "which clubs to carry" feature exists.
+   */
+  if (setShape === 'overstuffed') {
+    const EXTRAS: [string, number][] = [
+      ['58 Wedge', 78 - handicap * 1.4], ['60 Wedge', 70 - handicap * 1.3],
+      ['3 Hybrid', 205 - handicap * 3.1], ['2 Iron', 200 - handicap * 3.2],
+      ['7 Wood', 200 - handicap * 3], ['Approach Wedge', 112 - handicap * 1.9],
+    ];
+    for (const [club, carry] of EXTRAS) {
+      if (!chance(rng, 0.5)) continue;
+      bag.push({
+        club,
+        carry: Math.max(0, Math.round(carry + (rng() - 0.5) * 10)),
+        measured: !thinData && chance(rng, 0.3),
+        stated: chance(rng, 0.35),
+      });
+    }
+  }
 
   // Shot history. A tendency-biased population: slicers, hookers, and the genuinely straight.
   const bias = pick(rng, ['fade', 'draw', 'straight'] as const);

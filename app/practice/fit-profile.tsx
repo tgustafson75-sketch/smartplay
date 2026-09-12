@@ -14,7 +14,9 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useClubStatsStore, CLUB_ORDER, clubIdToClubName, type ClubName } from '../../store/clubStatsStore';
 import { composeFitProfile, recommendFlex, type FitClubInput } from '../../services/practice/fitProfile';
 import { composeFitGap, type OwnedClub } from '../../services/practice/fitGap';
-import { useClubBagStore } from '../../store/clubBagStore';
+import { useClubBagStore, carryLimitFor, PUTTER_ID } from '../../store/clubBagStore';
+import { clubWorkStatuses } from '../../services/clubWork';
+import { liveBagPack } from '../../services/bagPackLive';
 import { useRoundStore } from '../../store/roundStore';
 import { clubTendencies } from '../../services/clubTendency';
 import { normalizeClub } from '../../services/clubNormalize';
@@ -163,6 +165,84 @@ export default function FitProfileScreen() {
     return map;
   }, []);
 
+  /**
+   * 2026-09-11 (Tim) — PACK YOUR BAG.
+   *
+   * "User needs to be able to enter, like, eighteen clubs and then set sixteen for the bag with,
+   * obviously, the putter defaulted. And then you'd have the, like, one line of data or
+   * characteristics for each club, and you pack your bag."
+   *
+   * It lives HERE and not on a screen of its own — "the bag and clubs are set in the dashboard" —
+   * beside the ladder that already knows every club's carry. What you OWN and what you are CARRYING
+   * are two different facts and the app has only ever held one of them, which is how the caddie
+   * could name a club sitting in the boot of the car.
+   *
+   * The characteristics line is the club's work status, through services/clubWork, so the row, the
+   * caddie and the packer cannot hold three opinions about the same club.
+   * [[two-owners-is-the-root-cause]]
+   */
+  const carriedToday = useClubBagStore((st) => st.carriedToday);
+  const isCompetition = useRoundStore((st) => st.isCompetition);
+  const packRows = useMemo(() => {
+    const st = useClubStatsStore.getState();
+    const work = (() => {
+      try {
+        const rs = useRoundStore.getState();
+        const all = [...(rs.roundHistory ?? []).flatMap((r) => r.shots ?? []), ...(rs.shots ?? [])].slice(-400);
+        const m = new Map<string, string>();
+        for (const w of clubWorkStatuses({ shots: all as never, normalize: normalizeClub })) {
+          if (w.status !== 'unproven') m.set(w.club, w.line);
+        }
+        return m;
+      } catch { return new Map<string, string>(); }
+    })();
+    return Object.values(bagClubs)
+      .map((c) => {
+        const name = clubIdToClubName(c.club_id);
+        const key = (name ?? c.club_id) as string;
+        const yards = name && st.hasDistance(name as ClubName) ? Math.round(st.carryFor(name as ClubName)) : null;
+        return {
+          club_id: c.club_id,
+          label: key,
+          yards,
+          /**
+           * One line, and it prefers the WORK status over the yardage, because a number he already
+           * knows is not a characteristic. Falls back to the carry, then to silence — never to a
+           * sentence assembled out of nothing. [[illustration-data-points]]
+           */
+          detail: work.get(key)
+            ?? (yards != null ? `${yards} yd carry` : null),
+          isPutter: c.club_id === PUTTER_ID,
+        };
+      })
+      .sort((a, b) => CLUB_ORDER.indexOf(a.label as ClubName) - CLUB_ORDER.indexOf(b.label as ClubName));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bagClubs, stats, manual]);
+
+  /** Empty carriedToday means carrying everything — the honest default, never "carrying nothing". */
+  const packedSet = useMemo(
+    () => (carriedToday.length > 0 ? new Set(carriedToday) : new Set(packRows.map((r) => r.club_id))),
+    [carriedToday, packRows],
+  );
+  const limit = carryLimitFor(isCompetition);
+
+  const togglePacked = (club_id: string) => {
+    const next = new Set(packedSet);
+    // The putter never comes out. Nobody plays a round without one, and a tap that removed it would
+    // be the app making the worst possible choice on the player's behalf.
+    if (club_id === PUTTER_ID) return;
+    if (next.has(club_id)) next.delete(club_id); else next.add(club_id);
+    useClubBagStore.getState().setCarriedToday([...next], { limit });
+  };
+
+  const autoPack = () => {
+    const { pack } = liveBagPack();
+    if (!pack) return;
+    const byLabel = new Map(packRows.map((r) => [r.label, r.club_id]));
+    const ids = pack.carry.map((c) => byLabel.get(c)).filter((x): x is NonNullable<typeof x> => !!x);
+    if (ids.length > 0) useClubBagStore.getState().setCarriedToday(ids, { limit });
+  };
+
   const confColor = profile.confidence === 'high' ? '#3FB950' : profile.confidence === 'medium' ? '#f5a623' : '#9ca3af';
 
   return (
@@ -232,6 +312,78 @@ export default function FitProfileScreen() {
             )}
           </View>
         )}
+
+        {/**
+          * 2026-09-11 (Tim) — PACK YOUR BAG. "Enter eighteen clubs and then set sixteen for the bag
+          * with the putter defaulted… one line of data or characteristics for each club, and you
+          * pack your bag." Plus the auto-pack: "Course engine could have a chip that you could auto
+          * spool your bag for that course."
+          */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.cardLabel, { color: colors.text_primary }]}>{t('practice_fit_profile.fit_profile_screen.pack_your_bag')}</Text>
+          {packRows.length === 0 ? (
+            <Text style={[styles.gapText, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.no_clubs_in_your_bag_yet')}</Text>
+          ) : (
+            <>
+              <Text style={[styles.confText, { color: colors.text_muted, marginBottom: 4 }]}>
+                {carriedToday.length > 0
+                  ? t('practice_fit_profile.fit_profile_screen.packed_of_owned', { packed: packedSet.size, owned: packRows.length })
+                  : t('practice_fit_profile.fit_profile_screen.carrying_everything_you_own')}
+              </Text>
+              {limit != null && (
+                <Text style={[styles.confText, { color: '#f5a623', marginBottom: 8 }]}>{t('practice_fit_profile.fit_profile_screen.competition_14_club_cap')}</Text>
+              )}
+              <View style={styles.packChips}>
+                <TouchableOpacity
+                  style={[styles.scanBagBtn, { backgroundColor: colors.surface, borderColor: colors.accent, flex: 1, marginTop: 0 }]}
+                  onPress={autoPack}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('practice_fit_profile.fit_profile_screen.auto_pack_for_this_course')}
+                >
+                  <Ionicons name="sparkles-outline" size={16} color={colors.accent} />
+                  <Text style={[styles.scanBagText, { color: colors.accent }]}>{t('practice_fit_profile.fit_profile_screen.auto_pack_for_this_course')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.scanBagBtn, { backgroundColor: colors.surface, borderColor: colors.border, flex: 1, marginTop: 0 }]}
+                  onPress={() => useClubBagStore.getState().clearCarriedToday()}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('practice_fit_profile.fit_profile_screen.carry_everything')}
+                >
+                  <Ionicons name="refresh-outline" size={16} color={colors.text_muted} />
+                  <Text style={[styles.scanBagText, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.carry_everything')}</Text>
+                </TouchableOpacity>
+              </View>
+              {packRows.map((r) => {
+                const packed = packedSet.has(r.club_id);
+                return (
+                  <TouchableOpacity
+                    key={r.club_id}
+                    style={styles.packRow}
+                    onPress={() => togglePacked(r.club_id)}
+                    disabled={r.isPutter}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: packed, disabled: r.isPutter }}
+                    accessibilityLabel={packed
+                      ? t('practice_fit_profile.accessibility_label.leave_this_club_at_home')
+                      : t('practice_fit_profile.accessibility_label.pack_this_club_for_the_round')}
+                  >
+                    <Ionicons
+                      name={packed ? 'checkbox' : 'square-outline'}
+                      size={19}
+                      color={r.isPutter ? colors.text_muted : packed ? colors.accent : colors.border}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.fitGapTitle, { color: packed ? colors.text_primary : colors.text_muted }]}>{r.label}</Text>
+                      {r.detail ? (
+                        <Text style={[styles.fitGapDetail, { color: colors.text_muted }]}>{r.detail}</Text>
+                      ) : null}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </>
+          )}
+        </View>
 
         {/* GAPS */}
         {profile.gaps.length > 0 && (
@@ -444,6 +596,8 @@ const styles = StyleSheet.create({
   scanBagBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderRadius: 12, paddingVertical: 12, marginBottom: 14 },
   scanBagText: { fontSize: 15, fontWeight: '800' },
   fitGapRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  packChips: { flexDirection: 'row', gap: 8, marginBottom: 4 },
+  packRow: { flexDirection: 'row', gap: 10, marginTop: 10, alignItems: 'center' },
   fitGapTitle: { fontSize: 14, fontWeight: '700' },
   fitGapDetail: { fontSize: 12.5, lineHeight: 18, marginTop: 2 },
   confDot: { width: 8, height: 8, borderRadius: 4 },

@@ -446,6 +446,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // follow-up turn would quietly give worse advice than turn 1.
       club_tendencies = [],
       /**
+       * 2026-09-11 (Tim) — WHICH CLUBS NEED WORK. club_tendencies says what a club DOES; this says
+       * how well he does it and what it has cost him, from the shot log's contact feel and outcome.
+       * A club he strikes beautifully and keeps putting in the trees needs a different conversation
+       * from one he is fat with, and the caddie could see neither.
+       */
+      club_work = null,
+      /**
        * 2026-08-21 — SKIP THE AUDIO NOBODY IS GOING TO PLAY.
        *
        * kevin synthesises TTS on EVERY turn. That is right for kevin's own clients, which play
@@ -973,6 +980,21 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
          * only on the retired brain: this path had the number but never the shape of the answer.
          */
         lines.push(`- They are about ${distanceFromTeeYds} yards from THIS hole's tee — that is roughly the drive they just hit, and you know it before it is ever logged. When they ask what they have left ("what's left", "what do I have"), CONFIRM that shot naturally first ("you hit that about ${distanceFromTeeYds}"), THEN the remaining number, THEN the play — one flowing sentence, never robotic.`);
+      }
+      /**
+       * 2026-09-11 (Tim) — WHICH CLUBS NEED WORK, ON THE MESSAGE SIDE ON PURPOSE.
+       *
+       * club_tendencies above says what a club DOES. This says how well he does it and what it has
+       * cost him, read from the shot log's contact feel and outcomes — a club he strikes beautifully
+       * and keeps putting in the trees needs a different conversation from one he is fat with.
+       *
+       * It does NOT ride the cached system prompt, and that is deliberate: it is recomputed from
+       * shots INCLUDING this round's, so a logged shot can flip a club's status and would invalidate
+       * the whole cached block. The cache is all-or-nothing and the cost of getting it wrong is
+       * invisible — nothing fails, the bill doubles. That is the 2026-08-24 defect exactly.
+       */
+      if (typeof club_work === 'string' && club_work.trim()) {
+        lines.push(`- Which of their clubs are earning their place and which are not, from their own contact and outcomes: ${club_work.trim()} Lean on the strong ones when the plan is close. With one that needs work, adjust the APPROACH — a safer target, a club less — rather than telling them to go practise mid-round.`);
       }
       if (typeof preRoundRoutine === 'string' && preRoundRoutine.trim()) {
         lines.push(`- Their saved pre-round routine, in their words: "${String(preRoundRoutine).trim().slice(0, 400)}". Run them through it when they ask for it — your voice, not a recital.`);

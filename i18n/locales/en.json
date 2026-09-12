@@ -531,9 +531,13 @@
       "challenge": "Challenge",
       "no_courses_found_for_try": "No courses found for \"{{query}}\". Try a different name.",
       "back_9": "Back 9",
-      "front_9": "Front 9"
+      "front_9": "Front 9",
+      "bag_count_one": "{{count}} club",
+      "bag_count_other": "{{count}} clubs",
+      "set_your_bag": "Set your bag"
     },
     "accessibility_label": {
+      "edit_the_bag_for_this_round": "Edit the bag you are carrying for this round",
       "end_round": "End round",
       "refresh_nearby_courses_from_your": "Refresh nearby courses from your current location",
       "add_a_course_from_a": "Add a course from a scorecard photo",
@@ -1321,13 +1325,22 @@
       "your_bag_tap_a_club": "YOUR BAG · TAP A CLUB TO SET ITS CARRY",
       "tracked_from_your_shots_you": "● tracked from your shots · ◆ you set it · ○ estimate — tap a club to set your carry",
       "tracked_you_set_of_clubs": "{{measuredCount}} tracked · {{statedCount}} you set · of {{totalCount}} clubs · {{confidence}} confidence",
-      "clubs_in_your_bag_with": "{{ownedCount}} clubs in your bag · {{dialedCount}} with a carry set"
+      "clubs_in_your_bag_with": "{{ownedCount}} clubs in your bag · {{dialedCount}} with a carry set",
+      "pack_your_bag": "Pack your bag",
+      "packed_of_owned": "{{packed}} of {{owned}} clubs packed for this round",
+      "carrying_everything_you_own": "Carrying everything you own",
+      "auto_pack_for_this_course": "Pack for this course",
+      "carry_everything": "Carry everything",
+      "competition_14_club_cap": "Competition: 14 clubs max — USGA Rule 4.1b(1)",
+      "no_clubs_in_your_bag_yet": "No clubs registered yet — scan your bag or add them above."
     },
     "accessibility_label": {
       "scan_my_bag_with_video": "Scan my bag with video to populate clubs",
       "import_my_club_distances_from": "Import my club distances from an Arccos screenshot",
       "save": "Save",
-      "remove": "Remove"
+      "remove": "Remove",
+      "pack_this_club_for_the_round": "Pack this club for the round",
+      "leave_this_club_at_home": "Leave this club at home"
     }
   },
   "practice_open_range": {

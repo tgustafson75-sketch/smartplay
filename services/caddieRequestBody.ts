@@ -836,6 +836,22 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       return ct.describeBagTendencies(ct.clubTendencies(all as never, carryFor, cn.normalizeClub));
     }, []),
     /**
+     * 2026-09-11 (Tim) — WHICH CLUBS NEED WORK, which is a different question from what they do.
+     *
+     * "Each club, part of its characteristics is if you need to do work on that club. If it's a
+     * strong club or something you're consistently making errors [with], you need to kinda
+     * specifically work around your mindset and approach to that club."
+     *
+     * club_tendencies above says a club draws. It cannot say the club is struck fat half the time,
+     * or that it is the one putting him in the trees — those live in the shot log's `feel` and
+     * `outcome`, which no brain had ever been shown. Composed by services/caddieDecision so the
+     * sentence the caddie says and the line on the Fit Profile row are the same read.
+     *
+     * COST NOTE — cached side, beside club_tendencies. It moves on the scale of a round, never shot
+     * to shot, so it must not ride the message. [[arithmetic-belongs-in-code-not-the-model]]
+     */
+    club_work: safe(() => decision?.clubWork ?? null, null),
+    /**
      * 2026-08-24 (orphan sweep) — THE PLAYER'S OWN HISTORY, which no brain had ever seen.
      *
      * services/caddieHistoryContext.historyPromptBlock() has existed since 07-04 — recent rounds

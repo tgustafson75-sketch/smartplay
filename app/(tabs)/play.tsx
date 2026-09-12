@@ -36,6 +36,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { pushCourseGuarded } from '../../utils/courseNav';
 import { useTranslation } from 'react-i18next';
 import { useRoundStore } from '../../store/roundStore';
+import { useClubBagStore } from '../../store/clubBagStore';
 import { useDownloadedCoursesStore } from '../../store/downloadedCoursesStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { canAccess } from '../../services/featureAccess';
@@ -650,6 +651,13 @@ export default function PlayTab() {
   // hands these to roundStore via setPendingStartFactors; Caddie reads
   // them when consuming the pendingStartCourseId signal.
   const [setupMode, setSetupMode] = useState<RoundMode>('free_play');
+  /**
+   * 2026-09-11 — the bag chip reads the CARRIED list, so it shows what is going out today rather
+   * than what he owns. Subscribed (not read once) so setting a Sunday bag updates the chip on the
+   * way back to this tab.
+   */
+  const carriedCount = useClubBagStore((st) => st.carriedList().length);
+  const isPartialBag = useClubBagStore((st) => st.isPartialBag());
   const [setupNineHole, setSetupNineHole] = useState(false);
   /**
    * 2026-09-10 — WHICH nine. The caddie tab's own start modal has had this since 2026-08-06; this
@@ -2333,10 +2341,50 @@ export default function PlayTab() {
               ) : null}
               <TouchableOpacity
                 style={[styles.chip, setupCompetition && styles.chipActive]}
-                onPress={() => setSetupCompetition(v => !v)}
+                /**
+                 * 2026-09-11 — the competition flag now has ONE owner, and it is written the moment
+                 * the chip is tapped rather than only at startRound. The USGA 14-club cap on the bag
+                 * packer keys off it, and the bag is packed BEFORE the round starts — so a flag that
+                 * only existed at start time would have let a player pack sixteen for a competition
+                 * and be told nothing. startRound still passes the same value; this just means the
+                 * fact is true from the tap. [[two-owners-is-the-root-cause]]
+                 */
+                onPress={() => {
+                  const next = !setupCompetition;
+                  setSetupCompetition(next);
+                  useRoundStore.getState().setIsCompetition(next);
+                }}
               >
                 <Text style={[styles.chipText, setupCompetition && styles.chipTextActive]}>{t('play.competition')}</Text>
               </TouchableOpacity>
+              {/**
+                * 2026-09-11 (Tim) — "In the Play tab we don't have anywhere where you could edit
+                * your bag pre-round. It shouldn't be an auto prompt, but there should be a card or a
+                * chip on there to update your bag for the round."
+                *
+                * A chip, not a prompt — it sits with the other round-format choices and says nothing
+                * unless you look at it. What it sets is the CARRIED bag, which is a subset of the
+                * one you own: "a Sunday bag, three to six clubs for those kind of courses, just a
+                * subspawn of the full bag." Until now the app had one list and assumed it was both,
+                * so the caddie could name a club sitting in the boot of the car.
+                *
+                * It states the count rather than a label, because the count is the fact a golfer
+                * checks before walking to the first tee.
+                */}
+              <TouchableOpacity
+                style={[styles.chip, { flexDirection: 'row', alignItems: 'center' }, isPartialBag && styles.chipActive]}
+                onPress={() => router.push('/practice/fit-profile' as never)}
+                accessibilityRole="button"
+                accessibilityLabel={t('play.accessibility_label.edit_the_bag_for_this_round')}
+              >
+                <AppIcon name="golf" size={13} color={isPartialBag ? '#0b1220' : '#00C896'} />
+                <Text style={[styles.chipText, { marginLeft: 5 }, isPartialBag && styles.chipTextActive]}>
+                  {carriedCount > 0
+                    ? t('play.play_tab.bag_count', { count: carriedCount })
+                    : t('play.play_tab.set_your_bag')}
+                </Text>
+              </TouchableOpacity>
+
               {/* 2026-06-10 — Tournament: not a toggle — opens the full group-play
                   flow (scramble/skins/match play/etc). Moved here from the old
                   standalone top-of-tab card so it sits with the format choices. */}

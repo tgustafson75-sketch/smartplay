@@ -224,7 +224,9 @@ export function liveShotReadInputs(known: CallerKnown): ShotReadInputs {
       const { clubIdToClubName } = require('../store/clubStatsStore') as typeof import('../store/clubStatsStore');
       const { CLUB_LABEL } = require('./standardBag') as typeof import('./standardBag');
       const out: string[] = [];
-      for (const c of useClubBagStore.getState().bagList()) {
+      // CARRIED, not owned: the Sunday bag is a subset, and a club in the boot of the car is not a
+      // club he can hit. carriedList falls back to the whole bag when he has not pared it down.
+      for (const c of useClubBagStore.getState().carriedList()) {
         const canon = clubIdToClubName(c.club_id);
         if (!canon) continue;
         out.push((CLUB_LABEL as Record<string, string>)[canon] ?? canon);
