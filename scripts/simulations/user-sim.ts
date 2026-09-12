@@ -36,6 +36,10 @@ import { planHole } from '../../services/holePlan';
 import { clubClassOf } from '../../services/clubCharacter';
 import { conditionFindings, conditionPlay } from '../../services/roundConditions';
 import { composePreRoundFactors } from '../../services/practice/preRoundFactors';
+import { readOverride } from '../../services/overrideLoop';
+import { composePlayProfile, bogeyBudgetLine } from '../../services/playProfile';
+import { clubFromLoftPhrase } from '../../services/clubNormalize';
+import { composeBagRecommendation } from '../../services/bagRecommendation';
 import { clubTendencies, describeClubTendency, describeBagTendencies, type TendencyShot } from '../../services/clubTendency';
 import { inferCameraAngle } from '../../services/cameraAngleInference';
 import { compareSwings, unreadableMetrics } from '../../services/swingComparisonEngine';
@@ -862,6 +866,98 @@ function stageDecisionEngines(p: Persona) {
   }
 }
 
+
+/**
+ * 12. THE REST OF THE 2026-09-11 ENGINES — the override, the profile, the loft parse, the bag calls.
+ *
+ * Stage 11 covered the shot read and the plan and found two real bugs on its first run. The same
+ * argument applies to everything else built that day, so it gets the same treatment: run it on 100
+ * real, sparse, scaled bags and assert the properties rather than an expected output.
+ */
+function stageDecisionEngines2(p: Persona) {
+  const S = 'decision-engines-2';
+  const bag: Record<string, number> = {};
+  for (const b of p.bag) bag[b.club] = b.carry;
+  const clubs = Object.keys(bag);
+
+  // ── the override read: every pair of clubs in his bag, both directions ───────────────────────
+  for (const advised of clubs.slice(0, 6)) {
+    for (const chosen of clubs.slice(0, 6)) {
+      const o = readOverride({
+        advisedClub: advised, chosenClub: chosen, bag, normalize: normalizeClub as never,
+        yardsToTarget: 165, distanceControl: p.handicap > 18 ? 'full_swings' : 'dial_down',
+      });
+      if (advised === chosen) {
+        if (o) report(p.seed, S, 'the same club read as an override of itself', `${advised}`);
+        continue;
+      }
+      if (!o) continue;
+      deepCheck(p.seed, S, o);
+      if (o.deltaYards != null) checkNum(p.seed, S, 'override.delta', o.deltaYards, -400, 400);
+      if (o.leavesYards != null) checkNum(p.seed, S, 'override.leaves', o.leavesYards, 0, 700);
+      // The adjustment is a sentence the caddie says — it must never contain a raw null or NaN.
+      if (!o.adjustment || /\bnull\b|\bundefined\b|NaN/.test(o.adjustment)) {
+        report(p.seed, S, 'the override adjustment was not a sentence', `${advised}->${chosen}: ${o.adjustment}`);
+      }
+      // A full-swing player must never be told to take something off it.
+      if (p.handicap > 18 && o.lean === 'more' && /take something off|only works smooth/i.test(o.adjustment)) {
+        report(p.seed, S, 'a full-swing player was told to dial it down', `${advised}->${chosen}: ${o.adjustment}`);
+      }
+    }
+  }
+
+  // ── the play profile, across the goals a round can have ─────────────────────────────────────
+  for (const goal of ['break_100', 'break_90', 'break_80', 'free_play'] as const) {
+    const prof = composePlayProfile({
+      level: p.handicap > 20 ? 'simple' : p.handicap > 12 ? 'standard' : 'advanced',
+      goal, coursePar: 72,
+      distanceControl: p.handicap > 18 ? 'full_swings' : 'some_partials',
+      penaltiesPerRound: p.handicap / 3, puttsPerRound: 30 + p.handicap / 4,
+      roundsPlayed: p.thinData ? 0 : 9,
+    });
+    deepCheck(p.seed, S, prof);
+    if (prof.targetScore != null) checkNum(p.seed, S, `profile.target.${goal}`, prof.targetScore, 60, 130);
+    if (prof.strokeBudget != null) checkNum(p.seed, S, `profile.budget.${goal}`, prof.strokeBudget, -20, 60);
+    // A brand-new player has nothing measured — every finding must say so.
+    if (p.thinData) {
+      for (const f of [...prof.strengths, ...prof.weaknesses]) {
+        if (f.source === 'measured' && prof.confidence === 'seeded') {
+          report(p.seed, S, 'a measured finding on a player with nothing measured', `${f.text}`);
+        }
+      }
+    }
+    // The budget line must never promise a deficit as if it were hand.
+    const line = bogeyBudgetLine(prof, 12, 9);
+    if (line && /-\d/.test(line)) report(p.seed, S, 'the bogey budget printed a negative', line);
+  }
+
+  // ── the loft parse: a club is a club, a yardage is a yardage ─────────────────────────────────
+  for (const loft of [46, 50, 52, 54, 56, 58, 60, 64]) {
+    if (clubFromLoftPhrase(`the ${loft}`) == null) {
+      report(p.seed, S, 'a wedge loft with a determiner was not read as a club', `the ${loft}`);
+    }
+    for (const yard of [`${loft} out`, `from ${loft}`, `${loft} yards`, `hit it ${loft}`]) {
+      if (clubFromLoftPhrase(yard) != null) {
+        report(p.seed, S, 'a yardage phrase was read as a club', yard);
+      }
+    }
+  }
+
+  // ── the bag calls: idle here is not dead weight ──────────────────────────────────────────────
+  const shots = p.shots.slice(0, 40).map(sh => ({ ...sh, hole: 1 }));
+  const rec = composeBagRecommendation({
+    courseName: 'Sim GC', shots: shots as never, roundsPlayed: 6,
+    clubDistances: bag, ownedClubs: clubs,
+    inferClub: () => clubs[0] ?? '7 Iron',
+    everUsed: (c: string) => clubs.indexOf(c) % 2 === 0,
+  });
+  deepCheck(p.seed, S, rec);
+  for (const c of rec.deadWeight) {
+    if (!rec.idle.includes(c)) report(p.seed, S, 'dead weight named a club that is not idle here', c);
+    if (rec.idleButUsedElsewhere.includes(c)) report(p.seed, S, 'a club was both dead weight and used elsewhere', c);
+  }
+}
+
 const only = onlyArg ? Number(onlyArg.split('=')[1]) : null;
 const COUNT = Number(process.argv.find(a => a.startsWith('--n='))?.split('=')[1] ?? 100);
 const seeds = only != null ? [only] : Array.from({ length: COUNT }, (_, i) => 1000 + i * 7919);
@@ -871,7 +967,7 @@ const stages: [string, (p: Persona) => unknown][] = [
   ['club-identity', stageClubIdentity], ['bag/fitting', stageBag], ['carry', stageCarry],
   ['tendencies', stageTendencies], ['range-session', stageRangeSession],
   ['round', stageRound], ['legacy-sessions', stageLegacyData], ['practice', stagePractice], ['capture', stageCapture],
-  ['decision-engines', stageDecisionEngines],
+  ['decision-engines', stageDecisionEngines], ['decision-engines-2', stageDecisionEngines2],
 ];
 
 for (const seed of seeds) {
