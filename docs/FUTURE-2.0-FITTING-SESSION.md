@@ -102,7 +102,40 @@ number a launch monitor gives and **we must never imply we have.**
 | Head drift, sway, weight shift | `headDriftPxNorm`, `swayNorm`, `weightShiftPct` |
 | Finish quality | `finishWeightPct` |
 
-### NOT measured — never imply otherwise
+### Gated BY FACTOR, with the lever shown
+
+**Tim, 2026-09-12: *"We revised from drop to adjust gates by factor and show confidence level. Now we
+can show real factors the user could change to affect the confidence level."***
+
+The rule has moved in three steps and this session's spec must reflect the third:
+
+1. **Drop** what a phone cannot measure (2026-06-07). Why the app never shipped a fake spin number.
+2. **Do not null a metric for being less certain** (2026-09-02) — grade per element, show confidence
+   and a range. Blank is not more honest than an estimate, just less useful.
+3. **Show the factors** (now). A confidence level the player cannot act on is a verdict. The same
+   number with *"at 30fps I can't see the start line — record at 60 and I can"* is a lever.
+
+So a fitting session does not present a metric as present-or-absent. It presents it with its
+confidence and the **specific things this player could change** to raise it:
+
+| Factor they can change | What it raises |
+|---|---|
+| Frame rate (60 → 120 → 240) | start direction, club path through impact |
+| Camera angle (face-on vs down-the-line) | the pose read nulls what it cannot see from behind |
+| A fixed rig instead of a propped phone | comparability between contenders — the biggest confound |
+| More shots per contender | every comparison; the noise floor falls with n |
+| Lighting | high-speed formats need it; poor light silently degrades fps |
+| Declaring the ball | removes a confound from a club comparison |
+
+`services/captureQuality` is the first shipped instance of this — what I can still read, what I
+cannot and why, and the concrete fix — and the pattern generalises to every gated metric here.
+
+### Still never shown, at any confidence
+
+The revision above is about metrics we can PARTIALLY see. It does not license inventing ones we
+cannot see at all.
+
+
 Ball speed · **spin rate** · **launch angle** · smash factor · spin axis · angle of attack in degrees
 · face-to-path in degrees · strike location on the face (mm).
 
