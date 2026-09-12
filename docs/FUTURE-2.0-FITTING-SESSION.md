@@ -159,12 +159,71 @@ every fitting session — is captured below `MIN_TRACE_FPS`.
    video — so an external-source session is mostly an import flow plus fps metadata, not a new
    engine. Two things it does need:
 
-   - **fps from the file.** We cannot read it today. `expo-av` gives `durationMillis` and no frame
-     rate, and the frame extractor samples by TIME offset rather than by frame index. So a 240fps
-     GoPro clip yields more distinct samples than a 30fps one, but the app cannot say which it got —
-     and `MIN_TRACE_FPS` cannot honestly gate what it cannot measure.
    - **A fixed-rig mode.** Calibrate once — angle, distance, height — then every session reuses it,
      and the app can flag when the rig has moved rather than silently comparing two setups.
+   - **fps from the file.** We cannot read it today: `expo-av` gives `durationMillis` and no frame
+     rate. This is a smaller problem than it first looks — see §3c.
+
+---
+
+## 3c. Two sources, and the audio is the clock
+
+**Tim, 2026-09-12:** *"GoPro exports don't get timestamped, but the original premise was based on
+known target reconciled with acoustic confirmation and strike quality, known distance, clip length,
+swing time, time in each phase, etc. to derive a poor man's tracer unit / swing bay."* And: *"GoPro
+would come in as the SECOND video source file to analyze, in addition to the phone camera stream."*
+
+This corrects an assumption I had written into §3b. I had treated "we cannot read fps from the file"
+as a blocker for external cameras. **It mostly is not, and the codebase already proves it.**
+
+### The clock is the strike, not the frame rate
+
+`services/swing/ballDeparture` already works this way: it takes the **acoustic impact time**
+(`impactMs`) and samples `frameAt(uri, impactMs ± PRE/POST_MS)` — by TIME, not by frame index. The
+microphone is a far better clock than the video track, and the strike is an unmistakable transient in
+it. So swing time, time in each phase, and the launch window are all anchored in **real milliseconds**
+regardless of what the video was shot at.
+
+Frame rate therefore limits only one thing: how much the ball and club MOVED between the frames
+either side of a sampled moment. It is a spatial resolution limit, not a timing one. That is worth
+being precise about, because it is the difference between "we cannot use a GoPro" and "a GoPro makes
+the spatial half sharper while the timing half is already solid."
+
+And fps is **derivable** when it matters — clip length is known, so sampling across a known interval
+and counting distinct frames bounds it. A measured bound is all `MIN_TRACE_FPS` needs.
+
+### How two sources reconcile
+
+| Source | Contributes |
+|---|---|
+| **Phone** | the acoustic track (the clock and the strike-quality read), one angle, live capture |
+| **GoPro** | the fixed high-fps angle — the spatial detail the phone cannot reach |
+
+They are synchronised on the **same strike**. Both clips contain the impact; aligning their transients
+is the oldest trick in film and needs no timestamps, no clock sync and no metadata. Everything
+downstream already speaks in ms-from-impact, so a second source drops into the existing coordinate
+system rather than needing a new one.
+
+### The poor man's tracer
+
+With the target known, the distance to it known, the ball's start position placed, and a departure
+read from frames either side of an acoustically-timed impact, the ball's start direction is
+**geometry** — not estimation. Add strike quality from the acoustic read and the phase timings, and
+the result is what Tim originally described: a tracer and a bay, assembled from a phone, a cheap
+camera and a net.
+
+What it still does NOT give: spin, launch angle in degrees, ball speed. Those need either a radar or
+frame rates well past a GoPro's. The honesty table in §3 governs — the tracer shows **direction and
+dispersion**, which is what actually changes a club decision.
+
+### The thing a real bay cannot do
+
+**Tim: *"Swing bay — you don't get to see yourself and how you are swinging, as a standard."***
+
+A commercial bay sells you ball data and shows you a number. It does not show you your swing. We
+start from the swing — that is the whole of SmartMotion — and the ball data is what we are adding.
+Coming at it from that side is not a compromised version of a launch monitor; it is the half a launch
+monitor leaves out, with the half it does best approximated well enough to choose a club.
 
    The big screen is the other half of it, and it is a real product surface rather than a nicety: at
    a cage you are not holding the phone, so the session has to be readable across a room and drivable
