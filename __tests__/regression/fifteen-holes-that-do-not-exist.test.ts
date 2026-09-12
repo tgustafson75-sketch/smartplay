@@ -94,7 +94,61 @@ describe('the round hands over its own card', () => {
     expect(src).toMatch(/courseHoles,/);
   });
 
-  it('falls back to the round’s own nine-hole flag, not to eighteen', () => {
-    expect(src).toMatch(/r\.nineHoleMode \? 9 : 18/);
+  it('falls back to the played RANGE, not to the constant eighteen', () => {
+    // This asserted `r.nineHoleMode ? 9 : 18` until the audit found that nine-hole mode keeps the
+    // whole eighteen-hole card. The range owners answer both cases, so the fallback is derived.
+    expect(src).toMatch(/Math\.max\(1, last - first \+ 1\)/);
+    expect(src).not.toMatch(/r\.nineHoleMode \? 9 : 18/);
+  });
+});
+
+describe('a nine-hole round on an EIGHTEEN-hole course', () => {
+  /**
+   * 2026-09-11, found by the full-app audit an hour after the first fix shipped.
+   *
+   * `courseHoles` is the WHOLE card and stays the whole card in nine-hole mode — startRound stores
+   * the full hole list, and roundLastHole works the range out as `roundStartHole + 8` rather than
+   * from the array's length. So the first fix, which summed every row and counted every row, was
+   * right on a genuinely nine-hole course and wrong on the COMMON nine-hole case: nine holes of an
+   * eighteen-hole course. Par 72 and eighteen holes, for a round of nine.
+   */
+  const { roundFirstHole, roundLastHole } = require('../../store/roundStore');
+  const card = Array.from({ length: 18 }, (_, i) => ({ hole: i + 1, par: 4, distance: 380 }));
+  const range = (s: object) => {
+    const f = roundFirstHole(s), l = roundLastHole(s);
+    const rows = card.filter((h) => h.hole >= f && h.hole <= l);
+    return { holes: rows.length, par: rows.reduce((a, h) => a + h.par, 0) };
+  };
+
+  it('the back nine is nine holes of par 36, not eighteen of par 72', () => {
+    expect(range({ nineHoleMode: true, roundStartHole: 10, activeCourseId: null, courseHoles: card }))
+      .toEqual({ holes: 9, par: 36 });
+  });
+
+  it('so is the front nine', () => {
+    expect(range({ nineHoleMode: true, roundStartHole: 1, activeCourseId: null, courseHoles: card }))
+      .toEqual({ holes: 9, par: 36 });
+  });
+
+  it('and the full round is still eighteen of par 72', () => {
+    expect(range({ nineHoleMode: false, roundStartHole: 1, activeCourseId: null, courseHoles: card }))
+      .toEqual({ holes: 18, par: 72 });
+  });
+
+  it('budgets that nine as a nine — bogey golf on a par 36 is 45', () => {
+    const p = composePlayProfile({ level: 'simple', goal: 'break_90', coursePar: 36, courseHoles: 9 });
+    expect(p.targetScore).toBe(45);
+    expect(p.holeCount).toBe(9);
+    expect(bogeyBudgetLine(p, 2, 4)).toContain('5 holes');
+  });
+
+  it('the composer filters the card to the holes being played, through the range owners', () => {
+    const src = require('fs').readFileSync(
+      require('path').join(__dirname, '../../services/caddieDecision.ts'), 'utf8',
+    ) as string;
+    expect(src).toMatch(/roundFirstHole, roundLastHole/);
+    expect(src).toMatch(/\(h\.hole \?\? 0\) >= first && \(h\.hole \?\? 0\) <= last/);
+    // and it must NOT go back to counting the whole array
+    expect(src).not.toMatch(/const holeRows = \(r\.courseHoles \?\? \[\]\)\.filter\(\s*\(h: \{ par\?: number \}\)/);
   });
 });

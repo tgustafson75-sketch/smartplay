@@ -307,18 +307,29 @@ function composeProfile(): PlayProfile | null {
   const penalties = stats.reduce((a: number, h: { penalties?: number }) => a + (h.penalties ?? 0), 0);
   const putts = stats.reduce((a: number, h: { putts?: number }) => a + (h.putts ?? 0), 0);
   /**
-   * 2026-09-11 — THE PAR AND THE HOLE COUNT MUST COME FROM THE SAME CARD.
+   * 2026-09-11 — THE PAR AND THE HOLE COUNT MUST BOTH COME FROM THE HOLES BEING PLAYED.
    *
-   * courseHoles is the round's own hole list, so on a nine-hole round it is nine rows and the par
-   * sums to 27 or 36. Taking the par from here and the hole count from the constant 18 is what
-   * produced "58 shots in hand for 15 holes" on a par-3 nine. Counted together, from one source.
+   * `courseHoles` is the WHOLE card and stays the whole card in nine-hole mode — startRound stores
+   * the full hole list and roundLastHole works the range out as `roundStartHole + 8` rather than
+   * from the array's length. So summing every row gives par 72 for a nine-hole round on an 18-hole
+   * course, which is the COMMON nine-hole case, not the par-3 one.
+   *
+   * The first version of this fix summed every row and counted every row, and was wrong for exactly
+   * that case while looking right on a par-3 nine. Found by the audit an hour after shipping it.
+   * roundFirstHole/roundLastHole already own this range and three other callers use them; this is
+   * the fourth. [[two-owners-is-the-root-cause]]
    */
-  const holeRows = (r.courseHoles ?? []).filter((h: { par?: number }) => (h.par ?? 0) > 0);
+  const { roundFirstHole, roundLastHole } = require('../store/roundStore') as typeof import('../store/roundStore');
+  const first = safe(() => roundFirstHole(r as never), 1);
+  const last = safe(() => roundLastHole(r as never), 18);
+  const holeRows = (r.courseHoles ?? []).filter(
+    (h: { hole?: number; par?: number }) => (h.par ?? 0) > 0 && (h.hole ?? 0) >= first && (h.hole ?? 0) <= last,
+  );
   const coursePar = holeRows.reduce((a: number, h: { par?: number }) => a + (h.par ?? 0), 0) || null;
   const courseHoles = holeRows.length > 0
     ? holeRows.length
-    /** No card yet: the round's own nine-hole flag is still a fact, and a better one than 18. */
-    : r.nineHoleMode ? 9 : 18;
+    /** No card yet: the range is still known from the round's own flags, and beats the constant 18. */
+    : Math.max(1, last - first + 1);
   const rounds = safe(() => useRelationshipStore.getState().roundsTogether ?? 0, 0);
 
   /**
