@@ -182,7 +182,11 @@
       "swing_capture": "{{watch_device_label}} swing capture",
       "swing_capture_needs_latest_build": "{{watch_device_label}} swing capture · needs latest build",
       "trail_wrist_your_release_side": "Trail wrist (your release side) — best for spotting casting / early release. Club speed is a rougher estimate from here.",
-      "lead_wrist_default_the_steering": "Lead wrist (default) — the steering side, cleaner club-speed read. Toggle on if you wear the watch on your trail arm to target release faults."
+      "lead_wrist_default_the_steering": "Lead wrist (default) — the steering side, cleaner club-speed read. Toggle on if you wear the watch on your trail arm to target release faults.",
+      "how_your_caddie_talks": "HOW YOUR CADDIE TALKS",
+      "style_not_learned_yet": "Normal length. Just tell him — “keep it brief”, “get to the point”, “more detail” — and he’ll adjust.",
+      "style_tell_him_anytime": "Say the word any time and he’ll shift again.",
+      "style_reset": "Reset"
     },
     "placeholder": {
       "search_settings": "Search settings",
@@ -241,7 +245,8 @@
       "open_subscription_debug": "Open subscription debug",
       "open_mark_location_tool": "Open Mark Location tool",
       "reset_all_app_data_and": "Reset all app data and start fresh",
-      "voice_local_hit_rate_tap": "Voice local hit-rate; tap to reset"
+      "voice_local_hit_rate_tap": "Voice local hit-rate; tap to reset",
+      "reset_what_the_caddie_learned": "Reset what the caddie learned about how much to talk"
     },
     "label": {
       "handedness": "Handedness",

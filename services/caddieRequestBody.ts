@@ -231,7 +231,22 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     // ─── the ask ────────────────────────────────────────────────────────────
     message: extras.message,
     language: extras.language,
-    responseMode: extras.responseMode ?? null,
+    /**
+     * 2026-09-11 (Tim — "be smart, not toggle heavy") — WHAT HE SAID BEATS WHAT HE ONCE TOGGLED.
+     *
+     * The caller passes the stored Settings preference; services/caddieStyle may have LEARNED
+     * something since, from the player saying it out loud ("you're talking too much", "just give me
+     * the number"). Resolved HERE, once, because this is the single payload builder — doing it at
+     * the five askCaddie call sites is how two answers to one question start.
+     *
+     * With nothing learned the stored setting stands untouched, so a player who never mentions it is
+     * exactly where they were.
+     */
+    responseMode: safe(() => {
+      const cs = require('./caddieStyle') as typeof import('./caddieStyle');
+      const stored = (extras.responseMode ?? 'neutral') as 'short' | 'neutral' | 'detailed';
+      return cs.effectiveResponseMode(stored, cs.learnedStyleSync());
+    }, extras.responseMode ?? null),
     clientHour: safe(() => new Date().getHours(), 0),
 
     // ─── who the player is ──────────────────────────────────────────────────

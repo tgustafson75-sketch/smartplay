@@ -943,6 +943,17 @@ function AppNavigator() {
   useEffect(() => {
     bootMark('app_init_effect'); // root layout init effect running
     initListeningSession();
+    /**
+     * 2026-09-11 (Tim — "be smart, not toggle heavy") — hydrate what the caddie has LEARNED about
+     * how much this player wants him to talk, so services/caddieRequestBody can resolve it
+     * synchronously on the very first turn rather than the first turn using the stale toggle.
+     */
+    void (async () => {
+      try {
+        const cs = await import('../services/caddieStyle');
+        await cs.primeStyleCache();
+      } catch { /* nothing learned yet is a perfectly good state */ }
+    })();
     // 2026-07-08 (Tim — always-on narrative learning) — observe the caddie conversation
     // off-round and distill what the golfer says about themselves into the CNS narrative.
     // Pure observer of the conversation-log store; never touches the voice path.

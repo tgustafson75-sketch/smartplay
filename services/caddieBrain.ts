@@ -115,6 +115,25 @@ export async function askCaddie(opts: AskCaddieOptions): Promise<CaddieTurn | nu
      * It lives HERE rather than at the five askCaddie call sites, because hand-copying this is what
      * left the caddie-tab mic without a putt intercept for a month. One brain, one place.
      */
+    /**
+     * 2026-09-11 (Tim) — HE TAKES A HINT.
+     *
+     * "The user says 'listen, I don't wanna talk this much, let's be more brief, let's get to the
+     * point' — the caddie can take a hint and adjust accordingly. We wanna be smart, not toggle
+     * heavy."
+     *
+     * Here, at the ONE seam every surface funnels through, for the same reason the putt-ask note
+     * below lives here: hand-copying it to the five askCaddie call sites is how the caddie-tab mic
+     * went a month without a putt intercept. A player should be able to say "you're talking too
+     * much" to ANY surface and have it stick.
+     *
+     * Fire-and-forget. Adjusting how he talks must never be able to fail the turn he is talking in.
+     */
+    try {
+      const { noteUtterance } = require('./caddieStyle') as typeof import('./caddieStyle');
+      void noteUtterance(extras.message).catch(() => undefined);
+    } catch { /* never let learning a preference break a reply */ }
+
     try {
       const { noteCaddieAskedForPutts } = require('./pendingPuttAsk') as typeof import('./pendingPuttAsk');
       const rs = (require('../store/roundStore') as typeof import('../store/roundStore')).useRoundStore.getState();

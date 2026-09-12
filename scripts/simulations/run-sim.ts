@@ -12394,7 +12394,14 @@ check('RATCHET: nothing new may be interpolated into the cached system prompt',
       '_persistentPatterns', '_personalBest', '_physicalLimitation', '_playerHistory',
       '_practiceContext', '_practicePlan', '_recentAnalyses', '_recentCageInsights', '_recentRoundInsights',
       '_routineImpact', '_screenContext', '_smartFinderContext', '_unifiedContextBlock', 'c', 'caddieName',
-      'caddieRosterBlock', 'characterSpec', 'clubAdviceBlock', 'experienceDepthRule', 'firstName',
+      'caddieRosterBlock', 'characterSpec', 'clubAdviceBlock',
+      /**
+       * 2026-09-11 — derived from `responseMode` (a Settings value) and `isRoundActive`, which is
+       * already on this list. It moves at most once per round, never shot to shot, so it belongs on
+       * the cached side exactly as isRoundActive does. Added deliberately, per the note above.
+       */
+      'effectiveLength',
+      'experienceDepthRule', 'firstName',
       'handednessRule', 'insightLines', 'isRoundActive', 'is_proactive', 'langRule', 'mentalGameBlock',
       'modeLabel', 'personaIntensity', 'perspectiveBlock', 'pi', 'playerAddressRule', 'r', 'registerBlock',
       'responseMode', 'roundsTogether', 'selfReferenceBlock', 'sessionsTogether', 'shotAnswerShapeBlock',

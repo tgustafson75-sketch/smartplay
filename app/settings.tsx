@@ -257,6 +257,23 @@ export default function Settings() {
     setPreferredTee,
   } = usePlayerProfileStore();
 
+  /**
+   * 2026-09-11 — what the caddie has LEARNED about how much to talk, in the player's own words.
+   * Loaded once; the card shows it and offers a reset. Null means nothing learned, which is a
+   * perfectly good state and reads as "Normal length" rather than an error.
+   */
+  const [learnedStyleLine, setLearnedStyleLine] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const cs = await import('../services/caddieStyle');
+        const line = cs.describeLearnedStyle(await cs.loadLearnedStyle());
+        if (alive) setLearnedStyleLine(line);
+      } catch { /* nothing learned yet */ }
+    })();
+    return () => { alive = false; };
+  }, []);
   const [editName, setEditName] = useState(name);
   const [editHandicap, setEditHandicap] = useState(String(handicap));
   const [editCreds, setEditCreds] = useState(coachCredentials ?? '');
@@ -1251,6 +1268,49 @@ export default function Settings() {
               } catch (e) { console.log('[settings] custom-caddie sync failed (non-fatal):', e); }
             }}
           />
+
+          {/**
+            * 2026-09-11 (Tim) — ONE CARD, AND IT EXPLAINS ITSELF.
+            *
+            * "That whole way we originally designed levels — users don't quite understand it,
+            * especially looking through the settings, it's not intuitive. That whole premise needs
+            * to be simplified into one simple card, or even just dynamically learning user
+            * preferences... the caddie can take a hint and adjust accordingly. We wanna be smart,
+            * not toggle heavy."
+            *
+            * So what he has LEARNED leads, in the player's own words — "you asked me to keep it
+            * short" — rather than a category they have to decode. The pills stay underneath as a
+            * starting point for anyone who wants to set it directly, but they are no longer the
+            * main event, and nobody has to find them to be understood.
+            */}
+          <View style={[styles.styleCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
+            <Text style={[styles.styleCardLabel, { color: colors.text_muted }]}>
+              {t('settings.text.how_your_caddie_talks')}
+            </Text>
+            <Text style={[styles.styleCardBody, { color: colors.text_primary }]}>
+              {learnedStyleLine ?? t('settings.text.style_not_learned_yet')}
+            </Text>
+            {learnedStyleLine ? (
+              <View style={styles.styleCardFoot}>
+                <Text style={[styles.styleCardHint, { color: colors.text_muted }]}>
+                  {t('settings.text.style_tell_him_anytime')}
+                </Text>
+                <TouchableOpacity
+                  onPress={async () => {
+                    try {
+                      const cs = await import('../services/caddieStyle');
+                      await cs.saveLearnedStyle(null);
+                      setLearnedStyleLine(null);
+                    } catch { /* nothing to reset is not an error */ }
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('settings.accessibility_label.reset_what_the_caddie_learned')}
+                >
+                  <Text style={[styles.styleCardReset, { color: colors.accent }]}>{t('settings.text.style_reset')}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+          </View>
 
           <PillRow
             label={t('settings.label.response_style')}
@@ -2981,6 +3041,16 @@ function AiProviderRow({ colors }: { colors: ThemeColors }) {
 // ─── STYLES ───────────────────────────────
 
 const styles = StyleSheet.create({
+  /**
+   * 2026-09-11 — the one card that replaces decoding a Trust Spectrum. Colours are theme tokens so
+   * it resolves in all five palettes.
+   */
+  styleCard: { marginHorizontal: 16, marginTop: 6, marginBottom: 10, padding: 12, borderRadius: 12, borderWidth: 1 },
+  styleCardLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 1.3, marginBottom: 5 },
+  styleCardBody: { fontSize: 13.5, fontWeight: '600', lineHeight: 19 },
+  styleCardFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 10 },
+  styleCardHint: { fontSize: 11.5, flex: 1 },
+  styleCardReset: { fontSize: 12.5, fontWeight: '800' },
   // 2026-05-26 — Fix AB Phase 1: GHIN field helper-text style.
   helperText: {
     fontSize: 11,
