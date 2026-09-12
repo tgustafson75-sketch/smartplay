@@ -52,6 +52,25 @@ export interface PracticeImpact {
   /** True once there's enough on both sides to say anything honest. */
   hasEnough: boolean;
   headline: string;
+  /**
+   * 2026-09-12 — the measured DIRECTION of each side, exported rather than left inside the headline
+   * switch below. `headline` is UI copy addressed to the player ("Your practice is up…"); the caddie
+   * needs the FACTS so he can say it in his own voice instead of parroting a dashboard string. Both
+   * now read the same computation, so the graph and the caddie cannot disagree about which way the
+   * lines are going. Null until `hasEnough`. [[two-owners-is-the-root-cause]]
+   */
+  connection: {
+    /** Balls in the earlier half of the window vs the later half. */
+    practiceEarlyBalls: number;
+    practiceLateBalls: number;
+    practiceUp: boolean;
+    /** Mean score-vs-par, earlier half of the counted rounds vs later half. Lower is better. */
+    scoreEarlyAvg: number;
+    scoreLateAvg: number;
+    /** Half-point deadband either side, so one round can't declare a direction. */
+    scoreImproving: boolean;
+    scoreWorse: boolean;
+  } | null;
 }
 
 // 2026-09-11 — WEEKS / ROUNDS / WEEK_MS were declared identically in three files. One owner now,
@@ -123,19 +142,31 @@ export function computePracticeImpact(input: PracticeImpactInput): PracticeImpac
   const roundsCounted = scoreSeries.length;
   const hasEnough = practiceSessions >= MIN_SESSIONS && roundsCounted >= MIN_ROUNDS;
 
-  let headline: string;
-  if (!hasEnough) {
-    headline = 'Keep logging practice and rounds — I\'ll show how they connect once there\'s enough.';
-  } else {
-    // Direction of each side (honest, descriptive).
+  // Direction of each side (honest, descriptive). Computed once; `headline` below and the caddie's
+  // context block in services/caddieRequestBody both read it.
+  let connection: PracticeImpact['connection'] = null;
+  if (hasEnough) {
     const firstHalfP = practiceSeries.slice(0, Math.ceil(WEEKS / 2)).reduce((a, b) => a + b, 0);
     const lastHalfP = practiceSeries.slice(Math.ceil(WEEKS / 2)).reduce((a, b) => a + b, 0);
-    const practiceUp = lastHalfP > firstHalfP;
     const half = Math.ceil(scoreSeries.length / 2);
     const earlyAvg = scoreSeries.slice(0, half).reduce((a, b) => a + b, 0) / half;
     const lateAvg = scoreSeries.slice(half).reduce((a, b) => a + b, 0) / (scoreSeries.length - half);
-    const scoreImproving = lateAvg < earlyAvg - 0.5; // lower vs-par is better, with a small deadband
-    const scoreWorse = lateAvg > earlyAvg + 0.5;
+    connection = {
+      practiceEarlyBalls: firstHalfP,
+      practiceLateBalls: lastHalfP,
+      practiceUp: lastHalfP > firstHalfP,
+      scoreEarlyAvg: Math.round(earlyAvg * 10) / 10,
+      scoreLateAvg: Math.round(lateAvg * 10) / 10,
+      scoreImproving: lateAvg < earlyAvg - 0.5, // lower vs-par is better, with a small deadband
+      scoreWorse: lateAvg > earlyAvg + 0.5,
+    };
+  }
+
+  let headline: string;
+  if (!connection) {
+    headline = 'Keep logging practice and rounds — I\'ll show how they connect once there\'s enough.';
+  } else {
+    const { practiceUp, scoreImproving, scoreWorse } = connection;
 
     if (practiceUp && scoreImproving) {
       headline = 'Your practice is up and your scores are trending down — it\'s showing up on the course.';
@@ -150,5 +181,5 @@ export function computePracticeImpact(input: PracticeImpactInput): PracticeImpac
     }
   }
 
-  return { practiceSeries, scoreSeries, scoreWeekly, warmupWeekIndices, warmupOutcome, practiceSessions, roundsCounted, hasEnough, headline };
+  return { practiceSeries, scoreSeries, scoreWeekly, warmupWeekIndices, warmupOutcome, practiceSessions, roundsCounted, hasEnough, headline, connection };
 }

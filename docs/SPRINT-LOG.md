@@ -3338,3 +3338,86 @@ jest **2963/2963 (265 suites)** · sim **968/968**.
 Five defects today, one shape: **two sources for one fact, and the consumer reading the empty one.**
 The flap, Kevin's correction, the watch, and hole advance were all that. Three of the five fixes are
 deletions.
+
+---
+
+## Day N+4 — 2026-09-12 — the caddie could not see the dashboard
+
+Tim: *"I figured I would discuss my dashboard trends with Kevin… there seems to be a trend where I
+have a sharp uptick in practice and my scores go up. And then I stop practicing and play, and it
+slowly starts to translate. They cross each other… I think he can see that context, but I want you
+to check."* He could not. Read-only diagnosis first, then four fixes.
+
+### Shipped today
+
+**1. The practice→scoring crossing reaches the caddie.** `services/practice/practiceImpact` has
+paired practice volume against score-vs-par since 06-14; its only consumer was
+`app/(tabs)/dashboard.tsx`. The nearest thing the payload carried was `playerHistoryBlock`, whose
+practice half is an **all-time session count with no dates in it** — a number that cannot be trended
+even in principle. New `practiceImpactBlock` in the one payload builder, destructured and injected
+system-side in `api/kevin.ts` beside `routineImpactBlock` (constant for a whole round, so it rides
+the cached prompt). The measured DIRECTION is sent, not the dashboard's `headline` — that string is
+UI copy written at the player, and handing it over makes the caddie read the card back.
+
+**2. One owner for which way the lines are going.** `practiceImpact` now exports `connection`
+(early/late practice volume, early/late mean vs par, the two deadbanded verdicts). The dashboard
+headline is derived from it instead of computing it inline, so the graph and the caddie cannot
+disagree.
+
+**3. A club question is answered from the bag, with or without "my".** The `club_distance` block in
+`localIntentPrecheck` required the possessive, so *"how many yards do I hit a pitching wedge"* fell
+past it into the generic yardage pattern and came back as **the distance to the green** — the same
+question answered about the hole, decided by whether he happened to say "my". Article and bare forms
+accepted; guarded so a course feature ("how far to the **wood** line") is not read as a club. The
+generic yardage pattern now needs a referent, so bag talk ("what's my yardage gapping") reaches the
+caddie instead of being answered with the hole's number.
+
+**4. A spoken rangefinder number no longer opens a screen.** `rangefinder` was a bare alternative in
+the SmartFinder open, so *"my rangefinder says 205"* — the player feeding the system the number
+`yardageResolver` ranks **above** live GPS — matched at confidence 'high' and opened `/smartfinder`.
+The 205 went nowhere. Split in two: an explicit open still opens; the bare tool noun steps aside for
+a spoken yardage and falls through to the classifier, which has carried `state_yardage` for this all
+along. Same shape as the 08-06 NOT_ABOUT_TOOL fix.
+
+### The one that had never fired
+
+`clubFromLoftPhrase` needs the determiner in the string ("my 60"). The precheck handed it the
+capture group with the determiner **already stripped** ("60"), so the 2026-09-11 "the 60 is a club"
+fix returned null every single time and *"how far do I hit my 60"* answered with the yardage to the
+green. Measured against the pre-fix file, not inferred.
+
+Its gate could not catch it: `the-sixty-is-a-club.test.ts` asserted the **source text**
+`clubFromLoftPhrase(clubPhrase)`, so it passed over a fix that did not work, and only failed today
+because the fix moved one identifier. Replaced with a behavioural assertion. *A gate that cannot
+fail is not a gate* — this is the second instance since the 08-19 audit.
+
+### Verified
+
+`tsc` clean (one pre-existing `api/messages.ts` error) · lint clean on every changed file (151
+pre-existing i18n problems elsewhere, untouched) · jest **4253/4253 (363 suites)**. New gates:
+`practice-trend-reaches-the-caddie.test.ts` (5),
+`bag-distance-precheck-does-not-intercept.test.ts` (10). `payload-contract-is-closed` confirms the
+new key is both sent and read — the connection is closed at both ends.
+
+**NOT verified on device.**
+
+### Open / carried — the rest of the audit
+
+Same class, same shape, all still screen-only. Every one is a measured finding about the player
+whose sole importer is a screen, so the caddie cannot answer a question about it:
+
+- `practice/swingMetricTrend` — progress/regression per biomech metric vs the tour band. The
+  "am I actually getting better" answer. Biggest of the five.
+- `practice/workoutPerformance` / `workoutSwingImpact` — training volume vs scoring, vs strike rate.
+- `practice/pointsPerformance` — points vs scoring.
+- `practice/preRoundFactors` — balls / stretch / both / neither. (The warm-up *half* reaches the
+  caddie via `caddieDecision`; the four-way split does not.)
+- `handicapCalculator` — has an intent handler, so "what's my handicap" is answered locally and
+  never as conversation.
+
+Also carried: **the off-round deflection.** `queryStatusHandler` answers *"You're not in a round yet.
+Want to start one?"* to `putt_stats`, `gir`, `nine_split`, `last_round_here`, `longest_drive` — all
+"about me" questions, several of which the caddie can already answer (`golfer_model_snippet` carries
+avg putts/hole). Needs a per-topic decision, not a blanket `route_to_brain`: the topics that
+genuinely need a live round should keep deflecting, and the ones the caddie cannot source must not
+be routed to him to invent. Diagnosis done; fix deliberately not bundled here.

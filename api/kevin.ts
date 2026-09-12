@@ -564,6 +564,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       practicePlanBlock = null,
       /** 2026-08-24 — whether their routine shows up in the strike, from their own rounds. */
       routineImpactBlock = null,
+      /**
+       * 2026-09-12 — whether their PRACTICE shows up in their SCORES, from their own logged sessions
+       * and completed rounds. Same shape and same cache side as routineImpactBlock: a self-gating
+       * pre-composed block, constant for a whole round. See services/caddieRequestBody.
+       */
+      practiceImpactBlock = null,
     } = body;
 
     const cap = (v: unknown, max: number): string =>
@@ -620,6 +626,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const _playerHistory: string | null = capOrNull(playerHistoryBlock, 1200);
     const _practicePlan: string | null = capOrNull(practicePlanBlock, 1200);
     const _routineImpact: string | null = capOrNull(routineImpactBlock, 600);
+    const _practiceImpact: string | null = capOrNull(practiceImpactBlock, 700);
     // 2026-05-23 — Persona Knowledge Layer. When the user message matches a KB entry
     // above the score threshold, inject the top entries as a teaching-wisdom block so
     // the brain riffs off vetted coaching rather than freestyling. Resolves to null
@@ -1782,6 +1789,7 @@ ${_recentAnalyses ? `\nWHAT YOU JUST TOLD THEM (last few exchanges in this sessi
 ${_playerHistory ? `\n${_playerHistory}` : ''}
 ${_practicePlan ? `\n${_practicePlan}` : ''}
 ${_routineImpact ? `\n${_routineImpact}` : ''}
+${_practiceImpact ? `\n${_practiceImpact}` : ''}
 ${_unifiedContextBlock ? `\n${_unifiedContextBlock}` : ''}
 
 ${Array.isArray(playerVocabulary) && playerVocabulary.length > 0 ? `PHRASES THIS PLAYER USES (private; mirror their vocabulary, do not list these out loud):\n${(playerVocabulary as unknown[]).filter(p => typeof p === 'string').slice(0, 20).join(', ')}` : ''}

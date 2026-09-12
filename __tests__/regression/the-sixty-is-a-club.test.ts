@@ -20,6 +20,7 @@
  * "I'd go with the 60" stamped no club at all.
  */
 import { clubFromLoftPhrase, normalizeClub } from '../../services/clubNormalize';
+import { precheckLocalIntent } from '../../services/localIntentPrecheck';
 import fs from 'fs';
 import path from 'path';
 
@@ -108,10 +109,24 @@ describe('the club field itself was already right — this did not change it', (
 });
 
 describe('all three paths that heard it wrong', () => {
-  it('the offline precheck accepts a loft as a club phrase', () => {
-    const src = read('services/localIntentPrecheck.ts');
-    expect(src).toMatch(/clubFromLoftPhrase\(clubPhrase\)/);
-    expect(src).toMatch(/if \(loftClub \|\|/);
+  /**
+   * 2026-09-12 — THIS ASSERTED THE CODE WAS WRITTEN, NOT THAT IT WORKED, and so it passed for a day
+   * over a fix that had never once fired. `clubFromLoftPhrase` needs the determiner in the string
+   * ("my 60"); the precheck handed it the capture group with the determiner stripped off ("60"), so
+   * it returned null every time and "how far do I hit my 60" came back as the yardage to the GREEN
+   * — the exact confusion this file is named for. A source-text grep could not see that, and the
+   * only reason it failed today is that the fix moved one identifier.
+   *
+   * Ask the precheck the question instead. A gate that cannot fail is not a gate.
+   */
+  it('the offline precheck reads a spoken loft as a club', () => {
+    const topic = (t: string) =>
+      (precheckLocalIntent(t)?.parameters as { query_topic?: string } | undefined)?.query_topic ?? null;
+    expect(topic('how far do I hit my 60')).toBe('club_distance');
+    expect(topic('how far do I hit my 52')).toBe('club_distance');
+    expect(topic("what's my 60")).toBe('club_distance');
+    // The other side of the same coin: a yardage reading is not a wedge.
+    expect(topic('how far is the 60 yards to the pin')).not.toBe('club_distance');
   });
 
   it("the brain's club_change tool is told a loft is a club, not a distance", () => {

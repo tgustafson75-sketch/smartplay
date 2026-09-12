@@ -56,6 +56,26 @@ const intent = (
 // the tool name is an OBJECT, not a command — so don't auto-open; let it fall through to the brain.
 const NOT_ABOUT_TOOL = '(?!.*\\b(?:issue|issues|log|logged|logging|report|reporting|bug|bugs|problem|problems|feedback|complain|complaint|broke|broken|glitch|crash(?:ed|ing)?|not\\s+working|doesn\'?t\\s+work|isn\'?t\\s+working)\\b)';
 
+// 2026-09-12 (Tim — "I'm going to talk to him about my bag and distances, hoping he understands a
+// conversation versus trying to take me to a tool or screen I didn't ask for"). The same lesson as
+// NOT_ABOUT_TOOL above, pointed at DISTANCES: naming a distance is not asking for the hole's.
+//
+// The POSSESSIVE forms were already safe — "how far do I hit my 7-iron" is claimed by the
+// club_distance block inside precheckLocalIntent, which runs before this list. Measured, not
+// assumed: what the bare `how far` / `how many yards` alternatives below were actually stealing is
+// everything that names a club WITHOUT "my" in front of it — "how many yards do I hit a pitching
+// wedge", "how far do I usually hit it", "what's my yardage gapping" — all of which came back as
+// distance_to_green at confidence 'high', so the router answered locally and the caddie (who carries
+// clubDistances, bagClubs, club_tendencies and club_variant_insight) never saw the question. In a
+// round that is the yardage to the green instead of a wedge number; off the course it is
+// queryStatusHandler's off-round gate saying "You're not in a round yet. Want to start one?" to a
+// question that has nothing to do with being in a round.
+//
+// Any equipment word, or a "do I hit" phrasing, disqualifies the line outright.
+const NOT_ABOUT_MY_CLUBS =
+  '(?!.*\\b(?:driver|woods?|hybrids?|irons?|wedges?|putter|clubs?|bag|gapping|carry|carries)\\b)'
+  + '(?!.*\\bi\\s+hit\\b)';
+
 // Optional explicit hole for a spoken score ("...on hole 7"); otherwise the handler uses the current
 // hole. The stroke count itself is parsed from raw_text by logScoreHandler.
 const scoreHoleParam = (raw: string): Record<string, unknown> => {
@@ -132,7 +152,23 @@ const PATTERNS: Pattern[] = [
     build: (raw) => intent(raw, 'query_status', { query_topic: 'green_middle' }),
   },
   {
-    rx: /\b(how\s+far|yardage|yards?\s+to|distance\s+to|how\s+many\s+yards?)\b/i,
+    /**
+     * The bare `how far` / `how many yards` alternatives are gone: they now need a "to" referent
+     * ("how far TO the pin", "how far is it TO the green"), because without one the phrase is just
+     * as likely to be about his own clubs. Both narrowings are subtractive — everything that stops
+     * matching falls through to the cloud classifier, which lists "how far to the green" →
+     * distance_to_green itself (api/voice-intent), so the in-round phrasings keep their answer and
+     * only the fast path is lost. A bag question reaches the caddie, which is the point.
+     */
+    rx: new RegExp(
+      '^' + NOT_ABOUT_MY_CLUBS + '(?=.*\\b(?:'
+      + 'yardage'
+      + '|(?:how\\s+far|how\\s+many\\s+yards?|yards?|distance)\\s+(?:is\\s+it\\s+)?to'
+      + '|how\\s+far\\s+(?:am\\s+i|is\\s+(?:it|the\\s+(?:green|pin|flag|hole)))'
+      + '|how\\s+many\\s+yards?\\s+(?:is\\s+it|left|to\\s+go)'
+      + ')\\b)',
+      'i',
+    ),
     build: (raw) => intent(raw, 'query_status', { query_topic: 'distance_to_green' }),
   },
 
@@ -334,8 +370,28 @@ const PATTERNS: Pattern[] = [
     rx: new RegExp('^' + NOT_ABOUT_TOOL + "(?!.*\\bscore\\s*card\\b)(?=.*\\b(?:my\\s+(?:business|digital|contact)?\\s*card|business\\s+card|digital\\s+card|contact\\s+card)\\b)", 'i'),
     build: (raw) => intent(raw, 'open_tool', { tool_name: 'my_card' }),
   },
+  /**
+   * 2026-09-12 — SAYING A NUMBER IS NOT ASKING FOR A SCREEN.
+   *
+   * `rangefinder` was a bare alternative here, so "my rangefinder says 205" — the player FEEDING the
+   * system a number — matched at confidence 'high' and opened /smartfinder. The 205 went nowhere.
+   *
+   * That is the exact scenario services/yardageResolver was built for: a user-stated number outranks
+   * live GPS and the card, and the 08-24 note in services/caddieRequestBody reproduces it against
+   * production with a rangefinder reading of 205. The resolver never got the chance — the precheck
+   * had already spent the utterance on a screen. The cloud classifier has carried `state_yardage`
+   * for this all along (api/voice-intent §3.5, "rangefinder reading"); it just never ran.
+   *
+   * Split in two rather than loosened: an EXPLICIT open still opens, numbers and all, while the bare
+   * tool noun now steps aside for a spoken yardage and falls through to the classifier. Same shape
+   * as the 08-06 NOT_ABOUT_TOOL fix — naming the tool is not commanding it.
+   */
   {
-    rx: new RegExp('^' + NOT_ABOUT_TOOL + '(?=.*\\b(?:open\\s+smart\\s*finder|smart\\s*finder|rangefinder|range\\s+finder|lock\\s+(?:the\\s+)?distance)\\b)', 'i'),
+    rx: new RegExp('^' + NOT_ABOUT_TOOL + '(?=.*\\b(?:open|pull\\s+up|bring\\s+up|launch|fire\\s+up|show\\s+me|go\\s+to|take\\s+me\\s+to)\\s+(?:the\\s+|my\\s+)?(?:smart\\s*finder|range\\s*finder))', 'i'),
+    build: (raw) => intent(raw, 'open_tool', { tool_name: 'smartfinder' }),
+  },
+  {
+    rx: new RegExp('^' + NOT_ABOUT_TOOL + '(?!.*\\d{2,3})(?=.*\\b(?:smart\\s*finder|rangefinder|range\\s+finder|lock\\s+(?:the\\s+)?distance)\\b)', 'i'),
     build: (raw) => intent(raw, 'open_tool', { tool_name: 'smartfinder' }),
   },
   {
@@ -456,15 +512,44 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
   // so "what's my score / handicap / plan" fall through to their own patterns / the brain. The handler
   // (queryStatusHandler:club_distance) does the precise club parse + honest bag read.
   {
-    const cdm = t.match(/\b(?:how far(?:\s+do\s+i\s+(?:hit|carry))?(?:\s+does)?(?:\s+is)?|what(?:'s|s|\s+is))\s+my\s+(.+?)(?:\s+(?:go|going|carry|carrying))?\??$/i);
-    if (cdm) {
-      const clubPhrase = cdm[1].trim();
+    /**
+     * 2026-09-12 (Tim — "I'm going to talk to him about my bag and distances") — `my` WAS MANDATORY,
+     * and a golfer does not always say it.
+     *
+     * "How far do I hit my 7-iron" was claimed here; "how many yards do I hit a pitching wedge" was
+     * not, because the possessive was the only determiner allowed and "how many yards" was not one
+     * of the openers. It fell past this block into the generic yardage pattern below and came back
+     * as the distance to the GREEN — the same club question answered about the hole, decided by
+     * whether he happened to say "my". Nobody hears that distinction in their own speech.
+     *
+     * Article and bare forms accepted; the club-word test below still gates every one of them, so
+     * "what's the score" and friends are no more claimable than they were.
+     */
+    const cdm = t.match(/\b(?:how\s+far|how\s+many\s+yards?)(?:\s+do\s+i\s+(?:hit|carry))?(?:\s+does)?(?:\s+is)?\s+(?:my|a|an|the)?\s*(.+?)(?:\s+(?:go|going|carry|carrying))?\??$/i)
+      ?? t.match(/\b(?:what(?:'s|s|\s+is))\s+my\s+(.+?)(?:\s+(?:go|going|carry|carrying))?\??$/i);
+    const clubPhrase = cdm ? cdm[1].trim() : null;
+    // Dropping the mandatory `my` let a COURSE FEATURE in: "how far to the wood line" captures
+    // "to the wood line", whose club-word test passes on `wood`. A club phrase never opens with a
+    // preposition — that shape is always pointing at something out on the hole, so leave it to the
+    // yardage patterns below.
+    const pointsAtTheHole = clubPhrase != null
+      && /^(?:to|over|past|from|across|around|behind|beyond|up|down)\b/i.test(clubPhrase);
+    if (clubPhrase && !pointsAtTheHole) {
       /**
        * 2026-09-11 (Tim) — "how far do I hit my 60" fell through here, because this test wants a club
        * WORD and a golfer naming a wedge says its LOFT. clubFromLoftPhrase reads the grammar rather
        * than the number: a determiner in front ("my 60") is a club, a yardage word behind it is not.
+       *
+       * 2026-09-12 — and it had never once fired, because it was handed `clubPhrase`, which is the
+       * capture group with the determiner already stripped off. "How far do I hit my 60" reached it
+       * as "60"; the determiner branch it needs ("the|my|a|an|his|her|your|our" + two digits) cannot
+       * match a bare number, so it returned null every time and the utterance fell through to the
+       * generic yardage pattern and came back as the distance to the GREEN. Measured against the
+       * pre-fix file, not inferred. The whole transcript is what the function was written to read —
+       * its own guards already reject the yardage readings ("the 60 yards", "the 60 to the pin").
+       * A fix that cannot fire is not a fix. [[state-what-you-measured-not-what-you-intended]]
        */
-      const loftClub = (require('./clubNormalize') as typeof import('./clubNormalize')).clubFromLoftPhrase(clubPhrase);
+      const loftClub = (require('./clubNormalize') as typeof import('./clubNormalize')).clubFromLoftPhrase(t);
       if (loftClub || /\b(driver|wood|hybrid|iron|wedge|pitching|sand|lob|gap|approach|utility|pw|sw|lw|gw|aw|\d\s?h|\d\s?i|\d\s?w)\b/i.test(clubPhrase)) {
         return intent(t, 'query_status', { query_topic: 'club_distance', club_phrase: clubPhrase });
       }

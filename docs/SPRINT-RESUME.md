@@ -8,7 +8,30 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
-> ### ⚠️ LATEST — 2026-09-10. Three ways the right number could not reach the player.
+> ### ⚠️ LATEST — 2026-09-12. The caddie could not see the dashboard.
+>
+> Tim wanted to talk to Kevin about the practice/score crossing on his dashboard. Kevin had no
+> access to it: `practice/practiceImpact` has measured it since 06-14 with `app/(tabs)/dashboard.tsx`
+> as its only importer, and the closest thing in the payload was an all-time practice session COUNT
+> with no dates in it. Now sent as `practiceImpactBlock` (system-side, cached, direction not the
+> dashboard's UI copy), with `practiceImpact.connection` as the one owner of which way each line is
+> going. **Three more from the same sweep:** a club question without "my" in it
+> ("how many yards do I hit a pitching wedge") was answered with the distance to the GREEN; a spoken
+> "my rangefinder says 205" opened /smartfinder and dropped the number that `yardageResolver` ranks
+> above live GPS; and the 09-11 "the 60 is a club" fix **had never once fired** — it was handed the
+> capture group with the determiner stripped, and its gate asserted the *source text*, so it passed
+> over a fix that did not work. That gate is behavioural now.
+>
+> Green: tsc, lint, jest 4253/4253 (363 suites). **NOT verified on device.**
+>
+> **Carried:** five more measured findings with no route to the caddie — `swingMetricTrend`
+> (progress/regression vs the tour band, the biggest), `workoutPerformance`, `workoutSwingImpact`,
+> `pointsPerformance`, `preRoundFactors` — plus the off-round deflection ("You're not in a round
+> yet" to putting/GIR/last-round-here questions). Needs a per-topic decision, not a blanket route.
+
+---
+
+> ### 2026-09-10. Three ways the right number could not reach the player.
 >
 > Reported from the tee at Hemet, mid-round. **(1) The flap** — `yardageResolver` gated live GPS on
 > `fixAge < 10_000` while `gpsManager`'s walking mode polls at *exactly* 10_000ms, so the live tier

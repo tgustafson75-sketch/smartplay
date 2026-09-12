@@ -1002,6 +1002,62 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
         : null;
     }, null),
 
+    /**
+     * 2026-09-12 (Tim — "there seems to be a trend where I have a sharp uptick in practice and my
+     * scores go up… then I stop practicing and play, and it slowly starts to translate. They cross
+     * each other, and I wanna be able to just check") — THE CROSSING, which the caddie could not see.
+     *
+     * services/practice/practiceImpact has paired practice volume against scoring since 06-14. Its
+     * only consumer was app/(tabs)/dashboard.tsx. So the player could watch the two lines cross on
+     * the dashboard and then ask the caddie about it, and the caddie had nothing: the nearest thing
+     * he carried was `playerHistoryBlock`, whose practice half is an ALL-TIME session count with no
+     * dates in it — a number that cannot be trended even in principle. Measured, drawn, and
+     * unaskable. [[unconnected-halves-not-broken-code]]
+     *
+     * The measured DIRECTION is sent, not the dashboard's `headline`: that string is UI copy written
+     * at the player ("Your practice is up…") and handing it over makes the caddie read the card back
+     * instead of talking about it. Volume is deliberately balls-per-3-weeks rather than a rate — it
+     * is what the module counts, and inventing a smoother unit here would be a second owner.
+     *
+     * NOT round-gated. This is exactly the conversation that happens away from the course, and it is
+     * the half of himself the caddie was blindest to off-round.
+     *
+     * COST — computed from completed rounds and logged sessions only, so it is constant for a whole
+     * round and rides the CACHED system prompt, same as routineImpactBlock above. Warm-ups are not
+     * passed: they only feed `warmupOutcome` and the chart markers, and the warm-up finding already
+     * reaches the caddie through caddieDecision → roundConditions.warmup. One owner each.
+     */
+    practiceImpactBlock: safe(() => {
+      const { computePracticeImpact } = require('./practice/practiceImpact') as typeof import('./practice/practiceImpact');
+      const { usePracticeSessionStore } = require('../store/practiceSessionStore') as typeof import('../store/practiceSessionStore');
+      const sessions = (usePracticeSessionStore.getState().history ?? [])
+        .map((s: { startedAt?: number; swingCount?: number | null; swings?: unknown[] }) => ({
+          startedAt: s.startedAt as number,
+          balls: s.swingCount ?? (Array.isArray(s.swings) ? s.swings.length : 0),
+        }))
+        .filter((s) => typeof s.startedAt === 'number');
+      // Simulated rounds are narrated demos; trending them would report practice transferring to
+      // play that never happened. Same filter caddieHistoryContext applies for the same reason.
+      const rounds = (r.roundHistory ?? [])
+        .filter((h: { simulated?: boolean; endedAt?: number; scoreVsPar?: number | null }) =>
+          !h.simulated && typeof h.endedAt === 'number' && typeof h.scoreVsPar === 'number')
+        .map((h: { endedAt: number; startedAt?: number; scoreVsPar: number }) => ({
+          endedAt: h.endedAt, startedAt: h.startedAt, scoreVsPar: h.scoreVsPar,
+        }));
+      const c = computePracticeImpact({ sessions, rounds, nowMs: Date.now() }).connection;
+      if (!c) return null;
+      const practiceDir = c.practiceUp ? 'UP' : 'down or flat';
+      const scoreDir = c.scoreImproving ? 'IMPROVING' : c.scoreWorse ? 'getting worse' : 'holding steady';
+      const vs = (n: number) => `${n > 0 ? '+' : ''}${n}`;
+      return 'THEIR PRACTICE-TO-SCORING CONNECTION over the last 6 weeks, measured from their own '
+        + 'logged practice and completed rounds (association, not cause — say it as an observation, '
+        + 'never as a promise, and never read the numbers out as a list): practice volume '
+        + `${c.practiceEarlyBalls} balls in the earlier 3 weeks vs ${c.practiceLateBalls} in the later 3 — ${practiceDir}. `
+        + `Scoring over the same stretch went ${vs(c.scoreEarlyAvg)} to ${vs(c.scoreLateAvg)} vs par — ${scoreDir}. `
+        + 'Lower vs par is better. If they ask whether practice is showing up in their scores, answer '
+        + 'from THIS, not from a general opinion about practice.';
+    }, null),
+
     /** The stated weekly plan — goals, challenges, open reminders. Empty until they engage it. */
     practicePlanBlock: safe(() => {
       const pp = require('../store/practicePlanStore') as typeof import('../store/practicePlanStore');
