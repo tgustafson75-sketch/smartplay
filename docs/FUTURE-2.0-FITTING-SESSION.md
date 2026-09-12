@@ -506,6 +506,53 @@ check actually found — recorded so the next person does not rebuild it:
 | `components/practice/PracticeTargetUI` | **Built.** The canvas/bullseye UI with hit-type labelling. |
 | Bullseye as a vision fiducial at high fps | **Not built.** The design intent Tim describes; nothing detects the target optically yet. |
 
+### ⚠️ The tap-to-label screen is a BOOTSTRAP TOOL, not the product
+
+**Tim, 2026-09-12: *"Not too much supervised — it was too much tap. We need to show what AI does in
+this space."***
+
+Correcting how I wrote this up. `target-calibration.tsx` asks the player to tap where the ball hit,
+and I described it as the feature. It is not: it is a dataset builder, built to teach an
+**acoustic-only** model to place a strike from sound. That was the right tool for bootstrapping and
+the wrong shape to ship.
+
+And the tapping is not confined to calibration. The cage flow today asks for three:
+
+| Tap | Why it exists |
+|---|---|
+| *"tap where your ball sits"* | gives the ball's position for the departure read |
+| tap the target | gives the aim line |
+| *"tap where it hit"* (calibration) | labels a training sample |
+
+Three manual inputs to measure one golf shot. Every one of them is a thing the camera is looking
+straight at.
+
+### Zero taps is the requirement
+
+The setup the AI should handle by itself:
+
+1. **Find the ball.** A golf ball on a mat is a high-contrast sphere of known diameter — which also
+   makes it a second scale reference alongside the bullseye.
+2. **Find the target.** A printed bullseye of known size is a textbook fiducial: it yields the
+   pixels-to-inches scale AND the camera's pose relative to the canvas, with no calibration step and
+   nothing for the player to measure.
+3. **Find the strike.** The ball's last tracked position before it meets the canvas, cross-checked
+   against the acoustic hit.
+
+**We already do the far harder version of this.** `services/swing/clubPath` tracks a CLUBHEAD through
+impact — a small, motion-blurred, fast-moving object — and reports per-frame coverage honestly. A
+stationary bullseye and a stationary ball are easier problems than the one already shipped. The
+capability is proven; it has simply never been pointed at the target.
+
+That also re-casts the acoustic work rather than replacing it. If vision reports WHERE, the
+microphone is free to do what it is uniquely good at: WHEN (sub-millisecond, which is where ball
+speed comes from) and HOW WELL IT WAS STRUCK. Two instruments answering different questions and
+cross-checking each other beats one instrument being asked to guess position from a sound.
+
+**What the tapping becomes:** a correction, not an input. The player taps only when the AI got it
+wrong — which is also how the training set keeps growing, from real disagreements rather than from a
+chore.
+
 ### The gap that matters
 
 **`targetSamples` has no exit.** It is written by the calibration screen and read only by that same
