@@ -47,6 +47,8 @@ export interface ShotReadInputs {
   lie?: import('./clubCharacter').Lie;
   /** Clean-strike rate for a ladder-labelled club, or null when not enough rated swings. */
   confidenceFor?: (ladderLabel: string) => number | null;
+  /** Ladder labels for the clubs he owns. Null/empty means unknown, not "owns nothing". */
+  ownedLabels?: readonly string[] | null;
   risk?: ShotRiskMode;
   isCompetition?: boolean;
   pastScoreNote?: string | null;
@@ -205,6 +207,30 @@ export function liveShotReadInputs(known: CallerKnown): ShotReadInputs {
         return typeof v === 'number' && Number.isFinite(v) ? v : null;
       };
     }, undefined as never),
+
+    /**
+     * 2026-09-11 — THE CLUBS HE ACTUALLY OWNS.
+     *
+     * The market sim, once given starter sets, had the read telling a player with a driver, a 7 iron
+     * and a sand wedge to hit a 3 Iron — a rung of the merged standard ladder he does not have. The
+     * registered bag is the one place that knows, and it was never asked.
+     *
+     * Translated onto ladder labels here, at the boundary, for the same reason the confidence map is:
+     * clubBagStore speaks ClubId, the ladder speaks labels, and handing either across raw is how the
+     * lie offer silently never fired. An empty bag means UNKNOWN and the ladder stands.
+     */
+    ownedLabels: safe(() => {
+      const { useClubBagStore } = require('../store/clubBagStore') as typeof import('../store/clubBagStore');
+      const { clubIdToClubName } = require('../store/clubStatsStore') as typeof import('../store/clubStatsStore');
+      const { CLUB_LABEL } = require('./standardBag') as typeof import('./standardBag');
+      const out: string[] = [];
+      for (const c of useClubBagStore.getState().bagList()) {
+        const canon = clubIdToClubName(c.club_id);
+        if (!canon) continue;
+        out.push((CLUB_LABEL as Record<string, string>)[canon] ?? canon);
+      }
+      return out;
+    }, [] as string[]),
 
     /** Nearest trouble ahead on the line, when the hole is mapped. */
     nearestHazard: safe(() => {

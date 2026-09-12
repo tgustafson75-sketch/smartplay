@@ -149,6 +149,8 @@ interface GapContext {
   greenFrontYards?: number | null;
   greenBackYards?: number | null;
   nearestHazard?: { label: string; yards: number } | null;
+  /** Ladder labels for the clubs he owns. Absent/empty → unknown, and the ladder stands. */
+  ownedLabels?: readonly string[] | null;
   /**
    * 2026-09-11 (Tim) — WHAT THE BALL IS SITTING ON.
    *
@@ -204,7 +206,16 @@ function pickClub(playsLikeYards: number, bag: Partial<Record<string, number>>, 
    * own clubs prove. See services/standardBag.personalBagScale.
    */
   const { merged, measured } = mergedLadder(bag);
-  const real = [...merged.entries()] as [string, number][];
+  /**
+   * 2026-09-11 — never recommend a club he does not have. The ladder still holds every rung for the
+   * bag-extreme reasoning above; it is the CHOICE that is restricted. Skipped entirely when the
+   * registered bag is unknown, and skipped if filtering would leave nothing to choose from — a
+   * narrowed-to-empty ladder would be worse than a chart club.
+   */
+  const ownedSet = gap.ownedLabels && gap.ownedLabels.length > 0 ? new Set(gap.ownedLabels) : null;
+  const allEntries = [...merged.entries()] as [string, number][];
+  const ownedEntries = ownedSet ? allEntries.filter(([c]) => ownedSet.has(c)) : allEntries;
+  const real = ownedEntries.length >= 2 ? ownedEntries : allEntries;
   if (real.length > 0) {
     let best: [string, number] | null = null;
     let longest = real[0];
@@ -472,11 +483,24 @@ export function composeShotRead(input: {
   lie?: import('./clubCharacter').Lie;
   /** Clean-strike rate for a LADDER-LABELLED club, or null when not enough rated swings. */
   confidenceFor?: (ladderLabel: string) => number | null;
+  /**
+   * 2026-09-11 — THE CLUBS HE ACTUALLY OWNS, when he has told us.
+   *
+   * Found by giving the market sim STARTER SETS: a player whose bag is a driver, a 7 iron and a sand
+   * wedge was told to hit a 3 Iron. The standard ladder is merged in deliberately — so a sparse bag
+   * cannot collapse it and produce "gap wedge for 324 yards" — but that merge also makes chart rungs
+   * eligible as RECOMMENDATIONS, and a club he does not own is never the answer.
+   *
+   * Only applied when the registered bag is genuinely known. A player who has not scanned or entered
+   * one gets the ladder exactly as before, because an empty list is "we do not know", not "he owns
+   * nothing". [[illustration-data-points]]
+   */
+  ownedLabels?: readonly string[] | null;
 }): ShotRead | null {
   const {
     rawYards, weather, shotBearingDeg, elevationDeltaFeet = 0,
     bag = {}, dominantMiss, holeLineNote, nearestHazard, isCompetition, pastScoreNote,
-    greenFrontYards = null, greenBackYards = null, distanceControl, lie, confidenceFor,
+    greenFrontYards = null, greenBackYards = null, distanceControl, lie, confidenceFor, ownedLabels,
   } = input;
   if (rawYards == null || !Number.isFinite(rawYards)) return null;
 
@@ -506,7 +530,7 @@ export function composeShotRead(input: {
 
   // 2) Club — the answer. Pushes a learned-carry why line when the bag is real.
   const club = pickClub(playsLikeYards, bag, why, input.risk ?? 'normal', {
-    distanceControl, greenFrontYards, greenBackYards, nearestHazard, lie, confidenceFor,
+    distanceControl, greenFrontYards, greenBackYards, nearestHazard, lie, confidenceFor, ownedLabels,
   });
 
   // 3) Hazard — only when it's actually in play for this shot (ahead, within reach).

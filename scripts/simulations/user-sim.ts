@@ -174,9 +174,23 @@ interface Persona {
 
 function makePersona(seed: number): Persona {
   const rng = mulberry32(seed);
-  const handicap = int(rng, 8, 26);
+  /**
+   * 2026-09-11 — THE POPULATION WAS TOO TIDY TO BE EVIDENCE.
+   *
+   * Handicap 8-26 with each club present 85% of the time gives every one of 500 personas a bag of
+   * about twelve clubs. So the engines never saw the shapes that actually break a ladder: a starter
+   * set, a borrowed half set, a beginner who owns a driver, a 7 iron and a putter. Those are real
+   * market segments — the file's own note says a quarter of the market is brand new, and a brand-new
+   * golfer usually does NOT have fourteen clubs.
+   *
+   * The handicap range widens for the same reason: a 2 and a 36 are both people who will download
+   * this, and both sit outside every number the engines were ever run against.
+   */
+  const handicap = chance(rng, 0.12) ? int(rng, 27, 36) : chance(rng, 0.08) ? int(rng, 2, 7) : int(rng, 8, 26);
   const hand: 'right' | 'left' = chance(rng, 0.12) ? 'left' : 'right';
   const thinData = chance(rng, 0.25); // a quarter of the market is brand new — the honesty stress case
+  /** How much of a set he actually owns. 'full' is the old behaviour and still the common case. */
+  const setShape: 'full' | 'half' | 'starter' = chance(rng, 0.06) ? 'starter' : chance(rng, 0.1) ? 'half' : 'full';
 
   // A bag as real players actually have one: gaps, duplicates, missing wedges, quirky names.
   const base: [string, number][] = [
@@ -186,8 +200,13 @@ function makePersona(seed: number): Persona {
     ['Pitching Wedge', 120 - handicap * 2], ['Gap Wedge', 105 - handicap * 1.8],
     ['Sand Wedge', 90 - handicap * 1.6], ['Lob Wedge', 72 - handicap * 1.4], ['Putter', 0],
   ];
+  const STARTER = new Set(['Driver', '7 Iron', 'Sand Wedge', 'Putter']);
+  const HALF = new Set(['Driver', '5 Iron', '7 Iron', '9 Iron', 'Sand Wedge', 'Putter']);
   const bag = base
-    .filter(() => chance(rng, 0.85)) // most players are missing something
+    .filter(([club]) =>
+      setShape === 'starter' ? STARTER.has(club)
+      : setShape === 'half' ? HALF.has(club)
+      : chance(rng, 0.85)) // most players are missing something
     .map(([club, carry]) => ({
       club,
       carry: Math.max(0, Math.round(carry + (rng() - 0.5) * 12)),

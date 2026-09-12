@@ -309,7 +309,19 @@ function searchLead(
   preferFullSwing: boolean,
 ): Omit<PlanStep, 'shot' | 'leavesYards'>[] | null {
   if (remainingShots === 0) {
-    return isPlayableApproach(Math.round(toGreen), ladder, dc, preferFullSwing) ? acc : null;
+    if (!isPlayableApproach(Math.round(toGreen), ladder, dc, preferFullSwing)) return null;
+    /**
+     * 2026-09-11 — AND THE APPROACH IS PART OF THE SEQUENCE.
+     *
+     * The first version of this rule only ordered the LEAD shots against each other, which left the
+     * starter-set bug standing: "Driver, Sand Wedge, 7 Iron" has non-increasing leads (190, 70) and
+     * an approach LONGER than the lay-up before it. You would hit the 7 iron and then the wedge.
+     */
+    if (acc.length > 0) {
+      const approach = clubFor(ladder, Math.round(toGreen), { offTheDeck: true, mustCover: true });
+      if (approach && approach.yards > acc[acc.length - 1].carryYards) return null;
+    }
+    return acc;
   }
   // Mapped trouble is measured from the TEE. Pretending we know where the water is from a fairway we
   // have not reached yet would be inventing hazard data, so later shots are planned without it.
@@ -322,6 +334,19 @@ function searchLead(
     // Only the tee shot is played off a tee. The same fact that keeps the driver out of the approach
     // keeps it out of the second shot of a par 5 — it produced "Driver to 40" on the first run.
     if (depth > 0 && isDriver(c.club)) continue;
+    /**
+     * 2026-09-11 — LAY-UPS GO LONGEST FIRST.
+     *
+     * Found once the market sim was given STARTER SETS: a par 4 at 370 came back "Driver, Sand
+     * Wedge, 7 Iron". Arithmetically perfect and nobody has ever played golf that way — you hit the
+     * 7 iron and then the wedge. It happened because the full-swing preference rejected the 60 yards
+     * the 7 iron would have left and accepted the 110 the wedge left, so the absurd order satisfied
+     * the search first.
+     *
+     * A later lead shot may not be LONGER than an earlier one. That is how a golfer advances a ball,
+     * and it costs the search nothing — the same clubs are still available in the sensible order.
+     */
+    if (acc.length > 0 && c.yards > acc[acc.length - 1].carryYards) continue;
     const wet = inTrouble(c.yards, hz);
     if (wet) { blockedBy = blockedBy ?? wet; continue; }
     const why = blockedBy
