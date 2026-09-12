@@ -246,7 +246,8 @@
       "open_mark_location_tool": "Open Mark Location tool",
       "reset_all_app_data_and": "Reset all app data and start fresh",
       "voice_local_hit_rate_tap": "Voice local hit-rate; tap to reset",
-      "reset_what_the_caddie_learned": "Reset what the caddie learned about how much to talk"
+      "reset_what_the_caddie_learned": "Reset what the caddie learned about how much to talk",
+      "open_the_owner_console": "Open the owner console"
     },
     "label": {
       "handedness": "Handedness",

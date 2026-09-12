@@ -66,10 +66,22 @@ describe('all four surfaces are connected', () => {
     expect(code('app/_layout.tsx')).toContain("'/owner-checklist'");
   });
 
-  it('Owner Tools has a row that reaches it, carrying the open count', () => {
+  it('Owner Tools reaches it, carrying the open count', () => {
+    /**
+     * 2026-09-11 — this used to require settings to push '/owner-checklist' DIRECTLY. The sixteen
+     * owner routes were condensed into app/owner-console.tsx (Tim: "condense this into one card
+     * that's more dashboard style"), so the hop moved. What has to stay true is the REACHABILITY
+     * and the count: Tim must still see there is work without opening anything.
+     */
     const settings = code('app/settings.tsx');
-    expect(settings).toContain("router.push('/owner-checklist' as never)");
+    expect(settings).toContain("router.push('/owner-console' as never)");
+    // the open count still rides the settings row itself — that is the point of it
     expect(settings).toContain('checklistOpen');
+
+    // ...and the console actually reaches the checklist.
+    const consoleSrc = code('app/owner-console.tsx');
+    expect(consoleSrc).toContain("'/owner-checklist'");
+    expect(consoleSrc).toContain('useOwnerChecklistStore');
   });
 
   it('the launch reminder waits for the profile to HYDRATE before deciding', () => {

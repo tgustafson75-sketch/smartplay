@@ -2325,333 +2325,39 @@ export default function Settings() {
                     value={ownerFieldTest}
                     onValueChange={confirmToggle('Field Test', setOwnerFieldTest)}
                   />
-                  {/* 2026-09-09 (Tim — "put my checklists of to dos on the phone in owners tool").
-                      First row in Owner Tools on purpose: it is the one that has something to say. */}
+                  {/**
+                    * 2026-09-11 (Tim) — "We have multiple platforms for harnesses and issue logs and
+                    * things like that. Do we need to condense this into one card, that's more
+                    * dashboard style, that I can go to that isn't finding what subcard I'm looking
+                    * for. And then probably start to hide ones that aren't active."
+                    *
+                    * This section had grown to SIXTEEN route pushes plus three actions, ~410 lines,
+                    * and finding the right one meant remembering which of them it was. All of it now
+                    * lives in app/owner-console.tsx: a status strip that answers "does anything need
+                    * me?" without opening anything, then the tools grouped by what you are doing.
+                    *
+                    * The Field Test toggle stays HERE because it is a setting, not a tool — it is
+                    * read once at round start and belongs with the things you set.
+                    *
+                    * Mark Green / Mark Tee / location did not make the move. Tim: "When I say a
+                    * marker green or a location or a tee box, I'm gonna do it verbally. I'm not
+                    * going to a sub menu to mark fucking locations anymore." The voice path owns it.
+                    */}
                   <TouchableOpacity
                     style={styles.resetRow}
-                    onPress={() => router.push('/owner-checklist' as never)}
+                    onPress={() => router.push('/owner-console' as never)}
                     accessibilityRole="button"
-                    accessibilityLabel={t('settings.accessibility_label.open_my_checklist')}
+                    accessibilityLabel={t('settings.accessibility_label.open_the_owner_console')}
                   >
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.rowLabel, { color: colors.text_primary }]}>
-                        Checklist{checklistOpen > 0 ? ` · ${checklistOpen} open` : ''}
+                        Owner Console{checklistOpen > 0 ? ` · ${checklistOpen} open` : ''}
                       </Text>
                       <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        {t('settings.text.field_tests_and_ship_steps')}
+                        Checklist, issue log, harnesses, diagnostics and owner actions — one screen
                       </Text>
                     </View>
-                    <Ionicons name="checkbox-outline" size={20} color={colors.text_muted} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.resetRow}
-                    onPress={() => router.push('/owner-card' as never)}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('settings.accessibility_label.open_my_digital_business_card')}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.my_card')}</Text>
-                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        {t('settings.text.your_digital_business_card_qr')}
-                      </Text>
-                    </View>
-                    <Ionicons name="id-card-outline" size={20} color={colors.text_muted} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.resetRow}
-                    onPress={() => router.push('/author/reference-assets' as never)}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('settings.accessibility_label.open_train_the_trainer_reference')}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.train_the_trainer')}</Text>
-                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        {t('settings.text.capture_example_photos_narrative_for')}
-                      </Text>
-                    </View>
-                    <Ionicons name="school-outline" size={20} color={colors.text_muted} />
-                  </TouchableOpacity>
-                  {/* 2026-05-24 — Feel Capture toggle. When ON, every
-                      practice swing's clip audio is transcribed via
-                      Whisper and stored as feel_narration_transcript
-                      paired with perShotAnalysis. Owner-only dataset
-                      for future feel-vs-real calibration. Doubly
-                      gated (flag + isOwnerEmail) — never fires for
-                      production users. Review tuples at /swing-sessions-debug. */}
-                  <FeelCaptureRow colors={colors} />
-                  <VoiceHitRateRow colors={colors} />
-                  {/* 2026-08-22 (Tim — "owner only is me seeing it graphically... not a text line.
-                      That's not gonna let me compare anything"). TRAINING vs STRIKE moved out of here
-                      and onto the dashboard PROGRESS graph as an owner-only "Strike" source, so it is
-                      read the way a player would read it. A text strip cannot answer whether two
-                      lines move together. */}
-
-                  {/* 2026-06-16 (Tim — "issue log + harness should be in owner
-                      tools") — Issue Log restored HERE in Owner Tools (it also
-                      still lives in the public Beta Feedback section above, but Tim
-                      expects it alongside the harness). Owner triage lives inside. */}
-                  <TouchableOpacity
-                    style={styles.resetRow}
-                    onPress={() => router.push('/owner-logs' as never)}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('settings.accessibility_label.open_issue_log')}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.issue_log')}</Text>
-                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        {t('settings.text.logged_issues_voice_log_this')}
-                      </Text>
-                    </View>
-                    <Ionicons name="bug-outline" size={20} color={colors.text_muted} />
-                  </TouchableOpacity>
-                  {/* 2026-05-24 — Scenario harness. Owner-gated test runner
-                      for 17 scenarios covering the shipped-unverified items
-                      from BUILD-STATE-AUDIT §B. */}
-                  <TouchableOpacity
-                    style={styles.resetRow}
-                    onPress={() => router.push('/harness' as never)}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('settings.accessibility_label.view_scenario_harness')}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.scenario_harness')}</Text>
-                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        {t('settings.text.17_scenarios_9_critical_5')}
-                      </Text>
-                    </View>
-                    <Ionicons name="flask-outline" size={20} color={colors.text_muted} />
-                  </TouchableOpacity>
-                  {/* 2026-06-10 — Caddie Clip Test owner tool removed per Tim. */}
-                  {/* 2026-05-23 — Voice coverage log. Every voice command
-                      that doesn't match a wired handler (classifier
-                      unknown, no handler registered, or handler threw)
-                      lands here with transcript + surface + reason. */}
-                  <TouchableOpacity
-                    style={styles.resetRow}
-                    onPress={() => router.push('/voice-misses' as never)}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('settings.accessibility_label.view_voice_misses_log')}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.voice_misses')}</Text>
-                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        {t('settings.text.phrasings_that_didn_t_match')}
-                      </Text>
-                    </View>
-                    <Ionicons name="mic-off-outline" size={20} color={colors.text_muted} />
-                  </TouchableOpacity>
-                  {/* 2026-07-04 (Tim — voice sim round) — tap-start for the narrated
-                      SIM round (voice: "start a sim round"). Palms, 9 holes; the
-                      round is SIM-tagged and never trains handicap/bag/CNS. */}
-                  <TouchableOpacity
-                    style={styles.resetRow}
-                    onPress={() => {
-                      try {
-                        const sim = require('../services/simRound') as typeof import('../services/simRound');
-                        const r = sim.startVoiceSimRound({ nineHoles: true });
-                        (require('../store/toastStore') as typeof import('../store/toastStore')).useToastStore.getState().show(r.ok ? '🎮 Sim round started — Palms, 9 holes' : r.say);
-                        if (r.ok) router.push('/(tabs)/caddie' as never);
-                      } catch (e) { console.log('[settings] sim round start failed:', e); }
-                    }}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('settings.accessibility_label.start_a_sim_round')}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.sim_round_palms_9')}</Text>
-                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        {t('settings.text.voice_narrated_practice_round_on')}
-                      </Text>
-                    </View>
-                    <Ionicons name="game-controller-outline" size={20} color={colors.text_muted} />
-                  </TouchableOpacity>
-                  {/* 2026-09-02 (Tim — "a second option for owner tools sim round that is non
-                      voice and goes by user tendencies and data... watch hole transition, scoring").
-                      The narrated round above needs him to speak every shot, which is the wrong tool
-                      for hunting a scorecard bug. This one plays itself through the same pipeline in
-                      seconds, on his own bag and miss, and exports a per-hole report. */}
-                  <TouchableOpacity
-                    style={styles.resetRow}
-                    onPress={() => router.push('/simround-auto' as never)}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('settings.accessibility_label.auto_sim_round_silent')}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.auto_sim_round_silent')}</Text>
-                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        {t('settings.text.plays_a_full_round_by')}
-                      </Text>
-                    </View>
-                    <Ionicons name="play-forward-outline" size={20} color={colors.text_muted} />
-                  </TouchableOpacity>
-                  {/* 2026-07-04 (elite-clean audit, menu finding #10) — the coach
-                      tutorial manager (curate + upload instruction videos) was an
-                      ORPHANED surface: registered routes reachable only from each
-                      other, no entry anywhere. It's coach/owner tooling — its
-                      entry lives here. */}
-                  <TouchableOpacity
-                    style={styles.resetRow}
-                    onPress={() => router.push('/swinglab/tutorials' as never)}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('settings.accessibility_label.manage_coach_tutorials')}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.coach_tutorials')}</Text>
-                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        {t('settings.text.curate_upload_instruction_videos_for')}
-                      </Text>
-                    </View>
-                    <Ionicons name="school-outline" size={20} color={colors.text_muted} />
-                  </TouchableOpacity>
-                  {/* 2026-05-24 — Swing-analysis telemetry card. Pairs
-                      the client's frames-sent count with the server's
-                      echoed image-block count so the multi-frame pipe
-                      is verifiable in-app (no Vercel logs). Refreshes
-                      on every real swing through SmartMotion. */}
-                  <TouchableOpacity
-                    style={styles.resetRow}
-                    onPress={() => router.push('/swing-analysis-debug' as never)}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('settings.accessibility_label.view_swing_analysis_telemetry')}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.swing_analysis_telemetry')}</Text>
-                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        {t('settings.text.last_swing_frames_sent_vs')}
-                      </Text>
-                    </View>
-                    <Ionicons name="film-outline" size={20} color={colors.text_muted} />
-                  </TouchableOpacity>
-                  {/* 2026-05-24 — Reset Tutorials. Clears every
-                      tutorialsSeen flag so the standardized 3-line
-                      first-run tutorial replays on next entry of
-                      every feature screen (Caddie / SwingLab /
-                      SmartMotion / Quick Record / Practice / Coach).
-                      Owner test path for the QuickTutorial system. */}
-                  <TouchableOpacity
-                    style={styles.resetRow}
-                    onPress={() => {
-                      Alert.alert(
-                        t('settings.alert.reset_tutorials'),
-                        t('settings.alert.every_first_run_tutorial_will'),
-                        [
-                          { text: 'Cancel', style: 'cancel' },
-                          {
-                            text: 'Reset',
-                            style: 'destructive',
-                            onPress: () => {
-                              useSettingsStore.getState().resetTutorials();
-                            },
-                          },
-                        ],
-                      );
-                    }}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('settings.accessibility_label.reset_all_first_run_tutorials')}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.reset_tutorials')}</Text>
-                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        {t('settings.text.replay_every_feature_s_3')}
-                      </Text>
-                    </View>
-                    <Ionicons name="refresh-outline" size={20} color={colors.text_muted} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.resetRow}
-                    onPress={() => router.push('/gps-test' as never)}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('settings.accessibility_label.open_gps_test_bench')}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.gps_test_bench')}</Text>
-                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        {t('settings.text.drop_an_anchor_at_your')}
-                      </Text>
-                    </View>
-                    <Ionicons name="locate-outline" size={20} color={colors.text_muted} />
-                  </TouchableOpacity>
-                  {/* 2026-07-06 (elite audit) — /native-modules-debug was a
-                      registered route with NO entry point anywhere, yet it's
-                      load-bearing: the capture-engine A/B flag is flipped
-                      there. Owner tooling — its entry lives here. */}
-                  <TouchableOpacity
-                    style={styles.resetRow}
-                    onPress={() => router.push('/native-modules-debug' as never)}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('settings.accessibility_label.open_native_modules_debug')}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.native_modules')}</Text>
-                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        {t('settings.text.on_device_module_status_the')}
-                      </Text>
-                    </View>
-                    <Ionicons name="hardware-chip-outline" size={20} color={colors.text_muted} />
-                  </TouchableOpacity>
-                  {/* 2026-07-06 (elite audit) — /swing-sessions-debug is the hub that
-                      links out to the other debug screens but was itself
-                      unreachable from any menu. */}
-                  <TouchableOpacity
-                    style={styles.resetRow}
-                    onPress={() => router.push('/swing-sessions-debug' as never)}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('settings.accessibility_label.open_swing_sessions_debug_hub')}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.swing_sessions_debug')}</Text>
-                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        {t('settings.text.debug_hub_captured_swing_tuples')}
-                      </Text>
-                    </View>
-                    <Ionicons name="construct-outline" size={20} color={colors.text_muted} />
-                  </TouchableOpacity>
-                  {/* 2026-08-30 (Tim: "I am not seeing subscription debug in my owners tools") —
-                      it WAS reachable, but only as Owner Tools → Swing Sessions Debug → Subscription Debug:
-                      two levels deep, behind a hub named after the rig. Nobody looks for
-                      subscription state there, and Owner Tools itself listed only swing-analysis,
-                      native-modules and swing-sessions-debug. Buried is not the same as missing, but for the
-                      person trying to find it the difference does not matter. Direct row, because
-                      this is now the screen that reads subscription state, runs the 30-day
-                      promotion, and forces the paywall for the App Store review screenshot. */}
-                  <TouchableOpacity
-                    style={styles.resetRow}
-                    onPress={() => router.push('/subscription-debug' as never)}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('settings.accessibility_label.open_subscription_debug')}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.subscription_debug')}</Text>
-                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        {t('settings.text.subscription_trial_state_the_30')}
-                      </Text>
-                    </View>
-                    <Ionicons name="card-outline" size={20} color={colors.text_muted} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.resetRow}
-                    onPress={() => router.push('/kevin-learning' as never)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Open ${caddieName} learning log`}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.learning', { caddieName })}</Text>
-                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>{t('settings.text.vocabulary_has_picked_up_from', { caddieName })}</Text>
-                    </View>
-                    <Ionicons name="library-outline" size={20} color={colors.text_muted} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.resetRow}
-                    onPress={() => router.push('/mark-green' as never)}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('settings.accessibility_label.open_mark_location_tool')}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.text.mark_location')}</Text>
-                      <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        {t('settings.text.walk_to_a_tee_box')}
-                      </Text>
-                    </View>
-                    <Ionicons name="location" size={20} color={colors.text_muted} />
+                    <Ionicons name="grid-outline" size={20} color={colors.text_muted} />
                   </TouchableOpacity>
                 </CollapsibleSection>
               </>
@@ -2955,42 +2661,6 @@ function GlassesModeRow({ colors }: { colors: ThemeColors }) {
 // 2026-06-16 (Tim — self-growing agent metric) — the local-first health metric:
 // what share of spoken asks the caddie answered ON-DEVICE (instant/offline/0-token)
 // vs escalated to the cloud. Should trend UP as the CNS brain grows. Tap to reset.
-function VoiceHitRateRow({ colors }: { colors: ThemeColors }) {
-  const { t } = useTranslation();
-  const local = useVoiceHitRateStore((s) => s.local);
-  const cloud = useVoiceHitRateStore((s) => s.cloud);
-  const reset = useVoiceHitRateStore((s) => s.reset);
-  const total = local + cloud;
-  const pct = total === 0 ? 0 : Math.round((local / total) * 100);
-  return (
-    <TouchableOpacity
-      style={styles.resetRow}
-      onPress={() =>
-        Alert.alert(
-          t('settings.alert.reset_voice_hit_rate'),
-          `Local ${pct}% — ${local} on-device / ${cloud} cloud (${total} asks).`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Reset', style: 'destructive', onPress: () => reset() },
-          ],
-        )
-      }
-      accessibilityRole="button"
-      accessibilityLabel={t('settings.accessibility_label.voice_local_hit_rate_tap')}
-    >
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.rowLabel, { color: colors.text_primary }]}>{t('settings.voice_hit_rate_row.voice_local_hit_rate')}</Text>
-        <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-          {total === 0
-            ? 'No voice asks yet. Answered on-device vs escalated to the cloud — should climb as the brain learns.'
-            : `${pct}% on-device · ${local} local / ${cloud} cloud (${total} asks). Tap to reset.`}
-        </Text>
-      </View>
-      <Text style={[styles.rowLabel, { color: pct >= 50 ? colors.accent : colors.text_muted, fontVariant: ['tabular-nums'] }]}>{pct}%</Text>
-    </TouchableOpacity>
-  );
-}
-
 function FeelCaptureRow({ colors }: { colors: ThemeColors }) {
   const { t } = useTranslation();
   const feelCaptureEnabled = useSettingsStore((s) => s.feelCaptureEnabled);

@@ -4788,6 +4788,7 @@ check('Voice local-first hit-rate metric: recorded at decision points + shown in
     const store = read('store/voiceHitRateStore.ts');
     const ls = read('services/listeningSession.ts');
     const settings = read('app/settings.tsx');
+    const ownerConsole = read('app/owner-console.tsx');
     return (
       /export const useVoiceHitRateStore/.test(store) &&
       /recordLocal:/.test(store) && /recordCloud:/.test(store) &&
@@ -4797,10 +4798,17 @@ check('Voice local-first hit-rate metric: recorded at decision points + shown in
       // the metric now measures is narrower and truer: a COMMAND matched by the regex precheck
       // (no classifier round-trip) versus one that needed the cloud classifier.
       /recordCloud\(`cloud:/.test(ls) &&
-      /function VoiceHitRateRow/.test(settings) && /<VoiceHitRateRow colors=\{colors\} \/>/.test(settings)
+      // 2026-09-11 — the live % moved OUT of settings into the Owner Console's status strip when the
+      // sixteen owner rows were condensed into one screen. Settings must no longer carry the row
+      // (it was left defined-but-never-rendered by that move, which is how this was caught), and the
+      // console must show the rate AND keep the reset the settings row had.
+      !/function VoiceHitRateRow/.test(settings) &&
+      /useVoiceHitRateStore/.test(ownerConsole) &&
+      /Voice on-device/.test(ownerConsole) &&
+      /resetVoiceRate\(\)/.test(ownerConsole)
     );
   })(),
-  'local-vs-cloud counter recorded at precheck/local-primary/cloud points; live % in Owner Tools');
+  'local-vs-cloud counter recorded at precheck/cloud points; live % + reset in the Owner Console');
 
 check('Voice: first-ask failure exits leave a breadcrumb in the Issue Log (diagnosable)',
   // 2026-06-16 (Tim — "first ask is 90% a failure", "front-end path has a glitch") — the
@@ -4861,18 +4869,23 @@ check('Voice: dead-zone failures SPEAK via device TTS (not just a silent text bu
 check('Voice keep-warm deduped; Issue Log restored to Owner Tools',
   // 2026-06-16 (Tim) — removed the caddie-tab __ping__ keepWarm (redundant with the
   // app-wide prewarmVoice heartbeat) so there aren't two 4-min idle timers; Issue
-  // Log + Scenario Harness both live in Owner Tools again.
+  // Log + Scenario Harness must both stay REACHABLE.
+  // 2026-09-11 — they now live in the Owner Console rather than as rows in settings, so this asserts
+  // reachability where they actually are. Settings keeps ONE door (the console row); the Issue Log
+  // additionally keeps its own tester-facing row, because it is not an owner surface.
   (() => {
     const caddie = read('app/(tabs)/caddie.tsx');
     const settings = read('app/settings.tsx');
+    const ownerConsole = read('app/owner-console.tsx');
     return (
       !/setInterval\(keepWarm/.test(caddie) &&
       !/message: '__ping__'/.test(caddie) &&
-      /issue log \+ harness should be in owner/i.test(settings) &&
-      /router\.push\('\/harness' as never\)/.test(settings)
+      /router\.push\('\/owner-console' as never\)/.test(settings) &&
+      /route: '\/harness'/.test(ownerConsole) &&
+      /route: '\/owner-logs'/.test(ownerConsole)
     );
   })(),
-  'single app-wide voice heartbeat (caddie __ping__ dup removed); Issue Log + Harness in Owner Tools');
+  'single app-wide voice heartbeat (caddie __ping__ dup removed); Issue Log + Harness reachable via the Owner Console');
 
 check('Close a tool → HOME (no white screen), deterministic + local',
   // 2026-06-16 (Tim — "close Smart Motion" white-screened) — close/exit a tool goes

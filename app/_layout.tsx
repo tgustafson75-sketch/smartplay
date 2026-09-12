@@ -206,6 +206,10 @@ const DEBUG_ROUTES: ReadonlySet<string> = new Set([
   // 2026-09-09 — Tim's field checklist. Owner-only at the route AND at the render (a route is
   // reachable by voice, deep link, or typing), same as /owner-card.
   '/owner-checklist',
+  // 2026-09-11 — the consolidated Owner Console. It reaches every owner surface below, so it has to
+  // be gated at least as tightly as the tightest thing it reaches, at the ROUTE as well as the
+  // render: a route is reachable by voice, deep link, or typing it.
+  '/owner-console',
   // 2026-07-10 (audit N1) — /owner-logs REMOVED from this gate. The Issue Log is an
   // ALL-BETA-TESTER surface (openToolHandler maps "send the issue log" → /owner-logs for
   // everyone, with ?send=1 auto-export). Gating it here redirected a non-owner tester who
