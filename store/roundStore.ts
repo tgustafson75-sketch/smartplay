@@ -914,6 +914,13 @@ export function strokesPlayedOnHole(
   return shots.length + shots.reduce((a, sh) => a + (sh.penalty_strokes ?? 0), 0);
 }
 
+/**
+ * 2026-09-11 — the most holes a round can have. Twice-around nines are expanded to 18 before they
+ * get here, so nothing this app models exceeds it. Named once so the score seam and the spoken-hole
+ * parsers cannot disagree about what "a hole that cannot exist" means.
+ */
+export const MAX_ROUND_HOLES = 18;
+
 export function roundFirstHole(s: { nineHoleMode: boolean; roundStartHole: number }): number {
   return s.nineHoleMode ? Math.max(1, s.roundStartHole || 1) : 1;
 }
@@ -2801,6 +2808,44 @@ export const useRoundStore = create<RoundState>()(
       },
 
       logScore: (hole, score) => {
+        /**
+         * 2026-09-11 (full-app audit) — VALIDATE AT THE SEAM, because two of three parsers did.
+         *
+         * services/intents/logScoreHandler and declareHoleHandler both bound a spoken hole to 1..18.
+         * services/voice/conversationalToolDispatch — the path the BRAIN's own tool calls take —
+         * checked only `a.hole > 0`, so a mis-parsed `log_score { hole: 22 }` wrote scores[22]. That
+         * score is invisible: the scorecard iterates courseHoles, so nothing renders it and nothing
+         * can correct it, while endRound counts it into holesPlayed and totalScore — and holesPlayed
+         * is what decides whether a round posts as a nine or an eighteen.
+         *
+         * This function's own header already calls itself "the ONE seam every score path funnels
+         * through", and names the wrong-hole class as one Tim has fought repeatedly. The mental-state
+         * derivation was moved here for exactly this reason: doing it at the funnel makes it true for
+         * surfaces added later. So is this.
+         *
+         * REJECTED, never clamped. Clamping a 22 to 18 would write a real score onto the wrong hole,
+         * which is worse than dropping it — and silent. [[no-half-fixes-enforce-every-surface]]
+         */
+        /**
+         * 1..18, the bound logScoreHandler and declareHoleHandler already use.
+         *
+         * My first version of this capped at getCourseHoleCount(activeCourseId, courseHoles.length)
+         * and the suite caught it immediately: `courseHoles` is whatever was LOADED, not how many
+         * holes the course has. caddie.tsx has an acknowledged `startedWithoutHoles` path, and a
+         * fixture with a single hole made the cap 1 — rejecting a perfectly good score on hole 4.
+         * The job here is to refuse a hole that cannot exist, not to police a partly-loaded card.
+         */
+        if (!Number.isInteger(hole) || hole < 1 || hole > MAX_ROUND_HOLES) {
+          console.log(`[path6:scorecard] score_write REJECTED hole=${hole} (outside 1..${MAX_ROUND_HOLES})`);
+          return;
+        }
+        // A golf score is at least one stroke. Zero is not an erase anywhere in this app — nothing
+        // calls logScore(hole, 0) — and a zero or negative would be silently dropped by every
+        // downstream `score > 0` filter while still overwriting a real score the player entered.
+        if (!Number.isFinite(score) || Math.round(score) < 1) {
+          console.log(`[path6:scorecard] score_write REJECTED hole=${hole} score=${score} (not a score)`);
+          return;
+        }
         try {
           (require('../services/roundTrace') as typeof import('../services/roundTrace'))
             .trace('shot', 'score', { hole, score });

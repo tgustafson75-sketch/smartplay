@@ -23,6 +23,15 @@ import { Linking } from 'react-native';
 import { useSettingsStore } from '../../store/settingsStore';
 import { getScreenContext } from '../screenContext';
 import { ACTIVE_PERSONAS, type Persona } from '../../lib/persona';
+/**
+ * 2026-09-11 (full-app audit) — one bound for every hole argument the brain can send.
+ *
+ * This file had `<= 18` written out three times and, in two more places, no upper bound at all —
+ * which is how `log_score { hole: 22 }` reached the store. Imported from the owner so the score
+ * seam, the spoken-intent parsers and these tool handlers cannot drift apart about what
+ * "a hole that cannot exist" means. [[two-owners-is-the-root-cause]]
+ */
+import { MAX_ROUND_HOLES as MAX_HOLES } from '../../store/roundStore';
 
 /*
  * 2026-08-30 (full audit) — THE FIFTH LIST. Four surfaces were unified onto ACTIVE_PERSONAS earlier
@@ -202,7 +211,7 @@ function dispatchOne(a: AnyAction): void {
       if (!note) break;
       const r = (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState();
       // No hole stated = the hole he is on. Asking "which hole?" is what made this feel robotic.
-      const hole = typeof a.hole === 'number' && a.hole >= 1 && a.hole <= 18 ? a.hole : r.currentHole;
+      const hole = typeof a.hole === 'number' && a.hole >= 1 && a.hole <= MAX_HOLES ? a.hole : r.currentHole;
       if (hole != null) r.setHoleNote(hole, note);
       break;
     }
@@ -219,7 +228,7 @@ function dispatchOne(a: AnyAction): void {
     }
     case 'declare_hole': {
       const h = typeof a.hole === 'number' ? Math.round(a.hole) : NaN;
-      if (Number.isFinite(h) && h >= 1 && h <= 18) (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState().setCurrentHole(h);
+      if (Number.isFinite(h) && h >= 1 && h <= MAX_HOLES) (require('../../store/roundStore') as typeof import('../../store/roundStore')).useRoundStore.getState().setCurrentHole(h);
       break;
     }
     case 'set_session_focus': {
@@ -375,8 +384,26 @@ function dispatchOne(a: AnyAction): void {
       if (!round.isRoundActive) break;
       // 2026-08-09 (on-course audit C2) — bare score → lowest unscored hole at/behind currentHole.
       const { voiceScoreHole } = require('../../store/roundStore') as typeof import('../../store/roundStore');
-      const targetHole = typeof a.hole === 'number' && a.hole > 0 ? Math.round(a.hole) : voiceScoreHole(round);
+      /**
+       * 2026-09-11 (full-app audit) — `a.hole > 0` WAS THE WHOLE CHECK.
+       *
+       * The two spoken-intent parsers (logScoreHandler, declareHoleHandler) both bound a hole to
+       * 1..18; this path, which carries the BRAIN's own tool arguments, had no upper bound at all.
+       * A mis-parsed `log_score { hole: 22 }` wrote a score onto a hole the scorecard cannot render
+       * and the player cannot correct, while endRound counted it into holesPlayed — the number that
+       * decides whether a round posts as a nine or an eighteen.
+       *
+       * roundStore.logScore now rejects it at the seam, which protects every surface. This check
+       * stays as well, because without it the dispatch would fall through to its confirmation and
+       * tell the player a score was logged that was not. A caddie that says "got it" and stored
+       * nothing is worse than one that admits it missed. [[no-half-fixes-enforce-every-surface]]
+       */
+      const askedHole = typeof a.hole === 'number' && Number.isFinite(a.hole) ? Math.round(a.hole) : null;
+      if (askedHole != null && (askedHole < 1 || askedHole > MAX_HOLES)) break;
+      const targetHole = askedHole ?? voiceScoreHole(round);
       const rounded = Math.round(a.score);
+      if (rounded < 1) break; // not a golf score
+
       const alreadyScored = (round.scores[targetHole] ?? 0) > 0;
       round.logScore(targetHole, rounded);
       if (!alreadyScored) {
@@ -413,7 +440,18 @@ function dispatchOne(a: AnyAction): void {
       const { resolveShotClub } = require('../shotClubResolver') as typeof import('../shotClubResolver');
       const resolved = resolveShotClub(typeof a.club === 'string' ? a.club : null);
       const shotClub = resolved.club;
-      const shotHole = typeof a.hole === 'number' && a.hole > 0 ? Math.round(a.hole) : round.currentHole;
+      /**
+       * 2026-09-11 (full-app audit) — the same unbounded `a.hole > 0` the score path had, found while
+       * break-testing the guard written for that one. A shot logged onto hole 22 is not as costly as
+       * a score there — it never reaches the handicap — but it still lands in the shot list, the shot
+       * map and the per-club stats attributed to a hole that does not exist, where nothing can show
+       * or correct it. Out of range falls back to the hole he is on, which is the honest default and
+       * already what an absent hole does.
+       */
+      const askedShotHole = typeof a.hole === 'number' && Number.isFinite(a.hole) ? Math.round(a.hole) : null;
+      const shotHole = askedShotHole != null && askedShotHole >= 1 && askedShotHole <= MAX_HOLES
+        ? askedShotHole
+        : round.currentHole;
       const dist = typeof a.distance_yards === 'number' && a.distance_yards > 0 && a.distance_yards <= 500
         ? Math.round(a.distance_yards) : null;
       round.logShot({
