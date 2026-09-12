@@ -438,31 +438,74 @@ export function computeWhsPostingScore(input: {
   strokeIndexByHole?: Record<number, number>; // optional real HCP column; falls back to hole number
 }): { adjustedGrossScore: number; postedHoles: 9 | 18; playedHoles: number } | null {
   const { intendedHoles, courseHandicap, pars, scores, strokeIndexByHole } = input;
-  const POST_MIN = intendedHoles === 9 ? 7 : 14;
-  // 2026-07-25 (deep audit) — a 9-hole round can be the BACK nine (holes 10–18). The loop assumed
-  // 1..intendedHoles, so a back-nine round saw scores[1..9] all empty → played=0 → never posted to the
-  // Index. Detect which nine was actually played from where the scores are, and iterate that range.
-  let firstHole = 1;
-  let lastHole = intendedHoles;
-  if (intendedHoles === 9) {
-    const scored = Object.keys(scores).map(Number).filter((h) => (scores[h] ?? 0) > 0);
-    if (scored.length > 0 && scored.every((h) => h >= 10)) { firstHole = 10; lastHole = 18; }
+
+  /**
+   * 2026-09-11 (Tim, full-app audit) — "if 10-18 don't get scored, or the player stops between 11
+   * and 18 and ends and saves the round, we need to calculate that as 9 played and scored."
+   *
+   * WHS posts a round of 7 to 13 holes as a NINE-HOLE score, and 14 or more as an eighteen. This
+   * function only ever implemented the second half: an eighteen-hole round with 9, 10, 11, 12 or 13
+   * holes scored returned null, so it carried no posting basis at all.
+   *
+   * What that cost depended on the number, which is the worst kind of inconsistency:
+   *   - exactly 9 scored slipped through a LEGACY branch elsewhere (`holesPlayed === 9`) and posted
+   *     as a raw nine — with no net-double-bogey cap and no net-par fill, so a blow-up hole went to
+   *     the Index at full value;
+   *   - 10 through 13 matched no branch anywhere and NEVER reached the Index at all.
+   * A man who walks in after eleven holes had that round silently vanish from his handicap.
+   *
+   * So the decision is made per NINE and the posting length follows what was actually played,
+   * rather than being asserted up front by the caller.
+   */
+  const nineOf = (first: number) => {
+    let ags = 0;
+    let played = 0;
+    let parsKnown = true;
+    for (let hole = first; hole <= first + 8; hole++) {
+      const par = pars[hole];
+      if (par == null || par <= 0) { parsKnown = false; continue; }
+      const strokeIdx = strokeIndexByHole?.[hole] ?? hole;
+      const strokes = strokesReceivedOnHole(courseHandicap, strokeIdx);
+      const actual = scores[hole] ?? 0;
+      // Played → capped at net double bogey. Not completed → net par, the accepted most-likely score.
+      if (actual > 0) { played++; ags += Math.min(actual, netDoubleBogeyCap(par, strokes)); }
+      else { ags += par + strokes; }
+    }
+    return { ags, played, parsKnown };
+  };
+
+  const front = nineOf(1);
+  const back = nineOf(10);
+  const totalPlayed = front.played + back.played;
+
+  // An eighteen needs fourteen played and a full set of pars — unchanged.
+  if (intendedHoles === 18 && front.parsKnown && back.parsKnown && totalPlayed >= 14) {
+    return { adjustedGrossScore: front.ags + back.ags, postedHoles: 18, playedHoles: totalPlayed };
   }
-  let played = 0;
-  let ags = 0;
-  for (let hole = firstHole; hole <= lastHole; hole++) {
-    const par = pars[hole];
-    if (par == null || par <= 0) return null; // can't cap without a known par
-    const strokeIdx = strokeIndexByHole?.[hole] ?? hole;
-    const strokes = strokesReceivedOnHole(courseHandicap, strokeIdx);
-    const netPar = par + strokes;                 // hole not completed → net par (most-likely)
-    const netDoubleBogey = netDoubleBogeyCap(par, strokes);
-    const actual = scores[hole] ?? 0;
-    if (actual > 0) { played++; ags += Math.min(actual, netDoubleBogey); }
-    else { ags += netPar; }
+
+  /**
+   * Otherwise a nine, when seven or more holes were played. Which nine is decided by where the
+   * scores ARE, not by what the round was declared to be: a back-nine round has its scores at
+   * 10–18, and a player who walked in after eleven has most of his on the front.
+   *
+   * STRICTLY a short round (7–13), or a round intended as a nine. A full eighteen that failed above
+   * for a DATA reason — one unknown par — must still return null rather than fall in here: posting
+   * half of a complete round as a nine-hole score would throw away nine real holes and put the wrong
+   * differential on his Index. That was the first version of this and a pre-existing test caught it.
+   */
+  const shortRound = totalPlayed >= 7 && totalPlayed <= 13;
+  if (intendedHoles === 9 ? totalPlayed >= 7 : shortRound) {
+    const pick = back.played > front.played ? back : front;
+    if (pick.parsKnown && pick.played >= 1) {
+      return { adjustedGrossScore: pick.ags, postedHoles: 9, playedHoles: pick.played };
+    }
+    const other = pick === front ? back : front;
+    if (other.parsKnown && other.played >= 1) {
+      return { adjustedGrossScore: other.ags, postedHoles: 9, playedHoles: other.played };
+    }
   }
-  if (played < POST_MIN) return null; // too incomplete to post an honest score
-  return { adjustedGrossScore: ags, postedHoles: intendedHoles, playedHoles: played };
+
+  return null; // too incomplete, or no nine whose pars we know
 }
 
 export function computeRoundHandicap(input: {

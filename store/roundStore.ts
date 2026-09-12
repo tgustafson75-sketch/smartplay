@@ -2523,7 +2523,31 @@ export const useRoundStore = create<RoundState>()(
          * finishing at 9 stays a nine-hole round, because stopping is not evidence of anything.
          */
         if (state.nineHoleMode && hole > maxHole) {
-          const courseHoleCount = state.courseHoles?.length ?? 0;
+          /**
+           * 2026-09-11 (full-app audit) — THIS ASKED THE WRONG OWNER, AND THE ROUND STOPPED COUNTING.
+           *
+           * It read `state.courseHoles.length`, which is a SECOND answer to "how many holes does this
+           * course have" and the weaker one: courseHoles is populated only by startRound, nothing
+           * backfills it, and caddie.tsx has an acknowledged `startedWithoutHoles` path for a course
+           * that is in neither the bundle nor the API. On such a course the count was 0, `0 >= 10`
+           * was false, and a player who walked onto the 10th was clamped back to 9 for the rest of
+           * the round — every hole after that unrecorded. Reproduced by driving the store: start a
+           * front nine with no holes, setCurrentHole(10), and you are on hole 9.
+           *
+           * That is precisely the defect this block was written to prevent, still live for the
+           * courses least likely to have data. getCourseHoleCount is the owner, and it already
+           * answers correctly for all three cases: a bundled nine stays nine and refuses to expand,
+           * a bundled eighteen expands, and an unknown course falls back to 18 — which is the honest
+           * answer, because an empty array is not evidence that a course has nine holes, and the
+           * player's feet on the tenth tee are evidence that it does not.
+           * [[two-owners-is-the-root-cause]]
+           */
+          const courseHoleCount = (() => {
+            try {
+              const { getCourseHoleCount } = require('../data/courses') as typeof import('../data/courses');
+              return getCourseHoleCount(state.activeCourseId, state.courseHoles?.length ?? 0);
+            } catch { return state.courseHoles?.length ?? 0; }
+          })();
           if (courseHoleCount >= hole) {
             console.log(`[roundStore] played past hole ${maxHole} onto ${hole} — expanding this round to the full ${courseHoleCount}`);
             set({ nineHoleMode: false });

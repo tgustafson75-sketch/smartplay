@@ -313,6 +313,24 @@ export const RULES_REFERENCE: RuleEntry[] = [
     common_misconceptions: 'Net double bogey is for HANDICAP posting only. In a tournament playing stroke play, you must hole out (or take double-par max if tournament uses that format).',
     keywords: ['max score', 'net double bogey', 'pick up', 'handicap', 'cap'],
   },
+  {
+    /**
+     * 2026-09-11 (Tim, full-app audit — "we have USGA Rules literally built in the app").
+     *
+     * The handicap engine implemented this rule and the reference could not explain it, so a player
+     * who walked in after eleven holes saw a nine-hole score posted with nowhere to find out why.
+     * The arithmetic and the rules surface now say the same thing. [[two-owners-is-the-root-cause]]
+     */
+    rule_id: 'incomplete_round_posting',
+    category: 'pace_of_play',
+    title: 'Walking in early — what your round posts as',
+    rule_summary: 'Play 7 to 13 holes and it posts as a 9-hole score. Play 14 or more and it posts as an 18.',
+    detailed_explanation: 'Under the World Handicap System a round does not have to be finished to count. Play at least 7 holes but no more than 13 and the score is posted as a 9-hole score; play 14 or more and it is posted as an 18-hole score. Either way the holes you did not play are filled in at net par — your par plus the strokes you get on that hole — and every hole you did play is capped at net double bogey. Fewer than 7 holes is not an acceptable score and does not count.',
+    tactical_advice: 'If you are going to have to walk in, it is worth getting to 7 holes or to 14 — those are the two places the round starts counting for something. And do not grind out a blow-up hole to "be honest": net double bogey is the most it can post for anyway, so pick up and keep the group moving.',
+    official_reference: 'Rules of Handicapping 2.2 and Appendix C (acceptable scores; 9- and 18-hole posting)',
+    common_misconceptions: 'An unfinished round is not a wasted round — most players think it has to be all 18 to count. And the holes you skipped are not counted as zero or as par: they are net par, which includes your strokes received.',
+    keywords: ['incomplete round', 'walked in', 'quit early', 'posting', '9 holes', 'nine hole score', 'handicap', 'unfinished', 'rain', 'darkness'],
+  },
 ];
 
 // Quick lookup helpers

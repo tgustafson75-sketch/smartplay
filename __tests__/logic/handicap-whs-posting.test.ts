@@ -40,10 +40,53 @@ describe('computeWhsPostingScore — M4 pick-up rounds count', () => {
     expect(post!.adjustedGrossScore).toBe(18 * 5);
   });
 
-  it('returns null when too incomplete to post (below WHS minimum of 14 of 18)', () => {
+  /**
+   * 2026-09-11 (Tim, full-app audit) — "if 10-18 don't get scored, or the player stops between 11
+   * and 18 and ends and saves the round, we need to calculate that as 9 played and scored."
+   *
+   * This test used to assert null for ten holes of an eighteen, which encoded the bug: the Rules of
+   * Handicapping post a round of 7 to 13 holes as a NINE-hole score. Only the 14-of-18 half was ever
+   * implemented, so 10 through 13 holes reached the Index nowhere at all, and exactly 9 slipped
+   * through a legacy branch that skipped the net-double-bogey cap entirely.
+   */
+  it('posts 7 to 13 holes of an eighteen as a NINE-hole score', () => {
     const scores: Record<number, number> = {};
-    for (let h = 1; h <= 10; h++) scores[h] = 5; // only 10 holes
+    for (let h = 1; h <= 10; h++) scores[h] = 5; // walked in after ten
+    const post = computeWhsPostingScore({ intendedHoles: 18, courseHandicap: 18, pars: par4x18(), scores });
+    expect(post).not.toBeNull();
+    expect(post!.postedHoles).toBe(9);
+    // The nine it posts is the one the scores are in, capped and net-par filled — not a raw total.
+    expect(post!.playedHoles).toBe(9);
+  });
+
+  it('posts the BACK nine when that is where he played', () => {
+    const scores: Record<number, number> = {};
+    for (let h = 10; h <= 18; h++) scores[h] = 5;
+    const post = computeWhsPostingScore({ intendedHoles: 18, courseHandicap: 18, pars: par4x18(), scores });
+    expect(post!.postedHoles).toBe(9);
+    expect(post!.playedHoles).toBe(9);
+  });
+
+  it('still refuses fewer than seven — that is not a round', () => {
+    const scores: Record<number, number> = {};
+    for (let h = 1; h <= 6; h++) scores[h] = 5;
     expect(computeWhsPostingScore({ intendedHoles: 18, courseHandicap: 18, pars: par4x18(), scores })).toBeNull();
+  });
+
+  it('a full eighteen still posts as eighteen, not as the better nine', () => {
+    const scores: Record<number, number> = {};
+    for (let h = 1; h <= 18; h++) scores[h] = 5;
+    const post = computeWhsPostingScore({ intendedHoles: 18, courseHandicap: 18, pars: par4x18(), scores });
+    expect(post!.postedHoles).toBe(18);
+    expect(post!.playedHoles).toBe(18);
+  });
+
+  it('fourteen of eighteen is an EIGHTEEN, not a nine — the short-round rule stops at thirteen', () => {
+    const scores: Record<number, number> = {};
+    for (let h = 1; h <= 14; h++) scores[h] = 5;
+    const post = computeWhsPostingScore({ intendedHoles: 18, courseHandicap: 18, pars: par4x18(), scores });
+    expect(post!.postedHoles).toBe(18);
+    expect(post!.playedHoles).toBe(14);
   });
 
   it('returns null when a hole par is unknown (can not cap honestly)', () => {
