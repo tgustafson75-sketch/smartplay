@@ -79,15 +79,28 @@ describe('the flag the fix depends on is set synchronously', () => {
   });
 });
 
-describe('the caddie tab still opens the mic after a question', () => {
+describe('the tab no longer arms the mic at all — belt AND braces', () => {
   const TAB = code('app/(tabs)/caddie.tsx');
 
-  it('has not been fixed by simply deleting the feature', () => {
-    expect(TAB).toMatch(/ls\.toggle\(\)/);
-    expect(TAB).toMatch(/willListen/);
+  /**
+   * 2026-09-12, later the same day: Tim removed the trigger as well. "Just don't start with a
+   * question as a rule — make it more statement based." The opener is now an offer, so nothing
+   * opens the mic and this specific collision cannot be staged any more.
+   *
+   * The guard above STAYS regardless. It is not a fix for one call site; primeMicPipeline is
+   * exported and any future caller that opens a session and primes in the same tick would walk into
+   * exactly the same teardown. The call site that happened to find it is gone; the trap was not.
+   */
+  it('the opener does not open a listening session', () => {
+    expect(TAB).not.toMatch(/ls\.toggle\(\)/);
   });
 
-  it('still primes — the warm-up is wanted on every launch that does NOT open the mic', () => {
+  it('still primes — the warm-up is wanted on every launch, and now always safely', () => {
     expect(TAB).toMatch(/primeMicPipeline\(\)/);
+  });
+
+  it('and the guard is in primeMicPipeline itself, not at the call site that tripped it', () => {
+    expect(TAB).not.toMatch(/isSessionInFlight/);
+    expect(VOICE).toMatch(/isSessionInFlight\(\)/);
   });
 });

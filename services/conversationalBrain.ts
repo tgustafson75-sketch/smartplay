@@ -138,43 +138,32 @@ export async function generateProactiveLine(
 }
 
 export async function generateProactiveOpener(
-  opts?: { timeoutMs?: number; willListen?: boolean; gapHint?: string },
+  opts?: { timeoutMs?: number; gapHint?: string },
 ): Promise<BrainReply> {
   /**
-   * 2026-09-11 (Tim) — "when he greets it often is a question but he doesn't listen for an answer.
-   * That will make it Pinocchio instead of a real boy real quick."
+   * 2026-09-12 (Tim) — THE OPENER NEVER ASKS. IT OFFERS.
    *
-   * Exactly right, and it was one decision missing in two places. The directive said "open the
-   * conversation", which invites a question, and nothing downstream armed the mic — so the caddie
-   * asked how your swing felt and then sat there waiting to be tapped. A person who asks a question
-   * and then stares at you is not a person.
+   * "Just don't start with a question as a rule. Make it more statement based like 'when you are
+   *  ready, I am here to help you practice or take that hard work to the course'."
    *
-   * So ONE fact drives both halves. The caller works out whether the mic will actually open (voice
-   * on, proactive on, not local mode, trust above Quiet, kill switch clear) and says so here:
-   *   - it WILL listen  → he may ask, and the caller opens the mic when he does
-   *   - it will NOT     → he must not ask, because nothing can answer him
+   * This SUPERSEDES the 2026-09-11 arrangement, which let him ask whenever the mic was going to open
+   * for the answer. That was built for his "he greets with a question but doesn't listen — Pinocchio
+   * instead of a real boy" report and it did work, but it fixed the wrong half. The problem with an
+   * opening question is not only that nothing hears it; it is that a question is a DEMAND. You have
+   * just opened the app and the first thing that happens is being asked something. A good caddie
+   * opens the door and waits — he does not interview you in the car park.
    *
-   * The second case matters as much as the first. A player at trust level 1 — "Quiet · tap or type
-   * to talk" — getting asked a question the app has no intention of hearing is the same defect,
-   * just quieter. [[feels-like-a-real-caddie]]
+   * A statement also removes the failure mode instead of managing it. Nothing has to arm the mic, so
+   * nothing can be left holding it open — which is exactly what bit on 2026-09-12, when the mic
+   * warm-up tore down the session the opener had just started and Kevin sat listening for 150s.
+   *
+   * THE GAP is still raised — Tim asked for that on 2026-09-11 and it stands — but as an OFFER, not
+   * a question. "When you get a minute I can set your bag up with you" says the same thing as "do
+   * you want to set up your bag?" while asking nothing of a player who is not ready to answer.
    */
-  const willListen = opts?.willListen === true;
-  /**
-   * 2026-09-11 (Tim, second pass) — AND HE ONLY ASKS WHEN HE HAS A REASON.
-   *
-   * "Unless it's logical don't have caddie ask repeatedly questions that could make it unnatural,
-   * stopping the conversation by having to keep telling the caddie you are good and don't need
-   * anything."
-   *
-   * `gapHint` is that reason: one real, named gap in their setup (services/setupGaps), not a
-   * generic offer of help. With no gap there is no question — he greets and leaves them alone.
-   *
-   * The hint says what is missing and why it matters, never the sentence. A caddie reading a
-   * prompted line back is the robotic tell this app treats as a defect. [[feels-like-a-real-caddie]]
-   */
-  const ask = willListen && opts?.gapHint
-    ? `There is ONE thing worth raising, briefly and naturally, in your own words — never as a script, never as a list: ${opts.gapHint} Offer it once, lightly, and end on a short question. The mic opens the moment you stop speaking, so they can simply answer out loud. If they say no, drop it — do not raise it again.`
-    : 'Do NOT end with a question, and do not offer help or ask what they want to work on. There is nothing you need from them right now and nothing is listening for an answer. Just greet them warmly and stop.';
+  const ask = opts?.gapHint
+    ? `There is ONE thing worth mentioning, briefly and naturally, in your own words — never as a script, never as a list: ${opts.gapHint} Put it as an OFFER, not a question: say it is there for when they want it, and leave the door open. It must NOT end in a question mark. If they do not pick it up, let it go.`
+    : 'Do NOT ask a question. Do not end on a question mark, and do not ask what they want to work on or how anything felt. Greet them and leave the door open as a STATEMENT — the shape is "when you are ready, I am here to help you practise or take that work to the course". Warm, unhurried, and asking nothing of them.';
   const turn = await askCaddie({
     // A directive, NOT a player utterance — is_proactive tells the brain the player didn't ask.
     message: `The player just opened the app and is on the caddie home screen (not in a round). Greet them as their caddie and open the conversation — warm, natural, one or two sentences, by name if you know it. If you know their game, you may nod to it. Never read a script. ${ask}`,

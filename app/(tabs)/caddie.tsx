@@ -1753,59 +1753,25 @@ export default function CaddieTab() {
         // the very next reply ("yes") is answered in context. Best-effort: on any failure we stay
         // silent (no canned fallback — that was the whole problem). One call returns text + TTS audio.
         /**
-         * 2026-09-11 (Tim) — WILL HE ACTUALLY LISTEN? Decide BEFORE he speaks.
+         * 2026-09-12 (Tim — "don't start with a question as a rule") — the opener is a STATEMENT
+         * now, so nothing has to listen and the gap no longer needs the mic to be available.
          *
-         * "When he greets it often is a question but he doesn't listen for an answer. That will make
-         * it Pinocchio instead of a real boy real quick."
-         *
-         * The gates above already establish that proactive speech is allowed. Listening needs two
-         * more: the voice kill switch must be clear (services/listeningSession.toggle returns
-         * silently when it is not, so without checking we would promise a mic that never opens), and
-         * the player must be above trust level 1 — whose own store entry reads "Quiet · tap or type
-         * to talk", and asking a Quiet player a question the app will not hear is the same defect in
-         * a lower voice.
+         * The old code gated this lookup on the voice_caddie flag, because the gap used to be raised
+         * as a QUESTION and asking one with the mic dead is the Pinocchio defect. As an offer — "when
+         * you get a minute I can set your bag up with you" — it is worth saying to every player,
+         * including one who only ever types. Gating it on the mic would have hidden a useful offer
+         * from exactly the players least likely to find the setting on their own.
          */
-        /**
-         * 2026-09-11 (Tim, second pass) — HE ASKS WHEN HE HAS A REASON, NOT AS A HABIT.
-         *
-         * "Unless it's logical don't have caddie ask repeatedly questions that could make it
-         * unnatural — stopping the conversation by having to keep telling the caddie you are good
-         * and don't need anything."
-         *
-         * So the question is no longer "may I ask?" but "do I have something worth asking about?".
-         * services/setupGaps answers it: one real gap in their setup, weighted so the bag wins (it
-         * feeds every club call), rate-limited a fortnight per gap so a player who ignores it is not
-         * asked again this month. No gap → he greets with a statement and the mic stays shut.
-         *
-         * AND THE TRUST GATE IS GONE. I had required level 2, treating Quiet as "do not ask". Tim
-         * corrected it: "logical natural conversation doesn't break L1. It helps it by getting to
-         * the point, having the right dialogue — not close and confuse it with an active listening
-         * violation." He is right. Trust level governs whether the caddie SPEAKS proactively at all,
-         * which the gates above already settle. Once he has spoken and asked, refusing to hear the
-         * answer is not restraint, it is the same Pinocchio defect in a lower voice.
-         *
-         * The voice kill switch stays, because that one is not a preference — toggle() returns
-         * silently when it is off, so without it we would promise a mic that cannot open.
-         */
-        const micCanOpen = (() => {
+        const gap = await (async () => {
           try {
-            const { isFlagEnabled } = require('../../store/flagStore') as typeof import('../../store/flagStore');
-            return isFlagEnabled('voice_caddie');
-          } catch { return false; }
+            const sg = require('../../services/setupGaps') as typeof import('../../services/setupGaps');
+            return await sg.liveSetupGap();
+          } catch { return null; }
         })();
-        const gap = micCanOpen
-          ? await (async () => {
-              try {
-                const sg = require('../../services/setupGaps') as typeof import('../../services/setupGaps');
-                return await sg.liveSetupGap();
-              } catch { return null; }
-            })()
-          : null;
-        const willListen = micCanOpen && gap != null;
         console.log('[caddie] opener: generating from brain', {
-          persona: liveSettings.caddiePersonality, willListen, gap: gap?.key ?? null,
+          persona: liveSettings.caddiePersonality, gap: gap?.key ?? null,
         });
-        const r = await generateProactiveOpener({ willListen, gapHint: gap?.hint });
+        const r = await generateProactiveOpener({ gapHint: gap?.hint });
         if (r.text) {
           if (r.audioBase64) {
             await speakFromBase64(r.audioBase64, { userInitiated: true, caption: r.text }).catch(() => undefined);
@@ -1817,33 +1783,14 @@ export default function CaddieTab() {
           // launch / hot-reload retries cleanly (same guarantee the mp3 path had).
           openerPlayedThisProcess = true;
           claimOpenerSlot();
-          /**
-           * 2026-09-11 (Tim) — HE ASKED, SO HE LISTENS.
-           *
-           * Only when he actually ended on a question. A greeting that is a statement should not
-           * open the mic — that would be listening at someone rather than to them, and it is the
-           * kind of thing that makes an app feel like it is watching.
-           *
-           * `toggle()` is the one chokepoint every mic path uses, so it carries the kill switch, the
-           * Smart Motion camera guard and the tap dedupe for free. If the player says nothing the
-           * session times out on its own; there is no second prompt and no nag.
-           */
-          // Mark the gap raised whether or not he phrased it as a question — he brought it up, and
-          // bringing it up again next launch is the nagging Tim asked to avoid.
+          // Mark the gap raised: he brought it up, and bringing it up again next launch is the
+          // nagging Tim asked to avoid. Raised as an OFFER now, so there is no answer to wait for —
+          // a player who ignores it has declined it, which is the whole point of the cooldown.
           if (gap) {
             try {
               const sg = require('../../services/setupGaps') as typeof import('../../services/setupGaps');
               void sg.markGapAsked(gap.key);
             } catch { /* a missed mark only means it may come round again later */ }
-          }
-          if (willListen && /\?\s*$/.test(r.text.trim()) && !isSpeaking()) {
-            try {
-              const ls = require('../../services/listeningSession') as typeof import('../../services/listeningSession');
-              if (!ls.isSessionInFlight()) {
-                console.log('[caddie] opener ended on a question — opening the mic to hear the answer');
-                void ls.toggle();
-              }
-            } catch (e) { console.log('[caddie] opener listen failed (non-fatal):', e); }
           }
         } else {
           console.log('[caddie] opener skipped: brain returned no text (staying silent, not canned)');
