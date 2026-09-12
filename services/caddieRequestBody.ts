@@ -819,9 +819,26 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * lookup — the caddie reads down a list that silently omits it. And nothing stopped it naming a
      * club they no longer carry but still have history for.
      */
+    /**
+     * 2026-09-11 (Tim — "triple check plays like and its relationship to the user's bag") — THE BAG
+     * HE IS CARRYING, NOT THE BAG HE OWNS.
+     *
+     * This read bagList(), which is everything REGISTERED. Earlier the same day the Sunday-bag work
+     * scoped the local club pick to carriedList() — services/shotReadLive — and this payload was not
+     * moved with it. So the two halves of one decision disagreed: cnsShotRead would never pick the
+     * 3 wood he left at home, and the brain was handed a block headed "[CLUBS IN THE BAG]" that
+     * listed it and says outright "You may name one of these". The caddie could recommend a club
+     * sitting in the garage while the on-screen read refused to.
+     *
+     * My own half-fix, found by auditing my own morning's work. [[no-half-fixes-enforce-every-surface]]
+     * [[two-owners-is-the-root-cause]]
+     *
+     * carriedList() returns the whole registered bag whenever no subset has been chosen, so a player
+     * who never touches the pack screen is completely unaffected.
+     */
     bagClubs: safe(() => {
       const { useClubBagStore } = require('../store/clubBagStore') as typeof import('../store/clubBagStore');
-      return useClubBagStore.getState().bagList().map((c) => c.club_id);
+      return useClubBagStore.getState().carriedList().map((c) => c.club_id);
     }, []),
     /** Per-club character (shape + miss + carry), evidence-barred by clubTendency itself. */
     club_tendencies: safe(() => {

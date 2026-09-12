@@ -2107,7 +2107,17 @@ ${emoArr.slice(-5).map(e => `  - ${e.state ?? '?'}` + (e.valence ? ` (${e.valenc
        * one question where guessing is expensive. Probed: with a 235-yard 3-wood in the bag it told
        * a player 210 over water was "beyond your 3-wood".
        */
-      ? `[THE BAG — real CARRY distances in yards: what the ball FLIES, roll not included]\n${bagEntries.map(([c, y]) => `  ${c}: ${y}`).join('\n')}\n[/BAG]\n`
+      /**
+       * 2026-09-11 (Tim — "triple check plays like and its relationship to the user's bag") — THIS
+       * BLOCK IS A DISTANCE REFERENCE, NOT AN INVENTORY, AND IT USED TO CLAIM OTHERWISE.
+       *
+       * It is built from every club with a measured carry, which is a fact about the PLAYER and
+       * stays true whether or not the club is with him today. [CLUBS IN THE BAG] below is the
+       * inventory. Both were headed "THE BAG", so on a Sunday-bag round the model met two
+       * contradictory lists — fourteen clubs here, four there — and the longer, more specific one
+       * wins every time. It would have recommended a club sitting in the garage.
+       */
+      ? `[CARRY DISTANCES — how far this player FLIES each club he owns, roll not included. A reference, NOT what is with him today]\n${bagEntries.map(([c, y]) => `  ${c}: ${y}`).join('\n')}\n[/CARRY DISTANCES]\n`
       : '';
     /**
      * 2026-08-26 — WHICH CLUBS ARE ACTUALLY IN THE BAG, which is a different fact from which clubs
@@ -2122,12 +2132,25 @@ ${emoArr.slice(-5).map(e => `  - ${e.state ?? '?'}` + (e.valence ? ` (${e.valenc
     const registered = Array.isArray(bagClubs)
       ? (bagClubs as unknown[]).filter((c): c is string => typeof c === 'string' && c.length > 0)
       : [];
-    const measured = new Set(bagEntries.map(([c]) => c));
+    const measuredList = bagEntries.map(([c]) => c as string);
+    const measured = new Set(measuredList);
     const unmeasured = registered.filter((c) => !measured.has(c));
+    /**
+     * 2026-09-11 — and when he is carrying a SUBSET, say so explicitly.
+     *
+     * A club can have a carry distance above and not be in this list: that is a Sunday bag, or a
+     * par-3 nine, or a competition trim to fourteen. The model must not reach past this list for a
+     * recommendation, and it is genuinely useful for it to know WHY a club is unavailable rather
+     * than to silently never mention it.
+     */
+    const leftAtHome = measuredList.filter((c) => !registered.includes(c));
     const bagClubsBlock = registered.length > 0
-      ? `[CLUBS IN THE BAG] ${registered.join(', ')}\n`
+      ? `[CLUBS IN THE BAG — the ONLY clubs available this round; never recommend one that is not here] ${registered.join(', ')}\n`
         + (unmeasured.length > 0
           ? `  No measured carry yet for: ${unmeasured.join(', ')}. You may name one of these, but say you do not have their number for it yet — never invent a yardage.\n`
+          : '')
+        + (leftAtHome.length > 0
+          ? `  NOT with him today (he has carries for these but left them out): ${leftAtHome.join(', ')}. If one would have been the play, you may say so — do not recommend hitting it.\n`
           : '')
         + '[/CLUBS IN THE BAG]\n'
       : '';
