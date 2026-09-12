@@ -146,10 +146,29 @@ every fitting session — is captured below `MIN_TRACE_FPS`.
    light is too poor for high fps (high-speed modes need it), say that instead of quietly dropping.
 4. **Record the fps on every captured swing**, and refuse to compare two contenders captured at
    different rates without flagging it — that is a confound exactly like using two different balls.
-5. **External camera — the original concept.** A GoPro at 240fps is the honest path to strike-level
-   feedback, and none of this pipeline assumes the phone is the camera: SmartMotion already accepts
-   uploaded video. An external-source fitting session is mostly an import flow plus the fps metadata,
-   not a new engine.
+5. **External camera — the original concept, and it was a whole bay.** Tim, 2026-09-12: *"in first
+   gen I was going to put a GoPro on my cage and stream my phone to a big screen as my own cheap-ass
+   bay."*
+
+   That is the setup this feature should assume, not a phone propped on a bag. A fixed camera on a
+   cage is **better** than a handheld phone in every way that matters here: identical framing across
+   every contender (the single biggest confound in a comparison — move the camera between clubs and
+   the pose angles shift), a locked distance and height, and a rate the phone cannot reach.
+
+   None of the pipeline assumes the phone is the camera — SmartMotion already accepts uploaded
+   video — so an external-source session is mostly an import flow plus fps metadata, not a new
+   engine. Two things it does need:
+
+   - **fps from the file.** We cannot read it today. `expo-av` gives `durationMillis` and no frame
+     rate, and the frame extractor samples by TIME offset rather than by frame index. So a 240fps
+     GoPro clip yields more distinct samples than a 30fps one, but the app cannot say which it got —
+     and `MIN_TRACE_FPS` cannot honestly gate what it cannot measure.
+   - **A fixed-rig mode.** Calibrate once — angle, distance, height — then every session reuses it,
+     and the app can flag when the rig has moved rather than silently comparing two setups.
+
+   The big screen is the other half of it, and it is a real product surface rather than a nicety: at
+   a cage you are not holding the phone, so the session has to be readable across a room and drivable
+   by voice. That is already how this app prefers to be used.
 
 ---
 

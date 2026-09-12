@@ -1244,8 +1244,14 @@ export default function SmartMotion() {
   // meaningfully true in a build that linked react-native-vision-camera. On any
   // other build the require never runs, so the native module is never touched and
   // this screen's JS ships safely over OTA. (require, not import, is the point.)
+  /**
+   * 2026-09-12 — a runtime opt-out for this session when vision-camera loads but cannot serve a
+   * device. Not persisted: it is a property of this device right now, and a transient failure must
+   * not permanently downgrade a phone that can do 120fps.
+   */
+  const [visionUnavailable, setVisionUnavailable] = useState(false);
   const SwingVisionCamera = useMemo(() => {
-    if (!useVisionCamera) return null;
+    if (!useVisionCamera || visionUnavailable) return null;
     try {
       return require('../../components/capture/SwingVisionCamera').SwingVisionCamera as typeof import('../../components/capture/SwingVisionCamera').SwingVisionCamera;
     } catch {
@@ -1254,7 +1260,7 @@ export default function SmartMotion() {
       // lazy require above.)
       return null;
     }
-  }, [useVisionCamera]);
+  }, [useVisionCamera, visionUnavailable]);
   const videoRef = useRef<Video>(null);
   // 2026-08-05 (Tim — NATIVE fatal: expo-av ExoPlayer released off-main in AVManager.onHostDestroy →
   // "Player accessed on the wrong thread" crash-to-launcher when leaving a swing while background
@@ -5227,6 +5233,10 @@ export default function SmartMotion() {
           // lands (Stage 1 follow-up). Default OFF → this is dead, CameraView runs.
           useVisionCamera && SwingVisionCamera ? (
             <SwingVisionCamera
+              onUnavailable={() => {
+                console.warn('[smartmotion] vision-camera has no device — falling back to expo-camera');
+                setVisionUnavailable(true);
+              }}
               ref={cameraRef as unknown as React.Ref<SwingCameraHandle>}
               style={StyleSheet.absoluteFill}
               facing={facing}

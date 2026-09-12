@@ -40,6 +40,15 @@ interface Props {
   /** vision-camera streams only while active; mirror CameraView mount/unmount. */
   isActive?: boolean;
   onCameraReady?: () => void;
+  /**
+   * 2026-09-12 — fired when this engine cannot run on this device.
+   *
+   * `if (!device) return null` below renders NOTHING. The parent has already committed to the vision
+   * branch by then (its lazy require succeeded, so the native module is linked), which left the
+   * player looking at a blank frame with no capture at all — a worse outcome than the 30fps engine
+   * it replaced. The parent needs to hear about it so it can fall back.
+   */
+  onUnavailable?: () => void;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -50,7 +59,7 @@ function toUri(path: string): string {
 }
 
 export const SwingVisionCamera = forwardRef<SwingCameraHandle, Props>(function SwingVisionCamera(
-  { facing = 'back', isActive = true, onCameraReady, style },
+  { facing = 'back', isActive = true, onCameraReady, onUnavailable, style },
   ref,
 ) {
   const device = useCameraDevice(facing);
@@ -121,6 +130,16 @@ export const SwingVisionCamera = forwardRef<SwingCameraHandle, Props>(function S
 
   // No camera (permission denied / unavailable) → render nothing; recordAsync
   // resolves undefined, matching the "no capture" path the caller already handles.
+  /**
+   * No camera device for this facing — the module is linked but cannot serve this device. Tell the
+   * parent so it falls back to expo-camera rather than showing an empty frame. Reported from an
+   * effect, never during render: calling a parent's setState inside render is a React warning and,
+   * worse, can loop.
+   */
+  useEffect(() => {
+    if (!device) onUnavailable?.();
+  }, [device, onUnavailable]);
+
   if (!device) return null;
 
   return (
