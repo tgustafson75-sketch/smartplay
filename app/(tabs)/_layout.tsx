@@ -8,6 +8,8 @@ import { DASHBOARD_TOUR_STEPS, PLAY_TOUR_STEPS, SCORECARD_TOUR_STEPS, SWINGLAB_T
 import { useTabTour } from '../../hooks/useTabTour';
 import { useFlag } from '../../store/flagStore';
 import { useTranslation } from 'react-i18next';
+import { TAB_BAR_HEIGHT } from '../../services/caddieLayoutBudget';
+import { useTheme } from '../../contexts/ThemeContext';
 
 // 2026-07-30 (Tim — "Show me around on SwingLab + basics on all main tabs"). One host that shows the
 // FOCUSED tab's short basics tour (the caddie tab runs its own richer tour on its screen). Reuses the same
@@ -69,6 +71,13 @@ function CaddieTabIcon({ focused, label }: { focused: boolean; label: string }) 
 
 export default function TabLayout() {
   const { t } = useTranslation();
+  /**
+   * 2026-09-11 (Tim — "thematically disjointed") — the tab row's fill and border were literal
+   * '#0d1a0d' / '#1e3a28', which ARE the dark palette's `surface` and `border`. In light mode that
+   * left a black bar under a #f5f9f6 page. Same values in dark, resolved from the palette in all
+   * five so the row belongs to whichever theme is on.
+   */
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const swinglabEnabled = useFlag('swinglab');
   const isRoundActive = useRoundStore(s => s.isRoundActive);
@@ -80,10 +89,10 @@ export default function TabLayout() {
   // ("doesn't lay out right"). A small constant bottom pad keeps it breathing if the
   // caddie bar is ever disabled via its kill switch.
   const sharedTabBarStyle = {
-    backgroundColor: '#0d1a0d',
-    borderTopColor: '#1e3a28',
+    backgroundColor: colors.surface,
+    borderTopColor: colors.border,
     borderTopWidth: 1,
-    height: 48,
+    height: TAB_BAR_HEIGHT,
     paddingBottom: 6,
     paddingTop: 4,
   };

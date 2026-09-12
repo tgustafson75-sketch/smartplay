@@ -24,6 +24,7 @@
  */
 import fs from 'fs';
 import path from 'path';
+import { composeTheme, darkTheme, lightTheme } from '../../theme/tokens';
 
 const ROOT = path.join(__dirname, '../..');
 
@@ -72,9 +73,17 @@ const REVIEWED_SAFE: Record<string, string> = {
   'components/course/HolePhotosGrid.tsx': 'placeholderWrap overrides backgroundColor inline with colors.surface',
 };
 
-/** Files that FIXED the bug by pinning their contents. They must stay pinned. */
+/**
+ * Files that FIXED the bug by pinning their contents. They must stay pinned.
+ *
+ * 2026-09-11 — CaddieBottomBar LEFT this list. Pinning its text was the 2026-09-06 fix for a bar
+ * whose fill was a hardcoded '#0d1a0d'; the bar is now themed (`colors.surface`), so both halves
+ * move together and pinning would re-break it in the opposite direction — white-pinned text on a
+ * white light-mode pill. The invariant it actually has to satisfy is asserted directly further down
+ * ("the caddie bottom bar specifically"), computed across every palette rather than by pinning an
+ * implementation. coach-lesson is unchanged: its surface really is a fixed black video review pane.
+ */
 const PINNED_SURFACES: { file: string; consts: string[] }[] = [
-  { file: 'components/caddie/CaddieBottomBar.tsx', consts: ['ON_BAR_TEXT', 'ON_BAR_MUTED'] },
   { file: 'app/swinglab/coach-lesson.tsx', consts: ['ON_BLACK_TEXT', 'ON_BLACK_MUTED'] },
 ];
 
@@ -117,14 +126,70 @@ describe('a fixed-colour surface never carries theme-coloured text', () => {
     },
   );
 
-  it('the caddie bottom bar specifically — the one Tim hit on the course', () => {
-    const src = fs.readFileSync(path.join(ROOT, 'components/caddie/CaddieBottomBar.tsx'), 'utf8');
-    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-    // The bar is still dark...
-    expect(code).toContain("backgroundColor: '#0d1a0d'");
-    // ...and nothing painted on it reads a theme text colour any more.
-    expect(code).not.toMatch(/color:\s*colors\.text_/);
-    expect(code).not.toMatch(/color=\{colors\.text_/);
-    expect(code).not.toMatch(/placeholderTextColor=\{colors\./);
+  /**
+   * THE INVARIANT, stated directly: whatever palette is active, the text painted on the caddie bar
+   * must be legible against the bar's own fill. This is what the 2026-09-06 incident was really
+   * about — light mode resolved text_primary to '#0d1a0d' while the bar painted '#0d1a0d', so the
+   * contrast ratio was exactly 1.00 and everything on the bar vanished.
+   *
+   * Computed from the palettes rather than asserted about the source, so it holds for whichever fix
+   * is in place — pinning the text, theming the surface, or anything later.
+   */
+  describe('the caddie bottom bar specifically — the one Tim hit on the course', () => {
+    const srgb = (c: number) => {
+      const v = c / 255;
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    };
+    const luminance = (hex: string) => {
+      const h = hex.replace('#', '');
+      const [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
+      return 0.2126 * srgb(r) + 0.7152 * srgb(g) + 0.0722 * srgb(b);
+    };
+    const contrast = (a: string, b: string) => {
+      const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
+      return (x + 0.05) / (y + 0.05);
+    };
+
+    /** Every palette the app can actually be in. */
+    const PALETTES = [
+      ['dark', composeTheme(darkTheme, true, false)],
+      ['light', composeTheme(lightTheme, false, false)],
+      ['dark high-contrast', composeTheme(darkTheme, true, true)],
+      ['light high-contrast', composeTheme(lightTheme, false, true)],
+    ] as const;
+
+    it.each(PALETTES.map(([n, t]) => [n, t] as const))(
+      'input text is legible on the bar in %s',
+      (name, theme) => {
+        const ratio = contrast(theme.colors.surface, theme.colors.text_primary);
+        expect(`${name}:${ratio >= 4.5}`).toBe(`${name}:true`);
+      },
+    );
+
+    it.each(PALETTES.map(([n, t]) => [n, t] as const))(
+      'the placeholder is legible on the bar in %s',
+      (name, theme) => {
+        // A placeholder is deliberately quieter than body text, so it gets the large-text floor.
+        const ratio = contrast(theme.colors.surface, theme.colors.text_muted);
+        expect(`${name}:${ratio >= 3}`).toBe(`${name}:true`);
+      },
+    );
+
+    it('REJECTS the exact pairing Tim hit — the old bar fill against light-mode text', () => {
+      // The bar used to paint '#0d1a0d'; light mode's text_primary is byte-identical.
+      expect(lightTheme.colors.text_primary).toBe('#0d1a0d');
+      expect(contrast('#0d1a0d', lightTheme.colors.text_primary)).toBeCloseTo(1, 5);
+      // ...so had the fill stayed hardcoded, the assertions above would fail. Prove that.
+      expect(contrast('#0d1a0d', lightTheme.colors.text_primary) >= 4.5).toBe(false);
+    });
+
+    it('the bar takes both its fill and its text from the palette, not from literals', () => {
+      const src = fs.readFileSync(path.join(ROOT, 'components/caddie/CaddieBottomBar.tsx'), 'utf8');
+      const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+      expect(code).not.toContain("'#0d1a0d'");
+      expect(code).toMatch(/backgroundColor: colors\.surface/);
+      expect(code).toMatch(/colors\.text_primary/);
+      expect(code).toMatch(/placeholderTextColor=\{colors\.text_muted\}/);
+    });
   });
 });

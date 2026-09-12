@@ -236,3 +236,23 @@ export function composeTheme(
     colors: { ...base.colors, ...overlay },
   };
 }
+
+/**
+ * 2026-09-11 — Fade a palette colour to transparency.
+ *
+ * The caddie hero's melt-gradient has to END on whatever the page behind it actually is, or it stops
+ * being a dissolve and becomes a hard edge — which is what Tim photographed in light mode, where the
+ * gradient melted to the DARK palette's `#060f09` over a `#f5f9f6` page. The gradient needs the same
+ * colour at three alphas, so the conversion lives with the palette rather than being open-coded at
+ * the one call site that happens to need it today.
+ *
+ * Accepts the `#rrggbb` form every token in this file uses; anything else is returned untouched so a
+ * future `rgba()` or named token degrades to opaque rather than rendering as a black band.
+ */
+export function withAlpha(color: string, alpha: number): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(color.trim());
+  if (!m) return color;
+  const n = parseInt(m[1], 16);
+  const a = Math.max(0, Math.min(1, alpha));
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}

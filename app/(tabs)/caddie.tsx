@@ -5,6 +5,8 @@ import { View, Text, TouchableOpacity, StyleSheet, Modal, Alert, Animated, Easin
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { caddieLayoutBudget, TAB_BAR_HEIGHT } from '../../services/caddieLayoutBudget';
+import { useCaddieBarReserve } from '../../components/GlobalCaddieBar';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { pushCourseGuarded } from '../../utils/courseNav';
 import { haversineYards } from '../../utils/geoDistance';
@@ -197,6 +199,23 @@ export default function CaddieTab() {
   const styles = useMemo(() => makeStyles(theme.colors), [theme.colors]);
 
   const { width: W, height: H } = useWindowDimensions();
+  /**
+   * 2026-09-11 — ONE OWNER FOR THIS TAB'S VERTICAL SPACE. Every bottom offset below used to be a
+   * hand-tuned constant plus `insets.bottom`; the bar below us already spends that inset and the tab
+   * bar + caddie bar are outside this screen's box, so those constants stranded ~150dp of dead page
+   * under the portrait. See services/caddieLayoutBudget.ts for the full autopsy.
+   */
+  const caddieBarReserve = useCaddieBarReserve();
+  const budget = useMemo(
+    () => caddieLayoutBudget({
+      W, H,
+      insetTop: insets.top,
+      insetBottom: insets.bottom,
+      barReserve: caddieBarReserve,
+      tabBarHeight: TAB_BAR_HEIGHT,
+    }),
+    [W, H, insets.top, insets.bottom, caddieBarReserve],
+  )
   // Natural 9:16 frame height — shows Kevin's full portrait without over-zoom
   // Phase AU.1 — natural 9:16 frame for Kevin (canonical).
   // Phase AU.2 — capped on wide aspects so Kevin doesn't extend below
@@ -3445,7 +3464,7 @@ export default function CaddieTab() {
           bottom controls. */}
       <TouchableOpacity
         style={{
-          position: 'absolute', right: 14, bottom: insets.bottom + 168, zIndex: 20,
+          position: 'absolute', right: 14, bottom: budget.bubbleClearance, zIndex: 20,
           width: 46, height: 46, borderRadius: 12, borderWidth: 1.5,
           borderColor: '#00C896', backgroundColor: 'rgba(6,15,9,0.7)',
           alignItems: 'center', justifyContent: 'center',
@@ -3485,8 +3504,8 @@ export default function CaddieTab() {
         // SmartVision preview and the text never overlap. The bubble sits at
         // bottom (isRoundActive ? 168 : 108) + ib and is up to 3 lines (~104px) tall;
         // end the cells above it (never tighter than the prior 150 dropdown clearance).
-        const bubbleClearance = (isRoundActive ? 168 : 108) + insets.bottom + 104;
-        const cellMaxBottom = H - Math.max(150 + insets.bottom, bubbleClearance);
+        const bubbleClearance = budget.bubbleClearance + (isRoundActive ? 60 : 0);
+        const cellMaxBottom = H - Math.max(budget.heroBottom, bubbleClearance);
         if (isWide) {
           const cellW = (W - 36) / 2;
           const cellH = Math.min(360, cellMaxBottom - cellTop);
@@ -3579,12 +3598,12 @@ export default function CaddieTab() {
           corner box to swap — that tap IS the Quiet<->Active toggle. No Cockpit, no Harry. */}
       {(() => {
         const caddiePrimary = trustLevel !== 1; // 1 = Quiet → SmartVision leads
-        const zoneBottom = 150 + insets.bottom;
+        const zoneBottom = budget.heroBottom;
         // 2026-07-25 (Tim — "top box extends to the top / overlays the status bar; contain it") — pin the
         // top box with an EXPLICIT top gap below the phone's status bar and an explicit bottom above the
         // controls. Top+bottom positioning fills the space cleanly on ANY screen size (phone → Fold-open)
         // and can never ride under the status bar again.
-        const zoneTop = insets.top + 12;
+        const zoneTop = budget.heroTop;
         const zoneHeight = Math.max(0, H - zoneTop - zoneBottom);
         const swap = () => {
           try { Haptics.selectionAsync().catch(() => {}); } catch { /* optional */ }
@@ -3625,7 +3644,7 @@ export default function CaddieTab() {
               style={{
                 position: 'absolute',
                 left: 12,
-                bottom: 132 + insets.bottom,
+                bottom: budget.cornerBottom,
                 width: 120,
                 height: 86,
                 borderRadius: 14,
@@ -3981,7 +4000,7 @@ export default function CaddieTab() {
         <HolePlanChip
           plan={livePlan.plan}
           budgetLine={livePlan.budget}
-          bottomOffset={84}
+          bottomOffset={94}
           visible={isRoundActive}
         />
         <CaddieDataStrip
@@ -3995,9 +4014,11 @@ export default function CaddieTab() {
           targetDirection={targetDirection}
           stroke={currentStroke}
           visible={true}
-          // Phase AT — Tim wants the strip as LOW as possible. bottom: 0
-          // pins it to the very bottom edge of the screen.
-          bottomOffset={0}
+          // Phase AT — Tim wants the strip as LOW as possible. 2026-09-11: still true, but the
+          // strip is now a floating rounded pill over a full-bleed portrait (his reference board),
+          // and a pill flush at bottom: 0 reads as a bar bolted to the tab row. 10dp is the least
+          // float that lets it read as floating.
+          bottomOffset={10}
           // Phase 400-followup — surface whether the strip's PLAYS yardage
           // came from live GPS or scorecard fallback. liveYardage is non-null
           // only when yardageMode='live' AND GPS resolved a haversine yards
@@ -4023,7 +4044,7 @@ export default function CaddieTab() {
       {/* PENALTY QUICK-TAP — only visible when the scoring tool is open. */}
       {isRoundActive && showShotCard && (
         <TouchableOpacity
-          style={[styles.penaltyQuickBtn, { bottom: 96 + insets.bottom }]}
+          style={[styles.penaltyQuickBtn, { bottom: budget.controlsBottom }]}
           onPress={() => { addPenalty(currentHole); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); }}
           activeOpacity={0.75}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -4051,7 +4072,7 @@ export default function CaddieTab() {
           // 2026-07-25 (Tim — "too much space around Start Round") — the global caddie bar + tab bar now
           // own the bottom safe area, so the old `24 + insets.bottom` double-counted it and floated the
           // button too high. Sit it just above the tab row.
-          style={[styles.startRoundBtn, { bottom: 22 }]}
+          style={[styles.startRoundBtn, { bottom: budget.ctaBottom }]}
           // Caddie's Start Round button now routes to the Play tab (Course
           // Discovery). After a course is picked there, the Selected Course
           // card's "Start Round" button navigates back here with

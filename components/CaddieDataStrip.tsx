@@ -494,19 +494,27 @@ export default function CaddieDataStrip({
 }
 
 const styles = StyleSheet.create({
-  // ── Horizontal (portrait) wrapper ────────
+  /**
+   * ── Horizontal (portrait) wrapper ────────
+   *
+   * 2026-09-11 (Tim's inspiration board) — this was a flush edge-to-edge bar with square corners and
+   * a top hairline, because it used to butt against the page below a boxed hero. The reference this
+   * tab was designed from floats ONE rounded data pill over a full-bleed portrait, and the hero is
+   * now full-bleed, so the strip is inset and rounded to match. Every cell it carries is unchanged —
+   * Tim: "it cannot erase the added functions we have, would like it to be a blend of the two."
+   *
+   * Still as low as it can sit (the Phase AT instruction): a 10dp float is what makes it read as a
+   * pill ON the portrait rather than a bar bolted to the tab row.
+   */
   wrapper: {
     position: 'absolute',
     bottom: 0,
-    left: 0,
-    right: 0,
+    left: 10,
+    right: 10,
     height: 84,
-    borderRadius: 0,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(30, 58, 40, 0.5)',
-    borderLeftWidth: 0,
-    borderRightWidth: 0,
-    borderBottomWidth: 0,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(30, 58, 40, 0.5)',
     overflow: 'hidden',
     zIndex: 5,
   },

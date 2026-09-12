@@ -299,11 +299,22 @@ describe('it is wired to the caddie AND to the screen, from ONE composer', () =>
     expect(chip).toMatch(/if \(!plan \|\| !visible \|\| plan\.steps\.length === 0\) return null;/);
   });
 
-  it('the chip is positioned above the strip, so the frozen layout does not move', () => {
+  it('the chip clears the strip entirely, whatever the strip is doing', () => {
+    // 2026-09-11 — this used to pin the literals `bottomOffset={84}` and `bottom: 0,`. That asserted
+    // ONE arrangement rather than the property, so floating the strip as a rounded pill (Tim's
+    // reference board) broke a guard about the chip. DERIVE both offsets and assert the relation:
+    // the chip must sit above the strip's top edge, whatever numbers either one is using.
     expect(chip).toMatch(/position: 'absolute'/);
-    expect(caddieTab).toMatch(/bottomOffset=\{84\}/);
-    // CaddieDataStrip keeps bottom: 0 and its own height.
-    expect(R('components/CaddieDataStrip.tsx')).toMatch(/bottom: 0,/);
+
+    const strip = R('components/CaddieDataStrip.tsx');
+    const stripHeight = Number(/^\s*height: (\d+),$/m.exec(strip.slice(strip.indexOf('wrapper: {')))?.[1]);
+    expect(Number.isFinite(stripHeight)).toBe(true);
+
+    const offsets = [...caddieTab.matchAll(/bottomOffset=\{(\d+)\}/g)].map(m => Number(m[1]));
+    expect(offsets.length).toBe(2);
+    const [chipOffset, stripOffset] = [Math.max(...offsets), Math.min(...offsets)];
+
+    expect(chipOffset).toBeGreaterThanOrEqual(stripOffset + stripHeight);
   });
 
   it('the brain renders it and is told NOT to recompute the numbers', () => {

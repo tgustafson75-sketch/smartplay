@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 // hardcoded — they're brand-intentional and changing them risks dark-
 // mode regressions we'd need to verify visually.
 import { useTheme } from '../contexts/ThemeContext';
+import { withAlpha } from '../theme/tokens';
 
 // 2026-08-25 (Tim) — TANK_AVATARS removed with the persona. The map was only reachable when Tank
 // was the active caddie, which is no longer selectable, and its portraits are a real person's
@@ -406,6 +407,23 @@ export default function CaddieAvatar({
   const { width: W, height: H } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const themeColors = useTheme().colors;
+  /**
+   * 2026-09-11 (Tim — "thematically disjointed") — the melt-gradient used to end on a LITERAL
+   * #060f09, with a comment asserting that was "the zone/card bg". True for the dark palette only.
+   * In light mode the hero dissolved into near-black over a #f5f9f6 page and read as the hard
+   * cut-off this gradient was added to remove; in dark-high-contrast it melted to #060f09 over pure
+   * #000000 and floated as a lighter block. It has to end on the page colour, whatever that is.
+   */
+  const meltColors = useMemo(
+    () => [
+      'transparent',
+      'transparent',
+      withAlpha(themeColors.background, 0.5),
+      withAlpha(themeColors.background, 0.88),
+      themeColors.background,
+    ] as const,
+    [themeColors.background],
+  );
 
   const aspectRatio = H / W;
   const isFolded = aspectRatio > 1.6;
@@ -878,11 +896,11 @@ export default function CaddieAvatar({
   ];
 
   return (
-    <View style={fill === 'cover' ? styles.wrapperFull : styles.wrapper}>
+    <View style={[fill === 'cover' ? styles.wrapperFull : styles.wrapper, { backgroundColor: themeColors.background }]}>
 
       {/* ── AVATAR FRAME ──────────────── */}
       <TouchableOpacity
-        style={fill === 'cover' ? styles.frameFull : [styles.frame, { height: AVATAR_HEIGHT }]}
+        style={[fill === 'cover' ? styles.frameFull : styles.frame, fill === 'cover' ? null : { height: AVATAR_HEIGHT }, { backgroundColor: themeColors.background }]}
         onPress={onTap}
         activeOpacity={0.7}
         accessibilityRole="button"
@@ -927,14 +945,16 @@ export default function CaddieAvatar({
           resizeMode={fill}
         />
 
-        {/* Layer 2 — Bottom gradient. 2026-07-25 (Tim — "the bottom looks home-made, hard cut-off
-            under the portrait") — the fade stopped at 0.75 opacity, leaving a visible horizontal
-            edge where the portrait zone ends. Carry it to FULLY opaque #060f09 (the app's dark base,
-            = the zone/card bg) so the caddie DISSOLVES into the screen instead of being cut off —
-            the premium hero-fade look. Fades a touch earlier for a longer, smoother melt. */}
+        {/* Layer 2 — Bottom melt. Settles the portrait into the tab row instead of meeting it on a
+            hard horizontal edge (Tim, 2026-07-25: "the bottom looks home-made, hard cut-off").
+            2026-09-11 — the hero is now FULL-BLEED to the bottom of its box, so the fade was
+            retuned: it used to begin at 40% because it had to blend a boxed hero into a band of page
+            below it, and on a full-bleed frame that washed out the subject's whole torso. It now
+            starts at 66% and only the last third melts, which is what Tim's reference board does.
+            The stops come from the active palette — see meltColors. */}
         <LinearGradient
-          colors={['transparent', 'transparent', 'rgba(6,15,9,0.5)', 'rgba(6,15,9,0.88)', '#060f09']}
-          locations={[0, 0.4, 0.72, 0.9, 1]}
+          colors={meltColors}
+          locations={[0, 0.66, 0.85, 0.95, 1]}
           style={StyleSheet.absoluteFill}
           pointerEvents="none"
         />
@@ -1026,7 +1046,7 @@ export default function CaddieAvatar({
           avatar AND in a separate top card, and stops empty text
           blocks from holding visual real estate. */}
       {fill === 'contain' && !hideInternalText && displayedText !== '' && (
-        <Animated.View style={[styles.responseArea, { opacity: responseFade }]}>
+        <Animated.View style={[styles.responseArea, { opacity: responseFade, backgroundColor: themeColors.background }]}>
           <Text
             style={caddieResponse ? styles.responseText : styles.openingText}
             numberOfLines={3}
@@ -1046,22 +1066,18 @@ const styles = StyleSheet.create({
   wrapper: {
     width: '100%',
     flexShrink: 0,
-    backgroundColor: '#060f09',
   },
   wrapperFull: {
     flex: 1,
-    backgroundColor: '#060f09',
   },
   frame: {
     width: '100%',
     overflow: 'hidden',
-    backgroundColor: '#060f09',
     paddingTop: 8,
   },
   frameFull: {
     flex: 1,
     overflow: 'hidden',
-    backgroundColor: '#060f09',
   },
   avatarImage: {
     position: 'absolute',
@@ -1153,7 +1169,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     minHeight: 56,
     justifyContent: 'center',
-    backgroundColor: '#060f09',
   },
   responseText: {
     color: '#ffffff',

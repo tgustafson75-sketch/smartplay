@@ -15,7 +15,9 @@
  * Additive — unused until a screen mounts it; rollout is one screen at a time, device-verified.
  */
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, TextInput, TouchableOpacity, StyleSheet, Keyboard, Platform, Image } from 'react-native';
+import { View, TextInput, TouchableOpacity, StyleSheet, Keyboard, Platform, Image, useWindowDimensions } from 'react-native';
+import { askBarTextWidth, fitAskPlaceholder } from '../../services/caddieLayoutBudget';
+import { withAlpha } from '../../theme/tokens';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router, usePathname } from 'expo-router';
@@ -36,7 +38,6 @@ import { useTranslation } from 'react-i18next';
 const MIC_CADDIE = require('../../assets/icons/caddie/mic-caddie.png');
 
 // Brand neon green (matches the caddie voice-state cue).
-const NEON = '#88F700';
 
 /**
  * 2026-09-06 (Tim, on-course, light mode: "our bottom caddy bar where you type in… the text doesn't
@@ -50,14 +51,20 @@ const NEON = '#88F700';
  *
  * Pinned to the dark palette's own values rather than themed, because the surface they sit on is not
  * themed either. If the bar ever becomes theme-aware, these move with it — same owner. */
-const ON_BAR_TEXT = '#ffffff';   // theme/tokens.ts dark text_primary
-const ON_BAR_MUTED = '#c2cad4';  // theme/tokens.ts dark text_muted
+/**
+ * 2026-09-11 (Tim — "thematically disjointed") — these were literal copies of the DARK palette's
+ * text tokens, as their own comments admitted, on a bar whose fill was a literal #0d1a0d. In light
+ * mode that left a black pill with white text sitting on a #f5f9f6 page while everything around it
+ * was light. The bar is now themed like every other surface, so the on-bar colours have to come from
+ * the same palette or the contrast inverts. Read from `colors` at the call sites below.
+ */
 
 export interface CaddieBottomBarProps {
   placeholder?: string;
 }
 
 export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: CaddieBottomBarProps) {
+  const { width: barWidth } = useWindowDimensions();
   const { t } = useTranslation();
   const { colors } = useTheme();
   const pathname = usePathname();
@@ -119,7 +126,7 @@ export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: 
       {/* ‹ universal page back */}
       <TouchableOpacity onPress={goBack} style={s.chevron} accessibilityRole="button" accessibilityLabel={t('caddie_caddie_bottom_bar.accessibility_label.back')}
         hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
-        <Ionicons name="chevron-back" size={24} color={ON_BAR_TEXT} />
+        <Ionicons name="chevron-back" size={24} color={colors.text_primary} />
       </TouchableOpacity>
 
       {/* The neon caddie SPEAKING = tap to talk (same listeningSession as everywhere).
@@ -144,8 +151,16 @@ export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: 
         style={s.input}
         value={text}
         onChangeText={setText}
-        placeholder={placeholder}
-        placeholderTextColor={ON_BAR_MUTED}
+        /**
+         * 2026-09-11 — a TextInput placeholder CLIPS, it does not ellipsize, so on a narrow panel
+         * this read "Ask or tell your c" with the rest gone (Tim's Fold cover shot). Shorten it to
+         * the width the bar actually leaves rather than letting it run off the edge.
+         */
+        placeholder={fitAskPlaceholder(
+          placeholder,
+          askBarTextWidth(barWidth, { micVisible: voiceCaddieOn }),
+        )}
+        placeholderTextColor={colors.text_muted}
         returnKeyType="send"
         onSubmitEditing={submit}
         onFocus={() => setFocused(true)}
@@ -157,21 +172,21 @@ export function CaddieBottomBar({ placeholder = 'Ask or tell your caddie…' }: 
 
       {text.trim() ? (
         <TouchableOpacity onPress={submit} style={s.send} accessibilityRole="button" accessibilityLabel={t('caddie_caddie_bottom_bar.accessibility_label.send_to_caddie')}>
-          <Ionicons name="arrow-up" size={18} color="#0d1a0d" />
+          <Ionicons name="arrow-up" size={18} color={colors.background} />
         </TouchableOpacity>
       ) : focused ? (
         // Keyboard is up with an empty field → tap to minimize it (tester request).
         <TouchableOpacity onPress={() => Keyboard.dismiss()} style={s.chevron}
           accessibilityRole="button" accessibilityLabel={t('caddie_caddie_bottom_bar.accessibility_label.hide_keyboard')}
           hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
-          <Ionicons name="chevron-down" size={24} color={ON_BAR_TEXT} />
+          <Ionicons name="chevron-down" size={24} color={colors.text_primary} />
         </TouchableOpacity>
       ) : (
         // › universal page forward (disabled/dim when there's nowhere forward)
         <TouchableOpacity onPress={goForward} disabled={!canForward} style={[s.chevron, { opacity: canForward ? 1 : 0.3 }]}
           accessibilityRole="button" accessibilityLabel={t('caddie_caddie_bottom_bar.accessibility_label.forward')}
           hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
-          <Ionicons name="chevron-forward" size={24} color={ON_BAR_TEXT} />
+          <Ionicons name="chevron-forward" size={24} color={colors.text_primary} />
         </TouchableOpacity>
       )}
     </View>
@@ -190,10 +205,10 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingHorizontal: 10,
       paddingVertical: 9,
       borderRadius: 26,
-      backgroundColor: '#0d1a0d',
+      backgroundColor: colors.surface,
       borderWidth: 1.5,
-      borderColor: 'rgba(136,247,0,0.6)',
-      shadowColor: NEON,
+      borderColor: withAlpha(colors.accent_lime, 0.6),
+      shadowColor: colors.accent_lime,
       shadowOffset: { width: 0, height: 0 },
       shadowOpacity: 0.35,
       shadowRadius: 9,
@@ -206,11 +221,11 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       width: 50, height: 38, borderRadius: 12,
       alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent',
     },
-    micActive: { backgroundColor: 'rgba(136,247,0,0.18)', borderWidth: 1, borderColor: NEON },
+    micActive: { backgroundColor: withAlpha(colors.accent_lime, 0.18), borderWidth: 1, borderColor: colors.accent_lime },
     micImg: { width: 46, height: 32 },
     input: {
       flex: 1,
-      color: ON_BAR_TEXT,
+      color: colors.text_primary,
       fontSize: 16,
       paddingVertical: Platform.OS === 'ios' ? 8 : 4,
       paddingHorizontal: 4,
