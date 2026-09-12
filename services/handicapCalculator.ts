@@ -379,20 +379,29 @@ export function rebuildDifferentialsFromHistory(rounds: {
   scores?: Record<number, number> | null;
   courseId?: string | null;
 }[]): number[] {
+  /**
+   * 2026-09-11 (full-app audit) — THIS WAS A SECOND COPY, UNDER A COMMENT SAYING IT WAS NOT.
+   *
+   * postingInputsFor was extracted precisely so the recap card and this rebuild could not disagree
+   * about what a round posts — the header above says they "call the same two functions, so they
+   * agree by construction rather than by comment". They did not. postingInputsFor had exactly ONE
+   * consumer, components/recap/HandicapImpactCard, and this function re-implemented it inline:
+   * same `posted` expression, same `score`, same baseline derivation, character for character.
+   *
+   * They agreed only because the two copies happened to still match. That is the state the comment
+   * claims was fixed, and it is the same defect it describes the cost of — "the player read a worse
+   * number than the one that actually moved their Index". It also would have bitten immediately:
+   * any change to the posting rule had to be made twice, and nothing said so.
+   *
+   * One call now. [[two-owners-is-the-root-cause]] [[prose-that-asserts-runtime-state-goes-stale]]
+   */
   const normalized = rounds.map(r => {
-    const posted: 9 | 18 | null = r.handicapHoles ?? (r.holesPlayed === 9 ? 9 : r.holesPlayed === 18 ? 18 : null);
-    const score = r.handicapAgs ?? r.totalScore;
-    const derived = (r.rating == null && r.parTotal == null && (r.holePars || r.courseId))
-      ? postingBaseline(r)
-      : { parTotal: r.parTotal ?? null, rating: r.rating ?? null, slope: r.slope ?? null };
-    const baseRating = (typeof derived.rating === 'number' && derived.rating > 0)
-      ? derived.rating
-      : (typeof derived.parTotal === 'number' && derived.parTotal > 0) ? derived.parTotal : null;
-    const baseSlope = (typeof derived.slope === 'number' && derived.slope > 0) ? derived.slope : NEUTRAL_SLOPE;
-    return { startedAt: r.startedAt, score, posted, baseRating, baseSlope };
-  });
+    const posting = postingInputsFor(r);
+    return posting ? { startedAt: r.startedAt, ...posting } : null;
+  }).filter((r): r is { startedAt: number } & PostingInputs => r != null);
   const eligible = normalized
-    .filter((r): r is { startedAt: number; score: number; posted: 9 | 18; baseRating: number | null; baseSlope: number } => r.posted != null && r.score > 0)
+    // `posted != null && score > 0` used to be re-tested here; postingInputsFor now guarantees both
+    // by returning null, so repeating it would only suggest it does not.
     // 2026-06-11 — Drop INCOMPLETE rounds (under MIN_STROKES_PER_HOLE / hole).
     // An abandoned round (e.g. an imported "4") would otherwise convert into a
     // wildly-negative differential that lands in the "best 8" and craters the
