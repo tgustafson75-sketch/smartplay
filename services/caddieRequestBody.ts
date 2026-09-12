@@ -903,6 +903,18 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * only ship the line when it named a winner. A caddie who reports "your two balls are level"
      * unprompted has turned a throwaway remark on the first tee into a conversation.
      */
+    /**
+     * 2026-09-12 — which of several physical clubs in one slot is actually working (three drivers,
+     * different shafts). Only sent once a comparison REACHED a conclusion: "nothing in it" is the
+     * right answer when he asks and noise when volunteered. Shot-level, across his history — a
+     * shaft difference would vanish if it were averaged over whole rounds.
+     */
+    club_variant_insight: safe(() => {
+      const { bestClubVariantInsight } = require('./clubVariantPerformance') as typeof import('./clubVariantPerformance');
+      const hist = safe(() => r.roundHistory ?? [], []);
+      const shots = hist.flatMap((rd: { shots?: unknown[] }) => rd.shots ?? []).concat(safe(() => r.shots ?? [], []));
+      return bestClubVariantInsight(shots)?.say ?? null;
+    }, null),
     ball_performance: safe(() => {
       const { compareBalls } = require('./ballPerformance') as typeof import('./ballPerformance');
       const c = compareBalls(safe(() => r.roundHistory ?? [], []));

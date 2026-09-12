@@ -336,6 +336,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       dominantMiss = null,
       currentBall = null,
       ball_performance = null,
+      club_variant_insight = null,
       physicalLimitation = null,
       goal = null,
       personalBest = null,
@@ -1024,6 +1025,9 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
        * Only present when the comparison actually found a difference worth acting on — see
        * services/ballPerformance. Answer with it when asked; do not open with it.
        */
+      if (typeof club_variant_insight === 'string' && club_variant_insight.trim()) {
+        lines.push(`- If they ask which of their clubs is working — they own more than one of the same club — this is the answer from their own shots: ${club_variant_insight.trim()} Only say it if asked. Straighter beats longer, and the line already reflects that.`);
+      }
       if (typeof ball_performance === 'string' && ball_performance.trim()) {
         lines.push(`- If they ask which ball scores better for them, this is the answer from their own rounds: ${ball_performance.trim()} Say it plainly and do not oversell it — it is their scoring, not a lab test.`);
       }

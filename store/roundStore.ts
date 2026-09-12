@@ -151,6 +151,18 @@ export interface ShotResult {
   // contact-quality `feel` enum.
   outcome_text?: string | null;
   swing_feel?: string | null;
+  /**
+   * 2026-09-12 (Tim) — WHICH physical club this was, when the slot holds more than one.
+   *
+   * "I have 3 drivers, all different shafts — so if I say I am going to use the TaylorMade X shaft
+   *  vs Burner 2 stock shaft, that provides some degree of feedback data."
+   *
+   * Stamped at log time from the declared variant for that club (store/clubVariantStore), so the
+   * comparison in services/clubVariantPerformance counts real shots rather than relying on the
+   * player to remember which driver was in the bag three weeks ago. Optional everywhere: absent on
+   * every shot hit with an undeclared club, which is most of them.
+   */
+  club_variant?: string | null;
   // Outcome tagging (added v1 migration — absent in old data treated as 'clean')
   outcome?: ShotOutcome;
   penalty_strokes?: number;
@@ -3135,6 +3147,18 @@ export const useRoundStore = create<RoundState>()(
             // deleted (editShot/deleteShot match by id) and future by-id dedup/backup-merge couldn't
             // address it. Salted so two shots in the same ms don't collide.
             id: shot.id ?? `shot-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+            /**
+             * 2026-09-12 — stamp the declared variant for this club, at the ONE funnel every shot
+             * passes through. Doing it at the producers instead would mean four copies and the
+             * brain-logged path missing it, which is the id defect directly above this line.
+             * Never overwrites a variant the caller already set.
+             */
+            club_variant: shot.club_variant ?? (() => {
+              try {
+                return (require('./clubVariantStore') as typeof import('./clubVariantStore'))
+                  .useClubVariantStore.getState().variantFor(shot.club);
+              } catch { return null; }
+            })(),
             start_location: incomingStart,
             gps_location: shot.gps_location ?? incomingStart,
             hole_number: shot.hole_number ?? shot.hole,

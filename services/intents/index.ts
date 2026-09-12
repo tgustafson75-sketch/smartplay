@@ -36,6 +36,7 @@ import { correctLastShotHandler } from './correctLastShotHandler';
 import { setClubDistanceHandler } from './setClubDistanceHandler';
 import { bagRemoveHandler } from './bagRemoveHandler';
 import { setBallHandler } from './setBallHandler';
+import { setClubVariantHandler } from './setClubVariantHandler';
 import { ownerChecklistHandler } from './ownerChecklistHandler';
 
 export const voiceCommandRouter = new VoiceCommandRouter();
@@ -91,6 +92,7 @@ voiceCommandRouter.registerHandler(correctLastShotHandler);
 voiceCommandRouter.registerHandler(setClubDistanceHandler);
 voiceCommandRouter.registerHandler(bagRemoveHandler);
 voiceCommandRouter.registerHandler(setBallHandler);
+voiceCommandRouter.registerHandler(setClubVariantHandler);
 
 export {
   openToolHandler,

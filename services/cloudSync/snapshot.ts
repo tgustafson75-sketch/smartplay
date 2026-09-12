@@ -97,6 +97,15 @@ export const BACKED_UP_STORE_KEYS: string[] = [
    * which phone it was completed on.
    */
   'owner-checklist-v1',
+  /**
+   * 2026-09-12 — which physical club is in each slot (three drivers, different shafts).
+   *
+   * BACKED UP: it is the key that makes every `club_variant` already stamped on past shots mean
+   * something. Lose it on a new handset and the shot history keeps its labels while the app forgets
+   * which driver is currently in the bag, so a test he has been running for a month silently starts
+   * attributing new shots to nothing. Tiny — a handful of short strings.
+   */
+  'club-variant-v1',
   // ── Crown jewels ──────────────────────────────────────────────
   'round-store-v1',        // rounds, scores, shots, handicap history
   'club-bag-v1',           // the player's bag

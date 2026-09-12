@@ -87,6 +87,11 @@ const INTENT_TYPE_ENUM = [
    * only thing that can answer "which ball actually scores better for me".
    */
   'set_ball',
+  /**
+   * 2026-09-12 (Tim) — "I have 3 drivers, all different shafts." WHICH physical club is in the slot.
+   * Undeclared, three drivers average into one blurred driver and a shaft test can never conclude.
+   */
+  'set_club_variant',
 ] as const;
 
 const VOICE_INTENT_SCHEMA: StructuredSchema = {
@@ -438,6 +443,17 @@ Available intents:
    parameters: {}
    Examples: "show clubs", "club menu", "switch club", "change club", "open the club picker"
    Use this when the user wants to PICK from a list (vs club_change which already names a specific club).
+
+15f. set_club_variant — User declares WHICH model/spec of a club they are putting in the bag, when
+   they own more than one of that club. Background capture, like set_ball.
+   parameters: { club_phrase: string, variant_phrase: string }
+   Examples:
+   - "I'm using the TaylorMade X shaft driver today" -> { club_phrase: "driver", variant_phrase: "TaylorMade X shaft" }
+   - "driver today is the Burner 2 stock shaft" -> { club_phrase: "driver", variant_phrase: "Burner 2 stock shaft" }
+   - "putting the stiff shaft 3 wood in the bag" -> { club_phrase: "3 wood", variant_phrase: "stiff shaft" }
+   Boundaries: a DISTANCE statement is set_club_distance (#15c). Choosing a club for the shot in
+   hand ("I'll hit the 7 iron") is club_change, NOT this. Taking a club out is remove_club (#15d).
+   Only claim this when they name a MODEL or SPEC, not just a club.
 
 15e. set_ball — User DECLARES which golf ball they are playing. Usually said in passing on the
    first tee. Log it and move on; this is background data capture, not a conversation starter.

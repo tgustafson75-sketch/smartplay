@@ -34,6 +34,11 @@ export const HOW_TO: HowTo[] = [
     steps: 'Just say it on the first tee \u2014 "I\u2019m teeing off with a Chromesoft" \u2014 and I log it against the round, quietly. Once you have a few rounds on two different balls, ask me "which ball scores better for me" and I\u2019ll tell you from your actual scoring, or tell you they are level if that is the truth.',
   },
   {
+    id: 'club-variant',
+    asks: ['I have two drivers', 'which driver is working', 'I am using the stiff shaft', 'compare my drivers', 'which of my irons is better', 'I switched shafts'],
+    steps: 'If you own more than one of the same club, tell me which one is in the bag \u2014 "driver today is the TaylorMade X shaft" \u2014 and I track them separately instead of averaging them into one blurred driver. Once you have a dozen shots with each, ask me which is working and I\u2019ll tell you from your own shots. Straighter beats longer, and I will say so.',
+  },
+  {
     id: 'club-work',
     asks: ['which club should I work on', 'what club is costing me', 'which club is my worst', 'what should I practice', 'where am I losing shots', 'which clubs are working'],
     steps: 'Ask me and I\u2019ll tell you straight \u2014 I track every club separately and I separate the two problems: a club you are not STRIKING well (that is range work) versus one you strike fine but keep putting in trouble (that is a decision, and I can club you differently instead). Needs about six tracked shots with a club before I will say anything about it.',
