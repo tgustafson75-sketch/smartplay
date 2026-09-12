@@ -10405,7 +10405,16 @@ check('LOCK: the putt read line is OPTIONAL, and is never sold as the actual rol
 check('LOCK: issue reports carry an anonymous install id, attached once, with no schema risk',
   (() => {
     const svc = read('services/installId.ts');
-    const exp = read('services/issueLogExport.ts');
+    /**
+     * 2026-09-12 — STRIP COMMENTS BEFORE COUNTING. The "attached once" rule below counts
+     * getInstallId() occurrences, and a doc comment EXPLAINING that rule contains the call it
+     * forbids — so writing down why there is only one resolution made the guard read two. That is
+     * this project's most-repeated guard failure and it has now happened on a LOCK.
+     * [[strip-comments-before-a-guard-matches]]
+     */
+    const exp = read('services/issueLogExport.ts')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
     // ONE owner that mints and persists it
     const owned = /export async function getInstallId/.test(svc) && /AsyncStorage\.setItem\(KEY/.test(svc);
     // attached at the single SEND point, not at each of the ~10 entry writers

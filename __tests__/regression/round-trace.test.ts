@@ -110,9 +110,24 @@ describe('it is wired into the round, with zero setup', () => {
     expect(store).toContain("rt.trace('round', 'end'");
   });
 
-  it('mails itself at the end, without blocking the round record', () => {
-    expect(store).toContain('void rt.sendRoundTrace(');
+  it('sends itself at the end, without blocking the round record', () => {
+    /**
+     * 2026-09-12 — was `void rt.sendRoundTrace(`, which pinned the CALL SHAPE. The send became async
+     * so it could resolve the anonymous install id first (it used to identify the player by
+     * plaintext email, on a path that defaults ON), and the guard failed on working code. What has
+     * to stay true is that it is fired-and-forgotten and cannot take the round record down with it.
+     */
+    expect(store).toMatch(/rt\.sendRoundTrace\(/);
     expect(store).toContain('tracing never blocks the round record');
+    // fire-and-forget: not awaited into the record-building path
+    expect(store).toMatch(/void \(async \(\) => \{[\s\S]{0,400}?sendRoundTrace/);
+  });
+
+  it('identifies the sender by the ANONYMOUS install id, never by email', () => {
+    // shareDiagnostics defaults ON, so this send leaves the device without a deliberate act.
+    expect(store).toMatch(/getInstallId\(\)/);
+    const at = store.indexOf('sendRoundTrace');
+    expect(store.slice(Math.max(0, at - 600), at)).not.toMatch(/prof\.email/);
   });
 
   it('captures the whole DIALOGUE at the one chokepoint every path uses', () => {

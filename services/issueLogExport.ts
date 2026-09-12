@@ -216,7 +216,25 @@ async function autoSendIssuesInner(): Promise<boolean> {
   if (useSettingsStore.getState().shareDiagnostics === false) return false;
   const base = getApiBaseUrl();
   if (!base) return false;
-  const reporter = usePlayerProfileStore.getState().email || 'beta tester';
+  /**
+   * 2026-09-12 (Tim, pre-launch settings audit) — AUTOMATIC SENDS ARE ANONYMOUS.
+   *
+   * `reporter` was the player's PLAINTEXT EMAIL, and shareDiagnostics defaults ON — so every public
+   * user's email address would have left the device automatically, without a deliberate act. The
+   * published privacy policy covers "crash and diagnostic data — stack traces and breadcrumb logs"
+   * and has no row describing an email address, which is exactly what Play's Data safety form and
+   * Apple's privacy label ask about.
+   *
+   * The install id answers the only question triage actually needs — "is this the same device as the
+   * last three reports?" — and services/installId is explicitly built for this: random, local, tied to
+   * nothing, regenerated on reinstall.
+   *
+   * The MANUAL export keeps the email, deliberately. There the player is composing a message from
+   * their own mail client; identifying themselves is the point of the act and consent is the act.
+   */
+  // `reporter` is derived from the SINGLE install-id resolution below — see the note there. It is
+  // deliberately not a second getInstallId() call: that value is attached once, at this one send
+  // point, never at the ~10 places that write an entry.
   // 2026-08-10 — only real errors + manual notes auto-send; the voice_turn / sim_round / boot
   // breadcrumbs stay device-side for owner-log review and never clutter the issue email.
   await hydrateSentIds();
@@ -232,6 +250,16 @@ async function autoSendIssuesInner(): Promise<boolean> {
    * and is not worth risking for a field.
    */
   const installId = await getInstallId();
+  /**
+   * 2026-09-12 — the sender's identity, for an AUTOMATIC send.
+   *
+   * This was the player's plaintext email, on a path gated by a consent that defaults ON — so on a
+   * public launch every user's address would have left the device with no deliberate act, and the
+   * published privacy policy had no row describing it. The install id answers the only question
+   * triage needs ("same device as the last three reports?") and is random, local and tied to
+   * nothing. The MANUAL export still carries the email: there the act is the consent.
+   */
+  const reporter = installId ?? 'unknown-install';
   const payload = {
     entries: unsent.map(e => ({
       id: e.id,

@@ -1948,7 +1948,18 @@ export const useRoundStore = create<RoundState>()(
             const rt = require('../services/roundTrace') as typeof import('../services/roundTrace');
             rt.trace('round', 'end', { holes: scoredEntries.length, score: scoredEntries.reduce((a, [, sc]) => a + sc, 0) });
             const prof = (require('./playerProfileStore') as typeof import('./playerProfileStore')).usePlayerProfileStore.getState();
-            void rt.sendRoundTrace(prof.email || 'tester');
+            /**
+             * 2026-09-12 — the round trace is an AUTOMATIC send gated on shareDiagnostics, which
+             * defaults ON. It identified the player by PLAINTEXT EMAIL; it now uses the anonymous
+             * install id, which is what triage actually needs and what the privacy policy covers.
+             * The manual issue-log export still carries the email — there the act is the consent.
+             */
+            void (async () => {
+              try {
+                const { getInstallId } = require('../services/installId') as typeof import('../services/installId');
+                await rt.sendRoundTrace((await getInstallId()) ?? 'unknown-install');
+              } catch { /* tracing never blocks the round record */ }
+            })();
           } catch { /* tracing never blocks the round record */ } return {}; })(),
           // 2026-08-12 — and the watch's tempo story, for the same reason: the swings live only in
           // memory, so this is the last moment it can be captured. Null when no watch was worn.
