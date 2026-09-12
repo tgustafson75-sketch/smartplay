@@ -251,7 +251,10 @@ describe('it is wired to the caddie AND to the screen, from ONE composer', () =>
    */
   it('the payload sends the brain\'s plan', () => {
     expect(body).toMatch(/holePlan: safe\(/);
-    expect(body).toMatch(/decideShot\(\{ rawYards: workingYards \}\)\.plan/);
+    // 2026-09-11 — the payload now composes the decision ONCE and every block reads from it, so
+    // this asserts the property (it sends the brain's plan) rather than the call shape.
+    expect(body).toMatch(/return decision\?\.plan \?\? null;/);
+    expect(body).toMatch(/const decision = safe\(\(\) => \{/);
   });
 
   it('the chip shows the brain\'s plan', () => {

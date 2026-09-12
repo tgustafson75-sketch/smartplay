@@ -117,7 +117,14 @@ describe('one number, not two that agree', () => {
   it('and the payload takes the profile from the brain rather than composing its own', () => {
     const body = code('services/caddieRequestBody.ts');
     expect(body).not.toMatch(/\bcomposePlayProfile\b/);
-    expect(body).toMatch(/const d = decideShot\(\{ rawYards: workingYards \}\)/);
+    expect(body).toMatch(/const d = decision;/);
+    /**
+     * And composed ONCE for the whole payload. Four blocks each called decideShot with identical
+     * arguments and each rebuilt the entire decision — the club pick, a depth-first walk of the bag
+     * for the plan, the profile, and a pass over the round history — on every caddie turn.
+     */
+    // Exactly ONE invocation in the whole payload builder.
+    expect((body.match(/decideShot\(\{/g) || []).length).toBe(1);
   });
 });
 

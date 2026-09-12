@@ -135,8 +135,11 @@ describe('it reaches a future round now, which it never did', () => {
   it('the brain composes it', () => {
     const b = code('services/caddieDecision.ts');
     expect(b).toMatch(/conditionFindings\(/);
-    expect(b).toMatch(/conditions: safe\(/);
-    expect(b).toMatch(/todayMatches: safe\(/);
+    // Composed ONCE per decision — this was three separate safe() calls, each re-walking the round
+    // history to fill one property of the same answer.
+    expect(b).toMatch(/const conditions = safe\(/);
+    expect(b).toMatch(/conditions: conditions\.all/);
+    expect(b).toMatch(/todayMatches: conditions\.today/);
   });
 
   it('today\'s weather is MEASURED, not waited for', () => {

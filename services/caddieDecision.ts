@@ -122,6 +122,15 @@ export function decideShot(known: CallerKnown = { rawYards: null }): CaddieDecis
   }, null);
 
   const profile = safe(() => composeProfile(), null);
+  /**
+   * 2026-09-11 — composed ONCE. This was three separate `safe(() => composeConditions()...)` calls,
+   * one per field, and each walked the whole round history to recompute the same findings. Three
+   * passes to fill three properties of one answer.
+   */
+  const conditions = safe(
+    () => composeConditions(),
+    { all: null, today: null, play: null } as ReturnType<typeof composeConditions>,
+  );
 
   return {
     shot,
@@ -135,9 +144,9 @@ export function decideShot(known: CallerKnown = { rawYards: null }): CaddieDecis
     profile,
     override: safe(() => composeOverride(known), null),
     cues: safe(() => composeCues(profile), []),
-    conditions: safe(() => composeConditions().all, null),
-    todayMatches: safe(() => composeConditions().today, null),
-    conditionPlay: safe(() => composeConditions().play, null),
+    conditions: conditions.all,
+    todayMatches: conditions.today,
+    conditionPlay: conditions.play,
     warmup: safe(() => composeWarmup(), null),
   };
 }

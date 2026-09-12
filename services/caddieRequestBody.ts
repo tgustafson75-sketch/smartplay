@@ -153,6 +153,23 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
    * briefing a tee shot to a man in the fairway while the plan promises him a par he can no longer
    * make. [[two-owners-is-the-root-cause]]
    */
+  /**
+   * 2026-09-11 — THE CADDIE'S DECISION, COMPOSED ONCE PER TURN.
+   *
+   * Four blocks below each called decideShot({ rawYards: workingYards }) with identical arguments —
+   * the shot read, the hole plan, the play profile and the round conditions — and every call built
+   * the WHOLE decision again: the club pick, a depth-first walk of the bag for the plan, the
+   * profile, the override, the cues, and a pass over the round history for the conditions. Four
+   * identical answers computed four times, on every single caddie turn.
+   *
+   * It is composed here instead, and the blocks read from it. Still inside `safe`, so a failure
+   * leaves every field null rather than taking the payload down — the same contract they had.
+   */
+  const decision = safe(() => {
+    const { decideShot } = require('./caddieDecision') as typeof import('./caddieDecision');
+    return decideShot({ rawYards: workingYards });
+  }, null);
+
   const currentStroke: number = safe(() => {
     const { strokesPlayedOnHole } = require('../store/roundStore') as typeof import('../store/roundStore');
     return strokesPlayedOnHole(r as never, currentHole) + 1;
@@ -462,10 +479,9 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
        * players at this level, a [measured] one is an observation about THIS player, and stating the
        * first as the second is telling someone a guess about themselves as a fact.
        */
-      const { decideShot } = require('./caddieDecision') as typeof import('./caddieDecision');
-      const d = decideShot({ rawYards: workingYards });
-      const profile = d.profile;
-      if (!profile) return null;
+      const d = decision;
+      const profile = d?.profile;
+      if (!d || !profile) return null;
       return {
         level: profile.level,
         goal: profile.goal,
@@ -591,9 +607,8 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * a finding about wind is worth far more standing on a windy tee than in a season summary.
      */
     roundConditions: safe(() => {
-      const { decideShot } = require('./caddieDecision') as typeof import('./caddieDecision');
-      const d = decideShot({ rawYards: workingYards });
-      if (!d.conditions && !d.todayMatches && !d.conditionPlay && !d.warmup?.line) return null;
+      const d = decision;
+      if (!d || (!d.conditions && !d.todayMatches && !d.conditionPlay && !d.warmup?.line)) return null;
       return {
         pattern: d.conditions, today: d.todayMatches, play: d.conditionPlay,
         /**
@@ -607,8 +622,7 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     }, null),
 
     shotRead: safe(() => {
-      const { decideShot } = require('./caddieDecision') as typeof import('./caddieDecision');
-      const r0 = decideShot({ rawYards: workingYards }).shot;
+      const r0 = decision?.shot;
       if (!r0) return null;
       return {
         club: r0.club,
@@ -629,8 +643,7 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
        * plan the caddie SAYS would be the worst instance of that yet: both confidently wrong at
        * each other in the same moment. [[two-owners-is-the-root-cause]]
        */
-      const { decideShot } = require('./caddieDecision') as typeof import('./caddieDecision');
-      return decideShot({ rawYards: workingYards }).plan;
+      return decision?.plan ?? null;
     }, null),
 
     roundStats: safe(() => {
