@@ -160,7 +160,7 @@ export function cartModeSuggestion(
 // detectActivity() is async (Health Connect reads), but the shot-
 // detection orchestrator is sync. We run a 30s periodic tick during
 // round-active that refreshes a module-local cached reading, and
-// expose a sync `getCachedReading()` for sync consumers. When the
+// exposed a sync accessor for sync consumers (deleted 2026-09-11, see below). When the
 // ticker hasn't run yet (cold start, no recent round, etc.), the
 // cache is null and consumers fall through to manual-setting only.
 
@@ -168,9 +168,13 @@ let _cached: DetectorReading | null = null;
 let _tickerHandle: ReturnType<typeof setInterval> | null = null;
 const TICK_INTERVAL_MS = 30 * 1000;
 
-export function getCachedReading(): DetectorReading | null {
-  return _cached;
-}
+/**
+ * 2026-09-11 — a sync `getCachedReading()` lived here for callers that could not await. Its own
+ * orphan-baseline entry said it plainly: the pair it was written alongside is no longer orphaned
+ * (cart auto-detect consumes cartModeSuggestion), every live reader goes through isEffectiveCartMode
+ * instead, and this accessor was no longer waiting on a product call. Delete it or give it the caller
+ * it was written for — there is no caller, so it is deleted. [[orphans-are-live-bugs-not-dead-code]]
+ */
 
 /** Start the periodic activity-mode tick. Idempotent. The first read
  *  fires immediately, then every TICK_INTERVAL_MS. The caller is

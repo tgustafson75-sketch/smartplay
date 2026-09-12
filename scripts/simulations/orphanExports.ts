@@ -351,7 +351,15 @@ export const ORPHAN_BASELINE: Record<string, string> = {
     'Its header even reads "the brain riffs off the entry rather than freestyling". Keep it dead, or ' +
     'delete it; do not connect it. [[learning-layer-must-not-intercept]] [[feels-like-a-real-caddie]]',
   'services/gpsManager.ts :: getGpsHealth':
-    'WIRE/TRIAGE — GPS health read; gpsLost reaches the brain, this richer read does not.',
+    'DO NOT WIRE (re-tagged 2026-09-11 after tracing it). The old reason said the brain gets gpsLost '
+    + 'but not this richer read, which invited someone to add a redundant field. Both halves are '
+    + 'already covered better elsewhere: the DIAGNOSTIC path logs gps_error at the moment of failure '
+    + 'with sinceMs, lastAccuracy_m, lastSource and roundActive — more than this returns — and the '
+    + 'CADDIE gets gpsLost for total loss plus yardageInsight.source/is_fallback for a soft fix, which '
+    + 'is what actually changes what it says. A comment in gpsManager also claims a UI banner reports '
+    + 'this; no banner does — the screens read getLastFix + classifyAccuracy directly. Kept because '
+    + 'three comments and a regression test cite it as the namer of never_ticked/stale, which is true '
+    + 'and worth keeping readable.',
   'services/glassesVisionInput.ts :: registerGlassesTransport':
     'PARKED — Meta glasses profile needs a native build.',
   'services/metaWearablesBridge.ts :: getMetaWearablesStatus':
@@ -370,8 +378,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
     'SURFACE — the classification set, exported so the split is inspectable rather than buried.',
   'services/mediaPipePoseService.ts :: smoothPoseFrames':
     'SURFACE — an exported pure helper the analyzer applies internally.',
-  'services/poseTelemetry.ts :: useLatestPoseTelemetry':
-    'WIRE — the React half of the telemetry bus whose plain getter is also orphaned. Nothing reads what recordPoseTelemetry writes; see getLatestPoseTelemetry in the WIRE block above.',
   'services/smartFinderService.ts :: getYardageCalcLog':
     'SURFACE — the calculation trace for the SmartFinder debug view.',
   'services/smartVisionOverlay.ts :: projectToTilePixels':
@@ -384,8 +390,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
     'PARKED — archetype matching ahead of the surface that would show it.',
   'services/voicePermissionService.ts :: clearMicDenial':
     'SURFACE — the reset half of the denial state its sibling persists.',
-  'services/walkingDetector.ts :: getCachedReading':
-    'WIRE — the SYNC cache of the walking/cart reading, for a caller that cannot await. Its former pair cartModeSuggestion is NO LONGER orphaned: cart auto-detect (2026-08-30, 5f9928fb) consumes it at walkingDetector.ts:229, so the detector IS consumed now and the old "both orphaned together, nothing consumes it" verdict here was stale — as was its named blocker ("where the suggestion is shown"), since the correction is silent and shows nothing. What is still unwired is only this SYNC accessor: every live reader (conversationalLoggingOrchestrator) goes through isEffectiveCartMode instead. Delete it or give it the sync caller it was written for; it is no longer waiting on a product call.',
   'services/watchWristInterpretation.ts :: calibrateFromMeasured':
     'PARKED — see estimateClubSpeedMph; this is the calibration half.',
 

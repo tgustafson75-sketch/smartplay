@@ -2,7 +2,7 @@
  * 2026-05-23 — Pose telemetry pub/sub.
  *
  * Tiny shared state that the poseEstimator pushes to on every call,
- * and that UI surfaces subscribe to via useLatestPoseTelemetry() for
+ * and that diagnostics decorate their log lines with (describePoseTelemetry) for
  * the "On-device • 47ms" badge.
  *
  * Kept separate from poseEstimator.ts so the estimator stays pure
@@ -15,7 +15,6 @@
  * indirection.
  */
 
-import { useEffect, useState } from 'react';
 
 export interface PoseTelemetry {
   backend: 'mediapipe' | 'cloud_proxy' | 'cloud_vision_llm' | 'none';
@@ -35,13 +34,9 @@ const EMPTY: PoseTelemetry = {
 };
 
 let latest: PoseTelemetry = EMPTY;
-const listeners = new Set<(t: PoseTelemetry) => void>();
 
 export function recordPoseTelemetry(t: Partial<PoseTelemetry>): void {
   latest = { ...latest, ...t, at: Date.now() };
-  for (const cb of listeners) {
-    try { cb(latest); } catch { /* swallow */ }
-  }
 }
 
 export function getLatestPoseTelemetry(): PoseTelemetry {
@@ -82,21 +77,23 @@ export function describePoseTelemetry(): Record<string, unknown> | null {
   };
 }
 
-export function subscribePoseTelemetry(cb: (t: PoseTelemetry) => void): () => void {
-  listeners.add(cb);
-  return () => listeners.delete(cb);
-}
+/**
+ * 2026-09-11 — a listener set and a `subscribePoseTelemetry` publisher lived here. Their ONLY
+ * subscriber was the React hook above, and when that went the orphan guard flagged the publisher
+ * within a minute — a cascade worth having, because the notify loop then ran on EVERY pose call
+ * with nobody listening.
+ *
+ * Deleted with it. The two live readers — getLatestPoseTelemetry and describePoseTelemetry — pull
+ * when they need a value, which is what a diagnostic decorator wants anyway.
+ */
 
-/** React hook — re-renders the consumer whenever a new pose
- *  telemetry record lands. Returns the latest record. Stale records
- *  (older than 90s) are considered "no recent pose" and surface as
- *  `backend === 'none'` so the badge doesn't lie about activity. */
-export function useLatestPoseTelemetry(): PoseTelemetry {
-  const [value, setValue] = useState<PoseTelemetry>(latest);
-  useEffect(() => subscribePoseTelemetry(setValue), []);
-  const ageMs = Date.now() - value.at;
-  if (value.at > 0 && ageMs > 90_000) {
-    return { ...EMPTY, at: value.at };
-  }
-  return value;
-}
+/**
+ * 2026-09-11 — a `useLatestPoseTelemetry` React hook lived here for the "On-device • 47ms" badge
+ * described at the top of this file. The badge was never built, so the hook had no consumer for
+ * months while the plain getter DID get one: describePoseTelemetry decorates every pose diagnostic
+ * with the backend that served it and how long inference took, which is where the value actually was.
+ *
+ * Deleted rather than kept waiting. It is three lines if the badge is ever built, and a hook with no
+ * consumer reads as "this surface exists" to anyone scanning the file.
+ * [[orphans-are-live-bugs-not-dead-code]]
+ */
