@@ -407,6 +407,24 @@ export function GlobalToolsMenu() {
               onPress={() => nav('/profile/custom-caddie')}
               colors={colors}
             />
+            {/**
+              * 2026-09-12 (Tim) — "in Tools we need a refer-a-friend link that sends that app link
+              * to a friend. This will help tie in with the future referral promotions."
+              *
+              * THE WHOLE SYSTEM ALREADY EXISTED and almost nobody could reach it. api/referral.ts,
+              * app/invite.tsx, services/billing/referral, the 0009 migration, and the reward banking
+              * in _layout — all shipped 2026-09-03, reachable from exactly ONE row buried in
+              * Settings. A referral programme nobody can find earns nothing, and the promotions Tim
+              * is planning would have launched against a door with no handle.
+              * [[sweep-the-missing-half-not-the-unused-export]]
+              */}
+            <Row
+              icon="gift-outline"
+              label={t('tools_global_tools_menu.label.invite_a_friend')}
+              sub="Send a friend the app — you get 30 days when they play"
+              onPress={() => nav('/invite')}
+              colors={colors}
+            />
             <Row
               icon="library-outline"
               label={t('tools_global_tools_menu.label.tutorials')}
