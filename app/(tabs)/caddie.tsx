@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { caddieLayoutBudget, TAB_BAR_HEIGHT } from '../../services/caddieLayoutBudget';
 import { bestOn } from '../../theme/tokens';
+import { resolveYardageSource } from '../../services/yardageSource';
 import { useCaddieBarReserve } from '../../components/GlobalCaddieBar';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { pushCourseGuarded } from '../../utils/courseNav';
@@ -3981,11 +3982,17 @@ export default function CaddieTab() {
           // value; otherwise we're rendering the static scorecard yardage
           // and the user deserves to know.
           /* 2026-08-12 — three states, not two: a course still being mapped says so rather than
-             showing a bare STATIC that reads as "this is as good as it gets". */
-          yardageSource={displayYardage == null ? null
-            : liveYardage != null ? 'live'
-            : geometryBuilding[useRoundStore.getState().activeCourseId ?? ''] ? 'building'
-            : 'static'}
+             showing a bare STATIC that reads as "this is as good as it gets".
+             2026-09-12 — the rule moved OUT of this prop and into services/yardageSource. It lived
+             here, inline, so the L1 hole preview could not reuse it and was about to get a second
+             copy of the identical judgement about the identical GPS. Tim: "all of that should be in
+             the same general category — it all same catches, because the connectivity is the same."
+             [[two-owners-is-the-root-cause]] */
+          yardageSource={resolveYardageSource({
+            displayYardage,
+            liveYardage,
+            isBuilding: !!geometryBuilding[useRoundStore.getState().activeCourseId ?? ''],
+          })}
           // 2026-05-19 — totalScore/scoreVsPar wiring temporarily removed.
           // Strip displays STROKE only (per Tim's "don't show score in
           // the data bar, scoring goes in the expandable tool arrow"

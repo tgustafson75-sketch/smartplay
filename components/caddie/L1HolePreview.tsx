@@ -22,6 +22,7 @@ import { resolveCaptureUri } from '../../services/courseCaptureIngest';
 import { getHoleImageryUrl, getCenteredImageryUrl } from '../../services/mapboxImagery';
 import { useGeometryStatusStore } from '../../store/geometryStatusStore';
 import { useTranslation } from 'react-i18next';
+import { resolveYardageSource, yardageSourceLabel, isLiveYardage } from '../../services/yardageSource';
 
 const REFRESH_MS = 4_000;
 const DEFAULT_W = 320;
@@ -214,6 +215,16 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
 
   // 2026-08-13 — subscribe so a finished geometry build re-runs the effect below.
   const geometryCompletions = useGeometryStatusStore((st) => st.completions);
+  /**
+   * 2026-09-12 (Tim — "SmartVision should show ACTIVE with current cart position and yardages") —
+   * the SAME live/static judgement the in-round data strip makes, from the SAME function.
+   *
+   * The preview already computed a cart position and a yards-to-green and drew both. What it never
+   * did was say whether the map was ALIVE: on any hole where the overlay could not resolve, it was a
+   * hole photograph with no overlay and no explanation, which reads as a broken feature rather than
+   * as GPS that has not landed. Tim: "it all same catches, because the connectivity is the same."
+   */
+  const geometryBuilding = useGeometryStatusStore((st) => st.building);
 
   useEffect(() => {
     let cancelled = false;
@@ -505,6 +516,31 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
               </View>
             </>
           ) : null}
+          {/**
+            * SAY WHETHER THIS MAP IS ALIVE — from services/yardageSource, the same function the
+            * in-round data strip uses. Three states, not two: a course mid-build says MAPPING…
+            * rather than a bare STATIC that reads as "this is as good as it gets".
+            */}
+          {(() => {
+            if (!isRoundActive) return null;
+            /**
+             * In a round there is ALWAYS something to say — the only question is whether GPS is
+             * driving it. `displayYardage: 1` is the standing "a number is on screen" signal; the
+             * live/static call is made entirely by whether yardsToGreen resolved.
+             */
+            const src = resolveYardageSource({
+              displayYardage: 1,
+              liveYardage: yardsToGreen,
+              isBuilding: !!geometryBuilding[activeCourseId ?? ''],
+            });
+            const label = yardageSourceLabel(src);
+            if (!label) return null;
+            return (
+              <View style={[styles.sourcePill, isLiveYardage(src) ? styles.sourcePillLive : styles.sourcePillStatic]}>
+                <Text style={[styles.sourcePillText, isLiveYardage(src) ? styles.sourcePillTextLive : styles.sourcePillTextStatic]}>{label}</Text>
+              </View>
+            );
+          })()}
         </ImageBackground>
         {/* Branded badge is a FRAME child (full width), not inside the centered/narrower image box —
             so it pins to the card's true top-right and clears the ••• tools pill (badgeTop). */}
@@ -715,6 +751,17 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     borderWidth: 2, borderColor: '#0d1a0d',
   },
+  /** Mirrors the data strip's source pill — same three states, same meaning, one function behind both. */
+  sourcePill: {
+    // BOTTOM-right: the top-right belongs to HoleBrandBadge and the tab's ••• tools pill.
+    position: 'absolute', bottom: 8, right: 8,
+    paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999, borderWidth: 1,
+  },
+  sourcePillLive: { backgroundColor: 'rgba(0,200,150,0.18)', borderColor: '#00C896' },
+  sourcePillStatic: { backgroundColor: 'rgba(0,0,0,0.55)', borderColor: 'rgba(255,255,255,0.35)' },
+  sourcePillText: { fontSize: 9, fontWeight: '900', letterSpacing: 1 },
+  sourcePillTextLive: { color: '#00C896' },
+  sourcePillTextStatic: { color: 'rgba(255,255,255,0.8)' },
   playerYardageBadge: {
     position: 'absolute',
     top: 8,
