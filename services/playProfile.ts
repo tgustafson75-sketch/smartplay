@@ -52,6 +52,8 @@ export interface PlayProfile {
   targetScore: number | null;
   /** Strokes over par the target allows across 18 — the bogey budget. */
   strokeBudget: number | null;
+  /** Holes this round is over — 18 unless the round says otherwise. Owns the "holes left" maths. */
+  holeCount: number;
   strengths: PlayFinding[];
   weaknesses: PlayFinding[];
   /**
@@ -68,6 +70,11 @@ export interface PlayProfileInput {
   goal?: RoundGoal | null;
   /** Par for the course, for the stroke budget. Defaults to 72. */
   coursePar?: number | null;
+  /**
+   * How many holes this round is. Nine for a nine-hole round, and it is not a cosmetic detail — it
+   * decides both the target and how many holes are left to spend the budget on.
+   */
+  courseHoles?: number | null;
   /** How the player covers an in-between yardage. */
   distanceControl?: 'full_swings' | 'some_partials' | 'dial_down' | null;
   /** CNS-learned miss side, when there is one. */
@@ -84,10 +91,41 @@ export interface PlayProfileInput {
   roundsPlayed?: number | null;
 }
 
-/** Target score per goal. free_play has no target, and must not invent one. */
+/**
+ * 2026-09-11 (Tim — "you're gonna have a three-club bag on a par-three nine-hole course, so that
+ * should in and of itself have its own kind of logic") — THE GOAL IS A STANDARD, NOT A NUMBER.
+ *
+ * This table used to hold 99 / 89 / 79 and the budget was `target - coursePar`. On a nine-hole
+ * par-27 course that made the budget 89 − 27 = 62 strokes in hand, and the caddie said so:
+ * "58 shots in hand for 15 holes", on a nine-hole round, fifteen holes that do not exist.
+ *
+ * "Break 90" is not the number 89. It is a SCORING STANDARD — seventeen over par, which is bogey on
+ * every hole bar one, which is the whole bogey-golf lens this file exists to state. Held as strokes
+ * over par and scaled to the holes actually being played, it means the same thing on a par-3 nine as
+ * it does at Torrey Pines, and the number it prints is a number for THIS round.
+ *
+ * Scaled by HOLES rather than by par on purpose: the standard is about how many holes you can drop a
+ * shot on. Scaling by par would tighten a par-3 course to +6 — a standard no one playing a par-3
+ * nine is trying to meet — while nine holes of bogey golf is exactly half of eighteen.
+ */
 const TARGET: Record<RoundGoal, number | null> = {
   break_100: 99, break_90: 89, break_80: 79, free_play: null,
 };
+
+/**
+ * The same standards as strokes over par, used ONLY when the round is not a full eighteen.
+ *
+ * Over eighteen holes the goal keeps its literal meaning — a man who shoots 89 on a par 70 has
+ * broken ninety, and telling him he needed 87 would be the app moving his goalposts. It is the
+ * shorter round that has no literal reading at all: "break 90" over nine holes is a standard or it
+ * is nothing.
+ */
+const OVER_PAR: Record<RoundGoal, number | null> = {
+  break_100: 27, break_90: 17, break_80: 7, free_play: null,
+};
+
+/** The card these standards are stated against. */
+const STANDARD_HOLES = 18;
 
 /**
  * Level-seeded priors. These are the things that are true of most players AT THAT LEVEL, stated as
@@ -128,9 +166,18 @@ const finding = (text: string, source: FindingSource): PlayFinding => ({ text, s
 export function composePlayProfile(input: PlayProfileInput): PlayProfile {
   const level = input.level;
   const goal: RoundGoal = input.goal ?? 'free_play';
-  const targetScore = TARGET[goal];
   const par = typeof input.coursePar === 'number' && input.coursePar > 0 ? input.coursePar : 72;
-  const strokeBudget = targetScore == null ? null : targetScore - par;
+  const holeCount = typeof input.courseHoles === 'number' && input.courseHoles > 0
+    ? Math.round(input.courseHoles)
+    : STANDARD_HOLES;
+  const absolute = TARGET[goal];
+  const overPar = OVER_PAR[goal];
+  const { targetScore, strokeBudget } = holeCount === STANDARD_HOLES
+    ? { targetScore: absolute, strokeBudget: absolute == null ? null : absolute - par }
+    : (() => {
+        const budget = overPar == null ? null : Math.round((overPar * holeCount) / STANDARD_HOLES);
+        return { targetScore: budget == null ? null : par + budget, strokeBudget: budget };
+      })();
 
   const strengths: PlayFinding[] = [];
   const weaknesses: PlayFinding[] = [];
@@ -180,7 +227,7 @@ export function composePlayProfile(input: PlayProfileInput): PlayProfile {
   const confidence: PlayProfile['confidence'] =
     anyMeasured && anySeeded ? 'mixed' : anyMeasured ? 'measured' : 'seeded';
 
-  return { level, goal, targetScore, strokeBudget, strengths, weaknesses, cues, confidence };
+  return { level, goal, targetScore, strokeBudget, holeCount, strengths, weaknesses, cues, confidence };
 }
 
 /**
@@ -196,12 +243,20 @@ export function bogeyBudgetLine(
   holesPlayed: number,
 ): string | null {
   if (profile.strokeBudget == null) return null;
-  if (strokesOverPar == null || holesPlayed <= 0 || holesPlayed > 18) return null;
+  /**
+   * 2026-09-11 — THE HOLE COUNT COMES FROM THE PROFILE, NOT FROM THE NUMBER 18.
+   *
+   * This said `18 - holesPlayed` and rejected anything past 18. On a nine-hole round it told a man
+   * on his third hole how many holes he had left out of eighteen — fifteen holes that were never
+   * going to be played. The count belongs to the round, and the profile is what knows the round.
+   */
+  const total = profile.holeCount > 0 ? profile.holeCount : 18;
+  if (strokesOverPar == null || holesPlayed <= 0 || holesPlayed > total) return null;
   const remaining = profile.strokeBudget - strokesOverPar;
   if (remaining < 0) return `${Math.abs(remaining)} over the ${profile.targetScore} pace — par two of these and you're back`;
-  const holesLeft = 18 - holesPlayed;
+  const holesLeft = total - holesPlayed;
   if (holesLeft <= 0) return null;
-  return `${remaining} shots in hand for ${holesLeft} holes — bogey them all and you still break ${(profile.targetScore ?? 0) + 1}`;
+  return `${remaining} shots in hand for ${holesLeft} hole${holesLeft === 1 ? '' : 's'} — bogey them all and you still come in at ${(profile.targetScore ?? 0) + 1} or better`;
 }
 
 /**

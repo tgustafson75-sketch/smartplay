@@ -306,9 +306,19 @@ function composeProfile(): PlayProfile | null {
   const played = stats.length;
   const penalties = stats.reduce((a: number, h: { penalties?: number }) => a + (h.penalties ?? 0), 0);
   const putts = stats.reduce((a: number, h: { putts?: number }) => a + (h.putts ?? 0), 0);
-  const coursePar = (r.courseHoles ?? []).reduce(
-    (a: number, h: { par?: number }) => a + (h.par ?? 0), 0,
-  ) || null;
+  /**
+   * 2026-09-11 — THE PAR AND THE HOLE COUNT MUST COME FROM THE SAME CARD.
+   *
+   * courseHoles is the round's own hole list, so on a nine-hole round it is nine rows and the par
+   * sums to 27 or 36. Taking the par from here and the hole count from the constant 18 is what
+   * produced "58 shots in hand for 15 holes" on a par-3 nine. Counted together, from one source.
+   */
+  const holeRows = (r.courseHoles ?? []).filter((h: { par?: number }) => (h.par ?? 0) > 0);
+  const coursePar = holeRows.reduce((a: number, h: { par?: number }) => a + (h.par ?? 0), 0) || null;
+  const courseHoles = holeRows.length > 0
+    ? holeRows.length
+    /** No card yet: the round's own nine-hole flag is still a fact, and a better one than 18. */
+    : r.nineHoleMode ? 9 : 18;
   const rounds = safe(() => useRelationshipStore.getState().roundsTogether ?? 0, 0);
 
   /**
@@ -340,6 +350,7 @@ function composeProfile(): PlayProfile | null {
     }),
     goal: (r.mode ?? null) as never,
     coursePar,
+    courseHoles,
     distanceControl: p.distanceControl ?? null,
     dominantMiss: (p.dominantMiss ?? null) as never,
     // Per-18 rates only mean something once a round is actually under way.
