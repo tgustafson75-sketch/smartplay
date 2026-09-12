@@ -42,14 +42,20 @@ describe('each line is labelled on itself', () => {
 
   it('in the line\'s own colour, so the tie is visual not remembered', () => {
     expect(chart).toMatch(/fill=\{t\.color\}/);
-    expect(chart).toMatch(/push\('primary', endLabel, series\[series\.length - 1\], endUnit, last, trendColor\)/);
+    // 2026-09-11 — the primary tag reads the last value SEEN (`present`), not the last SLOT, so a
+    // trailing week with no round cannot tag the line with a null. Still the primary's own series.
+    expect(chart).toMatch(/push\('primary', endLabel, present\[present\.length - 1\], endUnit, last, trendColor\)/);
     expect(chart).toMatch(/push\('overlay', overlay\.label, oVal, overlay\.unit, pt, overlay\.color\)/);
   });
 
   it('the overlay tag reads the RAW overlay value, not the normalised one', () => {
     // The overlay is normalised into the primary's space to make the shapes comparable. Labelling it
     // with that normalised number would print a meaningless figure.
-    expect(chart).toMatch(/const oVal = overlaySeries\[overlaySeries\.length - 1\]/);
+    // 2026-09-11 — still taken from overlaySeries (the RAW values), now skipping a trailing gap.
+    // What it must never do is read a y coordinate out of overlayPts, which is the normalised space.
+    expect(chart).toMatch(/const oPresent = overlaySeries\.filter\(\(v\): v is number => v != null\)/);
+    expect(chart).toMatch(/const oVal = oPresent\[oPresent\.length - 1\]/);
+    expect(chart).not.toMatch(/const oVal = overlayPts/);
   });
 });
 

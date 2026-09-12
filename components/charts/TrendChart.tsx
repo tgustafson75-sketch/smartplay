@@ -17,7 +17,11 @@ import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Path, Circle, Defs, LinearGradient, Stop, Text as SvgText, Rect } from 'react-native-svg';
 
 export interface TrendChartProps {
-  data: number[];
+  /**
+   * 2026-09-11 — `null` is a REAL value here: a period with no activity. It keeps its slot on the
+   * x-axis and breaks the line, rather than being dropped and letting later points slide backwards.
+   */
+  data: (number | null)[];
   width: number;
   height: number;
   color?: string;
@@ -69,7 +73,7 @@ export interface TrendChartProps {
   // timeline and read as "are they moving together"). Drawn as a line in its own color with its own legend
   // entry. This is what collapses the old score/effort pair into a single graph.
   overlay?: {
-    data: number[];
+    data: (number | null)[];
     color: string;
     label: string;
     /** Unit for the overlay's end-of-line value, e.g. 'balls'. */
@@ -83,18 +87,37 @@ const MIN_POINTS = 2;
 type Pt = { x: number; y: number };
 
 /** Map a numeric series into chart points over a shared x-range, normalized to its OWN [lo,hi]. */
-function seriesToPoints(series: number[], xPad: number, chartW: number, yTop: number, chartH: number): Pt[] {
+function seriesToSlots(series: (number | null)[], xPad: number, chartW: number, yTop: number, chartH: number): (Pt | null)[] {
   if (series.length < 1) return [];
-  const rawMin = Math.min(...series);
-  const rawMax = Math.max(...series);
+  const present = series.filter((v): v is number => v != null);
+  if (present.length < 1) return [];
+  const rawMin = Math.min(...present);
+  const rawMax = Math.max(...present);
   const pad = Math.max(rawMax - rawMin, 1) * 0.15;
   const lo = rawMin - pad;
   const span = (rawMax + pad) - lo || 1;
   const n = series.length;
-  return series.map((v, i) => ({
+  return series.map((v, i) => v == null ? null : ({
     x: xPad + (chartW * i) / Math.max(1, n - 1),
     y: yTop + chartH - ((v - lo) / span) * chartH,
   }));
+}
+
+/** Split slot-preserving points into contiguous runs, so a gap breaks the line instead of bridging it. */
+function contiguousRuns(slots: (Pt | null)[]): Pt[][] {
+  const out: Pt[][] = [];
+  let cur: Pt[] = [];
+  for (const p of slots) {
+    if (p) cur.push(p);
+    else if (cur.length) { out.push(cur); cur = []; }
+  }
+  if (cur.length) out.push(cur);
+  return out;
+}
+
+/** One path string over every run. A single-point run draws nothing (the dot layer shows it). */
+function runs2path(runs: Pt[][]): string {
+  return runs.filter((r) => r.length >= 2).map(smoothLinePath).join(' ');
 }
 
 // Catmull-Rom spline → cubic-Bézier path. Endpoints are duplicated so the curve
@@ -123,16 +146,28 @@ export default function TrendChart({
   endLabel, endUnit, xLabels,
   overlay = null,
 }: TrendChartProps) {
+  /**
+   * 2026-09-11 (full-app audit) — A GAP IS A SLOT, NOT A DELETION.
+   *
+   * This filtered non-numbers OUT, which silently COLLAPSED the series: drop week 3 and week 4 slid
+   * into its x position, so every remaining point moved and the timeline underneath stopped
+   * describing the line above it. For a weekly chart where "he did not play that week" is a real and
+   * common state, that is the difference between an honest gap and a redrawn history.
+   *
+   * The slots are kept and the path is broken instead. A series with no nulls is plotted exactly as
+   * it was before. [[illustration-data-points]]
+   */
   const series = useMemo(
-    () => data.filter((v) => typeof v === 'number' && Number.isFinite(v)),
+    () => data.map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : null)),
     [data],
   );
   const overlaySeries = useMemo(
-    () => (overlay?.data ?? []).filter((v) => typeof v === 'number' && Number.isFinite(v)),
+    () => (overlay?.data ?? []).map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : null)),
     [overlay],
   );
+  const present = useMemo(() => series.filter((v): v is number => v != null), [series]);
 
-  if (series.length < MIN_POINTS) {
+  if (present.length < MIN_POINTS) {
     return (
       <View style={[styles.empty, { width, height }]}>
         {label ? <Text style={styles.emptyLabel}>{label}</Text> : null}
@@ -141,13 +176,14 @@ export default function TrendChart({
     );
   }
 
-  const rawMin = Math.min(...series);
-  const rawMax = Math.max(...series);
+  const rawMin = Math.min(...present);
+  const rawMax = Math.max(...present);
   const pad = Math.max(rawMax - rawMin, 1) * 0.15;
   const lo = yMin ?? rawMin - pad;
   const hi = yMax ?? rawMax + pad;
   const span = hi - lo || 1;
-  const delta = series[series.length - 1] - series[0];
+  // The trend is first-seen to last-seen. A trailing gap must not read as a drop to zero.
+  const delta = present[present.length - 1] - present[0];
 
   const PAD_X = 6;
   const hasLegend = !!label;
@@ -158,23 +194,33 @@ export default function TrendChart({
   const chartH = height - PAD_TOP - PAD_BOT;
   const baseY = PAD_TOP + chartH;
 
-  const points: Pt[] = series.map((v, i) => {
-    const x = PAD_X + (chartW * i) / (series.length - 1);
+  /** Slot-preserving: index i is always week i, `null` where there is no value. */
+  const slots: (Pt | null)[] = series.map((v, i) => {
+    const x = PAD_X + (chartW * i) / Math.max(1, series.length - 1);
+    if (v == null) return null;
     const y = PAD_TOP + chartH - ((v - lo) / span) * chartH;
     return { x, y };
   });
+  const points: Pt[] = slots.filter((p): p is Pt => p != null);
+  const runs = contiguousRuns(slots);
   const last = points[points.length - 1];
   // Overlay series: its OWN normalization over the SAME x-range/geometry (shape-correlation on one graph).
-  const overlayPts = overlaySeries.length >= MIN_POINTS
-    ? seriesToPoints(overlaySeries, PAD_X, chartW, PAD_TOP, chartH)
+  const overlaySlots = overlaySeries.filter((v) => v != null).length >= MIN_POINTS
+    ? seriesToSlots(overlaySeries, PAD_X, chartW, PAD_TOP, chartH)
     : [];
-  const overlayPath = overlayPts.length ? smoothLinePath(overlayPts) : '';
+  const overlayPts = overlaySlots.filter((p): p is Pt => p != null);
+  const overlayPath = overlaySlots.length ? runs2path(contiguousRuns(overlaySlots)) : '';
   // Markers sit on the effort (overlay) line when present — warm-ups are a property of practice weeks —
   // otherwise on the primary line.
-  const markerHost = overlayPts.length ? overlayPts : points;
+  /**
+   * 2026-09-11 — markers index the SLOTS, not the compacted points. Indexing the compacted array put
+   * a warm-up marker on whatever point happened to land at that position once a gap existed.
+   */
+  const markerHost: (Pt | null)[] = overlaySlots.length ? overlaySlots : slots;
   const markerPts = (markerIndices ?? [])
     .filter((i) => Number.isInteger(i) && i >= 0 && i < markerHost.length)
-    .map((i) => markerHost[i]);
+    .map((i) => markerHost[i])
+    .filter((p): p is Pt => p != null);
 
   // Color the line by trend direction relative to "better".
   const improving = higherIsBetter ? delta >= 0 : delta <= 0;
@@ -189,9 +235,13 @@ export default function TrendChart({
   // an overlay (effort line), the markers belong to IT (warm-ups are a property of practice weeks); else the
   // primary line. Computed after overlayPts below via markerHost.
 
-  const linePath = smoothLinePath(points);
-  // Area = the smooth line, then down to the baseline and back to the start.
-  const areaPath = `${linePath}L${last.x.toFixed(1)},${baseY.toFixed(1)}L${points[0].x.toFixed(1)},${baseY.toFixed(1)}Z`;
+  const linePath = runs2path(runs);
+  // Area = each contiguous run's smooth line, closed to the baseline. Broken runs get their own
+  // shape so a gap is empty rather than filled across.
+  const areaPath = runs
+    .filter((r) => r.length >= 2)
+    .map((r) => `${smoothLinePath(r)}L${r[r.length - 1].x.toFixed(1)},${baseY.toFixed(1)}L${r[0].x.toFixed(1)},${baseY.toFixed(1)}Z`)
+    .join(' ');
   // Unique per chart instance (color + size + endpoints) so multiple charts on one
   // screen don't share/collide on a single <LinearGradient> id.
   const gradId = `tc-${trendColor.replace('#', '')}-${Math.round(width)}x${Math.round(height)}-${Math.round(points[0].y)}-${Math.round(last.y)}`;
@@ -212,10 +262,12 @@ export default function TrendChart({
       const y = Math.max(PAD_TOP + 9, Math.min(pt.y, height - 4));
       out.push({ key, x, y, w, text, color: c });
     };
-    push('primary', endLabel, series[series.length - 1], endUnit, last, trendColor);
+    // The last VALUE SEEN, not the last slot — a trailing gap must not tag the line with null.
+    push('primary', endLabel, present[present.length - 1], endUnit, last, trendColor);
     if (overlayPts.length && overlay?.label) {
       const oLast = overlayPts[overlayPts.length - 1];
-      const oVal = overlaySeries[overlaySeries.length - 1];
+      const oPresent = overlaySeries.filter((v): v is number => v != null);
+      const oVal = oPresent[oPresent.length - 1];
       // Nudge apart when the two lines finish on top of each other, or one tag hides the other.
       const clash = out.length > 0 && Math.abs(oLast.y - out[0].y) < 14;
       const pt: Pt = clash ? { x: oLast.x, y: Math.min(oLast.y + 15, height - 4) } : oLast;
@@ -236,10 +288,13 @@ export default function TrendChart({
    * not as a line through mostly nothing. The same discipline the rest of the app keeps: show the
    * real signal, never a shape that implies more than the data says. [[illustration-data-points]]
    */
-  const activeCount = (xs: number[]) => xs.filter((v) => Number.isFinite(v) && v !== 0).length;
+  const activeCount = (xs: (number | null)[]) => xs.filter((v) => v != null && Number.isFinite(v) && v !== 0).length;
   const overlaySparse = overlayPts.length > 0 && activeCount(overlaySeries) < 2;
+  // Indexed against the SLOTS, so a gap cannot shift which period a dot belongs to.
   const overlayDots = overlaySparse
-    ? overlayPts.filter((_, i) => Number.isFinite(overlaySeries[i]) && overlaySeries[i] !== 0)
+    ? overlaySlots
+        .map((p, i) => (p && overlaySeries[i] != null && overlaySeries[i] !== 0 ? p : null))
+        .filter((p): p is Pt => p != null)
     : [];
 
   return (

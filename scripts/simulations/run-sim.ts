@@ -6906,7 +6906,11 @@ check('Practice history: dashboard list → detail with per-club striation + tem
       /<TrendChart/.test(detail);
     // primitives exist + are generic (number[] / segments), pure SVG
     const primitivesOk =
-      /export default function TrendChart/.test(trend) && /data: number\[\]/.test(trend) &&
+      /export default function TrendChart/.test(trend) &&
+      // 2026-09-11 — still a PLAIN numeric series (generic, reusable), now admitting `null` for a
+      // period with no activity. The point of this clause is that the primitive is not bound to one
+      // screen's data shape; a screen-specific prop type must still fail it.
+      /data: \(number \| null\)\[\]/.test(trend) &&
       /export default function StriationBar/.test(stri) && /react-native-svg/.test(stri);
     return storeOk && drillHistory && dashOk && detailOk && primitivesOk;
   })(),

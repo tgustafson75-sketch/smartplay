@@ -25,7 +25,10 @@ const dash = code('app/(tabs)/dashboard.tsx');
 describe('one event is drawn as an event, not as a trend', () => {
   it('counts the periods that ACTUALLY had activity', () => {
     // Zeroes are not data points about practice; they are weeks he did not practise.
-    expect(chart).toMatch(/const activeCount = \(xs: number\[\]\) => xs\.filter\(\(v\) => Number\.isFinite\(v\) && v !== 0\)\.length/);
+    // 2026-09-11 — widened to (number|null)[] when the chart learned to keep a gap as a slot. It
+    // must still reject BOTH a zero counted as activity and a null counted as activity.
+    expect(chart).toMatch(/const activeCount = \(xs: \(number \| null\)\[\]\) =>/);
+    expect(chart).toMatch(/xs\.filter\(\(v\) => v != null && Number\.isFinite\(v\) && v !== 0\)\.length/);
   });
 
   it('needs at least TWO active periods before it draws a line', () => {
@@ -43,7 +46,11 @@ describe('one event is drawn as an event, not as a trend', () => {
   });
 
   it('only the ACTIVE points get dots — a zero week is not an event', () => {
-    expect(chart).toMatch(/overlayPts\.filter\(\(_, i\) => Number\.isFinite\(overlaySeries\[i\]\) && overlaySeries\[i\] !== 0\)/);
+    // 2026-09-11 — now indexed against the SLOTS rather than the compacted points, because with a
+    // gap present the compacted index no longer identifies a week. The zero test must survive.
+    expect(chart).toMatch(/overlaySlots\s*\n?\s*\.map\(\(p, i\) => \(p && overlaySeries\[i\] != null && overlaySeries\[i\] !== 0 \? p : null\)\)/);
+    // and it must NOT go back to indexing the compacted array
+    expect(chart).not.toMatch(/overlayPts\.filter\(\(_, i\) => /);
   });
 });
 

@@ -25,6 +25,12 @@ export interface WorkoutPerformance {
   workoutSeries: number[];
   /** score-vs-par per round, oldest→newest (last ROUNDS rounds). */
   scoreSeries: number[];
+  /**
+   * 2026-09-11 — the score on the SAME weekly buckets as the effort line, `null` for a week with no
+   * round. This is what the CHART plots; `scoreSeries` above stays per-round for the trend maths.
+   * Before this the two lines on one chart had different time bases and the axis was wrong for both.
+   */
+  scoreWeekly: (number | null)[];
   /** 'minutes' when most workouts had a duration, else 'sessions'. */
   metric: 'minutes' | 'sessions';
   /** True when the minutes total includes assumed-duration fills (so the UI shows "est."). */
@@ -37,9 +43,9 @@ export interface WorkoutPerformance {
   headline: string;
 }
 
-const WEEKS = 6;
-const ROUNDS = 8;
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+// 2026-09-11 — WEEKS / ROUNDS / WEEK_MS were declared identically in three files. One owner now,
+// so the cards the dashboard renders together cannot drift onto different buckets.
+const { WEEKS, ROUNDS, WEEK_MS, weeklyScoreSeries } = require('./weeklyBuckets') as typeof import('./weeklyBuckets');
 const MIN_WORKOUTS = 3;
 const MIN_ROUNDS = 4;
 /** Per-session fallback weight when a workout has no stated duration (assumed ~45 min). */
@@ -76,6 +82,12 @@ export function computeWorkoutPerformance(input: WorkoutPerformanceInput): Worko
     .slice(-ROUNDS)
     .map((r) => r.scoreVsPar);
 
+  /**
+   * 2026-09-11 — the score on the SAME weekly buckets the effort line uses, so one timeline is
+   * true for both lines and point `i` of each is the same week. `null` for a week with no round;
+   * a zero on a vs-par axis would read as level par, which is the opposite of "did not play".
+   */
+  const scoreWeekly = weeklyScoreSeries(rounds as never, nowMs, WEEKS);
   const roundsCounted = scoreSeries.length;
   const hasEnough = totalWorkouts >= MIN_WORKOUTS && roundsCounted >= MIN_ROUNDS;
 
@@ -99,5 +111,5 @@ export function computeWorkoutPerformance(input: WorkoutPerformanceInput): Worko
     else headline = 'Steady stretch — a bump in golf-specific training tends to move the scoring line over time.';
   }
 
-  return { workoutSeries, scoreSeries, metric, totalWorkouts, totalMinutes, minutesEstimated, roundsCounted, hasEnough, headline };
+  return { workoutSeries, scoreSeries, scoreWeekly, metric, totalWorkouts, totalMinutes, minutesEstimated, roundsCounted, hasEnough, headline };
 }

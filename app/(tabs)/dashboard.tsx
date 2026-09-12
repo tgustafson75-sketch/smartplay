@@ -476,16 +476,16 @@ export default function Dashboard() {
     // 2026-08-22 — the OUTCOME axis is per-source now. It was hardcoded to score-vs-par in the JSX,
     // which silently assumed every source is judged the same way; strike rate is a percentage where
     // HIGHER is better, so a hardcoded axis would have drawn improvement as decline.
-    type Src = { key: 'practice' | 'points' | 'training' | 'strike' | 'swing'; tab: string; effort: number[]; effortLabel: string; deltaUnit: string; score: number[]; hasEnough: boolean; headline: string; markers: number[]; scoreLabel: string; scoreDeltaUnit: string; scoreHigherIsBetter: boolean };
+    type Src = { key: 'practice' | 'points' | 'training' | 'strike' | 'swing'; tab: string; effort: number[]; effortLabel: string; deltaUnit: string; score: (number | null)[]; hasEnough: boolean; headline: string; markers: number[]; scoreLabel: string; scoreDeltaUnit: string; scoreHigherIsBetter: boolean };
     const list: Src[] = [];
     if (practiceHistory.length > 0 && roundHistory.length > 0) {
-      list.push({ key: 'practice', tab: 'Practice', effort: practiceImpact.practiceSeries, effortLabel: 'PRACTICE / WK', deltaUnit: 'balls', score: practiceImpact.scoreSeries, hasEnough: practiceImpact.hasEnough, headline: practiceImpact.headline, markers: practiceImpact.warmupWeekIndices, scoreLabel: 'SCORE VS PAR', scoreDeltaUnit: 'vs par', scoreHigherIsBetter: false });
+      list.push({ key: 'practice', tab: 'Practice', effort: practiceImpact.practiceSeries, effortLabel: 'PRACTICE / WK', deltaUnit: 'balls', score: practiceImpact.scoreWeekly, hasEnough: practiceImpact.hasEnough, headline: practiceImpact.headline, markers: practiceImpact.warmupWeekIndices, scoreLabel: 'SCORE VS PAR', scoreDeltaUnit: 'vs par', scoreHigherIsBetter: false });
     }
     if (libraryHistory.length > 0) {
-      list.push({ key: 'points', tab: 'Points', effort: pointsPerf.pointsSeries, effortLabel: 'POINTS / WK', deltaUnit: 'pts', score: pointsPerf.scoreSeries, hasEnough: pointsPerf.hasEnough, headline: pointsPerf.headline, markers: [], scoreLabel: 'SCORE VS PAR', scoreDeltaUnit: 'vs par', scoreHigherIsBetter: false });
+      list.push({ key: 'points', tab: 'Points', effort: pointsPerf.pointsSeries, effortLabel: 'POINTS / WK', deltaUnit: 'pts', score: pointsPerf.scoreWeekly, hasEnough: pointsPerf.hasEnough, headline: pointsPerf.headline, markers: [], scoreLabel: 'SCORE VS PAR', scoreDeltaUnit: 'vs par', scoreHigherIsBetter: false });
     }
     if (workoutHistory.length > 0) {
-      list.push({ key: 'training', tab: 'Training', effort: workoutPerf.workoutSeries, effortLabel: workoutPerf.metric === 'minutes' ? 'TRAIN MIN / WK' : 'WORKOUTS / WK', deltaUnit: workoutPerf.metric === 'minutes' ? 'min' : '', score: workoutPerf.scoreSeries, hasEnough: workoutPerf.hasEnough, headline: workoutPerf.headline, markers: [], scoreLabel: 'SCORE VS PAR', scoreDeltaUnit: 'vs par', scoreHigherIsBetter: false });
+      list.push({ key: 'training', tab: 'Training', effort: workoutPerf.workoutSeries, effortLabel: workoutPerf.metric === 'minutes' ? 'TRAIN MIN / WK' : 'WORKOUTS / WK', deltaUnit: workoutPerf.metric === 'minutes' ? 'min' : '', score: workoutPerf.scoreWeekly, hasEnough: workoutPerf.hasEnough, headline: workoutPerf.headline, markers: [], scoreLabel: 'SCORE VS PAR', scoreDeltaUnit: 'vs par', scoreHigherIsBetter: false });
     }
     /**
      * 2026-08-22 — TRAINING vs STRIKE, owner-only. Plotted on the same graph as everything else so it
