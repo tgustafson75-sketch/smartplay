@@ -553,6 +553,32 @@ cross-checking each other beats one instrument being asked to guess position fro
 wrong — which is also how the training set keeps growing, from real disagreements rather than from a
 chore.
 
+#### "Verifiably", not "confidently"
+
+**Tim, 2026-09-12: *"Only ask to tap the bullseye if vision did not catch it verifiably."***
+
+The distinction matters and it is the whole design. A confidence score is the model's opinion of
+itself, and a threshold on it is a guess about a guess. A bullseye does not need one, because **its
+geometry is known, so a detection can be PROVED rather than scored**:
+
+- concentric rings share a centre;
+- the ring-diameter ratios are fixed by the printed target;
+- under perspective the circles become ellipses, and a *consistent* homography must explain all of
+  them at once — one that fits the outer ring and not the inner has found something that is not a
+  bullseye;
+- the recovered scale must agree with the known physical diameter, and hold still across frames.
+
+Pass those and we have not "probably" found the target — we have found it, and we know the
+pixels-to-inches scale and camera pose that come with it. Fail any of them and we ask, once.
+
+**So the rule is: prove it or ask.** No silent low-confidence guess dressed as a measurement, and no
+tap asked of a player when the camera can demonstrate it already knows. The same test answers the
+other question for free — if the homography drifts between sessions, the rig has moved, which is the
+confound the fitting comparison most needs flagged (§5).
+
+This is the honesty rule applied to an input rather than an output: the factor the player can change
+is "put the target somewhere I can see all of it", and we say so instead of quietly degrading.
+
 ### The gap that matters
 
 **`targetSamples` has no exit.** It is written by the calibration screen and read only by that same
