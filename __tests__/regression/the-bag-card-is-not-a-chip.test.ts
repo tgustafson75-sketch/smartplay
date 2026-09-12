@@ -88,3 +88,49 @@ describe('what the card actually says', () => {
     expect(clean).toMatch(/const ownedCount = useClubBagStore\(\(st\) => Object\.keys\(st\.clubs\)\.length\)/);
   });
 });
+
+/**
+ * 2026-09-11 (Tim) — "needs a slightly bigger icon that clearly says golf bag."
+ *
+ * It was Ionicons `golf` — a flag and a ball. On the Play tab that says GOLF, which is the one thing
+ * every icon on the screen already says, so it carried no information and the eye had nothing to
+ * catch. No installed icon family has a literal golf bag (checked all five); the nearest true
+ * silhouette is MaterialCommunityIcons `bag-personal`, a tall upright bag with a shoulder strap.
+ */
+describe('the icon says BAG, not just golf', () => {
+  it('uses the bag glyph rather than the flag-and-ball', () => {
+    expect(clean).toMatch(/<AppIcon family="mci" name="bag-personal"/);
+    // the old one must not come back on this card
+    const at = clean.indexOf('styles.bagIconWrap');
+    const block = clean.slice(at - 200, at + 260);
+    expect(block).not.toMatch(/name="golf"/);
+  });
+
+  it('is bigger than it was, and the circle grew with it', () => {
+    const iconAt = clean.indexOf('name="bag-personal"');
+    const size = Number(/size=\{(\d+)\}/.exec(clean.slice(iconAt, iconAt + 90))![1]);
+    expect(size).toBeGreaterThan(16);            // was 16
+
+    const wrapAt = src.indexOf('  bagIconWrap: {');
+    const w = Number(/width: (\d+)/.exec(src.slice(wrapAt, wrapAt + 140))![1]);
+    expect(w).toBeGreaterThanOrEqual(size + 12); // the glyph must not crowd its circle
+  });
+
+  it('the glyph actually exists in the family — a typo renders an empty box, silently', () => {
+    const glyphs = require('@expo/vector-icons/build/vendor/react-native-vector-icons/glyphmaps/MaterialCommunityIcons.json');
+    expect(glyphs['bag-personal']).toBeDefined();
+  });
+
+  it('the second family goes through AppIcon, not a direct import at the call site', () => {
+    // The wrapper exists to stop icon families scattering; adding one must not start that.
+    expect(src).not.toMatch(/import \{[^}]*MaterialCommunityIcons/);
+    const wrapper = fs.readFileSync(path.join(__dirname, '../../components/AppIcon.tsx'), 'utf8');
+    expect(wrapper).toMatch(/family: 'mci'; name: MciIconName/);
+  });
+
+  it('every other AppIcon call still defaults to Ionicons with no change', () => {
+    const wrapper = fs.readFileSync(path.join(__dirname, '../../components/AppIcon.tsx'), 'utf8');
+    expect(wrapper).toMatch(/family\?: 'ionicons'; name: IconName/);
+    expect(wrapper).toMatch(/return <Ionicons name=\{props\.name\}/);
+  });
+});

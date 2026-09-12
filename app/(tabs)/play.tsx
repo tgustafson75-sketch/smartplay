@@ -2407,8 +2407,17 @@ export default function PlayTab() {
               accessibilityLabel={t('play.accessibility_label.edit_the_bag_for_this_round')}
               activeOpacity={0.8}
             >
+              {/**
+                * 2026-09-11 (Tim) — "needs a slightly bigger icon that clearly says golf bag."
+                *
+                * It was Ionicons `golf`: a flag and a ball. That says GOLF, which on this screen is
+                * the one thing every icon already says — so it carried no information and the eye
+                * had nothing to catch. No installed family has a literal golf bag; the nearest true
+                * silhouette is MaterialCommunityIcons `bag-personal`, a tall upright bag with a
+                * shoulder strap, which is what a golf bag looks like at this size.
+                */}
               <View style={[styles.bagIconWrap, isPartialBag && styles.bagIconWrapActive]}>
-                <AppIcon name="golf" size={16} color="#00C896" />
+                <AppIcon family="mci" name="bag-personal" size={21} color="#00C896" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.bagCardLabel}>{t('play.play_tab.your_bag')}</Text>
@@ -2646,7 +2655,7 @@ return StyleSheet.create({
   },
   bagCardActive: { borderColor: c.accent, backgroundColor: 'rgba(0,200,150,0.10)' },
   bagIconWrap: {
-    width: 32, height: 32, borderRadius: 16,
+    width: 36, height: 36, borderRadius: 18,
     alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,200,150,0.14)',
   },
   bagIconWrapActive: { backgroundColor: 'rgba(0,200,150,0.22)' },
