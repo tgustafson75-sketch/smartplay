@@ -20,7 +20,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
-import { useRoundStore, eligibleHandicapRounds } from '../store/roundStore';
+import { useRoundStore, recalculateHandicapRounds } from '../store/roundStore';
 import { useTranslation } from 'react-i18next';
 
 export default function ProfileScreen() {
@@ -41,11 +41,11 @@ export default function ProfileScreen() {
   const onRecalculate = useCallback(() => {
     try {
       const calcMod = require('../services/handicapCalculator') as typeof import('../services/handicapCalculator');
-      const rounds = useRoundStore.getState().roundHistory;
       // 2026-07-06 (audit P0) — canonical filter also excludes sim rounds.
-      const eligible = eligibleHandicapRounds(rounds);
+      // 2026-09-11 — repairs the historical posting basis first; see recalculateHandicapRounds.
+      const { eligible } = recalculateHandicapRounds();
       if (eligible.length < 3) {
-        Alert.alert(t('profile.alert.need_more_rounds'), `Recalculation needs at least 3 complete 9- or 18-hole rounds. You have ${eligible.length}. Import your round history to seed it.`);
+        Alert.alert(t('profile.alert.need_more_rounds'), `Recalculation needs at least 3 postable rounds. You have ${eligible.length}. Import your round history to seed it.`);
         return;
       }
       const differentials = calcMod.rebuildDifferentialsFromHistory(eligible);

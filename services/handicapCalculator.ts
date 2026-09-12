@@ -517,6 +517,55 @@ export function computeWhsPostingScore(input: {
   return null; // too incomplete, or no nine whose pars we know
 }
 
+/**
+ * 2026-09-11 (Tim, full-app audit) — REPAIR THE POSTING BASIS ON A ROUND PLAYED BEFORE WE COMPUTED ONE.
+ *
+ * Two populations of historical rounds carry the wrong basis, and neither can fix itself:
+ *   - 7-8 and 10-13 hole rounds have NO basis, so eligibleHandicapRounds drops them and they have
+ *     never counted toward the Index at all;
+ *   - 9s and 18s from before the WHS posting score existed post their RAW total, with no
+ *     net-double-bogey cap, so one blow-up hole is still inflating the Index years later.
+ *
+ * Everything needed to repair them is already stored — the per-hole `scores` and the `holePars`
+ * snapshot. The one thing that is NOT stored is the course handicap the player had ON THE DAY, and
+ * the caps depend on it. The caller passes today's, which moves the cap by at most a stroke or two
+ * on the handful of holes that reach it. That is a far smaller error than the one being fixed:
+ * excluding the round entirely, or counting a 9 on a par 4 at full value.
+ *
+ * Returns null when the round must not be touched — a sim round, an import with no per-hole data, or
+ * one that already carries a basis (overwriting a correctly-stamped round would be a regression, and
+ * stamping is what makes the repair deterministic rather than drifting with the Index).
+ */
+export function repairedPostingBasis(
+  r: {
+    id?: string;
+    simulated?: boolean;
+    holesPlayed: number;
+    handicapAgs?: number;
+    handicapHoles?: 9 | 18;
+    holePars?: Record<number, number> | null;
+    scores?: Record<number, number> | null;
+  },
+  courseHandicap: number,
+): { handicapAgs: number; handicapHoles: 9 | 18 } | null {
+  if (r.simulated) return null;
+  if (r.handicapHoles != null) return null;                 // already has a basis — leave it alone
+  if (typeof r.id === 'string' && r.id.startsWith('imported_')) return null; // score-only, no holes
+  const pars = r.holePars;
+  const scores = r.scores;
+  if (!pars || !scores) return null;
+  const played = Object.values(scores).filter((v) => typeof v === 'number' && v > 0).length;
+  if (played < 7) return null;                              // below the WHS minimum either way
+  const post = computeWhsPostingScore({
+    // 14+ is an eighteen, 7..13 a nine — the same rule computeWhsPostingScore applies internally.
+    intendedHoles: played >= 14 ? 18 : 9,
+    courseHandicap,
+    pars,
+    scores,
+  });
+  return post ? { handicapAgs: post.adjustedGrossScore, handicapHoles: post.postedHoles } : null;
+}
+
 export function computeRoundHandicap(input: {
   handicapIndex: number;
   courseRating: number;

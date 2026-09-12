@@ -102,6 +102,15 @@ export default function ImportRoundsListScreen() {
         const all = useRoundStore.getState().roundHistory;
         // 2026-07-06 (audit P0) — canonical filter also excludes sim rounds
         // (this recompute runs automatically after EVERY import).
+        /**
+         * 2026-09-11 — DELIBERATELY NOT recalculateHandicapRounds().
+         *
+         * The Settings and Profile buttons repair the historical posting basis before rebuilding.
+         * This path does not, and must not: it fires automatically after every import, and Tim's
+         * decision was that the repair goes behind an explicit Recalculate because it moves an Index
+         * he may have quoted. Silently repairing here would be the automatic behaviour he declined.
+         * If you are here to "make the three consistent" — this inconsistency is the feature.
+         */
         const eligible = eligibleHandicapRounds(all);
         if (eligible.length >= 3) {
           const differentials = calcMod.rebuildDifferentialsFromHistory(eligible);

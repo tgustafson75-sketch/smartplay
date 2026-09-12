@@ -330,14 +330,16 @@ export default function Settings() {
     try {
       const roundMod = require('../store/roundStore') as typeof import('../store/roundStore');
       const calcMod = require('../services/handicapCalculator') as typeof import('../services/handicapCalculator');
-      const rounds = roundMod.useRoundStore.getState().roundHistory;
-      // 2026-07-06 (audit P0) — canonical filter from roundStore: also
-      // excludes sim rounds, which this site's inline copy missed.
-      const eligible = roundMod.eligibleHandicapRounds(rounds);
+      // 2026-07-06 (audit P0) — canonical filter from roundStore: also excludes sim rounds, which
+      // this site's inline copy missed.
+      // 2026-09-11 — and it now REPAIRS first: historical rounds of 7-13 holes carried no posting
+      // basis and had never counted, and old 9s/18s posted uncapped. One helper so the three
+      // Recalculate surfaces cannot drift apart on the order of the two steps.
+      const { eligible, repaired, nowCounted } = roundMod.recalculateHandicapRounds();
       if (eligible.length < 3) {
         Alert.alert(
           t('settings.alert.need_more_rounds'),
-          `Recalculation needs at least 3 complete 9- or 18-hole rounds. You have ${eligible.length}. Play more rounds or import past rounds (Settings → Help → Import Past Round). Partial rounds (10-17 holes) aren't counted.`,
+          `Recalculation needs at least 3 postable rounds. You have ${eligible.length}. Play more rounds or import past rounds (Settings → Help → Import Past Round). A round of 7-13 holes posts as a nine; under 7 holes cannot post.`,
         );
         return;
       }
@@ -353,9 +355,22 @@ export default function Settings() {
       if (result.newIndex != null) {
         profileMod.setHandicapIndex(result.newIndex);
         setEditIndex(String(result.newIndex));
+        /**
+         * 2026-09-11 — SAY WHAT THE REPAIR DID, because it is why the number moved.
+         *
+         * A recalculate that silently restamps historical rounds and hands back a different Index is
+         * indistinguishable from a bug. `nowCounted` is the part that surprises: rounds of 7-13
+         * holes had never counted toward the Index at all, so this is the tap where they start.
+         */
+        const repairNote = repaired > 0
+          ? `\n\nRepaired the scoring basis on ${repaired} past round${repaired === 1 ? '' : 's'}` +
+            (nowCounted > 0
+              ? `, ${nowCounted} of which had never counted toward your Index (a round of 7-13 holes posts as a nine).`
+              : ' — blow-up holes are now capped at net double bogey, as the Rules of Handicapping require.')
+          : '';
         Alert.alert(
           t('settings.alert.handicap_updated'),
-          `New Index: ${result.newIndex.toFixed(1)}\n\n${result.estimateNote}`,
+          `New Index: ${result.newIndex.toFixed(1)}\n\n${result.estimateNote}${repairNote}`,
         );
       } else {
         Alert.alert(t('settings.alert.could_not_compute'), result.estimateNote);

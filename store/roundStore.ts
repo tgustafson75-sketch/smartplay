@@ -640,6 +640,12 @@ interface RoundState {
    *  that lack one (Golfshot imports excluded). Idempotent; no-op if nothing to do. */
   backfillRoundSummaries: () => void;
   /**
+   * 2026-09-11 (Tim) — repair the WHS posting basis on historical rounds, from their stored per-hole
+   * scores. USER-TRIGGERED ONLY (the Recalculate buttons): it moves the Index, so it must never
+   * happen behind the player's back. Returns what it changed so the surface can say so.
+   */
+  repairHandicapPostingBasis: (courseHandicap: number) => { repaired: number; nowCounted: number };
+  /**
    * 2026-05-17 — Phase 413 — attach a health-data snapshot to the most
    * recently saved RoundRecord. Called by the round-end flow AFTER
    * endRound() returns the id, since reading from Health Connect is
@@ -1640,6 +1646,37 @@ export const useRoundStore = create<RoundState>()(
           });
           return changed ? { roundHistory: updated } : {};
         });
+      },
+
+      /**
+       * 2026-09-11 (Tim, full-app audit) — THE ROUNDS THAT NEVER COUNTED.
+       *
+       * Rounds of 7-8 or 10-13 holes carry no posting basis, so eligibleHandicapRounds has always
+       * dropped them; old 9s and 18s post their RAW total with no net-double-bogey cap. Both are
+       * repairable from data already on the record, and neither can repair itself.
+       *
+       * Deliberately NOT automatic. Tim's call: it goes behind Recalculate, because it moves a
+       * number he may have quoted to a club and he should be the one who asks for it. Stamping the
+       * result (rather than deriving it at each rebuild) also makes it deterministic — a lazily
+       * derived cap would drift every time the Index moved.
+       */
+      repairHandicapPostingBasis: (courseHandicap) => {
+        const calc = require('../services/handicapCalculator') as typeof import('../services/handicapCalculator');
+        let repaired = 0;
+        let nowCounted = 0;
+        const updated = get().roundHistory.map((r) => {
+          const basis = calc.repairedPostingBasis(r, courseHandicap);
+          if (!basis) return r;
+          repaired += 1;
+          // "Now counted" = rounds that were excluded from the Index entirely, as opposed to ones
+          // that were counting at an uncapped score. Worth separating: the first changes how many
+          // rounds back the Index looks, the second only changes their value.
+          if (r.holesPlayed !== 9 && r.holesPlayed !== 18) nowCounted += 1;
+          return { ...r, ...basis };
+        });
+        if (repaired > 0) set({ roundHistory: updated });
+        console.log(`[handicap] posting-basis repair: ${repaired} rounds restamped, ${nowCounted} now countable`);
+        return { repaired, nowCounted };
       },
 
       discardRound: () => {
@@ -3649,6 +3686,35 @@ export function whenRoundStoreHydrated(body: () => void | (() => void)): () => v
 // last runs automatically after every import) re-implemented the predicate
 // WITHOUT !r.simulated, so one tap silently posted sim differentials into
 // the Index. All rebuild sites import this so the filter can't drift again.
+/**
+ * 2026-09-11 (Tim) — REPAIR, THEN FILTER, IN ONE PLACE.
+ *
+ * The three Recalculate surfaces (settings, profile, import-rounds-list) each need to repair the
+ * historical posting basis and then apply the eligibility filter, in that order. This predicate has
+ * already been hand-copied across those three sites once — the 2026-07-06 audit found all three had
+ * re-implemented it WITHOUT `!r.simulated`, so one tap posted sim differentials into a real Index.
+ * Handing them a second two-step sequence to copy would invite the same failure again.
+ *
+ * The course handicap for the caps is the player's CURRENT rounded Index, the same approximation
+ * endRound makes when it stamps a fresh round. Returns the counts so each surface can tell the
+ * player what just changed rather than silently moving their number.
+ */
+export function recalculateHandicapRounds(): {
+  eligible: RoundRecord[];
+  repaired: number;
+  nowCounted: number;
+} {
+  const courseHandicap = (() => {
+    try {
+      const { usePlayerProfileStore } = require('./playerProfileStore') as typeof import('./playerProfileStore');
+      const idx = usePlayerProfileStore.getState().handicap_index;
+      return Math.round(typeof idx === 'number' && Number.isFinite(idx) ? idx : 18);
+    } catch { return 18; }
+  })();
+  const { repaired, nowCounted } = useRoundStore.getState().repairHandicapPostingBasis(courseHandicap);
+  return { eligible: eligibleHandicapRounds(useRoundStore.getState().roundHistory), repaired, nowCounted };
+}
+
 export function eligibleHandicapRounds(rounds: RoundRecord[]): RoundRecord[] {
   // 2026-07-24 (M4) — a round that carries a WHS posting basis (handicapHoles: filled to 9/18 after
   // a pick-up) is eligible even if its raw holesPlayed is 14-17. This keeps the recalc button IN SYNC
