@@ -1,87 +1,176 @@
 # Owner 2.0 — The Fitting Session
 
-**Raised by Tim, 2026-09-12.** Written up the day the per-club variant tracking shipped, because
-that feature turned out to be the bottom half of something much bigger.
+**Raised by Tim, 2026-09-12**, the day per-club variant tracking shipped — because that feature
+turned out to be the bottom half of something much bigger.
 
 > "Add a card for me with Owner 2.0 for a range session with SmartMotion where I enter 1–3 different
-> clubs for 10 shots then compare results. In this example, like my multiple drivers, or 3 different
-> sets of irons or — sorry I keep going — but we never considered grips and grip sizes. So like
+> clubs for 10 shots then compare results… but we never considered grips and grip sizes. So like
 > seeing maybe not universal truth but a what's working for me, and then maybe there is a
 > quantifiable why."
 >
 > "That's real fitting session beta in theory."
+>
+> "Make sure that fitting session is robust and has all factors selectable."
 
-That last line is the point of this document. It is not a range drill with a comparison bolted on.
-It is a **club fitting**, done with a phone, by the player, on their own range bay.
+**STATUS: SPEC ONLY. Not built.** The bottom half shipped 2026-09-12 (`clubVariantStore`,
+`ShotResult.club_variant`, `services/clubVariantPerformance`).
 
 ---
 
-## Why this is bigger than it looks
+## 1. Why this is bigger than a range drill
 
-A real fitting costs money, takes an appointment, happens on someone else's launch monitor, and ends
-with a recommendation from a person whose employer sells clubs. The player then takes the club home
-and finds out over six months whether it actually helped.
+A real fitting costs money, needs an appointment, runs on someone else's launch monitor, and ends in
+a recommendation from a person whose employer sells clubs. The player takes the club home and finds
+out over six months whether it helped.
 
-We already hold the pieces that make the honest version of that possible:
+**The moat is not the measurement — it is the validation.** A fitting bay knows what a club did for
+ten swings indoors. We know what it did over the next twenty *rounds*, because we are there for both.
+A fitting that checks its own homework on the course is only possible for whoever owns the round.
+No launch-monitor company can follow us there.
 
-| Piece | Where it already is |
+---
+
+## 2. The factor taxonomy — everything selectable
+
+A contender is a **spec**, not a club. Any field may differ; the ones that differ become the
+comparison axis. All optional, all free-text or picker, none required.
+
+### 2.1 Head
+| Factor | Notes |
 |---|---|
-| Which physical club is in play | `store/clubVariantStore` + `ShotResult.club_variant` (shipped 09-12) |
-| Comparison that refuses to over-claim | `services/clubVariantPerformance` — straighter beats longer, 12-shot floor |
-| Swing capture and pose | SmartMotion, on-device MediaPipe |
-| Tempo, club path, contact | `services/swing/clubPath`, the fault engine |
-| Carry vs total, per club | `store/clubStatsStore` — two ladders + a roll model |
-| Ball in play | `playerProfileStore.currentBall`, stamped per round (shipped 09-12) |
-| What it did on the course | the whole round history |
+| Model / year | free text — "Qi10", "Burner 2" |
+| Loft | stated loft, and actual if known |
+| Face angle setting | open / square / closed, or the hosel setting |
+| Lie angle | standard / upright / flat, degrees if known |
+| Head weight | grams, or the weight-port setting |
+| Bounce + grind | wedges only |
 
-**The differentiator is the last row.** A fitting bay can tell you what a club did for ten swings
-indoors. We are the only one that can then tell you what it did over the next twenty rounds, because
-we are there for both. A fitting that validates itself on the course afterwards is not a feature a
-launch-monitor company can copy — they are not in the round.
+### 2.2 Shaft
+| Factor | Notes |
+|---|---|
+| Model | free text |
+| Flex | L / A / R / S / X, or a raw CPM |
+| Weight | grams |
+| Torque | degrees |
+| Length | inches — **the factor most likely to move strike location** |
+| Kick point | low / mid / high |
+| Tip trim | free text |
+
+### 2.3 Grip — the unmodelled one
+Tim's aside is the most interesting thing in the ask. Nobody fits grips, they are cheap to change,
+and they plausibly move exactly what our pose read is *good* at.
+
+| Factor | Notes |
+|---|---|
+| Model | free text |
+| **Size** | undersize / standard / midsize / jumbo |
+| Build-up | number of wraps |
+| Material | rubber / cord / hybrid / wrap |
+| Taper | reduced-taper yes/no |
+
+### 2.4 Ball
+Already tracked (`currentBall`). A fitting session must pin it — **comparing two drivers with two
+different balls compares nothing.** The session should refuse to start with an undeclared ball, or
+record it as a known confound.
+
+### 2.5 Setup and environment — recorded, not chosen
+Not factors under test, but they are what makes a session comparable to itself, and a later session
+comparable to this one.
+
+Tee height · turf vs mat · indoor/outdoor · temperature · wind · altitude · time of day (fatigue) ·
+camera angle (face-on vs down-the-line — the pose read is angle-aware and nulls what it cannot see
+from behind) · warm-up completed yes/no.
 
 ---
 
-## The session
+## 3. What we can honestly measure, and what we cannot
 
-Owner 2.0 card. Range mode, SmartMotion running.
+This table is the spine of the feature. Everything above the line is real; everything below it is a
+number a launch monitor gives and **we must never imply we have.**
 
-1. **Declare the contenders — 1 to 3.** Anything that differs: three drivers, three iron sets, the
-   same head with two shafts, *the same club with two grips*.
-2. **Ten shots each**, prompted in rotation rather than in blocks. Rotation matters: ten in a row
-   with one club measures how warm you got, not the club.
-3. **Compare**, on what we can actually measure, and say plainly which of those is a real gap and
-   which is inside the noise.
-4. **Carry it to the course.** The winner becomes the declared variant, and the next twenty rounds
-   either confirm it or do not — and we say which.
+### Measured
+| Signal | Source |
+|---|---|
+| Carry vs total, per club | `clubStatsStore` — two ladders + roll model |
+| Dispersion / direction | shot direction + outcome tagging |
+| Trouble rate | penalty strokes + non-clean outcomes |
+| Contact quality | acoustic contact + strike feel |
+| Clubhead path through impact | `services/swing/clubPath` — measured points, with frame coverage |
+| Tempo and transition | swing metrics |
+| Hip / shoulder turn, tilt, sequencing | `SwingBiomechanics` |
+| Lead-arm angle at top and impact | `leadArmTopDeg`, `leadArmImpactDeg` |
+| Head drift, sway, weight shift | `headDriftPxNorm`, `swayNorm`, `weightShiftPct` |
+| Finish quality | `finishWeightPct` |
 
-### Grips — the part nobody models
+### NOT measured — never imply otherwise
+Ball speed · **spin rate** · **launch angle** · smash factor · spin axis · angle of attack in degrees
+· face-to-path in degrees · strike location on the face (mm).
 
-Tim's aside is the most interesting thing in the ask. Grip and grip size are fitted almost nowhere,
-are cheap to change, and plausibly move exactly the things our pose read is good at: hand position at
-address, face rotation through impact, and grip pressure as it shows up in tempo.
-
-We cannot claim a mechanism. We *can* honestly say "with the midsize grip your face is four degrees
-less closed at impact across twenty shots" — and that is a quantifiable why, which is more than a
-player gets from a shop wall.
+> A fitting that quietly implies spin numbers it never took is exactly the fake precision this app
+> exists not to do. Where a factor's usual justification is a number we cannot take, say so: "I can't
+> measure spin — what I *can* tell you is you're in trouble off it 40% of the time."
 
 ---
 
-## What this must not become
+## 4. The session protocol
 
-The failure mode is obvious and it is the one every launch monitor falls into: **fake precision**.
-Ten shots is a small sample. A phone is not a TrackMan. The honest product is:
+1. **Declare the contenders — 1 to 3.** Each is a spec from §2. The app names the axis that actually
+   differs ("same head, same shaft, midsize vs standard grip") so the player knows what is being
+   tested. If more than one factor differs, say so plainly: the result will be real but it will not
+   isolate a cause.
+2. **Pin the confounds.** Ball declared; environment recorded.
+3. **Rotate, never block.** Shot-by-shot rotation, not ten in a row. **Ten in a row with one club
+   measures how warm you got.** This is the single most important protocol decision here.
+4. **10 shots each, minimum.** See §5 — ten resolves large gaps only, and the app must say so.
+5. **Compare** using the shipped `compareClubVariants` rules: straighter beats longer, report "nothing
+   in it" when it is, never invent a winner.
+6. **Offer a why** only where a measurement backs it. "Your face is four degrees less closed at impact
+   with the midsize grip" is a why. "Midsize grips reduce hand action" is marketing.
+7. **Carry it to the course.** The winner becomes the declared variant. The next twenty rounds either
+   confirm it or do not — and the app says which. **This step is the product.**
 
-- Report the gaps that are real and say "nothing in it" for the rest — the comparison already works
-  this way and must keep doing so.
-- Never report a universal truth. Tim said it himself: *"maybe not universal truth but a what's
-  working for me."* That framing is the product. It is also the only defensible claim.
-- A "why" only where there is a measurement behind it. No mechanism-sounding prose over a number we
-  did not take.
+---
 
-## Status
+## 5. The statistics honesty problem
 
-**SPEC ONLY. Not built.** The bottom half — declaring a variant and comparing it from real shots —
-shipped 2026-09-12. This card is the session that makes it deliberate rather than incidental.
+Ten shots is a small sample and shot-to-shot variance in golf is large. With n=10 per contender, only
+**large** effects are resolvable; a 4-yard carry difference is indistinguishable from noise no matter
+how confidently it is displayed.
 
-Depends on nothing new: it is an orchestration of SmartMotion capture, the variant store and the
-comparison. The work is the session flow and the rotation prompting, not new measurement.
+The feature must therefore:
+- state the resolution up front — "with 10 each I can see a big difference, not a small one";
+- widen, not sharpen, as data thins;
+- offer "hit 10 more with each" as the answer to an inconclusive result, rather than picking a winner;
+- treat an outlier as an outlier (a topped one is a mishit, not evidence about the shaft) and say how
+  many it set aside;
+- **never rank three contenders 1-2-3 when only first-vs-last clears the noise.** Say "A and B are
+  level, C is behind."
+
+`MIN_SHOTS_PER_VARIANT = 12`, `MEANINGFUL_YARDS = 6`, `MEANINGFUL_TROUBLE_PCT = 8` in
+`clubVariantPerformance` are the shipped expression of this and should govern the session too.
+
+---
+
+## 6. What it must never become
+
+- A recommendation engine pointed at a shop.
+- A universal claim. Tim set the line himself: *"maybe not universal truth but a what's working for
+  me."* That framing is both the honest claim and the better product.
+- A number-dense screen that looks like a launch monitor. The output is a sentence, then the numbers
+  under it for anyone who wants them.
+
+---
+
+## 7. Build notes
+
+No new measurement is required. This is orchestration of what exists:
+
+- SmartMotion capture, with the existing rotation between clubs driven by the session.
+- `clubVariantStore` for the declared spec — **needs extending from a single label string to the
+  structured spec in §2**, keeping the current string as the display name.
+- `clubVariantPerformance` for the comparison — already correct, already guarded.
+- Pose + clubPath for the "why".
+- Round history for the validation loop.
+
+The work is the session flow, the spec editor, the rotation prompting and the honesty rails — not
+new sensors.
