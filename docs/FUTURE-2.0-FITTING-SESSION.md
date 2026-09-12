@@ -579,6 +579,26 @@ confound the fitting comparison most needs flagged (§5).
 This is the honesty rule applied to an input rather than an output: the factor the player can change
 is "put the target somewhere I can see all of it", and we say so instead of quietly degrading.
 
+#### The same rule applies to the shot map's inputs
+
+**Tim, 2026-09-12: *"Same for adding shot input on shot maps in SmartMotion reports."***
+
+`components/smartmotion/ShotMapPage.tsx` takes its cage geometry through **steppers** — canvas
+distance in feet, camera-behind distance in feet, tapped up and down one at a time. The map itself is
+already honest about its sources (downrange from the effort→carry estimate, lateral from the
+acoustic-anchored down-the-line ball trace), but those two distances are the player doing a
+measurement the camera is looking straight at.
+
+A verified bullseye recovers exactly those numbers. The homography that proves the target IS a
+bullseye also gives the scale and the camera's pose relative to the canvas — which is the canvas
+distance and the camera-behind distance, in the same step, with no tape measure and no stepper.
+
+So the steppers follow the same rule: **derived when the target verifies, editable when it does
+not.** They stay on screen as a correction — a player who has moved the camera or is using a target
+we cannot see should still be able to say so — but they stop being the way the numbers normally
+arrive. A stepper the app fills in for you is a completely different object from a stepper you are
+required to operate.
+
 ### The gap that matters
 
 **`targetSamples` has no exit.** It is written by the calibration screen and read only by that same
