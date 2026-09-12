@@ -777,6 +777,27 @@ export async function primeMicPipeline(): Promise<void> {
     const perm = await Audio.getPermissionsAsync();
     if (!perm.granted) return;                 // can't prime without permission — retry later
     if (isSpeaking() || isCapturing()) return; // don't fight TTS / a live capture — retry later
+    /**
+     * 2026-09-12 (Tim — "Kevin is stuck listening after a question from him I answered") — AND NOT
+     * WHILE A SESSION IS OPENING.
+     *
+     * `isCapturing()` only goes true once the recording actually starts, which is several awaits
+     * deep inside openSession(). A caller that opens a session and then primes — which is exactly
+     * what the caddie tab's opener began doing on 2026-09-11 when it started opening the mic after a
+     * question — slips through this guard in the window between the two. Priming then creates a
+     * SECOND Audio.Recording alongside the real one and, worse, its `finally` puts the audio session
+     * back into SPEECH mode underneath a session that is trying to record. The capture records
+     * nothing, so VAD never sees end-of-speech and the turn never ends: the session sits in
+     * 'listening' until the 150s dormancy watchdog force-closes it.
+     *
+     * sessionInFlight is set SYNCHRONOUSLY at the top of toggle(), before its first await, so this
+     * check closes the window rather than narrowing it. Lazy require: listeningSession imports this
+     * module, so a static import here is a cycle.
+     */
+    try {
+      const ls = require('./listeningSession') as typeof import('./listeningSession');
+      if (ls.isSessionInFlight()) return;
+    } catch { /* if we cannot tell, fall through — the guards above still apply */ }
     micPipelinePrimed = true;                  // commit only once we're actually priming
     await configureAudioForRecording();
     const { recording } = await Audio.Recording.createAsync(RECORDING_OPTIONS);
