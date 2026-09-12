@@ -658,6 +658,8 @@ export default function PlayTab() {
    */
   const carriedCount = useClubBagStore((st) => st.carriedList().length);
   const isPartialBag = useClubBagStore((st) => st.isPartialBag());
+  /** What he OWNS — so a pared-down bag can read "8 of 16" rather than a bare count. */
+  const ownedCount = useClubBagStore((st) => Object.keys(st.clubs).length);
   const [setupNineHole, setSetupNineHole] = useState(false);
   /**
    * 2026-09-10 — WHICH nine. The caddie tab's own start modal has had this since 2026-08-06; this
@@ -2357,34 +2359,6 @@ export default function PlayTab() {
               >
                 <Text style={[styles.chipText, setupCompetition && styles.chipTextActive]}>{t('play.competition')}</Text>
               </TouchableOpacity>
-              {/**
-                * 2026-09-11 (Tim) — "In the Play tab we don't have anywhere where you could edit
-                * your bag pre-round. It shouldn't be an auto prompt, but there should be a card or a
-                * chip on there to update your bag for the round."
-                *
-                * A chip, not a prompt — it sits with the other round-format choices and says nothing
-                * unless you look at it. What it sets is the CARRIED bag, which is a subset of the
-                * one you own: "a Sunday bag, three to six clubs for those kind of courses, just a
-                * subspawn of the full bag." Until now the app had one list and assumed it was both,
-                * so the caddie could name a club sitting in the boot of the car.
-                *
-                * It states the count rather than a label, because the count is the fact a golfer
-                * checks before walking to the first tee.
-                */}
-              <TouchableOpacity
-                style={[styles.chip, { flexDirection: 'row', alignItems: 'center' }, isPartialBag && styles.chipActive]}
-                onPress={() => router.push('/practice/fit-profile' as never)}
-                accessibilityRole="button"
-                accessibilityLabel={t('play.accessibility_label.edit_the_bag_for_this_round')}
-              >
-                <AppIcon name="golf" size={13} color={isPartialBag ? '#0b1220' : '#00C896'} />
-                <Text style={[styles.chipText, { marginLeft: 5 }, isPartialBag && styles.chipTextActive]}>
-                  {carriedCount > 0
-                    ? t('play.play_tab.bag_count', { count: carriedCount })
-                    : t('play.play_tab.set_your_bag')}
-                </Text>
-              </TouchableOpacity>
-
               {/* 2026-06-10 — Tournament: not a toggle — opens the full group-play
                   flow (scramble/skins/match play/etc). Moved here from the old
                   standalone top-of-tab card so it sits with the format choices. */}
@@ -2410,6 +2384,44 @@ export default function PlayTab() {
                 <Text style={[styles.chipText, { marginLeft: 5 }]}>{t('play.play_tab.challenge')}</Text>
               </TouchableOpacity>
             </View>
+
+            {/**
+              * 2026-09-11 (Tim) — ITS OWN SLIM CARD, because as a chip it was lost.
+              *
+              * It first shipped in the format row beside Competition, Front/Back nine, Tournament
+              * and Challenge. Tim: "that location and look for set your bag is awful, gets lost on
+              * non-related factors." He is right, and the reason is structural rather than visual:
+              * everything else in that row is a TOGGLE or a flow you open. This is a STATE with a
+              * value — how many clubs are going out with you — and a value reads as a toggle when
+              * you put it in a row of toggles.
+              *
+              * So: a card of its own, stating the number. The count is the fact a golfer checks
+              * before walking to the first tee, and it is the one thing that makes a wrong club call
+              * impossible to explain away. Accented only when he has deliberately pared the bag
+              * down, so a normal full bag is quiet.
+              */}
+            <TouchableOpacity
+              style={[styles.bagCard, isPartialBag && styles.bagCardActive]}
+              onPress={() => router.push('/practice/fit-profile' as never)}
+              accessibilityRole="button"
+              accessibilityLabel={t('play.accessibility_label.edit_the_bag_for_this_round')}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.bagIconWrap, isPartialBag && styles.bagIconWrapActive]}>
+                <AppIcon name="golf" size={16} color="#00C896" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.bagCardLabel}>{t('play.play_tab.your_bag')}</Text>
+                <Text style={[styles.bagCardValue, isPartialBag && { color: '#00C896' }]} numberOfLines={1}>
+                  {ownedCount === 0
+                    ? t('play.play_tab.bag_not_set')
+                    : isPartialBag
+                      ? t('play.play_tab.bag_of_owned', { packed: carriedCount, owned: ownedCount })
+                      : t('play.play_tab.bag_count', { count: carriedCount })}
+                </Text>
+              </View>
+              <AppIcon name="chevron-forward" size={16} color="#00C896" />
+            </TouchableOpacity>
 
             {/* 2026-06-13 (Tim) — Getting around: walking vs cart. Stored on
                 roundStore.transportMode + persisted onto the round record. */}
@@ -2604,6 +2616,24 @@ return StyleSheet.create({
   factorTitleActive: { color: c.accent },
   factorSub: { color: c.text_muted, fontSize: 11, lineHeight: 15 },
   factorRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, flexWrap: 'wrap' },
+  /**
+   * 2026-09-11 — the bag's own slim row. Deliberately shorter than factorCard (10pt vertical, one
+   * line of value) so it reads as a status you can tap, not another setting to weigh up.
+   */
+  bagCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    marginHorizontal: 16, marginTop: 14,
+    paddingVertical: 10, paddingHorizontal: 12,
+    backgroundColor: c.surface, borderRadius: 12, borderWidth: 1, borderColor: c.border,
+  },
+  bagCardActive: { borderColor: c.accent, backgroundColor: c.surface_elevated },
+  bagIconWrap: {
+    width: 30, height: 30, borderRadius: 15,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface_elevated,
+  },
+  bagIconWrapActive: { backgroundColor: 'rgba(0,200,150,0.16)' },
+  bagCardLabel: { color: c.text_muted, fontSize: 10, fontWeight: '700', letterSpacing: 1.3 },
+  bagCardValue: { color: c.text_primary, fontSize: 14, fontWeight: '800', marginTop: 1 },
   chip: {
     paddingHorizontal: 14, paddingVertical: 8,
     borderRadius: 20, borderWidth: 1, borderColor: c.border,

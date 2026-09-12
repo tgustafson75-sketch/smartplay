@@ -535,7 +535,10 @@
       "front_9": "Front 9",
       "bag_count_one": "{{count}} club",
       "bag_count_other": "{{count}} clubs",
-      "set_your_bag": "Set your bag"
+      "set_your_bag": "Set your bag",
+      "your_bag": "YOUR BAG",
+      "bag_of_owned": "{{packed}} of {{owned}} clubs",
+      "bag_not_set": "Not set yet"
     },
     "accessibility_label": {
       "edit_the_bag_for_this_round": "Edit the bag you are carrying for this round",
