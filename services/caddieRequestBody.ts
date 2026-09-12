@@ -852,6 +852,27 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      */
     club_work: safe(() => decision?.clubWork ?? null, null),
     /**
+     * 2026-09-11 (Tim) — "add a cover recommendations by course if the user would like to say, what
+     * should I bring for this course?"
+     *
+     * He could not ask. services/bagRecommendation answers the backward-looking half and its only
+     * caller is the scorecard, for the course already being played — which is the case where he
+     * could just remember. Nothing answered it for a course he has not teed off on yet.
+     *
+     * SENT ONLY BEFORE THE ROUND, and on the first hole. Packing the bag is a car-park decision; by
+     * the fourth green the clubs he has are the clubs he has, and shipping the answer to a question
+     * nobody can act on any more is the "call nobody asked should exist" shape. It also keeps this
+     * off the wire for all but a couple of turns a round. [[a-call-nobody-asked-should-exist]]
+     */
+    bag_pack: safe(() => {
+      const hole = safe(() => r.currentHole ?? null, null);
+      if (isRoundActive && typeof hole === 'number' && hole > 1) return null;
+      const { liveBagPack } = require('./bagPackLive') as typeof import('./bagPackLive');
+      const { pack } = liveBagPack();
+      if (!pack || pack.carry.length === 0) return null;
+      return { headline: pack.headline, carry: pack.carry, leave: pack.leave, why: pack.reasons };
+    }, null),
+    /**
      * 2026-08-24 (orphan sweep) — THE PLAYER'S OWN HISTORY, which no brain had ever seen.
      *
      * services/caddieHistoryContext.historyPromptBlock() has existed since 07-04 — recent rounds

@@ -453,6 +453,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
        */
       club_work = null,
       /**
+       * 2026-09-11 (Tim) — "what should I bring for this course?" Sent by the client only before the
+       * round and on the first hole: packing the bag is a car-park decision, and by the fourth green
+       * the clubs he has are the clubs he has.
+       */
+      bag_pack = null,
+      /**
        * 2026-08-21 — SKIP THE AUDIO NOBODY IS GOING TO PLAY.
        *
        * kevin synthesises TTS on EVERY turn. That is right for kevin's own clients, which play
@@ -995,6 +1001,10 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
        */
       if (typeof club_work === 'string' && club_work.trim()) {
         lines.push(`- Which of their clubs are earning their place and which are not, from their own contact and outcomes: ${club_work.trim()} Lean on the strong ones when the plan is close. With one that needs work, adjust the APPROACH — a safer target, a club less — rather than telling them to go practise mid-round.`);
+      }
+      const bp = bag_pack as { headline?: string; carry?: string[]; leave?: string[]; why?: string[] } | null;
+      if (bp && Array.isArray(bp.carry) && bp.carry.length > 0) {
+        lines.push(`- What to put in the bag for this course, worked out from the actual card and their own carries: ${bp.headline ?? ''} Carry: ${bp.carry.join(', ')}.${Array.isArray(bp.leave) && bp.leave.length ? ` Leave: ${bp.leave.join(', ')}.` : ''}${Array.isArray(bp.why) && bp.why.length ? ` Why: ${bp.why.join(' ')}` : ''} Use this ONLY if they ask what to bring or what to carry — do not volunteer a bag review on the first tee.`);
       }
       if (typeof preRoundRoutine === 'string' && preRoundRoutine.trim()) {
         lines.push(`- Their saved pre-round routine, in their words: "${String(preRoundRoutine).trim().slice(0, 400)}". Run them through it when they ask for it — your voice, not a recital.`);
