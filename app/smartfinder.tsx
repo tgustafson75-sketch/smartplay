@@ -97,6 +97,13 @@ const CANVAS_W_FRACTION = 0.92;
  * camera modes (Standard, Putt) overlay it on the camera; SVG modes show it in
  * the standard header.
  */
+/**
+ * How long the spoken callout waits for a real elevation delta before giving the flat number.
+ * Long enough for the gridded elevation lookup (cached, normally well under a second); short enough
+ * that a course with no elevation data is never left in silence on the tee.
+ */
+const ELEVATION_GRACE_MS = 2500;
+
 export default function SmartFinder() {
   const { t } = useTranslation();
   // 2026-09-06 — remote kill switch. Redirects to the Caddie screen if `smartfinder` is off, whether it
@@ -178,6 +185,11 @@ export default function SmartFinder() {
     geometry?.green ? { lat: geometry.green.lat, lng: geometry.green.lng } : null,
   );
   const calloutElevationFeet = calloutElevation.deltaFeet;
+  /**
+   * When the callout first became sayable. Bounds how long it waits for the elevation to resolve
+   * before speaking the flat number anyway — see the callout effect below.
+   */
+  const calloutEligibleSinceRef = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -271,6 +283,26 @@ export default function SmartFinder() {
     if (trustLevel < 2) return; // Quiet = silent by design
     const middle = yards.middle;
     if (middle == null) return;
+    /**
+     * 2026-09-11 (full-app audit) — WAIT FOR THE ELEVATION, BUT NOT FOREVER.
+     *
+     * Earlier today this callout was given `calloutElevationFeet` so the spoken plays-like would
+     * stop disagreeing with the on-screen card. The value was passed; the effect was never told to
+     * depend on it. useElevationDeltaStatus starts at `{ deltaFeet: 0, hasData: false }` and fills
+     * in asynchronously, and this effect speaks exactly ONCE (calloutSpokenRef) — so on the common
+     * path it fired the moment the yardage resolved, read a not-yet-loaded 0, announced the shot as
+     * if the green were level, and could never correct itself. The fix was half-wired: right value,
+     * wrong moment. Found by react-hooks/exhaustive-deps, not by eye.
+     *
+     * `hasData` is false both while loading AND when a course genuinely has no elevation data, so
+     * waiting on it unconditionally would leave those courses silent — worse than a flat number.
+     * Hence a BOUNDED wait: hold for the real figure, and if it has not arrived within the grace
+     * window, speak the honest flat one, which is exactly what shipped before today.
+     */
+    if (!calloutElevation.hasData) {
+      if (calloutEligibleSinceRef.current == null) calloutEligibleSinceRef.current = Date.now();
+      if (Date.now() - calloutEligibleSinceRef.current < ELEVATION_GRACE_MS) return;
+    }
     // 2026-05-18 — Sanity gate. If middle yardage is insane (>600y means
     // we're not playing the hole we think we are, or GPS/geometry are
     // out of sync — Tim was hearing "Middle of green, eighty thousand
@@ -310,7 +342,9 @@ export default function SmartFinder() {
       });
     }, 300);
     return () => clearTimeout(timer);
-  }, [isRoundActive, voiceEnabled, trustLevel, yards.middle, caddieWeather, shotBearingDeg, voiceGender, language, apiUrl]);
+    // calloutElevationFeet / hasData are dependencies because the whole point is to re-evaluate when
+    // the elevation lands. calloutSpokenRef still guarantees one callout.
+  }, [isRoundActive, voiceEnabled, trustLevel, yards.middle, caddieWeather, shotBearingDeg, voiceGender, language, apiUrl, calloutElevationFeet, calloutElevation.hasData]);
 
   // Camera modes share the camera view + need permission gate. Phase 502
   // added TARGET to this set — V3-style camera-with-draggable-reticle.

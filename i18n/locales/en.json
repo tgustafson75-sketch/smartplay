@@ -452,7 +452,8 @@
       "preround_association_note": "Association, not cause — the rounds you stretched for are often the ones you arrived early for.",
       "weeks_ago_one": "{{count}} wk ago",
       "weeks_ago_other": "{{count}} wks ago",
-      "this_week": "this wk"
+      "this_week": "this wk",
+      "points_and_sessions": "{{points}} pts · {{sessions}}×"
     },
     "alert": {
       "delete_round": "Delete round?"

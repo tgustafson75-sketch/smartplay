@@ -270,7 +270,21 @@ export default function Dashboard() {
       warmups: warmupEvents.map((t) => ({ startedAt: t })),
       nowMs: Date.now(),
     }),
-    [practiceHistory, realRounds],
+    /**
+     * 2026-09-11 (full-app audit) — `warmupEvents` WAS MISSING FROM THIS LIST.
+     *
+     * It is read two lines above and it draws on workoutHistory as well as practiceHistory: a
+     * pre-round STRETCH is a workoutHistory entry (`source === 'preround_warmup'`), and nothing
+     * about it touches practiceHistory. So logging a stretch changed warmupEvents, this memo did
+     * not recompute, and the warm-up markers on the practice line plus the warmed-vs-cold split
+     * stayed stale until a practice session or a round happened to land.
+     *
+     * Which is precisely the thing Tim said he wanted to see — "definitely some differences on
+     * whether I stretch before I play", "once you do like one stretch". He would have logged one,
+     * opened the dashboard, and watched nothing move. The sibling memo below already lists it;
+     * this one was an oversight, confirmed by react-hooks/exhaustive-deps rather than by eye.
+     */
+    [practiceHistory, realRounds, warmupEvents],
   );
 
   // 2026-06-15 (Tim — estimated points from the swing library + the point/performance
@@ -1162,7 +1176,7 @@ export default function Dashboard() {
                   {getDrillEntry(id)?.title ?? rec.label ?? id}
                 </Text>
                 <Text style={[styles.practiceDrillPts, { color: colors.text_muted }]}>
-                  {rec.points} pts · {rec.sessions}×
+                  {t('dashboard.text.points_and_sessions', { points: rec.points, sessions: rec.sessions })}
                 </Text>
               </View>
             ))}
