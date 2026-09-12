@@ -51,7 +51,7 @@ export const HOW_TO: HowTo[] = [
   {
     id: 'putting-read',
     asks: ['how is my putting', 'am I putting well', 'my putting stats', 'how many putts', 'three putts'],
-    steps: 'Ask me "how\u2019s my putting" \u2014 I work it out from your tracked rounds: putts per hole, how often a three-putt is costing you, and whether the problem is distance control or the short ones. Needs about nine tracked holes of putting before it means anything.',
+    steps: 'Ask me "how\u2019s my putting" \u2014 I work it out from your tracked rounds: putts per hole, how often a three-putt is costing you, and whether the problem is distance control or the short ones. Before I have watched you putt I go off your handicap so the plan still makes sense from day one, and I\u2019ll tell you that is what I am doing. About nine tracked holes and it becomes your own record.',
   },
   {
     id: 'caddie-brevity',
