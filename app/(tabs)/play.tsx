@@ -603,6 +603,29 @@ const LOCAL_COURSES: CourseSummary[] = LOCAL_COURSES_RAW.map(c => {
 // 2026-06-04) + its trophy button + launchTournamentForCourse were DEAD code and
 // have been deleted. Tournament Mode stays reachable from the format chip row.
 
+/**
+ * 2026-09-11 (Tim) — THE BRANDED SECTION ICONS.
+ *
+ * Produced to the Smart Motion STYLE LOCK (assets/icons/smartmotion/README.md): thin lime line art,
+ * one subject in a thin circle, black knocked out to transparent. Extracted from one ChatGPT sheet
+ * and centred to identical bounding boxes, so they align without per-icon nudging.
+ *
+ * Tinted at render time with `c.accent_lime`, which the theme already resolves per mode — #88F700 on
+ * dark, #5a9e1a on light. That token exists because the 2026-09-05 contrast pass had already found
+ * that the raw brand lime does not hold up on a white field, which is exactly what a contact sheet
+ * of these on white shows. Using it rather than a new constant keeps ONE owner for "brand lime, as
+ * this mode should render it". [[two-owners-is-the-root-cause]]
+ */
+const SEC_ICON = {
+  strategy: require('../../assets/icons/play/sec-strategy.png'),
+  mental: require('../../assets/icons/play/sec-mental.png'),
+  format: require('../../assets/icons/play/sec-format.png'),
+  bag: require('../../assets/icons/play/sec-your-bag.png'),
+  around: require('../../assets/icons/play/sec-getting-around.png'),
+  tee: require('../../assets/icons/play/sec-tee-box.png'),
+  notes: require('../../assets/icons/play/sec-notes.png'),
+} as const;
+
 export default function PlayTab() {
   const router = useRouter();
   const { t } = useTranslation();
@@ -1896,7 +1919,7 @@ export default function PlayTab() {
         </View>
 
         {/* Closest Local */}
-        <Text style={styles.sectionLabel}>{t('play.closest_courses')}</Text>
+        <Text style={[styles.sectionLabel, styles.sectionLabelFlush]}>{t('play.closest_courses')}</Text>
         {/* Phase 405 wave 3 — auto-detect banner. Only renders when GPS
             puts the player within ~550y of a known course, so most users
             never see it (no pollution); when it fires, it's strongly
@@ -2289,7 +2312,10 @@ export default function PlayTab() {
                 (nine-hole + competition), MENTAL state, NOTES. Picked
                 BEFORE the round fires so Kevin briefing + caddie brain
                 have the player's intent in hand. */}
-            <Text style={[styles.sectionLabel, { marginTop: 18 }]}>{t('play.strategy')}</Text>
+            <View style={styles.sectionHead}>
+              <Image source={SEC_ICON.strategy} style={styles.sectionIcon} tintColor={colors.accent_lime} />
+              <Text style={styles.sectionHeadText}>{t('play.strategy')}</Text>
+            </View>
             <View style={styles.factorGrid}>
               {(Object.keys(ROUND_MODE_CARDS) as RoundMode[]).map(m => {
                 const active = setupMode === m;
@@ -2307,7 +2333,10 @@ export default function PlayTab() {
               })}
             </View>
 
-            <Text style={[styles.sectionLabel, { marginTop: 18 }]}>{t('play.mental')}</Text>
+            <View style={styles.sectionHead}>
+              <Image source={SEC_ICON.mental} style={styles.sectionIcon} tintColor={colors.accent_lime} />
+              <Text style={styles.sectionHeadText}>{t('play.mental')}</Text>
+            </View>
             <View style={styles.factorRow}>
               {(['fresh', 'neutral', 'tense'] as const).map(m => {
                 const active = setupMental === m;
@@ -2323,7 +2352,10 @@ export default function PlayTab() {
               })}
             </View>
 
-            <Text style={[styles.sectionLabel, { marginTop: 18 }]}>{t('play.format')}</Text>
+            <View style={styles.sectionHead}>
+              <Image source={SEC_ICON.format} style={styles.sectionIcon} tintColor={colors.accent_lime} />
+              <Text style={styles.sectionHeadText}>{t('play.format')}</Text>
+            </View>
             <View style={styles.factorRow}>
               <TouchableOpacity
                 style={[styles.chip, setupNineHole && styles.chipActive]}
@@ -2417,7 +2449,7 @@ export default function PlayTab() {
                 * shoulder strap, which is what a golf bag looks like at this size.
                 */}
               <View style={[styles.bagIconWrap, isPartialBag && styles.bagIconWrapActive]}>
-                <AppIcon family="mci" name="bag-personal" size={21} color="#00C896" />
+                <Image source={SEC_ICON.bag} style={styles.bagIcon} tintColor={colors.accent_lime} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.bagCardLabel}>{t('play.play_tab.your_bag')}</Text>
@@ -2434,7 +2466,10 @@ export default function PlayTab() {
 
             {/* 2026-06-13 (Tim) — Getting around: walking vs cart. Stored on
                 roundStore.transportMode + persisted onto the round record. */}
-            <Text style={[styles.sectionLabel, { marginTop: 18 }]}>{t('play.getting_around', { defaultValue: 'GETTING AROUND' })}</Text>
+            <View style={styles.sectionHead}>
+              <Image source={SEC_ICON.around} style={styles.sectionIcon} tintColor={colors.accent_lime} />
+              <Text style={styles.sectionHeadText}>{t('play.getting_around', { defaultValue: 'GETTING AROUND' })}</Text>
+            </View>
             <View style={styles.factorRow}>
               <TouchableOpacity
                 style={[styles.chip, { flexDirection: 'row', alignItems: 'center' }, setupTransport === 'walking' && styles.chipActive]}
@@ -2461,7 +2496,10 @@ export default function PlayTab() {
                 round record via startRound. Informational for v1.1
                 (per-tee coordinates aren't wired into SmartFinder
                 math yet); shows up in recap so the score is contextual. */}
-            <Text style={[styles.sectionLabel, { marginTop: 18 }]}>{t('play.tee_box')}</Text>
+            <View style={styles.sectionHead}>
+              <Image source={SEC_ICON.tee} style={styles.sectionIcon} tintColor={colors.accent_lime} />
+              <Text style={styles.sectionHeadText}>{t('play.tee_box')}</Text>
+            </View>
             <View style={styles.factorRow}>
               {(['gold', 'blue', 'white', 'red'] as const).map(color => {
                 const active = setupTee === color;
@@ -2496,7 +2534,10 @@ export default function PlayTab() {
               })}
             </View>
 
-            <Text style={[styles.sectionLabel, { marginTop: 18 }]}>{t('play.notes')}</Text>
+            <View style={styles.sectionHead}>
+              <Image source={SEC_ICON.notes} style={styles.sectionIcon} tintColor={colors.accent_lime} />
+              <Text style={styles.sectionHeadText}>{t('play.notes')}</Text>
+            </View>
             <View style={styles.notesRow}>
               <TextInput
                 ref={notesInputRef}
@@ -2607,10 +2648,51 @@ return StyleSheet.create({
   // near-invisible in light mode while the rest of the screen themed via makeStyles(c). Use the theme.
   playTitle: { fontSize: 28, fontWeight: '900', color: c.text_primary, letterSpacing: 0.3 },
   playTagline: { fontSize: 13, fontWeight: '500', color: c.text_muted, marginTop: 2 },
+  /**
+   * 2026-09-11 (Tim, on a screenshot) — "those words get lost. They're gray, they're small, they're
+   * about the same size as the word on the pill, and there's no delineation or separation."
+   *
+   * Measurably true, and it was inverted rather than merely weak: the label was `text_muted` at
+   * 11pt while the CHIPS it introduces are `text_muted` at 12pt. Same colour, smaller size — the
+   * heading was quieter than its own contents, so STRATEGY read as one more pill that happened to
+   * have no border.
+   *
+   * Three changes, no layout move: step the colour up to text_primary (the chips keep muted, so the
+   * hierarchy now runs the right way), 13pt so it is bigger than what it labels, and a hairline rule
+   * above — inset to the 16pt gutter — so each section is visibly its own block instead of one
+   * continuous column. paddingHorizontal became marginHorizontal so the rule stops at the gutter
+   * rather than running edge to edge.
+   *
+   * Deliberately NOT a redesign: the branded section icons Tim is producing will sit to the left of
+   * this text, and that is the change that will carry the separation. This is the typography that
+   * should have been right underneath it.
+   */
   sectionLabel: {
-    color: c.text_muted, fontSize: 11, fontWeight: '700',
-    letterSpacing: 1.6, paddingHorizontal: 16, marginTop: 16, marginBottom: 8,
+    color: c.text_primary, fontSize: 13, fontWeight: '800',
+    letterSpacing: 1.4, marginHorizontal: 16, marginTop: 16, marginBottom: 10,
+    paddingTop: 16, borderTopWidth: 1, borderTopColor: c.border,
   },
+  /** The first label on the screen, where a rule would double up with the chrome above it. */
+  sectionLabelFlush: { borderTopWidth: 0, paddingTop: 0 },
+
+  /**
+   * 2026-09-11 — the same header, now carrying its branded icon. sectionLabel above still serves the
+   * four course-list headings, which have no icon of their own.
+   *
+   * Every colour here is a theme token, so it resolves across all five palettes rather than being
+   * tuned for the mode I happened to be looking at — which is the mistake Tim stopped me making.
+   */
+  sectionHead: {
+    flexDirection: 'row', alignItems: 'center', gap: 9,
+    marginHorizontal: 16, marginTop: 18, marginBottom: 10,
+    paddingTop: 16, borderTopWidth: 1, borderTopColor: c.border,
+  },
+  sectionIcon: { width: 22, height: 22 },
+  sectionHeadText: {
+    color: c.text_primary, fontSize: 13, fontWeight: '800', letterSpacing: 1.4,
+  },
+  /** The bag card's own mark — the same branded golf bag, a touch larger inside its circle. */
+  bagIcon: { width: 24, height: 24 },
   factorGrid: {
     flexDirection: 'row', flexWrap: 'wrap', gap: 8,
     paddingHorizontal: 16,

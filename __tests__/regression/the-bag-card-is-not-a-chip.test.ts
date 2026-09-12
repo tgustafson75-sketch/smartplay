@@ -98,39 +98,43 @@ describe('what the card actually says', () => {
  * silhouette is MaterialCommunityIcons `bag-personal`, a tall upright bag with a shoulder strap.
  */
 describe('the icon says BAG, not just golf', () => {
-  it('uses the bag glyph rather than the flag-and-ball', () => {
-    expect(clean).toMatch(/<AppIcon family="mci" name="bag-personal"/);
-    // the old one must not come back on this card
+  /**
+   * 2026-09-11, twice. First it was Ionicons `golf` — a flag and a ball, which on the Play tab says
+   * GOLF, the one thing every icon there already says. Then MaterialCommunityIcons `bag-personal`,
+   * which Tim called correctly: "that looks like a fucking suitcase." It is luggage.
+   *
+   * No icon family ships a golf bag. So one was PRODUCED to the Smart Motion style lock and lives in
+   * assets/icons/play — a golf bag with clubs fanning out of the top, which is the only version of
+   * this that actually reads.
+   */
+  it('uses the branded golf-bag asset, not a stock glyph', () => {
+    expect(clean).toMatch(/bag: require\('\.\.\/\.\.\/assets\/icons\/play\/sec-your-bag\.png'\)/);
+    expect(clean).toMatch(/<Image source=\{SEC_ICON\.bag\}/);
+  });
+
+  it('neither stock stand-in can come back to this card', () => {
     const at = clean.indexOf('styles.bagIconWrap');
-    const block = clean.slice(at - 200, at + 260);
+    const block = clean.slice(at - 260, at + 300);
     expect(block).not.toMatch(/name="golf"/);
+    expect(block).not.toMatch(/bag-personal/);
   });
 
-  it('is bigger than it was, and the circle grew with it', () => {
-    const iconAt = clean.indexOf('name="bag-personal"');
-    const size = Number(/size=\{(\d+)\}/.exec(clean.slice(iconAt, iconAt + 90))![1]);
-    expect(size).toBeGreaterThan(16);            // was 16
-
-    const wrapAt = src.indexOf('  bagIconWrap: {');
-    const w = Number(/width: (\d+)/.exec(src.slice(wrapAt, wrapAt + 140))![1]);
-    expect(w).toBeGreaterThanOrEqual(size + 12); // the glyph must not crowd its circle
+  it('the asset exists on disk — a missing require is a red box at runtime', () => {
+    const p = require('path').join(__dirname, '../../assets/icons/play/sec-your-bag.png');
+    expect(fs.existsSync(p)).toBe(true);
+    expect(fs.statSync(p).size).toBeGreaterThan(2000);
   });
 
-  it('the glyph actually exists in the family — a typo renders an empty box, silently', () => {
-    const glyphs = require('@expo/vector-icons/build/vendor/react-native-vector-icons/glyphmaps/MaterialCommunityIcons.json');
-    expect(glyphs['bag-personal']).toBeDefined();
+  it('is tinted from the theme, so it cannot wash out in light mode', () => {
+    // The raw brand lime does not hold up on a white field; accent_lime already resolves per mode.
+    expect(clean).toMatch(/source=\{SEC_ICON\.bag\}[^/]*tintColor=\{colors\.accent_lime\}/);
   });
 
-  it('the second family goes through AppIcon, not a direct import at the call site', () => {
-    // The wrapper exists to stop icon families scattering; adding one must not start that.
-    expect(src).not.toMatch(/import \{[^}]*MaterialCommunityIcons/);
-    const wrapper = fs.readFileSync(path.join(__dirname, '../../components/AppIcon.tsx'), 'utf8');
-    expect(wrapper).toMatch(/family: 'mci'; name: MciIconName/);
-  });
-
-  it('every other AppIcon call still defaults to Ionicons with no change', () => {
-    const wrapper = fs.readFileSync(path.join(__dirname, '../../components/AppIcon.tsx'), 'utf8');
-    expect(wrapper).toMatch(/family\?: 'ionicons'; name: IconName/);
-    expect(wrapper).toMatch(/return <Ionicons name=\{props\.name\}/);
+  it('and the unused icon family went with the glyph it was added for', () => {
+    // Comments stripped first: the note explaining the REMOVAL names the thing removed, so a raw
+    // match fails on the explanation. Fifth time today. [[strip-comments-before-a-guard-matches]]
+    const wrapper = fs.readFileSync(path.join(__dirname, '../../components/AppIcon.tsx'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+    expect(wrapper).not.toMatch(/MaterialCommunityIcons/);
   });
 });
