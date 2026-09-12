@@ -297,6 +297,31 @@ The feature must therefore:
 
 ---
 
+## 5b. Where the honesty ethos came from
+
+**Tim, 2026-09-12: *"So you have context — this is where the entire honesty ethos originally came
+from."***
+
+Worth recording, because it changes how the rules in this document should be read. The honesty
+principles in this app are not a policy adopted for good taste. They are what the original concept —
+this concept, a Temu net in a back garden with a GoPro and a phone — ran into physically and could
+not get around:
+
+- in a net the ball travels about four feet, so there is no carry to observe at any frame rate;
+- a phone camera and one microphone cannot see spin, launch angle, ball speed or spin axis;
+- so the only way the idea worked **at all** was to be exact about which numbers were real.
+
+Everything downstream descends from that. Dropping spin / face angle / launch angle from SmartMotion
+rather than faking them. "Real signals or Coming Soon, never fabricate." Confidence and range instead
+of a blank. Degrade and flag rather than go dark. The source-tiering in `swingMetricsService`.
+
+So the honesty rails in §3 and §5 are not a constraint bolted onto this feature to keep it modest.
+**They are the feature.** The reason a phone and a cheap net can be called a fitting at all is that
+it only ever claims what it measured — and the moment it claims more, it is just a worse launch
+monitor.
+
+---
+
 ## 6. What it must never become
 
 - A recommendation engine pointed at a shop.
