@@ -115,3 +115,46 @@ describe('the timeline no longer collides with what follows it', () => {
     expect(Number(m![1])).toBeGreaterThanOrEqual(18);
   });
 });
+
+/**
+ * 2026-09-11 (Tim) — "fix score trend. Kind of the whole point."
+ *
+ * The SHOT STATS tile labelled SCORE TREND was showing the AVERAGE score-vs-par over the last five
+ * rounds — a level, not a direction. It then drew a trending-UP arrow beside it and rendered it in
+ * the positive accent, so "+15.6" (fifteen over par) arrived with three separate signals all saying
+ * good news. In golf lower is better, so every one of them was backwards.
+ */
+describe('SCORE TREND is a trend, and says which way is good', () => {
+  const dashRaw = read('app/(tabs)/dashboard.tsx');
+
+  it('compares two halves rather than averaging one window', () => {
+    expect(dash).toMatch(/const early = vs\.slice\(0, half\)/);
+    expect(dash).toMatch(/const late = vs\.slice\(vs\.length - half\)/);
+    expect(dash).toMatch(/const delta = avg\(late\) - avg\(early\)/);
+  });
+
+  it('treats DOWN as improvement, because lower is better in golf', () => {
+    expect(dash).toMatch(/improving: delta < -0\.5/);
+    expect(dash).toMatch(/scoreTrend\.improving \? 'trending-down-outline'/);
+  });
+
+  it('will not call a trend off fewer than four rounds', () => {
+    // With two or three, one bad afternoon IS the trend. A dash beats a confident number.
+    expect(dash).toMatch(/if \(vs\.length < 4\) return null/);
+  });
+
+  it('colours bad news as bad news — the tile used to be green whatever it said', () => {
+    expect(dashRaw).toMatch(/tone\?: 'good' \| 'bad' \| 'neutral'/);
+    expect(dashRaw).toMatch(/tone === 'bad' \? colors\.accent_amber/);
+    expect(dash).toMatch(/scoreTrend\.worsening \? 'bad'/);
+  });
+
+  it('and the other three tiles are untouched — tone defaults to good', () => {
+    expect(dashRaw).toMatch(/tone = 'good',/);
+  });
+
+  it('a flat stretch claims nothing — no arrow, no colour', () => {
+    expect(dash).toMatch(/: 'remove-outline'/);
+    expect(dash).toMatch(/: 'neutral'/);
+  });
+});

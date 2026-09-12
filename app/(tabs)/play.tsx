@@ -2448,9 +2448,16 @@ export default function PlayTab() {
                 * silhouette is MaterialCommunityIcons `bag-personal`, a tall upright bag with a
                 * shoulder strap, which is what a golf bag looks like at this size.
                 */}
-              <View style={[styles.bagIconWrap, isPartialBag && styles.bagIconWrapActive]}>
-                <Image source={SEC_ICON.bag} style={styles.bagIcon} tintColor={colors.accent_lime} />
-              </View>
+              {/**
+                * 2026-09-11 (Tim) — "take badge treatment off Play tab icons and make a little
+                * bigger too."
+                *
+                * The tinted circle behind it was a second ring around art that had just had its own
+                * ring stripped for exactly this reason. Two circles competing for the same 26 points
+                * of width, with the actual golf bag squeezed into what was left. Gone; the glyph
+                * gets the whole footprint.
+                */}
+              <Image source={SEC_ICON.bag} style={styles.bagIcon} tintColor={colors.accent_lime} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.bagCardLabel}>{t('play.play_tab.your_bag')}</Text>
                 <Text style={[styles.bagCardValue, isPartialBag && { color: '#00C896' }]} numberOfLines={1}>
@@ -2687,12 +2694,12 @@ return StyleSheet.create({
     marginHorizontal: 16, marginTop: 18, marginBottom: 10,
     paddingTop: 16, borderTopWidth: 1, borderTopColor: c.border,
   },
-  sectionIcon: { width: 24, height: 24 },
+  sectionIcon: { width: 27, height: 27 },
   sectionHeadText: {
     color: c.text_primary, fontSize: 13, fontWeight: '800', letterSpacing: 1.4,
   },
   /** The bag card's own mark — the same branded golf bag, a touch larger inside its circle. */
-  bagIcon: { width: 26, height: 26 },
+  bagIcon: { width: 32, height: 32 },
   factorGrid: {
     flexDirection: 'row', flexWrap: 'wrap', gap: 8,
     paddingHorizontal: 16,
@@ -2736,11 +2743,6 @@ return StyleSheet.create({
     borderLeftWidth: 3, borderLeftColor: c.accent,
   },
   bagCardActive: { borderColor: c.accent, backgroundColor: 'rgba(0,200,150,0.10)' },
-  bagIconWrap: {
-    width: 36, height: 36, borderRadius: 18,
-    alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,200,150,0.14)',
-  },
-  bagIconWrapActive: { backgroundColor: 'rgba(0,200,150,0.22)' },
   bagCardLabel: { color: c.text_muted, fontSize: 10, fontWeight: '700', letterSpacing: 1.3 },
   bagCardValue: { color: c.text_primary, fontSize: 15, fontWeight: '800', marginTop: 1 },
   chip: {

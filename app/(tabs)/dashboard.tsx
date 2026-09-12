@@ -179,10 +179,31 @@ export default function Dashboard() {
   const profilePortraitB64 = useCustomCaddieMediaStore((s) => s.profilePortraitB64);
   // 2026-06-16 (Tim — mockup SHOT STATS 4th tile) — honest score trend = avg
   // score-vs-par over the last few rounds. Null (→ "—") until there's history.
+  /**
+   * 2026-09-11 (Tim — "fix score trend, kind of the whole point") — IT WAS NOT A TREND.
+   *
+   * This averaged score-vs-par over the last five rounds, which is a LEVEL, not a direction. The
+   * tile then labelled it SCORE TREND, drew a trending-UP arrow beside it and coloured it with the
+   * positive accent — so "+15.6", meaning fifteen over par, arrived with three separate signals all
+   * saying good news. In golf lower is better, so every one of them was backwards.
+   *
+   * A trend is a comparison. Later half minus earlier half of the recent rounds: NEGATIVE means the
+   * scores came down, which is improvement. Needs four rounds (two a side) before it will say
+   * anything — with fewer, one bad afternoon is the entire "trend", and an honest dash beats a
+   * confident number. [[illustration-data-points]]
+   */
   const scoreTrend = useMemo(() => {
-    const recent = realRounds.filter((r) => typeof r.scoreVsPar === 'number').slice(-5);
-    if (recent.length === 0) return null;
-    return recent.reduce((a, r) => a + (r.scoreVsPar ?? 0), 0) / recent.length;
+    const vs = realRounds
+      .filter((r) => typeof r.scoreVsPar === 'number')
+      .slice(-8)
+      .map((r) => r.scoreVsPar as number);
+    if (vs.length < 4) return null;
+    const half = Math.floor(vs.length / 2);
+    const early = vs.slice(0, half);
+    const late = vs.slice(vs.length - half);
+    const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+    const delta = avg(late) - avg(early);
+    return { delta, improving: delta < -0.5, worsening: delta > 0.5 };
   }, [realRounds]);
   // 2026-06-30 (Tim — audit) — visible TIER/LEVEL + points. Every caddie chat, swing
   // and practice awards points and climbs a tier, but it was rendered NOWHERE after the
@@ -1186,10 +1207,23 @@ export default function Dashboard() {
             value={shotStats.teeShots === 0 || shotStats.avgYds === 0 ? '—' : String(shotStats.avgYds)}
             label={t('dashboard.tee_avg')}
           />
+          {/**
+            * The icon and the colour now follow the DIRECTION, not the sign of a number. An arrow
+            * down is improvement in golf, and it is drawn in the positive accent; worsening gets
+            * amber, which this palette already reserves for warnings. Flat gets a dash and no colour
+            * claim at all.
+            */}
           <StatTile
             colors={colors}
-            icon="trending-up-outline"
-            value={scoreTrend == null ? '—' : `${scoreTrend >= 0 ? '+' : ''}${scoreTrend.toFixed(1)}`}
+            icon={scoreTrend == null ? 'remove-outline'
+              : scoreTrend.improving ? 'trending-down-outline'
+              : scoreTrend.worsening ? 'trending-up-outline'
+              : 'remove-outline'}
+            tone={scoreTrend == null ? 'neutral'
+              : scoreTrend.improving ? 'good'
+              : scoreTrend.worsening ? 'bad'
+              : 'neutral'}
+            value={scoreTrend == null ? '—' : `${scoreTrend.delta > 0 ? '+' : ''}${scoreTrend.delta.toFixed(1)}`}
             label={t('dashboard.score_trend', { defaultValue: 'SCORE TREND' })}
           />
         </View>
@@ -1754,16 +1788,24 @@ function StatTile({
   value,
   label,
   icon,
+  tone = 'good',
 }: {
   colors: ReturnType<typeof useTheme>['colors'];
   value: string;
   label: string;
   icon?: React.ComponentProps<typeof Ionicons>['name'];
+  /**
+   * 2026-09-11 — every tile used to render in the positive accent regardless of what it said, so a
+   * score fifteen over par was the same green as a 100% clean-tee rate. `tone` lets a tile state
+   * that its number is bad news; 'good' stays the default so the other three are untouched.
+   */
+  tone?: 'good' | 'bad' | 'neutral';
 }) {
+  const toneColor = tone === 'bad' ? colors.accent_amber : tone === 'neutral' ? colors.text_muted : colors.accent;
   return (
     <View style={[styles.statTile, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
-      {icon ? <Ionicons name={icon} size={18} color={colors.accent} style={{ marginBottom: 2 }} /> : null}
-      <Text style={[styles.statTileValue, { color: colors.accent }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>{value}</Text>
+      {icon ? <Ionicons name={icon} size={18} color={toneColor} style={{ marginBottom: 2 }} /> : null}
+      <Text style={[styles.statTileValue, { color: toneColor }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>{value}</Text>
       <Text style={[styles.statTileLabel, { color: colors.text_muted }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{label}</Text>
     </View>
   );

@@ -5093,18 +5093,35 @@ check('Custom caddie portrait can be just the dashboard icon (separate from the 
   })(),
   'a portrait can be the dashboard icon without activating the custom caddie persona/voice');
 
-check('Dashboard SHOT STATS: 4 branded-icon tiles incl. honest score trend',
-  // 2026-06-16 (Tim — dashboard mockup) — 4-up shot stats with branded green icons;
-  // Score Trend is a real avg score-vs-par over recent rounds (— until history).
+check('Dashboard SHOT STATS: 4 tiles, and a score trend that knows which way is good',
+  // 2026-06-16 (Tim — dashboard mockup) — 4-up shot stats, each with an icon.
+  /**
+   * 2026-09-11 (Tim — "fix score trend, kind of the whole point") — THIS GUARD DESCRIBED THE BUG.
+   *
+   * Its own wording was "score trend = real avg score-vs-par", and that was the defect: an AVERAGE
+   * is a level, not a trend. The tile drew a trending-UP arrow beside it in the positive accent, so
+   * "+15.6" — fifteen over par — arrived with three signals all reading as good news. In golf lower
+   * is better. The guard was green through all of it because it only checked the icon NAME existed.
+   *
+   * Still rejects what it always did: a missing tile, a missing icon, a fabricated trend. Now also
+   * rejects an up-arrow meaning improvement, and a trend claimed off too little history.
+   * [[a-guard-can-assert-the-broken-shape]]
+   */
   (() => {
     const d = read('app/(tabs)/dashboard.tsx');
-    return (
-      /icon="golf-outline"/.test(d) && /icon="locate-outline"/.test(d) &&
-      /icon="flag-outline"/.test(d) && /icon="trending-up-outline"/.test(d) &&
-      /const scoreTrend = useMemo/.test(d)
-    );
+    const fourTiles =
+      /icon="golf-outline"/.test(d) && /icon="locate-outline"/.test(d) && /icon="flag-outline"/.test(d);
+    // a real comparison, not an average of one window
+    const isATrend = /const delta = avg\(late\) - avg\(early\)/.test(d) && /const scoreTrend = useMemo/.test(d);
+    // down is improvement, and bad news is not painted with the positive accent
+    const directionRight = /improving: delta < -0\.5/.test(d)
+      && /scoreTrend\.improving \? 'trending-down-outline'/.test(d)
+      && /tone === 'bad' \? colors\.accent_amber/.test(d);
+    // and it refuses to call a trend off a couple of rounds
+    const honest = /if \(vs\.length < 4\) return null/.test(d);
+    return fourTiles && isATrend && directionRight && honest;
   })(),
-  '4-up SHOT STATS with branded icons; score trend = real avg score-vs-par, dash until there is history');
+  '4-up SHOT STATS; score trend is a real half-vs-half comparison, DOWN is improvement, bad news is amber, and it dashes below four rounds');
 
 check('Dashboard: real day-streak metric surfaced',
   // 2026-06-16 (Tim — "streaks as a metric in the app") — the player's own day streak

@@ -78,9 +78,12 @@ describe('what the card actually says', () => {
     // 2026-09-11 second pass: the card now carries a permanent accent left edge so it is not
     // skipped. The partial state still adds the full accent border and an accent value on top, so
     // "you have pared this down" still reads as a change rather than as ambient colour.
+    // 2026-09-11 — the icon's tinted badge went when Tim asked for the badge treatment off: it was
+    // a second ring around art whose own ring had just been stripped for legibility. The escalation
+    // now runs through the CARD and the VALUE, which is where it was always most visible.
     expect(clean).toMatch(/isPartialBag && styles\.bagCardActive/);
-    expect(clean).toMatch(/isPartialBag && styles\.bagIconWrapActive/);
     expect(clean).toMatch(/isPartialBag && \{ color: '#00C896' \}/);
+    expect(clean).not.toMatch(/bagIconWrap/);   // the badge must not come back
   });
 
   it('reads the CARRIED count and the OWNED count from the store, never a constant', () => {
@@ -113,8 +116,8 @@ describe('the icon says BAG, not just golf', () => {
   });
 
   it('neither stock stand-in can come back to this card', () => {
-    const at = clean.indexOf('styles.bagIconWrap');
-    const block = clean.slice(at - 260, at + 300);
+    const at = clean.indexOf('source={SEC_ICON.bag}');
+    const block = clean.slice(Math.max(0, at - 300), at + 300);
     expect(block).not.toMatch(/name="golf"/);
     expect(block).not.toMatch(/bag-personal/);
   });
