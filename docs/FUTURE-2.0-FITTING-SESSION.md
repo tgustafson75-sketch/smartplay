@@ -112,6 +112,47 @@ Ball speed · **spin rate** · **launch angle** · smash factor · spin axis · 
 
 ---
 
+## 3b. Frame rate — the hard floor on everything above
+
+**Tim, 2026-09-12: "Make sure we are prompting for 60fps minimum and accommodating for more when
+possible, like a GoPro (original concept) for more precise data and feedback."**
+
+This is not a nicety; it is the ceiling on how good any of §3 can be. A driver head travels roughly
+100+ mph. At 30fps the head moves about **4–5 feet between frames**, so the clubhead path is a coarse
+polyline through a handful of points and impact almost never lands on a sampled frame. At 60fps that
+halves; at 120 it is a quarter; at 240 you are resolving the strike itself.
+
+### What is already in the codebase
+| Constant | Value | Where |
+|---|---|---|
+| `PREFERRED_CAPTURE_FPS` | 120 | `services/capture/captureFlags.ts` |
+| `MIN_TRACE_FPS` | 60 | same — below this SmartTrace refuses to claim a flight direction |
+| `DEFAULT_USE_VISION_CAMERA` | **false** | same — the high-fps engine is OFF by default |
+
+So the 60fps floor Tim is asking for **is already specified**, and the engine that can hit it already
+exists behind `SwingVisionCamera` (vision-camera, `useCameraFormat` degrading to device max).
+
+**The live gap: the default capture path is expo-camera at ~30fps.** `recordAsync()` exposes no frame
+rate. The vision path has been off since 2026-06-13 pending on-device validation, toggled by the
+owner on the native-modules-debug screen. Until it is validated and flipped, every swing — including
+every fitting session — is captured below `MIN_TRACE_FPS`.
+
+### Requirements for the session
+1. **Check the achievable fps before the session starts, and say it.** Not a silent degrade: "this
+   phone gives me 60 — I can compare dispersion and path, not strike location."
+2. **Refuse to claim what the frame rate cannot support.** The existing `MIN_TRACE_FPS` gate is the
+   right pattern — extend it so each *metric* declares the fps it needs, rather than one global cut.
+3. **Prompt for better.** If the device supports 120/240 and the session is set lower, say so. If the
+   light is too poor for high fps (high-speed modes need it), say that instead of quietly dropping.
+4. **Record the fps on every captured swing**, and refuse to compare two contenders captured at
+   different rates without flagging it — that is a confound exactly like using two different balls.
+5. **External camera — the original concept.** A GoPro at 240fps is the honest path to strike-level
+   feedback, and none of this pipeline assumes the phone is the camera: SmartMotion already accepts
+   uploaded video. An external-source fitting session is mostly an import flow plus the fps metadata,
+   not a new engine.
+
+---
+
 ## 4. The session protocol
 
 1. **Declare the contenders — 1 to 3.** Each is a spec from §2. The app names the axis that actually

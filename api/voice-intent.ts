@@ -484,13 +484,19 @@ Available intents:
 15c. set_club_distance — User is TELLING the caddie how far a club of theirs goes, as a standing
    fact about their bag. Declarative, present tense, one club, one number. This REGISTERS the
    yardage; it is not a shot report and not a question.
-   parameters: { club_phrase: string, yards: integer }
+   parameters: { club_phrase: string, yards: integer, distance_kind: "carry" | "total",
+                 carry_yards?: integer, total_yards?: integer }
+   CARRY vs TOTAL matters and the VERB tells you which. "carries" / "carry is" / "flies" describe the
+   FLIGHT → carry. "goes" describes where it ENDED UP → total. When neither is clear, use "total":
+   reading a total as carry tells the caddie the player flies a hazard they do not, which loses a
+   ball, while the other way round only costs a few yards of club. When they state BOTH in one
+   sentence, fill carry_yards AND total_yards and nothing has to be inferred.
    Examples:
-   - "my 7 iron goes 165" -> { club_phrase: "7 iron", yards: 165 }
-   - "set my pitching wedge to 130" -> { club_phrase: "pitching wedge", yards: 130 }
-   - "my driver carries about 250" -> { club_phrase: "driver", yards: 250 }
-   - "put my 5 wood at 210" -> { club_phrase: "5 wood", yards: 210 }
-   - "my 52 degree is 105" -> { club_phrase: "52 degree", yards: 105 }
+   - "my 7 iron goes 165" -> { club_phrase: "7 iron", yards: 165, distance_kind: "total", total_yards: 165 }
+   - "set my pitching wedge to 130" -> { club_phrase: "pitching wedge", yards: 130, distance_kind: "total", total_yards: 130 }
+   - "my driver carries about 250" -> { club_phrase: "driver", yards: 250, distance_kind: "carry", carry_yards: 250 }
+   - "my 3 wood goes 230 and carries 215" -> { club_phrase: "3 wood", yards: 230, distance_kind: "total", total_yards: 230, carry_yards: 215 }
+   - "my 52 degree is 105" -> { club_phrase: "52 degree", yards: 105, distance_kind: "total", total_yards: 105 }
    Boundaries: a PAST-TENSE report of one shot is log_shot (#16) — "I hit my 7-iron 165" is one
    swing, "my 7-iron goes 165" is the club's number. A QUESTION with no number is club_query or
    query_status — "what's my 7 iron". SEVERAL clubs in one breath ("I carry driver, 3-wood, 5

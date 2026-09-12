@@ -1345,7 +1345,13 @@ check('Bag-by-voice: registrar seam + brain tool + offline set + interview exemp
       /register_bag stays ON/.test(read('api/kevin.ts')) &&                          // interview exemption
       /case 'register_bag':/.test(disp) &&                                          // client dispatch
       !/NAV_OPEN_ACTIONS = new Set\(\[[^\]]*register_bag/.test(disp) &&             // not suppressed in interview
-      /'set_club_distance', \{ club_phrase/.test(pre) &&                            // offline declarative form
+      // 2026-09-12 — was /'set_club_distance', \{ club_phrase/, which pinned the object LAYOUT: the
+      // moment the emitted parameters grew past one line the guard failed on working code. Assert the
+      // properties instead, including the carry/total kind the handler now depends on — filing a
+      // stated total as carry tells the caddie the player flies a hazard they do not.
+      /'set_club_distance',\s*\{[\s\S]{0,400}?club_phrase/.test(pre) &&            // offline declarative form
+      /distance_kind: primaryKind/.test(pre) &&                                     // ...carrying which number it is
+      /goes\$\/i\.test\(sm\[2\]\.trim\(\)\) \? 'total' : 'carry'/.test(pre) && // "goes" = total, the safe reading
       /registerHandler\(setClubDistanceHandler\)/.test(idx)
     );
   })(),

@@ -508,9 +508,40 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
   // number, and the shot report ("I hit my 7-iron 165") has "hit" — neither matches here. Rich
   // multi-club sentences ("I carry driver, 3-wood, 5 through PW") ride the brain's register_bag tool.
   {
-    const sm = t.match(/\bmy\s+(.{2,24}?)\s+(?:goes|carries|carry\s+is|flies)\s+(?:about\s+|around\s+|roughly\s+)?(\d{2,3})\b/i);
+    /**
+     * 2026-09-12 (Tim) — THE VERB SAYS WHICH NUMBER IT IS, so capture it.
+     *
+     * "adjusting obviously truthfully by total, then we extrapolate as honestly as possible average
+     *  carry — that really makes a huge difference in overall strategy."
+     *
+     * This used to throw the verb away and the handler filed everything as CARRY. "My 3 wood goes
+     * 230" — plainly the number he watches it stop at — was recorded as 230 of carry, overstating it
+     * by the roll, which tells the caddie he flies a hazard he does not. That errs in the direction
+     * that loses a ball.
+     *
+     *   carries / carry is / flies → CARRY (all three describe the flight)
+     *   goes                       → TOTAL (where it ended up)
+     *
+     * And when both are in one breath — "goes 230 and carries 215" — each ladder gets its own real
+     * number and nothing has to be inferred at all, which is the best case.
+     */
+    const sm = t.match(/\bmy\s+(.{2,24}?)\s+(goes|carries|carry\s+is|flies)\s+(?:about\s+|around\s+|roughly\s+)?(\d{2,3})\b/i);
     if (sm && /\b(driver|wood|hybrid|rescue|iron|wedge|pitching|sand|lob|gap|degree|pw|sw|lw|gw|aw|\d\s?h|\d\s?i|\d\s?w)\b/i.test(sm[1])) {
-      return intent(t, 'set_club_distance', { club_phrase: sm[1].trim(), yards: Number(sm[2]), raw_utterance: t });
+      const primaryKind: 'carry' | 'total' = /^goes$/i.test(sm[2].trim()) ? 'total' : 'carry';
+      const primary = Number(sm[3]);
+      // A SECOND number anywhere in the sentence, of the other kind.
+      const carryM = t.match(/\bcarr(?:ies|y)\s+(?:is\s+)?(?:about\s+|around\s+|roughly\s+)?(\d{2,3})\b/i);
+      const totalM = t.match(/\b(?:total|all\s+in|rolls?\s+out\s+to|goes)\s+(?:about\s+|around\s+|roughly\s+)?(\d{2,3})\b/i);
+      const carryY = carryM ? Number(carryM[1]) : (primaryKind === 'carry' ? primary : null);
+      const totalY = totalM ? Number(totalM[1]) : (primaryKind === 'total' ? primary : null);
+      return intent(t, 'set_club_distance', {
+        club_phrase: sm[1].trim(),
+        yards: primary,
+        distance_kind: primaryKind,
+        ...(carryY != null ? { carry_yards: carryY } : {}),
+        ...(totalY != null ? { total_yards: totalY } : {}),
+        raw_utterance: t,
+      });
     }
   }
 
