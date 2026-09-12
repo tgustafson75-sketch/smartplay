@@ -24,6 +24,7 @@ import { analyzeSwing, type SwingAnalysis } from '../../services/poseDetection';
 import { classifySession } from '../../services/swingIssueClassifier';
 import { recommendDrill } from '../../services/drillRecommendation';
 import { processSwingAnalysis } from '../../services/relationshipEngine';
+import { synthesizeCageInsight } from '../../services/contextSynthesizer';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
 import type { PrimaryIssue, DrillRecommendation } from '../../store/swingSessionStore';
 import { activateMediaSession, deactivateMediaSession } from '../../services/mediaKeyBridge';
@@ -200,6 +201,35 @@ export default function CageSummary() {
           } catch (e) {
             console.log('[cage/summary] relationship engine error', e);
           }
+          /**
+           * 2026-09-11 (full-app audit) — THE LIVE SESSION NEVER REACHED THE CADDIE'S MEMORY.
+           *
+           * services/videoUpload fires this beside processSwingAnalysis, and its comment states the
+           * intent: the note "persists into recentInsights, injected into pre-round briefing so
+           * practice meaningfully informs rounds". This screen — the LIVE post-session pipeline, and
+           * the path most players actually take — ran the relationship engine and stopped.
+           *
+           * Followed the writer chain rather than assuming: recentInsights has exactly one writer
+           * (addCageInsight), whose only caller is synthesizeCageInsight, whose only caller was
+           * videoUpload. So a player who practises live and never uploads a clip produced ZERO cage
+           * insights — `recentCageInsights` reached the brain empty every time, and
+           * maybeSynthesizePatterns, which needs three of them before it will run at all, was
+           * starved of half its input permanently.
+           *
+           * Fire-and-forget and deduped by session id inside the store, exactly as on the upload
+           * path. [[no-half-fixes-enforce-every-surface]] [[close-the-loop-strategy]]
+           */
+          try {
+            void synthesizeCageInsight({
+              sessionId: session.id,
+              club: session.club,
+              shotCount: session.shots.length,
+              primaryIssueName: issue.name,
+              severity: issue.severity,
+              drillName: drill?.drill_name ?? null,
+              dominantMiss: session.dominantMiss ?? null,
+            }).catch(() => {});
+          } catch { /* a memory note never blocks the summary */ }
         }
       }
       setAnalysisStatus('done');
