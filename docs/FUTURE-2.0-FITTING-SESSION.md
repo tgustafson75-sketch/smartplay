@@ -136,8 +136,18 @@ The revision above is about metrics we can PARTIALLY see. It does not license in
 cannot see at all.
 
 
-Ball speed · **spin rate** · **launch angle** · smash factor · spin axis · angle of attack in degrees
-· face-to-path in degrees · strike location on the face (mm).
+**spin rate** · **spin axis** · smash factor · face-to-path in degrees · angle of attack in degrees ·
+strike location on the face (mm).
+
+Spin is the hard one and the reason a radar still exists: reading it optically needs a marked ball
+and a high-speed close-up of the first inches of flight, which is a different rig from this one.
+Smash factor is club speed ÷ ball speed, so it inherits both error bars and becomes a number too
+loose to act on.
+
+**Moved OUT of this list on 2026-09-12:** *ball speed* (measurable across a known 15-foot section at
+120fps+, see above) and *launch angle* (measurable from a calibrated side-on rig at high fps, coarse,
+and only with the calibration). Both belong in the gated-by-factor column with their confidence
+shown — that is the whole point of the revision.
 
 > A fitting that quietly implies spin numbers it never took is exactly the fake precision this app
 > exists not to do. Where a factor's usual justification is a number we cannot take, say so: "I can't
@@ -253,15 +263,102 @@ bar we clear, which we do not, and which we clear that TrackMan does not.
 | Carry distance | measured | **inferred — see below** |
 | Ball speed, spin, launch angle, spin axis | measured | **never. Radar or nothing.** |
 
-### The net problem, stated plainly
+### The net problem — and how much flight 15 feet actually is
 
-**In a bay the ball travels about four feet.** There is no carry to observe — not at 30fps, not at
-240, not with any camera. Anyone claiming a backyard net measures carry distance is inferring it from
-launch conditions that need a radar to take in the first place.
+**Tim, 2026-09-12: *"BUT with my 10 foot netter cage I am about 15 feet from the target."***
 
-So this feature must NOT report a carry number from a bay session. What it reports is what it saw:
-start direction, dispersion, strike quality, tempo and body mechanics — the repeatability of a swing
-rather than the distance of one shot.
+That correction matters, and it moves a metric off the never-list. I had written "about four feet",
+which would have been a golfer standing almost on the net. Fifteen feet of observable flight, at a
+ball speed around 150 mph (220 ft/s), is **68 milliseconds** — and how much that is worth depends
+entirely on frame rate:
+
+| fps | frames over 15 ft | timing error | what it supports |
+|---|---|---|---|
+| 30 | 2.0 | ±49% | nothing. Two points is a line with no confidence. |
+| 60 | 4.1 | ±24% | start direction only |
+| 120 | 8.2 | **±12%** | start direction + a **usable ball-speed estimate** |
+| 240 | 16.4 | **±6%** | the above, tighter — a real number with a real range |
+
+So a 15-foot cage is not "no flight". It is a short, well-lit, **fixed-distance** measuring section,
+which is close to the ideal conditions for the one thing that matters most: the ball crosses a KNOWN
+distance in a COUNTABLE number of frames, and distance over time is speed.
+
+**BALL SPEED COMES OFF THE NEVER-LIST.** It belongs in the gated-by-factor column, which is exactly
+what Tim's revised rule is for: not dropped, not fabricated — measured to a confidence the frame rate
+earns, with the lever shown ("at 120 I can give you ball speed to about 12%; at 240 it halves").
+
+**CARRY DISTANCE IS STILL NOT MEASURED,** and must never be presented as if it were. Fifteen feet
+says nothing about 250 yards on its own; carry needs ball speed *plus* launch angle *plus* spin, and
+spin is radar-or-nothing. What we can do is *infer* it from measured ball speed and label it as an
+inference with a range.
+
+---
+
+### The canvas target — where cage mode came from, and the real unlock
+
+**Tim, 2026-09-12: *"and canvas target with a bulls eye. This is where cage mode came from."***
+
+That completes the original rig: a 10-foot net cage, **15 feet** to a canvas target with a bullseye.
+And it is not decoration — it is the instrument. A known target at a known distance gives three
+things a net alone does not:
+
+1. **A fiducial.** A bullseye of known size is a camera calibration reference. Pixels become inches
+   without asking the player to measure anything.
+2. **Dispersion, measured rather than extrapolated.** Where the ball actually *strikes the canvas*
+   is the dispersion, directly — far better than projecting a line from 15 feet of flight.
+3. **A second acoustic event at a speed-dependent delay.** This is the big one.
+
+#### Ball speed, acoustically, with one microphone
+
+`api/acoustic-detect.ts` already finds TWO peaks and already does the arithmetic — but it reads the
+second peak as the **wall echo** of the club strike and therefore solves for the unknown: distance.
+`Δt = 2 × distance / c`.
+
+In a cage where the distance is KNOWN, that inverts. And the ball hitting the canvas is a *third*,
+later transient whose delay depends on how fast the ball was going:
+
+| Event | Delay after impact | Depends on ball speed? |
+|---|---|---|
+| Club-strike echo off the cage wall | **26.7 ms** (2 × 15 ft ÷ 1125 ft/s) | **no** — constant |
+| Ball strikes the canvas, sound returns | **73–127 ms** (15 ft ÷ v, + 13.3 ms back) | **yes** |
+
+They are cleanly separable because they scale differently. And the timing precision is extraordinary
+compared with video: the decoder runs at 22050 Hz, so one sample is **0.045 ms** — about **0.06%** of
+a 68 ms flight. That is an order of magnitude better than 240fps video, from hardware every phone has.
+
+| | timing error on ball speed |
+|---|---|
+| video @ 120fps | ±12% |
+| video @ 240fps | ±6% |
+| **acoustic, known distance** | **≈0.1%** (detection confidence, not timing, is the limit) |
+
+#### This corrects a claim in our own code
+
+`api/acoustic-detect.ts` states: *"True ball speed needs 2 mics, doppler, or radar — out of scope."*
+That is right for an OPEN range, where the distance travelled is unknown. **It is not right for a
+cage with a known target distance**, which is the exact case this rig is. One mic, one known
+distance, two timestamps.
+
+#### What would have to be true
+
+Stated plainly, because this is a proposal and not a shipped capability:
+
+- **The canvas hit has to be detectable.** It is much quieter than the club strike, and netting
+  absorbs; a taut canvas target is the loudest version of this and is what Tim built. Unproven.
+- **The detection window must widen.** It is currently 5–80 ms, tuned for the 26.7 ms echo — which
+  *misses the ball-strike transient for every swing under about 150 mph*. It needs ~200 ms.
+- **The distance must be entered once**, in a cage setup. That is the single missing input standing
+  between the existing two-peak maths and a real number.
+- **Rebounds must be rejected.** `filterReboundStrikes` already exists for the adjacent problem.
+
+If it holds, ball speed stops being "club-typical × peak amplitude" — the heuristic the file itself
+flags as a heuristic — and becomes measured. That is the difference between a swing recorder and the
+poor man's TrackMan.
+
+**And then check the inference against something no bay has.** We hold this player's real carry and
+total for that club, from actual rounds, in two ladders. So a bay-inferred carry is not a guess
+floating free — it can be reconciled against what the club has genuinely done for them outdoors, and
+the gap between the two is itself worth telling them about.
 
 ### And that is precisely where the round comes back in
 
@@ -378,3 +475,51 @@ No new measurement is required. This is orchestration of what exists:
 
 The work is the session flow, the spec editor, the rotation prompting and the honesty rails — not
 new sensors.
+
+---
+
+## 8. PARKED — the intuitive-simplification pass
+
+**Tim, 2026-09-12: *"We are not going to do the intuitive simplification review — that is 2.0, mostly
+minor, maybe some like putting drills and shot shapes in one interface. But let's not mess with that
+right now, just put it for later."***
+
+Deliberately not being done now. Recorded so it is not rediscovered as a finding:
+
+- consolidating putting drills and shot shapes into one interface;
+- the wider "even I have trouble finding things" pass over navigation and settings.
+
+Both are 2.0 and mostly minor. Nothing above depends on them.
+
+---
+
+## 9. What was already built (checked, 2026-09-12)
+
+Tim: *"you will probably find this all built mostly already."* He was right, and this is what the
+check actually found — recorded so the next person does not rebuild it:
+
+| Piece | State |
+|---|---|
+| `app/practice-session/target-calibration.tsx` | **Built.** Listen → tap where it hit → save a labelled `CageTargetSample` (WAV + hitX/hitY + peakDb + cage geometry). Scatter plot after 5. Reachable from the practice-session index. |
+| `store/acousticCalibrationStore` | **Built.** Persists up to 200 target samples, plus a separate applied-calibration path that IS wired. |
+| `api/acoustic-detect.ts` | **Built.** Two-peak detection, envelope, echo-delay → cage distance, confidence. |
+| `components/practice/PracticeTargetUI` | **Built.** The canvas/bullseye UI with hit-type labelling. |
+| Bullseye as a vision fiducial at high fps | **Not built.** The design intent Tim describes; nothing detects the target optically yet. |
+
+### The gap that matters
+
+**`targetSamples` has no exit.** It is written by the calibration screen and read only by that same
+screen, for its own scatter plot and counts. The file header says the dataset *"can be batch-sent to
+/api/acoustic-detect"* — "can be", and nothing does. So every labelled sample Tim has patiently
+collected stays on one device and teaches nothing.
+
+**And its audio was not durable.** `wavUri` pointed at whatever expo-av's Recording chose, a file
+this app never owned the lifetime of (`acousticImpactDetector`'s own contract is "call
+cleanupImpactRecording(uri) to discard"). The labels persist in AsyncStorage, so after a cache
+eviction the store would show 200 carefully tapped positions with every WAV behind them gone — the
+worst shape for a training set, because it still looks complete. **Fixed 2026-09-12:** samples are
+copied into `documentDirectory/cage-calibration/` on save, the same reasoning
+`services/clipStorageGc` already applies to swing clips.
+
+The export path remains open, and it is the smallest piece of real work standing between a collected
+dataset and a model that could place a strike on the canvas from sound alone.

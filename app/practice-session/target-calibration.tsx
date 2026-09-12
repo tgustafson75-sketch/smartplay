@@ -23,6 +23,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { PracticeTargetUI } from '../../components/practice/PracticeTargetUI';
@@ -109,11 +110,41 @@ export default function CageTargetCalibration() {
     setPendingSave(pos);
   }, [phase]);
 
+  /**
+   * 2026-09-12 — KEEP THE AUDIO, or the dataset is metadata pointing at nothing.
+   *
+   * `lastWavUri` is whatever expo-av's Recording chose, and this app never owned that file's
+   * lifetime — acousticImpactDetector's own contract is "call cleanupImpactRecording(uri) to
+   * discard". The labelled samples persist in AsyncStorage, so on cache eviction (OS pressure, an
+   * app update, a reinstall) the store would still show 200 carefully tapped hit positions while
+   * every WAV behind them was gone. That is the worst shape for a training set: it looks complete.
+   *
+   * documentDirectory is the house answer to exactly this — services/clipStorageGc keeps swing clips
+   * there "so replay / re-analyze survive OS cache eviction". Same reasoning, smaller files.
+   */
+  const preserveWav = useCallback(async (uri: string | null): Promise<string | null> => {
+    if (!uri) return null;
+    try {
+      const dir = `${FileSystem.documentDirectory}cage-calibration/`;
+      await FileSystem.makeDirectoryAsync(dir, { intermediates: true }).catch(() => undefined);
+      const dest = `${dir}${Date.now()}-${Math.floor(Math.random() * 1e6)}.wav`;
+      await FileSystem.copyAsync({ from: uri, to: dest });
+      return dest;
+    } catch (e) {
+      // Keep the original URI rather than losing the sample outright — a possibly-evictable file
+      // beats no file, and the hit position is still worth having.
+      console.log('[cage-calibration] could not preserve wav (non-fatal):', e);
+      return uri;
+    }
+  }, []);
+
   // ── Confirm and save ─────────────────────────────────────────────────────
   const confirmSave = useCallback(() => {
     if (!pendingSave) return;
+    void (async () => {
+    const durableWav = await preserveWav(lastWavUri);
     addTargetSample({
-      wavUri: lastWavUri,
+      wavUri: durableWav,
       peakDb: lastPeakDb ?? -999,
       impactMs: 0,
       hitType: pendingSave.hitType,
@@ -129,7 +160,8 @@ export default function CageTargetCalibration() {
     setPhase('saved');
     // Auto-advance to next shot after 1.2s
     setTimeout(() => { void startListening(); }, 1200);
-  }, [pendingSave, lastWavUri, lastPeakDb, addTargetSample, startListening]);
+    })();
+  }, [pendingSave, lastWavUri, lastPeakDb, addTargetSample, startListening, preserveWav]);
 
   // ── Skip (re-tap) ────────────────────────────────────────────────────────
   const retap = useCallback(() => {
