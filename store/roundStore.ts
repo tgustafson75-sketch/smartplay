@@ -1718,6 +1718,10 @@ export const useRoundStore = create<RoundState>()(
       discardRound: () => {
         const s = get();
         console.log(`[roundStore] discardRound — abandoning ${s.currentRoundId ?? 'unknown'}`);
+        // Same reasoning as endRound: an abandoned round must not leave the bag packed for the next.
+        try {
+          (require('./clubBagStore') as typeof import('./clubBagStore')).useClubBagStore.getState().clearCarriedToday();
+        } catch { /* a missed clear must never fail the discard */ }
         set({
           isRoundActive: false,
           isSimRound: false,
@@ -2144,6 +2148,25 @@ export const useRoundStore = create<RoundState>()(
         // KEEP: roundHistory (the persisted record we just appended),
         //       roundNumber (incremented by startRound on next round),
         //       recentCourseIds (locator UX context).
+        /**
+         * 2026-09-12 (Tim — three bag surfaces, one truth) — CLEAR THE PACKED BAG.
+         *
+         * clubBagStore.carriedToday is the subset of clubs carried for THIS round — the partial bag
+         * a player packs for a short course. It is PERSISTED, and `clearCarriedToday` had exactly one
+         * caller: a button on the fit-profile screen. Nothing cleared it when a round ended.
+         *
+         * So packing once made the caddie believe that subset was the bag FOREVER — across every
+         * later round, every other course, and app restarts — because carriedList() feeds the payload
+         * as `bagClubs`. The caddie would keep clubbing around irons the player was carrying.
+         *
+         * Clearing is the SAFE direction. Falling back to the full registered bag can at worst
+         * suggest a club left at home, which the player notices instantly and corrects. A stale
+         * partial bag silently removes clubs they are holding, which they never see.
+         */
+        try {
+          (require('./clubBagStore') as typeof import('./clubBagStore')).useClubBagStore.getState().clearCarriedToday();
+        } catch { /* a missed clear must never fail the round save */ }
+
         set(state => ({
           isRoundActive: false,
           isSimRound: false,

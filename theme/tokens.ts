@@ -256,3 +256,46 @@ export function withAlpha(color: string, alpha: number): string {
   const a = Math.max(0, Math.min(1, alpha));
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
 }
+
+/**
+ * 2026-09-12 — Relative luminance, then the WCAG contrast ratio between two palette colours.
+ *
+ * Exists because "which text colour reads on this fill?" kept being answered by eye, and the eye was
+ * calibrated on dark mode. The caddie tab's Start Round button was a near-transparent teal that
+ * borrowed its contrast from the dark hero behind it; once the hero melted into a LIGHT page under
+ * it, there was nothing left to borrow and the button faded out (Tim, from a screenshot).
+ */
+function relativeLuminance(hex: string): number {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return 0;
+  const n = parseInt(m[1], 16);
+  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+}
+
+/** WCAG contrast ratio, 1 (identical) to 21 (black on white). */
+export function contrastRatio(a: string, b: string): number {
+  const [hi, lo] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
+ * Pick whichever candidate reads best on `background`.
+ *
+ * Measured rather than assumed, so it stays correct in all five palettes AND if a token is ever
+ * retuned. On the current palettes this resolves to the page colour on dark (8.98:1) and
+ * text_primary on light (5.27:1) — the opposite choice each way, which is exactly why hardcoding one
+ * of them is how a button ends up unreadable in the theme its author does not use.
+ */
+export function bestOn(background: string, ...candidates: string[]): string {
+  let best = candidates[0] ?? '#000000';
+  let bestRatio = -1;
+  for (const c of candidates) {
+    const r = contrastRatio(background, c);
+    if (r > bestRatio) { bestRatio = r; best = c; }
+  }
+  return best;
+}

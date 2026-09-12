@@ -245,6 +245,24 @@ export default function FitProfileScreen() {
 
   const confColor = profile.confidence === 'high' ? '#3FB950' : profile.confidence === 'medium' ? '#f5a623' : '#9ca3af';
 
+  /**
+   * 2026-09-12 (Tim — "it has a key but the key shows grey dots, not the yellow and green in the bag
+   * setup") — ONE OWNER FOR WHAT A DOT MEANS.
+   *
+   * There was no legend. The confidence line above LOOKED like one — it uses the exact words
+   * "tracked" and "you set" that describe these dots — but its single dot is coloured by CONFIDENCE
+   * (green / amber / grey), a different axis entirely. So on a low-confidence bag it showed a grey
+   * dot while the list below showed green and cyan, and appeared to explain something it contradicts.
+   *
+   * The legend now takes its swatches from THIS function, the same one the list rows use, so the two
+   * cannot drift. A legend maintained separately from the thing it explains is how you get a legend
+   * that lies. [[two-owners-is-the-root-cause]]
+   */
+  const dotStyleFor = (measured: boolean | undefined, stated: boolean | undefined) => ({
+    backgroundColor: measured ? '#3FB950' : stated ? '#22d3ee' : 'transparent',
+    borderColor: measured ? '#3FB950' : stated ? '#22d3ee' : colors.text_muted,
+  });
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
@@ -260,6 +278,23 @@ export default function FitProfileScreen() {
         <View style={styles.confRow}>
           <View style={[styles.confDot, { backgroundColor: confColor }]} />
           <Text style={[styles.confText, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.tracked_you_set_of_clubs', { measuredCount: profile.measuredCount, statedCount: profile.statedCount, totalCount: profile.totalCount, confidence: profile.confidence })}</Text>
+        </View>
+
+        {/**
+          * THE KEY. Three states, three appearances, stated once — swatches come from dotStyleFor,
+          * the same function the rows below use, so they can never drift apart.
+          */}
+        <View style={styles.keyRow}>
+          {([
+            [true, false, t('practice_fit_profile.key.tracked')],
+            [false, true, t('practice_fit_profile.key.you_set')],
+            [false, false, t('practice_fit_profile.key.estimated')],
+          ] as const).map(([m, st, label]) => (
+            <View key={label} style={styles.keyItem}>
+              <View style={[styles.measuredDot, dotStyleFor(m, st), { marginLeft: 0 }]} />
+              <Text style={[styles.keyText, { color: colors.text_muted }]}>{label}</Text>
+            </View>
+          ))}
         </View>
 
         {/* 2026-07-23 (Tim — Bag Vision) — populate the bag by video instead of typing each club. */}
@@ -554,7 +589,7 @@ export default function FitProfileScreen() {
                 </View>
                 <View style={styles.ladderRight}>
                   <Text style={[styles.ladderYards, { color: c.measured || c.stated ? colors.text_primary : colors.text_muted }]}>{Math.round(c.yards)}<Text style={styles.ladderUnit}> yd</Text></Text>
-                  <View style={[styles.measuredDot, { backgroundColor: c.measured ? '#3FB950' : c.stated ? '#22d3ee' : 'transparent', borderColor: c.measured ? '#3FB950' : c.stated ? '#22d3ee' : colors.text_muted }]} />
+                  <View style={[styles.measuredDot, dotStyleFor(c.measured, c.stated)]} />
                   {gapSet.has(c.club) ? <Ionicons name="alert-circle" size={14} color="#f5a623" style={{ marginLeft: 4 }} /> : null}
                   {overlapSet.has(c.club) ? <Ionicons name="copy-outline" size={13} color={colors.text_muted} style={{ marginLeft: 4 }} /> : null}
                   {editable ? <Ionicons name="pencil" size={12} color={colors.text_muted} style={{ marginLeft: 6 }} /> : null}
@@ -601,6 +636,9 @@ const styles = StyleSheet.create({
   fitGapTitle: { fontSize: 14, fontWeight: '700' },
   fitGapDetail: { fontSize: 12.5, lineHeight: 18, marginTop: 2 },
   confDot: { width: 8, height: 8, borderRadius: 4 },
+  keyRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 14, marginTop: 8 },
+  keyItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  keyText: { fontSize: 11, fontWeight: '600' },
   confText: { fontSize: 12 },
   card: { borderWidth: 1, borderRadius: 14, padding: 14, marginTop: 12 },
   cardLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 1.3, marginBottom: 8 },

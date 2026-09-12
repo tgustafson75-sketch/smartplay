@@ -2459,6 +2459,10 @@ export default function PlayTab() {
                 */}
               <Image source={SEC_ICON.bag} style={styles.bagIcon} tintColor={colors.accent_lime} />
               <View style={{ flex: 1 }}>
+                {/* 2026-09-12 (Tim — "these all need to be the same function and same bag truth") —
+                    this card and the Dashboard's both push to /practice/fit-profile, the ONE editor.
+                    They were labelled "YOUR BAG" and "MY BAG", which is how one feature comes to look
+                    like two. Same destination, same name. */}
                 <Text style={styles.bagCardLabel}>{t('play.play_tab.your_bag')}</Text>
                 <Text style={[styles.bagCardValue, isPartialBag && { color: '#00C896' }]} numberOfLines={1}>
                   {ownedCount === 0

@@ -6,6 +6,7 @@ import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { caddieLayoutBudget, TAB_BAR_HEIGHT } from '../../services/caddieLayoutBudget';
+import { bestOn } from '../../theme/tokens';
 import { useCaddieBarReserve } from '../../components/GlobalCaddieBar';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { pushCourseGuarded } from '../../utils/courseNav';
@@ -3737,7 +3738,7 @@ export default function CaddieTab() {
               width: 30, height: 30, borderRadius: 15,
               alignItems: 'center', justifyContent: 'center',
               borderWidth: 1.5, borderColor: '#00C896',
-              backgroundColor: 'rgba(0,200,150,0.12)',
+          backgroundColor: 'rgba(0,200,150,0.12)',
             }}
             // 2026-05-15 — universal Tools menu. Opens the same
             // sectioned GlobalToolsMenu the ••• pill on every other tab uses.
@@ -4797,10 +4798,24 @@ return StyleSheet.create({
     // as hollow/lighter than its filled, glowing neighbors (SmartVision card, caddie bar). Give it a
     // subtle teal fill + a soft teal glow so the primary CTA shares the same depth treatment as the
     // rest of the bottom stack and clearly leads.
-    backgroundColor: 'rgba(0,200,150,0.12)',
+    /**
+     * 2026-09-12 (Tim, from a screenshot — "the frosted effect through the middle fades the start
+     * button a bit") — A PRIMARY CTA MUST NOT BORROW ITS CONTRAST.
+     *
+     * This was rgba(0,200,150,0.12) — 88% transparent — and it read well for exactly one reason: a
+     * DARK hero sat behind it. The hero is now full-bleed and melts into the PAGE colour precisely
+     * where this button sits, so there is nothing left to borrow. Measured, the teal label on the
+     * light page is 3.20:1.
+     *
+     * Filled with the accent, and the label picked by MEASUREMENT (bestOn) rather than by eye — the
+     * eye here is calibrated on dark mode. It resolves to the page colour on dark (8.98:1) and to
+     * text_primary on light (5.27:1): OPPOSITE choices, which is exactly why hardcoding either one
+     * leaves the button unreadable in whichever theme its author does not use.
+     */
+    backgroundColor: c.accent,
     borderWidth: 1.5,
-    borderColor: '#00C896',
-    shadowColor: '#00C896',
+    borderColor: c.accent,
+    shadowColor: c.accent,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.35,
     shadowRadius: 10,
@@ -4815,7 +4830,8 @@ return StyleSheet.create({
     zIndex: 50,
   },
   startRoundText: {
-    color: '#00C896',
+    // Measured against the filled accent, never assumed — see bestOn in theme/tokens.
+    color: bestOn(c.accent, c.background, c.text_primary),
     fontSize: 17,
     fontWeight: '700',
     letterSpacing: 0.2,

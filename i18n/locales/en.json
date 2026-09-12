@@ -542,7 +542,7 @@
       "bag_count_one": "{{count}} club",
       "bag_count_other": "{{count}} clubs",
       "set_your_bag": "Set your bag",
-      "your_bag": "YOUR BAG",
+      "your_bag": "MY BAG",
       "bag_of_owned": "{{packed}} of {{owned}} clubs",
       "bag_not_set": "Not set yet"
     },
@@ -1360,6 +1360,11 @@
       "remove": "Remove",
       "pack_this_club_for_the_round": "Pack this club for the round",
       "leave_this_club_at_home": "Leave this club at home"
+    },
+    "key": {
+      "tracked": "Tracked — measured from your shots",
+      "you_set": "You set it",
+      "estimated": "Estimated — not yours yet"
     }
   },
   "practice_open_range": {
