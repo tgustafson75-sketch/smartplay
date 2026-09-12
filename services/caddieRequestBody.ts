@@ -896,6 +896,21 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      */
     club_work: safe(() => decision?.clubWork ?? null, null),
     /**
+     * 2026-09-12 — what this device's capture CANNOT give, and what would fix it.
+     *
+     * Tim: "not letting things break and default and go around… part of our honesty is that we say,
+     * hey listen, we can analyze here, but you may not have these factors — if you switch your phone
+     * to sixty, you get more accuracy."
+     *
+     * Null unless a real, MEASURED shortfall exists. An unknown frame rate produces nothing: warning
+     * a player about a capture we never measured is a guess dressed as a finding.
+     */
+    capture_quality: safe(() => {
+      const { captureQualityLine } = require('./captureQuality') as typeof import('./captureQuality');
+      const { useCaptureEngineStore } = require('../store/captureEngineStore') as typeof import('../store/captureEngineStore');
+      return captureQualityLine(useCaptureEngineStore.getState().capturedFps);
+    }, null),
+    /**
      * 2026-09-12 — how his balls actually compare on the card.
      *
      * Sent only once there is something real to say: services/ballPerformance returns a null

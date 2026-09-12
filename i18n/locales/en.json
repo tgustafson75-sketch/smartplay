@@ -2139,7 +2139,8 @@
   "swinglab_smartmotion": {
     "alert": {
       "microphone_needed": "Microphone needed",
-      "smart_motion_listens_for_ball": "Smart Motion listens for ball strikes to detect your swings. Allow microphone access to record."
+      "smart_motion_listens_for_ball": "Smart Motion listens for ball strikes to detect your swings. Allow microphone access to record.",
+      "about_this_camera": "About this camera"
     },
     "smart_motion": {
       "camera_access_needed": "Camera access needed",

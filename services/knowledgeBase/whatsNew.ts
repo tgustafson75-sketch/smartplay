@@ -25,6 +25,29 @@ export interface WhatsNewEntry {
   howTo?: string;
 }
 
+/**
+ * ⚠️ 2026-09-12 (Tim) — "NO WHAT'S NEW TIL POST LAUNCH."
+ *
+ * "Testers can just see this as a nice upgrade and intuitive simplification." Everything shipping
+ * now is refinement of things that already existed, and an entry saying "the empty band under your
+ * caddie is gone" advertises that there WAS an empty band. Entries resume at launch, and the whole
+ * refinement wave becomes ONE line, not a backlog of individual regressions.
+ *
+ * QUEUED FOR THE LAUNCH PUSH — Tim: "nest it in the What's New pushes."
+ * The camera frame-rate tip belongs in an entry's `howTo`, which exists for exactly this ("a moved
+ * control, a removed setting, or a new gesture… a player who cannot find the new method experiences
+ * an improvement as a regression"). The caddie already says it conversationally when a capture falls
+ * short — services/captureQuality — but a player who never records a slow swing never hears it, and
+ * the setting is on their camera, not in our app. Draft:
+ *
+ *   note:  "Your swing reads are sharper on a phone recording at 60 frames a second or better —
+ *           that's what lets your caddie show where the ball actually started."
+ *   howTo: "Check your camera's video setting is 60fps (or higher). Your caddie will tell you when
+ *           a recording was too slow for a reading, and what it cost you."
+ *
+ * The owner checklist carries this as a ship item so it cannot be forgotten (ownerChecklistStore,
+ * 'whats-new-at-launch').
+ */
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Sep 2026',

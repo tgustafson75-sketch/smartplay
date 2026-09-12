@@ -65,6 +65,7 @@ import { recordPracticeSwingIfActive, usePracticeSessionStore } from '../../stor
 // keeping this file's JS OTA-safe on a build that doesn't link vision-camera.
 import type { SwingCameraHandle } from '../../components/capture/SwingVisionCamera';
 import { useCaptureEngineStore } from '../../store/captureEngineStore';
+import { captureQualityNote } from '../../services/captureQuality';
 import { estimateCarryYards } from '../../services/swing/carryEstimate';
 // 2026-07-30 (analysis audit C2/C4) — single-flight queue wrapper, not raw expo-video-thumbnails, so the
 // address-still grab can't run a native retriever concurrently with another extractor. Drop-in re-export.
@@ -1250,6 +1251,32 @@ export default function SmartMotion() {
    * not permanently downgrade a phone that can do 120fps.
    */
   const [visionUnavailable, setVisionUnavailable] = useState(false);
+  /**
+   * 2026-09-12 (Tim) — "if navigate to SmartMotion with 30 set, provide one text box reminder."
+   *
+   * The honest-degrade half of MIN_TRACE_FPS. Below the floor the departure trace is suppressed and
+   * the player is left to conclude the feature is broken rather than that their capture was too slow
+   * for it. Tim: "part of our honesty is that we say — hey listen, we can analyze here, but you may
+   * not have these factors; if you switch your phone to sixty, you get more accuracy."
+   *
+   * Fires on the fps we ACTUALLY resolved, never on an unknown one: warning someone about a capture
+   * we never measured is a guess dressed as a finding. Shown ONCE, ever — persisted — because the
+   * setting lives on their camera and saying it twice is nagging, not honesty.
+   */
+  const capturedFpsLive = useCaptureEngineStore((s) => s.capturedFps);
+  const lowFpsNoticeShown = useCaptureEngineStore((s) => s.lowFpsNoticeShown);
+  useEffect(() => {
+    if (lowFpsNoticeShown) return;
+    if (capturedFpsLive == null || capturedFpsLive >= MIN_TRACE_FPS) return;
+    const note = captureQualityNote(capturedFpsLive);
+    if (note.ok || !note.missing || !note.fix) return;
+    useCaptureEngineStore.getState().markLowFpsNoticeShown();
+    Alert.alert(
+      t('swinglab_smartmotion.alert.about_this_camera'),
+      `${note.can[0].toUpperCase()}${note.can.slice(1)}, but ${note.missing}.\n\n${note.fix[0].toUpperCase()}${note.fix.slice(1)}.`,
+      [{ text: 'Got it' }],
+    );
+  }, [capturedFpsLive, lowFpsNoticeShown]);
   const SwingVisionCamera = useMemo(() => {
     if (!useVisionCamera || visionUnavailable) return null;
     try {

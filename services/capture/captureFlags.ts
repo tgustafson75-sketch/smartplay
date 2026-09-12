@@ -20,12 +20,24 @@
  */
 
 /**
- * Compile-time DEFAULT for the vision-camera swing/cage capture path. OFF so every
- * build behaves exactly like today until the vision path is validated on a device.
- * The live value is a persisted runtime toggle (store/captureEngineStore) the owner
- * flips on the native-modules-debug screen — so one build A/B-tests both engines.
+ * Compile-time DEFAULT for the vision-camera swing/cage capture path.
+ *
+ * 2026-09-12 — ON. Tim: "we have already proven it works better at 60, and if I am not mistaken
+ * that is like minimum… most if not all phones now have 60fps."
+ *
+ * It was off from 2026-06-13 "until the vision path is validated on a device", and that validation
+ * has happened. Three things make this safe to flip rather than merely desirable:
+ *   - the module is linked in the SHIPPED build (docs/NEEDS-A-NATIVE-BUILD.md §3), so this reaches
+ *     players over OTA rather than waiting for a store build;
+ *   - smartmotion falls back to expo-camera both when the module is absent and — since 2026-09-12 —
+ *     when it loads but resolves no device, which previously rendered a blank frame;
+ *   - it is the ONLY engine that reports the fps it actually got, so MIN_TRACE_FPS finally applies
+ *     on the path players are really on. expo-camera exposes no frame rate at all, which is why a
+ *     30fps capture has been drawing the same confident departure trace as a 120fps one.
+ *
+ * Reversible from the Owner Console (native-modules-debug) at runtime, per device.
  */
-export const DEFAULT_USE_VISION_CAMERA = false;
+export const DEFAULT_USE_VISION_CAMERA = true;
 
 /**
  * Preferred capture frame rate (fps) for swing video. SmartTrace reads the ball's

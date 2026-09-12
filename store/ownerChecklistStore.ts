@@ -111,6 +111,12 @@ const SEED: Omit<ChecklistItem, 'done' | 'doneAt'>[] = [
     detail: 'The watch Record→SmartMotion command and the reachability query are native. They cannot ride an OTA; they go in the next store build. The Wear OS APK needs rebuilding too for the long-press.',
   },
   {
+    id: 'whats-new-at-launch',
+    group: 'ship',
+    title: "Turn WHAT'S NEW back on at launch",
+    detail: 'Entries are suspended pre-launch (testers should read the refinement wave as the app simply being good, not as a list of what used to be wrong). At launch add ONE line for the whole wave, and nest the camera tip in it: swing reads are sharper at 60fps+, with a howTo pointing at the phone\u2019s own camera setting. The draft sits in services/knowledgeBase/whatsNew.ts.',
+  },
+  {
     id: 'ota-baseline',
     group: 'ship',
     title: 'Run npm run ota:baseline after any store build',

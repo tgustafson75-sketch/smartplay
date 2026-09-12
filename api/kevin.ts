@@ -337,6 +337,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       currentBall = null,
       ball_performance = null,
       club_variant_insight = null,
+      capture_quality = null,
       physicalLimitation = null,
       goal = null,
       personalBest = null,
@@ -1025,6 +1026,14 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
        * Only present when the comparison actually found a difference worth acting on — see
        * services/ballPerformance. Answer with it when asked; do not open with it.
        */
+      /**
+       * Say it when they ask why something is missing from a swing read, or when you are about to
+       * explain a read that this capture could not fully support. Never open with it and never
+       * repeat it — it is one honest note about their camera, not a recurring complaint.
+       */
+      if (typeof capture_quality === 'string' && capture_quality.trim()) {
+        lines.push(`- What this phone's capture could NOT give you on the last swing, in your own words: ${capture_quality.trim()} Use it if they ask why a reading is absent, or when it explains a gap you are about to leave. Do not lead with it and do not bring it up twice.`);
+      }
       if (typeof club_variant_insight === 'string' && club_variant_insight.trim()) {
         lines.push(`- If they ask which of their clubs is working — they own more than one of the same club — this is the answer from their own shots: ${club_variant_insight.trim()} Only say it if asked. Straighter beats longer, and the line already reflects that.`);
       }

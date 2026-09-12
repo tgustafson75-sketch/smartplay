@@ -40,23 +40,82 @@ interface CaptureEngineState {
    */
   capturedFps: number | null;
   setCapturedFps: (fps: number | null) => void;
+  /**
+   * 2026-09-12 — did a HUMAN pick this engine, or is it just the default sitting on disk?
+   *
+   * `useVisionCamera` is persisted, so every device that has ever opened the app already has `false`
+   * written to it — not because anyone chose expo-camera, but because that was the compile-time
+   * default and persist wrote it out. Raising the default alone would therefore have reached NOBODY,
+   * while looking exactly like a shipped change.
+   *
+   * This is the defect that cost a whole audit once before: a DEFAULT read back as a CHOICE.
+   * [[nobody-chose-cage-the-default-did]] Only an explicit flip on the debug screen sets this, so the
+   * v2 migration can adopt the new default for everyone who never expressed a preference and leave
+   * alone the one person who did.
+   */
+  chosenByUser: boolean;
+  /**
+   * 2026-09-12 (Tim) — "if navigate to SmartMotion with 30 set, provide one text box reminder."
+   *
+   * ONE. Persisted so it survives relaunch, because a reminder that returns every time you open the
+   * screen is a nag, and this app does not nag. There is nothing to gain from saying it twice: the
+   * setting is on their camera and they either changed it or decided not to.
+   *
+   * Self-retiring: it only fires below MIN_TRACE_FPS, so a player who acts on it never sees it
+   * again, and one who does not has already heard it.
+   */
+  lowFpsNoticeShown: boolean;
+  markLowFpsNoticeShown: () => void;
 }
 
 export const useCaptureEngineStore = create<CaptureEngineState>()(
   persist(
     (set, get) => ({
       useVisionCamera: DEFAULT_USE_VISION_CAMERA,
-      setUseVisionCamera: (on) => set({ useVisionCamera: on }),
-      toggleVisionCamera: () => set({ useVisionCamera: !get().useVisionCamera }),
+      chosenByUser: false,
+      setUseVisionCamera: (on) => set({ useVisionCamera: on, chosenByUser: true }),
+      toggleVisionCamera: () => set({ useVisionCamera: !get().useVisionCamera, chosenByUser: true }),
       capturedFps: null,
       setCapturedFps: (fps) => set({ capturedFps: typeof fps === 'number' && fps > 0 ? fps : null }),
+      lowFpsNoticeShown: false,
+      markLowFpsNoticeShown: () => set({ lowFpsNoticeShown: true }),
     }),
     {
       name: 'capture-engine-v1',
       // capturedFps is a property of THIS device + THIS format, re-resolved on every mount.
-      partialize: (s) => ({ useVisionCamera: s.useVisionCamera }) as CaptureEngineState,
-      version: 1,
-      migrate: (s) => s as never, // 2026-06-15 (audit) — passthrough; no silent wipe on bump
+      partialize: (s) => ({
+        useVisionCamera: s.useVisionCamera,
+        chosenByUser: s.chosenByUser,
+        lowFpsNoticeShown: s.lowFpsNoticeShown,
+      }) as CaptureEngineState,
+      version: 2,
+      /**
+       * 2026-09-12 — v1 → v2: adopt the new engine default for anyone who never chose.
+       *
+       * v1 stored no record of WHY `useVisionCamera` held its value, so every device carries `false`
+       * whether or not a human ever looked at the setting. Treating that as a preference would mean
+       * raising DEFAULT_USE_VISION_CAMERA changed nothing for a single existing player — the change
+       * would ship, pass every gate, and reach zero people.
+       *
+       * So a v1 record is read as "no preference expressed" and takes the current default. From v2
+       * on, `chosenByUser` records the difference honestly and this migration never runs again.
+       * The owner's explicit A/B flip is preserved the moment they make it.
+       */
+      migrate: (persisted, version) => {
+        /**
+         * A truncated or cleared write can leave a PRIMITIVE here, and zustand merges what this
+         * returns by spreading it — so returning 'abc' writes {0:'a',1:'b',2:'c'} back to disk and
+         * corrupts the store permanently, on every launch after. Falling back to defaults loses it
+         * once instead. [[a-corrupt-write-must-cost-one-store]]
+         */
+        const prev = (persisted == null || typeof persisted !== 'object'
+          ? {}
+          : persisted) as Partial<CaptureEngineState>;
+        if (version < 2) {
+          return { ...prev, useVisionCamera: DEFAULT_USE_VISION_CAMERA, chosenByUser: false } as never;
+        }
+        return prev as never;
+      },
       storage: createJSONStorage(() => getPersistStorage()),
     },
   ),
