@@ -28,12 +28,33 @@ describe('the shot map never asserts a line it did not read', () => {
   });
 
   it('the dot is drawn ONLY when the line was actually read', () => {
-    // the positioned marker (left: 50% + lateral) must sit inside the lateralKnown branch
-    const at = code.indexOf('lateralKnown ? (');
+    /**
+     * 2026-09-12 — the branch is now keyed on `plotLateralKnown`, because a shot the PLAYER reported
+     * by tapping the map has a known lateral too. That is still a read line, just read by the only
+     * sensor that can see a 250-yard drive land. The invariant is unchanged: a positioned dot
+     * requires a known line from SOMEWHERE, and never renders on a centre default.
+     */
+    const at = code.indexOf('plotLateralKnown ? (');
     expect(at).toBeGreaterThan(-1);
     const branch = code.slice(at, code.indexOf(') : (', at));
     expect(branch).toContain('styles.ballDot');
-    expect(branch).toMatch(/left: `\$\{50 \+ lateral \* 38\}%`/);
+    expect(branch).toMatch(/left: `\$\{50 \+ plotLateral \* 38\}%`/);
+  });
+
+  it('a reported shot is the ONLY thing that can make an unread line "known"', () => {
+    // If this ever becomes `reported || something-else`, a fabricated dot is back on the table.
+    expect(code).toMatch(/const plotLateralKnown = reported \? true : lateralKnown;/);
+    expect(code).toMatch(/const plotLateral = reported \? reported\.lateralFrac : lateral;/);
+  });
+
+  it('a reported distance drops the estimate tilde — it is a measurement', () => {
+    expect(code).toMatch(/reported \? `\$\{reported\.yards\}y` : `~\$\{estCarry\}y`/);
+  });
+
+  it('the CAGE view is never tappable — there the camera can see the answer', () => {
+    // onReportShot is only passed for range/course; the cage must not acquire a "tap it in" path.
+    const sm = fs.readFileSync(path.join(__dirname, '../../app/swinglab/smartmotion.tsx'), 'utf8');
+    expect(sm).toMatch(/onReportShot=\{effectiveMode === 'sim' \? undefined : reportShotDistance\}/);
   });
 
   it('an unread line renders a band across the field, not a point on the centre', () => {

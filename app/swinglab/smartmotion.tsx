@@ -909,6 +909,18 @@ export default function SmartMotion() {
   const framingSpokeRef = useRef(false);   // spoke the "framed" cue once per setup
   const ballLocateTriedRef = useRef(false); // ran the real-ball locate once per setup (proxy stands otherwise)
   const userMovedBallRef = useRef(false);   // don't auto-place the box once the user drags it
+  /**
+   * 2026-09-12 (Tim) — "only ask to tap the bullseye if vision did not catch it verifiably" /
+   * "we need to show what AI does in this space".
+   *
+   * The twin of ballLocateTriedRef. The ball has been auto-located from the setup frame for a
+   * while; the TARGET was still a tap, in a rig whose entire point is measurement and with the
+   * camera pointed straight at it. One attempt per setup, and a tap always wins.
+   */
+  const targetLocateTriedRef = useRef(false);
+  const userMovedTargetRef = useRef(false);
+  /** Set only when a scan ran and could NOT be verified — names the factor the player can change. */
+  const [targetHint, setTargetHint] = useState<string | null>(null);
 
   // 2026-06-13 (Tim) — setup tool rail collapses to a chevron by default so the
   // right third stays clear for framing; tap to pop it down over a darker scrim.
@@ -976,7 +988,7 @@ export default function SmartMotion() {
   // recording. Stops the instant we leave setup. (If a device plays a shutter sound
   // on takePictureAsync, widen the cadence / gate behind a toggle — confirm in cage.)
   useEffect(() => {
-    if (phase !== 'setup') { setFraming(null); framingSpokeRef.current = false; liveAngleFramesRef.current = []; ballLocateTriedRef.current = false; return; }
+    if (phase !== 'setup') { setFraming(null); framingSpokeRef.current = false; liveAngleFramesRef.current = []; ballLocateTriedRef.current = false; targetLocateTriedRef.current = false; setTargetHint(null); return; }
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const tick = async () => {
@@ -1067,6 +1079,39 @@ export default function SmartMotion() {
                             console.log('[smartmotion] ball located from setup frame', JSON.stringify(found));
                           }
                         } catch { /* proxy stands */ }
+                      })();
+                    }
+                    /**
+                     * Same frame, no extra camera grab — takePictureAsync is the expensive part and
+                     * racing a second one against the recorder is the hiccup this loop already
+                     * guards against.
+                     *
+                     * VERIFIED or nothing. verifyTarget proves the geometry (centre between its own
+                     * edges, radii agreeing, a believable size, edges level) rather than trusting a
+                     * confidence word — so a failure leaves the existing tap flow exactly as it is
+                     * and a pass is a measurement, not a guess.
+                     */
+                    if (!targetLocateTriedRef.current) {
+                      targetLocateTriedRef.current = true;
+                      void (async () => {
+                        try {
+                          const ts = await import('../../services/targetScan');
+                          const scan = await ts.scanForTarget(b64);
+                          const v = ts.verifyTarget(scan);
+                          if (v.ok && v.center && !cancelled && !userMovedTargetRef.current) {
+                            setDraftTarget({ x: v.center.x, y: v.center.y });
+                            console.log('[smartmotion] target verified from setup frame', JSON.stringify(v.center));
+                          } else if (!v.ok && !cancelled && !userMovedTargetRef.current) {
+                            /**
+                             * Say WHY, naming the thing the player can change. A silent fallback to
+                             * the tap tells them nothing; "back the camera off, or tap it" is the
+                             * same honesty rule the capture-quality note follows — what I can't do,
+                             * and the lever.
+                             */
+                            console.log('[smartmotion] target not verified:', v.reason);
+                            setTargetHint(ts.targetFailureLine(v.reason));
+                          }
+                        } catch { /* the tap stands */ }
                       })();
                     }
                   }
@@ -1251,6 +1296,39 @@ export default function SmartMotion() {
    * not permanently downgrade a phone that can do 120fps.
    */
   const [visionUnavailable, setVisionUnavailable] = useState(false);
+
+  /**
+   * 2026-09-12 — the player's own report of where the shot finished, for THIS swing.
+   *
+   * Not persisted onto the swing: the durable, valuable half is the ladder write below, which
+   * improves every club call the caddie makes. The dot is just this screen catching up to the truth.
+   */
+  const [reportedShot, setReportedShot] = useState<{ yards: number; lateralFrac: number } | null>(null);
+  /**
+   * A report belongs to ONE swing. Without this, tapping a distance on swing 3 would follow you to
+   * swing 4 and read as a measurement of a shot nobody reported — the map asserting something the
+   * player never said, which is the exact fabrication this screen's header forbids.
+   */
+  useEffect(() => { setReportedShot(null); }, [selectedSwing, phase]);
+  const reportShotDistance = useCallback((yards: number, lateralFrac: number) => {
+    setReportedShot({ yards, lateralFrac });
+    try { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); } catch { /* optional */ }
+    /**
+     * Into the TOTAL ladder, not carry. On a range the player reports where the ball FINISHED —
+     * that is what they walked off or read from a marker — and calling it carry would overstate the
+     * number they fly a hazard with. Same reasoning as the spoken "my 3 wood goes 230" fix.
+     *
+     * recordTotal gates on isPlausibleForClub, so a stray tap cannot poison a ladder.
+     */
+    try {
+      const cs = require('../../store/clubStatsStore') as typeof import('../../store/clubStatsStore');
+      const name = cs.clubIdToClubName(clubRef.current);
+      if (name) {
+        cs.useClubStatsStore.getState().recordTotal(name, yards);
+        console.log('[shotmap] reported', yards, 'y total for', name);
+      }
+    } catch (e) { console.log('[shotmap] report failed (non-fatal):', e); }
+  }, []);
   /**
    * 2026-09-12 (Tim) — "if navigate to SmartMotion with 30 set, provide one text box reminder."
    *
@@ -5458,7 +5536,14 @@ export default function SmartMotion() {
               target={isPutt ? draftTarget : null}
               targetKind={isPutt ? 'cup' : 'aim'}
               onChangeBallArea={(a) => { userMovedBallRef.current = true; setDraftBall(a); }}
-              onChangeTarget={(t) => setDraftTarget(isPutt ? { x: t.x, y: t.y } : { x: t.x, y: Math.max(EFFORT_TOP_CAP, t.y) })}
+              onChangeTarget={(t) => {
+                // 2026-09-12 — a tap is a CORRECTION and outranks the detector for this setup, the
+                // same way userMovedBallRef has always outranked the ball auto-locate. Without this
+                // a late scan would quietly pull the aim point back off where the player put it.
+                userMovedTargetRef.current = true;
+                setTargetHint(null);
+                setDraftTarget(isPutt ? { x: t.x, y: t.y } : { x: t.x, y: Math.max(EFFORT_TOP_CAP, t.y) });
+              }}
               // 2026-08-01 (tester — "moving the ball box scrolls to another card"): freeze the card
               // pager while a ball/target drag is in flight so the horizontal ScrollView can't steal it.
               onDragActiveChange={setTargetsDragging}
@@ -6131,6 +6216,13 @@ export default function SmartMotion() {
             <Text style={[styles.setupHintLine, { color: colors.accent }]}>{t('swinglab_smartmotion.smart_motion.tap_where_your_ball_sits')}</Text>
           ) : null}
 
+          {/* 2026-09-12 — shown only when a target scan actually RAN and could not be verified.
+              Never on a setup where we never looked: that would be a warning about something we did
+              not measure. Names the factor the player can change, then gets out of the way. */}
+          {phase === 'setup' && targetHint ? (
+            <Text style={[styles.setupHintLine, { color: colors.text_muted }]}>{targetHint}</Text>
+          ) : null}
+
           {!isReview ? (
             // 2026-06-29 (Tim) — THREE-circle control row matching the mockup:
             // golfer (cycle DTL → Face-On → Putting, with a fade-away mode label) ·
@@ -6497,6 +6589,17 @@ export default function SmartMotion() {
       cameraBehindFeet={cameraBehindFeet}
       onChangeCanvasFeet={setPracticeCanvasFeet}
       onChangeCameraBehindFeet={setCameraBehindFeet}
+      /**
+       * 2026-09-12 (Tim) — "the range shot map has not reported right. User knows if they just hit
+       * 250 plus and where, and could tap it, and then the caddie would update the yardage data and
+       * overall logic."
+       *
+       * RANGE AND COURSE ONLY. In the cage the camera can see the answer, so asking would be the
+       * design failure; on a range the ball leaves the measurable volume entirely and the player
+       * who watched it land is the only sensor there is.
+       */
+      onReportShot={effectiveMode === 'sim' ? undefined : reportShotDistance}
+      reported={reportedShot}
       colors={colors}
       isDark={isDark}
       topInset={insets.top}

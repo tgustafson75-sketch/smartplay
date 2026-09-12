@@ -129,6 +129,13 @@
       }
     },
     {
+      "src": "api/target-scan.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 30
+      }
+    },
+    {
       "src": "api/measure-scan.ts",
       "use": "@vercel/node",
       "config": {
@@ -484,6 +491,10 @@
     {
       "src": "/api/hole-scan",
       "dest": "/api/hole-scan.ts"
+    },
+    {
+      "src": "/api/target-scan",
+      "dest": "/api/target-scan.ts"
     },
     {
       "src": "/api/measure-scan",

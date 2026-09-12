@@ -15,6 +15,24 @@
  *
  * No fabricated data: every number traces to a real measurement (trace, effort)
  * or a user-confirmed input (the two distances).
+ *
+ * 2026-09-12 (Tim) — "the range shot map has not reported right. User knows if they just hit 250
+ * plus and where, and could tap it, and then the caddie would update the yardage data and overall
+ * logic."
+ *
+ * THE RANGE IS THE OPPOSITE CASE TO THE CAGE, and the rule flips with it. In a cage the camera sees
+ * everything, so asking the player to tap is a design failure. On a RANGE the ball leaves the
+ * measurable volume entirely — nothing on this phone can see where a 250-yard drive landed — while
+ * the player watched it land next to a marker. There the player IS the sensor, and asking is not a
+ * fallback, it is the only ground truth available.
+ *
+ * Until now the downrange dot was fullCarryYards(club, effort) — an estimate off an industry table
+ * scaled by handicap, which carryEstimate itself flags as a placeholder ("(future) explicit user
+ * club-distance setting — none exists yet"). Honest, labelled "est", and still not his shot.
+ *
+ * One tap now reports the real one. It goes to clubStatsStore through recordTotal, so it improves
+ * every club call the caddie makes rather than decorating one screen — and that path already gates
+ * on isPlausibleForClub, so a stray tap cannot poison a ladder.
  */
 import React from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet, StyleProp, ViewStyle } from 'react-native';
@@ -58,6 +76,8 @@ export function ShotMapPage({
   cameraBehindFeet,
   onChangeCanvasFeet,
   onChangeCameraBehindFeet,
+  onReportShot,
+  reported,
   colors,
   isDark,
   topInset,
@@ -76,6 +96,13 @@ export function ShotMapPage({
   cameraBehindFeet: number;
   onChangeCanvasFeet: (n: number) => void;
   onChangeCameraBehindFeet: (n: number) => void;
+  /**
+   * Range only. Fired when the player taps where the shot actually finished.
+   * `yards` is distance down the field; `lateralFrac` is −1 (left) … +1 (right).
+   */
+  onReportShot?: (yards: number, lateralFrac: number) => void;
+  /** The reported shot for THIS swing, once given — plotted instead of the estimate. */
+  reported?: { yards: number; lateralFrac: number } | null;
   colors: ThemeColors;
   isDark: boolean;
   topInset: number;
@@ -141,6 +168,8 @@ export function ShotMapPage({
           effortPct={effortPct}
           lateral={lateral}
           dirLabel={dirLabel}
+          onReportShot={onReportShot}
+          reported={reported ?? null}
           colors={colors}
         />
       )}
@@ -150,7 +179,8 @@ export function ShotMapPage({
 
 // ─── Full-swing vertical "course" map ────────────────────────────────
 function CourseMap({
-  club, handicap, learnedCarry, estCarry, effortPct, lateral, lateralKnown, dirLabel, colors,
+  club, handicap, learnedCarry, estCarry, effortPct, lateral, lateralKnown, dirLabel,
+  onReportShot, reported, colors,
 }: {
   club: ClubId | null;
   handicap: number | null;
@@ -161,15 +191,39 @@ function CourseMap({
   /** False when no ball-trace was read — the downrange estimate stands, the LINE does not. */
   lateralKnown: boolean;
   dirLabel: string | null;
+  onReportShot?: (yards: number, lateralFrac: number) => void;
+  reported?: { yards: number; lateralFrac: number } | null;
   colors: ThemeColors;
 }) {
   const { t } = useTranslation();
   // Scale the field to the club's full carry (so a 7-iron map isn't driver-sized),
   // floored so a tiny club still reads. estCarry is the partial-effort estimate.
   const full = fullCarryYards(club, handicap, learnedCarry);
-  const maxRange = Math.max(full ?? 0, estCarry ?? 0, 120);
-  const downFrac = estCarry != null ? Math.min(1, estCarry / maxRange) : null;
-  const has = estCarry != null;
+  /**
+   * 2026-09-12 — the field must reach FURTHER than the estimate, or a player who out-hits the model
+   * cannot tap where the ball actually went. Headroom of a third above whatever we think, so "I hit
+   * that 250" is reachable on a map built from a 190-yard guess.
+   */
+  const maxRange = Math.round(Math.max((full ?? 0) * 1.35, (estCarry ?? 0) * 1.35, reported?.yards ? reported.yards * 1.1 : 0, 120));
+  const [fieldH, setFieldH] = React.useState(0);
+  const fieldWidthRef = React.useRef(1);
+
+  /** A reported shot REPLACES the estimate — it is a measurement and the estimate never was. */
+  const plotYards = reported?.yards ?? estCarry;
+  const plotLateral = reported ? reported.lateralFrac : lateral;
+  const plotLateralKnown = reported ? true : lateralKnown;
+  const downFrac = plotYards != null ? Math.min(1, plotYards / maxRange) : null;
+  const has = plotYards != null;
+
+  const onFieldTap = React.useCallback((e: { nativeEvent: { locationX: number; locationY: number } }) => {
+    if (!onReportShot || fieldH <= 0) return;
+    const { locationX, locationY } = e.nativeEvent;
+    // The field is bottom-anchored at the tee, so distance grows UPWARD.
+    const yards = Math.round(Math.max(1, (1 - locationY / fieldH) * maxRange));
+    // styles.ball uses left: 50% + lateral*38, so invert that to keep the dot under the finger.
+    const lateralFrac = Math.max(-1, Math.min(1, ((locationX / Math.max(1, fieldWidthRef.current)) * 100 - 50) / 38));
+    onReportShot(yards, lateralFrac);
+  }, [onReportShot, fieldH, maxRange]);
 
   return (
     <View style={styles.body}>
@@ -177,7 +231,26 @@ function CourseMap({
         <LinearGradient
           colors={['#0c2a17', '#0a3a1f', '#093e21']}
           style={styles.field}
+          onLayout={(e) => {
+            setFieldH(e.nativeEvent.layout.height);
+            fieldWidthRef.current = e.nativeEvent.layout.width;
+          }}
         >
+          {/**
+            * 2026-09-12 — TAP WHERE IT ACTUALLY FINISHED.
+            *
+            * Covers the whole field, behind the markers, so the gridlines and the dot stay readable.
+            * Only mounted when a handler is supplied — the cage view must never become tappable,
+            * because there the camera can see the answer and asking would be the design failure.
+            */}
+          {onReportShot ? (
+            <Pressable
+              onPress={onFieldTap}
+              style={StyleSheet.absoluteFill}
+              accessibilityRole="button"
+              accessibilityLabel={t('smartmotion_shot_map_page.a11y.tap_where_the_shot_finished')}
+            />
+          ) : null}
           {/* yard gridlines */}
           {[0.25, 0.5, 0.75].map((f) => (
             <View key={f} style={[styles.gridline, { bottom: `${f * 100}%` }]}>
@@ -190,16 +263,17 @@ function CourseMap({
           <View style={styles.tee} />
           {/* ball marker — only when we have an honest carry estimate */}
           {has && downFrac != null ? (
-            lateralKnown ? (
+            plotLateralKnown ? (
               <View
                 style={[
                   styles.ball,
-                  { bottom: `${Math.max(2, downFrac * 96)}%`, left: `${50 + lateral * 38}%` },
+                  { bottom: `${Math.max(2, downFrac * 96)}%`, left: `${50 + plotLateral * 38}%` },
                 ]}
               >
                 <View style={styles.ballDot} />
                 <View style={styles.ballPill}>
-                  <Text style={styles.ballPillText}>~{estCarry}y</Text>
+                  {/* A reported shot is a MEASUREMENT and drops the "~" that marks an estimate. */}
+                  <Text style={styles.ballPillText}>{reported ? `${reported.yards}y` : `~${estCarry}y`}</Text>
                 </View>
               </View>
             ) : (
@@ -208,7 +282,7 @@ function CourseMap({
               <View style={[styles.distanceBand, { bottom: `${Math.max(2, downFrac * 96)}%` }]}>
                 <View style={styles.distanceBandLine} />
                 <View style={styles.ballPill}>
-                  <Text style={styles.ballPillText}>{t('smartmotion_shot_map_page.course_map.y_line_not_read', { estCarry })}</Text>
+                  <Text style={styles.ballPillText}>{t('smartmotion_shot_map_page.course_map.y_line_not_read', { estCarry: plotYards })}</Text>
                 </View>
               </View>
             )

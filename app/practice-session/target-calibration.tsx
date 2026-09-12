@@ -18,7 +18,7 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, Pressable,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, Pressable, Share, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -192,6 +192,41 @@ export default function CageTargetCalibration() {
   const netCount = targetSamples.filter(s => s.hitType === 'net').length;
   const centerCount = targetSamples.filter(s => s.hitType === 'canvas_center').length;
 
+  /**
+   * Sequential server round-trips, so the button must say it is working or it reads as hung.
+   * Failures are surfaced, never swallowed — a dataset that silently shrinks is worse than a small
+   * one, because nobody knows which half went missing.
+   */
+  const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState<string | null>(null);
+  const exportDataset = useCallback(() => {
+    if (exporting) return;
+    setExporting(true);
+    setExportProgress('Reading 0%');
+    void (async () => {
+      try {
+        const { buildCageDataset, describeCageDataset } =
+          require('../../services/cageDatasetExport') as typeof import('../../services/cageDatasetExport');
+        const data = await buildCageDataset((done, total) => {
+          setExportProgress(`Reading ${total === 0 ? 100 : Math.round((done / total) * 100)}%`);
+        });
+        await Share.share({
+          title: 'SmartPlay cage dataset',
+          message: `${describeCageDataset(data)}\n\n${JSON.stringify(data, null, 2)}`,
+        });
+      } catch (e) {
+        console.log('[cage-calibration] export failed:', e);
+        Alert.alert(
+          t('practice_session_target_calibration.alert.export_failed'),
+          e instanceof Error ? e.message : String(e),
+        );
+      } finally {
+        setExporting(false);
+        setExportProgress(null);
+      }
+    })();
+  }, [exporting, t]);
+
   const SCATTER_SIZE = 200;
   const CANVAS_RATIO = CANVAS_SIZE_FT / CAGE_WIDTH_FT;
   const scatterCanvasPx = SCATTER_SIZE * CANVAS_RATIO;
@@ -353,6 +388,30 @@ export default function CageTargetCalibration() {
           </View>
         )}
 
+        {/**
+          * 2026-09-12 — THE DATASET'S EXIT.
+          *
+          * This screen's header has always said the samples "can be batch-sent to
+          * /api/acoustic-detect". Nothing sent them, so every labelled sample stayed on one device
+          * and taught nothing. Runs each stored WAV through the detector and shares the resulting
+          * feature table — labels plus timing plus derived cage distance — which is the shape a
+          * canvas-centre / canvas-edge / net discriminator would actually be fitted on.
+          */}
+        {sessionCount > 0 && (
+          <TouchableOpacity
+            style={[styles.exportBtn, { borderColor: colors.accent }]}
+            onPress={exportDataset}
+            disabled={exporting}
+            accessibilityRole="button"
+            accessibilityLabel={t('practice_session_target_calibration.a11y.export_the_dataset')}
+          >
+            <Ionicons name={exporting ? 'hourglass-outline' : 'share-outline'} size={16} color={colors.accent} />
+            <Text style={[styles.exportBtnText, { color: colors.accent }]}>
+              {exportProgress ?? t('practice_session_target_calibration.label.export_dataset')}
+            </Text>
+          </TouchableOpacity>
+        )}
+
         {/* Footer hint */}
         <Text style={[styles.footerHint, { color: colors.text_secondary }]}>
           {t('practice_session_target_calibration.cage_target_calibration.each_shot_saves_the_wav')}
@@ -365,6 +424,12 @@ export default function CageTargetCalibration() {
 }
 
 const styles = StyleSheet.create({
+  exportBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    marginHorizontal: 20, marginTop: 18, paddingVertical: 12,
+    borderRadius: 12, borderWidth: 1,
+  },
+  exportBtnText: { fontSize: 14, fontWeight: '700' },
   container: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
   title: { fontSize: 17, fontWeight: '700' },

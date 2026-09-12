@@ -8455,8 +8455,13 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /Array\.from\(\{ length: pageCount \}\)/.test(smSrc2) &&            // dots are dynamic
       /practiceCanvasFeet: number/.test(read('store/settingsStore.ts')) &&    // confirmed geometry persisted
       /cameraBehindFeet: s\.cameraBehindFeet/.test(read('store/settingsStore.ts')) &&
-      // honest: course marker only when an effort-carry estimate exists; cage impact is preview-labeled.
-      /const has = estCarry != null;/.test(read('components/smartmotion/ShotMapPage.tsx')) &&
+      // honest: course marker only when there is a real distance to plot; cage impact is preview-labeled.
+      // 2026-09-12 — was /const has = estCarry != null;/. The marker now also appears for a shot the
+      // PLAYER reported by tapping the map, which on a range is the only ground truth there is (the
+      // ball leaves the measurable volume). Strictly MORE honest than before: a report is a
+      // measurement and drops the estimate tilde. The invariant is unchanged — no distance, no dot.
+      /const has = plotYards != null;/.test(read('components/smartmotion/ShotMapPage.tsx')) &&
+      /const plotYards = reported\?\.yards \?\? estCarry;/.test(read('components/smartmotion/ShotMapPage.tsx')) &&
       saysToPlayer(read('components/smartmotion/ShotMapPage.tsx'), 'est · preview'),
     'page 3 is a shot map for every full swing (never gated on a camera-angle label): course plots from real effort→carry + trace; cage shows a bullseye + confirmable canvas/camera distances; no fabricated positions (empty until a real read)');
 

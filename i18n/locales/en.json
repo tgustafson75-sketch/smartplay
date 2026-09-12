@@ -1297,6 +1297,15 @@
       "hit_distribution_canvas_shots": "Hit distribution ({{length}} canvas shots)",
       "edge": "{{center_count}} edge",
       "center_edge_net": "{{center_count}} center · {{center_count2}} edge · {{net_count}} net"
+    },
+    "a11y": {
+      "export_the_dataset": "Export the dataset"
+    },
+    "label": {
+      "export_dataset": "Export dataset"
+    },
+    "alert": {
+      "export_failed": "Export failed"
     }
   },
   "practice": {
@@ -3219,6 +3228,9 @@
       "lateral_start_comes_from_the": "Lateral start comes from the acoustic-anchored trace; depth + height on the bullseye sharpen with higher-frame-rate capture. Line the rings up over your net's bullseye.",
       "est_preview_start": "est · preview · {{dirLabel}} start",
       "ft": "{{camera_behind_feet}} ft"
+    },
+    "a11y": {
+      "tap_where_the_shot_finished": "Tap where the shot finished"
     }
   },
   "smartmotion_smart_motion_hud": {
