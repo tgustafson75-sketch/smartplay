@@ -313,6 +313,23 @@ export interface RoundRecord {
   // (services/goals/teeScoreGoal) can evaluate "break 90 from the reds" honestly.
   // Optional: rounds that predate this (and imports) read as 'unspecified' = untagged.
   selectedTee?: TeeColor;
+  /**
+   * 2026-09-12 (Tim) — the ball he was playing, stamped on the round.
+   *
+   * "I've been actually using different balls and seeing different results… I'm gonna tee off here
+   * with a Chromesoft, and just ingest that data."
+   *
+   * `playerProfileStore.currentBall` already existed but is ONE global string with no history, so
+   * nothing could ever answer "which ball scores better for me" — the question he is actually
+   * asking. The comparison needs the ball attached to each round, which is what this is.
+   *
+   * Stamped at round END from the current declared ball, so declaring it on the first tee covers the
+   * round. If he switches mid-round the last one declared wins; that is the honest reading of a
+   * single value, and a round played with two balls is not a clean data point for either.
+   *
+   * Optional: absent on imports and on every round that predates this.
+   */
+  ball?: string | null;
   // 2026-06-13 — walking vs cart (Play tab). Optional; older rounds omit it.
   transportMode?: TransportMode;
   // 2026-06-13 (Tim) — short caddie summary shown on the dashboard Recent Rounds.
@@ -1189,6 +1206,13 @@ export const useRoundStore = create<RoundState>()(
                 shots: [...prev.shots],
                 selectedTee: prev.selectedTee,
                 transportMode: prev.transportMode,
+                // `prev` is the LIVE state, not a record — the ball lives on the profile.
+                ball: (() => {
+                  try {
+                    return (require('./playerProfileStore') as typeof import('./playerProfileStore'))
+                      .usePlayerProfileStore.getState().currentBall ?? null;
+                  } catch { return null; }
+                })(),
               };
               set(s => ({ roundHistory: capHistory([...s.roundHistory, preserved]) }));
               console.warn('[roundStore] startRound over an active round — preserved the prior round to history (no data loss)');
@@ -1942,6 +1966,13 @@ export const useRoundStore = create<RoundState>()(
           shots: [...persistedShots],
           selectedTee: s.selectedTee,
           transportMode: s.transportMode,
+          // Lazy require: playerProfileStore imports round data, so a top-level import here cycles.
+          ball: (() => {
+            try {
+              return (require('./playerProfileStore') as typeof import('./playerProfileStore'))
+                .usePlayerProfileStore.getState().currentBall ?? null;
+            } catch { return null; }
+          })(),
           round_photos: s.currentRoundPhotos.length > 0 ? [...s.currentRoundPhotos] : undefined,
           // FIX B13 — persist emotional log onto the record so recap + future
           // pattern analysis ("you push right when stressed") can correlate

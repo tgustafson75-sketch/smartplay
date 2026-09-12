@@ -334,6 +334,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       recentBreakthroughs = [],
       recentCageSessions = [],
       dominantMiss = null,
+      currentBall = null,
+      ball_performance = null,
       physicalLimitation = null,
       goal = null,
       personalBest = null,
@@ -1005,6 +1007,25 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
       const bp = bag_pack as { headline?: string; carry?: string[]; leave?: string[]; why?: string[] } | null;
       if (bp && Array.isArray(bp.carry) && bp.carry.length > 0) {
         lines.push(`- What to put in the bag for this course, worked out from the actual card and their own carries: ${bp.headline ?? ''} Carry: ${bp.carry.join(', ')}.${Array.isArray(bp.leave) && bp.leave.length ? ` Leave: ${bp.leave.join(', ')}.` : ''}${Array.isArray(bp.why) && bp.why.length ? ` Why: ${bp.why.join(' ')}` : ''} Use this ONLY if they ask what to bring or what to carry — do not volunteer a bag review on the first tee.`);
+      }
+      /**
+       * 2026-09-12 — the ball they are playing. Rides the MESSAGE because it changes on the first
+       * tee ("I'm teeing off with a Chromesoft") and a volatile value in the cached system block
+       * busts the cache for every turn after it — the 2026-08-24 defect.
+       *
+       * Framed as context, NOT as a cue to talk about golf balls. The player mentioned it in
+       * passing; a caddie who answers with a ball-fitting opinion every time has made a throwaway
+       * remark into a conversation they did not ask for.
+       */
+      if (typeof currentBall === 'string' && currentBall.trim()) {
+        lines.push(`- The ball they are playing today: ${currentBall.trim()}. Know it, use it if it genuinely matters (a firm ball into a hard green, spin on a short one), and otherwise say nothing about it. Do NOT offer a ball recommendation unless they ask.`);
+      }
+      /**
+       * Only present when the comparison actually found a difference worth acting on — see
+       * services/ballPerformance. Answer with it when asked; do not open with it.
+       */
+      if (typeof ball_performance === 'string' && ball_performance.trim()) {
+        lines.push(`- If they ask which ball scores better for them, this is the answer from their own rounds: ${ball_performance.trim()} Say it plainly and do not oversell it — it is their scoring, not a lab test.`);
       }
       if (typeof preRoundRoutine === 'string' && preRoundRoutine.trim()) {
         lines.push(`- Their saved pre-round routine, in their words: "${String(preRoundRoutine).trim().slice(0, 400)}". Run them through it when they ask for it — your voice, not a recital.`);

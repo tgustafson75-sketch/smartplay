@@ -29,6 +29,11 @@ export const HOW_TO: HowTo[] = [
    * feature the caddie cannot mention is one most players will never find.
    */
   {
+    id: 'set-ball',
+    asks: ['I am playing a Chromesoft', 'teeing off with a Pro V1', 'switching balls', 'what ball am I playing', 'which ball scores better', 'which ball should I play', 'track my ball'],
+    steps: 'Just say it on the first tee \u2014 "I\u2019m teeing off with a Chromesoft" \u2014 and I log it against the round, quietly. Once you have a few rounds on two different balls, ask me "which ball scores better for me" and I\u2019ll tell you from your actual scoring, or tell you they are level if that is the truth.',
+  },
+  {
     id: 'club-work',
     asks: ['which club should I work on', 'what club is costing me', 'which club is my worst', 'what should I practice', 'where am I losing shots', 'which clubs are working'],
     steps: 'Ask me and I\u2019ll tell you straight \u2014 I track every club separately and I separate the two problems: a club you are not STRIKING well (that is range work) versus one you strike fine but keep putting in trouble (that is a decision, and I can club you differently instead). Needs about six tracked shots with a club before I will say anything about it.',

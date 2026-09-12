@@ -78,6 +78,15 @@ const INTENT_TYPE_ENUM = [
    * reinstalling the app as the only remedy.
    */
   'remove_club',
+  /**
+   * 2026-09-12 (Tim) — "I'm gonna tee off here with a Chromesoft, and just ingest that data…
+   * somewhat in the background." The ball he is playing, declared in passing.
+   *
+   * playerProfileStore.currentBall already existed and was written by ONE text field on the ball-fit
+   * screen; nothing else set it and the caddie never saw it. Stamped on the round, it becomes the
+   * only thing that can answer "which ball actually scores better for me".
+   */
+  'set_ball',
 ] as const;
 
 const VOICE_INTENT_SCHEMA: StructuredSchema = {
@@ -429,6 +438,19 @@ Available intents:
    parameters: {}
    Examples: "show clubs", "club menu", "switch club", "change club", "open the club picker"
    Use this when the user wants to PICK from a list (vs club_change which already names a specific club).
+
+15e. set_ball — User DECLARES which golf ball they are playing. Usually said in passing on the
+   first tee. Log it and move on; this is background data capture, not a conversation starter.
+   parameters: { ball_phrase: string }
+   Examples:
+   - "I'm teeing off with a Chromesoft" -> { ball_phrase: "Chromesoft" }
+   - "I'm playing a Pro V1 today" -> { ball_phrase: "Pro V1" }
+   - "switching to TP5x" -> { ball_phrase: "TP5x" }
+   - "put me down for a Pro V1x" -> { ball_phrase: "Pro V1x" }
+   Boundaries: a QUESTION about balls ("what ball should I play", "which ball is better for me") is
+   NOT this — that is a normal caddie answer, not a declaration. A remark about where the ball IS
+   ("my ball is in the rough", "I'm at my ball") is at_ball / a lie report, not the ball MODEL. Do
+   not guess a brand the user did not say.
 
 15d. remove_club — User wants a club TAKEN OUT of their bag. The bag is built by camera scan, so
    this is how a misrecognised club gets corrected. Only claim an explicit removal.

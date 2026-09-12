@@ -255,6 +255,18 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     handicap: safe(() => p.handicap ?? null, null),
     ghinNumber: safe(() => p.ghin_number ?? null, null),
     dominantMiss: safe(() => p.dominantMiss ?? null, null),
+    /**
+     * 2026-09-12 — THE BALL, which the caddie could not see until today.
+     *
+     * `currentBall` has been in the profile for months, written by the ball-fit screen and read by
+     * cnsBallFitting alone. It never reached the brain, so a player could tell the app exactly what
+     * they play and the caddie would still talk as if it did not know. Tim: "I've been actually
+     * using different balls and seeing different results."
+     *
+     * It rides the MESSAGE, not the cached system prompt — it changes on the first tee, and a
+     * volatile value in the cached block busts the cache for every turn after it.
+     */
+    currentBall: safe(() => p.currentBall ?? null, null),
     physicalLimitation: safe(() => p.physicalLimitation ?? null, null),
     /**
      * 2026-08-23 — WHERE THEY ARE IN THEIR GOLF (starting / improving / returning / competitive).
@@ -883,6 +895,19 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * to shot, so it must not ride the message. [[arithmetic-belongs-in-code-not-the-model]]
      */
     club_work: safe(() => decision?.clubWork ?? null, null),
+    /**
+     * 2026-09-12 — how his balls actually compare on the card.
+     *
+     * Sent only once there is something real to say: services/ballPerformance returns a null
+     * `better` until two balls each have enough rounds AND the gap clears the noise floor, and we
+     * only ship the line when it named a winner. A caddie who reports "your two balls are level"
+     * unprompted has turned a throwaway remark on the first tee into a conversation.
+     */
+    ball_performance: safe(() => {
+      const { compareBalls } = require('./ballPerformance') as typeof import('./ballPerformance');
+      const c = compareBalls(safe(() => r.roundHistory ?? [], []));
+      return c.better ? c.say : null;
+    }, null),
     /**
      * 2026-09-11 (Tim) — "add a cover recommendations by course if the user would like to say, what
      * should I bring for this course?"
