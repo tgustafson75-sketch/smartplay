@@ -170,7 +170,8 @@ every fitting session — is captured below `MIN_TRACE_FPS`.
 
 **Tim, 2026-09-12:** *"GoPro exports don't get timestamped, but the original premise was based on
 known target reconciled with acoustic confirmation and strike quality, known distance, clip length,
-swing time, time in each phase, etc. to derive a poor man's tracer unit / swing bay."* And: *"GoPro
+swing time, time in each phase, etc. to derive a poor man's TrackMan."* — *"with a swing bay in my
+back yard, off Temu."* And: *"GoPro
 would come in as the SECOND video source file to analyze, in addition to the phone camera stream."*
 
 This corrects an assumption I had written into §3b. I had treated "we cannot read fps from the file"
@@ -204,17 +205,43 @@ is the oldest trick in film and needs no timestamps, no clock sync and no metada
 downstream already speaks in ms-from-impact, so a second source drops into the existing coordinate
 system rather than needing a new one.
 
-### The poor man's tracer
+### "Poor man's TrackMan" — what that can honestly mean
 
-With the target known, the distance to it known, the ball's start position placed, and a departure
-read from frames either side of an acoustically-timed impact, the ball's start direction is
-**geometry** — not estimation. Add strike quality from the acoustic read and the phase timings, and
-the result is what Tim originally described: a tracer and a bay, assembled from a phone, a cheap
-camera and a net.
+The target setup is a **net in a back garden, bought off Temu**, a GoPro on the frame and a phone.
+Naming TrackMan sets the bar deliberately high, so it is worth being exact about which parts of that
+bar we clear, which we do not, and which we clear that TrackMan does not.
 
-What it still does NOT give: spin, launch angle in degrees, ball speed. Those need either a radar or
-frame rates well past a GoPro's. The honesty table in §3 governs — the tracer shows **direction and
-dispersion**, which is what actually changes a club decision.
+| | TrackMan | This |
+|---|---|---|
+| Start direction / face-to-path tendency | degrees, radar | **direction and dispersion, measured** |
+| Strike quality | smash factor | **acoustic strike read** |
+| Tempo, phase timings | — | **measured, ms-anchored to impact** |
+| Body: turn, tilt, sequencing, sway, extension | **not measured at all** | **measured** |
+| Carry distance | measured | **inferred — see below** |
+| Ball speed, spin, launch angle, spin axis | measured | **never. Radar or nothing.** |
+
+### The net problem, stated plainly
+
+**In a bay the ball travels about four feet.** There is no carry to observe — not at 30fps, not at
+240, not with any camera. Anyone claiming a backyard net measures carry distance is inferring it from
+launch conditions that need a radar to take in the first place.
+
+So this feature must NOT report a carry number from a bay session. What it reports is what it saw:
+start direction, dispersion, strike quality, tempo and body mechanics — the repeatability of a swing
+rather than the distance of one shot.
+
+### And that is precisely where the round comes back in
+
+The bay says **how you swung**. The course says **how far it went** — we already hold carry and total
+per club from real rounds, in two ladders, with a roll model between them.
+
+Neither half alone is a fitting. A launch monitor bay measures ball flight and never sees your body
+or your scores. A round tracker knows your distances and never sees your swing. **The whole argument
+for this feature is that one product has both**, and the fitting session is where they finally meet:
+test the swing indoors in January, validate the club outdoors in April, from the same app.
+
+Nobody selling a $20,000 bay can follow us onto the golf course, and nobody selling a shot tracker
+can follow us into the garage.
 
 ### The thing a real bay cannot do
 
