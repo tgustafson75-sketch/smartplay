@@ -6,6 +6,7 @@ import type { HoleGeometry } from '../../services/courseGeometryService';
 import { haversineYards, projectToAxis } from '../../utils/geoDistance';
 import type { ShotConfirmation } from '../../services/round/shotSwingConfirm';
 import { useTranslation } from 'react-i18next';
+import { shotDistanceDisplay } from '../../services/puttUnits';
 
 /**
  * Phase B — Hole-level shot map.
@@ -132,6 +133,13 @@ export default function HoleShotMap({
   }, [shots, origin, destination]);
 
   const selected = selectedIdx != null ? shots[selectedIdx] : null;
+  /**
+   * 2026-09-13 (Tim, "putts should be always in Feet") — the detail row appended ' yd' to EVERY shot,
+   * so a putt in the recap read "8 yd". Found while triple-checking the same fix in ShotTimeline: the
+   * unit had a second renderer and only one of them had been corrected. One owner answers both.
+   * [[two-owners-is-the-root-cause]]
+   */
+  const selectedDistance = shotDistanceDisplay(selected?.club, selected?.distance_yards);
 
   return (
     <View style={styles.container}>
@@ -295,7 +303,7 @@ export default function HoleShotMap({
                 {/* Show the distance recorded at shot time — never a
                     render-time recalc (it can drift from the stored value
                     if locations changed). Honesty: one number, the real one. */}
-                {selected.distance_yards != null ? selected.distance_yards + ' yd' : '—'}
+                {selectedDistance ? `${selectedDistance.value} ${selectedDistance.unit === 'ft' ? 'ft' : 'yd'}` : '—'}
               </Text>
             </View>
             <View style={styles.detailRow}>

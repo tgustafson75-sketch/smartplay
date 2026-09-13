@@ -51,9 +51,30 @@ describe('the training leg reaches the caddie', () => {
 
   /** headline and connection must agree — that is the whole point of exporting it. */
   it('the headline is built FROM the connection, not beside it', () => {
+    /**
+     * 2026-09-13 — this pinned the literal destructure `const { trainingUp, scoreImproving,
+     * scoreWorse } = connection;`, so it failed when the headline moved onto
+     * services/practice/effortScoreVerdict (which derives direction from the two halves and made the
+     * "you stopped" case sayable). The EXPRESSION was never the point; agreement was. Asserted
+     * behaviourally now, in both directions, so it survives the next refactor and still catches a
+     * headline authored beside the numbers instead of from them.
+     */
+    const up = perf([0, 0, 1, 3, 3, 3], [9, 8, 7, 5, 4, 3]);
+    expect(up.connection!.trainingUp).toBe(true);
+    expect(up.headline).toMatch(/\bup\b/i);
+    expect(up.headline).not.toMatch(/dropped off/i);
+
+    // ...and the case the old bare `else` swallowed: training that FELL must not read as steady.
+    const down = perf([3, 3, 3, 1, 0, 0], [5, 5, 5, 5, 5, 5]);
+    expect(down.connection!.trainingUp).toBe(false);
+    expect(down.connection!.trainingLate).toBeLessThan(down.connection!.trainingEarly);
+    expect(down.headline).toMatch(/dropped off/i);
+    expect(down.headline).not.toMatch(/steady stretch/i);
+
     const src = strip(read('services/practice/workoutPerformance.ts'));
-    expect(src).toMatch(/const \{ trainingUp, scoreImproving, scoreWorse \} = connection;/);
     expect(src).toMatch(/if \(!connection\) \{/);
+    // built from the connection's own measured halves, not from a second local computation
+    expect(src).toMatch(/effortEarly: connection\.trainingEarly, effortLate: connection\.trainingLate/);
   });
 
   it('rides the one payload builder and reaches the brain', () => {

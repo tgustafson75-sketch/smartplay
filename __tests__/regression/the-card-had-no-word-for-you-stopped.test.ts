@@ -153,6 +153,38 @@ describe('all three PROGRESS sources ask the owner', () => {
     expect(src).not.toMatch(/a bump in [^']*tends to move the scoring line/);
   });
 
+  it('the CADDIE reads the same three-way direction the card does', () => {
+    /**
+     * 2026-09-13, triple-check. The card was fixed and services/caddieRequestBody was not: it told the
+     * brain `practiceUp ? 'UP' : 'down or flat'` — the same two-way collapse that produced "steady
+     * stretch" over a 0-ball practice line. So the dashboard could say "your practice dropped off, 240
+     * balls down to 0" while the caddie answered the same question with "down or flat". The screen had
+     * got smarter than the brain. Both read effortDirection now.
+     * [[two-owners-is-the-root-cause]]
+     */
+    const body = code('services/caddieRequestBody.ts');
+    expect(body).toMatch(/effortDirection\(c\.practiceEarlyBalls, c\.practiceLateBalls\)/);
+    expect(body).toMatch(/effortDirection\(c\.trainingEarly, c\.trainingLate\)/);
+    // the collapsed phrasing is gone from BOTH blocks
+    expect(body).not.toMatch(/'down or flat'/);
+    // and the caddie can name all three states, not two
+    expect(body).toMatch(/down: 'DOWN'/);
+    expect(body).toMatch(/flat: 'essentially FLAT'/);
+  });
+
+  it('no source keeps a second local copy of "which way did effort go"', () => {
+    // pointsPerformance's `pointsUp` and workoutPerformance's destructured `trainingUp` were both
+    // left dangling behind a `void` after the refactor. A second copy of the direction is how the
+    // card and the caddie drifted apart in the first place.
+    for (const f of ['services/practice/pointsPerformance.ts', 'services/practice/workoutPerformance.ts']) {
+      const src = code(f);
+      expect(src).not.toMatch(/void (?:pointsUp|trainingUp);/);
+      expect(src).not.toMatch(/const pointsUp = /);
+    }
+    // trainingUp stays on the EXPORTED connection, because caddieRequestBody reads it.
+    expect(code('services/practice/workoutPerformance.ts')).toMatch(/trainingUp: lastHalf > firstHalf,/);
+  });
+
   it('the one place that still says it is the owner, on the flat case only', () => {
     const owner = code('services/practice/effortScoreVerdict.ts');
     expect(owner).toMatch(/flat_holding: \(v\) => `Steady stretch/);

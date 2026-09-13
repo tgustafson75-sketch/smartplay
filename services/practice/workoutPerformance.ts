@@ -146,10 +146,11 @@ export function computeWorkoutPerformance(input: WorkoutPerformanceInput): Worko
   if (!connection) {
     headline = 'Import your SmartPump golf workouts and log a few rounds — once there\'s enough, I\'ll show whether your training tracks your scoring.';
   } else {
-    const { trainingUp, scoreImproving, scoreWorse } = connection;
+    // `trainingUp` stays on the exported `connection` (services/caddieRequestBody reads it), but the
+    // headline no longer branches on it — effortScoreVerdict derives direction from the two halves.
+    const { scoreImproving, scoreWorse } = connection;
 
     // 2026-09-13 — see services/practice/effortScoreVerdict. Third copy of the same missing branch.
-    void trainingUp;
     headline = effortScoreHeadline(
       { effortEarly: connection.trainingEarly, effortLate: connection.trainingLate, scoreImproving, scoreWorse },
       {

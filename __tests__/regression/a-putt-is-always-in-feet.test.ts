@@ -97,6 +97,29 @@ describe('every surface a human reads a putt on says feet', () => {
     expect(st).not.toMatch(/<Text style=\{styles\.distUnit\}>yds<\/Text>/);
   });
 
+  it('the RECAP shot map asks the same owner — the unit had two renderers', () => {
+    /**
+     * 2026-09-13, triple-check. ShotTimeline was fixed and components/recap/HoleShotMap was not: it
+     * appended ' yd' to every shot, so the same putt read "24 ft" on the dashboard and "8 yd" in the
+     * recap. A unit with two renderers is a unit with two answers.
+     */
+    const map = code('components/recap/HoleShotMap.tsx');
+    expect(map).toMatch(/shotDistanceDisplay\(selected\?\.club, selected\?\.distance_yards\)/);
+    expect(map).not.toMatch(/selected\.distance_yards \+ ' yd'/);
+  });
+
+  it('no surface appends a distance unit by hand instead of asking', () => {
+    // The property, swept: any file that renders a shot's distance_yards must get its unit from the
+    // owner. Stated as a sweep so the NEXT renderer cannot repeat this.
+    const offenders: string[] = [];
+    for (const rel of ['components/caddie/ShotTimeline.tsx', 'components/recap/HoleShotMap.tsx']) {
+      const src = code(rel);
+      if (/distance_yards[^\n]*(?:\+\s*' ?(?:yd|yds|y)'|>yds<)/.test(src)) offenders.push(rel);
+      if (!src.includes('shotDistanceDisplay')) offenders.push(`${rel} (does not ask the owner)`);
+    }
+    expect(offenders).toEqual([]);
+  });
+
   it('the Quick Log sheet asks for FEET once the putter is picked, and converts on the way in', () => {
     const q = code('components/QuickLogShotSheet.tsx');
     expect(q).toMatch(/isPutterClub\(club\)\s*\?\s*puttYardsFromFeet\(distNum\)\s*:\s*distNum/);

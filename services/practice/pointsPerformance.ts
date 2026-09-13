@@ -103,7 +103,6 @@ export function computePointsPerformance(input: PointsPerformanceInput): PointsP
   } else {
     const firstHalf = pointsSeries.slice(0, Math.ceil(WEEKS / 2)).reduce((a, b) => a + b, 0);
     const lastHalf = pointsSeries.slice(Math.ceil(WEEKS / 2)).reduce((a, b) => a + b, 0);
-    const pointsUp = lastHalf > firstHalf;
     const half = Math.ceil(scoreSeries.length / 2);
     const earlyAvg = scoreSeries.slice(0, half).reduce((a, b) => a + b, 0) / half;
     const lateAvg = scoreSeries.slice(half).reduce((a, b) => a + b, 0) / (scoreSeries.length - half);
@@ -111,8 +110,9 @@ export function computePointsPerformance(input: PointsPerformanceInput): PointsP
     const scoreWorse = lateAvg > earlyAvg + 0.5;
 
     // 2026-09-13 — see services/practice/effortScoreVerdict. The old `else` here reported a DROP in
-    // points as a "steady stretch", identically to practiceImpact and workoutPerformance.
-    void pointsUp;
+    // points as a "steady stretch", identically to practiceImpact and workoutPerformance. The local
+    // `pointsUp` boolean went with it: direction is the owner's job now, and a second copy of it here
+    // is how the two would drift apart again.
     headline = effortScoreHeadline(
       { effortEarly: firstHalf, effortLate: lastHalf, scoreImproving, scoreWorse },
       {

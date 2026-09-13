@@ -1085,7 +1085,22 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
           + ' If they ask, say THAT plainly — what you have, what you still need, and that you will '
           + 'have a real answer then. Never claim a trend from this, and never just go quiet.';
       }
-      const practiceDir = c.practiceUp ? 'UP' : 'down or flat';
+      /**
+       * 2026-09-13 (Tim) — THE SCREEN GOT SMARTER THAN THE BRAIN.
+       *
+       * `practiceUp ? 'UP' : 'down or flat'` collapses two completely different situations into one
+       * phrase — exactly the collapse that made the PROGRESS card say "steady stretch" over a practice
+       * line ending at 0 balls. The card was fixed today (services/practice/effortScoreVerdict owns all
+       * nine effort×score outcomes); this block was not, so the dashboard could say "your practice
+       * dropped off, 240 balls down to 0" while the caddie answered the same question with "down or
+       * flat". Found triple-checking that fix.
+       *
+       * Both now read `effortDirection`, so the graph and the caddie cannot disagree about which way
+       * the line is going, or about whether it moved at all. [[two-owners-is-the-root-cause]]
+       */
+      const { effortDirection } = require('./practice/effortScoreVerdict') as typeof import('./practice/effortScoreVerdict');
+      const DIR = { up: 'UP', down: 'DOWN', flat: 'essentially FLAT' } as const;
+      const practiceDir = DIR[effortDirection(c.practiceEarlyBalls, c.practiceLateBalls)];
       const scoreDir = c.scoreImproving ? 'IMPROVING' : c.scoreWorse ? 'getting worse' : 'holding steady';
       const vs = (n: number) => `${n > 0 ? '+' : ''}${n}`;
       return 'THEIR PRACTICE-TO-SCORING CONNECTION over the last 6 weeks, measured from their own '
@@ -1286,7 +1301,11 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
           + ' Say that if asked. Never claim the training is or is not working from this.';
       }
 
-      const dir = c.trainingUp ? 'UP' : 'down or flat';
+      // 2026-09-13 — same collapse as the practice block above; same owner answers it.
+      const { effortDirection } = require('./practice/effortScoreVerdict') as typeof import('./practice/effortScoreVerdict');
+      const dir = ({ up: 'UP', down: 'DOWN', flat: 'essentially FLAT' } as const)[
+        effortDirection(c.trainingEarly, c.trainingLate)
+      ];
       const scoring = c.scoreImproving ? 'IMPROVING' : c.scoreWorse ? 'getting worse' : 'holding steady';
       const vs = (n: number) => `${n > 0 ? '+' : ''}${n}`;
       return 'THEIR TRAINING-TO-SCORING CONNECTION over the last 6 weeks, measured from their own '
