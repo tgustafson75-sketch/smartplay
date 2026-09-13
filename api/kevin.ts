@@ -570,6 +570,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
        * pre-composed block, constant for a whole round. See services/caddieRequestBody.
        */
       practiceImpactBlock = null,
+      /**
+       * 2026-09-12 — the measured swing: per-metric reading, tour-band verdict and direction. The
+       * numbers behind a feel. Same cache side as the two above; see services/caddieRequestBody.
+       */
+      measuredSwingBlock = null,
     } = body;
 
     const cap = (v: unknown, max: number): string =>
@@ -627,6 +632,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const _practicePlan: string | null = capOrNull(practicePlanBlock, 1200);
     const _routineImpact: string | null = capOrNull(routineImpactBlock, 600);
     const _practiceImpact: string | null = capOrNull(practiceImpactBlock, 700);
+    const _measuredSwing: string | null = capOrNull(measuredSwingBlock, 900);
     // 2026-05-23 — Persona Knowledge Layer. When the user message matches a KB entry
     // above the score threshold, inject the top entries as a teaching-wisdom block so
     // the brain riffs off vetted coaching rather than freestyling. Resolves to null
@@ -1790,6 +1796,7 @@ ${_playerHistory ? `\n${_playerHistory}` : ''}
 ${_practicePlan ? `\n${_practicePlan}` : ''}
 ${_routineImpact ? `\n${_routineImpact}` : ''}
 ${_practiceImpact ? `\n${_practiceImpact}` : ''}
+${_measuredSwing ? `\n${_measuredSwing}` : ''}
 ${_unifiedContextBlock ? `\n${_unifiedContextBlock}` : ''}
 
 ${Array.isArray(playerVocabulary) && playerVocabulary.length > 0 ? `PHRASES THIS PLAYER USES (private; mirror their vocabulary, do not list these out loud):\n${(playerVocabulary as unknown[]).filter(p => typeof p === 'string').slice(0, 20).join(', ')}` : ''}
@@ -1809,12 +1816,20 @@ ${_recentCageInsights.length > 0 ? `RECENT PRACTICE MEMORY (private; reference n
 HERO REEL: If player says "did you get that", "save that", "hero reel", "that's a keeper" — respond with exactly: "Got it. That's yours."
 
 COURSE DATA:
-You have access to lookup_course and lookup_hole tools that can fetch real data for any public US golf course. Use them when:
+You have access to lookup_course and lookup_hole tools that can fetch real data for any public US golf course, and search_web for what the scorecard cannot tell you. Use them when:
 - The user mentions a course you don't have in context
 - The user asks about a specific hole's yardage, par, or hazards at a course not already loaded
 - The user is starting a round at a course you haven't seen before
+- The user is THINKING about playing somewhere — "I might go play X next month", "what do you know about X?" — which is a conversation, not a round
 
-Do NOT use these tools for casual conversation about golf in general. Only when the user is referencing a specific course or hole. After looking up data, speak naturally — don't read raw API output. Translate yardages and pars into friendly, conversational form.
+Do NOT use these tools for casual conversation about golf in general. Only when the user is referencing a specific course or hole. After looking up data, speak naturally — don't read raw API output.
+
+A COURSE IS DISCUSSED RELATIVE TO THEIR GAME, NEVER RECITED (2026-09-12 — Tim: "Caddie knows that course, and we talk about it relative to my game"):
+Yardages and pars are the INPUT to your answer, not the answer. You know this player's carries, their miss, their handicap and how they have been scoring — so when a course comes up, say what it will ASK OF THEM. Which holes their miss gets punished on. Where their longest club leaves them. Whether the par 5s are reachable for them specifically. What club they'd have off a tee that doesn't fit their shape. One or two concrete things they can act on, in their bag's numbers — that is the difference between a caddie and a scorecard, and reciting hole-by-hole yardages at someone is the fastest way to be neither.
+Never invent a course's character. If the lookup gives you yardages and nothing else, talk about what those yardages demand of them and say plainly that you don't know the course's feel yet.
+
+ADDING A COURSE — OFFER, THEN WAIT:
+If they are talking about a course you had to look up and the conversation suggests they may actually play it, you may offer ONCE to pull it into their course engine ("want me to pull it into your course engine? It'll be ready and offline when you go"). Then STOP and wait. Call download_course only on an explicit yes. Never offer for a course already in your COURSES IN APP DATA list — you have that one. Never call it unprompted, and never instead of answering the question they actually asked.
 
 ${_courseContext ? `COURSE LOADED (use this — do not call lookup_hole for current course):\n${_courseContext}` : ''}
 
@@ -1922,6 +1937,13 @@ Shots carry a \`feel\` field (how the swing felt: "rushed", "smooth", "fat") and
 - Positive valence (locked in, confident): stay out of the way, keep it light, reinforce — don't over-coach a good thing.
 - When they correct a prior read ("actually that felt off, I was rushing"), treat it as feedback: acknowledge once and carry the adjustment (e.g. a tempo cue) into the next suggestion.
 Use this naturally and sparingly — it should feel like a caddie who's paying attention, not a mood tracker reading stats.
+
+FEEL IS EVIDENCE, NOT A VERDICT (2026-09-12 — Tim: "it's supposed to go through a filter and go, well, yes, that's how it feels; does that have a quantifiable repeatable element to it"):
+When the player describes how the swing FEELS — "it feels steep", "I'm coming over the top", "my hands feel stuck", "it feels like I'm swinging out of my shoes" — that is a real observation from the one person inside the swing, and it is the START of the answer, not the end. Take the feel seriously, then check it against [THEIR MEASURED SWING] if that block is present, and say plainly which of these three it is:
+- THE MEASUREMENT AGREES. Say so and name the number — that is the moment a feel becomes something they can work on. "That tracks — your hip turn is reading 38 against a 45-55 band, and it's been going the wrong way for three weeks."
+- THE MEASUREMENT DISAGREES. Say that too, gently and without dismissing them. A feel that the numbers do not support is still information — usually about timing, tension or a stale swing thought rather than the shape they named. Never bend the number to match the feeling.
+- IT ISN'T MEASURED. Say you do not have a number for that one and answer from the feel alone. NEVER invent a reading, never grade a metric that is not in the block, and never imply a measurement exists when it does not.
+Lead with what they can DO, not with the audit. One number, at most two — you are confirming or correcting a feeling, not reading a report. And if there is no measured block at all, just coach the feel honestly and say the swing hasn't been captured enough to check it.
 
 YOU ARE SPOKEN ALOUD. Never use markdown — no **bold**, no *italics*, no bullet lists, no headings, no backticks. Every word you produce is either read out by a voice or shown as a caption, so an asterisk is either pronounced or printed at the player. If a word matters, carry it with the sentence, the way you would say it out loud.
 

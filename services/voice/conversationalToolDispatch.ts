@@ -100,6 +100,8 @@ type AnyAction = {
   // switch_caddie / set_golfer
   personality?: string;
   name?: string;
+  // download_course (2026-09-12 — the course engine, reached from the conversation)
+  course_id?: string;
   // register_bag (2026-08-08 — spoken bag registration)
   clubs?: string[];
   distances?: { club: string; yards: number; kind?: 'carry' | 'total' | null }[];
@@ -520,6 +522,33 @@ function dispatchOne(a: AnyAction): void {
         a.target?.trim() ? `→ ${a.target.trim()}` : null,
       ].filter(Boolean).join(' · ');
       toast(bits ? `Plan set — ${bits}` : 'Plan noted');
+      break;
+    }
+    /**
+     * 2026-09-12 — the course engine, reached from the conversation rather than from arriving at a
+     * course. The engine reports `fresh` precisely so a caller only claims a download that actually
+     * happened; the arrival toast used to claim one for courses owned for weeks. Async and
+     * fire-and-forget — the caddie has already spoken, and a 3s geometry build must not hold the
+     * turn open. A failure says so rather than leaving the player believing he owns a course he
+     * does not.
+     */
+    case 'download_course': {
+      const courseName = typeof a.name === 'string' ? a.name.trim() : '';
+      if (!courseName) break;
+      toast(`Pulling ${courseName} into your course engine\u2026`);
+      import('../courseDownloadEngine')
+        .then((eng) => eng.downloadCourse({
+          name: courseName,
+          courseId: typeof a.course_id === 'string' && a.course_id.trim() ? a.course_id.trim() : null,
+        }))
+        .then((r) => {
+          if (r.ok) toast(r.fresh ? `\u2705 ${courseName} downloaded` : `${courseName} was already in your engine`);
+          else toast(`Couldn't pull ${courseName} in${r.reason ? ` \u2014 ${r.reason}` : ''}`);
+        })
+        .catch((e) => {
+          console.log('[download_course] failed (non-fatal):', e);
+          toast(`Couldn't pull ${courseName} in`);
+        });
       break;
     }
     case 'set_reminder': {

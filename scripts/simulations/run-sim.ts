@@ -12430,7 +12430,8 @@ check('RATCHET: nothing new may be interpolated into the cached system prompt',
       '_conversationTurns', 'voicedDistress', 'liveFactsBlock', 'bagBlock', '_personaKBBlock', 'kbAddendum'];
     if (DENY.some((d) => names.has(d))) return false;
 
-    // Frozen 2026-08-25 at 57. Shrinking is always fine; growing needs a deliberate line here.
+    // Frozen 2026-08-25 at 57; 59 since 2026-09-12. Shrinking is always fine; growing needs a
+    // deliberate line here.
     const ALLOWED = new Set(['Array', 'TRANSLATION_OVERRIDE', '_cecilyMode', '_coachKnowledgeContext',
       '_courseContext', '_courseIntelligence', '_dominantMiss', '_ghinNumber', '_ghostContext', '_goal',
       '_golferModel', '_holeContextBlock', '_kevinContext', '_knownCoursesBlock', '_penaltyContext',
@@ -12444,6 +12445,23 @@ check('RATCHET: nothing new may be interpolated into the cached system prompt',
        * the cached side exactly as isRoundActive does. Added deliberately, per the note above.
        */
       'effectiveLength',
+      /**
+       * 2026-09-12 — added deliberately, per the note above. Both are derived from COMPLETED work
+       * and cannot move shot to shot:
+       *
+       *   _practiceImpact — practice volume against score-vs-par, read from logged practice sessions
+       *     and FINISHED rounds. It can only change when a round ends or a session is logged, and
+       *     neither happens mid-shot. Same reasoning, and the same cache side, as _routineImpact
+       *     directly above it, which was argued through on 08-24.
+       *
+       *   _measuredSwing — the biomech readings and their tour-band verdicts, read from the swing
+       *     library. Changes when a swing is CAPTURED, which is a range session, not a shot on the
+       *     course. In a round it is frozen.
+       *
+       * Both are also large-ish and repeated on every turn, which is exactly the shape the cache is
+       * for: putting them on the message side would be the cousin of the 08-24 defect, not a fix.
+       */
+      '_practiceImpact', '_measuredSwing',
       'experienceDepthRule', 'firstName',
       'handednessRule', 'insightLines', 'isRoundActive', 'is_proactive', 'langRule', 'mentalGameBlock',
       'modeLabel', 'personaIntensity', 'perspectiveBlock', 'pi', 'playerAddressRule', 'r', 'registerBlock',

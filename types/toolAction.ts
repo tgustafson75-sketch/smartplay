@@ -94,6 +94,10 @@ export type ToolAction =
    * UI_TOOL has a member here — so the next tool cannot join the brain without one.
    */
   | { type: 'recommend_club'; club: string; shape?: string }
-  | { type: 'register_bag'; clubs?: unknown[]; distances?: unknown[] };
+  | { type: 'register_bag'; clubs?: unknown[]; distances?: unknown[] }
+  // 2026-09-12 — the course engine, reached from the conversation: a course the player is only
+  // THINKING about had no way in. `name` is required; `course_id` rides along when a prior
+  // lookup_course produced one.
+  | { type: 'download_course'; name: string; course_id?: string };
 
 // ── POST handler ──────────────────────────────────────────────────────────────

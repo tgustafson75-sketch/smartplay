@@ -1999,6 +1999,37 @@ export default function CaddieTab() {
         } catch (e) { console.log('[caddie] plan_shot toast failed (non-fatal):', e); }
         break;
       }
+      /**
+       * 2026-09-12 — the twin of the conversationalToolDispatch case. Both dispatchers must carry
+       * every brain-emittable tool or the caddie confirms an action the client never ran; the
+       * parity guard in __tests__/logic/voice-intent-parity checks exactly that.
+       */
+      case 'download_course': {
+        const dc = action as { name?: string; course_id?: string };
+        const courseName = typeof dc.name === 'string' ? dc.name.trim() : '';
+        if (!courseName) break;
+        try {
+          const toast = require('../../store/toastStore') as typeof import('../../store/toastStore');
+          toast.useToastStore.getState().show(`Pulling ${courseName} into your course engine\u2026`);
+          import('../../services/courseDownloadEngine')
+            .then((eng) => eng.downloadCourse({
+              name: courseName,
+              courseId: typeof dc.course_id === 'string' && dc.course_id.trim() ? dc.course_id.trim() : null,
+            }))
+            .then((r) => {
+              toast.useToastStore.getState().show(
+                r.ok
+                  ? (r.fresh ? `\u2705 ${courseName} downloaded` : `${courseName} was already in your engine`)
+                  : `Couldn't pull ${courseName} in${r.reason ? ` \u2014 ${r.reason}` : ''}`,
+              );
+            })
+            .catch((e) => {
+              console.log('[caddie] download_course failed (non-fatal):', e);
+              toast.useToastStore.getState().show(`Couldn't pull ${courseName} in`);
+            });
+        } catch (e) { console.log('[caddie] download_course dispatch failed (non-fatal):', e); }
+        break;
+      }
       case 'set_reminder': {
         // 2026-07-04 (Tim — verbal reminders) — "remind me to work on my putting
         // Thursday" → a SmartPlan reminder the caddie surfaces + considers all week.

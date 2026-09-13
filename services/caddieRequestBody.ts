@@ -1058,6 +1058,51 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
         + 'from THIS, not from a general opinion about practice.';
     }, null),
 
+    /**
+     * 2026-09-12 (Tim — "if you wanna talk to your swing coach… I open the app to talk about my
+     * swing or feel — that's where feel as a dynamic came from — and I don't think it's wired in
+     * elementally like that, where it's supposed to go through a filter and go, well, yes, that's
+     * how it feels; does that have a quantifiable repeatable element to it") — THE NUMBERS BEHIND
+     * THE FEEL, which no brain had ever been given.
+     *
+     * Not one biomech value reached the caddie. The payload's whole swing half was
+     * `recentCageSessions` (date, club, a shot COUNT) and two prose fields, so a player saying "it
+     * feels like I'm coming over the top" could only be agreed with or opined at. The measurement
+     * existed the entire time — the swing library stores per-shot biomech, services/swingBenchmarks
+     * holds the tour reference bands, services/practice/swingMetricTrend grades one against the
+     * other — and app/(tabs)/dashboard.tsx was its only reader. A swing coach you can talk to, who
+     * cannot see the swing. [[unconnected-halves-not-broken-code]]
+     *
+     * The RAW READING rides along with the band verdict deliberately. "Outside the band" is a grade;
+     * "51° of hip turn against a 45-55 band" is a fact he can argue with, and a player who cannot
+     * check you learns to distrust the number.
+     *
+     * `framing` is carried verbatim because swingMetricTrend marks it mandatory for any surface that
+     * renders this — these are directional tour ranges, never "you are X° off a named pro".
+     *
+     * COST — swing reads change when a session is captured, never shot to shot, so this rides the
+     * cached system prompt like the two blocks above it.
+     */
+    measuredSwingBlock: safe(() => {
+      const { computeSwingMetricTrend } = require('./practice/swingMetricTrend') as typeof import('./practice/swingMetricTrend');
+      const { collectSelfTrendSwings } = require('./practice/selfSwingReads') as typeof import('./practice/selfSwingReads');
+      const { useSwingSessionStore } = require('../store/swingSessionStore') as typeof import('../store/swingSessionStore');
+      const swings = collectSelfTrendSwings(useSwingSessionStore.getState().sessionHistory as never);
+      if (swings.length === 0) return null;
+      const trend = computeSwingMetricTrend({ swings, nowMs: Date.now() });
+      if (!trend.hasEnough || trend.trends.length === 0) return null;
+      // Worst-first is how computeSwingMetricTrend sorts, and worst-first is what a coach leads
+      // with. Four is enough to answer a feel question without burying the shot in front of him.
+      const lines = trend.trends.slice(0, 4).map((m) => {
+        const raw = m.rawSeries.filter((v) => Number.isFinite(v));
+        const latest = raw.length > 0 ? Math.round(raw[raw.length - 1] * 10) / 10 : null;
+        return `- ${m.label}: ${latest != null ? `latest read ${latest}, ` : ''}`
+          + `${m.inBandNow ? 'inside' : 'outside'} the tour band, ${m.direction}`
+          + ` over ${m.weeksWithData} weeks (${m.gradedReads} graded swings). ${m.headline}`;
+      });
+      return `THEIR MEASURED SWING (private; ${trend.framing}):\n${lines.join('\n')}`;
+    }, null),
+
     /** The stated weekly plan — goals, challenges, open reminders. Empty until they engage it. */
     practicePlanBlock: safe(() => {
       const pp = require('../store/practicePlanStore') as typeof import('../store/practicePlanStore');

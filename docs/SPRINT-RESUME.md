@@ -8,7 +8,34 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
-> ### ⚠️ LATEST — 2026-09-12. The caddie could not see the dashboard.
+> ### ⚠️ LATEST — 2026-09-13. The day-one concept: talk to them, and they know.
+>
+> Tim reframed the sweep around the original idea — a swing coach / caddie / mental coach you TALK
+> to, not a menu you open. Two of the three things he named were built and unreachable from a
+> conversation. **The swing coach could not see the swing:** not one biomech value reached the brain,
+> though the library stores per-shot reads, `swingBenchmarks` holds the tour bands and
+> `swingMetricTrend` grades one against the other — dashboard-only. Now `measuredSwingBlock` (raw
+> reading + band verdict + direction), a shared `selfSwingReads` collector, and a prompt rule that
+> makes a FEEL go through the filter he described: agrees / disagrees / isn't measured, never invent
+> a reading. **A course he is only thinking about** could reach `lookup_course` but never
+> `courseDownloadEngine`, whose three callers were all "you are already playing here" — now a
+> consent-gated `download_course` tool in both dispatchers, and the prompt reads a course against
+> HIS game instead of reciting the card.
+>
+> The sim's cached-prompt RATCHET caught both new interpolations (and 09-12's, committed without the
+> sim being run). Both registered deliberately; frozen count 57 → 59. **Run `npm run sim`, not just
+> jest.**
+>
+> Green: tsc, lint, jest 4270/4270 (365 suites), sim 1023/1023. **NOT verified on device.**
+>
+> **Carried:** `workoutPerformance`, `workoutSwingImpact`, `pointsPerformance`, `preRoundFactors`,
+> `handicapCalculator` still screen-only; the off-round deflection ("You're not in a round yet" to
+> putting/GIR/last-round questions) still needs a per-topic call; the MENTAL-game leg has not been
+> audited against this lens yet.
+
+---
+
+> ### 2026-09-12. The caddie could not see the dashboard.
 >
 > Tim wanted to talk to Kevin about the practice/score crossing on his dashboard. Kevin had no
 > access to it: `practice/practiceImpact` has measured it since 06-14 with `app/(tabs)/dashboard.tsx`

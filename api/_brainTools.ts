@@ -59,6 +59,8 @@ export const UI_TOOLS = new Set([
   'open_smartvision', 'open_smartfinder', 'open_swinglab',
   'record_swing', 'log_shot', 'plan_shot', 'log_score', 'log_emotional_state',
   'mark_tee', 'mark_green', 'log_issue', 'set_reminder',
+  // 2026-09-12 — the course engine, reachable from the conversation. See the tool above.
+  'download_course',
   'configure_drill', 'close_swinglab', 'set_angle', 'set_golfer', 'switch_caddie',
   // 2026-08-09 (Tim — exact club attribution) — recommend_club carries the caddie's spoken club to the
   // client so silent adherence trains the bag with the EXACT club advised (not just a distance proxy).
@@ -402,6 +404,31 @@ export const BRAIN_TOOLS: AiToolDef[] = [
         query: { type: 'string', description: 'The factual question to look up, phrased for a search (e.g. "course record at Pebble Beach", "dress code Torrey Pines").' },
       },
       required: ['query'],
+    },
+  },
+  /**
+   * 2026-09-12 (Tim — the day-one concept) — "I was thinking about going to play some course in
+   * Nevada, and Caddie knows that course, and we talk about it relative to my game. And then you
+   * could say, hey, well, let's pull that up into my course engine."
+   *
+   * services/courseDownloadEngine has done exactly that since 08-06 — geometry, content,
+   * intelligence and imagery fetched and marked offline-available. Its only three callers were
+   * arriving at a course, picking one to play, and starting a round. A course he is THINKING about
+   * had no way in, which is the half of the conversation he was describing.
+   *
+   * Consent is the whole design here: the caddie may OFFER once and fires this only on an explicit
+   * yes, the same bar every other tool in this file is held to.
+   */
+  {
+    name: 'download_course',
+    description: 'Pull a course into the player\'s course engine — downloads its geometry, content and imagery so it is ready and available offline. Use ONLY after the player explicitly agrees to add a course you were discussing ("yeah, pull it up", "add it", "download it", "get that one"). You may OFFER once after talking about a course they do not have ("want me to pull it into your course engine?") and then WAIT. Never call this unprompted, never on a course already in your COURSES IN APP DATA list, and never as a way to answer a question — lookup_course and lookup_hole already fetch what you need to TALK about a course.',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'The course name as the player would recognise it.' },
+        course_id: { type: 'string', description: 'The id from a prior lookup_course result, when you have one. Omit if you only have the name.' },
+      },
+      required: ['name'],
     },
   },
   {

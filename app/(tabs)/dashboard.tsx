@@ -56,7 +56,8 @@ import { exercisesForFault } from '../../services/swing/faultWorkouts';
 import { usePointsBaselineStore } from '../../store/pointsBaselineStore';
 import { useWorkoutStore } from '../../store/workoutStore';
 import { computeWorkoutSwingImpact } from '../../services/practice/workoutSwingImpact';
-import { computeSwingMetricTrend, type TrendSwing } from '../../services/practice/swingMetricTrend';
+import { computeSwingMetricTrend } from '../../services/practice/swingMetricTrend';
+import { collectSelfTrendSwings } from '../../services/practice/selfSwingReads';
 import { useWatchStore } from '../../store/watchStore';
 import { roundTempoBaseline, holeTempoFlag } from '../../services/round/roundSwingRead';
 import { useToastStore } from '../../store/toastStore';
@@ -489,47 +490,13 @@ export default function Dashboard() {
    * in this same history, and drawing their hip turn as the owner's regression would be worse than
    * showing nothing at all.
    */
-  const swingTrend = useMemo(() => {
-    const swings: TrendSwing[] = [];
-    for (const sess of libraryHistory ?? []) {
-      if (resolvePlayerName(sess.player_id, '__self__') !== '__self__') continue;
-      // Tempo is a SESSION read (it needs marked phases), so it rides on each of that session's
-      // swings rather than being dropped for lack of a per-shot equivalent.
-      const tempoRatio = typeof sess.tempo_result?.ratio === 'number' ? sess.tempo_result.ratio : null;
-      const perShot = (sess.shots ?? []).filter((sh) => sh.biomechanics);
-      if (perShot.length > 0) {
-        for (const sh of perShot) {
-          const b = sh.biomechanics!;
-          swings.push({
-            date: sess.date,
-            club: sh.club ?? sess.club ?? null,
-            metrics: {
-              hipTurnDeg: b.hipTurnDeg, shoulderTurnDeg: b.shoulderTurnDeg,
-              shoulderTiltDeg: b.shoulderTiltDeg ?? null, weightShiftPct: b.weightShiftPct,
-              spineAngleDeltaDeg: b.spineAngleDeltaDeg, headDriftPxNorm: b.headDriftPxNorm,
-              hipSlideRatio: b.hipSlideRatio, sequencingScore: b.sequencingScore ?? null,
-              tempoRatio,
-            },
-          });
-        }
-        continue;
-      }
-      const b = sess.biomechanics;
-      if (!b && tempoRatio == null) continue;
-      swings.push({
-        date: sess.date,
-        club: sess.club ?? null,
-        metrics: {
-          hipTurnDeg: b?.hipTurnDeg ?? null, shoulderTurnDeg: b?.shoulderTurnDeg ?? null,
-          shoulderTiltDeg: b?.shoulderTiltDeg ?? null, weightShiftPct: b?.weightShiftPct ?? null,
-          spineAngleDeltaDeg: b?.spineAngleDeltaDeg ?? null, headDriftPxNorm: b?.headDriftPxNorm ?? null,
-          hipSlideRatio: b?.hipSlideRatio ?? null, sequencingScore: b?.sequencingScore ?? null,
-          tempoRatio,
-        },
-      });
-    }
-    return computeSwingMetricTrend({ swings, nowMs: Date.now() });
-  }, [libraryHistory]);
+  const swingTrend = useMemo(
+    // 2026-09-12 — the swings assembly moved to services/practice/selfSwingReads so the caddie's
+    // context can read the same library this graph does. The rules (per-shot first, tempo rides
+    // along, self only) went with it unchanged.
+    () => computeSwingMetricTrend({ swings: collectSelfTrendSwings(libraryHistory), nowMs: Date.now() }),
+    [libraryHistory],
+  );
 
   // 2026-08-06 (Tim — "there should be ONE graph not multiple"). Collapse the three correlation cards
   // (practice / points / training, each two stacked sparklines) into a SINGLE progress graph: score-vs-par

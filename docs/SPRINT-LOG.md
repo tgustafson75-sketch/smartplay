@@ -3421,3 +3421,82 @@ Want to start one?"* to `putt_stats`, `gir`, `nine_split`, `last_round_here`, `l
 avg putts/hole). Needs a per-topic decision, not a blanket `route_to_brain`: the topics that
 genuinely need a live round should keep deflecting, and the ones the caddie cannot source must not
 be routed to him to invent. Diagnosis done; fix deliberately not bundled here.
+
+---
+
+## Day N+5 — 2026-09-13 — the day-one concept, through its own lens
+
+Tim, reframing the whole sweep: *"This is a day one concept of this app seven months ago. This is
+where the sports coach, swing coach, caddy, mental game coach concept originally came from — to be
+able to talk to them. Sometimes it's not about opening up practice or play… That's why I keep
+saying Pinocchio turning into a person. It's that content, the context, and all of it wrapped
+smartly."* Two of the three things he named were measured, built, and unreachable from a
+conversation.
+
+### The swing coach could not see the swing
+
+**Not one biomech value reached the brain.** The payload's entire swing half was
+`recentCageSessions` (date, club, a shot COUNT) plus two prose fields — so "it feels like I'm coming
+over the top" could only be agreed with or opined at. Everything needed was already built: the swing
+library stores per-shot biomech, `services/swingBenchmarks` holds the tour reference bands,
+`services/practice/swingMetricTrend` grades one against the other. `app/(tabs)/dashboard.tsx` was
+its only reader.
+
+- New `measuredSwingBlock` — per metric: the latest RAW reading, in/outside the tour band,
+  direction, weeks and graded-swing counts, and `swingMetricTrend`'s mandatory framing carried
+  verbatim. The raw number rides with the verdict deliberately: "outside the band" is a grade,
+  "51° against a 45-55 band" is a fact he can argue with.
+- New `services/practice/selfSwingReads.ts` — the swings assembly (per-shot first, tempo rides
+  along, self-only for Family/Coach mode) lifted out of the dashboard so the graph and the caddie
+  read the same library instead of two copies.
+- New prompt rule **FEEL IS EVIDENCE, NOT A VERDICT**, which is the filter he described: take the
+  feel seriously, then say which of three it is — the measurement AGREES (name the number), the
+  measurement DISAGREES (say so without dismissing him; never bend a number to fit a feeling), or
+  IT ISN'T MEASURED (say that, and never invent a reading).
+
+### A course he is only thinking about could reach the data but never the engine
+
+`lookup_course` / `lookup_hole` have fetched any public US course for a long time — that half
+worked. `services/courseDownloadEngine` has pulled geometry, content, intelligence and imagery into
+offline availability since 08-06, and its only three callers were **arriving** at a course,
+**picking** one to play, and **starting** a round.
+
+- New `download_course` brain tool → both dispatchers (`conversationalToolDispatch` + the
+  `caddie.tsx` twin) → the existing engine. Gated on an explicit yes: offer once, then wait.
+- The COURSE DATA prompt block said *"translate yardages and pars into friendly, conversational
+  form"* — a scorecard with a nicer voice. Replaced with **A COURSE IS DISCUSSED RELATIVE TO THEIR
+  GAME, NEVER RECITED**: which holes his miss gets punished on, where his longest club leaves him,
+  whether the par 5s are reachable *for him* — plus an explicit bar on inventing a course's
+  character when the lookup returned only yardages.
+
+### The guard that earned its keep
+
+`npm run sim`'s cached-prompt RATCHET failed on both new interpolations — including
+`_practiceImpact` from yesterday, which was committed without the sim ever being run against it.
+Both are genuinely round-stable (one reads completed rounds and logged sessions, the other the swing
+library), so both were added to the allow-list with the reason the ratchet demands. The frozen count
+moves 57 → 59. **Lesson for the next session: run `npm run sim`, not just jest — the prompt-cost
+guards live only there.**
+
+### Verified
+
+`tsc` clean (one pre-existing `api/messages.ts` error) · lint clean on every changed file · jest
+**4270/4270 (365 suites)** · sim **1023/1023**. New gates:
+`the-swing-coach-can-see-the-swing.test.ts` (9), `a-course-he-is-thinking-about.test.ts` (8).
+
+**NOT verified on device.**
+
+### Open / carried
+
+- Still screen-only, same class: `workoutPerformance`, `workoutSwingImpact`, `pointsPerformance`,
+  `preRoundFactors`, `handicapCalculator`. (`swingMetricTrend` came off this list today.)
+- **The off-round deflection**, unchanged from yesterday: `queryStatusHandler` answers "You're not in
+  a round yet. Want to start one?" to putting / GIR / nine-split / last-round-here / longest-drive.
+  Squarely the thing Tim is describing — those are conversations, not round queries — and still
+  needs a per-topic decision rather than a blanket `route_to_brain`.
+- **The mental-game coach is the untested third leg.** Feel and course both got wired today; the
+  mental side has `mentalState`, `emotionalLog` and a `mentalGameBlock` in the prompt already, but
+  nothing was audited against them this session. Next natural sweep.
+- `feelCaptureService` remains owner-only cage tooling whose own header calls feel-vs-real "a future
+  feature". Today's work answers that question from BIOMECH; the clip-narration-vs-analysis pairing
+  it was built for is still parked.
