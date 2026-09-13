@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
 import { usePracticeSessionStore } from '../../store/practiceSessionStore';
+import { sessionsOnSameDay, prettyFocus } from '../../services/practice/practiceFocus';
 import { summarizeOpenRange } from '../../services/practice/openRangeStats';
 import StriationBar from '../../components/charts/StriationBar';
 import TrendChart from '../../components/charts/TrendChart';
@@ -38,18 +39,34 @@ export default function PracticeSessionDetail() {
   const insets = useSafeAreaInsets();
   const history = usePracticeSessionStore((s) => s.history);
 
-  const session = useMemo(
-    () => history.find((s) => s.id === sessionId) ?? null,
-    [history, sessionId],
+  /**
+   * 2026-09-13 (Tim) — "Learn to show a day."
+   *
+   * This was per-SESSION, and practiceSessionStore opens a session per bout of work — so a day with
+   * three goes had three detail screens and the dashboard could only reach one of them. Two thirds
+   * of a day's practice was listed and unreachable.
+   *
+   * A day is the unit now. The route still takes a session id (every existing link keeps working),
+   * and the screen shows the DAY that session belongs to: every bout, oldest first, with the club
+   * striation and the tempo line drawn across the whole day rather than one slice of it.
+   */
+  const daySessions = useMemo(() => sessionsOnSameDay(history, sessionId), [history, sessionId]);
+  const session = daySessions[0] ?? null;
+
+  /** Every swing of the day, in the order it happened. */
+  const daySwings = useMemo(() => daySessions.flatMap((s) => s.swings ?? []), [daySessions]);
+  const dayBalls = useMemo(
+    () => daySessions.reduce((n, s) => n + (s.swingCount ?? s.swings.length), 0),
+    [daySessions],
   );
 
   const summary = useMemo(
-    () => (session && session.swings.length > 0 ? summarizeOpenRange(session.swings) : null),
-    [session],
+    () => (daySwings.length > 0 ? summarizeOpenRange(daySwings) : null),
+    [daySwings],
   );
   const tempoSeries = useMemo(
-    () => (session?.swings ?? []).map((s) => s.tempoRatio).filter((t): t is number => typeof t === 'number'),
-    [session],
+    () => daySwings.map((s) => s.tempoRatio).filter((t): t is number => typeof t === 'number'),
+    [daySwings],
   );
 
   if (!session) {
@@ -63,8 +80,9 @@ export default function PracticeSessionDetail() {
     );
   }
 
-  const title = session.label ?? (session.focus ? session.focus : session.kind === 'open_range' ? 'Open Range' : 'Practice');
-  const ballCount = session.swingCount ?? session.swings.length;
+  const focuses = [...new Set(daySessions.map((x) => x.label ?? (x.focus ? prettyFocus(x.focus) : null)).filter((x): x is string => !!x))];
+  const title = focuses.length > 0 ? focuses.join(' · ') : 'Practice';
+  const ballCount = dayBalls;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -75,9 +93,28 @@ export default function PracticeSessionDetail() {
 
         <Text style={[styles.title, { color: colors.text_primary }]} numberOfLines={2}>{title}</Text>
         <Text style={[styles.subtitle, { color: colors.text_muted }]}>
-          {fmtDate(session.startedAt)} · {fmtTime(session.startedAt)} · {ballCount} {ballCount === 1 ? 'ball' : 'balls'}
+          {fmtDate(session.startedAt)} · {ballCount} {ballCount === 1 ? 'ball' : 'balls'}
+          {daySessions.length > 1 ? ` · ${daySessions.length} goes` : ''}
           {session.environment ? ` · ${session.environment}` : ''}
         </Text>
+
+        {/* The day's goes — every bout is reachable from here, which it was not before. */}
+        {daySessions.length > 1 ? (
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.cardLabel, { color: colors.text_muted }]}>{t('practice.practice_session_detail.the_days_goes')}</Text>
+            {daySessions.map((b) => {
+              const when = (() => { try { return fmtTime(b.startedAt); } catch { return ''; } })();
+              const what = b.label ?? (b.focus ? prettyFocus(b.focus) : 'Practice');
+              const n = b.swingCount ?? b.swings.length;
+              return (
+                <View key={b.id} style={styles.boutRow}>
+                  <Text style={[styles.insight, { color: colors.text_primary }]} numberOfLines={1}>{what}</Text>
+                  <Text style={[styles.insight, { color: colors.text_muted }]}>{when} · {n}</Text>
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
 
         {summary?.headline ? (
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -134,5 +171,6 @@ const styles = StyleSheet.create({
   headline: { fontSize: 16, fontWeight: '800', marginBottom: 8 },
   insight: { fontSize: 13, lineHeight: 19, marginTop: 2 },
   caption: { fontSize: 11, marginTop: 8, fontStyle: 'italic' },
+  boutRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 3, gap: 10 },
   emptyText: { fontSize: 14, textAlign: 'center', marginTop: 40 },
 });

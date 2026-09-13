@@ -6968,8 +6968,15 @@ check('Practice history: dashboard list → detail with per-club striation + tem
       /export function groupPracticeByDay/.test(read('services/practice/practiceFocus.ts')) &&
       /router\.push\(`\/practice\/\$\{primary\.id\}`/.test(dash);
     // detail screen renders the two primitives off real session data
+    /**
+     * 2026-09-13 (Tim — "Learn to show a day") — the detail screen aggregates the whole DAY now, so
+     * this pinned `summarizeOpenRange(session.swings)`, one bout's slice. The property is that the
+     * striation and the tempo line are drawn from REAL logged swings resolved through the shared
+     * day owner — not from which variable happened to hold them.
+     */
     const detailOk =
-      /summarizeOpenRange\(session\.swings\)/.test(detail) &&
+      /summarizeOpenRange\(daySwings\)/.test(detail) &&
+      /sessionsOnSameDay\(history, sessionId\)/.test(detail) &&
       /<StriationBar/.test(detail) &&
       /<TrendChart/.test(detail);
     // primitives exist + are generic (number[] / segments), pure SVG

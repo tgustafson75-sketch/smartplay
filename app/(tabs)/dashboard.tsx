@@ -44,7 +44,7 @@ import { useRoundStore } from '../../store/roundStore';
 import { usePracticePointsStore } from '../../store/practicePointsStore';
 import { usePointsStore } from '../../store/pointsStore';
 import { usePracticeSessionStore } from '../../store/practiceSessionStore';
-import { groupPracticeByDay, describePracticeDay } from '../../services/practice/practiceFocus';
+import { groupPracticeByDay, describePracticeDay, dayKeyOf, prettyFocus } from '../../services/practice/practiceFocus';
 import { computePracticeImpact } from '../../services/practice/practiceImpact';
 import { useClubStatsStore, CLUB_ORDER, clubIdToClubName } from '../../store/clubStatsStore';
 import { useClubBagStore } from '../../store/clubBagStore';
@@ -183,6 +183,8 @@ export default function Dashboard() {
    * bouts underneath so nothing is lost — the day is the headline, not the capture.
    */
   const practiceDays = useMemo(() => groupPracticeByDay(practiceHistory, 6), [practiceHistory]);
+  /** 2026-09-13 (Tim) — "a small 2 line card that can expand to more about the day's work." */
+  const [openPracticeDay, setOpenPracticeDay] = useState<string | null>(null);
 
   // 2026-06-15 (Tim — My Bag back on the dashboard) — the clubs with a REAL carry
   // (tracked OR stated), longest→shortest. Feeds the dashboard bag card; tap → the
@@ -1280,18 +1282,24 @@ export default function Dashboard() {
                 try { return new Date(day.at).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }); }
                 catch { return ''; }
               })();
-              /** Tap opens the day's first bout — the detail screen is per-session by design. */
-              const primary = practiceHistory.find((ps) => {
-                const x = new Date(ps.startedAt);
-                return `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}` === day.key;
-              });
+              const bouts = practiceHistory
+                .filter((ps) => typeof ps.startedAt === 'number' && dayKeyOf(ps.startedAt) === day.key)
+                .sort((a, b) => a.startedAt - b.startedAt);
+              const primary = bouts[0];
+              const isOpen = openPracticeDay === day.key;
               return (
                 <View key={day.key} style={styles.practiceDay}>
+                  {/**
+                    * Two lines: the day, and what the day was. Tapping expands to the individual
+                    * goes that made it up — nothing is lost by grouping, it just stops being the
+                    * headline. Before this, a day with four goes filled four rows with "1 ball".
+                    */}
                   <TouchableOpacity
                     style={styles.practiceRow}
-                    onPress={() => { if (primary) router.push(`/practice/${primary.id}` as never); }}
+                    onPress={() => setOpenPracticeDay((cur) => (cur === day.key ? null : day.key))}
                     accessibilityRole="button"
-                    accessibilityLabel={`Open practice from ${dateLabel}`}
+                    accessibilityState={{ expanded: isOpen }}
+                    accessibilityLabel={`${dateLabel}. ${describePracticeDay(day)}. Tap to ${isOpen ? 'collapse' : 'see the day\'s work'}`}
                   >
                     <Text style={[styles.practiceDrill, { color: colors.text_primary }]} numberOfLines={1}>{dateLabel}</Text>
                     <Text style={[styles.practiceDrillPts, { color: colors.text_muted }]}>
@@ -1301,6 +1309,41 @@ export default function Dashboard() {
                   <Text style={[styles.practiceDayWork, { color: colors.text_muted }]} numberOfLines={1}>
                     {describePracticeDay(day)}
                   </Text>
+                  {isOpen ? (
+                    <View style={styles.practiceDayOpen}>
+                      {bouts.map((b) => {
+                        const when = (() => {
+                          try { return new Date(b.startedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }); }
+                          catch { return ''; }
+                        })();
+                        const what = b.label ?? (b.focus ? prettyFocus(b.focus) : 'Practice');
+                        const n = b.swingCount ?? b.swings.length;
+                        return (
+                          <TouchableOpacity
+                            key={b.id}
+                            style={styles.practiceBoutRow}
+                            onPress={() => router.push(`/practice/${b.id}` as never)}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Open ${what} from ${when}`}
+                          >
+                            <Text style={[styles.practiceBoutWhat, { color: colors.text_primary }]} numberOfLines={1}>{what}</Text>
+                            <Text style={[styles.practiceBoutMeta, { color: colors.text_muted }]}>{when} · {n}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                      {primary ? (
+                        <TouchableOpacity
+                          onPress={() => router.push(`/practice/${primary.id}` as never)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Open the whole day`}
+                        >
+                          <Text style={[styles.practiceBoutMeta, { color: colors.accent, paddingVertical: 4 }]}>
+                            {t('dashboard.text.see_the_whole_day')}
+                          </Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                  ) : null}
                 </View>
               );
             })}
@@ -2032,6 +2075,10 @@ const styles = StyleSheet.create({
   // 2026-09-13 — a day is one thin card: the row is the headline, the work line sits under it.
   practiceDay: { marginBottom: 2 },
   practiceDayWork: { fontSize: 11, lineHeight: 15, paddingHorizontal: 2, paddingBottom: 6, opacity: 0.85 },
+  practiceDayOpen: { paddingLeft: 10, paddingBottom: 6, borderLeftWidth: 1, borderLeftColor: 'rgba(127,127,127,0.25)', marginLeft: 2 },
+  practiceBoutRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 3 },
+  practiceBoutWhat: { fontSize: 12, fontWeight: '600', flex: 1, marginRight: 10 },
+  practiceBoutMeta: { fontSize: 11, fontWeight: '600' },
   practiceDrill: { fontSize: 13, fontWeight: '700', flex: 1, marginRight: 10 },
   practiceDrillPts: { fontSize: 12, fontWeight: '600' },
   impactHeadline: { fontSize: 13, lineHeight: 19, fontWeight: '600', marginBottom: 10 },

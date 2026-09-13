@@ -24,6 +24,7 @@ import {
   describePracticeDay,
   buildPracticeFocusBlock,
   prettyFocus,
+  sessionsOnSameDay,
 } from '../../services/practice/practiceFocus';
 
 const root = path.resolve(__dirname, '../..');
@@ -122,6 +123,39 @@ describe('the focus is discoverable by the brain', () => {
     expect(kevin).toMatch(/practiceFocusBlock = null,/);
     expect(kevin).toMatch(/_practiceFocus: string \| null = capOrNull\(practiceFocusBlock/);
     expect(kevin).toMatch(/\$\{_practiceFocus \? /);
+  });
+
+  it('every bout of a day is reachable — the day is the unit, and nothing is lost inside it', () => {
+    /**
+     * 2026-09-13 (Tim) — "Learn to show a day. It can be a small 2 line card that can expand to more
+     * about the day's work."
+     *
+     * Grouping by day created a new way to lose things: the dashboard row could open only ONE of a
+     * day's bouts, so on an Aug 23 with four goes, three were listed and unreachable. The card
+     * expands to them, and the detail screen resolves the whole day from any session id — so the
+     * route every existing link uses still works and now lands on the day it belongs to.
+     */
+    const detail = code('app/practice/[sessionId].tsx');
+    expect(detail).toMatch(/sessionsOnSameDay\(history, sessionId\)/);
+    expect(detail).toMatch(/daySwings/);
+    // the day's individual goes are listed, so none of them is orphaned
+    expect(detail).toMatch(/the_days_goes/);
+
+    const dash = code('app/(tabs)/dashboard.tsx');
+    expect(dash).toMatch(/setOpenPracticeDay/);
+    expect(dash).toMatch(/bouts\.map\(/);
+  });
+
+  it('sessionsOnSameDay returns the day oldest-first, and nothing from another day', () => {
+    const picked = sessionsOnSameDay(
+      SESSIONS.map((x, i) => ({ ...x, id: `s${i}` })),
+      's2', // the 4pm bout on the 10th
+    );
+    expect(picked.map((x) => x.id)).toEqual(['s0', 's1', 's2']);
+  });
+
+  it('an unknown session id yields nothing rather than the whole history', () => {
+    expect(sessionsOnSameDay(SESSIONS.map((x, i) => ({ ...x, id: `s${i}` })), 'nope')).toEqual([]);
   });
 
   it('the screen and the prompt group days the SAME way', () => {

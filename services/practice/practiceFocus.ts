@@ -62,8 +62,7 @@ export function groupPracticeByDay(sessions: readonly SessionLike[], limit = 6):
   const byDay = new Map<string, PracticeDay>();
   for (const s of sessions) {
     if (typeof s.startedAt !== 'number' || !Number.isFinite(s.startedAt)) continue;
-    const d = new Date(s.startedAt);
-    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    const key = dayKeyOf(s.startedAt);
     const balls = s.swingCount ?? (Array.isArray(s.swings) ? s.swings.length : 0);
     const focus = focusOf(s);
     const row = byDay.get(key);
@@ -119,4 +118,32 @@ export function buildPracticeFocusBlock(sessions: readonly SessionLike[], limit 
     + ' shot calls for something he has put reps into — reference the work, do not congratulate him on'
     + ' improvement you have not measured.',
   ].join('\n');
+}
+
+/** The local-calendar key a timestamp belongs to. One spelling, so nothing groups differently. */
+export function dayKeyOf(at: number): string {
+  const d = new Date(at);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+/**
+ * 2026-09-13 (Tim) — "Learn to show a day."
+ *
+ * The detail screen was per-session, and the dashboard row could only open ONE of a day's bouts —
+ * so on a day with three goes, two of them were unreachable from the ledger that listed them. Given
+ * any session id, this returns every bout from the SAME DAY, oldest first, which is the order the
+ * day actually happened in.
+ *
+ * Oldest-first matters: the tempo line across a day is only a story if it runs forwards.
+ */
+export function sessionsOnSameDay<T extends { id?: string; startedAt?: number }>(
+  history: readonly T[],
+  sessionId: string | undefined,
+): T[] {
+  const anchor = history.find((s) => s.id === sessionId);
+  if (!anchor || typeof anchor.startedAt !== 'number') return [];
+  const key = dayKeyOf(anchor.startedAt);
+  return history
+    .filter((s) => typeof s.startedAt === 'number' && dayKeyOf(s.startedAt) === key)
+    .sort((a, b) => (a.startedAt as number) - (b.startedAt as number));
 }

@@ -472,7 +472,8 @@
       "points_and_sessions": "{{points}} pts · {{sessions}}×",
       "practice_day_meta": "{{balls}} balls · {{bouts}}",
       "practice_bouts_one": "one go",
-      "practice_bouts_other": "{{count}} goes"
+      "practice_bouts_other": "{{count}} goes",
+      "see_the_whole_day": "See the whole day →"
     },
     "alert": {
       "delete_round": "Delete round?"
@@ -1328,7 +1329,8 @@
       "tempo_through_the_session": "TEMPO THROUGH THE SESSION",
       "backswing_downswing_ratio_per_ball": "Backswing:downswing ratio per ball.",
       "single_focus_drill_reps_logged": "Single-focus drill — reps logged toward your practice points.",
-      "session_logged": "Session logged."
+      "session_logged": "Session logged.",
+      "the_days_goes": "THE DAY'S GOES"
     },
     "accessibility_label": {
       "back": "Back"
