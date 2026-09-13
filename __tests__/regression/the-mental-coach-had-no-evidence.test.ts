@@ -127,9 +127,18 @@ describe('the mental coach can see what the player has told him', () => {
     const body = read('services/caddieRequestBody.ts');
     expect(body).toMatch(/mentalPatternBlock: safe\(/);
     expect(body).toMatch(/computeMentalPattern/);
-    const block = body.slice(body.indexOf('mentalPatternBlock: safe('));
-    // Honest gate: nothing is said until there is enough, and never without a named state.
-    expect(block.slice(0, 900)).toMatch(/if \(!m\.hasEnough \|\| !m\.topState\) return null;/);
+    const at = body.indexOf('mentalPatternBlock: safe(');
+    expect(at).toBeGreaterThan(-1);
+    const block = body.slice(at, body.indexOf('}, null),', at));
+    /**
+     * 2026-09-12 — this asserted the gate `return null`. The GATE is unchanged; what it does below
+     * the floor is not. Tim: "we don't wanna just fall silent in any case." It now states what is in
+     * the books and what a pattern would need. The honest half — never a pattern without a named
+     * state — is what this asserts instead of the mechanism.
+     */
+    expect(block).toMatch(/if \(!m\.hasEnough \|\| !m\.topState\)/);
+    expect(block).toMatch(/NOT ENOUGH YET/);
+    expect(block).toMatch(/Never invent a/);
   });
 
   it('the brain destructures, caps and injects it', () => {

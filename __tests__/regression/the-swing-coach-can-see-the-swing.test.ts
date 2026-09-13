@@ -63,19 +63,44 @@ describe('the caddie can see the measured swing', () => {
     expect(block).toMatch(/^THEIR MEASURED SWING \(private; .+\):/);
   });
 
-  it('stays null rather than grading a swing that was never captured', () => {
+  /**
+   * 2026-09-12 (Tim) — THESE TWO USED TO ASSERT `toBeNull()`, AND THE INVARIANT SURVIVED THE CHANGE.
+   *
+   * "We don't want to say nothing. A new golf coach giving a first lesson lets the player swing —
+   * let me let you swing so I can get a sense of it. We don't wanna just fall silent. That is an
+   * unnatural response." Returning null meant the caddie said NOTHING when asked about a feel, and a
+   * floor you cannot see makes correct silence look broken.
+   *
+   * What must never happen is unchanged and is still asserted: no grade, no band verdict, no
+   * direction from a swing that was never captured or a single session. Only the mechanism moved —
+   * from saying nothing to saying what he needs to see.
+   */
+  it('asks to watch him hit a few rather than grading a swing it never saw', () => {
     useSwingSessionStore.setState({ sessionHistory: [] } as never);
-    expect(buildCaddieRequestBody({ message: 'x', language: 'en' }).measuredSwingBlock).toBeNull();
+    const block = buildCaddieRequestBody({ message: 'x', language: 'en' }).measuredSwingBlock as string;
+    expect(block).not.toBeNull();
+    expect(block).toMatch(/NEVER SEEN THIS PLAYER SWING/);
+    expect(block).toMatch(/ASK TO SEE IT/);
+    // THE INVARIANT: it must not have graded anything.
+    expect(block).not.toMatch(/THEIR MEASURED SWING/);
+    expect(block).not.toMatch(/tour band/i);
+    expect(block).not.toMatch(/latest read/);
   });
 
-  it('stays null while there are too few weeks to call a direction', () => {
+  it('calls one session a reading, not a direction', () => {
     const now = Date.now();
     useSwingSessionStore.setState({
       sessionHistory: [
         { id: 'a', date: now, club: '7 iron', shots: [{ club: '7 iron', biomechanics: { hipTurnDeg: 44 } }] },
       ],
     } as never);
-    expect(buildCaddieRequestBody({ message: 'x', language: 'en' }).measuredSwingBlock).toBeNull();
+    const block = buildCaddieRequestBody({ message: 'x', language: 'en' }).measuredSwingBlock as string;
+    expect(block).not.toBeNull();
+    expect(block).toMatch(/CANNOT CALL A TREND YET/);
+    expect(block).toMatch(/a reading, not a trend/);
+    // THE INVARIANT: still no graded trend block, and no band verdict.
+    expect(block).not.toMatch(/THEIR MEASURED SWING/);
+    expect(block).not.toMatch(/inside the tour band|outside the tour band/);
   });
 });
 

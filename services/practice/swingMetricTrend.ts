@@ -128,6 +128,16 @@ const MIN_SWINGS_PER_WEEK = 1;
  * lets the halves below each contain more than one point.
  */
 const MIN_WEEKS_WITH_DATA = 4;
+
+/**
+ * 2026-09-12 (Tim) — "a new golf coach giving a first lesson lets the player swing so he can get a
+ * sense of it… we don't wanna just fall silent."
+ *
+ * Exported so the caddie can name what he still needs to see instead of going quiet. Below this
+ * floor there is genuinely nothing honest to say about a TREND — but "I need a few more weeks of
+ * swings before I can call a direction" is itself an honest, useful thing to say.
+ */
+export const SWING_TREND_FLOOR = { weeks: MIN_WEEKS_WITH_DATA } as const;
 /** A move smaller than this is noise in a pose read, not a change in a golf swing. */
 const STEADY_BAND_SCORE = 5;
 

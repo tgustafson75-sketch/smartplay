@@ -53,10 +53,23 @@ describe('the caddie can see the practice-to-scoring crossing', () => {
     expect(block).toMatch(/association, not cause/);
   });
 
-  it('stays null until there is enough on BOTH sides to say anything', () => {
+  /**
+   * 2026-09-12 (Tim — "we don't wanna just fall silent, that is an unnatural response") — this
+   * asserted `toBeNull()`. The gate is unchanged and still honest; what changed is that below it the
+   * caddie now says what is in the books and what would make a comparison real, instead of nothing.
+   * The invariant — never claim a trend from too little — is asserted below and still holds.
+   */
+  it('says what it still needs instead of going silent', () => {
     usePracticeSessionStore.setState({ history: [] } as never);
     useRoundStore.setState({ roundHistory: [] } as never);
-    expect(buildCaddieRequestBody({ message: 'x', language: 'en' }).practiceImpactBlock).toBeNull();
+    const block = buildCaddieRequestBody({ message: 'x', language: 'en' }).practiceImpactBlock as string;
+    expect(block).not.toBeNull();
+    expect(block).toMatch(/NOT MEASURABLE YET/);
+    expect(block).toMatch(/0 logged practice sessions and 0 completed rounds/);
+    expect(block).toMatch(/more session|more round/);
+    // THE INVARIANT: no direction claimed from nothing.
+    expect(block).not.toMatch(/practice volume \d+ balls/);
+    expect(block).not.toMatch(/IMPROVING|getting worse/);
   });
 
   it('does not trend a narrated SIM round as real play', () => {

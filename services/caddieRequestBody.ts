@@ -1044,8 +1044,31 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
         .map((h: { endedAt: number; startedAt?: number; scoreVsPar: number }) => ({
           endedAt: h.endedAt, startedAt: h.startedAt, scoreVsPar: h.scoreVsPar,
         }));
-      const c = computePracticeImpact({ sessions, rounds, nowMs: Date.now() }).connection;
-      if (!c) return null;
+      const impact = computePracticeImpact({ sessions, rounds, nowMs: Date.now() });
+      const c = impact.connection;
+      /**
+       * 2026-09-12 (Tim) — NOT YET IS AN ANSWER; SILENCE IS NOT.
+       *
+       * This returned null below the floor, so the caddie said nothing when asked whether practice
+       * was showing up — and a coach who goes quiet on a straight question reads as broken, not as
+       * careful. He says what is in the books and what would make the comparison real, the way a
+       * coach says "let me see a few more before I call it".
+       */
+      if (!c) {
+        const { PRACTICE_FLOOR } = require('./practice/practiceImpact') as typeof import('./practice/practiceImpact');
+        const needS = Math.max(0, PRACTICE_FLOOR.sessions - impact.practiceSessions);
+        const needR = Math.max(0, PRACTICE_FLOOR.rounds - impact.roundsCounted);
+        return 'THEIR PRACTICE-TO-SCORING CONNECTION is NOT MEASURABLE YET, and this is what is in '
+          + `the books over the last 6 weeks: ${impact.practiceSessions} logged practice session`
+          + `${impact.practiceSessions === 1 ? '' : 's'} and ${impact.roundsCounted} completed round`
+          + `${impact.roundsCounted === 1 ? '' : 's'}. It needs ${PRACTICE_FLOOR.sessions} sessions and `
+          + `${PRACTICE_FLOOR.rounds} rounds before a comparison means anything`
+          + (needS || needR
+            ? ` — so ${[needS ? `${needS} more session${needS === 1 ? '' : 's'}` : '', needR ? `${needR} more round${needR === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ')}.`
+            : '.')
+          + ' If they ask, say THAT plainly — what you have, what you still need, and that you will '
+          + 'have a real answer then. Never claim a trend from this, and never just go quiet.';
+      }
       const practiceDir = c.practiceUp ? 'UP' : 'down or flat';
       const scoreDir = c.scoreImproving ? 'IMPROVING' : c.scoreWorse ? 'getting worse' : 'holding steady';
       const vs = (n: number) => `${n > 0 ? '+' : ''}${n}`;
@@ -1088,9 +1111,43 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       const { collectSelfTrendSwings } = require('./practice/selfSwingReads') as typeof import('./practice/selfSwingReads');
       const { useSwingSessionStore } = require('../store/swingSessionStore') as typeof import('../store/swingSessionStore');
       const swings = collectSelfTrendSwings(useSwingSessionStore.getState().sessionHistory as never);
-      if (swings.length === 0) return null;
+      const { SWING_TREND_FLOOR } = require('./practice/swingMetricTrend') as typeof import('./practice/swingMetricTrend');
+      /**
+       * 2026-09-12 (Tim) — THE FIRST-LESSON CASE, and the one that most needed fixing.
+       *
+       * "A new golf coach giving a first lesson lets the player swing. Okay, let me let you swing,
+       * and again, so that I can get a sense of it."
+       *
+       * With no captured swings this returned null, so a player describing a FEEL got a coach with
+       * no opinion and no explanation — the app has never seen him swing and never said so. A coach
+       * asks to see it. That is not a limitation to apologise for, it is the first instruction of
+       * every lesson ever given.
+       */
+      if (swings.length === 0) {
+        return 'YOU HAVE NEVER SEEN THIS PLAYER SWING — there are no captured swings in the library, '
+          + 'so you have no measurement of anything about his motion. If he describes a feel, take it '
+          + 'seriously and coach it from what he says, then ASK TO SEE IT: a few swings on camera in '
+          + 'SwingLab and you can tell him whether the numbers agree with the feel. Say it the way a '
+          + 'coach asks at a first lesson — you want to watch him hit a few to get a sense of it — '
+          + 'not as an error, an apology, or a feature pitch. Never imply you have measured anything.';
+      }
       const trend = computeSwingMetricTrend({ swings, nowMs: Date.now() });
-      if (!trend.hasEnough || trend.trends.length === 0) return null;
+      if (!trend.hasEnough || trend.trends.length === 0) {
+        // Seen him swing, but not across enough weeks to call a DIRECTION. Say which it is.
+        // weeksWithData is per-METRIC; at the top level the honest equivalent is how many weekly
+        // buckets actually carry swings.
+        const weeks = (trend.swingsPerWeek ?? []).filter((n) => n > 0).length;
+        const need = Math.max(0, SWING_TREND_FLOOR.weeks - weeks);
+        return 'YOU HAVE SEEN HIM SWING BUT CANNOT CALL A TREND YET: '
+          + `${trend.totalGradedSwings} graded swing${trend.totalGradedSwings === 1 ? '' : 's'} across `
+          + `${weeks} week${weeks === 1 ? '' : 's'} with data, and a direction needs about `
+          + `${SWING_TREND_FLOOR.weeks} weeks`
+          + (need > 0 ? ` — ${need} more week${need === 1 ? '' : 's'} of range sessions.` : '.')
+          + ' So: coach the feel he describes, and if he asks whether he is getting better, say '
+          + 'plainly that you have got a few sessions in the books and will be able to compare '
+          + 'properly once there are a couple more. A single session is a reading, not a trend — '
+          + 'never present it as one, and never answer with nothing.';
+      }
       // Worst-first is how computeSwingMetricTrend sorts, and worst-first is what a coach leads
       // with. Four is enough to answer a feel question without burying the shot in front of him.
       const lines = trend.trends.slice(0, 4).map((m) => {
@@ -1127,7 +1184,22 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     mentalPatternBlock: safe(() => {
       const { computeMentalPattern } = require('./mentalPatterns') as typeof import('./mentalPatterns');
       const m = computeMentalPattern({ rounds: (r.roundHistory ?? []) as never });
-      if (!m.hasEnough || !m.topState) return null;
+      // Same rule again. The mental read is the one where going quiet is worst: he asked how it has
+      // been going and got nothing back.
+      if (!m.hasEnough || !m.topState) {
+        const { MENTAL_FLOOR } = require('./mentalPatterns') as typeof import('./mentalPatterns');
+        const needRd = Math.max(0, MENTAL_FLOOR.rounds - m.roundsWithReports);
+        const needRep = Math.max(0, MENTAL_FLOOR.reports - m.totalReports);
+        return 'THERE IS NOT ENOUGH YET to read a pattern in how he has been feeling out there. What '
+          + `exists: ${m.totalReports} moment${m.totalReports === 1 ? '' : 's'} noted across `
+          + `${m.roundsWithReports} round${m.roundsWithReports === 1 ? '' : 's'}. A pattern needs about `
+          + `${MENTAL_FLOOR.reports} moments across ${MENTAL_FLOOR.rounds} rounds`
+          + (needRd || needRep ? ' — a couple more rounds where you talk through how it went.' : '.')
+          + ' If he asks whether he always falls apart, or how his head has been, answer from what he '
+          + 'is telling you RIGHT NOW and say plainly that you have only got a few rounds logged so '
+          + 'far, and you will be able to tell him properly once there are more. Never invent a '
+          + 'pattern, and never answer that question with nothing.';
+      }
       const pct = (n: number) => `${Math.round(n * 100)}%`;
       const where = m.negFront + m.negBack === 0 ? ''
         : m.negBack > m.negFront * 2 ? ' Those rough patches cluster on the BACK nine.'
@@ -1183,7 +1255,20 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
 
       const perf = computeWorkoutPerformance({ workouts, rounds, nowMs: Date.now() });
       const c = perf.connection;
-      if (!c) return null;
+      // Same rule as practiceImpactBlock above: not yet is an answer, silence is not.
+      if (!c) {
+        const { TRAINING_FLOOR } = require('./practice/workoutPerformance') as typeof import('./practice/workoutPerformance');
+        const needW = Math.max(0, TRAINING_FLOOR.workouts - perf.totalWorkouts);
+        const needR = Math.max(0, TRAINING_FLOOR.rounds - perf.roundsCounted);
+        return 'THEIR TRAINING-TO-SCORING CONNECTION is NOT MEASURABLE YET. In the books over the last '
+          + `6 weeks: ${perf.totalWorkouts} logged workout${perf.totalWorkouts === 1 ? '' : 's'} and `
+          + `${perf.roundsCounted} completed round${perf.roundsCounted === 1 ? '' : 's'}. It needs `
+          + `${TRAINING_FLOOR.workouts} workouts and ${TRAINING_FLOOR.rounds} rounds`
+          + (needW || needR
+            ? ` — ${[needW ? `${needW} more workout${needW === 1 ? '' : 's'}` : '', needR ? `${needR} more round${needR === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ')}.`
+            : '.')
+          + ' Say that if asked. Never claim the training is or is not working from this.';
+      }
 
       const dir = c.trainingUp ? 'UP' : 'down or flat';
       const scoring = c.scoreImproving ? 'IMPROVING' : c.scoreWorse ? 'getting worse' : 'holding steady';

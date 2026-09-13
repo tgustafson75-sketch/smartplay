@@ -66,6 +66,17 @@ export interface WorkoutPerformance {
 const { WEEKS, ROUNDS, WEEK_MS, weeklyScoreSeries } = require('./weeklyBuckets') as typeof import('./weeklyBuckets');
 const MIN_WORKOUTS = 3;
 const MIN_ROUNDS = 4;
+
+/**
+ * 2026-09-12 (Tim) — "we don't wanna just fall silent in any case. That is an unnatural response…
+ * a new golf coach giving a first lesson lets the player swing so he can get a sense of it."
+ *
+ * THE FLOOR HAS TO BE VISIBLE OR SILENCE LOOKS BROKEN. These gates are honest — below them there is
+ * nothing true to say — but returning nothing means the caddie says nothing, and a coach who goes
+ * quiet when you ask him a straight question reads as broken, not as careful. Exported so the
+ * caddie can say which of these he has and what would make the comparison real.
+ */
+export const TRAINING_FLOOR = { workouts: MIN_WORKOUTS, rounds: MIN_ROUNDS } as const;
 /** Per-session fallback weight when a workout has no stated duration (assumed ~45 min). */
 const ASSUMED_SESSION_MIN = 45;
 

@@ -60,6 +60,17 @@ export interface MentalPattern {
 /** Enough to say "this has come up before" without one bad afternoon speaking for him. */
 const MIN_ROUNDS = 3;
 const MIN_REPORTS = 6;
+
+/**
+ * 2026-09-12 (Tim) — "we don't wanna just fall silent in any case. That is an unnatural response…
+ * a new golf coach giving a first lesson lets the player swing so he can get a sense of it."
+ *
+ * THE FLOOR HAS TO BE VISIBLE OR SILENCE LOOKS BROKEN. These gates are honest — below them there is
+ * nothing true to say — but returning nothing means the caddie says nothing, and a coach who goes
+ * quiet when you ask him a straight question reads as broken, not as careful. Exported so the
+ * caddie can say which of these he has and what would make the comparison real.
+ */
+export const MENTAL_FLOOR = { rounds: MIN_ROUNDS, reports: MIN_REPORTS } as const;
 /** Most recent rounds considered. Older than this is a different golfer. */
 const WINDOW_ROUNDS = 10;
 /** Either side of level, so a single extra grumble cannot declare a direction. */
