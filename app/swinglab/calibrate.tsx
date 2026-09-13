@@ -228,7 +228,7 @@ export default function CalibrateAcoustics() {
           <>
             <Text style={[styles.counterBig, { color: colors.text_primary }]}>{detectedCount}</Text>
             <Text style={[styles.counterCaption, { color: colors.text_muted }]}>{t('swinglab_calibrate.calibrate_acoustics.strikes_detected_target', { TARGET_STRIKES })}</Text>
-            <Text style={[styles.counterCaption, { color: colors.text_muted }]}>noise floor {Number.isFinite(result?.floorDb) ? result!.floorDb.toFixed(0) : '—'} dB</Text>
+            <Text style={[styles.counterCaption, { color: colors.text_muted }]}>{t('swinglab_calibrate.calibrate_acoustics.noise_floor', { value: Number.isFinite(result?.floorDb) ? result!.floorDb.toFixed(0) : '—' })}</Text>
           </>
         ) : phase === 'recording' ? (
           <>

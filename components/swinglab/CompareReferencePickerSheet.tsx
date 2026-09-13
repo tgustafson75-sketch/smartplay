@@ -111,7 +111,10 @@ export default function CompareReferencePickerSheet({
             </Pressable>
           </View>
           <Text style={[styles.subheading, { color: colors.text_muted }]}>
-            {clubFilter ? `Filtered to ${clubFilter}.` : 'All clubs.'} Ranked by match similarity.
+            {clubFilter
+              ? t('swinglab_compare_reference_picker_sheet.subheading.filtered_to', { club: clubFilter })
+              : t('swinglab_compare_reference_picker_sheet.subheading.all_clubs')}
+            {t('swinglab_compare_reference_picker_sheet.subheading.ranked_by_similarity')}
           </Text>
 
           {matches === null ? (

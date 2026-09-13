@@ -59,8 +59,8 @@ export default function PuttingAnalysisCard({ analysis, clipUri, clipDurationSec
 
       {analysis.distanceFeet > 0 && (
         <Text style={[styles.subtitle, { color: colors.text_muted }]}>
-          {analysis.distanceFeet} foot putt
-          {analysis.holeNumber ? `  ·  Hole ${analysis.holeNumber}` : ''}
+          {t('swinglab_putting_analysis_card.subtitle.foot_putt', { count: analysis.distanceFeet })}
+          {analysis.holeNumber ? t('swinglab_putting_analysis_card.subtitle.hole_suffix', { hole: analysis.holeNumber }) : ''}
         </Text>
       )}
 

@@ -190,8 +190,9 @@ export default function FamilyMemberScreen() {
           <View style={styles.heroText}>
             <Text style={[styles.heroName, { color: colors.text_primary }]}>{member.firstName}</Text>
             <Text style={[styles.heroMeta, { color: colors.text_muted }]}>
-              {member.age != null ? `${member.age}y · ` : ''}{BAND_LABEL[band]} band · {member.skillLevel.replace(/_/g, ' ')}
-              {member.handedness !== 'unknown' ? ` · ${member.handedness}-handed` : ''}
+              {member.age != null ? t('family.member_hero.age_prefix', { age: member.age }) : ''}
+              {t('family.member_hero.band_and_skill', { band: BAND_LABEL[band], skill: member.skillLevel.replace(/_/g, ' ') })}
+              {member.handedness !== 'unknown' ? t('family.member_hero.handedness', { hand: member.handedness }) : ''}
             </Text>
             {member.nickname ? (
               <Text style={[styles.heroNickname, { color: colors.accent }]}>&quot;{member.nickname}&quot;</Text>

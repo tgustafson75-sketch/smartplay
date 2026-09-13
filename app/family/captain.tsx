@@ -453,7 +453,8 @@ function CoachRow({
             ) : null}
           </Text>
           <Text style={[styles.rowMeta, { color: colors.text_muted }]} numberOfLines={1}>
-            Coach{member.team ? `  ·  ${member.team}` : ''}
+            {t('family_captain.roster_row.coach')}
+            {member.team ? t('family_captain.roster_row.team_suffix', { team: member.team }) : ''}
           </Text>
         </View>
       </Pressable>

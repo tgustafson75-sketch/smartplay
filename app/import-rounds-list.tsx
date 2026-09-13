@@ -176,9 +176,9 @@ export default function ImportRoundsListScreen() {
           <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.cardTitle, { color: colors.text_primary }]}>{t('import_rounds_list.import_rounds_list_screen.round_found', { count: phase.rounds.length })}</Text>
             <Text style={[styles.cardSub, { color: colors.text_muted, marginBottom: 4 }]}>
-              {phase.skippedNoScore > 0 ? `${phase.skippedNoScore} in-progress round${phase.skippedNoScore === 1 ? '' : 's'} (no score) skipped. ` : ''}
-              {phase.skippedIncomplete > 0 ? `${phase.skippedIncomplete} unfinished round${phase.skippedIncomplete === 1 ? '' : 's'} (too few holes) skipped. ` : ''}
-              Tap a 9/18 chip to correct it. Read confidence:{' '}
+              {phase.skippedNoScore > 0 ? t('import_rounds_list.skipped.no_score', { count: phase.skippedNoScore }) : ''}
+              {phase.skippedIncomplete > 0 ? t('import_rounds_list.skipped.incomplete', { count: phase.skippedIncomplete }) : ''}
+              {t('import_rounds_list.skipped.tap_chip_read_confidence')}
               <Text style={{ fontWeight: '800', color: phase.confidence === 'high' ? colors.accent : phase.confidence === 'low' ? '#F5A623' : colors.text_primary }}>{phase.confidence}</Text>
             </Text>
 

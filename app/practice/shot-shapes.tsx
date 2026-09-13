@@ -77,7 +77,7 @@ export default function ShotShapesPicker() {
             <Text style={[styles.tileName, { color: colors.text_primary }]}>{s.name}</Text>
             <Text style={[styles.tileBlurb, { color: colors.text_muted }]}>{s.blurb}</Text>
             <Text style={[styles.tileMeta, { color: HEIGHT_TINT[s.intendedHeight] }]}>
-              {s.intendedHeight.toUpperCase()} LAUNCH
+              {t('practice_shot_shapes.tile.launch', { height: s.intendedHeight.toUpperCase() })}
             </Text>
           </TouchableOpacity>
         ))}

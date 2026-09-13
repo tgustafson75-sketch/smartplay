@@ -228,8 +228,8 @@ export default function ComparisonResultSheet({
                         {f.note}
                       </Text>
                       <Text style={[styles.benchmarkFeel, { color: colors.accent }]}>
-                        Feel: {f.feel}
-                        {f.drillId ? `  ·  drill: ${f.drillId}` : ''}
+                        {t('swinglab_comparison_result_sheet.benchmark.feel', { feel: f.feel })}
+                        {f.drillId ? t('swinglab_comparison_result_sheet.benchmark.drill_suffix', { drill: f.drillId }) : ''}
                       </Text>
                     </View>
                   ))
@@ -256,18 +256,24 @@ export default function ComparisonResultSheet({
             {unreadable.length > 0 ? (
               <View style={[styles.unreadCard, { borderColor: colors.border, backgroundColor: colors.surface_elevated }]}>
                 <Text style={[styles.unreadTitle, { color: colors.text_muted }]}>
-                  NOT MEASURED ON {unreadable.every((u) => u.missing === 'reference') ? 'THE REFERENCE' : unreadable.every((u) => u.missing === 'yours') ? 'THIS SWING' : 'ONE OR BOTH SWINGS'}
+                  {t('swinglab_comparison_result_sheet.unread.not_measured_on', {
+                    which: unreadable.every((u) => u.missing === 'reference')
+                      ? t('swinglab_comparison_result_sheet.unread.the_reference')
+                      : unreadable.every((u) => u.missing === 'yours')
+                        ? t('swinglab_comparison_result_sheet.unread.this_swing')
+                        : t('swinglab_comparison_result_sheet.unread.one_or_both'),
+                  })}
                 </Text>
                 <Text style={[styles.unreadBody, { color: colors.text_secondary }]}>
                   {unreadable.map((u) => u.label).join(' · ')}
                 </Text>
                 <Text style={[styles.unreadHint, { color: colors.text_muted }]}>
                   {readableCount === 0
-                    ? 'Nothing lined up between these two swings yet.'
+                    ? t('swinglab_comparison_result_sheet.unread.nothing_lined_up')
                     : readableCount < 2
-                      ? 'One dimension alone is too thin to score a match — the reading above is that single metric, not a verdict on the swing.'
-                      : 'Scored on what both swings could be read for.'}
-                  {' '}A full-body view with the whole swing in frame reads more of them.
+                      ? t('swinglab_comparison_result_sheet.unread.one_dimension_too_thin')
+                      : t('swinglab_comparison_result_sheet.unread.scored_on_readable')}
+                  {t('swinglab_comparison_result_sheet.unread.full_body_reads_more')}
                 </Text>
               </View>
             ) : null}

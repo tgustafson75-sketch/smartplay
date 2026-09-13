@@ -309,7 +309,7 @@ export default function IndoorHotelModeScreen() {
                 <View key={i} style={s.repRow}>
                   <Text style={s.repIdx}>{i + 1}</Text>
                   <Text style={s.repTempo}>{r.tempoRatio.toFixed(1)}:1</Text>
-                  <Text style={s.repDetail}>{Math.round(r.backswingMs)}ms / {Math.round(r.downswingMs)}ms</Text>
+                  <Text style={s.repDetail}>{t('swinglab_indoor.rep.back_down_ms', { back: Math.round(r.backswingMs), down: Math.round(r.downswingMs) })}</Text>
                   <Text style={[s.repTrans, { color: r.transition === 'smooth' ? NEON : r.transition === 'quick' ? '#F0C030' : '#ef4444' }]}>
                     {r.transition.toUpperCase()}
                   </Text>

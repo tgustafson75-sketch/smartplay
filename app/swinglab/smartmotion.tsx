@@ -6036,8 +6036,11 @@ export default function SmartMotion() {
                         <TempoBar ratio={tempo?.ratio ?? null} />
                         {tempo?.ratio != null && tempo.backswingMs != null && tempo.downswingMs != null ? (
                           <Text style={[styles.tempoDetail, { color: colors.text_muted }]} numberOfLines={1}>
-                            Back {(tempo.backswingMs / 1000).toFixed(1)}s · Down {(tempo.downswingMs / 1000).toFixed(1)}s
-                            {tempo.sequencingScore != null ? ` · Transition: ${transitionLabel(tempo.sequencingScore)}` : ''}
+                            {t('swinglab_smartmotion.tempo.back_down_seconds', {
+                              back: (tempo.backswingMs / 1000).toFixed(1),
+                              down: (tempo.downswingMs / 1000).toFixed(1),
+                            })}
+                            {tempo.sequencingScore != null ? t('swinglab_smartmotion.tempo.transition_suffix', { label: transitionLabel(tempo.sequencingScore) }) : ''}
                           </Text>
                         ) : null}
                       </>
@@ -6047,7 +6050,8 @@ export default function SmartMotion() {
                       <View style={[styles.engagePill, { borderColor: colors.accent, backgroundColor: colors.accent_muted }]}>
                         <Ionicons name="locate" size={13} color={colors.accent} />
                         <Text style={[styles.engageText, { color: colors.accent }]}>
-                          RANGE · ENGAGED{aimRead ? ` · aim ${aimRead}` : ''}
+                          {t('swinglab_smartmotion.range.engaged')}
+                          {aimRead ? t('swinglab_smartmotion.range.aim_suffix', { aim: aimRead }) : ''}
                         </Text>
                       </View>
                     ) : null}

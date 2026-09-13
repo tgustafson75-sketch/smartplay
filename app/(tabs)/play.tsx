@@ -2296,9 +2296,12 @@ export default function PlayTab() {
                     <Text style={styles.selectedStats} numberOfLines={1}>
                       {/* 2026-07-26 (deep audit S3) — don't fabricate "18 holes" when a searched tee returns
                           an empty hole list (could be a 9-hole course); show the count only when real. */}
-                      {pickTeeSet(selected.tees, preferredTee, handicapGender)!.holes.length ? `${pickTeeSet(selected.tees, preferredTee, handicapGender)!.holes.length} holes · ` : ''}Par {pickTeeSet(selected.tees, preferredTee, handicapGender)!.par_total}
-                      {pickTeeSet(selected.tees, preferredTee, handicapGender)!.course_rating != null && ` · Rating ${pickTeeSet(selected.tees, preferredTee, handicapGender)!.course_rating!.toFixed(1)}`}
-                      {pickTeeSet(selected.tees, preferredTee, handicapGender)!.slope_rating != null && ` · Slope ${pickTeeSet(selected.tees, preferredTee, handicapGender)!.slope_rating}`}
+                      {pickTeeSet(selected.tees, preferredTee, handicapGender)!.holes.length
+                        ? t('play.tee_stats.holes_prefix', { count: pickTeeSet(selected.tees, preferredTee, handicapGender)!.holes.length })
+                        : ''}
+                      {t('play.tee_stats.par', { par: pickTeeSet(selected.tees, preferredTee, handicapGender)!.par_total })}
+                      {pickTeeSet(selected.tees, preferredTee, handicapGender)!.course_rating != null && t('play.tee_stats.rating', { rating: pickTeeSet(selected.tees, preferredTee, handicapGender)!.course_rating!.toFixed(1) })}
+                      {pickTeeSet(selected.tees, preferredTee, handicapGender)!.slope_rating != null && t('play.tee_stats.slope', { slope: pickTeeSet(selected.tees, preferredTee, handicapGender)!.slope_rating })}
                     </Text>
                   )}
                 </View>

@@ -1,5 +1,6 @@
 import React, { forwardRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import type { RoundMode } from '../types/patterns';
 
 const MODE_LABELS: Record<string, string> = {
@@ -24,6 +25,15 @@ export interface ShareCardProps {
 // Rendered offscreen at 360×640 — captureRef scales to 1080×1920
 const RoundShareCard = forwardRef<View, ShareCardProps>(
   ({ courseName, date, totalScore, mode, ghostVariance, ghostLabel: _ghostLabel, heroStat, kevinQuote, caddieName = 'Kevin' }, ref) => {
+    /**
+     * 2026-09-13 — a forwardRef render function IS a component, so the hook belongs here; the i18n
+     * codemod skipped this file only because its detector does not recognise forwardRef.
+     *
+     * The wordmark and the tagline go through the locale file like everything else. A locale file is
+     * exactly where "SmartPlay stays SmartPlay" gets decided — the alternative was a new lint escape
+     * hatch, and eslint-rules/i18n-shared says plainly that the ignored-props list is the only one.
+     */
+    const { t } = useTranslation();
     const modeLabel = MODE_LABELS[mode] ?? mode;
 
     const ghostColor = ghostVariance == null
@@ -44,8 +54,8 @@ const RoundShareCard = forwardRef<View, ShareCardProps>(
         {/* ── HEADER ────────────────────────── */}
         <View style={styles.header}>
           <View style={styles.logoRow}>
-            <Text style={styles.logoText}>SmartPlay</Text>
-            <Text style={styles.logoBadge}>AI CADDIE</Text>
+            <Text style={styles.logoText}>{t('round_share_card.share_card.wordmark')}</Text>
+            <Text style={styles.logoBadge}>{t('round_share_card.share_card.wordmark_badge')}</Text>
           </View>
           <Text style={styles.courseName} numberOfLines={2}>{courseName}</Text>
           <Text style={styles.dateText}>{date}</Text>
@@ -66,7 +76,7 @@ const RoundShareCard = forwardRef<View, ShareCardProps>(
 
         {/* ── HERO STAT ─────────────────────── */}
         <View style={styles.heroSection}>
-          <Text style={styles.heroStatLabel}>HIGHLIGHT</Text>
+          <Text style={styles.heroStatLabel}>{t('round_share_card.share_card.highlight')}</Text>
           <Text style={styles.heroStat}>{heroStat}</Text>
         </View>
 
@@ -78,7 +88,7 @@ const RoundShareCard = forwardRef<View, ShareCardProps>(
 
         {/* ── FOOTER ────────────────────────── */}
         <View style={styles.footer}>
-          <Text style={styles.footerTag}>Your AI caddie. Get better.</Text>
+          <Text style={styles.footerTag}>{t('round_share_card.share_card.footer_tagline')}</Text>
           <Text style={styles.footerUrl}>smartplaycaddie.com</Text>
         </View>
 

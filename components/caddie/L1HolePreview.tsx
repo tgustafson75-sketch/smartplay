@@ -84,23 +84,34 @@ function buildHoleBox(aspect: number | null, w: number, h: number): { width: num
 // 2026-06-14 (audit — perf) — hoisted to MODULE level so the 4s dot-tick doesn't remount the subtree.
 // 2026-07-28 — now the measuring + centering frame: it FILLS its parent (so the true container size
 // is used, not a lagging width prop), reports its measured size, and centers the aspect-locked child.
-const HoleFrame: React.FC<{
+/**
+ * 2026-09-13 — was `React.FC<{...}> = (...) => (`, a concise arrow body, which left nowhere to call
+ * useTranslation from; the one accessibility label in it could not be localized. Rewritten as a
+ * function declaration with an explicit props type: it needs a block body for the hook either way,
+ * and the declaration form is what the rest of this file already uses for its default export.
+ */
+type HoleFrameProps = {
   onPress?: () => void;
   onLayout?: (w: number, h: number) => void;
   children: React.ReactNode;
-}> = ({ onPress, onLayout, children }) => (
-  <TouchableOpacity
-    onPress={onPress}
-    activeOpacity={onPress ? 0.85 : 1}
-    disabled={!onPress}
-    accessibilityRole="button"
-    accessibilityLabel="Open SmartVision for this hole"
-    style={styles.frame}
-    onLayout={onLayout ? (e) => onLayout(e.nativeEvent.layout.width, e.nativeEvent.layout.height) : undefined}
-  >
-    {children}
-  </TouchableOpacity>
-);
+};
+
+function HoleFrame({ onPress, onLayout, children }: HoleFrameProps) {
+  const { t } = useTranslation();
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={onPress ? 0.85 : 1}
+      disabled={!onPress}
+      accessibilityRole="button"
+      accessibilityLabel={t('caddie_l1_hole_preview.hole_frame.open_smartvision')}
+      style={styles.frame}
+      onLayout={onLayout ? (e) => onLayout(e.nativeEvent.layout.width, e.nativeEvent.layout.height) : undefined}
+    >
+      {children}
+    </TouchableOpacity>
+  );
+}
 
 export default function L1HolePreview({ onOpenSmartVision, width, height, badgeTop = 8 }: Props) {
   const { t } = useTranslation();

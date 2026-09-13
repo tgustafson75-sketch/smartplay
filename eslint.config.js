@@ -18,6 +18,28 @@ module.exports = defineConfig([
   expoConfig,
   {
     ignores: ['dist/*', 'ios/*', 'android/*', 'eslint-rules/*'],
+    /**
+     * 2026-09-13 — TELL eslint-plugin-import HOW TO READ A TYPESCRIPT FILE.
+     *
+     * `import/namespace` and its siblings build an export map by parsing the IMPORTED file, and they
+     * do it with the default parser unless told otherwise — which cannot read TypeScript at all. So
+     * any .tsx the rule needed to introspect came back as "Parse errors in imported module … '}'
+     * expected", pointing at the last line of a file that compiles cleanly and parses cleanly under
+     * Babel.
+     *
+     * It surfaced as a single error on app/(tabs)/caddie.tsx's import of L1HolePreview, and it moved
+     * when unrelated lines moved — which is the signature of a config gap rather than a code defect.
+     * A lint error that appears and disappears with edits elsewhere teaches everyone to ignore lint.
+     */
+    settings: {
+      'import/parsers': {
+        '@typescript-eslint/parser': ['.ts', '.tsx', '.d.ts'],
+      },
+      'import/resolver': {
+        typescript: { alwaysTryTypes: true },
+        node: { extensions: ['.js', '.jsx', '.ts', '.tsx'] },
+      },
+    },
     rules: {
       /**
        * 2026-09-11 — OFF, DELIBERATELY, AND THE 553 SUPPRESSIONS IT REQUIRED ARE DELETED WITH IT.

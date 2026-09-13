@@ -168,50 +168,52 @@ function SetupPanel() {
         ))}
 
         <Text style={styles.sectionLabel}>{t('tournament.setup_panel.teams')}</Text>
-        {state.teams.map((t, ti) => (
-          <View key={t.id} style={styles.teamCard}>
+        {/* 2026-09-13 — the map param was `t`, which shadowed the translation function for this whole
+            block, so nothing inside it could be localized. Renamed to `team`. */}
+        {state.teams.map((team, ti) => (
+          <View key={team.id} style={styles.teamCard}>
             <View style={styles.teamHeaderRow}>
-              <TextInput style={styles.teamNameInput} value={t.name} onChangeText={n => state.setTeamName(t.id, n)} placeholder={`Team ${ti + 1}`} placeholderTextColor="#4b5563" />
+              <TextInput style={styles.teamNameInput} value={team.name} onChangeText={n => state.setTeamName(team.id, n)} placeholder={`Team ${ti + 1}`} placeholderTextColor="#4b5563" />
               {/* 2026-05-24 — Voice-roster mic. Tap → speak up to 5
                   first names → parseRosterNames populates players[].
                   Active state pulses the icon green so the user knows
                   it's listening; disabled state when another team is
                   recording so two mics can't race. */}
               <TouchableOpacity
-                onPress={() => { void handleRosterMic(t.id); }}
-                disabled={recordingTeamId !== null && recordingTeamId !== t.id}
+                onPress={() => { void handleRosterMic(team.id); }}
+                disabled={recordingTeamId !== null && recordingTeamId !== team.id}
                 style={styles.rosterMicBtn}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 accessibilityRole="button"
-                accessibilityLabel={`Voice-add players to ${t.name}`}
+                accessibilityLabel={`Voice-add players to ${team.name}`}
               >
                 <Ionicons
-                  name={recordingTeamId === t.id ? 'mic' : 'mic-outline'}
+                  name={recordingTeamId === team.id ? 'mic' : 'mic-outline'}
                   size={18}
-                  color={recordingTeamId === t.id ? '#00C896' : (recordingTeamId ? '#374151' : '#9ca3af')}
+                  color={recordingTeamId === team.id ? '#00C896' : (recordingTeamId ? '#374151' : '#9ca3af')}
                 />
               </TouchableOpacity>
               {state.teams.length > 2 && (
-                <TouchableOpacity onPress={() => state.removeTeam(t.id)} style={styles.removeBtn}>
+                <TouchableOpacity onPress={() => state.removeTeam(team.id)} style={styles.removeBtn}>
                   <Ionicons name="trash-outline" size={16} color="#ef4444" />
                 </TouchableOpacity>
               )}
             </View>
-            {t.players.map((p, pi) => (
+            {team.players.map((p, pi) => (
               <View key={pi} style={styles.playerRow}>
                 <Text style={styles.playerIdx}>{pi + 1}.</Text>
-                <TextInput style={styles.playerNameInput} value={p} onChangeText={n => state.setPlayerName(t.id, pi, n)} placeholder={`Player ${pi + 1}`} placeholderTextColor="#4b5563" />
-                {t.players.length > 2 && (
-                  <TouchableOpacity onPress={() => state.removePlayer(t.id, pi)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <TextInput style={styles.playerNameInput} value={p} onChangeText={n => state.setPlayerName(team.id, pi, n)} placeholder={`Player ${pi + 1}`} placeholderTextColor="#4b5563" />
+                {team.players.length > 2 && (
+                  <TouchableOpacity onPress={() => state.removePlayer(team.id, pi)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                     <Ionicons name="close" size={16} color="#6b7280" />
                   </TouchableOpacity>
                 )}
               </View>
             ))}
-            {t.players.length < 5 && (
-              <TouchableOpacity onPress={() => state.addPlayer(t.id)} style={styles.addRow}>
+            {team.players.length < 5 && (
+              <TouchableOpacity onPress={() => state.addPlayer(team.id)} style={styles.addRow}>
                 <Ionicons name="add-circle-outline" size={16} color="#00C896" />
-                <Text style={styles.addRowText}>Add player</Text>
+                <Text style={styles.addRowText}>{t('tournament.setup.add_player')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -382,7 +384,11 @@ function LeaderboardPanel() {
         <View style={{ flex: 1 }}>
           <Text style={styles.leaderTitle}>{state.label || 'Tournament'}</Text>
           <Text style={styles.leaderSub}>
-            {FORMAT_LABEL[state.format]}{state.courseName ? ` · ${state.courseName}` : ''} · thru {result.maxThrough}/18
+            {t('tournament.leaderboard.format_course_thru', {
+              format: FORMAT_LABEL[state.format],
+              course: state.courseName ? ` · ${state.courseName}` : '',
+              thru: result.maxThrough,
+            })}
           </Text>
         </View>
         <TouchableOpacity onPress={onShare} style={styles.shareBtn}>

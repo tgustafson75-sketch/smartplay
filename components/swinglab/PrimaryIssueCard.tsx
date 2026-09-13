@@ -181,7 +181,9 @@ export default function PrimaryIssueCard({ issue, totalShots }: Props) {
             <Text style={styles.firstDominoLabel}>{t('swinglab_primary_issue_card.primary_issue_card.start_here_first_domino')}</Text>
           </View>
           <Text style={styles.firstDominoText}>
-            Work on <Text style={styles.firstDominoEmph}>{issue.name.toLowerCase()}</Text> first. Fix this one thing and {symptomsList.toLowerCase()} should settle down with it.
+            {t('swinglab_primary_issue_card.first_domino.work_on')}
+            <Text style={styles.firstDominoEmph}>{issue.name.toLowerCase()}</Text>
+            {t('swinglab_primary_issue_card.first_domino.fix_this_one_thing', { symptoms: symptomsList.toLowerCase() })}
           </Text>
         </View>
       )}

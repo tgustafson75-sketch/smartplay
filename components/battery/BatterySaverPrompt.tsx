@@ -41,7 +41,8 @@ export function BatterySaverPrompt() {
         <View style={styles.headRow}>
           <Ionicons name="battery-half-outline" size={20} color={colors.warning} />
           <Text style={[styles.title, { color: colors.text_primary }]}>
-            Battery low{pct != null ? ` · ${pct}%` : ''}
+            {t('battery_battery_saver_prompt.prompt.battery_low')}
+            {pct != null ? t('battery_battery_saver_prompt.prompt.pct_suffix', { pct }) : ''}
           </Text>
         </View>
         <Text style={[styles.body, { color: colors.text_secondary }]}>

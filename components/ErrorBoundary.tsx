@@ -20,6 +20,26 @@
 
 import React from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import i18n from '../i18n';
+
+/**
+ * 2026-09-13 — localized, but NOT through useTranslation: this is a class component because error
+ * boundaries must be (see the note above), so there is no hook scope. It goes through the i18next
+ * instance directly, and every call carries the English as a last resort.
+ *
+ * That fallback is not belt-and-braces padding — this is the one screen in the app that only renders
+ * because something has ALREADY thrown. If the thing that threw was i18n initialisation, a bare
+ * `i18n.t` would paint raw key names over the crash report and hide the stack the screen exists to
+ * show. English beats `error_boundary.crash_screen.heading`.
+ */
+const tr = (key: string, english: string): string => {
+  try {
+    const out = i18n.t(key);
+    return typeof out === 'string' && out !== key ? out : english;
+  } catch {
+    return english;
+  }
+};
 
 type Props = { children: React.ReactNode };
 type State = { error: Error | null; info: React.ErrorInfo | null };
@@ -60,39 +80,39 @@ export class ErrorBoundary extends React.Component<Props, State> {
     return (
       <View style={styles.container}>
         <ScrollView contentContainerStyle={styles.scroll}>
-          <Text style={styles.heading}>Something broke during render.</Text>
+          <Text style={styles.heading}>{tr('error_boundary.crash_screen.heading', 'Something broke during render.')}</Text>
           <Text style={styles.subheading}>
-            Screenshot this and send it. The app is paused so we can see what threw.
+            {tr('error_boundary.crash_screen.subheading', 'Screenshot this and send it. The app is paused so we can see what threw.')}
           </Text>
 
           <View style={styles.card}>
-            <Text style={styles.label}>ERROR</Text>
+            <Text style={styles.label}>{tr('error_boundary.crash_screen.label_error', 'ERROR')}</Text>
             <Text style={styles.errorText}>{message}</Text>
           </View>
 
           {stack.length > 0 && (
             <View style={styles.card}>
-              <Text style={styles.label}>STACK</Text>
+              <Text style={styles.label}>{tr('error_boundary.crash_screen.label_stack', 'STACK')}</Text>
               <Text style={styles.codeText}>{stack}</Text>
             </View>
           )}
 
           {componentStack.length > 0 && (
             <View style={styles.card}>
-              <Text style={styles.label}>COMPONENT TREE</Text>
+              <Text style={styles.label}>{tr('error_boundary.crash_screen.label_component_tree', 'COMPONENT TREE')}</Text>
               <Text style={styles.codeText}>{componentStack}</Text>
             </View>
           )}
 
           <View style={styles.card}>
-            <Text style={styles.label}>RUNTIME</Text>
+            <Text style={styles.label}>{tr('error_boundary.crash_screen.label_runtime', 'RUNTIME')}</Text>
             <Text style={styles.codeText}>
-              platform: {Platform.OS} {Platform.Version}
+              {`platform: ${Platform.OS} ${Platform.Version}`}
             </Text>
           </View>
 
           <TouchableOpacity style={styles.btn} onPress={this.handleReset} accessibilityRole="button">
-            <Text style={styles.btnText}>Try to recover</Text>
+            <Text style={styles.btnText}>{tr('error_boundary.crash_screen.try_to_recover', 'Try to recover')}</Text>
           </TouchableOpacity>
         </ScrollView>
       </View>

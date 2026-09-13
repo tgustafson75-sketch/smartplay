@@ -24,6 +24,7 @@ import * as VideoThumbnails from '../../utils/videoThumbnail';
 import { puttFrameTimeSec } from '../../services/puttFrameExtractor';
 import type { PuttingAnalysis } from '../../services/puttingAnalysisService';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   readLine: NonNullable<PuttingAnalysis['readLine']>;
@@ -36,6 +37,7 @@ interface Props {
 const BOX_H = 200;
 
 export default function PuttReadLine({ readLine, clipUri, clipDurationSec }: Props) {
+  const { t } = useTranslation();
   const { colors } = useTheme();
   const [frameUri, setFrameUri] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -97,7 +99,9 @@ export default function PuttReadLine({ readLine, clipUri, clipDurationSec }: Pro
         looking, so it is said in words rather than implied.
       */}
       <Text style={[styles.caption, { color: colors.text_muted }]}>
-        The line to play — read from the break above{readLine.confidence ? ` · ${Math.round(readLine.confidence)}% confidence` : ''}. Not a trace of your actual roll.
+        {t('swinglab_putt_read_line.caption.line_to_play')}
+        {readLine.confidence ? t('swinglab_putt_read_line.caption.confidence_suffix', { pct: Math.round(readLine.confidence) }) : ''}
+        {t('swinglab_putt_read_line.caption.not_a_trace')}
       </Text>
     </View>
   );

@@ -7361,7 +7361,28 @@ check('Perf: on-course dot tickers ride the GPS watch cache (peekFix), not force
 check('Perf: L1HolePreview HoleFrame is module-level + fills/measures (no 4s remount cascade)',
   (() => {
     const prev = read('components/caddie/L1HolePreview.tsx');
-    const defIdx = prev.search(/const HoleFrame: React\.FC</);
+    /**
+     * 2026-09-13 — this pinned the SPELLING `const HoleFrame: React.FC<`, so it failed when the
+     * declaration became a `function` (it needed a block body to call useTranslation from, for its
+     * one accessibility label). The property that actually matters is MODULE SCOPE: defined at column
+     * zero, above the component that uses it, so the 4s dot-tick reconciles in place instead of
+     * minting a new component type. Either form satisfies that; neither an inner `const` nor an inner
+     * `function` does, because both would be indented.
+     */
+    /**
+     * The property is SCOPE, and the only robust reading of it here is POSITION: the declaration must
+     * sit before `export default function L1HolePreview`, because anything after that line is inside
+     * its body and is therefore re-created on every render — which is the 4s remount cascade.
+     *
+     * An earlier version of this also tested indentation as a proxy for scope. That was wrong twice:
+     * `\s+` matched the newline before a column-zero declaration (so it fired on correct code), and
+     * once fixed to `[ \t]+` it was asserting FORMATTING — re-indenting a module-level function
+     * would have failed the guard while changing nothing about when React re-creates it.
+     *
+     * Declared exactly once, so a second copy cannot satisfy the ordering while the live one moves.
+     */
+    const decls = [...prev.matchAll(/(?:function|const)\s+HoleFrame\b/g)];
+    const defIdx = decls.length === 1 ? decls[0].index! : -1;
     const fnIdx = prev.search(/export default function L1HolePreview/);
     return (
       defIdx >= 0 && fnIdx >= 0 && defIdx < fnIdx &&                                  // module scope, before the component
@@ -10438,9 +10459,19 @@ check('LOCK: the putt read line is OPTIONAL, and is never sold as the actual rol
     const stillOptional = !/readLine/.test(rootRequired) && /readLine: \{/.test(api);
     // 2) the model must be told to OMIT it rather than guess where the hole is
     const omitsRatherThanGuesses = /OMIT readLine entirely if the hole is out of frame/.test(api);
-    // 3) HONEST. This is the read, not a trace of the roll — puttRoll.ts is still unfed, so a caption
-    //    implying "your putt" would be a claim the player cannot check.
-    const labelledAsRead = /Not a trace of your actual roll/.test(overlay);
+    /**
+     * 3) HONEST. This is the read, not a trace of the roll — puttRoll.ts is still unfed, so a caption
+     *    implying "your putt" would be a claim the player cannot check.
+     *
+     *    2026-09-13 — the caption moved into i18n/locales/en.json when the last 72 hardcoded strings
+     *    were localized, so pinning the English against the TSX now certifies nothing. Assert the
+     *    property where it now lives: the overlay renders that key, AND the key's value still carries
+     *    the disclaimer. Checking only the key would let the sentence be reworded into a claim; checking
+     *    only the value would let the overlay stop rendering it.
+     */
+    const CAPTION_KEY = 'swinglab_putt_read_line.caption.not_a_trace';
+    const labelledAsRead = overlay.includes(CAPTION_KEY)
+      && /not a trace of your actual roll/i.test(enValueFor(CAPTION_KEY) ?? '');
     // 4) the card only draws when it genuinely has both the coords and a clip
     const guardedRender = /analysis\.readLine && clipUri \?/.test(card);
     // 5) frame index -> time has ONE owner; a second copy of the phase fractions would drift and the
@@ -12885,10 +12916,23 @@ check('LOCK: a match score is never asserted from a sample too thin to average',
     const floor = /const MIN_METRICS_FOR_OVERALL = 2;/.test(eng)
       && /if \(usable\.length < MIN_METRICS_FOR_OVERALL\) return null;/.test(eng)
       && !/if \(usable\.length === 0\) return null;/.test(eng);
-    // ...and the refusal must be SPECIFIC: name the dimensions that couldn't be read, on which swing.
+    /**
+     * ...and the refusal must be SPECIFIC: name the dimensions that couldn't be read, on which swing.
+     *
+     * 2026-09-13 — the heading moved into en.json with the last 72 hardcoded strings, so matching the
+     * English against the TSX certified nothing. Assert both halves: the sheet renders the key, and the
+     * key still says which swing went unmeasured. A key check alone would survive the value being
+     * softened into a generic "not enough data"; a value check alone would survive the sheet dropping
+     * the heading entirely.
+     */
+    const HEADING_KEY = 'swinglab_comparison_result_sheet.unread.not_measured_on';
     const namesGaps = /export function unreadableMetrics\(/.test(eng)
       && /unreadableMetrics\(result\)/.test(sheet)
-      && /NOT MEASURED ON/.test(sheet);
+      && sheet.includes(HEADING_KEY)
+      && /not measured on/i.test(enValueFor(HEADING_KEY) ?? '')
+      && ['the_reference', 'this_swing', 'one_or_both'].every(
+        (k) => (enValueFor(`swinglab_comparison_result_sheet.unread.${k}`) ?? '').length > 0,
+      );
     // The ring still never renders a number it doesn't have.
     const noFakeZero = /\{hasMatch \? result\.overall_match : '—'\}/.test(sheet);
     return floor && namesGaps && noFakeZero;

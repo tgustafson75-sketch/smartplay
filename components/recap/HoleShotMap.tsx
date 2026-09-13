@@ -276,7 +276,7 @@ export default function HoleShotMap({
             */}
             {confirmations?.[selectedIdx!]?.confirmed && (
               <Text style={styles.detailConfirm}>
-                ✓ Watch confirmed
+                {t('recap_hole_shot_map.detail.watch_confirmed')}
                 {confirmations[selectedIdx!].tempoRatio
                   ? ` · ${Math.round(confirmations[selectedIdx!].tempoRatio! * 10) / 10}:1 tempo`
                   : ''}

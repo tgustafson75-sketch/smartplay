@@ -107,7 +107,9 @@ export default function AddCourseScreen() {
         <ScrollView contentContainerStyle={{ padding: 16 }}>
           <Text style={[styles.courseName, { color: colors.text_primary }]}>{result.course_name?.trim() || 'My Course'}</Text>
           <Text style={[styles.sub, { color: colors.text_secondary, textAlign: 'left', marginBottom: 4 }]}>
-            {result.tee_name ? `${result.tee_name} tees · ` : ''}{readCount} holes read{withYardage < readCount ? ` · ${withYardage} with yardage` : ''}
+            {result.tee_name ? t('add_course.read_summary.tee_prefix', { tee: result.tee_name }) : ''}
+            {t('add_course.read_summary.holes_read', { count: readCount })}
+            {withYardage < readCount ? t('add_course.read_summary.with_yardage', { n: withYardage }) : ''}
           </Text>
           {result.confidence === 'low' && (
             <Text style={[styles.warn, { color: colors.error ?? '#e5484d' }]}>{t('add_course.add_course_screen.low_confidence_double_check_the')}</Text>

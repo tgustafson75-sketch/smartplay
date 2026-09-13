@@ -104,19 +104,19 @@ function RecapScorecardGrid({ holes, parByHole }: { holes: HoleComparison[]; par
   const Nine = ({ ns, label }: { ns: number[]; label: string }) => (
     <View style={sg.block}>
       <View style={sg.row}>
-        <Text style={[sg.cell, sg.lab]}>HOLE</Text>
+        <Text style={[sg.cell, sg.lab]}>{t('recap.scoregrid.hole')}</Text>
         {ns.map((n) => <Text key={n} style={[sg.cell, sg.head]}>{n}</Text>)}
         <Text style={[sg.cell, sg.head]}>{label}</Text>
       </View>
       {hasPar && (
         <View style={sg.row}>
-          <Text style={[sg.cell, sg.lab]}>PAR</Text>
+          <Text style={[sg.cell, sg.lab]}>{t('recap.scoregrid.par')}</Text>
           {ns.map((n) => <Text key={n} style={[sg.cell, sg.par]}>{parByHole[n] ?? '·'}</Text>)}
           <Text style={[sg.cell, sg.par]}>{sumPar(ns) || '·'}</Text>
         </View>
       )}
       <View style={sg.row}>
-        <Text style={[sg.cell, sg.lab]}>YOU</Text>
+        <Text style={[sg.cell, sg.lab]}>{t('recap.scoregrid.you')}</Text>
         {ns.map((n) => <Text key={n} style={[sg.cell, sg.score, { color: scoreVsParColor(scoreByHole[n], parByHole[n]) }]}>{scoreByHole[n] ?? '·'}</Text>)}
         <Text style={[sg.cell, sg.score]}>{sumScore(ns) || '·'}</Text>
       </View>
@@ -940,7 +940,7 @@ export default function RecapScreen() {
                         }
                       }}
                     >
-                      <Text style={styles.keyMomentHole}>Hole {hc.hole_number}</Text>
+                      <Text style={styles.keyMomentHole}>{t('recap.key_moment.hole_number', { hole: hc.hole_number })}</Text>
                       <Text style={[styles.keyMomentScore, {
                         color: varianceColor(
                           hc.actual_score != null && parByHole[hc.hole_number] != null

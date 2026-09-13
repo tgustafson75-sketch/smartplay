@@ -1988,8 +1988,14 @@ function TargetCameraOverlay({
                   real read (hasData) that actually moves the number (≥1yd ≈ 3ft). */}
               {elevation.hasData && Math.abs(elevationDeltaFeet) >= 3 && (
                 <Text style={styles.targetIntelLine}>
-                  Elevation: {elevationDeltaFeet > 0 ? '↑ uphill' : '↓ downhill'} {Math.abs(Math.round(elevationDeltaFeet))} ft
-                  {' · '}plays {elevationDeltaFeet > 0 ? '+' : '−'}{Math.abs(Math.round(elevationDeltaFeet / 3))}y
+                  {t('smartfinder.target_intel.elevation', {
+                    direction: elevationDeltaFeet > 0
+                      ? t('smartfinder.target_intel.uphill')
+                      : t('smartfinder.target_intel.downhill'),
+                    feet: Math.abs(Math.round(elevationDeltaFeet)),
+                    sign: elevationDeltaFeet > 0 ? '+' : '−',
+                    plays: Math.abs(Math.round(elevationDeltaFeet / 3)),
+                  })}
                 </Text>
               )}
               {landing && (

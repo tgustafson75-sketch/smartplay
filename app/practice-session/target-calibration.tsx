@@ -275,7 +275,7 @@ export default function CageTargetCalibration() {
             <>
               <Text style={[styles.instruction, { color: colors.text_primary }]}>{t('practice_session_target_calibration.cage_target_calibration.tap_where_it_hit')}</Text>
               <Text style={[styles.instructionSub, { color: colors.text_secondary }]}>
-                Peak: {lastPeakDb != null ? `${lastPeakDb.toFixed(1)} dBFS` : '—'}
+                {t('practice_session_target_calibration.cage_target_calibration.peak', { value: lastPeakDb != null ? `${lastPeakDb.toFixed(1)} dBFS` : '—' })}
               </Text>
             </>
           )}

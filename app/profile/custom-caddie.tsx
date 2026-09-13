@@ -739,9 +739,10 @@ export default function CustomCaddieScreen() {
           <View style={styles.recorderHelpRow}>
             <Ionicons name="information-circle-outline" size={14} color="#9ca3af" />
             <Text style={styles.recorderHelp}>
-              Record short phrases in your own voice. The caddie uses
-              your recording for any phrase you record and the AI voice
-              for everything else. {recordedCount > 0 ? `${recordedCount} recorded.` : 'None recorded yet.'}
+              {t('profile_custom_caddie.recorder.help')}
+              {recordedCount > 0
+                ? t('profile_custom_caddie.recorder.recorded_count', { count: recordedCount })
+                : t('profile_custom_caddie.recorder.none_recorded')}
             </Text>
           </View>
 

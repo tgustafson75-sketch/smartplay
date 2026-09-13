@@ -4271,7 +4271,7 @@ export default function CaddieTab() {
                         >
                           <View style={{ flex: 1 }}>
                             <Text style={[styles.ghostRowText, selectedGhostId === r.id && styles.ghostRowTextSelected]}>
-                              {r.totalScore} strokes · {ROUND_MODE_LABELS[r.mode] ?? r.mode}
+                              {t('caddie.ghost_row.strokes_and_mode', { strokes: r.totalScore, mode: ROUND_MODE_LABELS[r.mode] ?? r.mode })}
                             </Text>
                             <Text style={styles.ghostRowDate}>{relDate(r.endedAt)}</Text>
                           </View>

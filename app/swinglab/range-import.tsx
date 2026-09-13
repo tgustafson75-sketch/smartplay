@@ -101,7 +101,7 @@ export default function RangeImportScreen() {
       onPress={() => router.back()}
       style={styles.backBtn}
       accessibilityRole="button"
-      accessibilityLabel="Back"
+      accessibilityLabel={t('swinglab_range_import.back_button.back')}
     >
       <Ionicons name="chevron-back" size={24} color={c.text_primary} />
     </TouchableOpacity>

@@ -2365,10 +2365,11 @@ export default function Settings() {
                   >
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.rowLabel, { color: colors.text_primary }]}>
-                        Owner Console{checklistOpen > 0 ? ` · ${checklistOpen} open` : ''}
+                        {t('settings.text.owner_console')}
+                        {checklistOpen > 0 ? t('settings.text.owner_console_open_count', { count: checklistOpen }) : ''}
                       </Text>
                       <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-                        Checklist, issue log, harnesses, diagnostics and owner actions — one screen
+                        {t('settings.text.owner_console_sub')}
                       </Text>
                     </View>
                     <Ionicons name="grid-outline" size={20} color={colors.text_muted} />

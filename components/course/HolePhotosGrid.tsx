@@ -107,7 +107,7 @@ export default function HolePhotosGrid({ photos }: Props) {
                   <Image source={{ uri: item.url }} style={styles.viewerImg} resizeMode="contain" />
                 )}
                 <View style={styles.viewerLabel}>
-                  <Text style={styles.viewerLabelText}>Hole {item.hole_number}</Text>
+                  <Text style={styles.viewerLabelText}>{t('course_hole_photos_grid.viewer.hole_number', { hole: item.hole_number })}</Text>
                 </View>
               </View>
             )}

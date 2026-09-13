@@ -1072,8 +1072,8 @@ export default function Scorecard() {
             <Text style={[styles.sectionLabel, { color: c.text_muted }]}>{t('scorecard.text.your_bag', { active_course: activeCourse.toUpperCase() })}</Text>
             <View style={[styles.clubGrid, { backgroundColor: c.surface, borderColor: c.border }]}>
               <Text style={[styles.courseBagNote, { color: c.text_muted }]}>
-                {courseClubUsage.length} club{courseClubUsage.length === 1 ? '' : 's'} see action here
-                {courseRounds.length > 0 ? ` over ${courseRounds.length} round${courseRounds.length === 1 ? '' : 's'}` : ''}
+                {t('scorecard.course_bag.clubs_see_action', { count: courseClubUsage.length })}
+                {courseRounds.length > 0 ? t('scorecard.course_bag.over_rounds', { count: courseRounds.length }) : ''}
                 {courseRounds.length < 2 ? ' · pattern still forming' : ''}
               </Text>
               {courseClubUsage.map(item => (

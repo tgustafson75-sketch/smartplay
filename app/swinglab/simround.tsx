@@ -395,7 +395,7 @@ export default function SwingSimScreen() {
           <View style={s.toggleRow}>
             {([9, 18] as const).map((n) => (
               <TouchableOpacity key={n} style={[s.toggleBtn, holeCount === n && s.toggleBtnActive]} onPress={() => setHoleCount(n)} accessibilityRole="button">
-                <Text style={[s.toggleText, holeCount === n && { color: '#0b1220' }]}>{n} HOLES</Text>
+                <Text style={[s.toggleText, holeCount === n && { color: '#0b1220' }]}>{t('swinglab_simround.setup.hole_count', { count: n })}</Text>
               </TouchableOpacity>
             ))}
           </View>

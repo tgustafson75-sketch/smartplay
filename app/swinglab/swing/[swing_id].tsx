@@ -2654,9 +2654,9 @@ export default function SwingDetail() {
             <View style={styles.compareRow}>
               <View style={styles.comparePane}>
                 <Text style={[styles.compareCaption, { color: colors.text_muted }]} numberOfLines={1}>
-                  Swing {String((session.shots.findIndex(x => x.id === leftShot.id) + 1)).padStart(2, '0')}
+                  {t('swinglab_swing.compare.swing_number', { n: String((session.shots.findIndex(x => x.id === leftShot.id) + 1)).padStart(2, '0') })}
                   {leftShot.perShotAnalysis?.detected_issue && leftShot.perShotAnalysis.detected_issue !== 'none'
-                    ? ` · ${leftShot.perShotAnalysis.detected_issue.replace(/_/g, ' ')}`
+                    ? t('swinglab_swing.compare.issue_suffix', { issue: leftShot.perShotAnalysis.detected_issue.replace(/_/g, ' ') })
                     : ''}
                 </Text>
                 <Video
@@ -2671,9 +2671,9 @@ export default function SwingDetail() {
               </View>
               <View style={styles.comparePane}>
                 <Text style={[styles.compareCaption, { color: colors.text_muted }]} numberOfLines={1}>
-                  Swing {String((session.shots.findIndex(x => x.id === rightShot.id) + 1)).padStart(2, '0')}
+                  {t('swinglab_swing.compare.swing_number', { n: String((session.shots.findIndex(x => x.id === rightShot.id) + 1)).padStart(2, '0') })}
                   {rightShot.perShotAnalysis?.detected_issue && rightShot.perShotAnalysis.detected_issue !== 'none'
-                    ? ` · ${rightShot.perShotAnalysis.detected_issue.replace(/_/g, ' ')}`
+                    ? t('swinglab_swing.compare.issue_suffix', { issue: rightShot.perShotAnalysis.detected_issue.replace(/_/g, ' ') })
                     : ''}
                 </Text>
                 <Video
@@ -3684,7 +3684,7 @@ export default function SwingDetail() {
                   (those use PuttingAnalysisCard above). */}
               {activeBiomech && !session.putting_analysis && (
                 <View style={[styles.biomechCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                  <Text style={[styles.biomechLabel, { color: colors.accent }]}>BIOMECHANICS{session.shots.length > 1 ? ` · SWING ${selectedShotIdx + 1}` : ''}</Text>
+                  <Text style={[styles.biomechLabel, { color: colors.accent }]}>{t('swinglab_swing.biomech.heading')}{session.shots.length > 1 ? t('swinglab_swing.biomech.swing_suffix', { n: selectedShotIdx + 1 }) : ''}</Text>
                   <Text style={[styles.biomechSub, { color: colors.text_muted }]}>
                     {activeBiomech.frames.length > 0
                       ? `Measured from ${activeBiomech.frames.length} swing keyframes`
@@ -3725,12 +3725,14 @@ export default function SwingDetail() {
                   */}
                   {clubPlane.classification && clubPlane.planeDeltaDeg != null && (
                     <Text style={[styles.biomechRow, { color: colors.text_primary }]}>
-                      • Club plane: {clubPlane.classification === 'over_the_top'
-                        ? `steeper coming down (+${clubPlane.planeDeltaDeg}°)`
-                        : clubPlane.classification === 'shallow'
-                          ? `shallower coming down (${clubPlane.planeDeltaDeg}°)`
-                          : `on plane (${clubPlane.planeDeltaDeg >= 0 ? '+' : ''}${clubPlane.planeDeltaDeg}°)`}
-                      {clubPlane.provisional ? ' — measured from your clubhead arc, still being calibrated' : ''}
+                      {t('swinglab_swing.biomech.club_plane', {
+                        read: clubPlane.classification === 'over_the_top'
+                          ? t('swinglab_swing.biomech.plane_steeper', { deg: clubPlane.planeDeltaDeg })
+                          : clubPlane.classification === 'shallow'
+                            ? t('swinglab_swing.biomech.plane_shallower', { deg: clubPlane.planeDeltaDeg })
+                            : t('swinglab_swing.biomech.plane_on_plane', { deg: `${clubPlane.planeDeltaDeg >= 0 ? '+' : ''}${clubPlane.planeDeltaDeg}` }),
+                      })}
+                      {clubPlane.provisional ? t('swinglab_swing.biomech.plane_provisional') : ''}
                     </Text>
                   )}
                 </View>
@@ -3792,8 +3794,11 @@ export default function SwingDetail() {
                   {/* 2026-06-30 (Tim — audit) — the tempo MS detail was persisted but never shown. */}
                   {(session.smart_motion_shot_map.tempo.backswingMs != null && session.smart_motion_shot_map.tempo.downswingMs != null) ? (
                     <Text style={[styles.biomechSub, { color: colors.text_muted, marginTop: 4 }]}>
-                      Back {(session.smart_motion_shot_map.tempo.backswingMs / 1000).toFixed(1)}s · Down {(session.smart_motion_shot_map.tempo.downswingMs / 1000).toFixed(1)}s
-                      {session.smart_motion_shot_map.tempo.sequencingScore != null ? ` · Transition ${Math.round(session.smart_motion_shot_map.tempo.sequencingScore)}` : ''}
+                      {t('swinglab_swing.biomech.back_down_seconds', {
+                        back: (session.smart_motion_shot_map.tempo.backswingMs / 1000).toFixed(1),
+                        down: (session.smart_motion_shot_map.tempo.downswingMs / 1000).toFixed(1),
+                      })}
+                      {session.smart_motion_shot_map.tempo.sequencingScore != null ? t('swinglab_swing.biomech.transition_suffix', { score: Math.round(session.smart_motion_shot_map.tempo.sequencingScore) }) : ''}
                     </Text>
                   ) : null}
                 </View>
@@ -3999,7 +4004,8 @@ export default function SwingDetail() {
                     </View>
                     <View style={styles.faultModalPane}>
                       <Text style={[styles.faultModalPaneLabel, styles.faultModalPaneLabelRef]}>
-                        REFERENCE{reference.position ? ` · ${reference.position.toUpperCase()}` : ''}
+                        {t('swinglab_swing.fault_modal.reference')}
+                        {reference.position ? t('swinglab_swing.fault_modal.position_suffix', { position: reference.position.toUpperCase() }) : ''}
                       </Text>
                       <Image
                         source={reference.image as NonNullable<typeof reference.image>}

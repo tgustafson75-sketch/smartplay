@@ -76,8 +76,8 @@ export function GreenHeatCard({ scope = 'career', style }: GreenHeatCardProps) {
             />
           </View>
           <Text style={[styles.progressLabel, { color: c.text_muted }]}>
-            {model.totalHoles} of {GREEN_HEAT_MIN_HOLES} putt-holes logged
-            {model.remaining > 0 ? ` · ${model.remaining} to go` : ''}
+            {t('green_heat_card.progress.putt_holes_logged', { logged: model.totalHoles, target: GREEN_HEAT_MIN_HOLES })}
+            {model.remaining > 0 ? t('green_heat_card.progress.to_go', { n: model.remaining }) : ''}
           </Text>
         </View>
       ) : (
@@ -98,8 +98,10 @@ export function GreenHeatCard({ scope = 'career', style }: GreenHeatCardProps) {
                       <Text style={styles.cellBig}>{pct(b.onePuttRate)}</Text>
                       <Text style={styles.cellBigSub}>{t('green_heat_card.text.1_putt_rate')}</Text>
                       <Text style={styles.cellMeta}>
-                        {b.avgPutts != null ? b.avgPutts.toFixed(2) : '—'} avg · {b.holes} hole
-                        {b.holes === 1 ? '' : 's'}
+                        {t('green_heat_card.band.avg_and_holes', {
+                          avg: b.avgPutts != null ? b.avgPutts.toFixed(2) : '—',
+                          count: b.holes,
+                        })}
                       </Text>
                       {b.threePlus > 0 && (
                         <Text style={styles.cellLeak}>{t('green_heat_card.text.3_putt', { three_putt_rate: pct(b.threePuttRate) })}</Text>
@@ -123,11 +125,12 @@ export function GreenHeatCard({ scope = 'career', style }: GreenHeatCardProps) {
           {/* ── REAL green-roll break signal — only when measured rolls exist ── */}
           {model.rollSignal && model.rollSignal.rolls > 0 && (
             <Text style={[styles.rollSignal, { color: c.text_muted }]}>
-              Reads: breaks{' '}
+              {t('green_heat_card.roll_signal.reads_breaks')}
               <Text style={{ color: c.text_primary }}>{model.rollSignal.dominantBreak}</Text>
-              {' · '}
-              {Math.round(model.rollSignal.makeRate * 100)}% made over{' '}
-              {model.rollSignal.rolls} measured roll{model.rollSignal.rolls === 1 ? '' : 's'}
+              {t('green_heat_card.roll_signal.made_over_rolls', {
+                pct: Math.round(model.rollSignal.makeRate * 100),
+                count: model.rollSignal.rolls,
+              })}
             </Text>
           )}
 

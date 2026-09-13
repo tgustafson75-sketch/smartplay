@@ -104,9 +104,15 @@ export default function TutorialUpload() {
   };
 
   const onAnalyze = async () => {
-    const t = title.trim();
-    if (!t) {
-      Alert.alert('Title needed', 'Give the tutorial a short title (e.g. "Marc — shallow attack on wedges").');
+    // 2026-09-13 — was `const t`, which shadowed the translation function for the whole of this
+    // handler, so every string in it was unlocalizable without renaming first. That is the only
+    // reason the i18n codemod skipped this file.
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
+      Alert.alert(
+        t('swinglab_tutorial_upload.alert.title_needed'),
+        t('swinglab_tutorial_upload.alert.title_needed_body'),
+      );
       return;
     }
 
@@ -118,15 +124,19 @@ export default function TutorialUpload() {
     ].filter(Boolean).join('\n');
 
     const outcome = await analyzeTutorial(
-      { title: t, notes: fullNotes, frame_uri: frameUri },
+      { title: trimmedTitle, notes: fullNotes, frame_uri: frameUri },
       apiUrl,
     );
 
     if (outcome.kind !== 'ok') {
       const msg = outcome.kind === 'no_network'
-        ? 'Lost connection — try again.'
-        : `Analyzer hit a snag: ${outcome.message.slice(0, 200)}`;
-      Alert.alert("Couldn't analyze", msg, [{ text: 'OK', onPress: () => setStep('compose') }]);
+        ? t('swinglab_tutorial_upload.alert.lost_connection')
+        : t('swinglab_tutorial_upload.alert.analyzer_snag', { detail: outcome.message.slice(0, 200) });
+      Alert.alert(
+        t('swinglab_tutorial_upload.alert.couldnt_analyze'),
+        msg,
+        [{ text: t('swinglab_tutorial_upload.alert.ok'), onPress: () => setStep('compose') }],
+      );
       return;
     }
 
@@ -136,13 +146,13 @@ export default function TutorialUpload() {
     // Smart Motion for actual user-swing analysis.
     if (outcome.teaching_focus === 'not_instruction') {
       Alert.alert(
-        "Doesn't look like a golf lesson",
-        "If this is your own swing video, use Smart Motion for swing analysis. Tutorials are for coaching content — instructor-led lessons or instruction videos.",
+        t('swinglab_tutorial_upload.alert.not_a_lesson'),
+        t('swinglab_tutorial_upload.alert.not_a_lesson_body'),
         [
-          { text: 'Try again', onPress: () => setStep('compose') },
+          { text: t('swinglab_tutorial_upload.alert.try_again'), onPress: () => setStep('compose') },
           // 2026-07-04 (elite-clean audit) — was the legacy /cage flow (the "wrong
           // tool" route the Tools menu removed); Smart Motion is the analyzer now.
-          { text: 'Open Smart Motion', onPress: () => router.replace('/swinglab/smartmotion' as never) },
+          { text: t('swinglab_tutorial_upload.alert.open_smart_motion'), onPress: () => router.replace('/swinglab/smartmotion' as never) },
         ],
       );
       return;
@@ -158,7 +168,7 @@ export default function TutorialUpload() {
     const id = addTutorial({
       source_kind: videoUri ? 'uploaded_video' : 'manual_note',
       source_uri: videoUri,
-      title: t,
+      title: trimmedTitle,
       instructor: outcome.instructor ?? (instructor.trim() || null),
       target_clubs: mergedClubs,
       player_notes: notes.trim() || null,

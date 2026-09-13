@@ -322,9 +322,13 @@ export default function TempoTrainerScreen() {
 
       <View style={styles.body}>
         <Text style={[styles.sub, { color: colors.text_muted }]}>
-          Swing to the beat — <Text style={{ color: colors.text_primary, fontWeight: '800' }}>tick</Text> takeaway,
-          {' '}<Text style={{ color: colors.text_primary, fontWeight: '800' }}>tick</Text> {mode === 'short' ? 'hinge' : 'top'},
-          {' '}<Text style={{ color: colors.accent, fontWeight: '800' }}>tock</Text> strike. Target tempo {ratio}:1.
+          {t('swinglab_tempo_trainer.beat.swing_to_the_beat')}
+          <Text style={{ color: colors.text_primary, fontWeight: '800' }}>{t('swinglab_tempo_trainer.beat.tick')}</Text>
+          {t('swinglab_tempo_trainer.beat.takeaway')}
+          <Text style={{ color: colors.text_primary, fontWeight: '800' }}>{t('swinglab_tempo_trainer.beat.tick')}</Text>
+          {mode === 'short' ? t('swinglab_tempo_trainer.beat.hinge') : t('swinglab_tempo_trainer.beat.top')}
+          <Text style={{ color: colors.accent, fontWeight: '800' }}>{t('swinglab_tempo_trainer.beat.tock')}</Text>
+          {t('swinglab_tempo_trainer.beat.strike_target_tempo', { ratio })}
         </Text>
 
         {/* Ratio readout + pulse ring */}
