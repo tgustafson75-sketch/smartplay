@@ -39,12 +39,29 @@ import * as path from 'path';
 const ROOT = path.resolve(__dirname, '../../');
 
 /** Directories whose exports must be connected. `app/` is excluded: expo-router consumes route files
- *  by filesystem convention, not by import, so every screen would read as orphaned. */
-const SCAN_DIRS = ['services', 'lib', 'utils', 'hooks', 'store', 'contexts', 'components'];
+ *  by filesystem convention, not by import, so every screen would read as orphaned.
+ *
+ *  2026-09-13 (release audit) — `constants/` and `data/` ADDED. They were in CORPUS_DIRS (they are
+ *  real consumers) but never SCANNED, so an unwired export in either was invisible to this guard
+ *  forever. Two of the eight it found were a real defect of exactly the shape this file exists to
+ *  catch: `ANALYSIS_PROMPT_PLAIN_MIN_HCP` and `ANALYSIS_PROMPT_TECHNICAL_MAX_HCP` were centralized
+ *  out of api/swing-analysis's prompt and the prompt kept its own literal 20 and 10 — a threshold
+ *  with two owners, one of them unfindable by searching for the number. A third,
+ *  `LEGAL_EFFECTIVE_DATE`, was wrong by construction (the Terms and the Privacy Policy have different
+ *  effective dates, so one constant could not serve both) and was deleted. A blind spot in a guard is
+ *  not smaller than the bug it misses. */
+const SCAN_DIRS = ['services', 'lib', 'utils', 'hooks', 'store', 'contexts', 'components', 'constants', 'data'];
 
 /** Everything that could legitimately name a symbol. Wider than SCAN_DIRS on purpose — `api/` and
- *  `data/` and `scripts/` are real consumers, and leaving one out invents orphans. */
-const CORPUS_DIRS = ['app', 'components', 'lib', 'services', 'hooks', 'utils', 'store', 'contexts', 'api', 'scripts', 'data'];
+ *  `data/` and `scripts/` are real consumers, and leaving one out invents orphans.
+ *
+ *  MUST BE A SUPERSET OF SCAN_DIRS, and the assertion below enforces it. The scan loop does
+ *  `const entry = corpus.get(f); if (!entry) continue;` — so a directory added to SCAN_DIRS but not
+ *  here is walked, found to have no corpus entry, and SILENTLY SKIPPED. That happened on 2026-09-13
+ *  within minutes of adding `constants/`: the guard reported four new orphans from `data/` and none
+ *  from `constants/`, and looked like it had simply found nothing there. A guard that goes quiet when
+ *  you extend it is worse than one that refuses to. */
+const CORPUS_DIRS = ['app', 'components', 'lib', 'services', 'hooks', 'utils', 'store', 'contexts', 'api', 'scripts', 'data', 'constants'];
 
 /**
  * THIS FILE MUST NOT BE PART OF ITS OWN CORPUS.
@@ -60,6 +77,22 @@ const CORPUS_DIRS = ['app', 'components', 'lib', 'services', 'hooks', 'utils', '
  * here too, or it will silently switch the guard off again.
  */
 const SELF = 'scripts/simulations/orphanExports.ts';
+
+/**
+ * A scanned directory that is not in the corpus is scanned into a void (see CORPUS_DIRS). Throwing is
+ * right rather than logging: this file runs inside the sim, and a misconfiguration that makes the
+ * guard weaker must stop the run, not colour one line green.
+ */
+{
+  const missing = SCAN_DIRS.filter((d) => !CORPUS_DIRS.includes(d));
+  if (missing.length > 0) {
+    throw new Error(
+      `orphanExports misconfigured: SCAN_DIRS not in CORPUS_DIRS (${missing.join(', ')}) — `
+      + 'those directories would be walked and silently skipped, so the guard would report nothing '
+      + 'from them and look healthy.',
+    );
+  }
+}
 
 /**
  * Naming conventions that mark a deliberate seam rather than a half-build. Narrow on purpose — each
@@ -164,6 +197,37 @@ export function findOrphanExports(): string[] {
  * you still remember what it was for — which is the entire point of this file.
  */
 export const ORPHAN_BASELINE: Record<string, string> = {
+  // ── 2026-09-13: the constants/ + data/ blind spot, opened and triaged ─────────
+  'constants/handicapTiers.ts :: DEFAULT_TIER':
+    'TEST SURFACE, and the test is the point — DEFAULT_TIER is a second owner of "the default skill ' +
+    'tier", asserted as \'mid\' beside a deriveTier() that COMPUTES it from DEFAULT_HANDICAP. They ' +
+    'agree only because 18 lands in the mid band; change DEFAULT_HANDICAP to 22 and the constant and ' +
+    'the function disagree forever. the-default-tier-cannot-disagree-with-itself.test.ts pins ' +
+    'deriveTier(null) === DEFAULT_TIER, which makes the redundancy safe instead of latent. Do not ' +
+    'delete it to silence this line.',
+  'constants/handicapTiers.ts :: TIER_LABEL':
+    'WIRE — a HandicapTier → display-label map ("Mid handicap"), built when the canonical tier bands ' +
+    'landed and never put on a screen. The labels themselves are live (TIER_BANDS.*.label is what it ' +
+    'reads), so this is the DISPLAY affordance that is missing, not the data. Where it belongs is a ' +
+    'profile or stats surface that currently prints a bare handicap number. Not urgent, not dead, and ' +
+    'not to be deleted — deriveTier and TIER_BANDS beside it are both fully wired.',
+  'data/rulesReference.ts :: rulesByCategory':
+    'DUPE — a one-line filter over RULES_REFERENCE. The rules capability is fully wired in BOTH halves ' +
+    'the lens asks about: app/reference.tsx is the screen and services/intents/rulesQueryHandler is the ' +
+    'conversation, and each does its own narrowing (searchRules / findRelevantRules). A category filter ' +
+    'nothing asks for is a third accessor to the same array. Delete candidate.',
+  'data/rulesReference.ts :: getRuleById':
+    'TEST SURFACE — the-round-he-walked-out-of.test.ts resolves a rule id through it to prove the id ' +
+    'the handler cites is real rather than restating the rule text in the test. A public accessor by ' +
+    'id is also the right shape for a deep link into app/reference.tsx, which is why it stays exported.',
+  'data/courses.ts :: getHole':
+    'TRIAGE — a per-hole accessor on the bundled course data. Callers read holes through the course ' +
+    'record or the geometry service instead. Needs a look at whether those paths all agree about which ' +
+    'hole shape is authoritative before this is called dead; that is a bigger question than one export.',
+  'data/localCourseImages.ts :: getDefaultPreviewImage':
+    'TRIAGE — a fallback preview image for a course with no bundled art. Whether the app currently ' +
+    'renders SOMETHING in that case, or an empty box, is a real question about the course list and is ' +
+    'not answerable from this file. Do not delete before checking the empty state.',
   'services/checklistAutoTick.ts :: CHECKLIST_EVENT_MAP':
     'TEST SURFACE, deliberately — the map IS the production data (noteChecklistEvent reads it in the ' +
     'same module), and it is exported only so the guard can assert every item id it claims to prove ' +

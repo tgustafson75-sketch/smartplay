@@ -45,7 +45,15 @@
  * accepted. The date is now honest about when the text changed; whether existing users should be
  * asked again is a product/legal call, not something this line does.
  */
-export const LEGAL_EFFECTIVE_DATE = 'August 30, 2026';
+/**
+ * 2026-09-13 (release audit) — LEGAL_EFFECTIVE_DATE was deleted, not wired.
+ *
+ * It had no readers, and it could not correctly have any: the Terms are effective August 30 2026 and
+ * the Privacy Policy September 3 2026, so one shared constant is wrong for one of them by
+ * construction. Each document carries its own date inline, which is where a reader looks anyway.
+ * This is the rare case where "no callers" really does mean redundant rather than unconnected — and
+ * the evidence is that the two facts it tried to be one of are different facts.
+ */
 
 export const TERMS_OF_SERVICE = `# SmartPlay Caddie Terms of Service
 

@@ -8,7 +8,7 @@ import * as Sentry from '@sentry/react-native';
 import { SmartVisionProvider } from '../contexts/SmartVisionContext';
 import { KevinPresenceProvider } from '../contexts/KevinPresenceContext';
 import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
-import { usePlayerProfileStore, isOwnerEmail, OWNER_EMAILS } from '../store/playerProfileStore';
+import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
 import { useOnboardingTourStore } from '../store/onboardingTourStore';
 import { useCustomCaddieMediaStore } from '../store/customCaddieMediaStore';
 import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
@@ -632,18 +632,31 @@ function AppNavigator() {
       // build (env var EXPO_PUBLIC_OWNER_EMAIL only lives in .env.local,
       // not in the preview eas.json profile).
       //
-      // Mirror order: explicit env var > single-entry OWNER_EMAILS default.
-      // The single-entry default catches the single-tester beta case so
-      // owner mode works without env or build-config hassle. When the
-      // allowlist grows past one entry, the auto-set stops and email must
-      // be set explicitly via setEmail (login / Settings text input).
+      /**
+       * 2026-09-13 (release audit) — THE SINGLE-ENTRY FALLBACK WAS A LANDMINE, AND IT IS GONE.
+       *
+       * It used to read:
+       *
+       *     if (envOwner) setEmail(envOwner);
+       *     else if (OWNER_EMAILS.length === 1) setEmail(OWNER_EMAILS[0]);
+       *
+       * a beta convenience so owner mode worked on a preview build without env hassle, disarmed only
+       * by the accident that the allowlist currently holds FOUR entries. Trim it back to one — which
+       * the old comment explicitly contemplated, and which is the natural thing to do after launch
+       * when the App Review and support accounts come out — and EVERY NEW INSTALL silently becomes
+       * the owner: Owner Tools on every player's Settings screen, Tim's email written into their
+       * profile, and `planTrialLifecycle` reading isOwner → grantLifetime, so every player gets
+       * lifetime access and billing never engages. A one-line edit to an unrelated list, months from
+       * now, with no test in the way.
+       *
+       * Owner is now ONLY ever claimed by an explicit signal: the build's own env var, or an email
+       * the player typed. The convenience it existed for is handled where it belongs — eas.json sets
+       * EXPO_PUBLIC_OWNER_EMAIL on the development and preview profiles and deliberately not on
+       * production. [[a-default-that-grants-privilege-is-not-a-default]]
+       */
       if (!profile.email) {
         const envOwner = (process.env.EXPO_PUBLIC_OWNER_EMAIL ?? '').trim();
-        if (envOwner.length > 0) {
-          profile.setEmail(envOwner);
-        } else if (OWNER_EMAILS.length === 1) {
-          profile.setEmail(OWNER_EMAILS[0]);
-        }
+        if (envOwner.length > 0) profile.setEmail(envOwner);
       }
 
       /**
@@ -665,9 +678,10 @@ function AppNavigator() {
        * The stale read predates today's work and was harmless while the kill-switch granted lifetime
        * to everyone regardless. It stops being harmless the moment billing turns on: on the first
        * launch after an install, the mirror and the owner check happen in the same tick, so an owner
-       * whose email came from the OWNER_EMAILS default rather than the env var would be handed a
+       * whose email came from the owner mirror rather than a persisted profile would be handed a
        * TRIAL instead of lifetime. It self-heals on the next launch, which is exactly what would
-       * have made it hard to believe as a bug report.
+       * have made it hard to believe as a bug report. (The mirror now only ever reads the build's env
+       * var — see the note above on why the single-entry allowlist fallback was removed.)
        */
       const ownerEmail = usePlayerProfileStore.getState().email;
       const plan = planTrialLifecycle({

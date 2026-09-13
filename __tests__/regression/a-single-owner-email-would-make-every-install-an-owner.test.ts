@@ -1,6 +1,22 @@
 /**
  * 2026-09-04 (launch) — THE LENGTH-1 BRANCH IS A REVENUE LANDMINE.
  *
+ * ─── 2026-09-13 (release audit): THE BRANCH IS GONE. ────────────────────────────────────────────
+ *
+ * This test was right, and the mitigation it could reach from a test file — "OWNER_EMAILS never has
+ * exactly one entry" — was the wrong place to hold the line. It asked a list of email addresses to
+ * stay long enough to keep a privilege check safe, and pinned the dangerous branch in place so the
+ * guard above would keep meaning something. Both halves were honest and both were load-bearing on a
+ * coincidence.
+ *
+ * The branch itself is now deleted. Owner is claimed ONLY by an explicit signal: the build's own
+ * EXPO_PUBLIC_OWNER_EMAIL, or an email the player typed. The convenience it existed for moved to
+ * where it belongs — eas.json sets that env var on the development and preview profiles and
+ * deliberately not on any release profile, asserted at the bottom of this file.
+ *
+ * The length assertion stays as defence in depth (it costs nothing and is still true), but it is no
+ * longer what makes the app safe. [[a-default-that-grants-privilege-is-not-a-default]]
+ *
  * app/_layout.tsx boots with an owner-email auto-mirror:
  *
  *     if (!profile.email) {
@@ -33,6 +49,10 @@ import path from 'path';
 import { OWNER_EMAILS, isOwnerEmail } from '../../store/playerProfileStore';
 
 const root = path.join(__dirname, '..', '..');
+const stripped = (rel: string) =>
+  fs.readFileSync(path.join(root, rel), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
 
 describe('a blank-email install can never be auto-stamped as the owner', () => {
   it('OWNER_EMAILS never has exactly one entry', () => {
@@ -41,12 +61,19 @@ describe('a blank-email install can never be auto-stamped as the owner', () => {
     expect(OWNER_EMAILS.length).not.toBe(1);
   });
 
-  it('the dangerous branch is still gated on that exact length — if this changes, re-read the guard', () => {
-    // Pinning the shape means a refactor that drops the length check fails here rather than
-    // silently making the guard above meaningless.
-    const layout = fs.readFileSync(path.join(root, 'app', '_layout.tsx'), 'utf8');
-    const stripped = layout.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-    expect(stripped).toMatch(/OWNER_EMAILS\.length\s*===\s*1/);
+  it('the dangerous branch does not exist any more — the list length is no longer load-bearing', () => {
+    const layout = stripped('app/_layout.tsx');
+    expect(layout).not.toMatch(/OWNER_EMAILS\.length\s*===\s*1/);
+    expect(layout).not.toMatch(/setEmail\(OWNER_EMAILS\[0\]\)/);
+    // the allowlist must not be consulted AT ALL when deciding what to stamp on a blank profile
+    expect(layout).not.toMatch(/OWNER_EMAILS/);
+  });
+
+  it('the only auto-stamp path is the build\'s own env var, with no else after it', () => {
+    const layout = stripped('app/_layout.tsx');
+    expect(layout).toMatch(/const envOwner = \(process\.env\.EXPO_PUBLIC_OWNER_EMAIL \?\? ''\)\.trim\(\);/);
+    expect(layout).toMatch(/if \(envOwner\.length > 0\) profile\.setEmail\(envOwner\);/);
+    expect(layout).not.toMatch(/if \(envOwner\.length > 0\) profile\.setEmail\(envOwner\);\s*else/);
   });
 
   it('the review sign-in addresses are present — Play declares them, so removing them is a doc change too', () => {
@@ -56,8 +83,41 @@ describe('a blank-email install can never be auto-stamped as the owner', () => {
     expect(OWNER_EMAILS).toContain('tim@smartplaycaddie.com');
   });
 
-  it('a fresh install email is not an owner', () => {
-    expect(isOwnerEmail('')).toBe(false);
-    expect(isOwnerEmail('someone@example.com')).toBe(false);
+  it('a fresh install email is not an owner, including near-misses', () => {
+    for (const e of ['', '   ', null, undefined, 'someone@example.com', `${OWNER_EMAILS[0]}.evil.com`]) {
+      expect(isOwnerEmail(e as string)).toBe(false);
+    }
+  });
+
+  it('a listed email still IS an owner, case- and space-insensitively', () => {
+    expect(isOwnerEmail(OWNER_EMAILS[0])).toBe(true);
+    expect(isOwnerEmail(`  ${OWNER_EMAILS[0].toUpperCase()} `)).toBe(true);
+  });
+});
+
+/**
+ * 2026-09-13 — where the beta convenience went. This is the half that replaces the deleted branch:
+ * owner mode on the builds Tim tests, and on no build a player can install.
+ */
+describe('owner mode is a build-profile decision, not a runtime default', () => {
+  const eas = JSON.parse(fs.readFileSync(path.join(root, 'eas.json'), 'utf8')) as {
+    build: Record<string, { env?: Record<string, string> }>;
+  };
+
+  it('development and preview builds carry an owner email', () => {
+    for (const p of ['development', 'preview']) {
+      expect(eas.build[p]?.env?.EXPO_PUBLIC_OWNER_EMAIL).toBeTruthy();
+    }
+  });
+
+  it('NO release profile does — this is the whole point', () => {
+    for (const p of ['production', 'production-apk', 'glasses']) {
+      expect(eas.build[p]?.env?.EXPO_PUBLIC_OWNER_EMAIL).toBeUndefined();
+    }
+  });
+
+  it('every build profile is accounted for, so a new one cannot quietly ship owner mode', () => {
+    const reviewed = new Set(['development', 'preview', 'production', 'production-apk', 'glasses']);
+    expect(Object.keys(eas.build).filter((p) => !reviewed.has(p))).toEqual([]);
   });
 });

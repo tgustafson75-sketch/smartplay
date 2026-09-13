@@ -7,6 +7,15 @@ import { allowInference } from './_inferLimit';
 import { GoogleGenAI, Type } from '@google/genai';
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
+/**
+ * 2026-09-13 (release audit) — the two register thresholds below were centralized into
+ * constants/handicapTiers on the day that file was written, with its own note saying "Centralized for
+ * B2 when the analysis register work touches the prompt". B2 never touched it, so the constants sat
+ * with zero readers while THIS prompt kept its own literal 20 and 10 — a threshold with two owners,
+ * one of them invisible to every search for the number. Same values, so nothing changes today; the
+ * point is that changing them tomorrow now changes the behaviour. [[two-owners-is-the-root-cause]]
+ */
+import { ANALYSIS_PROMPT_PLAIN_MIN_HCP, ANALYSIS_PROMPT_TECHNICAL_MAX_HCP } from '../constants/handicapTiers';
 
 const gemini = process.env.GOOGLE_API_KEY
   ? new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY })
@@ -525,7 +534,7 @@ Rules:
 - The observation field is the single sentence the user will hear ("Your hips are moving toward the ball through impact"). Specific, factual, no jargon.
 - fault_frame_index: when detected_issue is anything other than 'none', return the integer index of the frame that most clearly shows the tendency. When detected_issue is 'none', return -1.
 - Voice / cadence: when a caddie name is provided in the user context, write the observation in that caddie's voice. Kevin = neutral conversational technical ("Your weight is still on your back foot at impact"). Serena = precise instructor ("At impact your weight has not transferred forward — about 60 percent still on the trail side"). Harry = warm encouraging ("I can see you're hanging back a bit at impact — that's a common one"). Default (no caddie_name) = neutral technical.
-- Personalization: when player_context is provided, tailor the read. Higher handicap (≥20) — favor plain language, biggest single fault; do NOT pile on. Lower handicap (≤10) — get technical, name secondary tendencies. When dominant_miss is named (e.g. "slice"), bias your priority toward the fault most consistent with that miss pattern. When experience signals beginner, skip jargon. Default (no player_context) = neutral technical.
+- Personalization: when player_context is provided, tailor the read. Higher handicap (≥${ANALYSIS_PROMPT_PLAIN_MIN_HCP}) — favor plain language, biggest single fault; do NOT pile on. Lower handicap (≤${ANALYSIS_PROMPT_TECHNICAL_MAX_HCP}) — get technical, name secondary tendencies. When dominant_miss is named (e.g. "slice"), bias your priority toward the fault most consistent with that miss pattern. When experience signals beginner, skip jargon. Default (no player_context) = neutral technical.
 - Output ONLY valid JSON. No code fences, no preamble.`;
 
 /**
