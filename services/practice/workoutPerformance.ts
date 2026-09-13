@@ -41,6 +41,24 @@ export interface WorkoutPerformance {
   /** Enough on BOTH sides to say anything honest. */
   hasEnough: boolean;
   headline: string;
+  /**
+   * 2026-09-12 — the measured DIRECTION of each line, exported rather than left inside the headline
+   * switch. `headline` is UI copy addressed to the player ("Your training volume is up…"); the caddie
+   * needs the FACTS so he can say it in his own voice instead of reading the card back. Both now read
+   * one computation, so the chart and the caddie cannot disagree about which way the lines go. Null
+   * until `hasEnough`. Same shape and same reasoning as practiceImpact.connection.
+   * [[two-owners-is-the-root-cause]]
+   */
+  connection: {
+    trainingEarly: number;
+    trainingLate: number;
+    trainingUp: boolean;
+    /** Mean score-vs-par, earlier half of the counted rounds vs later. Lower is better. */
+    scoreEarlyAvg: number;
+    scoreLateAvg: number;
+    scoreImproving: boolean;
+    scoreWorse: boolean;
+  } | null;
 }
 
 // 2026-09-11 — WEEKS / ROUNDS / WEEK_MS were declared identically in three files. One owner now,
@@ -91,18 +109,31 @@ export function computeWorkoutPerformance(input: WorkoutPerformanceInput): Worko
   const roundsCounted = scoreSeries.length;
   const hasEnough = totalWorkouts >= MIN_WORKOUTS && roundsCounted >= MIN_ROUNDS;
 
-  let headline: string;
-  if (!hasEnough) {
-    headline = 'Import your SmartPump golf workouts and log a few rounds — once there\'s enough, I\'ll show whether your training tracks your scoring.';
-  } else {
+  // Direction of each side, computed ONCE. The headline below and the caddie's context block in
+  // services/caddieRequestBody both read this.
+  let connection: WorkoutPerformance['connection'] = null;
+  if (hasEnough) {
     const firstHalf = workoutSeries.slice(0, Math.ceil(WEEKS / 2)).reduce((a, b) => a + b, 0);
     const lastHalf = workoutSeries.slice(Math.ceil(WEEKS / 2)).reduce((a, b) => a + b, 0);
-    const trainingUp = lastHalf > firstHalf;
     const half = Math.ceil(scoreSeries.length / 2);
     const earlyAvg = scoreSeries.slice(0, half).reduce((a, b) => a + b, 0) / half;
     const lateAvg = scoreSeries.slice(half).reduce((a, b) => a + b, 0) / (scoreSeries.length - half);
-    const scoreImproving = lateAvg < earlyAvg - 0.5; // lower vs-par = better
-    const scoreWorse = lateAvg > earlyAvg + 0.5;
+    connection = {
+      trainingEarly: firstHalf,
+      trainingLate: lastHalf,
+      trainingUp: lastHalf > firstHalf,
+      scoreEarlyAvg: Math.round(earlyAvg * 10) / 10,
+      scoreLateAvg: Math.round(lateAvg * 10) / 10,
+      scoreImproving: lateAvg < earlyAvg - 0.5, // lower vs-par = better
+      scoreWorse: lateAvg > earlyAvg + 0.5,
+    };
+  }
+
+  let headline: string;
+  if (!connection) {
+    headline = 'Import your SmartPump golf workouts and log a few rounds — once there\'s enough, I\'ll show whether your training tracks your scoring.';
+  } else {
+    const { trainingUp, scoreImproving, scoreWorse } = connection;
 
     if (trainingUp && scoreImproving) headline = 'Your training volume is up and your scores are trending down — the work off the course is showing up on it.';
     else if (trainingUp && scoreWorse) headline = 'Training volume is up but scores ticked the wrong way — give the strength gains time to transfer to the swing.';
@@ -111,5 +142,5 @@ export function computeWorkoutPerformance(input: WorkoutPerformanceInput): Worko
     else headline = 'Steady stretch — a bump in golf-specific training tends to move the scoring line over time.';
   }
 
-  return { workoutSeries, scoreSeries, scoreWeekly, metric, totalWorkouts, totalMinutes, minutesEstimated, roundsCounted, hasEnough, headline };
+  return { workoutSeries, scoreSeries, scoreWeekly, metric, totalWorkouts, totalMinutes, minutesEstimated, roundsCounted, hasEnough, headline, connection };
 }

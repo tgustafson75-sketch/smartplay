@@ -1145,6 +1145,60 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
         + `${pct(m.negShareLate)} more recently). Use this to MEET him, not to tell him about himself.`;
     }, null),
 
+    /**
+     * 2026-09-12 — THE FOURTH COACH HAD NO EVIDENCE EITHER.
+     *
+     * The day-one concept is four vantage points: caddie, swing coach, mental coach, and the
+     * training/fitness side. Three of them can now be asked something — the course read against his
+     * game, the measured swing behind a feel, the emotional pattern, the practice→score crossing. The
+     * TRAINING leg could not: `practice/workoutPerformance` has paired his logged workouts against
+     * his scoring for weeks with `app/(tabs)/dashboard.tsx` as its only importer. Drawn, correct,
+     * unaskable — the same shape as every other finding in this sweep.
+     * [[sweep-the-missing-half-not-the-unused-export]]
+     *
+     * It exports `connection` now, so the direction is computed ONCE and the chart and the caddie
+     * cannot disagree about which way the lines go. `headline` stays where it belongs, on the card:
+     * it is copy addressed to the player, and handing it over makes the caddie read the card back.
+     *
+     * CARRIED, DELIBERATELY: `workoutSwingImpact` (does the gym work show up in his STRIKE) is the
+     * other half of this question and is NOT here. Its input mapping — per-shot contact grading plus
+     * the self-only filter for Family/Coach mode — lives inline in the dashboard, so wiring it from
+     * here tonight would have meant a second copy of "which swings count and which are graded", which
+     * is the exact defect this sweep keeps fixing. It wants the `selfSwingReads` treatment first:
+     * extract the mapping, then both read it. Doing it wrong would be worse than not doing it.
+     *
+     * COST — completed rounds and logged workouts only, so it cannot move during a round and rides
+     * the CACHED prompt, same side and same argument as practiceImpactBlock above.
+     */
+    trainingImpactBlock: safe(() => {
+      const { computeWorkoutPerformance } = require('./practice/workoutPerformance') as typeof import('./practice/workoutPerformance');
+      const { useWorkoutStore } = require('../store/workoutStore') as typeof import('../store/workoutStore');
+
+      // Mapped exactly as the dashboard maps it, so both cards describe the same six weeks.
+      const workouts = (useWorkoutStore.getState().history ?? [])
+        .map((w: { date: number; durationMin: number | null }) => ({ date: w.date, durationMin: w.durationMin }));
+      const rounds = (r.roundHistory ?? [])
+        .filter((h: { simulated?: boolean; scoreVsPar?: number | null }) => !h.simulated && h.scoreVsPar != null)
+        .map((h: { endedAt: number; scoreVsPar: number }) => ({ endedAt: h.endedAt, scoreVsPar: h.scoreVsPar }));
+
+      const perf = computeWorkoutPerformance({ workouts, rounds, nowMs: Date.now() });
+      const c = perf.connection;
+      if (!c) return null;
+
+      const dir = c.trainingUp ? 'UP' : 'down or flat';
+      const scoring = c.scoreImproving ? 'IMPROVING' : c.scoreWorse ? 'getting worse' : 'holding steady';
+      const vs = (n: number) => `${n > 0 ? '+' : ''}${n}`;
+      return 'THEIR TRAINING-TO-SCORING CONNECTION over the last 6 weeks, measured from their own '
+        + 'logged workouts and completed rounds (association, not cause — say it as an observation, '
+        + 'never as a promise, and never read the numbers out as a list): training volume '
+        + `${c.trainingEarly} → ${c.trainingLate} ${perf.metric} — ${dir}. `
+        + `Scoring over the same stretch went ${vs(c.scoreEarlyAvg)} to ${vs(c.scoreLateAvg)} vs par — ${scoring}. `
+        + 'Lower vs par is better. Strength work reaches the STRIKE before it reaches the score, so '
+        + 'training up with scoring flat is not a failure — it is usually a course-management or '
+        + 'putting conversation rather than a gym one. If they ask whether their training is worth it, '
+        + 'answer from THIS, not from a general opinion about fitness.';
+    }, null),
+
     /** The stated weekly plan — goals, challenges, open reminders. Empty until they engage it. */
     practicePlanBlock: safe(() => {
       const pp = require('../store/practicePlanStore') as typeof import('../store/practicePlanStore');

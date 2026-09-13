@@ -12430,7 +12430,7 @@ check('RATCHET: nothing new may be interpolated into the cached system prompt',
       '_conversationTurns', 'voicedDistress', 'liveFactsBlock', 'bagBlock', '_personaKBBlock', 'kbAddendum'];
     if (DENY.some((d) => names.has(d))) return false;
 
-    // Frozen 2026-08-25 at 57; 59 since 2026-09-12; 60 with _mentalPattern. Shrinking is always
+    // Frozen 2026-08-25 at 57; 59 since 2026-09-12; 60 with _mentalPattern; 61 with _trainingImpact. Shrinking is always
     // fine; growing needs a deliberate line here.
     const ALLOWED = new Set(['Array', 'TRANSLATION_OVERRIDE', '_cecilyMode', '_coachKnowledgeContext',
       '_courseContext', '_courseIntelligence', '_dominantMiss', '_ghinNumber', '_ghostContext', '_goal',
@@ -12472,6 +12472,13 @@ check('RATCHET: nothing new may be interpolated into the cached system prompt',
        * that cannot have changed.
        */
       '_mentalPattern',
+      /**
+       * 2026-09-12 — _trainingImpact, added deliberately per the note above and cached for the same
+       * reason as _practiceImpact: it reads LOGGED WORKOUTS and COMPLETED rounds, neither of which
+       * can change mid-shot. A gym session on Tuesday and a round that ended last week are not round
+       * state.
+       */
+      '_trainingImpact',
       'experienceDepthRule', 'firstName',
       'handednessRule', 'insightLines', 'isRoundActive', 'is_proactive', 'langRule', 'mentalGameBlock',
       'modeLabel', 'personaIntensity', 'perspectiveBlock', 'pi', 'playerAddressRule', 'r', 'registerBlock',

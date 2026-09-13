@@ -44,6 +44,19 @@ export interface WorkoutSwingImpact {
   /** Enough on BOTH sides, in the SAME weeks, to say anything honest. */
   hasEnough: boolean;
   headline: string;
+  /**
+   * 2026-09-12 — the measured direction, exported so the caddie reads the same computation the chart
+   * does rather than parroting `headline`, which is UI copy written at the player. Null until
+   * `hasEnough`. [[two-owners-is-the-root-cause]]
+   */
+  connection: {
+    trainingUp: boolean;
+    /** Mean strike rate 0-100 over weeks that actually carry one, early half vs late. */
+    strikeEarlyAvg: number | null;
+    strikeLateAvg: number | null;
+    /** Late minus early, rounded. Null when either half had no graded week. */
+    strikeDelta: number | null;
+  } | null;
 }
 
 const WEEKS = 6;
@@ -112,6 +125,7 @@ export function computeWorkoutSwingImpact(input: WorkoutSwingImpactInput): Worko
     totalGradedSwings >= MIN_GRADED_SWINGS &&
     weeksWithBoth >= MIN_WEEKS_WITH_BOTH;
 
+  let connection: WorkoutSwingImpact['connection'] = null;
   let headline: string;
   if (!hasEnough) {
     const needW = Math.max(0, MIN_WORKOUTS - totalWorkouts);
@@ -141,6 +155,13 @@ export function computeWorkoutSwingImpact(input: WorkoutSwingImpactInput): Worko
     const earlyAvg = avg(early);
     const lateAvg = avg(late);
     const delta = earlyAvg != null && lateAvg != null ? Math.round(lateAvg - earlyAvg) : null;
+    // Exported so the caddie reads this computation rather than the sentence built from it.
+    connection = {
+      trainingUp,
+      strikeEarlyAvg: earlyAvg == null ? null : Math.round(earlyAvg),
+      strikeLateAvg: lateAvg == null ? null : Math.round(lateAvg),
+      strikeDelta: delta,
+    };
 
     if (delta == null) {
       headline = 'Not enough striking weeks on both sides of the window to compare yet.';
@@ -167,5 +188,6 @@ export function computeWorkoutSwingImpact(input: WorkoutSwingImpactInput): Worko
     weeksWithBoth,
     hasEnough,
     headline,
+    connection,
   };
 }

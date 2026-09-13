@@ -581,6 +581,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
        * side as the three above; see services/caddieRequestBody.
        */
       mentalPatternBlock = null,
+      /**
+       * 2026-09-12 — the fourth coach's evidence: whether his logged TRAINING tracks his scoring.
+       * Same cache side as the three above; see services/caddieRequestBody.
+       */
+      trainingImpactBlock = null,
     } = body;
 
     const cap = (v: unknown, max: number): string =>
@@ -640,6 +645,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const _practiceImpact: string | null = capOrNull(practiceImpactBlock, 700);
     const _measuredSwing: string | null = capOrNull(measuredSwingBlock, 900);
     const _mentalPattern: string | null = capOrNull(mentalPatternBlock, 700);
+    const _trainingImpact: string | null = capOrNull(trainingImpactBlock, 700);
     // 2026-05-23 — Persona Knowledge Layer. When the user message matches a KB entry
     // above the score threshold, inject the top entries as a teaching-wisdom block so
     // the brain riffs off vetted coaching rather than freestyling. Resolves to null
@@ -1805,6 +1811,7 @@ ${_routineImpact ? `\n${_routineImpact}` : ''}
 ${_practiceImpact ? `\n${_practiceImpact}` : ''}
 ${_measuredSwing ? `\n${_measuredSwing}` : ''}
 ${_mentalPattern ? `\n${_mentalPattern}` : ''}
+${_trainingImpact ? `\n${_trainingImpact}` : ''}
 ${_unifiedContextBlock ? `\n${_unifiedContextBlock}` : ''}
 
 ${Array.isArray(playerVocabulary) && playerVocabulary.length > 0 ? `PHRASES THIS PLAYER USES (private; mirror their vocabulary, do not list these out loud):\n${(playerVocabulary as unknown[]).filter(p => typeof p === 'string').slice(0, 20).join(', ')}` : ''}

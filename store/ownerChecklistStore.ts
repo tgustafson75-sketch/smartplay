@@ -57,6 +57,19 @@ export const GROUP_LABEL: Record<ChecklistGroup, string> = {
  */
 const SEED: Omit<ChecklistItem, 'done' | 'doneAt'>[] = [
   {
+    /**
+     * 2026-09-12 — the four coaches got their evidence this sweep, and every one of those blocks is
+     * SILENT until there is enough to be honest. That is correct behaviour and it is also how a
+     * working feature looks broken: ask the caddie about your practice with two rounds logged and he
+     * says nothing, which reads as "it did not ship". The thresholds are stated here so the first
+     * test does not produce a false negative.
+     */
+    id: 'four-coaches-can-speak',
+    group: 'field',
+    title: 'Check the four coaches can actually answer',
+    detail: 'Ask Kevin: "is my practice showing up in my scores", "it feels like I am coming over the top", "is my training worth it", and something about how a round felt. Each answers from measured data — but only once there is enough, and each stays quiet rather than guessing. Needs, inside the last 6 weeks and from REAL (not simulated) rounds: practice→score 3 sessions + 4 rounds · training→score 3 workouts + 4 rounds · measured swing 4 weeks with graded swings · mental pattern 3 rounds carrying reports + 6 logged moments. Silence with less than that is the honesty gate working, not a bug.',
+  },
+  {
     id: 'yardage-on-watch',
     group: 'field',
     title: 'Pin yardage reaches the watch',
