@@ -572,6 +572,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       practiceImpactBlock = null,
       practiceFocusBlock = null,
       /**
+       * 2026-09-13 — HOW HE PUTTS, by how he reached the green. The third leg of the green: yardage is
+       * the resolver's, the read is greenReadStore's, and this is the measured record. Built from
+       * COMPLETED rounds by services/putting/greenHeat, so it is constant for a whole round — the same
+       * cache argument the two blocks above make.
+       */
+      puttingRecordBlock = null,
+      /**
        * 2026-09-12 — the measured swing: per-metric reading, tour-band verdict and direction. The
        * numbers behind a feel. Same cache side as the two above; see services/caddieRequestBody.
        */
@@ -652,6 +659,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
      * the property the RATCHET is protecting. 600 is enough for five days plus the thread line.
      */
     const _practiceFocus: string | null = capOrNull(practiceFocusBlock, 600);
+    // Two distance classes plus an overall line; 500 holds it with room for the caveat sentence.
+    const _puttingRecord: string | null = capOrNull(puttingRecordBlock, 500);
     const _measuredSwing: string | null = capOrNull(measuredSwingBlock, 900);
     const _mentalPattern: string | null = capOrNull(mentalPatternBlock, 700);
     const _trainingImpact: string | null = capOrNull(trainingImpactBlock, 700);
@@ -1818,6 +1827,7 @@ ${_playerHistory ? `\n${_playerHistory}` : ''}
 ${_practicePlan ? `\n${_practicePlan}` : ''}
 ${_routineImpact ? `\n${_routineImpact}` : ''}
 ${_practiceImpact ? `\n${_practiceImpact}` : ''}${_practiceFocus ? `\n${_practiceFocus}` : ''}
+${_puttingRecord ? `\n${_puttingRecord}` : ''}
 ${_measuredSwing ? `\n${_measuredSwing}` : ''}
 ${_mentalPattern ? `\n${_mentalPattern}` : ''}
 ${_trainingImpact ? `\n${_trainingImpact}` : ''}

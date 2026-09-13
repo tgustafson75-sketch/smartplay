@@ -11,21 +11,47 @@
  *
  * Variables in templates use `{name}` syntax — interpolated by dialogEngine
  * from the context object.
+ *
+ * ─── 2026-09-13 (Tim: "the rest is likely not additive and/or noise") ───────────────────────────
+ *
+ * NINE SITUATIONS WERE REMOVED, and every one of them had a LIVE owner that already said the thing,
+ * usually better. The audit that found them first read them as unwired halves; they are not — they
+ * are a second, dormant authoring of shipping copy, which is the defect this codebase names most
+ * often. Wiring them would have created the two-owners split, not closed one.
+ *
+ *   distance_to_pin / _front / _back  services/intents/queryStatusHandler answers green_front /
+ *                                     green_back / green_middle with the RESOLVED yardage
+ *                                     (`${value} to the ${which}.`) — the same sentence, with a real
+ *                                     number behind it instead of a caller-supplied one.
+ *   wind_callout                      the same handler says "12 miles per hour out of the southwest"
+ *                                     AND has a calm-case line. "{speed} {direction}" is thinner.
+ *   plays_like                        the handler factors weather in; the template restated the shape
+ *                                     without the computation.
+ *   no_data_apology                   THE IMPORTANT ONE. The handler's refusals are SPECIFIC — "I
+ *                                     don't have green coordinates for the front of this hole", "I
+ *                                     can't read the wind right now". A generic "I don't have that
+ *                                     yet." is a REGRESSION in honesty: an honesty gate has to say
+ *                                     what it still needs. [[silence-is-not-an-answer]]
+ *   shot_logged_ack                   services/caddieAckLines is the documented single owner of "Got
+ *                                     it." — and offlineVoiceCache pre-renders those lines in the
+ *                                     persona's REAL voice, so speaking a template copy instead would
+ *                                     regress the happy path to robotic device TTS.
+ *   help_intro                        "Here's what you can say." was the pre-brain answer. The
+ *                                     "how do I …?" path now reaches services/knowledgeBase/howTo
+ *                                     through the brain and gives the actual steps.
+ *   lie_analysis_summary_engaged      a leftover of the L4 trust level, collapsed 2026-06-04. L3
+ *                                     inherits the engaged tone via responseMode; nothing can select
+ *                                     this key any more.
+ *
+ * `aggressive_call` was the ONLY one of the twelve that was a genuine missing wire, and it is now
+ * called: app/lie-analysis paired it with `safety_call` and passed only the conservative branch, so
+ * the caddie said nothing at all when the aggressive line was on.
  */
 
 export type CaddieSituation =
   | 'shot_prompt'
-  | 'shot_logged_ack'
-  | 'distance_to_pin'
-  | 'distance_to_front'
-  | 'distance_to_back'
-  | 'wind_callout'
-  | 'plays_like'
-  | 'no_data_apology'
-  | 'help_intro'
   | 'lie_analysis_summary'
   | 'lie_analysis_summary_terse'
-  | 'lie_analysis_summary_engaged'
   | 'club_recommendation'
   | 'safety_call'
   | 'aggressive_call'
@@ -44,50 +70,6 @@ const TEMPLATES: Record<CaddieSituation, string[]> = {
     "How'd it feel?",
   ],
 
-  shot_logged_ack: [
-    "Got it.",
-    "Logged.",
-    "Down for the count.",
-    "Noted.",
-  ],
-
-  distance_to_pin: [
-    "{yards} to the pin.",
-    "{yards} yards in.",
-    "{yards} to the middle.",
-  ],
-
-  distance_to_front: [
-    "{yards} to the front.",
-    "Front edge {yards}.",
-  ],
-
-  distance_to_back: [
-    "{yards} to the back.",
-    "Back edge {yards}.",
-  ],
-
-  wind_callout: [
-    "{speed} {direction}.",
-    "Wind's {direction} at {speed}.",
-  ],
-
-  plays_like: [
-    "{actual} actual, plays like {plays_like}.",
-    "{actual} on the card — plays {plays_like}.",
-  ],
-
-  no_data_apology: [
-    "I don't have that yet.",
-    "Can't pull that one right now.",
-    "No data on that one — yet.",
-  ],
-
-  help_intro: [
-    "Here's what you can say.",
-    "Try one of these.",
-  ],
-
   // Phase H — Lie analysis output. The lieAnalysis surface fills these
   // with the API's situation/advice/club/alternative fields. Engine picks
   // the variation; client interpolates {variables}. Future Tank-character
@@ -102,11 +84,6 @@ const TEMPLATES: Record<CaddieSituation, string[]> = {
   lie_analysis_summary_terse: [
     "{advice}",
     "Here's the play: {advice}",
-  ],
-  lie_analysis_summary_engaged: [
-    "Alright, {situation} Here's what I'd do — {advice}",
-    "Okay, taking a look. {situation} {advice} That's the play.",
-    "Let me walk you through this. {situation} {advice}",
   ],
 
   // Phase O — earbud tap-to-talk opener (Caddie register, in-round).

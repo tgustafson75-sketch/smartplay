@@ -2,7 +2,8 @@
  * 2026-06-25 — GreenHeatCard: Grint-style putting heat map — HONEST v1.
  *
  * Renders ONLY real collected putt data (services/putting/greenHeat.ts via
- * hooks/useGreenHeat). Until enough real putts exist (GREEN_HEAT_MIN_HOLES),
+ * hooks/useGreenHeat). Until enough real putts exist (MIN_PUTT_HOLES — the same floor
+ * services/puttingRead and the hole plan use, unified 2026-09-13),
  * it shows an honest "collecting your putts…" state with a progress count —
  * NEVER a fabricated/illustrative heat map.
  *
@@ -20,7 +21,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useGreenHeat } from '../hooks/useGreenHeat';
 import {
   heatColorForRate,
-  GREEN_HEAT_MIN_HOLES,
+  MIN_PUTT_HOLES,
   type PuttBucketStat,
   type PuttClass,
 } from '../services/putting/greenHeat';
@@ -47,7 +48,7 @@ export function GreenHeatCard({ scope = 'career', style }: GreenHeatCardProps) {
 
   // Progress toward the render threshold (collecting state).
   const progress = useMemo(
-    () => Math.max(0, Math.min(1, model.totalHoles / GREEN_HEAT_MIN_HOLES)),
+    () => Math.max(0, Math.min(1, model.totalHoles / MIN_PUTT_HOLES)),
     [model.totalHoles],
   );
 
@@ -76,7 +77,7 @@ export function GreenHeatCard({ scope = 'career', style }: GreenHeatCardProps) {
             />
           </View>
           <Text style={[styles.progressLabel, { color: c.text_muted }]}>
-            {t('green_heat_card.progress.putt_holes_logged', { logged: model.totalHoles, target: GREEN_HEAT_MIN_HOLES })}
+            {t('green_heat_card.progress.putt_holes_logged', { logged: model.totalHoles, target: MIN_PUTT_HOLES })}
             {model.remaining > 0 ? t('green_heat_card.progress.to_go', { n: model.remaining }) : ''}
           </Text>
         </View>

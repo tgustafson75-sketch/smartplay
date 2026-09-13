@@ -1,6 +1,7 @@
 /**
- * 2026-09-13 (Tim — "Check for any other unaudited surfaces and functions") — EIGHT AUTHORED CADDIE
- * SITUATIONS THAT NOTHING EVER REQUESTS.
+ * 2026-09-13 (Tim — "Check for any other unaudited surfaces and functions", then "we want the Caddie
+ * to say the right thing contextually and situationally… the rest is likely not additive and/or
+ * noise") — TWELVE AUTHORED CADDIE SITUATIONS THAT NOTHING EVER REQUESTED. NOW ZERO.
  *
  * Found by the same sweep that caught the psychologist register: compare a declared string union
  * against the values any code actually produces. `CaddieSituation` declares 18 situations,
@@ -50,26 +51,29 @@ const walk = (dir: string, out: string[] = []): string[] => {
   }
   return out;
 };
+const FILES = [...walk('app'), ...walk('components'), ...walk('services'), ...walk('hooks')];
 
-/** Every situation the union admits, read off the type. */
+const TEMPLATES_FILE = 'constants/dialogTemplates/caddieTemplates.ts';
+
+/** Every situation the union admits, read off the type so it cannot go stale. */
 const DECLARED = (() => {
-  const src = code('constants/dialogTemplates/caddieTemplates.ts');
-  const m = src.match(/export type CaddieSituation\s*=\s*([\s\S]*?);/);
+  const m = code(TEMPLATES_FILE).match(/export type CaddieSituation\s*=\s*([\s\S]*?);/);
   return [...m![1].matchAll(/'([a-z_0-9]+)'/g)].map((x) => x[1]);
 })();
 
 /**
- * Every CaddieSituation any code actually asks for.
+ * Every situation any code actually asks for.
  *
  * Scans the ARGUMENT SPAN rather than matching `getDialog(role, 'x')` positionally: the role argument
- * is sometimes an expression with its own parentheses (`getDialog(roleFor(surface), 'distance_to_pin')`),
- * and a `[^,)]+` pattern silently skipped those calls — which made a first draft of this test report
- * six extra dormant situations that were actually wired. Take every literal inside the call and keep
- * the ones the union admits.
+ * is sometimes an expression with its own parentheses, and a `[^,)]+` pattern silently skipped those
+ * calls. It also accepts a situation passed through a VARIABLE — app/lie-analysis builds
+ * `summaryKey` from the trust level and passes that — because a literal-only scan reported two wired
+ * situations as dormant. Both misses were in the first draft of this test; a scan that under-reports
+ * callers manufactures phantom orphans, and deleting one of those would have broken a live surface.
  */
 const REQUESTED = (() => {
   const out = new Set<string>();
-  for (const f of [...walk('app'), ...walk('components'), ...walk('services'), ...walk('hooks')]) {
+  for (const f of FILES) {
     const src = code(f);
     for (const m of src.matchAll(/getDialog\(/g)) {
       const span = src.slice(m.index! + m[0].length, m.index! + m[0].length + 240).split(';')[0];
@@ -77,60 +81,74 @@ const REQUESTED = (() => {
         if (DECLARED.includes(lit[1])) out.add(lit[1]);
       }
     }
+    // a situation selected into a variable, then handed to getDialog
+    if (/getDialog\(/.test(src)) {
+      for (const lit of src.matchAll(/'([a-z_0-9]+)'/g)) {
+        if (DECLARED.includes(lit[1])) out.add(lit[1]);
+      }
+    }
   }
   return out;
 })();
 
-/**
- * Authored but not yet requested, as of the audit. A name may LEAVE this list (wire it — that is the
- * point) but nothing may join it.
- */
-const DORMANT = [
-  'aggressive_call',
-  'distance_to_back',
-  'distance_to_front',
-  'distance_to_pin',
-  'help_intro',
-  'lie_analysis_summary',
-  'lie_analysis_summary_engaged',
-  'lie_analysis_summary_terse',
-  'no_data_apology',
-  'plays_like',
-  'shot_logged_ack',
-  'wind_callout',
-].sort();
-
-describe('the caddie has lines nobody asks him for', () => {
-  it('the scan reads both sides off the source and finds them', () => {
-    expect(DECLARED.length).toBeGreaterThanOrEqual(18);
-    // Six of eighteen. If this ever reads zero the scan has broken, not the app.
-    expect(REQUESTED.size).toBeGreaterThanOrEqual(6);
+describe('every line the caddie has, he is asked for', () => {
+  it('the scan reads both sides off the source and finds real calls', () => {
+    expect(DECLARED.length).toBeGreaterThanOrEqual(9);
+    expect(REQUESTED.size).toBeGreaterThanOrEqual(9);
     expect([...REQUESTED]).toContain('safety_call');
   });
 
-  it('the dormant set has not GROWN — a new situation must arrive with a caller', () => {
-    const dormantNow = DECLARED.filter((s) => !REQUESTED.has(s)).sort();
-    const added = dormantNow.filter((s) => !DORMANT.includes(s));
-    expect(added).toEqual([]);
+  it('NOTHING is authored without a caller — the dormant set is empty and stays empty', () => {
+    /**
+     * This replaced a pinned debt list. Twelve of eighteen situations were dormant; eleven of those
+     * were a second authoring of copy a live owner already shipped (queryStatusHandler's resolved
+     * yardages, its SPECIFIC refusals, caddieAckLines' "Got it." pre-rendered in the persona's real
+     * voice), and one — lie_analysis_summary_engaged — was a leftover of the L4 trust level collapsed
+     * on 2026-06-04. They were removed rather than wired: wiring them would have created the
+     * two-owners split, and in the no_data_apology case would have made the caddie LESS honest.
+     */
+    const dormant = DECLARED.filter((x) => !REQUESTED.has(x));
+    expect(dormant).toEqual([]);
   });
 
-  it('every situation that IS requested has authored lines', () => {
-    // The opposite failure, and the worse one: a caller naming a situation with no template, which
-    // renders as silence from the caddie rather than as a crash.
-    const templates = code('constants/dialogTemplates/caddieTemplates.ts');
-    const missing = [...REQUESTED].filter((x) => !templates.includes(`'${x}'`) && !templates.includes(`${x}:`));
+  it('every requested situation has authored lines', () => {
+    // The opposite failure, and the worse one: a caller naming a situation with no template renders
+    // as SILENCE from the caddie rather than as a crash.
+    const templates = code(TEMPLATES_FILE);
+    const missing = [...REQUESTED].filter((x) => !new RegExp(`\\b${x}:`).test(templates));
     expect(missing).toEqual([]);
   });
 
-  it('the dormant set is EXACTLY what was measured — it may shrink, never grow', () => {
-    const dormantNow = DECLARED.filter((x) => !REQUESTED.has(x)).sort();
-    expect(dormantNow.filter((x) => !DORMANT.includes(x))).toEqual([]);
-    // shrinking is progress; this records the count so wiring one is visible in the diff
-    expect(dormantNow.length).toBeLessThanOrEqual(DORMANT.length);
+  it('the aggressive call is spoken when the aggressive line is on', () => {
+    /**
+     * The one genuine missing wire of the twelve. app/lie-analysis read
+     * `conservative_call ? safety_call : ''`, so with a required boolean false — the model saying the
+     * line is open — the caddie said NOTHING on the one call a player most wants backed. safety_call
+     * and aggressive_call were authored together in the same voice; surplus content does not arrive
+     * in matched pairs.
+     */
+    const lie = code('app/lie-analysis.tsx');
+    expect(lie).toMatch(/a\.conservative_call \? 'safety_call' : 'aggressive_call'/);
+    expect(lie).not.toMatch(/conservative_call\s*\?\s*' ' \+ getDialog\('caddie', 'safety_call'\)\s*:\s*''/);
   });
 
-  it('safety_call is wired, which is why aggressive_call reads as unfinished rather than surplus', () => {
-    expect(REQUESTED.has('safety_call')).toBe(true);
-    expect(DORMANT).toContain('aggressive_call');
+  it('the removed situations stay removed — no copy may return without a caller', () => {
+    const templates = code(TEMPLATES_FILE);
+    for (const gone of [
+      'shot_logged_ack', 'distance_to_pin', 'distance_to_front', 'distance_to_back',
+      'wind_callout', 'plays_like', 'no_data_apology', 'help_intro', 'lie_analysis_summary_engaged',
+    ]) {
+      expect(templates).not.toMatch(new RegExp(`\\b${gone}:`));
+    }
+  });
+
+  it('the live owners that replaced them still say the thing', () => {
+    // If these regress, the removals above become real losses rather than de-duplication.
+    const h = code('services/intents/queryStatusHandler.ts');
+    expect(h).toMatch(/\$\{value\} to the \$\{which\}/);                       // distance_to_front/back/pin
+    expect(h).toMatch(/miles per hour out of the/);                              // wind_callout
+    expect(h).toMatch(/I don.{0,3}t have green coordinates for the \$\{which\}/); // a SPECIFIC refusal
+    expect(code('services/caddieAckLines.ts')).toMatch(/Got it\./);              // shot_logged_ack
+    expect(code('services/knowledgeBase/howTo.ts')).toMatch(/HOW_TO/);            // help_intro
   });
 });

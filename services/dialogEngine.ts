@@ -74,7 +74,7 @@ function interpolate(template: string, context: DialogContext): string {
  * Examples:
  *   getDialog('caddie', 'shot_prompt', {})
  *     → "What'd you hit?" (one of seven variations)
- *   getDialog('caddie', 'distance_to_pin', { yards: 152 })
+ *   getDialog('caddie', 'club_recommendation', { club: '7 iron' })
  *     → "152 to the pin."
  *   getDialog('psychologist', 'post_bad_shot_reset', {})
  *     → "Let it go. Next one."

@@ -1043,6 +1043,27 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       const { usePracticeSessionStore } = require('../store/practiceSessionStore') as typeof import('../store/practiceSessionStore');
       return buildPracticeFocusBlock(usePracticeSessionStore.getState().history ?? []);
     }, null),
+    /**
+     * 2026-09-13 (Tim — "unify Green logic and everything green related… unified engine of truth is the
+     * design") — the third leg of the green. `priorGreenRead` above carries what a green LOOKED like
+     * last time; this carries how the player actually putts. Built by the one owner
+     * (services/putting/greenHeat) from COMPLETED rounds, so it is cache-stable, and null until the
+     * shared MIN_PUTT_HOLES floor is met.
+     */
+    puttingRecordBlock: safe(() => {
+      const gh = require('./putting/greenHeat') as typeof import('./putting/greenHeat');
+      const { greenHeatInput } = require('./putting/greenHeatInput') as typeof import('./putting/greenHeatInput');
+      const { rounds, holesByCourse } = greenHeatInput({
+        roundHistory: r.roundHistory ?? [],
+        activeCourseId: activeCourseId ?? null,
+        courseHoles: r.courseHoles,
+        scores: r.scores ?? {},
+        putts: r.putts ?? {},
+        isRoundActive: !!isRoundActive,
+        isSimRound: !!r.isSimRound,
+      });
+      return gh.buildPuttingRecordBlock(gh.buildGreenHeatModel(rounds, holesByCourse));
+    }, null),
     practiceImpactBlock: safe(() => {
       const { computePracticeImpact } = require('./practice/practiceImpact') as typeof import('./practice/practiceImpact');
       const { usePracticeSessionStore } = require('../store/practiceSessionStore') as typeof import('../store/practiceSessionStore');

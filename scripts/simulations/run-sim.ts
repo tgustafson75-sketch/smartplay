@@ -12574,6 +12574,30 @@ check('RATCHET: nothing new may be interpolated into the cached system prompt',
        */
       '_practiceFocus',
       /**
+       * 2026-09-13 — _puttingRecord, added deliberately. Tim: "unify Green logic and everything green
+       * related according to course play, GPS, and putting practice… unified engine of truth is the
+       * design if I am not mistaken."
+       *
+       * CACHE-SAFE for the same reason _practiceImpact is: services/putting/greenHeat builds it from
+       * COMPLETED rounds, and the shared assembler (services/putting/greenHeatInput) folds the live
+       * round in only as a whole-round aggregate of putts already logged. It cannot move between two
+       * shots on the same hole — a putt logged now changes the number after the hole is scored, not
+       * mid-shot, and even then it is a per-hole aggregate rather than per-stroke state.
+       *
+       * Why it exists at all: the green had THREE legs and they met nowhere. Course play's yardage is
+       * unified in services/yardageResolver; the GPS read reaches the caddie as `priorGreenRead`; and
+       * the measured putting record — where the strokes actually go, by how he reached the green —
+       * reached GreenHeatCard, PuttReadLine and useGreenHeat and the caddie NOT AT ALL. Asked "how's my
+       * putting" he answered from puttStatsFrom, which is one round's putt count from the same raw
+       * input. He now has the record.
+       *
+       * Capped at 500 — two distance classes, an overall line and the caveat sentence — and null until
+       * the shared MIN_PUTT_HOLES floor is met, so a player with eight scored holes carries no prompt
+       * weight for it. The block also states that it is a RECORD and not a read of the green in front
+       * of him, because quoting a career three-putt rate at a specific putt would be a fabrication.
+       */
+      '_puttingRecord',
+      /**
        * 2026-09-12 — _trainingImpact, added deliberately per the note above and cached for the same
        * reason as _practiceImpact: it reads LOGGED WORKOUTS and COMPLETED rounds, neither of which
        * can change mid-shot. A gym session on Tuesday and a round that ended last week are not round

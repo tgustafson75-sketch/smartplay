@@ -45,7 +45,24 @@ import type { GreenRoll } from '../../store/greenRollStore';
  *  collecting card indefinitely (sim rounds are excluded by design, chip-ins/unlogged holes don't
  *  count, and score-only logging carries no putts). One real logged nine now lights the map; the
  *  per-cell hole counts keep the small-sample honesty visible. */
-export const GREEN_HEAT_MIN_HOLES = 9;
+/**
+ * 2026-09-13 (Tim — "unify Green logic and everything green related… unified engine of truth is the
+ * design") — THE SAME FLOOR, TWICE, WITH NO WIRE BETWEEN THEM.
+ *
+ * This was `export const GREEN_HEAT_MIN_HOLES = 9;`, and services/puttingRead has
+ * `export const MIN_PUTT_HOLES = 9;`. Same number, same meaning — "enough putting holes before we say
+ * anything about how this player putts" — and the two files never referenced each other. Both read the
+ * SAME raw input (`RoundRecord.putts`), so the moment anyone tuned one floor the card and the hole plan
+ * would disagree about whether the player's putting was known yet: the heat would render while the plan
+ * still called the read 'forming', or the reverse.
+ *
+ * puttingRead owns it. That is the semantic home — the floor is a fact about the PLAYER's record, not
+ * about one card's render gate — and it is where the rest of the putting scale already lives
+ * (POOR_PUTTS_PER_HOLE, GOOD_PUTTS_PER_HOLE, COSTLY_THREE_PUTT_RATE). One name, so a search for the
+ * threshold finds every consumer. [[two-owners-is-the-root-cause]]
+ */
+import { MIN_PUTT_HOLES } from '../puttingRead';
+export { MIN_PUTT_HOLES };
 
 export type PuttClass = 'approachPutt' | 'scramblePutt';
 
@@ -69,7 +86,7 @@ export interface PuttBucketStat {
 export interface GreenHeatModel {
   /** Total scored holes with real putt data folded into the model. */
   totalHoles: number;
-  /** True once totalHoles >= GREEN_HEAT_MIN_HOLES — only then should the heat render. */
+  /** True once totalHoles >= MIN_PUTT_HOLES — only then should the heat render. */
   ready: boolean;
   /** Holes remaining until ready (0 when ready). Drives the collecting-state progress. */
   remaining: number;
@@ -180,8 +197,8 @@ export function buildGreenHeatModel(
   const totalHoles = overall.holes;
   return {
     totalHoles,
-    ready: totalHoles >= GREEN_HEAT_MIN_HOLES,
-    remaining: Math.max(0, GREEN_HEAT_MIN_HOLES - totalHoles),
+    ready: totalHoles >= MIN_PUTT_HOLES,
+    remaining: Math.max(0, MIN_PUTT_HOLES - totalHoles),
     byClass: {
       approachPutt: finalizeBucket(byClass.approachPutt, classSum.approachPutt),
       scramblePutt: finalizeBucket(byClass.scramblePutt, classSum.scramblePutt),
@@ -244,4 +261,74 @@ function lerpColor(a: [number, number, number], b: [number, number, number], t: 
   const ch = (i: number) => Math.round(a[i] + (b[i] - a[i]) * t);
   const hex = (n: number) => n.toString(16).padStart(2, '0');
   return `#${hex(ch(0))}${hex(ch(1))}${hex(ch(2))}`;
+}
+
+/**
+ * 2026-09-13 (Tim — "unify Green logic and everything green related according to course play, GPS, and
+ * putting practice… unified engine of truth is the design") — THE PUTTING RECORD REACHED A CARD AND
+ * NEVER THE CADDIE.
+ *
+ * Before this, the three legs of "the green" met nowhere:
+ *   · COURSE PLAY  services/yardageResolver owns front/middle/back yardage (unified 2026-09-10).
+ *   · GPS          app/smartfinder writes a green READ — feet, slope, advice — to greenReadStore, and
+ *                  caddieRequestBody.priorGreenRead carries it, so the caddie can recall a read.
+ *   · PRACTICE     THIS model — where the strokes actually go, by distance class — reached
+ *                  GreenHeatCard, PuttReadLine and useGreenHeat, and caddieRequestBody not at all.
+ *
+ * So the caddie could tell you what a green looked like last time and had no idea you three-putt from
+ * distance half the time. Asked "how's my putting" he answered from `puttStatsFrom` — putts per hole
+ * for one round — which is a thinner fact from the same raw input.
+ *
+ * A READ and a ROLL are deliberately NOT merged: a read is a prediction before the stroke, a roll is a
+ * CV observation of what the ball did (services/putting/puttRoll, no feeder yet). Different facts, so
+ * `rollSignal` stays null and honest rather than being fed from the read.
+ *
+ * CACHE-STABLE: built from COMPLETED rounds, which is why it may live in the cached prompt block —
+ * a round in progress cannot change it. Same argument practiceFocusBlock makes.
+ *
+ * Says nothing until the floor is met, because a distance class with two holes in it is noise the
+ * caddie would state as a tendency. [[smartplay-defect-class-unwired-halves]]
+ */
+export function buildPuttingRecordBlock(model: GreenHeatModel): string | null {
+  if (!model.ready) return null;
+
+  const pct = (v: number | null): string | null => (v == null ? null : `${Math.round(v * 100)}%`);
+  const line = (label: string, b: PuttBucketStat): string | null => {
+    if (b.holes === 0 || b.avgPutts == null) return null;
+    const parts = [`${b.avgPutts.toFixed(2)} putts/hole over ${b.holes} hole${b.holes === 1 ? '' : 's'}`];
+    const one = pct(b.onePuttRate);
+    const three = pct(b.threePuttRate);
+    if (one) parts.push(`one-putt ${one}`);
+    if (three) parts.push(`three-putt ${three}`);
+    return `- ${label}: ${parts.join(', ')}`;
+  };
+
+  const rows = [
+    line('Reached the green in regulation', model.byClass.approachPutt),
+    line('Scrambling (missed the green)', model.byClass.scramblePutt),
+  ].filter((x): x is string => x != null);
+
+  const overall = model.overall.avgPutts != null
+    ? `Overall ${model.overall.avgPutts.toFixed(2)} putts per hole across ${model.totalHoles} scored holes.`
+    : null;
+
+  /**
+   * THE CLASSES CAN BE EMPTY WHILE THE RECORD IS REAL, and an early `rows.length === 0` return threw
+   * that away — found by probing the real model instead of trusting the first draft of the test.
+   *
+   * buildGreenHeatModel classifies approach-vs-scramble only when it can resolve the hole's par, and
+   * `holesByCourse` carries the LIVE course only. So a player whose rounds are on courses without
+   * bundled holes — which the model's own comment calls out, counting those putts toward `overall`
+   * "honest, not guessed" — had a real putts-per-hole record and got a null block. The overall line is
+   * the floor of this block, not a footnote to it.
+   */
+  if (rows.length === 0 && !overall) return null;
+
+  return [
+    'HIS PUTTING RECORD (measured from his own scored rounds — putts per hole by how he reached the green):',
+    ...rows,
+    ...(overall ? [overall] : []),
+    'Use this when he asks how he is putting, and when a hole plan hinges on getting up and down.'
+    + ' It is a RECORD, not a read of the green in front of him — never quote it as what this putt will do.',
+  ].join('\n');
 }

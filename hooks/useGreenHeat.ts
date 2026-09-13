@@ -26,7 +26,7 @@ import {
   mergeGreenRollSignal,
   type GreenHeatModel,
 } from '../services/putting/greenHeat';
-import type { RoundRecord, CourseHole } from '../store/roundStore';
+import { greenHeatInput } from '../services/putting/greenHeatInput';
 
 /**
  * Build the green heat model from real round history + the live round.
@@ -47,41 +47,16 @@ export function useGreenHeat(scope: 'career' | 'round' = 'career'): GreenHeatMod
   const rollsMap = useGreenRollStore((s) => s.rolls);
 
   return useMemo(() => {
-    // holesByCourse: resolve par for any course whose real holes we have on hand.
-    // Today that's the live course's courseHoles. Historical rounds on the same
-    // course classify; others contribute to `overall` only (honest, not guessed).
-    const holesByCourse: Record<string, CourseHole[]> = {};
-    if (activeCourseId && courseHoles && courseHoles.length > 0) {
-      holesByCourse[activeCourseId] = courseHoles;
-    }
-
-    // Assemble the rounds to fold in.
-    // 2026-07-06 (elite audit) — sim rounds never feed green heat: narrated
-    // sim putts aren't real greens data. Same gate for the live sim round.
-    const realHistory = roundHistory.filter((r) => !r.simulated);
-    const rounds: RoundRecord[] = [];
-    const liveRound: RoundRecord | null =
-      isRoundActive && !isSimRound && Object.keys(livePutts ?? {}).length > 0
-        ? ({
-            // Minimal synthetic record — only the fields buildGreenHeatModel reads
-            // (putts, scores, courseId). Real data only; no fabricated putts.
-            id: '__live__',
-            courseId: activeCourseId,
-            putts: livePutts,
-            scores: liveScores,
-          } as unknown as RoundRecord)
-        : null;
-
-    if (scope === 'round') {
-      if (liveRound) rounds.push(liveRound);
-      else {
-        const last = realHistory[realHistory.length - 1];
-        if (last) rounds.push(last);
-      }
-    } else {
-      rounds.push(...realHistory);
-      if (liveRound) rounds.push(liveRound);
-    }
+    /**
+     * 2026-09-13 — the assembly moved to services/putting/greenHeatInput so the CADDIE PAYLOAD feeds
+     * the model from the same decisions this card does (sim rounds excluded, the live round folded in,
+     * par resolved only where real holes exist). Writing them twice is how the card and the caddie
+     * would come to disagree about which rounds count.
+     */
+    const { rounds, holesByCourse } = greenHeatInput(
+      { roundHistory, activeCourseId, courseHoles, scores: liveScores, putts: livePutts, isRoundActive, isSimRound },
+      scope,
+    );
 
     const base = buildGreenHeatModel(rounds, holesByCourse);
 

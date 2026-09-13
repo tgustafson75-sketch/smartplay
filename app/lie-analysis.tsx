@@ -125,9 +125,20 @@ export default function LieAnalysisScreen() {
     const clubLine = a.recommended_club
       ? ' ' + getDialog('caddie', 'club_recommendation', { club: a.recommended_club })
       : '';
-    const closer = a.conservative_call
-      ? ' ' + getDialog('caddie', 'safety_call')
-      : '';
+    /**
+     * 2026-09-13 (Tim — "we want the Caddie to say the right thing contextually and situationally")
+     * — THE CADDIE WENT SILENT EXACTLY WHEN THE ANSWER WAS "GO FOR IT".
+     *
+     * This was `conservative_call ? safety_call : ''`. `conservative_call` is a required boolean on
+     * LieAnalysis (api/lie-analysis coerces it with Boolean()), so false is not "unknown" — it is the
+     * model saying the aggressive line is on. And in that case the caddie said nothing at all, which
+     * reads as no opinion on the one call a player most wants backed.
+     *
+     * `aggressive_call` was authored in the same commit as `safety_call`, in the same voice ("Line's
+     * open. Go after it."), and only one of the pair ever got a caller. That asymmetry is what gave it
+     * away: surplus content does not arrive in matched pairs.
+     */
+    const closer = ' ' + getDialog('caddie', a.conservative_call ? 'safety_call' : 'aggressive_call');
     const goalLine = a.goal_aware_note
       ? ' ' + getDialog('caddie', 'goal_aware_addendum', { note: a.goal_aware_note })
       : '';
