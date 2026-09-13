@@ -1,5 +1,6 @@
 import { resolveYardage, resolvedToFmb } from '../yardageResolver';
 import { holePar, resolveGreenCoords } from '../smartFinderService';
+import { girFrom, puttStatsFrom, nineSplitFrom, scoredRoundFromRecord, longestDriveFrom, type ScoredRound } from '../round/scoredRoundStats';
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import { useRoundStore } from '../../store/roundStore';
 import { useGhostStore } from '../../store/ghostStore';
@@ -93,6 +94,97 @@ export const queryStatusHandler: IntentHandler = {
     const topic = String(intent.parameters.query_topic ?? '').toLowerCase();
     const round = useRoundStore.getState();
 
+    /** The LIVE round as a ScoredRound. Par comes from the loaded course, as it always has. */
+    const liveScored = (): ScoredRound => ({ scores: round.scores, putts: round.putts, parOf: (h) => holePar(h) });
+
+    /**
+     * 2026-09-12 (Tim) — "Longest drive is on the dashboard and GIR is calculated on the scorecard."
+     *
+     * OFF THE COURSE, THESE ARE STILL ANSWERABLE. Until now every one of them got "You're not in a
+     * round yet. Want to start one?" — a deflection built on the assumption that a round stat needs a
+     * round in progress. It does not: `compactHistoryForPersist` keeps scores, putts and holePars for
+     * every round it retains, and longest drive is a profile field the dashboard already shows. The
+     * player asking "how many greens did I hit" on his sofa is the conversation this app is for, and
+     * he was being told to go start a round.
+     *
+     * WHAT IT WILL NOT DO IS PRETEND. Every answer below names WHICH round it is about, because "11
+     * of 18 greens" said without a subject sounds like today. If there is no completed round to read,
+     * it says so rather than reaching for a number.
+     */
+    const lastCompleted = (() => {
+      const hist = (round.roundHistory ?? []).filter((r) => !r.simulated && typeof r.endedAt === 'number');
+      return hist.length > 0 ? hist[hist.length - 1] : null;
+    })();
+    const whenLabel = (rec: { courseName?: string | null }): string =>
+      rec.courseName ? `Last round at ${rec.courseName}` : 'Your last round';
+
+    if (!round.isRoundActive && (topic === 'putt_stats' || topic === 'gir' || topic === 'nine_split' || topic === 'longest_drive')) {
+      if (topic === 'longest_drive') {
+        // All-time, from the same derivation the dashboard's highlights card uses — and said AS
+        // all-time, never as "this round", which is what the in-round answer says.
+        const profile = require('../../store/playerProfileStore') as typeof import('../../store/playerProfileStore');
+        const best = longestDriveFrom({
+          rounds: (round.roundHistory ?? []).filter((r) => !r.simulated),
+          profileLongestDrive: profile.usePlayerProfileStore.getState().longestDrive,
+        });
+        return best == null
+          ? { success: true, voice_response: "I haven't got a measured drive for you yet.", side_effects: ['query:longest_drive:off_round_empty'], follow_up_needed: false }
+          : { success: true, voice_response: `Your longest measured drive is ${best} yards.`, side_effects: [`query:longest_drive:off_round_${best}`], follow_up_needed: false };
+      }
+
+      if (!lastCompleted) {
+        return { success: true, voice_response: "I don't have a finished round to read that from yet.", side_effects: [`query:${topic}:off_round_no_history`], follow_up_needed: false };
+      }
+      const scored = scoredRoundFromRecord(lastCompleted);
+      const where = whenLabel(lastCompleted);
+
+      if (topic === 'gir') {
+        const { hit, counted } = girFrom(scored);
+        return counted === 0
+          ? { success: true, voice_response: `${where} doesn't have enough putts logged for me to call greens in regulation.`, side_effects: ['query:gir:off_round_no_data'], follow_up_needed: false }
+          : { success: true, voice_response: `${where}: ${hit} of ${counted} green${counted === 1 ? '' : 's'} in regulation.`, side_effects: [`query:gir:off_round_${hit}_of_${counted}`], follow_up_needed: false };
+      }
+
+      if (topic === 'putt_stats') {
+        const ps = puttStatsFrom(scored);
+        if (ps.holes === 0) {
+          return { success: true, voice_response: `${where} doesn't have any putts logged.`, side_effects: ['query:putt_stats:off_round_empty'], follow_up_needed: false };
+        }
+        const bits = [`${ps.total} putts over ${ps.holes} hole${ps.holes === 1 ? '' : 's'}`, `averaging ${(ps.avg ?? 0).toFixed(1)}`];
+        if (ps.threePutts > 0) bits.push(`${ps.threePutts} three-putt${ps.threePutts === 1 ? '' : 's'}`);
+        if (ps.onePutts > 0) bits.push(`${ps.onePutts} one-putt${ps.onePutts === 1 ? '' : 's'}`);
+        return { success: true, voice_response: `${where}: ${bits.join(', ')}.`, side_effects: [`query:putt_stats:off_round_total_${ps.total}`], follow_up_needed: false };
+      }
+
+      // nine_split
+      const wantBack = /\bback\b/.test((intent.raw_text ?? '').toLowerCase());
+      const ns = nineSplitFrom(scored, wantBack ? 10 : 1, wantBack ? 18 : 9);
+      const nineName = wantBack ? 'back nine' : 'front nine';
+      if (ns.played === 0) {
+        return { success: true, voice_response: `${where} has no scored holes on the ${nineName}.`, side_effects: ['query:nine_split:off_round_empty'], follow_up_needed: false };
+      }
+      const vsText = ns.vs == null ? null : ns.vs === 0 ? 'even' : ns.vs > 0 ? `+${ns.vs}` : String(ns.vs);
+      return {
+        success: true,
+        voice_response: vsText == null
+          ? `${where}: ${ns.strokes} on the ${nineName} through ${ns.played}.`
+          : `${where}: ${ns.strokes} on the ${nineName} through ${ns.played} — ${vsText}.`,
+        side_effects: [`query:nine_split:off_round_${wantBack ? 'back' : 'front'}`],
+        follow_up_needed: false,
+      };
+    }
+
+    /**
+     * `last_round_here` off-round has no course to anchor to — `activeCourseId` is null — and the
+     * course he means is in the conversation, not in the store ("what did I shoot at Menifee?"). So it
+     * goes to the BRAIN, which carries his round history, rather than to a canned re-prompt. Same
+     * shape as the default case below: no voice_response and no follow-up is not a command hit.
+     * [[no-canned-voice-blocking-the-ai]]
+     */
+    if (!round.isRoundActive && topic === 'last_round_here') {
+      return { success: false, voice_response: null, side_effects: ['query:last_round_here:off_round_route_to_brain'], follow_up_needed: false };
+    }
+
     // Pre-beta — distance/wind/carry queries are shot-intent signals; bump
     // GPS to active so the next answer reads from a fresh fix.
     if (topic === 'distance_to_green' || topic === 'green_front' || topic === 'green_back' ||
@@ -102,7 +194,7 @@ export const queryStatusHandler: IntentHandler = {
       try { require('../gpsManager').bumpToActive('voice_query:' + topic); } catch {}
     }
 
-    if (!round.isRoundActive && (topic === 'score' || topic === 'hole' || topic === 'ghost_match' || topic === 'shot_distance' || topic === 'hole_progress' || topic === 'distance_to_green' || topic === 'wind' || topic === 'conditions' || topic === 'weather' || topic === 'plays_like' || topic === 'green_front' || topic === 'green_back' || topic === 'green_middle' || topic === 'holes_left' || topic === 'par' || topic === 'course' || topic === 'putt_stats' || topic === 'gir' || topic === 'nine_split' || topic === 'last_round_here' || topic === 'longest_drive') /* 2026-07-24 added holes_left/par/course so they don't fabricate "on 1 of 18" off-round. 2026-07-25 added the round-stat topics. end_session, next_focus, swing_observation, tell_me_more, putt_analysis deliberately allowed off-round */) {
+    if (!round.isRoundActive && (topic === 'score' || topic === 'hole' || topic === 'ghost_match' || topic === 'shot_distance' || topic === 'hole_progress' || topic === 'distance_to_green' || topic === 'wind' || topic === 'conditions' || topic === 'weather' || topic === 'plays_like' || topic === 'green_front' || topic === 'green_back' || topic === 'green_middle' || topic === 'holes_left' || topic === 'par' || topic === 'course' ) /* 2026-07-24 added holes_left/par/course so they don't fabricate "on 1 of 18" off-round. end_session, next_focus, swing_observation, tell_me_more, putt_analysis deliberately allowed off-round. 2026-09-12: putt_stats/gir/nine_split/longest_drive REMOVED from this list and answered above from the last completed round and the profile (Tim: "longest drive is on the dashboard and GIR is calculated on the scorecard"); last_round_here routes to the brain. What remains here is genuinely about a round IN PROGRESS — a yardage, a wind, which hole he is on — and has no honest off-round answer. */) {
       return {
         success: true,
         voice_response: 'You\'re not in a round yet. Want to start one?',
@@ -1279,19 +1371,14 @@ export const queryStatusHandler: IntentHandler = {
       // data we already capture (scores, putts, shots). Honest by construction: each derives only
       // from logged values and says so when the data isn't there yet (never fabricates a stat).
       case 'putt_stats': {
-        const holes = Object.keys(round.putts).map(Number).filter((h) => Number.isFinite(h));
-        if (holes.length === 0) {
+        // 2026-09-12 — the arithmetic moved to services/round/scoredRoundStats so the OFF-ROUND answer
+        // below reads the same rule. Behaviour here is unchanged.
+        const ps = puttStatsFrom(liveScored());
+        if (ps.holes === 0) {
           return { success: true, voice_response: 'No putts logged yet this round.', side_effects: ['query:putt_stats:empty'], follow_up_needed: false };
         }
-        let total = 0, threePutts = 0, onePutts = 0;
-        for (const h of holes) {
-          const p = round.putts[h];
-          total += p;
-          if (p >= 3) threePutts++;
-          if (p === 1) onePutts++;
-        }
-        const avg = total / holes.length;
-        const bits = [`${total} putts over ${holes.length} hole${holes.length === 1 ? '' : 's'}`, `averaging ${avg.toFixed(1)}`];
+        const { total, threePutts, onePutts } = ps;
+        const bits = [`${total} putts over ${ps.holes} hole${ps.holes === 1 ? '' : 's'}`, `averaging ${(ps.avg ?? 0).toFixed(1)}`];
         if (threePutts > 0) bits.push(`${threePutts} three-putt${threePutts === 1 ? '' : 's'}`);
         if (onePutts > 0) bits.push(`${onePutts} one-putt${onePutts === 1 ? '' : 's'}`);
         return { success: true, voice_response: bits.join(', ') + '.', side_effects: [`query:putt_stats:total_${total}`], follow_up_needed: false };
@@ -1301,17 +1388,7 @@ export const queryStatusHandler: IntentHandler = {
         // Greens in regulation DERIVED honestly: strokes-to-green = hole score − putts; a green
         // is hit in regulation when that's ≤ par − 2. Counts only holes where score, putts, AND
         // par are all known — no putts logged for a hole means we can't derive it, so we skip it.
-        const parOf = (h: number) => holePar(h);
-        let counted = 0, hit = 0;
-        for (const hStr of Object.keys(round.scores)) {
-          const h = Number(hStr);
-          const score = round.scores[h];
-          const putts = round.putts[h];
-          const par = parOf(h);
-          if (!(score > 0) || typeof putts !== 'number' || par == null) continue;
-          counted++;
-          if ((score - putts) <= (par - 2)) hit++;
-        }
+        const { hit, counted } = girFrom(liveScored());
         if (counted === 0) {
           return { success: true, voice_response: "I need a few holes with both score and putts logged before I can call greens in regulation.", side_effects: ['query:gir:no_data'], follow_up_needed: false };
         }
@@ -1322,21 +1399,13 @@ export const queryStatusHandler: IntentHandler = {
         const raw = (intent.raw_text ?? '').toLowerCase();
         const wantBack = /\bback\b/.test(raw);
         const lo = wantBack ? 10 : 1, hi = wantBack ? 18 : 9;
-        const parOf = (h: number) => holePar(h);
-        let strokes = 0, parSum = 0, played = 0;
-        for (let h = lo; h <= hi; h++) {
-          const s = round.scores[h];
-          if (!(s > 0)) continue;
-          played++;
-          strokes += s;
-          const par = parOf(h);
-          if (par != null) parSum += par;
-        }
+        const ns = nineSplitFrom(liveScored(), lo, hi);
+        const { strokes, played } = ns;
         const nineName = wantBack ? 'back nine' : 'front nine';
         if (played === 0) {
           return { success: true, voice_response: `You haven't scored any holes on the ${nineName} yet.`, side_effects: ['query:nine_split:empty'], follow_up_needed: false };
         }
-        const vs = parSum > 0 ? strokes - parSum : null;
+        const vs = ns.vs;
         const vsText = vs == null ? null : vs === 0 ? 'even' : vs > 0 ? `+${vs}` : String(vs);
         return {
           success: true,

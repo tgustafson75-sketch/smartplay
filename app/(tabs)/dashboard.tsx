@@ -58,6 +58,7 @@ import { useWorkoutStore } from '../../store/workoutStore';
 import { computeWorkoutSwingImpact } from '../../services/practice/workoutSwingImpact';
 import { computeSwingMetricTrend } from '../../services/practice/swingMetricTrend';
 import { collectSelfTrendSwings } from '../../services/practice/selfSwingReads';
+import { longestDriveFrom } from '../../services/round/scoredRoundStats';
 import { useWatchStore } from '../../store/watchStore';
 import { roundTempoBaseline, holeTempoFlag } from '../../services/round/roundSwingRead';
 import { useToastStore } from '../../store/toastStore';
@@ -787,21 +788,12 @@ export default function Dashboard() {
   // that consumed it is replaced by the AI-driven card below).
 
   // 2026-06-04 — Highlights Card derived stats.
-  const derivedLongestDrive = useMemo(() => {
-    // 2026-06-30 (Tim — long drive showed ~7000y = the whole-course total, from a failed
-    // capture leaking the course yardage into a shot). No human drive exceeds ~500y, so
-    // anything above that is a corrupt capture — drop it. This also self-resets a bad value.
-    const MAX_REAL_DRIVE = 500;
-    const fromHistory = realRounds
-      .flatMap(r => r.shots ?? [])
-      .filter(s => s.club === 'Driver')
-      .map(s => s.carry_distance ?? s.distance_yards ?? 0)
-      .filter(y => y > 0 && y <= MAX_REAL_DRIVE)
-      .reduce((max, y) => (y > max ? y : max), 0);
-    const fromProfile = (longestDrive != null && longestDrive <= MAX_REAL_DRIVE) ? longestDrive : 0;
-    const best = Math.max(fromHistory, fromProfile);
-    return best > 0 ? best : null;
-  }, [realRounds, longestDrive]);
+  // 2026-09-12 — the derivation (including the 500y corrupt-capture cap) moved to
+  // services/round/scoredRoundStats so the caddie can quote the number on this card. Rule unchanged.
+  const derivedLongestDrive = useMemo(
+    () => longestDriveFrom({ rounds: realRounds, profileLongestDrive: longestDrive }),
+    [realRounds, longestDrive],
+  );
 
   const bestRound = useMemo(() => {
     // 2026-07-20 (bug-hunt fix) — Best Round must compare like-for-like: only FULL 18-hole
