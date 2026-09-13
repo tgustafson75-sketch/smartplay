@@ -392,11 +392,27 @@ All 23 confirmed HIGH findings from the 30-agent workflow audit addressed:
 >   clean — this was a corrupted second owner of the same rule. Repo-wide sweep: this file only, now
 >   gated by a control-character assertion over the whole file.
 >
-> **STILL OPEN, unchanged and now the top of the queue:** the off-round deflection
-> (`queryStatusHandler` ~L105 still answers "You're not in a round yet" to `putt_stats`, `gir`,
-> `nine_split`, `last_round_here`, `longest_drive`) — **needs Tim's per-topic call**, because he can
-> source putting from `golfer_model_snippet` but has NO source for GIR or longest-drive history, and
-> routing those invites an invented number. Then the five screen-only modules.
+> - `67bac32` — **THE OFF-ROUND DEFLECTION IS CLOSED, and the reason it stayed open was a wrong claim
+>   in this very document.** It said the caddie had NO source for GIR or longest-drive history. Tim:
+>   *"Longest drive is on the dashboard and GIR is calculated on the scorecard."* He was right. GIR
+>   derives from score − putts against par — values `compactHistoryForPersist` explicitly KEEPS — and
+>   longest drive is a `playerProfileStore` field `logShot` maintains, which is what the dashboard
+>   highlights card shows. `putt_stats`, `gir`, `nine_split` and `longest_drive` now answer off the
+>   course, naming WHICH round they read (an unsubjected "11 of 18" sounds like today) and using the
+>   round's OWN stored `holePars`. `last_round_here` routes to the brain, because off-round the course
+>   he means is in the conversation, not in `activeCourseId`. Formulas live in
+>   `services/round/scoredRoundStats`, read by the live handlers, the off-round path AND the dashboard
+>   — the 500-yard corrupt-capture cap moved there too.
+>
+> **DO NOT TRUST A NEGATIVE CAPABILITY CLAIM IN THIS FILE WITHOUT GREPPING FOR IT.** "Nothing reads
+> X", "there is no source for Y" — two of those have now been wrong in two days (Cowork's "nothing
+> reads the media library", and this file's "no source for GIR"). A claim that something does not
+> exist is the easiest kind to write and the most expensive to inherit.
+>
+> **STILL OPEN:** the five screen-only modules — `practice/workoutPerformance`,
+> `practice/workoutSwingImpact`, `practice/pointsPerformance`, `practice/preRoundFactors` and
+> `handicapCalculator`. Each is a measured finding about the player whose only importer is a screen,
+> which is the same shape as everything fixed above.
 
 > ### ⚠️ CURRENT — 2026-09-13. On a branch, not on main.
 >
