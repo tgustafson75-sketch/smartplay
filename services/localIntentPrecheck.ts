@@ -72,6 +72,32 @@ const NOT_ABOUT_TOOL = '(?!.*\\b(?:issue|issues|log|logged|logging|report|report
 // question that has nothing to do with being in a round.
 //
 // Any equipment word, or a "do I hit" phrasing, disqualifies the line outright.
+/**
+ * "How do I …?" and its relatives. Anchored at the START of the utterance (after an optional filler
+ * like "hey Kevin," / "so") so a mid-sentence "how" cannot trip it: "what's my score, and how far is
+ * the pin" keeps its local answer.
+ *
+ * WHY THE MEASUREMENT QUESTIONS ARE SAFE, precisely: the frame requires the auxiliary verb to be the
+ * word DIRECTLY after "how". In "how far do I hit my 7 iron" that word is "far", so the alternative
+ * never engages, and the club-distance answer — the most-asked offline question in the app — is
+ * untouched. Same for "how many putts", "how much wind", "how long is this hole", "how old".
+ *
+ * An earlier version of this carried a `(?!\s+(?:far|many|much|long|old))` lookahead as well. Break-
+ * testing showed removing it changed NOTHING: it could only ever have fired on "how do I far …",
+ * which is not a sentence. It was unreachable, and a comment above it claimed it was what kept
+ * "how far do I" local — a guard that certifies the wrong reason is worse than no guard, because the
+ * next person trusts it. Deleted, and the real reason is written down instead.
+ *
+ * "WALK ME THROUGH …" IS DELIBERATELY NOT HERE. It reads like an instructional ask, and the first
+ * version of this guard claimed it — which broke "walk me through the hole", a phrasing that already
+ * has a correct local owner in the hole_read pattern and is answered OFFLINE from the hole data. A
+ * pinned test caught it. Nothing is lost by leaving it out: "walk me through starting a round" matches
+ * no pattern, so it falls through to the brain anyway, which is the destination this guard exists to
+ * reach. A guard must not take a phrasing away from a feature that already answers it correctly.
+ */
+const INSTRUCTIONAL_QUESTION_RX =
+  /^(?:(?:hey|ok|okay|yo|so|um|uh|hi)[\s,]+)*(?:\w+[\s,]+)??(?:how\s+(?:do|can|would|could|should)\s+(?:i|we|you)\b|how\s+(?:does|do)\s+(?:this|that|it|the\s+\w+|\w+)\s+work\b|where\s+(?:do|can)\s+i\s+(?:find|change|set|turn|see|get|add|edit|import|export)\b|(?:show|teach|tell)\s+me\s+how\s+to\b)/i;
+
 const NOT_ABOUT_MY_CLUBS =
   '(?!.*\\b(?:driver|woods?|hybrids?|irons?|wedges?|putter|clubs?|bag|gapping|carry|carries)\\b)'
   + '(?!.*\\bi\\s+hit\\b)';
@@ -493,6 +519,36 @@ export function precheckLocalIntent(transcript: string): VoiceIntent | null {
   // Cap length to avoid pathological regex backtracking on a wall of
   // text — high-frequency intents are always short.
   if (t.length > 200) return null;
+
+  /**
+   * 2026-09-13 (Tim) — "part of the app's tutorial logic is a user can ask 'how do I ...?' and the
+   * app can answer. Make sure this is the truth."
+   *
+   * IT WAS NOT, FOR THE ASKS MOST LIKELY TO BE ASKED. `services/knowledgeBase/howTo` holds 29
+   * entries and `howToForPrompt()` is injected into the cached brain prompt unconditionally, so the
+   * caddie has the real steps for all of them. But a question only reaches the brain if this function
+   * lets it past, and it did not:
+   *
+   *   "how do I change my handicap" → handicap_query   — answered with what it IS, not how to change it
+   *   "how do I add a course"       → open_tool{add_course}
+   *   "how do I use SmartFinder"    → open_tool{smartfinder}
+   *
+   * The first is the worse one: the player asked how to do a thing and got a number back. The other
+   * two yank them to a screen with no explanation, which is the opposite of a tutorial. All three are
+   * this file's own documented rule, broken: THE PRECHECK MATCHES COMMANDS, and "how do I ...?" is a
+   * question by construction. Routing a command is not answering a question, and a question
+   * intercepted before the brain is a question the caddie never heard.
+   *
+   * So an instructional question returns null here, always, and lands on the brain that holds the
+   * how-to block. This sits ABOVE every pattern rather than as a lookahead on the three that bit,
+   * because the next pattern someone adds would bite too — the guard belongs to the DISPATCHER.
+   *
+   * Deliberately narrow: it matches the interrogative FRAME, not any sentence containing "how". A
+   * golf question caught by it ("how do I stop slicing") also belongs on the brain, so a wide net
+   * here costs nothing and a narrow one is still correct.
+   * [[smartplay-defect-class-unwired-halves]]
+   */
+  if (INSTRUCTIONAL_QUESTION_RX.test(t)) return null;
 
   // 2026-06-15 (Tim — tap-to-talk record loop) — when the Smart Motion screen is
   // OPEN, a record/watch/stop command must be DETERMINISTIC and LOCAL. Previously
