@@ -340,20 +340,37 @@ const PATTERNS: Pattern[] = [
     build: (raw) => intent(raw, 'open_tool', { tool_name: 'sim_round', raw_utterance: raw }),
   },
 
-  // ── TOOL OPEN (high frequency) ────────────────────────────
-  // 2026-06-17 — "Hey Caddy, what's the smart play?" is THE tagline trigger.
-  // Must be deterministic — "smart play" also appears in Haiku's shot_strategy
-  // examples, causing it to explain verbally instead of opening SmartFinder.
-  // Precheck catches the canonical phrasings before Haiku sees them.
-  // NOTE: this pattern is ordered AFTER the shot_strategy pattern above so
-  // "what's the play" (no "smart") hits shot_strategy, while "what's the
-  // SMART play" falls through to here.
+  // ── THE TAGLINE ───────────────────────────────────────────
+  /**
+   * 2026-09-13 (Tim) — "SmartPlay is not really a tool like SmartFinder. It's our 'what's the play
+   * here' phrase as a tool. When the user asks for the SmartPlay, Caddie analyzes the situation in
+   * that moment under our myriad of conditions and factors and provides user-centric strategy for
+   * the shot... it's our answer to every other app's plays-like feature."
+   *
+   * From 2026-06-17 until today this did the OPPOSITE. The comment that used to live here said it
+   * out loud: "'smart play' also appears in Haiku's shot_strategy examples, causing it to explain
+   * verbally instead of opening SmartFinder" — the model wanted to answer strategically and was
+   * deliberately overridden into opening a camera. So "what's the play" reached the brain with the
+   * whole payload (lie, wind, elevation, plays-like, the bag, the player's tendencies, the hole and
+   * the pin) while "what's the SMART play" took a photo. Adding the app's own tagline word made the
+   * answer worse.
+   *
+   * A question intercepted before the brain is a question the caddie never heard — the precheck
+   * matches COMMANDS, and this was never a command. Everyone else answers "plays like 165"; the
+   * point of this phrase is that it answers with the decision. It goes to the brain now, exactly
+   * where the un-"smart" phrasing already went.
+   *
+   * The NOT_ABOUT_TOOL guard stays: "log an issue with the smart play" is still about the feature,
+   * not a request for a read. The visual scene read it used to open is unchanged and still reachable
+   * inside SmartFinder.
+   * [[a-toggle-that-does-nothing-for-the-default-user]] [[orphans-are-live-bugs-not-dead-code]]
+   */
   {
     // 2026-08-06 (voice audit) — NOT_ABOUT_TOOL guard, same as smartfinder/vision/swinglab below, so
     // "log an issue with the smart play" / "the smart play feature is broken" DON'T open SmartFinder.
     // The bare `the smart play` alternative (no verb anchor) was the exposure the others were spared.
     rx: new RegExp('^' + NOT_ABOUT_TOOL + "(?=.*\\b(?:what(?:'s|s)?\\s+the\\s+smart\\s+play|give\\s+me\\s+the\\s+smart\\s+play|the\\s+smart\\s+play|open\\s+smart\\s*play|smartplay\\s+here)\\b)", 'i'),
-    build: (raw) => intent(raw, 'open_tool', { tool_name: 'smartplay' }),
+    build: (raw) => intent(raw, 'query_status', { query_topic: 'shot_strategy' }),
   },
   {
     /**

@@ -359,19 +359,19 @@ export function GlobalToolsMenu() {
               colors={colors}
             />
             )}
-            {/* 2026-06-17 — Smart Play tap shortcut mirrors the voice trigger
-                "Hey Caddy, what's the smart play?" → SmartFinder + autoread.
-                Opens the same screen as SmartFinder but auto-fires the caddie
-                scene read so the user doesn't need to tap the eye button. */}
-{flagSmartFinder && (
-            <Row
-              icon="eye-outline"
-              label={t('tools_global_tools_menu.label.smart_play')}
-              sub="What's the smart play? · caddie reads the scene"
-              onPress={() => navOrPaywall('smartfinder', '/smartfinder?autoread=1')}
-              colors={colors}
-            />
-            )}
+            {/**
+              * 2026-09-13 (Tim) — THE SMART PLAY ROW IS GONE, ON PURPOSE.
+              *
+              * "SmartPlay is not really a tool like SmartFinder. It's our 'what's the play here'
+              * phrase as a tool... it's our answer to every other app's plays-like feature." A row
+              * in a tools list made the tagline look like a screen, and it opened a camera — which
+              * is how the phrase came to mean LESS than the phrase without the word "smart".
+              *
+              * Tim: "onboarding and tutorials should reinforce the phrase so it's prevalent for the
+              * user's understanding. Don't need another button." So the phrase is taught in
+              * welcome.tsx, quick-start and tutorials, and it is answered by the caddie wherever the
+              * player says or types it. SmartFinder keeps its own row and its own scene-read button.
+              */}
             {/* 2026-07-04 (elite-clean audit, menu finding #8) — TightLie was the one
                 tool with NO Tools-menu entry (reachable only from the cockpit pill /
                 L4 row / voice). One menu, every tool. */}

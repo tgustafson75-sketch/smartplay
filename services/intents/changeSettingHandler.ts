@@ -100,7 +100,20 @@ export const changeSettingHandler: IntentHandler = {
       case 'cart_mode': {
         const v = asBool(rawValue);
         if (v === null) return clarify('Cart mode on or off?');
-        settings.setCartMode(v);
+        /**
+         * 2026-09-13 — a SPOKEN choice is an explicit choice.
+         *
+         * walkingDetector and shotDetectionService both honour `roundStore.transportDeclared` and
+         * never override it — but only the Play tab set it, so "cart mode off" said out loud could
+         * be quietly corrected back by the detector a minute later. Saying it counts.
+         * setTransportMode records the declaration AND carries it to cartMode, so this is one call.
+         */
+        try {
+          const round = require('../../store/roundStore') as typeof import('../../store/roundStore');
+          round.useRoundStore.getState().setTransportMode(v ? 'cart' : 'walking');
+        } catch {
+          settings.setCartMode(v);
+        }
         return ack(
           v ? 'Cart mode on — tightened up shot detection for the cart.'
             : 'Cart mode off — back to walking defaults.',

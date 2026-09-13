@@ -20,6 +20,7 @@
  */
 
 import React, { useEffect, useRef } from 'react';
+import { applyPresence } from '../../services/caddiePresence';
 import { View, Image, Pressable, Animated, Easing, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -27,7 +28,6 @@ import { useListeningSessionStore } from '../../store/listeningSessionStore';
 import { toggle as toggleListening } from '../../services/listeningSession';
 import {
   useTrustLevelStore,
-  TRUST_LEVEL_SLIDER_ORDER,
   type TrustLevel,
 } from '../../store/trustLevelStore';
 import { useTranslation } from 'react-i18next';
@@ -60,11 +60,9 @@ const TRUST_CHIP: Record<TrustLevel, { icon: keyof typeof Ionicons.glyphMap; lab
   3: { icon: 'ear-outline', label: 'A' },           // Active
 };
 
-function nextTrustLevel(current: TrustLevel): TrustLevel {
-  const idx = TRUST_LEVEL_SLIDER_ORDER.indexOf(current);
-  if (idx === -1) return TRUST_LEVEL_SLIDER_ORDER[0];
-  return TRUST_LEVEL_SLIDER_ORDER[(idx + 1) % TRUST_LEVEL_SLIDER_ORDER.length];
-}
+// 2026-09-13 — the local trust cycler is gone: presence is one decision now and this chip calls
+// services/caddiePresence like every other presence surface, so cycling the level alone (and
+// leaving proactive / interactive / localMode / responseMode behind) is no longer possible here.
 
 export function CaddieMicBadge({
   size = 56,
@@ -77,7 +75,6 @@ export function CaddieMicBadge({
   const { colors } = useTheme();
   const listeningState = useListeningSessionStore((s) => s.state);
   const trustLevel = useTrustLevelStore((s) => s.level) as TrustLevel;
-  const setTrustLevel = useTrustLevelStore((s) => s.setLevel);
 
   const isListening = listeningState === 'listening';
   const isThinking = listeningState === 'thinking' || listeningState === 'responding';
@@ -132,13 +129,15 @@ export function CaddieMicBadge({
   // bottom-left of the badge (opposite the mic chip). Renders as a
   // sibling of the Pressable so its own onPress doesn't bubble to the
   // badge tap (and vice versa). Cycles trustLevel via
-  // TRUST_LEVEL_SLIDER_ORDER on each tap. Owner-aware label so the
+  // presence stop on each tap (services/caddiePresence). Owner-aware label so the
   // user sees what level they're flipping to.
   const trustChipSize = Math.max(18, Math.round(size * 0.34));
   const trustMeta = TRUST_CHIP[trustLevel] ?? TRUST_CHIP[3];
   const trustChip = !hideTrustChip ? (
     <Pressable
-      onPress={() => setTrustLevel(nextTrustLevel(trustLevel))}
+      // 2026-09-13 — one writer for presence; cycling the level alone left the other four flags
+      // behind. Quiet <-> Balanced, the same two stops the Tools pill offers.
+      onPress={() => applyPresence(trustLevel === 1 ? 'balanced' : 'quiet')}
       hitSlop={6}
       accessibilityRole="button"
       accessibilityLabel={`Trust level ${trustMeta.label}. Tap to cycle.`}

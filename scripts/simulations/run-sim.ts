@@ -9287,9 +9287,16 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     'a bare score tap no longer writes a fake 2-putt that corrupted GIR%/avg-putts and persisted to history');
 
   const vadSrc = read('hooks/useVoiceActivityDetection.ts');
-  check('Voice: denied mic permission turns Auto-Listen toggle OFF',
-    /setAutoListenEnabled\(false\)/.test(vadSrc),
-    'the toggle stops lying — a denied mic flips Auto-Listen off instead of showing ON while nothing listens');
+  /**
+   * 2026-09-13 — assert the PROPERTY (listening is turned off), not the one expression that used to
+   * do it. Hands-free listening is two flags now — the mic and whether it stays open between turns —
+   * and this path flipped only the first, so a denied mic left continuousConversationMode still
+   * saying "keep the mic open". It goes through services/caddiePresence like every other listening
+   * write. The old regex would have failed a correct fix. [[a-guard-can-assert-the-broken-shape]]
+   */
+  check('Voice: denied mic permission turns hands-free listening OFF',
+    /applyListening\(false\)/.test(vadSrc) || /setAutoListenEnabled\(false\)/.test(vadSrc),
+    'the toggle stops lying — a denied mic turns listening off instead of showing ON while nothing listens');
 
   const cageDbgSrc = read('app/swing-sessions-debug.tsx');
   check('Stores: swing-sessions-debug Feel Capture viewer no longer uses a fresh-array selector',

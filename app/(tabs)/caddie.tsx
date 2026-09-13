@@ -89,6 +89,7 @@ import { useCurrentWeather } from '../../hooks/useCurrentWeather';
 import { playsLikeDistance } from '../../utils/playsLike';
 import { useElevationDeltaStatus } from '../../hooks/useElevationDelta';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
+import { applyPresence } from '../../services/caddiePresence';
 
 import { useToolsMenuStore } from '../../store/toolsMenuStore';
 import L1HolePreview from '../../components/caddie/L1HolePreview';
@@ -189,7 +190,6 @@ export default function CaddieTab() {
   const insets = useSafeAreaInsets();
   const { pre_course_id, _t: preCourseNonce } = useLocalSearchParams<{ pre_course_id?: string; _t?: string }>();
   const trustLevel = useTrustLevelStore(s => s.level);
-  const setTrustLevel = useTrustLevelStore(s => s.setLevel);
   // Phase AP — themed container background so theme + high-contrast toggles
   // produce immediate, visible change on the home tab. Brand accent and
   // L2/L3 avatar treatments stay literal (intentional brand consistency).
@@ -3595,7 +3595,10 @@ export default function CaddieTab() {
         const zoneHeight = budget.heroHeight;
         const swap = () => {
           try { Haptics.selectionAsync().catch(() => {}); } catch { /* optional */ }
-          setTrustLevel(caddiePrimary ? 1 : 3);
+          // 2026-09-13 — presence has one writer (services/caddiePresence). This swap used to move
+          // the trust level alone, leaving proactive / interactive / localMode / responseMode where
+          // they were, so the layout said Quiet while the caddie kept volunteering.
+          applyPresence(caddiePrimary ? 'quiet' : 'balanced');
         };
         const kevinAvatar = (
           <CaddieAvatar

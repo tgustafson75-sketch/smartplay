@@ -33,7 +33,7 @@ describe('hole read is pull-only (offline precheck)', () => {
     }
   });
 
-  it('leaves "what\'s the play" as shot_strategy and "smart play" for SmartFinder', () => {
+  it('leaves "what\'s the play" as shot_strategy — and "smart play" now goes to the SAME place', () => {
     expect(topic("what's the play")).toBe('shot_strategy');
     expect(topic("what's the smart play")).not.toBe('hole_read');
   });

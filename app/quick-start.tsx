@@ -44,10 +44,25 @@ type Card = {
 // verbatim from the PDF tester guide so the in-app reference is the
 // single source of truth. Section order and copy match the PDF.
 const CARDS: Card[] = [
+  /**
+   * 2026-09-13 (Tim) — "onboarding and tutorials should reinforce the phrase so it's prevalent for
+   * the user's understanding." SmartPlay is not a screen in this list; it is the question the whole
+   * app exists to answer, and it is our answer to every other app's plays-like number. It leads.
+   */
+  {
+    icon: 'golf-outline',
+    title: "\"What's the smart play?\"",
+    body: 'Ask that, out loud or by typing, any time you are over a shot. It is the one question this app was built to answer — and you never have to open anything first.',
+    named: [
+      { name: 'Everyone else gives you a number', body: 'Plays like 165. Useful, and it still leaves the decision to you.' },
+      { name: 'Your caddie gives you the play',   body: 'The lie, the wind, the elevation, the pin, the trouble, what is in your bag and how you are swinging today — weighed together into what to actually do.' },
+    ],
+    footer: 'Say it on the course, on the range, or from the home screen. "What\'s the smart play?"',
+  },
   {
     icon: 'people-circle-outline',
     title: 'Your Caddie Team',
-    // 2026-08-07 (Tim) — Tank is owner-gated (off by default); don't advertise him in onboarding.
+    // 2026-08-07 — onboarding advertises only the caddies a player can actually pick.
     body: 'SmartPlay gives you a team of AI caddies. Each one shines in a different part of your game — and you can build your own.',
     named: [
       { name: 'Kevin — The Steady Hand',        body: 'Warm, knowledgeable, balanced. Your default caddie on the course.' },

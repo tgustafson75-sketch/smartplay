@@ -16,6 +16,7 @@
  */
 
 import React, { useEffect, useRef } from 'react';
+import { applyListening } from '../../services/caddiePresence';
 import { Text, Pressable, StyleSheet, Animated, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -26,7 +27,6 @@ import { useTranslation } from 'react-i18next';
 export function ActiveListeningPill() {
   const { t } = useTranslation();
   const autoListenEnabled = useSettingsStore(s => s.autoListenEnabled);
-  const setAutoListenEnabled = useSettingsStore(s => s.setAutoListenEnabled);
   const isRoundActive = useRoundStore(s => s.isRoundActive);
 
   const visible = autoListenEnabled && isRoundActive;
@@ -56,8 +56,11 @@ export function ActiveListeningPill() {
   const dotScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1.15] });
 
   const handleTap = () => {
-    setAutoListenEnabled(false);
-    useToastStore.getState().show('Active Listening muted');
+    // 2026-09-13 — muting has to close BOTH halves. This set autoListenEnabled alone, so the mic
+    // stopped listening while continuousConversationMode still said "keep the mic open between
+    // turns" — muted, and still half-armed. [[two-owners-is-the-root-cause]]
+    applyListening(false);
+    useToastStore.getState().show('Hands-free listening muted');
   };
 
   return (

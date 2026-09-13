@@ -139,7 +139,10 @@ export function useVoiceActivityDetection({
         // this, a denied mic left Auto-Listen showing ON while nothing was
         // listening — the user thought the caddie was hearing them. Turning it
         // off makes the UI reflect reality; they re-enable after granting.
-        try { useSettingsStore.getState().setAutoListenEnabled(false); } catch { /* noop */ }
+        // 2026-09-13 — through the one owner: a denied mic makes BOTH halves impossible, and
+        // flipping autoListen alone left continuousConversationMode saying "keep the mic open
+        // between turns" on a device that just refused the mic. [[two-owners-is-the-root-cause]]
+        try { require('../services/caddiePresence').applyListening(false); } catch { /* noop */ }
         Alert.alert(
           'Microphone Required',
           'Auto-Listen needs microphone access. Enable it in Settings, then turn Auto-Listen back on.',

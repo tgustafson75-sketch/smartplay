@@ -94,10 +94,45 @@ describe('caddie presence is one decision', () => {
     const menu = code('components/tools/GlobalToolsMenu.tsx');
     expect(menu).toMatch(/applyPresence\(/);
     expect(menu).toMatch(/applyListening\(/);
-    // No surface may write a presence flag on its own again.
-    for (const setter of ['setTrustLevel', 'setProactiveKevinEnabled', 'setInteractiveRound', 'setLocalMode', 'setResponseMode', 'setAutoListenEnabled', 'setContinuousConversationMode']) {
-      expect(menu).not.toMatch(new RegExp(`${setter}\\(`));
-    }
+  });
+
+  it('NO presence surface writes a flag on its own — swept, not spot-checked', () => {
+    /**
+     * 2026-09-13, second pass. The first version of this guard checked ONE file, the Tools menu,
+     * because that was the one I had just fixed — and a sweep then found three more surfaces
+     * writing presence directly: the caddie/map swap in app/(tabs)/caddie.tsx, the trust chip in
+     * CaddieMicBadge, and the mute tap in ActiveListeningPill (which closed the mic while leaving
+     * continuousConversationMode armed). A guard scoped to the file you were looking at certifies
+     * every file you were not. Walk the tree instead.
+     *
+     * EXEMPT: services/intents/changeSettingHandler.ts. A spoken "keep it brief" is a deliberate,
+     * targeted change to ONE behaviour — Tim's own design ("just tell him"), not a presence move —
+     * and forcing it through the bundle would overwrite four settings the player never mentioned.
+     * [[guard-scoped-to-one-repo-certifies-the-sibling]] [[sweep-the-missing-half-not-the-unused-export]]
+     */
+    const SETTERS = ['setTrustLevel', 'setProactiveKevinEnabled', 'setInteractiveRound', 'setLocalMode', 'setAutoListenEnabled', 'setContinuousConversationMode'];
+    const OWNER = 'services/caddiePresence.ts';
+    const EXEMPT = new Set([
+      OWNER,
+      'store/settingsStore.ts',
+      'store/trustLevelStore.ts',
+      'services/intents/changeSettingHandler.ts',
+    ]);
+    const offenders: string[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
+        const rel = `${dir}/${entry.name}`;
+        if (entry.isDirectory()) { walk(rel); continue; }
+        if (!/\.(ts|tsx)$/.test(entry.name)) continue;
+        if (EXEMPT.has(rel)) continue;
+        const src = code(rel);
+        for (const setter of SETTERS) {
+          if (new RegExp(`\\b${setter}\\(`).test(src)) offenders.push(`${rel} :: ${setter}`);
+        }
+      }
+    };
+    for (const dir of ['app', 'components', 'services', 'store', 'hooks']) walk(dir);
+    expect(offenders).toEqual([]);
   });
 
   it('the applier lives in the service, so there is something to share', () => {

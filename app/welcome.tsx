@@ -284,6 +284,19 @@ export default function WelcomeScreen() {
             {t('welcome.welcome_screen.you_can_change_this_anytime')}
           </Text>
 
+          {/**
+            * 2026-09-13 (Tim) — "onboarding and tutorials should reinforce the phrase so it's
+            * prevalent for the user's understanding. Don't need another button."
+            *
+            * The one thing a new player should leave this screen knowing is the question to ask.
+            * It sits inline rather than as a step, because this screen is deliberately ONE screen.
+            */}
+          <View style={[styles.primerCard, { borderColor: colors.accent }]}>
+            <Text style={[styles.primerText, { color: colors.text_primary }]}>
+              {t('welcome.welcome_screen.smart_play_primer')}
+            </Text>
+          </View>
+
           {/* 2026-05-22 — Terms & Acceptance gate. Required before
               "Get started" enables. Acceptance persists immediately to
               the store so an interrupted onboarding (close mid-form)
@@ -437,6 +450,8 @@ function makeStyles(
     caddieName: { fontSize: 16, fontWeight: '800' },
     caddieBlurb: { fontSize: 12, marginTop: 1 },
     fineprint: { fontSize: 11, marginTop: s.sm, fontStyle: 'italic' },
+    primerCard: { borderWidth: 1, borderRadius: r.md, padding: 14, marginTop: s.lg },
+    primerText: { fontSize: 14, lineHeight: 21, fontWeight: '600' },
     cta: {
       borderRadius: r.lg, paddingVertical: 14, alignItems: 'center',
       marginTop: s.xl,

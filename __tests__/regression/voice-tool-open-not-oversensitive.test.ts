@@ -14,8 +14,17 @@ describe('tool-open precheck is not over-sensitive (offline)', () => {
     expect(tool('smart vision')).toBe('smartvision');
     expect(tool('open smartfinder')).toBe('smartfinder');
     expect(tool('swing lab')).toBe('swinglab');
-    expect(tool("what's the smart play")).toBe('smartplay');
-    expect(tool('the smart play')).toBe('smartplay');
+    /**
+     * 2026-09-13 (Tim) — "SmartPlay is not really a tool like SmartFinder. It's our 'what's the play
+     * here' phrase... Caddie analyzes the situation in that moment under our myriad of conditions
+     * and factors and provides user-centric strategy for the shot."
+     *
+     * It used to open the SmartFinder camera, so the app's own tagline was the ONE phrasing that
+     * never reached the brain — "what's the play" got the full strategic answer and "what's the
+     * SMART play" got a photo. It is a question, and the precheck matches commands.
+     */
+    expect(tool("what's the smart play")).toBe('query_status');
+    expect(tool('the smart play')).toBe('query_status');
   });
 
   it('does NOT open when the utterance is about logging an issue / bug / crash', () => {

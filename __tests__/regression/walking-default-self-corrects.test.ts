@@ -86,6 +86,17 @@ describe('a walking default is safe because the round corrects it', () => {
     expect(code('store/settingsStore.ts')).toMatch(/cartMode: false,/);
   });
 
+  it('a SPOKEN "cart mode off" counts as declared, so detection will not undo it', () => {
+    /**
+     * 2026-09-13, second pass. Both detectors honour transportDeclared and never override it — but
+     * only the Play tab set it, so a spoken choice could be corrected back a minute later by the
+     * very detector that exists to respect explicit choices. Found by sweeping for OTHER writers
+     * after fixing the first one. [[guard-scoped-to-one-repo-certifies-the-sibling]]
+     */
+    const h = code('services/intents/changeSettingHandler.ts');
+    expect(h).toMatch(/setTransportMode\(v \? 'cart' : 'walking'\)/);
+  });
+
   it('the correction stays silent — no prompt, ever', () => {
     expect(code('services/walkingDetector.ts')).not.toMatch(/Alert\.alert|confirm\(/);
   });

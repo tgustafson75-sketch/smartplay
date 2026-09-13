@@ -33,6 +33,26 @@ type Tutorial = {
  */
 const buildTutorials = (caddieName: string, pronoun: string): Tutorial[] => {
   const all: Tutorial[] = [
+  /**
+   * 2026-09-13 (Tim) — "SmartPlay is not really a tool like SmartFinder. It's our 'what's the play
+   * here' phrase as a tool... it's our answer to every other app's plays-like feature." He also said
+   * where it belongs: "onboarding and tutorials should reinforce the phrase so it's prevalent for
+   * the user's understanding. Don't need another button."
+   *
+   * So it leads. Every other card explains a screen; this one explains the thing the app is for.
+   */
+  {
+    id: 'smart_play',
+    icon: 'golf-outline',
+    title: "\"What's the smart play?\"",
+    blurb: 'The one question this app was built to answer.',
+    steps: [
+      `Ask it out loud, or type it, any time you are over a shot — ${caddieName} answers with the play, not just a number.`,
+      'Other apps tell you it "plays like 165". This tells you what to do about it.',
+      `${caddieName} weighs the lie, wind, elevation, temperature, the pin, the trouble, what is actually in your bag and how you have been hitting it today.`,
+      'You do not need to open anything first. It works on the course, on the range, and from the home screen.',
+    ],
+  },
   {
     id: 'voice',
     icon: 'mic',
@@ -40,7 +60,7 @@ const buildTutorials = (caddieName: string, pronoun: string): Tutorial[] => {
     blurb: 'Voice anytime, tap anytime, both equal.',
     steps: [
       `Tap ${caddieName} or the mic icon to talk. ${pronoun} listens for a few seconds, then responds.`,
-      'Try natural lines like "What\'d you hit?" or "How far to the green?".',
+      'Try natural lines like "What\'s the smart play?", "What\'d you hit?" or "How far to the green?".',
       'Tap the ? button (L2 / L3) for a list of what you can say on the current screen.',
       'Voice can be muted in Tools → Voice On/Off if you want to play in silence.',
     ],
@@ -182,8 +202,8 @@ const buildTutorials = (caddieName: string, pronoun: string): Tutorial[] => {
     blurb: 'Three-dot menu top-right of Caddie home.',
     steps: [
       `Switch your caddie or cycle ${caddieName}'s Presence without leaving the menu.`,
-      'Open SmartMotion, SwingLab, SmartVision, SmartFinder, Smart Play, or TightLie.',
-      'Refresh GPS, view the Shot Log, end the round, or toggle Coach Mode.',
+      'Open SmartMotion, SwingLab, SmartVision, SmartFinder, or TightLie.',
+      'Refresh GPS, view the Shot Log, end the round, or toggle Shared Sessions.',
       'Tutorials (this screen) and Your Caddie live under Help.',
     ],
   },

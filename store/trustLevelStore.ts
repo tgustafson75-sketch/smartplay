@@ -55,8 +55,18 @@ export const TRUST_LEVEL_META: Record<TrustLevel, TrustLevelMeta> = {
   3: { level: 3, id: 'active',    label: 'Active',    one_liner: 'Your caddie leads the way.' },
 };
 
-/** Display order for the toggle — just the two live levels now (Quiet, Active). */
-export const TRUST_LEVEL_SLIDER_ORDER: readonly TrustLevel[] = [1, 3];
+/**
+ * 2026-09-13 — REMOVED, as a true duplicate rather than as dead code.
+ *
+ * This was the display order for the two-stop trust toggle. Presence is one decision now and its
+ * ordered stops live in services/caddiePresence (PRESENCE_PROFILES: quiet, balanced, talkative),
+ * which is also the only thing that writes a trust level. Both consumers of this list — the Settings
+ * slider and the CaddieMicBadge cycler — were replaced by that owner, so keeping a second ordering
+ * of the same concept is exactly how the two would disagree later.
+ *
+ * TRUST_LEVEL_META stays: it holds what a level MEANS, including that the level decides which view
+ * leads, and the presence description reads it. [[orphans-are-live-bugs-not-dead-code]]
+ */
 
 interface TrustLevelState {
   level: TrustLevel;
