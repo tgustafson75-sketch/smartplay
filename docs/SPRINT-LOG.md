@@ -3808,3 +3808,36 @@ Two release fixes:
 - Four orphan-lock entries in `constants/`+`data/` baselined as TRIAGE/DUPE with reasons, not resolved.
 - Legacy putter shots carry a number whose unit is unknowable and will now read ×3 as feet. No
   migration can fix that honestly; it is Tim's own test data.
+
+### Mental audit + unaudited-surface sweep (`a20e0a27`)
+
+The carried mental item, done. The mental **data** was already guarded; the mental **voice** could not
+be selected at all. `ActiveSurface` names eight values and only FOUR were ever registered by a screen,
+so both `psychologist` branches in `caddieRequestBody.register` were dead — the recap answered in the
+on-course tactical register, and the coach register worked in Cage Mode and nowhere else in SwingLab.
+`'arena'` is a v1 leftover **parked for 3.0** (TopGolf-at-home on top of Cage, Tim's call) and is
+documented as dormant rather than wired.
+
+Three more found by the same surface sweep:
+- **Fix G (2026-05-21) had been dead for months** behind a comment that explained it away: it gated on
+  `'drill_session'` asserting Cage Mode set it; Cage Mode sets `'cage'`. A bare "record" in Cage Mode
+  told the player they were not in a round.
+- **An apostrophe was a word boundary** in `retrieve.ts`'s `norm()`, making 45 curated aliases across
+  the whole KB unreachable to any real transcript — including `'whats the smart play'`, the tagline.
+- **The mental KB did not speak golfer**: "choke" existed only as "choke down" (a grip) and "yips"
+  appeared nowhere in the knowledge base. 15 natural mental utterances now all retrieve mental
+  knowledge; six previously returned nothing or swing-mechanics noise.
+
+Wider sweep measured and triaged in `docs/audit-unguarded-inventory.md` — 154 files / 22,939 lines
+named by no test and no sim guard, of which 91 logic files are the real gap.
+
+### Open / carried (updated)
+
+- **`services/putting/greenHeat` reaches three screens and the caddie not at all.** The player can see
+  make-rate by distance band and dominant break and cannot ask about any of it. Deliberately not fixed:
+  wiring it adds a cached-prompt block, which trips the ratchet and needs a stated prompt-cost decision.
+  **This is the next thing on the mental/putting leg.**
+- 12 of 18 authored `CaddieSituation` dialog situations are never requested (pinned shrink-only).
+  `distance_to_pin` and `plays_like` are a second, dormant authoring of copy that already ships.
+- Device verification of everything today, still Tim's gate — now including a bare "record" in Cage
+  Mode and the recap's register.

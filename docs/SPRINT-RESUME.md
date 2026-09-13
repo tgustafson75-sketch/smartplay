@@ -43,8 +43,18 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 >
 > Green: tsc · jest **4578/4578 (385 suites)** · sim **1034/1034** · lint **0 errors / 75 warnings**.
 >
-> **Carried:** device verification of everything above; the mental-game leg; four orphan entries
-> baselined as TRIAGE/DUPE.
+> **Mental leg: DONE** (`a20e0a27`) — the data was guarded, the VOICE could not be selected. Four of
+> eight `ActiveSurface` values were never registered, so both `psychologist` branches were dead and the
+> recap answered in the on-course tactical register. `'arena'` is parked for 3.0 (Tim). Same sweep
+> found Fix G dead for months behind a comment that explained it away, an apostrophe acting as a word
+> boundary that made 45 KB aliases unreachable (including the tagline), and a mental KB with no word
+> for "choke" or "yips".
+>
+> **Carried:** device verification of everything above; **`services/putting/greenHeat` reaches three
+> screens and the caddie not at all — next on this leg**, deliberately deferred because wiring it trips
+> the cached-prompt ratchet; 12 of 18 authored dialog situations never requested (pinned shrink-only);
+> four orphan entries baselined as TRIAGE/DUPE; `docs/audit-unguarded-inventory.md` lists 91 unguarded
+> logic files.
 
 ---
 
