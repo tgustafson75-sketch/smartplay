@@ -1103,6 +1103,48 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       return `THEIR MEASURED SWING (private; ${trend.framing}):\n${lines.join('\n')}`;
     }, null),
 
+    /**
+     * 2026-09-12 (Tim — the day-one concept, the MENTAL-game leg) — "this is where the sports coach,
+     * swing coach, caddy, mental game coach concept originally came from — to be able to talk to
+     * them."
+     *
+     * The mental coach was the only one of the four with no evidence at all. `mentalGameBlock()`
+     * tells him he is a sports psychologist, always-on on AND off the course; what he got was
+     * `emotionalLog` directly above — the CURRENT round's last five reports — and `endRound` empties
+     * that. So off the course, which is where this conversation actually happens, he had nothing,
+     * while every report from the last fifty rounds sat persisted in roundHistory and was read by
+     * nothing. Not even by a screen: unlike practiceImpact and swingMetricTrend, the mental leg has
+     * no surface anywhere. [[sweep-the-missing-half-not-the-unused-export]]
+     *
+     * SPARSE ON PURPOSE, AND SAID SO. `log_emotional_state` fires only when the caddie noticed a
+     * shift worth logging, so these are the moments that stood out, not a mood record. The block
+     * states that in the text, because a model handed counts reasons about them as complete. The
+     * numbers are shares, never a diagnosis, and the prompt rule forbids reciting them.
+     *
+     * COST — completed rounds only, so it cannot move during a round and rides the CACHED prompt,
+     * the same side and the same argument as practiceImpactBlock above.
+     */
+    mentalPatternBlock: safe(() => {
+      const { computeMentalPattern } = require('./mentalPatterns') as typeof import('./mentalPatterns');
+      const m = computeMentalPattern({ rounds: (r.roundHistory ?? []) as never });
+      if (!m.hasEnough || !m.topState) return null;
+      const pct = (n: number) => `${Math.round(n * 100)}%`;
+      const where = m.negFront + m.negBack === 0 ? ''
+        : m.negBack > m.negFront * 2 ? ' Those rough patches cluster on the BACK nine.'
+          : m.negFront > m.negBack * 2 ? ' Those rough patches cluster on the FRONT nine.'
+            : '';
+      const dir = m.direction === 'settling' ? 'settling down'
+        : m.direction === 'tightening' ? 'getting more frequent'
+          : 'about level';
+      return 'WHAT HIS OWN EMOTIONAL REPORTS SHOW across his last '
+        + `${m.roundsWithReports} rounds (private; ${m.totalReports} moments logged — these are only the `
+        + 'moments that stood out enough to note, NOT a record of how he usually feels, so treat them as '
+        + `"has this come up before", never as a diagnosis): the state he names most is "${m.topState.state}" `
+        + `(${m.topState.count} times). ${m.negative} of the ${m.totalReports} were rough, ${m.positive} good.`
+        + `${where} Rough moments are ${dir} lately (${pct(m.negShareEarly)} of reports earlier vs `
+        + `${pct(m.negShareLate)} more recently). Use this to MEET him, not to tell him about himself.`;
+    }, null),
+
     /** The stated weekly plan — goals, challenges, open reminders. Empty until they engage it. */
     practicePlanBlock: safe(() => {
       const pp = require('../store/practicePlanStore') as typeof import('../store/practicePlanStore');

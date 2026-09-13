@@ -12430,8 +12430,8 @@ check('RATCHET: nothing new may be interpolated into the cached system prompt',
       '_conversationTurns', 'voicedDistress', 'liveFactsBlock', 'bagBlock', '_personaKBBlock', 'kbAddendum'];
     if (DENY.some((d) => names.has(d))) return false;
 
-    // Frozen 2026-08-25 at 57; 59 since 2026-09-12. Shrinking is always fine; growing needs a
-    // deliberate line here.
+    // Frozen 2026-08-25 at 57; 59 since 2026-09-12; 60 with _mentalPattern. Shrinking is always
+    // fine; growing needs a deliberate line here.
     const ALLOWED = new Set(['Array', 'TRANSLATION_OVERRIDE', '_cecilyMode', '_coachKnowledgeContext',
       '_courseContext', '_courseIntelligence', '_dominantMiss', '_ghinNumber', '_ghostContext', '_goal',
       '_golferModel', '_holeContextBlock', '_kevinContext', '_knownCoursesBlock', '_penaltyContext',
@@ -12462,6 +12462,16 @@ check('RATCHET: nothing new may be interpolated into the cached system prompt',
        * for: putting them on the message side would be the cousin of the 08-24 defect, not a fix.
        */
       '_practiceImpact', '_measuredSwing',
+      /**
+       * 2026-09-12 — _mentalPattern, added deliberately per the note above, and cached for the same
+       * reason as _practiceImpact beside it: it is computed from COMPLETED rounds only
+       * (services/mentalPatterns reads roundHistory), so it cannot move shot to shot — the live
+       * emotional signals that DO move mid-round are `mentalState`, `isSpiralRisk` and
+       * `voicedDistress`, and all three are on the DENY list above, on the message side, where they
+       * belong. Putting this one there instead would invalidate the cache every turn for a string
+       * that cannot have changed.
+       */
+      '_mentalPattern',
       'experienceDepthRule', 'firstName',
       'handednessRule', 'insightLines', 'isRoundActive', 'is_proactive', 'langRule', 'mentalGameBlock',
       'modeLabel', 'personaIntensity', 'perspectiveBlock', 'pi', 'playerAddressRule', 'r', 'registerBlock',
