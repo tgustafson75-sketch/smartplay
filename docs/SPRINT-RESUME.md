@@ -377,8 +377,29 @@ All 23 confirmed HIGH findings from the 30-agent workflow audit addressed:
 >   shared `selfSwingReads`), and a course you have not played (`download_course` tool → the existing
 >   `courseDownloadEngine`, plus the course-read-against-your-game prompt rule).
 >
-> Green on both: tsc, lint, jest 4270/4270 (365 suites), sim 1023/1023. **Nothing verified on device.**
-> Two OTA-eligible prompt changes are in here, so a device pass is the gate before either is trusted.
+> - `d855974` — **the Play tab half of `download_course`, which was missing.** The fetch worked and
+>   `getCourse` is cache-first, so a pulled-in course really does open offline — but nothing LISTED
+>   it. `downloaded` was rendered nowhere (the engine's comment relied on that), and
+>   `recentCourseIds` is written at round START, so a course fetched for an upcoming trip was in no
+>   list and the only route to it was a network-only search. Cached, ready, unreachable — while the
+>   prompt promised "ready and offline when you go". `downloadedCourseSummaries` is the one owner of
+>   which downloaded courses are listable; the Play tab folds them in beside bundled/custom/recent,
+>   deduped, with the `place:` alias rows filtered (that filter is now load-bearing — see the
+>   corrected comment on `rememberAlias`) and no fetch at mount.
+>
+> Green: tsc 0, jest 4279/4279 (366 suites), sim 1023/1023. **Nothing verified on device.**
+> Three OTA-eligible prompt changes are in here, so a device pass is the gate before any is trusted.
+>
+> **`lint` IS NOT GREEN AND WAS NOT GREEN BEFORE THIS BRANCH.** `npx expo lint` reports 76 errors /
+> 75 warnings, all `i18n/no-hardcoded-jsx-text` — and `origin/main` reports the IDENTICAL 76/75.
+> Earlier entries here claiming "lint clean" are wrong about main as well; no commit on this branch
+> added one. One of the five standing gates has effectively been off.
+> [[a-gate-that-cannot-run-is-not-a-gate-that-passes]]
+>
+> **The download_course gate asserts SOURCE TEXT only** (`readFileSync` + `toMatch`, zero execution)
+> — the same shape as the 09-11 "the 60 is a club" gate that certified a fix which had never once
+> fired. `a-fetched-course-reaches-the-play-tab.test.ts` is behavioural and break-tested in two
+> layers; the `a-course-he-is-thinking-about` gate still is not.
 >
 > **THE LENS these were found through (Tim, 2026-09-13):** *"This is a day one concept… where the
 > sports coach, swing coach, caddy, mental game coach concept originally came from — to be able to
