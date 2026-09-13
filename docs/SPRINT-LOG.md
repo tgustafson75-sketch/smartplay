@@ -3546,8 +3546,16 @@ message → defect removed): disclosure-matches-manifest **both directions**; th
 the same premise; every default-ON consent in every copy; a cited Settings control the player can find;
 the processor list answering to the code (three directions — retired vendor re-disclosed, live vendor
 missing, disclosed vendor's marker gone); and the three published copies being the same document line
-for line. **9 of 9 caught.** Two liveness markers initially pointed at filenames I had guessed rather
-than grepped, and failed for that reason first.
+for line. Two liveness markers initially pointed at filenames I had guessed rather than grepped, and
+failed for that reason first.
+
+**A SEVENTH guard, because the sixth certified a wrong page.** After pushing, curling the live URL
+showed smartplaycaddie.com still naming ElevenLabs with no Deepgram and no Gemini — the processor
+fixes had landed in the three repo copies only, and "the published copies are the SAME document" went
+green because it only looked inside this repo. The fourth copy, the one Google's Data safety form
+points at, is in ~/smartplaycaddie. Regenerated it from the embed the way build_caddie_site.py says
+to, and added a guard that reads the sibling repo and FAILS with "could not reach" when it is absent,
+rather than passing blind. **11 of 11 break-tests caught** across all seven guards. sim 1028/1028.
 
 **`docs/APP-BUILD-RULES.md`** — new, at Tim's request. Rule 1: every new session follows it. Part A is
 general build principles for every app in the workspace (ship-green and what green means, guard
