@@ -258,6 +258,22 @@ export default function FitProfileScreen() {
    * cannot drift. A legend maintained separately from the thing it explains is how you get a legend
    * that lies. [[two-owners-is-the-root-cause]]
    */
+  /**
+   * 2026-09-13 (Tim) — "Needs to layout more sectionally like you are in a pro shop by sections
+   * with Data."
+   *
+   * Twenty rows in one undifferentiated list is a spreadsheet. A golfer does not think "club 11 of
+   * 20" — they think woods, hybrids, irons, wedges, and they read each rack as a set: does this part
+   * of my bag cover its range, and is anything in here doing another club's job? Each section
+   * carries its own line of data so the answer is right there instead of in a card further down.
+   */
+  const BAG_SECTIONS: readonly { title: string; clubs: readonly string[] }[] = [
+    { title: 'WOODS', clubs: ['Driver', '3W', '5W', '7W'] },
+    { title: 'HYBRIDS', clubs: ['2H', '3H', '4H', '5H'] },
+    { title: 'IRONS', clubs: ['3I', '4I', '5I', '6I', '7I', '8I', '9I'] },
+    { title: 'WEDGES', clubs: ['PW', 'AW', 'GW', 'SW', 'LW'] },
+  ];
+
   const dotStyleFor = (measured: boolean | undefined, stated: boolean | undefined) => ({
     backgroundColor: measured ? '#3FB950' : stated ? '#22d3ee' : 'transparent',
     borderColor: measured ? '#3FB950' : stated ? '#22d3ee' : colors.text_muted,
@@ -277,7 +293,7 @@ export default function FitProfileScreen() {
         <Text style={[styles.headline, { color: colors.text_primary }]}>{profile.headline}</Text>
         <View style={styles.confRow}>
           <View style={[styles.confDot, { backgroundColor: confColor }]} />
-          <Text style={[styles.confText, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.tracked_you_set_of_clubs', { measuredCount: profile.measuredCount, statedCount: profile.statedCount, totalCount: profile.totalCount, confidence: profile.confidence })}</Text>
+          <Text style={[styles.confText, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.tracked_you_set_of_clubs', { measuredCount: profile.measuredCount, statedCount: profile.statedCount, confidence: profile.confidence })}</Text>
         </View>
 
         {/**
@@ -295,8 +311,260 @@ export default function FitProfileScreen() {
               <Text style={[styles.keyText, { color: colors.text_muted }]}>{label}</Text>
             </View>
           ))}
+          {/**
+            * 2026-09-13 — the amber ! and the overlap glyph appear on rows below and were in NO
+            * legend, on a screen that already had two legends disagreeing about the dots. A marker a
+            * player cannot decode is noise wearing the costume of information.
+            */}
+          <View style={styles.keyItem}>
+            <Ionicons name="alert-circle" size={13} color="#f5a623" />
+            <Text style={[styles.keyText, { color: colors.text_muted }]}>{t('practice_fit_profile.key.gap')}</Text>
+          </View>
+          <View style={styles.keyItem}>
+            <Ionicons name="copy-outline" size={12} color={colors.text_muted} />
+            <Text style={[styles.keyText, { color: colors.text_muted }]}>{t('practice_fit_profile.key.overlap')}</Text>
+          </View>
         </View>
 
+        {/* LADDER — your bag. Tap any non-tracked club to set your carry. */}
+        <Text style={[styles.cardLabel, { color: colors.text_muted, marginTop: 16, marginBottom: 8, marginLeft: 4 }]}>{t('practice_fit_profile.fit_profile_screen.your_bag_tap_a_club')}</Text>
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, paddingVertical: 4 }]}>
+          {BAG_SECTIONS.map((section) => {
+          const rows = profile.ladder.filter((r) => section.clubs.includes(r.club));
+          if (rows.length === 0) return null;
+          /** The rack's own data: what it covers, and how much of it is real. */
+          const tracked = rows.filter((r) => r.measured).length;
+          const hi = Math.max(...rows.map((r) => Math.round(r.yards)));
+          const lo = Math.min(...rows.map((r) => Math.round(r.yards)));
+          return (
+          <View key={section.title}>
+            <View style={styles.rackHead}>
+              <Text style={[styles.rackTitle, { color: colors.text_primary }]}>{section.title}</Text>
+              <Text style={[styles.rackData, { color: colors.text_muted }]}>
+                {lo === hi ? `${hi} yd` : `${lo}–${hi} yd`} · {tracked}/{rows.length} tracked
+              </Text>
+            </View>
+          {rows.map((c) => {
+            if (editingClub === c.club) {
+              return (
+                <View key={c.club} style={styles.ladderRow}>
+                  <Text style={[styles.ladderClub, { color: colors.text_primary }]}>{c.club}</Text>
+                  <View style={styles.ladderRight}>
+                    <TextInput
+                      value={draft}
+                      onChangeText={setDraft}
+                      keyboardType="number-pad"
+                      autoFocus
+                      placeholder="yds"
+                      placeholderTextColor={colors.text_muted}
+                      maxLength={3}
+                      onSubmitEditing={() => saveEdit(c.club)}
+                      style={[styles.editInput, { color: colors.text_primary, borderColor: colors.accent }]}
+                      accessibilityLabel={`Carry distance for ${c.club} in yards`}
+                    />
+                    <TouchableOpacity onPress={() => saveEdit(c.club)} style={styles.editBtn} accessibilityRole="button" accessibilityLabel={t('practice_fit_profile.accessibility_label.save')}>
+                      <Ionicons name="checkmark" size={20} color="#3FB950" />
+                    </TouchableOpacity>
+                    {c.stated ? (
+                      <TouchableOpacity onPress={() => clearEdit(c.club)} style={styles.editBtn} accessibilityRole="button" accessibilityLabel={t('practice_fit_profile.accessibility_label.remove')}>
+                        <Ionicons name="trash-outline" size={16} color={colors.text_muted} />
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                </View>
+              );
+            }
+            const editable = !c.measured; // tracked carries win; don't let a stated value masquerade as tracked
+            /**
+             * 2026-08-17 (Tim — "this driving iron gets 215 yards and a baby fade every single time,
+             * and I'd like to see that before even looking, in the bag tendency or club properties").
+             *
+             * The ladder already answers HOW FAR. This answers WHAT IT DOES — the thing a golfer
+             * knows about their own clubs before they know their handicap. Only clubs with an
+             * established tendency show a line (services/clubTendency owns the evidence bars), so
+             * the column stays empty rather than filling with guesses about clubs barely hit.
+             * Carry is deliberately omitted here: it is already the number on the right.
+             */
+            const tendency = tendencyByClub.get(c.club) ?? null;
+            const inner = (
+              <>
+                <View style={styles.ladderLeft}>
+                  <Text style={[styles.ladderClub, { color: colors.text_primary }]}>{c.club}</Text>
+                  {tendency ? (
+                    <Text style={[styles.ladderTendency, { color: colors.text_muted }]} numberOfLines={1}>
+                      {tendency}
+                    </Text>
+                  ) : null}
+                </View>
+                <View style={styles.ladderRight}>
+                  <Text style={[styles.ladderYards, { color: c.measured || c.stated ? colors.text_primary : colors.text_muted }]}>{Math.round(c.yards)}<Text style={styles.ladderUnit}> yd</Text></Text>
+                  <View style={[styles.measuredDot, dotStyleFor(c.measured, c.stated)]} />
+                  {gapSet.has(c.club) ? <Ionicons name="alert-circle" size={14} color="#f5a623" style={{ marginLeft: 4 }} /> : null}
+                  {overlapSet.has(c.club) ? <Ionicons name="copy-outline" size={13} color={colors.text_muted} style={{ marginLeft: 4 }} /> : null}
+                  {editable ? <Ionicons name="pencil" size={12} color={colors.text_muted} style={{ marginLeft: 6 }} /> : null}
+                </View>
+              </>
+            );
+            return editable ? (
+              <TouchableOpacity
+                key={c.club}
+                style={styles.ladderRow}
+                onPress={() => openEdit(c.club)}
+                accessibilityRole="button"
+                accessibilityLabel={`Set carry for ${c.club}`}
+              >
+                {inner}
+              </TouchableOpacity>
+            ) : (
+              <View key={c.club} style={styles.ladderRow}>{inner}</View>
+            );
+          })}
+          </View>
+          );
+          })}
+          {/**
+            * 2026-09-13 — the SECOND legend is gone. It said "◆ you set it" while the key at the top
+            * of the screen draws that state as a filled cyan dot, so one screen explained the same
+            * three icons two different ways. The key above is built from dotStyleFor, the same
+            * function these rows use, and cannot drift. [[two-owners-is-the-root-cause]]
+            */}
+        </View>
+
+        <Text style={[styles.sectionHeading, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.fit_findings_heading')}</Text>
+        {/* GAPS */}
+        {profile.gaps.length > 0 && (
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#f5a623' }]}>
+            <Text style={[styles.cardLabel, { color: '#f5a623' }]}>{t('practice_fit_profile.fit_profile_screen.gaps_to_fill')}</Text>
+            {profile.gaps.map((g, i) => (
+              <Text key={i} style={[styles.gapText, { color: colors.text_primary }]}>
+                {t('practice_fit_profile.fit_profile_screen.gap_line', { gapYards: g.gapYards, upper: g.upper, lower: g.lower, centerYards: g.centerYards })}
+              </Text>
+            ))}
+          </View>
+        )}
+
+        {/* OVERLAPS */}
+        {profile.overlaps.length > 0 && (
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.cardLabel, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.doing_the_same_job')}</Text>
+            {/**
+              * 2026-09-13 — ranked and capped. Nine rows all ending "one may be redundant." is a
+              * list, not a finding: the pair that matters is the one with the least daylight between
+              * them, and it was buried among eight others in ladder order.
+              */}
+            {[...profile.overlaps].sort((a, b) => a.gapYards - b.gapYards).slice(0, 4).map((o, i) => (
+              <Text key={i} style={[styles.gapText, { color: colors.text_primary }]}>
+                {t('practice_fit_profile.fit_profile_screen.overlap_line', { longer: o.longer, shorter: o.shorter, gapYards: o.gapYards })}
+              </Text>
+            ))}
+            {profile.overlaps.length > 4 ? (
+              <Text style={[styles.confText, { color: colors.text_muted, marginTop: 6 }]}>
+                {t('practice_fit_profile.fit_profile_screen.overlap_more', { n: profile.overlaps.length - 4 })}
+              </Text>
+            ) : null}
+          </View>
+        )}
+
+        <Text style={[styles.sectionHeading, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.specs_heading')}</Text>
+        {/* FLEX + BALL — honest directional layers (starting points). */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.cardLabel, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.shaft_flex')}</Text>
+          {flex ? (
+            <>
+              <Text style={[styles.fitValue, { color: colors.text_primary }]}>{flex.flex}</Text>
+              <Text style={[styles.gapText, { color: colors.text_muted }]}>{flex.note}</Text>
+            </>
+          ) : (
+            <Text style={[styles.gapText, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.track_a_few_driver_shots')}</Text>
+          )}
+        </View>
+
+        {/* RECOMMENDED BALL — honest, DIRECTIONAL fit from readable game data. */}
+        {/* 2026-09-13 — was a sky-blue bordered card among a green one, an amber one and a plain
+            one. Four accent colours on one screen reads as four unrelated things; the card chrome is
+            uniform now and colour is reserved for meaning (amber = a gap). */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.cardLabel, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.recommended_ball')}</Text>
+          {ball.lowInfo ? (
+            <>
+              <Text style={[styles.fitValue, { color: colors.text_primary }]}>{ball.headline}</Text>
+              {ball.reasons.map((r, i) => (
+                <View key={i} style={styles.reasonRow}>
+                  <Ionicons name="ellipse" size={5} color={colors.text_muted} style={{ marginTop: 7 }} />
+                  <Text style={[styles.gapText, { color: colors.text_muted, marginTop: 0 }]}>{r}</Text>
+                </View>
+              ))}
+            </>
+          ) : (
+            <>
+              <View style={styles.ballHeadRow}>
+                <Text style={[styles.profileTag, { color: '#0a1410', backgroundColor: colors.accent }]}>{ball.profileLabel}</Text>
+              </View>
+              <Text style={[styles.fitValue, { color: colors.text_primary, marginTop: 8 }]}>{ball.headline}</Text>
+
+              {ball.reasons.map((r, i) => (
+                <View key={i} style={styles.reasonRow}>
+                  <Ionicons name="checkmark-circle" size={14} color={colors.accent} style={{ marginTop: 3 }} />
+                  <Text style={[styles.gapText, { color: colors.text_secondary, marginTop: 0, flex: 1 }]}>{r}</Text>
+                </View>
+              ))}
+
+              {/* Characteristics — '—' where we have no honest read (never fabricated). */}
+              <View style={styles.charRow}>
+                <View style={styles.charCell}>
+                  <Text style={[styles.charLabel, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.spin')}</Text>
+                  <Text style={[styles.charValue, { color: colors.text_primary }]}>{ball.characteristics.spin}</Text>
+                </View>
+                <View style={styles.charCell}>
+                  <Text style={[styles.charLabel, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.feel')}</Text>
+                  <Text style={[styles.charValue, { color: colors.text_primary }]}>{ball.characteristics.feel}</Text>
+                </View>
+                <View style={[styles.charCell, { flex: 1.4 }]}>
+                  <Text style={[styles.charLabel, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.cover')}</Text>
+                  <Text style={[styles.charValue, { color: colors.text_primary }]}>{ball.characteristics.cover}</Text>
+                </View>
+              </View>
+
+              {/* Generic categories — NOT branded balls asserted as fact. */}
+              {ball.exampleCategories.length > 0 && (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                  {ball.exampleCategories.map((c) => (
+                    <View key={c} style={[styles.catPill, { borderColor: colors.border }]}>
+                      <Text style={[styles.catPillText, { color: colors.text_secondary }]}>{c}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </>
+          )}
+          {/* Standing honesty line — always shown. */}
+          <Text style={[styles.honesty, { color: colors.text_muted }]}>{ball.honestyLine}</Text>
+        </View>
+
+        <Text style={[styles.sectionHeading, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.practice_volume')}</Text>
+        {/* PRACTICE VOLUME — honest rep credit per club (not a measured carry). */}
+        {repList.length > 0 && (
+          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+              {repList.map((r) => (
+                <View key={r.club} style={[styles.repPill, { borderColor: colors.border }]}>
+                  <Text style={[styles.repClub, { color: colors.text_primary }]}>{r.club}</Text>
+                  <Text style={[styles.repN, { color: colors.text_muted }]}> {r.n}</Text>
+                </View>
+              ))}
+            </View>
+            <Text style={[styles.gapText, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.practice_volume_purpose')}</Text>
+          </View>
+        )}
+
+        {/**
+          * 2026-09-13 (Tim) — SET UP YOUR BAG, at the BOTTOM.
+          *
+          * These three used to sit between the headline and any of the analysis it promised, so the
+          * screen opened on two import buttons and an empty card. They are setup, not the answer —
+          * you come here to see your ladder, and you only scan or import once.
+          */}
+        <Text style={[styles.sectionHeading, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.set_up_your_bag')}</Text>
         {/* 2026-07-23 (Tim — Bag Vision) — populate the bag by video instead of typing each club. */}
         <TouchableOpacity
           onPress={() => router.push('/bag-scan' as never)}
@@ -420,201 +688,6 @@ export default function FitProfileScreen() {
           )}
         </View>
 
-        {/* GAPS */}
-        {profile.gaps.length > 0 && (
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: '#f5a623' }]}>
-            <Text style={[styles.cardLabel, { color: '#f5a623' }]}>{t('practice_fit_profile.fit_profile_screen.gaps_to_fill')}</Text>
-            {profile.gaps.map((g, i) => (
-              <Text key={i} style={[styles.gapText, { color: colors.text_primary }]}>
-                {g.gapYards} yd between your {g.upper} and {g.lower} — a club-and-a-half hole around {g.centerYards} yds.
-              </Text>
-            ))}
-          </View>
-        )}
-
-        {/* OVERLAPS */}
-        {profile.overlaps.length > 0 && (
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.cardLabel, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.doing_the_same_job')}</Text>
-            {profile.overlaps.map((o, i) => (
-              <Text key={i} style={[styles.gapText, { color: colors.text_primary }]}>
-                {o.longer} and {o.shorter} carry within {o.gapYards} yds — one may be redundant.
-              </Text>
-            ))}
-          </View>
-        )}
-
-        {/* FLEX + BALL — honest directional layers (starting points). */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.cardLabel, { color: '#22d3ee' }]}>{t('practice_fit_profile.fit_profile_screen.shaft_flex')}</Text>
-          {flex ? (
-            <>
-              <Text style={[styles.fitValue, { color: colors.text_primary }]}>{flex.flex}</Text>
-              <Text style={[styles.gapText, { color: colors.text_muted }]}>{flex.note}</Text>
-            </>
-          ) : (
-            <Text style={[styles.gapText, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.track_a_few_driver_shots')}</Text>
-          )}
-        </View>
-
-        {/* RECOMMENDED BALL — honest, DIRECTIONAL fit from readable game data. */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.accent_sky }]}>
-          <Text style={[styles.cardLabel, { color: colors.accent_sky }]}>{t('practice_fit_profile.fit_profile_screen.recommended_ball')}</Text>
-          {ball.lowInfo ? (
-            <>
-              <Text style={[styles.fitValue, { color: colors.text_primary }]}>{ball.headline}</Text>
-              {ball.reasons.map((r, i) => (
-                <View key={i} style={styles.reasonRow}>
-                  <Ionicons name="ellipse" size={5} color={colors.text_muted} style={{ marginTop: 7 }} />
-                  <Text style={[styles.gapText, { color: colors.text_muted, marginTop: 0 }]}>{r}</Text>
-                </View>
-              ))}
-            </>
-          ) : (
-            <>
-              <View style={styles.ballHeadRow}>
-                <Text style={[styles.profileTag, { color: '#0a1410', backgroundColor: colors.accent_sky }]}>{ball.profileLabel}</Text>
-              </View>
-              <Text style={[styles.fitValue, { color: colors.text_primary, marginTop: 8 }]}>{ball.headline}</Text>
-
-              {ball.reasons.map((r, i) => (
-                <View key={i} style={styles.reasonRow}>
-                  <Ionicons name="checkmark-circle" size={14} color={colors.accent_sky} style={{ marginTop: 3 }} />
-                  <Text style={[styles.gapText, { color: colors.text_secondary, marginTop: 0, flex: 1 }]}>{r}</Text>
-                </View>
-              ))}
-
-              {/* Characteristics — '—' where we have no honest read (never fabricated). */}
-              <View style={styles.charRow}>
-                <View style={styles.charCell}>
-                  <Text style={[styles.charLabel, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.spin')}</Text>
-                  <Text style={[styles.charValue, { color: colors.text_primary }]}>{ball.characteristics.spin}</Text>
-                </View>
-                <View style={styles.charCell}>
-                  <Text style={[styles.charLabel, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.feel')}</Text>
-                  <Text style={[styles.charValue, { color: colors.text_primary }]}>{ball.characteristics.feel}</Text>
-                </View>
-                <View style={[styles.charCell, { flex: 1.4 }]}>
-                  <Text style={[styles.charLabel, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.cover')}</Text>
-                  <Text style={[styles.charValue, { color: colors.text_primary }]}>{ball.characteristics.cover}</Text>
-                </View>
-              </View>
-
-              {/* Generic categories — NOT branded balls asserted as fact. */}
-              {ball.exampleCategories.length > 0 && (
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-                  {ball.exampleCategories.map((c) => (
-                    <View key={c} style={[styles.catPill, { borderColor: colors.border }]}>
-                      <Text style={[styles.catPillText, { color: colors.text_secondary }]}>{c}</Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </>
-          )}
-          {/* Standing honesty line — always shown. */}
-          <Text style={[styles.honesty, { color: colors.text_muted }]}>{ball.honestyLine}</Text>
-        </View>
-
-        {/* PRACTICE VOLUME — honest rep credit per club (not a measured carry). */}
-        {repList.length > 0 && (
-          <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.cardLabel, { color: colors.accent }]}>{t('practice_fit_profile.fit_profile_screen.practice_volume')}</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-              {repList.map((r) => (
-                <View key={r.club} style={[styles.repPill, { borderColor: colors.border }]}>
-                  <Text style={[styles.repClub, { color: colors.text_primary }]}>{r.club}</Text>
-                  <Text style={[styles.repN, { color: colors.text_muted }]}> {r.n}</Text>
-                </View>
-              ))}
-            </View>
-            <Text style={[styles.gapText, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.reps_you_ve_logged_in')}</Text>
-          </View>
-        )}
-
-        {/* LADDER — your bag. Tap any non-tracked club to set your carry. */}
-        <Text style={[styles.cardLabel, { color: colors.text_muted, marginTop: 16, marginBottom: 8, marginLeft: 4 }]}>{t('practice_fit_profile.fit_profile_screen.your_bag_tap_a_club')}</Text>
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, paddingVertical: 4 }]}>
-          {profile.ladder.map((c) => {
-            if (editingClub === c.club) {
-              return (
-                <View key={c.club} style={styles.ladderRow}>
-                  <Text style={[styles.ladderClub, { color: colors.text_primary }]}>{c.club}</Text>
-                  <View style={styles.ladderRight}>
-                    <TextInput
-                      value={draft}
-                      onChangeText={setDraft}
-                      keyboardType="number-pad"
-                      autoFocus
-                      placeholder="yds"
-                      placeholderTextColor={colors.text_muted}
-                      maxLength={3}
-                      onSubmitEditing={() => saveEdit(c.club)}
-                      style={[styles.editInput, { color: colors.text_primary, borderColor: colors.accent }]}
-                      accessibilityLabel={`Carry distance for ${c.club} in yards`}
-                    />
-                    <TouchableOpacity onPress={() => saveEdit(c.club)} style={styles.editBtn} accessibilityRole="button" accessibilityLabel={t('practice_fit_profile.accessibility_label.save')}>
-                      <Ionicons name="checkmark" size={20} color="#3FB950" />
-                    </TouchableOpacity>
-                    {c.stated ? (
-                      <TouchableOpacity onPress={() => clearEdit(c.club)} style={styles.editBtn} accessibilityRole="button" accessibilityLabel={t('practice_fit_profile.accessibility_label.remove')}>
-                        <Ionicons name="trash-outline" size={16} color={colors.text_muted} />
-                      </TouchableOpacity>
-                    ) : null}
-                  </View>
-                </View>
-              );
-            }
-            const editable = !c.measured; // tracked carries win; don't let a stated value masquerade as tracked
-            /**
-             * 2026-08-17 (Tim — "this driving iron gets 215 yards and a baby fade every single time,
-             * and I'd like to see that before even looking, in the bag tendency or club properties").
-             *
-             * The ladder already answers HOW FAR. This answers WHAT IT DOES — the thing a golfer
-             * knows about their own clubs before they know their handicap. Only clubs with an
-             * established tendency show a line (services/clubTendency owns the evidence bars), so
-             * the column stays empty rather than filling with guesses about clubs barely hit.
-             * Carry is deliberately omitted here: it is already the number on the right.
-             */
-            const tendency = tendencyByClub.get(c.club) ?? null;
-            const inner = (
-              <>
-                <View style={styles.ladderLeft}>
-                  <Text style={[styles.ladderClub, { color: colors.text_primary }]}>{c.club}</Text>
-                  {tendency ? (
-                    <Text style={[styles.ladderTendency, { color: colors.text_muted }]} numberOfLines={1}>
-                      {tendency}
-                    </Text>
-                  ) : null}
-                </View>
-                <View style={styles.ladderRight}>
-                  <Text style={[styles.ladderYards, { color: c.measured || c.stated ? colors.text_primary : colors.text_muted }]}>{Math.round(c.yards)}<Text style={styles.ladderUnit}> yd</Text></Text>
-                  <View style={[styles.measuredDot, dotStyleFor(c.measured, c.stated)]} />
-                  {gapSet.has(c.club) ? <Ionicons name="alert-circle" size={14} color="#f5a623" style={{ marginLeft: 4 }} /> : null}
-                  {overlapSet.has(c.club) ? <Ionicons name="copy-outline" size={13} color={colors.text_muted} style={{ marginLeft: 4 }} /> : null}
-                  {editable ? <Ionicons name="pencil" size={12} color={colors.text_muted} style={{ marginLeft: 6 }} /> : null}
-                </View>
-              </>
-            );
-            return editable ? (
-              <TouchableOpacity
-                key={c.club}
-                style={styles.ladderRow}
-                onPress={() => openEdit(c.club)}
-                accessibilityRole="button"
-                accessibilityLabel={`Set carry for ${c.club}`}
-              >
-                {inner}
-              </TouchableOpacity>
-            ) : (
-              <View key={c.club} style={styles.ladderRow}>{inner}</View>
-            );
-          })}
-          <Text style={[styles.legend, { color: colors.text_muted }]}>
-            {t('practice_fit_profile.fit_profile_screen.tracked_from_your_shots_you')}
-          </Text>
-        </View>
-
         <Text style={[styles.disclaimer, { color: colors.text_muted }]}>{profile.disclaimer}</Text>
       </ScrollView>
     </SafeAreaView>
@@ -671,5 +744,12 @@ const styles = StyleSheet.create({
   charValue: { fontSize: 14, fontWeight: '800', marginTop: 2, textTransform: 'capitalize' },
   catPill: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },
   catPillText: { fontSize: 11, fontWeight: '700' },
+  sectionHeading: { fontSize: 11, fontWeight: '800', letterSpacing: 2, marginTop: 24, marginBottom: 8, marginLeft: 4 },
+  rackHead: {
+    flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between',
+    paddingHorizontal: 14, paddingTop: 14, paddingBottom: 6,
+  },
+  rackTitle: { fontSize: 12, fontWeight: '800', letterSpacing: 1.5 },
+  rackData: { fontSize: 11, fontWeight: '600' },
   honesty: { fontSize: 10, lineHeight: 15, marginTop: 12, fontStyle: 'italic' },
 });

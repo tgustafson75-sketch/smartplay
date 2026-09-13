@@ -16,7 +16,7 @@ import { getPersistStorage } from '../services/ssrSafeStorage';
 import type { ClubId } from '../services/clubRecognition';
 import { CLUB_SNAP_ORDER } from '../services/clubBagReconcile';
 
-export type ClubRegisterSource = 'camera' | 'voice' | 'manual';
+export type ClubRegisterSource = 'camera' | 'voice' | 'manual' | 'measured';
 
 export interface RegisteredClub {
   club_id: ClubId;
@@ -192,10 +192,47 @@ export const useClubBagStore = create<ClubBagState>()(
         const carried = get().carriedToday;
         return carried.length > 0 && carried.length < Object.keys(get().clubs).length;
       },
-      bagList: () =>
-        Object.values(get().clubs).sort(
-          (a, b) => CLUB_ORDER.indexOf(a.club_id) - CLUB_ORDER.indexOf(b.club_id),
-        ),
+      /**
+       * 2026-09-13 (Tim) — ONE BAG. Measured clubs ARE in the bag until he says otherwise.
+       *
+       * The Fit Profile showed "No clubs registered yet" directly beneath "13 tracked", and then
+       * named his Driver, 7I, LW and GW in the gap analysis — all true, and self-contradictory to
+       * read, because two stores each held half of "your bag": this one (what you told us you carry)
+       * and clubStatsStore (what we measured you hitting). Registering is a REFINEMENT — specs,
+       * lofts, which ones you packed today — not the thing that decides whether a club exists.
+       *
+       * It also closes a real hole: caddieRequestBody sends `bagClubs` from carriedList(), so a
+       * player who never opened the bag scanner handed the caddie an EMPTY bag while the app had
+       * thirteen measured clubs. Club selection and plays-like read from that.
+       *
+       * The registered bag always wins when it has anything in it, so nothing overrides a real
+       * registration, and a measured stand-in is marked source 'measured' so no surface can mistake
+       * it for a scanned club with specs. [[sweep-the-missing-half-not-the-unused-export]]
+       */
+      bagList: () => {
+        const registered = Object.values(get().clubs);
+        if (registered.length > 0) {
+          return registered.sort((a, b) => CLUB_ORDER.indexOf(a.club_id) - CLUB_ORDER.indexOf(b.club_id));
+        }
+        try {
+          /**
+           * Narrowly typed on purpose: `typeof import('./clubStatsStore')` pulls the whole module
+           * type across a store-to-store boundary and the cycle collapses inference to `any` in
+           * every consumer (dashboard, play). This asks for the two members it uses and nothing else.
+           */
+          const stats = require('./clubStatsStore') as {
+            CLUB_ORDER: readonly string[];
+            useClubStatsStore: { getState: () => { hasDistance: (c: string) => boolean } };
+          };
+          const st = stats.useClubStatsStore.getState();
+          return stats.CLUB_ORDER
+            .filter((c) => c !== 'Putter' && st.hasDistance(c))
+            .map((c): RegisteredClub => ({ club_id: c as ClubId, registered_at: 0, source: 'measured' }))
+            .sort((a, b) => CLUB_ORDER.indexOf(a.club_id) - CLUB_ORDER.indexOf(b.club_id));
+        } catch {
+          return [];
+        }
+      },
     }),
     {
       name: 'club-bag-v1',

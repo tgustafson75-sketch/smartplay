@@ -1351,9 +1351,9 @@
       "cover": "COVER",
       "practice_volume": "PRACTICE VOLUME",
       "reps_you_ve_logged_in": "Reps you've logged in practice — work credited per club. Volume, not a measured carry.",
-      "your_bag_tap_a_club": "YOUR BAG · TAP A CLUB TO SET ITS CARRY",
+      "your_bag_tap_a_club": "YOUR BAG · TAP ANY CLUB TO SET ITS CARRY",
       "tracked_from_your_shots_you": "● tracked from your shots · ◆ you set it · ○ estimate — tap a club to set your carry",
-      "tracked_you_set_of_clubs": "{{measuredCount}} tracked · {{statedCount}} you set · of {{totalCount}} clubs · {{confidence}} confidence",
+      "tracked_you_set_of_clubs": "{{measuredCount}} tracked · {{statedCount}} you set · {{confidence}} confidence",
       "clubs_in_your_bag_with": "{{ownedCount}} clubs in your bag · {{dialedCount}} with a carry set",
       "pack_your_bag": "Pack your bag",
       "packed_of_owned": "{{packed}} of {{owned}} clubs packed for this round",
@@ -1361,7 +1361,14 @@
       "auto_pack_for_this_course": "Pack for this course",
       "carry_everything": "Carry everything",
       "competition_14_club_cap": "Competition: 14 clubs max — USGA Rule 4.1b(1)",
-      "no_clubs_in_your_bag_yet": "No clubs registered yet — scan your bag or add them above."
+      "no_clubs_in_your_bag_yet": "No clubs registered yet — scan your bag or add them above.",
+      "set_up_your_bag": "SET UP YOUR BAG",
+      "specs_heading": "YOUR SPECS",
+      "practice_volume_purpose": "Where your reps went. Volume, not a measured carry — it is why some clubs above are tracked and others are still estimates.",
+      "fit_findings_heading": "WHAT YOUR SET IS MISSING",
+      "gap_line": "{{gapYards}} yd between your {{upper}} and {{lower}} — a club-and-a-half hole around {{centerYards}} yds.",
+      "overlap_line": "{{longer}} and {{shorter}} carry within {{gapYards}} yds — one may be redundant.",
+      "overlap_more": "+{{n}} more pairs within a few yards of each other."
     },
     "accessibility_label": {
       "scan_my_bag_with_video": "Scan my bag with video to populate clubs",
@@ -1374,7 +1381,9 @@
     "key": {
       "tracked": "Tracked — measured from your shots",
       "you_set": "You set it",
-      "estimated": "Estimated — not yours yet"
+      "estimated": "Estimated — not yours yet",
+      "gap": "Next to a gap",
+      "overlap": "Doing another club’s job"
     }
   },
   "practice_open_range": {

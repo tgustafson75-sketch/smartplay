@@ -94,12 +94,33 @@ type CarryLadders = {
   total: Partial<Record<ClubName, ClubStat>>;
   manual: Partial<Record<ClubName, number>>;
 };
+/**
+ * 2026-09-13 (Tim, reviewing the Fit Profile — "pretty messy and feels disjointed") — THE READ-SIDE
+ * HEALING REACHED ONE READER AND NOT THE OTHER.
+ *
+ * The plausibility band exists because a bad row once wrote GW = 164y and inferClub then legitimately
+ * picked a gap wedge for a 164-yard shot (see PLAUSIBLE_LO). It was applied at INGEST, and at READ in
+ * inferClub — but NOT here, and this is the function `carryFor` returns. So a sample ingested before
+ * the gate shipped is still served as a tracked carry to everything downstream: the Fit Profile
+ * ladder, the gap analysis, the overlap list, the shaft-flex recommendation and the ball fit.
+ *
+ * Tim's own bag showed it. GW read 38 yards with a green "tracked" dot — the chart expects 98, so the
+ * floor is 53.9 and today's ingest would reject that sample outright. The screen then told him he had
+ * "32 yd between your LW and GW" and to go fill a gap that does not exist.
+ *
+ * An out-of-band legacy sample now falls through exactly as if it were never recorded: the caller
+ * lands on the scaled chart and the club reads as an ESTIMATE, which is what it always was.
+ * A stated My-Bag number is never filtered — the player said it, and expectedYards is built from it.
+ * [[sweep-the-missing-half-not-the-unused-export]] [[orphans-are-live-bugs-not-dead-code]]
+ */
 function ownCarry(g: CarryLadders, club: ClubName): number | null {
   const c = g.carry[club];
-  if (c && c.samples > 0) return c.avgYards;                    // measured carry
-  if (g.manual[club] != null) return g.manual[club]!;           // stated carry (My Bag)
+  if (c && c.samples > 0 && isPlausibleForClub(club, c.avgYards, 'carry', g.manual)) return c.avgYards;
+  if (g.manual[club] != null) return g.manual[club]!;           // stated carry (My Bag) — never filtered
   const t = g.total[club];
-  if (t && t.samples > 0) return Math.max(1, Math.round(t.avgYards - ROLL_YARDS[club])); // total − roll
+  if (t && t.samples > 0 && isPlausibleForClub(club, t.avgYards, 'total', g.manual)) {
+    return Math.max(1, Math.round(t.avgYards - ROLL_YARDS[club])); // total − roll
+  }
   return null;
 }
 
@@ -343,10 +364,19 @@ export const useClubStatsStore = create<ClubStatsState>()(
       avgFor: (club) => get().totalFor(club),      // deprecated back-compat
       distanceFor: (club) => get().totalFor(club), // deprecated back-compat
       hasSamples: (club) => (get().carry[club]?.samples ?? 0) > 0 || (get().total[club]?.samples ?? 0) > 0,
-      hasCarry: (club) => (get().carry[club]?.samples ?? 0) > 0 || get().manual[club] != null,
+      /**
+       * 2026-09-13 — agrees with ownCarry, or the dot lies. hasCarry paints the green "tracked from
+       * your shots" dot in the Fit Profile; if an out-of-band sample is filtered out of the NUMBER
+       * but still counted here, the row shows an estimate wearing a measured badge.
+       */
+      hasCarry: (club) => {
+        const g = get();
+        const c = g.carry[club];
+        return (!!c && c.samples > 0 && isPlausibleForClub(club, c.avgYards, 'carry', g.manual)) || g.manual[club] != null;
+      },
       hasTotal: (club) => (get().total[club]?.samples ?? 0) > 0,
       hasManual: (club) => get().manual[club] != null,
-      hasDistance: (club) => (get().carry[club]?.samples ?? 0) > 0 || (get().total[club]?.samples ?? 0) > 0 || get().manual[club] != null,
+      hasDistance: (club) => ownCarry(get(), club) != null,
       inferClub: (yards) => {
         const g = get();
         // 2026-08-10 (Tim — "164y and the caddie defaults to gap wedge"). Two guards, both required:
