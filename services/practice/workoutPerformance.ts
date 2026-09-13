@@ -12,6 +12,8 @@
  * sessions). We surface which metric was used so the card can label it truthfully.
  */
 
+import { effortScoreHeadline } from './effortScoreVerdict';
+
 export interface WorkoutPerformanceInput {
   /** Imported workouts: a date + optional duration. */
   workouts: { date: number; durationMin: number | null }[];
@@ -146,11 +148,18 @@ export function computeWorkoutPerformance(input: WorkoutPerformanceInput): Worko
   } else {
     const { trainingUp, scoreImproving, scoreWorse } = connection;
 
-    if (trainingUp && scoreImproving) headline = 'Your training volume is up and your scores are trending down — the work off the course is showing up on it.';
-    else if (trainingUp && scoreWorse) headline = 'Training volume is up but scores ticked the wrong way — give the strength gains time to transfer to the swing.';
-    else if (trainingUp) headline = 'Training volume is up; scores are holding — keep building the engine.';
-    else if (scoreImproving) headline = 'Scores are trending down — nice. Steadier training would help hold the gains.';
-    else headline = 'Steady stretch — a bump in golf-specific training tends to move the scoring line over time.';
+    // 2026-09-13 — see services/practice/effortScoreVerdict. Third copy of the same missing branch.
+    void trainingUp;
+    headline = effortScoreHeadline(
+      { effortEarly: connection.trainingEarly, effortLate: connection.trainingLate, scoreImproving, scoreWorse },
+      {
+        subject: 'Your training volume',
+        noun: 'golf-specific training',
+        unit: metric === 'minutes' ? 'min' : 'workouts',
+        holdAdvice: 'keep building the engine',
+        transferNote: 'give the strength gains time to transfer to the swing',
+      },
+    );
   }
 
   return { workoutSeries, scoreSeries, scoreWeekly, metric, totalWorkouts, totalMinutes, minutesEstimated, roundsCounted, hasEnough, headline, connection };

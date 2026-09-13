@@ -45,7 +45,8 @@
 
 import { runWithAsserts, type ScenarioReport, type AssertCtx } from './harness/assert';
 import { startVoiceSimRound, getSimPosition } from './simRound';
-import { simShot, simPutt, lieFor, liePenalty, missBiasFor, puttFeetFrom, type SimLie } from './simGame';
+import { simShot, simPutt, lieFor, liePenalty, missBiasFor, type SimLie } from './simGame';
+import { puttFeetFrom } from './puttUnits';
 import type { IndoorRep } from './indoorSwing';
 import { bagDistances } from './shotStrategy';
 // 2026-09-02 — roundFirstHole/roundLastHole are the round's OWN definition of which holes are in

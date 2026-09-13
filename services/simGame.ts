@@ -94,13 +94,13 @@ export function restingDistanceYds(remainingBeforeYds: number, carryYds: number,
  * rather than three: the harnesses were never going to catch a bug that only existed on the screen.
  * [[two-owners-is-the-root-cause]]
  */
-export const FEET_PER_YARD = 3;
-
-/** Distance-to-pin in yards → the putt length in feet. Floored at a tap-in, never zero. */
-export function puttFeetFrom(remainingYards: number): number {
-  const y = Number.isFinite(remainingYards) ? Math.max(0, remainingYards) : 0;
-  return Math.max(1, Math.round(y * FEET_PER_YARD));
-}
+/**
+ * 2026-09-13 — moved to services/puttUnits, which is the one owner of "a putt is always in feet" for
+ * the whole app. It lived here because the bug it fixed was on the SwingSim screen; the surfaces
+ * that needed it next (Settings, the Highlights card, the shot rows, the Quick Log sheet) could not
+ * import a shot engine to get at a unit conversion. Nothing re-exports it from here — one name, one
+ * home. Importers of `puttFeetFrom` take it from services/puttUnits.
+ */
 
 export type SimLie = 'tee' | 'fairway' | 'rough' | 'trees' | 'green' | 'holed';
 

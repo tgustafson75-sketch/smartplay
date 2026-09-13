@@ -232,6 +232,19 @@ const PATTERNS: Pattern[] = [
 
   // ── ROUND STATS (2026-07-25 coverage-audit gaps — all answered locally/offline) ──
   {
+    /**
+     * 2026-09-13 (Tim) — the Highlights card has shown LONGEST PUTT since June and the caddie could
+     * not be asked about it, while LONGEST DRIVE beside it has had a topic since 2026-09-12. Drawn,
+     * stored, unaskable — the half that keeps being missing.
+     * [[smartplay-defect-class-unwired-halves]]
+     *
+     * Sits ABOVE putt_stats deliberately: "my longest putt today" matches that pattern's
+     * `putts?\s+today` branch, and the more specific question has to win.
+     */
+    rx: /\b(longest\s+putt|furthest\s+putt|farthest\s+putt|my\s+best\s+putt|longest\s+one\s+i(?:'ve)?\s+(?:ever\s+)?made)\b/i,
+    build: (raw) => intent(raw, 'query_status', { query_topic: 'longest_putt' }),
+  },
+  {
     rx: /\b(how\s+many\s+putts|putts?\s+(?:so\s+far|this\s+round|today)|how(?:'s|\s+is|\s+am\s+i)\s+(?:my\s+)?putting|putting\s+stats?)\b/i,
     build: (raw) => intent(raw, 'query_status', { query_topic: 'putt_stats' }),
   },

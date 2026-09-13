@@ -98,6 +98,36 @@ export const queryStatusHandler: IntentHandler = {
     const liveScored = (): ScoredRound => ({ scores: round.scores, putts: round.putts, parOf: (h) => holePar(h) });
 
     /**
+     * 2026-09-13 (Tim) — "putts should be always in Feet."
+     *
+     * LONGEST PUTT has sat on the Highlights card beside LONGEST DRIVE since June. The drive became
+     * askable on 2026-09-12; the putt never did — drawn, stored, and unaskable.
+     * [[smartplay-defect-class-unwired-halves]]
+     *
+     * Answered the same in a round as out of one, because unlike the drive there is nothing to
+     * derive from today: putts are captured as COUNTS per hole, never as distances, so the profile
+     * value a human typed is the only honest source there is. It says so rather than implying it
+     * measured anything — and it says FEET, which is the only unit a putt is ever in.
+     */
+    if (topic === 'longest_putt') {
+      const profile = require('../../store/playerProfileStore') as typeof import('../../store/playerProfileStore');
+      const ft = profile.usePlayerProfileStore.getState().longestPuttFeet;
+      return ft == null
+        ? {
+            success: true,
+            voice_response: "I don't have a longest putt for you yet — it's yours to set, under Settings. I only count putts per hole, I don't measure them.",
+            side_effects: ['query:longest_putt:unset'],
+            follow_up_needed: false,
+          }
+        : {
+            success: true,
+            voice_response: `Your longest putt is ${ft} feet — the one you logged yourself.`,
+            side_effects: [`query:longest_putt:${ft}`],
+            follow_up_needed: false,
+          };
+    }
+
+    /**
      * 2026-09-12 (Tim) — "Longest drive is on the dashboard and GIR is calculated on the scorecard."
      *
      * OFF THE COURSE, THESE ARE STILL ANSWERABLE. Until now every one of them got "You're not in a

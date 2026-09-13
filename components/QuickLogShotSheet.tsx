@@ -25,6 +25,7 @@ import { getLastFix as getGpsLastFix, getOneShotFix } from '../services/gpsManag
 import { track } from '../services/analytics';
 import type { ShotOutcome } from '../types/shot';
 import { useTranslation } from 'react-i18next';
+import { isPutterClub, puttYardsFromFeet } from '../services/puttUnits';
 
 interface Props {
   visible: boolean;
@@ -147,7 +148,18 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
       direction,
       shape: null,
       acousticContact: null,
-      distance_yards: Number.isFinite(distNum) ? distNum : null,
+      /**
+       * 2026-09-13 (Tim) — "putts should be always in Feet."
+       *
+       * This sheet offers `putter` in its club list and then asked for "Distance (yards)", so a
+       * player logging a twenty-five-footer typed 25 and the app recorded a SEVENTY-FIVE-FOOT putt.
+       * The label now says feet when the putter is picked, and the number converts here —
+       * `distance_yards` keeps meaning yards for every club, which is what its name promises and
+       * what HoleShotMap draws from. [[two-owners-is-the-root-cause]]
+       */
+      distance_yards: Number.isFinite(distNum)
+        ? (isPutterClub(club) ? puttYardsFromFeet(distNum) : distNum)
+        : null,
       outcome,
       logged_via: 'tap',
       gps_location: location,
@@ -274,12 +286,16 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
               ))}
             </View>
 
-            <Text style={[styles.label, { color: colors.text_muted, marginTop: 12 }]}>{t('quick_log_shot_sheet.text.distance_yards_optional')}</Text>
+            <Text style={[styles.label, { color: colors.text_muted, marginTop: 12 }]}>
+              {isPutterClub(club)
+                ? t('quick_log_shot_sheet.text.distance_feet_optional')
+                : t('quick_log_shot_sheet.text.distance_yards_optional')}
+            </Text>
             <TextInput
               value={distance}
               onChangeText={setDistance}
               keyboardType="numeric"
-              placeholder="e.g. 165"
+              placeholder={isPutterClub(club) ? 'e.g. 25' : 'e.g. 165'}
               placeholderTextColor={colors.text_muted}
               style={[
                 styles.input,

@@ -13,6 +13,8 @@
  * quiet until there's enough on both sides ([[points-practice-correlation]]).
  */
 
+import { effortScoreHeadline } from './effortScoreVerdict';
+
 // Mirror practicePointsStore's conservative scheme so estimated == what a tracked
 // session of the same size would have earned (BASE + 1/swing, capped at 5 swings).
 const BASE_PER_SESSION = 5;
@@ -108,11 +110,19 @@ export function computePointsPerformance(input: PointsPerformanceInput): PointsP
     const scoreImproving = lateAvg < earlyAvg - 0.5; // lower vs-par = better
     const scoreWorse = lateAvg > earlyAvg + 0.5;
 
-    if (pointsUp && scoreImproving) headline = 'Your practice points are climbing and your scores are trending down — the work is showing up.';
-    else if (pointsUp && scoreWorse) headline = 'Practice points are up but scores ticked the wrong way — give the reps time to transfer.';
-    else if (pointsUp) headline = 'Practice points are up; scores are holding — keep stacking the work.';
-    else if (scoreImproving) headline = 'Scores are trending down — nice. More practice points would help it stick.';
-    else headline = 'Steady stretch — a bump in focused practice tends to move the scoring line.';
+    // 2026-09-13 — see services/practice/effortScoreVerdict. The old `else` here reported a DROP in
+    // points as a "steady stretch", identically to practiceImpact and workoutPerformance.
+    void pointsUp;
+    headline = effortScoreHeadline(
+      { effortEarly: firstHalf, effortLate: lastHalf, scoreImproving, scoreWorse },
+      {
+        subject: 'Your practice points',
+        noun: 'practice points',
+        unit: 'points',
+        holdAdvice: 'keep stacking the work',
+        transferNote: 'give the reps time to transfer',
+      },
+    );
   }
 
   return { pointsSeries, scoreSeries, scoreWeekly, totalEstimatedPoints, sessionsCounted, roundsCounted, hasEnough, headline };

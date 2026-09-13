@@ -21,7 +21,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { IndoorRep } from '../../services/indoorSwing';
-import { simShot, simPutt, lieFor, liePenalty, missBiasFor, scoreName, restingDistanceYds, puttFeetFrom, type SimLie } from '../../services/simGame';
+import { simShot, simPutt, lieFor, liePenalty, missBiasFor, scoreName, restingDistanceYds, type SimLie } from '../../services/simGame';
+import { puttFeetFrom } from '../../services/puttUnits';
 
 // ─── Args ────────────────────────────────────────────────────────────────────
 const argv = process.argv.slice(2);

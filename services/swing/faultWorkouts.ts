@@ -44,9 +44,27 @@ const FAULT_EXERCISES: Record<string, Exercise[]> = {
     { name: 'Lateral lunges', category: 'strength', why: 'Strength in the lateral shift so your weight actually gets forward.' },
     { name: 'Med-ball rotational throw (to lead side)', category: 'strength', why: 'Builds the transfer of weight + speed toward the target.' },
   ],
+  /**
+   * 2026-09-13 (Tim, reviewing the dashboard) — TRAIN YOUR SWING WAS STILL PUSHING THE PUMP DRILL.
+   *
+   * On 2026-08-13 Tim said it plainly — "the step and swing drill has helped me better than the pump
+   * drill I'm always getting suggested" — and two of the three places that answer "which drill for
+   * coming over the top" were changed that day: data/drillCatalog lists step-and-swing FIRST, and
+   * services/drillRecommendation leads with it. This table, which is the one the DASHBOARD card
+   * reads, was the third owner and nobody told it. So the surface he actually looks at kept opening
+   * with the pump drill for another month — the exact complaint, unfixed, on the screen that prompted
+   * it. [[two-owners-is-the-root-cause]] [[smartplay-drill-feedback]]
+   *
+   * The ordering now mirrors the catalog's, for the reason the catalog states: step-and-swing ends in
+   * a FINISH by construction, and his stated limitation with pump-and-pause was not finishing the
+   * swing and not being sure how to perform it. The pump is not deleted — it works for plenty of
+   * players and it is the same drill the catalog keeps as an alternative. It is simply no longer the
+   * first thing he is told to do.
+   */
   over_the_top: [
-    { name: 'Hip-lead separation drill (pump)', category: 'drill', why: 'Sequences the hips to start the downswing so the club drops on plane.', video: { url: 'https://youtu.be/SYtoiQBXOFc', title: 'The Golf Fix — Stop Coming Over the Top', source: 'Golf Channel · Michael Breed' } },
+    { name: 'Step-and-swing', category: 'drill', why: 'Feet together, step toward the target to start down, and swing through to a full finish over the lead leg — the step forces the lower body to lead instead of the shoulders throwing the club out.' },
     { name: 'Thoracic rotation mobility', category: 'mobility', why: 'More upper-back turn means less need to throw the shoulders over the top.' },
+    { name: 'Pump-and-pause', category: 'drill', why: 'Sequences the hips to start the downswing so the club drops on plane. Swing to the top, pump to hip height three times, then swing through on the fourth.', video: { url: 'https://youtu.be/SYtoiQBXOFc', title: 'The Golf Fix — Stop Coming Over the Top', source: 'Golf Channel · Michael Breed' } },
     { name: 'Med-ball scoop toss', category: 'strength', why: 'Ingrains the lower-body-first sequence that fixes the over-the-top move.' },
   ],
   under_coil: [

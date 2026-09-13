@@ -6875,7 +6875,8 @@ check('Upload angle picker: imported clip read at its true angle (DTL vs face-on
 // enough data on both sides. Lower score-vs-par = better.
 check('Practice→performance: honest connection card (association, gated, no fabrication)',
   (() => {
-    const svc = read('services/practice/practiceImpact.ts');
+    const svc = readCode('services/practice/practiceImpact.ts');
+    const verdict = readCode('services/practice/effortScoreVerdict.ts');
     const dash = read('app/(tabs)/dashboard.tsx');
     const svcOk =
       /export function computePracticeImpact/.test(svc) &&
@@ -6886,9 +6887,26 @@ check('Practice→performance: honest connection card (association, gated, no fa
       /hasEnough = practiceSessions >= MIN_SESSIONS && roundsCounted >= MIN_ROUNDS/.test(svc) &&
       // honest "keep logging" when not enough; association language when it is
       /Keep logging practice and rounds/.test(svc) &&
-      /showing up on the course/.test(svc) &&
-      // never claims causation
-      !/because you practiced|practice caused|proves/.test(svc);
+      /**
+       * 2026-09-13 — this used to test /showing up on the course/ against THIS file, and the LOCK
+       * caught it the moment the copy moved: the phrase survived only in practiceImpact's header
+       * comment, so the guard would have kept passing on a file whose every headline had been
+       * gutted. The association language now belongs to services/practice/effortScoreVerdict, which
+       * owns all nine effort×score outcomes — so assert that this service ASKS that owner, and that
+       * the owner is the one holding the association sentence.
+       */
+      /effortScoreHeadline\(/.test(svc) &&
+      /showing up on the course/.test(verdict) &&
+      // never claims causation, in either file
+      !/because you practiced|practice caused|proves/.test(svc) &&
+      !/because you practiced|practice caused|proves/.test(verdict) &&
+      /**
+       * And the branch that started this: effort that FELL must not be described as a steady stretch.
+       * Tim's card said "a bump in focused practice tends to move the scoring line" with PRACTICE 0
+       * balls on the line underneath it, because all three services ended in a bare `else`.
+       */
+      !/else\s+headline = 'Steady stretch/.test(svc) &&
+      /down_holding: \(v, f\) =>/.test(verdict);
     // 2026-08-06 (Tim — "there should be ONE graph not multiple") — the three correlation cards collapsed
     // into a SINGLE PROGRESS graph: score-vs-par (outcome) with the chosen effort line overlaid.
     const dashOk =
@@ -16348,11 +16366,20 @@ check(
  * caught it, because the harnesses held the two copies that were right.
  */
 {
+  /**
+   * 2026-09-13 — the owner moved to services/puttUnits when Tim said "putts should be always in
+   * Feet" and the rule had to reach Settings, the Highlights card, the shot rows and the Quick Log
+   * sheet. This asserts the OWNERSHIP, wherever it lives: exactly one file defines the conversion,
+   * and simGame is not allowed to grow a second copy back.
+   */
   const sg = readCode('services/simGame.ts');
+  const pu = readCode('services/puttUnits.ts');
   check(
     'PUTT FEET: the conversion has one owner and it knows a yard is three feet',
-    /export const FEET_PER_YARD = 3;/.test(sg) &&
-      /export function puttFeetFrom\(remainingYards: number\): number/.test(sg),
+    /export const FEET_PER_YARD = 3;/.test(pu) &&
+      /export function puttFeetFrom\(remainingYards: number\): number/.test(pu) &&
+      !/export const FEET_PER_YARD/.test(sg) &&
+      !/export function puttFeetFrom/.test(sg),
     'three copies disagreed and the shipped one was the wrong one — the harnesses could never have caught that',
   );
   const consumers = ['app/swinglab/simround.tsx', 'services/simRoundAuto.ts', 'scripts/simulations/sim-auto-round.ts'];

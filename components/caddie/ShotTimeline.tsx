@@ -27,6 +27,7 @@ import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoundStore, type ShotResult } from '../../store/roundStore';
 import { useTranslation } from 'react-i18next';
+import { shotDistanceDisplay } from '../../services/puttUnits';
 
 interface Props {
   /** Optional cap on rows rendered. Default 8 — enough to see the
@@ -35,6 +36,12 @@ interface Props {
   maxRows?: number;
   /** When true, only show shots from the current hole. */
   holeOnly?: boolean;
+  /**
+   * The shots to draw. Omit for the live round — right for the Caddie tab and the shot log, where
+   * "the round you are playing" is what the player means. The Dashboard passes its own pool so that
+   * "RECENT SHOTS" keeps meaning your recent shots when no round is in progress.
+   */
+  shots?: readonly ShotResult[];
 }
 
 const DEFAULT_MAX_ROWS = 8;
@@ -81,10 +88,25 @@ function directionTag(direction: ShotResult['direction'] | null | undefined): st
   return String(direction);
 }
 
-export default function ShotTimeline({ maxRows = DEFAULT_MAX_ROWS, holeOnly = false }: Props) {
+/**
+ * 2026-09-13 (Tim, dashboard review) — RECENT SHOTS RENDERED AS A HEADING WITH NOTHING UNDER IT.
+ *
+ * Two owners of "your recent shots". The Dashboard's gate falls back to the LAST COMPLETED ROUND's
+ * shots when no round is live, so with rounds logged it is non-empty and the "no shots logged yet"
+ * empty state is skipped — while this component read `useRoundStore(s => s.shots)`, the ACTIVE
+ * round only, found none off the course, and returned null. Heading, then nothing, then the next
+ * section. The screen promised a thing it had already decided not to draw.
+ *
+ * `shots` is now an optional prop: a caller that already knows WHICH shots it means passes them,
+ * and the live-round default stays for the caddie tab and the shot log, where "the round you are
+ * playing" is the right answer. One source per caller, chosen by the caller.
+ * [[two-owners-is-the-root-cause]]
+ */
+export default function ShotTimeline({ maxRows = DEFAULT_MAX_ROWS, holeOnly = false, shots: shotsProp }: Props) {
   const { t } = useTranslation();
-  const shots = useRoundStore(s => s.shots);
+  const liveShots = useRoundStore(s => s.shots);
   const currentHole = useRoundStore(s => s.currentHole);
+  const shots = shotsProp ?? liveShots;
 
   const rows = useMemo(() => {
     const pool = holeOnly ? shots.filter(s => s.hole === currentHole) : shots;
@@ -106,7 +128,9 @@ export default function ShotTimeline({ maxRows = DEFAULT_MAX_ROWS, holeOnly = fa
       >
         {rows.map((shot, i) => {
           const icon = clubIcon(shot.club);
-          const dist = shot.distance_yards;
+          // 2026-09-13 (Tim) — "putts should be always in Feet." Every row said "yds", so a putt
+          // logged from eight yards out read "8 yds" instead of the twenty-four-footer it was.
+          const dist = shotDistanceDisplay(shot.club, shot.distance_yards);
           const dir = directionTag(shot.direction);
           const oc = outcomeChip(shot.outcome);
           return (
@@ -120,8 +144,8 @@ export default function ShotTimeline({ maxRows = DEFAULT_MAX_ROWS, holeOnly = fa
                 {dir ? <Text style={styles.dirLabel}>{dir}</Text> : null}
               </View>
               <View style={styles.distCol}>
-                <Text style={styles.distValue}>{dist != null ? `${dist}` : '—'}</Text>
-                <Text style={styles.distUnit}>yds</Text>
+                <Text style={styles.distValue}>{dist?.value ?? '—'}</Text>
+                <Text style={styles.distUnit}>{dist?.unit ?? 'yds'}</Text>
               </View>
               {oc ? (
                 <View style={[styles.chip, { backgroundColor: oc.bg, borderColor: oc.color }]}>

@@ -489,15 +489,16 @@ export default function Settings() {
   const [editBest, setEditBest] = useState(personalBest ? String(personalBest) : '');
   // 2026-06-04 — Personal-best capture for the dashboard Highlights card.
   // longestDrive auto-updates from logShot when a Driver shot beats the
-  // current high (see roundStore.logShot); longestPutt is manual until
-  // a putt-distance sensor lands. Both clear when the user blanks the
-  // input.
+  // current high (see roundStore.logShot); longestPuttFeet is manual — putts are captured as counts
+  // per hole, never as distances, so there is nothing to derive it from. Both clear when the user
+  // blanks the input. The putt is in FEET (services/puttUnits); this field used to say yards, and
+  // the card read "22y".
   const longestDrive = usePlayerProfileStore(s => s.longestDrive);
   const setLongestDrive = usePlayerProfileStore(s => s.setLongestDrive);
-  const longestPutt = usePlayerProfileStore(s => s.longestPutt);
-  const setLongestPutt = usePlayerProfileStore(s => s.setLongestPutt);
+  const longestPuttFeet = usePlayerProfileStore(s => s.longestPuttFeet);
+  const setLongestPuttFeet = usePlayerProfileStore(s => s.setLongestPuttFeet);
   const [editLongestDrive, setEditLongestDrive] = useState(longestDrive != null ? String(longestDrive) : '');
-  const [editLongestPutt, setEditLongestPutt] = useState(longestPutt != null ? String(longestPutt) : '');
+  const [editLongestPutt, setEditLongestPutt] = useState(longestPuttFeet != null ? String(longestPuttFeet) : '');
 
   // 2026-07-01 (Tim — OTA-lag trust fix) — show the LIVE bundle stamp so you can confirm in 2s that
   // you're on the current update before judging a fix. `embedded` = running the build's baked-in JS
@@ -553,7 +554,7 @@ export default function Settings() {
     const drv = parseInt(editLongestDrive, 10);
     setLongestDrive(!isNaN(drv) && drv > 0 ? drv : null);
     const putt = parseInt(editLongestPutt, 10);
-    setLongestPutt(!isNaN(putt) && putt > 0 ? putt : null);
+    setLongestPuttFeet(!isNaN(putt) && putt > 0 ? putt : null);
     setProfileExpanded(false);
     // 2026-05-28 — Fix FB: three coordinated changes to make save
     // actually feel like save.
@@ -872,7 +873,8 @@ export default function Settings() {
           {/* 2026-06-04 — Personal-best inputs surfaced on the dashboard
               Highlights card. longestDrive auto-updates from logShot when
               a Driver shot beats the current high (see roundStore.logShot);
-              longestPutt is manual until a putt-distance source lands. */}
+              longestPuttFeet is manual, in FEET, and there is no putt-distance source to derive it
+              from — putts are counted per hole, not measured. */}
           <Text style={inputLblStyle}>{t('settings.text.longest_drive_yards')}</Text>
           <TextInput
             style={inputFldStyle}
@@ -886,13 +888,13 @@ export default function Settings() {
             {t('settings.text.updated_automatically_as_you_log')}
           </Text>
 
-          <Text style={inputLblStyle}>{t('settings.text.longest_putt_yards')}</Text>
+          <Text style={inputLblStyle}>{t('settings.text.longest_putt_feet')}</Text>
           <TextInput
             style={inputFldStyle}
             value={editLongestPutt}
             onChangeText={setEditLongestPutt}
             keyboardType="numeric"
-            placeholder="e.g. 45"
+            placeholder="e.g. 38"
             placeholderTextColor="#374151"
           />
           <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -8, marginBottom: 8 }]}>

@@ -694,7 +694,7 @@ export default function Dashboard() {
     goal,
     dominantMiss: _dominantMiss,
     longestDrive,
-    longestPutt,
+    longestPuttFeet,
     kevinRead,
   } = usePlayerProfileStore(
     useShallow((s) => ({
@@ -706,7 +706,7 @@ export default function Dashboard() {
       goal: s.goal,
       dominantMiss: s.dominantMiss,
       longestDrive: s.longestDrive,
-      longestPutt: s.longestPutt,
+      longestPuttFeet: s.longestPuttFeet,
       kevinRead: s.kevinRead,
     })),
   );
@@ -789,13 +789,22 @@ export default function Dashboard() {
     return { shotsLogged, fairwayPct, avgYds, teeShots: teeShotCount };
   }, [realRounds, allShots]);
 
-  // Recent shots — last 5, newest first. Drawn from the active round
-  // when one exists, otherwise the most recent historical round.
-  const recentShots = useMemo(() => {
-    if (allShots.length > 0) return [...allShots].slice(-5).reverse();
+  /**
+   * 2026-09-13 (Tim, dashboard review) — "RECENT SHOTS" drew a heading and nothing under it.
+   *
+   * This gate already knew the right answer: the active round's shots if a round is live, else the
+   * last round you finished. It decided the section was NOT empty — and then handed the drawing to
+   * ShotTimeline, which read the ACTIVE round for itself, found nothing off the course, and returned
+   * null. Two owners of "your recent shots", disagreeing, and the disagreement rendered as a blank.
+   *
+   * Now this is the ONLY owner: it builds the POOL (oldest-first, as stored) and passes it down.
+   * ShotTimeline still caps and reverses — one place decides WHICH shots, one decides how they look.
+   * [[two-owners-is-the-root-cause]]
+   */
+  const recentShotPool = useMemo(() => {
+    if (allShots.length > 0) return allShots;
     const last = realRounds[realRounds.length - 1];
-    if (!last) return [];
-    return [...(last.shots ?? [])].slice(-5).reverse();
+    return last?.shots ?? [];
   }, [allShots, realRounds]);
 
   // 2026-06-04 — topClubs derivation removed (Kevin's Read inline block
@@ -1603,12 +1612,12 @@ export default function Dashboard() {
           <Image source={DASH_ICON.recentShots} style={styles.dashIcon} tintColor={colors.accent_lime} />
           <Text style={[styles.sectionHeader, { color: colors.text_primary, paddingHorizontal: 0 }]}>{t('dashboard.recent_shots')}</Text>
         </View>
-        {recentShots.length === 0 ? (
+        {recentShotPool.length === 0 ? (
           <Text style={[styles.emptyLine, { color: colors.text_muted }]}>
             {t('dashboard.text.no_shots_logged_yet_log')}
           </Text>
         ) : (
-          <ShotTimeline maxRows={5} />
+          <ShotTimeline maxRows={5} shots={recentShotPool} />
         )}
 
         {/* 2026-06-13 (Tim) — ROUND HISTORY. Completed rounds were persisted to
@@ -1767,11 +1776,12 @@ export default function Dashboard() {
                 router.push('/settings' as never);
               }}
               accessibilityRole="button"
-              accessibilityLabel={longestPutt == null ? 'Set longest putt in Settings' : `Longest putt ${longestPutt} yards — tap to edit`}
+              accessibilityLabel={longestPuttFeet == null ? 'Set longest putt in Settings' : `Longest putt ${longestPuttFeet} feet — tap to edit`}
             >
               <Text style={[styles.highlightLabel, { color: colors.text_muted }]}>{t('dashboard.longest_putt')}</Text>
               <Text style={[styles.highlightValue, { color: colors.text_primary }]}>
-                {longestPutt != null ? `${longestPutt}y` : '—'}
+                {/* 2026-09-13 (Tim) — "putts should be always in Feet." This read "22y". */}
+                {longestPuttFeet != null ? `${longestPuttFeet} ft` : '—'}
               </Text>
             </TouchableOpacity>
             <View style={styles.highlightCell}>

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
+import { FEET_PER_YARD, PUTT_MAX_FEET } from '../services/puttUnits';
 
 // ─── STATE ────────────────────────────────
 
@@ -220,10 +221,17 @@ interface PlayerProfileState {
 
   // 2026-06-04 — Personal-best tracking. `longestDrive` auto-updates
   // from logShot when a Driver shot with carry_distance / distance_yards
-  // beats the current high; `longestPutt` is user-entered in Settings
-  // (no automatic detection today). null = never set.
+  // beats the current high; `longestPuttFeet` is user-entered in Settings
+  // (no automatic detection today — putts are captured as COUNTS per hole,
+  // never as distances, so there is nothing to derive it from). null = never set.
   longestDrive: number | null;
-  longestPutt: number | null;
+  /**
+   * 2026-09-13 (Tim) — "putts should be always in Feet." It was `longestPutt` in YARDS, the Settings
+   * field said "(yards)", the card read "22y", and the setter clamped at 1000 — three times the
+   * longest putt ever holed in a tournament, in the wrong unit. Nobody describes a putt in yards.
+   * The unit is in the NAME now, so no surface has to guess and no reviewer has to check.
+   */
+  longestPuttFeet: number | null;
 
   // 2026-06-04 — Cached AI "Kevin's Read" — 2-3 sentence prevailing-
   // tendency assessment generated from the last few rounds by
@@ -314,7 +322,7 @@ interface PlayerProfileState {
   setGhinNumber: (ghin: string | null) => void;
   // 2026-06-04 — Personal-best setters.
   setLongestDrive: (yards: number | null) => void;
-  setLongestPutt: (yards: number | null) => void;
+  setLongestPuttFeet: (feet: number | null) => void;
   // 2026-06-04 — Kevin's Read cache setter.
   setKevinRead: (read: { text: string; generatedAt: number } | null) => void;
 }
@@ -380,7 +388,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       ghin_number: null,
       // 2026-06-04 — personal-best + Kevin's Read defaults.
       longestDrive: null,
-      longestPutt: null,
+      longestPuttFeet: null,
       kevinRead: null,
 
       setName: (name) =>
@@ -536,9 +544,13 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
         if (yards > 500) return;
         set({ longestDrive: Math.round(yards) });
       },
-      setLongestPutt: (yards) => {
-        if (yards == null || !Number.isFinite(yards) || yards <= 0) return set({ longestPutt: null });
-        set({ longestPutt: Math.min(1000, Math.round(yards)) });
+      setLongestPuttFeet: (feet) => {
+        if (feet == null || !Number.isFinite(feet) || feet <= 0) return set({ longestPuttFeet: null });
+        // PUTT_MAX_FEET rejects rather than clamps, the same call setLongestDrive makes: a number
+        // past the longest putt ever holed is a mis-key, and silently recording 400 as a personal
+        // best is worse than ignoring the keystroke.
+        if (feet > PUTT_MAX_FEET) return;
+        set({ longestPuttFeet: Math.round(feet) });
       },
       // 2026-06-04 — Kevin's Read cache. null clears (forces the
       // dashboard to render the default fallback line).
@@ -558,10 +570,22 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       // the choice — but only when the base persona is still the untouched default, since an
       // explicit base persona is the newer and more specific statement of intent. Without this a
       // female custom caddie would silently become male on the update.
-      version: 3,
+      // 2026-09-13 (v4) — `longestPutt` held YARDS under a Settings field labelled "(yards)", and
+      // Tim's read 22. A putt is always in feet (services/puttUnits), so the field is now
+      // `longestPuttFeet`. The stored number is converted at the rate the LABEL promised — 22 yards
+      // is 66 feet — rather than reinterpreted as feet, because reinterpreting would mean deciding
+      // the old label was lying to him, which is a guess. 66 feet is a real lag putt; if it is not
+      // the number he meant, the field now says FEET and he can correct it in one keystroke. The
+      // alternative — dropping the value — loses a personal best to a unit change, and inventing a
+      // number is the only thing worse than losing one.
+      version: 4,
       migrate: (s) => {
         const p = s as Record<string, unknown> | null;
         if (p && (p.customCaddieBasePersona as string) === 'tank') p.customCaddieBasePersona = 'kevin';
+        if (p && p.longestPuttFeet == null && typeof p.longestPutt === 'number' && p.longestPutt > 0) {
+          p.longestPuttFeet = Math.min(PUTT_MAX_FEET, Math.round(p.longestPutt * FEET_PER_YARD));
+        }
+        if (p) delete p.longestPutt;
         if (p && p.customCaddieGender === 'female'
             && (p.customCaddieBasePersona == null || p.customCaddieBasePersona === 'kevin')) {
           p.customCaddieBasePersona = 'serena';

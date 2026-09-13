@@ -12,7 +12,7 @@
  * it. A correct fix upstream turned an approximation into a compounding error, which is precisely
  * why this now has one owner.
  */
-import { puttFeetFrom, FEET_PER_YARD } from '../../services/simGame';
+import { puttFeetFrom, FEET_PER_YARD } from '../../services/puttUnits';
 
 describe('puttFeetFrom', () => {
   it('knows a yard is three feet', () => {

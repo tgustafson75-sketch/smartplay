@@ -14,6 +14,7 @@
  */
 
 import { wasRoundWarmed } from './warmupPerformance';
+import { effortScoreHeadline } from './effortScoreVerdict';
 
 export interface PracticeImpactInput {
   /** Practice sessions with a start time + a ball/swing count. */
@@ -173,24 +174,30 @@ export function computePracticeImpact(input: PracticeImpactInput): PracticeImpac
     };
   }
 
-  let headline: string;
-  if (!connection) {
-    headline = 'Keep logging practice and rounds — I\'ll show how they connect once there\'s enough.';
-  } else {
-    const { practiceUp, scoreImproving, scoreWorse } = connection;
-
-    if (practiceUp && scoreImproving) {
-      headline = 'Your practice is up and your scores are trending down — it\'s showing up on the course.';
-    } else if (practiceUp && scoreWorse) {
-      headline = 'Practice is up but scores ticked the wrong way — give the work time to transfer.';
-    } else if (practiceUp) {
-      headline = 'Practice is up; scores are holding steady — keep stacking the reps.';
-    } else if (scoreImproving) {
-      headline = 'Scores are trending down — nice. More practice volume would help it stick.';
-    } else {
-      headline = 'Steady stretch — a bump in focused practice tends to move the scoring line.';
-    }
-  }
+  /**
+   * 2026-09-13 (Tim) — this switch used to end in an `else` that reported a COLLAPSE in practice as a
+   * "steady stretch" and recommended a bump in the thing he had stopped doing, while the practice
+   * line on the same card ended at 0 balls. Every branch was about practice going UP; there was no
+   * sentence for it going down. services/practice/effortScoreVerdict owns all nine outcomes and its
+   * copy map is exhaustive by type, so the missing case cannot come back.
+   */
+  const headline = !connection
+    ? 'Keep logging practice and rounds — I\'ll show how they connect once there\'s enough.'
+    : effortScoreHeadline(
+        {
+          effortEarly: connection.practiceEarlyBalls,
+          effortLate: connection.practiceLateBalls,
+          scoreImproving: connection.scoreImproving,
+          scoreWorse: connection.scoreWorse,
+        },
+        {
+          subject: 'Your practice',
+          noun: 'focused practice',
+          unit: 'balls',
+          holdAdvice: 'keep stacking the reps',
+          transferNote: 'give the work time to transfer',
+        },
+      );
 
   return { practiceSeries, scoreSeries, scoreWeekly, warmupWeekIndices, warmupOutcome, practiceSessions, roundsCounted, hasEnough, headline, connection };
 }

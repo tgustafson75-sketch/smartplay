@@ -74,7 +74,6 @@
       "personal_best": "Personal Best",
       "longest_drive_yards": "Longest Drive (yards)",
       "updated_automatically_as_you_log": "Updated automatically as you log Driver shots.",
-      "longest_putt_yards": "Longest Putt (yards)",
       "manual_entry_for_now": "Manual entry for now.",
       "handicap_index_usga": "Handicap Index (USGA)",
       "recalculate_from_round_history": "Recalculate from Round History",
@@ -193,7 +192,8 @@
       "presence_quiet_desc": "Quiet — it stays out of the way and answers when you ask.",
       "presence_balanced_desc": "Balanced — speaks at the tee and between holes, and answers anything.",
       "presence_talkative_desc": "Talkative — reads the shot when you stop mid-hole, and gives the longer version.",
-      "hands_free_listening_desc": "The caddie listens during a round and keeps the mic open between turns — just talk. Off means tap to talk."
+      "hands_free_listening_desc": "The caddie listens during a round and keeps the mic open between turns — just talk. Off means tap to talk.",
+      "longest_putt_feet": "Longest Putt (feet)"
     },
     "placeholder": {
       "search_settings": "Search settings",
@@ -2829,7 +2829,8 @@
       "distance_yards_optional": "Distance (yards, optional)",
       "outcome": "Outcome",
       "direction_optional": "Direction (optional)",
-      "log_shot_hole": "Log shot · hole {{current_hole}}"
+      "log_shot_hole": "Log shot · hole {{current_hole}}",
+      "distance_feet_optional": "Distance (feet, optional)"
     }
   },
   "quick_tutorial": {
