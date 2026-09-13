@@ -361,6 +361,43 @@ All 23 confirmed HIGH findings from the 30-agent workflow audit addressed:
 
 ## What's actively in progress
 
+> ### ⚠️ CURRENT — 2026-09-13 (later). ON MAIN, AND SHIPPED BY OTA.
+>
+> The branch work below was merged to `main` (fast-forward) and **three OTAs went out, production and
+> preview each time, runtimeVersion 1.0.0**. Nothing native moved in any of them, so neither store
+> submission is affected. **Nothing is device-verified.**
+>
+> - `d855974` — the Play tab half of `download_course`. The fetch worked; nothing LISTED the result,
+>   so a course pulled in for a future trip was cached, ready and unreachable. `downloaded` was
+>   rendered nowhere and `recentCourseIds` only fills at round START.
+>   `downloadedCourseSummaries` owns it; the `place:` alias filter is now load-bearing.
+> - `da8a51a` — **the MENTAL leg, which had no evidence at all.** `mentalGameBlock()` told the caddie
+>   he was an always-on sports psychologist and handed him the current round's last five reports;
+>   `endRound` empties that, so off the course he had nothing, while every report from the last fifty
+>   rounds sat in `roundHistory` read by nobody — not even a screen. `services/mentalPatterns` owns
+>   it, sparse by construction and says so in its own text. **And the join (Tim: "all those coaches
+>   have to work together"):** three measured blocks were in the prompt with nothing saying they
+>   describe the same man. `YOU ARE ONE PANEL` names the joins — practice up + scoring flat + a metric
+>   going the wrong way means he is practising the wrong thing; readings in-band + scoring worse means
+>   do NOT hand him a swing change.
+> - `9c38fe6` — **the topic picks the lead** (Tim: "the topic will determine what coach is prevalent…
+>   we never want slower response that feels unnatural"). `leadCoachFor` is a LOCAL regex; the verdict
+>   rides the MESSAGE side, the doctrine stays cached. No classify round-trip and no model downgrade —
+>   `aiTier` stays `'quality'`. The speed comes from a shorter answer, not a cheaper model. **Do not
+>   "optimise" this by making the cached blocks topic-dependent: that re-breaks the 08-24 cache fix.**
+> - Same commit — **a regex that held BACKSPACE bytes instead of word boundaries.** `LOFT_CUE` in
+>   `api/_brain.ts` had five raw 0x08 where `\b` was meant, passed straight through by `String.raw`,
+>   so `extractAdvisedClub` returned null for every loft-named club ("your 60", "the 56", "your 52
+>   degree"). That is the exact-club attribution that trains the bag (08-09). The CLIENT copy was
+>   clean — this was a corrupted second owner of the same rule. Repo-wide sweep: this file only, now
+>   gated by a control-character assertion over the whole file.
+>
+> **STILL OPEN, unchanged and now the top of the queue:** the off-round deflection
+> (`queryStatusHandler` ~L105 still answers "You're not in a round yet" to `putt_stats`, `gir`,
+> `nine_split`, `last_round_here`, `longest_drive`) — **needs Tim's per-topic call**, because he can
+> source putting from `golfer_model_snippet` but has NO source for GIR or longest-drive history, and
+> routing those invites an invented number. Then the five screen-only modules.
+
 > ### ⚠️ CURRENT — 2026-09-13. On a branch, not on main.
 >
 > **Branch: `claude/dashboard-practice-score-trends-5i4bxh`** — two commits, both pushed, working
