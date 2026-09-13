@@ -8,10 +8,22 @@ import { View, Text, Pressable, StyleSheet, Image } from 'react-native';
  * The rest screen was three lines of dim type on pure black. On a bag clip in daylight that is a
  * blank phone with some grey text on it — you cannot tell at a glance that the app is alive, which
  * is the ONE thing this screen exists to say. The mark reads from much further away than the words
- * do, and it is the same neon caddie that sits in the ask bar, so the resting app still looks like
- * the app. Same asset, one source: assets/icons/caddie/mic-caddie.png.
+ * do.
+ *
+ * 2026-09-12 (later, Tim) — "this is the correct resting screen logo." The neon outline that was
+ * here (mic-caddie.png) was the wrong mark AND a bad crop: two head profiles bleeding off both edges
+ * of a 240x128 landscape box. This is the caddie mark — cap, bag, and the waves.
+ *
+ * THE BACKDROP WAS REMOVED RATHER THAN SHIPPED. The source arrived 1024x1024 with `hasAlpha: no` and
+ * a near-black backdrop baked in (measured luminance ~27, peak 32). This screen paints PURE #000 on
+ * purpose — on OLED that turns the panel physically off, which is the entire reason it exists — so a
+ * baked backdrop would have shown as a faintly lighter square AND lit every pixel inside it, working
+ * against the one job the screen has. The background is flood-filled from the borders, not keyed by
+ * luminance, so the dark outlines INSIDE the mark (bag strap, shoulder seam) stay opaque instead of
+ * being punched through; edge pixels get partial alpha so there is no dark halo. Then cropped to its
+ * own content, so it fills the box rather than floating in a fifth of empty frame.
  */
-const REST_MARK = require('../../assets/icons/caddie/mic-caddie.png');
+const REST_MARK = require('../../assets/icons/caddie/rest-caddie.png');
 import { usePathname } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useRestModeStore } from '../../store/restModeStore';
@@ -121,7 +133,15 @@ const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center', gap: 16 },
   gpsRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   // 470×250 source, held to its aspect. Large enough to read across a fairway, not a flashlight.
-  mark: { width: 240, height: 128, opacity: 0.9, marginBottom: 6 },
+  // 2026-09-12 (Tim — "just dim it out a bit"). 0.9 → 0.7. Deliberately a nudge, not a fade: the
+  // mark exists because three lines of dim type on black do not tell you at a glance that the app is
+  // alive on a bag clip in daylight, so dimming it far enough to lose that would undo the reason it
+  // is here. Pure #000 around it is load-bearing too — on OLED those pixels are physically off.
+  //
+  // SQUARE, because the mark is (626x626 after crop). The old 240x128 box was cut for the landscape
+  // outline; leaving it would have shrunk this one to 128px tall inside a 240-wide box under
+  // resizeMode="contain" — the logo arriving and getting SMALLER.
+  mark: { width: 200, height: 200, opacity: 0.7, marginBottom: 10 },
   gpsDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: 'rgba(0,200,150,0.55)' },
   gpsText: { color: 'rgba(0,200,150,0.5)', fontSize: 11, fontWeight: '800', letterSpacing: 1.4 },
   // Dim on purpose — few lit pixels, low power.
