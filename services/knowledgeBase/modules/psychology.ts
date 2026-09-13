@@ -53,7 +53,7 @@ export const PSYCHOLOGY: KBEntry[] = [
     layer: 'psychology',
     module: MODULE,
     topic: 'over-control / steering',
-    aliases: ['steering the ball', 'guiding it', 'tense over the ball', 'gripping too tight', 'trying too hard', 'tight swing'],
+    aliases: ['steering the ball', 'guiding it', 'tense over the ball', 'gripping too tight', 'trying too hard', 'tight swing', 'the yips', 'i have the yips', 'putting yips', 'my hands freeze on short putts', 'i get tight over short putts', 'i tense up over short putts'],
     principle:
       'Trying to manually control the clubface tightens the body and produces the very miss you’re guarding against. Trust your setup and target, soften the grip pressure, and let the swing release freely — control comes from commitment and rhythm, not muscle.',
     appSignals: ['none'],
@@ -83,7 +83,7 @@ export const PSYCHOLOGY: KBEntry[] = [
     layer: 'psychology',
     module: MODULE,
     topic: 'outcome fixation',
-    aliases: ['i think about my score', 'pressure of the number', 'protecting my score', 'result anxiety', 'cant stop thinking about the result'],
+    aliases: ['i think about my score', 'pressure of the number', 'protecting my score', 'result anxiety', 'cant stop thinking about the result', 'i choked', 'i keep choking', 'i choke under pressure', 'i bottled it', 'i fold when it matters'],
     principle:
       'Fixating on the score or result hijacks attention from the one shot in front of you and tightens execution. Anchor on the PROCESS — target, picture, commit, swing — and let outcomes accumulate. Play the shot you have, not the number you want.',
     appSignals: ['none'],

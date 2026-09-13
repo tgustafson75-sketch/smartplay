@@ -14,12 +14,34 @@ import type { KBEntry, KBLayer } from './schema';
 import { GOLF_KNOWLEDGE } from './modules';
 
 /** Normalize text for matching: lowercase, strip punctuation, collapse space. */
+/**
+ * 2026-09-13 (Tim — "Mental must be audited") — AN APOSTROPHE WAS A WORD BOUNDARY, AND 45 ALIASES
+ * COULD NEVER BE MATCHED.
+ *
+ * This replaced every non-alphanumeric character with a SPACE, so "can't" became the two tokens
+ * "can t" while an alias written `'cant let go of a bad shot'` normalised to "cant …". The two
+ * spellings could never meet. Both sides of every comparison run through this function, so the bug
+ * was invisible from either side alone — the alias looked fine and the query looked fine.
+ *
+ * 45 curated aliases were unreachable to anyone whose transcript carried the apostrophe, which is
+ * every real transcript: Deepgram writes "can't", not "cant". Among them, in courseMgmt, was
+ * `'whats the smart play'` — the app's own tagline. The mental module was the worst hit (8 of its
+ * aliases), which is why this surfaced during the mental audit rather than a course-strategy one.
+ *
+ * An apostrophe INSIDE a word is not a word boundary, so it is stripped rather than spaced. The two
+ * contractions that are spelled as separate words ("i am", "cannot") are folded to the contracted
+ * form, so both spellings converge on one token regardless of which side wrote which. Applied to both
+ * sides, this can only ever make a match MORE likely — it cannot silence a match that worked before.
+ */
 function norm(s: string): string {
   return s
     .toLowerCase()
+    .replace(/['\u2018\u2019\u02BC]/g, '')
     .replace(/[^a-z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ')
-    .trim();
+    .trim()
+    .replace(/\bi am\b/g, 'im')
+    .replace(/\bcannot\b/g, 'cant');
 }
 
 /** Words ignored when scoring keyword overlap (too common to be meaningful). */

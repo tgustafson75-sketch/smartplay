@@ -16,7 +16,7 @@ import {
   Pressable, Easing, PanResponder, Share, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Video, ResizeMode, type AVPlaybackStatus, type AVPlaybackStatusSuccess } from 'expo-av';
 import * as Sharing from 'expo-sharing';
 import * as MediaLibrary from 'expo-media-library';
@@ -78,6 +78,7 @@ import type { SwingComparison } from '../../../services/swingComparisonEngine';
 import { getApiBaseUrl } from '../../../services/apiBase';
 import { titleForUpload } from '../../../services/swing/swingTitle';
 import { useTranslation } from 'react-i18next';
+import { setActiveSurface, clearActiveSurface } from '../../../services/activeSurfaceRegistry';
 
 // 2026-06-12 — shared Smart Motion control badges, so Library video controls match
 // the SmartMotion review badges (whole-app control consistency).
@@ -106,6 +107,25 @@ const STATUS_COPY: Record<AnalysisStatus, string> = {
 };
 
 export default function SwingDetail() {
+  /**
+   * 2026-09-13 (mental-game audit, same root) — this screen never registered its surface, so
+   * `caddieRequestBody.register` fell through to 'caddie' and a question asked here was answered in
+   * the on-course tactical voice instead of the COACH register the branch was written for:
+   *
+   *     if (s === 'cage' || s === 'swing_library' || s === 'swing_detail') return 'coach';
+   *
+   * Only 'cage' was ever set, so the coach register worked in Cage Mode and nowhere else in SwingLab.
+   * Found by comparing the ActiveSurface union against every setActiveSurface call site: four of eight
+   * values were never registered by any screen. [[smartplay-defect-class-unwired-halves]]
+   */
+  useFocusEffect(
+    useCallback(() => {
+      setActiveSurface('swing_detail');
+      // clearActiveSurface, not setActiveSurface(null) — screen B's focus can precede this cleanup.
+      return () => clearActiveSurface('swing_detail');
+    }, []),
+  );
+
   const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();

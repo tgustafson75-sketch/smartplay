@@ -78,7 +78,7 @@ export const MENTAL_GAME: KBEntry[] = [
     layer: 'psychology',
     module: MODULE,
     topic: 'first-tee nerves',
-    aliases: ['im so nervous on the first tee', 'first tee jitters', 'people are watching me tee off', 'i tighten up on the first hole', 'opening tee shot nerves'],
+    aliases: ['im so nervous on the first tee', 'first tee jitters', 'people are watching me tee off', 'i tighten up on the first hole', 'opening tee shot nerves', 'im scared', 'i get scared over the ball'],
     principle:
       'First-tee nerves are normal — even pros feel them — and they are energy, not a warning. Accept the buzz instead of fighting it, take a breath, trust your routine, and pick a smaller target than usual. Aim for a committed, in-play tee shot, not a perfect one; the nerves fade once you are moving.',
     appSignals: ['none'],
@@ -93,7 +93,7 @@ export const MENTAL_GAME: KBEntry[] = [
     layer: 'psychology',
     module: MODULE,
     topic: 'next-shot reset (bounce back from a bad hole)',
-    aliases: ['i fell apart after a bad hole', 'cant let go of a bad shot', 'one bad hole ruined my round', 'how do i bounce back', 'i spiral after a double bogey', 'shake off a blow up hole'],
+    aliases: ['i fell apart after a bad hole', 'cant let go of a bad shot', 'one bad hole ruined my round', 'how do i bounce back', 'i spiral after a double bogey', 'shake off a blow up hole', 'i had a meltdown', 'i melted down', 'the wheels came off'],
     principle:
       'A bad hole only becomes a bad round if you carry it to the next tee. Build a short reset: take a breath, accept the number, and consciously hand the bad hole to the past as you walk off the green. The next shot does not know what the last one did — start it clean.',
     appSignals: ['none'],
@@ -108,7 +108,7 @@ export const MENTAL_GAME: KBEntry[] = [
     layer: 'psychology',
     module: MODULE,
     topic: 'staying present (one shot at a time)',
-    aliases: ['stay in the moment', 'i get ahead of myself', 'thinking about my final score', 'one shot at a time', 'stop counting strokes mid round', 'staying present'],
+    aliases: ['stay in the moment', 'i get ahead of myself', 'thinking about my final score', 'one shot at a time', 'stop counting strokes mid round', 'staying present', 'i cant concentrate', 'i lose focus', 'my concentration is gone'],
     principle:
       'The only shot you can control is the one in front of you. Drop the math and the what-ifs and give full attention to THIS target — past holes are done, the scorecard can wait. Playing one shot at a time keeps the swing free and quietly takes care of the score.',
     appSignals: ['none'],
@@ -138,7 +138,7 @@ export const MENTAL_GAME: KBEntry[] = [
     layer: 'psychology',
     module: MODULE,
     topic: 'confidence from a go-to shot',
-    aliases: ['i need a reliable shot under pressure', 'whats my go to shot', 'a shot i can trust', 'safe shot when nervous', 'fall back shot', 'my bread and butter shot'],
+    aliases: ['i need a reliable shot under pressure', 'whats my go to shot', 'a shot i can trust', 'safe shot when nervous', 'fall back shot', 'my bread and butter shot', 'i lost my confidence', 'im not confident', 'i have no confidence', 'i dont trust my swing'],
     principle:
       'Under pressure, lean on the one shot you trust most — a stock club and stock shape you can repeat without thinking. It does not have to be your longest or prettiest; it has to be RELIABLE. Having a go-to takes the guesswork out of a tense moment and gives the nerves something solid to grab.',
     appSignals: ['none'],
@@ -153,7 +153,7 @@ export const MENTAL_GAME: KBEntry[] = [
     layer: 'psychology',
     module: MODULE,
     topic: 'the score doesn\'t define the round',
-    aliases: ['i had a bad round', 'my score was terrible', 'i judge myself by my score', 'the number ruined my day', 'managing expectations golf', 'i expect too much of myself'],
+    aliases: ['i had a bad round', 'my score was terrible', 'i judge myself by my score', 'the number ruined my day', 'managing expectations golf', 'i expect too much of myself', 'that round got away from me', 'the round got away from me', 'i threw that round away'],
     principle:
       'A round is more than the final number — good swings, a clutch up-and-down, time outside, and laughs all count. Set expectations to your real game (misses included) so a high score doesn\'t erase a day that had plenty of good in it. Judge the round by how you committed and how it felt, not just the total.',
     appSignals: ['none'],
@@ -226,7 +226,7 @@ export const MENTAL_GAME: KBEntry[] = [
     layer: 'psychology',
     module: MODULE,
     topic: 'frustrated / nervous — reset before the next shot',
-    aliases: ['how do i calm down', 'im so frustrated', 'i keep blowing up', 'i play bad when people watch', 'i lost my temper'],
+    aliases: ['how do i calm down', 'im so frustrated', 'i keep blowing up', 'i play bad when people watch', 'i lost my temper', 'im angry', 'i keep getting angry', 'i lost my cool', 'im tilted', 'i went on tilt', 'im rattled', 'i need to calm down', 'i need to settle down'],
     principle:
       "When emotion is high, don't lead with mechanics. Breathe in through your nose, out through your mouth, then look at the lie and choose the smartest shot available. Decide second, breathe first — the next shot doesn't care how mad you are.",
     honesty: 'coaching_only',

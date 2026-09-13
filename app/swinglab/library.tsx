@@ -14,13 +14,13 @@
  *   - Empty states: cleaner copy + correct CTA per context.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Image,
   ActivityIndicator, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useSwingSessionStore, resolvePlayerName, playerMatchesFilter } from '../../store/swingSessionStore';
@@ -32,6 +32,7 @@ import YouTubeReferenceModal from '../../components/swinglab/YouTubeReferenceMod
 import type { PoseEstimate } from '../../services/poseEstimator';
 import type { SimilarMatch } from '../../services/swingDatabase';
 import { useTranslation } from 'react-i18next';
+import { setActiveSurface, clearActiveSurface } from '../../services/activeSurfaceRegistry';
 
 const FILTERS: { id: LibraryFilter; label: string }[] = [
   { id: 'all', label: 'All' },
@@ -49,6 +50,25 @@ const DATE_FILTERS: { id: DateFilter; label: string }[] = [
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export default function SwingLibrary() {
+  /**
+   * 2026-09-13 (mental-game audit, same root) — this screen never registered its surface, so
+   * `caddieRequestBody.register` fell through to 'caddie' and a question asked here was answered in
+   * the on-course tactical voice instead of the COACH register the branch was written for:
+   *
+   *     if (s === 'cage' || s === 'swing_library' || s === 'swing_detail') return 'coach';
+   *
+   * Only 'cage' was ever set, so the coach register worked in Cage Mode and nowhere else in SwingLab.
+   * Found by comparing the ActiveSurface union against every setActiveSurface call site: four of eight
+   * values were never registered by any screen. [[smartplay-defect-class-unwired-halves]]
+   */
+  useFocusEffect(
+    useCallback(() => {
+      setActiveSurface('swing_library');
+      // clearActiveSurface, not setActiveSurface(null) — screen B's focus can precede this cleanup.
+      return () => clearActiveSurface('swing_library');
+    }, []),
+  );
+
   const { t } = useTranslation();
   const router = useRouter();
   const { colors } = useTheme();

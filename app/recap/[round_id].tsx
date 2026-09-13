@@ -50,6 +50,7 @@ import type { GhostHoleResult } from '../../types/ghost';
 import type { RoundPhoto } from '../../store/roundStore';
 import { getApiBaseUrl } from '../../services/apiBase';
 import { useTranslation } from 'react-i18next';
+import { setActiveSurface, clearActiveSurface } from '../../services/activeSurfaceRegistry';
 
 // 2026-07-01 (Tim — recap showed "Unknown Course / 0 holes" for a real 18-hole round) — the
 // archived recap can be degraded (generated at round-end before the course/scores resolved), while
@@ -419,6 +420,38 @@ export default function RecapScreen() {
         return true;
       });
       return () => sub.remove();
+    }, [])
+  );
+
+  /**
+   * 2026-09-13 (Tim — "Mental must be audited") — THE PSYCHOLOGIST HAD NO SURFACE.
+   *
+   * `caddieRequestBody.register` picks the caddie's ROLE from the active surface:
+   *
+   *     if (s === 'cage' || s === 'swing_library' || s === 'swing_detail') return 'coach';
+   *     if (s === 'arena' || s === 'recap') return 'psychologist';
+   *     return 'caddie';
+   *
+   * Only four of the eight ActiveSurface values were ever registered by a screen — caddie, cage,
+   * drill_detail, drill_session — so BOTH psychologist branches were unreachable. `'arena'` is a v1
+   * leftover parked for 3.0 (docs/v1.2-deferred.md), which left `'recap'` as the role's one live
+   * route, and this screen never registered it. So `constants/dialogTemplates/psychologistTemplates`
+   * and the whole mental register existed, were authored, and could not be selected.
+   *
+   * The recap is exactly where that conversation happens — a player looks at a round that got away
+   * from them and says so. They were answered in the on-course tactical voice, mid-round register,
+   * about a round that had already ended.
+   *
+   * The mental DATA was never the missing half: mentalPatterns and the derived mentalState both reach
+   * the payload and are guarded. It was the VOICE that had no way in.
+   * [[smartplay-defect-class-unwired-halves]]
+   */
+  useFocusEffect(
+    useCallback(() => {
+      setActiveSurface('recap');
+      // clearActiveSurface, never setActiveSurface(null) — screen B's focus can run before this
+      // blur cleanup, and an unconditional null would wipe B's just-registered surface.
+      return () => clearActiveSurface('recap');
     }, [])
   );
 
