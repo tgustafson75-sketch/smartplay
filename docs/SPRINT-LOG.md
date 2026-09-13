@@ -3584,3 +3584,90 @@ re-read.
 - Everything carried from the earlier 09-13 session stands: `workoutPerformance`,
   `workoutSwingImpact`, `pointsPerformance`, `preRoundFactors`, `handicapCalculator` screen-only; the
   off-round deflection; **and the mental-game leg, which is next.**
+
+---
+
+## Day N+6 — 2026-09-13 (third session) — Settings, read as a product surface
+
+Tim sent 28 screenshots of the Settings screen: *"over-disclosing tools where they shouldn't be,
+hard to find, duplicates... and Jesus, a few of these, you put the whole coding goddamn explanation
+into it."* Reviewed first, changed nothing until he confirmed. 11 sections, ~75 controls, and no
+guard of its own anywhere — which is how eleven defects accumulated in it while every other surface
+was being swept.
+
+### Shipped today
+
+**Tank, gone from everything a player reads.** Seven user-facing strings × three locales still named
+the retired persona. The code was already clean (dropped from `ALL_PERSONAS`, no assets, no API
+rules); the three `'tank' → 'kevin'` migration lines are KEPT — they are what makes Tank not exist
+for installs that already had him. Tim: *"Tank got owner privileges, never an owner. Needs to not
+exist in this app anywhere."* Verified his address left `OWNER_EMAILS` on 2026-08-06,
+`MESSAGING_ALLOWED_EMAILS` is env-driven with messaging off in release, and no third-party email is
+hardcoded in `app/ services/ store/ constants/ api/`.
+
+**"Cecily Mode" → "Kid-Friendly Mode".** A private name on a public row and in the toast it fires
+(`confirmToggle`'s first argument is shown to the player). Capability unchanged.
+
+**Instruments back to Owner Tools.** The `(dev)`-labelled GPS overlay was in the CADDIE section
+telling the reader to use it "during the Garmin comparison test"; screenshot mode was in Language &
+Display telling Android users to "crop or wait for the next app update".
+
+**People & Coaching, a new section.** Family Coaching, Team Captain and Messages were under *Help &
+About*; Invite a friend was inside *Data & Privacy* between two consent toggles and the legal links.
+
+**The Bag reaches Profile.** Tim: *"shouldn't The Bag be populated originally in the Profile?"* —
+Profile asked everything about how you play and nothing about what you play with, while the only bag
+surface was `/bag-scan`, reachable from neither onboarding nor Profile. Import Past Rounds moved
+there too; its own description already read "In Profile".
+
+**Claims that contradicted the code:** three Health Connect rows rendering with
+`HEALTH_CONNECT_ENABLED === false` and no health permission (now gated — `tutorials.tsx` has
+honoured that flag for months, this screen never read it); "Includes your email" on the automatic
+issue send (anonymous since the install-id fix — third copy of that stale claim today); "TTS and STT
+always use OpenAI" (STT is Deepgram); "Walking is the default" with `cartMode: true`; "Four caddies"
+with two offered.
+
+**The coding explanations:** the Ray-Ban description was a dated changelog quoting Tim and naming
+`MetaWearablesFrameModule` / `metaWearablesBridge`; Auto Shot Detection ran six lines ending on
+"will have no shots to show".
+
+**Gus was never a persistence bug.** The four pillar pickers hard-coded `[Kevin, Serena]` while
+Active Caddie built itself from `ACTIVE_PERSONAS` (which includes `'custom'`).
+`setCaddieForPillar` takes a full `Persona` and `caddieAssignments` persists one, so the store could
+always hold Gus per pillar — only the pickers refused to offer him, so the next pillar resolve put
+Kevin back. One owner now: `selectablePersonas()`.
+
+### Verified
+
+`tsc` clean · `jest` **4383/4383 (373 suites)** · sim **1034/1034** · lint **76 errors, exactly the
+count at HEAD** (none new). Six new sim guards, break-tested 7/7 on the defects they exist for; the
+eighth direction (flag ON) is covered by the morning's disclosure guard, confirmed by flipping it.
+
+**NOT verified on device.**
+
+The sim caught two defects of mine mid-work, which is the point of it: moving screenshot mode into
+the owner-gated block made its hooks **conditional** (rules-of-hooks LOCK — a field-fatal render
+crash), and my Galaxy Watch trim deleted *"Pin yardage and the watch mic do not need this"*, a
+sentence `pin-yardage-does-not-ride-the-swing-toggle.test.ts` pins because Tim lost a round to that
+implication.
+
+### Corrections to my own review
+
+- **The language picker is right.** I flagged missing ja/ko; those are Deepgram *transcription*
+  codes in `api/transcribe.ts`. i18n has exactly en/es/zh and the store type is `'en'|'es'|'zh'`.
+- **The two Privacy Policy rows are not duplicates** — one opens the in-app document, one the web
+  URL a reviewer looks for. Both kept; the "placeholder URL" comment was the stale part.
+
+### Open / carried
+
+- **The presence and verbosity controls are still seven.** Kevin's presence, Proactive Kevin,
+  Interactive Round, Local Mode, Active Listening, Continuous Conversation, Response Style — grouped
+  better now but not consolidated. Collapsing them removes user-visible switches people may rely on;
+  that is a product call, not a cleanup.
+- **`cartMode` still defaults TRUE.** The copy is honest now, but the default is what suppressed Auto
+  Shot Detection for every default user. Flipping it only affects new installs — Tim's call.
+- **Handicap has two fields** (`Handicap` 17 and `Handicap Index (USGA)` 17.1) and miss has two
+  (`Dominant Miss`, `Typical Miss`). Not touched — needs a decision on which one the caddie reads.
+- **Four club stores** (`clubBagStore`, `clubSelectionStore`, `clubStatsStore`, `clubVariantStore`)
+  before any deeper bag work.
+- Lint's 76-error i18n backlog, and the mental-game leg, both still open.

@@ -8,6 +8,32 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+> ### ⚠️ LATEST — 2026-09-13 (third session). Settings, read as a product surface.
+>
+> 28 screenshots, 11 sections, ~75 controls, and **no guard on the screen at all** — which is how
+> eleven defects accumulated in it. Shipped: **Tank removed from every string a player reads** (code
+> was already clean; the three `'tank' → 'kevin'` migration lines are KEPT); **"Cecily Mode" →
+> "Kid-Friendly Mode"**; the `(dev)` GPS overlay and screenshot mode **moved to Owner Tools**; a new
+> **People & Coaching** section for the features hiding under Help & About; **the Bag reachable from
+> Profile**; three **Health Connect rows gated** behind the flag that says the build has no health;
+> and four copy claims that contradicted the code (issue-report email, OpenAI STT, cart default,
+> "four caddies").
+>
+> **Gus was never a persistence bug** — the pillar pickers hard-coded `[Kevin, Serena]` while the
+> store has always accepted a full `Persona`. One owner now: `selectablePersonas()`.
+>
+> Six new sim guards, break-tested 7/7. The sim caught two of MY defects mid-work: conditional hooks
+> from the Owner Tools move, and a trim that deleted a sentence a regression test pins.
+>
+> Green: tsc, jest 4383/4383 (373 suites), sim **1034/1034**, lint 76 errors = exactly HEAD.
+> **NOT verified on device.**
+>
+> **Carried, and all of them are Tim's call:** the seven presence/verbosity controls are grouped but
+> not consolidated; `cartMode` still defaults TRUE; handicap and miss each have two fields; four club
+> stores sit under "the bag". Plus the i18n lint backlog and the mental-game leg.
+
+---
+
 > ### ⚠️ LATEST — 2026-09-13 (second session). One document, four files, and the copy the player accepts.
 >
 > A documentation review found the privacy policy had **no owner**. The live site was ahead of the repo
