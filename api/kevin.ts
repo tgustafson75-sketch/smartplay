@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import OpenAI from 'openai';
 import { KEVIN_TTS_INSTRUCTIONS } from './_kevinVoice';
-import { selfReferenceBlock, perspectiveBlock, mentalGameBlock, clubAdviceBlock, caddieRosterBlock, shotAnswerShapeBlock, extractAdvisedClub, detectEmotionalState, extractShotReport } from './_brain';
+import { selfReferenceBlock, perspectiveBlock, mentalGameBlock, clubAdviceBlock, caddieRosterBlock, shotAnswerShapeBlock, extractAdvisedClub, detectEmotionalState, extractShotReport, leadCoachFor } from './_brain';
 import { BRAIN_TOOLS, UI_TOOLS, SERVER_TOOLS } from './_brainTools';
 import { completeText, runAgenticLoop, providerFromHeader, type AiProvider, type AiTier, type AiToolDef, type AiImageInput } from './_aiProvider';
 import { applyCors } from './_cors';
@@ -1969,6 +1969,8 @@ The joins that actually matter, when the blocks are present to make them:
 - ROUGH MOMENTS CLUSTERING LATE IN THE ROUND + no swing change to explain it → fatigue, focus or pressure, not a new swing thought. Mid-round, that means simplify, not diagnose.
 - A COURSE THAT PUNISHES HIS MEASURED MISS → the caddie and the swing coach answering together: what this course will ask of him, in his own numbers.
 - A FEEL he reports + a measurement + a mental pattern that all point the same way → say so once, plainly. Three things agreeing is rare and it is worth him hearing.
+THE TOPIC PICKS THE LEAD (2026-09-12 — Tim: "the topic will determine what coach is prevalent"): a [LEAD — …] line may arrive with the player's message naming whose question this is. When it does, that vantage point ANSWERS and the others stay quiet unless they change the answer — a swing question gets the swing coach, not a committee. Lead with the one thing he can do. When no LEAD line is present the topic was not clearly anyone's, so use your own judgement; never invent a lead you were not given.
+SHORTER IS FASTER AND HE IS WAITING. Every word you produce is generated and then spoken aloud, so a four-way answer makes him wait four times as long to hear the one thing that mattered. The lead exists to make you brief, not thorough.
 RULES FOR THE PANEL. Never announce the hand-off — no "as your mental coach" or "switching hats"; he is talking to ONE caddie who happens to know all of it. Never stack four opinions into one answer: pick the ONE join that answers what he actually asked and lead with what he can do. If two vantage points genuinely disagree, say that honestly rather than averaging them — a disagreement is information, and pretending to a consensus you do not have is the thing that makes a coach untrustworthy. And a block that is ABSENT is not a vantage point you have: never infer one coach's read from another's data.
 
 YOU ARE SPOKEN ALOUD. Never use markdown — no **bold**, no *italics*, no bullet lists, no headings, no backticks. Every word you produce is either read out by a voice or shown as a caption, so an asterisk is either pronounced or printed at the player. If a word matters, carry it with the sentence, the way you would say it out loud.
@@ -2217,6 +2219,27 @@ ${emoArr.slice(-5).map(e => `  - ${e.state ?? '?'}` + (e.valence ? ` (${e.valenc
     const roundFactsPrefix = roundFactsBlock ? `${roundFactsBlock}\n\n` : '';
     const turnStatePrefix = turnStateBlock ? `${turnStateBlock}\n\n` : '';
 
+    /**
+     * 2026-09-12 (Tim — "the topic will determine what coach is prevalent, helping logic and speed of
+     * response"; then "we never want slower response that feels unnatural") — WHO LEADS THIS ANSWER.
+     *
+     * MESSAGE SIDE, deliberately. This is the only part of the panel that changes turn to turn, and
+     * the system prompt is ONE cache block — putting a per-turn value inside it is precisely the
+     * 08-24 defect documented above, where a volatile line made every turn a 2x cache WRITE instead
+     * of a read. Doctrine (how to use this) stays in the system prompt where it is stable; the
+     * verdict rides here, costing one short line. leadCoachFor is a local regex, so deciding it costs
+     * no measurable time.
+     *
+     * Null stays SILENT rather than being sent as "none": an absent line is a shorter message, and
+     * the panel rule already covers the no-clear-topic case.
+     */
+    // Read from baseMessage — the player's OWN words — not from the assembled message, which by this
+    // point carries fact prefixes whose wording would otherwise vote on who leads.
+    const leadCoach = leadCoachFor(baseMessage);
+    const leadPrefix = leadCoach
+      ? `[LEAD — ${leadCoach.toUpperCase()}. This question is theirs. Answer as them, lead with the one thing he can do, and bring in another vantage point ONLY if it changes the answer. Shorter is better: he is waiting on you.]\n\n`
+      : '';
+
     const bagBlock = bagEntries.length > 0
       /**
        * 2026-08-23 — Label these as CARRY, because that is what they are. bagDistances() returns
@@ -2285,8 +2308,8 @@ ${sv.measureYards != null ? sv.measureYards + ' yards to tapped target' : ''}
 ${sv.analysisText ? 'SmartVision analysis: ' + sv.analysisText : ''}
 [/SMARTVISION OPEN]
 
-${kbPrefix ? `${kbPrefix}\n\n` : ''}${onCourseContextBlock}${roundFactsPrefix}${turnStatePrefix}${liveFactsPrefix}${baseMessage}`
-      : `${kbPrefix ? `${kbPrefix}\n\n` : ''}${recentShotsBlock}${onCourseContextBlock}${roundFactsPrefix}${turnStatePrefix}${liveFactsPrefix}${baseMessage}`;
+${kbPrefix ? `${kbPrefix}\n\n` : ''}${onCourseContextBlock}${roundFactsPrefix}${turnStatePrefix}${liveFactsPrefix}${leadPrefix}${baseMessage}`
+      : `${kbPrefix ? `${kbPrefix}\n\n` : ''}${recentShotsBlock}${onCourseContextBlock}${roundFactsPrefix}${turnStatePrefix}${liveFactsPrefix}${leadPrefix}${baseMessage}`;
 
     // 2026-05-22 — Vision frame normalization. When the client passed
     // an image, validate the shape and prefer it as the primary user-

@@ -222,7 +222,7 @@ export function mentalGameBlock(): string {
  * the word degree behind it. "60 out" and "from 60" are yardages and match neither. Loft families
  * follow the bag's own mapping (46-49 PW, 50-53 GW, 54-57 SW, 58-64 LW).
  */
-const LOFT_CUE = String.raw`(?:(?:the|my|a|an|his|her|your|our)\s+(?:LOFTS)|(?:LOFTS)\s*(?:°|deg|degree[s]?|wedge))`;
+const LOFT_CUE = String.raw`(?:(?:the|my|a|an|his|her|your|our)\s+(?:LOFTS)\b|\b(?:LOFTS)\s*(?:°|deg\b|degree[s]?\b|wedge\b))`;
 const loftRx = (lofts: string) => new RegExp(LOFT_CUE.replace(/LOFTS/g, lofts), 'i');
 
 const CLUB_PATTERNS: Array<[RegExp, string]> = [
@@ -328,6 +328,62 @@ const EMOTION_PATTERNS: Array<{ re: RegExp; state: string; valence: 'positive' |
 ];
 /** The speaker must be talking about THEMSELVES, now — not quoting, not asking. */
 const FIRST_PERSON = /\b(?:i|i'?m|im|my|me|we)\b/i;
+
+/**
+ * 2026-09-12 (Tim — "the topic will determine what coach is prevalent, helping logic and speed of
+ * response", then: "we never want slower response that feels unnatural").
+ *
+ * WHICH OF THE FOUR LEADS THIS ANSWER. Read LOCALLY from the player's own words — one regex pass
+ * over one string. No network, no model call, no measurable time.
+ *
+ * THE TWO IMPLEMENTATIONS THAT WOULD HAVE MADE IT SLOWER, and are therefore not here:
+ *
+ *   A CLASSIFY ROUND-TRIP. kevin.ts pins `aiTier = 'quality'` every turn and says why: "There is
+ *   still no classifyQuestion() round-trip — that was removed for good reason and stays removed." An
+ *   extra call to decide who answers spends a whole network hop before the real answer starts, which
+ *   is the opposite of what was asked for. So the lead is derived locally and the tier is untouched.
+ *   No model downgrade either: a cheaper model on a swing question is a worse answer, not a faster
+ *   conversation.
+ *
+ *   DROPPING THE OTHER BLOCKS FROM THE PROMPT. Tempting — fewer input tokens — and it would have
+ *   re-broken the 08-24 cache fix. The system prompt is ONE cache block; making its contents depend
+ *   on the topic changes the cache key every turn, turning every read into a 2x write. That defect
+ *   cost $50 in a day and made turns slower, not faster. The blocks stay stable and cached; only this
+ *   one short line is volatile, so it rides the MESSAGE side with the other live facts.
+ *
+ * WHERE THE SPEED ACTUALLY COMES FROM: a lead means a shorter answer. Output tokens are what the
+ * player waits on — each one is generated and then spoken — so "answer as the swing coach, one thing
+ * he can do" finishes talking sooner than four vantage points hedging at each other. Faster because
+ * it says less, which is also why it sounds more like a person. [[speed-is-the-wow]]
+ *
+ * Returns null when the topic belongs to nobody in particular — a greeting, a general question, a
+ * mix. Null means "no lead", NOT "no coaches": the panel rule in the system prompt still applies, and
+ * guessing a lead badly is worse than letting the panel decide.
+ */
+export type LeadCoach = 'swing' | 'mental' | 'practice' | 'course' | 'shot';
+
+export function leadCoachFor(playerText: string): LeadCoach | null {
+  const t = (playerText ?? '').toLowerCase();
+  if (!t.trim()) return null;
+
+  // A shot decision in front of him outranks everything else: he is standing over the ball, and the
+  // only useful answer is a club. Checked first for that reason.
+  if (/\b(?:what (?:should|do) i hit|which club|club should|how far|yardage|plays like|into the wind|lay ?up|go for it|carry the)\b/.test(t)) return 'shot';
+
+  // The swing itself — mechanics, a feel, a measured metric, a miss.
+  if (/\b(?:swing|backswing|downswing|takeaway|over the top|steep|shallow|casting|early extension|hip turn|shoulder turn|tempo|sequencing|weight shift|spine angle|release|slice|slicing|hook(?:ing)?|fat|thin|topped|topping|shank(?:ing|ed)?)\b/.test(t)) return 'swing';
+
+  // The mental game — his own words about what it is like to be him out there.
+  if (/\b(?:frustrated|frustrating|frustration|angry|tilt|tilting|pissed|nervous|anxious|anxiety|choke|choking|pressure|confidence|confident|mental|focus|fall apart|falling apart|spiral|give up|embarrassed|embarrassing|in my head)\b/.test(t)) return 'mental';
+
+  // Practice and whether it is paying off — the learn-loop question.
+  if (/\b(?:practice|practise|practising|practicing|range session|drill|drills|work on|reps|getting better|improving|plateau|worth it|showing up in my scores)\b/.test(t)) return 'practice';
+
+  // A course — one he is playing, or one he is only thinking about.
+  if (/\b(?:course|front nine|back nine|tee box|green|bunker|hazard|layout|par \d|hole \d)\b/.test(t)) return 'course';
+
+  return null;
+}
 
 export function detectEmotionalState(playerText: string): { state: string; valence: 'positive' | 'neutral' | 'negative' } | null {
   if (!playerText) return null;
