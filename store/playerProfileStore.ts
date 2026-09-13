@@ -385,7 +385,17 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
 
       setName: (name) =>
         set({ name, firstName: name.split(' ')[0] ?? name }),
-      setHandicap: (hcp) => set({ handicap: hcp }),
+      /**
+       * 2026-09-13 — WRITES BOTH, because it is the MIRROR that is being set.
+       *
+       * `handicap` mirrors `handicap_index` (setHandicapIndex has kept them in lockstep since
+       * 2026-05-16) — but only in that direction. This setter wrote the integer alone, so every
+       * caller of it silently desynced the pair: Settings had a "Handicap" box wired here next to
+       * an "Index" box wired to the other, and onboarding wrote a first-run handicap that left the
+       * Index null. Both UI paths now write the index; this keeps the pair honest for anything that
+       * reaches for the mirror later. [[two-owners-is-the-root-cause]]
+       */
+      setHandicap: (hcp) => set({ handicap: hcp, handicap_index: hcp }),
       setHandedness: (h) => set({ handedness: h }),
       setRole: (r) => set({ role: r }),
       setCoachCredentials: (c) => set({ coachCredentials: c && c.trim().length > 0 ? c.trim() : null }),

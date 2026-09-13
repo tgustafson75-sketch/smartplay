@@ -3,7 +3,7 @@
  *
  * Captures the three things a tester opens the app to set up:
  *   1. Name (so the caddie can address them by it)
- *   2. Active caddie (Kevin default, Tank / Serena / Harry available)
+ *   2. Active caddie (Kevin default; the roster comes from selectablePersonas())
  *   3. Handicap (optional, can skip)
  *
  * Lives outside `app/onboarding/` because Tim explicitly disabled the
@@ -66,7 +66,7 @@ export default function WelcomeScreen() {
 
   const existingRole = usePlayerProfileStore(s => s.role);
   const setName = usePlayerProfileStore(s => s.setName);
-  const setHandicap = usePlayerProfileStore(s => s.setHandicap);
+  const setHandicapIndex = usePlayerProfileStore(s => s.setHandicapIndex);
   const setRole = usePlayerProfileStore(s => s.setRole);
   const setCaddiePersonality = useSettingsStore(s => s.setCaddiePersonality);
 
@@ -134,8 +134,17 @@ export default function WelcomeScreen() {
     if (trimmed.length > 0) setName(trimmed);
     else if (!existingName) setName('friend');
 
+    /**
+     * 2026-09-13 — onboarding writes the INDEX, not the mirror.
+     *
+     * `handicap` is an integer mirror of `handicap_index`, and setHandicap only ever wrote the
+     * mirror — so a first-run player typed 17.1, the app stored 17 as the handicap and left the
+     * Index null, and every Index-based surface (posting, the recap card, setup gaps) behaved as
+     * though they had no handicap at all. setHandicapIndex writes both, and the field already
+     * parses a decimal. [[two-owners-is-the-root-cause]]
+     */
     const hcp = parseFloat(handicapText.trim());
-    if (Number.isFinite(hcp) && hcp >= 0 && hcp <= 54) setHandicap(hcp);
+    if (Number.isFinite(hcp) && hcp >= 0 && hcp <= 54) setHandicapIndex(hcp);
 
     setRole(roleSel);
     setCaddiePersonality(caddie);

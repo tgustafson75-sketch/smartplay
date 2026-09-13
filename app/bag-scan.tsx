@@ -9,13 +9,14 @@
  * HONEST: only clubs actually seen are listed (never padded to 14); brand/model are blank when
  * not legible rather than guessed. You can edit any field and toggle any club off before adding.
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../contexts/ThemeContext';
 import { safeBack } from '../services/safeBack';
+import { useSettingsStore } from '../store/settingsStore';
 import { scanBagFromVideo, type ScannedClub } from '../services/bagScan';
 import { useClubBagStore } from '../store/clubBagStore';
 import type { ClubId } from '../services/clubRecognition';
@@ -27,6 +28,19 @@ type Phase = 'idle' | 'scanning' | 'review';
 const VIDEO_MAX_SECONDS = 10;
 
 export default function BagScanScreen() {
+  /**
+   * 2026-09-13 — OFFERED ONCE, AND ONLY ONCE.
+   *
+   * decideFirstRunRoute sends a fresh install here when the registered bag is empty, so the caddie
+   * does not start the first round with bagClubs: []. A first-run arrival has NO back stack, so
+   * safeBack() lands on '/' and the router re-evaluates immediately — if this flag were set on
+   * "done" instead of on arrival, skipping would put the player straight back here, forever. This
+   * mirrors permissions.tsx, which sets its flag on Skip as well as on Allow.
+   */
+  useEffect(() => {
+    try { useSettingsStore.getState().markTutorialSeen('bag_setup_offered'); } catch { /* a flag we could not set is not a reason to block the bag */ }
+  }, []);
+
   const { t } = useTranslation();
   const { colors } = useTheme();
   const registerClub = useClubBagStore((s) => s.registerClub);

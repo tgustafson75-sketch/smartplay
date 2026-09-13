@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Redirect } from 'expo-router';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { decideFirstRunRoute } from '../services/firstRunRoute';
+import { useClubBagStore } from '../store/clubBagStore';
 import { useSettingsStore } from '../store/settingsStore';
 import { recordLaunch } from '../services/kevinGreeting';
 import { signalGreetingComplete } from './greeting';
@@ -104,12 +105,17 @@ export default function Index() {
     corePermissionsAsked: !!tutorialsSeen['core_permissions_requested'],
     termsAccepted: profileSnap.termsAcceptedAt != null,
     hasName: (profileSnap.name ?? '').trim().length > 0,
+    bagSetupOffered: !!tutorialsSeen['bag_setup_offered'],
+    // Read through carriedList() — the same view of the bag the caddie payload sends.
+    bagEmpty: (() => {
+      try { return useClubBagStore.getState().carriedList().length === 0; } catch { return false; }
+    })(),
   });
   // 2026-08-19 (critical-path audit) — PATH 1 instrumentation. The seven [path1:onboard] markers
   // docs/critical-paths.md promised were on a subtree deleted in May, so the MIN VERIFY (grep
   // logcat for [path1:onboard]) returned nothing on a healthy run AND on a broken one. This traces
   // the flow that actually exists.
-  console.log(`[path1:onboard] route_decision intro=${!!tutorialsSeen['intro_video']} terms=${profileSnap.termsAcceptedAt != null} name=${(profileSnap.name ?? '').trim().length > 0} perms=${!!tutorialsSeen['core_permissions_requested']} -> ${firstRun ?? 'app'}`);
+  console.log(`[path1:onboard] route_decision intro=${!!tutorialsSeen['intro_video']} terms=${profileSnap.termsAcceptedAt != null} name=${(profileSnap.name ?? '').trim().length > 0} perms=${!!tutorialsSeen['core_permissions_requested']} bag_offered=${!!tutorialsSeen['bag_setup_offered']} -> ${firstRun ?? 'app'}`);
   // expo-router's typed routes are generated from the filesystem at build time; new routes need an
   // `as never` cast until the type regeneration catches up.
   if (firstRun) return <Redirect href={firstRun as never} />;

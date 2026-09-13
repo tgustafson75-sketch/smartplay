@@ -42,13 +42,14 @@ import { initWatchSwingBridge, stopWatchSwingBridge, isWatchSwingBridgeAvailable
 import { useScreenshotModeStore } from '../store/screenshotModeStore';
 import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
 import { useToastStore } from '../store/toastStore';
-import { useTrustLevelStore, TRUST_LEVEL_META, TRUST_LEVEL_SLIDER_ORDER } from '../store/trustLevelStore';
+import { useTrustLevelStore, TRUST_LEVEL_META } from '../store/trustLevelStore';
 import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
 import { isFeatureShelved } from '../services/releaseSurface';
+import { PRESENCE_PROFILES, LISTENING_PROFILES, presenceFromFlags, type CaddiePresence } from '../services/caddiePresence';
 /**
  * 2026-09-13 — HEALTH_CONNECT_ENABLED is false for 1.0: the health permissions came OUT of app.json
  * and the binary cannot read steps, heart rate, distance or calories. Until today this screen did
@@ -90,8 +91,9 @@ export default function Settings() {
     // 2026-05-26 — Fix BE: Cecily Mode toggle state + setter.
     cecilyMode,
     setCecilyMode,
-    // 2026-05-26 — Fix AP Phase 2: Continuous Conversation toggle.
-    continuousConversationMode,
+    // 2026-05-26 — Fix AP Phase 2: Continuous Conversation.
+    // 2026-09-13 — no longer a row of its own; applyListening writes it alongside autoListenEnabled
+    // (services/caddiePresence), so the mic is one decision instead of two that could disagree.
     setContinuousConversationMode,
     language,
     responseMode,
@@ -208,6 +210,31 @@ export default function Settings() {
   const setTrustLevel = useTrustLevelStore(s => s.setLevel);
 
   /**
+   * 2026-09-13 — the two controls that replaced seven. `presence` is read back OUT of the flags so
+   * the pill shows what the app is actually doing, including for state written before this existed.
+   */
+  const presence = presenceFromFlags({
+    trustLevel, proactiveKevin: proactive_kevin_enabled, interactiveRound, localMode, responseMode,
+  });
+  const applyPresence = (level: CaddiePresence) => {
+    const p = PRESENCE_PROFILES[level];
+    setTrustLevel(p.trustLevel as never);
+    setProactiveKevinEnabled(p.proactiveKevin);
+    setInteractiveRound(p.interactiveRound);
+    setLocalMode(p.localMode);
+    setResponseMode(p.responseMode);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    useToastStore.getState().show(`${caddieName}'s presence: ${level}`);
+  };
+  const applyListening = (on: boolean) => {
+    const l = LISTENING_PROFILES[on ? 'on' : 'off'];
+    setAutoListenEnabled(l.autoListenEnabled);
+    setContinuousConversationMode(l.continuousConversationMode);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    useToastStore.getState().show(`Hands-free listening: ${on ? 'ON' : 'OFF'}`);
+  };
+
+  /**
    * 2026-05-19 — Toggle wrapper that fires a Medium haptic and a toast
    * on every state change. Previously the bare setters gave no visible
    * confirmation — the switch thumb sliding was the only signal that the
@@ -234,7 +261,6 @@ export default function Settings() {
     name,
     role,
     coachCredentials,
-    handicap,
     handedness,
     dominantMiss,
     physicalLimitation,
@@ -267,7 +293,6 @@ export default function Settings() {
     setName,
     setRole,
     setCoachCredentials,
-    setHandicap,
     setHandedness,
     setDominantMiss,
     setPhysicalLimitation,
@@ -294,7 +319,6 @@ export default function Settings() {
     return () => { alive = false; };
   }, []);
   const [editName, setEditName] = useState(name);
-  const [editHandicap, setEditHandicap] = useState(String(handicap));
   const [editCreds, setEditCreds] = useState(coachCredentials ?? '');
   const [editHomeCourse, setEditHomeCourse] = useState(homeCourse ?? '');
   const [editGoal, setEditGoal] = useState(goal ?? '');
@@ -524,8 +548,17 @@ export default function Settings() {
 
   const handleSaveProfile = () => {
     if (editName.trim()) setName(editName.trim());
-    const hcp = parseInt(editHandicap, 10);
-    if (!isNaN(hcp)) setHandicap(Math.min(54, Math.max(0, hcp)));
+    /**
+     * 2026-09-13 — ONE EDITABLE HANDICAP, AND IT IS THE INDEX.
+     *
+     * `handicap` (integer) is a MIRROR of `handicap_index`: setHandicapIndex writes both. But
+     * setHandicap wrote only the integer, and this screen offered a second text box wired to it —
+     * so typing in "Handicap" left the Index stale, and the two then disagreed for good. The caddie
+     * payload sends `handicap` while posting, the recap card and setup gaps read `handicap_index`,
+     * which is the divergence arriving somewhere it matters. The Index field below is now the only
+     * number a player types, and it keeps the integer in step on every write.
+     * [[two-owners-is-the-root-cause]]
+     */
     setGoal(editGoal.trim() || null);
     setPhysicalLimitation(editLimitation.trim() || null);
     const best = parseInt(editBest, 10);
@@ -779,7 +812,7 @@ export default function Settings() {
               <Text style={[styles.profileSlimName, { color: colors.text_primary }]} numberOfLines={1}>
                 {name.trim()}
               </Text>
-              <Text style={[styles.profileSlimMeta, { color: colors.text_muted }]} numberOfLines={1}>{t('settings.text.handicap_goal', { handicap: handicapIndex != null ? handicapIndex.toFixed(1) : (handicap || '—'), goal: goal || '—' })}</Text>
+              <Text style={[styles.profileSlimMeta, { color: colors.text_muted }]} numberOfLines={1}>{t('settings.text.handicap_goal', { handicap: handicapIndex != null ? handicapIndex.toFixed(1) : '—', goal: goal || '—' })}</Text>
             </View>
             <TouchableOpacity
               onPress={() => setProfileExpanded(true)}
@@ -838,16 +871,6 @@ export default function Settings() {
             placeholder={t('settings.placeholder.your_name')}
             placeholderTextColor="#374151"
             autoCapitalize="words"
-          />
-
-          <Text style={inputLblStyle}>{t('settings.text.handicap')}</Text>
-          <TextInput
-            style={inputFldStyle}
-            value={editHandicap}
-            onChangeText={setEditHandicap}
-            keyboardType="numeric"
-            placeholder="0–54"
-            placeholderTextColor="#374151"
           />
 
           <Text style={inputLblStyle}>{t('settings.text.personal_best')}</Text>
@@ -1343,16 +1366,8 @@ export default function Settings() {
             ) : null}
           </View>
 
-          <PillRow
-            label={t('settings.label.response_style')}
-            options={[
-              { label: 'Brief', value: 'short' },
-              { label: 'Normal', value: 'neutral' },
-              { label: 'Detailed', value: 'detailed' },
-            ]}
-            value={responseMode}
-            onSelect={(v) => setResponseMode(v as 'short' | 'neutral' | 'detailed')}
-          />
+          {/* 2026-09-13 — Response Style is set by presence now (see Round Experience), and the
+              card above already tells the player the faster way: just say "keep it brief". */}
 
           {/* 2026-05-19 — removed duplicate "What ${caddieName} is
               learning" link. The same /kevin-learning surface is
@@ -1371,63 +1386,46 @@ export default function Settings() {
 
         {/* ROUND EXPERIENCE */}
         <CollapsibleSection title={t('settings.title.round_experience')} icon="flag-outline">
-          {/* 2026-05-19 — trust slider moved INLINE here. Was a routed
-              sub-screen at /settings/trust-level that created the
-              settings-within-settings pattern Tim called out. The full
-              slider + descriptions now render directly in this card. */}
-          <View style={[styles.trustBlock, { borderBottomColor: colors.border }]}>
-            <Text style={labelStyle}>{t('settings.settings.s_presence', { caddieName })}</Text>
-            <Text style={[subStyle, { marginBottom: 10 }]}>{t('settings.settings.how_present_should_be_during', { caddieName })}</Text>
-            <View style={[styles.trustSlider, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              {TRUST_LEVEL_SLIDER_ORDER.map((lvl) => {
-                const meta = TRUST_LEVEL_META[lvl];
-                const active = trustLevel === lvl;
-                return (
-                  <TouchableOpacity
-                    key={lvl}
-                    onPress={() => {
-                      setTrustLevel(lvl);
-                      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
-                      useToastStore.getState().show(`${caddieName}'s presence: ${meta.label}`);
-                    }}
-                    style={[
-                      styles.trustCell,
-                      active && { backgroundColor: colors.accent_muted },
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: active }}
-                  >
-                    <Text
-                      style={[
-                        styles.trustCellLabel,
-                        { color: active ? colors.accent : colors.text_muted },
-                      ]}
-                    >
-                      {meta.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            <Text style={[styles.trustOneLiner, { color: colors.text_primary }]}>
-              {TRUST_LEVEL_META[trustLevel].one_liner}
-            </Text>
-          </View>
+          {/**
+            * 2026-09-13 (Tim — "we wanna be smart, not toggle heavy") — SEVEN SWITCHES, TWO DECISIONS.
+            *
+            * The trust slider, Proactive, Interactive Round, Local Mode, Active Listening,
+            * Continuous Conversation and Response Style all answered one of two questions: how much
+            * should it talk, and should it be listening. Spread across seven rows they could
+            * contradict each other — Quiet with Proactive still on, or Local Mode silencing a caddie
+            * whose presence pill read Active. One owner now: services/caddiePresence.
+            *
+            * Nothing was deleted. Every flag still exists and every consumer still reads the flag it
+            * always read; only the combination has an owner. [[two-owners-is-the-root-cause]]
+            */}
+          <PillRow
+            label={t('settings.label.caddie_presence')}
+            options={[
+              { label: 'Quiet', value: 'quiet' },
+              { label: 'Balanced', value: 'balanced' },
+              { label: 'Talkative', value: 'talkative' },
+            ]}
+            value={presence}
+            onSelect={(v) => applyPresence(v as CaddiePresence)}
+          />
+          {/**
+            * 2026-09-13 — the canonical one-liner comes from TRUST_LEVEL_META, not from a second copy
+            * written here. Removing the old slider orphaned that export, and the sim's orphan LOCK
+            * caught it — which was the right question to be asked: the level does not only control
+            * proactivity, it decides WHICH VIEW LEADS (SmartVision/map at Quiet, the caddie at
+            * Active), and my three descriptions had quietly dropped that. One owner for what a trust
+            * level means; this line adds only what the presence stop adds on top of it.
+            * [[orphans-are-live-bugs-not-dead-code]]
+            */}
+          <Text style={[styles.sectionIntro, { color: colors.text_muted, marginTop: 4 }]}>
+            {`${t(`settings.text.presence_${presence}_desc`)} ${TRUST_LEVEL_META[PRESENCE_PROFILES[presence].trustLevel].one_liner}`}
+          </Text>
 
           <ToggleRow
             label={t('settings.label.skip_pre_round_briefing')}
             sub={`Go straight to the round without ${caddieName}'s intro`}
             value={skip_briefings}
             onValueChange={confirmToggle('Skip Pre-Round Briefing', setSkipBriefings)}
-          />
-          <ToggleRow
-            label={`Proactive ${caddieName}`}
-            sub={localMode
-              ? `Paused while Local Mode is on (${caddieName} only speaks when asked). Turn off Local Mode to re-enable.`
-              : `${caddieName} speaks up between holes — streaks, patterns, ghost updates`}
-            value={proactive_kevin_enabled}
-            disabled={localMode}
-            onValueChange={confirmToggle(`Proactive ${caddieName}`, setProactiveKevinEnabled)}
           />
           <ToggleRow
             label={t('settings.label.riding_in_a_cart')}
@@ -1440,12 +1438,6 @@ export default function Settings() {
             sub="GPS moves you to the next hole automatically. Off = step through yourself."
             value={autoHoleAdvance}
             onValueChange={confirmToggle('Auto Hole Advance', setAutoHoleAdvance)}
-          />
-          <ToggleRow
-            label={t('settings.label.interactive_round')}
-            sub="Caddie speaks a read when you stop walking mid-hole. Off (default) = it stays quiet and waits for you to ask; it still auto-briefs at the tee."
-            value={interactiveRound}
-            onValueChange={confirmToggle('Interactive Round', setInteractiveRound)}
           />
           {/* 2026-08-14 (Tim, after a round where nothing populated) — the toggle was here and fairly
               described, but it never said what you LOSE by leaving it off. Off means no shots are
@@ -1467,25 +1459,15 @@ export default function Settings() {
             L2 Companion = reactive, L3 Active = volunteers). voiceEnabled
             field stays in the store as an internal kill switch. */}
         <CollapsibleSection title={t('settings.title.voice_conversation')} icon="mic-outline">
-          {/* 2026-05-30 — Fix FY: Local Mode toggle. Conservation +
-              stability mode — proactive speech off, brain calls pinned
-              to Haiku (the cheapest/fastest tier), navigation intents
-              resolved locally. GPS, yardage, scorecard untouched.
-              Honest framing in the sub-line — not a warning. */}
+          {/* 2026-09-13 — one mic decision. Local Mode's real effect was the speech gate in
+              voiceService (`localMode && !userInitiated` → stay silent), which is the Quiet end of
+              presence above, not a separate choice; Active Listening and Continuous Conversation
+              were two halves of "is it listening". See services/caddiePresence. */}
           <ToggleRow
-            label={t('settings.label.local_mode')}
-            sub={`Battery saver for weak signal. ${caddieName} only speaks when asked; GPS + yardages unchanged.`}
-            value={localMode}
-            onValueChange={confirmToggle('Local Mode', setLocalMode)}
-          />
-          <ToggleRow
-            label={t('settings.label.active_listening')}
-            sub={localMode
-              ? `Paused in Local Mode (tap-to-talk only).`
-              : `${caddieName} listens automatically during rounds — just talk. Tap the pill to mute.`}
+            label={t('settings.label.hands_free_listening')}
+            sub={t('settings.text.hands_free_listening_desc')}
             value={autoListenEnabled}
-            disabled={localMode}
-            onValueChange={confirmToggle('Active Listening', setAutoListenEnabled)}
+            onValueChange={confirmToggle('Hands-free listening', applyListening)}
           />
           {/* 2026-05-26 — Fix BE: Cecily Mode toggle. When on, the
               caddie answers ANY topic in age-appropriate kid-friendly
@@ -1504,12 +1486,6 @@ export default function Settings() {
               loop: 6-turn cap + 120s wall-clock cap + close-intent
               gate + silence-twice cap. Useful for sustained chats
               ("teach me about lag") without re-tapping the mic. */}
-          <ToggleRow
-            label={t('settings.label.continuous_conversation')}
-            sub={`Keeps the mic open between turns so you can talk back without re-tapping. Say "I'm good" to end.`}
-            value={continuousConversationMode}
-            onValueChange={confirmToggle('Continuous Conversation', setContinuousConversationMode)}
-          />
           {/* 2026-05-19 — the "Earbud Tap-to-Talk · Coming soon" row
               moved to the Connected Hardware section below where all
               not-yet-wired hardware integrations are listed together

@@ -189,7 +189,11 @@
       "style_reset": "Reset",
       "your_bag": "Your Bag",
       "the_clubs_you_carry": "The clubs you carry — what the caddie picks from",
-      "volume_and_cadence": "Volume and cadence. Lower is quieter, with fewer signature phrases."
+      "volume_and_cadence": "Volume and cadence. Lower is quieter, with fewer signature phrases.",
+      "presence_quiet_desc": "Quiet — it stays out of the way and answers when you ask.",
+      "presence_balanced_desc": "Balanced — speaks at the tee and between holes, and answers anything.",
+      "presence_talkative_desc": "Talkative — reads the shot when you stop mid-hole, and gives the longer version.",
+      "hands_free_listening_desc": "The caddie listens during a round and keeps the mic open between turns — just talk. Off means tap to talk."
     },
     "placeholder": {
       "search_settings": "Search settings",
@@ -292,7 +296,9 @@
       "share_course_maps": "Share course maps",
       "auto_send_my_issue_reports": "Auto-send my issue reports",
       "field_test_this_round": "Field Test This Round",
-      "how_you_cover_a_number": "How You Cover a Number"
+      "how_you_cover_a_number": "How You Cover a Number",
+      "caddie_presence": "How much your caddie speaks up",
+      "hands_free_listening": "Hands-free listening"
     },
     "developer_tools_section": {
       "developer_tools_dev_build": "Developer Tools (dev build)",

@@ -229,7 +229,8 @@ is unchanged before reporting the phase complete.
 
 - Solo founder building SmartPlay Caddie. Pre-beta, targeting beta release end of May 2026.
 - React Native + Expo Router + TypeScript.
-- Adult ADHD: all prompts and instructions must be maximally explicit. Every choice presented must be binary or pre-recommended. Never open-ended.
+- Adult ADHD: all prompts and instructions must be maximally explicit. **Every question is BINARY — two options, recommendation first, marked.** Never open-ended, and never a paragraph of trade-offs with no option attached. See [docs/APP-BUILD-RULES.md](docs/APP-BUILD-RULES.md) A11.
+- **Pre-launch: there is no install base.** Tim is the only user of this version. Decide for what the app LAUNCHES as — "existing users may rely on it" is not a reason to keep anything. See APP-BUILD-RULES B1.
 - Testing on Samsung Galaxy Z Fold (closed ≈ 9:21, open ≈ 8:9). All UI work must account for variable aspect ratios via `useWindowDimensions` and aspect-ratio breakpoints.
 - Discovery logic must be built into prompts. Tim should never have to grep, hunt for files, or paste file contents manually — the agent finds them.
 

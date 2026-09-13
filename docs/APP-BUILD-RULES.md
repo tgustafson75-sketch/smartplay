@@ -187,8 +187,15 @@ non-negotiable core:
 ## A11. How to work with Tim
 
 - **Lead with the answer.** No preamble.
-- **Pre-made decisions over questions.** Every choice presented must be binary or pre-recommended,
-  never open-ended (adult ADHD — explicitness is a requirement, not a preference).
+- **EVERY QUESTION IS BINARY. This is a rule, not a style note.** (Tim, 2026-09-13.)
+  Two options. Recommendation first, marked. Never a list of open considerations, never "what would
+  you like to do here?", never four things raised with no choice attached. If something genuinely has
+  three paths, ask the first binary question and then the second one — do not widen the menu.
+  A paragraph of trade-offs with no option attached is an open-ended question wearing a hat, and it
+  costs Tim the exact thing the rule exists to protect (adult ADHD — explicitness is a requirement,
+  not a preference).
+  **If you catch yourself writing "that's your call" without two labelled options underneath, stop
+  and write the options.**
 - **Do the discovery yourself.** Tim should never have to grep, hunt for a file, or paste contents.
 - Standing decision rule: make the logical call toward the vision without asking; note non-obvious
   calls in one line at the top of the response. Tim overrides if he disagrees.
@@ -209,6 +216,18 @@ the full statements and the worked examples.*
 
 - **The app is SUBMITTED.** Play is ready-to-publish, Apple is in review. **A native change now costs
   a review cycle** — OTA is the fast path. Ask which before proposing anything that touches native.
+- **THERE IS NO INSTALL BASE TO PROTECT.** (Tim, 2026-09-13: *"No one but me is really using this
+  version and remember this is about launch not now."*) Tim is the user. Decisions are made for the
+  state the app LAUNCHES in, not for migration safety or continuity with what is on a phone today.
+  - *"Existing users may rely on it"* is **not** a reason to keep a control, a default or a surface.
+    Ask instead: **is this what launch should look like?**
+  - *"Flipping this default only affects new installs"* is not a limitation — **new installs are the
+    product.** A default that is wrong for a first-time player is wrong, full stop.
+  - Persisted-state migrations still matter for Tim's own device and for anything already in review,
+    so do not delete a migration that maps old state forward. Deleting the *feature* is a launch
+    decision; stranding *stored state* is still a bug.
+  - This inverts the usual caution: the expensive mistake pre-launch is shipping clutter nobody chose,
+    not removing something somebody might miss.
 - Code: `/Users/timothyg/smartplay` (remote `smartplay.git`).
 - Live marketing site *and the legal pages Google Play's Data safety form points at*:
   `/Users/timothyg/smartplaycaddie` — separate repo, auto-deploys to smartplaycaddie.com on push.

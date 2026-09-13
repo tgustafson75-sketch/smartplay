@@ -10,6 +10,8 @@
  * Now a pure function, so the sequence every user of the release build walks exactly once — and can
  * never re-walk — is enumerable.
  */
+import fs from 'fs';
+import path from 'path';
 import { decideFirstRunRoute, type FirstRunState } from '../../services/firstRunRoute';
 
 const fresh: FirstRunState = {
@@ -17,6 +19,8 @@ const fresh: FirstRunState = {
   corePermissionsAsked: false,
   termsAccepted: false,
   hasName: false,
+  bagSetupOffered: false,
+  bagEmpty: true,
 };
 
 describe('decideFirstRunRoute', () => {
@@ -28,6 +32,11 @@ describe('decideFirstRunRoute', () => {
     expect(decideFirstRunRoute(s)).toBe('/welcome');
     s = { ...s, termsAccepted: true, hasName: true };
     expect(decideFirstRunRoute(s)).toBe('/permissions');
+    s = { ...s, corePermissionsAsked: true };
+    // 2026-09-13 — the bag, once: an empty bag means the caddie starts with bagClubs: [].
+    expect(decideFirstRunRoute(s)).toBe('/bag-scan');
+    s = { ...s, bagSetupOffered: true };
+    expect(decideFirstRunRoute(s)).toBeNull();
     s = { ...s, corePermissionsAsked: true };
     expect(decideFirstRunRoute(s)).toBeNull();
   });
@@ -61,13 +70,47 @@ describe('decideFirstRunRoute', () => {
     // predates the timestamp field is not sent back to the welcome screen.
     expect(decideFirstRunRoute({
       introVideoSeen: true, corePermissionsAsked: true, termsAccepted: false, hasName: true,
+      bagSetupOffered: true, bagEmpty: false,
     })).toBeNull();
+  });
+
+  it('does not trap a player who SKIPPED the bag', () => {
+    /**
+     * bag-scan marks 'bag_setup_offered' ON MOUNT, because a first-run arrival has no back stack:
+     * safeBack() returns to '/', the router re-evaluates, and an unset flag would put the player
+     * straight back on the screen they just left. Offered once, never again.
+     */
+    expect(decideFirstRunRoute({
+      introVideoSeen: true, corePermissionsAsked: true, termsAccepted: true, hasName: true,
+      bagSetupOffered: true, bagEmpty: true,
+    })).toBeNull();
+  });
+
+  it('never asks a player who already registered clubs', () => {
+    expect(decideFirstRunRoute({
+      introVideoSeen: true, corePermissionsAsked: true, termsAccepted: true, hasName: true,
+      bagSetupOffered: false, bagEmpty: false,
+    })).toBeNull();
+  });
+
+  it('bag-scan actually SETS the flag on mount — the pure function cannot save us here', () => {
+    /**
+     * The order above is only safe if the screen marks itself offered. Assert the call exists, with
+     * comments stripped, because the sentence explaining this trap names the very string it forbids.
+     * [[strip-comments-before-a-guard-matches]] [[an-invariant-has-three-homes]]
+     */
+    const src = fs.readFileSync(path.join(__dirname, '../../app/bag-scan.tsx'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+    expect(src).toMatch(/markTutorialSeen\('bag_setup_offered'\)/);
+    expect(src).toMatch(/useEffect\(\s*\(\)\s*=>/);
   });
 
   it('does not trap a player who DECLINED the permissions', () => {
     // permissions.tsx sets its flag on Skip as well as Allow, so declining advances.
     expect(decideFirstRunRoute({
       introVideoSeen: true, corePermissionsAsked: true, termsAccepted: true, hasName: true,
+      bagSetupOffered: true, bagEmpty: false,
     })).toBeNull();
   });
 });

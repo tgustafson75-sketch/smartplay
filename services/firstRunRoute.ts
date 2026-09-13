@@ -27,10 +27,14 @@ export type FirstRunState = {
   termsAccepted: boolean;
   /** A non-empty profile name. A returning player has one even without fresh consent. */
   hasName: boolean;
+  /** tutorialsSeen['bag_setup_offered'] — set by bag-scan ON MOUNT, so it is offered exactly once. */
+  bagSetupOffered: boolean;
+  /** clubBagStore has no registered clubs yet. */
+  bagEmpty: boolean;
 };
 
 /** Where to send the player, or null when first run is complete and the app should proceed. */
-export type FirstRunRoute = '/intro-video' | '/welcome' | '/permissions' | null;
+export type FirstRunRoute = '/intro-video' | '/welcome' | '/permissions' | '/bag-scan' | null;
 
 export function decideFirstRunRoute(s: FirstRunState): FirstRunRoute {
   // 1. The intro plays once per install, before anything asks the player for something.
@@ -54,6 +58,23 @@ export function decideFirstRunRoute(s: FirstRunState): FirstRunRoute {
   //    after consent. The screen sets its flag on Skip as well as Allow, so declining still
   //    advances rather than trapping the player on it.
   if (!s.corePermissionsAsked) return '/permissions';
+
+  /**
+   * 4. THE BAG, ONCE — 2026-09-13 (Tim: "shouldn't The Bag be populated originally in the Profile?").
+   *
+   * A fresh install finished setup with an EMPTY registered bag and `bagClubs: []` going to the
+   * caddie, while club selection and plays-like read from that bag. The only way to fill it was to
+   * find /bag-scan, which nothing pointed at. This is not a new onboarding step in welcome.tsx —
+   * that screen is deliberately ONE screen ("get rid of that whole stupid onboarding nonsense") —
+   * it is the same re-entrant router sequence that already places the intro, consent and
+   * permissions, so it stays skippable and cannot stack.
+   *
+   * `bagSetupOffered` is set by bag-scan ON MOUNT, exactly like permissions sets its flag on Skip as
+   * well as Allow. Without that, safeBack() from a first-run arrival has no stack to return to, the
+   * router re-evaluates, and the player is put straight back on the screen they just left.
+   * [[a-toggle-that-does-nothing-for-the-default-user]]
+   */
+  if (!s.bagSetupOffered && s.bagEmpty) return '/bag-scan';
 
   return null;
 }
