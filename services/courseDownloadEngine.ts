@@ -315,9 +315,11 @@ export async function downloadCourse(input: {
    * tiles) does NOT re-run. What repeats is one golfcourseapi SEARCH per course per launch — on a
    * rate-limited free tier, on the morning the player is about to tee off.
    *
-   * Recording the alias makes the cheap check work. Safe because `downloaded` is never rendered as a
-   * list — the only consumers are isDownloaded() and a hydration probe — so an alias row cannot show
-   * up as a duplicate course anywhere. [[two-owners-is-the-root-cause]]
+   * Recording the alias makes the cheap check work. It used to be safe because `downloaded` was
+   * never rendered as a list. It IS rendered now — the Play tab lists downloaded courses through
+   * downloadedCourseSummaries below — so that function's alias filter is what stops an alias row
+   * showing up as a duplicate course. Do not render this map without it.
+   * [[two-owners-is-the-root-cause]]
    */
   const aliasId = input.courseId && input.courseId.startsWith('place:') ? input.courseId : null;
   const rememberAlias = (resolvedId: string, name: string, holeCount: number, greens?: number) => {
@@ -379,6 +381,54 @@ export async function downloadCourse(input: {
 
 export function isCourseDownloaded(courseId: string | null | undefined): boolean {
   return useDownloadedCoursesStore.getState().isDownloaded(courseId);
+}
+
+/**
+ * 2026-09-12 (Tim — the day-one concept) — "being able to ask the caddie to fetch that course for
+ * the play tab to play on a future date."
+ *
+ * THE HALF THAT WAS MISSING. `download_course` landed the same day and the fetch itself worked:
+ * geometry, content, intelligence and imagery all cached, and `getCourse` is cache-first with a
+ * stale-cache fallback, so a downloaded course genuinely opens with no network. What did not exist
+ * was any way to REACH it. `downloaded` was never rendered anywhere, and `recentCourseIds` is
+ * written at round START (store/roundStore) — so a course pulled in for a trip he had not taken yet
+ * appeared in no list, and the only route to it was typing the name into a search that is
+ * network-only (golfCourseApi.searchCourses). Cached, ready, and unreachable on the one morning it
+ * was fetched for — while the caddie was promising it would be "ready and offline when you go".
+ *
+ * ALIAS ROWS MUST NOT BE RENDERED. `rememberAlias` above deliberately writes a SECOND row under the
+ * `place:<place_id>` id for the same course, so the nearby prefetch can skip an owned course without
+ * paying a search. That was safe while nothing rendered this map; rendering it makes the filter
+ * below load-bearing, because an unfiltered list shows the same course twice.
+ *
+ * `local:` ids are skipped for the same reason: the bundled catalog already lists those.
+ *
+ * NO NETWORK. The record carries the name, so a row is built without a single fetch — deliberately,
+ * because this runs at mount, which is exactly when the connection is worst and when a dropped
+ * lookup once erased a course Tim was about to play. Rating, slope and coordinates stay null until
+ * he selects it (selection re-fetches the detail, cache-first); a row with no coordinates sorts to
+ * the end of the Play tab's distance list, which is the existing behaviour for a coordless course.
+ */
+export function downloadedCourseSummaries(
+  downloaded: Readonly<Record<string, { courseId: string; name: string }>>,
+  nameMeta: Readonly<Record<string, { club_name: string; location: string }>> = {},
+): { id: string; club_name: string; location: string; rating: null; slope: null }[] {
+  const rows = Object.values(downloaded ?? {})
+    .filter((d) => d != null && typeof d.courseId === 'string' && d.courseId !== '')
+    .filter((d) => !d.courseId.startsWith('place:') && !d.courseId.startsWith('local:'))
+    .map((d) => {
+      const meta = nameMeta?.[d.courseId];
+      return {
+        id: d.courseId,
+        club_name: (meta?.club_name ?? d.name ?? '').trim() || d.courseId,
+        location: meta?.location ?? '',
+        rating: null as null,
+        slope: null as null,
+      };
+    });
+  // Stable order so the Play tab does not reshuffle between launches when no GPS fix is in yet.
+  rows.sort((a, b) => a.club_name.localeCompare(b.club_name));
+  return rows;
 }
 
 /**

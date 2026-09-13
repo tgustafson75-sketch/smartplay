@@ -47,7 +47,7 @@ import { useSettingsStore } from '../../store/settingsStore';
 // /tournament with the course pre-filled (saves the free-text typing).
 import { type RoundMode, ROUND_MODE_CARDS } from '../../types/patterns';
 import { searchCourses, getCourse, aiSearchCourse, type AiCourseResult } from '../../services/golfCourseApi';
-import { prefetchFoundCourses, locateNearbyCourses } from '../../services/courseDownloadEngine';
+import { prefetchFoundCourses, locateNearbyCourses, downloadedCourseSummaries } from '../../services/courseDownloadEngine';
 import { getBundledHoles, getBundledCourseCentroid } from '../../data/courses';
 import { useCustomCourseStore } from '../../store/customCourseStore';
 import { useGeometryStatusStore } from '../../store/geometryStatusStore';
@@ -776,6 +776,14 @@ export default function PlayTab() {
   const searchSeqRef = useRef<number>(0);
 
   const [recentCourses, setRecentCourses] = useState<CourseSummary[]>([]);
+  /**
+   * 2026-09-12 (Tim) — courses the CADDIE pulled in, so "fetch that course for the play tab to play
+   * on a future date" actually lands somewhere he can tap. Downloaded courses were tracked but never
+   * listed, and recents only fill at round start, so a course fetched for an upcoming trip was
+   * reachable only through a network-only search. Built with no fetch; see
+   * courseDownloadEngine.downloadedCourseSummaries (it also filters the `place:` alias rows).
+   */
+  const downloadedCourses = useDownloadedCoursesStore(s => s.downloaded);
   const recentCourseMeta = useRoundStore(s => s.recentCourseMeta);
   const rememberRecentCourseMeta = useRoundStore(s => s.rememberRecentCourseMeta);
   // The player's Preferred Tee — recents should quote the same tee set the course screen will.
@@ -1154,10 +1162,18 @@ export default function PlayTab() {
   }, [userPosition, customSummaries]);
 
   const closestLocal: CourseSummary[] = useMemo(() => {
+    const already = (id: string): boolean =>
+      LOCAL_COURSES.some(l => l.id === id) || customSummaries.some(cs => cs.id === id);
+    const recentRows = recentCourses.filter(r => !already(r.id));
+    // A caddie-fetched course joins the same list. Deduped against every other source by id, so a
+    // course he has also played shows once, as its richer recent row (rating/slope already resolved).
+    const downloadedRows = downloadedCourseSummaries(downloadedCourses, recentCourseMeta)
+      .filter(d => !already(d.id) && !recentRows.some(r => r.id === d.id));
     const combined: CourseSummary[] = [
       ...customSummaries,
       ...LOCAL_COURSES,
-      ...recentCourses.filter(r => !LOCAL_COURSES.some(l => l.id === r.id) && !customSummaries.some(cs => cs.id === r.id)),
+      ...recentRows,
+      ...downloadedRows,
     ];
     if (!userPosition) return combined;
     const YARDS_PER_MILE = 1760;
@@ -1175,7 +1191,7 @@ export default function PlayTab() {
       return a.miles - b.miles;
     });
     return annotated.map(a => a.course);
-  }, [recentCourses, userPosition, customSummaries]);
+  }, [recentCourses, userPosition, customSummaries, downloadedCourses, recentCourseMeta]);
 
   // Phase 407 — per-course distance label keyed by id. Computed once
   // alongside the sort so the row renderer just looks up.
