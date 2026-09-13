@@ -361,7 +361,33 @@ All 23 confirmed HIGH findings from the 30-agent workflow audit addressed:
 
 ## What's actively in progress
 
-> ### ⚠️ CURRENT — 2026-09-13. CLOSED OUT. Everything on main, five OTAs out, nothing open.
+> ### ⚠️ CURRENT — 2026-09-13. CLOSED OUT. On main, seven OTAs out, nothing open.
+>
+> **ALL FOUR COACHES NOW HAVE EVIDENCE.** That was the point of the whole sweep. caddie (course read
+> against his game) · swing coach (`measuredSwingBlock`) · mental coach (`mentalPatternBlock`) ·
+> training (`trainingImpactBlock`, `6d35448`). Each is computed by ONE owner that also feeds the
+> dashboard card, so the chart and the caddie cannot disagree, and each is SILENT until there is
+> enough to be honest.
+>
+> **THEY ARE SUPPOSED TO BE SILENT EARLY, AND THAT LOOKS LIKE A BUG.** Ask about practice with two
+> rounds logged and the caddie says nothing. Thresholds, inside 6 weeks, REAL rounds only:
+> practice→score 3 sessions + 4 rounds · training→score 3 workouts + 4 rounds · measured swing 4 weeks
+> with graded swings · mental pattern 3 rounds carrying reports + 6 moments. This is now an owner
+> checklist item (`four-coaches-can-speak`) so the first device test does not read as a false negative.
+>
+> **Two mechanical interconnectedness sweeps came back CLEAN** — worth recording, because clean was
+> not obvious. All 106 payload keys are read in `api/kevin.ts`; all 25 `capOrNull` locals are
+> interpolated (none parsed then dropped). Nine UI_TOOLS *looked* unhandled in the Caddie-tab
+> dispatcher: its `default:` DELEGATES to the shared one (the 08-17 fix) and the sim already guards
+> that. **A case-only parity check reports nine false defects — do not write one.**
+>
+> **STILL CARRIED, deliberately:** `workoutSwingImpact` (training → STRIKE). Its session mapping —
+> per-shot contact grading + the self-only filter — lives inline in the dashboard, so wiring it from
+> the payload builder means a SECOND owner of "which swings are graded". It needs the `selfSwingReads`
+> treatment first: extract, then both read it. A test asserts the copy has not been made. Also still
+> screen-only: `pointsPerformance`, `preRoundFactors`, `handicapCalculator`.
+
+> ### 2026-09-13 (earlier). CLOSED OUT. Everything on main, five OTAs out, nothing open.
 >
 > **THE DEFECT CLASS, IN TIM'S WORDS, BECAUSE A PREVIOUS SESSION GOT THIS WRONG.** The explanation
 > that there are many bugs "because you're one developer using one AI" is untrue and misses the point.
