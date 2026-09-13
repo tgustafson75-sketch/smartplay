@@ -15289,6 +15289,193 @@ check(
 }
 
 /**
+ * ─── 2026-09-13 — THE SETTINGS SCREEN IS A PRODUCT SURFACE, NOT A DRAWER ───────────────────────
+ *
+ * Tim reviewed 28 screenshots of Settings: "over-disclosing tools where they shouldn't be, hard to
+ * find, duplicates... and Jesus, a few of these, you put the whole coding goddamn explanation into
+ * it." Everything below is one of those findings, turned into something that fails.
+ *
+ * The screen had no guard of its own at all, which is why eleven separate defects accumulated in it
+ * while every other surface was being swept. [[orphans-are-live-bugs-not-dead-code]]
+ */
+{
+  const settingsSrc = read('app/settings.tsx');
+  const settingsCode = readCode('app/settings.tsx');
+  const locales = ['en', 'es', 'zh'].map((l) => ({ file: `i18n/locales/${l}.json`, text: read(`i18n/locales/${l}.json`) }));
+
+  /**
+   * A RETIRED PERSONA AND A REAL CHILD'S NAME WERE BOTH SHIPPING TO EVERY PLAYER.
+   *
+   * "Tank" is the persona Tim retired — standing rule, Kevin and Serena only — and it survived in
+   * SEVEN user-facing strings in all three locales ("What would Tank do?", "Ask: Tank, driver or
+   * 3-wood?"), telling players to talk to a caddie the app does not have. The code was already
+   * clean: ALL_PERSONAS dropped it, three migration lines map a persisted 'tank' to Kevin, no
+   * assets, no API rules. Only the words nobody greps were left.
+   *
+   * "Cecily Mode" named Tim's granddaughter on a public settings row and in the toast it fires.
+   * The capability is good and stays; the private name does not ship.
+   *
+   * Locale VALUES and KEYS both — the key `what_would_tank_do` outlived its own string once already.
+   */
+  const BANNED_IN_COPY = ['Tank', 'Cecily'];
+  const copyOffenders: string[] = [];
+  for (const name of BANNED_IN_COPY) {
+    const re = new RegExp(`\\b${name}\\b`);
+    for (const loc of locales) if (re.test(loc.text)) copyOffenders.push(`${name} in ${loc.file}`);
+    // settings.tsx: strings a player reads, not the comments explaining why they went.
+    for (const m of settingsCode.matchAll(/(['"`])((?:\\.|(?!\1)[\s\S])*?)\1/g)) {
+      if (re.test(m[2])) { copyOffenders.push(`${name} in a live string in app/settings.tsx`); break; }
+    }
+  }
+  check(
+    'SETTINGS: no retired persona and no private name in anything a player reads',
+    copyOffenders.length === 0,
+    copyOffenders.length
+      ? `user-facing copy still names them: ${[...new Set(copyOffenders)].join(', ')}`
+      : 'the caddies the app offers are the only caddies the copy names',
+  );
+
+  /**
+   * A SURFACE THAT PROMISES HEALTH, IN A BUILD THAT CANNOT DELIVER IT.
+   *
+   * HEALTH_CONNECT_ENABLED is false and app.json declares no android.permission.health.*, and this
+   * screen did not know: it kept a master toggle the player could switch ON, a "tap to grant
+   * access" button, and a heartbeat row that would wait for a live sample forever. tutorials.tsx
+   * has hidden its 'walk' card behind that flag for months — the flag's whole purpose — while the
+   * larger promise sat here unguarded. Same defect the privacy policy had, in the other direction.
+   */
+  const healthRows = [
+    'settings.text.use_health_connect_during_rounds',
+    'settings.text.connect_health_data',
+    'settings.text.health_connect_heartbeat',
+  ];
+  const healthFlagOff = /export const HEALTH_CONNECT_ENABLED = false;/.test(readCode('services/featureAccess.ts'));
+  /**
+   * Count gates against rows rather than measuring a distance. The first version of this check used
+   * a 1,200-character window and went red on a row that IS gated — the "Connect Health Data" button
+   * carries a permission handler between its gate and its label, so the gate sits 1,689 characters
+   * above. A window guard on JSX fails on whichever row happens to have the longest handler; one
+   * gate per row is the property that actually matters. [[three-ways-a-guard-is-worthless]]
+   */
+  const rowsPresent = healthRows.filter((key) => settingsCode.includes(key));
+  const gateCount = (settingsCode.match(/HEALTH_CONNECT_ENABLED\s*&&/g) ?? []).length;
+  const noGateAbove = rowsPresent.filter(
+    (key) => !/HEALTH_CONNECT_ENABLED\s*&&/.test(settingsCode.slice(0, settingsCode.indexOf(key))),
+  );
+  check(
+    'SETTINGS: every Health Connect row is behind the flag that says the build has no health',
+    !healthFlagOff || (noGateAbove.length === 0 && gateCount >= rowsPresent.length),
+    noGateAbove.length
+      ? `these rows promise health data the binary cannot read: ${noGateAbove.join(', ')}`
+      : gateCount < rowsPresent.length
+        ? `${rowsPresent.length} health rows but only ${gateCount} HEALTH_CONNECT_ENABLED gates — one of them renders unconditionally`
+        : healthFlagOff
+          ? `health is off for 1.0 and all ${rowsPresent.length} rows are gated`
+          : 'health is enabled, so the rows are allowed to show',
+  );
+
+  /**
+   * INSTRUMENTS FOR BUILDING THE APP, IN THE SECTIONS FOR PLAYING GOLF.
+   *
+   * A pill labelled "GPS quality overlay (dev)" sat in the CADDIE section — the most player-facing
+   * section on the screen — with a description telling the reader to use it "during the Garmin
+   * comparison test". Screenshot mode sat in Language & Display. Owner Tools is where the
+   * instruments live, and everything in it is already owner-gated.
+   */
+  const ownerToolsAt = settingsCode.indexOf("settings.title.owner_tools");
+  const devInstruments = ['settings.label.gps_quality_overlay_dev_default', 'settings.label.screenshot_mode_hide_top_bar'];
+  const misfiled = devInstruments.filter((k) => {
+    const at = settingsCode.indexOf(k);
+    return at >= 0 && ownerToolsAt >= 0 && at < ownerToolsAt;
+  });
+  check(
+    'SETTINGS: developer instruments render inside Owner Tools, not in a player section',
+    ownerToolsAt >= 0 && misfiled.length === 0,
+    misfiled.length
+      ? `a player scrolls past these before reaching Owner Tools: ${misfiled.join(', ')}`
+      : 'the dev instruments are all behind the owner gate',
+  );
+
+  /**
+   * TWO HAND-WRITTEN ROSTERS ON ONE SCREEN, AND THEY DISAGREED.
+   *
+   * The four per-pillar pickers hard-coded [Kevin, Serena]; "Active Caddie" built itself from
+   * ACTIVE_PERSONAS, which includes 'custom' — the caddie the player renames (Tim's is "Gus").
+   * setCaddieForPillar has always taken a full Persona and caddieAssignments has always persisted
+   * one, so the store could hold Gus on every pillar and only the pickers refused to offer him:
+   * choose Gus, and the next pillar resolve quietly put Kevin back. It read as a persistence bug.
+   * One owner: selectablePersonas(). [[two-owners-is-the-root-cause]]
+   */
+  const handwrittenRoster = /options=\{\[\s*\{\s*label:\s*'(?:Kevin|Serena)'/.test(settingsCode);
+  const rosterFromOwner = (settingsCode.match(/selectablePersonas\(\)\.map/g) ?? []).length;
+  check(
+    'SETTINGS: the caddie roster comes from selectablePersonas, never a hand-written list',
+    !handwrittenRoster && rosterFromOwner >= 2,
+    handwrittenRoster
+      ? 'a persona option list is spelled out by hand again — that is how the pillar rows lost the custom caddie'
+      : rosterFromOwner < 2
+        ? `expected the pillar rows AND Active Caddie to read the one roster; found ${rosterFromOwner}`
+        : `${rosterFromOwner} pickers, one roster`,
+  );
+
+  /**
+   * THE WHOLE CODING EXPLANATION, SHIPPED AS THE DESCRIPTION.
+   *
+   * The Ray-Ban row's description was a dated engineering changelog that QUOTED TIM back to the
+   * player — '2026-09-01 (Tim: "temple tap on meta glasses is working")... this row said BLOCKED
+   * because Meta exposed no SDK. Wrong on both halves.' — and then named internal modules
+   * (MetaWearablesFrameModule, metaWearablesBridge). A player-facing string should never carry a
+   * changelog date, a quoted decision, or a symbol name.
+   */
+  const enText = JSON.parse(locales[0].text) as Record<string, unknown>;
+  const changelogCopy: string[] = [];
+  (function walk(node: unknown, path: string): void {
+    if (typeof node === 'string') {
+      if (/\b20\d{2}-\d{2}-\d{2}\b/.test(node) || /[a-z]+[A-Z][a-zA-Z]*(?:Module|Bridge|Store|Service)\b/.test(node)) {
+        changelogCopy.push(path);
+      }
+      return;
+    }
+    if (node && typeof node === 'object') {
+      for (const [k, v] of Object.entries(node as Record<string, unknown>)) walk(v, path ? `${path}.${k}` : k);
+    }
+  })(enText, '');
+  check(
+    'SETTINGS: no changelog date or internal symbol name in player-facing copy',
+    changelogCopy.length === 0,
+    changelogCopy.length
+      ? `these strings read like a commit message: ${changelogCopy.slice(0, 4).join(', ')}`
+      : 'the copy explains the setting, not the history of the setting',
+  );
+
+  /**
+   * THE TOAST HAS TO SAY WHAT THE ROW SAYS.
+   *
+   * The published privacy policy now tells the player their opt-out is "Auto-send my issue reports"
+   * or "Share course maps" — the labels on screen. The toasts fired 'Issue report sharing' and
+   * 'Course map sharing', which are neither the row nor the policy. A control the documentation
+   * names has to be the control the player can find. [[feedback-reachable-not-just-wired]]
+   */
+  const CITED = [
+    { key: 'auto_send_my_issue_reports', setter: 'setShareDiagnostics' },
+    { key: 'share_course_maps', setter: 'setShareCommunityData' },
+  ];
+  const mismatched = CITED.filter(({ key, setter }) => {
+    const label = enValueFor(`settings.label.${key}`);
+    if (!label) return true;
+    const m = settingsCode.match(new RegExp(`confirmToggle\\(\\s*'([^']+)'\\s*,\\s*${setter}\\s*\\)`));
+    return !m || m[1] !== label;
+  });
+  check(
+    'SETTINGS: the consent toast names the row the privacy policy points at',
+    mismatched.length === 0,
+    mismatched.length
+      ? `toast and row disagree for: ${mismatched.map((x) => x.key).join(', ')} — the policy sends the player looking for the row's name`
+      : 'toast, row and published policy all use the same words',
+  );
+}
+
+/**
  * ─── 2026-09-03 — A MISSED TRIAL IS NOT A REJECTION ────────────────────────────────────────────
  *
  * Tim: "in the free period, where a user has not used it 3 times in that period, they are offered a

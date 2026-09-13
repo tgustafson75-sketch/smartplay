@@ -28,6 +28,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router';
 import { useSettingsStore } from '../store/settingsStore';
 import { displayCaddieName } from '../services/caddieResolver';
+import type { Persona } from '../services/caddieResolver';
 // 2026-05-21 — Consolidation 1 / Merge C: watch-connected display
 // reads from the dedicated watchStore so all three call sites
 // (cage-mode, cage/summary, settings) share one source of truth.
@@ -48,6 +49,16 @@ import { Audio } from 'expo-av';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
 import { isFeatureShelved } from '../services/releaseSurface';
+/**
+ * 2026-09-13 — HEALTH_CONNECT_ENABLED is false for 1.0: the health permissions came OUT of app.json
+ * and the binary cannot read steps, heart rate, distance or calories. Until today this screen did
+ * not know that, so it kept offering three rows that promise it — a master toggle the player could
+ * switch ON, a "tap to grant access" button, and a heartbeat row that would wait for a live sample
+ * forever. The flag already existed for exactly this reason (see tutorials.tsx, which hides the
+ * 'walk' card): a surface explaining how to connect Health Connect, in a build that cannot, is the
+ * app lying to someone who went looking. The rows stay in the code and come back with the flag.
+ */
+import { HEALTH_CONNECT_ENABLED } from '../services/featureAccess';
 import CloudBackupCard from '../components/settings/CloudBackupCard';
 import type { ThemeColors } from '../theme/tokens';
 import { getCaddieName, selectablePersonas } from '../lib/persona';
@@ -161,6 +172,14 @@ export default function Settings() {
   const setCaddieSuggestions = useSettingsStore(s => s.setCaddieSuggestions);
   // Phase 107 — GPS quality debug overlay toggle.
   const gpsQualityDebugOverlay = useSettingsStore(s => s.gpsQualityDebugOverlay);
+  /**
+   * 2026-09-13 — hoisted. Screenshot mode moved into Owner Tools, which renders behind an owner
+   * check, and a hook inside a `&&` branch is a conditional hook: the order changes the moment the
+   * gate flips and React crashes the render. The sim's rules-of-hooks LOCK caught it the same
+   * minute. Read the store here, unconditionally, and pass plain values down.
+   */
+  const screenshotModeEnabled = useScreenshotModeStore(s => s.enabled);
+  const setScreenshotModeEnabled = useScreenshotModeStore(s => s.setEnabled);
   const setGpsQualityDebugOverlay = useSettingsStore(s => s.setGpsQualityDebugOverlay);
   // 2026-06-30 (audit) — these round behaviors are consumed (_layout.tsx, holeDetection,
   // roundStore) and their setters existed, but no toggle was ever built — even though the
@@ -1123,6 +1142,43 @@ export default function Settings() {
             onSelect={(v) => setHandicapGender(v as 'm' | 'f' | 'x')}
           />
 
+          {/**
+            * 2026-09-13 (Tim — "shouldn't The Bag be populated originally in the Profile?")
+            *
+            * Profile asked handedness, typical miss, preferred tee, how you cover a number, goal and
+            * home course — everything about HOW you play — and never once what you play WITH. The
+            * only bag surface in the app was /bag-scan, reachable from neither onboarding nor here,
+            * while club selection, plays-like and the caddie's whole recommendation chain read from
+            * that bag. A player could finish Profile with an empty bag and never be told.
+            *
+            * Import Past Rounds moved here from Help & About for the same reason: its own
+            * description already said "In Profile", so it was filed under Help pointing at Profile.
+            */}
+          <TouchableOpacity
+            style={rowDivStyle}
+            onPress={() => router.push('/bag-scan' as never)}
+            accessibilityRole="button"
+            accessibilityLabel={t('settings.text.your_bag')}
+          >
+            <View style={styles.rowText}>
+              <Text style={labelStyle}>{t('settings.text.your_bag')}</Text>
+              <Text style={subStyle}>{t('settings.text.the_clubs_you_carry')}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={rowDivStyle}
+            onPress={() => router.push('/profile' as never)}
+            accessibilityRole="button"
+            accessibilityLabel={t('settings.accessibility_label.import_past_rounds_from_your')}
+          >
+            <View style={styles.rowText}>
+              <Text style={labelStyle}>{t('settings.text.import_past_rounds')}</Text>
+              <Text style={subStyle}>{t('settings.text.in_profile_history_handicap')}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+          </TouchableOpacity>
+
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <TouchableOpacity style={[styles.saveBtn, { flex: 1 }]} onPress={handleSaveProfile}>
               <Text style={styles.saveBtnText}>{t('settings.text.save_profile')}</Text>
@@ -1166,45 +1222,35 @@ export default function Settings() {
             <Ionicons name="chatbubbles-outline" size={20} color={colors.accent} />
           </TouchableOpacity>
 
-          <PillRow
-            label={t('settings.label.round_on_course_default_kevin')}
-            options={[
-              { label: 'Kevin', value: 'kevin' },
-              { label: 'Serena', value: 'serena' },
-            ]}
-            value={caddieAssignments.round}
-            onSelect={(v) => setCaddieForPillar('round', v as 'kevin' | 'serena' | 'harry')}
-          />
-
-          <PillRow
-            label={t('settings.label.practice_default_serena')}
-            options={[
-              { label: 'Serena', value: 'serena' },
-              { label: 'Kevin', value: 'kevin' },
-            ]}
-            value={caddieAssignments.practice}
-            onSelect={(v) => setCaddieForPillar('practice', v as 'kevin' | 'serena' | 'harry')}
-          />
-
-          <PillRow
-            label={t('settings.label.drills_swinglab_default_serena')}
-            options={[
-              { label: 'Serena', value: 'serena' },
-              { label: 'Kevin', value: 'kevin' },
-            ]}
-            value={caddieAssignments.drills}
-            onSelect={(v) => setCaddieForPillar('drills', v as 'kevin' | 'serena' | 'harry')}
-          />
-
-          <PillRow
-            label={t('settings.label.play_arena_default_kevin')}
-            options={[
-              { label: 'Kevin', value: 'kevin' },
-              { label: 'Serena', value: 'serena' },
-            ]}
-            value={caddieAssignments.play}
-            onSelect={(v) => setCaddieForPillar('play', v as 'kevin' | 'serena' | 'harry')}
-          />
+          {/**
+            * 2026-09-13 — THE ROSTER HAS ONE OWNER, AND THESE FOUR ROWS WERE NOT USING IT.
+            *
+            * Every pillar row hard-coded [Kevin, Serena] while "Active Caddie" below built itself
+            * from ACTIVE_PERSONAS — which includes 'custom', the caddie the player has named
+            * themselves (Tim's is "Gus"). `setCaddieForPillar` has always accepted a full Persona,
+            * and `caddieAssignments` has always persisted one, so the store could hold Gus on every
+            * pillar; only these option lists refused to offer him.
+            *
+            * That is why a renamed caddie "would not stick": you could make Gus the active caddie,
+            * then the moment a surface resolved its pillar it read an assignment that could only
+            * ever say kevin or serena, and the name reverted. Not a persistence bug — a picker that
+            * could not express what the store could hold.
+            * [[sweep-the-missing-half-not-the-unused-export]] [[two-owners-is-the-root-cause]]
+            */}
+          {([
+            ['round', 'settings.label.round_on_course_default_kevin'],
+            ['practice', 'settings.label.practice_default_serena'],
+            ['drills', 'settings.label.drills_swinglab_default_serena'],
+            ['play', 'settings.label.play_arena_default_kevin'],
+          ] as const).map(([pillar, labelKey]) => (
+            <PillRow
+              key={pillar}
+              label={t(labelKey)}
+              options={selectablePersonas().map((p) => ({ label: displayCaddieName(p), value: p }))}
+              value={caddieAssignments[pillar]}
+              onSelect={(v) => setCaddieForPillar(pillar, v as Persona)}
+            />
+          ))}
 
           <TouchableOpacity onPress={resetCaddieAssignments} style={styles.linkBtn}>
             <Text style={[styles.linkBtnText, { color: colors.accent }]}>{t('settings.text.reset_to_defaults')}</Text>
@@ -1225,41 +1271,26 @@ export default function Settings() {
             {t('settings.text.when_a_teammate_is_better')}
           </Text>
 
-          {/* Phase 107 — GPS quality debug overlay (dev / Tim only by default) */}
-          <PillRow
-            label={t('settings.label.gps_quality_overlay_dev_default')}
-            options={[
-              { label: 'Off', value: 'off' },
-              { label: 'On', value: 'on' },
-            ]}
-            value={gpsQualityDebugOverlay ? 'on' : 'off'}
-            onSelect={(v) => setGpsQualityDebugOverlay(v === 'on')}
-          />
-          <Text style={[styles.sectionIntro, { color: colors.text_muted, marginTop: 4 }]}>
-            {t('settings.text.top_left_badge_during_a')}
-          </Text>
-
-          {/* 2026-06-10 — caddie persona controls merged in from the old
-              "{caddieName}'s Voice" card so every caddie setting lives here. */}
-          <Text style={[styles.sectionIntro, { color: colors.text_muted, marginTop: 8 }]}>
-            {t('settings.text.manually_override_the_active_caddie')}
-          </Text>
           {/* 2026-07-04 (elite-clean audit) — this pill duplicated the Tools-menu
               persona cycler but DIVERGED: it omitted 'custom' and never synced
               setUseCustomCaddie, so switching personas here while the custom caddie
               was active left useCustomCaddie=true → stale avatar/voice overrides.
               Now mirrors the cycler: same ACTIVE_PERSONAS set + the same sync. */}
+          {/* 2026-06-10 — caddie persona controls merged in from the old
+              "{caddieName}'s Voice" card so every caddie setting lives here.
+              2026-09-13 — this description used to render ABOVE the divider, directly under the GPS
+              overlay row, so on screen it read as an explanation of a dev toggle. It describes the
+              row below it; it now sits with it. */}
+          <Text style={[styles.sectionIntro, { color: colors.text_muted, marginTop: 8 }]}>
+            {t('settings.text.manually_override_the_active_caddie')}
+          </Text>
           <PillRow
             label={t('settings.label.active_caddie')}
-            options={[
-              { label: 'Kevin', value: 'kevin' },
-              { label: 'Serena', value: 'serena' },
-              {
-                // 2026-09-01 — one owner for "what do we call this caddie" (caddieResolver).
-                label: displayCaddieName('custom'),
-                value: 'custom',
-              },
-            ]}
+            // 2026-09-01 — one owner for "what do we call this caddie" (caddieResolver).
+            // 2026-09-13 — and one owner for WHICH caddies exist (selectablePersonas), the same
+            // list the four pillar rows above now use. Two hand-written rosters on one screen is
+            // how they came to disagree.
+            options={selectablePersonas().map((p) => ({ label: displayCaddieName(p), value: p }))}
             value={caddiePersonality}
             onSelect={(v) => {
               setCaddiePersonality(v as 'kevin' | 'serena' | 'custom');
@@ -1400,9 +1431,9 @@ export default function Settings() {
           />
           <ToggleRow
             label={t('settings.label.riding_in_a_cart')}
-            sub="Tunes shot detection for cart play. Walking is the default."
+            sub="Tunes shot detection for cart play. On by default — turn it off when you walk."
             value={cartMode}
-            onValueChange={confirmToggle('Cart Mode', setCartMode)}
+            onValueChange={confirmToggle('Riding in a cart', setCartMode)}
           />
           <ToggleRow
             label={t('settings.label.auto_hole_advance')}
@@ -1424,7 +1455,7 @@ export default function Settings() {
               plays is worse than telling them plainly. */}
           <ToggleRow
             label={t('settings.label.auto_shot_detection')}
-            sub="GPS auto-logs where each shot was hit. OFF by default — it can over-count on cart rounds. Riding in a cart, shots are logged quietly with no club and the caddie never interrupts; walking, it asks what you hit. While it's off, nothing is recorded unless you log shots by voice, so View hole and the round recap will have no shots to show."
+            sub="GPS logs where each shot was hit, so View hole and your recap can show them. Off by default — while it is off, only shots you log by voice are recorded. Walking, it asks what you hit; riding, it logs quietly without interrupting."
             value={autoShotDetection}
             onValueChange={confirmToggle('Auto Shot Detection', setAutoShotDetection)}
           />
@@ -1464,9 +1495,9 @@ export default function Settings() {
               members (Bea, Lily, Daniella) don't trip it. */}
           <ToggleRow
             label={t('settings.label.cecily_mode')}
-            sub={`Kid-friendly chat for Cecily — any topic, warm and simple.`}
+            sub={`Kid-friendly chat — any topic, warm and simple. Built for a youngster playing along.`}
             value={cecilyMode}
-            onValueChange={confirmToggle('Cecily Mode', setCecilyMode)}
+            onValueChange={confirmToggle('Kid-Friendly Mode', setCecilyMode)}
           />
           {/* 2026-05-26 — Fix AP Phase 2: continuous-conversation
               opt-in toggle. Default off. Safety rails inside the
@@ -1548,23 +1579,6 @@ export default function Settings() {
             value={highContrast}
             onValueChange={setHighContrast}
           />
-          {/* 2026-05-27 — Fix EA: Screenshot mode. Hides the top
-              status bar (time / battery / wifi) app-wide so promo,
-              App Store, and social screenshots are clean. Not
-              persisted — turns OFF on app restart so users don't
-              get stuck wondering where the status bar went. Android
-              bottom nav bar still shows until next APK build (needs
-              expo-navigation-bar native dep, not OTA-able). */}
-          <ToggleRow
-            label={t('settings.label.screenshot_mode_hide_top_bar')}
-            sub={
-              Platform.OS === 'android'
-                ? 'Hides the top status bar for clean screenshots. The bottom nav bar still shows in this build — crop or wait for the next app update.'
-                : 'Hides the top status bar (time, battery, wifi) for clean screenshots. Turns off automatically when you close the app.'
-            }
-            value={useScreenshotModeStore(s => s.enabled)}
-            onValueChange={useScreenshotModeStore(s => s.setEnabled)}
-          />
           {/* PGA HOPE follow-up (A1) — large-text upgrade for low-vision
               participants. Bumps caption + briefing font sizes. */}
           <ToggleRow
@@ -1604,7 +1618,7 @@ export default function Settings() {
               <View style={{ flex: 1 }}>
                 <Text style={labelStyle}>{displayName}</Text>
                 <Text style={subStyle}>
-                  {`Volume + cadence (${intensityVal}/100). Lower = quieter, fewer signature phrases.`}
+                  {t('settings.text.volume_and_cadence')}
                 </Text>
               </View>
               <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -1660,7 +1674,10 @@ export default function Settings() {
                     watch mic silently rode on a switch labelled "swing capture" and defaulting off.
                     They are independent now — say so, so nobody goes hunting here for yardage. */}
                 {watchBridgeAvailable
-                  ? `Captures every swing the watch sees — during a live round (tagged to the hole, shown in View hole and the round recap) and in Smart Motion, where a calibrated capture also reads club speed. Pin yardage and the watch mic do not need this — they work whenever your watch is paired and the SmartPlay watch app is open.${watchConnected ? ' Watch connected.' : ` Open the SmartPlay watch app on your ${watchDeviceLabel()} to start sending.`}`
+                  // 2026-09-13 — was five lines covering three features and what does NOT need the
+                  // toggle. A setting's description should say what the switch does; the caveats
+                  // belong where the caveat bites, not stacked on the row.
+                  ? `Captures every swing your watch sees — tagged to the hole in a round, and read for club speed in Smart Motion. Pin yardage and the watch mic do not need this.${watchConnected ? ' Watch connected.' : ` Open the SmartPlay watch app on your ${watchDeviceLabel()} to start sending.`}`
                   : 'The watch swing-capture module ships in the latest native build — install it, then this turns on.'}
               </Text>
             </View>
@@ -1709,7 +1726,7 @@ export default function Settings() {
               thumbColor={colors.text_primary}
             />
           </View>
-          <View style={rowDivStyle}>
+          {HEALTH_CONNECT_ENABLED && <View style={rowDivStyle}>
             <View style={styles.rowText}>
               <Text style={labelStyle}>{t('settings.text.health_connect_heartbeat')}</Text>
               <Text style={subStyle}>
@@ -1723,7 +1740,7 @@ export default function Settings() {
                   : ''}
               </Text>
             </View>
-          </View>
+          </View>}
           {/* 2026-07-06 — Earbud button tap-to-talk, LIVE. The native media-button
               listener (BluetoothMediaButtonModule via the withBluetoothMediaButton
               plugin, app.json) is compiled into the build and initialized app-wide at
@@ -1833,7 +1850,7 @@ export default function Settings() {
               external integrations). Master toggle for the Health Connect
               integration + an explicit re-ask button if permissions were
               declined earlier. (Data & Privacy relocated just below.) */}
-          <View style={rowDivStyle}>
+          {HEALTH_CONNECT_ENABLED && <View style={rowDivStyle}>
             <View style={styles.rowText}>
               <Text style={labelStyle}>{t('settings.text.use_health_connect_during_rounds')}</Text>
               <Text style={subStyle}>
@@ -1846,7 +1863,7 @@ export default function Settings() {
               trackColor={{ false: colors.border, true: colors.accent }}
               thumbColor={colors.text_primary}
             />
-          </View>
+          </View>}
           {/* 2026-05-21 — Fix N-3 — explicit tap-to-grant. The original
               "re-ask on next round" row relied on the JIT IIFE in
               roundStore.startRound, which was the prime suspect for the
@@ -1856,7 +1873,7 @@ export default function Settings() {
               it takes down Settings instead of the round — failure mode
               is the user simply can't tap-and-grant on a stubbed-HC
               device, which is the correct degradation. */}
-          <TouchableOpacity
+          {HEALTH_CONNECT_ENABLED && <TouchableOpacity
             style={rowDivStyle}
             onPress={() => {
               void (async () => {
@@ -1895,6 +1912,68 @@ export default function Settings() {
                 {t('settings.text.tap_to_grant_smartplay_read')}
               </Text>
             </View>
+          </TouchableOpacity>}
+        </CollapsibleSection>
+
+        {/**
+          * PEOPLE & COACHING — 2026-09-13.
+          *
+          * Family Coaching, Team Captain, Messages and Invite a friend were filed under "Help &
+          * About" and "Data & Privacy". They are not help and they are not a privacy control; they
+          * are the people half of the product, and nobody looks for a roster inside an About page.
+          * The referral in particular was technically reachable and practically invisible, wedged
+          * between two consent toggles and the legal links.
+          * [[feedback-reachable-not-just-wired]]
+          */}
+        <CollapsibleSection title={t('settings.title.people_coaching')} icon="people-outline">
+          <TouchableOpacity
+            style={rowDivStyle}
+            onPress={() => router.push('/family/roster' as never)}
+            accessibilityRole="button"
+            accessibilityLabel={t('settings.accessibility_label.open_family_coaching')}
+          >
+            <View style={styles.rowText}>
+              <Text style={labelStyle}>{t('settings.text.family_coaching')}</Text>
+              <Text style={subStyle}>{t('settings.text.roster_swing_library')}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={rowDivStyle}
+            onPress={() => router.push('/family/captain' as never)}
+            accessibilityRole="button"
+            accessibilityLabel={t('settings.accessibility_label.open_team_captain')}
+          >
+            <View style={styles.rowText}>
+              <Text style={labelStyle}>{t('settings.text.team_captain')}</Text>
+              <Text style={subStyle}>{t('settings.text.teammates_coaches')}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+          </TouchableOpacity>
+          {MESSAGING_ENABLED && (
+            <TouchableOpacity
+              style={rowDivStyle}
+              onPress={() => router.push('/messages' as never)}
+              accessibilityRole="button"
+              accessibilityLabel={t('settings.accessibility_label.open_messages')}
+            >
+              <View style={styles.rowText}>
+                <Text style={labelStyle}>{t('settings.text.messages')}</Text>
+                <Text style={subStyle}>{t('settings.text.message_a_golfer')}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={rowDivStyle}
+            onPress={() => router.push('/invite' as never)}
+            accessibilityRole="button"
+            accessibilityLabel={t('settings.accessibility_label.invite_a_friend')}
+          >
+            <View style={styles.rowText}>
+              <Text style={labelStyle}>{t('settings.text.invite_a_friend')}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
           </TouchableOpacity>
         </CollapsibleSection>
 
@@ -1957,20 +2036,14 @@ export default function Settings() {
             label={t('settings.label.share_course_maps')}
             sub="Contribute the hole layouts your phone maps so other golfers get them instantly. Coordinates only — never your scores or personal data. On for beta; turn off anytime."
             value={shareCommunityData}
-            onValueChange={confirmToggle('Course map sharing', setShareCommunityData)}
+            onValueChange={confirmToggle('Share course maps', setShareCommunityData)}
           />
           <ToggleRow
             label={t('settings.label.auto_send_my_issue_reports')}
-            sub="When you log a bug, send it to the team automatically so it gets fixed faster. Includes your email (so we can follow up) and app diagnostics — never your scores. On for beta; turn off anytime."
+            sub="When you log a bug, send it to the team automatically so it gets fixed faster. Sent anonymously — a random install ID, never your name, email or scores. On for beta; turn off anytime."
             value={shareDiagnostics}
-            onValueChange={confirmToggle('Issue report sharing', setShareDiagnostics)}
+            onValueChange={confirmToggle('Auto-send my issue reports', setShareDiagnostics)}
           />
-          {/* 2026-09-03 — invite a friend (app/invite.tsx). Sits here rather than in Help because it
-              is a thing the player DOES, not a thing they read. */}
-          <TouchableOpacity style={[rowDivStyle, { alignItems: 'center' }]} onPress={() => router.push('/invite' as never)} accessibilityRole="button" accessibilityLabel={t('settings.accessibility_label.invite_a_friend')}>
-            <View style={styles.rowText}><Text style={labelStyle}>{t('settings.text.invite_a_friend')}</Text></View>
-            <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
-          </TouchableOpacity>
           {/* 2026-07-18 — real in-app legal documents (app/legal.tsx). */}
           <TouchableOpacity style={[rowDivStyle, { alignItems: 'center' }]} onPress={() => router.push('/legal?doc=privacy' as never)} accessibilityRole="button">
             <View style={styles.rowText}><Text style={labelStyle}>{t('settings.text.privacy_policy')}</Text></View>
@@ -2016,62 +2089,6 @@ export default function Settings() {
           {/* 2026-06-11 — Round import moved to its proper home: the Profile
               screen (alongside handicap index + GHIN). This Help row now just
               routes there so the old entry point still lands somewhere useful. */}
-          <TouchableOpacity
-            style={styles.aboutRow}
-            onPress={() => router.push('/profile' as never)}
-            accessibilityRole="button"
-            accessibilityLabel={t('settings.accessibility_label.import_past_rounds_from_your')}
-          >
-            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>{t('settings.text.import_past_rounds')}</Text>
-            <Text style={[styles.aboutValue, { color: colors.accent }]}>
-              {t('settings.text.in_profile_history_handicap')}
-            </Text>
-          </TouchableOpacity>
-          {/* 2026-05-22 — Family Coaching roster + library link. Single
-              entry into the Family mode (kids, partner, friends). Voice
-              flow already works ("record Emma's swing"); this surfaces
-              the UI for parents who add via tap. */}
-          <TouchableOpacity
-            style={styles.aboutRow}
-            onPress={() => router.push('/family/roster' as never)}
-            accessibilityRole="button"
-            accessibilityLabel={t('settings.accessibility_label.open_family_coaching')}
-          >
-            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>{t('settings.text.family_coaching')}</Text>
-            <Text style={[styles.aboutValue, { color: colors.accent }]}>
-              {t('settings.text.roster_swing_library')}
-            </Text>
-          </TouchableOpacity>
-          {/* 2026-06-30 (Tim) — minimal in-app messaging.
-              2026-07-21 — RELEASE feature, hidden in beta behind MESSAGING_ENABLED. */}
-          {MESSAGING_ENABLED && (
-          <TouchableOpacity
-            style={styles.aboutRow}
-            onPress={() => router.push('/messages' as never)}
-            accessibilityRole="button"
-            accessibilityLabel={t('settings.accessibility_label.open_messages')}
-          >
-            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>{t('settings.text.messages')}</Text>
-            <Text style={[styles.aboutValue, { color: colors.accent }]}>
-              {t('settings.text.message_a_golfer')}
-            </Text>
-          </TouchableOpacity>
-          )}
-          {/* 2026-05-22 — Captain extension. Surfaces Team Captain mode
-              for high-school golfers (e.g. Heritage HS Romoland CA)
-              managing teammates + coach contacts. Same store, distinct
-              screen, voice flows reused. */}
-          <TouchableOpacity
-            style={styles.aboutRow}
-            onPress={() => router.push('/family/captain' as never)}
-            accessibilityRole="button"
-            accessibilityLabel={t('settings.accessibility_label.open_team_captain')}
-          >
-            <Text style={[styles.aboutLabel, { color: colors.text_muted }]}>{t('settings.text.team_captain')}</Text>
-            <Text style={[styles.aboutValue, { color: colors.accent }]}>
-              {t('settings.text.teammates_coaches')}
-            </Text>
-          </TouchableOpacity>
           {/* Phase 411 — Share Feedback shortcut. Pre-fills email
               client with subject + helpful body prompts so testers
               don't stare at a blank message. */}
@@ -2122,10 +2139,11 @@ export default function Settings() {
               {t('settings.text.support_smartplaycaddie_com')}
             </Text>
           </TouchableOpacity>
-          {/* Phase 410 — Privacy disclosure. PGA Hope graduates and any
-              App Store / Play reviewer will look for this. Currently
-              hosted at smartplaycaddie.com/privacy (placeholder URL —
-              swap when the real policy is published). */}
+          {/* Phase 410 — Privacy disclosure. PGA Hope graduates and any App Store / Play reviewer
+              will look for this. 2026-09-13 — the "placeholder URL" note was stale: the policy is
+              published and live at smartplaycaddie.com/privacy, and it is the same document as the
+              in-app copy in Data & Privacy (one document, four files — see constants/legalText.ts).
+              This row is the WEB copy and that one is the offline in-app copy; both stay. */}
           <TouchableOpacity
             style={styles.aboutRow}
             onPress={() => {
@@ -2191,7 +2209,7 @@ export default function Settings() {
               {t('labels.meta_glasses_setup')}
             </Text>
             <Text style={[styles.aboutValue, { color: colors.text_primary, lineHeight: 18 }]}>
-              {t('labels.meta_glasses_instructions')}
+              {t('labels.meta_glasses_instructions', { caddieName })}
             </Text>
           </View>
             </>
@@ -2243,6 +2261,38 @@ export default function Settings() {
             return (
               <>
                 <CollapsibleSection title={t('settings.title.owner_tools')} icon="construct-outline">
+                  {/**
+                    * 2026-09-13 — MOVED HERE, from the two places a player would find them.
+                    *
+                    * The GPS quality overlay sat in the CADDIE section, labelled "(dev)", with a
+                    * description telling the reader to use it "during the Garmin comparison test".
+                    * Screenshot mode sat in Language & Display and told Android users to "crop or
+                    * wait for the next app update". Both are instruments for building the app, not
+                    * settings for playing golf, and Owner Tools is where the instruments live.
+                    * Neither behaviour changed — only who has to scroll past them.
+                    */}
+                  <PillRow
+                    label={t('settings.label.gps_quality_overlay_dev_default')}
+                    options={[
+                      { label: 'Off', value: 'off' },
+                      { label: 'On', value: 'on' },
+                    ]}
+                    value={gpsQualityDebugOverlay ? 'on' : 'off'}
+                    onSelect={(v) => setGpsQualityDebugOverlay(v === 'on')}
+                  />
+                  <Text style={[styles.sectionIntro, { color: colors.text_muted, marginTop: 4 }]}>
+                    {t('settings.text.top_left_badge_during_a')}
+                  </Text>
+                  <ToggleRow
+                    label={t('settings.label.screenshot_mode_hide_top_bar')}
+                    sub={
+                      Platform.OS === 'android'
+                        ? 'Hides the top status bar for clean screenshots. The bottom nav bar still shows on Android.'
+                        : 'Hides the top status bar (time, battery, wifi) for clean screenshots. Turns off automatically when you close the app.'
+                    }
+                    value={screenshotModeEnabled}
+                    onValueChange={setScreenshotModeEnabled}
+                  />
                   {/* 2026-05-24 v1.2.1 — Glasses Mode toggle. Pre-
                       configures the audio session for background
                       Bluetooth so the caddie's voice routes to Ray-Ban
@@ -2526,6 +2576,14 @@ function GlassesModeRow({ colors }: { colors: ThemeColors }) {
   const { t } = useTranslation();
   const glassesMode = useSettingsStore((s) => s.glassesMode);
   const setGlassesMode = useSettingsStore((s) => s.setGlassesMode);
+  /**
+   * 2026-09-13 — these three strings used to name the RETIRED Tank persona, so the glasses copy
+   * told the player to talk to a caddie the app no longer has. They interpolate the live caddie
+   * now, which means this row needs the name: `caddiePersonality`, never `voiceGender` — the
+   * latter folds every non-Kevin persona back to "Kevin".
+   */
+  const caddiePersonality = useSettingsStore((s) => s.caddiePersonality);
+  const caddieName = getCaddieName(caddiePersonality);
   const [busy, setBusy] = useState(false);
 
   const onToggle = async (next: boolean) => {
@@ -2562,7 +2620,7 @@ function GlassesModeRow({ colors }: { colors: ThemeColors }) {
       setGlassesMode(true);
       Alert.alert(
         t('settings.glasses_tutorial_title'),
-        t('settings.glasses_tutorial_body'),
+        t('settings.glasses_tutorial_body', { caddieName }),
         // 2026-07-04 (elite-clean audit, menu finding #15) — the "Watch Tutorial"
         // button pointed at smartplaygolf.com (wrong domain, dead link). Removed
         // until a real hosted tutorial exists; the alert body carries the setup steps.
@@ -2589,7 +2647,7 @@ function GlassesModeRow({ colors }: { colors: ThemeColors }) {
             🕶️ {t('settings.glasses_mode')}
           </Text>
           <Text style={[styles.rowSub, { color: colors.text_muted }]}>
-            {t('settings.glasses_mode_desc')}
+            {t('settings.glasses_mode_desc', { caddieName })}
           </Text>
           {glassesMode && (
             <Text style={[styles.rowSub, { color: colors.accent, marginTop: 6 }]}>
@@ -2619,7 +2677,7 @@ function GlassesModeRow({ colors }: { colors: ThemeColors }) {
             {t('settings.glasses_how_to_title')}
           </Text>
           <Text style={[styles.rowSub, { color: colors.text_muted, lineHeight: 19 }]}>
-            {t('settings.glasses_how_to_body')}
+            {t('settings.glasses_how_to_body', { caddieName })}
           </Text>
           <TouchableOpacity
             onPress={onTestMic}
