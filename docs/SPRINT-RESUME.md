@@ -361,7 +361,50 @@ All 23 confirmed HIGH findings from the 30-agent workflow audit addressed:
 
 ## What's actively in progress
 
-> ### ⚠️ CURRENT — 2026-09-13 (later). ON MAIN, AND SHIPPED BY OTA.
+> ### ⚠️ CURRENT — 2026-09-13. CLOSED OUT. Everything on main, five OTAs out, nothing open.
+>
+> **THE DEFECT CLASS, IN TIM'S WORDS, BECAUSE A PREVIOUS SESSION GOT THIS WRONG.** The explanation
+> that there are many bugs "because you're one developer using one AI" is untrue and misses the point.
+> These were **not untested surfaces.** They were repeatedly tested surfaces, and things he had asked
+> for — "probably minimum ten times", "the fiftieth time I've worked on this" — and it is in the
+> transcripts and the docs. Every finding in this sweep was ONE shape: a capability built, measured
+> and persisted, with nothing connecting it to the CONVERSATION. practiceImpact (dashboard-only since
+> 06-14), swingMetricTrend (dashboard-only), the emotional log (persisted fifty rounds, read by
+> nothing at all), GIR and longest drive (on screens he looks at, while the caddie said "you're not in
+> a round yet"), courseDownloadEngine (fetched and cached, never listed).
+>
+> **The tests passed the whole time, because they tested the halves that worked.** So "what is
+> untested?" is the wrong question here. The right one is **"what does this app already know that the
+> caddie cannot reach?"** — and the fix is almost never to build something. It is to wire a half that
+> already exists. This is the day-one concept (swing coach · caddie · mental coach · fitness — knowing
+> the player, building the player), not a backlog.
+>
+> **Adversarial pass, `c54ae6b` — four defects, three of them introduced the same day.** Three
+> misroutes in the lead detector, found by PROBING it with real utterances rather than re-reading it
+> ("read this green" → course coach; "I'm so angry I topped it again" → swing coach, against
+> mentalGameBlock's acknowledge-first rule; "what do you know about shadow creek", his own day-one
+> example, → no lead). Two prompt rules written hours apart that contradicted each other. And a spec
+> that asserted both "ball speed is never shown at any confidence" and "ball speed comes off the
+> never-list" — fourteen minutes apart — which is how a defect gets reintroduced next week by someone
+> reading a doc as instruction.
+>
+> **Last night's cage work reintroduced nothing into SmartMotion** (checked on Tim's ask): the
+> contentious ball-speed commits were DOCS ONLY; the report-your-shot tap is withheld in the rig
+> (`effectiveMode === 'sim'`, which IS the cage since the 09-01 unification) and offered on the range
+> where the player is the only sensor; `verifyTarget` PROVES a bullseye geometrically instead of
+> thresholding a confidence label, and fails closed.
+>
+> **Ball speed IS wired into SmartMotion from the acoustic detector** — `swingMetricsService`'s comment
+> saying no caller passed it was stale, and I repeated it as fact before checking. What keeps it honest
+> is not absence but three guards, now PINNED by a test instead of resting on prose: acoustic-detect
+> returns null rather than faking a calibration for an unknown club; `'acoustic'` is not in
+> `TRUTH_GRADE_SOURCES`, so smash can never reach its 0.85 branch; confidence ceilings at 0.65.
+>
+> Gates at close: **tsc 0 · jest 4359/4359 across 370 suites · sim 1023/1023.** Lint is 76 errors / 75
+> warnings, IDENTICAL to where main started — pre-existing i18n debt, none added. Control-character
+> sweep across all source: clean. **Nothing is device-verified.**
+
+> ### 2026-09-13 (earlier). ON MAIN, AND SHIPPED BY OTA.
 >
 > The branch work below was merged to `main` (fast-forward) and **three OTAs went out, production and
 > preview each time, runtimeVersion 1.0.0**. Nothing native moved in any of them, so neither store
