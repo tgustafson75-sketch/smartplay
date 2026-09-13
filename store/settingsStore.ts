@@ -534,7 +534,19 @@ export const useSettingsStore = create<SettingsState>()(
       // needing to touch Settings. Walking users flip to OFF once and
       // their preference persists. Existing users' persisted value
       // (whatever they previously had) wins via the persist middleware.
-      cartMode: true,
+      /**
+       * 2026-09-13 — WALKING IS THE DEFAULT, because the wrong answer now self-corrects.
+       *
+       * Tim: most players ride, which is why this defaulted to cart — but a default that is wrong
+       * for a walker is silent and permanent, while a default that is wrong for a RIDER is fixed by
+       * the round itself. walkingDetector sees sustained movement above 3 m/s — faster than anyone
+       * walks — and writes this setting silently, without asking. That path existed before today and
+       * could never fire (every GPS-only reading was graded 'low' and vetoed); it fires now.
+       *
+       * And a player who DECLARES on the Play tab is never overridden by detection, so the explicit
+       * choice still wins over both the default and the detector.
+       */
+      cartMode: false,
       // 2026-05-22 — Fix T (TOP PRIORITY after two real rounds at Menifee).
       // Auto hole-advance + auto-shot-detection were racing ahead of the
       // player (1→3→4 climbing on its own). The Fix L threshold tightening

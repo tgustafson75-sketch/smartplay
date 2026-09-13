@@ -56,7 +56,14 @@ describe('the ticker applies it without asking', () => {
     const src = require('fs').readFileSync(
       require('path').join(__dirname, '../../services/walkingDetector.ts'), 'utf8');
     expect(src).toMatch(/applyDetectedTransport\(_cached\)/);
-    expect(src).toMatch(/if \(declared === 'cart' \|\| declared === 'walking'\) return;/);
+    /**
+     * 2026-09-13 — was `declared === 'cart' || declared === 'walking'`, which is always true
+     * (no unset value, initialises to 'walking'), so applyDetectedTransport returned on its FIRST
+     * LINE every tick and this "correction" never ran once in the field. Pin the declaration flag,
+     * and pin the absence of the value test so it cannot creep back.
+     */
+    expect(src).toMatch(/if \(round\.useRoundStore\.getState\(\)\.transportDeclared\) return;/);
+    expect(src).not.toMatch(/declared === 'cart' \|\| declared === 'walking'/);
     // No prompt: the player is never asked to confirm a fact the phone measured.
     expect(src).not.toMatch(/Alert\.alert|confirm\(/);
   });

@@ -534,6 +534,17 @@ interface RoundState {
   selectedTee: TeeColor;
   // 2026-06-13 — walking vs cart for this round (Play tab setup).
   transportMode: TransportMode;
+  /**
+   * 2026-09-13 — THE STATE THE TYPE COULD NOT REPRESENT.
+   *
+   * Both auto-detectors guard with "an explicit player choice is never overridden — we only fill an
+   * UNSET one", and then test `transportMode === 'walking' || === 'cart'`. TransportMode has no
+   * third value and the field initialises to 'walking', so that test was ALWAYS true: walkingDetector
+   * returned on its first line every tick of every round, and shotDetectionService pinned itself to a
+   * default nobody had chosen. The premise was right and unrepresentable. This is the missing bit.
+   * [[a-guard-can-enforce-a-stale-premise]]
+   */
+  transportDeclared: boolean;
 
   // Phase 409 — TightLie pending result. The lie analysis completes
   // BEFORE the player hits the shot, so it can't be attached to a
@@ -645,6 +656,8 @@ interface RoundState {
   ) => void;
   setSelectedTee: (color: TeeColor) => void;
   setTransportMode: (m: TransportMode) => void;
+  /** Clears the player's declaration so detection may fill it again (new round). */
+  clearTransportDeclaration: () => void;
 
   // Phase 409 — TightLie pending lie analysis.
   setPendingLieAnalysis: (analysis: import('../services/lieAnalysisService').LieAnalysis | null) => void;
@@ -1028,6 +1041,7 @@ export const useRoundStore = create<RoundState>()(
       selectedTee: 'unspecified',
       // 2026-06-13 — walking vs cart; default walking (the engaged/health default).
       transportMode: 'walking',
+      transportDeclared: false,
 
       // Phase 409 — TightLie pending lie analysis. Cleared when a shot is
       // logged (its value is copied onto the shot.lie_analysis).
@@ -1038,7 +1052,24 @@ export const useRoundStore = create<RoundState>()(
       pendingKevinRec: null,
 
       setSelectedTee: (color) => set({ selectedTee: color }),
-      setTransportMode: (m) => set({ transportMode: m }),
+      /**
+       * 2026-09-13 — a declaration does three things, and it used to do one.
+       *
+       * It records the choice, it MARKS it as a choice (so detection stands down — see
+       * transportDeclared above), and it carries the choice to settings.cartMode, which is what
+       * every other reader actually consumes (isEffectiveCartMode, the orchestrator, the caddie
+       * payload). Picking "Cart" on the Play tab used to leave cartMode saying walking.
+       */
+      setTransportMode: (m) => {
+        set({ transportMode: m, transportDeclared: true });
+        try {
+          const settings = require('./settingsStore').useSettingsStore.getState();
+          settings.setCartMode?.(m === 'cart');
+        } catch (e) {
+          console.log('[roundStore] transport → cartMode sync failed (non-fatal):', e);
+        }
+      },
+      clearTransportDeclaration: () => set({ transportDeclared: false }),
       setPendingLieAnalysis: (analysis) => set({ pendingLieAnalysis: analysis }),
       clearPendingLieAnalysis: () => set({ pendingLieAnalysis: null }),
       setPendingKevinRec: (rec) => set({ pendingKevinRec: rec ? { at: Date.now(), ...rec } : null }),

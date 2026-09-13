@@ -2715,12 +2715,23 @@ check('Play tab: walking vs cart setting persisted on the round (Tim)',
       /export type TransportMode = 'walking' \| 'cart'/.test(rs) &&
       /transportMode: TransportMode;/.test(rs) &&             // state field
       /setTransportMode: \(m: TransportMode\) => void;/.test(rs) &&
-      /setTransportMode: \(m\) => set\(\{ transportMode: m \}\)/.test(rs) &&
       /transportMode: s\.transportMode,/.test(rs) &&          // persisted on the record
       /const resolvedTransport = options\.transportMode \?\? prev\.transportMode \?\? 'walking'/.test(rs) && // default (refactored to a named var)
-      // Play tab chips wired to the store
+      /**
+       * 2026-09-13 — assert the PROPERTY, not the expression. This pinned
+       * `setTransportMode: (m) => set({ transportMode: m })` and the two literal
+       * `setSetupTransport('walking')` / `('cart')` call sites, so raising the chips into a mapped
+       * pair of half-width buttons failed a guard while the behaviour was intact — and, worse, the
+       * pinned one-line setter was itself the defect: a declaration has to MARK itself declared and
+       * carry to settings.cartMode, which that expression could never do.
+       * [[a-guard-can-assert-the-broken-shape]]
+       */
+      /transportDeclared: true/.test(rs) &&                    // a choice is marked AS a choice
+      /setCartMode\?\.\(m === 'cart'\)/.test(rs) &&            // ...and reaches the setting others read
+      // Play tab still offers both modes and writes them to the store
       /useRoundStore\(s => s\.transportMode\)/.test(play) &&
-      /setSetupTransport\('walking'\)/.test(play) && /setSetupTransport\('cart'\)/.test(play)
+      /setSetupTransport\(mode\)/.test(play) &&
+      /'walking'/.test(play) && /'cart'/.test(play)
     );
   })(),
   'walking/cart set on Play tab → roundStore.transportMode → persisted on the round record (like selectedTee)');

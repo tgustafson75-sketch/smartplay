@@ -33,9 +33,19 @@ describe('the app senses cart vs walking instead of asking', () => {
     expect(src).toMatch(/speed < 1\.8/);   // hysteresis gap: no flapping at the boundary
   });
 
-  it('never overrides a player who actually chose', () => {
+  it('never overrides a player who actually chose — and can tell that they chose', () => {
+    /**
+     * 2026-09-13 — this used to pin `declared === 'cart' || declared === 'walking'`, which reads as
+     * "did they choose?" and is not: TransportMode has no unset value and the field initialises to
+     * 'walking', so that test was ALWAYS true. Every sense took the honour-the-choice branch and the
+     * sensed speed below could never retune anything — a rider who never opened the Play tab was
+     * pinned to walking tuning for the whole round by a default nobody picked. The declaration is a
+     * flag now, and only the Play tab sets it. [[a-guard-can-enforce-a-stale-premise]]
+     */
     expect(src).toMatch(/An explicit player choice is never overridden/);
-    expect(src).toMatch(/declared === 'cart' \|\| declared === 'walking'/);
+    expect(src).toMatch(/if \(rs\.transportDeclared\)/);
+    // The broken shape must not come back: a VALUE test cannot answer "did they choose".
+    expect(src).not.toMatch(/declared === 'cart' \|\| declared === 'walking'/);
   });
 
   it('honours that choice by retuning to it rather than ignoring the mismatch', () => {

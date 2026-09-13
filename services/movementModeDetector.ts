@@ -40,7 +40,16 @@ export type MovementMode = 'stationary' | 'walking' | 'cart' | 'unknown';
  * cart's real cruising speed, with margin on both sides rather than a ceiling almost nothing
  * reaches.
  */
-const CART_SPEED_MS = 3.0;      // sustained > 3 m/s (~6.7 mph) = riding, not walking
+/**
+ * 2026-09-13 — EXPORTED, because walkingDetector needs the same number.
+ *
+ * It had its own GPS-only cart line at 1.2 m/s (~2.7 mph), which is BELOW a brisk walk (1.3–1.5
+ * m/s) — so its no-health branch could not tell a walker from a cart and graded every GPS-only
+ * reading 'low', which `cartModeSuggestion` then vetoed. Two detectors, two different answers to
+ * "is this a cart". This is the audited divider; there is now one of it.
+ * [[two-owners-is-the-root-cause]]
+ */
+export const CART_SPEED_MS = 3.0;      // sustained > 3 m/s (~6.7 mph) = riding, not walking
 const WALK_SPEED_MIN_MS = 1.0;  // sustained > 1 m/s but <= cart = walking
 const SPEED_WINDOW = 5;         // rolling-sample window
 const SUSTAIN_NEEDED = 3;       // 3 of 5 must agree to flip the mode

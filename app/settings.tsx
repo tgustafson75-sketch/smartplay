@@ -1429,7 +1429,7 @@ export default function Settings() {
           />
           <ToggleRow
             label={t('settings.label.riding_in_a_cart')}
-            sub="Tunes shot detection for cart play. On by default — turn it off when you walk."
+            sub="Tunes shot detection for cart play. Walking is the default, and your caddie switches this on by itself once it sees cart speed."
             value={cartMode}
             onValueChange={confirmToggle('Riding in a cart', setCartMode)}
           />

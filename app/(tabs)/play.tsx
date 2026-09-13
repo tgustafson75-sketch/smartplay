@@ -2497,26 +2497,41 @@ export default function PlayTab() {
               <Image source={SEC_ICON.around} style={styles.sectionIcon} tintColor={colors.accent_lime} />
               <Text style={styles.sectionHeadText}>{t('play.getting_around', { defaultValue: 'GETTING AROUND' })}</Text>
             </View>
-            <View style={styles.factorRow}>
-              <TouchableOpacity
-                style={[styles.chip, { flexDirection: 'row', alignItems: 'center' }, setupTransport === 'walking' && styles.chipActive]}
-                onPress={() => setSetupTransport('walking')}
-                accessibilityRole="button"
-                accessibilityLabel={t('play.accessibility_label.walking_this_round')}
-              >
-                <AppIcon name="walk" size={14} color={setupTransport === 'walking' ? '#0a1410' : '#00C896'} />
-                <Text style={[styles.chipText, { marginLeft: 5 }, setupTransport === 'walking' && styles.chipTextActive]}>{t('play.walking', { defaultValue: 'Walking' })}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.chip, { flexDirection: 'row', alignItems: 'center' }, setupTransport === 'cart' && styles.chipActive]}
-                onPress={() => setSetupTransport('cart')}
-                accessibilityRole="button"
-                accessibilityLabel={t('play.accessibility_label.riding_a_cart_this_round')}
-              >
-                <AppIcon name="car-sport" size={14} color={setupTransport === 'cart' ? '#0a1410' : '#00C896'} />
-                <Text style={[styles.chipText, { marginLeft: 5 }, setupTransport === 'cart' && styles.chipTextActive]}>{t('play.cart', { defaultValue: 'Cart' })}</Text>
-              </TouchableOpacity>
+            {/**
+              * 2026-09-13 (Tim) — "make it stand out more, icons help, on the play tab so user does
+              * not skip over it."
+              *
+              * These were two small pills in a wrapping row of setup chips, the same weight as every
+              * other option, and cart-vs-walking is not the same weight: it retunes shot detection
+              * (an 8s stationary window and a 12m radius versus 4s/8m), so getting it wrong costs
+              * shots on the card. Two half-width targets with a real icon, and a line saying the
+              * caddie will fix it by itself if you just start playing — which is true now, and was
+              * not before today.
+              */}
+            <View style={styles.transportRow}>
+              {([
+                ['walking', 'walk', t('play.walking', { defaultValue: 'Walking' }), t('play.accessibility_label.walking_this_round')],
+                ['cart', 'car-sport', t('play.cart', { defaultValue: 'Cart' }), t('play.accessibility_label.riding_a_cart_this_round')],
+              ] as const).map(([mode, icon, label, a11y]) => {
+                const active = setupTransport === mode;
+                return (
+                  <TouchableOpacity
+                    key={mode}
+                    style={[styles.transportBtn, active && styles.transportBtnActive]}
+                    onPress={() => setSetupTransport(mode)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    accessibilityLabel={a11y}
+                  >
+                    <AppIcon name={icon} size={24} color={active ? colors.accent : colors.text_muted} />
+                    <Text style={[styles.transportLabel, active && styles.transportLabelActive]}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
+            <Text style={styles.transportHint}>
+              {t('play.transport_hint', { defaultValue: 'Not sure? Just start — your caddie switches to cart on its own once it sees cart speed.' })}
+            </Text>
 
             {/* Phase 405 wave 3 — tee box selection. Standard 4 colors.
                 Stored on roundStore.selectedTee + persisted onto the
@@ -2771,6 +2786,17 @@ return StyleSheet.create({
     backgroundColor: c.surface,
   },
   chipActive: { borderColor: c.accent, backgroundColor: c.surface_elevated },
+  transportRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 16 },
+  transportBtn: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 14, gap: 6,
+    borderRadius: 14, borderWidth: 1, borderColor: c.border,
+    backgroundColor: c.surface,
+  },
+  transportBtnActive: { borderColor: c.accent, borderWidth: 2, backgroundColor: c.surface_elevated },
+  transportLabel: { color: c.text_muted, fontSize: 13, fontWeight: '700' },
+  transportLabelActive: { color: c.accent },
+  transportHint: { color: c.text_muted, fontSize: 11, paddingHorizontal: 16, marginTop: 6, lineHeight: 15 },
   chipText: { color: c.text_muted, fontSize: 12, fontWeight: '700' },
   chipTextActive: { color: c.accent },
   notesInput: {

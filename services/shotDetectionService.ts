@@ -435,10 +435,17 @@ class ShotDetector {
 
     try {
       const round = require('../store/roundStore') as typeof import('../store/roundStore');
-      // An explicit player choice is never overridden — we only fill an unset one.
-      const declared = round.useRoundStore.getState().transportMode;
-      if (declared === 'cart' || declared === 'walking') {
+      /**
+       * An explicit player choice is never overridden — we only fill an unset one.
+       * 2026-09-13 — and "unset" now has a representation. `transportMode` initialises to 'walking'
+       * and has no third value, so this branch was taken on every sense, which meant the sensed
+       * speed below could never retune anything: a rider who never touched the Play tab was pinned
+       * to walking tuning (an 8s stationary window and a 12m radius versus 4s/8m) for the round.
+       */
+      const rs = round.useRoundStore.getState();
+      if (rs.transportDeclared) {
         // They told us. Honour it, and stop re-deciding.
+        const declared = rs.transportMode;
         if ((declared === 'cart') !== this.config.cartMode) this.configure({ cartMode: declared === 'cart' });
         return;
       }

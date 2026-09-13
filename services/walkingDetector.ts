@@ -24,6 +24,7 @@
  * Nothing breaks; the suggestedMode just goes to null.
  */
 
+import { CART_SPEED_MS } from './movementModeDetector';
 import { isHealthAvailable, readHealthSnapshot } from './healthData';
 import { useWatchStore } from '../store/watchStore';
 
@@ -100,9 +101,33 @@ export async function detectActivity(windowGpsSpeedMps: number): Promise<Detecto
   let confidence: 'high' | 'medium' | 'low';
 
   if (!hasHealthData) {
-    // No watch contribution: lean on GPS.
-    if (windowGpsSpeedMps > CART_MIN_MPS) {
-      mode = 'cart';            // moving fast, no step data → likely a cart
+    /**
+     * 2026-09-13 — THE GPS-ONLY BRANCH IS THE ONLY BRANCH IN 1.0, AND IT REFUSED TO DECIDE.
+     *
+     * Health Connect is disabled for 1.0 (permissions out, HEALTH_CONNECT_ENABLED false), so
+     * hasHealthData is ALWAYS false in the shipping build and every reading landed here. Every
+     * reading here was graded 'low', and cartModeSuggestion opens with
+     * `if (reading.confidence === 'low') return null`. So the auto-correction below ran on a timer,
+     * classified correctly, and threw the answer away on every tick of every round.
+     *
+     * The grade was honest for the old line: CART_MIN_MPS is 1.2 m/s (~2.7 mph), BELOW a brisk walk
+     * at 1.3–1.5 m/s, so it could not separate a walker from a cart. The fix is the threshold, not
+     * the grade — above CART_SPEED_MS (3.0 m/s, ~6.7 mph, the divider audited on 2026-08-12 and now
+     * shared with movementModeDetector) is not something a human does on foot, and this is a WINDOW
+     * average, not one spike. That earns 'medium', which is enough to correct the setting and still
+     * short of the 'high' that isEffectiveCartMode demands — so shot detection's own gate is
+     * untouched and this can only ever ADD the correction it was written to make.
+     *
+     * Asymmetric on purpose: fast movement proves a cart, but slow movement proves nothing (a cart
+     * crawling between shots looks exactly like walking), so the walking side stays 'low' and can
+     * never auto-disable a cart the player is actually in.
+     * [[orphans-are-live-bugs-not-dead-code]] [[a-toggle-that-does-nothing-for-the-default-user]]
+     */
+    if (windowGpsSpeedMps > CART_SPEED_MS) {
+      mode = 'cart';            // faster than anyone walks, sustained over the window → riding
+      confidence = 'medium';
+    } else if (windowGpsSpeedMps > CART_MIN_MPS) {
+      mode = 'cart';            // moving, but inside the band a brisk walk can reach → do not act
       confidence = 'low';
     } else if (gpsMoving) {
       mode = 'walking';         // moving at walking pace, no step data → assume walking
@@ -223,8 +248,12 @@ export function startActivityTicker(getGpsSpeedMps: () => number): void {
 function applyDetectedTransport(reading: DetectorReading): void {
   try {
     const round = require('../store/roundStore') as typeof import('../store/roundStore');
-    const declared = round.useRoundStore.getState().transportMode;
-    if (declared === 'cart' || declared === 'walking') return;
+    /**
+     * 2026-09-13 — test the DECLARATION, not the value. transportMode has no unset state and
+     * initialises to 'walking', so this line used to return on every tick of every round and the
+     * correction below has never once run in the field.
+     */
+    if (round.useRoundStore.getState().transportDeclared) return;
 
     const settings = require('../store/settingsStore').useSettingsStore.getState();
     const suggestion = cartModeSuggestion(settings.cartMode, reading);
