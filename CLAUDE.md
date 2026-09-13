@@ -1,5 +1,15 @@
 # SmartPlay Caddie — Project Conventions
 
+## RULE 1 — READ [docs/APP-BUILD-RULES.md](docs/APP-BUILD-RULES.md) FIRST
+
+**Every new session follows the App Build Rules.** That file is the consolidated statement of every
+build rule, engineering principle and hard-won lesson on this machine: **Part A** is general and
+applies to every app in this workspace, **Part B** is SmartPlay Caddie. It is the checklist; this
+file and [docs/ENGINEERING-PRINCIPLES.md](docs/ENGINEERING-PRINCIPLES.md) remain the authority for
+the long-form statements, and the rules file points at them rather than copying them.
+
+Read it before writing code, before proposing a fix, and before declaring anything shipped.
+
 ## Critical Path Verification Gates (Phase AO)
 
 The four end-to-end paths defined in [docs/critical-paths.md](docs/critical-paths.md)

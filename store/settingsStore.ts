@@ -221,9 +221,15 @@ interface SettingsState {
    *  2026-07-27 — the issue-report/diagnostics auto-send was SPLIT OUT to `shareDiagnostics` (below); do
    *  NOT re-bundle PII onto this course-map toggle. */
   shareCommunityData: boolean;
-  /** 2026-07-26 (deep audit S3) — SEPARATE consent for auto-sending your issue reports, which include
-   *  your EMAIL + app diagnostics — split out of shareCommunityData so PII no longer rides the
-   *  "share course maps" toggle silently. Gates issueLogExport's auto-POST only. */
+  /** 2026-07-26 (deep audit S3) — SEPARATE consent for auto-sending your issue reports — split out of
+   *  shareCommunityData so PII no longer rides the "share course maps" toggle silently. Gates
+   *  issueLogExport's auto-POST only.
+   *  2026-09-13 — this comment said the auto-send "includes your EMAIL". It did when it was written;
+   *  it has not since the automatic path was made anonymous (random install id, never the address —
+   *  `__tests__/regression/an-automatic-send-is-anonymous.test.ts`). The MANUAL export still carries
+   *  the email deliberately: there the player is composing the message, so the act is the consent.
+   *  The privacy policy is written off this distinction, so a reader who trusted the old line would
+   *  have described the wrong product. [[a-stale-header-is-a-source-someone-trusts]] */
   shareDiagnostics: boolean;
   // 2026-05-17 — Phase 413 — Health Connect just-in-time permission
   // marker. Set to true the first time we ask (whether granted or

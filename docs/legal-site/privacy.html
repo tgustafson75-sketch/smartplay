@@ -45,7 +45,7 @@
 <body>
 <main>
 <h1>SmartPlay Caddie — Privacy Policy</h1>
-<p class="dates"><strong>Effective date:</strong> September 3, 2026 &nbsp;·&nbsp; <strong>Last updated:</strong> September 3, 2026</p>
+<p class="dates"><strong>Effective date:</strong> September 3, 2026 &nbsp;·&nbsp; <strong>Last updated:</strong> September 13, 2026</p>
 
 <h2>1. Who we are</h2>
 <p>SmartPlay Caddie ("the App", "we", "us") is a golf companion mobile application operated by <strong>SmartPlay AI LLC</strong>, 29003 Navigator Way, Menifee, CA 92585. You can contact us at <a href="mailto:support@smartplaycaddie.com">support@smartplaycaddie.com</a> for any privacy-related question, request, or complaint.</p>
@@ -63,10 +63,11 @@
 <tr><td><strong>Video</strong></td><td>Camera capture during swing recording, lie analysis, and SmartFinder</td><td>Swing analysis, lie and turf analysis, on-course distance assistance</td><td>Only while you are actively in those features; videos save locally to your device unless you choose to upload</td></tr>
 <tr><td><strong>Round data</strong></td><td>Shot-by-shot history, per-club statistics, scoring, hole-by-hole performance</td><td>Generate your scorecard, recap, and long-term trends</td><td>Created during rounds you start in the App</td></tr>
 <tr><td><strong>Practice data</strong></td><td>Practice session results, swing analyses, drill recommendations</td><td>Track practice performance and detect patterns over time</td><td>Created when you use the practice and swing-analysis features</td></tr>
-<tr><td><strong>Health &amp; fitness (Android only)</strong></td><td>Step count, distance walked, average and maximum heart rate, and active calories for the duration of a round, read from Health Connect</td><td>Show you what the round cost you physically in your post-round recap, and let your caddie mention it when he walks you through the round</td><td>Android only, only if you grant Health Connect access and leave Health Data on in Settings, and only for the window between the start and end of a round you played in the App. We never read your health data outside a round.</td></tr>
 <tr><td><strong>Backup identifier</strong></td><td>An email address and a passphrase you choose, used only in hashed form</td><td>Identify your backup so you can restore it on a new device</td><td>Only if you turn on optional cloud backup</td></tr>
 <tr><td><strong>Device data</strong></td><td>Operating system, app version, device model, language, timezone</td><td>Diagnostic context for crash reports and feature compatibility</td><td>At app start and on crash</td></tr>
 <tr><td><strong>Crash and diagnostic data</strong></td><td>Stack traces and breadcrumb logs</td><td>Debugging and stability</td><td>When a crash or error occurs</td></tr>
+<tr><td><strong>Issue reports and round traces</strong></td><td>Error entries, notes you write in the in-app issue log, and a technical timeline of a round (which features ran, what resolved, what failed). Identified by a random install identifier &mdash; not your name or email.</td><td>Finding and fixing bugs we cannot reproduce</td><td>While &ldquo;Auto-send my issue reports&rdquo; is on in Settings. You can turn it off at any time.</td></tr>
+<tr><td><strong>Course map data</strong></td><td>Tee, green and hole coordinates for courses you play. No personal data, and nothing about your round or your scores.</td><td>Building the shared course database so unmapped courses work for everyone</td><td>While &ldquo;Share course maps&rdquo; is on in Settings. You can turn it off at any time.</td></tr>
 </table>
 </div>
 
@@ -84,7 +85,7 @@
 <tr><th>Where</th><th>What's stored</th><th>How long</th></tr>
 <tr><td><strong>On your device</strong></td><td>All profile data, round history, practice history, and swing videos saved locally</td><td>Until you uninstall the App or clear app data; you can also delete specific items in-app</td></tr>
 <tr><td><strong>Our backend (Vercel-hosted serverless API)</strong></td><td>Transient request and response state for AI features. Logs may include redacted timing data and error messages</td><td>API request logs ≤ 30 days; no user content beyond the duration of the request</td></tr>
-<tr><td><strong>Cloud backup (optional, opt-in)</strong></td><td>If you turn on cloud backup, a snapshot of your on-device data (rounds, practice history, settings) is stored in our Supabase database. Because health readings are attached to the round they were measured during, a round’s step, distance, heart-rate and calorie figures are included in that snapshot. Turning off Health Data in Settings stops new readings being attached; deleting a round removes its readings from the next backup</td><td>Until you overwrite it with a newer backup or ask us to delete it</td></tr>
+<tr><td><strong>Cloud backup (optional, opt-in)</strong></td><td>If you turn on cloud backup, a snapshot of your on-device data (rounds, practice history, settings) is stored in our Supabase database</td><td>Until you overwrite it with a newer backup or ask us to delete it</td></tr>
 <tr><td><strong>Third-party processors (see §4)</strong></td><td>Your audio, video, or text is sent to the relevant provider only for the duration of the request</td><td>Processor retention varies; see §4</td></tr>
 </table>
 </div>
@@ -97,8 +98,9 @@
 <table>
 <tr><th>Provider</th><th>What we send</th><th>Purpose</th><th>Retention by provider</th></tr>
 <tr><td><strong>Anthropic</strong> (<a href="https://www.anthropic.com/legal/privacy">privacy</a>)</td><td>Voice query transcripts, swing and lie context</td><td>Generate caddie, coaching, and conversational responses</td><td>Not used for training on API data; logs retained ≤ 30 days</td></tr>
-<tr><td><strong>OpenAI</strong> (<a href="https://openai.com/policies/privacy-policy/">privacy</a>)</td><td>Voice transcription audio, text-to-speech text, hole overhead images</td><td>Speech-to-text, text-to-speech, vision-based hole reads</td><td>Not used for training on API data; logs retained ≤ 30 days</td></tr>
-<tr><td><strong>ElevenLabs</strong> (<a href="https://elevenlabs.io/privacy">privacy</a>)</td><td>Text to be synthesised as speech</td><td>Caddie voice synthesis</td><td>Per ElevenLabs API policy</td></tr>
+<tr><td><strong>OpenAI</strong> (<a href="https://openai.com/enterprise-privacy">privacy</a>)</td><td>Text to be spoken aloud, hole overhead images, and swing or lie images when Gemini is unavailable</td><td>Text-to-speech, and vision-based hole, lie and swing reads</td><td>Not used for training on API data; logs retained ≤ 30 days</td></tr>
+<tr><td><strong>Deepgram</strong></td><td>Recordings of your spoken queries to the caddie</td><td>Speech-to-text — turning what you say into the text your caddie answers</td><td>Per Deepgram&rsquo;s API terms; the recording is not retained by us after transcription</td></tr>
+<tr><td><strong>Google (Gemini)</strong> (<a href="https://ai.google.dev/gemini-api/terms">terms</a>)</td><td>Swing, lie, putting and scorecard images, and the text sent with them</td><td>Vision analysis for lie reads, putting reads and scorecard import — Gemini is tried first on these, with OpenAI as the fallback</td><td>Per Google&rsquo;s Gemini API terms; not used for training on API data</td></tr>
 <tr><td><strong>Mapbox</strong> (<a href="https://www.mapbox.com/legal/privacy">privacy</a>)</td><td>Hole bounding-box coordinates and zoom requests</td><td>Satellite imagery and static map tiles</td><td>Mapbox-side request logs</td></tr>
 <tr><td><strong>Google (Maps Platform)</strong> (<a href="https://policies.google.com/privacy">privacy</a>)</td><td>Course search queries and coordinates</td><td>Course discovery and place lookup</td><td>Per Google Maps Platform terms</td></tr>
 <tr><td><strong>golfcourseapi.com</strong></td><td>Course identifiers and queries</td><td>Course information, hole geometry, tee and green coordinates</td><td>Per provider policy</td></tr>
@@ -147,7 +149,6 @@
 <li><strong>Microphone</strong> — voice queries to your caddie and practice-session strike detection.</li>
 <li><strong>Camera</strong> — swing recording, lie analysis, and SmartFinder distance assistance.</li>
 <li><strong>Location (when in use, and in the background during an active round)</strong> — find courses, compute yardages, and detect hole transitions while your phone is in your pocket. Background location is used only while a round is in progress and stops when the round ends.</li>
-<li><strong>Health Connect (Android only)</strong> — read step count, distance, heart rate, and active calories for a round you played, so your recap can show what the walk cost you. Read-only: we never write anything back to Health Connect, and we never share this data with a third party or use it for advertising.</li>
 <li><strong>Photo library</strong> — save your swing videos and round share-cards.</li>
 <li><strong>Bluetooth media-key access</strong> — earbud tap to engage your caddie hands-free.</li>
 </ul>

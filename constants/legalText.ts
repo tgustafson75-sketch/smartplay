@@ -10,6 +10,27 @@
  */
 
 /**
+ * 2026-09-13 — RECONCILED against the published policy. One document lives in four files
+ * (`docs/legal-site/privacy-embed.html`, `docs/legal-site/privacy.html`, `docs/privacy-policy.html`,
+ * and this constant), and only the published copies had been kept current. This one was two
+ * disclosures SHORT and one disclosure LONG:
+ *
+ *  - MISSING: issue reports / round traces and course map data. Both `shareDiagnostics` and
+ *    `shareCommunityData` DEFAULT TO TRUE, so the default install sends both — and the document the
+ *    player accepts at onboarding named neither. The site disclosed them on 09-12; this did not.
+ *  - STALE: health & fitness. The permissions came out for 1.0 (`HEALTH_CONNECT_ENABLED === false`,
+ *    no `android.permission.health.*` in app.json), so this copy described a collection the binary
+ *    cannot perform. Removed here and from §7.
+ *  - Toggle names were wrong in EVERY copy, published ones included: the policy said "Share
+ *    diagnostics" / "Share community data" — the store keys. The labels a player can actually find
+ *    in Settings are "Auto-send my issue reports" and "Share course maps" (i18n
+ *    `settings.label.auto_send_my_issue_reports` / `settings.label.share_course_maps`). A policy that
+ *    names a control the player cannot find is not an opt-out.
+ *
+ * The automatic issue send is anonymous (install id, never the email — see
+ * `__tests__/regression/an-automatic-send-is-anonymous.test.ts`); the MANUAL export keeps the email
+ * deliberately, because there the player is composing the message. The disclosure says so.
+ *
  * 2026-09-03 — the PRIVACY POLICY changed today and now carries its own September 3 date below:
  * health & fitness data was disclosed for the first time (Phase 413 has been reading Steps,
  * Distance, HeartRate and ActiveCaloriesBurned from Health Connect since May without a word of it
@@ -237,7 +258,7 @@ Questions regarding these Terms may be directed to the contact information above
 
 export const PRIVACY_POLICY = `# SmartPlay Caddie Privacy Policy
 
-**Effective Date:** September 3, 2026
+**Effective Date:** September 3, 2026 · **Last updated:** September 13, 2026
 
 SmartPlay Caddie ("the App", "we", "us") is a golf companion mobile application operated by SmartPlay AI LLC, 29003 Navigator Way, Menifee, CA 92585. You can contact us at **support@smartplaycaddie.com** for any privacy-related question, request, or complaint.
 
@@ -253,8 +274,9 @@ We collect the minimum needed to make each feature work, and we tell you in the 
 * **Audio (practice / swing)** — microphone capture during practice sessions, for acoustic strike detection and estimation. Only while a session is recording.
 * **Video** — camera capture during swing recording, lie analysis, and SmartFinder. Videos save locally to your device unless you choose to upload.
 * **Round & practice data** — shot history, per-club stats, scoring, swing analyses. Used to generate your scorecard, recap, and trends.
-* **Health & fitness (Android only)** — step count, distance walked, average and maximum heart rate, and active calories for the duration of a round, read from Health Connect. Used to show what the round cost you physically in your recap and to let your caddie mention it. Only with your Health Connect grant and the Health Data toggle on, and only for the window of a round you played. Read-only, never shared, never used for advertising.
 * **Device & crash data** — OS, app version, device model, language, timezone, and (when enabled) crash logs, for diagnostics.
+* **Issue reports and round traces** — error entries, notes you write in the in-app issue log, and a technical timeline of a round (which features ran, what resolved, what failed). Identified by a random install identifier, not your name or email. Used to find and fix bugs we cannot reproduce, while “Auto-send my issue reports” is on in Settings. You can turn it off at any time.
+* **Course map data** — tee, green and hole coordinates for courses you play. No personal data, and nothing about your round or your scores. Used to build the shared course database so unmapped courses work for everyone, while “Share course maps” is on in Settings. You can turn it off at any time.
 
 ### What we do NOT collect
 
@@ -276,10 +298,12 @@ We send data to the following providers solely to deliver the feature you reques
 * **OpenAI** — voice text-to-speech, and vision-based hole/lie reads. Does not train on API data.
 * **Anthropic** — caddie / coaching responses. Does not train on API data.
 * **Deepgram** — speech-to-text transcription of your voice queries.
-* **Google (Gemini)** — vision analysis fallback for some image reads.
+* **Google (Gemini)** — vision analysis of swing, lie, putting and scorecard images. Tried first on those reads, with OpenAI as the fallback.
 * **Mapbox** — satellite imagery and static map tiles.
 * **Golf Course API** — course information, hole geometry, tee/green coordinates.
 * **Vercel** — hosting of our backend.
+* **Sentry** — crash stack traces, breadcrumb logs, device and app version, for stability diagnostics.
+* **Google (Maps Platform)** — course search queries and coordinates, for course discovery.
 * **Supabase** — storage for optional, opt-in encrypted cloud backup.
 * **Apple App Store / Google Play** — app distribution and, where applicable, subscription billing.
 
@@ -309,7 +333,6 @@ The App requests these device permissions, each with a specific reason shown in 
 * **Camera** — swing recording, lie analysis, SmartFinder distance assistance.
 * **Location (while in use)** — find courses, compute yardages, detect hole transitions.
 * **Location (background)** — only if you enable it, so yardages keep updating with your screen off during a round.
-* **Health Connect (Android only)** — read steps, distance, heart rate, and active calories for a round, so your recap can show the walk. Read-only; we never write back.
 * **Photos** — save your hero-moment shots and share-cards.
 * **Bluetooth** — earbud / glasses tap-to-engage the caddie.
 

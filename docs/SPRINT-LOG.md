@@ -3500,3 +3500,79 @@ guards live only there.**
 - `feelCaptureService` remains owner-only cage tooling whose own header calls feel-vs-real "a future
   feature". Today's work answers that question from BIOMECH; the clip-narration-vs-analysis pairing
   it was built for is still parked.
+
+---
+
+## Day N+6 — 2026-09-13 (second session) — the document nobody owned
+
+Started as a documentation review — Tim asked to see the project's docs and rules — and the read
+produced the finding. The site repo's README claims its legal pages inline the app repo's fragments
+*verbatim, so the site and the app cannot drift apart*. They had drifted, and the stale copy was the
+one in the source-of-truth position.
+
+Full narrative: `~/Desktop/SmartPlay-Project-Files/handoffs/2026-09-13-legal-single-source-of-truth.md`.
+
+### Shipped today
+
+**The privacy policy, reconciled to one document across four files** —
+`docs/legal-site/privacy-embed.html`, `docs/legal-site/privacy.html`, `docs/privacy-policy.html`,
+`constants/legalText.ts`, plus the site page in `~/smartplaycaddie`. Six findings:
+
+1. **Health, over-disclosed.** Four copies described reading steps / distance / heart rate / calories
+   from Health Connect. The 1.0 binary declares no `android.permission.health.*`, ships no plugin, and
+   `HEALTH_CONNECT_ENABLED === false`. The live site was corrected 09-12; nothing in the repo was.
+2. **Two default-ON consents, under-disclosed.** `shareDiagnostics` and `shareCommunityData` both
+   default `true`, so the default install sends issue reports, round traces and course coordinates
+   from first launch. The published policy disclosed both on 09-12; the **in-app** policy — rendered by
+   `app/legal.tsx`, reached from the welcome screen, the document a player *accepts* — named neither.
+3. **An opt-out pointing at nothing.** Every copy including the live one cited *"Share diagnostics"* /
+   *"Share community data"* — the store keys. The labels on screen are "Auto-send my issue reports"
+   and "Share course maps". Fixed in the live text too, so the site was republished.
+4. **A processor list describing a different product.** Named **ElevenLabs** (path deleted 06-04, no
+   key, no network call); omitted **Deepgram** (production STT since 06-22, receives every voice
+   query) and **Gemini** (tried *first* by `api/lie-analysis`, `api/putting-analysis`,
+   `api/course-import` with swing / lie / scorecard images); credited OpenAI with speech-to-text.
+   In-app called Gemini a "fallback" and omitted Sentry and Maps Platform.
+5. **A stale comment.** `settingsStore.ts` said the automatic issue send "includes your EMAIL" — true
+   when written, false since the automatic path became anonymous (install id;
+   `an-automatic-send-is-anonymous.test.ts`). The manual export still carries it deliberately.
+
+Method worth keeping: the live fragment was **extracted and proved** — rebuilt into a full page and
+compared byte-for-byte with the file serving smartplaycaddie.com — before being written into the repo.
+No paragraph of a legal document was retyped. Every subsequent edit asserted a count of exactly 1.
+
+**Six new guards in `run-sim.ts`, all break-tested** (defect reintroduced → guard fails with the right
+message → defect removed): disclosure-matches-manifest **both directions**; the backup paragraph under
+the same premise; every default-ON consent in every copy; a cited Settings control the player can find;
+the processor list answering to the code (three directions — retired vendor re-disclosed, live vendor
+missing, disclosed vendor's marker gone); and the three published copies being the same document line
+for line. **9 of 9 caught.** Two liveness markers initially pointed at filenames I had guessed rather
+than grepped, and failed for that reason first.
+
+**`docs/APP-BUILD-RULES.md`** — new, at Tim's request. Rule 1: every new session follows it. Part A is
+general build principles for every app in the workspace (ship-green and what green means, guard
+discipline, don't-trust-your-first-assumption, anti-bandaid, one owner per fact, orphans, reachability,
+honesty, money/machine discipline, repo-as-memory, working with Tim); Part B is Caddie. `CLAUDE.md` now
+opens by pointing at it — a rules file no session reads is the same defect class as a policy no current
+copy of which exists.
+
+### Verified
+
+`tsc` clean · `jest` **4383/4383 (373 suites)** · sim **1027/1027**. Site republished and the live URL
+re-read.
+
+**NOT verified on device** (no native or UI change; the in-app policy screen is text only).
+
+### Open / carried
+
+- **Lint is red at HEAD and was before today:** 76 errors, essentially all the project's own
+  `i18n/no-hardcoded-jsx-text` rule (tracked in `docs/I18N-AUDIT.md`). Identical count with the working
+  tree stashed. CLAUDE.md says lint must pass; it does not, and a gate everyone steps over protects
+  nothing. Tim's call: clear the backlog, or drop the rule to `warn` and track it. Written up as
+  `APP-BUILD-RULES.md` §B10.
+- **No re-consent mechanism.** `termsAcceptedAt` is never compared against the policy date, so the
+  09-13 update does not re-prompt anyone who already accepted. Product/legal call, unchanged.
+- A privacy attorney has still never reviewed the policy — as the policy itself says.
+- Everything carried from the earlier 09-13 session stands: `workoutPerformance`,
+  `workoutSwingImpact`, `pointsPerformance`, `preRoundFactors`, `handicapCalculator` screen-only; the
+  off-round deflection; **and the mental-game leg, which is next.**

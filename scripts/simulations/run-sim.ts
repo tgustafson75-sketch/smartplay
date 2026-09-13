@@ -15052,19 +15052,40 @@ check(
   ];
   const policies = POLICY_FILES.map((f) => ({ file: f, text: read(f) }));
   const published = policies.map((x) => x.text).join('\n');
-  const missingHealth = policies.filter((x) => !/Health Connect/.test(x.text) || !/Health &amp; fitness/.test(x.text));
   const staleCage = policies.filter((x) => /\bcage\b/i.test(x.text));
-  const inApp = read('constants/legalText.ts');
+  /**
+   * COMMENT-BLIND on purpose. The entry at the top of legalText.ts that EXPLAINS this reconciliation
+   * names every phrase the checks below forbid, so reading the raw file would let the explanation
+   * certify the defect it describes. [[my-own-comment-defeats-my-own-guard]]
+   */
+  const inAppText = readCode('constants/legalText.ts');
+  const ALL_COPIES = [...POLICY_FILES, 'constants/legalText.ts'];
+  const surfaces = [...policies, { file: 'constants/legalText.ts', text: inAppText }];
+
+  /**
+   * 2026-09-13 — IF AND ONLY IF, in both directions.
+   *
+   * This guard used to open with `healthPerms.length === 0 ||`, which reads as "nothing declared,
+   * nothing to check". So when the health permissions came OUT for 1.0 it stopped asserting anything
+   * at all — and all four copies of the policy went on describing step count, heart rate and active
+   * calories that the binary can no longer read. Ten days, green the whole time; the live site was
+   * only corrected because Tim asked a question about it. An over-disclosure is a false statement in
+   * a document the player ACCEPTS at onboarding, and Play's Data safety form is answered from it.
+   *
+   * A one-directional guard on a fact that can flip is half a guard.
+   * [[a-guard-can-enforce-a-stale-premise]] [[guards-by-element-not-blanket-suppression]]
+   */
+  const healthDeclared = healthPerms.length > 0 ||
+    /export const HEALTH_CONNECT_ENABLED = true;/.test(readCode('services/featureAccess.ts'));
+  const namesHealth = (t: string) =>
+    /Health Connect/.test(t) || /Health &amp; fitness/.test(t) || /Health & fitness/.test(t);
+  const naming = surfaces.filter((s) => namesHealth(s.text)).map((s) => s.file);
   check(
-    'HEALTH: every health permission we declare is disclosed in EVERY policy copy',
-    healthPerms.length === 0 ||
-      (missingHealth.length === 0 &&
-       /Health Connect/.test(inApp) && /Health & fitness/.test(inApp)),
-    healthPerms.length === 0
-      ? 'no health permissions declared, so nothing to disclose'
-      : missingHealth.length
-        ? `${healthPerms.length} health permissions declared, but these copies do not disclose them: ${missingHealth.map((x) => x.file).join(', ')}`
-        : `${healthPerms.length} health permissions declared — the in-app policy must also name Health Connect and carry a health & fitness category`,
+    'HEALTH: the disclosure matches the manifest — in BOTH directions',
+    healthDeclared ? naming.length === ALL_COPIES.length : naming.length === 0,
+    healthDeclared
+      ? `health is declared, so every copy must disclose it — silent copies: ${ALL_COPIES.filter((f) => !naming.includes(f)).join(', ') || 'none'}`
+      : `no android.permission.health.* in app.json and HEALTH_CONNECT_ENABLED is false, so no copy may describe collecting it — these still do: ${naming.join(', ') || 'none'}`,
   );
   check(
     'POLICY: no published copy still says "cage"',
@@ -15074,9 +15095,165 @@ check(
       : 'every policy copy uses the language the app actually ships',
   );
   check(
-    'HEALTH: the policy says the readings ride along in cloud backup',
-    /heart-rate/.test(published) && /included in that snapshot/.test(published),
-    'roundHistory[].health sits inside round-store-v1, which IS in BACKED_UP_STORE_KEYS — a policy that describes the backup without naming heart rate is describing a different product',
+    'HEALTH: the backup paragraph tracks whether health actually rides along',
+    healthDeclared
+      ? /heart-rate/.test(published) && /included in that snapshot/.test(published)
+      : !/heart-rate/.test(published),
+    healthDeclared
+      ? 'roundHistory[].health sits inside round-store-v1, which IS in BACKED_UP_STORE_KEYS — a policy that describes the backup without naming heart rate is describing a different product'
+      : 'nothing reads health in 1.0, so the backup paragraph must not name heart rate either — it was describing a snapshot the app cannot produce',
+  );
+
+  /**
+   * 2026-09-13 — A CONSENT THAT DEFAULTS **ON** MUST BE IN THE DOCUMENT.
+   *
+   * `shareDiagnostics` and `shareCommunityData` both default TRUE, so the default install has been
+   * sending issue reports, round traces and course coordinates since first launch. The published
+   * policy disclosed both on 09-12. The IN-APP policy — the document a player accepts on the welcome
+   * screen — named NEITHER, and nothing was watching the gap: the only policy guard here was about
+   * health, and health was the one category that had been removed.
+   *
+   * Under-disclosure of a default-ON send is the shape that fails a store review, and it is the
+   * opposite direction from the health defect above. Both came from the same root: one document
+   * living in four files, with a guard pointed at one fact.
+   * [[a-toggle-that-does-nothing-for-the-default-user]] [[two-owners-is-the-root-cause]]
+   */
+  const settingsSrc = readCode('store/settingsStore.ts');
+  const DEFAULT_ON_SENDS = [
+    { flag: 'shareDiagnostics', must: [/issue reports?/i, /round trace/i] },
+    { flag: 'shareCommunityData', must: [/course map/i] },
+  ];
+  const undisclosed: string[] = [];
+  for (const s of DEFAULT_ON_SENDS) {
+    if (!new RegExp(`${s.flag}:\\s*true`).test(settingsSrc)) continue;
+    for (const surface of surfaces) {
+      if (!s.must.every((re) => re.test(surface.text))) undisclosed.push(`${s.flag} → ${surface.file}`);
+    }
+  }
+  check(
+    'POLICY: every consent that DEFAULTS ON is disclosed in every copy, the in-app one included',
+    undisclosed.length === 0,
+    undisclosed.length
+      ? `a default-ON send the player was never told about: ${undisclosed.join(', ')}`
+      : 'the document the player accepts names everything the default install sends',
+  );
+
+  /**
+   * 2026-09-13 — A CONTROL THE POLICY NAMES IS A CONTROL THE PLAYER CAN FIND.
+   *
+   * Every copy, the live site included, told the player their opt-out was "Share diagnostics" or
+   * "Share community data". Those are the STORE KEYS. The labels in Settings read "Auto-send my issue
+   * reports" and "Share course maps", so the sentence explaining how to switch it off pointed at
+   * nothing on the screen. An opt-out you cannot locate is not an opt-out, and this is the half that
+   * a disclosure guard checking only for the WORDS would have certified.
+   * [[feedback-reachable-not-just-wired]]
+   */
+  const enValues = new Set<string>();
+  (function walk(o: unknown): void {
+    if (typeof o === 'string') { enValues.add(o); return; }
+    if (o && typeof o === 'object') Object.values(o as Record<string, unknown>).forEach(walk);
+  })(enLocale);
+  const cited = [
+    ...[...published.matchAll(/&ldquo;([^&]{3,60})&rdquo; is on in Settings/g)].map((m) => m[1]),
+    ...[...inAppText.matchAll(/[“"]([^”"]{3,60})[”"] is on in Settings/g)].map((m) => m[1]),
+  ];
+  const phantom = [...new Set(cited)].filter((label) => !enValues.has(label));
+  check(
+    'POLICY: a Settings control the policy names is one the player can actually find',
+    cited.length >= DEFAULT_ON_SENDS.length && phantom.length === 0,
+    cited.length < DEFAULT_ON_SENDS.length
+      ? `each default-ON consent must name its own control — found ${cited.length} citations for ${DEFAULT_ON_SENDS.length} consents`
+      : phantom.length
+        ? `the policy sends the player looking for a control that is not in Settings: ${phantom.join(', ')}`
+        : `${cited.length} cited controls, all of them real Settings labels`,
+  );
+
+  /**
+   * 2026-09-13 — A PROCESSOR LIST IS A CLAIM ABOUT THE CODE.
+   *
+   * §4 named ElevenLabs, whose path was deleted on 2026-06-04 — no key, no network call, nothing to
+   * send. It did NOT name Deepgram, which replaced Whisper as the production STT on 2026-06-22 and
+   * receives every voice query, and it did NOT name Gemini, which `api/lie-analysis`,
+   * `api/putting-analysis` and `api/course-import` try FIRST with the player's swing, lie and
+   * scorecard images. The OpenAI row still claimed speech-to-text. So the document told a player
+   * their voice went to a vendor that no longer exists, and said nothing about the two that actually
+   * receive their audio and their photographs.
+   *
+   * Prose guards cannot catch this: the sentences were all well-formed. What catches it is making the
+   * list answer to the code — every disclosed vendor needs a live marker, and every live vendor has
+   * to appear in BOTH documents.
+   * [[a-stale-header-is-a-source-someone-trusts]] [[two-owners-is-the-root-cause]]
+   */
+  const PROCESSORS: { name: string; inApp: RegExp; live: () => boolean }[] = [
+    { name: 'Anthropic', inApp: /\*\*Anthropic\*\*/, live: () => /"@anthropic-ai\/sdk"/.test(read('package.json')) },
+    { name: 'OpenAI', inApp: /\*\*OpenAI\*\*/, live: () => /new OpenAI\(/.test(readCode('api/voice.ts')) },
+    { name: 'Deepgram', inApp: /\*\*Deepgram\*\*/, live: () => /api\.deepgram\.com/.test(readCode('api/transcribe.ts')) },
+    { name: 'Google (Gemini)', inApp: /\*\*Google \(Gemini\)\*\*/, live: () => /'gemini'/.test(readCode('api/lie-analysis.ts')) },
+    { name: 'Google (Maps Platform)', inApp: /\*\*Google \(Maps Platform\)\*\*/, live: () => /places\.googleapis\.com|maps\.googleapis\.com/.test(readCode('api/course-places.ts')) },
+    { name: 'Mapbox', inApp: /\*\*Mapbox\*\*/, live: () => /api\.mapbox\.com/.test(readCode('services/mapboxImagery.ts')) },
+    { name: 'Supabase', inApp: /\*\*Supabase\*\*/, live: () => /"@supabase\/supabase-js"/.test(read('package.json')) },
+    { name: 'Sentry', inApp: /\*\*Sentry\*\*/, live: () => /sentry/i.test(read('package.json')) },
+    { name: 'Vercel', inApp: /\*\*Vercel\*\*/, live: () => true },
+  ];
+  const processorSection = (() => {
+    const t = policies[0].text;
+    const start = t.indexOf('Third-party processors (sub-processors)');
+    const end = t.indexOf('Your rights', start);
+    return start < 0 || end < 0 ? '' : t.slice(start, end);
+  })();
+  const RETIRED = ['ElevenLabs'];
+  const processorProblems: string[] = [];
+  if (!processorSection) processorProblems.push('could not locate §4 in the policy — this guard was reading nothing');
+  for (const proc of PROCESSORS) {
+    if (!proc.live()) { processorProblems.push(`${proc.name}: disclosed but its live marker is gone from the code`); continue; }
+    for (const s of surfaces) {
+      const named = s.file.endsWith('.ts') ? proc.inApp.test(s.text) : s.text.includes(proc.name);
+      if (!named) processorProblems.push(`${proc.name}: live, but ${s.file} does not name it`);
+    }
+  }
+  for (const gone of RETIRED) {
+    const still = surfaces.filter((s) => s.text.includes(gone)).map((s) => s.file);
+    if (still.length) processorProblems.push(`${gone} was removed from the app but is still disclosed in: ${still.join(', ')}`);
+  }
+  check(
+    'POLICY: the processor list answers to the code, in both directions',
+    processorProblems.length === 0,
+    processorProblems.length
+      ? processorProblems.join(' | ')
+      : `${PROCESSORS.length} processors, each live in code and named in all ${surfaces.length} copies`,
+  );
+
+  /**
+   * 2026-09-13 — ONE DOCUMENT, THREE FILES IN THIS REPO.
+   *
+   * The 09-03 comment above says three files holding one document is the defect. It then guarded them
+   * phrase by phrase, which catches the phrases someone thought of and nothing else: the 09-12 site
+   * edit added two whole data categories and moved the date, and no copy in this repo heard about it
+   * for a day. Comparing the BODIES makes the drift itself fail, whatever it is about.
+   * [[no-half-fixes-enforce-every-surface]] [[state-what-you-measured-not-what-you-intended]]
+   */
+  const policyBody = (html: string): string => {
+    const lines = html
+      .replace(/<style>[\s\S]*?<\/style>/g, '')
+      .replace(/<script>[\s\S]*?<\/script>/g, '')
+      .replace(/<[^>]*>/g, '\n')
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
+    const start = lines.indexOf('SmartPlay Caddie — Privacy Policy');
+    const end = lines.findIndex((l) => l.startsWith('SmartPlay AI LLC · SmartPlay Caddie'));
+    return start < 0 || end < 0 ? '' : lines.slice(start, end + 1).join('\n');
+  };
+  const bodies = policies.map((x) => ({ file: x.file, body: policyBody(x.text) }));
+  const divergent = bodies.filter((b) => b.body !== bodies[0].body).map((b) => b.file);
+  check(
+    'POLICY: the published copies are the SAME document, line for line',
+    bodies[0].body.length > 4000 && divergent.length === 0,
+    bodies[0].body.length <= 4000
+      ? `could not read a policy body out of ${bodies[0].file} — the H1 or the footer moved, so this guard was comparing nothing`
+      : divergent.length
+        ? `these have drifted from ${bodies[0].file}: ${divergent.join(', ')}`
+        : `one document, ${bodies.length} files, identical bodies (${bodies[0].body.split('\n').length} lines)`,
   );
 }
 

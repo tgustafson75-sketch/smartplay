@@ -8,6 +8,35 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+> ### ⚠️ LATEST — 2026-09-13 (second session). One document, four files, and the copy the player accepts.
+>
+> A documentation review found the privacy policy had **no owner**. The live site was ahead of the repo
+> by four changes (09-12); the **in-app** policy — `constants/legalText.ts`, rendered by
+> `app/legal.tsx`, reached from the welcome screen — was **two disclosures short** of it, and both
+> missing consents (`shareDiagnostics`, `shareCommunityData`) **DEFAULT ON**. Every copy, the live one
+> included, also pointed the player's opt-out at the store keys ("Share diagnostics") instead of the
+> labels on screen ("Auto-send my issue reports" / "Share course maps"), and §4 disclosed ElevenLabs
+> (deleted 06-04) while omitting Deepgram (production STT, every voice query) and Gemini (tried FIRST
+> on lie / putting / scorecard images).
+>
+> Now **one 244-line document across four files**, with the live fragment extracted and proved
+> byte-for-byte against smartplaycaddie.com before being written into the repo. **Six new sim guards,
+> all break-tested (9/9)** — including disclosure-matches-manifest in BOTH directions, because the old
+> guard's `healthPerms.length === 0 ||` short-circuit had stopped checking anything the moment health
+> came out for 1.0. Site republished.
+>
+> **`docs/APP-BUILD-RULES.md` is new and `CLAUDE.md` opens by pointing at it. Rule 1: every new session
+> follows it.** Part A general, Part B Caddie.
+>
+> Green: tsc, jest 4383/4383 (373 suites), sim 1027/1027. **Lint is RED at HEAD and was before today** —
+> 76 errors, all the i18n hardcoded-text rule; see APP-BUILD-RULES §B10, Tim's call.
+>
+> **Carried:** the mental-game leg is still unaudited against the conversation lens — **next**. Plus
+> `workoutPerformance`, `workoutSwingImpact`, `pointsPerformance`, `preRoundFactors`,
+> `handicapCalculator` screen-only, and the off-round deflection.
+
+---
+
 > ### ⚠️ LATEST — 2026-09-13. The day-one concept: talk to them, and they know.
 >
 > Tim reframed the sweep around the original idea — a swing coach / caddie / mental coach you TALK
