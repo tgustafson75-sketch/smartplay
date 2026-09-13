@@ -100,3 +100,54 @@ export const LISTENING_PROFILES: Record<'off' | 'on', ListeningProfile> = {
   off: { autoListenEnabled: false, continuousConversationMode: false },
   on: { autoListenEnabled: true, continuousConversationMode: true },
 };
+
+/**
+ * 2026-09-13 — THE APPLIER LIVES HERE, not in whichever screen happened to need it first.
+ *
+ * The first version of this consolidation put `applyPresence` inside app/settings.tsx as a local
+ * closure, and the Tools pill kept its own `setTrustLevel(next)` — so the two surfaces that both
+ * change presence wrote DIFFERENT amounts of it. Toggling from the pill moved the trust level and
+ * left proactive, interactive, localMode and responseMode where they were, which is the exact
+ * seven-flags-disagreeing state this file exists to end. One owner means one writer.
+ * [[two-owners-is-the-root-cause]] [[sweep-the-missing-half-not-the-unused-export]]
+ *
+ * Stores are required lazily: this service is imported by UI that the stores themselves can reach.
+ */
+export function applyPresence(level: CaddiePresence): void {
+  const p = PRESENCE_PROFILES[level];
+  try {
+    const trust = require('../store/trustLevelStore') as typeof import('../store/trustLevelStore');
+    trust.useTrustLevelStore.getState().setLevel(p.trustLevel as never);
+  } catch (e) { console.log('[presence] trust write failed:', e); }
+  try {
+    const s = require('../store/settingsStore').useSettingsStore.getState();
+    s.setProactiveKevinEnabled?.(p.proactiveKevin);
+    s.setInteractiveRound?.(p.interactiveRound);
+    s.setLocalMode?.(p.localMode);
+    s.setResponseMode?.(p.responseMode);
+  } catch (e) { console.log('[presence] settings write failed:', e); }
+}
+
+export function applyListening(on: boolean): void {
+  const l = LISTENING_PROFILES[on ? 'on' : 'off'];
+  try {
+    const s = require('../store/settingsStore').useSettingsStore.getState();
+    s.setAutoListenEnabled?.(l.autoListenEnabled);
+    s.setContinuousConversationMode?.(l.continuousConversationMode);
+  } catch (e) { console.log('[presence] listening write failed:', e); }
+}
+
+/** Read the current level from live store state — for surfaces that only need the label. */
+export function currentPresence(): CaddiePresence {
+  try {
+    const trust = require('../store/trustLevelStore').useTrustLevelStore.getState();
+    const s = require('../store/settingsStore').useSettingsStore.getState();
+    return presenceFromFlags({
+      trustLevel: trust.level,
+      proactiveKevin: !!s.proactive_kevin_enabled,
+      interactiveRound: !!s.interactiveRound,
+      localMode: !!s.localMode,
+      responseMode: String(s.responseMode ?? 'neutral'),
+    });
+  } catch { return 'balanced'; }
+}

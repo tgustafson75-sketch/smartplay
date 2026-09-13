@@ -49,7 +49,7 @@ import { Audio } from 'expo-av';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
 import { isFeatureShelved } from '../services/releaseSurface';
-import { PRESENCE_PROFILES, LISTENING_PROFILES, presenceFromFlags, type CaddiePresence } from '../services/caddiePresence';
+import { PRESENCE_PROFILES, presenceFromFlags, applyPresence as applyPresenceFlags, applyListening as applyListeningFlags, type CaddiePresence } from '../services/caddiePresence';
 /**
  * 2026-09-13 — HEALTH_CONNECT_ENABLED is false for 1.0: the health permissions came OUT of app.json
  * and the binary cannot read steps, heart rate, distance or calories. Until today this screen did
@@ -94,7 +94,6 @@ export default function Settings() {
     // 2026-05-26 — Fix AP Phase 2: Continuous Conversation.
     // 2026-09-13 — no longer a row of its own; applyListening writes it alongside autoListenEnabled
     // (services/caddiePresence), so the mic is one decision instead of two that could disagree.
-    setContinuousConversationMode,
     language,
     responseMode,
     highContrast,
@@ -114,9 +113,7 @@ export default function Settings() {
     setKevinGreetingEnabled,
     // 2026-05-30 — Fix FY: Local Mode toggle.
     localMode,
-    setLocalMode,
     setLanguage,
-    setResponseMode,
     setHighContrast,
     // PGA HOPE follow-up + re-sim — accessibility / persona-fit fields.
     largeText,
@@ -128,10 +125,8 @@ export default function Settings() {
     simpleBriefingUserTouched,
     personaIntensity,
     setPersonaIntensity,
-    setAutoListenEnabled,
     setCartMode,
     setSkipBriefings,
-    setProactiveKevinEnabled,
     setDistanceUnit,
     setThemePreference,
   } = useSettingsStore();
@@ -195,7 +190,6 @@ export default function Settings() {
   const autoHoleAdvance = useSettingsStore(s => s.autoHoleAdvance);
   const setAutoHoleAdvance = useSettingsStore(s => s.setAutoHoleAdvance);
   const interactiveRound = useSettingsStore(s => s.interactiveRound);
-  const setInteractiveRound = useSettingsStore(s => s.setInteractiveRound);
   // 2026-06-24 — Off-device data layer Phase A: usage telemetry opt-in.
   const analyticsOptIn = useSettingsStore(s => s.analyticsOptIn);
   const setAnalyticsOptIn = useSettingsStore(s => s.setAnalyticsOptIn);
@@ -207,7 +201,6 @@ export default function Settings() {
   // 2026-05-19 — trust level read inline in Round Experience instead of
   // routing to a sub-screen. Same store, same persistence.
   const trustLevel = useTrustLevelStore(s => s.level);
-  const setTrustLevel = useTrustLevelStore(s => s.setLevel);
 
   /**
    * 2026-09-13 — the two controls that replaced seven. `presence` is read back OUT of the flags so
@@ -217,19 +210,12 @@ export default function Settings() {
     trustLevel, proactiveKevin: proactive_kevin_enabled, interactiveRound, localMode, responseMode,
   });
   const applyPresence = (level: CaddiePresence) => {
-    const p = PRESENCE_PROFILES[level];
-    setTrustLevel(p.trustLevel as never);
-    setProactiveKevinEnabled(p.proactiveKevin);
-    setInteractiveRound(p.interactiveRound);
-    setLocalMode(p.localMode);
-    setResponseMode(p.responseMode);
+    applyPresenceFlags(level);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     useToastStore.getState().show(`${caddieName}'s presence: ${level}`);
   };
   const applyListening = (on: boolean) => {
-    const l = LISTENING_PROFILES[on ? 'on' : 'off'];
-    setAutoListenEnabled(l.autoListenEnabled);
-    setContinuousConversationMode(l.continuousConversationMode);
+    applyListeningFlags(on);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     useToastStore.getState().show(`Hands-free listening: ${on ? 'ON' : 'OFF'}`);
   };

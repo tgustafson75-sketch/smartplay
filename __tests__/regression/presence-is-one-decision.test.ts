@@ -81,6 +81,33 @@ describe('caddie presence is one decision', () => {
     expect(LISTENING_PROFILES.off.continuousConversationMode).toBe(false);
   });
 
+  it('the Tools pill writes presence through the SAME owner, not its own half of it', () => {
+    /**
+     * 2026-09-13 — found by reviewing the Tools menu screenshots, hours after shipping the
+     * consolidation. The pill called `setTrustLevel(next)` and nothing else, while Settings wrote
+     * five flags through services/caddiePresence — so flipping presence from the pill moved the
+     * level and left proactive, interactive, localMode and responseMode behind. The app would say
+     * "Quiet" and keep volunteering, or say "Active" while localMode silenced every unprompted
+     * line. I created that split by consolidating one surface and not sweeping for the others.
+     * [[sweep-the-missing-half-not-the-unused-export]] [[two-owners-is-the-root-cause]]
+     */
+    const menu = code('components/tools/GlobalToolsMenu.tsx');
+    expect(menu).toMatch(/applyPresence\(/);
+    expect(menu).toMatch(/applyListening\(/);
+    // No surface may write a presence flag on its own again.
+    for (const setter of ['setTrustLevel', 'setProactiveKevinEnabled', 'setInteractiveRound', 'setLocalMode', 'setResponseMode', 'setAutoListenEnabled', 'setContinuousConversationMode']) {
+      expect(menu).not.toMatch(new RegExp(`${setter}\\(`));
+    }
+  });
+
+  it('the applier lives in the service, so there is something to share', () => {
+    const svc = code('services/caddiePresence.ts');
+    expect(svc).toMatch(/export function applyPresence/);
+    expect(svc).toMatch(/export function applyListening/);
+    // Settings must delegate rather than keep a second copy of the write.
+    expect(code('app/settings.tsx')).toMatch(/applyPresenceFlags\(level\)/);
+  });
+
   it('Settings renders the two controls and none of the seven it replaced', () => {
     const s = code('app/settings.tsx');
     expect(s).toContain('applyPresence');

@@ -37,10 +37,11 @@ import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useToastStore } from '../../store/toastStore';
 import { getCaddieName, selectablePersonas, type Persona } from '../../lib/persona';
+import { applyPresence, applyListening, currentPresence, type CaddiePresence } from '../../services/caddiePresence';
 import { recalibrateGps } from '../../services/gpsManager';
 import { markGpsRefreshNow, useLastGpsRefresh, formatRefreshAge } from '../../services/lastGpsRefresh';
 import { forceMarkPosition } from '../../services/positionMarkBus';
-import { canAccess, type FeatureKey } from '../../services/featureAccess';
+import { canAccess, SUBSCRIPTIONS_ENABLED, type FeatureKey } from '../../services/featureAccess';
 import { useFlag } from '../../store/flagStore';
 import { triggerPaywall } from '../../services/paywallGuard';
 import { openYouTubeChannel } from '../../services/youtubeLinks';
@@ -57,7 +58,6 @@ export function GlobalToolsMenu() {
 
   // Trust + persona
   const trustLevel = useTrustLevelStore((s) => s.level);
-  const setTrustLevel = useTrustLevelStore((s) => s.setLevel);
   const caddiePersonality = useSettingsStore((s) => s.caddiePersonality);
   const setCaddiePersonality = useSettingsStore((s) => s.setCaddiePersonality);
   const caddieName = getCaddieName(caddiePersonality);
@@ -72,7 +72,6 @@ export function GlobalToolsMenu() {
   // menu (was previously buried in Settings, leading to Tim's "Kevin is
   // responding to my TV and I can't find the mute" report).
   const autoListenEnabled = useSettingsStore((s) => s.autoListenEnabled);
-  const setAutoListenEnabled = useSettingsStore((s) => s.setAutoListenEnabled);
   // 2026-06-04 — Coach Mode toggle moved into this central tool menu
   // (was an L4 dropdown icon + an overlay badge on Kevin's box). When
   // ON, Caddie tab + Dashboard surface the shared-session entry; when
@@ -97,18 +96,26 @@ export function GlobalToolsMenu() {
     void Promise.resolve(next()).catch((e) => console.log('[tools] action threw', e));
   };
 
-  // 2026-07-24 (Tim) — the single caddie interface toggle: Quiet (SmartVision leads) <-> Active
-  // (caddie leads). No more Cockpit/Harry. Level 1 = Quiet, 3 = Active.
+  /**
+   * 2026-07-24 (Tim) — the single caddie interface toggle: Quiet (SmartVision leads) <-> Active
+   * (caddie leads). No more Cockpit/Harry.
+   *
+   * 2026-09-13 — it used to call setTrustLevel() and nothing else, while Settings set FIVE flags
+   * through services/caddiePresence. So flipping presence from this pill moved the level and left
+   * proactive, interactive, localMode and responseMode behind — the app would say "Quiet" and keep
+   * volunteering, or say "Active" while localMode silenced every unprompted line. Presence has one
+   * writer now, and this is a caller of it. [[two-owners-is-the-root-cause]]
+   */
   const toggleQuiet = () => {
-    const next = trustLevel === 1 ? 3 : 1;
-    setTrustLevel(next);
-    useToastStore.getState().show(next === 1 ? 'Quiet — SmartVision leads' : 'Active — caddie leads');
+    const next: CaddiePresence = currentPresence() === 'quiet' ? 'balanced' : 'quiet';
+    applyPresence(next);
+    useToastStore.getState().show(next === 'quiet' ? 'Quiet — SmartVision leads' : 'Active — caddie leads');
     fire(() => undefined);
   };
 
   const cyclePersona = () => {
-    // 2026-08-07 (Tim) — Tank is owner-gated: the cycler must SKIP him when disabled (was cycling through
-    // ACTIVE_PERSONAS which always includes Tank).
+    // 2026-08-07 — the cycler reads the gated roster, never ACTIVE_PERSONAS directly.
+    // 2026-09-13 — the retired persona this comment used to name is gone from the app entirely.
     const list = selectablePersonas();
     const idx = list.indexOf(caddiePersonality as Persona);
     const next = list[(Math.max(idx, -1) + 1) % list.length];
@@ -145,9 +152,14 @@ export function GlobalToolsMenu() {
     fire(() => undefined);
   };
 
+  /**
+   * 2026-09-13 — hands-free listening is one decision (mic on + mic stays open between turns), and
+   * this wrote only the first half while Settings wrote both. [[two-owners-is-the-root-cause]]
+   */
   const toggleActiveListening = () => {
-    setAutoListenEnabled(!autoListenEnabled);
-    useToastStore.getState().show(autoListenEnabled ? 'Active Listening off' : 'Active Listening on');
+    const next = !autoListenEnabled;
+    applyListening(next);
+    useToastStore.getState().show(next ? 'Hands-free listening on' : 'Hands-free listening off');
     fire(() => undefined);
   };
 
@@ -226,14 +238,19 @@ export function GlobalToolsMenu() {
             {/* 2026-07-24 (Tim) — ONE toggle: Quiet (SmartVision leads, caddie quiet) <-> Active
                 (caddie leads + volunteers). Replaces the old Presence-cycler + Cockpit/Harry rows. */}
             <Row
-              icon={trustLevel === 1 ? 'map-outline' : 'mic-outline'}
+              // 2026-09-13 — 'mic-outline' here collided with the Active Listening row two rows
+              // below, so the same glyph meant "the caddie leads" in one place and "the mic is hot"
+              // in another. Presence is about talking, not listening.
+              icon={trustLevel === 1 ? 'map-outline' : 'chatbubbles-outline'}
               label={trustLevel === 1 ? 'Quiet · SmartVision leads' : 'Active · caddie leads'}
               sub={trustLevel === 1 ? `Tap → let ${caddieName} lead` : 'Tap → quiet, map-first'}
               onPress={toggleQuiet}
               colors={colors}
             />
             <Row
-              icon="people-outline"
+              // 2026-09-13 — was the same 'people' glyph Shared Sessions uses. One caddie is a
+              // person; a shared session is people.
+              icon="person-circle-outline"
               label={`Caddie: ${caddieName}`}
               sub="Tap to switch personas"
               onPress={cyclePersona}
@@ -360,7 +377,10 @@ export function GlobalToolsMenu() {
                 L4 row / voice). One menu, every tool. */}
 {flagLieAnalysis && (
             <Row
-              icon="fitness-outline"
+              // 2026-09-13 — was fitness-outline, a heart-rate trace, on a row that says
+              // "Photo your lie". The icon is the fastest thing read in a list; it should not
+              // describe a different feature.
+              icon="camera-outline"
               label={t('tools_global_tools_menu.label.tightlie')}
               sub="Photo your lie · how to play it"
               onPress={() => nav('/lie-analysis')}
@@ -372,7 +392,8 @@ export function GlobalToolsMenu() {
                 one tag there). Honest label until a dedicated putting lab exists. */}
 {flagSwingAnalysis && (
             <Row
-              icon="golf-outline"
+              // 2026-09-13 — shared SwingLab's flag icon two rows apart; this one is a video upload.
+              icon="cloud-upload-outline"
               label={t('tools_global_tools_menu.label.upload_a_swing_or_putt')}
               sub="Video upload · swing + putt analysis"
               onPress={() => nav('/swinglab/upload')}
@@ -393,7 +414,10 @@ export function GlobalToolsMenu() {
               sub={coachModeEnabled ? 'On — shared sessions visible' : 'Off — tap to enable shared sessions'}
               onPress={() => fire(() => {
                 setCoachModeEnabled(!coachModeEnabled);
-                useToastStore.getState().show(coachModeEnabled ? 'Coach Mode off' : 'Coach Mode on');
+                // 2026-09-13 — the row was renamed to "Shared Sessions" in July precisely because
+                // "Coach Mode" is the SwingLab screen's name, and the toast kept saying the old
+                // name — so the confirmation contradicted the row that fired it.
+                useToastStore.getState().show(coachModeEnabled ? 'Shared Sessions off' : 'Shared Sessions on');
               })}
               colors={colors}
             />
@@ -421,7 +445,18 @@ export function GlobalToolsMenu() {
             <Row
               icon="gift-outline"
               label={t('tools_global_tools_menu.label.invite_a_friend')}
-              sub="Send a friend the app — you get 30 days when they play"
+              /**
+               * 2026-09-13 — THE MENU PROMISED WHAT THE DESTINATION SCREEN REFUSES TO PROMISE.
+               *
+               * app/invite.tsx deliberately says "you BANK 30 days" while SUBSCRIPTIONS_ENABLED is
+               * false, and says why: 1.0 ships with the paywall off, so "you GET 30 days of Pro"
+               * describes a reward against a period the player already has for free. This row said
+               * exactly the sentence that screen went out of its way to avoid. Same flag, same
+               * wording, so the two cannot drift again. [[two-owners-is-the-root-cause]]
+               */
+              sub={SUBSCRIPTIONS_ENABLED
+                ? 'Send a friend the app — you get 30 days when they play'
+                : 'Send a friend the app — you bank 30 days of Pro when they play'}
               onPress={() => nav('/invite')}
               colors={colors}
             />

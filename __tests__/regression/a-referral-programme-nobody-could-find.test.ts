@@ -30,6 +30,18 @@ describe('the invite screen is reachable from Tools', () => {
     expect(MENU).toMatch(/30 days when they play/);
   });
 
+  it('...and says GET or BANK exactly as the invite screen does', () => {
+    /**
+     * 2026-09-13 — the row promised "you get 30 days" flat, while app/invite.tsx deliberately says
+     * "bank" until SUBSCRIPTIONS_ENABLED, because 1.0 ships paywall-off and "get" describes a
+     * reward against a period the player already has free. The menu was promising what the
+     * destination refuses to promise. One flag drives both. [[two-owners-is-the-root-cause]]
+     */
+    expect(MENU).toMatch(/SUBSCRIPTIONS_ENABLED/);
+    expect(MENU).toMatch(/bank 30 days of Pro/);
+    expect(code('app/invite.tsx')).toMatch(/SUBSCRIPTIONS_ENABLED/);
+  });
+
   it('it is still reachable from Settings too — Tools is an ADDITION, not a move', () => {
     expect(code('app/settings.tsx')).toMatch(/router\.push\('\/invite' as never\)/);
   });
