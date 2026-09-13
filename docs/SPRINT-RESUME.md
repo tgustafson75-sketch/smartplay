@@ -8,6 +8,46 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+> ### ⚠️ LATEST — 2026-09-13 (fifth session). The dashboard's last four, lint to ZERO, and a release audit.
+>
+> **The release gate that remains is device verification, and it is Tim's.** Everything below is
+> code-traced and gated; none of it has been on a real round.
+>
+> `35269109` **the four dashboard findings.** RECENT SHOTS was a heading with nothing under it (the
+> gate and the renderer disagreed about which shots they meant). **A putt is always in FEET** now, one
+> owner in `services/puttUnits` — and the app had been *collecting* them in yards, since Quick Log
+> offers `putter` then asked for "Distance (yards)". PROGRESS had no word for "you stopped": three
+> services ended in a bare `else` that called a collapse a "steady stretch" over a 0-ball line;
+> `effortScoreVerdict` owns all nine outcomes as an exhaustive `Record`. And TRAIN YOUR SWING still led
+> with the pump drill — `faultWorkouts` was a third owner nobody told on 08-13.
+>
+> `0adab626` **lint is at ZERO errors for the first time.** The last 72 hardcoded strings, plus a 73rd
+> error that was never i18n: `eslint-plugin-import` had no TS parser, so `import/namespace` failed on a
+> file that compiles cleanly and the error moved when unrelated lines moved.
+>
+> `f5a6c6a8` **"how do I …?" reaches the caddie.** 29 how-to entries were in the cached prompt and the
+> three most likely asks never got there — "how do I change my handicap" was answered with what it IS.
+> The guard is on the dispatcher, above every pattern.
+>
+> `b62f2fe9` **triple-check.** The recap was a SECOND renderer still saying "8 yd" for a putt, and
+> `caddieRequestBody` still said "down or flat" — the screen had got smarter than the brain. New guard
+> over all 2,629 `t()` call sites.
+>
+> `c483329d` **release audit.** All six critical-path markers ARE emitted; store config, permissions and
+> secrets clean; **the live privacy policy matches the repo word for word**, five copies agreeing on the
+> dates. Two fixes: a **privilege default** (`_layout.tsx` stamped a blank profile with
+> `OWNER_EMAILS[0]` at list-length 1 — inert only by coincidence; trim the list after launch and every
+> install is an owner with lifetime access), and the **orphan lock could not see `constants/` or
+> `data/`** — widening it found a threshold with two owners, and the widening itself went quiet until a
+> throwing superset assertion was added.
+>
+> Green: tsc · jest **4578/4578 (385 suites)** · sim **1034/1034** · lint **0 errors / 75 warnings**.
+>
+> **Carried:** device verification of everything above; the mental-game leg; four orphan entries
+> baselined as TRIAGE/DUPE.
+
+---
+
 > ### ⚠️ LATEST — 2026-09-13 (fourth session). Launch decisions, and a loop that had never closed.
 >
 > **Frame (now a rule, APP-BUILD-RULES B1):** no install base to protect — decide for what the app
@@ -28,7 +68,7 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 > Green: tsc, jest 4404/4404 (375 suites), sim 1034/1034, lint 76 = exactly HEAD. Break-tested 9/9
 > and 7/7. **NOT verified on device — the cart loop wants a real round.**
 >
-> **Carried:** the cart loop is code-traced only; the i18n lint backlog; the mental-game leg.
+> **Carried:** the cart loop is code-traced only; the i18n lint backlog **(CLOSED 09-13 — lint is 0 errors)**; the mental-game leg.
 
 ---
 
@@ -54,7 +94,7 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 >
 > **Carried, and all of them are Tim's call:** the seven presence/verbosity controls are grouped but
 > not consolidated; `cartMode` still defaults TRUE; handicap and miss each have two fields; four club
-> stores sit under "the bag". Plus the i18n lint backlog and the mental-game leg.
+> stores sit under "the bag". Plus the i18n lint backlog **(CLOSED 09-13 — lint is 0 errors)** and the mental-game leg.
 
 ---
 

@@ -3734,3 +3734,77 @@ first tee.
 - `cartMode`'s new default and the whole cart loop are code-traced, not device-confirmed.
 - Lint's 76-error i18n backlog.
 - The mental-game leg, still unaudited against the conversation lens.
+
+## Day N — 2026-09-13 (evening) — the four dashboard findings, lint to zero, and a release audit
+
+### Shipped today (after the cart/presence work above)
+
+**`35269109` — the four dashboard findings.**
+1. RECENT SHOTS drew a heading and nothing under it: the dashboard's gate correctly fell back to the
+   last completed round (so it skipped the empty state) while `ShotTimeline` read the ACTIVE round for
+   itself and returned null. The gate owns the pool now and passes it down.
+2. **A putt is always in FEET**, one owner in `services/puttUnits`. The app was not just displaying
+   putts in yards, it was COLLECTING them that way — Quick Log offers `putter` and then asked for
+   "Distance (yards)", so a 25-footer was recorded as a 75-foot putt. `FEET_PER_YARD` moved out of
+   `simGame`. `longestPutt` → `longestPuttFeet` (profile v4 migration, ×3 at the rate the old label
+   promised). And "what's my longest putt" is answerable now — LONGEST DRIVE got a topic on 09-12 and
+   the putt never did.
+3. PROGRESS had no word for "you stopped": three services each ended in a bare `else` that reported a
+   collapse as "steady stretch" while the line under it read PRACTICE 0 balls.
+   `services/practice/effortScoreVerdict` owns all nine effort×score outcomes as an exhaustive
+   `Record`, so the fall-through is a compile error.
+4. TRAIN YOUR SWING still led with the pump drill. Step-and-swing landed 08-13 in the catalog and the
+   recommender; `faultWorkouts` — what the dashboard reads — was the third owner and nobody told it.
+
+**`0adab626` — lint to ZERO errors, first time in this repo.** The last 72 hardcoded strings, all
+four shapes the 1.5 codemod refused to guess at (40 interpolation-split fragments, 11 outside any
+component scope, 6 where a local `const t` shadowed the translation function, 5 concise arrow bodies).
+Plus a 73rd error that was never i18n: `eslint-plugin-import` had no TypeScript parser configured, so
+`import/namespace` failed on a `.tsx` that compiles cleanly and the error MOVED when unrelated lines
+moved.
+
+**`f5a6c6a8` — "how do I …?" reaches the caddie.** 29 how-to entries and `howToForPrompt()` in the
+cached prompt, and three of the most likely asks never got there: "how do I change my handicap" →
+`handicap_query` (answered with what it IS), "how do I add a course" / "how do I use SmartFinder" →
+`open_tool`. The guard is on the DISPATCHER, above every pattern.
+
+**`b62f2fe9` — triple-check of the above.** The recap's `HoleShotMap` was a SECOND renderer still
+saying "8 yd" for a putt. `caddieRequestBody` told the brain `practiceUp ? 'UP' : 'down or flat'` —
+the same collapse the card had just been fixed for, so the screen had got smarter than the brain. Plus
+a new guard over the whole i18n class: every one of 2,629 `t()` call sites must have a value, no value
+may carry an unfilled placeholder, and runtime-assembled keys must resolve.
+
+**`c483329d` — release audit.** See below.
+
+### Verified
+
+`tsc` clean · `jest` **4578/4578 (385 suites)** · sim **1034/1034** · lint **0 errors / 75 warnings**.
+Break-tested throughout: 14/14 on the four findings, 5/5 on the rewritten sim guards, 6/6 on the
+how-do-I guard, 4/4 on the i18n integrity guard, 3/3 on the threshold guard.
+
+Release audit checked rather than assumed: all six critical-path markers ARE emitted (7/14/5/16/4/4);
+store config, bundle ids, build 26 and every iOS usage-description string present; no committed
+secrets; **the live privacy policy matches the repo word for word** (only the site's nav/footer
+differ) with all five copies agreeing on Effective Sept 3 / Last updated Sept 13; billing
+deliberately ON matching the filed paperwork.
+
+Two release fixes:
+- **A privilege default.** `_layout.tsx` stamped a blank profile with `OWNER_EMAILS[0]` when that list
+  held one entry — inert only because it holds four, two of them App Review accounts. Trim it after
+  launch and every install becomes an owner with lifetime access. Branch deleted; the convenience
+  moved to `eas.json` (dev/preview only, asserted no release profile carries it).
+- **The orphan lock could not see `constants/` or `data/`.** Widening it found a threshold with two
+  owners (the swing-analysis prompt kept its own literal 20/10), a `DEFAULT_TIER` that can silently
+  disagree with `deriveTier`, and a `LEGAL_EFFECTIVE_DATE` that was wrong by construction. And the
+  widening itself went quiet — a dir in `SCAN_DIRS` but not `CORPUS_DIRS` is walked then skipped. Now
+  a throwing superset assertion.
+
+### Open / carried to tomorrow
+
+- **Device verification is the only remaining release gate, and it is Tim's.** Nothing today has been
+  on a real round: the cart/walking loop, the presence rewiring, a putt logged in feet (Quick Log and
+  the recap), and "how do I …?" spoken to the caddie.
+- The mental-game leg, still unaudited against the conversation lens.
+- Four orphan-lock entries in `constants/`+`data/` baselined as TRIAGE/DUPE with reasons, not resolved.
+- Legacy putter shots carry a number whose unit is unknowable and will now read ×3 as feet. No
+  migration can fix that honestly; it is Tim's own test data.
