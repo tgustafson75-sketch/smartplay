@@ -3671,3 +3671,66 @@ implication.
 - **Four club stores** (`clubBagStore`, `clubSelectionStore`, `clubStatsStore`, `clubVariantStore`)
   before any deeper bag work.
 - Lint's 76-error i18n backlog, and the mental-game leg, both still open.
+
+---
+
+## Day N+6 — 2026-09-13 (fourth session) — the launch decisions, and a loop that had never closed
+
+Tim reset the frame: *"No one but me is really using this version and remember this is about launch
+not now."* Recorded as a rule (APP-BUILD-RULES B1) — "existing users may rely on it" stops being a
+reason to keep anything, and a default that is wrong for a first-time player is wrong, full stop.
+Also recorded: **every question to Tim is BINARY** (A11), two options, recommendation marked.
+
+### Shipped
+
+**Seven presence switches → two.** Kevin's presence, Proactive, Interactive Round, Local Mode,
+Active Listening, Continuous Conversation and Response Style answered two questions — how much
+should it talk, is it listening — across seven rows that could contradict each other. `localMode`'s
+real effect is `localMode && !opts?.userInitiated` in voiceService, so it silenced a caddie whose
+presence pill read Active with Proactive greyed out underneath. `services/caddiePresence` owns the
+combination; every flag and every consumer is untouched.
+
+**One editable handicap.** `handicap` is an integer MIRROR of `handicap_index` — `setHandicapIndex`
+wrote both, `setHandicap` wrote only the integer, and Settings had a second box wired to it. The
+caddie payload sends `handicap`; posting, the recap card and setup gaps read `handicap_index`.
+
+**The bag before the first round.** Not a step in `welcome.tsx` (deliberately one screen) but step 4
+of `decideFirstRunRoute`, the re-entrant sequence that already places intro, consent and
+permissions. `bag-scan` marks its flag ON MOUNT — a first-run arrival has no back stack, so
+`safeBack()` lands on `/` and a flag set on "done" would loop the player forever.
+
+**Walking is the default, because the round can finally correct it.** Tim: *"Once the golfer who
+forgets to set is moving in a cart in a way walking could never support, we adjust in the background
+quietly."* That corrector existed and had NEVER RUN, for three independent reasons:
+1. Health Connect is off in 1.0, so every reading came from the GPS-only branch, which graded itself
+   `'low'` — and `cartModeSuggestion` vetoes low. Honest grade for a 1.2 m/s line that sits BELOW a
+   brisk walk (1.3–1.5). Fixed the threshold, not the grade: `CART_SPEED_MS` (3.0 m/s, audited
+   08-12) is exported from `movementModeDetector` and shared.
+2. Both detectors guarded "we only fill an UNSET one" by testing
+   `transportMode === 'walking' || === 'cart'` — a type with no third value, initialised to
+   'walking'. Always true. `roundStore.transportDeclared` is the missing state.
+3. Declaring "Cart" on the Play tab never reached `settings.cartMode`.
+Play tab chips raised to two half-width targets with 24px icons.
+
+### Verified
+
+`tsc` clean · `jest` **4404/4404 (375 suites)** · sim **1034/1034** · lint **76 errors = exactly
+HEAD**. Break-tested: 9/9 on presence + handicap + first-run, 7/7 on the cart loop.
+
+**NOT verified on device.** The cart loop wants a real round — watch for
+`[walkingDetector] transport auto-detected as CART — correcting the setting` a minute or two off the
+first tee.
+
+### Corrections to my own review, all caught by checking before acting
+
+- The two miss fields are NOT duplicates: "Typical Miss" writes `missType` and its setter
+  auto-derives `dominantMiss`. My recommendation would have deleted the field **45 readers** use.
+- The four club stores are four distinct facts with one owner each, not four owners of one.
+- The two Privacy Policy rows are in-app vs web.
+- The language picker is right — ja/ko are Deepgram transcription codes, not UI locales.
+
+### Open / carried
+
+- `cartMode`'s new default and the whole cart loop are code-traced, not device-confirmed.
+- Lint's 76-error i18n backlog.
+- The mental-game leg, still unaudited against the conversation lens.

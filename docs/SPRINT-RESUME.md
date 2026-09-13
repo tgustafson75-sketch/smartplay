@@ -8,6 +8,30 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+> ### ⚠️ LATEST — 2026-09-13 (fourth session). Launch decisions, and a loop that had never closed.
+>
+> **Frame (now a rule, APP-BUILD-RULES B1):** no install base to protect — decide for what the app
+> LAUNCHES as. And **every question to Tim is BINARY** (A11).
+>
+> Shipped: **seven presence switches → two** (`services/caddiePresence` owns the combination, no flag
+> or consumer touched); **one editable handicap** (the integer was a mirror whose edits never wrote
+> back); **the bag before the first round** (step 4 of `decideFirstRunRoute`, not a new onboarding
+> step — `bag-scan` marks its flag ON MOUNT or a first-run arrival loops); and **walking as the
+> default**.
+>
+> That last one only became safe because the silent corrector — which existed, and had **never run** —
+> was fixed on three counts: the GPS-only branch self-vetoed at `'low'` (threshold was 1.2 m/s, below
+> a brisk walk; now the shared audited 3.0), "did the player choose" was untestable (`transportMode`
+> has no unset value, so both detectors returned on their first line), and a Play-tab declaration
+> never reached `settings.cartMode`.
+>
+> Green: tsc, jest 4404/4404 (375 suites), sim 1034/1034, lint 76 = exactly HEAD. Break-tested 9/9
+> and 7/7. **NOT verified on device — the cart loop wants a real round.**
+>
+> **Carried:** the cart loop is code-traced only; the i18n lint backlog; the mental-game leg.
+
+---
+
 > ### ⚠️ LATEST — 2026-09-13 (third session). Settings, read as a product surface.
 >
 > 28 screenshots, 11 sections, ~75 controls, and **no guard on the screen at all** — which is how
