@@ -369,7 +369,30 @@ All 23 confirmed HIGH findings from the 30-agent workflow audit addressed:
 > dashboard card, so the chart and the caddie cannot disagree, and each is SILENT until there is
 > enough to be honest.
 >
-> **THEY ARE SUPPOSED TO BE SILENT EARLY, AND THAT LOOKS LIKE A BUG.** Ask about practice with two
+> **THEY ARE NO LONGER SILENT EARLY — `f196c48`, and this was the last thing Tim corrected tonight.**
+> Every block returned `null` below its gate. The gates are honest; `null` is not, because the floor
+> is invisible from outside and a coach who goes quiet on a straight question reads as BROKEN rather
+> than careful. Tim: *"a new golf coach giving a first lesson lets the player swing — let me let you
+> swing so I can get a sense of it. We don't wanna just fall silent. That is an unnatural response."*
+>
+> Each floor is EXPORTED now (`PRACTICE_FLOOR`, `TRAINING_FLOOR`, `MENTAL_FLOOR`,
+> `SWING_TREND_FLOOR`) so the block names the real number instead of hardcoding one that drifts, and
+> below the floor each says what is in the books and what would make the comparison real. The
+> first-lesson case is the one that mattered: with no captured swings the caddie now ASKS TO WATCH
+> HIM HIT A FEW instead of having no opinion and no explanation. One session is called a reading,
+> never a trend.
+>
+> **The rule that stops it nagging is in the prompt** (`NEVER GO SILENT ON A MEASURE YOU ARE
+> KEEPING`): answer the question first from what you DO have, let the not-yet be the second half of
+> the sentence, only when asked, once per conversation, never as a limitation or a feature pitch.
+>
+> **Four tests asserted `toBeNull()`** — written hours earlier, the same day. Updated, not deleted:
+> the invariant they protect (no grade, no direction, no trend from below the floor) is now asserted
+> through the new behaviour. A red test can hold the right intent while the code moves under it.
+>
+> The thresholds below still apply — they are now what the caddie SAYS, not what makes him quiet.
+
+> **(superseded) THEY ARE SUPPOSED TO BE SILENT EARLY, AND THAT LOOKS LIKE A BUG.** Ask about practice with two
 > rounds logged and the caddie says nothing. Thresholds, inside 6 weeks, REAL rounds only:
 > practice→score 3 sessions + 4 rounds · training→score 3 workouts + 4 rounds · measured swing 4 weeks
 > with graded swings · mental pattern 3 rounds carrying reports + 6 moments. This is now an owner
