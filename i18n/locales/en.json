@@ -469,7 +469,10 @@
       "weeks_ago_one": "{{count}} wk ago",
       "weeks_ago_other": "{{count}} wks ago",
       "this_week": "this wk",
-      "points_and_sessions": "{{points}} pts · {{sessions}}×"
+      "points_and_sessions": "{{points}} pts · {{sessions}}×",
+      "practice_day_meta": "{{balls}} balls · {{bouts}}",
+      "practice_bouts_one": "one go",
+      "practice_bouts_other": "{{count}} goes"
     },
     "alert": {
       "delete_round": "Delete round?"

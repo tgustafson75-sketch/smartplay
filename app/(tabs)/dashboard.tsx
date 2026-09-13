@@ -44,6 +44,7 @@ import { useRoundStore } from '../../store/roundStore';
 import { usePracticePointsStore } from '../../store/practicePointsStore';
 import { usePointsStore } from '../../store/pointsStore';
 import { usePracticeSessionStore } from '../../store/practiceSessionStore';
+import { groupPracticeByDay, describePracticeDay } from '../../services/practice/practiceFocus';
 import { computePracticeImpact } from '../../services/practice/practiceImpact';
 import { useClubStatsStore, CLUB_ORDER, clubIdToClubName } from '../../store/clubStatsStore';
 import { useClubBagStore } from '../../store/clubBagStore';
@@ -170,7 +171,18 @@ export default function Dashboard() {
   // 2026-06-14 (Tim — practice history) — recent practice sessions for the dashboard
   // list (tap → /practice/[sessionId] for the per-club striation + tempo trend).
   const practiceHistory = usePracticeSessionStore((s) => s.history);
-  const recentSessions = useMemo(() => practiceHistory.slice(0, 6), [practiceHistory]);
+  /**
+   * 2026-09-13 (Tim) — "A DAY DOING WORK IS A SESSION."
+   *
+   * This listed practiceSessionStore.history straight, one row per stored session — and the store
+   * opens a session per bout of work, so a single afternoon at the range where he ran three
+   * analyses produced three rows. The ledger read like a shot log: the same date three times, each
+   * with a slice of the day's balls, and no row that answered "what did I do Tuesday".
+   *
+   * A session is a DAY. Group by local calendar date, sum the work, and keep the day's individual
+   * bouts underneath so nothing is lost — the day is the headline, not the capture.
+   */
+  const practiceDays = useMemo(() => groupPracticeByDay(practiceHistory, 6), [practiceHistory]);
 
   // 2026-06-15 (Tim — My Bag back on the dashboard) — the clubs with a REAL carry
   // (tracked OR stated), longest→shortest. Feeds the dashboard bag card; tap → the
@@ -1251,27 +1263,45 @@ export default function Dashboard() {
 
         {/* ─── PRACTICE HISTORY (Tim) — sessions by date → tap for the per-club
             striation + tempo trend. The visible half of the practice ledger. */}
-        {recentSessions.length > 0 && (
+        {practiceDays.length > 0 && (
           <View style={[styles.practiceCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <View style={[styles.dashHeadInline, { marginBottom: 8 }]}>
               <Image source={DASH_ICON.practiceHistory} style={styles.dashIconSm} tintColor={colors.accent_lime} />
               <Text style={[styles.practiceLabel, { color: colors.text_primary }]}>{t('dashboard.text.practice_history')}</Text>
             </View>
-            {recentSessions.map((s) => {
-              const label = s.label ?? (s.focus ? s.focus.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : s.kind === 'open_range' ? 'Open Range' : 'Practice');
-              const balls = s.swingCount ?? s.swings.length;
-              const d = (() => { try { return new Date(s.startedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; } })();
+            {/**
+              * 2026-09-13 (Tim) — "A day doing work is a Session." One thin card per DAY: the date
+              * and what the day added up to. The day's individual bouts sit underneath in a lighter
+              * line, so a Tuesday with three analyses reads as one Tuesday instead of three rows all
+              * dated the same and each holding a third of the balls.
+              */}
+            {practiceDays.map((day) => {
+              const dateLabel = (() => {
+                try { return new Date(day.at).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }); }
+                catch { return ''; }
+              })();
+              /** Tap opens the day's first bout — the detail screen is per-session by design. */
+              const primary = practiceHistory.find((ps) => {
+                const x = new Date(ps.startedAt);
+                return `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}` === day.key;
+              });
               return (
-                <TouchableOpacity
-                  key={s.id}
-                  style={styles.practiceRow}
-                  onPress={() => router.push(`/practice/${s.id}` as never)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open practice session ${label}`}
-                >
-                  <Text style={[styles.practiceDrill, { color: colors.text_primary }]} numberOfLines={1}>{label}</Text>
-                  <Text style={[styles.practiceDrillPts, { color: colors.text_muted }]}>{t('dashboard.text.ball', { count: balls, d })}</Text>
-                </TouchableOpacity>
+                <View key={day.key} style={styles.practiceDay}>
+                  <TouchableOpacity
+                    style={styles.practiceRow}
+                    onPress={() => { if (primary) router.push(`/practice/${primary.id}` as never); }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open practice from ${dateLabel}`}
+                  >
+                    <Text style={[styles.practiceDrill, { color: colors.text_primary }]} numberOfLines={1}>{dateLabel}</Text>
+                    <Text style={[styles.practiceDrillPts, { color: colors.text_muted }]}>
+                      {t('dashboard.text.ball', { count: day.balls, d: '' }).trim()}
+                    </Text>
+                  </TouchableOpacity>
+                  <Text style={[styles.practiceDayWork, { color: colors.text_muted }]} numberOfLines={1}>
+                    {describePracticeDay(day)}
+                  </Text>
+                </View>
               );
             })}
           </View>
@@ -1999,6 +2029,9 @@ const styles = StyleSheet.create({
   bagPillYds: { fontSize: 12, fontWeight: '600' },
   practiceTotal: { fontSize: 26, fontWeight: '900' },
   practiceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 3 },
+  // 2026-09-13 — a day is one thin card: the row is the headline, the work line sits under it.
+  practiceDay: { marginBottom: 2 },
+  practiceDayWork: { fontSize: 11, lineHeight: 15, paddingHorizontal: 2, paddingBottom: 6, opacity: 0.85 },
   practiceDrill: { fontSize: 13, fontWeight: '700', flex: 1, marginRight: 10 },
   practiceDrillPts: { fontSize: 12, fontWeight: '600' },
   impactHeadline: { fontSize: 13, lineHeight: 19, fontWeight: '600', marginBottom: 10 },

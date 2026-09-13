@@ -570,6 +570,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
        * pre-composed block, constant for a whole round. See services/caddieRequestBody.
        */
       practiceImpactBlock = null,
+      practiceFocusBlock = null,
       /**
        * 2026-09-12 — the measured swing: per-metric reading, tour-band verdict and direction. The
        * numbers behind a feel. Same cache side as the two above; see services/caddieRequestBody.
@@ -643,6 +644,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const _practicePlan: string | null = capOrNull(practicePlanBlock, 1200);
     const _routineImpact: string | null = capOrNull(routineImpactBlock, 600);
     const _practiceImpact: string | null = capOrNull(practiceImpactBlock, 700);
+    /**
+     * 2026-09-13 — WHAT HE HAS BEEN WORKING ON, grouped by day.
+     *
+     * Registered in the cached block deliberately: it is built from COMPLETED practice sessions, and
+     * a session completes off the course — so it cannot change shot to shot inside a round, which is
+     * the property the RATCHET is protecting. 600 is enough for five days plus the thread line.
+     */
+    const _practiceFocus: string | null = capOrNull(practiceFocusBlock, 600);
     const _measuredSwing: string | null = capOrNull(measuredSwingBlock, 900);
     const _mentalPattern: string | null = capOrNull(mentalPatternBlock, 700);
     const _trainingImpact: string | null = capOrNull(trainingImpactBlock, 700);
@@ -1808,7 +1817,7 @@ ${_recentAnalyses ? `\nWHAT YOU JUST TOLD THEM (last few exchanges in this sessi
 ${_playerHistory ? `\n${_playerHistory}` : ''}
 ${_practicePlan ? `\n${_practicePlan}` : ''}
 ${_routineImpact ? `\n${_routineImpact}` : ''}
-${_practiceImpact ? `\n${_practiceImpact}` : ''}
+${_practiceImpact ? `\n${_practiceImpact}` : ''}${_practiceFocus ? `\n${_practiceFocus}` : ''}
 ${_measuredSwing ? `\n${_measuredSwing}` : ''}
 ${_mentalPattern ? `\n${_mentalPattern}` : ''}
 ${_trainingImpact ? `\n${_trainingImpact}` : ''}

@@ -6952,10 +6952,21 @@ check('Practice history: dashboard list → detail with per-club striation + tem
     // drills get recorded into the unified history (separate from the award)
     const drillHistory = /usePracticeSessionStore\.getState\(\)\.recordCompletedSession\(\{/.test(sm);
     // dashboard surfaces the history list and navigates to the detail route
+    /**
+     * 2026-09-13 (Tim — "A day doing work is a Session") — the list groups by DAY now, so this
+     * pinned the wrong shape: `practiceHistory.slice(0, 6)` took the six most recent BOUTS, and the
+     * store opens a bout per go, so one afternoon with three analyses filled half the card with the
+     * same date. Assert the property — days, built from the history, still reaching the detail
+     * route — rather than the expression that used to produce it.
+     * [[a-guard-can-assert-the-broken-shape]]
+     */
     const dashOk =
       saysToPlayer(dash, 'PRACTICE HISTORY') &&
-      /recentSessions = useMemo\(\(\) => practiceHistory\.slice\(0, 6\)/.test(dash) &&
-      /router\.push\(`\/practice\/\$\{s\.id\}`/.test(dash);
+      /practiceDays = useMemo\(\(\) => groupPracticeByDay\(/.test(dash) &&
+      // the screen and the caddie's prompt block must group the same way, or the dashboard and the
+      // answer to "what did I work on Tuesday" disagree about what a day was.
+      /export function groupPracticeByDay/.test(read('services/practice/practiceFocus.ts')) &&
+      /router\.push\(`\/practice\/\$\{primary\.id\}`/.test(dash);
     // detail screen renders the two primitives off real session data
     const detailOk =
       /summarizeOpenRange\(session\.swings\)/.test(detail) &&
@@ -12490,6 +12501,22 @@ check('RATCHET: nothing new may be interpolated into the cached system prompt',
        * that cannot have changed.
        */
       '_mentalPattern',
+      /**
+       * 2026-09-13 — _practiceFocus, added deliberately, and cache-safe for exactly the reason
+       * _practiceImpact beside it is: it is built from COMPLETED practice sessions
+       * (services/practice/practiceFocus groups practiceSessionStore.history by DAY), and a session
+       * completes off the course. It cannot move shot to shot inside a round.
+       *
+       * Why it exists at all: `PracticeSession.focus` — irons, wedges, driver_speed, tempo — had
+       * been recorded since the session runner shipped and reached the caddie NOWHERE. The only
+       * practice data in the prompt was _practiceImpact, which maps each session to
+       * `{ startedAt, balls }` and discards the rest. So the app knew what he had been working on
+       * and could not be asked about it. Tim: "make sure this context is discoverable by the brain."
+       *
+       * Capped at 600 — five days plus the thread line — and it is null when nothing is logged,
+       * so a player who has never practised carries no prompt weight for it.
+       */
+      '_practiceFocus',
       /**
        * 2026-09-12 — _trainingImpact, added deliberately per the note above and cached for the same
        * reason as _practiceImpact: it reads LOGGED WORKOUTS and COMPLETED rounds, neither of which

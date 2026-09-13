@@ -1027,6 +1027,22 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * passed: they only feed `warmupOutcome` and the chart markers, and the warm-up finding already
      * reaches the caddie through caddieDecision → roundConditions.warmup. One owner each.
      */
+    /**
+     * 2026-09-13 (Tim) — "if there was a focus that day... make sure this context is discoverable by
+     * the brain."
+     *
+     * practiceImpactBlock below maps every practice session to `{ startedAt, balls }` and drops the
+     * rest, so `PracticeSession.focus` — irons, wedges, driver_speed, tempo — has never reached the
+     * caddie. The app knew what he worked on and could not be asked about it.
+     *
+     * Grouped by DAY, because a day of work is a session. Cache-stable: built from COMPLETED
+     * sessions, and a session completes off the course.
+     */
+    practiceFocusBlock: safe(() => {
+      const { buildPracticeFocusBlock } = require('./practice/practiceFocus') as typeof import('./practice/practiceFocus');
+      const { usePracticeSessionStore } = require('../store/practiceSessionStore') as typeof import('../store/practiceSessionStore');
+      return buildPracticeFocusBlock(usePracticeSessionStore.getState().history ?? []);
+    }, null),
     practiceImpactBlock: safe(() => {
       const { computePracticeImpact } = require('./practice/practiceImpact') as typeof import('./practice/practiceImpact');
       const { usePracticeSessionStore } = require('../store/practiceSessionStore') as typeof import('../store/practiceSessionStore');
