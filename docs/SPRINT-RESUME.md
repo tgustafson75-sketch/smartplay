@@ -361,6 +361,36 @@ All 23 confirmed HIGH findings from the 30-agent workflow audit addressed:
 
 ## What's actively in progress
 
+> ### ⚠️ CURRENT — 2026-09-13. On a branch, not on main.
+>
+> **Branch: `claude/dashboard-practice-score-trends-5i4bxh`** — two commits, both pushed, working
+> tree clean. `main` does NOT have this work.
+>
+> ```
+> git fetch origin && git checkout claude/dashboard-practice-score-trends-5i4bxh
+> ```
+>
+> - `2258d1e` — the practice→score crossing reaches the caddie; three voice-precheck fixes beside it
+>   (a club question without "my" was answered with the distance to the green; "my rangefinder says
+>   205" opened a screen and dropped the number; the 09-11 loft fix had never fired).
+> - `f0bd3bd` — the swing behind the feel (`measuredSwingBlock` + the FEEL IS EVIDENCE prompt rule +
+>   shared `selfSwingReads`), and a course you have not played (`download_course` tool → the existing
+>   `courseDownloadEngine`, plus the course-read-against-your-game prompt rule).
+>
+> Green on both: tsc, lint, jest 4270/4270 (365 suites), sim 1023/1023. **Nothing verified on device.**
+> Two OTA-eligible prompt changes are in here, so a device pass is the gate before either is trusted.
+>
+> **THE LENS these were found through (Tim, 2026-09-13):** *"This is a day one concept… where the
+> sports coach, swing coach, caddy, mental game coach concept originally came from — to be able to
+> TALK to them. Sometimes it's not about opening up practice or play."* Read every finding as: is
+> this thing the app measures reachable from a CONVERSATION, or only from a screen? Three sweeps in,
+> the answer has been "only from a screen" every single time, and the fix has never been to build
+> anything — it has been to wire a half that already existed.
+
+<details>
+<summary>Older in-progress notes (Day 5, 2026-05-24) — kept for history</summary>
+
+
 **Day 5 close (2026-05-24):**
 - ~40 OTA-eligible items shipped + verified TS-clean + bundled OTA. Update group history: `ac5045ea` (voice spine extensions) → `ab644d16` (voice→cage + auto-coach) → `dcf96941` (Tank rules + practice store) → `23197688` (AsyncStorage dump panel). All on preview channel.
 - BUILD-STATE-AUDIT.md committed and pushed (`d97c22e`). Surfaces the verification debt as the dominant 1.0 gap.
@@ -381,9 +411,34 @@ All 23 confirmed HIGH findings from the 30-agent workflow audit addressed:
 - Cloud backup of swing library + videos (data-loss-on-uninstall protection)
 - EAS Build cut to ship the BT worktree
 
+</details>
+
 ---
 
 ## What's next (P0 queue from the Sprint Map)
+
+> ### ⚠️ NEXT UP — 2026-09-13, in recommended order
+>
+> 1. **The off-round deflection.** `services/intents/queryStatusHandler.ts` (the `!round.isRoundActive`
+>    gate, ~L105) answers *"You're not in a round yet. Want to start one?"* to `putt_stats`, `gir`,
+>    `nine_split`, `last_round_here`, `longest_drive`. Those are CONVERSATIONS, not round queries —
+>    the exact thing the lens above is about, and the last surface still actively refusing one.
+>    **Needs a per-topic decision from Tim, not a blanket `route_to_brain`:** the caddie can already
+>    answer putting (`golfer_model_snippet` carries avg putts/hole), but he has no source for
+>    longest-drive or GIR history, and routing those to him invites an invented number. The
+>    `route_to_brain: true` mechanism already exists in that same file (L359, L381, L1398).
+> 2. **The mental-game leg.** `mentalState`, `emotionalLog` and `mentalGameBlock` all exist and none
+>    were audited against the lens this session. It is the untested third of the four-coach concept.
+> 3. **Still screen-only, same class as everything fixed above** — each is a measured finding about
+>    the player whose only importer is a screen: `practice/workoutPerformance`,
+>    `practice/workoutSwingImpact`, `practice/pointsPerformance`, `practice/preRoundFactors`
+>    (the warm-up HALF reaches the caddie via `caddieDecision`; the balls/stretch/both/neither split
+>    does not), and `handicapCalculator` (has an intent handler, so "what's my handicap" is answered
+>    locally and never as conversation).
+> 4. **Device verification** of everything on the branch. Nothing here has been near a phone.
+
+<details>
+<summary>Older P0 queue (Sprint Map, Day 1) — kept for history</summary>
 
 In dependency order — see [audit-420-SPRINT-MAP.md](audit-420-SPRINT-MAP.md) for evidence and file paths:
 
@@ -398,6 +453,8 @@ In dependency order — see [audit-420-SPRINT-MAP.md](audit-420-SPRINT-MAP.md) f
 9. ~~**Day 1 / Fix 7** — Hole-transition GPS refresh seam.~~ On `currentHole` change, force `gpsManager.getOneShotFix()` + `markTick++` so the `fmb` memo recomputes against the freshest fix instead of an up-to-one-sim-tick-old cache. Eliminates the 2-5y upward yardage bump Tim saw on transitions around holes 13/16/17. Symptoms 2 (caddie hole announcement on harness) and 3 (stroke ≤2 on synthetic round) confirmed expected harness behavior — left as-is.
 
 Then P1 consolidation (5 swing-capture surfaces → 2; 5 haversines → 1; 3 GPS-fix caches → 1; etc.) and P2 polish.
+
+</details>
 
 ---
 

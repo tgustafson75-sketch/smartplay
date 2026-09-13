@@ -74,6 +74,44 @@ the cue fall through to an earcon *beep*, because `OFFLINE_LINES` pre-renders `L
 persona's voice and not the dialog templates. A connection is finished when the whole path works,
 not when the call compiles.
 
+### THE SECOND HALF OF THE LENS — is it reachable from a CONVERSATION? (Tim, 2026-09-13)
+
+> *"This is a day one concept of this app seven months ago. This is where the sports coach, swing
+> coach, caddy, mental game coach concept originally came from — to be able to TALK to them.
+> Sometimes it's not about opening up, and I'm on a practice or play… if you wanna talk to your
+> swing coach or your caddy, and I open the app to talk about my swing or feel — which is where feel
+> as a dynamic came from — I don't think it's wired in elementally like that, where it's supposed to
+> go through a filter and go: well, yes, that's how it feels. Does that have a quantifiable
+> repeatable element to it?"*
+>
+> *"That's why I keep saying Pinocchio turning into a person. It's that content, the context, and
+> all of it wrapped smartly."*
+
+THE LENS above asks *where should this be?*. This asks the follow-up that keeps catching things:
+**a capability wired to a SCREEN is still only half-wired.** The app is a person you talk to; the
+screens are one way in, not the way in.
+
+So for anything the app measures, ask both:
+1. Can the player SEE it? (a screen reads it) — usually yes.
+2. Can the player ASK about it? (it reaches `services/caddieRequestBody`, the one payload builder) —
+   this is the half that keeps being missing.
+
+**Three sweeps, 2026-09-12 → 13, and the answer was "screen only" every single time.** The
+practice→score crossing, the biomech behind a felt swing, and the course engine for a course he had
+not played were all measured, drawn, correct — and unaskable. Not one fix required building
+anything; each was a half that already existed, missing its wire.
+
+Two corollaries worth stating because both bit inside those sweeps:
+
+- **A question intercepted before the brain is a question the caddie never heard.**
+  `services/localIntentPrecheck` runs BEFORE `/api/kevin` and dispatches at confidence 'high'. A
+  regex one word too loose there does not degrade the answer — it replaces the conversation with a
+  lookup. Its own router comment is the rule: *the precheck matches COMMANDS; routing a command is
+  not answering a question.*
+- **Answering is not the same as reaching.** `services/intents/queryStatusHandler`'s off-round gate
+  replies "You're not in a round yet. Want to start one?" to questions that have nothing to do with
+  being in a round. A canned deflection is the app declining to be talked to.
+
 ## Phase report format
 
 When shipping a phase, include in the response:
@@ -94,7 +132,13 @@ When shipping a phase, include in the response:
 
 - Platform: Windows + PowerShell. Use POSIX paths in tools when possible.
 - Bash tool available for git/npm; prefer dedicated tools (Read/Edit/Grep/Glob) elsewhere.
-- TypeScript strict mode. `npx tsc --noEmit` and `npx expo lint` must pass before commit.
+- TypeScript strict mode. `npx tsc --noEmit`, `npx expo lint`, `npx jest` AND `npm run sim` must all
+  pass before commit. **The sim is not optional and jest does not cover it.** `scripts/simulations/run-sim.ts`
+  holds guards that exist nowhere else — among them the cached-system-prompt RATCHET, which fails on
+  any NEW interpolation into `api/kevin.ts`'s cached block until someone adds the name deliberately
+  and states why it is stable for a whole round. That guard protects the prompt bill (the 08-24
+  cache defect cost $50 in a day), and on 2026-09-12 a commit shipped past it because only jest was
+  run. Cost of running it: ~20 seconds.
 - Build path: `eas build --profile development --platform android`.
 
 ## Feature naming
