@@ -166,6 +166,14 @@ describe('the mental coach can see what the player has told him', () => {
     // One voice, no announced hand-off, and no invented consensus.
     expect(k).toMatch(/Never announce the hand-off/);
     expect(k).toMatch(/say that honestly rather than averaging them/);
+    /**
+     * 2026-09-12 adversarial re-read: the panel rule said joining two was "the single most useful
+     * thing you can do" while the LEAD rule said the others "stay quiet" — read together those are
+     * contradictory, and a contradicted prompt produces inconsistent answers. A join is now
+     * conditional on CHANGING the answer, which is what the lead rule already required.
+     */
+    expect(k).toMatch(/When none of them does, the lead answers alone/);
+    expect(k).not.toMatch(/The single most useful thing you can do is JOIN two of them/);
     // An absent block is not a vantage point — the honesty rule that keeps the panel from guessing.
     expect(k).toMatch(/never infer one coach's read from another's data/);
   });

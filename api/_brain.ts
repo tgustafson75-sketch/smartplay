@@ -368,19 +368,41 @@ export function leadCoachFor(playerText: string): LeadCoach | null {
 
   // A shot decision in front of him outranks everything else: he is standing over the ball, and the
   // only useful answer is a club. Checked first for that reason.
-  if (/\b(?:what (?:should|do) i hit|which club|club should|how far|yardage|plays like|into the wind|lay ?up|go for it|carry the)\b/.test(t)) return 'shot';
+  if (/\b(?:what (?:should|do) i hit|which club|club should|how far|yardage|plays like|into the wind|lay ?up|go for it|carry the|read (?:this|the) green|green read)\b/.test(t)) return 'shot';
+
+  /**
+   * EXPLICIT DISTRESS OUTRANKS THE MECHANICS. Probed 2026-09-12: "I'm so angry I topped it again" led
+   * with the SWING, because `topped` matched first — and mentalGameBlock's standing instruction is to
+   * acknowledge the frustration before anything else. A man who just told you he is angry does not
+   * want a lesson on his strike pattern as the opening sentence.
+   *
+   * Deliberately NARROWER than the mental test below: only words that can mean nothing else. `focus`,
+   * `pressure`, `confidence`, `mental` and `head` are NOT here, because "focus on my hip turn" and
+   * "pressure the ball" are swing sentences — putting those above the swing test would trade one
+   * misroute for a worse one.
+   */
+  if (/\b(?:angry|furious|frustrated|frustrating|frustration|pissed|embarrassed|embarrassing|choking|fall(?:ing)? apart|tilting|give up|giving up|fed up|sick of this)\b/.test(t)) return 'mental';
 
   // The swing itself — mechanics, a feel, a measured metric, a miss.
   if (/\b(?:swing|backswing|downswing|takeaway|over the top|steep|shallow|casting|early extension|hip turn|shoulder turn|tempo|sequencing|weight shift|spine angle|release|slice|slicing|hook(?:ing)?|fat|thin|topped|topping|shank(?:ing|ed)?)\b/.test(t)) return 'swing';
 
-  // The mental game — his own words about what it is like to be him out there.
-  if (/\b(?:frustrated|frustrating|frustration|angry|tilt|tilting|pissed|nervous|anxious|anxiety|choke|choking|pressure|confidence|confident|mental|focus|fall apart|falling apart|spiral|give up|embarrassed|embarrassing|in my head)\b/.test(t)) return 'mental';
+  // The rest of the mental game — the words that need the swing test to have passed first.
+  if (/\b(?:tilt|nervous|anxious|anxiety|choke|pressure|confidence|confident|mental|spiral|in my head|in my own way)\b/.test(t)) return 'mental';
 
   // Practice and whether it is paying off — the learn-loop question.
-  if (/\b(?:practice|practise|practising|practicing|range session|drill|drills|work on|reps|getting better|improving|plateau|worth it|showing up in my scores)\b/.test(t)) return 'practice';
+  if (/\b(?:practice|practise|practising|practicing|range session|drill|drills|work on|reps|get(?:ting)? better|improving|plateau|worth it|showing up in my scores)\b/.test(t)) return 'practice';
 
-  // A course — one he is playing, or one he is only thinking about.
-  if (/\b(?:course|front nine|back nine|tee box|green|bunker|hazard|layout|par \d|hole \d)\b/.test(t)) return 'course';
+  /**
+   * A course — one he is playing, or one he is only THINKING about, which is the case he named on
+   * day one ("I was thinking about going to play some course in Nevada"). Probed: "what do you know
+   * about shadow creek" got no lead, because a course NAME cannot be recognised by regex and every
+   * pattern here needed the word "course". The openers are the tell, not the name.
+   *
+   * `green`, `bunker`, `hazard` and `tee box` are deliberately NOT here: they are features of the
+   * hole in front of him, not a conversation about a course, and `green` alone sent "read this green
+   * for me" to the course coach.
+   */
+  if (/\b(?:what do you know about|thinking about playing|thinking of playing|might play|ever played|have you (?:heard of|played)|worth playing|course|front nine|back nine|layout|par \d|hole \d)\b/.test(t)) return 'course';
 
   return null;
 }

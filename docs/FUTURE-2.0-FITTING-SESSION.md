@@ -261,7 +261,8 @@ bar we clear, which we do not, and which we clear that TrackMan does not.
 | Tempo, phase timings | — | **measured, ms-anchored to impact** |
 | Body: turn, tilt, sequencing, sway, extension | **not measured at all** | **measured** |
 | Carry distance | measured | **inferred — see below** |
-| Ball speed, spin, launch angle, spin axis | measured | **never. Radar or nothing.** |
+| Spin, launch angle, spin axis | measured | **never. Radar or nothing.** |
+| Ball speed | measured | **never in SmartMotion. Only in a rig with a KNOWN target distance — see below.** |
 
 ### The net problem — and how much flight 15 feet actually is
 
@@ -283,9 +284,38 @@ So a 15-foot cage is not "no flight". It is a short, well-lit, **fixed-distance*
 which is close to the ideal conditions for the one thing that matters most: the ball crosses a KNOWN
 distance in a COUNTABLE number of frames, and distance over time is speed.
 
-**BALL SPEED COMES OFF THE NEVER-LIST.** It belongs in the gated-by-factor column, which is exactly
-what Tim's revised rule is for: not dropped, not fabricated — measured to a confidence the frame rate
-earns, with the lever shown ("at 120 I can give you ball speed to about 12%; at 240 it halves").
+**BALL SPEED COMES OFF THE NEVER-LIST — IN A RIG WITH A KNOWN TARGET DISTANCE, AND NOWHERE ELSE.**
+It belongs in the gated-by-factor column there, which is exactly what Tim's revised rule is for: not
+dropped, not fabricated — measured to a confidence the frame rate earns, with the lever shown ("at 120
+I can give you ball speed to about 12%; at 240 it halves").
+
+> ⚠️ **READ THE CONDITION BEFORE WIRING ANYTHING.** This paragraph and the commit that added it
+> (`e18b7520`) were written fourteen minutes apart from `c5bd40ce`, which says ball speed "stays
+> radar-or-nothing and is never shown at any confidence". Both were right about different situations
+> and the document read as though it contradicted itself. The resolution, which is physics and not a
+> preference:
+>
+> **The measurement is of a known DISTANCE over a counted TIME.** In the rig the distance is known
+> (the canvas is a fixed, measured 15 feet away) so the speed is real. In SmartMotion's ordinary case
+> — a phone on a range, a ball leaving frame, no target at a known distance — the distance is unknown,
+> so there is no measurement to make and ball speed stays **radar-or-nothing, never shown**.
+>
+> **What is actually wired today, verified 2026-09-12 rather than taken from a comment:**
+> `app/swinglab/smartmotion.tsx` DOES pass `measuredBallSpeedMph`, from the acoustic detector. The
+> comment in `services/swingMetricsService` claiming no caller passed it was stale and has been
+> corrected. Without the acoustic read, ball speed is `club speed × typical smash`, capped at 0.45
+> confidence tagged / 0.30 untagged.
+>
+> That wiring is acceptable, and the three things that make it so are the things to protect:
+> `api/acoustic-detect` returns `ball_speed_mph: null` when the club is unknown rather than faking a
+> calibration; `'acoustic'` is NOT in `TRUTH_GRADE_SOURCES`, so smash factor can never reach its 0.85
+> branch off it; and confidence ceilings at 0.65 with the note "acoustic (single-mic impact,
+> club-typical)" so it reads as a sharper estimate, not a reading.
+>
+> What must NOT happen is presenting any of it as a distance-derived measurement, or relaxing those
+> three guards because this document says ball speed "came off the never-list". It came off the
+> never-list for a rig with a known target distance. Everywhere else it is still an estimate wearing
+> its error bars. [[smartmotion-metrics-honesty]]
 
 **CARRY DISTANCE IS STILL NOT MEASURED,** and must never be presented as if it were. Fifteen feet
 says nothing about 250 yards on its own; carry needs ball speed *plus* launch angle *plus* spin, and
@@ -439,6 +469,12 @@ not get around:
 
 - in a net the ball travels about four feet, so there is no carry to observe at any frame rate;
 - a phone camera and one microphone cannot see spin, launch angle, ball speed or spin axis;
+
+  *(Historical, and kept because it is where the ethos came from — these were the constraints as
+  DISCOVERED in the backyard net. One has since been measured rather than assumed: Tim's cage puts the
+  target ~15 feet away, not four, which makes ball speed measurable IN THAT RIG. Spin, launch angle
+  and spin axis are unchanged and remain radar-or-nothing. Nothing here licenses a ball-speed readout
+  in SmartMotion's general path — see the boxed condition above.)*
 - so the only way the idea worked **at all** was to be exact about which numbers were real.
 
 Everything downstream descends from that. Dropping spin / face angle / launch angle from SmartMotion

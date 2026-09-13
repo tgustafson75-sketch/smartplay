@@ -28,6 +28,41 @@ describe('the topic picks which coach leads', () => {
     expect(leadCoachFor('my swing feels steep, what should i hit')).toBe('shot');
   });
 
+  /**
+   * 2026-09-12 — THE THREE MISROUTES A PROBE FOUND, after the first version shipped its own tests.
+   * Written as a gate because each was a plausible-looking regex doing the wrong thing:
+   *
+   *   "read this green for me" went to COURSE — the bare word `green` made a green read look like a
+   *   conversation about the layout.
+   *   "I'm so angry I topped it again" went to SWING, because `topped` matched before any emotion
+   *   did, against mentalGameBlock's standing instruction to acknowledge the frustration first.
+   *   "what do you know about shadow creek" got NO lead — his literal day-one example — because a
+   *   course NAME is not recognisable by regex and every course pattern needed the word "course".
+   */
+  it.each([
+    ['read this green for me', 'shot'],
+    ['im so angry i topped it again', 'mental'],
+    ['what do you know about shadow creek', 'course'],
+    ['thinking about playing pebble next month', 'course'],
+    ['i want to get better at putting', 'practice'],
+  ])('probe-found: %s -> %s', (text, want) => {
+    expect(leadCoachFor(text)).toBe(want);
+  });
+
+  /**
+   * And the trade that fix could have made and must not: the distress list sits ABOVE the swing test,
+   * so it is deliberately narrow. `focus`, `pressure`, `confidence`, `mental` and `head` stay BELOW —
+   * "focus on my hip turn" is a swing sentence, and promoting those words would swap one misroute for
+   * a worse one. [[break-test-every-guard-you-write]]
+   */
+  it.each([
+    ['i need to focus on my hip turn', 'swing'],
+    ['i feel pressure on my takeaway', 'swing'],
+    ['i have no confidence in my driver swing', 'swing'],
+  ])('an ambiguous word does not steal a swing question: %s -> %s', (text, want) => {
+    expect(leadCoachFor(text)).toBe(want);
+  });
+
   /** Null means "no lead", not "no coaches" — guessing badly is worse than letting the panel decide. */
   it.each([['hey kevin'], ['how are you'], [''], ['   ']])('stays silent on %s', (text) => {
     expect(leadCoachFor(text)).toBeNull();

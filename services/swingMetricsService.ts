@@ -381,10 +381,22 @@ export function synthesizeSwingMetrics(inputs: SwingMetricInputs): SwingMetricSe
   // club-typical multiplier. Confidence inherits the parent and
   // ceilings at 'med'.
   //
-  // Reserved input — measuredBallSpeedMph: when a caller passes an
-  // acoustic-detected ball speed (server /api/acoustic-detect, 1B),
-  // source is 'acoustic' (truth-grade). No SmartMotion caller passes
-  // this today; 1B will wire it.
+  // measuredBallSpeedMph: an acoustic-detected ball speed from
+  // /api/acoustic-detect. source is 'acoustic'.
+  //
+  // 2026-09-12 — THIS COMMENT SAID "No SmartMotion caller passes this
+  // today; 1B will wire it", AND THAT IS NO LONGER TRUE.
+  // app/swinglab/smartmotion.tsx passes it (see measuredBallSpeedMph
+  // there, from ballSpeed?.ball_speed_mph). It also said 'acoustic' was
+  // truth-grade, which the 05-24 (C1) note below already contradicted.
+  // Corrected rather than updated-in-place because both halves were
+  // being trusted: I read it this morning and repeated it as fact.
+  // What keeps this honest is NOT that it is unwired. It is that
+  // api/acoustic-detect returns null when the club is unknown rather
+  // than faking a calibration, 'acoustic' is NOT in
+  // TRUTH_GRADE_SOURCES, and confidence ceilings at 0.65 — so smash
+  // can never be promoted to the 0.85 branch off it.
+  // [[a-stale-header-is-a-source-someone-trusts]]
   let ballSpeed: SwingMetric;
   if (typeof inputs.measuredBallSpeedMph === 'number' && Number.isFinite(inputs.measuredBallSpeedMph)) {
     // 2026-05-24 (C1) — Acoustic is the sharpest estimate available
