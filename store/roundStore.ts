@@ -113,6 +113,14 @@ export type TeeColor = 'unspecified' | 'gold' | 'blue' | 'white' | 'red';
 // fatigue/pace awareness + honest step/distance interpretation (cart ≠ walked).
 export type TransportMode = 'walking' | 'cart';
 
+/** Which third of the green the pin sits in, front to back. 'middle' is also the undeclared default. */
+export type PinDepth = 'front' | 'middle' | 'back';
+/** Which side of the green the pin sits on, looking at it. 'center' is also the undeclared default. */
+export type PinSide = 'left' | 'center' | 'right';
+export interface PinPosition { depth: PinDepth; side: PinSide }
+/** What the app assumes before the player says otherwise: dead centre, and NOT declared. */
+export const PIN_CENTER: PinPosition = { depth: 'middle', side: 'center' };
+
 /**
  * WHERE IS THE GREEN FOR THIS HOLE — one owner, and it is not here.
  *
@@ -563,6 +571,27 @@ interface RoundState {
    */
   transportDeclared: boolean;
 
+  /**
+   * 2026-09-13 (Tim) — "what would it take to have input for pin position? … This would have to be
+   * tied to green logic which is why i disturbed you." Option A: declared once per ROUND, on the Play
+   * tab, because that is how the information actually arrives — a course sets its pins for the DAY.
+   *
+   * Two axes because a green has two, and they are consumed by different things:
+   *   depth  front / middle / back  → adjusts the YARDAGE, in services/yardageResolver, and only when
+   *                                   the green's real front or back edge is known. One owner there
+   *                                   means all thirteen consumers (the caddie payload, the watch
+   *                                   bridge, SmartFinder, the cockpit, voice readback) move together.
+   *   side   left / center / right  → is NOT a distance. It reaches the caddie as aim context so he can
+   *                                   say "pin's back right, favour the left half" — nothing about it
+   *                                   changes a number.
+   *
+   * `pinDeclared` exists for the same reason `transportDeclared` does: 'middle'/'center' is a real
+   * answer AND the initial value, so the value alone cannot say whether the player chose it. Nothing
+   * adjusts a yardage off an undeclared default.
+   */
+  pinPosition: PinPosition;
+  pinDeclared: boolean;
+
   // Phase 409 — TightLie pending result. The lie analysis completes
   // BEFORE the player hits the shot, so it can't be attached to a
   // ShotResult that doesn't exist yet. This slot holds the most
@@ -673,6 +702,7 @@ interface RoundState {
   ) => void;
   setSelectedTee: (color: TeeColor) => void;
   setTransportMode: (m: TransportMode) => void;
+  setPinPosition: (p: PinPosition | null) => void;
   /** Clears the player's declaration so detection may fill it again (new round). */
   clearTransportDeclaration: () => void;
 
@@ -1059,6 +1089,8 @@ export const useRoundStore = create<RoundState>()(
       // 2026-06-13 — walking vs cart; default walking (the engaged/health default).
       transportMode: 'walking',
       transportDeclared: false,
+      pinPosition: PIN_CENTER,
+      pinDeclared: false,
 
       // Phase 409 — TightLie pending lie analysis. Cleared when a shot is
       // logged (its value is copied onto the shot.lie_analysis).
@@ -1087,6 +1119,14 @@ export const useRoundStore = create<RoundState>()(
         }
       },
       clearTransportDeclaration: () => set({ transportDeclared: false }),
+      /**
+       * Records the pin AND marks it declared, so yardageResolver knows the difference between "the
+       * player told me the pin is middle" and "nobody has said". Passing null clears the declaration
+       * back to centre — the honest reset, not a third state.
+       */
+      setPinPosition: (p) => set(p == null
+        ? { pinPosition: PIN_CENTER, pinDeclared: false }
+        : { pinPosition: p, pinDeclared: true }),
       setPendingLieAnalysis: (analysis) => set({ pendingLieAnalysis: analysis }),
       clearPendingLieAnalysis: () => set({ pendingLieAnalysis: null }),
       setPendingKevinRec: (rec) => set({ pendingKevinRec: rec ? { at: Date.now(), ...rec } : null }),
@@ -1319,6 +1359,17 @@ export const useRoundStore = create<RoundState>()(
           // transportMode are always sourced from opts, not ambient store state.
           selectedTee: resolvedTee,
           transportMode: resolvedTransport,
+          /**
+           * 2026-09-13 — A NEW ROUND STARTS WITH NO PIN, DELIBERATELY, even though pinPosition is
+           * persisted (below). The two rules pull opposite ways and both are needed:
+           *   · persisted, so an app restart mid-round does not silently give back ten yards. Transport
+           *     can be re-established by the detector; a pin cannot — nothing observes where the flag is.
+           *   · cleared here, because pins are set per DAY. Carrying yesterday's sheet into today's round
+           *     would adjust every yardage off a fact that expired overnight, and the player would have
+           *     no reason to suspect it. An undeclared pin costs nothing; a stale one is wrong all day.
+           */
+          pinPosition: PIN_CENTER,
+          pinDeclared: false,
           // 2026-08-06 (tester Matt Abid) — start on the chosen nine (back nine = hole 10). Clamped to a
           // real hole in the loaded set so an out-of-range start can't strand the round.
           currentHole: startHoleResolved,
@@ -3758,7 +3809,11 @@ export const useRoundStore = create<RoundState>()(
         // restart in between dropped it, so kevin_adhered/kevin_rec_club never stamped on that shot.
         pendingKevinRec: s.pendingKevinRec,
         selectedTee: s.selectedTee,
-        transportMode: s.transportMode,
+transportMode: s.transportMode,
+        // Persisted for the reason startRound clears it: a mid-round restart must not quietly revert
+        // every yardage to the middle of the green. Nothing can re-derive a pin.
+        pinPosition: s.pinPosition,
+        pinDeclared: s.pinDeclared,
         // 2026-06-05 — third audit pass: four more in-round fields
         // that were initialized + mutated mid-round but missing from
         // partialize, so a crash + relaunch silently lost them.

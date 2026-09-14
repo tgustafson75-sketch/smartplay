@@ -191,6 +191,17 @@ const SEED: Omit<ChecklistItem, 'done' | 'doneAt'>[] = [
     detail: 'Try "how do I change my handicap", "how do I import my old scores", "how do I add a course". You should get the actual STEPS, spoken. Fails to watch for, all of which happened before this update: being told your current handicap instead of how to change it, or being yanked straight to a screen with no explanation. Measurement questions must still answer locally and instantly — "how far do I hit my 7 iron" is not a how-to and should not go to the brain.',
   },
   {
+    /**
+     * 2026-09-13 — Tim: "Pin position shows me all the logic working together." It does, which is why
+     * this item is worded to test the WHOLE chain rather than the grid: one tap on the Play tab has to
+     * move the yardage everywhere, because the resolver that applies it is the one every surface reads.
+     */
+    id: 'pin-moves-every-yardage',
+    group: 'field',
+    title: "Set today's pins on the Play tab, then check the yardage everywhere",
+    detail: 'Play tab → TODAY\u2019S PINS → tap BACK RIGHT before you start. Then on a hole where the caddie has real front/back numbers, check the SAME yardage in all of: the cockpit card, "how far to the green" by voice, SmartFinder, and the watch. A back pin should read about 10 yards longer than the middle on a normal green — it is the back edge minus 5, the inset a greenkeeper actually cuts to, so a big green moves more and a shallow one barely moves. A FAIL is any two surfaces disagreeing, or the number moving on a hole where he has no green geometry — he should say "I don\u2019t have the back edge of this green" and stay on the middle. Ask him where the pin is: he should say "back right" and tell you the fat of the green is left. He must NOT add yardage for it again on top — the depth is already in the number.',
+  },
+  {
     id: 'mental-words-are-heard',
     group: 'field',
     title: 'Use your own words for a bad patch',

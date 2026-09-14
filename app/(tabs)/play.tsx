@@ -36,6 +36,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { pushCourseGuarded } from '../../utils/courseNav';
 import { useTranslation } from 'react-i18next';
 import { useRoundStore } from '../../store/roundStore';
+import { describePin } from '../../services/pinPosition';
 import { useClubBagStore } from '../../store/clubBagStore';
 import { useDownloadedCoursesStore } from '../../store/downloadedCoursesStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
@@ -748,6 +749,10 @@ export default function PlayTab() {
   // 2026-06-13 (Tim) — walking vs cart for this round.
   const setupTransport = useRoundStore(s => s.transportMode);
   const setSetupTransport = useRoundStore(s => s.setTransportMode);
+  // 2026-09-13 (Tim) — today's pin, declared once for the round. See roundStore.pinPosition.
+  const setupPin = useRoundStore(s => s.pinPosition);
+  const pinDeclared = useRoundStore(s => s.pinDeclared);
+  const setSetupPin = useRoundStore(s => s.setPinPosition);
 
   const [query, setQuery] = useState('');
   // 2026-07-23 (Tim) — golfcourseapi has no city/state fields; a location hint appended to the
@@ -2536,6 +2541,60 @@ export default function PlayTab() {
               {t('play.transport_hint', { defaultValue: 'Not sure? Just start — your caddie switches to cart on its own once it sees cart speed.' })}
             </Text>
 
+            {/**
+              * 2026-09-13 (Tim) — TODAY'S PINS. "I know the numbers change but back right, left, front
+              * right, front left … to be useful would have to pop like cart/walk selection."
+              *
+              * Declared once for the ROUND, because that is how the information arrives: a course sets
+              * its pins for the day. A 3×3 grid rather than four named corners, because a grid reads as
+              * the green itself — you point at where the flag is instead of translating a phrase.
+              *
+              * DEPTH changes the yardage, through services/yardageResolver, which is the single owner
+              * every surface reads — so one tap moves the caddie, the watch, SmartFinder and the
+              * cockpit together. SIDE changes aim, not distance, and reaches the caddie as context.
+              * Neither invents anything: depth only applies when the green's real edge is known.
+              */}
+            <View style={styles.sectionHead}>
+              <Image source={SEC_ICON.tee} style={styles.sectionIcon} tintColor={colors.accent_lime} />
+              <Text style={styles.sectionHeadText}>{t("play.todays_pins", { defaultValue: "TODAY’S PINS" })}</Text>
+            </View>
+            <View style={styles.pinGrid}>
+              {(['back', 'middle', 'front'] as const).map((depth) => (
+                <View key={depth} style={styles.pinGridRow}>
+                  {(['left', 'center', 'right'] as const).map((side) => {
+                    const active = pinDeclared && setupPin.depth === depth && setupPin.side === side;
+                    return (
+                      <TouchableOpacity
+                        key={side}
+                        style={[styles.pinCell, active && styles.pinCellActive]}
+                        onPress={() => setSetupPin({ depth, side })}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: active }}
+                        accessibilityLabel={t('play.accessibility_label.pin_cell', {
+                          defaultValue: 'Pin {{depth}} {{side}}',
+                          depth,
+                          side,
+                        })}
+                      >
+                        <View style={[styles.pinDot, active && styles.pinDotActive]} />
+                      </TouchableOpacity>
+                    );
+                  })}
+                  <Text style={styles.pinRowLabel}>
+                    {t(`play.pin_depth_${depth}`, { defaultValue: depth.toUpperCase() })}
+                  </Text>
+                </View>
+              ))}
+            </View>
+            <Text style={styles.transportHint}>
+              {pinDeclared
+                ? t('play.pin_set_hint', {
+                    defaultValue: 'Pin {{pin}}. Your yardage now plays to the flag, not the middle — but only on greens I have real front/back numbers for.',
+                    pin: describePin(setupPin),
+                  })
+                : t('play.pin_hint', { defaultValue: "Optional. If the card says where today's pins are, tap it — a back pin is a real club difference. Skipped means middle, and nothing is adjusted." })}
+            </Text>
+
             {/* Phase 405 wave 3 — tee box selection. Standard 4 colors.
                 Stored on roundStore.selectedTee + persisted onto the
                 round record via startRound. Informational for v1.1
@@ -2800,6 +2859,17 @@ return StyleSheet.create({
   transportLabel: { color: c.text_muted, fontSize: 13, fontWeight: '700' },
   transportLabelActive: { color: c.accent },
   transportHint: { color: c.text_muted, fontSize: 11, paddingHorizontal: 16, marginTop: 6, lineHeight: 15 },
+  // TODAY'S PINS — a 3×3 that reads as the green. Row label sits outside the cells so the grid stays square.
+  pinGrid: { paddingHorizontal: 16, gap: 8 },
+  pinGridRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pinCell: {
+    flex: 1, aspectRatio: 1.9, alignItems: 'center', justifyContent: 'center',
+    borderRadius: 12, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface,
+  },
+  pinCellActive: { borderColor: c.accent, borderWidth: 2, backgroundColor: c.surface_elevated },
+  pinDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: c.text_muted, opacity: 0.5 },
+  pinDotActive: { backgroundColor: c.accent, opacity: 1, width: 11, height: 11, borderRadius: 6 },
+  pinRowLabel: { width: 56, color: c.text_muted, fontSize: 10, fontWeight: '800', letterSpacing: 0.4 },
   chipText: { color: c.text_muted, fontSize: 12, fontWeight: '700' },
   chipTextActive: { color: c.accent },
   notesInput: {

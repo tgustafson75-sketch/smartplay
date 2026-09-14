@@ -4016,3 +4016,42 @@ script, `eas update` last.
 
 `tsc` clean · `jest` **4754/4754 (396 suites)** twice · sim **1034/1034** · lint **0 errors** ·
 `ota-preflight` OK · `ota-owner-guard` safe. 9/9 break-test mutations caught.
+
+### Pin position — BUILT (Option A). "Pin position shows me all the logic working together."
+
+It does, and that is why it was worth doing this way: the pin is applied in ONE place —
+`services/yardageResolver`, the single owner thirteen surfaces already read — so one tap on the Play tab
+moves the caddie payload, the watch bridge, SmartFinder, the cockpit, `queryStatusHandler` and voice
+readback together. Per-surface adjustment is the exact defect that resolver exists to end.
+
+**Tim corrected the model mid-build** — "but aren't there general pin position rules that give a good
+estimate?" My scope used a FRACTION of green depth (two-thirds from centre to edge), a number I picked. The
+real convention is an INSET FROM THE EDGE: greenkeepers cut holes a minimum distance inside any edge (USGA
+guidance ≥4 paces; 5 used here). It self-corrects for green size the way pin setting actually does —
+44-yard green → +17, 12-yard green → +1, and a green shallower than the inset correctly changes nothing.
+A fraction is wrong in both directions.
+
+**What it refuses to do** is the half that matters: depth declines — visibly, in `reason` — when the edge
+is unknown, when the yardage is itself an estimate from the tee (`is_fallback`), or when the green is too
+shallow for the flag to change the club. A wrong pin makes every yardage on the hole wrong.
+
+**Side is not a distance.** It never enters the maths; it reaches the caddie as aim context ("pin's back
+right — the fat of the green is left, and a right miss is the dead one"), and the prompt tells him the
+depth is ALREADY in his numbers so he cannot double-count it.
+
+**Lifetime: persisted, but cleared at round start.** Two rules pulling opposite ways, both needed — a
+mid-round restart must not silently hand back ten yards (nothing can re-derive a pin, unlike transport,
+which the detector re-establishes), and yesterday's pin sheet must not carry into today.
+
+Three defects found in my own work by break-testing, all fixed:
+1. the bad-geometry check was unreachable behind the shallow-green clamp, so nonsense data was explained
+   to the player as "this green is too shallow" — same number, wrong sentence;
+2. every resolver assertion was running the DECLINED path (static card, `is_fallback` true), so removing
+   the `pinDeclared` check changed nothing and all 21 assertions stayed green. The GPS tier is mocked now;
+3. the clear-test asserted only the yardage, which a declared middle pin satisfies as a no-op — it never
+   proved the declaration was cleared.
+
+### Verified
+
+`tsc` clean · `jest` **4785/4785 (397 suites)** · sim **1034/1034** · lint **0 errors / 75 warnings**.
+14/14 break-test mutations caught. Checklist item `pin-moves-every-yardage` added for the field test.

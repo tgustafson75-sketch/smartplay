@@ -34,6 +34,7 @@
 
 import { useRoundStore } from '../store/roundStore';
 import { getGreenYardagesSync, getLastFix, classifyAccuracy, holeData } from './smartFinderService';
+import { adjustForPin, describePin } from './pinPosition';
 
 export type YardageSource = 'user_stated' | 'gps_live' | 'static_card' | 'none';
 export type YardageConfidence = 'high' | 'med' | 'low';
@@ -74,7 +75,58 @@ const STATED_TTL_MS = 5 * 60 * 1000; // 5 min — stale after that
 export function resolveYardage(holeNumberArg?: number): ResolvedYardage {
   const round = useRoundStore.getState();
   const hole = holeNumberArg ?? round.currentHole;
-  return traceResolved(hole, resolveYardageInner(hole, round));
+  return traceResolved(hole, applyDeclaredPin(resolveYardageInner(hole, round), round));
+}
+
+/**
+ * 2026-09-13 (Tim) — THE PIN, APPLIED ONCE, HERE.
+ *
+ * This function exists because this resolver is the single owner of "how far is it" for thirteen
+ * surfaces — the caddie payload, the watch bridge, SmartFinder, the cockpit, queryStatusHandler, voice
+ * readback, shot tracking. Adjusting for the pin HERE means a declared back pin moves all of them
+ * together; adjusting it per-surface is the defect this file was written to end.
+ *
+ * The rule itself lives in services/pinPosition (an inset from the real edge, per greenkeeping
+ * convention) so the maths has one owner too.
+ *
+ * WHEN IT DECLINES, and it declines often on purpose:
+ *   · the player has not declared a pin — `middle`/`center` is also the initial value, so the value
+ *     alone cannot say whether anybody chose it. That is what pinDeclared is for.
+ *   · `is_fallback` is true. That flag means the yardage is ITSELF an estimate from the tee with no
+ *     green mark, so front/back are estimates too and a pin offset would compound a guess.
+ *   · the relevant edge is unknown. A user-stated number carries no front or back at all, by design —
+ *     "the player gave us ONE number, inventing a front and back around it would be fabrication" — and
+ *     a pin cannot be applied to it either.
+ *
+ * A declined pin returns the yardage UNTOUCHED and says so in `reason`, because a wrong pin makes every
+ * number on the hole wrong, which is worse than no pin.
+ */
+function applyDeclaredPin(
+  r: ResolvedYardage,
+  round: ReturnType<typeof useRoundStore.getState>,
+): ResolvedYardage {
+  if (!round.pinDeclared || r.value == null) return r;
+  const pin = round.pinPosition;
+  if (pin.depth === 'middle') return r;
+  if (r.is_fallback) {
+    return { ...r, reason: `${r.reason} Pin is ${describePin(pin)}, but this yardage is an estimate — not adjusting for it.` };
+  }
+
+  const adj = adjustForPin(r.value, r.front, r.back, pin.depth);
+  if (adj.why !== 'applied') {
+    const because =
+      adj.why === 'no_edge' ? `I don't have the ${pin.depth} edge of this green` :
+      adj.why === 'green_too_shallow' ? 'this green is too shallow for it to change the club' :
+      'the pin is central';
+    return { ...r, reason: `${r.reason} Pin is ${describePin(pin)} — ${because}, so this is still to the middle.` };
+  }
+
+  return {
+    ...r,
+    value: adj.yards,
+    // front/back are the GREEN's edges and do not move because the flag did.
+    reason: `${r.reason} Pin ${describePin(pin)}: playing ${adj.yards} (${adj.delta > 0 ? '+' : ''}${adj.delta} on the middle).`,
+  };
 }
 
 function resolveYardageInner(

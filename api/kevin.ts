@@ -525,6 +525,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       missType = null,
       trustLevel = null,
       priorGreenRead = null,
+      /**
+       * 2026-09-13 — where the flag is on the green. The DEPTH is already baked into every yardage in
+       * this payload (services/yardageResolver applies it once for all consumers), so this is here for
+       * the SIDE, which no number can carry. Null unless the player actually declared a pin.
+       */
+      pinPosition = null,
       priorRoundsAtCourse = 0,
       /** Last five rounds AT THIS COURSE — score, vs par, holes. The comparison, not just a count. */
       priorRoundsHere = [],
@@ -1246,6 +1252,15 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
       const pg = priorGreenRead as { feet: number | null; slopePct: number | null; note: string | null } | null;
       if (pg && (pg.feet != null || pg.slopePct != null || pg.note)) {
         lines.push(`- You have read this green with them before: ${[pg.feet != null ? `${pg.feet} feet` : null, pg.slopePct != null ? `${pg.slopePct}% slope` : null, pg.note || null].filter(Boolean).join(', ')}. That is a real prior read — recall it as memory, not as a guess.`);
+      }
+      const pin = pinPosition as { depth: string; side: string; said: string; aim: string | null } | null;
+      if (pin) {
+        lines.push(
+          `- TODAY'S PIN is ${pin.said}. The yardages you have been given ALREADY play to that flag, not`
+          + ` to the middle — do not add or subtract for it again.`
+          + (pin.aim ? ` ${pin.aim}` : '')
+          + ` Say where the pin is when it changes the play; do not recite it every shot.`,
+        );
       }
       if (isRoundActive && typeof priorRoundsAtCourse === 'number') {
         const ph = (priorRoundsHere as Array<{ score: number | null; vsPar: number | null; holes: number | null; daysAgo: number | null }>) ?? [];

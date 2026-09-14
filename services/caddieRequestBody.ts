@@ -1434,6 +1434,27 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
       return require('../store/trustLevelStore').useTrustLevelStore.getState().level ?? null;
     }, null),
     /**
+     * 2026-09-13 (Tim) — WHERE THE FLAG IS, which is the half of a pin that no yardage can carry.
+     *
+     * The DEPTH is already inside every yardage the caddie receives — services/yardageResolver applies
+     * it once for all thirteen consumers, so `distanceToPin` and the plays-like numbers are already to
+     * the flag. This field exists for the SIDE, which is not a distance: "back right" changes which half
+     * of the green is safe and which miss is dead, and a single number cannot say that.
+     *
+     * Null until the player declares one, because 'middle'/'center' is also the initial value — the
+     * caddie must not be told "the pin is middle" when nobody has said so.
+     */
+    pinPosition: safe(() => {
+      if (!isRoundActive || !r.pinDeclared) return null;
+      const { describePin, aimNoteForPin } = require('./pinPosition') as typeof import('./pinPosition');
+      return {
+        depth: r.pinPosition.depth,
+        side: r.pinPosition.side,
+        said: describePin(r.pinPosition),
+        aim: aimNoteForPin(r.pinPosition),
+      };
+    }, null),
+    /**
      * A green read the player SAVED on a PRIOR visit to this hole — honest recall of a real read,
      * never a same-round replay dressed up as memory.
      */

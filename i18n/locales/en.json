@@ -580,7 +580,8 @@
       "round_challenge_break_a_score": "Round challenge — break a score from a tee",
       "walking_this_round": "Walking this round",
       "riding_a_cart_this_round": "Riding a cart this round",
-      "done_editing_notes": "Done editing notes"
+      "done_editing_notes": "Done editing notes",
+      "pin_cell": "Pin {{depth}} {{side}}"
     },
     "placeholder": {
       "city_state_optional_narrows_the": "City, State (optional) — narrows the search"
@@ -593,7 +594,13 @@
       "par": "Par {{par}}",
       "rating": " · Rating {{rating}}",
       "slope": " · Slope {{slope}}"
-    }
+    },
+    "todays_pins": "TODAY’S PINS",
+    "pin_depth_back": "BACK",
+    "pin_depth_middle": "MIDDLE",
+    "pin_depth_front": "FRONT",
+    "pin_hint": "Optional. If the card says where today's pins are, tap it — a back pin is a real club difference. Skipped means middle, and nothing is adjusted.",
+    "pin_set_hint": "Pin {{pin}}. Your yardage now plays to the flag, not the middle — but only on greens I have real front/back numbers for."
   },
   "swinglab": {
     "practice": "PRACTICE",
