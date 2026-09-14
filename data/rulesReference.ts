@@ -348,9 +348,18 @@ export function searchRules(query: string): RuleEntry[] {
   );
 }
 
-export function rulesByCategory(category: RuleCategory): RuleEntry[] {
-  return RULES_REFERENCE.filter(r => r.category === category);
-}
+/**
+ * 2026-09-13 — `rulesByCategory(category)` was DELETED as genuinely redundant, with the evidence.
+ *
+ * Asked where it SHOULD be called from: nowhere. The rules capability is wired in BOTH halves the lens
+ * asks about — `app/reference.tsx` is the screen and `services/intents/rulesQueryHandler` is the
+ * conversation — and neither wants a category filter. The screen lists `RULES_REFERENCE` and narrows
+ * with `searchRules`; it does not group by category anywhere. The handler uses `findRelevantRules`. So
+ * this was a one-line `.filter` standing as a third accessor over the same array.
+ *
+ * If a category-browsing UI ever lands, `RULES_REFERENCE.filter(r => r.category === c)` is that one
+ * line, written where the screen needs it.
+ */
 
 /**
  * Best-match lookup for a free-form rule query (used by rulesQueryHandler

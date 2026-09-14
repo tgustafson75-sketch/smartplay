@@ -43,11 +43,26 @@ Note the orphan lock already covers "has no callers" for `services/`, so nothing
     seven natural phrasings were wrong, on holes 10-18.
   - `openExternalHandler` had NO defect — query encoding, service aliases and both failure paths were
     already right. Covered anyway, since it is player-sayable and had nothing looking at it.
-- **Two TRIAGE orphans resolved and deleted with evidence** (not wired): `data/courses.getHole` was a
+- **`services/caddieRewards`** — two defects, both fixed. The spoken drive celebration had NO upper
+  bound, so the 500y+ corrupt capture the rest of the app rejects (`MAX_REAL_DRIVE`, `setLongestDrive`,
+  `shotTracking`) made the caddie say "Hammered. That one's going." about a number nobody hit —
+  celebrating a fabricated measurement on the one occasion it volunteers an opinion unprompted. And a
+  variant line restated the threshold in prose ("Two-fifty plus." against `REWARD_DRIVE_YARDS = 250`),
+  so tuning the constant would have made the caddie state a wrong number. Guarded by
+  `the-caddie-never-celebrates-a-glitch.test.ts`.
+- **Three TRIAGE/DUPE orphans resolved and deleted with evidence** (not wired): `data/courses.getHole` was a
   one-line wrapper keyed on a course NAME over the bundled catalog, while all 25 runtime hole lookups
   use `round.courseHoles` from the API — a different source. `localCourseImages.getDefaultPreviewImage`
   unconditionally returned null, and the empty state it existed for is rendered by SmartVision itself.
-  Both rules are kept as comments where they belong.
+  `data/rulesReference.rulesByCategory` was a third accessor over the same array — `app/reference.tsx`
+  does not group by category anywhere and the handler uses `findRelevantRules`. All three rules are kept
+  as comments where they belong, and all three baseline entries are gone, so the orphan debt SHRANK
+  rather than being re-explained.
+
+Remaining from the list below: `TIER_LABEL` stays baselined as WIRE with its reason — it is a display
+affordance waiting on a surface, which is a product decision rather than a wire. `getRuleById` and
+`DEFAULT_TIER` are TEST SURFACES with stated reasons. That is the "one truth or a reason for other
+structure" position for every one of them.
 
 ## Headline finding — `services/putting/greenHeat.ts` — FIXED 2026-09-13
 

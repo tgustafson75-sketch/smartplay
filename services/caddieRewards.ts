@@ -26,8 +26,19 @@ import { useSettingsStore } from '../store/settingsStore';
 import { useTrustLevelStore } from '../store/trustLevelStore';
 import * as voiceService from './voiceService';
 import { getApiBaseUrl } from './apiBase';
+import { MAX_REAL_DRIVE } from './round/scoredRoundStats';
 
 export const REWARD_DRIVE_YARDS = 250;
+
+/**
+ * 2026-09-13 — A CORRUPT CAPTURE USED TO GET A CELEBRATION.
+ *
+ * The trigger was `distance_yards > REWARD_DRIVE_YARDS` with no upper bound, so the 500y+ glitch that
+ * `MAX_REAL_DRIVE` exists for — a GPS jump, or the whole-course total leaking into one shot — made the
+ * caddie say "Hammered. That one's going." about a number nobody hit. `setLongestDrive` already
+ * REJECTS those rather than clamping, and services/shotTracking carries the same guard; this path had
+ * neither. Imported rather than restated, so there is one answer to "what is a real drive".
+ */
 export const REWARD_PUTTS = 1;
 
 // Neutral, short, genuine — works in any of the four caddie voices.
@@ -36,7 +47,10 @@ export const REWARD_PUTTS = 1;
 // persona.
 const DRIVE_VARIANTS: readonly string[] = [
   'Hammered. That one\'s going.',
-  'Pured it. Two-fifty plus.',
+  // 2026-09-13 — was "Pured it. Two-fifty plus.", which restated REWARD_DRIVE_YARDS in prose. Tune the
+  // constant to 230 and the caddie announces "two-fifty plus" over a 235-yard drive. The number has one
+  // owner now and the copy does not repeat it; the other four variants never did.
+  'Pured it. That is a number.',
   'Stepped on that drive. Good number.',
   'That ball had a tag on it. Nice strike.',
   'Long and online. Take a breath.',
@@ -92,6 +106,7 @@ function evaluateShot(shot: ShotResult): void {
   if (!shot.logged_via) return;
   if (typeof shot.distance_yards !== 'number') return;
   if (shot.distance_yards <= REWARD_DRIVE_YARDS) return;
+  if (shot.distance_yards > MAX_REAL_DRIVE) return;   // corrupt capture — never celebrated
   if (!trustAllowsReward()) return;
 
   firedShotIds.add(shot.id);

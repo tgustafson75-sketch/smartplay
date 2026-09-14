@@ -211,11 +211,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
     'reads), so this is the DISPLAY affordance that is missing, not the data. Where it belongs is a ' +
     'profile or stats surface that currently prints a bare handicap number. Not urgent, not dead, and ' +
     'not to be deleted — deriveTier and TIER_BANDS beside it are both fully wired.',
-  'data/rulesReference.ts :: rulesByCategory':
-    'DUPE — a one-line filter over RULES_REFERENCE. The rules capability is fully wired in BOTH halves ' +
-    'the lens asks about: app/reference.tsx is the screen and services/intents/rulesQueryHandler is the ' +
-    'conversation, and each does its own narrowing (searchRules / findRelevantRules). A category filter ' +
-    'nothing asks for is a third accessor to the same array. Delete candidate.',
   'data/rulesReference.ts :: getRuleById':
     'TEST SURFACE — the-round-he-walked-out-of.test.ts resolves a rule id through it to prove the id ' +
     'the handler cites is real rather than restating the rule text in the test. A public accessor by ' +
