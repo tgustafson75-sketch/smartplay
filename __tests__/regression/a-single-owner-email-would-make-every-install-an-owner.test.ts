@@ -49,6 +49,8 @@ import path from 'path';
 import { OWNER_EMAILS, isOwnerEmail } from '../../store/playerProfileStore';
 
 const root = path.join(__dirname, '..', '..');
+/** Raw file contents. The guard assertions below are about a SCRIPT and about prose in it, so raw. */
+const read = (rel: string) => fs.readFileSync(path.join(root, rel), 'utf8');
 const stripped = (rel: string) =>
   fs.readFileSync(path.join(root, rel), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -134,6 +136,63 @@ describe('a blank-email install can never be auto-stamped as the owner', () => {
  * 2026-09-13 — where the beta convenience went. This is the half that replaces the deleted branch:
  * owner mode on the builds Tim tests, and on no build a player can install.
  */
+describe('an OTA cannot ship owner mode to the production channel', () => {
+  /**
+   * 2026-09-13 — THE LANDMINE'S SECOND DOOR, and I opened it myself.
+   *
+   * eas.json keeps EXPO_PUBLIC_OWNER_EMAIL off every release BUILD profile, and the tests below assert
+   * that. But `eas update` bundles LOCALLY, so a value in `.env.local` is inlined into the published
+   * bundle and walks straight around that protection — proved with a sentinel export: a value present
+   * nowhere in the source appeared in the exported Hermes bundle.
+   *
+   * It matters here specifically because EVERY build on this project is profile=production /
+   * channel=production, including the Play Store internal-testing build on Tim's phone. So
+   * `ota:production` is the only publish his app ever sees, and that bundle reaches every user on the
+   * channel. With the variable set, `isOwner` is true for all of them: Owner Tools plus a lifetime grant
+   * that bypasses billing and persists before anyone notices.
+   *
+   * I had told him to create .env.local for exactly this variable. A rule that lives in a comment depends
+   * on remembering, so the machine enforces it now.
+   */
+  const pkg = JSON.parse(read('package.json')) as { scripts: Record<string, string> };
+
+  it('ota:production runs the owner guard BEFORE publishing', () => {
+    const script = pkg.scripts['ota:production'];
+    expect(script).toMatch(/ota-owner-guard\.mjs/);
+    // ordering matters — a guard after `eas update` guards nothing
+    expect(script.indexOf('ota-owner-guard.mjs')).toBeLessThan(script.indexOf('eas update'));
+    // and the native-surface preflight still runs too
+    expect(script).toMatch(/ota-preflight\.mjs/);
+  });
+
+  it('the guard exists, reads every env file Expo would, and has no override', () => {
+    const g = read('scripts/ota-owner-guard.mjs');
+    expect(g).toMatch(/EXPO_PUBLIC_OWNER_EMAIL/);
+    expect(g).toMatch(/\.env\.local/);
+    // The GATE line, not merely the identifier: `process.env[VAR]` appears twice in the script, so a
+    // loose match survived removing the check itself. Break-testing found that.
+    expect(g).toMatch(/if \(\(process\.env\[VAR\] \?\? ''\)\.trim\(\)\.length > 0\)/);
+    expect(g).toMatch(/process\.exit\(1\)/);
+    expect(g).toMatch(/There is no override flag/);
+    expect(g).not.toMatch(/--force|OTA_FORCE|SKIP_/);
+  });
+
+  it('a commented line counts as OFF, so the file can document the variable safely', () => {
+    const g = read('scripts/ota-owner-guard.mjs');
+    expect(g).toMatch(/startsWith\('#'\)\) continue;/);
+  });
+
+  it('the value is redacted in the failure output — it is an account identifier', () => {
+    const g = read('scripts/ota-owner-guard.mjs');
+    expect(g).toMatch(/const redact =/);
+    expect(g).toMatch(/\$\{redact\(s\.value\)\}/);
+  });
+
+  it('preview and development are NOT guarded — those channels are Tim\'s own builds', () => {
+    expect(pkg.scripts['ota:preview']).not.toMatch(/ota-owner-guard/);
+  });
+});
+
 describe('owner mode is a build-profile decision, not a runtime default', () => {
   const eas = JSON.parse(fs.readFileSync(path.join(root, 'eas.json'), 'utf8')) as {
     build: Record<string, { env?: Record<string, string> }>;

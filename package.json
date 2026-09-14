@@ -25,7 +25,7 @@
     "ios:ship": "eas build --profile production --platform ios --auto-submit-with-profile production",
     "ota:baseline": "node scripts/ota-preflight.mjs --write",
     "ota:preview": "node scripts/ota-preflight.mjs && eas update --branch preview",
-    "ota:production": "node scripts/ota-preflight.mjs && eas update --branch production",
+    "ota:production": "node scripts/ota-preflight.mjs && node scripts/ota-owner-guard.mjs && eas update --branch production",
     "android:build:preview": "eas build --profile preview --platform android",
     "android:build:production": "eas build --profile production --platform android",
     "test": "jest",

@@ -34,8 +34,24 @@ describe('every publish command runs the preflight', () => {
   });
 
   it.each(publishScripts)('%s is gated', (_name, cmd) => {
-    // The check must run BEFORE eas update, and && means a refusal stops the publish.
-    expect(cmd).toMatch(/^node scripts\/ota-preflight\.mjs && eas update/);
+    /**
+     * THE PROPERTY, not the exact string. This pinned
+     * `^node scripts/ota-preflight.mjs && eas update` literally, and on 2026-09-13 it failed on a
+     * correct change: `ota:production` gained a SECOND gate (scripts/ota-owner-guard.mjs, which refuses
+     * a production publish while EXPO_PUBLIC_OWNER_EMAIL is set locally). Adding a guard should never
+     * fail the test that exists to require guards.
+     *
+     * What actually matters is unchanged: the preflight runs FIRST, every gate is `&&`-chained ahead of
+     * `eas update` so a refusal stops the publish, and nothing runs after it.
+     */
+    const parts = cmd.split('&&').map((x) => x.trim());
+    expect(parts[0]).toBe('node scripts/ota-preflight.mjs');
+    const publishAt = parts.findIndex((x) => x.startsWith('eas update'));
+    expect(publishAt).toBeGreaterThan(0);                       // never the first step
+    expect(publishAt).toBe(parts.length - 1);                   // and always the last
+    for (const gate of parts.slice(0, publishAt)) {
+      expect(gate).toMatch(/^node scripts\/ota-[\w-]+\.mjs/);   // every earlier step is a gate script
+    }
   });
 
   it('there is a way to re-record the baseline, and it is not the same command as publishing', () => {

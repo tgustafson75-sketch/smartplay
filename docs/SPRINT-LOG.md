@@ -3978,3 +3978,41 @@ be deleted later as a bug or become the sole reply.
 
 Three full suite runs green afterwards, not one. The lesson is narrower than "run it twice": an assertion
 over a randomly-sampled value needs repeated draws, or it is a coin toss wearing a test's clothes.
+
+### "Can all OTAs be pushed so I can see it on my app?" — nearly a very expensive yes
+
+Checking which channel his app listens to, instead of answering from the profile names, turned up two
+things — the second of which I had caused.
+
+**1. The channel is `production`, not `preview`.** `eas build:list` shows the last five builds are all
+`profile=production / channel=production`, including the Play Store INTERNAL TESTING build on his phone.
+So `npm run ota:preview` publishes to a branch his app never reads; `npm run ota:production` is the only
+command it sees. `runtimeVersion` has been the literal `"1.0.0"` since 2026-05-23, so the binary accepts
+today's bundle.
+
+**2. Creating `.env.local` re-opened the owner landmine through a different door.** eas.json keeps
+`EXPO_PUBLIC_OWNER_EMAIL` off every release BUILD profile and a test asserts it — but `eas update`
+bundles LOCALLY, so a value in `.env.local` is inlined into the published bundle and walks around that
+protection. Proved with a sentinel export: a value present nowhere in the source appeared in the
+exported Hermes bundle. Because `app/_layout.tsx` treats ANY non-empty value as owner, a production OTA
+would have given every user Owner Tools and a lifetime grant, bypassing billing, persisted before anyone
+noticed.
+
+That is the same defect as the `OWNER_EMAILS.length === 1` landmine removed this morning, and **I created
+this one** by telling him to create `.env.local`.
+
+Fixed structurally rather than by a comment: `scripts/ota-owner-guard.mjs` refuses a production publish
+while the variable is set in the shell or in any `.env*` file Expo reads, is wired into `ota:production`
+BEFORE `eas update`, treats a commented line as off, redacts the value in its output, and has no override
+flag. `.env.local` now ships with the line commented and an explanation. `ota:preview` is deliberately
+NOT guarded — those channels are his own builds.
+
+Also relaxed `the-publish-command-is-guarded.test.ts`, which pinned the publish script as a literal
+string and therefore failed on a correct change: adding a second gate should never fail the test whose
+purpose is to require gates. It now asserts the property — preflight first, every earlier step a gate
+script, `eas update` last.
+
+### Verified
+
+`tsc` clean · `jest` **4754/4754 (396 suites)** twice · sim **1034/1034** · lint **0 errors** ·
+`ota-preflight` OK · `ota-owner-guard` safe. 9/9 break-test mutations caught.
