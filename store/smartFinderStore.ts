@@ -8,6 +8,26 @@ import type { RangefinderLock } from '../types/smartfinder';
 // out of the type; a persisted 'measure' maps to 'target' via migrate v3 + the setMode guard below.
 export type SmartFinderMode = 'standard' | 'target' | 'map' | 'putt';
 
+/** Every mode the screen can be opened in. Declared once so the URL validator cannot drift from the type. */
+export const SMARTFINDER_MODES: readonly SmartFinderMode[] = ['standard', 'target', 'map', 'putt'];
+
+/**
+ * 2026-09-13 (Tim — "I think it opens SmartFinder in Putt mode"). It did not: SmartFinder read only
+ * `autoread` from the URL, so NOTHING in the app could open it in a chosen mode, and arriving in putt
+ * mode by voice worked purely because zustand had persisted 'putt' from the last time he tapped the tab.
+ *
+ * This is the validator for the `?mode=` param that fixes that. A route is a boundary, so an unknown or
+ * absent value returns null and the persisted preference stands — a bad link must never strand the
+ * screen in a mode that does not exist.
+ */
+export function parseSmartFinderMode(raw: unknown): SmartFinderMode | null {
+  if (typeof raw !== 'string') return null;
+  const v = raw.trim().toLowerCase();
+  // 'measure' was retired above and still appears in old links; it maps where the migration maps it.
+  if (v === 'measure') return 'target';
+  return (SMARTFINDER_MODES as readonly string[]).includes(v) ? (v as SmartFinderMode) : null;
+}
+
 interface SmartFinderState {
   // Transient — not persisted. AR lock from the legacy camera mode.
   currentLock: RangefinderLock | null;

@@ -186,5 +186,20 @@
     "tut_2": "Toca Smart Motion para capturar y analizar tus swings; el Modo Coach es para trabajar con alguien más.",
     "tut_3": "Cada swing que analizas alimenta mi lectura de tus tendencias en el campo.",
     "tut_spoken": "SwingLab. Centro de práctica. Toca una tarjeta para empezar."
+  },
+  "smartfinder": {
+    "putt_camera_overlay": {
+      "green_slope_phone_down": "PENDIENTE DEL GREEN · MÓVIL EN EL SUELO",
+      "caddie": "CADDIE",
+      "top_at_hole": "PUNTA AL HOYO",
+      "crosswise": "TRANSVERSAL",
+      "read_this_spot": "MEDIR ESTE PUNTO",
+      "read_spot_n": "MEDIR PUNTO {{n}}",
+      "slope_measured": "PENDIENTE · MEDIDA",
+      "ask_caddie_to_read_it": "PIDE AL CADDIE QUE LA LEA",
+      "reading_ellipsis": "LEYENDO…",
+      "lay_phone_on_green": "Apoya el móvil en el green para medir la pendiente.",
+      "ends_differ_slope_changes": "Los extremos difieren un {{spread}}% — la pendiente cambia a lo largo de esta línea."
+    }
   }
 }

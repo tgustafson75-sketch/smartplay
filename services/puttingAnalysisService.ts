@@ -473,7 +473,35 @@ function fallbackAnalysis(
     mentalCue: 'Smooth pendulum, eyes still through impact.',
     technicalCue: 'Accelerate gently — no deceleration.',
   };
-  const caddieComment = `${caddieName} here. ${echo}Smooth pendulum, eyes still, trust the line.`;
+  /**
+   * 2026-09-13 (Tim) — "most of the time I ask the Caddie to look at the Putt which works every time."
+   *
+   * IT WORKED EVERY TIME BECAUSE IT NEVER LOOKED. This is the blind fallback — no frame, no read, nothing
+   * to analyse — and it answered "Smooth pendulum, eyes still, trust the line", which is a confident
+   * coaching sentence about a putt the caddie cannot see. Indistinguishable from a real read, which is
+   * exactly why it never seemed to fail. A fortune cookie with a handicap.
+   *
+   * It says so now, and points at the instrument that CAN see it: SmartFinder's putt read, which carries
+   * the bubble level and the distance measure.
+   *
+   * CORRECTING MY OWN NOTE HERE, because the first version of this comment asserted something I had not
+   * checked. I wrote that "look at my putt" speaks this analysis and never navigates, and used that to
+   * explain why Tim had never seen the level indicator. He pushed back — "Or maybe it was actually
+   * opening tightlie but I get a pic analysis… You just make a very simple assumption and ran with it" —
+   * and the trace proved him right and me wrong. Those words never reached this file at all: they fell
+   * through the local precheck to the cloud classifier, landed on open_tool{look}, and opened SmartFinder
+   * at whatever mode was PERSISTED, which then fired a general hole scene read. What reaches this
+   * function is stroke-mechanics phrasing ("how's my putting stroke"), and the routing split that makes
+   * that true now lives in services/localIntentPrecheck and api/voice-intent.
+   * [[feedback-verify-negative-claims]]
+   *
+   * The generic cues below are still returned in the structured fields — they are true things about
+   * putting — but they are no longer SPOKEN as though they were a read of this putt.
+   * [[silence-is-not-an-answer]] [[smartplay-defect-class-unwired-halves]]
+   */
+  const caddieComment = partialCapture
+    ? `${caddieName} here. ${echo}I can't actually see this one — no frame to read. Open the putt read in SmartFinder and I'll give you the distance and the level; otherwise it's your eyes on this one.`
+    : `${caddieName} here. ${echo}Smooth pendulum, eyes still, trust the line.`;
   return {
     puttId: newPuttId(),
     timestamp: new Date().toISOString(),

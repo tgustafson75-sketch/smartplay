@@ -178,16 +178,37 @@ const ALL_TOOL_NAME_TO_ACTION: Record<string, ToolAction | { type: 'navigate'; p
   // Visual analysis fills gaps when course hazard/geometry data is missing.
   // The old /lie-analysis?smartplay=1 route is retired; TightLie phrasings
   // ("analyze my lie", "check my lie", etc.) still land on lie_analysis.
-  smartplay: { type: 'navigate', path: '/smartfinder?autoread=1' },
-  smart_play: { type: 'navigate', path: '/smartfinder?autoread=1' },
+  /**
+   * 2026-09-13 (Tim) — `&mode=target` is NOT decoration. SmartFinder opens at its PERSISTED mode, and
+   * the scene read only runs in target mode, so a player whose last visit was putt mode said "tell me
+   * what you see" and landed in putt mode where nothing fires. Naming the mode makes every one of these
+   * routes mean the same thing on every device, instead of depending on what the player last tapped.
+   */
+  smartplay: { type: 'navigate', path: '/smartfinder?autoread=1&mode=target' },
+  smart_play: { type: 'navigate', path: '/smartfinder?autoread=1&mode=target' },
   // 2026-06-30 (Tim — "the logical voice path should be: open up SmartVision and tell me what
   // you see") — a spoken "tell me what you see / what do you see out there / read the scene"
   // opens the camera scene read (SmartFinder autoread) and SPEAKS what it perceives. Same
   // autoread path as smart_play; distinct from lie_analysis (a specific lie read). This is the
   // natural voice front-end for vision ingestion — point the phone, hear what's out there.
-  scene_read: { type: 'navigate', path: '/smartfinder?autoread=1' },
-  look: { type: 'navigate', path: '/smartfinder?autoread=1' },
-  what_you_see: { type: 'navigate', path: '/smartfinder?autoread=1' },
+  scene_read: { type: 'navigate', path: '/smartfinder?autoread=1&mode=target' },
+  look: { type: 'navigate', path: '/smartfinder?autoread=1&mode=target' },
+  what_you_see: { type: 'navigate', path: '/smartfinder?autoread=1&mode=target' },
+  /**
+   * 2026-09-13 (Tim — "most of the time I ask the Caddie to look at the Putt which works every time and
+   * I think it opens SmartFinder in Putt mode").
+   *
+   * IT DID NOT. Every putt phrasing fell through the local precheck to the cloud classifier, landed on
+   * `look`/`scene_read` above, and reached putt mode only because zustand had persisted 'putt' from the
+   * last time he tapped the tab — then fired a general HOLE scene read at it, 1500 ms after mount,
+   * before either end of the putt had been tapped. The wrong analysis of nothing, on an accidental route.
+   *
+   * This is the deliberate one. `mode=putt` is honoured by the screen now, and putt mode does a PUTT
+   * read from the measured distance and the grounded slope once both ends are tapped.
+   */
+  putt_read: { type: 'navigate', path: '/smartfinder?autoread=1&mode=putt' },
+  read_putt: { type: 'navigate', path: '/smartfinder?autoread=1&mode=putt' },
+  green_read: { type: 'navigate', path: '/smartfinder?autoread=1&mode=putt' },
   // 2026-06-21 — PuttingLab voice route. "Open PuttingLab", "putting lab",
   // "putting analysis" land on the upload screen (swinglab/upload).
   // 2026-07-06 (nav audit) — carry ?tag=putt so the upload screen opens PRE-SET to
@@ -745,6 +766,10 @@ export const openToolHandler: IntentHandler = {
         voiceResponse = "Cage mode starting. I'll capture every swing.";
       } else if (toolName === 'smartplay' || toolName === 'smart_play') {
         voiceResponse = "I'll take a look.";
+      } else if (toolName === 'putt_read' || toolName === 'read_putt' || toolName === 'green_read') {
+        // A caddie reading a putt says this, and it sets the expectation correctly: he is going to look
+        // at THIS putt, not narrate the hole.
+        voiceResponse = 'Let me read it. Tap your ball, then the hole.';
       } else if (toolName === 'scene_read' || toolName === 'look' || toolName === 'what_you_see') {
         // 2026-07-24 (final QA) — these had no label and spoke "Opening undefined." A vision
         // read wants a caddie-natural line, not "Opening SmartVision."

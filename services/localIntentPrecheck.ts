@@ -256,6 +256,40 @@ const PATTERNS: Pattern[] = [
     build: (raw) => intent(raw, 'query_status', { query_topic: 'course' }),
   },
 
+  /**
+   * ── READ THIS PUTT (2026-09-13) ───────────────────────────────────────────────────────────────────
+   *
+   * Tim: "most of the time I ask the Caddie to look at the Putt which works every time and I think it
+   * opens SmartFinder in Putt mode… Or maybe it was actually opening tightlie but I get a pic analysis.
+   * You just make a very simple assumption and ran with it."
+   *
+   * Every putt phrasing returned NULL here, so the cloud classifier decided — and api/voice-intent lists
+   * "look at my putt" under query_status{putt_analysis} (PuttingLab STROKE analysis from glasses video,
+   * which speaks and never navigates) while the utterance's own words pull hard toward open_tool{look}
+   * (a general HOLE scene read). A coin flip between two wrong answers. Landing in putt mode at all
+   * depended on zustand having persisted 'putt' from the last time he tapped the tab.
+   *
+   * Deterministic here, exactly like the B11 "what's the play" fix above, and for the same reason: a
+   * route that a model re-decides every time is not a route.
+   *
+   * WHAT THIS DELIBERATELY DOES NOT TAKE — this is a COMMAND ("go read this putt"), and the precheck
+   * must not swallow questions the caddie should answer himself:
+   *   · "how's my putting" / "how many putts"  → putt_stats, below and unaffected (no read verb)
+   *   · "longest putt"                          → longest_putt, below and unaffected
+   *   · anything naming the STROKE or a lesson  → the negative lookahead sends it to the brain, which
+   *     is what actually owns PuttingLab stroke analysis
+   * [[a-question-intercepted-before-the-brain-is-never-heard]]
+   */
+  {
+    rx: /^(?!.*\b(?:stroke|tempo|mechanics|takeaway|follow\s*through|lesson|drill)\b)(?=.*\b(?:look\s+at|read|check|analy[sz]e|size\s+up)\b)(?=.*\b(?:putt|green)\b)(?!.*\b(?:putts?\s+(?:so\s+far|this\s+round|today)|how\s+many)\b)/i,
+    build: (raw) => intent(raw, 'open_tool', { tool_name: 'putt_read' }),
+  },
+  {
+    // "how's my read" is a green read too, and reaches none of the patterns above or below it.
+    rx: /\bhow(?:'s|\s+is)\s+(?:my|the)\s+read\b/i,
+    build: (raw) => intent(raw, 'open_tool', { tool_name: 'putt_read' }),
+  },
+
   // ── ROUND STATS (2026-07-25 coverage-audit gaps — all answered locally/offline) ──
   {
     /**

@@ -186,5 +186,20 @@
     "tut_2": "点击 Smart Motion 捕捉并分析你的挥杆；教练模式用于指导他人。",
     "tut_3": "你分析的每一次挥杆都会丰富我对你球场倾向的判断。",
     "tut_spoken": "SwingLab。练习中心。点击卡片开始。"
+  },
+  "smartfinder": {
+    "putt_camera_overlay": {
+      "green_slope_phone_down": "果岭坡度 · 手机平放",
+      "caddie": "球童",
+      "top_at_hole": "顶端朝向球洞",
+      "crosswise": "横向放置",
+      "read_this_spot": "读取此处",
+      "read_spot_n": "读取第 {{n}} 处",
+      "slope_measured": "坡度 · 实测",
+      "ask_caddie_to_read_it": "请球童读线",
+      "reading_ellipsis": "读取中…",
+      "lay_phone_on_green": "将手机平放在果岭上以测量坡度。",
+      "ends_differ_slope_changes": "两端相差 {{spread}}% — 沿这条线坡度有变化。"
+    }
   }
 }

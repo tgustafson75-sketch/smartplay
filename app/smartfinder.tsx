@@ -18,7 +18,12 @@ import * as Location from 'expo-location';
 import { DeviceMotion } from 'expo-sensors';
 import { useRoundStore } from '../store/roundStore';
 import { useGreenReadStore } from '../store/greenReadStore';
-import { readPuttSlope, paceHintFor, whyNoSlope } from '../services/puttSlopeRead';
+import {
+  readPuttSlope, paceHintFor, whyNoSlope, readLevel, bubbleOffset,
+  readGroundSlope, summarizeGroundSpots, groundReadConfidence, groundConfidenceNote,
+  describeGroundSlope, whyNoGroundSlope,
+  type GroundSlopeRead, type GroundOrientation,
+} from '../services/puttSlopeRead';
 import { decideShot } from '../services/caddieDecision';
 import { liveShotReadInputs } from '../services/shotReadLive';
 import { getLearnedMissDirection } from '../services/effectiveMiss';
@@ -30,7 +35,7 @@ import { useClubStatsStore, CLUB_ORDER } from '../store/clubStatsStore';
 // SF fix #3 — the 4-tier yardage resolver, so a number the player STATED
 // ("I'm 150 out") wins over the GPS/scorecard middle on the target overlay.
 import { resolveYardage, resolvedToFmb } from '../services/yardageResolver';
-import { useSmartFinderStore, type SmartFinderMode } from '../store/smartFinderStore';
+import { useSmartFinderStore, parseSmartFinderMode, type SmartFinderMode } from '../store/smartFinderStore';
 import {
   peekFix,
   classifyAccuracy,
@@ -153,9 +158,28 @@ export default function SmartFinder() {
 
   // autoread=1: voice trigger lands here for scene read. Override 'map' to
   // 'target' so the camera is live. User's persisted preference unchanged.
-  const { autoread } = useLocalSearchParams<{ autoread?: string }>();
+  /**
+   * 2026-09-13 (Tim) — `?mode=` EXISTS NOW, and it is the fix for a feature that only ever worked by
+   * accident. "Look at my putt" reached putt mode because zustand had persisted 'putt' from the last
+   * time he tapped the tab — had he last used target mode, the same words would have scene-read the
+   * hole. Nothing in the app could ask for a mode, because this line read `autoread` and nothing else.
+   *
+   * An explicit mode WINS over the autoread nudge below it: a caller that named a mode has said
+   * something more specific than "make sure the camera is live". It is also written through to the
+   * store, so the mode the player arrived in is the mode the screen remembers — one owner of "what mode
+   * am I in", rather than a display override sitting on top of a disagreeing store.
+   */
+  const { autoread, mode: modeParam } = useLocalSearchParams<{ autoread?: string; mode?: string }>();
   const autoRead = autoread === '1';
-  const displayMode: SmartFinderMode = autoRead && mode === 'map' ? 'target' : mode;
+  const requestedMode = parseSmartFinderMode(modeParam);
+  useEffect(() => {
+    if (requestedMode && requestedMode !== mode) setMode(requestedMode);
+    // Deliberately keyed on the REQUEST only. Including `mode` would re-fire and fight the user the
+    // moment they tapped a different tab on a screen they had opened with a param.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedMode]);
+  // Read the request directly rather than waiting for the effect, so there is no frame of the old mode.
+  const displayMode: SmartFinderMode = requestedMode ?? (autoRead && mode === 'map' ? 'target' : mode);
 
   // 2026-09-10 — through the resolver, like every other surface. This screen read the engine
   // directly, so a stated correction moved the caddie's number and not this one.
@@ -870,12 +894,23 @@ function CameraSmartFinder({
   // Guard with autoFiredRef so the effect reruns (when runSceneRead changes due
   // to sceneReading flip) do NOT fire a second read.
   useEffect(() => {
-    if (!autoRead || autoFiredRef.current) return;
+    /**
+     * 2026-09-13 (Tim) — TARGET MODE ONLY, and that is the bug this line closes.
+     *
+     * `runSceneRead` is the general "what's out there" hole read. It was auto-firing in PUTT mode too,
+     * which is what he had been getting for months: he asked the caddie to look at his putt, landed in
+     * putt mode, and a photo of the green went off to be analysed as a hole — with no putt context, and
+     * 1500 ms after mount, BEFORE either end of the putt had been tapped. The wrong analysis, of nothing.
+     *
+     * A putt arriving with autoread ARMS the putt read instead (passed down as `armRead`), and that one
+     * fires when there is a measurement to read.
+     */
+    if (!autoRead || mode !== 'target' || autoFiredRef.current) return;
     autoFiredRef.current = true;
     // 1500ms: camera hardware warmup before takePictureAsync is reliable.
     const timer = setTimeout(() => { void runSceneRead(); }, 1500);
     return () => clearTimeout(timer);
-  }, [autoRead, runSceneRead]);
+  }, [autoRead, mode, runSceneRead]);
 
   // Loading state — always render a back affordance so a stalled OS
   // dialog can never strand the user.
@@ -958,7 +993,11 @@ function CameraSmartFinder({
               onPrecisionRead={handlePrecisionRead}
             />
           ) : (
-            <PuttCameraOverlay locationGranted={locationGranted} />
+            <PuttCameraOverlay
+              locationGranted={locationGranted}
+              armRead={autoRead}
+              captureFrameBase64={captureFrameBase64}
+            />
           )}
         </View>
       </GestureDetector>
@@ -2039,12 +2078,38 @@ function TargetCameraOverlay({
   );
 }
 
-function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGranted: boolean }) {
+/**
+ * 2026-09-13 (Tim) — "sometimes, the putting read has said uphill when its down… if we reconcile with
+ * what we see and know this truly completes this picture."
+ *
+ * THE GROUNDED READ lives here now. Everything this overlay used to call slope came from the AIMED
+ * tilt — the phone held up, sighting down the line — and that method cannot resolve what it claimed:
+ * 2% of grade is 1.15° of camera angle and a hand wanders 2-3°. Laid flat on the green the same sensor
+ * reads the surface directly, at a ~0.5° floor, which is what finally makes 2% readable.
+ *
+ * So the panel's SLOPE now prefers a grounded reading and falls back to saying it does not have one.
+ * The aimed read is kept only for the live bubble and its own honest refusals — never as the number.
+ *
+ * `armRead` is set when the player got here by ASKING ("look at my putt"). It does not fire anything on
+ * arrival; it fires the caddie read once both ends are tapped, because a read taken before there is a
+ * measurement is what the scene read was doing wrong.
+ */
+function PuttCameraOverlay({ locationGranted: _locationGranted, armRead = false, captureFrameBase64 }: {
+  locationGranted: boolean;
+  armRead?: boolean;
+  /** Grabs a frame from the CameraView that lives in the parent. Null when capture fails. */
+  captureFrameBase64?: () => Promise<string | null>;
+}) {
   const { t } = useTranslation();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
   const pitchRef = useRef(0);
   const rollRef = useRef(0);
+  const wobbleRef = useRef<{ p: number; r: number }[]>([]);
+  /** Wobble observed at the moment a spot was locked. Null means nothing watched it — not 'steady'. */
+  const lastWobbleRef = useRef<number | null>(null);
+  /** Size of the tap surface, so a tapped point can be expressed as a fraction of the frame. */
+  const tapSizeRef = useRef<{ width: number; height: number } | null>(null);
   const [pointA, setPointA] = useState<{ x: number; y: number } | null>(null);
   const [pointB, setPointB] = useState<{ x: number; y: number } | null>(null);
   const [pitchAtMeasure, setPitchAtMeasure] = useState<number | null>(null);
@@ -2061,6 +2126,11 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
         const roll = ((data.rotation.gamma ?? 0) * 180) / Math.PI;
         pitchRef.current = pitch;
         rollRef.current = roll;
+        // Rolling window of raw samples (~1s at 200ms) so steadiness is MEASURED rather than assumed.
+        // An unwatched hold is 'unknown', not 'steady' — see groundReadConfidence.
+        const w = wobbleRef.current;
+        w.push({ p: pitch, r: roll });
+        if (w.length > 5) w.shift();
         // 2026-08-07 (render-stability sweep) — only setState when the level actually MOVED (≥0.5°). This
         // fired a fresh {pitch,roll} object 5×/s regardless of change → continuous re-render + battery drain
         // on a high-traffic on-course surface. The refs above still update every sample for the live read.
@@ -2093,7 +2163,49 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
    */
   const liveSlope = readPuttSlope(tilt.pitch);
   const liveSlopePct = liveSlope.pct;
-  const liveLevel = liveSlopePct != null && Math.abs(liveSlopePct) < 1 && Math.abs(tilt.roll) < 2;
+  /**
+   * 2026-09-13 — LEVEL COMES FROM THE ANGLES, not from the slope percentage.
+   *
+   * This was `liveSlopePct != null && |liveSlopePct| < 1 && |roll| < 2`, and the deadband added an hour
+   * earlier made `pct` null near level — so the indicator could never say LEVEL exactly when the phone WAS
+   * level. A regression I introduced; found because Tim asked for a level indicator and it turned out one
+   * already existed, broken.
+   *
+   * The angles are also the honest source. A phone measures its own attitude from gravity to a fraction of
+   * a degree; it only becomes guesswork when asked to infer the GREEN's slope from where it is aimed.
+   */
+  const liveLevelRead = readLevel(tilt.pitch, tilt.roll);
+  const liveLevel = liveLevelRead.isLevel;
+  const bubble = bubbleOffset(liveLevelRead);
+
+  /**
+   * THE GROUNDED READ — the phone laid on the green, where its own attitude IS the surface gradient.
+   * This is the trustworthy instrument; `liveSlope` above is the aimed one and stays out of the number.
+   */
+  const [groundOrientation, setGroundOrientation] = useState<GroundOrientation>('top_to_hole');
+  const liveGround = readGroundSlope(tilt.pitch, tilt.roll, groundOrientation);
+  const [groundSpots, setGroundSpots] = useState<GroundSlopeRead[]>([]);
+  const groundSummary = useMemo(() => summarizeGroundSpots(groundSpots), [groundSpots]);
+  const groundQuality = useMemo(
+    () => ({ spots: groundSummary?.spots ?? 0, agree: groundSummary?.agree, wobbleDeg: lastWobbleRef.current }),
+    [groundSummary],
+  );
+  const groundConfidence = groundSummary ? groundReadConfidence(groundSummary.mean, groundQuality) : null;
+
+  /** Capture the patch under the phone right now. Wobble is snapshotted with it, not recomputed later. */
+  const lockGroundSpot = useCallback(() => {
+    const read = readGroundSlope(pitchRef.current, rollRef.current, groundOrientation);
+    if (read.call !== 'read') return;
+    const w = wobbleRef.current;
+    lastWobbleRef.current = w.length >= 2
+      ? Math.max(
+          Math.max(...w.map((x) => x.p)) - Math.min(...w.map((x) => x.p)),
+          Math.max(...w.map((x) => x.r)) - Math.min(...w.map((x) => x.r)),
+        )
+      : null;
+    setGroundSpots((prev) => [...prev, read].slice(-3));
+    try { useToastStore.getState().show('Spot read.'); } catch { /* non-fatal */ }
+  }, [groundOrientation]);
 
   const handleTap = useCallback((event: { nativeEvent: { locationX: number; locationY: number } }) => {
     const { locationX, locationY } = event.nativeEvent;
@@ -2112,7 +2224,15 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
     }
   }, [pointA, pointB]);
 
-  const reset = () => { setPointA(null); setPointB(null); setPitchAtMeasure(null); setRollAtMeasure(null); };
+  const reset = () => {
+    setPointA(null); setPointB(null); setPitchAtMeasure(null); setRollAtMeasure(null);
+    // The grounded spots belong to the putt that was just cleared — keeping them would attach one
+    // green's slope to the next putt, which is the quiet kind of wrong this screen keeps producing.
+    setGroundSpots([]);
+    lastWobbleRef.current = null;
+    setCaddieRead(null);
+    caddieFiredRef.current = false;
+  };
 
   // Approximate distance in feet using a simple visual heuristic — pixels mapped
   // to feet via a fixed reference (this is rough by design; a calibrated camera
@@ -2132,7 +2252,28 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
   // the incline, break direction from the side tilt. Qualitative on
   // purpose (no fake cup counts) and labeled an estimate — trust your own
   // read too. This is the "now that we have more metrics" improvement.
-  const puttRead = pointA && pointB && measuredSlope.call !== 'no_reading' ? (() => {
+  /**
+   * 2026-09-13 — THE GROUNDED READING IS THE NUMBER. The aimed one is the fallback, and only ever
+   * reports through its own deadband, which is what stops it flipping direction on a 1.2° grip change.
+   * Two owners of "the slope" on one screen is precisely how it came to say uphill when it was down.
+   */
+  const shownSlopePct = groundSummary?.mean.alongPct ?? slopePct;
+  const shownSlopeIsGrounded = groundSummary != null;
+
+  const puttRead = pointA && pointB && (groundSummary || measuredSlope.call !== 'no_reading') ? (() => {
+    if (groundSummary) {
+      const g = groundSummary.mean;
+      const pace = g.alongPct == null || g.alongPct === 0
+        ? 'stock pace — it plays flat'
+        : g.alongPct > 0 ? 'firm pace — it’s uphill' : 'soft pace — downhill, let it die';
+      const across = g.acrossPct ?? 0;
+      const breakTxt = across === 0
+        ? 'plays fairly straight'
+        : Math.abs(across) >= 2
+          ? (across > 0 ? 'strong right break — aim outside the left edge' : 'strong left break — aim outside the right edge')
+          : (across > 0 ? 'breaks right — aim the left edge' : 'breaks left — aim the right edge');
+      return `${breakTxt}, ${pace}.`;
+    }
     /**
      * The pace clause is the owner's call now, and when it declines the read SAYS so instead of quietly
      * falling back to 'stock pace' — which is what made a no-signal hold look like a measurement.
@@ -2157,17 +2298,88 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
   // 2026-08-06 (audit cycle 5, #4 — Tim: "you don't see it"). Recall the last saved read for THIS hole from
   // a PRIOR visit, so a persisted read is actually surfaced (not just written). Shown until a fresh read is
   // taken this session — then the live card owns the current read.
+  /**
+   * THE CADDIE READ — what "look at my putt" was always supposed to produce.
+   *
+   * It fires when there is a MEASUREMENT to read, never on arrival. The scene read it replaces on this
+   * path fired 1500 ms after mount, before either end had been tapped, and analysed the green as if it
+   * were a hole. Armed by `armRead` (he asked for it) or by the button below (he tapped for it); either
+   * way the trigger is both ends being set, and it runs once per read.
+   */
+  const [caddieRead, setCaddieRead] = useState<string | null>(null);
+  const [caddieReading, setCaddieReading] = useState(false);
+  const caddieFiredRef = useRef(false);
+
+  const runCaddieRead = useCallback(async () => {
+    if (caddieFiredRef.current || distanceFeet == null) return;
+    caddieFiredRef.current = true;
+    setCaddieReading(true);
+    try {
+      /**
+       * 2026-09-13 (Tim) — "See if you can bake in a vision step to look for the flag stick and flag
+       * and hole."
+       *
+       * The frame is what lets the read CHECK ITSELF. Point B is whatever the player tapped, and the
+       * A/B distance is only as good as that tap landing on the hole — so the normalised position goes
+       * with the picture and the model is asked whether a hole or flagstick is actually there. A
+       * disagreement is worth more than the number: it means the measurement is off, which is exactly
+       * the accuracy complaint this whole pass is chasing.
+       */
+      const size = tapSizeRef.current;
+      const targetPoint = pointB && size && size.width > 0 && size.height > 0
+        ? { xNorm: pointB.x / size.width, yNorm: pointB.y / size.height }
+        : null;
+      const imageBase64 = captureFrameBase64 ? await captureFrameBase64() : null;
+
+      const svc = await import('../services/puttReadService');
+      const result = await svc.readPutt({
+        distanceFeet,
+        ground: groundSummary?.mean ?? null,
+        groundConfidence,
+        groundSpots: groundSummary?.spots ?? 0,
+        targetPoint,
+        imageBase64,
+      });
+      if (result) {
+        setCaddieRead(result.text);
+        /**
+         * He ASKED for this out loud, so he hears it. Same path the scene read uses — the brain turn
+         * runs with skipTts, so the round-trip is not paid for twice.
+         */
+        try {
+          const st = useSettingsStore.getState();
+          void speak(result.text, st.voiceGender, st.language ?? 'en', getApiBaseUrl(), { userInitiated: true })
+            ?.catch?.(() => undefined);
+        } catch { /* spoken is best-effort — the card above still carries the read */ }
+      } else {
+        // Let him ask again rather than stranding the read on a dropped connection.
+        caddieFiredRef.current = false;
+        useToastStore.getState().show('Caddie read unavailable — check your signal.');
+      }
+    } catch {
+      caddieFiredRef.current = false;
+      useToastStore.getState().show('Caddie read failed — try again.');
+    } finally {
+      setCaddieReading(false);
+    }
+  }, [distanceFeet, groundSummary, groundConfidence, pointB, captureFrameBase64]);
+
+  useEffect(() => {
+    if (!armRead || distanceFeet == null || caddieFiredRef.current) return;
+    void runCaddieRead();
+  }, [armRead, distanceFeet, runCaddieRead]);
+
   const recallHole = useRoundStore((s) => (s.isRoundActive ? s.currentHole : null));
   const recallCourseId = useRoundStore((s) => (s.isRoundActive ? s.activeCourseId : null));
   const priorRead = useGreenReadStore((s) => s.lastForHole(recallCourseId, recallHole));
 
   const lastSavedReadRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!puttRead || distanceFeet == null || slopePct == null) return;
+    if (!puttRead || distanceFeet == null || shownSlopePct == null) return;
     const rs = useRoundStore.getState();
     // Include the hole in the dedup key: an identical feet/slope/roll read on a DIFFERENT hole (within one
     // continuous putt-mode session) is a distinct read and must still save (review F1).
-    const key = `${rs.isRoundActive ? rs.currentHole : 'x'}|${distanceFeet}|${slopePct}|${rollAtMeasure ?? 0}`;
+    const key = `${rs.isRoundActive ? rs.currentHole : 'x'}|${distanceFeet}|${shownSlopePct}|${rollAtMeasure ?? 0}`;
     if (lastSavedReadRef.current === key) return;
     lastSavedReadRef.current = key;
     try {
@@ -2177,16 +2389,23 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
         courseName: null,
         hole: rs.isRoundActive ? rs.currentHole : null,
         feetEst: distanceFeet,
-        slopePct,
+        // The grounded value when there is one — what gets recalled on the next visit to this green
+        // must be the measurement, not the aimed inference it replaced.
+        slopePct: shownSlopePct,
         text: puttRead,
       });
       useToastStore.getState().show('Green read saved.');
     } catch { /* non-fatal */ }
-  }, [puttRead, distanceFeet, slopePct, rollAtMeasure]);
+  }, [puttRead, distanceFeet, shownSlopePct, rollAtMeasure]);
 
   return (
     <>
-      <TouchableOpacity activeOpacity={1} style={StyleSheet.absoluteFill} onPress={handleTap} />
+      <TouchableOpacity
+        activeOpacity={1}
+        style={StyleSheet.absoluteFill}
+        onPress={handleTap}
+        onLayout={(e) => { tapSizeRef.current = e.nativeEvent.layout; }}
+      />
 
       {/* Live level indicator — hold the phone along the ball→hole line and
           read the incline in real time. Honest estimate (depends on a
@@ -2194,13 +2413,37 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
       <View style={{ position: 'absolute', top: insets.top + 12, left: 16, right: 16, alignItems: 'center' }} pointerEvents="none">
         <View style={{ backgroundColor: 'rgba(0,0,0,0.72)', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 10, alignItems: 'center', minWidth: 190 }}>
           <Text style={{ color: liveLevel ? '#00C896' : '#fff', fontSize: 13, fontWeight: '900', letterSpacing: 1 }}>
-            {liveSlopePct == null
+            {liveLevelRead.unreadable
               ? 'HOLD PHONE UPRIGHT'
-              : liveLevel ? 'LEVEL ✓' : `${liveSlopePct > 0 ? 'UPHILL' : 'DOWNHILL'} ~${Math.abs(liveSlopePct)}%`}
+              : liveLevel ? 'LEVEL ✓'
+              : liveSlopePct != null ? `${liveSlopePct > 0 ? 'UPHILL' : 'DOWNHILL'} ~${Math.abs(liveSlopePct)}%`
+              : 'TOO LEVEL TO CALL'}
           </Text>
-          <View style={{ marginTop: 8, width: 170, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center' }}>
-            <View style={{ position: 'absolute', left: '50%', width: 1.5, height: 14, backgroundColor: 'rgba(255,255,255,0.55)', top: -4, marginLeft: -0.75 }} />
-            <View style={{ position: 'absolute', left: `${50 + Math.max(-45, Math.min(45, (liveSlopePct ?? 0) * 5))}%`, width: 12, height: 12, borderRadius: 6, marginLeft: -6, backgroundColor: slopeColor(liveSlopePct) }} />
+          {/**
+            * 2026-09-13 (Tim: "Like a bubble pill like a carpenters level?") — A TWO-AXIS VIAL.
+            *
+            * The old one was a single horizontal track driven by the slope PERCENTAGE, so it moved on one
+            * axis and went dead in the middle once the percentage started refusing near level. A green
+            * tilts two ways and both matter: pitch is up/down the line, roll is the cross-slope that makes
+            * a putt break. The bubble is positioned from the ANGLES, which the phone measures directly.
+            */}
+          <View style={{ marginTop: 10, width: 78, height: 78, borderRadius: 39, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.35)', backgroundColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center' }}>
+            {/* centre target — a tight ring the bubble has to sit inside, like a bullseye vial */}
+            <View style={{ position: 'absolute', width: 20, height: 20, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)' }} />
+            <View style={{ position: 'absolute', width: 78, height: 1, backgroundColor: 'rgba(255,255,255,0.18)' }} />
+            <View style={{ position: 'absolute', width: 1, height: 78, backgroundColor: 'rgba(255,255,255,0.18)' }} />
+            <View
+              style={{
+                position: 'absolute',
+                width: 16, height: 16, borderRadius: 8,
+                backgroundColor: liveLevel ? '#00C896' : slopeColor(liveSlopePct),
+                opacity: liveLevelRead.unreadable ? 0.3 : 1,
+                transform: [
+                  { translateX: bubble.x * 29 },
+                  { translateY: bubble.y * 29 },
+                ],
+              }}
+            />
           </View>
           <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 9, marginTop: 6, fontWeight: '600' }}>{t('smartfinder.putt_camera_overlay.estimate_hold_steady_over_the')}</Text>
         </View>
@@ -2249,6 +2492,95 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
           already owns the safe-area inset, so +16-plus-inset double-counted it into a dead band (same
           fix as the target-mode strip; these two consumers were missed). */}
       <View style={[styles.bottomPanel, { paddingBottom: 10 }]} pointerEvents="box-none">
+        {/**
+          * 2026-09-13 (Tim) — "dont seem like a complicated add on to settle the issue we are working on
+          * when other factors dont agree."
+          *
+          * THE ARBITER. Lay the phone on the green and this is the one reading that is a measurement
+          * rather than an inference — so when the aimed tilt, the eye and the memory of the green
+          * disagree, this settles it. It sits above the A/B result deliberately: it is available before
+          * either end is tapped, because reading the slope is often the first thing you do.
+          */}
+        {(liveGround.call === 'read' || groundSummary) && (
+          <View style={{
+            marginBottom: 10, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10,
+            borderWidth: 1, borderColor: '#88F700', backgroundColor: 'rgba(136,247,0,0.10)',
+          }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ color: '#88F700', fontSize: 10, fontWeight: '900', letterSpacing: 1 }}>
+                {t('smartfinder.putt_camera_overlay.green_slope_phone_down')}
+              </Text>
+              {groundConfidence && (
+                <View style={{
+                  paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6,
+                  backgroundColor: groundConfidence === 'good' ? 'rgba(0,200,150,0.25)'
+                    : groundConfidence === 'moderate' ? 'rgba(245,166,35,0.25)' : 'rgba(239,68,68,0.25)',
+                }}>
+                  <Text style={{
+                    color: groundConfidence === 'good' ? '#00C896'
+                      : groundConfidence === 'moderate' ? '#F5A623' : '#ef4444',
+                    fontSize: 9, fontWeight: '900', letterSpacing: 0.5,
+                  }}>{groundConfidence.toUpperCase()}</Text>
+                </View>
+              )}
+            </View>
+
+            <Text style={{ color: '#fff', fontSize: 15, fontWeight: '800', marginTop: 4 }}>
+              {groundSummary
+                ? describeGroundSlope(groundSummary.mean)
+                : describeGroundSlope(liveGround) ?? whyNoGroundSlope(liveGround)}
+            </Text>
+
+            {/* The confidence says what it rests on, once — rather than hedging every clause above. */}
+            {groundConfidence && (
+              <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 9, marginTop: 4 }}>
+                {groundConfidenceNote(groundConfidence, groundQuality)}
+              </Text>
+            )}
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
+              {/* Orientation is not a preference — it decides which axis is along the line. */}
+              {(['top_to_hole', 'crosswise'] as const).map((o) => (
+                <TouchableOpacity
+                  key={o}
+                  onPress={() => setGroundOrientation(o)}
+                  style={{
+                    paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7, borderWidth: 1,
+                    borderColor: groundOrientation === o ? '#88F700' : 'rgba(255,255,255,0.25)',
+                    backgroundColor: groundOrientation === o ? 'rgba(136,247,0,0.18)' : 'transparent',
+                  }}
+                >
+                  <Text style={{
+                    color: groundOrientation === o ? '#88F700' : 'rgba(255,255,255,0.7)',
+                    fontSize: 9, fontWeight: '800',
+                  }}>{o === 'top_to_hole' ? t('smartfinder.putt_camera_overlay.top_at_hole') : t('smartfinder.putt_camera_overlay.crosswise')}</Text>
+                </TouchableOpacity>
+              ))}
+              <View style={{ flex: 1 }} />
+              <TouchableOpacity
+                onPress={lockGroundSpot}
+                disabled={liveGround.call !== 'read'}
+                style={{
+                  paddingHorizontal: 12, paddingVertical: 6, borderRadius: 7,
+                  backgroundColor: liveGround.call === 'read' ? '#88F700' : 'rgba(255,255,255,0.15)',
+                }}
+              >
+                <Text style={{
+                  color: liveGround.call === 'read' ? '#04170a' : 'rgba(255,255,255,0.5)',
+                  fontSize: 10, fontWeight: '900',
+                }}>{groundSummary ? t('smartfinder.putt_camera_overlay.read_spot_n', { n: groundSummary.spots + 1 }) : t('smartfinder.putt_camera_overlay.read_this_spot')}</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Disagreement between ends is a FINDING, not noise to average away. */}
+            {groundSummary && !groundSummary.agree && (
+              <Text style={{ color: '#F5A623', fontSize: 10, fontWeight: '700', marginTop: 6 }}>
+                {t('smartfinder.putt_camera_overlay.ends_differ_slope_changes', { spread: groundSummary.spreadPct })}
+              </Text>
+            )}
+          </View>
+        )}
+
         {!pointA ? (
           <Text style={styles.instructionText}>{t('smartfinder.putt_camera_overlay.tap_your_ball_position_point')}</Text>
         ) : !pointB ? (
@@ -2264,13 +2596,19 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
               </View>
               <View style={styles.puttDivider} />
               <View style={styles.puttResultItem}>
-                <Text style={[styles.puttResultValue, { color: slopeColor(slopePct) }]}>
-                  {slopePct != null ? `${slopePct > 0 ? '+' : ''}${slopePct}%` : '—'}
+                <Text style={[styles.puttResultValue, { color: slopeColor(shownSlopePct) }]}>
+                  {shownSlopePct != null ? `${shownSlopePct > 0 ? '+' : ''}${shownSlopePct}%` : '—'}
                 </Text>
-                <Text style={styles.puttResultLabel}>{t('smartfinder.putt_camera_overlay.slope')}</Text>
+                <Text style={styles.puttResultLabel}>
+                  {shownSlopeIsGrounded ? t('smartfinder.putt_camera_overlay.slope_measured') : t('smartfinder.putt_camera_overlay.slope')}
+                </Text>
               </View>
             </View>
-            <Text style={styles.puttHint}>{slopePct != null ? readSlope(slopePct) : 'Hold phone level over ball to read slope.'}</Text>
+            <Text style={styles.puttHint}>
+              {shownSlopePct != null
+                ? readSlope(shownSlopePct)
+                : (whyNoSlope(measuredSlope) ?? t('smartfinder.putt_camera_overlay.lay_phone_on_green'))}
+            </Text>
             {puttRead ? (
               <View style={{ marginTop: 10, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#00C896', backgroundColor: 'rgba(0,200,150,0.12)' }}>
                 <Text style={{ color: '#00C896', fontSize: 10, fontWeight: '900', letterSpacing: 1 }}>{t('smartfinder.putt_camera_overlay.your_read')}</Text>
@@ -2278,6 +2616,33 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
                 <Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 9, marginTop: 5 }}>{t('smartfinder.putt_camera_overlay.estimate_from_phone_tilt_trust')}</Text>
               </View>
             ) : null}
+            {/**
+              * THE CADDIE READ — this is what "look at my putt" was always meant to produce, and what
+              * the general hole scene read was standing in for. It reads the MEASURED putt: the A/B
+              * distance, the grounded slope and its confidence, and a vision cross-check on whether the
+              * hole is really where the second tap landed.
+              */}
+            {caddieRead ? (
+              <View style={{ marginTop: 10, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#88F700', backgroundColor: 'rgba(136,247,0,0.10)' }}>
+                <Text style={{ color: '#88F700', fontSize: 10, fontWeight: '900', letterSpacing: 1 }}>{t('smartfinder.putt_camera_overlay.caddie')}</Text>
+                <Text style={{ color: '#fff', fontSize: 14, lineHeight: 20, marginTop: 3 }}>{caddieRead}</Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                onPress={() => { caddieFiredRef.current = false; void runCaddieRead(); }}
+                disabled={caddieReading || distanceFeet == null}
+                style={{
+                  marginTop: 10, paddingVertical: 9, borderRadius: 10, alignItems: 'center',
+                  backgroundColor: caddieReading ? 'rgba(255,255,255,0.15)' : 'rgba(136,247,0,0.18)',
+                  borderWidth: 1, borderColor: caddieReading ? 'rgba(255,255,255,0.2)' : '#88F700',
+                }}
+              >
+                <Text style={{ color: caddieReading ? 'rgba(255,255,255,0.6)' : '#88F700', fontSize: 11, fontWeight: '900', letterSpacing: 0.6 }}>
+                  {caddieReading ? t('smartfinder.putt_camera_overlay.reading_ellipsis') : t('smartfinder.putt_camera_overlay.ask_caddie_to_read_it')}
+                </Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity style={styles.clearBtn} onPress={reset}>
               <Text style={styles.clearBtnText}>{t('smartfinder.putt_camera_overlay.reset')}</Text>
             </TouchableOpacity>
