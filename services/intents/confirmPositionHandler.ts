@@ -53,13 +53,44 @@ import {
 const CLOSE_YARDS = 30;
 const FAR_YARDS = 100;
 
+/**
+ * The characters of an explicit hole reference, blanked out so the distance scan cannot read the hole
+ * number as a yardage. Returns the utterance unchanged when no hole is named.
+ */
+function maskHolePhrase(raw: string): string {
+  return raw.replace(/\b(?:hole|on)\s+(\d{1,2})\b/gi, (whole, digits: string) => {
+    const n = parseInt(digits, 10);
+    // Only blank it when it really could be a hole. "on 140" is a distance, not hole 140.
+    return n >= 1 && n <= 18 ? ' '.repeat(whole.length) : whole;
+  });
+}
+
+/**
+ * 2026-09-13 (Tim: "Finish all no device test items") — THE HOLE NUMBER WAS BEING READ AS THE YARDAGE.
+ *
+ * This preferred the LAST 2-3 digit integer, on the reasoning that "the hole number usually precedes
+ * the distance". Natural speech puts it the other way round at least as often, and then the last
+ * integer IS the hole:
+ *
+ *     "I'm 140 out on hole 12"      → 12
+ *     "I'm about 95 out on hole 16" → 16
+ *
+ * Three of seven plausible phrasings returned the hole number. The consequence is not a shrug: the
+ * handler grounds that distance against the hole's geometry, finds GPS ~130 yards away from a position
+ * 12 yards from the pin, announces "that's drift", force-refreshes GPS, and says "using your number for
+ * this shot" — so a 140-yard approach is clubbed as 12. It only bit on holes 10-18, because the regex
+ * needs two digits, which is half the course.
+ *
+ * Fixed by resolving the HOLE first and blanking its characters before scanning for a yardage, so one
+ * token can never be consumed as both. Last-match preference is kept for everything else: "hole 12,
+ * 140 out" was always right and still is.
+ */
 function extractDistance(raw: string, paramYards: unknown): number | null {
   if (typeof paramYards === 'number' && Number.isFinite(paramYards) && paramYards >= 10 && paramYards <= 600) {
     return Math.round(paramYards);
   }
-  // Prefer the LAST 2-3 digit integer in the utterance — the hole
-  // number ("hole 2") usually precedes the distance ("140 out").
-  const matches = Array.from(raw.matchAll(/\b(\d{2,3})\b/g));
+  const scanned = maskHolePhrase(raw);
+  const matches = Array.from(scanned.matchAll(/\b(\d{2,3})\b/g));
   for (let i = matches.length - 1; i >= 0; i--) {
     const n = parseInt(matches[i][1], 10);
     if (Number.isFinite(n) && n >= 10 && n <= 600) return n;

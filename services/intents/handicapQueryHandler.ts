@@ -14,7 +14,7 @@
  *   • "how does my handicap work"
  */
 
-import { holePar as parForHole } from '../smartFinderService';
+import { holePar as parForHole, holeData as resolvedHoleData } from '../smartFinderService';
 import type { IntentHandler, IntentResult, VoiceIntent, AppContext } from '../../types/voiceIntent';
 import {
   computeCourseHandicap, computeScoreDifferential, netDoubleBogeyCap,
@@ -111,7 +111,42 @@ export const handicapQueryHandler: IntentHandler = {
         const rating = (tee && (tee as { course_rating?: number }).course_rating) ?? par;
         const slope = (tee && (tee as { slope_rating?: number }).slope_rating) ?? 113;
         const ch = computeCourseHandicap(idx, rating, slope, par);
-        const strokes = strokesReceivedOnHole(ch, round.currentHole || 1);
+        /**
+         * 2026-09-13 — THIS PASSED THE HOLE NUMBER WHERE WHS WANTS THE STROKE INDEX.
+         *
+         * `strokesReceivedOnHole(courseHandicap, holeStrokeIndex)` allocates by the scorecard's HCP
+         * column — 1 = hardest … 18 = easiest — and this called it with `round.currentHole`. Hole 1
+         * might be stroke index 7, so with a Course Handicap of 7 the old code granted a stroke on
+         * hole 1 that the player does not get, and withheld one on the hole where they do. Then it
+         * stated the result as fact: "Your max for handicap is 7 (par 4 plus 2 plus 1 stroke)."
+         *
+         * golfcourseapi supplies the column and normalizeHole always captured it; the mapping into
+         * CourseHole dropped it (now fixed). When it is genuinely absent — the bundled catalog, or a
+         * partially-populated course — the honest answer is the par+2 floor plus what we cannot work
+         * out, NOT a stroke allocation invented from the hole number.
+         */
+        /**
+         * Through smartFinderService.holeData, NOT an inline `courseHoles.find` — one-truth-per-fact
+         * pins that, and my first version of this fix used the inline lookup and failed it. The reason
+         * the rule exists applies directly here: the inline find skips the bundled fallback, so before
+         * `courseHoles` hydrates it returns undefined and the answer silently degrades.
+         */
+        const holeRecord = resolvedHoleData(round.currentHole || 1);
+        const strokeIndex = typeof holeRecord?.strokeIndex === 'number' && holeRecord.strokeIndex > 0
+          ? holeRecord.strokeIndex
+          : null;
+        if (strokeIndex == null) {
+          const floor = netDoubleBogeyCap(holePar, 0);
+          return {
+            success: true,
+            voice_response: ch > 0
+              ? `On par ${holePar} it's at least ${floor} — par plus two. Your Course Handicap is ${ch}, so you may get a stroke here on top of that, but I don't have this scorecard's handicap column to say whether this is one of your stroke holes.`
+              : `Your max for handicap is ${floor} — par ${holePar} plus 2. Off a Course Handicap of ${ch} you don't get a stroke anywhere.`,
+            side_effects: [`handicap:ndb:no_stroke_index:${floor}`],
+            follow_up_needed: false,
+          };
+        }
+        const strokes = strokesReceivedOnHole(ch, strokeIndex);
         const max = netDoubleBogeyCap(holePar, strokes);
         const strokeNote = strokes > 0 ? ` (par ${holePar} plus 2 plus ${strokes} stroke${strokes > 1 ? 's' : ''})` : ` (par ${holePar} plus 2)`;
         return {

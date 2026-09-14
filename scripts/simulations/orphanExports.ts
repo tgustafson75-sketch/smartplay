@@ -220,14 +220,6 @@ export const ORPHAN_BASELINE: Record<string, string> = {
     'TEST SURFACE — the-round-he-walked-out-of.test.ts resolves a rule id through it to prove the id ' +
     'the handler cites is real rather than restating the rule text in the test. A public accessor by ' +
     'id is also the right shape for a deep link into app/reference.tsx, which is why it stays exported.',
-  'data/courses.ts :: getHole':
-    'TRIAGE — a per-hole accessor on the bundled course data. Callers read holes through the course ' +
-    'record or the geometry service instead. Needs a look at whether those paths all agree about which ' +
-    'hole shape is authoritative before this is called dead; that is a bigger question than one export.',
-  'data/localCourseImages.ts :: getDefaultPreviewImage':
-    'TRIAGE — a fallback preview image for a course with no bundled art. Whether the app currently ' +
-    'renders SOMETHING in that case, or an empty box, is a real question about the course list and is ' +
-    'not answerable from this file. Do not delete before checking the empty state.',
   'services/checklistAutoTick.ts :: CHECKLIST_EVENT_MAP':
     'TEST SURFACE, deliberately — the map IS the production data (noteChecklistEvent reads it in the ' +
     'same module), and it is exported only so the guard can assert every item id it claims to prove ' +

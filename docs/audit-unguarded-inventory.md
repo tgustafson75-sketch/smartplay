@@ -27,7 +27,29 @@ numbers are a **floor** on the gap, not a ceiling.
 Note the orphan lock already covers "has no callers" for `services/`, so nothing in the logic bucket is
 *unwired* in that sense. The gap is **untested decisions**, plus the second half of the lens.
 
-## Headline finding — `services/putting/greenHeat.ts`
+## Worked down on 2026-09-13 (after this file was written)
+
+- **`services/putting/greenHeat.ts`** — the headline finding below is FIXED. It reaches the caddie as
+  `puttingRecordBlock`, the putting floor has one owner, and what feeds the model has one owner
+  (`greenHeatInput`). Guarded by `the-green-had-three-legs.test.ts`.
+- **All three `services/intents/*Handler.ts`** named below as the place to start are done, and two of
+  them had real defects:
+  - `handicapQueryHandler` passed a HOLE NUMBER where WHS wants a STROKE INDEX, and stated the wrong
+    max-for-handicap as fact. golfcourseapi supplies the scorecard's HCP column and `normalizeHole`
+    always captured it — the mapping into `CourseHole` dropped it. Now carried, used, and honest when
+    genuinely absent.
+  - `confirmPositionHandler` read the hole number as the yardage: "I'm 140 out on hole 12" parsed as
+    12, so the caddie announced GPS drift, force-refreshed, and clubbed a 140-yard shot as 12. Three of
+    seven natural phrasings were wrong, on holes 10-18.
+  - `openExternalHandler` had NO defect — query encoding, service aliases and both failure paths were
+    already right. Covered anyway, since it is player-sayable and had nothing looking at it.
+- **Two TRIAGE orphans resolved and deleted with evidence** (not wired): `data/courses.getHole` was a
+  one-line wrapper keyed on a course NAME over the bundled catalog, while all 25 runtime hole lookups
+  use `round.courseHoles` from the API — a different source. `localCourseImages.getDefaultPreviewImage`
+  unconditionally returned null, and the empty state it existed for is rendered by SmartVision itself.
+  Both rules are kept as comments where they belong.
+
+## Headline finding — `services/putting/greenHeat.ts` — FIXED 2026-09-13
 
 Reaches `components/GreenHeatCard`, `components/swinglab/PuttReadLine` and `hooks/useGreenHeat`.
 Reaches `services/caddieRequestBody` **not at all**.

@@ -654,6 +654,9 @@ export function courseToHoles(course: Course, teeName?: string): CourseHole[] {
   }).map((h) => ({
     hole: h.hole_number,
     par: h.par,
+    // 2026-09-13 — normalizeHole already reads the scorecard's HCP column; this mapping used to drop
+    // it, which is how WHS stroke allocation ended up keyed on hole number. See CourseHole.strokeIndex.
+    strokeIndex: h.handicap ?? null,
     // Placeholder front/middle/back: identical by design until real green geometry arrives, and
     // consumers gate on `back > front` before treating them as pin distances. Kept as-is; only the
     // yardage itself is now validated.

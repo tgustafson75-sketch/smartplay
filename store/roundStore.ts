@@ -22,6 +22,23 @@ import { getApiBaseUrl } from '../services/apiBase';
 export interface CourseHole {
   hole: number;
   par: number;
+  /**
+   * 2026-09-13 — THE SCORECARD'S "HCP" COLUMN, and the reason a handicap answer was wrong.
+   *
+   * The hole's handicap difficulty rank, 1 = hardest … 18 = easiest. WHS allocates strokes by THIS,
+   * not by hole number: hole 1 might be stroke index 7, so a Course Handicap of 7 gives a stroke on
+   * the seventh-hardest hole and not on the first.
+   *
+   * golfcourseapi supplies it and `normalizeHole` has always captured it
+   * (`handicap: raw.handicap ?? raw.handicap_index`) — the mapping into CourseHole then dropped it, so
+   * `handicapQueryHandler` passed `round.currentHole` where `strokesReceivedOnHole` wants a stroke
+   * index and stated the resulting max-for-handicap as fact. Normalized at the boundary, discarded one
+   * step later. [[smartplay-defect-class-unwired-halves]]
+   *
+   * Optional because the bundled catalog and some API entries do not carry it. Null means UNKNOWN and
+   * consumers must say so rather than substituting the hole number and sounding certain.
+   */
+  strokeIndex?: number | null;
   distance: number;
   front: number;
   back: number;

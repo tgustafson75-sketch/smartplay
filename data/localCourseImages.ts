@@ -520,12 +520,16 @@ export function getLocalHoleImageById(
 }
 
 /**
- * Default preview image used by SmartVision when no round is active and
- * no course context exists yet. Returns null — callers should render
- * an explicit "pick a course" empty state rather than fall back to a
- * specific course's imagery (which previously was Palms hole 1; that
- * leaked Palms screenshots into non-Palms contexts).
+ * 2026-09-13 — `getDefaultPreviewImage()` was DELETED, and the rule it encoded is kept here because
+ * the rule is the valuable part.
+ *
+ * THERE IS NO DEFAULT PREVIEW IMAGE, deliberately. It once returned Palms hole 1, which leaked Palms
+ * screenshots into non-Palms contexts; the fix was to return null, and the function then existed only
+ * to return null to nobody — it had zero callers. Its job belongs to the consumer: when there is no
+ * course context, SmartVision renders an explicit "pick a course" empty state, which it does (see the
+ * empty-state branches in app/smartvision.tsx) using getLocalHoleImage / getLocalHoleImageById for the
+ * cases where imagery genuinely exists.
+ *
+ * So: never add a fallback that guesses a course's art. An empty state that says what it needs beats a
+ * picture of the wrong golf course. [[silence-is-not-an-answer]]
  */
-export function getDefaultPreviewImage(): ImageSourcePropType | null {
-  return null;
-}

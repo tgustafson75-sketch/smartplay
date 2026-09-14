@@ -206,11 +206,17 @@ export function getCourseHoleCount(
   return 18;
 }
 
-export const getHole = (
-  courseName: string,
-  holeNumber: number
-): CourseHole | null =>
-  getCourse(courseName)?.holes.find(h => h.hole === holeNumber) ?? null;
+/**
+ * 2026-09-13 — `getHole(courseName, holeNumber)` was DELETED as genuinely redundant, with the evidence,
+ * rather than wired.
+ *
+ * Asked where it SHOULD be called from, the answer was nowhere. It was a one-line wrapper over
+ * `getCourse(name)?.holes.find(...)`, keyed on a course NAME and reading the BUNDLED catalog. Every
+ * runtime hole lookup in the app — 25 call sites — resolves against `round.courseHoles`, the loaded
+ * course from the API/orchestrator, which is a different source entirely. `getCourse` itself is live
+ * (app/course/[course_id], app/(tabs)/caddie) so the catalog stays; nothing ever needed a
+ * hole-by-name accessor on top of it.
+ */
 
 export const getCourseList = (): { id: string; name: string; par: number; yards: number }[] =>
   COURSES.map(c => ({
