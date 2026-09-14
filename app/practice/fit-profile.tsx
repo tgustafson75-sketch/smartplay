@@ -183,6 +183,33 @@ export default function FitProfileScreen() {
    */
   const carriedToday = useClubBagStore((st) => st.carriedToday);
   const isCompetition = useRoundStore((st) => st.isCompetition);
+  /**
+   * 2026-09-14 (Tim) — "a card on the fit profile to compare clubs like a swing bay, that a user can
+   * use to decide which club to take of the same class — which one of my drivers works best for me,
+   * or do the drivers give different reads."
+   *
+   * The reasoning shipped on 2026-09-12 (services/clubVariantPerformance) and the way to declare a
+   * variant shipped as a voice intent. There was NO screen, so unless you knew to say "driver today
+   * is the Burner 2" out loud, none of it existed. Same missing half, third time this week.
+   *
+   * Uses variantsForClub rather than compareClubVariants for the LIST because the comparison
+   * withholds a variant until it clears 12 shots — right for a verdict, wrong for a screen. A player
+   * four shots into the new driver should see those four and how far off the bar he is, not a card
+   * that looks broken. The VERDICT still comes from the comparison, which keeps its bar.
+   */
+  const clubCompare = useMemo(() => {
+    try {
+      const rs = useRoundStore.getState();
+      const shots = [...(rs.roundHistory ?? []).flatMap((r) => r.shots ?? []), ...(rs.shots ?? [])].slice(-400);
+      const cvp = require('../../services/clubVariantPerformance') as typeof import('../../services/clubVariantPerformance');
+      return cvp.clubsWithVariants(shots).map((club) => ({
+        club,
+        splits: cvp.variantsForClub(shots, club),
+        verdict: cvp.compareClubVariants(shots, club).say,
+      })).filter((c) => c.splits.length > 0);
+    } catch { return []; }
+  }, [profile]);
+
   const packRows = useMemo(() => {
     const st = useClubStatsStore.getState();
     const work = (() => {
@@ -622,6 +649,45 @@ export default function FitProfileScreen() {
           * pack your bag." Plus the auto-pack: "Course engine could have a chip that you could auto
           * spool your bag for that course."
           */}
+        {/**
+          * SAME CLUB, DIFFERENT MODELS — the swing-bay question, answered from his own shots.
+          *
+          * Shown only when he actually owns more than one of something: a card explaining a feature
+          * nobody is using is an advert, and this screen already opens on enough of those.
+          */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.cardLabel, { color: colors.text_primary }]}>
+            {t('practice_fit_profile.compare.title', { defaultValue: 'SAME CLUB, DIFFERENT MODELS' })}
+          </Text>
+          {clubCompare.length === 0 ? (
+            <Text style={[styles.gapText, { color: colors.text_muted }]}>
+              {t('practice_fit_profile.compare.empty', {
+                defaultValue: 'Own two drivers? Tell me which one is in the bag — say "driver today is the Burner 2" — and I will track them separately instead of averaging them into one blurred driver.',
+              })}
+            </Text>
+          ) : (
+            clubCompare.map((c) => (
+              <View key={c.club} style={{ marginTop: 10 }}>
+                <Text style={[styles.confText, { color: colors.text_primary, fontWeight: '800' }]}>{c.club}</Text>
+                {c.splits.map((v) => (
+                  <View key={v.variant} style={styles.compareRow}>
+                    <Text style={[styles.compareName, { color: colors.text_primary }]} numberOfLines={1}>{v.variant}</Text>
+                    <Text style={[styles.compareStat, { color: colors.text_muted }]}>
+                      {t('practice_fit_profile.compare.stat', {
+                        defaultValue: '{{shots}} shots · {{yards}} · {{trouble}}% trouble',
+                        shots: v.shots,
+                        yards: v.avgYards != null ? `${v.avgYards}y` : '—',
+                        trouble: v.troublePct,
+                      })}
+                    </Text>
+                  </View>
+                ))}
+                <Text style={[styles.gapText, { color: colors.text_muted, marginTop: 4 }]}>{c.verdict}</Text>
+              </View>
+            ))
+          )}
+        </View>
+
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.cardLabel, { color: colors.text_primary }]}>{t('practice_fit_profile.fit_profile_screen.pack_your_bag')}</Text>
           {packRows.length === 0 ? (
@@ -698,6 +764,9 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8 },
   headerBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  compareRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 4 },
+  compareName: { fontSize: 13, fontWeight: '700', flexShrink: 1 },
+  compareStat: { fontSize: 11, fontWeight: '600' },
   headerTitle: { fontSize: 17, fontWeight: '800' },
   headline: { fontSize: 16, fontWeight: '800', lineHeight: 22, marginTop: 4 },
   confRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 8, marginBottom: 12 },

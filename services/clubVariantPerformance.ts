@@ -154,3 +154,55 @@ export function bestClubVariantInsight(shots: ShotResult[]): VariantComparison |
   }
   return null;
 }
+
+/**
+ * 2026-09-14 (Tim) — "a card on the fit profile to compare clubs like a swing bay, that a user can
+ * use to decide which club to take of the same class — which one of my drivers works best for me, or
+ * do the drivers give different reads."
+ *
+ * `compareClubVariants` withholds a variant until it clears MIN_SHOTS_PER_VARIANT, which is right for
+ * a VERDICT and wrong for a screen: a player who has hit four with the new driver should see those
+ * four and how far off the bar they are, not an empty card that looks broken.
+ *
+ * So this returns every declared variant with its real numbers and no minimum, and the card shows
+ * the verdict separately — from compareClubVariants, which keeps its bar. Show what exists; withhold
+ * only the CONCLUSION until it is earned. [[illustration-data-points]]
+ */
+export function variantsForClub(shots: ShotResult[], club: string): VariantSplit[] {
+  const want = normalizeClub(club);
+  if (!want) return [];
+  const buckets = new Map<string, { label: string; yards: number[]; trouble: number; total: number }>();
+
+  for (const s of shots) {
+    if (!s.club_variant) continue;
+    if (normalizeClub(s.club) !== want) continue;
+    const key = s.club_variant.trim().toLowerCase();
+    if (!key) continue;
+    let b = buckets.get(key);
+    if (!b) { b = { label: s.club_variant.trim(), yards: [], trouble: 0, total: 0 }; buckets.set(key, b); }
+    b.total += 1;
+    if (inTrouble(s)) b.trouble += 1;
+    const y = s.distance_yards;
+    if (typeof y === 'number' && y > 0) b.yards.push(y);
+  }
+
+  return [...buckets.values()]
+    .map((b) => ({
+      variant: b.label,
+      shots: b.total,
+      avgYards: b.yards.length > 0 ? Math.round(b.yards.reduce((a, v) => a + v, 0) / b.yards.length) : null,
+      troublePct: Math.round((b.trouble / b.total) * 100),
+    }))
+    .sort((a, b) => b.shots - a.shots);
+}
+
+/** Every club slot the player has ever declared a variant for — the clubs worth offering to compare. */
+export function clubsWithVariants(shots: ShotResult[]): string[] {
+  const out = new Set<string>();
+  for (const s of shots) {
+    if (!s.club_variant) continue;
+    const c = normalizeClub(s.club);
+    if (c) out.add(c);
+  }
+  return [...out];
+}

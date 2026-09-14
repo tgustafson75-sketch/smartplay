@@ -567,7 +567,8 @@
       "set_your_bag": "Set your bag",
       "your_bag": "MY BAG",
       "bag_of_owned": "{{packed}} of {{owned}} clubs",
-      "bag_not_set": "Not set yet"
+      "bag_not_set": "Not set yet",
+      "bag_packed_for": "Packed for {{course}} — tap to change"
     },
     "accessibility_label": {
       "edit_the_bag_for_this_round": "Edit the bag you are carrying for this round",
@@ -1438,6 +1439,11 @@
       "estimated": "Estimated — not yours yet",
       "gap": "Next to a gap",
       "overlap": "Doing another club’s job"
+    },
+    "compare": {
+      "title": "SAME CLUB, DIFFERENT MODELS",
+      "empty": "Own two drivers? Tell me which one is in the bag — say \"driver today is the Burner 2\" — and I will track them separately instead of averaging them into one blurred driver.",
+      "stat": "{{shots}} shots · {{yards}} · {{trouble}}% trouble"
     }
   },
   "practice_open_range": {

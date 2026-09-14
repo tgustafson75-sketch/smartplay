@@ -682,6 +682,10 @@ export default function PlayTab() {
    * way back to this tab.
    */
   const carriedCount = useClubBagStore((st) => st.carriedList().length);
+  const ownedForPack = useClubBagStore((st) => st.bagList().length);
+  const carriedTodayLen = useClubBagStore((st) => st.carriedToday.length);
+
+
   const isPartialBag = useClubBagStore((st) => st.isPartialBag());
   /** What he OWNS — so a pared-down bag can read "8 of 16" rather than a bare count. */
   const ownedCount = useClubBagStore((st) => Object.keys(st.clubs).length);
@@ -809,6 +813,53 @@ export default function PlayTab() {
   // the row just did nothing. This surfaces an "opening…" state + a retry hint instead of a dead-end.
   const [selectError, setSelectError] = useState<string | null>(null);
   const [selectedHero, setSelectedHero] = useState<string | null>(null);
+
+  /**
+   * 2026-09-14 (Tim) — YOUR BAG AND THE COURSE-APPROPRIATE BAG ARE SUPPOSED TO RECONCILE.
+   *
+   * "We built a function that is supposed to auto adjust by course." We did — services/bagPack does
+   * the reasoning and is guarded, and services/bagPackLive's own header says the callers would be
+   * "the Fit Profile's auto-pack chip today, the Play tab and the caddie's answer next".
+   *
+   * The Play tab caller was never written. So the only way the reconciliation ever happened was a
+   * button on a screen Tim could not find — "can do manual pack, but I don't see that as a button" —
+   * which means for every real player it never happened at all. The reasoning shipped; the moment it
+   * was supposed to fire did not. [[sweep-the-missing-half-not-the-unused-export]]
+   *
+   * SUGGEST, THEN LET THEM EDIT — Tim's model, and the reason this writes rather than only displays:
+   * the packed bag is what the caddie clubs off, so a suggestion that is not applied is a label, not
+   * a bag. It is safe to write because it is per-round state that clears at round end, the card says
+   * what it did, and one tap opens the editor.
+   *
+   * It will NOT touch a bag he packed himself: carriedToday is empty only when nothing deliberate has
+   * been chosen. And it runs once per course, so editing it down does not get overwritten on the next
+   * render.
+   */
+  const packedForCourseRef = useRef<string | null>(null);
+  const [packedForCourseName, setPackedForCourseName] = useState<string | null>(null);
+  useEffect(() => {
+    const courseId = selected?.id ?? null;
+    if (!courseId || isRoundActive) return;
+    if (packedForCourseRef.current === courseId) return;
+    // A bag he chose himself outranks the course every time.
+    if (carriedTodayLen > 0) return;
+    if (ownedForPack === 0) return;
+    try {
+      const { liveBagPack } = require('../../services/bagPackLive') as typeof import('../../services/bagPackLive');
+      const { pack, competition } = liveBagPack();
+      // No pack, or a pack that keeps everything, is not a reconciliation worth announcing.
+      if (!pack || pack.leave.length === 0) return;
+      const bag = useClubBagStore.getState();
+      const { clubLabel } = require('../../services/clubRecognition') as typeof import('../../services/clubRecognition');
+      const byLabel = new Map<string, string>(bag.bagList().map((c) => [clubLabel(c.club_id), String(c.club_id)]));
+      const ids = pack.carry.map((c) => byLabel.get(c)).filter((x): x is string => !!x);
+      if (ids.length === 0) return;
+      packedForCourseRef.current = courseId;
+      const { carryLimitFor } = require('../../store/clubBagStore') as typeof import('../../store/clubBagStore');
+      bag.setCarriedToday(ids, { limit: carryLimitFor(competition) });
+      setPackedForCourseName(pack.headline ? (selected?.club_name ?? selected?.course_name ?? null) : null);
+    } catch { /* a failed reconcile leaves the full bag, which is the safe side */ }
+  }, [selected?.id, isRoundActive, carriedTodayLen, ownedForPack]);
   // DP-3 — resolve the selected LOCAL course's real bundled thumbnail
   // (hole-1 image) from its `local:<slug>` id via the canonical
   // courseId-keyed resolver — the same registry the closest-local rows
@@ -2496,6 +2547,19 @@ export default function PlayTab() {
                       ? t('play.play_tab.bag_of_owned', { packed: carriedCount, owned: ownedCount })
                       : t('play.play_tab.bag_count', { count: carriedCount })}
                 </Text>
+                {/**
+                  * 2026-09-14 — SAY THAT THE COURSE PACKED IT. The reconciliation writes the bag the
+                  * caddie will club off, so doing it silently would be the app changing his clubs
+                  * without telling him. One line, and the card is already a tap into the editor.
+                  */}
+                {packedForCourseName ? (
+                  <Text style={styles.bagCardNote} numberOfLines={1}>
+                    {t('play.play_tab.bag_packed_for', {
+                      defaultValue: 'Packed for {{course}} — tap to change',
+                      course: packedForCourseName,
+                    })}
+                  </Text>
+                ) : null}
               </View>
               <AppIcon name="chevron-forward" size={16} color="#00C896" />
             </TouchableOpacity>
@@ -2881,6 +2945,7 @@ return StyleSheet.create({
   bagCardActive: { borderColor: c.accent, backgroundColor: 'rgba(0,200,150,0.10)' },
   bagCardLabel: { color: c.text_muted, fontSize: 10, fontWeight: '700', letterSpacing: 1.3 },
   bagCardValue: { color: c.text_primary, fontSize: 15, fontWeight: '800', marginTop: 1 },
+  bagCardNote: { color: c.text_muted, fontSize: 10.5, fontWeight: '600', marginTop: 2 },
   chip: {
     paddingHorizontal: 14, paddingVertical: 8,
     borderRadius: 20, borderWidth: 1, borderColor: c.border,
