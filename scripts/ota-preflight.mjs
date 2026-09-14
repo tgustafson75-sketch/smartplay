@@ -66,7 +66,48 @@ const easIgnored = (() => {
 })();
 const isExcludedFromBuild = (relPath) =>
   easIgnored.some((pat) => relPath === pat || relPath.startsWith(`${pat}/`));
-const NATIVE_FILES = ['app.json', 'app.config.js', 'app.config.ts', 'eas.json'];
+const NATIVE_FILES = ['app.json', 'app.config.js', 'app.config.ts'];
+
+/**
+ * 2026-09-13 — eas.json is hashed with its `EXPO_PUBLIC_*` env values REMOVED, for the same reason
+ * package.json contributes its dependencies only (see below): a change that cannot reach the native
+ * build must not refuse an OTA, or the check trains you to ignore it.
+ *
+ * An `EXPO_PUBLIC_*` value is inlined into the JS BUNDLE at export — so it travels WITH the update
+ * rather than living in the installed shell. It is definitionally incapable of being the hazard this
+ * script exists to catch ("JS expects native code the shell does not have"), because the JS and the
+ * value ship together.
+ *
+ * EVERY OTHER KEY IN eas.json STAYS HASHED, and that is not caution for its own sake — plugins in this
+ * repo really do read env at build time. `plugins/withMetaWearablesDAT.js` gates Info.plist entries and
+ * Gradle changes on `MWDAT_IOS_ENABLED` / `MWDAT_ANDROID_ENABLED`, so the `glasses` profile's env
+ * genuinely changes native output. Excluding env wholesale would have defeated the guard for a live
+ * case. Checked rather than assumed: no config plugin reads an `EXPO_PUBLIC_` key — the full set they
+ * read is EXPO_GITHUB_TOKEN, GITHUB_TOKEN, META_WEARABLE_APP_ID, META_WEARABLE_CLIENT_TOKEN and the two
+ * MWDAT flags — and `__tests__/regression/ota-envelope-is-honest.test.ts` fails if that stops being
+ * true, which is what keeps this narrowing safe rather than merely convenient.
+ *
+ * What prompted it: adding EXPO_PUBLIC_OWNER_EMAIL to the development and preview profiles — so owner
+ * mode stops depending on a runtime default that would have made every install an owner — moved the
+ * fingerprint and refused an otherwise pure-JS update.
+ */
+function easJsonNativeSurface() {
+  try {
+    const raw = readFileSync(join(root, 'eas.json'), 'utf8');
+    const parsed = JSON.parse(raw);
+    for (const profile of Object.values(parsed.build ?? {})) {
+      if (profile && typeof profile === 'object' && profile.env && typeof profile.env === 'object') {
+        for (const key of Object.keys(profile.env)) {
+          if (key.startsWith('EXPO_PUBLIC_')) delete profile.env[key];
+        }
+      }
+    }
+    return JSON.stringify(parsed);
+  } catch {
+    // Unreadable or unparseable eas.json: hash the bytes so a broken file still moves the fingerprint.
+    try { return readFileSync(join(root, 'eas.json'), 'utf8'); } catch { return ''; }
+  }
+}
 /** Build output and caches are derived, not authored — hashing them would make every run differ. */
 const SKIP_DIRS = new Set(['build', 'node_modules', '.gradle', 'Pods', 'DerivedData', '.cxx', 'generated']);
 
@@ -108,6 +149,8 @@ function fingerprint() {
     h.update(rel); h.update(buf);
     listed.push(rel);
   }
+  h.update('eas.json');
+  h.update(easJsonNativeSurface());
   try {
     const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
     const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
