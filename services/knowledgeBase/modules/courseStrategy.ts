@@ -139,7 +139,7 @@ export const COURSE_STRATEGY: KBEntry[] = [
       'should i go for this par 5',
       'how to play a par 5',
       'par 5 strategy',
-      'lay up or go for the green',
+      'lay up or go for the green', 'should i lay up', 'do i lay up', 'lay up or go for it',
       'reachable par 5',
     ],
     principle:

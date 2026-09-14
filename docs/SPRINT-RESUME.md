@@ -55,8 +55,16 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 > drive celebrated as real. `greenHeat` now reaches the caddie, the green floor has one owner, lint is at
 > zero, and every orphan TRIAGE entry is resolved or has a written reason. ota-preflight: OK to publish.
 >
-> **What is left needs Tim, not a keyboard:** device verification on a real round, and the pin-position
-> A/B decision in `docs/v1.2-deferred.md`.
+> **Triple-checked** (see SPRINT-LOG). Two real defects found in my own day's work: a missing dialog
+> template would have THROWN on the TTS path (the nine deletions widened it), and three ordinary golf
+> questions retrieved nothing — verified pre-existing, not a regression, before fixing. Behaviour of the
+> v4 migration, the putt round-trip and the greenHeatInput extraction all verified by execution.
+>
+> **NEXT BUILD: pin position, OPTION A** — round-level, on the Play tab, 3×3 grid beside the walking/cart
+> chips. Depth adjusts yardage through `resolveYardage` (reaching all 13 consumers) and ONLY when
+> front/back are real; side is an aim bias for the hole plan. Scoped in `docs/v1.2-deferred.md`.
+>
+> **The only thing left that needs Tim rather than a keyboard:** device verification on a real round.
 >
 > **Carried:** device verification of everything above; ~~`services/putting/greenHeat` reaches three
 > screens and the caddie not at all~~ **— DONE**, ratchet answered with a registered reason; 12 of 18 authored dialog situations never requested (pinned shrink-only);

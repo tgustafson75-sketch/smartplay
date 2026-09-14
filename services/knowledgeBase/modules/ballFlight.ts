@@ -38,7 +38,7 @@ export const BALL_FLIGHT: KBEntry[] = [
     layer: 'ball_flight',
     module: MODULE,
     topic: 'curve = face-to-path',
-    aliases: ['why does my ball curve', 'slice or hook', 'draw vs fade', 'why do i slice', 'why do i hook', 'how to hit a draw', 'how to hit a fade'],
+    aliases: ['why does my ball curve', 'slice or hook', 'draw vs fade', 'why do i slice', 'why do i hook', 'how to hit a draw', 'how to hit a fade', 'what is a fade', 'whats a fade', 'what is a draw', 'difference between a draw and a fade'],
     principle:
       'Curve comes from the face RELATIVE to the path. Face open to the path curves it away from a righty (fade/slice); face closed to the path curves it toward (draw/hook). To shape it on purpose, control the gap between where the face points and where the club is travelling.',
     appSignals: ['tracked_dispersion'],

@@ -93,7 +93,7 @@ export const FAULT_LIBRARY: KBEntry[] = [
     layer: 'ball_flight',
     module: MODULE,
     topic: 'push — ball flies straight right (for a righty)',
-    aliases: ['push', 'i push it right', 'pushing everything right', 'straight right', 'block'],
+    aliases: ['push', 'i push it right', 'pushing everything right', 'straight right', 'block', 'my irons go right', 'everything goes right', 'my shots go right'],
     principle:
       'A push flies straight right (for a righty) — face and path both point right of target. It often comes from the body stalling and the club getting stuck behind, or early extension that traps the arms. Keep rotating through so the path isn\'t left way out to the right, and hold your posture so the arms have room.',
     appSignals: ['pose_biomech'],

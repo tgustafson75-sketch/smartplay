@@ -3883,3 +3883,52 @@ lookup and failed it.
   done; the rest is a named backlog with a stated method, not a claim of completeness.
 - Before publishing an OTA: set `EXPO_PUBLIC_OWNER_EMAIL` locally, or the bundle ships without it and
   Owner Tools disappears from the preview build.
+
+### Triple-check of the day (`<this commit>`) — two real defects in my own fixes
+
+Behavioural verification of what I had only asserted in source, plus an adversarial pass over the day's
+refactors.
+
+**Verified correct, by execution not by grep:**
+- The profile **v4 migration** runs: a v3 blob `{longestPutt: 22}` → `{longestPuttFeet: 66}` with the old
+  key deleted.
+- **Putt round-trips are lossless** for 1/3/12/25/38/66/101 ft (feet → fractional yards → feet).
+- **`greenHeatInput` is behaviourally identical** to the hook logic it replaced — all seven cases match
+  (career excludes sim, career folds live, round prefers live, round falls back to last completed, empty
+  history, sim round excluded, live-with-no-putts excluded). That was the day's riskiest refactor.
+- **No fallout from the nine deleted dialog situations**: `offlineVoiceCache` only pre-renders
+  `earbud_open`. **No import cycle** from `caddieRewards` → `scoredRoundStats` (it has no imports).
+- `register === 'psychologist'` is a real, substantive prompt branch in `api/kevin` — so wiring the recap
+  surface genuinely activated something rather than setting a flag nobody reads.
+- **No stray control characters** in any file changed today (the `String.raw` trap).
+
+**Two real defects found in my own work:**
+1. **A missing dialog template would have THROWN.** All three getters did
+   `const list = TEMPLATES[situation]; return list[...]`, and `getDialog` takes `situation: string` and
+   CASTS it — so TypeScript guards the literal call sites and not the dynamic ones (app/lie-analysis
+   already builds its key from the trust level). Deleting nine situations earlier today widened exactly
+   that hole. A missing template now means the caddie SAYS NOTHING; a throw on the TTS path is
+   field-fatal. My first fix then introduced a *new* throw — a bare `__DEV__` in a dependency-free
+   module — caught by the guard for it within a minute.
+2. **Three ordinary golf questions retrieved nothing** — "what is a fade", "should I lay up", "my irons
+   go right" — each with real curated content one alias away. **Checked first**: reverting the
+   normalizer left the same three empty, so these were pre-existing gaps and NOT a regression from the
+   apostrophe fix. Fixed with aliases, not a lower floor; lowering the floor surfaces a stray-word match
+   for every query in the app. Now 0/16 empty, guarded permanently.
+
+Also corrected: the floor assertion in that new guard claimed a behavioural pin it did not have —
+gibberish scores 0 and is dropped by `if (base <= 0) continue` before the floor is consulted, so mutating
+the floor to 0 left every assertion green. Stated honestly as a source assertion with the reason.
+
+### Verified
+
+`tsc` clean · `jest` **4745/4745 (396 suites)** · sim **1034/1034** · lint **0 errors / 75 warnings** ·
+`ota-preflight` **OK to publish**. 10/10 break-test mutations caught across the triple-check.
+
+### Open / carried
+
+- **Device verification** — still the only remaining release gate, still Tim's.
+- **Pin position: decision made — OPTION A** (round-level on the Play tab). Scoped in
+  `docs/v1.2-deferred.md`; **not built yet**, this is the next build.
+- Before publishing an OTA: set `EXPO_PUBLIC_OWNER_EMAIL` locally or Owner Tools disappears from the
+  preview build.

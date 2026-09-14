@@ -129,8 +129,32 @@ const TEMPLATES: Record<CaddieSituation, string[]> = {
   ],
 };
 
+  /**
+   * 2026-09-13 (triple-check) — DEGRADES, NEVER THROWS.
+   *
+   * This was `const list = TEMPLATES[situation]; return list[...]`, which throws
+   * "Cannot read properties of undefined" on any situation the map does not hold. `getDialog` takes
+   * `situation: string` and CASTS it (`situation as CaddieSituation`), so TypeScript protects the typed
+   * call sites and not the dynamic ones — app/lie-analysis builds its key from the trust level, and any
+   * future computed key has the same shape.
+   *
+   * Nine situations were removed from the caddie map earlier today because a live owner already said
+   * them, which widened exactly this hole: nine names that used to resolve now would not. A missing
+   * template should mean the caddie SAYS NOTHING, not that a voice turn dies — every caller
+   * concatenates the result, so an empty string is safe and a throw is field-fatal on the TTS path.
+   */
 export function getCaddieTemplate(situation: CaddieSituation): string {
   const list = TEMPLATES[situation];
+  if (!Array.isArray(list) || list.length === 0) {
+    // `typeof` guarded: these template modules are dependency-free by design and are imported by pure
+    // tests and by scripts where the React Native `__DEV__` global does not exist. A bare `__DEV__`
+    // reference here threw ReferenceError — a fix for "never throw" that introduced a throw, caught by
+    // the guard for it within a minute of being written.
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn('[dialogTemplates] no template for situation:', situation);
+    }
+    return '';
+  }
   return list[Math.floor(Math.random() * list.length)];
 }
 
