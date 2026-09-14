@@ -4184,3 +4184,84 @@ failed silently and the "pass" proved nothing, so it was redone.
   item** on the putt read; a tilt-and-known-height trig model is the principled fix and no machinery for it
   exists in the repo yet.
 - **OTA not yet published** for this or the three commits before it.
+
+## Day N — 2026-09-13 (late, second commit) — putt distance by tilt, and the ground view
+
+Tim: *"Finish path A distance option and grazing view and close out when you commit and push so i can
+test a few days and play."*
+
+### The distance was never a measurement
+
+`PIXELS_PER_FOOT = 35` — the pixel gap between two taps over a fixed constant. Under perspective, ten
+feet near the camera and ten feet away occupy completely different pixel counts, so the same putt read
+differently depending on hold height and where in the frame the taps landed. Labelling it "(EST)" did
+not make it a number with any relationship to the thing it measured.
+
+### The method that was pulled off the reticle is the right one here
+
+`cd017e41` took tilt ranging off the target reticle on 08-24, correctly: *"at ~1.6 m phone height a
+150-yard target sits at 0.67 DEGREES of down-angle"*, under the 2° floor. All true — and all a function
+of **distance**. At a 1.6 m hold:
+
+| putt | down-angle |    | shot | down-angle |
+|------|-----------|----|------|-----------|
+| 3 ft | 58.7° | | 50 yd | 1.9° ← the documented cap |
+| 20 ft | 13.8° | | 150 yd | 0.67° ← why it was pulled |
+| 60 ft | 4.7° | | | |
+
+The method was being used **outside** its envelope. A putt is the inside of it. A guard pins that
+argument numerically so it is not taken on trust.
+
+`computePuttGroundDistance` lives in `services/rangefinder` with the trig it belongs to and reuses the
+existing `angleForY` rectilinear projection. Verified against synthetic scenes: recovers 15.1 / 6.7 /
+53.5 / 26.0 ft putts exactly from two tap positions and the tilt.
+
+### Hold height was already solved
+
+I wrote a 3-preset height control, then found `services/rangefinderCalibration.effectiveEyeHeightM()` —
+which **learns** the player's hold height from GPS-anchored reads, and exists because a constant 1.6 m
+made the reticle read long for anyone shorter. A putt read is the same hold. Presets deleted; the putt
+read now sharpens as he uses the rangefinder.
+
+### It shows its error
+
+± propagated through the real geometry, not asserted: **±0.3 ft on a 7-footer, ±9.3 ft on a 53-footer**
+(which correctly drops out of high confidence). Confidence is the error as a **fraction** of the putt.
+A shallow-but-nonzero angle is **refused**, not served as a confident 300-foot putt.
+
+### The grazing view
+
+Phone standing on the green puts the camera an inch off the deck, where five inches of rise across a
+twenty-footer stands up against the backdrop. A **different pose** from the flat inclinometer — flat
+screen-up the camera is looking at grass — so it is gated on the pose being HELD: upright **and** steady,
+because upright alone is just the normal aiming hold. Qualitative only: the picture describes shape and
+sequence, the inclinometer owns the numbers.
+
+### Distance audited across the app (Tim asked)
+
+One pixel heuristic existed; gone. `computeDistance` has exactly one caller, map-first ordering intact.
+`yardageResolver` still has 13 consumers behind 10 guards. Putt distances in feet through
+`services/puttUnits` everywhere. No second owner found.
+
+### Four guards were token-pinned, not property-pinned
+
+Two mine, two the repo's. The rangefinder import assertion went red on a strictly *more correct* file;
+the `~N / FEET (EST)` honesty gate described a number that no longer exists. **The sim gate was made
+stricter, not looser** — it now requires the projection, the learned height, the absence of the
+heuristic, the ± reaching the player, and a refusal on unreadable geometry.
+
+### Verified
+
+`tsc` clean · lint **0 errors** · jest **4878/4878 (399 suites)** · sim **1034/1034**. Eighteen break-test
+mutations across the day. **B13 initially PASSED** — removing the envelope floor went undetected because
+the refusal test used a level phone, which fails either way and never exercised the floor. Test added,
+floor re-broken, caught.
+
+### Open / carried
+
+- **Device verification is the gate, and it is Tim's.** He is playing Echo Hills (Hemet) over the next
+  few days. The one thing to check first: **pace a putt and compare**. `CAMERA_VFOV_DEG = 60` is a
+  default, and a device whose true FOV differs produces a *proportional* error — if every read is off by
+  the same factor, that is the constant and it is a one-line fix.
+- Deferred, written up: the **Vet / PGA / public-service green-fee discounts** idea. The eligibility
+  profile field is the cheap, safe half; rate data is not in any API we use and must not ship as a guess.

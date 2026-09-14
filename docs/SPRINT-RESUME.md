@@ -8,6 +8,33 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+> ### ⚠️ LATEST — 2026-09-13 (late, 2nd). Putt distance by tilt, and the ground-level view.
+>
+> `07f76efd` **the putt distance was never a measurement** — `PIXELS_PER_FOOT = 35`, the pixel gap over
+> a constant, which perspective alone moves. Replaced by a tilt projection through the LEARNED hold
+> height (`rangefinderCalibration.effectiveEyeHeightM`, not a new preset system), with a ± propagated
+> from the real geometry: ±0.3 ft on a 7-footer, ±9.3 ft on a 53-footer.
+>
+> **The method pulled off the reticle in August is the right one here.** It failed there because a
+> 150-yard target sits at 0.67° of down-angle; a 20-ft putt sits at 13.8°. Outside its envelope vs
+> inside it. A guard pins that numerically.
+>
+> **GROUND VIEW** — phone standing on the green, camera an inch off the deck, where relief that is
+> invisible from chest height stands up against the backdrop. Gated on the pose being held (upright AND
+> steady — upright alone is just the aiming hold). Qualitative only; the inclinometer owns the numbers.
+>
+> **Distance audited app-wide** (Tim asked): one heuristic existed, gone; `computeDistance` has one
+> caller with map-first ordering intact; `yardageResolver` 13 consumers behind 10 guards.
+>
+> Green: tsc · lint **0 errors** · jest **4878/4878** · sim **1034/1034**. 18 break-tests across the day;
+> **B13 initially passed** and exposed a test that never exercised the floor it was guarding.
+>
+> **NEXT — device verification, Tim's gate.** Echo Hills (Hemet) over the next few days. First thing to
+> check: **pace a putt and compare.** `CAMERA_VFOV_DEG = 60` is a default; a device whose true FOV
+> differs produces a PROPORTIONAL error, so a consistent offset is one constant, not a redesign.
+>
+> ---
+>
 > ### ⚠️ LATEST — 2026-09-13 (late). The putt read: a deliberate route, a measured slope, a vision check.
 >
 > `65d748eb` **"look at my putt" had never once opened putt mode on purpose.** Tim: *"You just make a
