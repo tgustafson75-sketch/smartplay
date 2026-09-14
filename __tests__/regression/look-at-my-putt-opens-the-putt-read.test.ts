@@ -34,8 +34,11 @@ import {
   GROUND_MAX_TILT_DEG,
   GROUND_AGREE_PCT,
   GROUND_STEADY_DEG,
+  readGrazingPose,
+  whyNoGrazingPose,
 } from '../../services/puttSlopeRead';
-import { buildPuttMeasurementBlock } from '../../services/puttReadService';
+import { buildPuttMeasurementBlock, composeInstruction } from '../../services/puttReadService';
+import { computePuttGroundDistance, whyNoPuttDistance, PUTT_MIN_DEPRESSION_DEG } from '../../services/rangefinder';
 
 const root = path.resolve(__dirname, '../..');
 const code = (rel: string) =>
@@ -245,11 +248,24 @@ describe('the read never states a slope it did not measure', () => {
     expect(block).toMatch(/Length: not measured yet/);
   });
 
-  it('the A/B distance is never presented as surveyed', () => {
-    const block = buildPuttMeasurementBlock({
+  it('a distance always travels with its ± — the honesty is the number, not a disclaimer', () => {
+    /**
+     * 2026-09-13, second pass. This asserted the phrase "rough visual estimate", which was the right
+     * guard while the distance was pixels over a fixed constant. It is now a tilt projection with an
+     * uncertainty propagated through the real geometry, so the property worth protecting changed: the
+     * model must be given the RANGE, not a hedge in words it has to decide how much to discount.
+     */
+    const withPm = buildPuttMeasurementBlock({
+      distanceFeet: 18, distanceUncertaintyFeet: 1.2, ground: null, groundConfidence: null, groundSpots: 0,
+    });
+    expect(withPm).toMatch(/18 feet, give or take 1\.2/);
+    expect(withPm).toMatch(/different lag/);
+
+    // and with no ± available it states the number plainly rather than inventing a confidence
+    const without = buildPuttMeasurementBlock({
       distanceFeet: 18, ground: null, groundConfidence: null, groundSpots: 0,
     });
-    expect(block).toMatch(/rough visual estimate/);
+    expect(without).toMatch(/- Length: 18 feet\./);
   });
 
   it("the player's own read is reconciled with, not overruled", () => {
@@ -297,8 +313,11 @@ describe('the vision step checks the measurement rather than decorating it', () 
   });
 
   it('the flag question is only asked when there IS a frame', () => {
-    // Asking a text-only turn to look at a picture invites it to invent one.
-    expect(svc).toMatch(/input\.imageBase64 \? `\$\{PUTT_INSTRUCTION\}[\s\S]{0,40}\$\{FLAG_INSTRUCTION\}` : PUTT_INSTRUCTION/);
+    // Asking a text-only turn to look at a picture invites it to invent one. Asserted through the
+    // function rather than against the source text, so it survives the composition being refactored.
+    const base = { distanceFeet: 18, ground: null, groundConfidence: null, groundSpots: 0 } as const;
+    expect(composeInstruction({ ...base })).not.toMatch(/flagstick/i);
+    expect(composeInstruction({ ...base, imageBase64: 'x' })).toMatch(/flagstick/i);
     // and the image fields are nulled rather than sent empty when there is no frame
     expect(svc).toMatch(/image_media_type: input\.imageBase64 \?/);
   });
@@ -353,5 +372,167 @@ describe('describeGroundSlope reports plainly and hedges once', () => {
 
   it('there is nothing to describe when the phone is not down', () => {
     expect(describeGroundSlope(readGroundSlope(90, 0))).toBeNull();
+  });
+});
+
+/**
+ * 2026-09-13 (Tim) — "Finish path A distance option and grazing view."
+ *
+ * THE DISTANCE WAS NEVER A MEASUREMENT. The putt overlay divided the pixel gap between two taps by a
+ * fixed constant (PIXELS_PER_FOOT = 35, "rough by design"). Under perspective ten feet near the camera
+ * and ten feet away occupy completely different pixel counts, so the same putt read differently
+ * depending on hold height and where in the frame the taps landed. That is the accuracy complaint.
+ *
+ * The tilt projection replaces it — and it is the method that was taken OFF the reticle on 2026-08-24
+ * for being unusable. Both are true, because the reason it failed there is a function of DISTANCE:
+ * "at ~1.6 m phone height a 150-yard target sits at 0.67 DEGREES of down-angle", under the 2° floor.
+ * A putt is 3-60 feet, where the same geometry has degrees to spare. The envelope test below pins that
+ * argument numerically so nobody has to take it on trust — including me.
+ */
+describe('the putt distance is a projection, inside the envelope where tilt works', () => {
+  const H = 1.6;
+  const D2R = Math.PI / 180;
+  const VFOV = 60;
+
+  /** Build the tap a real camera would produce for a ground point at a known distance. */
+  const tapFor = (groundM: number, axisDepDeg: number) => {
+    const depression = Math.atan(H / groundM) / D2R;
+    const rayAboveDeg = axisDepDeg - depression;
+    const halfTan = Math.tan((VFOV * D2R) / 2);
+    return { xNorm: 0.5, yNorm: 0.5 - Math.tan(rayAboveDeg * D2R) / (2 * halfTan), pitchDeg: 90 - axisDepDeg };
+  };
+
+  it('recovers a putt length it was never told — this is the whole claim', () => {
+    for (const [ballM, holeM] of [[1.5, 6.1], [1.0, 3.05], [1.2, 9.14]] as const) {
+      const out = computePuttGroundDistance({ a: tapFor(ballM, 28), b: tapFor(holeM, 28), hold_height_m: H });
+      expect(out.call).toBe('read');
+      expect(out.feet!).toBeCloseTo((holeM - ballM) / 0.3048, 0);
+    }
+  });
+
+  it('the envelope claim is TRUE: a putt has degrees to spare where a 150-yard shot has none', () => {
+    const depressionFor = (metres: number) => Math.atan(H / metres) / D2R;
+    // why it was pulled off the reticle
+    expect(depressionFor(137)).toBeLessThan(1);            // 150 yd — under a degree
+    // why it belongs on a putt
+    expect(depressionFor(6.1)).toBeGreaterThan(PUTT_MIN_DEPRESSION_DEG * 3);   // 20 ft
+    expect(depressionFor(18.3)).toBeGreaterThan(PUTT_MIN_DEPRESSION_DEG);      // 60 ft, the long end
+  });
+
+  it('the uncertainty is propagated, not asserted — it grows with the putt', () => {
+    const short = computePuttGroundDistance({ a: tapFor(1.0, 30), b: tapFor(3.05, 30), hold_height_m: H });
+    const long = computePuttGroundDistance({ a: tapFor(2.0, 20), b: tapFor(18.3, 20), hold_height_m: H });
+    expect(short.uncertaintyFeet!).toBeLessThan(long.uncertaintyFeet!);
+    // and a ± that is a large fraction of the putt cannot be called high confidence
+    expect(short.confidence).toBe('high');
+    expect(long.confidence).not.toBe('high');
+  });
+
+  it('confidence is the error as a FRACTION of the putt, not its absolute size', () => {
+    // ±1 ft on a 40-footer is fine; the same ±1 ft on a 3-footer is the whole putt.
+    const out = computePuttGroundDistance({ a: tapFor(1.0, 30), b: tapFor(1.3, 30), hold_height_m: H });
+    if (out.call === 'read' && out.uncertaintyFeet! / out.feet! > 0.25) expect(out.confidence).toBe('low');
+  });
+
+  it('a shallow-but-nonzero angle is REFUSED, not served as a 300-foot putt', () => {
+    /**
+     * The floor is the point. Between 0 and PUTT_MIN_DEPRESSION_DEG the geometry still produces a
+     * finite number — it just runs away toward the horizon, where half a degree of tap error is tens of
+     * feet. A naive `depression > 0` test accepts all of it and reports a confident nonsense distance,
+     * which is exactly how the reticle used to behave before its own floor was added.
+     *
+     * Found because break-test B13 (replacing the floor with `> 0`) passed: the earlier refusal test
+     * used a level phone, which fails either way and so never exercised the floor at all.
+     */
+    const shallow = tapFor(90, 2);   // ~90 m out, ~1° of depression: inside the old naive test, outside this one
+    const near = tapFor(2.0, 2);
+    const out = computePuttGroundDistance({ a: near, b: shallow, hold_height_m: H });
+    expect(out.call).toBe('too_shallow');
+    expect(out.feet).toBeNull();
+  });
+
+  it('a geometry it cannot read is refused, and says WHICH way', () => {
+    // phone level: the ray never meets the ground inside the usable band
+    const level = computePuttGroundDistance({
+      a: { xNorm: 0.5, yNorm: 0.5, pitchDeg: 90 },
+      b: { xNorm: 0.5, yNorm: 0.45, pitchDeg: 90 },
+      hold_height_m: H,
+    });
+    expect(level.call).toBe('too_shallow');
+    expect(level.feet).toBeNull();
+    expect(whyNoPuttDistance(level.call)).toMatch(/Tilt down/);
+  });
+
+  it('the pixel heuristic is GONE — not kept as a second owner of how long the putt is', () => {
+    const sf = code('app/smartfinder.tsx');
+    expect(sf).not.toMatch(/PIXELS_PER_FOOT/);
+    expect(sf).toMatch(/computePuttGroundDistance\(/);
+  });
+
+  it('hold height comes from the calibration owner, not a new preset system', () => {
+    /**
+     * services/rangefinderCalibration already learns the player's real hold height from GPS-anchored
+     * reads — it exists because a constant 1.6 m made the reticle read long for anyone shorter. A putt
+     * read is the same hold, so it takes the same learned number rather than becoming a second owner.
+     */
+    expect(code('app/smartfinder.tsx')).toMatch(/hold_height_m: effectiveEyeHeightM\(\)/);
+    expect(code('services/rangefinder.ts')).not.toMatch(/PUTT_HOLD_HEIGHTS/);
+  });
+
+  it('each tap carries its OWN pitch — the phone moves between them', () => {
+    const sf = code('app/smartfinder.tsx');
+    expect(sf).toMatch(/pitchDeg: pointA\.pitch/);
+    expect(sf).toMatch(/pitchDeg: pointB\.pitch/);
+  });
+});
+
+describe('the grazing view is a pose, verified rather than promised', () => {
+  it('upright AND steady is ready — that combination is a phone resting on the green', () => {
+    expect(readGrazingPose(90, 0.1).ready).toBe(true);
+  });
+
+  it('upright but moving is NOT ready — that is just the normal aiming hold', () => {
+    const pose = readGrazingPose(90, 2.5);
+    expect(pose.ready).toBe(false);
+    expect(pose.call).toBe('not_steady');
+    expect(whyNoGrazingPose(pose)).toMatch(/settle/);
+  });
+
+  it('an unwatched hold is not steady — unknown is never treated as good', () => {
+    expect(readGrazingPose(90, null).ready).toBe(false);
+  });
+
+  it('flat on the green is NOT the grazing pose — the camera is looking at grass', () => {
+    // The two poses are different and cannot be done at once; conflating them would send a picture of
+    // turf up with the grazing question attached.
+    const pose = readGrazingPose(0, 0.1);
+    expect(pose.ready).toBe(false);
+    expect(pose.call).toBe('not_upright');
+  });
+
+  it('the grazing question is only asked of a frame taken from the ground', () => {
+    const base = { distanceFeet: 18, ground: null, groundConfidence: null, groundSpots: 0 } as const;
+    expect(composeInstruction({ ...base })).not.toMatch(/resting ON the green/);
+    expect(composeInstruction({ ...base, imageBase64: 'x' })).not.toMatch(/resting ON the green/);
+    expect(composeInstruction({ ...base, imageBase64: 'x', frameFromGround: true })).toMatch(/resting ON the green/);
+  });
+
+  it('a picture is never allowed to produce the slope number', () => {
+    const txt = composeInstruction({
+      distanceFeet: 18, ground: null, groundConfidence: null, groundSpots: 0,
+      imageBase64: 'x', frameFromGround: true,
+    });
+    expect(txt).toMatch(/do NOT give me a slope percentage or inches of break from a picture/);
+    expect(txt).toMatch(/the measured slope is above and it owns the numbers/);
+  });
+
+  it('the ground frame is PREFERRED over a fresh chest-height grab', () => {
+    expect(code('app/smartfinder.tsx')).toMatch(/groundFrame \?\? \(captureFrameBase64 \? await captureFrameBase64\(\) : null\)/);
+    expect(code('app/smartfinder.tsx')).toMatch(/frameFromGround: groundFrame != null/);
+  });
+
+  it('capturing a ground view makes the previous read stale rather than leaving it standing', () => {
+    const sf = code('app/smartfinder.tsx');
+    expect(sf).toMatch(/setGroundFrame\(b64\);[\s\S]{0,200}caddieFiredRef\.current = false;/);
   });
 });

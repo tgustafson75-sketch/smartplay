@@ -479,3 +479,66 @@ export function whyNoGroundSlope(g: GroundSlopeRead): string | null {
       return null;
   }
 }
+
+/**
+ * 2026-09-13 (Tim) — "For a put when it super tough, could there be a second level placing phone on the
+ * ground and it sees the terrain lie to the pin clearly?"
+ *
+ * THE GRAZING VIEW — the pose, and how the app knows it is in it.
+ *
+ * At standing height a 2% slope over 20 ft is about five inches of rise across the whole line, seen
+ * from above and foreshortened to nearly nothing. From an inch off the deck that same five inches
+ * stands up against the backdrop. It is why a player crouches behind the ball, and it is the single
+ * cheapest way to give a vision model something it can actually read.
+ *
+ * IT IS A DIFFERENT POSE FROM THE INCLINOMETER, which is the thing to be clear about. Flat on the green
+ * screen-up, `readGroundSlope` gets the surface gradient and the rear camera is looking at grass. To
+ * see down the line the phone has to STAND on its bottom edge. One phone, two poses, and they cannot be
+ * done at once.
+ *
+ * The prize is not only the angle. A phone resting on the green has NO HAND TREMOR — and hand tremor
+ * (±2-3°) is the entire reason the aimed read had to be given a deadband. So this pose is also the
+ * steadiest attitude reading the app can get.
+ *
+ * WHY STEADINESS IS PART OF THE TEST: "upright" alone is just the normal aiming hold. Upright AND
+ * steady to a fraction of a degree is a phone that is resting on something. The app cannot measure its
+ * height off the ground, so it verifies the thing it CAN measure and asks for the rest.
+ */
+
+/** How far from horizontal the camera may point and still be looking down the line. */
+export const GRAZING_PITCH_TOLERANCE_DEG = 20;
+
+export type GrazingPoseCall = 'ready' | 'not_upright' | 'not_steady' | 'no_reading';
+
+export interface GrazingPose {
+  call: GrazingPoseCall;
+  /** True only when the phone is upright AND resting still enough to be sitting on the green. */
+  ready: boolean;
+}
+
+/**
+ * @param pitchDeg  rotation.beta in degrees — 90 is upright with the camera horizontal.
+ * @param wobbleDeg observed movement over the last sampling window; null means nothing watched it,
+ *                  which is NOT the same as steady and is treated as not-ready.
+ */
+export function readGrazingPose(pitchDeg: number | null, wobbleDeg: number | null): GrazingPose {
+  if (pitchDeg == null || !Number.isFinite(pitchDeg)) return { call: 'no_reading', ready: false };
+  // Upright, camera looking out along the green rather than down at it or up at the sky.
+  if (Math.abs(pitchDeg - 90) > GRAZING_PITCH_TOLERANCE_DEG) return { call: 'not_upright', ready: false };
+  if (wobbleDeg == null || wobbleDeg > GROUND_STEADY_DEG) return { call: 'not_steady', ready: false };
+  return { call: 'ready', ready: true };
+}
+
+/** What to do to get into the pose, in the player's language. Null when already there. */
+export function whyNoGrazingPose(pose: GrazingPose): string | null {
+  switch (pose.call) {
+    case 'not_upright':
+      return 'Stand the phone on its bottom edge on the green, camera looking at the hole.';
+    case 'not_steady':
+      return 'Let go and let it settle — resting on the green is what makes this read good.';
+    case 'no_reading':
+      return 'No tilt reading yet.';
+    default:
+      return null;
+  }
+}

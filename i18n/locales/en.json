@@ -1849,7 +1849,13 @@
       "ask_caddie_to_read_it": "ASK THE CADDIE TO READ IT",
       "reading_ellipsis": "READING…",
       "lay_phone_on_green": "Lay the phone on the green to measure the slope.",
-      "ends_differ_slope_changes": "Ends differ by {{spread}}% — the slope changes along this line."
+      "ends_differ_slope_changes": "Ends differ by {{spread}}% — the slope changes along this line.",
+      "feet_plus_minus": "FEET  ±{{pm}}",
+      "ground_view": "GROUND VIEW · THE HARD ONES",
+      "capture": "CAPTURE",
+      "retake": "RETAKE",
+      "ground_view_ready": "Resting and steady — capture the line from down here.",
+      "ground_view_captured": "Captured. The caddie will read the line from ground level."
     },
     "target_view": {
       "course_geometry_isn_t_available": "Course geometry isn't available for this hole.",

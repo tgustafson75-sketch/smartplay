@@ -317,3 +317,204 @@ export function confidenceMargin(confidence: 'high' | 'medium' | 'low'): number 
   if (confidence === 'medium') return 10;
   return 20;
 }
+
+/**
+ * 2026-09-13 (Tim) — "Finish path A distance option."
+ *
+ * PUTT-DISTANCE BY TILT, WHICH IS THE ONE PLACE IN THIS APP THE METHOD ACTUALLY WORKS.
+ *
+ * `computeDistance` above ranges by tilt and was taken OFF the reticle on 2026-08-24 because it could
+ * not do the job: "at ~1.6 m phone height a 150-yard target sits at 0.67 DEGREES of down-angle — under
+ * the 2-degree floor", and this file's own header has said since 2026-07-22 that the method "physically
+ * caps at ~50 yds". All true, and none of it is an argument against using it on a PUTT. Run the numbers
+ * at the distances a putt actually is, at a 1.5 m chest-height hold:
+ *
+ *        3 ft (0.91 m)   58.7°        20 ft (6.1 m)   13.8°
+ *       10 ft (3.05 m)   26.2°        60 ft (18.3 m)   4.7°
+ *                                     50 yd (45.7 m)   1.9°   ← the documented cap
+ *
+ * A putt is 3-60 feet. Every one of those sits far above the floor where the method dies, and the cap
+ * is roughly forty yards beyond the longest putt anyone faces. The 08-24 finding was that the method
+ * was being used OUTSIDE its envelope; this is the inside of it.
+ *
+ * WHAT IT REPLACES. The putt overlay divided the pixel distance between two taps by a fixed constant
+ * (`PIXELS_PER_FOOT = 35`, "rough by design"). That is not a weak measurement, it is not a measurement
+ * at all: under perspective, ten feet near the camera and ten feet far from it occupy wildly different
+ * pixel counts, so the same putt read differently depending on how high the phone was held and how far
+ * down the frame the taps landed. This is the accuracy Tim has been chasing.
+ *
+ * ── WHAT IS ASSUMED, STATED PLAINLY ─────────────────────────────────────────────────────────────────
+ *
+ * The hold height is NOT invented here and there is no preset control for it. `services/rangefinder\
+ * Calibration.effectiveEyeHeightM()` already learns the player's real hold height from GPS-anchored
+ * target reads and falls back to a default until it has samples — the owner that exists because Tim
+ * reported the reticle reading long, and the cause was a constant 1.6 m for every player ("distance
+ * scales LINEARLY with it, so a player who holds the phone 10% lower reads 10% long on EVERY target").
+ * A putt read is the same hold, so it takes the same learned number rather than becoming a second
+ * owner of "how high does he hold the phone". It also means the putt read sharpens as he uses the
+ * rangefinder. [[two-owners-is-the-root-cause]]
+ *
+ * ONE input is still stated: vertical FOV — `CAMERA_VFOV_DEG`, a default for this file. A device whose
+ * true FOV differs produces a proportional error, which is why the first thing to do on a real green is
+ * pace a putt and compare. One constant fixes it if it is off.
+ *
+ * So the output carries an UNCERTAINTY computed from the geometry rather than a confidence adjective
+ * chosen by feel — see below. [[silence-is-not-an-answer]]
+ */
+
+/** Below this depression the geometry stops resolving: d = h/tan(θ) runs away toward the horizon. */
+export const PUTT_MIN_DEPRESSION_DEG = 3;
+/** Above this the phone is pointed essentially at the player's own feet. */
+export const PUTT_MAX_DEPRESSION_DEG = 80;
+/**
+ * The angular error to propagate: hand tremor plus how precisely a thumb lands on a ball at 20 feet.
+ * Half a degree is the honest figure for a handheld tap, and it is what makes the reported ± real.
+ */
+export const PUTT_ANGLE_ERROR_DEG = 0.5;
+
+export type PuttDistanceCall = 'read' | 'too_shallow' | 'too_steep' | 'no_reading';
+
+export interface PuttGroundTap {
+  xNorm: number;
+  yNorm: number;
+  /** DeviceMotion rotation.beta in degrees AT THE MOMENT OF THIS TAP. */
+  pitchDeg: number;
+}
+
+export interface PuttGroundOutput {
+  feet: number | null;
+  call: PuttDistanceCall;
+  /** ± feet, propagated from PUTT_ANGLE_ERROR_DEG through this exact geometry. Null when no read. */
+  uncertaintyFeet: number | null;
+  confidence: 'high' | 'medium' | 'low';
+  /** Ground distance from the camera to each tapped point, feet — for diagnostics and the block. */
+  aFeet: number | null;
+  bFeet: number | null;
+}
+
+const NO_PUTT_READ: PuttGroundOutput = {
+  feet: null, call: 'no_reading', uncertaintyFeet: null, confidence: 'low', aFeet: null, bFeet: null,
+};
+
+const M_PER_FT = 0.3048;
+
+/** Horizontal counterpart of angleForY — same rectilinear mapping, across the frame. */
+function angleForX(xNorm: number, hfovDeg: number): number {
+  const halfTan = Math.tan(degToRad(hfovDeg) / 2);
+  return Math.atan((xNorm - 0.5) * 2 * halfTan);
+}
+
+/**
+ * Where one tapped ground point sits, relative to the camera.
+ * Returns null when the ray does not meet the ground inside the usable envelope.
+ */
+function groundPointFor(
+  tap: PuttGroundTap,
+  heightM: number,
+  vfovDeg: number,
+  hfovDeg: number,
+): { alongM: number; lateralM: number; depressionDeg: number } | null {
+  if (!Number.isFinite(tap.pitchDeg) || !Number.isFinite(tap.xNorm) || !Number.isFinite(tap.yNorm)) return null;
+
+  /**
+   * The rear camera's optical axis, in degrees below horizontal. rotation.beta is 0 with the phone flat
+   * screen-up (camera pointing straight DOWN, 90° of depression) and 90 upright (camera horizontal, 0°),
+   * so the axis depression is simply 90 − beta. Same premise the slope reads use, pointed at the camera
+   * instead of at the surface.
+   */
+  const axisDepressionDeg = 90 - tap.pitchDeg;
+  // angleForY is positive ABOVE frame centre, so a tap low in the frame steepens the depression.
+  const rayAboveCentreDeg = (angleForY(tap.yNorm, vfovDeg) * 180) / Math.PI;
+  const depressionDeg = axisDepressionDeg - rayAboveCentreDeg;
+
+  if (!(depressionDeg > PUTT_MIN_DEPRESSION_DEG) || depressionDeg > PUTT_MAX_DEPRESSION_DEG) return null;
+
+  const alongM = heightM / Math.tan(degToRad(depressionDeg));
+  const lateralM = alongM * Math.tan(angleForX(tap.xNorm, hfovDeg));
+  return { alongM, lateralM, depressionDeg };
+}
+
+/** d(distance)/d(angle) in metres per degree at this geometry — how much a tap error costs here. */
+function sensitivityMPerDeg(heightM: number, depressionDeg: number): number {
+  const s = Math.sin(degToRad(depressionDeg));
+  return (heightM / (s * s)) * (Math.PI / 180);
+}
+
+/**
+ * The length of a putt, from two taps on the ground and the phone's tilt.
+ *
+ * Each tap carries its OWN pitch, because the phone moves between them and using one pose for both
+ * would quietly attribute that movement to the green. Lateral offsets assume the player did not YAW
+ * appreciably between the two taps — a reasonable assumption a second apart, aiming down one line, and
+ * a small term next to the along-line difference in any case.
+ */
+export function computePuttGroundDistance(input: {
+  a: PuttGroundTap;
+  b: PuttGroundTap;
+  hold_height_m: number;
+  vfov_deg?: number;
+  hfov_deg?: number;
+}): PuttGroundOutput {
+  const heightM = Number.isFinite(input.hold_height_m) && input.hold_height_m > 0 ? input.hold_height_m : 1.45;
+  const vfov = input.vfov_deg && input.vfov_deg > 0 ? input.vfov_deg : CAMERA_VFOV_DEG;
+  const hfov = input.hfov_deg && input.hfov_deg > 0 ? input.hfov_deg : CAMERA_HFOV_DEG;
+
+  const A = groundPointFor(input.a, heightM, vfov, hfov);
+  const B = groundPointFor(input.b, heightM, vfov, hfov);
+  if (!A || !B) {
+    /**
+     * Say WHICH way it failed, so the hint can be actionable rather than "no read". A tap above the
+     * usable band means the phone is too level — the horizon problem; below it means it is pointed at
+     * the player's feet.
+     */
+    const depressions = [input.a, input.b].map((t) => 90 - t.pitchDeg - (angleForY(t.yNorm, vfov) * 180) / Math.PI);
+    const anyShallow = depressions.some((d) => !(d > PUTT_MIN_DEPRESSION_DEG));
+    return { ...NO_PUTT_READ, call: anyShallow ? 'too_shallow' : 'too_steep' };
+  }
+
+  const dAlong = B.alongM - A.alongM;
+  const dLateral = B.lateralM - A.lateralM;
+  const separationM = Math.hypot(dAlong, dLateral);
+
+  /**
+   * Uncertainty, propagated rather than asserted. The two points' sensitivities do NOT cancel in the
+   * difference — the far point is far more sensitive than the near one — so the along-line term is
+   * their difference for a common pitch error, plus an independent tap error at each point.
+   */
+  const sA = sensitivityMPerDeg(heightM, A.depressionDeg);
+  const sB = sensitivityMPerDeg(heightM, B.depressionDeg);
+  const commonM = Math.abs(sB - sA) * PUTT_ANGLE_ERROR_DEG;
+  const tapM = Math.hypot(sA, sB) * PUTT_ANGLE_ERROR_DEG;
+  const uncertaintyM = Math.hypot(commonM, tapM);
+
+  const feet = Math.round((separationM / M_PER_FT) * 10) / 10;
+  const uncertaintyFeet = Math.round((uncertaintyM / M_PER_FT) * 10) / 10;
+
+  // Confidence is the error as a FRACTION of the putt: ±1 ft on a 40-footer is fine, on a 3-footer it
+  // is the whole putt. A ratio is the honest expression of that, not the absolute number.
+  const ratio = feet > 0 ? uncertaintyFeet / feet : Infinity;
+  const confidence: 'high' | 'medium' | 'low' = ratio <= 0.1 ? 'high' : ratio <= 0.25 ? 'medium' : 'low';
+
+  return {
+    feet,
+    call: 'read',
+    uncertaintyFeet,
+    confidence,
+    aFeet: Math.round((A.alongM / M_PER_FT) * 10) / 10,
+    bFeet: Math.round((B.alongM / M_PER_FT) * 10) / 10,
+  };
+}
+
+/** Why there is no trig distance, in the player's language. Null when there IS one. */
+export function whyNoPuttDistance(call: PuttDistanceCall): string | null {
+  switch (call) {
+    case 'too_shallow':
+      return 'Tilt down a bit — aim the camera at the ground between your ball and the hole.';
+    case 'too_steep':
+      return 'That is pointing at your feet — back the phone up and take in the whole line.';
+    case 'no_reading':
+      return 'No tilt reading yet.';
+    default:
+      return null;
+  }
+}

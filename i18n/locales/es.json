@@ -199,7 +199,13 @@
       "ask_caddie_to_read_it": "PIDE AL CADDIE QUE LA LEA",
       "reading_ellipsis": "LEYENDO…",
       "lay_phone_on_green": "Apoya el móvil en el green para medir la pendiente.",
-      "ends_differ_slope_changes": "Los extremos difieren un {{spread}}% — la pendiente cambia a lo largo de esta línea."
+      "ends_differ_slope_changes": "Los extremos difieren un {{spread}}% — la pendiente cambia a lo largo de esta línea.",
+      "feet_plus_minus": "PIES  ±{{pm}}",
+      "ground_view": "VISTA A RAS · LAS DIFÍCILES",
+      "capture": "CAPTURAR",
+      "retake": "REPETIR",
+      "ground_view_ready": "Apoyado y estable — captura la línea desde aquí abajo.",
+      "ground_view_captured": "Capturado. El caddie leerá la línea desde el suelo."
     }
   }
 }

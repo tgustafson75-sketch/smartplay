@@ -64,7 +64,15 @@ describe('the client half exists and fails closed', () => {
 
 describe('SmartFinder actually calls it', () => {
   it('imports the maths that used to be test-only', () => {
-    expect(sf).toContain("import { computeDistance, computeHeightRangedDistance } from '../services/rangefinder';");
+    /**
+     * 2026-09-13 — asserts the NAMES, not the exact import line. Pinning the whole statement made this
+     * go red when `computePuttGroundDistance` was added alongside them, which is a guard failing on a
+     * strictly-more-correct file. The property is that SmartFinder uses the shared maths rather than
+     * re-deriving it. [[break-test-every-guard-you-write]]
+     */
+    const line = sf.match(/import \{[^}]*\} from '\.\.\/services\/rangefinder';/)?.[0] ?? '';
+    expect(line).toContain('computeDistance');
+    expect(line).toContain('computeHeightRangedDistance');
   });
 
   it('can capture a frame — the CameraView ref lives in the parent', () => {

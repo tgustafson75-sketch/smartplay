@@ -63,6 +63,29 @@ const PUTT_INSTRUCTION =
  * it cannot measure pixels, so it is never asked to. And a MISS is the valuable answer — it means the
  * distance is wrong and should be re-tapped, which is worth more than a confident number.
  */
+/**
+ * 2026-09-13 (Tim) — "could there be a second level placing phone on the ground and it sees the terrain
+ * lie to the pin clearly?"
+ *
+ * THE GRAZING READ. When the frame was taken with the phone standing on the green, the camera is an
+ * inch off the deck looking down the line — the crouch-behind-the-ball view — and vertical relief that
+ * is invisible from chest height stands up against the backdrop. That is a genuinely different picture
+ * to reason about, so it gets a different question.
+ *
+ * Still QUALITATIVE, deliberately. The inclinometer owns the number; a photograph does not get to
+ * produce a percentage, and asking it to would re-introduce exactly the confident-and-unfounded slope
+ * this whole pass exists to remove. What a grazing frame CAN support is shape and sequence: where the
+ * ground falls away, which side is high, whether the line crests or dips before the hole.
+ */
+const GRAZING_INSTRUCTION =
+  'This frame was taken with the phone resting ON the green, camera an inch off the ground looking down ' +
+  'the line — the view you get crouching behind the ball, where slope that is invisible from standing ' +
+  'height shows up against the background. Read the SHAPE of the ground between me and the hole: which ' +
+  'side is high, where it falls away, whether the line crests or dips before it gets there, and whether ' +
+  'the last few feet run out or hold up. Describe shape and sequence only — do NOT give me a slope ' +
+  'percentage or inches of break from a picture; the measured slope is above and it owns the numbers. ' +
+  'If the ground between us is hidden or the frame is too dark to read, say so instead of guessing.';
+
 const FLAG_INSTRUCTION =
   'Also look at the picture for the hole and the flagstick. Say whether you can see a hole, a flagstick ' +
   'or a flag at all, and roughly where it sits in the frame (left / centre / right, near / far). Compare ' +
@@ -72,8 +95,10 @@ const FLAG_INSTRUCTION =
   'wind on the green. Never estimate a distance from the picture — the distance comes from my taps.';
 
 export interface PuttReadMeasurement {
-  /** A/B tap distance, in feet. Rough visual estimate — see the caveat sent with it. */
+  /** A/B tap distance, in feet, from the tilt projection in services/rangefinder. */
   distanceFeet: number | null;
+  /** ± feet propagated through that geometry. Null when there is no distance to qualify. */
+  distanceUncertaintyFeet?: number | null;
   /** The grounded reading, or null when the player has not laid the phone down yet. */
   ground: GroundSlopeRead | null;
   groundConfidence: ReadConfidence | null;
@@ -86,6 +111,23 @@ export interface PuttReadMeasurement {
    * can check the tap against where the hole actually is. Null when there is no frame to check against.
    */
   targetPoint?: { xNorm: number; yNorm: number } | null;
+  /**
+   * True when the frame came from the phone STANDING on the green rather than held at chest height.
+   * A different picture deserves a different question — see GRAZING_INSTRUCTION.
+   */
+  frameFromGround?: boolean;
+}
+
+/**
+ * Which questions this frame can actually support. A text-only turn is never asked to look at a picture
+ * — that invites it to invent one — and a chest-height frame is never asked the grazing question, which
+ * only means anything from ground level.
+ */
+export function composeInstruction(input: PuttReadMeasurement & { imageBase64?: string | null }): string {
+  if (!input.imageBase64) return PUTT_INSTRUCTION;
+  const parts = [PUTT_INSTRUCTION, FLAG_INSTRUCTION];
+  if (input.frameFromGround) parts.push(GRAZING_INSTRUCTION);
+  return parts.join('\n\n');
 }
 
 export interface PuttReadResult {
@@ -103,9 +145,16 @@ export function buildPuttMeasurementBlock(m: PuttReadMeasurement): string {
   const lines: string[] = ['THIS PUTT — measured on the green just now:'];
 
   if (m.distanceFeet != null) {
-    // Named as rough on purpose. The A/B tap divides pixels by a fixed constant, so perspective alone
-    // moves it — it is a useful ballpark and must never be spoken as a surveyed distance.
-    lines.push(`- Length: about ${m.distanceFeet} feet (rough visual estimate from tapping both ends — treat as a ballpark, not a lasered number).`);
+    /**
+     * 2026-09-13 — this used to say "rough visual estimate", and it was: pixels over a fixed constant.
+     * It is now a tilt projection through the learned hold height, and it comes with a ± propagated
+     * from the actual geometry. So the number is stated, and the ± carries the honesty — rather than a
+     * hedge in words that the model then has to decide how much to discount.
+     */
+    const pm = m.distanceUncertaintyFeet;
+    lines.push(pm != null
+      ? `- Length: ${m.distanceFeet} feet, give or take ${pm}. Use the range when it matters to the call — a ${m.distanceFeet}-footer that could be ${Math.round((m.distanceFeet + pm) * 10) / 10} is a different lag.`
+      : `- Length: ${m.distanceFeet} feet.`);
   } else {
     lines.push('- Length: not measured yet.');
   }
@@ -169,13 +218,17 @@ export async function readPutt(input: PuttReadMeasurement & {
   const turn = await askCaddie({
     // The flag cross-check is only asked for when there is actually a picture to check against —
     // asking a text-only turn to look at a frame invites it to invent one.
-    message: input.imageBase64 ? `${PUTT_INSTRUCTION}\n\n${FLAG_INSTRUCTION}` : PUTT_INSTRUCTION,
+    message: composeInstruction(input),
     language: settings.language ?? 'en',
     /** The measurements are FACTS, so they ride in the live block with the rest of the situation. */
     liveBlock: buildPuttMeasurementBlock(input),
     image_base64: input.imageBase64 ?? null,
     image_media_type: input.imageBase64 ? (input.mediaType ?? 'image/jpeg') : null,
-    image_caption: input.imageBase64 ? 'Looking down the line of a putt on the green.' : null,
+    image_caption: input.imageBase64
+      ? (input.frameFromGround
+          ? 'Phone resting on the green, camera at ground level looking down the line of a putt.'
+          : 'Looking down the line of a putt on the green.')
+      : null,
     // The screen speaks this itself through the same path the scene read uses, so the server TTS
     // round-trip would be paid for and thrown away.
     skipTts: true,

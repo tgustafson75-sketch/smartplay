@@ -199,7 +199,13 @@
       "ask_caddie_to_read_it": "请球童读线",
       "reading_ellipsis": "读取中…",
       "lay_phone_on_green": "将手机平放在果岭上以测量坡度。",
-      "ends_differ_slope_changes": "两端相差 {{spread}}% — 沿这条线坡度有变化。"
+      "ends_differ_slope_changes": "两端相差 {{spread}}% — 沿这条线坡度有变化。",
+      "feet_plus_minus": "英尺  ±{{pm}}",
+      "ground_view": "贴地视角 · 难读的推杆",
+      "capture": "拍摄",
+      "retake": "重拍",
+      "ground_view_ready": "已稳定放置 — 从这个高度拍摄推杆线。",
+      "ground_view_captured": "已拍摄。球童将从贴地视角读线。"
     }
   }
 }

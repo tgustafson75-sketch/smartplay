@@ -7305,18 +7305,36 @@ check('Store hygiene: roundHistory has a bounded-growth backstop cap',
   'roundHistory appends run through capHistory (max 1000) at both endRound and addImportedRound, bounding the persisted blob against runaway growth while preserving every realistic user\'s full history');
 
 // 2026-06-14 (audit — MED honesty) — two surfaces presented rough/placeholder
-// numbers as if real. SmartFinder putt distance (uncalibrated pixels→feet) now reads
+// numbers as if real. SmartFinder putt distance (uncalibrated pixels→feet) read
 // "~N" + "FEET (EST)"; the course-detail generic placeholder layout (18×par-4×380y for
-// un-catalogued local courses) now shows an "Estimated layout" banner instead of
+// un-catalogued local courses) shows an "Estimated layout" banner instead of
 // silently fabricating a scorecard. Keep-and-flag, not silent fabrication.
-check('Honesty: putt distance + placeholder course layout are flagged as estimates',
+//
+// 2026-09-13 — THE PUTT HALF GOT STRICTER, NOT LOOSER. The "~N (EST)" flag was the right
+// honesty for a number that was pixels over a fixed constant. That number is gone:
+// services/rangefinder.computePuttGroundDistance projects each tap onto the ground through
+// the phone's tilt and the LEARNED hold height, and returns a ± propagated from the real
+// geometry. So the gate now requires more than a disclaimer — it requires the projection,
+// the absence of the pixel heuristic, the ± shown to the player, and a REFUSAL when the
+// geometry cannot support a read. An estimate that tells you how good it is is a
+// measurement; one that cannot is a guess wearing a label.
+check('Honesty: putt distance is a projection with a stated ±, and placeholder layouts are flagged',
   (() => {
     const sf = read('app/smartfinder.tsx');
     const cd = read('app/course/[course_id].tsx');
+    const sfCode = sf.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
     return (
-      // putt distance shows ~N and an EST label (was a bare number + "FEET")
-      /distanceFeet != null \? `~\$\{distanceFeet\}` : '—'/.test(sf) &&
-      saysToPlayer(sf, "FEET (EST)") &&
+      // the distance is a PROJECTION, and the pixel heuristic is not still sitting beside it
+      /computePuttGroundDistance\(/.test(sfCode) &&
+      /hold_height_m: effectiveEyeHeightM\(\)/.test(sfCode) &&
+      !/PIXELS_PER_FOOT/.test(sfCode) &&
+      // the uncertainty reaches the player rather than living in the return value
+      /puttDistance\?\.uncertaintyFeet != null/.test(sfCode) &&
+      saysToPlayer(sf, "FEET  ±{{pm}}") &&
+      // a geometry it cannot read says so instead of showing a number
+      /whyNoPuttDistance\(puttDistance\.call\)/.test(sfCode) &&
+      // and the caddie read is given the range, not just the midpoint
+      /distanceUncertaintyFeet: puttDistance\?\.uncertaintyFeet \?\? null/.test(sfCode) &&
       // course detail flags the generic placeholder layout + clears it on real data
       /const \[layoutEstimated, setLayoutEstimated\] = useState\(false\)/.test(cd) &&
       /setLayoutEstimated\(!realHoles\)/.test(cd) &&
@@ -7326,7 +7344,7 @@ check('Honesty: putt distance + placeholder course layout are flagged as estimat
       saysToPlayer(cd, "Estimated layout — full course data not available yet.")
     );
   })(),
-  'the uncalibrated putt distance reads as an estimate (~N, FEET (EST)) and an un-catalogued course shows an "Estimated layout" banner instead of presenting the 18×par-4×380y placeholder as a real scorecard');
+  'the putt distance is a tilt projection through the learned hold height with a propagated ± shown to the player, refuses a geometry it cannot resolve, and the pixel heuristic is gone; an un-catalogued course still shows an "Estimated layout" banner instead of presenting the 18×par-4×380y placeholder as a real scorecard');
 
 // 2026-06-14 (audit — perf/battery) — the on-course dot tickers forced a fresh
 // high-accuracy GPS pull (refreshFix → getOneShotFix maxAgeMs:0) every 3-4s from

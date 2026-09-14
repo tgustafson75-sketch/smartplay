@@ -21,7 +21,7 @@ import { useGreenReadStore } from '../store/greenReadStore';
 import {
   readPuttSlope, paceHintFor, whyNoSlope, readLevel, bubbleOffset,
   readGroundSlope, summarizeGroundSpots, groundReadConfidence, groundConfidenceNote,
-  describeGroundSlope, whyNoGroundSlope,
+  describeGroundSlope, whyNoGroundSlope, readGrazingPose, whyNoGrazingPose,
   type GroundSlopeRead, type GroundOrientation,
 } from '../services/puttSlopeRead';
 import { decideShot } from '../services/caddieDecision';
@@ -47,7 +47,7 @@ import { fetchCourseGeometry, getHoleGeometry, type HoleGeometry } from '../serv
 import { refreshGpsAndReconcile } from '../services/refreshGpsAction';
 import { bearingDegrees, haversineYards, projectToAxis, unprojectFromAxis } from '../utils/geoDistance';
 import { computeHazardIntelligence } from '../services/hazardIntelligence';
-import { computeDistance, computeHeightRangedDistance } from '../services/rangefinder';
+import { computeDistance, computeHeightRangedDistance, computePuttGroundDistance, whyNoPuttDistance } from '../services/rangefinder';
 import * as Haptics from 'expo-haptics';
 import { subscribeSmartFinderCommand, setSmartFinderActive } from '../services/smartFinderCommandBus';
 import GPSQuality from '../components/smartfinder/GPSQuality';
@@ -2110,8 +2110,9 @@ function PuttCameraOverlay({ locationGranted: _locationGranted, armRead = false,
   const lastWobbleRef = useRef<number | null>(null);
   /** Size of the tap surface, so a tapped point can be expressed as a fraction of the frame. */
   const tapSizeRef = useRef<{ width: number; height: number } | null>(null);
-  const [pointA, setPointA] = useState<{ x: number; y: number } | null>(null);
-  const [pointB, setPointB] = useState<{ x: number; y: number } | null>(null);
+  type PuttTap = { x: number; y: number; pitch: number };
+  const [pointA, setPointA] = useState<PuttTap | null>(null);
+  const [pointB, setPointB] = useState<PuttTap | null>(null);
   const [pitchAtMeasure, setPitchAtMeasure] = useState<number | null>(null);
   const [rollAtMeasure, setRollAtMeasure] = useState<number | null>(null);
   // Live tilt for the real-time level indicator. pitch = fore/aft (incline
@@ -2184,6 +2185,47 @@ function PuttCameraOverlay({ locationGranted: _locationGranted, armRead = false,
    */
   const [groundOrientation, setGroundOrientation] = useState<GroundOrientation>('top_to_hole');
   const liveGround = readGroundSlope(tilt.pitch, tilt.roll, groundOrientation);
+  /**
+   * Live wobble over the sampling window — what separates a phone RESTING on the green from one being
+   * held upright. Recomputed on each tilt tick rather than only when a spot is locked, because the
+   * grazing pose has to be detected continuously to tell the player when it is ready.
+   */
+  const liveWobble = useMemo(() => {
+    const w = wobbleRef.current;
+    if (w.length < 2) return null;
+    return Math.max(
+      Math.max(...w.map((x) => x.p)) - Math.min(...w.map((x) => x.p)),
+      Math.max(...w.map((x) => x.r)) - Math.min(...w.map((x) => x.r)),
+    );
+    // `tilt` is the tick — the ref itself is mutated in place and would not trigger this on its own.
+  }, [tilt]);
+  const grazingPose = readGrazingPose(tilt.pitch, liveWobble);
+  const [groundFrame, setGroundFrame] = useState<string | null>(null);
+  const [grabbingGround, setGrabbingGround] = useState(false);
+
+  /**
+   * 2026-09-13 — capture the GRAZING frame: phone standing on the green, camera an inch off the deck
+   * looking down the line. Gated on the pose actually being held, because a chest-height frame sent
+   * with the grazing question would have the model describing relief that is not visible in it.
+   */
+  const captureGroundView = useCallback(async () => {
+    if (!captureFrameBase64 || grabbingGround) return;
+    setGrabbingGround(true);
+    try {
+      const b64 = await captureFrameBase64();
+      if (b64) {
+        setGroundFrame(b64);
+        // A new ground view is new evidence, so the read is stale and may be taken again.
+        caddieFiredRef.current = false;
+        setCaddieRead(null);
+        useToastStore.getState().show('Ground view captured.');
+      } else {
+        useToastStore.getState().show('Could not capture — try again.');
+      }
+    } finally {
+      setGrabbingGround(false);
+    }
+  }, [captureFrameBase64, grabbingGround]);
   const [groundSpots, setGroundSpots] = useState<GroundSlopeRead[]>([]);
   const groundSummary = useMemo(() => summarizeGroundSpots(groundSpots), [groundSpots]);
   const groundQuality = useMemo(
@@ -2207,17 +2249,26 @@ function PuttCameraOverlay({ locationGranted: _locationGranted, armRead = false,
     try { useToastStore.getState().show('Spot read.'); } catch { /* non-fatal */ }
   }, [groundOrientation]);
 
+  /**
+   * 2026-09-13 — EACH TAP CARRIES ITS OWN PITCH.
+   *
+   * The trig distance is height / tan(depression), and the depression of a tapped point depends on
+   * where the phone was pointing AT THAT MOMENT. Recording one pitch at the second tap (what this did,
+   * for the slope read) and using it for both would silently attribute any movement between the taps
+   * to the green itself.
+   */
   const handleTap = useCallback((event: { nativeEvent: { locationX: number; locationY: number } }) => {
     const { locationX, locationY } = event.nativeEvent;
+    const pt = { x: locationX, y: locationY, pitch: pitchRef.current };
     if (!pointA) {
-      setPointA({ x: locationX, y: locationY });
+      setPointA(pt);
     } else if (!pointB) {
-      setPointB({ x: locationX, y: locationY });
+      setPointB(pt);
       setPitchAtMeasure(pitchRef.current);
       setRollAtMeasure(rollRef.current);
     } else {
       // Reset on third tap
-      setPointA({ x: locationX, y: locationY });
+      setPointA(pt);
       setPointB(null);
       setPitchAtMeasure(null);
       setRollAtMeasure(null);
@@ -2229,19 +2280,40 @@ function PuttCameraOverlay({ locationGranted: _locationGranted, armRead = false,
     // The grounded spots belong to the putt that was just cleared — keeping them would attach one
     // green's slope to the next putt, which is the quiet kind of wrong this screen keeps producing.
     setGroundSpots([]);
+    setGroundFrame(null);
     lastWobbleRef.current = null;
     setCaddieRead(null);
     caddieFiredRef.current = false;
   };
 
-  // Approximate distance in feet using a simple visual heuristic — pixels mapped
-  // to feet via a fixed reference (this is rough by design; a calibrated camera
-  // model is 1.x work). One screen-width assumed to be ~6 feet at typical
-  // putting-arm-extension hold. Better than nothing for v1; tunable later.
-  const PIXELS_PER_FOOT = 35;
-  const distanceFeet = pointA && pointB
-    ? Math.round(Math.hypot(pointB.x - pointA.x, pointB.y - pointA.y) / PIXELS_PER_FOOT * 10) / 10
-    : null;
+  /**
+   * 2026-09-13 (Tim — "Finish path A distance option") — TRIG, NOT PIXELS.
+   *
+   * This was `hypot(B - A) / 35`: the pixel gap between the two taps divided by a fixed constant. That
+   * is not a weak measurement, it is not a measurement — under perspective, ten feet near the camera
+   * and ten feet away occupy completely different pixel counts, so the same putt read differently
+   * depending on how high the phone was held and where in the frame the taps landed. It is the
+   * accuracy complaint.
+   *
+   * `computePuttGroundDistance` projects each tap onto the ground through the phone's tilt and the
+   * learned hold height, and returns the separation with a propagated ± — see the note in
+   * services/rangefinder for why the method that was taken OFF the reticle in August is the right one
+   * here: a putt sits at 5-60° of down-angle, where it has plenty of resolution, not the 0.67° a
+   * 150-yard target sits at.
+   */
+  const puttDistance = useMemo(() => {
+    if (!pointA || !pointB) return null;
+    const size = tapSizeRef.current;
+    if (!size || size.width <= 0 || size.height <= 0) return null;
+    return computePuttGroundDistance({
+      a: { xNorm: pointA.x / size.width, yNorm: pointA.y / size.height, pitchDeg: pointA.pitch },
+      b: { xNorm: pointB.x / size.width, yNorm: pointB.y / size.height, pitchDeg: pointB.pitch },
+      // The one owner of how high this player holds the phone — learned from GPS-anchored reads.
+      hold_height_m: effectiveEyeHeightM(),
+    });
+  }, [pointA, pointB]);
+
+  const distanceFeet = puttDistance?.feet ?? null;
 
   // Slope hint from device pitch — a putter face perpendicular to the green
   // surface reads pitch ≈ -90°. Deviation from level is the rough slope read.
@@ -2329,16 +2401,23 @@ function PuttCameraOverlay({ locationGranted: _locationGranted, armRead = false,
       const targetPoint = pointB && size && size.width > 0 && size.height > 0
         ? { xNorm: pointB.x / size.width, yNorm: pointB.y / size.height }
         : null;
-      const imageBase64 = captureFrameBase64 ? await captureFrameBase64() : null;
+      /**
+       * The GROUND VIEW wins when one was captured: it is the same line from a far better angle, and a
+       * fresh chest-height grab would throw away the best evidence the player just took the trouble to
+       * collect.
+       */
+      const imageBase64 = groundFrame ?? (captureFrameBase64 ? await captureFrameBase64() : null);
 
       const svc = await import('../services/puttReadService');
       const result = await svc.readPutt({
         distanceFeet,
+        distanceUncertaintyFeet: puttDistance?.uncertaintyFeet ?? null,
         ground: groundSummary?.mean ?? null,
         groundConfidence,
         groundSpots: groundSummary?.spots ?? 0,
-        targetPoint,
+        targetPoint: groundFrame ? null : targetPoint,
         imageBase64,
+        frameFromGround: groundFrame != null,
       });
       if (result) {
         setCaddieRead(result.text);
@@ -2362,7 +2441,7 @@ function PuttCameraOverlay({ locationGranted: _locationGranted, armRead = false,
     } finally {
       setCaddieReading(false);
     }
-  }, [distanceFeet, groundSummary, groundConfidence, pointB, captureFrameBase64]);
+  }, [distanceFeet, puttDistance, groundSummary, groundConfidence, pointB, captureFrameBase64, groundFrame]);
 
   useEffect(() => {
     if (!armRead || distanceFeet == null || caddieFiredRef.current) return;
@@ -2581,6 +2660,53 @@ function PuttCameraOverlay({ locationGranted: _locationGranted, armRead = false,
           </View>
         )}
 
+        {/**
+          * 2026-09-13 (Tim) — GROUND VIEW, the "second level". Standing the phone on the green puts the
+          * camera an inch off the deck looking down the line, where five inches of rise across a
+          * twenty-footer stands up against the backdrop instead of being foreshortened into nothing.
+          * It is also the steadiest attitude the phone can be in, since nothing is holding it.
+          *
+          * Gated on the pose being HELD, not on a promise it is — upright alone is just the normal
+          * aiming hold; upright and still to a fraction of a degree is a phone resting on something.
+          */}
+        <View style={{
+          marginBottom: 10, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10,
+          borderWidth: 1,
+          borderColor: groundFrame ? '#00C896' : grazingPose.ready ? '#88F700' : 'rgba(255,255,255,0.18)',
+          backgroundColor: groundFrame ? 'rgba(0,200,150,0.10)' : 'rgba(0,0,0,0.35)',
+        }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={{
+              color: groundFrame ? '#00C896' : grazingPose.ready ? '#88F700' : 'rgba(255,255,255,0.65)',
+              fontSize: 10, fontWeight: '900', letterSpacing: 1,
+            }}>{t('smartfinder.putt_camera_overlay.ground_view')}</Text>
+            <TouchableOpacity
+              onPress={captureGroundView}
+              disabled={!grazingPose.ready || grabbingGround}
+              style={{
+                paddingHorizontal: 12, paddingVertical: 6, borderRadius: 7,
+                backgroundColor: grazingPose.ready && !grabbingGround ? '#88F700' : 'rgba(255,255,255,0.15)',
+              }}
+            >
+              <Text style={{
+                color: grazingPose.ready && !grabbingGround ? '#04170a' : 'rgba(255,255,255,0.5)',
+                fontSize: 10, fontWeight: '900',
+              }}>
+                {grabbingGround
+                  ? t('smartfinder.putt_camera_overlay.reading_ellipsis')
+                  : groundFrame
+                    ? t('smartfinder.putt_camera_overlay.retake')
+                    : t('smartfinder.putt_camera_overlay.capture')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 10, marginTop: 5 }}>
+            {groundFrame
+              ? t('smartfinder.putt_camera_overlay.ground_view_captured')
+              : (whyNoGrazingPose(grazingPose) ?? t('smartfinder.putt_camera_overlay.ground_view_ready'))}
+          </Text>
+        </View>
+
         {!pointA ? (
           <Text style={styles.instructionText}>{t('smartfinder.putt_camera_overlay.tap_your_ball_position_point')}</Text>
         ) : !pointB ? (
@@ -2589,10 +2715,17 @@ function PuttCameraOverlay({ locationGranted: _locationGranted, armRead = false,
           <>
             <View style={styles.puttResultRow}>
               <View style={styles.puttResultItem}>
-                <Text style={styles.puttResultValue}>{distanceFeet != null ? `~${distanceFeet}` : '—'}</Text>
-                {/* 2026-06-14 (audit) — mark the uncalibrated pixel→feet heuristic as an
-                    estimate, like SLOPE/READ; it's a rough visual reference, not a measure. */}
-                <Text style={styles.puttResultLabel}>{t('smartfinder.putt_camera_overlay.feet_est')}</Text>
+                <Text style={styles.puttResultValue}>{distanceFeet != null ? `${distanceFeet}` : '—'}</Text>
+                {/**
+                  * 2026-09-13 — the ± is PROPAGATED through this exact geometry, not a label. It is why
+                  * the old "(EST)" tag could go: an estimate that tells you how good it is is a
+                  * measurement, and one that cannot is a guess wearing a disclaimer.
+                  */}
+                <Text style={styles.puttResultLabel}>
+                  {puttDistance?.uncertaintyFeet != null
+                    ? t('smartfinder.putt_camera_overlay.feet_plus_minus', { pm: puttDistance.uncertaintyFeet })
+                    : t('smartfinder.putt_camera_overlay.feet_est')}
+                </Text>
               </View>
               <View style={styles.puttDivider} />
               <View style={styles.puttResultItem}>
@@ -2604,6 +2737,10 @@ function PuttCameraOverlay({ locationGranted: _locationGranted, armRead = false,
                 </Text>
               </View>
             </View>
+            {/* An unreadable geometry says WHICH way it failed, so the hint can be acted on. */}
+            {puttDistance && puttDistance.call !== 'read' && (
+              <Text style={[styles.puttHint, { color: '#F5A623' }]}>{whyNoPuttDistance(puttDistance.call)}</Text>
+            )}
             <Text style={styles.puttHint}>
               {shownSlopePct != null
                 ? readSlope(shownSlopePct)
