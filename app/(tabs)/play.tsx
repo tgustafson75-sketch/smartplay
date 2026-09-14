@@ -26,6 +26,7 @@ import * as Location from 'expo-location';
 // Phase 407 — distance helper for course-locator GPS sort
 import { haversineYards } from '../../utils/geoDistance';
 import { useDeviceLayout, WIDE_CONTENT_MAX_WIDTH } from '../../hooks/useDeviceLayout';
+import { withAlpha, bestOn } from '../../theme/tokens';
 // 2026-05-26 — Fix CA: Play tab was hardcoded dark palette while the
 // rest of the app respected useTheme/light mode. Importing here so
 // the StyleSheet can be themed via makeStyles(colors) at the bottom.
@@ -2558,33 +2559,71 @@ export default function PlayTab() {
               <Image source={SEC_ICON.tee} style={styles.sectionIcon} tintColor={colors.accent_lime} />
               <Text style={styles.sectionHeadText}>{t("play.todays_pins", { defaultValue: "TODAY’S PINS" })}</Text>
             </View>
-            <View style={styles.pinGrid}>
-              {(['back', 'middle', 'front'] as const).map((depth) => (
-                <View key={depth} style={styles.pinGridRow}>
-                  {(['left', 'center', 'right'] as const).map((side) => {
-                    const active = pinDeclared && setupPin.depth === depth && setupPin.side === side;
-                    return (
-                      <TouchableOpacity
-                        key={side}
-                        style={[styles.pinCell, active && styles.pinCellActive]}
-                        onPress={() => setSetupPin({ depth, side })}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: active }}
-                        accessibilityLabel={t('play.accessibility_label.pin_cell', {
-                          defaultValue: 'Pin {{depth}} {{side}}',
-                          depth,
-                          side,
-                        })}
-                      >
-                        <View style={[styles.pinDot, active && styles.pinDotActive]} />
-                      </TouchableOpacity>
-                    );
-                  })}
-                  <Text style={styles.pinRowLabel}>
-                    {t(`play.pin_depth_${depth}`, { defaultValue: depth.toUpperCase() })}
-                  </Text>
-                </View>
-              ))}
+            {/**
+              * 2026-09-14 (Tim) — "the Today's Pins card looks like a memory game. Can we make it
+              * look like a segmented green? Rounded rectangle or oblong circle — it matches the
+              * brand so much more."
+              *
+              * It was nine separate rounded boxes with a dot in each, which is exactly the shape of
+              * Concentration. The information is a POSITION ON A GREEN, so the control should be a
+              * green: ONE oblong surface, divided by mowing lines, with a flag where the pin is.
+              * Nothing about the data changed — still depth × side, still one tap.
+              *
+              * Built from plain Views on purpose. This file imports no SVG and no gradient, and a
+              * clipped parent with hairline dividers gets the whole shape for free: the corner
+              * segments take the green's curve because the container rounds them, so it reads as one
+              * surface rather than a grid. Turf is `accent_muted`, which is a real green in all four
+              * palettes (deep #003d20 dark, pale mint #d0f0e6 light) instead of a colour I picked.
+              */}
+            <View style={styles.pinGreenRow}>
+              <View style={styles.pinDepthCol}>
+                {(['back', 'middle', 'front'] as const).map((depth) => (
+                  <View key={depth} style={styles.pinDepthLabelWrap}>
+                    <Text style={styles.pinRowLabel}>
+                      {t(`play.pin_depth_${depth}`, { defaultValue: depth.toUpperCase() })}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+
+              <View style={styles.pinGreen}>
+                {(['back', 'middle', 'front'] as const).map((depth, rowIdx) => (
+                  <View key={depth} style={[styles.pinGreenRowInner, rowIdx > 0 && styles.pinGreenDivideTop]}>
+                    {(['left', 'center', 'right'] as const).map((side, colIdx) => {
+                      const active = pinDeclared && setupPin.depth === depth && setupPin.side === side;
+                      return (
+                        <TouchableOpacity
+                          key={side}
+                          style={[
+                            styles.pinCell,
+                            colIdx > 0 && styles.pinGreenDivideLeft,
+                            active && styles.pinCellActive,
+                          ]}
+                          onPress={() => setSetupPin({ depth, side })}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: active }}
+                          accessibilityLabel={t('play.accessibility_label.pin_cell', {
+                            defaultValue: 'Pin {{depth}} {{side}}',
+                            depth,
+                            side,
+                          })}
+                        >
+                          {active ? (
+                            // The pin itself: a pole and a flag. Unmistakable at this size, and it
+                            // says "the flag is HERE" in a way a filled square never does.
+                            <View style={styles.pinFlag}>
+                              <View style={styles.pinFlagPole} />
+                              <View style={styles.pinFlagCloth} />
+                            </View>
+                          ) : (
+                            <View style={styles.pinDot} />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ))}
+              </View>
             </View>
             <Text style={styles.transportHint}>
               {pinDeclared
@@ -2860,16 +2899,74 @@ return StyleSheet.create({
   transportLabelActive: { color: c.accent },
   transportHint: { color: c.text_muted, fontSize: 11, paddingHorizontal: 16, marginTop: 6, lineHeight: 15 },
   // TODAY'S PINS — a 3×3 that reads as the green. Row label sits outside the cells so the grid stays square.
-  pinGrid: { paddingHorizontal: 16, gap: 8 },
-  pinGridRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  pinCell: {
-    flex: 1, aspectRatio: 1.9, alignItems: 'center', justifyContent: 'center',
-    borderRadius: 12, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface,
+  /**
+   * 2026-09-14 — THE PIN PICKER IS A GREEN, NOT A GRID.
+   *
+   * The depth labels sit OUTSIDE the turf in their own column, with one flex:1 wrapper per row, so
+   * they stay aligned to the three bands without being clipped by the green's curve or stealing a
+   * tap target from it.
+   */
+  pinGreenRow: { flexDirection: 'row', alignItems: 'stretch', paddingHorizontal: 16, gap: 10 },
+  pinDepthCol: { width: 54, justifyContent: 'space-between', paddingVertical: 2 },
+  pinDepthLabelWrap: { flex: 1, justifyContent: 'center' },
+  pinRowLabel: { color: c.text_muted, fontSize: 10, fontWeight: '800', letterSpacing: 0.4 },
+
+  /**
+   * ONE surface, clipped. `overflow: 'hidden'` plus a large radius is what turns nine cells into a
+   * green: the corner segments inherit the curve instead of being nine separate rounded boxes, which
+   * is the whole of what made the old control read as a memory game.
+   *
+   * 156 tall = three 52pt bands, comfortably above the 44pt tap minimum. accent_muted is a genuine
+   * green in every palette, so the turf is never a hand-picked colour that breaks in one theme.
+   */
+  pinGreen: {
+    flex: 1, height: 156, borderRadius: 44, overflow: 'hidden',
+    backgroundColor: c.accent_muted,
+    borderWidth: 1, borderColor: withAlpha(c.accent, 0.45),
   },
-  pinCellActive: { borderColor: c.accent, borderWidth: 2, backgroundColor: c.surface_elevated },
-  pinDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: c.text_muted, opacity: 0.5 },
-  pinDotActive: { backgroundColor: c.accent, opacity: 1, width: 11, height: 11, borderRadius: 6 },
-  pinRowLabel: { width: 56, color: c.text_muted, fontSize: 10, fontWeight: '800', letterSpacing: 0.4 },
+  pinGreenRowInner: { flex: 1, flexDirection: 'row' },
+  /** Mowing lines. Hairlines in the accent, not the border grey — a seam in turf, not a table. */
+  pinGreenDivideTop: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: withAlpha(c.accent, 0.28) },
+  pinGreenDivideLeft: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: withAlpha(c.accent, 0.28) },
+
+  pinCell: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  /**
+   * The declared segment lifts OUT of the turf as a solid accent patch rather than being outlined —
+   * an outline would put a box back on the green, which is the thing being removed.
+   *
+   * Solid, not translucent, for a measured reason: a wash over turf lands on a different colour in
+   * every palette, so the flag on top would have to be legible against four unknowns. A solid accent
+   * patch is ONE known background, and `bestOn` already answers what reads on it — the same rule the
+   * Start Round button uses, proved across all four palettes there.
+   */
+  pinCellActive: { backgroundColor: c.accent },
+  /**
+   * The unpicked segments. `text_muted` rather than the accent: it is the token designed to be
+   * readable on a surface, and it measures 7.5:1 on dark turf and 6.2:1 on light where the accent
+   * managed 2.8:1. Kept quiet with opacity, not by choosing a colour that nearly vanishes.
+   */
+  pinDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: c.text_muted, opacity: 0.5 },
+
+  /**
+   * A pin: pole plus cloth. The cloth is a CSS triangle, so this needs no icon family and no SVG —
+   * this file imports neither, and a flag drawn from two Views cannot drift from a sprite sheet.
+   *
+   * Coloured by MEASUREMENT against the accent patch it sits on: the page colour on dark (8.98:1),
+   * text_primary on light (5.27:1). Opposite answers, which is exactly why a hardcoded lime flag
+   * would have been invisible in one of them — it measured 2.73:1 on light turf.
+   */
+  pinFlag: { width: 18, height: 22, alignItems: 'flex-start', justifyContent: 'flex-end' },
+  pinFlagPole: {
+    width: 2, height: 21, borderRadius: 1, marginLeft: 3,
+    backgroundColor: bestOn(c.accent, c.background, c.text_primary),
+  },
+  pinFlagCloth: {
+    position: 'absolute', top: 0, left: 5,
+    width: 0, height: 0,
+    borderTopWidth: 5, borderBottomWidth: 5, borderLeftWidth: 9,
+    borderTopColor: 'transparent', borderBottomColor: 'transparent',
+    borderLeftColor: bestOn(c.accent, c.background, c.text_primary),
+  },
   chipText: { color: c.text_muted, fontSize: 12, fontWeight: '700' },
   chipTextActive: { color: c.accent },
   notesInput: {
