@@ -3841,3 +3841,45 @@ named by no test and no sim guard, of which 91 logic files are the real gap.
   `distance_to_pin` and `plays_like` are a second, dormant authoring of copy that already ships.
 - Device verification of everything today, still Tim's gate — now including a bare "record" in Cage
   Mode and the recap's register.
+
+### No-device close-out (`6e688dc1`, `a0aa4c2e`) — three wrong numbers out of the caddie's mouth
+
+Worked `docs/audit-unguarded-inventory.md` from the top, starting where it said to: the
+`services/intents/*Handler.ts` files, because each is a thing a player can SAY.
+
+1. **A stroke index is not a hole number.** `handicapQueryHandler` called
+   `strokesReceivedOnHole(courseHandicap, holeStrokeIndex)` with `round.currentHole`. WHS allocates by
+   the scorecard's HCP column, so the caddie granted strokes on the wrong holes and said it as fact.
+   **The data was there all along** — golfcourseapi returns the column and `normalizeHole` always
+   captured it; the mapping into `CourseHole` dropped it. Now carried as `CourseHole.strokeIndex`, and
+   honest ("I don't have this scorecard's handicap column") when genuinely absent.
+2. **The hole number was read as the yardage.** `confirmPositionHandler` preferred the last 2-3 digit
+   integer, so "I'm 140 out on hole 12" parsed as **12** → the caddie announced GPS drift,
+   force-refreshed, and clubbed a 140-yard shot as 12. Three of seven natural phrasings, on holes 10-18.
+3. **The caddie celebrated corrupt captures.** `caddieRewards` had no upper bound on the drive
+   reward, so a 500y+ glitch triggered "Hammered. That one's going." Now imports `MAX_REAL_DRIVE`. Its
+   copy also restated the threshold ("Two-fifty plus." vs `REWARD_DRIVE_YARDS = 250`) — decoupled.
+
+`openExternalHandler` had **no** defect and is now covered anyway. Three TRIAGE/DUPE orphans resolved by
+deletion with evidence (`getHole`, `getDefaultPreviewImage`, `rulesByCategory`) and their baseline lines
+removed, so the debt shrank instead of being re-explained.
+
+An existing guard caught my own fix: `one-truth-per-fact` pins that a hole resolves through
+`smartFinderService.holeData`, not an inline `courseHoles.find` — my first version used the inline
+lookup and failed it.
+
+### Verified
+
+`tsc` clean · `jest` **4707/4707 (394 suites)** · sim **1034/1034** · lint **0 errors / 75 warnings** ·
+`ota-preflight` **OK to publish**.
+
+### Open / carried
+
+- **Device verification — the only remaining release gate, and it is Tim's.** Nothing today has been on
+  a real round.
+- **Pin position: decision A or B** (round-level on the Play tab now, vs per-hole capture). Scoped in
+  `docs/v1.2-deferred.md`; not started.
+- `docs/audit-unguarded-inventory.md` still lists ~85 unguarded logic files. The highest-risk tier is
+  done; the rest is a named backlog with a stated method, not a claim of completeness.
+- Before publishing an OTA: set `EXPO_PUBLIC_OWNER_EMAIL` locally, or the bundle ships without it and
+  Owner Tools disappears from the preview build.

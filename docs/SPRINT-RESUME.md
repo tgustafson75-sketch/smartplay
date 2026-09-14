@@ -50,9 +50,16 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 > boundary that made 45 KB aliases unreachable (including the tagline), and a mental KB with no word
 > for "choke" or "yips".
 >
-> **Carried:** device verification of everything above; **`services/putting/greenHeat` reaches three
-> screens and the caddie not at all — next on this leg**, deliberately deferred because wiring it trips
-> the cached-prompt ratchet; 12 of 18 authored dialog situations never requested (pinned shrink-only);
+> **No-device items: CLOSED** (`6e688dc1`, `a0aa4c2e`). Three wrong numbers removed from the caddie's
+> mouth — a stroke index read as a hole number, a hole number read as a yardage, and a corrupt-capture
+> drive celebrated as real. `greenHeat` now reaches the caddie, the green floor has one owner, lint is at
+> zero, and every orphan TRIAGE entry is resolved or has a written reason. ota-preflight: OK to publish.
+>
+> **What is left needs Tim, not a keyboard:** device verification on a real round, and the pin-position
+> A/B decision in `docs/v1.2-deferred.md`.
+>
+> **Carried:** device verification of everything above; ~~`services/putting/greenHeat` reaches three
+> screens and the caddie not at all~~ **— DONE**, ratchet answered with a registered reason; 12 of 18 authored dialog situations never requested (pinned shrink-only);
 > four orphan entries baselined as TRIAGE/DUPE; `docs/audit-unguarded-inventory.md` lists 91 unguarded
 > logic files.
 
