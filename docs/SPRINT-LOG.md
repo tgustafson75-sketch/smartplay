@@ -4100,3 +4100,87 @@ mutations caught, including one tautological assertion of mine that bounded a co
 
 Whether the on-course slope read should be **hidden during a round** for the rules reason above. That
 removes a visible feature, so it is a product decision, not a bug fix.
+
+## Day N — 2026-09-13 (late) — "you just make a very simple assumption and ran with it"
+
+### The correction that started it
+
+Tim: *"most of the time I ask the Caddie to look at the Putt which works every time and I think it opens
+SmartFinder in Putt mode… Or maybe it was actually opening tightlie but I get a pic analysis, I have given
+you screenshots before. You just make a very simple assumption and ran with it."*
+
+He was right. I had read the `query_status{putt_analysis}` branch, seen it speaks without navigating, and
+built an explanation on top of it — never checking which route his words actually take. Then he described
+what he sees: *"it comes back with 'let me take a look' I believe then I can tap point a and point b for the
+measurement, then it analyzes distance and strategy."* That is SmartFinder's two-point putt measure, and it
+settled it.
+
+### What was actually happening
+
+1. the local precheck returned **NULL** for every putt phrasing (ran it — `look at my putt`, `read my putt`,
+   `check my putt`, `analyze my putt` all null), so the cloud classifier decided
+2. it landed on `open_tool{look|scene_read}` → speaks **"Let me take a look."** → `/smartfinder?autoread=1`
+3. SmartFinder opened at its **persisted** mode — putt only because that is what he last tapped. The
+   autoread override rewrites `map`→`target` and leaves everything else alone
+4. autoread fired `runSceneRead` — the general **hole** read — on a putt, no putt context, 1500 ms after
+   mount, **before either end had been tapped**
+
+A feature he uses every round, reachable only by accident of a persisted zustand value, firing the wrong
+analysis on nothing. Nothing in the app opened SmartFinder in putt mode on purpose — there was no `mode`
+param at all, and the only `setMode('putt')` anywhere is the on-screen tab button.
+
+### Shipped — `65d748eb`
+
+- **The route.** `?mode=` param, validated by `parseSmartFinderMode` (store owns the type, so the validator
+  cannot drift). `open_tool{putt_read}` → `/smartfinder?autoread=1&mode=putt`. Scene-read routes now name
+  `mode=target` so they cannot inherit a persisted putt mode either. Deterministic precheck takes the read
+  phrasings and deliberately leaves `putt_stats`, `longest_putt` and stroke questions to the brain.
+- **The measurement.** The aimed tilt can never be a trustworthy slope — 2% of grade is 1.15° and a hand
+  wanders 2-3°. `readGroundSlope` reads the phone laid ON the green (~0.5° floor), in **both orientations**:
+  Tim caught that laid crosswise the axes SWAP, which would *invert* the break call rather than degrade it.
+  Every sign derived from one carried convention so a device test flips one thing.
+- **Honest, once.** Tim: *"Its an estimated slope like the honesty rules applies"* then *"We can relax to
+  show what is useful but show confidence level."* Confidence is derived from measured things — margin above
+  the grass floor, steadiness of the hold, how many spots agreed. Spots that **disagree** are a finding, not
+  something to average into false precision.
+- **Vision cross-check.** Tim: *"See if you can bake in a vision step to look for the flag stick and flag and
+  hole."* The frame goes up with the tapped point as a fraction of it; the model is asked whether the hole is
+  really there. A **miss is the valuable answer** — it means the A/B distance is wrong. Forbidden from
+  estimating distance from pixels.
+- **Through the one builder.** First version of `puttReadService` hand-assembled its own payload and pulled
+  the putting record + prior green read itself — the one-payload guard went red, correctly. Its comment says
+  a second exception is the moment to ask whether the rule or the code is wrong. The code was:
+  `buildCaddieRequestBody` already emits both. Now goes through `askCaddie`, so the read is in the
+  conversation history too.
+
+### Closed from the previous entry
+
+The open item — *whether the on-course slope read should be hidden during a round* — **Tim decided: no.**
+*"This is not USGA competition. Rangefinders use it every day it helps a user understand how slope affects
+the game"* and *"you can suggest user turns slope off in competition."* The `measuring_devices` rule entry
+now reads casual-play-fine / off for competition and posted rounds, and carries keywords for the level and
+green-slope feature so the caddie can be asked about it directly.
+
+### A guard of mine that was wrong
+
+`an-expectation-at-level-is-not-real` asserted "no `Math.abs` on pitch anywhere in the owner" — a **token,
+not a property**. It went red on `readGroundSlope`'s magnitude *gate*, which destroys no sign. Rescoped to
+`readPuttSlope`'s function body, and break-tested to confirm it still catches the original sign-collapse bug.
+
+### Verified
+
+`tsc` clean · lint **0 errors** · jest **4861/4861 (399 suites)** · sim **1034/1034** · ota-preflight OK ·
+ota-owner-guard safe. **Ten break-test mutations run, all caught** — including one where my mutation script
+failed silently and the "pass" proved nothing, so it was redone.
+
+### Open / carried
+
+- **Deferred, written up in `docs/v1.2-deferred.md`:** Tim's *"could there be a second level placing phone on
+  the ground and it sees the terrain lie to the pin clearly?"* — grazing-angle view is real physics and worth
+  building, but it is a **different pose** than the flat inclinometer (flat = camera in the grass). Its real
+  prize is that a phone resting on the green has no hand tremor.
+- **The A/B distance is still a rough pixel heuristic** (`PIXELS_PER_FOOT = 35`), unchanged today and now
+  labelled as a ballpark everywhere it is spoken. Perspective alone moves it. This is the **next real accuracy
+  item** on the putt read; a tilt-and-known-height trig model is the principled fix and no machinery for it
+  exists in the repo yet.
+- **OTA not yet published** for this or the three commits before it.

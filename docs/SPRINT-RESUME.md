@@ -8,6 +8,38 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+> ### ⚠️ LATEST — 2026-09-13 (late). The putt read: a deliberate route, a measured slope, a vision check.
+>
+> `65d748eb` **"look at my putt" had never once opened putt mode on purpose.** Tim: *"You just make a
+> very simple assumption and ran with it."* He was right — I had explained his experience from the
+> `putt_analysis` branch without checking which route his words take. What actually happened: the local
+> precheck returned **null** for every putt phrasing → the cloud classifier picked `open_tool{look}` →
+> spoke "Let me take a look." → `/smartfinder?autoread=1` → SmartFinder opened at its **persisted** mode
+> (putt only because that is what he last tapped) → autoread fired the general **hole** scene read, on a
+> putt, 1500 ms after mount, **before either end had been tapped**. There was no `mode` param in the app
+> at all.
+>
+> **Fixed as one story:** a validated `?mode=` param + `open_tool{putt_read}` + a deterministic precheck
+> (scene-read routes now name `mode=target` so they cannot inherit a persisted putt mode either);
+> `readGroundSlope` — the phone laid ON the green, ~0.5° floor, which finally resolves the 2% the aimed
+> tilt never could (2% = 1.15°, a hand wanders 2-3°) — in **both orientations**, because Tim caught that
+> laid crosswise the axes SWAP and would *invert* the break call; a derived confidence level instead of
+> hedging every clause; and a vision cross-check on the flagstick/hole where **a miss is the valuable
+> answer**, since it means the A/B distance is wrong.
+>
+> It goes through `askCaddie` — the first version hand-assembled its own payload and the one-payload
+> guard went red, correctly. Also rescoped a guard of my own that pinned a *token* rather than a
+> property, and break-tested that it still catches the original bug.
+>
+> Green: tsc · lint **0 errors** · jest **4861/4861 (399 suites)** · sim **1034/1034** · ota-preflight OK.
+> **Ten break-test mutations, all caught.**
+>
+> **Next real accuracy item:** the A/B distance is still `PIXELS_PER_FOOT = 35`, a rough pixel heuristic
+> that perspective alone moves. Labelled a ballpark everywhere it is spoken; a tilt-and-known-height trig
+> model is the principled fix and no machinery for it exists yet.
+>
+> ---
+>
 > ### ⚠️ LATEST — 2026-09-13 (fifth session). The dashboard's last four, lint to ZERO, and a release audit.
 >
 > **The release gate that remains is device verification, and it is Tim's.** Everything below is
