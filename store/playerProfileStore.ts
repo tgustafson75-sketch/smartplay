@@ -10,22 +10,51 @@ import { FEET_PER_YARD, PUTT_MAX_FEET } from '../services/puttUnits';
 // paywall + trial-init paths can short-circuit cleanly.
 export type SubscriptionStatus = 'trial' | 'expired' | 'active' | 'free' | 'lifetime';
 
-// Owner allow-list: any user whose email matches one of these gets a
-// lifetime grant on first boot, bypassing the trial. Also unlocks the
-// owner-gated debug surfaces (Issue Log, Voice Misses, GPS Test Bench,
-// Kevin Learning, etc.) per useDebugRouteGate + Settings → Owner Tools.
-// Add to this list (or set EXPO_PUBLIC_OWNER_EMAIL) when granting comp
-// access. Matching is case-insensitive on the trimmed profile email.
+/**
+ * WHO EACH ADDRESS IS — the authoritative mapping (Tim, 2026-09-13).
+ *
+ * Corrected after a session described `support@smartplaycaddie.com` as "the product support address,
+ * not Tim" and treated the two personal addresses as different people. Both were wrong, and the wrong
+ * version was about to be handed to a future session as a change prompt. It lives here now because this
+ * is the file that decides what the address MEANS, so there is one place to read it from.
+ *
+ *   t.gustafson75@gmail.com   ┐ BOTH Tim, ONE account/identity — not two owners and not a "test
+ *   t.gustafson@hotmail.com   ┘ device" address. The gmail one is his primary; the hotmail one is the
+ *                               same person signed in elsewhere: it is the `appleId` on both eas.json
+ *                               submit profiles and the Meta glasses developer-app account
+ *                               (i18n `the_app_registration_check_out`). Treat any change to one as a
+ *                               change to both.
+ *   support@smartplaycaddie.com  Tim's MAIN account email. NOT merely an App Review credential, which
+ *                               is what the previous comment claimed. It is also the user-facing
+ *                               support address printed in the privacy policy and 31 other places —
+ *                               see the note below, which is a recorded decision rather than an
+ *                               oversight.
+ *   tim@smartplaycaddie.com      Google Play / App Review access. Declared in Play Console → App
+ *                               content → Sign in details; do not remove without updating that
+ *                               declaration, because review uses it to reach paid features.
+ *
+ * KNOWN AND ACCEPTED (Tim's call, 2026-09-13): `support@smartplaycaddie.com` is on this list AND is
+ * published in the app's own privacy policy, so owner privilege — Owner Tools plus the lifetime grant
+ * below — is attached to a publicly-known address. It is not reachable without the mailbox, and it stays
+ * because it is his main account. Flagged here so nobody re-discovers it as a vulnerability.
+ *
+ * Owner allow-list: any user whose email matches one of these gets a lifetime grant on first boot,
+ * bypassing the trial. Also unlocks the owner-gated debug surfaces (Issue Log, Voice Misses, GPS Test
+ * Bench, Kevin Learning) per useDebugRouteGate + Settings → Owner Tools. Add to this list (or set
+ * EXPO_PUBLIC_OWNER_EMAIL) when granting comp access. Matching is case-insensitive on the trimmed
+ * profile email.
+ *
+ * NEVER let this list reach exactly ONE entry — see
+ * __tests__/regression/a-single-owner-email-would-make-every-install-an-owner.test.ts for why that used
+ * to hand every fresh install owner mode, and why the runtime fallback that did so is gone.
+ */
 export const OWNER_EMAILS: readonly string[] = [
+  // Tim — one account, two addresses (see the mapping above).
   't.gustafson75@gmail.com',
-  // 2026-06-09 — Tim's iOS test device email.
   't.gustafson@hotmail.com',
-  // 2026-08-06 (Tim) — the second owner was REMOVED. They stayed a beta tester (records + auto-sends
-  // his issue log like everyone else) but no longer has Owner Tools / owner-gated debug surfaces.
-  // 2026-09-03 — Google Play / App Review access. Declared in Play Console
-  // → App content → Sign in details. Do not remove without updating that
-  // declaration; review uses these to reach paid features.
+  // Tim's main account email, and the published support address.
   'support@smartplaycaddie.com',
+  // Google Play / App Review sign-in.
   'tim@smartplaycaddie.com',
 ];
 

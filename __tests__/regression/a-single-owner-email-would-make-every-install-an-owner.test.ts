@@ -76,11 +76,46 @@ describe('a blank-email install can never be auto-stamped as the owner', () => {
     expect(layout).not.toMatch(/if \(envOwner\.length > 0\) profile\.setEmail\(envOwner\);\s*else/);
   });
 
-  it('the review sign-in addresses are present — Play declares them, so removing them is a doc change too', () => {
-    // These two were added for Play Console -> App content -> Sign in details. They are also two
-    // of the four entries keeping the length above 1.
+  it('the four addresses are all present, and each one is documented for what it IS', () => {
+    /**
+     * 2026-09-13 — the previous version of this test called both smartplaycaddie.com addresses "the
+     * review sign-in addresses". Tim corrected that: `support@` is his MAIN account email, and the two
+     * personal addresses are ONE account (the hotmail one is the Apple ID on both eas.json submit
+     * profiles and the Meta glasses developer account — the same person signed in elsewhere, not a
+     * separate "test device" owner). Only `tim@` is a pure App Review credential.
+     *
+     * The mapping lives in store/playerProfileStore above OWNER_EMAILS, because that is the file that
+     * decides what an address MEANS. This asserts the comment has not drifted from the list.
+     */
+    expect(OWNER_EMAILS).toContain('t.gustafson75@gmail.com');
+    expect(OWNER_EMAILS).toContain('t.gustafson@hotmail.com');
     expect(OWNER_EMAILS).toContain('support@smartplaycaddie.com');
     expect(OWNER_EMAILS).toContain('tim@smartplaycaddie.com');
+
+    /**
+     * RAW source here, deliberately — the usual rule in this repo is to strip comments so an
+     * explanation cannot certify the defect it describes. This assertion is the inverse case: the thing
+     * under test IS the documentation, so stripping it guarantees a miss. (It did: the first version
+     * used `stripped` and failed against a correct mapping.) The CODE assertions elsewhere in this file
+     * still use `stripped`.
+     */
+    const doc = fs.readFileSync(path.join(root, 'store/playerProfileStore.ts'), 'utf8');
+    // each address is named in the mapping, so a future reader is not guessing
+    for (const addr of OWNER_EMAILS) expect(doc).toContain(addr);
+    // and the two corrections are recorded, not just fixed
+    expect(doc).toMatch(/BOTH Tim, ONE account/);
+    expect(doc).toMatch(/MAIN account email/);
+    expect(doc).not.toMatch(/Tim's iOS test device email/);
+  });
+
+  it('the hotmail address is the Apple ID, so the two really are one account', () => {
+    // The claim in the mapping is checkable — assert it rather than trusting the prose.
+    const eas = JSON.parse(fs.readFileSync(path.join(root, 'eas.json'), 'utf8')) as {
+      submit: Record<string, { ios?: { appleId?: string } }>;
+    };
+    for (const p of Object.keys(eas.submit)) {
+      expect(eas.submit[p]?.ios?.appleId).toBe('t.gustafson@hotmail.com');
+    }
   });
 
   it('a fresh install email is not an owner, including near-misses', () => {

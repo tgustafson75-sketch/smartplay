@@ -3932,3 +3932,49 @@ the floor to 0 left every assertion green. Stated honestly as a source assertion
   `docs/v1.2-deferred.md`; **not built yet**, this is the next build.
 - Before publishing an OTA: set `EXPO_PUBLIC_OWNER_EMAIL` locally or Owner Tools disappears from the
   preview build.
+
+### Who each email actually is (Tim's correction, 2026-09-13)
+
+I described `support@smartplaycaddie.com` as "the product support address, not Tim" and treated the two
+personal addresses as separate people. Both wrong, and the wrong version was about to be handed to a
+future session as a change prompt. Corrected at the source — the authoritative mapping now sits above
+`OWNER_EMAILS` in `store/playerProfileStore`, because that is the file that decides what an address MEANS:
+
+- `t.gustafson75@gmail.com` and `t.gustafson@hotmail.com` — **both Tim, ONE account.** Not two owners and
+  not a "test device" address. The hotmail one is the same person signed in elsewhere: it is the `appleId`
+  on both eas.json submit profiles and the Meta glasses developer account. A change to one is a change to
+  both. (The Apple ID claim is asserted against eas.json, not just written down.)
+- `support@smartplaycaddie.com` — **Tim's MAIN account email**, not an App Review credential.
+- `tim@smartplaycaddie.com` — the only pure App Review sign-in.
+
+`t.gustafson75@gmail.com` needed no change: it was already `OWNER_EMAILS[0]` and already the
+`EXPO_PUBLIC_OWNER_EMAIL` on the dev and preview build profiles.
+
+**Recorded, accepted, Tim's call:** `support@` is on the owner allow-list AND published in the app's own
+privacy policy, so owner privilege plus the lifetime grant is attached to a publicly-known address. Not
+reachable without the mailbox; it stays because it is his main account. Written into the comment so nobody
+re-discovers it as a vulnerability.
+
+One inverted trap worth noting: the guard for this reads RAW source, not comment-stripped. The usual rule
+here is to strip comments so an explanation cannot certify the defect it describes — but the thing under
+test IS the documentation, so stripping guaranteed a miss. The first version did exactly that and failed
+against a correct mapping.
+
+### A flaky guard, caught by the commit hook (2026-09-13)
+
+Worth recording because I reported "all gates green" and then the pre-commit hook blocked the very next
+commit. Both were true: the guard I had just written was **intermittent**, and it passed on the run I
+checked.
+
+`psychologist.idle_walk_filler` has four variations and the fourth is `""` — commented "sometimes the best
+psychologist response is silence", a one-in-four chance the caddie does NOT fill the air on a long walk
+between tees. That is a deliberate decision about what a companion sounds like. My new guard asserted
+"every situation returns a non-empty line", which contradicted it and therefore failed one run in four.
+
+**My guard was the defect, not the template.** It now skips the situations where silence is designed,
+draws each other situation 25 times (one draw proves nothing about a random selection), and separately
+PINS the silence — asserting `""` is still among the options and that it is not the only one, so it cannot
+be deleted later as a bug or become the sole reply.
+
+Three full suite runs green afterwards, not one. The lesson is narrower than "run it twice": an assertion
+over a randomly-sampled value needs repeated draws, or it is a coin toss wearing a test's clothes.

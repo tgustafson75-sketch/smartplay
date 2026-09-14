@@ -40,17 +40,52 @@ describe('an unknown situation is silence, not an exception', () => {
   });
 });
 
+/**
+ * SILENCE CAN BE DELIBERATE, and my first version of this file did not know that.
+ *
+ * `psychologist.idle_walk_filler` carries four variations and the fourth is `""`, commented "sometimes
+ * the best psychologist response is silence" — a one-in-four chance the caddie does NOT fill the air on
+ * a long walk between tees. That is a design decision about what a companion sounds like, not an
+ * oversight.
+ *
+ * So a blanket "every situation returns a non-empty line" was wrong, and it was wrong INTERMITTENTLY:
+ * the getter picks a variation at random, so the suite passed three times in four. It went green on the
+ * run I checked and then blocked the commit on the pre-commit hook, which is the only reason I looked.
+ * A flaky assertion that contradicts an intentional design is worse than none — it would eventually be
+ * "fixed" by deleting the silence.
+ *
+ * Note this also means `''` now carries two meanings: "no such template" (the crash fix above) and
+ * "deliberately nothing". Both instruct the caller to say nothing, so nothing downstream can tell them
+ * apart or needs to — every caller concatenates.
+ */
+const DELIBERATE_SILENCE: Record<string, string[]> = {
+  psychologist: ['idle_walk_filler'],
+};
+
 describe('the real situations still speak', () => {
-  it.each(['caddie', 'coach', 'psychologist'] as const)('every %s situation returns a non-empty line', (role) => {
+  it.each(['caddie', 'coach', 'psychologist'] as const)('every %s situation speaks, unless silence is the design', (role) => {
     const situations = listSituations(role);
     expect(situations.length).toBeGreaterThan(0);
+    const silent = DELIBERATE_SILENCE[role] ?? [];
     for (const s of situations) {
-      const line = getDialog(role, s, {
-        club: '7 iron', yards: 150, note: 'n', situation: 's', advice: 'a', speed: '10', direction: 'left',
-        actual: 150, plays_like: 155,
-      });
-      expect(line.length).toBeGreaterThan(0);
+      if (silent.includes(s)) continue;
+      // Drawn repeatedly, because the getter picks at random — one draw proves nothing about the set.
+      for (let i = 0; i < 25; i++) {
+        const line = getDialog(role, s, {
+          club: '7 iron', yards: 150, note: 'n', situation: 's', advice: 'a', speed: '10', direction: 'left',
+          actual: 150, plays_like: 155,
+        });
+        expect(line.length).toBeGreaterThan(0);
+      }
     }
+  });
+
+  it('the deliberate silence is still THERE, and still only one option among several', () => {
+    // Pinned so it is not deleted as a bug, and so it cannot become the ONLY option.
+    const drawn = new Set<string>();
+    for (let i = 0; i < 200; i++) drawn.add(getDialog('psychologist', 'idle_walk_filler'));
+    expect(drawn.has('')).toBe(true);
+    expect([...drawn].filter((d) => d.length > 0).length).toBeGreaterThanOrEqual(2);
   });
 
   it('the aggressive call wired today actually produces a line', () => {
