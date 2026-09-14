@@ -151,6 +151,30 @@ describe('owner mode is a build-profile decision, not a runtime default', () => 
     }
   });
 
+  it('the var is DOCUMENTED where the repo documents env vars, and left commented', () => {
+    /**
+     * 2026-09-13 — .env.example exists so "teammates / future-Tim / Claude know which env vars the
+     * pipeline + app need" (its own header), and it documented only the D-ID pipeline. The one var whose
+     * ABSENCE silently removes Owner Tools from a published OTA was missing from it, which is how a
+     * publish loses owner mode without anyone touching owner code.
+     *
+     * Left COMMENTED on purpose: copying .env.example to .env.local must not silently enable owner mode,
+     * because any non-empty value does (see the next assertion).
+     */
+    const ex = fs.readFileSync(path.join(root, '.env.example'), 'utf8');
+    expect(ex).toMatch(/EXPO_PUBLIC_OWNER_EMAIL/);
+    expect(ex).toMatch(/^#\s*EXPO_PUBLIC_OWNER_EMAIL=/m);   // commented, not live
+    expect(ex).not.toMatch(/^EXPO_PUBLIC_OWNER_EMAIL=/m);
+    // and it warns about the property that makes it dangerous
+    expect(ex).toMatch(/ANY non-empty value/);
+  });
+
+  it('ANY non-empty value marks the BUILD an owner build — the property the docs warn about', () => {
+    // Asserted so the warning in .env.example cannot become false without this failing.
+    const layout = stripped('app/_layout.tsx');
+    expect(layout).toMatch(/\(process\.env\.EXPO_PUBLIC_OWNER_EMAIL \?\? ''\)\.trim\(\)\.length > 0/);
+  });
+
   it('every build profile is accounted for, so a new one cannot quietly ship owner mode', () => {
     const reviewed = new Set(['development', 'preview', 'production', 'production-apk', 'glasses']);
     expect(Object.keys(eas.build).filter((p) => !reviewed.has(p))).toEqual([]);
