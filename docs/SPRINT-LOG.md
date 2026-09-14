@@ -4055,3 +4055,48 @@ Three defects found in my own work by break-testing, all fixed:
 
 `tsc` clean · `jest` **4785/4785 (397 suites)** · sim **1034/1034** · lint **0 errors / 75 warnings**.
 14/14 break-test mutations caught. Checklist item `pin-moves-every-yardage` added for the field test.
+
+### The putting read said uphill when it was down — two defects, and a rules problem neither of us was looking for
+
+Tim: "sometimes the putting read has said uphill when its down. A sure like me has the camera close to
+level but an expectation at level is not real." Both halves of that were right.
+
+**1. The sign was erased.** `const deviation = Math.abs(p) - 90`. Taking |pitch| collapses both
+hemispheres onto one answer, and the sign is the ONLY thing separating uphill from downhill. It worked
+while `rotation.beta` stayed positive and inverted silently when it did not — an inverted hold read +9%
+"uphill" for a phone aimed the other way.
+
+**2. The verdict was decided inside the noise.** Thresholds were ±2%. In the unit actually measured, 2% is
+**1.15° of camera angle at any putt length**, while a handheld phone wanders ±2-3° from tremor and grip. A
+1.2° change in how he held it flipped "firm pace — it's uphill" to "soft pace — downhill, let it die."
+There is a deadband now, expressed in degrees, and inside it the read SAYS it cannot call it rather than
+rounding into a direction.
+
+**GPS cannot help, and that is now written down so nobody builds it.** Tim asked; the honest answer is no.
+Against a 20 ft putt's 2% slope (0.12 m of rise): GPS horizontal is the wrong axis, GPS altitude carries
+±5-15 m of error (40-125× the signal), and the terrain API caches on an **11 m grid** — both ends of a 6 m
+putt land in one cell, so the delta is always 0. Even a whole-green tilt (0.9 m over 27 m) is at or below
+that data's ~1 m vertical resolution. A cross-check against a source that cannot see the thing is false
+comfort.
+
+**And the app had NO rule entry on measuring devices at all**, while shipping a live slope percentage. A
+player asking the caddie "can I use this?" got nothing back, and nothing reads as yes. Added
+`measuring_devices` (Rule 4.3a(1) / Model Local Rule G-5): distance is permitted where the committee allows
+devices, gauging slope or elevation change during a round is not — a rangefinder's slope function has to be
+switched off, and the same standard applies to a phone. Findable in the words a player uses ("is slope
+legal", "can I use a rangefinder").
+
+**Boundary verified, not assumed:** SmartPlay is the phrase → `query_status/shot_strategy`, answered
+by the brain; SmartFinder is the distance/target read → `open_tool/smartfinder` plus `distance_to_green`;
+TightLie is how the ball LIES → classifier-routed `open_tool{lie_analysis}`, camera. "What's the smart play"
+never opens either camera — already pinned by 14 assertions.
+
+### Verified
+
+`tsc` clean · `jest` **4806/4806 (398 suites)** · sim **1034/1034** · lint **0 errors**. 7/7 break-test
+mutations caught, including one tautological assertion of mine that bounded a constant against itself.
+
+### Open — needs Tim's call
+
+Whether the on-course slope read should be **hidden during a round** for the rules reason above. That
+removes a visible feature, so it is a product decision, not a bug fix.

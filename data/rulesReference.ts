@@ -17,6 +17,11 @@
 export const RULES_EDITION = '2023';
 
 export type RuleCategory =
+  /**
+   * 2026-09-13 — added because the app had NO rule entry on measuring devices at all, while shipping a
+   * live slope read. A player asking "can I use this?" got nothing, and "nothing" reads as "yes".
+   */
+  | 'equipment'
   | 'relief_free'
   | 'relief_penalty'
   | 'ball_at_rest'
@@ -46,6 +51,26 @@ export interface RuleEntry {
 
 export const RULES_REFERENCE: RuleEntry[] = [
   // ─── FREE RELIEF ──────────────────────────────────────────────────
+  {
+    /**
+     * 2026-09-13 (Tim, while we were fixing the putting slope read) — THE APP HAD NOTHING ON THIS, and it
+     * ships a live slope percentage on the SmartFinder putt read. A player who asked the caddie whether
+     * that was legal got no rule back.
+     *
+     * Written as reference, NOT as a lawyer's opinion: it states the rule and tells the player to check
+     * the committee's local rule, because DMD permission is a local-rule matter and the slope carve-out
+     * is the part people get wrong.
+     */
+    rule_id: 'measuring_devices',
+    category: 'equipment',
+    title: 'Rangefinders, GPS and slope',
+    rule_summary: 'Measuring DISTANCE with a device is allowed when the committee permits it. Using a device to gauge SLOPE or elevation change during a round is not — even if the same device does distance legally.',
+    detailed_explanation: 'Rule 4.3a(1) covers distance-measuring devices. Distance is permitted under the Model Local Rule most committees adopt; gauging elevation change or slope is specifically excluded. A rangefinder with a slope function must have that function switched OFF, and the same standard applies to a phone: using it to read the incline of a green or an approach during a round is the prohibited use, not the app being open.',
+    tactical_advice: 'Use distance freely if your committee allows devices. Read the slope with your eyes and your feet — walk from the hole back to the ball. Save any slope reading for practice rounds, where there is no restriction. If you are unsure whether devices are permitted at all, ask before the first tee rather than after.',
+    official_reference: 'Rule 4.3a(1); Model Local Rule G-5',
+    common_misconceptions: 'People assume that because a rangefinder is legal, everything it displays is legal — the slope feature is the exception and it has to be disabled. And "it was only a phone" is not a defence: the rule is about the USE, not the hardware.',
+    keywords: ['rangefinder', 'gps', 'slope', 'measuring device', 'dmd', 'elevation', 'is this legal', 'laser', 'uphill downhill reading'],
+  },
   {
     rule_id: 'casual_water',
     category: 'relief_free',

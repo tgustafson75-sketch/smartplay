@@ -18,6 +18,7 @@ import * as Location from 'expo-location';
 import { DeviceMotion } from 'expo-sensors';
 import { useRoundStore } from '../store/roundStore';
 import { useGreenReadStore } from '../store/greenReadStore';
+import { readPuttSlope, paceHintFor, whyNoSlope } from '../services/puttSlopeRead';
 import { decideShot } from '../services/caddieDecision';
 import { liveShotReadInputs } from '../services/shotReadLive';
 import { getLearnedMissDirection } from '../services/effectiveMiss';
@@ -2079,15 +2080,19 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
   // which used to print e.g. "DOWNHILL ~1633123935319537000%". Gate the read to a
   // sane upright hold and clamp to realistic green grades; return null (→ "hold
   // upright" hint / "—") when the phone isn't in a readable position.
-  const slopePctFromPitch = (p: number | null): number | null => {
-    if (p == null || !Number.isFinite(p)) return null;
-    const deviation = Math.abs(p) - 90; // degrees off vertical; upright hold ≈ 0
-    if (Math.abs(deviation) > 30) return null; // not a putting-read hold — tan() is noise here
-    const pct = Math.tan((deviation * Math.PI) / 180) * 100;
-    if (!Number.isFinite(pct)) return null;
-    return Math.round(Math.max(-25, Math.min(25, pct))); // real greens don't exceed ~a dozen %
-  };
-  const liveSlopePct = slopePctFromPitch(tilt.pitch);
+  /**
+   * 2026-09-13 (Tim: "sometimes the putting read has said uphill when its down … an expectation at level
+   * is not real") — MOVED TO services/puttSlopeRead, which fixed two things this inline version had:
+   *
+   *   · `Math.abs(p) - 90` threw away the SIGN, and the sign is the only thing separating uphill from
+   *     downhill. It survived only while beta stayed positive; an inverted hold read +9% "uphill" for a
+   *     phone pointing the other way.
+   *   · the ±2% verdict was inside the noise. 2% is 1.15° of camera angle at any putt length, and a
+   *     handheld phone wanders ±2-3°, so a 1.2° change in grip flipped "uphill" to "downhill". There is
+   *     a deadband now and it says it cannot call it, rather than rounding into a direction.
+   */
+  const liveSlope = readPuttSlope(tilt.pitch);
+  const liveSlopePct = liveSlope.pct;
   const liveLevel = liveSlopePct != null && Math.abs(liveSlopePct) < 1 && Math.abs(tilt.roll) < 2;
 
   const handleTap = useCallback((event: { nativeEvent: { locationX: number; locationY: number } }) => {
@@ -2120,16 +2125,19 @@ function PuttCameraOverlay({ locationGranted: _locationGranted }: { locationGran
 
   // Slope hint from device pitch — a putter face perpendicular to the green
   // surface reads pitch ≈ -90°. Deviation from level is the rough slope read.
-  const slopePct = slopePctFromPitch(pitchAtMeasure);
+  const measuredSlope = readPuttSlope(pitchAtMeasure);
+  const slopePct = measuredSlope.pct;
 
   // Putt READ — turn the captured metrics into actual advice: pace from
   // the incline, break direction from the side tilt. Qualitative on
   // purpose (no fake cup counts) and labeled an estimate — trust your own
   // read too. This is the "now that we have more metrics" improvement.
-  const puttRead = pointA && pointB && slopePct != null ? (() => {
-    const pace = slopePct > 2 ? 'firm pace — it’s uphill'
-      : slopePct < -2 ? 'soft pace — downhill, let it die'
-      : 'stock pace';
+  const puttRead = pointA && pointB && measuredSlope.call !== 'no_reading' ? (() => {
+    /**
+     * The pace clause is the owner's call now, and when it declines the read SAYS so instead of quietly
+     * falling back to 'stock pace' — which is what made a no-signal hold look like a measurement.
+     */
+    const pace = paceHintFor(measuredSlope) ?? whyNoSlope(measuredSlope) ?? 'stock pace';
     const side = rollAtMeasure ?? 0;
     let breakTxt: string;
     if (Math.abs(side) >= 4) {
