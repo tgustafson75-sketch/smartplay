@@ -119,12 +119,20 @@ export const queryStatusHandler: IntentHandler = {
             side_effects: ['query:longest_putt:unset'],
             follow_up_needed: false,
           }
-        : {
-            success: true,
-            voice_response: `Your longest putt is ${ft} feet — the one you logged yourself.`,
-            side_effects: [`query:longest_putt:${ft}`],
-            follow_up_needed: false,
-          };
+        : (() => {
+            // Auto-tick `putts-always-in-feet` — the NUMERIC branch only. The 'unset' answer above is
+            // honest but proves nothing about feet reaching him.
+            try {
+              (require('../checklistAutoTick') as typeof import('../checklistAutoTick'))
+                .noteChecklistEvent('caddie:longest-putt-answered');
+            } catch { /* best-effort */ }
+            return {
+              success: true,
+              voice_response: `Your longest putt is ${ft} feet — the one you logged yourself.`,
+              side_effects: [`query:longest_putt:${ft}`],
+              follow_up_needed: false,
+            };
+          })();
     }
 
     /**

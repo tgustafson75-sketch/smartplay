@@ -36,6 +36,19 @@ const PROVES: Record<string, string[]> = {
   'watch:swing': ['watch-record-button', 'watch-swing-output'],
   /** A club arc was computed for a session AND had points in it — the arc has something to draw. */
   'swing:club-arc': ['club-arc-visible'],
+  /**
+   * 2026-09-13 — a position remark named a hole of 10-18 AND parsed a distance that is NOT that hole
+   * number. That combination is unreachable for the phrasings the bug broke: "I'm 140 out on hole 12"
+   * used to parse 12, so distance === hole. Firing it means the yardage really was heard as the
+   * yardage. The handler fires it only after the distance is resolved.
+   */
+  'position:distance-not-hole': ['yardage-not-hole-number'],
+  /**
+   * The longest-putt question answered with an actual NUMBER. The topic did not exist before this
+   * update, and the 'unset' branch deliberately does not fire — being told "set it in Settings" is the
+   * honest empty answer, not evidence that he got his number back in feet.
+   */
+  'caddie:longest-putt-answered': ['putts-always-in-feet'],
 };
 
 /**

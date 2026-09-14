@@ -8,9 +8,12 @@
  * not "I looked at it and it was right" — and several items ask him to look. So the tick records
  * how it happened, the UI marks it, and a manual tick can never be downgraded by an observation.
  */
+import fs from 'fs';
+import path from 'path';
 import { CHECKLIST_EVENT_MAP } from '../../services/checklistAutoTick';
 import { useOwnerChecklistStore } from '../../store/ownerChecklistStore';
 
+const root = path.resolve(__dirname, '../..');
 const idsOf = () => useOwnerChecklistStore.getState().items.map((i) => i.id);
 
 describe('the event map points at items that exist', () => {
@@ -88,5 +91,54 @@ describe('the UI distinguishes the two', () => {
     const src = fs.readFileSync(path.join(__dirname, '../../app/owner-checklist.tsx'), 'utf8');
     expect(src).toMatch(/item\.doneVia === 'observed'/);
     expect(src).toContain('AUTO');
+  });
+
+  /**
+   * 2026-09-13 — the six items added for the 09-13 OTA, and the two of them that may tick themselves.
+   *
+   * The rule this file exists to hold: an event must be UNREACHABLE unless the item genuinely passed.
+   * Both new events clear it, and the four items that ask Tim to LOOK or LISTEN are deliberately absent
+   * from the map — the app can prove a code path ran, not that the number it produced was right.
+   */
+  it('the 09-13 items exist and are grouped where they will be read', () => {
+    const ids = idsOf();
+    for (const id of [
+      'yardage-not-hole-number', 'handicap-stroke-index', 'putts-always-in-feet',
+      'recap-talks-about-the-round', 'how-do-i-reaches-the-caddie', 'mental-words-are-heard',
+    ]) {
+      expect(ids).toContain(id);
+    }
+  });
+
+  it('only the two provable ones are auto-tickable', () => {
+    const observed = new Set(Object.values(CHECKLIST_EVENT_MAP).flat());
+    expect(observed.has('yardage-not-hole-number')).toBe(true);
+    expect(observed.has('putts-always-in-feet')).toBe(true);
+    // these need a human to look or listen — an observation must not stand in for that
+    for (const manual of ['handicap-stroke-index', 'recap-talks-about-the-round', 'how-do-i-reaches-the-caddie', 'mental-words-are-heard']) {
+      expect(observed.has(manual)).toBe(false);
+    }
+  });
+
+  it('the yardage event only fires when the hole was NAMED and is not the distance', () => {
+    const h = fs.readFileSync(path.join(root, 'services/intents/confirmPositionHandler.ts'), 'utf8');
+    expect(h).toMatch(/namedHole != null && namedHole >= 10 && distance !== namedHole/);
+    expect(h).toMatch(/noteChecklistEvent\('position:distance-not-hole'\)/);
+  });
+
+  it('the longest-putt event fires on the NUMBER, never on the unset answer', () => {
+    const q = fs.readFileSync(path.join(root, 'services/intents/queryStatusHandler.ts'), 'utf8');
+    const unsetAt = q.indexOf("query:longest_putt:unset");
+    const eventAt = q.indexOf("noteChecklistEvent('caddie:longest-putt-answered')");
+    expect(eventAt).toBeGreaterThan(-1);
+    expect(eventAt).toBeGreaterThan(unsetAt);   // it sits in the numeric branch, which comes second
+  });
+
+  it('every emitter is best-effort — the checklist can never break an answer', () => {
+    for (const f of ['services/intents/confirmPositionHandler.ts', 'services/intents/queryStatusHandler.ts']) {
+      const src = fs.readFileSync(path.join(root, f), 'utf8');
+      const at = src.indexOf('noteChecklistEvent');
+      expect(src.slice(Math.max(0, at - 400), at)).toMatch(/try \{/);
+    }
   });
 });

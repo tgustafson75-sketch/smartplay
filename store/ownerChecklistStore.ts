@@ -135,6 +135,67 @@ const SEED: Omit<ChecklistItem, 'done' | 'doneAt'>[] = [
     title: 'Run npm run ota:baseline after any store build',
     detail: 'That re-records the native fingerprint. Skip it and the preflight keeps refusing OTAs, because as far as it knows the shell is still the older one.',
   },
+
+  /**
+   * 2026-09-13 — the 09-13 OTA (update group b8ef990d). Six items, ordered by how likely the fix is to
+   * be wrong in the field rather than by code area.
+   *
+   * Two of them tick themselves; the other four ask him to LOOK or LISTEN, and an observation cannot
+   * stand in for that. The distinction is the whole discipline of services/checklistAutoTick: the app
+   * can prove a code path ran, not that the number it produced was right.
+   */
+  {
+    /**
+     * The highest-risk fix of the day, because it is the one that has to survive a real accent through
+     * Deepgram rather than a string in a test. The bug: the LAST 2-3 digit integer won, so a named hole
+     * of 10-18 was read as the yardage — "I'm 140 out on hole 12" parsed as 12, and the caddie then
+     * announced GPS drift, force-refreshed, and clubbed a 140-yard shot as a 12-yard one.
+     */
+    id: 'yardage-not-hole-number',
+    group: 'field',
+    title: 'Say "I\u2019m 140 out on hole 12" and check he hears 140',
+    detail: 'Say it out loud, in that order, with a hole number of 10 or higher — that is the case that was broken. A pass is him confirming the DISTANCE (140) on hole 12. A fail is any answer built on 12 yards: "GPS is 130 yards off", an instant refresh, or a wedge suggestion for a full iron. Try the other order too ("hole 12, 140 out") — that one always worked, so if it passes and the first fails, the mask is the problem and not your microphone. Ticks itself when a two-digit hole is named and the parsed distance is not that number.',
+  },
+  {
+    /**
+     * WHS allocates strokes by the scorecard's HCP column, and the handler passed the hole number.
+     * The column arrives from golfcourseapi and was being dropped on the way into CourseHole, so this
+     * item is really asking whether the plumbing reached THIS course.
+     */
+    id: 'handicap-stroke-index',
+    group: 'field',
+    title: 'Ask for your max for handicap on a hole',
+    detail: 'Ask "what\u2019s my max for handicap here". Two honest answers, and you have to read which one you got. WITH the scorecard\u2019s handicap column loaded: "Your max for handicap is 7 (par 4 plus 2 plus 1 stroke)" — and the stroke should only appear on holes that are genuinely among your hardest, not on hole 1 because it is hole 1. WITHOUT it: "at least 6 — par plus two … I don\u2019t have this scorecard\u2019s handicap column", which is the correct refusal, not a bug. A FAIL is a confident stroke on an easy hole. Left manual on purpose: the app can prove it answered, not that the number is right.',
+  },
+  {
+    id: 'putts-always-in-feet',
+    group: 'field',
+    title: 'Log a putt and check every surface says feet',
+    detail: 'Quick Log a shot with PUTTER. The distance label must read "Distance (feet, optional)" — type 25 for a 25-footer. Then check three places agree: the shot row (25 ft, not 25 yds and not 8), the round recap\u2019s shot detail, and Settings → Longest Putt, which now says (feet). Your stored longest putt will read 66 ft after this update — that is your old 22 converted at the rate the old "(yards)" label promised. If you meant 22 FEET, retype it; the field says feet now.',
+  },
+  {
+    /**
+     * The mental register existed, was authored, and could not be selected: both branches that choose
+     * it gated on surfaces nothing registered. 'arena' is parked for 3.0, so the recap is its one live
+     * route — which is also exactly where the conversation belongs.
+     */
+    id: 'recap-talks-about-the-round',
+    group: 'field',
+    title: 'Open a round recap and talk to him about how it went',
+    detail: 'Say something like "that one got away from me". He should answer like someone reviewing a round WITH you — acknowledging it before any tip, allowing space. A fail is the on-course tactical voice: clipped, club-and-number, present-tense, as if you were standing over a shot. That register had never once been reachable before this update, so this is a first run rather than a regression check. Ask him about your putting here too — he can now read your record by whether you reached the green in regulation, once you have 9 scored holes with putts logged.',
+  },
+  {
+    id: 'how-do-i-reaches-the-caddie',
+    group: 'field',
+    title: 'Ask "how do I\u2026?" about the app itself',
+    detail: 'Try "how do I change my handicap", "how do I import my old scores", "how do I add a course". You should get the actual STEPS, spoken. Fails to watch for, all of which happened before this update: being told your current handicap instead of how to change it, or being yanked straight to a screen with no explanation. Measurement questions must still answer locally and instantly — "how far do I hit my 7 iron" is not a how-to and should not go to the brain.',
+  },
+  {
+    id: 'mental-words-are-heard',
+    group: 'field',
+    title: 'Use your own words for a bad patch',
+    detail: 'Say "I choked", "I\u2019m tilted", "I lost my confidence", or "I have the yips". Before this update "choke" existed in the knowledge base only as "choke down" (a grip) and "yips" appeared nowhere, so these retrieved nothing or, worse, swing-mechanics noise — "I need to calm down" returned over-the-top and wedge bounce. A pass is a mental answer: routine, breathing, reset, expectations. A fail is a mechanics lecture.',
+  },
 ];
 
 interface ChecklistState {

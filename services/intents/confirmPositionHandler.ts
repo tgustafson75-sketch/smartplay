@@ -152,6 +152,18 @@ export const confirmPositionHandler: IntentHandler = {
 
     const namedHole = extractHole(raw, intent.parameters.hole);
     const hole = namedHole ?? round.currentHole;
+    /**
+     * 2026-09-13 — auto-tick `yardage-not-hole-number`. Fires ONLY when the player NAMED a hole of
+     * 10-18 and the parsed distance is not that number, which is unreachable for the phrasings the bug
+     * broke ("I'm 140 out on hole 12" parsed 12, so distance === hole). See services/checklistAutoTick
+     * for why an event must only be reachable when the item genuinely passed.
+     */
+    if (namedHole != null && namedHole >= 10 && distance !== namedHole) {
+      try {
+        (require('../checklistAutoTick') as typeof import('../checklistAutoTick'))
+          .noteChecklistEvent('position:distance-not-hole');
+      } catch { /* checklist is owner-only and best-effort — never affects the answer */ }
+    }
     const holeData = resolvedHoleData(hole);
     if (!holeData) {
       return {
