@@ -80,6 +80,17 @@ import { titleForUpload } from '../../../services/swing/swingTitle';
 import { useTranslation } from 'react-i18next';
 import { setActiveSurface, clearActiveSurface } from '../../../services/activeSurfaceRegistry';
 
+/**
+ * 2026-09-14 — hoisted out of the component. It is a compile-time feature flag, never state, and
+ * declaring it inside the render made it a fresh binding every pass — which is why
+ * react-hooks/exhaustive-deps kept demanding it in two dependency arrays.
+ *
+ * Meaning is unchanged: the screen is STATIC on open; the user initiates analysis with the Analyze
+ * button (onReanalyze). This gates every auto-process-on-open path — the on-open re-processing and
+ * racing that it was introduced to stop.
+ */
+const LIBRARY_AUTO_PROCESS = false;
+
 // 2026-06-12 — shared Smart Motion control badges, so Library video controls match
 // the SmartMotion review badges (whole-app control consistency).
 const ICON_CTRL = {
@@ -141,7 +152,6 @@ export default function SwingDetail() {
   // button. No auto-analyze/auto-biomech on open — that was the on-open
   // re-processing + racing. This flag gates every auto-process-on-open path; the
   // explicit Analyze/Re-analyze button (onReanalyze) is the only trigger.
-  const LIBRARY_AUTO_PROCESS = false;
   const analyzeInFlightRef = useRef(false);
   const watchFiredRef = useRef(false);
   const trustLevel = useTrustLevelStore(s => s.level);
@@ -527,7 +537,7 @@ export default function SwingDetail() {
     } catch (e) {
       console.error('[swing-detail] play error:', e);
     }
-  }, [shot?.clipUri, playbackUri]);
+  }, [shot, playbackUri]);
   // 2026-06-16 (Tim) — fade the on-frame CONTROLS shortly after a pause so a
   // paused frame screenshots clean (no play badge / seek bar / speed chip burned
   // into the grab). They snap back the instant playback resumes. The skeleton /
@@ -578,7 +588,13 @@ export default function SwingDetail() {
   // trace go blank on a swing that should show them. Reset to the primary swing on every swing_id change.
   useEffect(() => { setSelectedShotIdx(0); }, [swing_id]);
 
-  const poseFrames = activeBiomech?.frames ?? [];
+  /**
+   * 2026-09-14 — memoised. `?? []` built a NEW array on every render whenever frames were absent,
+   * so the three memos keyed on `poseFrames` below recomputed on every pass — pose interpolation,
+   * the club arc and the trace among them. The empty case is the common one on a swing with no
+   * pose read, which is exactly when the screen could least afford it.
+   */
+  const poseFrames = useMemo(() => activeBiomech?.frames ?? [], [activeBiomech]);
   const hasPose = poseFrames.length >= 2;
   /**
    * 2026-08-31 — A MEASURED IMPACT TIME, for when no microphone heard one.
@@ -1189,7 +1205,13 @@ export default function SwingDetail() {
         try { useSwingSessionStore.getState().setSessionBiomechanics(swing_id, null); } catch { /* non-fatal */ }
       }
     })();
-  }, [swing_id, shot?.clipUri, session?.biomechanics, session?.upload?.duration_sec, session?.source]);
+    /**
+     * 2026-09-14 — the clip WINDOW and the angle override decide what this analyses, and none of
+     * them were listed. Re-trimming a swing, or correcting its camera angle, left the backfill
+     * working from the values captured when the screen opened.
+     */
+  }, [swing_id, shot?.clipUri, shot?.clipStartSeconds, shot?.clipEndSeconds, shot?.locatedImpactSec,
+      session?.biomechanics, session?.upload?.duration_sec, session?.source, session?.upload?.angleOverride]);
 
   // 2026-08-01 (Tim — per-swing breakdown). LAZY per-SHOT biomech + clubhead arc: when the user selects
   // a swing in the reel that has no per-shot read yet, extract pose for JUST that swing's WINDOW (bounded
@@ -1500,7 +1522,6 @@ export default function SwingDetail() {
       useSwingSessionStore.getState().setSessionAnalysisStatus(swing_id, 'pending');
       void runPhaseKOnSession(swing_id);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysisStatus, shouldAutoplayThenAnalyze, swing_id]);
 
   // 2026-08-07 (Tim — the video-loop crash keeps coming back). ROOT CAUSE, made structural: EVERY prop

@@ -130,7 +130,7 @@ export default function IndoorHotelModeScreen() {
         detectorRef.current?.onAccel({ t: Date.now(), x: a.x, y: a.y, z: a.z });
       });
     } catch { /* accel is a bonus — gyro tempo works without it */ }
-  }, [mode]);
+  }, [mode, acceptRep]);
 
   // Finish → summary + credit (points, practice history, CNS tempo tendencies).
   const finish = useCallback(() => {

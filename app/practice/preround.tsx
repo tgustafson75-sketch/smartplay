@@ -100,7 +100,12 @@ export default function PreroundWarmUp() {
     } catch (e) {
       console.log('[preround] warm-up credit failed (non-fatal):', e);
     }
-  }, [allDone, completed, plan.steps]);
+    /**
+     * 2026-09-14 — `plan.allocated` and `plan.minutes` decide the DURATION this writes into the
+     * practice ledger, and were not listed. A plan whose allocation changed without its steps
+     * changing credited the warm-up with a stale number.
+     */
+  }, [allDone, completed, plan.steps, plan.allocated, plan.minutes]);
 
   const toggleDone = useCallback((id: string) => {
     setCompleted((prev) => {

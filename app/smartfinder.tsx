@@ -1729,7 +1729,7 @@ function TargetCameraOverlay({
     // SF-1: yards.reason / yards.middle are read above for the plausibility
     // gate, so they must be in deps — otherwise the callback closes over a
     // stale GPS baseline and the 60yd window compares against an old number.
-  }, [yards.reason, yards.middle]);
+  }, [yards.reason, yards.middle, aimCandidates, runHeightRangeScan]);
 
   const playsLike = useMemo(() => {
     if (targetYards == null || !weather) return null;

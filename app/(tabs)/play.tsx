@@ -859,7 +859,7 @@ export default function PlayTab() {
       bag.setCarriedToday(ids, { limit: carryLimitFor(competition) });
       setPackedForCourseName(pack.headline ? (selected?.club_name ?? selected?.course_name ?? null) : null);
     } catch { /* a failed reconcile leaves the full bag, which is the safe side */ }
-  }, [selected?.id, isRoundActive, carriedTodayLen, ownedForPack]);
+  }, [selected?.id, selected?.club_name, selected?.course_name, isRoundActive, carriedTodayLen, ownedForPack]);
   // DP-3 — resolve the selected LOCAL course's real bundled thumbnail
   // (hole-1 image) from its `local:<slug>` id via the canonical
   // courseId-keyed resolver — the same registry the closest-local rows
@@ -1055,7 +1055,7 @@ export default function PlayTab() {
       if (!cancelled) setRecentCourses(out);
     })();
     return () => { cancelled = true; };
-  }, [recentCourseIds, recentCourseMeta, preferredTee]);
+  }, [recentCourseIds, recentCourseMeta, preferredTee, handicapGender, rememberRecentCourseMeta]);
 
   // Phase 407 — GPS-driven default sort. When userPosition is known,
   // sort the combined catalog ascending by distance from the player.
@@ -1748,7 +1748,17 @@ export default function PlayTab() {
     } finally {
       setSelectedLoading(false);
     }
-  }, []);
+    /**
+     * 2026-09-14 — `preferredTee` and `handicapGender` were READ here and not listed, with an EMPTY
+     * dep array, so this callback captured whatever they were at mount.
+     *
+     * That is the same defect the note inside it records fixing, one level up: taking tees[0]
+     * quoted back-tee yardages to a player who had chosen front, so the code was changed to use
+     * pickTeeSet(c.tees, preferredTee, handicapGender) — but the callback was never recreated when
+     * he changed either. Pick a course after switching tees and the geometry, imagery and hole set
+     * it prefetched were still for the old one.
+     */
+  }, [preferredTee, handicapGender]);
 
   // Local courses don't have a real API course_id (their id is the
   // synthetic 'local:palms'). When the user taps (i) on a local row,

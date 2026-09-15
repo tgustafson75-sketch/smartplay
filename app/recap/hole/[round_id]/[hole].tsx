@@ -41,7 +41,15 @@ export default function HoleShotMapScreen() {
   );
 
   const courseId = isLive ? activeCourseId : record?.courseId ?? null;
-  const allShots: ShotResult[] = isLive ? liveShots : record?.shots ?? [];
+  /**
+   * 2026-09-14 — memoised. The `?? []` branch allocated a NEW array on every render for a record
+   * with no shots, so the `playedHoles` memo below recomputed every pass instead of only when the
+   * shots actually changed.
+   */
+  const allShots: ShotResult[] = useMemo(
+    () => (isLive ? liveShots : record?.shots ?? []),
+    [isLive, liveShots, record?.shots],
+  );
   const playedHoles = useMemo(() => {
     const set = new Set<number>();
     for (const s of allShots) set.add(s.hole);

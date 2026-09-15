@@ -2453,6 +2453,26 @@ export default function SmartMotion() {
     };
   }, []);
 
+  /**
+   * 2026-09-14 — THE ONE exhaustive-deps WARNING LEFT IN THE APP, AND IT IS LEFT ON PURPOSE.
+   *
+   * `runAnalysis` is deliberately STABLE: the 2026-06-11 audit found the auto-window-end timeout
+   * capturing a stale copy of it and routed the hands-free stop through `stopRecordingRef`, and the
+   * 2026-07-07 note added `tempoRef` / `biomechRef` / `ballTraceRef` so it reads the CURRENT
+   * measured signals at call time "without dep churn". Adding the ten deps the rule asks for would
+   * churn its identity on nearly every render and undo both of those.
+   *
+   * BUT IT IS NOT CLEANLY DELIBERATE, which is why there is no eslint-disable here. Of the ten,
+   * `router`, `drillFocus` and `drillName` are fixed for the life of the screen and harmless; `club`
+   * has a ref mirror. The rest — `clipUri` (4 reads), `feelText` (2), `coachNote` (2), `isPutt`,
+   * `analysisCaddie` — are read DIRECTLY with no mirror, in a callback that never re-creates. A
+   * stale `feelText` or `coachNote` would save the wrong note against a swing.
+   *
+   * Suppressing it would assert a design that is only half true; adding the deps blind would risk
+   * the recording flow. It needs someone to read the 540-line body and decide per value, which is a
+   * piece of work and not a lint fix. Left visible so it stays on the list.
+   * [[a-stale-header-is-a-source-someone-trusts]]
+   */
   const runAnalysis = useCallback(
     async (rawUri: string, segment?: SwingSegment) => {
       setPhase('analyzing');

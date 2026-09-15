@@ -64,6 +64,17 @@ describe('a recent course survives a failed lookup', () => {
   });
 
   it('re-renders when the cache or tee preference changes', () => {
-    expect(play).toContain('}, [recentCourseIds, recentCourseMeta, preferredTee]);');
+    /**
+     * 2026-09-14 — MEMBERSHIP, NOT THE WHOLE LITERAL. This pinned the exact dep line and failed the
+     * moment `handicapGender` and `rememberRecentCourseMeta` were ADDED — both of which this effect
+     * genuinely reads, and the second of which decides which rating set the recents quote.
+     *
+     * The test two above it already learned this lesson in August ("property, not literal: the
+     * picker gaining a gender argument is not a regression"). Same fix, one assertion later.
+     */
+    const arrays = [...play.matchAll(/\n\s*\}, \[([^\]]*)\]\);/g)].map((m) => m[1]);
+    const deps = arrays.find((a) => a.includes('recentCourseIds') && a.includes('recentCourseMeta'));
+    expect(deps).toBeDefined();
+    for (const d of ['recentCourseIds', 'recentCourseMeta', 'preferredTee']) expect(deps).toContain(d);
   });
 });
