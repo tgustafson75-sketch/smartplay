@@ -10266,9 +10266,14 @@ check('Fault engine: arm/finish/sway faults wired, fabricated over-the-top remov
     return (
       /leadArmTopDeg\b/.test(api) && /leadArmImpactDeg\b/.test(api) && /swayNorm\b/.test(api) && /finishWeightPct\b/.test(api) &&
       /jointAngleDeg\(/.test(api) &&                                                    // real 3-point arm angle
-      /key: 'lead_arm_bent'/.test(read2) && /key: 'chicken_wing'/.test(read2) && /key: 'poor_finish'/.test(read2) && /key: 'head_movement'/.test(read2) &&
-      !/key: 'over_the_top', label: 'Over the top'/.test(read2) &&                       // fabricated assertion GONE
-      /faults\.push\(\{ key: 'sway'[\s\S]{0,120}?swayNorm|swayNorm[\s\S]{0,400}?key: 'sway'/.test(read2) &&
+      // 2026-09-14 — faults are constructed through `fault(key, …)` now, not pushed as object
+      // literals, so that every one of them carries its teaching (services/swing/faultTeaching).
+      // The shape changed; what this guard protects did not.
+      /fault\('lead_arm_bent'/.test(read2) && /fault\('chicken_wing'/.test(read2) && /fault\('poor_finish'/.test(read2) && /fault\('head_movement'/.test(read2) &&
+      !/fault\('over_the_top', 'Over the top'/.test(read2) &&                            // fabricated assertion GONE
+      // The sway fault must be derived FROM swayNorm (hip-midpoint translation), not from the
+      // sequencing proxy it replaced. 800 chars spans the block including its explanatory comment.
+      /swayNorm[\s\S]{0,800}?fault\('sway'/.test(read2) &&
       /lead_arm_bent: 'lead_arm_bent'/.test(verdict) && /chicken_wing: 'chicken_wing'/.test(verdict) &&
       /id: 'lead_arm_bent'/.test(drills) && /id: 'poor_finish'/.test(drills) && /id: 'sway'/.test(drills) &&
       /lead_arm_bent:\s*\[/.test(overlay) && /poor_finish:\s*\[/.test(overlay)

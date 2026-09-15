@@ -2251,8 +2251,23 @@ export default function SmartMotion() {
         key: 'breakdown',
         title: 'SWING BREAKDOWN',
         value: poseRead.usable ? (worst ? worst.label : 'Clean') : null,
+        /**
+         * 2026-09-14 (Tim — "how can we comment on a lesson we have not taught") — THE FIX COMES
+         * WITH THE GRADE.
+         *
+         * This card named the worst dimension and quoted the measurement behind it, and stopped.
+         * For a player who has never had a lesson, "Spine angle changed 14° from address to impact"
+         * is a verdict in a language they do not speak. The top fault now carries what it IS, the
+         * fix, and the drill that trains it (services/swing/faultTeaching), so the read teaches
+         * rather than marks.
+         */
         note: poseRead.usable
-          ? (worst?.note ?? `${poseRead.dimensions.length} dimensions measured — nothing flagged.`)
+          ? (() => {
+              const top = poseRead.faults[0];
+              if (!top) return worst?.note ?? `${poseRead.dimensions.length} dimensions measured — nothing flagged.`;
+              const drill = top.drill ? ` Drill: ${top.drill.drill_name}.` : '';
+              return `${top.evidence}\n\n${top.what}\n\n${top.fix.join('\n')}${drill}`;
+            })()
           : 'No measured pose read for this swing.',
         tone: poseRead.usable ? toneFor(worst?.verdict ?? 'solid') : undefined,
       },
