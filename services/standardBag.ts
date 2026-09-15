@@ -53,6 +53,33 @@ export const ROLL_YARDS: Record<StandardClub, number> = {
  * spoken ladder is derived rather than hand-listed: a hand-listed copy is how the duplicate-club
  * bug got in ('7I' 165 sitting beside '7 Iron' 155 in the same ladder).
  */
+/**
+ * 2026-09-15 — THE BAND A NUMBER THE PLAYER STATES HAS TO SIT IN.
+ *
+ * `services/bagVoiceRegistration` has clamped SPOKEN distances to 30–400 since 2026-08-08 ("my driver
+ * goes 12" must not corrupt the bag the caddie quotes). The TYPED path had no floor at all, and today
+ * the Fit Profile opened editing on every club in the bag — fourteen chances to fat-finger a number
+ * on a phone. So the clamp stops being a literal inside one file and becomes the rule.
+ *
+ * Why it matters more than a tidy input: a stated number is the CENTRE of the plausibility band that
+ * decides which measured shots are allowed into the ladder. A driver stated at 15 yards makes the
+ * band 8–22, so every real 240-yard drive he ever hits is rejected at ingest and the club can never
+ * learn. One typo, silently, for ever. Reproduced before the fix. [[two-owners-is-the-root-cause]]
+ */
+export const STATED_YARDS_MIN = 30;
+export const STATED_YARDS_MAX = 400;
+
+/**
+ * How far a STATED number may sit from the chart before it stops being trusted as the ingest band's
+ * centre. Deliberately much wider than the ingest band itself (0.55–1.45): a senior carrying his
+ * driver 130 (0.53 of the chart) is a real golfer whose numbers must still widen the band for him,
+ * while a 50 that was meant to be 250 (0.20) must not be allowed to wall the club off from its own
+ * measurements. Outside this, the chart is the centre and the stated value is still what he is
+ * QUOTED — it just stops acting as a gate on his shots.
+ */
+export const STATED_VS_CHART_LO = 0.4;
+export const STATED_VS_CHART_HI = 1.8;
+
 export const CLUB_LABEL: Record<StandardClub, string> = {
   Driver: 'Driver', '3W': '3 Wood', '5W': '5 Wood', '7W': '7 Wood',
   '2H': 'Hybrid', '3H': 'Hybrid', '4H': 'Hybrid', '5H': 'Hybrid',

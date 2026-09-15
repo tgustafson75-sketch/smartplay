@@ -10,8 +10,9 @@
  * Writes:
  *   - clubBagStore.registerClub(id, { source: 'voice' })  → bag membership (the brain then ONLY
  *     recommends clubs he actually carries — pipecat prompt reads registered_clubs)
- *   - clubStatsStore.setManual(name, yds)                 → stated CARRY (the honest-carry chain the
- *     brain's club_distances reads); kind 'total' → recordTotal (tee→rest ladder)
+ *   - clubStatsStore.setManual(name, yds, kind)           → his STATED distance, in the unit he said
+ *     it in ('goes' → total, 'carries' → carry). Stored as one carry per club with the unit beside
+ *     it; never into the measured ladders, which belong to shots the app actually watched.
  *
  * HONEST: unparseable phrases are returned in `missed` (the caddie asks, never guesses); yardages are
  * plausibility-clamped (30–400) so "my driver goes 12" can't corrupt the bag the caddie quotes.
@@ -74,8 +75,29 @@ export function registerBagFromSpeech(input: SpokenBagInput): BagRegistrationRes
     // Stating a yardage implies the club is in the bag — register it too (idempotent).
     bag.registerClub(parsed.club_id, { source: 'voice' });
     const kind: 'carry' | 'total' = d?.kind === 'total' ? 'total' : 'carry';
-    if (kind === 'total') stats.recordTotal(name, yds);
-    else stats.setManual(name, yds);
+    /**
+     * 2026-09-15 — A SPOKEN NUMBER IS A STATED NUMBER, IN EITHER UNIT.
+     *
+     * A spoken total used to go to `recordTotal`, which is the ladder GPS shot-tracking owns. Two
+     * things followed, both wrong. The number he SAID was counted as a tracked sample and wore the
+     * green "tracked from your shots" badge; and `recordTotal` applies the plausibility gate and
+     * returns silently when a number is out of band — while the line below still pushed it into
+     * `distancesSet`, so the caddie said "Got it — 3 wood at 230 total" over a write that never
+     * happened. A stated number is never filtered, because the player said it.
+     *
+     * Now both units take the same road the typed screen takes: one stated carry per club, with the
+     * unit he used recorded beside it. The spoken half and the typed half cannot drift apart because
+     * there is only one of them. [[two-owners-is-the-root-cause]]
+     * [[a-success-reported-by-a-step-that-never-checked-is-not-a-success]]
+     */
+    /**
+     * 2026-09-15 — CONFIRM WHAT WAS WRITTEN, NOT WHAT WAS ATTEMPTED. `setManual` now refuses a number
+     * that is impossible for the club (30 yards of TOTAL on a driver is 2 yards of carry), and a
+     * refusal that still pushed into `distancesSet` would be the same "Got it" over a write that
+     * never happened that routing away from recordTotal was meant to end.
+     * [[a-success-reported-by-a-step-that-never-checked-is-not-a-success]]
+     */
+    if (!stats.setManual(name, yds, kind)) { missed.push(`${p} ${d?.yards}`); continue; }
     distancesSet.push({ label: clubLabel(parsed.club_id), yards: yds, kind });
   }
 

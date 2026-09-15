@@ -209,7 +209,10 @@ export function resolvePendingCourseUtterance(utterance: string): { confirmLine:
   });
   clearPendingCourseChoices('resolved');
 
-  void import('expo-router').then(m => m.router.push('/(tabs)/caddie' as never)).catch(() => {});
+  // 2026-09-15 — goToTab, not push. This runs from wherever the player happened to be when he
+  // resolved the course — including a pushed screen — and a PUSH to a tab route from there mounts a
+  // SECOND tab navigator instead of switching tabs. See services/safeBack.goToTab.
+  void import('./safeBack').then(m => m.goToTab('caddie')).catch(() => {});
 
   const holeWord = pending.factors.nineHole ? '9-hole ' : '';
   const loc = choice.location ? ` in ${choice.location}` : '';

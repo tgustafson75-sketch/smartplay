@@ -44,10 +44,18 @@ export interface BallComparison {
   say: string;
 }
 
-/** Normalised so "chromesoft", "Chrome Soft" and "CHROMESOFT" are one ball. */
-function key(ball: string): string {
+/**
+ * Normalised so "chromesoft", "Chrome Soft" and "CHROMESOFT" are one ball.
+ *
+ * 2026-09-15 — EXPORTED, because the round-setup ball picker offers the balls he has played before
+ * and must group them the same way this comparison buckets them. Two different ideas of "the same
+ * ball" would put one ball on the chip row twice and split its rounds across both.
+ * [[two-owners-is-the-root-cause]]
+ */
+export function normalizeBallKey(ball: string): string {
   return ball.trim().toLowerCase().replace(/\s+/g, '');
 }
+const key = normalizeBallKey;
 
 /**
  * Compare scoring by ball across tracked rounds.

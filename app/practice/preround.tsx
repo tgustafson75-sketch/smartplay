@@ -24,7 +24,7 @@ import { useWorkoutStore } from '../../store/workoutStore';
 import { useToastStore } from '../../store/toastStore';
 import { getCaddieName } from '../../lib/persona';
 import { getApiBaseUrl } from '../../services/apiBase';
-import { safeBack } from '../../services/safeBack';
+import { safeBack, goToTab } from '../../services/safeBack';
 import { ACCENT_SKY } from '../../theme/tokens';
 import { useTranslation } from 'react-i18next';
 
@@ -137,7 +137,7 @@ export default function PreroundWarmUp() {
   const doStep = useCallback((step: PreroundStep) => {
     switch (step.kind) {
       case 'stretch':
-        router.push('/(tabs)/caddie' as never); // health-aware stretch lives with the caddie
+        goToTab('caddie'); // health-aware stretch lives with the caddie
         break;
       case 'setup':
         router.push('/swinglab/setup-check' as never);

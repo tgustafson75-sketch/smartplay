@@ -446,7 +446,9 @@
       "open_my_bag_and_fit": "Open My Bag and Fit Profile",
       "talk_to_your_caddie_about": "Talk to your caddie about your game",
       "export_these_exercises": "Export these exercises",
-      "import_workouts_from_smartpump": "Import workouts from SmartPump"
+      "import_workouts_from_smartpump": "Import workouts from SmartPump",
+      "edit_your_profile": "Edit your profile",
+      "edit_your_bag": "Edit your bag — clubs, shafts and grips"
     },
     "text": {
       "messages": "Messages",
@@ -495,6 +497,10 @@
     "dashboard": {
       "welcome_back": "Welcome back, {{welcomeName}}",
       "tap_to_refresh": "{{kevinReadFooter}} · tap to refresh"
+    },
+    "profile_card": {
+      "edit_profile": "Profile",
+      "edit_bag": "Your Bag"
     }
   },
   "play": {
@@ -612,6 +618,17 @@
       "remove": "Remove from home courses",
       "full_title": "Three is the limit",
       "full_body": "You already have {{max}} home courses. Remove one first — they each build ahead of time so they are ready when you play."
+    },
+    "ball": "BALL",
+    "ball_other": "+ Another ball",
+    "ball_placeholder": "Which ball? e.g. Pro V1",
+    "ball_hint": "Optional. Tell me which ball you're playing and I'll stamp it on the round — after a few rounds each I can tell you which one actually scores better for you.",
+    "ball_set_hint": "Playing the {{ball}}. I'll stamp it on this round so it counts towards your ball comparison.",
+    "ball_a11y": {
+      "playing": "Playing the {{ball}}. Tap to clear.",
+      "play_this": "Play the {{ball}} this round",
+      "add_another": "Add another ball",
+      "save": "Save this ball"
     }
   },
   "swinglab": {
@@ -1417,7 +1434,7 @@
       "cover": "COVER",
       "practice_volume": "PRACTICE VOLUME",
       "reps_you_ve_logged_in": "Reps you've logged in practice — work credited per club. Volume, not a measured carry.",
-      "your_bag_tap_a_club": "YOUR BAG · TAP ANY CLUB TO SET ITS CARRY",
+      "your_bag_tap_a_club": "YOUR BAG · TAP ANY CLUB TO SET ITS DISTANCE",
       "tracked_from_your_shots_you": "● tracked from your shots · ◆ you set it · ○ estimate — tap a club to set your carry",
       "tracked_you_set_of_clubs": "{{measuredCount}} tracked · {{statedCount}} you set · {{confidence}} confidence",
       "clubs_in_your_bag_with": "{{ownedCount}} clubs in your bag · {{dialedCount}} with a carry set",
@@ -1448,7 +1465,8 @@
       "remove": "Remove",
       "pack_this_club_for_the_round": "Pack this club for the round",
       "leave_this_club_at_home": "Leave this club at home",
-      "open_my_bag": "My Bag"
+      "open_my_bag": "My Bag",
+      "distance_for_club": "{{unit}} distance for {{club}} in yards"
     },
     "key": {
       "tracked": "Tracked — measured from your shots",
@@ -1461,6 +1479,18 @@
       "title": "SAME CLUB, DIFFERENT MODELS",
       "empty": "Own two drivers? Tell me which one is in the bag — say \"driver today is the Burner 2\" — and I will track them separately instead of averaging them into one blurred driver.",
       "stat": "{{shots}} shots · {{yards}} · {{trouble}}% trouble"
+    },
+    "unit": {
+      "carry": "Carry",
+      "total": "Total",
+      "carry_hint": "Where it lands. This is the number I use for water, bunkers and any forced carry.",
+      "total_hint": "Where it stops — the number most of us know. I take off {{roll}} yd of roll for this club.",
+      "refused": "That is not a carry this club can have. Give me something between {{min}} and {{max}} yards."
+    },
+    "row": {
+      "you_set_total": "you set {{yards}} total",
+      "you_set_carry": "you set {{yards}} carry",
+      "tracked_is": "tracked {{yards}}"
     }
   },
   "practice_open_range": {

@@ -72,6 +72,7 @@ import {
 } from '../services/simulatedGPS';
 import { setScreenContext } from '../services/screenContext';
 import * as Sentry from '@sentry/react-native';
+import { goToTab } from '../services/safeBack';
 
 
 
@@ -655,7 +656,7 @@ export default function Settings() {
             style={rowDivStyle}
             onPress={() => {
               setScreenContext({ screen: 'getting to know the golfer', focus: GET_TO_KNOW_FOCUS });
-              router.push('/(tabs)/caddie' as never);
+              goToTab('caddie');
             }}
             accessibilityRole="button"
             accessibilityLabel={t('settings.accessibility_label.talk_to_your_caddie_so')}
@@ -1460,7 +1461,7 @@ export default function Settings() {
             style={styles.aboutRow}
             onPress={() => {
               try { require('../store/onboardingTourStore').useOnboardingTourStore.getState().relaunchTour(); } catch { /* non-fatal */ }
-              router.push('/(tabs)/caddie' as never);
+              goToTab('caddie');
             }}
             accessibilityRole="button"
             accessibilityLabel={t('settings.accessibility_label.replay_the_guided_tour')}

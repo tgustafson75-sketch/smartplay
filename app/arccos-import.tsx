@@ -80,17 +80,28 @@ export default function ArccosImportScreen() {
   const apply = () => {
     const store = useClubStatsStore.getState();
     let n = 0;
+    /**
+     * 2026-09-15 — COUNT WHAT LANDED, not what was attempted. Both writers refuse a number that is
+     * impossible for the club, and this loop used to `n += 1` regardless — so the banner could report
+     * a dozen clubs imported over a dozen writes that never happened, which is exactly the kind of
+     * quiet lie that makes a bag disagree with the screen that filled it.
+     * [[a-success-reported-by-a-step-that-never-checked-is-not-a-success]]
+     */
+    const refused: string[] = [];
     for (const r of rows) {
       if (!r.include) continue;
       const y = parseInt(r.yards, 10);
       if (!Number.isFinite(y) || y <= 0) continue;
-      if (unit === 'carry') store.setManual(r.club, y);   // stated carry (My Bag)
-      else store.recordTotal(r.club, y);                   // tee→rest total ladder
-      n += 1;
+      const kept = unit === 'carry'
+        ? store.setManual(r.club, y)     // stated carry (My Bag)
+        : store.recordTotal(r.club, y);  // tee→rest total ladder
+      if (kept) n += 1;
+      else refused.push(r.club);
     }
     setApplied(true);
     setRows((rs) => rs); // keep the review visible with a success banner
     if (n === 0) setError('Nothing to add — toggle at least one club on.');
+    else if (refused.length > 0) setError(`Skipped ${refused.join(', ')} — that distance isn't possible for the club.`);
   };
 
   return (

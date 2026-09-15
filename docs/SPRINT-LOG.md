@@ -4526,3 +4526,239 @@ tsc · lint **0 errors / 0 warnings** · jest **5047/5047 (416 suites)** · sim 
 
 **Device verification only.** Nothing else. Production Android is live on `2239117c`; open the app
 twice (open #1 downloads in the background, open #2 runs it) and Settings will show the update id.
+
+---
+
+## Day N — 2026-09-15 (midday) — two production reports, five defects, and a second ladder I built myself
+
+**Source:** two in-app feedback reports from Tim's SM-F926U on production (`spc-j43s75uoico9`,
+release `smartplay-caddie@1.0.0+26`), plus one line in the prompt. Five separate complaints:
+
+1. *"home course loop is not fixed"*
+2. *"player card on dashboard needs a shortcut link to edit bag and profile"*
+3. *"there is no way to edit club distances especially if tracked"*
+4. *"No carry vs total toggle when setting club distances"* (route `/practice/fit-profile`)
+5. *"No way to set ball used for a round"*
+
+All five were real. Every root cause below was reproduced before it was touched — three of them by
+running the store in a throwaway jest probe, because all three were PRECEDENCE bugs and precedence is
+not visible in a grep.
+
+---
+
+### 1. The home course loop — a second copy of the whole app, seven call sites
+
+`router.push('/(tabs)/play')` from a screen that is itself pushed on top of the tabs does not switch
+tabs. Expo Router resolves the divergence at the ROOT STACK (focused route `profile`, target
+`(tabs)`), so PUSH mounts a **second tab navigator** above the profile screen.
+
+Profile's "Choose home courses" jumped to Play that way; from that second tab bar the dashboard's
+profile card pushed Profile again, which jumped to Play again. Back walked Play → Profile → Play →
+Profile without reaching the bottom, and each lap left another live tab navigator behind it.
+
+**SEVEN call sites had it**, in settings (×2), owner-console, the course screen, preround, DrillCard
+and ProfileForm. Fixed with one helper — `services/safeBack.goToTab` → `router.dismissTo`, which
+dispatches POP_TO: it pops back to the `(tabs)` entry already in the stack and hands it the target
+tab in params. The back stack gets SHORTER rather than longer, and React Navigation's POP_TO falls
+back to replacing the current route when `(tabs)` is not below, so a deep link into a pushed screen
+is not stranded either.
+
+The guard is a **sweep**, not a spot check, because the defect is invisible at the call site: the
+line is identical to the same push from inside the tabs, which is fine. The only thing that decides
+whether it is a bug is which directory the file lives in. 207 files swept.
+
+### 2. The dashboard player card — both ways in existed, neither said so
+
+The identity area already opened Profile and the bag already sat one row inside it. Neither had a
+label, a chevron or a border. A control you find by accident is not a control. The card now carries
+two labelled buttons; the bag one opens `/bag-scan`, the SAME screen the Profile page opens, so
+there is one bag screen linked from two places rather than two bag screens.
+
+### 3 + 4. The club distance row — three defects and a unit, all in one row
+
+Proved by execution before any change:
+
+- **The stated number did nothing on a tracked club.** `ownCarry` tested the measured ladder first,
+  so setting a tracked 7 iron to 135 left `carryFor` answering 160 for ever. The UI accepted the
+  correction and the store discarded it.
+- **A club he had set could never be set again.** The row was tappable only when `!c.measured`, and
+  `measured` was `hasCarry`, which is TRUE for a number he typed. The first save locked the row — and
+  the bin that clears the override rendered only INSIDE the row he could no longer open. The control
+  existed and was unreachable for exactly the clubs it was for.
+- **The dot lied and the header counted the lie.** Same `hasCarry`: a typed club painted the green
+  "tracked from your shots" dot, the header read "1 tracked · 0 you set", and confidence climbed
+  toward 'high' on a hand-filled bag — which `fitProfile`'s own comment says must never happen.
+- **Every stated number was filed as a CARRY.** Most golfers know their clubs as a TOTAL. A player
+  entering the number he actually knows was over-stating his carry by the rollout of every club in
+  the bag — **28 yards of it on the driver** — with the caddie clubbing him over hazards on it.
+
+**Stated now wins**, in `carryFor` and `totalFor` alike (they must not disagree about one club). It
+is not a trapdoor: the row prints the tracked number beside his own and the bin takes the override
+back in one tap, while the measured ladder keeps accruing underneath. The unit toggle defaults to
+**TOTAL**, which is not a coin-toss — the app settled this on 2026-09-12 for the spoken path and the
+reason carries: an over-stated carry tells the caddie you fly a hazard you do not, which loses a
+ball; an under-stated one costs a few yards of club and nothing else.
+
+`manualUnit` is **not** a second owner of the distance. `manual` stays the one stated carry; the unit
+only says which way to show it back. The conversion is exact and invertible (ROLL_YARDS is whole per
+club), so the pair cannot drift.
+
+**The spoken half came with it.** A spoken total went to `recordTotal` — the ladder GPS shot tracking
+owns — so a number he SAID wore the tracked badge, and `recordTotal`'s plausibility gate could drop
+it silently while the caddie still said "Got it". Both units are one stated fact now. Typed and
+spoken reach the same setter.
+
+### 5. The ball — everything existed except the round
+
+`RoundRecord.ball` is stamped at round end from `currentBall`; `services/ballPerformance` compares
+scoring by ball; `caddieRequestBody` sends it to the brain. roundStore's own note says declaring it
+on the first tee covers the round — **and there was nowhere on the first tee to declare it.** The
+only ways in were a text field three taps deep in SwingLab tools and a ball lying in a bag-scan
+frame. The project's signature defect: built, measured, persisted, never wired to the moment the
+player is in.
+
+A BALL section now sits in the round-setup panel beside the tee box and the format. The chips are
+the balls he has ACTUALLY PLAYED, read off his own round history and deduped with the same key the
+comparison buckets rounds by — so a chip is exactly one row of that comparison, and no SKU is ever
+suggested by this screen.
+
+---
+
+### THE ONE I INTRODUCED TODAY, caught on the same-day re-read
+
+`getLearnedClubDistances` carried **its own copy of the precedence** — measured-total → carry+roll →
+stated+roll, in three lines of its own. It became wrong the hour `totalFor` changed. And it is not a
+minor reader: it is the bag the BRAIN quotes (`caddieMemoryRetrieval`) and the one the carry
+recommendation reads (`bagRecommendation`). Tim would have corrected a club, watched the Fit Profile
+agree with him, and then heard Kevin club him off the number he had just replaced — **the reported
+bug, moved one pipe to the left.**
+
+Both learned-bag helpers delegate to the store now. The guard pins the *agreement*, not the ladder.
+A sweep for other copies of the precedence outside the store found none (the two remaining reads of
+`.carry[`/`.total[` are sample COUNTS, not distances). [[feedback-triple-check]]
+
+Also caught on the re-read: the Fit Profile subscribed to the TOTAL ladder and not the carry one, so
+a screen left open while a carry was recorded kept drawing the old ladder — and the new "tracked 158"
+line would have gone stale the same way.
+
+---
+
+### Guards — sixteen break-test mutations, all watched to fail
+
+Three existing guards had to be rewritten because they pinned the LINE rather than the invariant, and
+each says in place why it changed:
+
+- `a-stated-total-was-filed-as-carry.test.ts` pinned `if (kind === 'total') stats.recordTotal(...)`.
+- The sim's bag-by-voice guard pinned the same call.
+- The sim's My Bag guard pinned `measured: st.hasCarry(c)` **and** `getLearnedClubDistances`' own
+  ladder — it would have stayed green through both of today's worst findings.
+
+New: a behavioural regression suite (15 assertions, runs the store rather than reading the file),
+plus six sim guards — the NAV sweep, `goToTab`'s shape, the home-course picker, the dashboard
+shortcuts and two on the ball. Every new guard asserts the property AND the absence of the broken
+form, because all of these are one-token edits away.
+
+**Green:** tsc · lint **0 errors** · jest **5065/5065 (417 suites)** · sim **1040/1040**.
+
+**NOT YET COMMITTED — `git` on this machine is refusing every command** with "You have not agreed to
+the Xcode license agreements". Homebrew's git is not actually installed (the prefix exists, the
+binary does not), so `/usr/bin/git` is the only one and it is blocked. One command clears it:
+`sudo xcodebuild -license`. Nothing else is outstanding.
+
+**NEXT — device verification, Tim's gate.** Four things to look at: the Profile → "Choose home
+courses" → Play → back path (it should land on Profile, once); the two new buttons on the dashboard
+player card; tapping a TRACKED club on the Fit Profile and setting it in TOTAL (the ladder should
+show the carry it converts to, with "you set N total · tracked M" underneath); and the BALL row in
+the round-setup panel.
+
+---
+
+## Day N — 2026-09-15 (midday, part 2) — "check all work": the audit found five more, three of them mine
+
+Tim asked for a full re-read of the morning's work before it ships. It was worth it.
+
+### 1. MY OWN SWEEP GUARD SCANNED TWO DIRECTORIES AND CLAIMED ALL OF THEM
+
+The NAV guard walked `app/` and `components/` and reported *"nothing outside app/(tabs)/ pushes a tab
+route"*. **Three did**, all in `services/` — and they are the worst three in the app, because they
+fire from VOICE:
+
+- `services/intents/quickRoundHandler` — "start a quick round"
+- `services/voice/conversationalToolDispatch` — "open swing lab"
+- `services/pendingDisambiguation` — picking which course you meant
+
+Every one is spoken from wherever the player is standing, which is usually a pushed screen. **So the
+loop Tim reported from the Profile screen was also reachable by talking to Kevin, and my brand-new
+guard was green over it.** A guard that walks a subset and states a universal is worse than no guard:
+it is a claim someone will trust. [[guard-scoped-to-one-repo-certifies-the-sibling]]
+
+Fixed at all three sites. The sweep now covers eight directories (**844 files, up from 207**) and —
+this is the part that matters — **asserts the superset**: it enumerates every top-level directory
+containing a `router.*` navigation call and fails if one is not in `SCAN_DIRS`. That assertion fired
+immediately and found `utils/`, which I had also missed.
+[[widening-a-guard-can-silently-disable-it]]
+
+### 2. A TYPO COULD WALL A CLUB OFF FROM ITS OWN MEASUREMENTS, FOR EVER
+
+A stated number is not only what the player is quoted — it is the **centre of the plausibility band**
+that decides which measured shots may enter the ladder. Reproduced:
+
+```
+setManual('Driver', 15)   →  band becomes 8–22
+recordCarry('Driver', 240) →  REJECTED. carry.Driver stays undefined, for ever.
+```
+
+One fat-finger and the driver can never learn again, silently. Pre-existing — but this morning I
+opened editing on **all fourteen clubs**, turning a corner case into fourteen chances a session.
+Shipping a widened edit control over that would not have been finishing the job.
+
+Two layers: `setManual` now **refuses** an impossible value (the shared 30–400 band the *spoken* path
+has clamped to since 2026-08-08 — it stops being a literal in one file and becomes the rule), and a
+stated number wildly out of line with the chart still **answers** (he said it) but stops **gating**
+his shots, which heals a store already poisoned before this shipped. Checked against real golfers: a
+senior's genuine 130-yard driver carry still widens his own band; a full lob wedge at 30 is still
+allowed; `30` of TOTAL on a driver (= 2 of carry) is refused on the stored value, not the typed one.
+
+### 3. I INTRODUCED A FALSE CONFIRMATION IN THREE PLACES
+
+`setManual` returning `false` is new, and three callers were still reporting success:
+
+- the Fit Profile closed the editor on a refused write — the row would snap back with no explanation
+- the voice registrar would have said *"Got it — 3 wood at 230"* over a refusal
+- **`arccos-import`** counted every attempt (`n += 1` regardless), and **`range-import`** toasted
+  `"12 club distances applied to your bag"` from `applicable.length`
+
+All three now count what LANDED. While in there: `recordCarry`/`recordTotal` have dropped out-of-band
+samples silently since the plausibility gate shipped, and both import screens counted those as
+successes too — so both writers report now as well.
+[[a-success-reported-by-a-step-that-never-checked-is-not-a-success]]
+
+### 4. A LATENT SPLIT BETWEEN THE SCREEN AND THE CADDIE
+
+`services/caddieDecision` builds the same Fit Profile input the screen builds and still used the
+wider `hasCarry` for `measured`. It changes nothing today — `evidenceRank` only breaks ties between
+duplicate rows for one club, and both callers build one row per `CLUB_ORDER` name — **which is
+exactly why it would have gone unnoticed if it ever started to.** Aligned, with a test asserting the
+gap and overlap lists are identical either way rather than asserting the call.
+
+### 5. TWO COMMENTS DESCRIBING A GATE THEY NO LONGER DESCRIBED
+
+The shaft-flex gate is `hasCarry` **deliberately** (a driver carry the player STATED is his own
+number; what it must exclude is a total-only estimate, which is the app's guess). But the local was
+called `driverMeasured` and `recommendFlex`'s header said *"returns null when the driver carry isn't
+measured"* — both untrue since 2026-07-27, on a screen where `measured` now means tracked. Behaviour
+kept, names and headers made true. [[a-stale-header-is-a-source-someone-trusts]]
+
+### Guards
+
+Four more existing guards had pinned the line instead of the invariant and had to be rewritten —
+including one pinning `recordCarry: (...) => void`, a type signature. Eight new assertions in the
+behavioural suite. **Nine further break-test mutations, all watched to fail** (25 across the day),
+including the two that matter most: a tab push reintroduced in `services/` (invisible to the old
+sweep) and `services/` quietly dropped from `SCAN_DIRS`.
+
+Also verified rather than assumed: `saysToPlayer('BALL')` can actually fail (changed the locale value
+and watched it go red — an assertion that cannot fail is not an assertion); all 23 new locale keys
+exist in en/es/zh with matching interpolation placeholders; no probe files or mutation residue left.
+
+**Green:** tsc · lint **0** · jest **5073/5073 (417 suites)** · sim **1040/1040**.

@@ -348,7 +348,19 @@ function composeProfile(): PlayProfile | null {
     const st = useClubStatsStore.getState();
     const clubs = CLUB_ORDER
       .filter((c) => c !== 'Putter')
-      .map((c) => ({ club: c, yards: st.carryFor(c), measured: st.hasCarry(c), stated: st.hasManual(c) }));
+      /**
+       * 2026-09-15 — hasTRACKEDCarry, the same test the Fit Profile screen passes.
+       *
+       * `measured` means "tracked from his shots" on the screen as of today. It meant something
+       * slightly wider here (hasCarry counts a number he typed), and fitProfile's own header says
+       * this ranking is "the one every other surface should agree with". Today it changes nothing —
+       * evidenceRank only breaks ties between DUPLICATE entries for one club, and both callers build
+       * one row per CLUB_ORDER name, so the gap count is identical either way (asserted in
+       * __tests__/regression/the-number-he-typed-was-ignored). It is aligned so it STAYS identical:
+       * the caddie reasoning about a different number of gaps than the screen shows him is the kind
+       * of split nobody would think to look for. [[two-owners-is-the-root-cause]]
+       */
+      .map((c) => ({ club: c, yards: st.carryFor(c), measured: st.hasTrackedCarry(c), stated: st.hasManual(c) }));
     return composeFitProfile(clubs as never).gaps.length;
   }, null);
 

@@ -885,7 +885,20 @@ export default function Dashboard() {
         </View>
 
         {/* ─── 3. PROFILE CARD ───────────────────────────────────────── */}
+        {/**
+          * 2026-09-15 (Tim, from the phone — "player card on dashboard needs a shortcut link to edit
+          * bag and profile") — THE WAY IN WAS INVISIBLE.
+          *
+          * Both destinations were already reachable from this card: the name opened Profile and the
+          * bag lives one row down inside it. Neither said so. A tappable name with no chevron, no
+          * label and no border is a control you find by accident, and the bag was a second hop behind
+          * it — which is why it reads as missing from the phone even though the wiring is there.
+          *
+          * So the card names them. The identity area still opens Profile for anyone who already
+          * learned that; these are the affordances. [[feedback-reachable-not-just-wired]]
+          */}
         <View style={[styles.profileCard, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}>
+          <View style={styles.profileTopRow}>
           {/* 2026-06-11 — tap the identity area to open the Profile screen
               (handicap, GHIN, import history). Gear still goes to Settings. */}
           <TouchableOpacity
@@ -919,6 +932,30 @@ export default function Dashboard() {
           >
             <Ionicons name="settings-outline" size={18} color={colors.accent} />
           </TouchableOpacity>
+          </View>
+
+          {/* The two shortcuts, labelled. `/bag-scan` is the SAME screen the Profile page's own
+              "Your Bag" row opens — one bag screen, linked from two places, never a second copy. */}
+          <View style={styles.profileShortcutRow}>
+            <TouchableOpacity
+              style={[styles.profileShortcut, { borderColor: colors.border }]}
+              onPress={() => router.push('/profile' as never)}
+              accessibilityRole="button"
+              accessibilityLabel={t('dashboard.accessibility_label.edit_your_profile')}
+            >
+              <Ionicons name="person-outline" size={15} color={colors.accent} />
+              <Text style={[styles.profileShortcutText, { color: colors.text_primary }]}>{t('dashboard.profile_card.edit_profile')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.profileShortcut, { borderColor: colors.border }]}
+              onPress={() => router.push('/bag-scan' as never)}
+              accessibilityRole="button"
+              accessibilityLabel={t('dashboard.accessibility_label.edit_your_bag')}
+            >
+              <Ionicons name="golf-outline" size={15} color={colors.accent} />
+              <Text style={[styles.profileShortcutText, { color: colors.text_primary }]}>{t('dashboard.profile_card.edit_bag')}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* 2026-06-30 (Tim) — Messages card = the future home of the social layer (foursome
@@ -1908,10 +1945,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 14,
     padding: 14,
+  },
+  // The identity + gear line. It used to BE the card; the shortcuts sit under it now.
+  profileTopRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  profileShortcutRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  profileShortcut: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
   },
+  profileShortcutText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.2 },
   avatar: {
     width: 48,
     height: 48,

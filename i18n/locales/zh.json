@@ -130,7 +130,15 @@
     "milestones": "里程碑",
     "no_rounds": "还没有球局",
     "no_rounds_sub": "和 {{caddie}} 打第一局来查看你的统计。",
-    "pattern_shift": "模式变化"
+    "pattern_shift": "模式变化",
+    "profile_card": {
+      "edit_profile": "个人资料",
+      "edit_bag": "你的球包"
+    },
+    "accessibility_label": {
+      "edit_your_profile": "编辑个人资料",
+      "edit_your_bag": "编辑球包——球杆、杆身和握把"
+    }
   },
   "play": {
     "active_round": "进行中的球局",
@@ -184,6 +192,17 @@
       "remove": "从常打球场移除",
       "full_title": "最多三个",
       "full_body": "你已经有 {{max}} 个常打球场。请先移除一个 — 每个都会提前构建，方便你随时开球。"
+    },
+    "ball": "球",
+    "ball_other": "+ 其他球",
+    "ball_placeholder": "用哪款球？例如 Pro V1",
+    "ball_hint": "可选。告诉我你打哪款球，我会记录在这一轮上——每款打几轮之后，我就能告诉你哪款让你打得更好。",
+    "ball_set_hint": "本轮使用 {{ball}}。我会记录在这一轮，计入你的用球对比。",
+    "ball_a11y": {
+      "playing": "本轮使用 {{ball}}。点击取消。",
+      "play_this": "本轮使用 {{ball}}",
+      "add_another": "添加其他球",
+      "save": "保存这款球"
     }
   },
   "swinglab": {
@@ -306,10 +325,24 @@
       "open_my_bag_sub": "球杆、杆身与握把 — 扫描或添加",
       "bag_cap": "开球时球包最多 {{limit}} 支。其余仍然是你的，只是留在家里。",
       "over_by_one": "已选 {{selected}} 支 — 再取出 {{count}} 支才能装包。",
-      "over_by_other": "已选 {{selected}} 支 — 再取出 {{count}} 支才能装包。"
+      "over_by_other": "已选 {{selected}} 支 — 再取出 {{count}} 支才能装包。",
+      "your_bag_tap_a_club": "你的球包 · 点击任意球杆设定距离"
     },
     "accessibility_label": {
-      "open_my_bag": "我的球包"
+      "open_my_bag": "我的球包",
+      "distance_for_club": "{{club}} 的{{unit}}，单位为码"
+    },
+    "unit": {
+      "carry": "飞行距离",
+      "total": "总距离",
+      "carry_hint": "落点距离。过水、过沙坑和任何强制飞越，我都用这个数字。",
+      "total_hint": "球停下的距离——大多数人记的就是它。这支杆我会减去 {{roll}} 码的滚动。",
+      "refused": "这支杆不可能是这个距离。请输入 {{min}} 到 {{max}} 码之间的数字。"
+    },
+    "row": {
+      "you_set_total": "你设定 {{yards}} 总距离",
+      "you_set_carry": "你设定 {{yards}} 飞行距离",
+      "tracked_is": "已记录 {{yards}}"
     }
   },
   "profile": {

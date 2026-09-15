@@ -28,7 +28,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { useTheme } from '../contexts/ThemeContext';
-import { safeBack } from '../services/safeBack';
+import { safeBack, goToTab } from '../services/safeBack';
 import { useOwnerChecklistStore } from '../store/ownerChecklistStore';
 import { useIssueLogStore } from '../store/issueLogStore';
 import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
@@ -162,7 +162,7 @@ export default function OwnerConsole() {
           const r = sim.startVoiceSimRound({ nineHoles: true });
           (require('../store/toastStore') as typeof import('../store/toastStore')).useToastStore
             .getState().show(r.ok ? '🎮 Sim round started — Palms, 9 holes' : r.say);
-          if (r.ok) router.push('/(tabs)/caddie' as never);
+          if (r.ok) goToTab('caddie');
         } catch (e) { console.log('[owner-console] sim round start failed:', e); }
       },
     },

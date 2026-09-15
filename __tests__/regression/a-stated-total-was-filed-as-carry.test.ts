@@ -85,13 +85,42 @@ describe('the classifier is told the same rule — a handler cannot fix what nev
   });
 });
 
-describe('the two-ladder model underneath is untouched', () => {
-  it('the registrar still routes total to the total ladder', () => {
-    const reg = code('services/bagVoiceRegistration.ts');
-    expect(reg).toMatch(/if \(kind === 'total'\) stats\.recordTotal\(name, yds\)/);
+/**
+ * 2026-09-15 — THIS BLOCK USED TO PIN THE WRONG HALF OF THE MODEL, and it is worth saying why it
+ * changed rather than quietly editing it.
+ *
+ * It asserted `if (kind === 'total') stats.recordTotal(name, yds)` — the LINE, not the invariant. The
+ * two-ladder model it is named for is about where MEASUREMENTS live, and a number the player speaks
+ * is not a measurement. Routing it into the measured total ladder gave a spoken number the green
+ * "tracked from your shots" badge, and `recordTotal`'s plausibility gate could drop it silently while
+ * the caddie still said "Got it". The invariant that actually matters is the one below: spoken and
+ * typed are the same stated fact, and the measured ladders belong to shots the app watched.
+ * [[a-guard-can-enforce-a-stale-premise]] [[a-guard-can-assert-the-broken-shape]]
+ */
+describe('a stated number is stated, in either unit — and the measured ladders stay measured', () => {
+  const reg = code('services/bagVoiceRegistration.ts');
+
+  it('the registrar files BOTH units as the one stated fact, with the unit beside it', () => {
+    expect(reg).toMatch(/stats\.setManual\(name, yds, kind\)/);
+  });
+
+  it('and never writes a spoken number into a measured ladder', () => {
+    expect(reg).not.toMatch(/recordTotal/);
+    expect(reg).not.toMatch(/recordCarry/);
+  });
+
+  it('the typed screen and the spoken path reach the SAME setter — one owner, no drift', () => {
+    expect(code('app/practice/fit-profile.tsx')).toMatch(/setManual\(/);
   });
 
   it('GPS tracking still writes TOTAL — that is what tee-to-rest actually is', () => {
     expect(code('services/shotTracking.ts')).toMatch(/recordTotal/);
+  });
+
+  it('the store converts by rollout and nothing else, both ways', () => {
+    const store = code('store/clubStatsStore.ts');
+    expect(store).toMatch(/statedCarryFromEntry/);
+    expect(store).toMatch(/statedEntryFromCarry/);
+    expect(store).toMatch(/unit === 'total' \? yards - ROLL_YARDS\[club\] : yards/);
   });
 });

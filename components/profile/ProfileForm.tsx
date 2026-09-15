@@ -29,12 +29,12 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
 import { usePlayerProfileStore, isOwnerEmail, MAX_HOME_COURSES } from '../../store/playerProfileStore';
 import { useToastStore } from '../../store/toastStore';
 import { PillRow } from '../PillRow';
+import { goToTab } from '../../services/safeBack';
 
 /**
  * Sentinels for the two pickers that keep an escape hatch. They exist only in this component's
@@ -69,7 +69,6 @@ function Field({ label, styles: fs, muted, ...rest }: {
 export function ProfileForm() {
   const { t } = useTranslation();
   const { colors } = useTheme();
-  const router = useRouter();
   const s = makeStyles(colors);
 
   const p = usePlayerProfileStore();
@@ -291,7 +290,7 @@ export function ProfileForm() {
         </View>
       )}
       <TouchableOpacity
-        onPress={() => router.push('/(tabs)/play' as never)}
+        onPress={() => goToTab('play')}
         style={s.ghostBtn}
         accessibilityRole="button"
         accessibilityLabel={t('settings.text.choose_home_courses')}

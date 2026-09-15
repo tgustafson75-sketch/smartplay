@@ -71,6 +71,7 @@ import type { Course } from '../../types/course';
 import { getApiBaseUrl } from '../../services/apiBase';
 import { prewarmBriefing } from '../../services/briefingGenerator';
 import { prewarmVoice } from '../../services/voiceWarmup';
+import { normalizeBallKey } from '../../services/ballPerformance';
 
 type CourseSummary = {
   id: string;
@@ -749,6 +750,37 @@ export default function PlayTab() {
   // Phase 405 wave 3 — tee box color selection. 'unspecified' until the
   // user picks. Survives the Play tab lifetime so navigating away and
   // back doesn't lose the selection.
+  /**
+   * 2026-09-15 (Tim, from the phone — "No way to set ball used for a round") — THE HALF THAT WAS
+   * MISSING WAS THE ROUND.
+   *
+   * Everything downstream of this has existed since 2026-09-12. `RoundRecord.ball` is stamped at
+   * round end from `playerProfileStore.currentBall`; `services/ballPerformance` compares scoring by
+   * ball across rounds; `caddieRequestBody` sends the current ball to the brain. roundStore's own
+   * note says the ball is "stamped at round END from the current declared ball, so declaring it on
+   * the first tee covers the round" — and there was nowhere on the first tee to declare it. The only
+   * two ways in were a text field on the Ball Fit screen (three taps deep in SwingLab tools) and a
+   * ball that happened to be lying in a bag-scan frame.
+   *
+   * So the fact the ROUND record carries is now set where the round is set up, beside the tee box
+   * and the format. It writes the same one field every other surface writes — no new store, no
+   * per-round copy that could disagree with the profile. [[smartplay-defect-class-unwired-halves]]
+   *
+   * The chips are the balls he has ACTUALLY PLAYED, read off his own round history, because that is
+   * the list the comparison is built from: picking one of these is what makes "which ball scores
+   * better for me" answerable. Nothing here is a brand suggestion the app invented.
+   */
+  const currentBall = usePlayerProfileStore(s => s.currentBall);
+  const [ballDraft, setBallDraft] = useState('');
+  const [ballEntryOpen, setBallEntryOpen] = useState(false);
+  /** ONE writer for the typed ball, so the return key and the tick can never disagree. */
+  const commitBallDraft = useCallback(() => {
+    const name = ballDraft.trim();
+    if (!name) return;
+    usePlayerProfileStore.getState().setCurrentBall(name);
+    setBallDraft('');
+    setBallEntryOpen(false);
+  }, [ballDraft]);
   const setupTee = useRoundStore(s => s.selectedTee);
   const setSetupTee = useRoundStore(s => s.setSelectedTee);
   // 2026-06-13 (Tim) — walking vs cart for this round.
@@ -1425,6 +1457,30 @@ export default function PlayTab() {
    * Skips an entry with no id: those are names carried over from the old free-text field, and
    * guessing which course a typed string meant is exactly what the picker exists to stop.
    */
+  /**
+   * The balls he has played, most recent first, plus whatever is declared now. Deduped by the SAME
+   * key `services/ballPerformance` buckets rounds with, so a chip is exactly one row of that
+   * comparison. Capped so the row stays a row.
+   */
+  const ballOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    const add = (raw: string | null | undefined) => {
+      const name = (raw ?? '').trim();
+      if (!name) return;
+      const k = normalizeBallKey(name);
+      if (!k || seen.has(k)) return;
+      seen.add(k);
+      out.push(name);
+    };
+    add(currentBall);
+    for (const r of [...roundHistory].sort((a, b) => (b.endedAt ?? b.startedAt ?? 0) - (a.endedAt ?? a.startedAt ?? 0))) {
+      add(r.ball);
+      if (out.length >= 6) break;
+    }
+    return out;
+  }, [roundHistory, currentBall]);
+
   /** Is the course on screen one of his home set? Drives the star on the selected card. */
   const isSelectedHome = useMemo(
     () => !!selected && (homeCourses ?? []).some((h) => (h.id && h.id === selected.id)
@@ -2830,6 +2886,82 @@ export default function PlayTab() {
               })}
             </View>
 
+            {/* ── BALL ───────────────────────────────────────────────────────────────────────
+                The one fact that makes "which ball scores better for me" answerable. See the note
+                on `currentBall` above: this writes the field the round record is stamped from, so
+                declaring it here covers the round. */}
+            <View style={styles.sectionHead}>
+              <Image source={SEC_ICON.tee} style={styles.sectionIcon} tintColor={colors.accent_lime} />
+              <Text style={styles.sectionHeadText}>{t('play.ball')}</Text>
+            </View>
+            <View style={styles.factorRow}>
+              {ballOptions.map((b) => {
+                const active = !!currentBall && normalizeBallKey(currentBall) === normalizeBallKey(b);
+                return (
+                  <TouchableOpacity
+                    key={normalizeBallKey(b)}
+                    style={[styles.chip, active && styles.chipActive]}
+                    onPress={() => {
+                      // Tapping the ball already in play takes it back off, the way every other chip
+                      // on this panel clears itself. Nothing is stamped on a round he did not declare.
+                      usePlayerProfileStore.getState().setCurrentBall(active ? null : b);
+                      setBallEntryOpen(false);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    accessibilityLabel={active ? t('play.ball_a11y.playing', { ball: b }) : t('play.ball_a11y.play_this', { ball: b })}
+                  >
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{b}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+              <TouchableOpacity
+                style={[styles.chip, ballEntryOpen && styles.chipActive]}
+                onPress={() => { setBallDraft(''); setBallEntryOpen((v) => !v); }}
+                accessibilityRole="button"
+                accessibilityLabel={t('play.ball_a11y.add_another')}
+              >
+                <Text style={[styles.chipText, ballEntryOpen && styles.chipTextActive]}>{t('play.ball_other')}</Text>
+              </TouchableOpacity>
+            </View>
+            {ballEntryOpen ? (
+              /**
+                * The keyboard's return key is not the only way out of a text field — he can tap
+                * anywhere else and the name is gone. So the tick is here as well, the same shape the
+                * Fit Profile's distance editor uses. Deliberately NOT a save-on-blur: tapping one of
+                * the chips above also blurs this field, and the two writes would race for the ball.
+                * [[a-success-reported-by-a-step-that-never-checked-is-not-a-success]]
+                */
+              <View style={styles.factorRow}>
+                <TextInput
+                  value={ballDraft}
+                  onChangeText={setBallDraft}
+                  placeholder={t('play.ball_placeholder')}
+                  placeholderTextColor="#3a5a40"
+                  style={styles.ballInput}
+                  autoCapitalize="words"
+                  returnKeyType="done"
+                  maxLength={40}
+                  onSubmitEditing={commitBallDraft}
+                  accessibilityLabel={t('play.ball_a11y.add_another')}
+                />
+                <TouchableOpacity
+                  style={[styles.chip, ballDraft.trim() ? styles.chipActive : null]}
+                  onPress={commitBallDraft}
+                  disabled={!ballDraft.trim()}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('play.ball_a11y.save')}
+                >
+                  <AppIcon name="checkmark" size={16} color={ballDraft.trim() ? colors.accent : colors.text_muted} />
+                </TouchableOpacity>
+              </View>
+            ) : null}
+            <Text style={styles.transportHint}>
+              {currentBall
+                ? t('play.ball_set_hint', { ball: currentBall })
+                : t('play.ball_hint')}
+            </Text>
+
             <View style={styles.sectionHead}>
               <Image source={SEC_ICON.notes} style={styles.sectionIcon} tintColor={colors.accent_lime} />
               <Text style={styles.sectionHeadText}>{t('play.notes')}</Text>
@@ -3128,6 +3260,19 @@ return StyleSheet.create({
     backgroundColor: c.surface, borderColor: c.border, borderWidth: 1,
     borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10,
     color: c.text_primary, fontSize: 13, minHeight: 56, textAlignVertical: 'top',
+  },
+  ballInput: {
+    flex: 1,
+    minWidth: 180,
+    borderWidth: 1,
+    borderColor: c.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    color: c.text_primary,
+    fontSize: 13,
+    fontWeight: '600',
+    backgroundColor: c.surface_elevated,
   },
   notesRow: {
     flexDirection: 'row',

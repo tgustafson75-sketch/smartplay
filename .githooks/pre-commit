@@ -13,7 +13,25 @@
 #
 # Genuine emergency: git commit --no-verify
 
-if git diff --cached --name-only | grep -qE '\.(ts|tsx)$'; then
+# 2026-09-15 — THIS HOOK COULD SKIP ITSELF IN SILENCE, and it took a broken machine to notice.
+#
+# Every gate below is guarded by `git diff --cached ... | grep`. When `git` itself fails — on this
+# machine, /usr/bin/git is an Xcode shim that refuses every command until the licence is accepted —
+# the error goes to stderr, the pipe carries NOTHING, grep matches NOTHING, and all three gates are
+# skipped. The hook exits 0 and the commit sails through having typechecked and tested exactly
+# nothing. The hook's own header says "discipline is not a gate. This is." It was not.
+#
+# Ask git ONCE, up front, and fail loudly if it cannot answer. A gate that cannot fail is not a gate,
+# and a gate that skips when the tooling breaks is worse: it is silent exactly when something is
+# already wrong. [[a-gate-that-cannot-fail-is-not-a-gate]]
+if ! STAGED_ALL="$(git diff --cached --name-only)"; then
+  echo 'pre-commit: FAILED — `git diff --cached` could not be read, so the gates could not run.'
+  echo 'Refusing to pass a commit that has not been typechecked or tested.'
+  echo 'On macOS this is usually the Xcode licence shim; /Library/Developer/CommandLineTools/usr/bin/git works without sudo.'
+  exit 1
+fi
+
+if printf '%s\n' "$STAGED_ALL" | grep -qE '\.(ts|tsx)$'; then
   printf 'pre-commit: typechecking... '
   if OUT=$(npx tsc --noEmit 2>&1); then
     printf 'clean\n'

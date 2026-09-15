@@ -95,3 +95,13 @@ _handoff
 # i18n codemod scratch output — regenerable, see docs/I18N-1.5.md
 scripts/codemod/.i18n-newkeys.json
 scripts/codemod/.i18n-skipped.json
+
+# 2026-09-15 — a Claude/Cowork scratch output folder that appears in the repo root. It is NOT part of
+# the app, and the standing save-point rule is `git add .`, so an un-ignored scratch dir gets
+# committed by the next session that follows the rule.
+#
+# No trailing slash, for the reason the _handoff entry above spells out: "Claude outputs/" matches the
+# DIRECTORY only, and the same name as a symlink is a file — it would not be ignored, and would be
+# committed. I wrote the trailing slash first and the lesson was two lines up this file.
+# [[node-modules-was-committed-as-a-self-symlink]] [[a-stale-header-is-a-source-someone-trusts]]
+Claude outputs

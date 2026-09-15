@@ -8,6 +8,76 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+> ### ⚠️ LATEST — 2026-09-15 (midday, part 2). "Check all work" found five more — three of them mine.
+>
+> **The audit was worth it.** In order of severity:
+>
+> 1. **My own NAV sweep guard scanned `app/` + `components/` and claimed everything.** Three tab
+>    pushes sat in `services/` — `quickRoundHandler`, `conversationalToolDispatch`,
+>    `pendingDisambiguation` — i.e. the loop was **also reachable by voice**, and the new guard was
+>    green over it. Sweep now covers 8 dirs (**844 files, was 207**) and ASSERTS THE SUPERSET; that
+>    assertion immediately caught a ninth directory I had missed (`utils/`).
+> 2. **A typo could wall a club off from its own measurements for ever.** A stated number is the
+>    centre of the ingest band: `setManual('Driver', 15)` → band 8–22 → every real 240y drive rejected
+>    at ingest, silently, permanently. Pre-existing, but this morning I opened editing on all fourteen
+>    clubs. Now refused at the setter (shared 30–400 band) and a wild value no longer gates his shots.
+> 3. **I introduced a false confirmation in three places** — the Fit Profile, the voice registrar, and
+>    both import screens ("12 club distances applied to your bag" over writes that never happened).
+>    All count what LANDED now; `recordCarry`/`recordTotal` report too.
+> 4. A latent split: `caddieDecision` counted gaps off the wider test. Identical today — which is why
+>    it would never have been noticed if it stopped being.
+> 5. Two comments describing a gate they no longer described (the shaft-flex `hasCarry`).
+>
+> Four more guards had pinned the LINE not the invariant (one pinned a type signature). **25 break-test
+> mutations across the day, all watched to fail.** Verified rather than assumed: `saysToPlayer('BALL')`
+> can actually fail; 23 new locale keys present in en/es/zh with matching placeholders; no residue.
+>
+> Green: tsc · lint **0** · jest **5073/5073 (417 suites)** · sim **1040/1040**.
+>
+> ---
+>
+> ### ⚠️ LATEST — 2026-09-15 (midday). Two production reports, five defects — NOT YET COMMITTED.
+>
+> **`git` is blocked on this machine** — every command returns "You have not agreed to the Xcode
+> license agreements", and Homebrew's git is not actually installed, so `/usr/bin/git` is the only
+> one. One command clears it: **`sudo xcodebuild -license`**. The work is done and green; it just
+> cannot be committed or published until that runs.
+>
+> Five complaints from Tim's phone on production, all real, each reproduced before it was touched:
+>
+> 1. **The home course loop.** `router.push('/(tabs)/play')` from a pushed screen does not switch
+>    tabs — it mounts a SECOND tab navigator on top. Profile → Play → Profile → Play, back never
+>    reaching the bottom, a live tab navigator left behind each lap. **Seven call sites.** All go
+>    through `goToTab` (→ `dismissTo`/POP_TO) now; a 207-file sweep guards the rest.
+> 2. **The dashboard player card** had both ways in and named neither. Two labelled buttons now;
+>    the bag one opens the same `/bag-scan` the Profile page opens.
+> 3. **A tracked club's distance could not be edited, and a club he HAD set could never be set
+>    again** — `editable` was `!measured`, and `measured` counted a typed number, so the first save
+>    locked the row and the bin that clears it lived inside the row he could no longer open. The
+>    stated number also did nothing: `carryFor` answered 160 on a club he had just set to 135.
+> 4. **No carry/total toggle.** Every stated number was filed as a CARRY — **28 yards of hazard on
+>    the driver**. Toggle added, defaulting to TOTAL (the app's own 09-12 rule: an over-stated carry
+>    loses a ball). The spoken path was fixed with it — a spoken total used to land in the MEASURED
+>    ladder and could be dropped silently while the caddie said "Got it".
+> 5. **Nowhere to declare the ball for a round** — while the round record stamped it, the comparison
+>    consumed it and the brain received it. A BALL row now sits in the round-setup panel.
+>
+> **One I introduced today and caught on the re-read:** `getLearnedClubDistances` kept its own copy of
+> the precedence, so the bag the BRAIN quotes would have ignored his correction — the reported bug,
+> one pipe to the left. Both learned bags delegate to the store now.
+>
+> **Three existing guards had to be rewritten** because they pinned the line rather than the
+> invariant; the My Bag one would have stayed green through both of today's worst findings.
+> Sixteen break-test mutations, all watched to fail.
+>
+> Green: tsc · lint **0** · jest **5065/5065 (417 suites)** · sim **1040/1040**.
+>
+> **NEXT — commit (after the license), publish, then device verification.** Four things to check:
+> Profile → "Choose home courses" → Play → back (should land on Profile, once); the two new buttons on
+> the player card; a TRACKED club set in TOTAL on the Fit Profile; and the BALL row in round setup.
+>
+> ---
+>
 > ### ⚠️ LATEST — 2026-09-15 (small hours). LIVE ON PRODUCTION ANDROID. Lint at ZERO.
 >
 > **Tim is on the PRODUCTION channel, not preview** — every Android build on this project is

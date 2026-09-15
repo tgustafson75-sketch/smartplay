@@ -11,8 +11,11 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useClubStatsStore, CLUB_ORDER, clubIdToClubName, type ClubName } from '../../store/clubStatsStore';
+import { useClubStatsStore, CLUB_ORDER, clubIdToClubName, statedCarryFromEntry, statedEntryFromCarry, type ClubName, type StatedUnit } from '../../store/clubStatsStore';
 import { composeFitProfile, recommendFlex, type FitClubInput } from '../../services/practice/fitProfile';
+// The SAME rollout table the store converts with — imported, never re-stated, or the hint under the
+// toggle would drift from the arithmetic it is describing. [[two-owners-is-the-root-cause]]
+import { ROLL_YARDS as ROLL_BY_CLUB, STATED_YARDS_MIN, STATED_YARDS_MAX } from '../../services/standardBag';
 import { composeFitGap, type OwnedClub } from '../../services/practice/fitGap';
 import { useClubBagStore, carryLimitFor, PUTTER_ID, specsOf } from '../../store/clubBagStore';
 import { clubWorkStatuses } from '../../services/clubWork';
@@ -26,12 +29,28 @@ import { safeBack } from '../../services/safeBack';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 
+/**
+ * The two evidence colours, named once. The key at the top of the screen, every dot on every row and
+ * the "you set 165 total" line all read from these, so a row can never be painted in a colour the
+ * legend does not explain. [[two-owners-is-the-root-cause]]
+ */
+const TRACKED_COLOR = '#3FB950';
+const STATED_COLOR = '#22d3ee';
+
 export default function FitProfileScreen() {
   const { t } = useTranslation();
   const { colors } = useTheme();
   const router = useRouter();
   // 2026-07-24 (club-logic unification) — re-render trigger; the memos read current carry/total via getState.
   const stats = useClubStatsStore((s) => s.total);
+  /**
+   * 2026-09-15 — the CARRY ladder was not subscribed, only the total one. Every memo below reads it
+   * through getState(), so a screen left open while a carry was recorded kept drawing the old
+   * ladder — and as of today a row also prints "tracked 158" from that ladder, which would have gone
+   * stale the same way. A memo that reads a store through getState still needs the store to tell the
+   * component when to recompute. [[a-stale-header-is-a-source-someone-trusts]]
+   */
+  const carryLadder = useClubStatsStore((s) => s.carry);
   const handicap = usePlayerProfileStore((s) => s.handicap);
   // 2026-06-24 — extra readable signals for the honest Ball Fit (directional).
   const handicapIndex = usePlayerProfileStore((s) => s.handicap_index);
@@ -42,6 +61,23 @@ export default function FitProfileScreen() {
   const reps = useClubStatsStore((s) => s.reps);
   const [editingClub, setEditingClub] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  /**
+   * 2026-09-15 (Tim — "No carry vs total toggle when setting club distances") — WHICH NUMBER IS HE
+   * TYPING?
+   *
+   * Almost every golfer knows their clubs as a TOTAL: "my seven iron goes 150" is where the ball
+   * stopped, not where it landed. This screen took that number and filed it as a CARRY, so a player
+   * entering the number he actually knows was over-stating his carry by the rollout of every club in
+   * the bag — 28 yards of it on the driver — and the caddie was clubbing him over hazards on it.
+   *
+   * The default is TOTAL, and that is not a coin-toss: the app already decided this question on
+   * 2026-09-12 for the spoken path, for a reason that holds just as well here. An over-stated carry
+   * tells the caddie the player flies a hazard they do not, which loses a ball; an under-stated one
+   * costs a few yards of club and nothing else. When in doubt, err the way that keeps the ball dry.
+   */
+  const [draftUnit, setDraftUnit] = useState<StatedUnit>('total');
+  /** Why the last save was refused, or null. Shown in the row, cleared the moment he edits again. */
+  const [draftError, setDraftError] = useState<string | null>(null);
 
   // 2026-06-16 (Tim — credit for swinging clubs in practice) — per-club rep volume
   // (Smart Motion / drills). HONEST: volume only, never a measured carry.
@@ -50,14 +86,51 @@ export default function FitProfileScreen() {
     [reps],
   );
 
+  /**
+   * 2026-09-15 (Tim, from the phone — "there is no way to edit club distances especially if tracked")
+   *
+   * EVERY CLUB OPENS. The row used to be tappable only when `!c.measured`, and `measured` is
+   * `hasCarry`, which is true for a number the player TYPED — so the moment he set a club's distance
+   * the row went read-only and he could never correct it or clear it again. The trash button three
+   * lines below rendered only inside the edit row, which meant it could never be reached for exactly
+   * the clubs it existed for. Proved by execution before the change.
+   * [[orphans-are-live-bugs-not-dead-code]] [[feedback-reachable-not-just-wired]]
+   */
   const openEdit = (club: string) => {
     const st = useClubStatsStore.getState();
+    const name = club as ClubName;
+    // Open on what he last told us, in the unit he told us in — never a converted number he has to
+    // recognise. A club he has never stated opens empty, on the safe default.
+    const unit = st.hasManual(name) ? st.statedUnitFor(name) : 'total';
+    const entry = st.statedEntryFor(name);
+    setDraftUnit(unit);
     setEditingClub(club);
-    setDraft(st.hasDistance(club as ClubName) ? String(Math.round(st.carryFor(club as ClubName))) : '');
+    setDraft(entry != null ? String(entry) : '');
+    setDraftError(null);
   };
+  /** Retype the draft into the other unit as he flips the toggle, so the number keeps its meaning. */
+  const switchDraftUnit = (club: string, unit: StatedUnit) => {
+    if (unit === draftUnit) return;
+    const y = parseInt(draft, 10);
+    setDraftUnit(unit);
+    if (!Number.isFinite(y) || y <= 0) return;
+    const asCarry = statedCarryFromEntry(club as ClubName, y, draftUnit);
+    setDraft(String(statedEntryFromCarry(club as ClubName, asCarry, unit)));
+  };
+  /**
+   * A refused number keeps the row OPEN with the reason under it. Closing the editor on a write that
+   * did not happen is the shape of every "it saved, didn't it?" bug: the row would snap back to the
+   * old value with no explanation and he would type it again.
+   */
   const saveEdit = (club: string) => {
     const y = parseInt(draft, 10);
-    if (Number.isFinite(y) && y > 0) useClubStatsStore.getState().setManual(club as ClubName, y);
+    if (!Number.isFinite(y) || y <= 0) { setEditingClub(null); setDraftError(null); return; }
+    const ok = useClubStatsStore.getState().setManual(club as ClubName, y, draftUnit);
+    if (!ok) {
+      setDraftError(t('practice_fit_profile.unit.refused', { min: STATED_YARDS_MIN, max: STATED_YARDS_MAX }));
+      return;
+    }
+    setDraftError(null);
     setEditingClub(null);
   };
   const clearEdit = (club: string) => {
@@ -78,13 +151,18 @@ export default function FitProfileScreen() {
       // drill, uploaded video, watch swing). Before today it had ONE writer and this screen could
       // not tell a club he lives on from one that never leaves the bag.
       .map((c) => ({
-        club: c, yards: st.carryFor(c), measured: st.hasCarry(c), stated: st.hasManual(c),
+        // 2026-09-15 — `measured` is hasTRACKEDCarry, not hasCarry. hasCarry is true for a number the
+        // player typed, so this row wore the green "tracked from your shots" dot over his own entry,
+        // the header counted it as "1 tracked · 0 you set", and the confidence read climbed towards
+        // 'high' on a bag he had simply filled in by hand — which fitProfile's own comment says must
+        // never happen. Proved by execution. [[a-stale-header-is-a-source-someone-trusts]]
+        club: c, yards: st.carryFor(c), measured: st.hasTrackedCarry(c), stated: st.hasManual(c),
         uses: st.repsFor(c),
       }));
     return composeFitProfile(clubs);
     // recompute when tracked stats OR the stated bag change
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stats, manual]);
+  }, [stats, manual, carryLadder]);
 
   // 2026-07-23 (Tim — Bag Vision Phase 2) — Fit Gap: cross-reference the OWNED bag (clubBagStore,
   // populated by the video scan) against the distance gaps so advice is honest about ownership
@@ -112,14 +190,24 @@ export default function FitProfileScreen() {
       clubOrder: CLUB_ORDER,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bagClubs, profile, stats, manual]);
+  }, [bagClubs, profile, stats, manual, carryLadder]);
 
   // FLEX (honest: only off a MEASURED driver carry) + the honest, DIRECTIONAL
   // Ball Fit (recommendBall — speed tier from carry, handicap tier, short-game/
   // feel emphasis). Both starting points, never launch-monitor specs.
   const { flex, ball } = useMemo(() => {
     const st = useClubStatsStore.getState();
-    const driverMeasured = st.hasCarry('Driver'); // 2026-07-27 audit — real/stated carry, not total-only estimate
+    /**
+     * 2026-09-15 — RENAMED, because on this screen `measured` now means TRACKED and this is not that.
+     *
+     * The flex gate is deliberately hasCarry: a driver carry the player STATED is his own number and
+     * is a fair basis for a shaft-flex starting point; what it must never run off is a total-only
+     * estimate (a GPS tee→rest figure minus a typical rollout), which is the app's guess. The old
+     * name said "measured" and `recommendFlex`'s own header said "isn't measured", so two comments
+     * described a gate that had deliberately included stated numbers since 2026-07-27.
+     * [[a-stale-header-is-a-source-someone-trusts]]
+     */
+    const driverCarryIsHis = st.hasCarry('Driver');
     // 2026-07-24 (club-logic unification) — flex + ball fit key off the honest driver CARRY (carryFor:
     // measured → stated → tracked-total−roll), not the old tracked value which was a GPS total (~20y hot).
     const driverCarry = st.hasDistance('Driver') ? st.carryFor('Driver') : null;
@@ -129,7 +217,7 @@ export default function FitProfileScreen() {
     const hcp = typeof handicapIndex === 'number' ? handicapIndex
       : typeof handicap === 'number' ? handicap : null;
     return {
-      flex: recommendFlex(st.carryFor('Driver'), driverMeasured),
+      flex: recommendFlex(st.carryFor('Driver'), driverCarryIsHis),
       ball: recommendBall({
         handicap: hcp,
         driverCarryYards: driverCarry,
@@ -139,7 +227,7 @@ export default function FitProfileScreen() {
       }),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stats, manual, handicap, handicapIndex, missType, goal]);
+  }, [stats, manual, carryLadder, handicap, handicapIndex, missType, goal]);
 
   const gapSet = useMemo(() => {
     const m = new Map<string, number>();
@@ -336,9 +424,14 @@ export default function FitProfileScreen() {
     { title: 'WEDGES', clubs: ['PW', 'AW', 'GW', 'SW', 'LW'] },
   ];
 
+  /**
+   * The dot names the source of THE NUMBER ON THIS ROW, so stated is tested first — that is the
+   * order `carryFor` resolves in since 2026-09-15. Tested the other way round, a club he had
+   * corrected would show the number he typed under a dot claiming the app had tracked it.
+   */
   const dotStyleFor = (measured: boolean | undefined, stated: boolean | undefined) => ({
-    backgroundColor: measured ? '#3FB950' : stated ? '#22d3ee' : 'transparent',
-    borderColor: measured ? '#3FB950' : stated ? '#22d3ee' : colors.text_muted,
+    backgroundColor: stated ? STATED_COLOR : measured ? TRACKED_COLOR : 'transparent',
+    borderColor: stated ? STATED_COLOR : measured ? TRACKED_COLOR : colors.text_muted,
   });
 
   return (
@@ -388,7 +481,8 @@ export default function FitProfileScreen() {
           </View>
         </View>
 
-        {/* LADDER — your bag. Tap any non-tracked club to set your carry. */}
+        {/* LADDER — your bag. Tap ANY club to set its distance, in carry or total; a club he has
+            corrected shows the tracked number beside his own so the override is never a trapdoor. */}
         <Text style={[styles.cardLabel, { color: colors.text_muted, marginTop: 16, marginBottom: 8, marginLeft: 4 }]}>{t('practice_fit_profile.fit_profile_screen.your_bag_tap_a_club')}</Text>
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border, paddingVertical: 4 }]}>
           {BAG_SECTIONS.map((section) => {
@@ -409,34 +503,100 @@ export default function FitProfileScreen() {
           {rows.map((c) => {
             if (editingClub === c.club) {
               return (
-                <View key={c.club} style={styles.ladderRow}>
-                  <Text style={[styles.ladderClub, { color: colors.text_primary }]}>{c.club}</Text>
-                  <View style={styles.ladderRight}>
-                    <TextInput
-                      value={draft}
-                      onChangeText={setDraft}
-                      keyboardType="number-pad"
-                      autoFocus
-                      placeholder="yds"
-                      placeholderTextColor={colors.text_muted}
-                      maxLength={3}
-                      onSubmitEditing={() => saveEdit(c.club)}
-                      style={[styles.editInput, { color: colors.text_primary, borderColor: colors.accent }]}
-                      accessibilityLabel={`Carry distance for ${c.club} in yards`}
-                    />
-                    <TouchableOpacity onPress={() => saveEdit(c.club)} style={styles.editBtn} accessibilityRole="button" accessibilityLabel={t('practice_fit_profile.accessibility_label.save')}>
-                      <Ionicons name="checkmark" size={20} color="#3FB950" />
-                    </TouchableOpacity>
-                    {c.stated ? (
-                      <TouchableOpacity onPress={() => clearEdit(c.club)} style={styles.editBtn} accessibilityRole="button" accessibilityLabel={t('practice_fit_profile.accessibility_label.remove')}>
-                        <Ionicons name="trash-outline" size={16} color={colors.text_muted} />
+                <View key={c.club} style={styles.editBlock}>
+                  <View style={styles.ladderRow}>
+                    <Text style={[styles.ladderClub, { color: colors.text_primary }]}>{c.club}</Text>
+                    <View style={styles.ladderRight}>
+                      <TextInput
+                        value={draft}
+                        onChangeText={(v) => { setDraft(v); if (draftError) setDraftError(null); }}
+                        keyboardType="number-pad"
+                        autoFocus
+                        placeholder="yds"
+                        placeholderTextColor={colors.text_muted}
+                        maxLength={3}
+                        onSubmitEditing={() => saveEdit(c.club)}
+                        style={[styles.editInput, { color: colors.text_primary, borderColor: colors.accent }]}
+                        accessibilityLabel={t('practice_fit_profile.accessibility_label.distance_for_club', { club: c.club, unit: draftUnit === 'total' ? t('practice_fit_profile.unit.total') : t('practice_fit_profile.unit.carry') })}
+                      />
+                      <TouchableOpacity onPress={() => saveEdit(c.club)} style={styles.editBtn} accessibilityRole="button" accessibilityLabel={t('practice_fit_profile.accessibility_label.save')}>
+                        <Ionicons name="checkmark" size={20} color="#3FB950" />
                       </TouchableOpacity>
-                    ) : null}
+                      {c.stated ? (
+                        <TouchableOpacity onPress={() => clearEdit(c.club)} style={styles.editBtn} accessibilityRole="button" accessibilityLabel={t('practice_fit_profile.accessibility_label.remove')}>
+                          <Ionicons name="trash-outline" size={16} color={colors.text_muted} />
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                  </View>
+                  {/**
+                    * THE TOGGLE. Two words, because the number means two different things and the app
+                    * cannot tell which one he typed. Whichever he picks, the store keeps ONE stated
+                    * carry per club and converts by this club's rollout — so the ladder above stays a
+                    * carry ladder and the gap analysis keeps comparing like with like.
+                    */}
+                  <View style={styles.unitRow}>
+                    {(['carry', 'total'] as const).map((u) => {
+                      const active = draftUnit === u;
+                      return (
+                        <TouchableOpacity
+                          key={u}
+                          onPress={() => switchDraftUnit(c.club, u)}
+                          style={[styles.unitChip, { borderColor: active ? colors.accent : colors.border }, active && { backgroundColor: colors.accent_muted }]}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: active }}
+                          accessibilityLabel={t('practice_fit_profile.unit.' + u)}
+                        >
+                          <Text style={[styles.unitChipText, { color: active ? colors.accent : colors.text_muted }]}>
+                            {t('practice_fit_profile.unit.' + u)}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                    <Text style={[styles.unitHint, { color: draftError ? '#f5a623' : colors.text_muted }]} numberOfLines={2}>
+                      {draftError
+                        ? draftError
+                        : draftUnit === 'total'
+                          ? t('practice_fit_profile.unit.total_hint', { roll: ROLL_BY_CLUB[c.club as ClubName] ?? 0 })
+                          : t('practice_fit_profile.unit.carry_hint')}
+                    </Text>
                   </View>
                 </View>
               );
             }
-            const editable = !c.measured; // tracked carries win; don't let a stated value masquerade as tracked
+            /**
+             * 2026-09-15 — EVERY CLUB IS EDITABLE. See openEdit: this was `!c.measured`, and
+             * `measured` counted a typed number, so setting a distance locked the row against the
+             * person who set it. There is no club whose number the player is not allowed to correct.
+             */
+            const editable = true;
+            /**
+             * What he told us, and what we tracked — BOTH, whenever they are not the same thing.
+             *
+             * The stated number wins the row (that is the honest precedence: he knows something the
+             * app does not). Printing the tracked carry beside it is what stops that from being a
+             * trapdoor — he can see the measurement he overrode and take the override back with the
+             * bin in the edit row. And when he stated a TOTAL, the ladder shows the carry it converts
+             * to, so his own number is echoed here or he would think the app had lost it.
+             */
+            const statedNote = (() => {
+              if (!c.stated) return null;
+              const st = useClubStatsStore.getState();
+              const name = c.club as ClubName;
+              const unit = st.statedUnitFor(name);
+              const entry = st.statedEntryFor(name);
+              const trackedY = st.trackedCarryFor(name);
+              const parts: string[] = [];
+              const overridden = trackedY != null && Math.round(trackedY) !== Math.round(c.yards);
+              // A stated TOTAL always says so, because the ladder prints the CARRY it converts to and
+              // he would otherwise think the app had lost his number. A stated CARRY only speaks up
+              // when there is a tracked number to contrast with — on its own it would just repeat the
+              // figure already on the right of the same row.
+              if (entry != null && unit === 'total') parts.push(t('practice_fit_profile.row.you_set_total', { yards: entry }));
+              else if (entry != null && overridden) parts.push(t('practice_fit_profile.row.you_set_carry', { yards: entry }));
+              if (overridden) parts.push(t('practice_fit_profile.row.tracked_is', { yards: Math.round(trackedY!) }));
+              return parts.length > 0 ? parts.join(' · ') : null;
+            })();
             /**
              * 2026-08-17 (Tim — "this driving iron gets 215 yards and a baby fade every single time,
              * and I'd like to see that before even looking, in the bag tendency or club properties").
@@ -452,6 +612,11 @@ export default function FitProfileScreen() {
               <>
                 <View style={styles.ladderLeft}>
                   <Text style={[styles.ladderClub, { color: colors.text_primary }]}>{c.club}</Text>
+                  {statedNote ? (
+                    <Text style={[styles.ladderTendency, { color: STATED_COLOR }]} numberOfLines={1}>
+                      {statedNote}
+                    </Text>
+                  ) : null}
                   {tendency ? (
                     <Text style={[styles.ladderTendency, { color: colors.text_muted }]} numberOfLines={1}>
                       {tendency}
@@ -848,6 +1013,12 @@ const styles = StyleSheet.create({
   ladderYards: { fontSize: 14, fontWeight: '800' },
   ladderUnit: { fontSize: 11, fontWeight: '600' },
   measuredDot: { width: 9, height: 9, borderRadius: 5, borderWidth: 1.5, marginLeft: 10 },
+  // 2026-09-15 — the edit row grew a second line (the carry/total toggle), so it is a block now.
+  editBlock: { paddingBottom: 10 },
+  unitRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, marginTop: 2 },
+  unitChip: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999, borderWidth: 1 },
+  unitChipText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.4 },
+  unitHint: { flex: 1, fontSize: 10, fontWeight: '600', lineHeight: 13 },
   editInput: { minWidth: 56, borderWidth: 1.5, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, fontSize: 14, fontWeight: '800', textAlign: 'right' },
   editBtn: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', marginLeft: 4 },
   repPill: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 },

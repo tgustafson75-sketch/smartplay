@@ -32,6 +32,7 @@ import { ACTIVE_PERSONAS, type Persona } from '../../lib/persona';
  * "a hole that cannot exist" means. [[two-owners-is-the-root-cause]]
  */
 import { MAX_ROUND_HOLES as MAX_HOLES } from '../../store/roundStore';
+import { goToTab } from '../safeBack';
 
 /*
  * 2026-08-30 (full audit) — THE FIFTH LIST. Four surfaces were unified onto ACTIVE_PERSONAS earlier
@@ -186,7 +187,10 @@ function dispatchOne(a: AnyAction): void {
       gatedOpen('smartfinder', '/smartfinder');
       break;
     case 'open_swinglab':
-      router.push('/(tabs)/swinglab' as never);
+      // 2026-09-15 — "open swing lab" is spoken from ANY screen, most of them pushed. A push to a tab
+      // route from a pushed screen stacks a second tab navigator rather than switching tabs, and the
+      // player then cannot get back out. See services/safeBack.goToTab.
+      goToTab('swinglab');
       break;
     /**
      * 2026-08-21 — THE NARRATIVE BRAIN, finally reachable in conversation.

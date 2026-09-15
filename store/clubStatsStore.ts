@@ -14,7 +14,7 @@
  */
 
 import { create } from 'zustand';
-import { STANDARD_CARRY_YARDS, ROLL_YARDS as SHARED_ROLL_YARDS, personalCarryFor } from '../services/standardBag';
+import { STANDARD_CARRY_YARDS, ROLL_YARDS as SHARED_ROLL_YARDS, personalCarryFor, STATED_YARDS_MIN, STATED_YARDS_MAX, STATED_VS_CHART_LO, STATED_VS_CHART_HI } from '../services/standardBag';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getPersistStorage } from '../services/ssrSafeStorage';
 
@@ -101,6 +101,24 @@ export interface ClubStat {
 const ROLL_YARDS: Record<ClubName, number> = SHARED_ROLL_YARDS;
 
 /**
+ * What a stated number MEANS. 'carry' is airtime to first bounce — the ladder's unit and every
+ * forced-carry, water and bunker call. 'total' is tee to rest, which is the number most players
+ * actually quote about their own clubs. Conversion between them is ROLL_YARDS and nothing else.
+ */
+export type StatedUnit = 'carry' | 'total';
+
+/** Turn a number the player typed into the stated CARRY the ladder stores. Never below 1 yard. */
+export function statedCarryFromEntry(club: ClubName, yards: number, unit: StatedUnit): number {
+  const carry = unit === 'total' ? yards - ROLL_YARDS[club] : yards;
+  return Math.max(1, Math.round(carry));
+}
+
+/** The inverse — a stored carry shown back in the unit the player typed. Exact: ROLL_YARDS is whole. */
+export function statedEntryFromCarry(club: ClubName, carry: number, unit: StatedUnit): number {
+  return unit === 'total' ? Math.round(carry + ROLL_YARDS[club]) : Math.round(carry);
+}
+
+/**
  * 2026-08-24 — what the player has actually PROVED for a club, with no chart fallback: measured
  * carry → stated carry (My Bag) → tracked total minus typical roll. `null` means "no evidence".
  *
@@ -112,6 +130,24 @@ type CarryLadders = {
   total: Partial<Record<ClubName, ClubStat>>;
   manual: Partial<Record<ClubName, number>>;
 };
+
+/**
+ * 2026-09-15 (Tim, from the phone — "there is no way to edit club distances especially if tracked")
+ *
+ * THE STATED NUMBER NOW WINS. It used to lose to a measured carry, which made the Fit Profile's edit
+ * control a no-op on exactly the clubs a player most wants to correct: set a tracked 7 iron to 135
+ * and `carryFor` kept answering 160. Proved by execution before the change.
+ *
+ * This is the honest precedence, not a preference. A measured average is evidence; a number the
+ * player typed is a CORRECTION of that evidence, made with knowledge the app does not have (a range
+ * session, a launch monitor, a club he has since re-shafted). The app never silently overrules the
+ * person holding the club.
+ *
+ * It is not a trapdoor either — every surface that shows a stated number shows the tracked one beside
+ * it and clears the override in one tap, so nothing is hidden and nothing is lost: the measured
+ * ladder keeps accruing underneath and returns the moment the override is cleared.
+ * [[two-owners-is-the-root-cause]] [[a-toggle-that-does-nothing-for-the-default-user]]
+ */
 /**
  * 2026-09-13 (Tim, reviewing the Fit Profile — "pretty messy and feels disjointed") — THE READ-SIDE
  * HEALING REACHED ONE READER AND NOT THE OTHER.
@@ -132,9 +168,11 @@ type CarryLadders = {
  * [[sweep-the-missing-half-not-the-unused-export]] [[orphans-are-live-bugs-not-dead-code]]
  */
 function ownCarry(g: CarryLadders, club: ClubName): number | null {
+  // STATED FIRST. The player's own number is a correction of the measurement, not a weaker version
+  // of it — see the note on CarryLadders. Never filtered: they said it.
+  if (g.manual[club] != null) return g.manual[club]!;
   const c = g.carry[club];
   if (c && c.samples > 0 && isPlausibleForClub(club, c.avgYards, 'carry', g.manual)) return c.avgYards;
-  if (g.manual[club] != null) return g.manual[club]!;           // stated carry (My Bag) — never filtered
   const t = g.total[club];
   if (t && t.samples > 0 && isPlausibleForClub(club, t.avgYards, 'total', g.manual)) {
     return Math.max(1, Math.round(t.avgYards - ROLL_YARDS[club])); // total − roll
@@ -175,15 +213,35 @@ function ownCarryMap(g: CarryLadders): Partial<Record<string, number>> {
 const PLAUSIBLE_LO = 0.55;
 const PLAUSIBLE_HI = 1.45;
 
+/**
+ * Is this stated number believable enough to be the CENTRE of the ingest band?
+ *
+ * 2026-09-15 — it used to be the centre unconditionally, and that is a trapdoor: the band is what
+ * decides which measured shots may enter the ladder, so a driver stated at 15 yards gives a band of
+ * 8–22 and every real drive he hits afterwards is rejected at ingest. The club can never learn, and
+ * nothing anywhere says why. Reproduced before the fix: setManual('Driver', 15) then a genuine 240y
+ * carry → `carry.Driver` still undefined.
+ *
+ * A number that fails this is NOT discarded — it is still what `carryFor` answers, because he said
+ * it. It simply stops gating his own shots, which is a power a typo should never have.
+ */
+function statedCenterFor(club: ClubName, manual: Partial<Record<ClubName, number>>): number | null {
+  const stated = manual[club];
+  if (stated == null || !(stated > 0)) return null;
+  if (stated < STATED_YARDS_MIN || stated > STATED_YARDS_MAX) return null;
+  const chart = STANDARD_YARDS[club];
+  if (chart > 0 && (stated < chart * STATED_VS_CHART_LO || stated > chart * STATED_VS_CHART_HI)) return null;
+  return stated;
+}
+
 /** The distance we EXPECT for this club in the given ladder's unit: stated My-Bag carry when the
- *  player gave one, else the standard chart. Putter → 0 (no band; it is never inferred). */
+ *  player gave a believable one, else the standard chart. Putter → 0 (no band; never inferred). */
 function expectedYards(
   club: ClubName,
   ladder: 'carry' | 'total',
   manual: Partial<Record<ClubName, number>>,
 ): number {
-  const stated = manual[club];
-  const base = stated != null && stated > 0 ? stated : STANDARD_YARDS[club];
+  const base = statedCenterFor(club, manual) ?? STANDARD_YARDS[club];
   if (base <= 0) return 0;
   return ladder === 'carry' ? base : base + ROLL_YARDS[club];
 }
@@ -209,8 +267,22 @@ interface ClubStatsState {
   // that's the root over-club bug. Migration v1→v2 moves old `stats` → `total` (its true unit).
   carry: Partial<Record<ClubName, ClubStat>>;
   total: Partial<Record<ClubName, ClubStat>>;
-  /** 2026-06-15 (Tim — editable My Bag) — user-entered CARRY per club (their own numbers, day one). */
+  /** 2026-06-15 (Tim — editable My Bag) — user-entered CARRY per club (their own numbers, day one).
+   *  Always a CARRY, whichever unit was typed: see `manualUnit`. ONE owner for "his stated carry". */
   manual: Partial<Record<ClubName, number>>;
+  /**
+   * 2026-09-15 (Tim — "No carry vs total toggle when setting club distances") — WHICH UNIT HE MEANT.
+   *
+   * Most golfers know their clubs as TOTAL ("my 7 iron goes 150"); the app's ladder is a CARRY, and
+   * it was silently reading one as the other — so a player typing the number he actually knows was
+   * over-clubbing himself by the rollout of every club in the bag, 28 yards of it on a driver.
+   *
+   * NOT a second owner of the distance. `manual` stays the one stated carry; this records the unit
+   * he entered so the screen can show the number back in the unit he thinks in. The conversion is
+   * exact and invertible (ROLL_YARDS is a whole number per club), so the pair can never drift:
+   * typed 165 total on a 7I → manual 159 → shown back as 165 total.
+   */
+  manualUnit: Partial<Record<ClubName, StatedUnit>>;
   /** Per-club REP tally — HONEST volume, NOT a distance. Every source, not just the range. */
   reps: Partial<Record<ClubName, number>>;
   /**
@@ -231,10 +303,18 @@ interface ClubStatsState {
    * Merging them would be the fabricated precision this app refuses. [[illustration-data-points]]
    */
   repsBySource: Partial<Record<ClubName, Partial<Record<ClubUseSource, number>>>>;
-  /** Record a measured AIRTIME carry (acoustic/pose, range Flat-Carry, stated). */
-  recordCarry: (club: ClubName, yards: number) => void;
-  /** Record a GPS tee→rest TOTAL (cart-mark shot tracking — includes roll). */
-  recordTotal: (club: ClubName, yards: number) => void;
+  /**
+   * Record a measured AIRTIME carry (acoustic/pose, range Flat-Carry).
+   *
+   * 2026-09-15 — returns whether it was KEPT. Both of these have dropped an out-of-band sample
+   * silently since the plausibility gate shipped, and the two import screens counted every attempt as
+   * a success — "12 club distances applied to your bag" over writes that did not happen. A caller
+   * that reports a number to the player has to be able to ask.
+   * [[a-success-reported-by-a-step-that-never-checked-is-not-a-success]]
+   */
+  recordCarry: (club: ClubName, yards: number) => boolean;
+  /** Record a GPS tee→rest TOTAL (cart-mark shot tracking — includes roll). Returns whether kept. */
+  recordTotal: (club: ClubName, yards: number) => boolean;
   /** @deprecated back-compat alias → recordTotal (the old `record` was fed GPS totals). */
   record: (club: ClubName, yards: number) => void;
   /**
@@ -248,9 +328,17 @@ interface ClubStatsState {
   usesBySource: (club: ClubName) => Partial<Record<ClubUseSource, number>>;
   /** Has this club been swung ANYWHERE? The honest test for dead weight in the bag. */
   everUsed: (club: ClubName) => boolean;
-  /** Set the player's stated CARRY for a club (My Bag). yards<=0 clears it. */
-  setManual: (club: ClubName, yards: number) => void;
+  /**
+   * Set the player's stated distance for a club. `unit` says what the number IS — 'carry' (the
+   * default, and the ladder's own unit) or 'total', which is converted to a carry by this club's
+   * typical rollout before it is stored. yards<=0 clears it.
+   */
+  setManual: (club: ClubName, yards: number, unit?: StatedUnit) => boolean;
   clearManual: (club: ClubName) => void;
+  /** The unit the player typed for this club. 'carry' when he never said otherwise. */
+  statedUnitFor: (club: ClubName) => StatedUnit;
+  /** His stated number back in the unit he typed it in — what the edit field should show. */
+  statedEntryFor: (club: ClubName) => number | null;
   /** HONEST carry: measured carry → stated → (tracked total − typical roll) → chart. The DEFAULT for
    *  club/reach/forced-carry advice (never over-states what the player can fly). */
   carryFor: (club: ClubName) => number;
@@ -266,6 +354,22 @@ interface ClubStatsState {
   /** True if we have ANY real number (carry, total, or stated) — not just the chart. */
   hasDistance: (club: ClubName) => boolean;
   hasCarry: (club: ClubName) => boolean;
+  /**
+   * 2026-09-15 — MEASURED, and nothing else. `hasCarry` is true for a number the player TYPED, which
+   * is right for "do we have an honest carry" but wrong for the green "tracked from your shots" dot
+   * the Fit Profile and the dashboard paint with it — those told him the app had tracked a number he
+   * had entered by hand. This is the test those badges needed.
+   */
+  hasTrackedCarry: (club: ClubName) => boolean;
+  /**
+   * The MEASURED carry on its own, ignoring anything stated — `null` when nothing was tracked.
+   *
+   * This is what lets an override be shown rather than hidden: the Fit Profile prints "tracked 158"
+   * beside a stated 135 so the player can see both numbers and take his correction back in one tap.
+   * Without it, `carryFor` returning the stated number would make the measurement invisible, which
+   * is how an override becomes a trapdoor.
+   */
+  trackedCarryFor: (club: ClubName) => number | null;
   hasTotal: (club: ClubName) => boolean;
   /** Best default club for a needed (to-target, total-ish) yardage. */
   inferClub: (yards: number) => ClubName;
@@ -292,6 +396,7 @@ export const useClubStatsStore = create<ClubStatsState>()(
       carry: {},
       total: {},
       manual: {},
+      manualUnit: {},
       reps: {},
       repsBySource: {},
       recordClubUse: (club, source, n = 1) => {
@@ -308,41 +413,82 @@ export const useClubStatsStore = create<ClubStatsState>()(
       repsFor: (club) => get().reps[club] ?? 0,
       usesBySource: (club) => get().repsBySource[club] ?? {},
       everUsed: (club) => (get().reps[club] ?? 0) > 0,
-      setManual: (club, yards) => {
+      /**
+       * Returns TRUE when the number was stored. FALSE means it was refused as impossible for this
+       * club and NOTHING changed — the caller must say so rather than confirm.
+       *
+       * 2026-09-15 — the typed path had no floor while the spoken one clamped to 30–400, and a bad
+       * stated number does more than read wrong: it becomes the centre of the plausibility band and
+       * walls the club off from its own measurements for ever (see statedCenterFor). Clearing is
+       * still always allowed — yards<=0 removes the override and is not a refusal.
+       */
+      setManual: (club, yards, unit = 'carry') => {
+        const clearing = !Number.isFinite(yards) || yards <= 0;
+        const carry = clearing ? 0 : statedCarryFromEntry(club, yards, unit);
+        // Validate the CARRY that would be stored, not the number typed: 30 yards of TOTAL on a
+        // driver is 2 yards of carry, and it is the carry every other surface reads.
+        if (!clearing && (carry < STATED_YARDS_MIN || carry > STATED_YARDS_MAX)) {
+          console.log(`[clubStats] refused stated ${club} ${Math.round(yards)}y ${unit} (carry ${carry}y outside ${STATED_YARDS_MIN}-${STATED_YARDS_MAX})`);
+          return false;
+        }
         set((s) => {
           const next = { ...s.manual };
-          if (!Number.isFinite(yards) || yards <= 0) delete next[club];
-          else next[club] = Math.round(yards);
-          return { manual: next };
+          const nextUnit = { ...s.manualUnit };
+          if (clearing) {
+            delete next[club];
+            delete nextUnit[club];
+          } else {
+            // Stored as a CARRY whatever he typed, so there is exactly one stated number per club
+            // and no surface has to remember to convert. The unit rides along for display only.
+            next[club] = carry;
+            if (unit === 'total') nextUnit[club] = 'total';
+            else delete nextUnit[club];   // 'carry' is the default; never persist the default
+          }
+          return { manual: next, manualUnit: nextUnit };
         });
+        return true;
       },
       clearManual: (club) => {
         set((s) => {
-          if (s.manual[club] == null) return {} as Partial<ClubStatsState>;
+          if (s.manual[club] == null && s.manualUnit[club] == null) return {} as Partial<ClubStatsState>;
           const next = { ...s.manual };
+          const nextUnit = { ...s.manualUnit };
           delete next[club];
-          return { manual: next };
+          delete nextUnit[club];
+          return { manual: next, manualUnit: nextUnit };
         });
       },
+      // `?? {}` on both: a blob persisted before manualUnit existed rehydrates through zustand's
+      // shallow merge and keeps the initial {}, but a partial or hand-edited blob need not, and a
+      // crash on the bag screen is not the place to find that out.
+      statedUnitFor: (club) => (get().manualUnit ?? {})[club] ?? 'carry',
+      statedEntryFor: (club) => {
+        const g = get();
+        const carry = g.manual?.[club];
+        if (carry == null) return null;
+        return statedEntryFromCarry(club, carry, (g.manualUnit ?? {})[club] ?? 'carry');
+      },
       recordCarry: (club, yards) => {
-        if (!Number.isFinite(yards) || yards <= 0) return;
+        if (!Number.isFinite(yards) || yards <= 0) return false;
         // 2026-08-10 — plausibility gate (see PLAUSIBLE_LO). A wildly out-of-band sample is a
         // mis-attribution, not a career shot; dropping it protects the ladder from one bad row.
         if (!isPlausibleForClub(club, yards, 'carry', get().manual)) {
           console.log(`[clubStats] rejected implausible ${club} carry ${Math.round(yards)}y (expected ~${expectedYards(club, 'carry', get().manual)}y)`);
-          return;
+          return false;
         }
         set((s) => ({ carry: recordInto(s.carry, club, yards) }));
+        return true;
       },
       recordTotal: (club, yards) => {
-        if (!Number.isFinite(yards) || yards <= 0) return;
+        if (!Number.isFinite(yards) || yards <= 0) return false;
         if (!isPlausibleForClub(club, yards, 'total', get().manual)) {
           console.log(`[clubStats] rejected implausible ${club} total ${Math.round(yards)}y (expected ~${expectedYards(club, 'total', get().manual)}y)`);
-          return;
+          return false;
         }
         set((s) => ({ total: recordInto(s.total, club, yards) }));
+        return true;
       },
-      record: (club, yards) => get().recordTotal(club, yards), // deprecated alias
+      record: (club, yards) => { get().recordTotal(club, yards); }, // deprecated alias
       carryFor: (club) => {
         const g = get();
         const own = ownCarry(g, club);
@@ -372,11 +518,14 @@ export const useClubStatsStore = create<ClubStatsState>()(
       },
       totalFor: (club) => {
         const g = get();
+        // STATED FIRST, exactly as ownCarry does. If these two disagreed about which source wins,
+        // one club would answer "carry 159" and "total 200" on the same screen. Same rule, one club,
+        // one story. [[two-owners-is-the-root-cause]]
+        if (g.manual[club] != null) return Math.round(g.manual[club]! + ROLL_YARDS[club]);
         const t = g.total[club];
         if (t && t.samples > 0) return t.avgYards;              // measured total
         const c = g.carry[club];
         if (c && c.samples > 0) return Math.round(c.avgYards + ROLL_YARDS[club]); // carry + roll (est)
-        if (g.manual[club] != null) return Math.round(g.manual[club]! + ROLL_YARDS[club]);
         return STANDARD_YARDS[club] + ROLL_YARDS[club];         // chart carry + roll
       },
       avgFor: (club) => get().totalFor(club),      // deprecated back-compat
@@ -391,6 +540,25 @@ export const useClubStatsStore = create<ClubStatsState>()(
         const g = get();
         const c = g.carry[club];
         return (!!c && c.samples > 0 && isPlausibleForClub(club, c.avgYards, 'carry', g.manual)) || g.manual[club] != null;
+      },
+      /**
+       * 2026-09-15 — TRACKED means tracked. No stated number counts here, which is the whole point:
+       * this is what the green "tracked from your shots" dot is allowed to be painted from.
+       */
+      hasTrackedCarry: (club) => {
+        const g = get();
+        const c = g.carry[club];
+        return !!c && c.samples > 0 && isPlausibleForClub(club, c.avgYards, 'carry', g.manual);
+      },
+      trackedCarryFor: (club) => {
+        const g = get();
+        const c = g.carry[club];
+        if (c && c.samples > 0 && isPlausibleForClub(club, c.avgYards, 'carry', g.manual)) return c.avgYards;
+        const t = g.total[club];
+        if (t && t.samples > 0 && isPlausibleForClub(club, t.avgYards, 'total', g.manual)) {
+          return Math.max(1, Math.round(t.avgYards - ROLL_YARDS[club]));
+        }
+        return null;
       },
       hasTotal: (club) => (get().total[club]?.samples ?? 0) > 0,
       hasManual: (club) => get().manual[club] != null,
@@ -476,10 +644,24 @@ export function getLearnedClubDistances(): Record<string, number> {
   const s = useClubStatsStore.getState();
   const out: Record<string, number> = {};
   for (const club of CLUB_ORDER) {
-    const t = s.total[club];
-    if (t && t.samples > 0) out[club] = t.avgYards;
-    else if (s.carry[club]?.samples) out[club] = Math.round(s.carry[club]!.avgYards + ROLL_YARDS[club]);
-    else if (s.manual[club] != null) out[club] = Math.round(s.manual[club]! + ROLL_YARDS[club]);
+    /**
+     * 2026-09-15 — THIS RE-IMPLEMENTED THE PRECEDENCE, AND IT BECAME WRONG THE HOUR THE PRECEDENCE
+     * CHANGED. Caught re-reading the same day's work, which is the only reason it is not shipping.
+     *
+     * It walked measured-total → carry+roll → stated+roll in its own three lines. The moment a stated
+     * number started beating a measurement in `totalFor`, this function still answered from the old
+     * ladder — and it is the bag the BRAIN quotes (caddieMemoryRetrieval) and the one the carry
+     * recommendation reads (bagRecommendation). Tim would have set his 7 iron on the screen, watched
+     * the screen agree, and heard Kevin club him off the old number: the exact defect he reported,
+     * moved one pipe to the left.
+     *
+     * It delegates now. The gate below is the only thing this function decides — WHICH clubs have
+     * real evidence — and `totalFor` owns HOW FAR, alone, for everyone.
+     * [[two-owners-is-the-root-cause]] [[feedback-triple-check]]
+     */
+    if (club === 'Putter') continue;
+    const hasReal = s.carry[club]?.samples || s.total[club]?.samples || s.manual[club] != null;
+    if (hasReal) out[club] = s.totalFor(club);
   }
   return out;
 }

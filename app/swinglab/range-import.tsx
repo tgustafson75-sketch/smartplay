@@ -86,11 +86,16 @@ export default function RangeImportScreen() {
       .filter(r => r.club_id !== null && r.flat_carry_yds !== null)
       .map(r => ({ name: normalizeClub(r.club_id!), yards: r.flat_carry_yds! }))
       .filter((r): r is { name: NonNullable<ReturnType<typeof normalizeClub>>; yards: number } => r.name !== null);
-    applicable.forEach(r => {
-      setManual(r.name, r.yards);
-    });
-    const n = applicable.length;
-    showToast(`${n} club distance${n === 1 ? '' : 's'} applied to your bag.`);
+    // 2026-09-15 — the toast counted `applicable.length`, i.e. everything we TRIED. setManual refuses
+    // a distance that is impossible for the club, so the toast could say "12 club distances applied
+    // to your bag" over a bag that got none of them. Count the writes that were kept.
+    // [[a-success-reported-by-a-step-that-never-checked-is-not-a-success]]
+    const n = applicable.filter(r => setManual(r.name, r.yards)).length;
+    const skipped = applicable.length - n;
+    showToast(
+      `${n} club distance${n === 1 ? '' : 's'} applied to your bag.`
+      + (skipped > 0 ? ` ${skipped} skipped — not a possible distance for the club.` : ''),
+    );
     setPhase({ kind: 'done', applied: n });
   }, [setManual, showToast]);
 

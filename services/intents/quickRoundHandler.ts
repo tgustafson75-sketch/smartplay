@@ -232,9 +232,12 @@ export const quickRoundHandler: IntentHandler = {
     // 4) Best-effort nav to Caddie — that tab's focus listener consumes
     //    the pending signal. Non-fatal if router import fails (the
     //    pending signal still fires the next time Caddie gains focus).
+    // 2026-09-15 — goToTab, not push: a quick round is started by VOICE from wherever he is, and a
+    // push to a tab route from a pushed screen mounts a second tab navigator instead of switching
+    // tabs. See services/safeBack.goToTab.
     try {
-      const { router } = await import('expo-router');
-      router.push('/(tabs)/caddie' as never);
+      const { goToTab } = await import('../safeBack');
+      goToTab('caddie');
     } catch (e) {
       console.log('[quickRoundHandler] caddie nav failed (non-fatal):', e);
     }

@@ -198,7 +198,10 @@ export function composeFitProfile(clubs: FitClubInput[]): FitProfile {
 /**
  * 2026-06-15 (Tim) — FLEX DIRECTION, honestly. From the player's MEASURED driver
  * carry (real) via the standard distance→flex heuristic online fitters use — NOT a
- * fabricated clubhead-speed mph. Returns null when the driver carry isn't measured
+ * fabricated clubhead-speed mph. Returns null when the driver carry is not the player's OWN number
+ * — measured from his shots or stated by him. (2026-09-15: this said "isn't measured", but the caller
+ * has passed hasCarry, which includes a stated carry, deliberately since 2026-07-27. What the flag
+ * actually excludes is a total-only ESTIMATE — the app's guess, not his number.)
  * yet (don't guess flex off a standard-chart number). A starting point, not a spec.
  */
 export interface FlexSuggestion { flex: string; note: string }

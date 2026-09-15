@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import type { DrillRecommendation } from '../../store/swingSessionStore';
 import { useTranslation } from 'react-i18next';
+import { goToTab } from '../../services/safeBack';
 
 /**
  * Phase J — Drill recommendation card paired with PrimaryIssueCard.
@@ -49,7 +50,7 @@ export default function DrillCard({ recommendation }: Props) {
           // Fall back to the SwingLab tab only if the recommendation predates catalog_id.
           recommendation.catalog_id
             ? router.push(`/drills/${recommendation.catalog_id}` as never)
-            : router.push('/(tabs)/swinglab' as never)
+            : goToTab('swinglab')
         }
         style={styles.cta}
         activeOpacity={0.85}

@@ -38,6 +38,7 @@ import { useCourseCaptureStore } from '../../store/courseCaptureStore';
 import { getLocalHoleImage } from '../../data/localCourseImages';
 import type { Course } from '../../types/course';
 import { useTranslation } from 'react-i18next';
+import { goToTab } from '../../services/safeBack';
 
 /**
  * Course Detail — legacy long-scroll format.
@@ -472,7 +473,7 @@ export default function CourseDetailScreen() {
     // Phase Q.5b — same store-based signal as Play tab. Avoids the
     // tabs-navigator param-propagation issue that broke the loop.
     useRoundStore.getState().setPendingStartCourse(course.id);
-    router.push('/(tabs)/caddie' as never);
+    goToTab('caddie');
   };
 
   const handleBookTeeTime = () => {

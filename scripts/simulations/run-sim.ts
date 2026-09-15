@@ -1327,7 +1327,14 @@ check('Bag-by-voice: registrar seam + brain tool + offline set + interview exemp
     return (
       /export function registerBagFromSpeech/.test(reg) &&
       /registerClub\(parsed\.club_id, \{ source: 'voice' \}\)/.test(reg) &&        // bag membership
-      /stats\.setManual\(name, yds\)/.test(reg) &&                                  // honest stated carry
+      // 2026-09-15 — was /stats\.setManual\(name, yds\)/, which pinned the CALL rather than the rule.
+      // A spoken total used to branch off to recordTotal — the ladder GPS shot tracking owns — so a
+      // number he SAID wore the "tracked from your shots" badge, and recordTotal's plausibility gate
+      // could drop it while the caddie still said "Got it". Both units are one stated fact now, and
+      // the second half of this assertion is the one that matters: a spoken number NEVER enters a
+      // measured ladder. [[a-guard-can-enforce-a-stale-premise]]
+      /stats\.setManual\(name, yds, kind\)/.test(reg) &&                            // his stated number, in his unit
+      !/record(Total|Carry)\s*\(/.test(reg) &&                                     // ...and never a measured ladder
       /yds < 30 \|\| yds > 400/.test(reg) &&                                        // plausibility clamp
       // 2026-08-19 (lockstep reconciliation) — tool declarations moved OUT of api/pipecat-turn.ts into
       // api/_brainTools.ts, the single owner both brains import. This guard used to grep the brain file
@@ -2223,8 +2230,16 @@ check('Club logic unified: one vocabulary (normalizeClub) + explicit carry vs to
     // GPS-total writer feeds recordTotal while real carries feed recordCarry.
     const cs = read('store/clubStatsStore.ts');
     const okStore =
-      /recordCarry: \(club: ClubName, yards: number\) => void/.test(cs) &&
-      /recordTotal: \(club: ClubName, yards: number\) => void/.test(cs) &&
+      // 2026-09-15 — these pinned `=> void`, the SIGNATURE rather than the separation they are named
+      // for. Both writers silently drop an out-of-band sample, and the two import screens counted
+      // every attempt as a success — "12 club distances applied to your bag" over writes that never
+      // happened. They report now, so the assertion is the ladder separation PLUS the fact that a
+      // caller can still ask. Going back to void would re-open the quiet lie.
+      // [[a-guard-can-enforce-a-stale-premise]]
+      /recordCarry: \(club: ClubName, yards: number\) => boolean/.test(cs) &&
+      /recordTotal: \(club: ClubName, yards: number\) => boolean/.test(cs) &&
+      /carry: recordInto\(s\.carry, club, yards\)/.test(cs) &&
+      /total: recordInto\(s\.total, club, yards\)/.test(cs) &&
       /carryFor: \(club: ClubName\) => number/.test(cs) &&
       /Math\.max\(1, Math\.round\(t\.avgYards - ROLL_YARDS\[club\]\)\)/.test(cs) && // carry = tracked total − roll
       /version: 2/.test(cs); // migration moves old GPS-total `stats` → the `total` ladder
@@ -9742,9 +9757,66 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
         // 2026-07-24 (club-logic unification) — setManual (stated CARRY) still writes the bag; the honest
         // carry ladder feeds the Fit Profile (carryFor) + the stated carry surfaces in the learned map.
         /setManual:/.test(store) && /carryFor:/.test(store) && /hasManual:/.test(store) &&
-        /s\.manual\[club\] != null\) out\[club\] = Math\.round\(s\.manual\[club\]! \+ ROLL_YARDS\[club\]\)/.test(store) &&
+        /**
+          * 2026-09-15 — was /s\.manual\[club\] != null\) out\[club\] = Math.round\(s\.manual\[club\]! \+ ROLL_YARDS\[club\]\)/,
+          * which pinned getLearnedClubDistances' own copy of the precedence ladder.
+          *
+          * That copy is exactly what went wrong. It walked measured-total → carry+roll → stated+roll
+          * in its own three lines, so the hour a stated number started beating a measurement in
+          * `totalFor`, this function — the bag the BRAIN quotes and the carry recommendation reads —
+          * still answered from the old ladder. He would have set a club, watched the screen agree,
+          * and heard Kevin club him off the old number. Caught on a same-day re-read.
+          *
+          * So the guard no longer pins the ladder. It pins the thing that makes a second ladder
+          * impossible: both learned-bag helpers ASK THE STORE. [[two-owners-is-the-root-cause]]
+          */
+        /if \(hasReal\) out\[club\] = s\.totalFor\(club\);/.test(store) &&
+        /out\[club\] = s\.carryFor\(club\)/.test(store) &&
+        !/out\[club\] = Math\.round\(s\.manual\[club\]! \+ ROLL_YARDS\[club\]\)/.test(store) &&
+        !/const t = s\.total\[club\];\s*\n\s*if \(t && t\.samples > 0\) out\[club\] = t\.avgYards;/.test(store) &&
         /useClubStatsStore\.getState\(\)\.setManual/.test(screen) &&
-        /yards: st\.carryFor\(c\), measured: st\.hasCarry\(c\), stated: st\.hasManual\(c\)/.test(screen) &&
+        /**
+          * 2026-09-15 (same-day audit) — A REFUSAL MUST REACH THE PERSON WHO TYPED IT.
+          *
+          * setManual now refuses a distance that is impossible for the club, because a stated number
+          * is the centre of the ingest band and a fat-finger silently wall a club off from its own
+          * shots for ever. A refusal that closed the editor anyway would be worse than the bug: the
+          * row would snap back to the old number with no explanation and he would type it again.
+          * Every caller that reports a count to the player must ask too — hence the two imports.
+          * [[a-success-reported-by-a-step-that-never-checked-is-not-a-success]]
+          */
+        /if \(!ok\) \{/.test(screen) && /setDraftError\(/.test(screen) &&
+        /if \(!stats\.setManual\(name, yds, kind\)\) \{ missed\.push/.test(readCode('services/bagVoiceRegistration.ts')) &&
+        /if \(kept\) n \+= 1;/.test(readCode('app/arccos-import.tsx')) &&
+        /applicable\.filter\(r => setManual\(r\.name, r\.yards\)\)\.length/.test(readCode('app/swinglab/range-import.tsx')) &&
+        /function statedCenterFor/.test(read('store/clubStatsStore.ts')) &&
+        /STATED_YARDS_MIN|STATED_YARDS_MAX/.test(read('store/clubStatsStore.ts')) &&
+        /**
+          * 2026-09-15 (Tim — "there is no way to edit club distances especially if tracked") — THREE
+          * THINGS THIS GUARD NOW PINS, each of which was broken while it stayed green on the old line.
+          *
+          *  1. The green dot is hasTRACKEDCarry. hasCarry is true for a number he TYPED, so a stated
+          *     club wore the "tracked from your shots" badge and the header counted it as tracked.
+          *  2. Every club opens. `editable` was `!c.measured` — i.e. false for any club with a stated
+          *     number — so setting a distance locked the row against the person who set it, and the
+          *     bin that clears the override rendered only INSIDE the row he could no longer open.
+          *  3. The stated number is filed with its UNIT, or a player typing the total he actually
+          *     knows silently over-states his carry by this club's rollout.
+          *
+          * Each is asserted as the property AND the absence of the broken form, because all three of
+          * the broken forms are one-token edits away. [[a-guard-can-assert-the-broken-shape]]
+          */
+        /yards: st\.carryFor\(c\), measured: st\.hasTrackedCarry\(c\), stated: st\.hasManual\(c\)/.test(screen) &&
+        !/measured: st\.hasCarry\(c\)/.test(screen) &&
+        /const editable = true;/.test(screen) && !/const editable = !c\.measured/.test(screen) &&
+        /setManual\(club as ClubName, y, draftUnit\)/.test(screen) &&
+        /statedUnitFor|statedEntryFor/.test(screen) &&
+        // 4. The toggle opens on TOTAL for a club he has never stated. Not a coin-toss: the app
+        //    settled this on 2026-09-12 for the spoken path and the reason carries over exactly —
+        //    an over-stated carry tells the caddie he flies a hazard he does not, which loses a
+        //    ball; an under-stated one costs a few yards of club and nothing else.
+        /useState<StatedUnit>\('total'\)/.test(screen) &&
+        /st\.hasManual\(name\) \? st\.statedUnitFor\(name\) : 'total'/.test(screen) &&
         saysToPlayer(dash, "MY BAG") && /router\.push\('\/practice\/fit-profile'/.test(dash)
       );
     })(),
@@ -16912,6 +16984,156 @@ check(
       /void appHelp;/.test(readCode('api/kevin.ts')),
     'gating the catalog on "is this an app question" made the cached block volatile AND left the caddie unable to name its own features on a normal turn',
   );
+}
+
+/**
+ * 2026-09-15 (Tim, from production — "home course loop is not fixed") — THE TAB JUMP THAT BUILT A
+ * SECOND APP ON TOP OF THE FIRST.
+ *
+ * `router.push('/(tabs)/play')` from a screen that is itself pushed on top of the tabs does NOT
+ * switch tabs. Expo Router resolves the divergence at the ROOT STACK — focused route `profile`,
+ * target `(tabs)` — so PUSH mounts a SECOND copy of the whole tab navigator above the profile screen.
+ *
+ * Profile's "Choose home courses" jumped to Play that way; from the second tab bar the dashboard's
+ * profile card pushed Profile again, which jumped to Play again. Back walked Play → Profile → Play →
+ * Profile without reaching the bottom, and every lap left another live tab navigator behind it. That
+ * is the loop he reported, and SEVEN call sites had it.
+ *
+ * This is a SWEEP, not a spot check, because the defect is invisible at the call site — the line
+ * looks identical to the same push from inside the tabs, which is fine. The only thing that decides
+ * whether it is a bug is which directory the file lives in, so the guard is the one thing a reviewer
+ * cannot see. [[orphans-are-live-bugs-not-dead-code]] [[feedback-reachable-not-just-wired]]
+ */
+{
+  const walkTsx = (dir: string): string[] => {
+    const out: string[] = [];
+    let entries: string[] = [];
+    try { entries = fs.readdirSync(dir); } catch { return out; }
+    for (const e of entries) {
+      const abs = path.join(dir, e);
+      let stat;
+      try { stat = fs.statSync(abs); } catch { continue; }
+      if (stat.isDirectory()) { if (e !== 'node_modules') out.push(...walkTsx(abs)); }
+      else if (e.endsWith('.tsx') || e.endsWith('.ts')) out.push(abs);
+    }
+    return out;
+  };
+  const ROOT = path.resolve(__dirname, '../../');
+  const TABS_DIR = path.join(ROOT, 'app', '(tabs)');
+  /**
+   * 2026-09-15, SAME DAY, ON THE RE-READ — THIS SWEEP SCANNED TWO DIRECTORIES AND CLAIMED ALL OF THEM.
+   *
+   * It walked `app/` and `components/` and reported "nothing outside app/(tabs)/ pushes a tab route".
+   * THREE did, all in `services/`, and they are the worst three in the app because they fire from
+   * VOICE — `quickRoundHandler` ("start a quick round"), `conversationalToolDispatch` ("open swing
+   * lab") and `pendingDisambiguation` (picking which course you meant). Every one of those is spoken
+   * from wherever the player is standing, which is usually a pushed screen. So the loop Tim reported
+   * from the Profile screen was also reachable by talking to Kevin, and my guard was green over it.
+   *
+   * A guard that walks a subset and states a universal is worse than no guard: it is a claim someone
+   * will trust. The scan list is now every directory that can hold a navigation call, and the
+   * SUPERSET is asserted below rather than assumed — a directory added to the app and not added here
+   * would otherwise be silently un-swept exactly as services/ was.
+   * [[guard-scoped-to-one-repo-certifies-the-sibling]] [[widening-a-guard-can-silently-disable-it]]
+   */
+  const SCAN_DIRS = ['app', 'components', 'services', 'hooks', 'store', 'contexts', 'api', 'utils'];
+  const scanned = SCAN_DIRS.flatMap((d) => walkTsx(path.join(ROOT, d)))
+    .filter((abs) => !abs.startsWith(TABS_DIR + path.sep));
+
+  /**
+   * The sweep must actually have swept. Two failures are possible and both look like a pass:
+   * a walk that returns nothing, and a source directory that exists but is not in SCAN_DIRS.
+   */
+  const everyCodeDirScanned = fs.readdirSync(ROOT)
+    .filter((e) => {
+      if (e.startsWith('.') || e === 'node_modules') return false;
+      try { if (!fs.statSync(path.join(ROOT, e)).isDirectory()) return false; } catch { return false; }
+      // a directory only matters here if it actually contains a router navigation call
+      return walkTsx(path.join(ROOT, e)).some((f) => /\brouter\.(push|replace|navigate|dismissTo)\(/.test(readBulk(f)));
+    })
+    .every((e) => SCAN_DIRS.includes(e) || e === '__tests__' || e === 'scripts');
+  const enoughFiles = scanned.length >= 100 && everyCodeDirScanned;
+
+  const offenders = scanned.filter((abs) => {
+    const body = readBulk(abs).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+    return /router\.push\(\s*[`'"]\/\(tabs\)\//.test(body);
+  });
+
+  check('NAV: nothing outside app/(tabs)/ PUSHES a tab route — that stacks a second tab navigator',
+    enoughFiles && offenders.length === 0,
+    offenders.length > 0
+      ? `these push a tab route from outside the tabs and will stack a duplicate navigator: ${offenders.map((f) => path.relative(ROOT, f)).join(', ')}`
+      : !everyCodeDirScanned
+        ? 'a source directory containing router navigation is NOT in SCAN_DIRS — the sweep would pass without looking at it'
+        : `swept ${scanned.length} files across ${SCAN_DIRS.join('/')} outside app/(tabs)/; every tab jump goes through goToTab (dismissTo → POP_TO), so the back stack gets shorter, not longer`);
+
+  const back = readCode('services/safeBack.ts');
+  check('NAV: goToTab pops to the tabs already in the stack rather than pushing a new one',
+    /export function goToTab/.test(back) &&
+      /router\.dismissTo\(`\/\(tabs\)\/\$\{tab\}`/.test(back) &&
+      !/export function goToTab[\s\S]{0,200}router\.push/.test(back),
+    'dismissTo dispatches POP_TO, which pops back to the existing (tabs) entry and hands it the target tab in params; React Navigation falls back to REPLACING the current route when (tabs) is not below, so a deep link into a pushed screen is not stranded either');
+
+  // And the screen that reported it: the home-course picker still points at the Play tab (where the
+  // course list, the search and the GPS ordering already live) — it just no longer stacks one.
+  const pform = readCode('components/profile/ProfileForm.tsx');
+  check('HOME COURSE: the picker still sends him to the courses, without the loop',
+    /goToTab\('play'\)/.test(pform) && !/router\.push\('\/\(tabs\)\/play'/.test(pform) &&
+      /setHomeCourses/.test(pform),
+    'Profile lists and removes home courses and jumps to the Play tab to add one — one course list in the app, and the jump is now a pop rather than a second navigator');
+}
+
+/**
+ * 2026-09-15 (Tim — "player card on dashboard needs a shortcut link to edit bag and profile").
+ *
+ * Both destinations were already reachable from that card and NEITHER said so: the identity area was
+ * a tappable name with no chevron, no label and no border, and the bag sat one hop further inside
+ * Profile. A control you can only find by accident is not a control. [[feedback-reachable-not-just-wired]]
+ */
+{
+  const dash = readCode('app/(tabs)/dashboard.tsx');
+  check('DASHBOARD: the player card names both ways in — Profile and the Bag',
+    /profileShortcutRow/.test(dash) &&
+      /router\.push\('\/profile' as never\)/.test(dash) &&
+      /router\.push\('\/bag-scan' as never\)/.test(dash) &&
+      saysToPlayer(dash, 'Profile') && saysToPlayer(dash, 'Your Bag'),
+    'two labelled buttons under the identity row; /bag-scan is the SAME screen the Profile page opens, so there is one bag screen linked from two places rather than two bag screens');
+}
+
+/**
+ * 2026-09-15 (Tim — "No way to set ball used for a round").
+ *
+ * THE WHOLE CHAIN EXISTED EXCEPT THE ROUND. `RoundRecord.ball` is stamped at round end from
+ * `currentBall`; `services/ballPerformance` compares scoring by ball; `caddieRequestBody` sends it to
+ * the brain. roundStore's own note says declaring it on the first tee covers the round — and there
+ * was nowhere on the first tee to declare it. The only ways in were a text field three taps deep in
+ * SwingLab tools and a ball that happened to be lying in a bag-scan frame.
+ *
+ * The classic shape on this project: built, measured, persisted, and never wired to the moment the
+ * player is in. [[smartplay-defect-class-unwired-halves]]
+ */
+{
+  const play = readCode('app/(tabs)/play.tsx');
+  const round = readCode('store/roundStore.ts');
+  const body = readCode('services/caddieRequestBody.ts');
+  const perf = readCode('services/ballPerformance.ts');
+  check('BALL: the ball is declared where the ROUND is set up, and it is the same one field',
+    // set it on the round-setup panel...
+    /usePlayerProfileStore\.getState\(\)\.setCurrentBall\(active \? null : b\)/.test(play) &&   // a chip
+      /usePlayerProfileStore\.getState\(\)\.setCurrentBall\(name\)/.test(play) &&               // ...and a new ball
+      saysToPlayer(play, 'BALL') &&                                                            // the section is on screen
+      /const ballOptions = useMemo/.test(play) &&
+      // ...from the balls he has actually played, grouped exactly as the comparison groups them
+      /normalizeBallKey/.test(play) && /export function normalizeBallKey/.test(perf) &&
+      // ...and every downstream half is still attached
+      /currentBall/.test(round) && /ball:/.test(round) &&
+      /currentBall: safe/.test(body),
+    'the setup panel writes playerProfileStore.currentBall — the one field the round record stamps at round end and the brain already receives — so there is no per-round copy to disagree with the profile');
+
+  check('BALL: the chips are rounds he played, never a brand the app invented',
+    /add\(r\.ball\)/.test(play) && /roundHistory/.test(play) &&
+      !/Pro V1|Chrome Soft|TP5/.test(play),
+    'the options come off his own round history plus whatever is declared now; picking one is what makes "which ball scores better for me" answerable, and no SKU is ever suggested by this screen');
 }
 
 const total = results.length;

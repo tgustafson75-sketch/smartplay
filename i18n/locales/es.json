@@ -130,7 +130,15 @@
     "milestones": "Logros",
     "no_rounds": "Aún no hay rondas",
     "no_rounds_sub": "Juega tu primera ronda con {{caddie}} para ver tus estadísticas aquí.",
-    "pattern_shift": "CAMBIO DE PATRÓN"
+    "pattern_shift": "CAMBIO DE PATRÓN",
+    "profile_card": {
+      "edit_profile": "Perfil",
+      "edit_bag": "Tu bolsa"
+    },
+    "accessibility_label": {
+      "edit_your_profile": "Editar tu perfil",
+      "edit_your_bag": "Editar tu bolsa: palos, varillas y grips"
+    }
   },
   "play": {
     "active_round": "RONDA ACTIVA",
@@ -184,6 +192,17 @@
       "remove": "Quitar de campos habituales",
       "full_title": "El límite son tres",
       "full_body": "Ya tienes {{max}} campos habituales. Quita uno primero: cada uno se prepara con antelación para estar listo cuando juegues."
+    },
+    "ball": "BOLA",
+    "ball_other": "+ Otra bola",
+    "ball_placeholder": "¿Qué bola? p. ej. Pro V1",
+    "ball_hint": "Opcional. Dime con qué bola juegas y la registro en la vuelta: tras unas cuantas vueltas con cada una podré decirte cuál te hace puntuar mejor.",
+    "ball_set_hint": "Juegas la {{ball}}. La registro en esta vuelta para que cuente en la comparación de bolas.",
+    "ball_a11y": {
+      "playing": "Juegas la {{ball}}. Toca para quitarla.",
+      "play_this": "Jugar la {{ball}} esta vuelta",
+      "add_another": "Añadir otra bola",
+      "save": "Guardar esta bola"
     }
   },
   "swinglab": {
@@ -306,10 +325,24 @@
       "open_my_bag_sub": "Palos, varillas y grips — escanea o añade",
       "bag_cap": "Una bolsa empieza la ronda con {{limit}} palos. El resto sigue siendo tuyo, solo se queda en casa.",
       "over_by_one": "{{selected}} seleccionados: saca {{count}} más para cerrar la bolsa.",
-      "over_by_other": "{{selected}} seleccionados: saca {{count}} más para cerrar la bolsa."
+      "over_by_other": "{{selected}} seleccionados: saca {{count}} más para cerrar la bolsa.",
+      "your_bag_tap_a_club": "TU BOLSA · TOCA CUALQUIER PALO PARA FIJAR SU DISTANCIA"
     },
     "accessibility_label": {
-      "open_my_bag": "Mi bolsa"
+      "open_my_bag": "Mi bolsa",
+      "distance_for_club": "Distancia de {{unit}} para {{club}} en yardas"
+    },
+    "unit": {
+      "carry": "Vuelo",
+      "total": "Total",
+      "carry_hint": "Donde cae. Es el número que uso para el agua, los búnkeres y cualquier carry obligado.",
+      "total_hint": "Donde se detiene: el número que casi todos conocemos. Descuento {{roll}} yd de rodada para este palo.",
+      "refused": "Esa no es una distancia posible para este palo. Dame algo entre {{min}} y {{max}} yardas."
+    },
+    "row": {
+      "you_set_total": "pusiste {{yards}} total",
+      "you_set_carry": "pusiste {{yards}} de vuelo",
+      "tracked_is": "registrado {{yards}}"
     }
   },
   "profile": {
