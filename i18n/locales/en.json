@@ -1515,6 +1515,10 @@
     },
     "tile": {
       "launch": "{{height}} LAUNCH"
+    },
+    "family": {
+      "full_swing": "FULL SWING — SHAPING",
+      "short_game": "AROUND THE GREEN"
     }
   },
   "practice_smartplan": {

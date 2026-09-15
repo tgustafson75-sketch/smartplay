@@ -321,5 +321,11 @@
     "accessibility_label": {
       "open_settings": "打开设置"
     }
+  },
+  "practice_shot_shapes": {
+    "family": {
+      "full_swing": "全挥杆 — 塑形",
+      "short_game": "果岭周边"
+    }
   }
 }

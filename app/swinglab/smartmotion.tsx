@@ -1620,8 +1620,14 @@ export default function SmartMotion() {
   const shotShapeVerdict = useMemo(() => {
     if (!shotShapeDef || !ballArea) return null;
     const actual = ballDeparture?.departurePoint ? readActualLaunch(ballArea, cvToContainer(ballDeparture.departurePoint)) : null;
-    return compareShotShape(shotShapeDef, actual);
-  }, [shotShapeDef, ballArea, ballDeparture, cvToContainer]);
+    /**
+     * 2026-09-14 — the SWINGER's hand, not the account holder's. A shaped full swing is graded on
+     * its start line, and a right-hander's draw starts right while a lefty's starts left — grading
+     * a left-handed student against a right-hander's shot would call every good one a miss. This is
+     * the same value the capture guides already use.
+     */
+    return compareShotShape(shotShapeDef, actual, { handedness: swingerHandedness });
+  }, [shotShapeDef, ballArea, ballDeparture, cvToContainer, swingerHandedness]);
   // Green→red by how far off the aim line it started, dimmed by a weak strike (peakDb
   // vs the session's strongest). Honest: divergence + real strike energy, no faked curve.
   const ballTraceColor = useMemo(() => {

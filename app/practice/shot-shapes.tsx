@@ -63,7 +63,21 @@ export default function ShotShapesPicker() {
         <Text style={[styles.sub, { color: colors.text_muted }]}>
           {t('practice_shot_shapes.shot_shapes_picker.pick_a_shot_i_ll')}
         </Text>
-        {SHOT_SHAPES.map((s) => (
+        {/**
+          * 2026-09-14 (Tim) — "we have shot shape drills but we dont teach how the hell to shot
+          * shape." The short-game set was taught on 2026-09-01; FULL-SWING shaping was not in the
+          * app at all beyond one knowledge-base entry stating the ball-flight law, while
+          * clubTendency measured your shape and the caddie commented on it.
+          *
+          * Two racks, because a flop and a draw are not the same kind of decision — one is about
+          * height beside the green, the other about curve off the tee. Full swing comes first: it
+          * is the one that was missing, and it is the one a player means by "shot shape".
+          */}
+        {(['full_swing', 'short_game'] as const).flatMap((fam) => [
+          <Text key={`h-${fam}`} style={[styles.famHeading, { color: colors.text_muted }]}>
+            {t(`practice_shot_shapes.family.${fam}`)}
+          </Text>,
+          ...SHOT_SHAPES.filter((s) => s.family === fam).map((s) => (
           <TouchableOpacity
             key={s.id}
             style={[styles.tile, { backgroundColor: colors.surface, borderColor: colors.border }]}
@@ -80,7 +94,8 @@ export default function ShotShapesPicker() {
               {t('practice_shot_shapes.tile.launch', { height: s.intendedHeight.toUpperCase() })}
             </Text>
           </TouchableOpacity>
-        ))}
+          )),
+        ])}
       </ScrollView>
 
       {/* THE LESSON. Opens on tap; RECORD is the second tap. */}
@@ -147,6 +162,7 @@ const styles = StyleSheet.create({
   headerBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 16, fontWeight: '800', flex: 1, textAlign: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingHorizontal: 16, paddingBottom: 40, justifyContent: 'space-between' },
+  famHeading: { width: '100%', fontSize: 11, fontWeight: '900', letterSpacing: 1.2, marginTop: 14, marginBottom: 2 },
   sub: { width: '100%', fontSize: 14, lineHeight: 20, marginBottom: 6 },
   tile: { width: '47%', borderWidth: 1, borderRadius: 14, padding: 14 },
   tileIcon: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },

@@ -40,11 +40,22 @@ export const BALL_FLIGHT: KBEntry[] = [
     topic: 'curve = face-to-path',
     aliases: ['why does my ball curve', 'slice or hook', 'draw vs fade', 'why do i slice', 'why do i hook', 'how to hit a draw', 'how to hit a fade', 'what is a fade', 'whats a fade', 'what is a draw', 'difference between a draw and a fade'],
     principle:
-      'Curve comes from the face RELATIVE to the path. Face open to the path curves it away from a righty (fade/slice); face closed to the path curves it toward (draw/hook). To shape it on purpose, control the gap between where the face points and where the club is travelling.',
+      'Curve comes from the face RELATIVE to the path. Face open to the path curves it away from a righty (fade/slice); face closed to the path curves it toward (draw/hook). '
+      // 2026-09-14 (Tim — "we have shot shape drills but we dont teach how the hell to shot shape").
+      // This stated the LAW and stopped, which is physics, not a lesson — and the caddie was the
+      // surface where it mattered most, because "how do I hit a draw" is asked out loud far more
+      // often than it is looked up. The instruction is the same one the Shot Shapes lesson gives:
+      // aim the face at the target, aim the body off it, swing along the body.
+      + 'TO SHAPE IT ON PURPOSE, the setup does the work: aim the CLUBFACE at your target first, '
+      + 'then set feet, hips and shoulders right of it for a draw (left for a fade, right-handed), '
+      + 'and swing along your FEET rather than at the target. Ball slightly back for a draw, '
+      + 'forward for a fade. Mirror it for a left-hander. The Shot Shapes drill in SwingLab walks '
+      + 'through each one and then watches the start line.',
     appSignals: ['tracked_dispersion'],
     honesty: 'directional',
     cnsPersonalize: ['tendencies'],
-    coachingCues: ['face open to path = fade/slice', 'face closed to path = draw/hook', 'shape = the gap'],
+    coachingCues: ['face open to path = fade/slice', 'face closed to path = draw/hook', 'shape = the gap',
+      'aim the face at the target, the body off it, swing along the body'],
     related: ['bf.start-direction-face', 'fs.transition.over-the-top', 'bf.gear-effect'],
     source: 'ball-flight-laws',
   },

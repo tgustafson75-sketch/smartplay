@@ -321,5 +321,11 @@
     "accessibility_label": {
       "open_settings": "Abrir ajustes"
     }
+  },
+  "practice_shot_shapes": {
+    "family": {
+      "full_swing": "SWING COMPLETO — FORMA",
+      "short_game": "JUEGO CORTO"
+    }
   }
 }
