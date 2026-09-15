@@ -320,6 +320,11 @@
     },
     "accessibility_label": {
       "open_settings": "Abrir ajustes"
+    },
+    "bag": {
+      "heading": "TU BOLSA",
+      "title": "Palos, varillas y grips",
+      "sub": "Escanea tu bolsa o corrige cualquier palo: el caddie usa esto."
     }
   },
   "practice_shot_shapes": {

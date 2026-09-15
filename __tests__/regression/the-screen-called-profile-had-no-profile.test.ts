@@ -78,3 +78,28 @@ describe('the profile lives on the Profile screen', () => {
     expect(f).toMatch(/^function Field\(/m);
   });
 });
+
+/**
+ * 2026-09-14 (evening) — THE BAG ENTRY CAME BACK, because moving the form deleted it.
+ *
+ * A "Your Bag" row was added to Settings on 2026-09-13 in answer to Tim asking "shouldn't The Bag
+ * be populated originally in the Profile?" — its note recorded that until then the bag was
+ * "reachable from neither onboarding nor here". The profile-form move lifted that whole section out
+ * of Settings and took the row with it, so the bag would have been hard to find again the next
+ * morning: the only remaining path was SwingLab → Fit Profile → scroll to the bottom.
+ *
+ * Found by checking that the two things he said he would do first — update his profile and scan his
+ * bag — were REACHABLE, not merely present. [[built-is-not-reachable]]
+ */
+describe('the bag is reachable from the profile', () => {
+  it('the Profile screen links to the bag', () => {
+    const src = code('app/profile.tsx');
+    expect(src).toMatch(/router\.push\('\/bag-scan'/);
+    expect(src).toMatch(/profile\.bag\.title/);
+  });
+
+  it('and there is still more than one way in', () => {
+    // Fit Profile keeps its own entry; losing BOTH is how it became unfindable the first time.
+    expect(code('app/practice/fit-profile.tsx')).toMatch(/router\.push\('\/bag-scan'/);
+  });
+});

@@ -1572,6 +1572,11 @@
       "saved": "Profile saved",
       "im_a": "I'M A",
       "your_details": "YOUR DETAILS"
+    },
+    "bag": {
+      "heading": "YOUR BAG",
+      "title": "Clubs, shafts and grips",
+      "sub": "Scan your bag, or fix any club — the caddie clubs off this."
     }
   },
   "profile_custom_caddie": {

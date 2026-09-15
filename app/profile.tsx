@@ -168,6 +168,30 @@ export default function ProfileScreen() {
           * them — it did, three taps away on a different screen. The form moved; the pointer is
           * gone rather than duplicated.
           */}
+        {/**
+          * 2026-09-14 — YOUR BAG, restored and moved to where Tim asked for it.
+          *
+          * A "Your Bag" row was added to Settings on 2026-09-13 because he asked "shouldn't The Bag
+          * be populated originally in the Profile?" — its own note recorded that the bag was
+          * "reachable from neither onboarding nor here". Moving the profile form out of Settings
+          * deleted that row with it, which would have made the bag hard to find again the very next
+          * morning. It belongs on the Profile screen, which is the answer to his original question.
+          */}
+        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{t('profile.bag.heading')}</Text>
+        <TouchableOpacity
+          style={[styles.actionCard, { backgroundColor: colors.surface, borderColor: colors.accent }]}
+          onPress={() => router.push('/bag-scan' as never)}
+          accessibilityRole="button"
+          accessibilityLabel={t('profile.bag.title')}
+        >
+          <Ionicons name="golf-outline" size={22} color={colors.accent} />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.actionTitle, { color: colors.text_primary }]}>{t('profile.bag.title')}</Text>
+            <Text style={[styles.actionSub, { color: colors.text_muted }]}>{t('profile.bag.sub')}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+        </TouchableOpacity>
+
         <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{t('profile.form.your_details')}</Text>
         <ProfileForm />
       </ScrollView>

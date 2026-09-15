@@ -320,6 +320,11 @@
     },
     "accessibility_label": {
       "open_settings": "打开设置"
+    },
+    "bag": {
+      "heading": "你的球包",
+      "title": "球杆、杆身与握把",
+      "sub": "扫描球包或修正任一球杆 — 球童据此选杆。"
     }
   },
   "practice_shot_shapes": {
