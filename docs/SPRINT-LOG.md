@@ -4405,3 +4405,38 @@ the rest "still live in Settings, so we don't fork the edit form."
 5. **A spoken tempo count** keyed to his measured ms — `tempoMetronome` already plays actual vs
    ideal; the count is the Haney/Tour-Tempo device, grounded, and the differentiator over the
    standalone app is that ours is set from a measurement.
+
+### The queue, worked in order — 2026-09-14 (late)
+
+1. `7dfe14d1` **the screen called Profile now holds the profile.** The form lived in Settings and
+   could not move, because `PillRow` was declared INSIDE the Settings component and closed over its
+   colours. PillRow came out to `components/PillRow`, the form to `components/profile/ProfileForm`,
+   and Settings is **745 lines lighter** — a slim card and a link, not a second copy.
+   *Found on the way:* a keyboard bug I wrote (`Field` declared inside the component = a new type
+   every render = the keyboard closes on each keystroke), **two recalculate handlers** where only
+   Settings' reported `repaired`/`nowCounted` (deleting it would have kept the silent one), and 48
+   dead declarations + 6 orphaned styles. Six existing guards re-pointed, none weakened.
+2. `22d18f80` **every swing fault says what it is and how to fix it.** `PoseFault` was key + label +
+   severity + measurement. Seven of eleven faults had no teaching anywhere; the other four had a
+   drill the pose read was never passed to. `services/swing/faultTeaching` is the one owner of the
+   words; the drill is ASKED of `drillRecommendation`. **The enforcement is the type** —
+   `Record<SwingFaultKey, …>` plus a single `fault()` constructor — verified by mutation.
+3. `864ff8ab` **full-swing shaping is taught.** Draw / Fade / Knockdown / High Ball with the
+   short-game lesson shape. The honesty problem: one departure point reads a START LINE, not a
+   curve, so a shaped swing is graded on the start line and the verdict says the curve is not
+   measured. Mirrors for a left-hander, using the SWINGER's hand. `bf.face-to-path` now carries the
+   instruction, not just the law.
+4. **Ball type → acoustic detector: investigated, deliberately NOT built.** Cover and compression do
+   move `peak_db`/`decay_db`/duration. But a per-ball offset table is fabricated constants, and a
+   learned baseline has **no consumer** — nothing compares strikes longitudinally. The ball-speed
+   number is already honest where it surfaces (estimate badge, `~`, confidence ≤ 0.65, not
+   truth-grade, null on unknown club).
+5. `92743fa4` **a tempo count fitted to his swing.** Grounded in Tour Tempo, which the trainer
+   already uses. The standalone app Tim tried hands you a preset; this picks the count that fits his
+   measured backswing at a speaking rate, plus one for the tempo he is aiming at. A backswing too
+   short to count **says so** rather than shrinking the count to fit.
+
+Gates throughout: tsc · lint 0 errors / 78 warnings (unchanged) · jest 5026/5026 (412 suites) ·
+sim 1034/1034. Break-tests on every new guard.
+
+**Still not on a phone. None of it.**

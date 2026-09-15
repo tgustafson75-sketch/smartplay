@@ -8,7 +8,26 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
-> ### ⚠️ LATEST — 2026-09-14 (later). Tempo, the home set, and the profile audit.
+> ### ⚠️ LATEST — 2026-09-14 (late). The queue, worked in order.
+>
+> `7dfe14d1` **Profile holds the profile** — the form moved out of Settings (745 lines lighter);
+> PillRow had to be extracted first because it was trapped inside the Settings component. Caught a
+> keyboard bug of my own and a second, silent recalculate handler on the way.
+> `22d18f80` **every fault names its fix** — 7 of 11 had no teaching anywhere; enforced by the TYPE,
+> not a test. `864ff8ab` **full-swing shaping taught** (draw/fade/knockdown/high), graded on start
+> line because a curve is not measurable from one departure point; mirrors for a lefty.
+> `92743fa4` **a tempo count fitted to the measured backswing**, plus one for the target tempo.
+>
+> **Ball type → acoustic detector: investigated, NOT built** — a per-ball offset would be fabricated
+> constants and a learned baseline has no consumer. Written up in SPRINT-LOG.
+>
+> Green: tsc · lint 0 errors · jest **5026/5026 (412 suites)** · sim **1034/1034**.
+>
+> **NEXT — device verification. None of today has been on a phone.**
+>
+> ---
+>
+> ### ⚠️ EARLIER — 2026-09-14 (later). Tempo, the home set, and the profile audit.
 >
 > `c1946e14` **tempo was measured to the millisecond and described from a table of four.** Five
 > findings, all reproduced by execution: canned coaching (same sentence for a 1.0:1 and a 2.6:1, and
