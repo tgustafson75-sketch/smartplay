@@ -8,7 +8,26 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
-> ### ⚠️ LATEST — 2026-09-14 (end of session). PUBLISHED TO PREVIEW.
+> ### ⚠️ LATEST — 2026-09-15 (small hours). LIVE ON PRODUCTION ANDROID. Lint at ZERO.
+>
+> **Tim is on the PRODUCTION channel, not preview** — every Android build on this project is
+> `channel=production` (verified via `eas build:list`; the preview publish reached nothing).
+> Published to **production, Android only** (`2239117c`): iOS is also production-channel and Apple is
+> in review, so the iOS binary stays on the 1-day-old update.
+>
+> **Open items are closed.** The last lint warning turned out to be five real stale reads inside
+> `runAnalysis` — feel/coach notes saved against the wrong swing, the persona stamped wrong, a hero
+> moment pointing at the wrong clip, and `isPutt` read directly while `puttModeRef` sat three lines
+> away. Fixed with mirrors, not suppressed. **Lint 78 → 0.** Hotel Mode and SwingSim are recorded as
+> fixed-dark by design.
+>
+> Green: tsc · lint **0/0** · jest **5047/5047 (416 suites)** · sim **1034/1034**.
+>
+> **The only thing left is device verification.** Open the app twice.
+>
+> ---
+>
+> ### ⚠️ EARLIER — 2026-09-14 (end of session). Published to preview.
 >
 > **Everything from 2026-09-14 is live on the `preview` channel** (update `6a3aaf70`). It was not
 > visible before because nothing had been published for 23 hours — a commit is not a deploy.

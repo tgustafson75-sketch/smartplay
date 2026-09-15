@@ -4475,3 +4475,54 @@ Every surface touched today now has ≥2 entry points: bag-scan, profile, shot-s
 
 Nothing here touches build 26. When it is wanted: `npm run ota:production`, which additionally runs
 `scripts/ota-owner-guard.mjs` (refuses a production OTA while owner mode is on locally).
+
+## Day N — 2026-09-15 (small hours) — open items closed, and the channel correction
+
+### THE CORRECTION THAT MATTERED MOST
+
+Tim: *"Im pretty sure Im on production as well."* He was right and I was wrong. I had taken "I am
+on the Android preview build" at face value and published to the **preview** channel. Checking
+`eas build:list` shows **every Android build on this project is `profile=production /
+channel=production`** — versionCode 26, built 9/4. There is no preview-channel Android build at all.
+`scripts/ota-owner-guard.mjs`'s own header says exactly this, and I had read that file earlier
+without connecting it. The preview publish would have reached nothing.
+
+**Published to the production channel, ANDROID ONLY.** iOS build 26 is also production-channel and
+Apple is in review, so `--platform android` reaches his phone while the iOS binary under review
+stays on the 1-day-old update. Verified after publishing: the production branch's latest iOS group
+is still `a89d2dfe`.
+
+[[trace-the-route-before-explaining-behavior]] — the lesson is the memory entry, exactly.
+
+### Open items, closed
+
+1. **The last lint warning was a real bug.** `runAnalysis` is deliberately stable (06-11 audit) but
+   read FIVE values directly with no ref mirror: `feelText` / `coachNote` (saved into the session as
+   feel_note / coach_note — a note could be saved against the wrong swing), `analysisCaddie` (the
+   persona stamped on the session; third instance of that class in two days), `clipUri` (a hero
+   moment could point at the clip loaded at screen-open), and `isPutt` — while `puttModeRef` existed
+   three lines away. Five mirrors added, the pattern the file established itself. Also found ONE
+   write still reading the bare `club` while three siblings read `clubRef.current`: one callback,
+   two answers for one fact. **Lint: 78 → 0.** Nothing suppressed.
+2. **Hotel Mode and SwingSim are fixed-dark BY DESIGN** — resolved from their own headers ("anywhere,
+   in the dark"; "broadcast presentation"), not from preference. Decision recorded in both files with
+   a do-not-wire-this-to-the-theme note.
+3. **Whole-app check**: every structural LOCK green — no persisted setting without a caller, no
+   orphaned export, no denied feature that refuses without offering the upgrade, no child swing data
+   leaving the device, no test-store key shippable with subscriptions on.
+
+### Three more brittle guards, all made to follow the code
+
+The sim's timeliness check pinned `isPutt ?` verbatim; the hero-moment test pinned
+`clipUri: clipUri ?? null`; a third asserted a non-fatal catch sat within 800 characters of the hero
+block — it is now 832, so **adding a comment broke it**. That one is anchored on structure now. A
+byte-count window is a guard with an expiry date.
+
+### Gates
+
+tsc · lint **0 errors / 0 warnings** · jest **5047/5047 (416 suites)** · sim **1034/1034**.
+
+### Still open
+
+**Device verification only.** Nothing else. Production Android is live on `2239117c`; open the app
+twice (open #1 downloads in the background, open #2 runs it) and Settings will show the update id.
