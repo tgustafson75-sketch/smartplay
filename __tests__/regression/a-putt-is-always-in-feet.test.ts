@@ -131,9 +131,12 @@ describe('every surface a human reads a putt on says feet', () => {
     expect(en.settings.text.longest_putt_feet).toMatch(/feet/i);
     // the yards spelling is gone, not merely unused — a key left behind is a key something re-uses
     expect(en.settings.text.longest_putt_yards).toBeUndefined();
-    const s = code('app/settings.tsx');
+    // 2026-09-14 — the field moved with the profile form out of Settings.
+    const s = code('components/profile/ProfileForm.tsx');
     expect(s).toMatch(/longest_putt_feet/);
     expect(s).not.toMatch(/longest_putt_yards/);
+    // and Settings must not have kept a second copy of it
+    expect(code('app/settings.tsx')).not.toMatch(/longest_putt/);
     const d = code('app/(tabs)/dashboard.tsx');
     expect(d).toMatch(/longestPuttFeet != null \? `\$\{longestPuttFeet\} ft`/);
     expect(d).toMatch(/Longest putt \$\{longestPuttFeet\} feet/);

@@ -14,7 +14,12 @@
 import fs from 'fs';
 import path from 'path';
 
-const SETTINGS = fs.readFileSync(path.resolve(__dirname, '../../app/settings.tsx'), 'utf8');
+/**
+ * 2026-09-14 — the profile form moved out of app/settings.tsx into
+   * components/profile/ProfileForm, rendered by app/profile.tsx, so the screen called Profile
+   * actually holds the profile. The guard follows the code; what it protects is unchanged.
+ */
+const SETTINGS = fs.readFileSync(path.resolve(__dirname, '../../components/profile/ProfileForm.tsx'), 'utf8');
 const code = SETTINGS.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 
 describe('the answers that are a known set are buttons', () => {
@@ -41,15 +46,15 @@ describe('the answers that are a known set are buttons', () => {
   });
 
   it('Other is still reachable — a list with no escape hatch is a worse form, not a better one', () => {
-    expect(code).toMatch(/GOAL_OTHER/);
+    expect(code).toMatch(/\bOTHER\b/);
     expect(code).toMatch(/goalOtherOpen/);
     expect(code).toMatch(/limitationOtherOpen/);
   });
 
   it('the sentinels never reach the store — it stores his words, not a magic string', () => {
     // setEditGoal is given '' for Other, never the sentinel itself.
-    expect(code).toMatch(/setEditGoal\(v === GOAL_OTHER \? '' : v\)/);
-    expect(code).toMatch(/setEditLimitation\(v === GOAL_OTHER \|\| v === LIMITATION_NONE \? '' : v\)/);
+    expect(code).toMatch(/setEditGoal\(v === OTHER \? '' : v\)/);
+    expect(code).toMatch(/setEditLimitation\(v === OTHER \|\| v === NONE \? '' : v\)/);
   });
 
   it('the fields that genuinely need a keyboard still have one', () => {

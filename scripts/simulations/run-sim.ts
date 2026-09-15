@@ -6383,10 +6383,19 @@ check('Voice club-change + scan work on Smart Motion (no cage session needed)',
   'spoken club updates the shared store; "scan my club" triggers detection');
 
 const ownerProfileSrc = read('store/playerProfileStore.ts');
-check('Owner tools restorable: hotmail allow-listed + settings email input',
+/**
+ * 2026-09-14 — the account-email input moved with the profile form out of app/settings.tsx into
+ * components/profile/ProfileForm (rendered by app/profile.tsx). The guard is about REACHABILITY —
+ * an owner must be able to type the address that unlocks Owner Tools — so it follows the field, and
+ * additionally pins that the Profile screen actually renders the form. Checking only that the field
+ * exists somewhere would pass on a component nothing mounts. [[built-is-not-reachable]]
+ */
+check('Owner tools restorable: hotmail allow-listed + a reachable email input',
   /t\.gustafson@hotmail\.com/.test(ownerProfileSrc) &&
-    saysToPlayer(read('app/settings.tsx'), 'Account email') && /setAccountEmail/.test(read('app/settings.tsx')),
-  'owner can set email in Settings to unlock Owner Tools (issue log / voice misses / harness)');
+    saysToPlayer(read('components/profile/ProfileForm.tsx'), 'Account email') &&
+    /p\.setEmail\(/.test(read('components/profile/ProfileForm.tsx')) &&
+    /<ProfileForm \/>/.test(read('app/profile.tsx')),
+  'owner can set email on the Profile screen to unlock Owner Tools (issue log / voice misses / harness)');
 
 // ─── 2026-06-09: feels engine + putt mode ──────────────────────────────────
 check('Feels engine wired (capture → caddie brain reconcile)',

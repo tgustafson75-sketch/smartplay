@@ -104,14 +104,15 @@ describe('the player can actually set it', () => {
    * ever called the setter, so every player sat on 'x' and the gender-aware picker could never do
    * anything. A capability nothing can reach is not a feature; this fails if the control is removed.
    */
-  it('a settings screen calls setHandicapGender', () => {
-    const src = fs.readFileSync(path.resolve(__dirname, '../../app/settings.tsx'), 'utf-8');
+  it('a profile screen calls setHandicapGender', () => {
+    // 2026-09-14 — the rating-set picker moved with the profile form out of app/settings.tsx.
+    const src = fs.readFileSync(path.resolve(__dirname, '../../components/profile/ProfileForm.tsx'), 'utf-8');
     expect(src).toMatch(/setHandicapGender\(/);
     expect(src).toMatch(/handicap_gender/);
   });
 
   it('offers both rating sets and a way back to unset', () => {
-    const src = fs.readFileSync(path.resolve(__dirname, '../../app/settings.tsx'), 'utf-8');
+    const src = fs.readFileSync(path.resolve(__dirname, '../../components/profile/ProfileForm.tsx'), 'utf-8');
     for (const v of ["'m'", "'f'", "'x'"]) expect(src).toContain(`value: ${v}`);
   });
 });

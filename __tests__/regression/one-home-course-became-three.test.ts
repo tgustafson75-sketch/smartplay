@@ -101,15 +101,16 @@ describe('the three cue up as builds on the Play tab', () => {
   it('the picker is on the tab that has the course list, and it is a button', () => {
     expect(play).toMatch(/toggleHomeCourse/);
     expect(play).toMatch(/star-outline/);
-    // Settings shows the set and removes from it, but declares no second course list.
-    const settings = code('app/settings.tsx');
-    expect(settings).toMatch(/homeCourses/);
-    expect(settings).not.toMatch(/setHomeCourse\b/);
-    expect(settings).not.toMatch(/onChangeText=\{setEditHomeCourse\}/);
+    // The profile form shows the set and removes from it, but declares no second course list.
+    // (2026-09-14: that form moved out of Settings to components/profile/ProfileForm.)
+    const form = code('components/profile/ProfileForm.tsx');
+    expect(form).toMatch(/homeCourses/);
+    expect(form).not.toMatch(/setHomeCourse\b/);
+    expect(form).not.toMatch(/onChangeText=\{setEditHomeCourse\}/);
   });
 
   it('nothing reads the retired single field any more', () => {
-    for (const f of ['app/(tabs)/play.tsx', 'app/settings.tsx', 'app/smartvision.tsx',
+    for (const f of ['app/(tabs)/play.tsx', 'components/profile/ProfileForm.tsx', 'app/smartvision.tsx',
                      'services/contextSynthesizer.ts', 'services/setupGaps.ts',
                      'hooks/useVoiceCaddie.ts', 'components/caddie/L1HolePreview.tsx']) {
       expect(code(f)).not.toMatch(/\.homeCourse\b/);

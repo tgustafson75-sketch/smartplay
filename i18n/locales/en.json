@@ -198,7 +198,8 @@
       "owner_console_open_count": " · {{count}} open",
       "owner_console_sub": "Checklist, issue log, harnesses, diagnostics and owner actions — one screen",
       "no_home_courses_yet": "None yet — pick them from the course list.",
-      "choose_home_courses": "Choose from the course list"
+      "choose_home_courses": "Choose from the course list",
+      "set_up_your_profile": "Set up your profile"
     },
     "placeholder": {
       "search_settings": "Search settings",
@@ -1560,7 +1561,13 @@
       "goal": "Goal {{goal}}"
     },
     "accessibility_label": {
-      "edit_profile_details": "Edit profile details"
+      "edit_profile_details": "Edit profile details",
+      "open_settings": "Open settings"
+    },
+    "form": {
+      "saved": "Profile saved",
+      "im_a": "I'M A",
+      "your_details": "YOUR DETAILS"
     }
   },
   "profile_custom_caddie": {

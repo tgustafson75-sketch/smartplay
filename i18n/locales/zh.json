@@ -47,7 +47,8 @@
     },
     "text": {
       "no_home_courses_yet": "尚未设置 — 请从球场列表中选择。",
-      "choose_home_courses": "从球场列表中选择"
+      "choose_home_courses": "从球场列表中选择",
+      "set_up_your_profile": "设置你的资料"
     },
     "accessibility_label": {
       "remove_home_course": "将 {{course}} 从常打球场中移除"
@@ -309,6 +310,16 @@
     },
     "accessibility_label": {
       "open_my_bag": "我的球包"
+    }
+  },
+  "profile": {
+    "form": {
+      "saved": "资料已保存",
+      "im_a": "我是",
+      "your_details": "你的资料"
+    },
+    "accessibility_label": {
+      "open_settings": "打开设置"
     }
   }
 }

@@ -104,10 +104,12 @@ describe('the ones a PLAYER owns are editable by the player', () => {
   it('distanceControl is offered as the three answers the engines branch on', () => {
     // The values here ARE the branches in cnsShotRead, overrideLoop and holePlan. A fourth option
     // added to the screen without a branch would read as a setting that does nothing.
-    const settings = fs.readFileSync(path.join(ROOT, 'app/settings.tsx'), 'utf8');
-    const at = settings.indexOf('how_you_cover_a_number');
+    // 2026-09-14 — the profile form moved out of app/settings.tsx to components/profile/ProfileForm
+    // so that the screen called Profile actually holds the profile. The guard follows the code.
+    const form = fs.readFileSync(path.join(ROOT, 'components/profile/ProfileForm.tsx'), 'utf8');
+    const at = form.indexOf('how_you_cover_a_number');
     expect(at).toBeGreaterThan(-1);
-    const block = settings.slice(at, at + 600);
+    const block = form.slice(at, at + 600);
     for (const v of ['full_swings', 'some_partials', 'dial_down']) expect(block).toContain(v);
   });
 });

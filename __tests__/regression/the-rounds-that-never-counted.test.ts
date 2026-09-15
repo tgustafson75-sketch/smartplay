@@ -75,9 +75,17 @@ describe('it is deterministic once stamped', () => {
 describe('the wiring respects the decision', () => {
   const read = (p: string) => require('fs').readFileSync(require('path').join(__dirname, '../../', p), 'utf8') as string;
 
-  it('Settings and Profile repair through the one helper', () => {
-    expect(read('app/settings.tsx')).toMatch(/recalculateHandicapRounds\(\)/);
+  it('there is ONE recalculate, and it repairs through the one helper', () => {
+    /**
+     * 2026-09-14 — there were TWO recalculate handlers, one in Settings and one on Profile, and
+     * only the Settings one reported `repaired` / `nowCounted`. Moving the profile form to Profile
+     * would have deleted the explaining version and kept the silent one. The richer implementation
+     * moved instead; the thinner one is gone. This now asserts BOTH halves: Profile repairs through
+     * the helper, and Settings no longer holds a second copy to drift.
+     * [[two-owners-is-the-root-cause]]
+     */
     expect(read('app/profile.tsx')).toMatch(/recalculateHandicapRounds\(\)/);
+    expect(read('app/settings.tsx')).not.toMatch(/recalculateHandicapRounds\(\)/);
   });
 
   it('the automatic post-import recompute does NOT repair — that would be the silent migration', () => {
@@ -94,8 +102,8 @@ describe('the wiring respects the decision', () => {
     expect(imp).toMatch(/eligibleHandicapRounds\(all\)/);
   });
 
-  it('Settings tells the player what the repair did, so a moved Index is never a mystery', () => {
-    const st = read('app/settings.tsx');
+  it('the recalculate tells the player what the repair did, so a moved Index is never a mystery', () => {
+    const st = read('app/profile.tsx');
     expect(st).toMatch(/repairNote/);
     expect(st).toMatch(/had never counted toward your Index/);
   });

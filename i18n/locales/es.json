@@ -47,7 +47,8 @@
     },
     "text": {
       "no_home_courses_yet": "Ninguno todavía: elígelos en la lista de campos.",
-      "choose_home_courses": "Elegir en la lista de campos"
+      "choose_home_courses": "Elegir en la lista de campos",
+      "set_up_your_profile": "Configura tu perfil"
     },
     "accessibility_label": {
       "remove_home_course": "Quitar {{course}} de tus campos habituales"
@@ -309,6 +310,16 @@
     },
     "accessibility_label": {
       "open_my_bag": "Mi bolsa"
+    }
+  },
+  "profile": {
+    "form": {
+      "saved": "Perfil guardado",
+      "im_a": "SOY",
+      "your_details": "TUS DATOS"
+    },
+    "accessibility_label": {
+      "open_settings": "Abrir ajustes"
     }
   }
 }

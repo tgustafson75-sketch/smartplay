@@ -40,7 +40,8 @@ import { initWatchSwingBridge, stopWatchSwingBridge, isWatchSwingBridgeAvailable
 // for clean promo / store screenshots). Sourced from its own store
 // so app-wide consumers (the root StatusBar binding) read the same flag.
 import { useScreenshotModeStore } from '../store/screenshotModeStore';
-import { usePlayerProfileStore, isOwnerEmail, MAX_HOME_COURSES } from '../store/playerProfileStore';
+import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
+import { PillRow } from '../components/PillRow';
 
 import { useToastStore } from '../store/toastStore';
 import { useTrustLevelStore, TRUST_LEVEL_META } from '../store/trustLevelStore';
@@ -73,15 +74,7 @@ import {
 import { setScreenContext } from '../services/screenContext';
 import * as Sentry from '@sentry/react-native';
 
-/**
- * 2026-09-14 — sentinels for the two pickers that keep an escape hatch. They exist only inside this
- * screen's selection state: what reaches `setGoal` / `setPhysicalLimitation` is always the player's
- * real words, never one of these.
- */
-const GOAL_OTHER = '__other__';
-const LIMITATION_NONE = '__none__';
-const GOAL_PRESETS = ['Break 100', 'Break 90', 'Break 80', 'Lower my handicap', 'More consistent', 'Enjoy it more'];
-const LIMITATION_PRESETS = ['Back', 'Shoulder', 'Knee', 'Hip', 'Wrist / elbow'];
+
 
 // 2026-07-08 (Tim — "answer, don't interview") — primes the caddie to INVITE the golfer
 // to talk and then LISTEN, not run a Q&A. Ingested to CNS via narrativeIngest.
@@ -256,14 +249,7 @@ export default function Settings() {
 
   const {
     name,
-    role,
-    coachCredentials,
-    handedness,
-    dominantMiss,
-    physicalLimitation,
     goal,
-    personalBest,
-    preferredTee,
     /**
      * 2026-09-10 (Tim: "I am tired of half done work") — FOUR PROFILE FIELDS WITH READERS AND NO
      * WRITER. missType, experienceContext, homeCourse and default_mode each have live consumers and
@@ -277,25 +263,6 @@ export default function Settings() {
      * The comment further down this file CLAIMED these were already here ("experience, home course"),
      * which is most likely why nobody noticed for months. [[a-stale-header-is-a-source-someone-trusts]]
      */
-    missType,
-    experienceContext,
-    distanceControl,
-    homeCourses,
-    default_mode,
-    setMissType,
-    setExperienceContext,
-    setDistanceControl,
-    setHomeCourses,
-    setDefaultMode,
-    setName,
-    setRole,
-    setCoachCredentials,
-    setHandedness,
-    setDominantMiss,
-    setPhysicalLimitation,
-    setGoal,
-    setPersonalBest,
-    setPreferredTee,
   } = usePlayerProfileStore();
 
   /**
@@ -315,15 +282,10 @@ export default function Settings() {
     })();
     return () => { alive = false; };
   }, []);
-  const [editName, setEditName] = useState(name);
-  const [editCreds, setEditCreds] = useState(coachCredentials ?? '');
-  const [editGoal, setEditGoal] = useState(goal ?? '');
   /**
    * The sentinel a picker uses to mean "none of these" — never stored. `setGoal` receives the
    * chosen text verbatim, so the store never holds a magic string.
    */
-  const [goalOtherOpen, setGoalOtherOpen] = useState(false);
-  const [limitationOtherOpen, setLimitationOtherOpen] = useState(false);
 
   // 2026-07-11 — Ray-Ban Meta glasses live stream (DAT v0.8). Subscribe to the
   // bridge status; the toggle starts/stops the POV camera stream into the caddie.
@@ -367,20 +329,10 @@ export default function Settings() {
     }
   }, [t]);
   const handicapIndex = usePlayerProfileStore(s => s.handicap_index);
-  const setHandicapIndex = usePlayerProfileStore(s => s.setHandicapIndex);
-  const handicapGender = usePlayerProfileStore(s => s.handicap_gender);
-  const setHandicapGender = usePlayerProfileStore(s => s.setHandicapGender);
-  const [editIndex, setEditIndex] = useState(handicapIndex != null ? String(handicapIndex) : '');
   // 2026-05-26 — Fix AB Phase 1: GHIN # local edit mirror.
-  const ghinNumber = usePlayerProfileStore(s => s.ghin_number);
-  const setGhinNumber = usePlayerProfileStore(s => s.setGhinNumber);
-  const [editGhin, setEditGhin] = useState(ghinNumber ?? '');
   // 2026-06-09 — Account email. Setting it to an owner-allowlisted address
   // unlocks Owner Tools (the auto-mirror stops once the allow-list has >1
   // entry, so this explicit input is the supported path). Mirrors locally.
-  const accountEmail = usePlayerProfileStore(s => s.email);
-  const setAccountEmail = usePlayerProfileStore(s => s.setEmail);
-  const [editEmail, setEditEmail] = useState(accountEmail ?? '');
 
   // 2026-05-26 — Fix BD: WHS handicap recompute from roundHistory.
   // Walks every round (live + Batch-28 imports) ≥ 9 holes, rebuilds
@@ -388,60 +340,6 @@ export default function Settings() {
   // best-8-of-20. Replaces the existing differentials list outright
   // so a stale/wrong index gets corrected. Toast + console log on
   // success so the user can see the new value land.
-  const onRecalculateHandicap = useCallback(() => {
-    try {
-      const roundMod = require('../store/roundStore') as typeof import('../store/roundStore');
-      const calcMod = require('../services/handicapCalculator') as typeof import('../services/handicapCalculator');
-      // 2026-07-06 (audit P0) — canonical filter from roundStore: also excludes sim rounds, which
-      // this site's inline copy missed.
-      // 2026-09-11 — and it now REPAIRS first: historical rounds of 7-13 holes carried no posting
-      // basis and had never counted, and old 9s/18s posted uncapped. One helper so the three
-      // Recalculate surfaces cannot drift apart on the order of the two steps.
-      const { eligible, repaired, nowCounted } = roundMod.recalculateHandicapRounds();
-      if (eligible.length < 3) {
-        Alert.alert(
-          t('settings.alert.need_more_rounds'),
-          `Recalculation needs at least 3 postable rounds. You have ${eligible.length}. Play more rounds or import past rounds (Settings → Help → Import Past Round). A round of 7-13 holes posts as a nine; under 7 holes cannot post.`,
-        );
-        return;
-      }
-      const differentials = calcMod.rebuildDifferentialsFromHistory(eligible);
-      // Reset the rolling window to the recomputed list. Done by
-      // clearing + re-pushing because there's no setRecentDifferentials.
-      const profileMod = usePlayerProfileStore.getState();
-      // Clear by setting handicap_index null → that's a noop on the
-      // differentials. Use the partial-state setter pattern instead:
-      // direct set via the store API.
-      usePlayerProfileStore.setState({ recent_differentials: differentials });
-      const result = calcMod.estimateNewIndex(differentials);
-      if (result.newIndex != null) {
-        profileMod.setHandicapIndex(result.newIndex);
-        setEditIndex(String(result.newIndex));
-        /**
-         * 2026-09-11 — SAY WHAT THE REPAIR DID, because it is why the number moved.
-         *
-         * A recalculate that silently restamps historical rounds and hands back a different Index is
-         * indistinguishable from a bug. `nowCounted` is the part that surprises: rounds of 7-13
-         * holes had never counted toward the Index at all, so this is the tap where they start.
-         */
-        const repairNote = repaired > 0
-          ? `\n\nRepaired the scoring basis on ${repaired} past round${repaired === 1 ? '' : 's'}` +
-            (nowCounted > 0
-              ? `, ${nowCounted} of which had never counted toward your Index (a round of 7-13 holes posts as a nine).`
-              : ' — blow-up holes are now capped at net double bogey, as the Rules of Handicapping require.')
-          : '';
-        Alert.alert(
-          t('settings.alert.handicap_updated'),
-          `New Index: ${result.newIndex.toFixed(1)}\n\n${result.estimateNote}${repairNote}`,
-        );
-      } else {
-        Alert.alert(t('settings.alert.could_not_compute'), result.estimateNote);
-      }
-    } catch (e) {
-      console.log('[settings] recalculate handicap threw:', e);
-      Alert.alert(t('settings.alert.recalculation_failed'), e instanceof Error ? e.message : String(e));
-    }
-  }, [t]);
   // 2026-06-16 — Meta glasses voice-log import (v1: JSON file, active
   // round only). Picks the Meta View export, hands the file URI to
   // ingestMetaGlassesJson, and surfaces the IngestResult via toast.
@@ -501,22 +399,12 @@ export default function Settings() {
     })();
   }, []);
 
-  const [editLimitation, setEditLimitation] = useState(physicalLimitation ?? '');
-  const goalIsPreset = GOAL_PRESETS.includes(editGoal.trim());
-  const limitationIsPreset = LIMITATION_PRESETS.includes(editLimitation.trim());
-  const [editBest, setEditBest] = useState(personalBest ? String(personalBest) : '');
   // 2026-06-04 — Personal-best capture for the dashboard Highlights card.
   // longestDrive auto-updates from logShot when a Driver shot beats the
   // current high (see roundStore.logShot); longestPuttFeet is manual — putts are captured as counts
   // per hole, never as distances, so there is nothing to derive it from. Both clear when the user
   // blanks the input. The putt is in FEET (services/puttUnits); this field used to say yards, and
   // the card read "22y".
-  const longestDrive = usePlayerProfileStore(s => s.longestDrive);
-  const setLongestDrive = usePlayerProfileStore(s => s.setLongestDrive);
-  const longestPuttFeet = usePlayerProfileStore(s => s.longestPuttFeet);
-  const setLongestPuttFeet = usePlayerProfileStore(s => s.setLongestPuttFeet);
-  const [editLongestDrive, setEditLongestDrive] = useState(longestDrive != null ? String(longestDrive) : '');
-  const [editLongestPutt, setEditLongestPutt] = useState(longestPuttFeet != null ? String(longestPuttFeet) : '');
 
   // 2026-07-01 (Tim — OTA-lag trust fix) — show the LIVE bundle stamp so you can confirm in 2s that
   // you're on the current update before judging a fix. `embedded` = running the build's baked-in JS
@@ -551,53 +439,12 @@ export default function Settings() {
   // since the slim card is far above the fold.
   const scrollRef = useRef<ScrollView>(null);
 
-  const handleSaveProfile = () => {
-    if (editName.trim()) setName(editName.trim());
-    /**
-     * 2026-09-13 — ONE EDITABLE HANDICAP, AND IT IS THE INDEX.
-     *
-     * `handicap` (integer) is a MIRROR of `handicap_index`: setHandicapIndex writes both. But
-     * setHandicap wrote only the integer, and this screen offered a second text box wired to it —
-     * so typing in "Handicap" left the Index stale, and the two then disagreed for good. The caddie
-     * payload sends `handicap` while posting, the recap card and setup gaps read `handicap_index`,
-     * which is the divergence arriving somewhere it matters. The Index field below is now the only
-     * number a player types, and it keeps the integer in step on every write.
-     * [[two-owners-is-the-root-cause]]
-     */
-    setGoal(editGoal.trim() || null);
-    setPhysicalLimitation(editLimitation.trim() || null);
-    const best = parseInt(editBest, 10);
-    setPersonalBest(!isNaN(best) ? best : null);
-    // 2026-06-04 — Personal bests for the dashboard Highlights card.
-    const drv = parseInt(editLongestDrive, 10);
-    setLongestDrive(!isNaN(drv) && drv > 0 ? drv : null);
-    const putt = parseInt(editLongestPutt, 10);
-    setLongestPuttFeet(!isNaN(putt) && putt > 0 ? putt : null);
-    setProfileExpanded(false);
-    // 2026-05-28 — Fix FB: three coordinated changes to make save
-    // actually feel like save.
-    //   1. Toast instead of blocking Alert — the Alert was sitting on
-    //      top of the freshly-collapsed slim card, so the user
-    //      dismissed it and was still looking at the (now-cached?)
-    //      old form layout. Toast slides in without blocking render.
-    //   2. setProfileExpanded(false) above — already was there, but
-    //      it never visibly took effect because the Alert blocked.
-    //   3. scrollRef.scrollTo({y:0}) below — even with collapse + no
-    //      blocking modal, the user's scroll position is mid-page at
-    //      the form's Save button. Scrolling back to top puts the
-    //      slim card under their eye where they expect.
-    useToastStore.getState().show('Profile saved');
-    requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({ y: 0, animated: true });
-    });
-  };
 
   // 2026-05-18 — Collapsible sections. Settings was ~5 scrolls long;
   // now each section header is a tap target that toggles its card body.
   // All sections default collapsed except Profile (which has its own
   // slim-card-vs-edit-form treatment based on whether a name is saved).
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
-  const [profileExpanded, setProfileExpanded] = useState(!name?.trim());
   const [searchQuery, setSearchQuery] = useState('');
   const isSearching = searchQuery.trim().length > 0;
   const isExpanded = (title: string) => expandedSections[title] === true;
@@ -621,8 +468,6 @@ export default function Settings() {
   const labelStyle   = [styles.rowLabel,   { color: colors.text_primary }];
   const subStyle     = [styles.rowSub,     { color: colors.text_muted }];
   const rowDivStyle  = [styles.row,        { borderBottomColor: colors.border }];
-  const inputLblStyle = [styles.inputLabel, { color: colors.text_muted }];
-  const inputFldStyle = [styles.input,     { backgroundColor: colors.background, borderColor: colors.border, color: colors.text_primary }];
 
   const SectionHeader = ({ title }: { title: string }) => (
     <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{title}</Text>
@@ -712,43 +557,6 @@ export default function Settings() {
     </View>
   );
 
-  const PillRow = ({
-    label,
-    options,
-    value,
-    onSelect,
-  }: {
-    label: string;
-    options: { label: string; value: string }[];
-    value: string;
-    onSelect: (v: string) => void;
-  }) => (
-    <View style={styles.pillSection}>
-      <Text style={[styles.pillLabel, { color: colors.text_secondary }]}>{label}</Text>
-      <View style={styles.pillRow}>
-        {options.map(opt => (
-          <TouchableOpacity
-            key={opt.value}
-            style={[
-              styles.pill,
-              { borderColor: colors.border, backgroundColor: colors.surface_elevated },
-              value === opt.value && { backgroundColor: colors.accent_muted, borderColor: colors.accent },
-            ]}
-            onPress={() => onSelect(opt.value)}
-          >
-            <Text style={[
-              styles.pillText,
-              { color: colors.text_muted },
-              value === opt.value && { color: colors.accent, fontWeight: '700' },
-            ]}>
-              {opt.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </View>
-  );
-
   // ─── RENDER ───────────────────────────────
 
   return (
@@ -800,515 +608,39 @@ export default function Settings() {
         {/* PROFILE — slim card when saved, full edit form when expanded
             (auto-expanded if no name on file). 2026-05-18. */}
         <SectionHeader title={t('settings.title.profile')} />
-        {!profileExpanded && name?.trim() ? (
-          <View style={[
-            styles.profileSlim,
-            { backgroundColor: colors.surface_elevated, borderColor: colors.border },
-          ]}>
-            <View style={[
-              styles.profileSlimAvatar,
-              { borderColor: colors.accent, backgroundColor: colors.accent_muted },
-            ]}>
-              <Text style={[styles.profileSlimLetter, { color: colors.accent }]}>
-                {name.trim().charAt(0).toUpperCase()}
-              </Text>
-            </View>
-            <View style={styles.profileSlimText}>
-              <Text style={[styles.profileSlimName, { color: colors.text_primary }]} numberOfLines={1}>
-                {name.trim()}
-              </Text>
-              <Text style={[styles.profileSlimMeta, { color: colors.text_muted }]} numberOfLines={1}>{t('settings.text.handicap_goal', { handicap: handicapIndex != null ? handicapIndex.toFixed(1) : '—', goal: goal || '—' })}</Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => setProfileExpanded(true)}
-              hitSlop={10}
-              accessibilityRole="button"
-              accessibilityLabel={t('settings.accessibility_label.edit_profile')}
-              style={[styles.profileSlimGear, { borderColor: colors.accent }]}
-            >
-              {/* 2026-05-28 — Fix FB: settings-outline icon to match
-                  the dashboard's profileCard gear. Was pencil-outline;
-                  swap unifies the two slim cards as visually-same
-                  component. Size 18 matches the dashboard's gearBtn
-                  icon (was 16). */}
-              <Ionicons name="settings-outline" size={18} color={colors.accent} />
-            </TouchableOpacity>
-          </View>
-        ) : (
-        <View style={cardStyle}>
-          {/* 2026-05-26 — Fix DG: minimize button at top of expanded
-              profile form. The form takes 2 scrolls of screen real
-              estate; previously the only way to collapse was scrolling
-              all the way to the bottom Save/Cancel pair. Top chevron
-              gives a one-tap collapse without scrolling. Only renders
-              when a name is already on file (otherwise the user MUST
-              fill out the form first — collapse would lose data). */}
-          {name?.trim() ? (
-            <TouchableOpacity
-              onPress={() => setProfileExpanded(false)}
-              accessibilityRole="button"
-              accessibilityLabel={t('settings.accessibility_label.minimize_profile')}
-              hitSlop={10}
-              style={{
-                position: 'absolute',
-                top: 8,
-                right: 8,
-                zIndex: 1,
-                width: 32,
-                height: 32,
-                borderRadius: 16,
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: colors.surface_elevated,
-                borderWidth: 1,
-                borderColor: colors.border,
-              }}
-            >
-              <Ionicons name="chevron-up" size={16} color={colors.accent} />
-            </TouchableOpacity>
-          ) : null}
-
-          <Text style={inputLblStyle}>{t('settings.text.name')}</Text>
-          <TextInput
-            style={inputFldStyle}
-            value={editName}
-            onChangeText={setEditName}
-            placeholder={t('settings.placeholder.your_name')}
-            placeholderTextColor="#374151"
-            autoCapitalize="words"
-          />
-
-          <Text style={inputLblStyle}>{t('settings.text.personal_best')}</Text>
-          <TextInput
-            style={inputFldStyle}
-            value={editBest}
-            onChangeText={setEditBest}
-            keyboardType="numeric"
-            placeholder={t('settings.placeholder.best_round_score')}
-            placeholderTextColor="#374151"
-          />
-
-          {/* 2026-06-04 — Personal-best inputs surfaced on the dashboard
-              Highlights card. longestDrive auto-updates from logShot when
-              a Driver shot beats the current high (see roundStore.logShot);
-              longestPuttFeet is manual, in FEET, and there is no putt-distance source to derive it
-              from — putts are counted per hole, not measured. */}
-          <Text style={inputLblStyle}>{t('settings.text.longest_drive_yards')}</Text>
-          <TextInput
-            style={inputFldStyle}
-            value={editLongestDrive}
-            onChangeText={setEditLongestDrive}
-            keyboardType="numeric"
-            placeholder="e.g. 280"
-            placeholderTextColor="#374151"
-          />
-          <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -8, marginBottom: 8 }]}>
-            {t('settings.text.updated_automatically_as_you_log')}
-          </Text>
-
-          <Text style={inputLblStyle}>{t('settings.text.longest_putt_feet')}</Text>
-          <TextInput
-            style={inputFldStyle}
-            value={editLongestPutt}
-            onChangeText={setEditLongestPutt}
-            keyboardType="numeric"
-            placeholder="e.g. 38"
-            placeholderTextColor="#374151"
-          />
-          <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -8, marginBottom: 8 }]}>
-            {t('settings.text.manual_entry_for_now')}
-          </Text>
-
-          <Text style={inputLblStyle}>{t('settings.text.handicap_index_usga')}</Text>
-          <TextInput
-            style={inputFldStyle}
-            value={editIndex}
-            onChangeText={(v) => {
-              setEditIndex(v);
-              const n = parseFloat(v);
-              if (Number.isFinite(n)) setHandicapIndex(n);
-              else if (v === '') setHandicapIndex(null);
-            }}
-            keyboardType="decimal-pad"
-            placeholder="e.g. 18.0"
-            placeholderTextColor="#374151"
-          />
-          {/* 2026-05-26 — Fix BD: WHS-equivalent index recalculator.
-              Rebuilds recent_differentials from the entire roundHistory
-              (live rounds + imported screenshots from Batch 28) and
-              writes the WHS best-8-of-20 average back to handicap_index.
-              Useful for users who have populated their history but
-              their index is stale OR was never set. Lives directly
-              under the manual index field so the relationship is
-              obvious. */}
-          <TouchableOpacity
-            style={[styles.recalcBtn, { borderColor: colors.accent, backgroundColor: colors.accent_muted }]}
-            onPress={onRecalculateHandicap}
-          >
-            <Text style={[styles.recalcBtnText, { color: colors.accent }]}>
-              {t('settings.text.recalculate_from_round_history')}
+        {/**
+          * 2026-09-14 (Tim) — THE FORM MOVED TO THE SCREEN CALLED PROFILE.
+          *
+          * This section held the app's only profile editor — around 470 lines of it — while
+          * `app/profile.tsx`, the screen you reach by tapping the profile card on the Dashboard,
+          * showed five facts and a link back here. Tim opened Profile, found a handicap and no
+          * experience or level, and reported the app did not hold them. It did; they were on the
+          * other screen.
+          *
+          * So this is a slim card and a link, and there is no second copy of the form. The editor
+          * is `components/profile/ProfileForm`, rendered by `/profile`.
+          */}
+        <TouchableOpacity
+          style={[styles.profileSlim, { backgroundColor: colors.surface_elevated, borderColor: colors.border }]}
+          onPress={() => router.push('/profile' as never)}
+          accessibilityRole="button"
+          accessibilityLabel={t('settings.accessibility_label.edit_profile')}
+        >
+          <View style={[styles.profileSlimAvatar, { borderColor: colors.accent, backgroundColor: colors.accent_muted }]}>
+            <Text style={[styles.profileSlimLetter, { color: colors.accent }]}>
+              {(name?.trim() || 'G').charAt(0).toUpperCase()}
             </Text>
-          </TouchableOpacity>
-          <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -4, marginBottom: 8 }]}>
-            {/* 2026-09-03 — the old copy said "treats every course as 72.0 rating / 113 slope", which
-                has been untrue since rebuildDifferentialsFromHistory started reading each round's
-                own baseRating and baseSlope. It understated the app's own accuracy to the player, on
-                the screen that explains how their handicap is worked out. */}
-            {t('settings.text.uses_the_whs_best_8')}
-          </Text>
-
-          {/* 2026-05-26 — Fix AB Phase 1: GHIN # capture. We store the
-              number now so once USGA business-API credentials land we
-              can auto-pull official handicap + posted-scores history.
-              Until then it's informational (brain prompt + tournament
-              hints). */}
-          <Text style={inputLblStyle}>{t('settings.text.ghin_number')}</Text>
-          <TextInput
-            style={inputFldStyle}
-            value={editGhin}
-            onChangeText={(v) => {
-              setEditGhin(v);
-              setGhinNumber(v);
-            }}
-            keyboardType="numbers-and-punctuation"
-            placeholder="e.g. 1234567"
-            placeholderTextColor="#374151"
-          />
-          <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -8, marginBottom: 8 }]}>
-            {t('settings.text.optional_we_ll_pull_your')}
-          </Text>
-
-          <Text style={inputLblStyle}>{t('settings.text.account_email')}</Text>
-          <TextInput
-            style={inputFldStyle}
-            value={editEmail}
-            onChangeText={(v) => { setEditEmail(v); setAccountEmail(v.trim() || null); }}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder={t('settings.placeholder.you_email_com')}
-            placeholderTextColor="#374151"
-          />
-          <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -8, marginBottom: 8 }]}>{isOwnerEmail(editEmail) ? t('settings.text.optional_owner_tools_unlocked') : t('settings.text.optional_owner_devices_enter_your')}</Text>
-
-          {/**
-            * 2026-09-14 (Tim) — "Make profile setup buttons where it can be and only type when needed
-            * for ease of use for the user."
-            *
-            * These two were free-text boxes, and both are questions with a handful of real answers.
-            * A typed goal is also worse downstream than a picked one: the brain is handed this
-            * verbatim, so "brek 90", "Break 90!" and "break ninety" are three different goals to
-            * anything that wants to group or compare them.
-            *
-            * OTHER IS STILL THERE, and revealing the field only when it is chosen is the whole
-            * point — the common answers are one tap, and the keyboard appears only for someone whose
-            * answer genuinely is not on the list. Neither field is required.
-            */}
-          <PillRow
-            label={t('settings.text.goal')}
-            options={[
-              { label: 'Break 100', value: 'Break 100' },
-              { label: 'Break 90', value: 'Break 90' },
-              { label: 'Break 80', value: 'Break 80' },
-              { label: 'Lower my handicap', value: 'Lower my handicap' },
-              { label: 'More consistent', value: 'More consistent' },
-              { label: 'Enjoy it more', value: 'Enjoy it more' },
-              { label: 'Other', value: GOAL_OTHER },
-            ]}
-            value={goalIsPreset ? editGoal : (editGoal.trim() ? GOAL_OTHER : '')}
-            onSelect={(v) => { setGoalOtherOpen(v === GOAL_OTHER); setEditGoal(v === GOAL_OTHER ? '' : v); }}
-          />
-          {!goalIsPreset && (editGoal.trim().length > 0 || goalOtherOpen) && (
-            <TextInput
-              style={inputFldStyle}
-              value={editGoal}
-              onChangeText={setEditGoal}
-              placeholder={t('settings.placeholder.e_g_break_90')}
-              placeholderTextColor="#374151"
-              accessibilityLabel={t('settings.text.goal')}
-            />
-          )}
-
-          <PillRow
-            label={t('settings.text.physical_note')}
-            options={[
-              { label: 'None', value: LIMITATION_NONE },
-              { label: 'Back', value: 'Back' },
-              { label: 'Shoulder', value: 'Shoulder' },
-              { label: 'Knee', value: 'Knee' },
-              { label: 'Hip', value: 'Hip' },
-              { label: 'Wrist / elbow', value: 'Wrist / elbow' },
-              { label: 'Other', value: GOAL_OTHER },
-            ]}
-            value={limitationIsPreset ? editLimitation : (editLimitation.trim() ? GOAL_OTHER : LIMITATION_NONE)}
-            onSelect={(v) => { setLimitationOtherOpen(v === GOAL_OTHER); setEditLimitation(v === GOAL_OTHER || v === LIMITATION_NONE ? '' : v); }}
-          />
-          {!limitationIsPreset && (editLimitation.trim().length > 0 || limitationOtherOpen) && (
-            <TextInput
-              style={inputFldStyle}
-              value={editLimitation}
-              onChangeText={setEditLimitation}
-              placeholder={t('settings.placeholder.e_g_bad_left_knee')}
-              placeholderTextColor="#374151"
-              accessibilityLabel={t('settings.text.physical_note')}
-            />
-          )}
-
-          <PillRow
-            label="I'm a"
-            options={[
-              { label: 'Golfer', value: 'golfer' },
-              { label: 'Instructor', value: 'instructor' },
-              { label: 'Student', value: 'student' },
-            ]}
-            value={role}
-            onSelect={(v) => setRole(v as 'golfer' | 'instructor' | 'student')}
-          />
-
-          {role === 'instructor' ? (
-            <>
-              <Text style={inputLblStyle}>{t('settings.text.credentials_shown_on_swing_reports')}</Text>
-              <TextInput
-                style={inputFldStyle}
-                value={editCreds}
-                onChangeText={setEditCreds}
-                onBlur={() => setCoachCredentials(editCreds)}
-                placeholder={t('settings.placeholder.e_g_lpga_class_a')}
-                placeholderTextColor={colors.text_muted}
-              />
-            </>
-          ) : null}
-
-          <PillRow
-            label={t('settings.label.handedness')}
-            options={[
-              { label: 'Right', value: 'right' },
-              { label: 'Left', value: 'left' },
-            ]}
-            value={handedness}
-            onSelect={(v) => setHandedness(v as 'right' | 'left')}
-          />
-
-          <PillRow
-            label={t('settings.label.dominant_miss')}
-            options={[
-              { label: 'Left', value: 'left' },
-              { label: 'Straight', value: 'straight' },
-              { label: 'Right', value: 'right' },
-            ]}
-            value={dominantMiss ?? ''}
-            onSelect={(v) => setDominantMiss(v as 'left' | 'right' | 'straight')}
-          />
-
-          <PillRow
-            label={t('settings.label.preferred_tee')}
-            options={[
-              { label: 'Front', value: 'front' },
-              { label: 'Middle', value: 'middle' },
-              { label: 'Back', value: 'back' },
-            ]}
-            value={preferredTee}
-            onSelect={(v) => setPreferredTee(v as 'front' | 'middle' | 'back')}
-          />
-
-          {/*
-            2026-09-10 — the four fields below had LIVE READERS AND NO WRITER until today. Each one
-            was permanently null, so every consumer silently took its fallback branch. Placed here,
-            in the Profile section, because the comment lower down this file already told readers
-            they lived here.
-          */}
-
-          {/* Miss Type is richer than Dominant Miss (direction only) and the setter DERIVES
-              dominantMiss from it, so setting this keeps the two in step rather than splitting
-              them. Read by ball-fit's ball recommendation. */}
-          <PillRow
-            label={t('settings.label.typical_miss')}
-            options={[
-              { label: 'Slice', value: 'slice' },
-              { label: 'Hook', value: 'hook' },
-              { label: 'Pull', value: 'pull' },
-              { label: 'Push', value: 'push' },
-              { label: 'Thin', value: 'thin' },
-              { label: 'Fat', value: 'fat' },
-              { label: 'Varies', value: 'varies' },
-            ]}
-            value={missType ?? ''}
-            onSelect={(v) => setMissType(v as 'slice' | 'hook' | 'thin' | 'fat' | 'pull' | 'push' | 'varies')}
-          />
-
-          {/* Drives coachingAdaptation's tone + complexity, which until now ALWAYS fell to the
-              default branch — the caddie could not adapt how it explained things to anyone. */}
-          <PillRow
-            label={t('settings.label.where_you_re_at')}
-            options={[
-              { label: 'Starting', value: 'starting' },
-              { label: 'Improving', value: 'improving' },
-              { label: 'Returning', value: 'returning' },
-              { label: 'Competitive', value: 'competitive' },
-            ]}
-            value={experienceContext ?? ''}
-            onSelect={(v) => setExperienceContext(v as 'starting' | 'improving' | 'returning' | 'competitive')}
-          />
-
-          {/**
-            * 2026-09-11 (Tim) — THE FIFTH FIELD WITH READERS AND NO WRITER, and by some distance the
-            * most expensive one. distanceControl was added to the store with a default and then
-            * wired into cnsShotRead's club gapping, the override adjustment and the hole plan — so
-            * three features were branching on a value nobody could set, and every player in the app
-            * was silently treated as 'some_partials'.
-            *
-            * Tim describes himself as the opposite: "all I do right now is full swing and not good
-            * with dialing down yardages, so I play according to my yardages and feel." He would have
-            * got the wrong plan on every hole. This is exactly the class the 2026-09-10 note above
-            * was written about, one field later. [[sweep-the-missing-half-not-the-unused-export]]
-            */}
-          <PillRow
-            label={t('settings.label.how_you_cover_a_number')}
-            options={[
-              { label: 'Full swings', value: 'full_swings' },
-              { label: 'Some partials', value: 'some_partials' },
-              { label: 'I dial down', value: 'dial_down' },
-            ]}
-            value={distanceControl ?? ''}
-            onSelect={(v) => setDistanceControl(v as 'full_swings' | 'some_partials' | 'dial_down')}
-          />
-
-          {/* The mode Kevin assumes when a round starts (contextSynthesizer). */}
-          <PillRow
-            label={t('settings.label.default_round_mode')}
-            options={[
-              { label: 'Break 100', value: 'break_100' },
-              { label: 'Break 90', value: 'break_90' },
-              { label: 'Break 80', value: 'break_80' },
-              { label: 'Just play', value: 'free_play' },
-            ]}
-            value={default_mode ?? ''}
-            onSelect={(v) => setDefaultMode(v as 'break_100' | 'break_90' | 'break_80' | 'free_play')}
-          />
-
-          {/* Read by play.tsx to default-select your course, by smartvision as a last-resort
-              courseId, and by contextSynthesizer. Commits on blur, like Credentials above. */}
-          {/**
-            * 2026-09-14 (Tim — "make profile setup buttons where it can be and only type when needed",
-            * and "when user selects up to 3 home courses") — PICKED, NOT TYPED.
-            *
-            * This was a free-text box matched by SUBSTRING against the bundled catalog, so a typo, a
-            * shortened name or the wrong club in a multi-course facility all failed silently — and it
-            * could hold only one course.
-            *
-            * The picker is not HERE, deliberately. The catalog lives in `app/(tabs)/play.tsx` with
-            * search, GPS-nearest sorting and the real course cards; rebuilding any of that in Settings
-            * would be a second course list to keep in step. So this shows the set and removes from it,
-            * and the choosing happens on the tab that already knows every course.
-            */}
-          <Text style={inputLblStyle}>{t('settings.label.home_courses', { max: MAX_HOME_COURSES })}</Text>
-          {homeCourses.length === 0 ? (
-            <Text style={[subStyle, { marginBottom: 8 }]}>{t('settings.text.no_home_courses_yet')}</Text>
-          ) : (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-              {homeCourses.map((hc) => (
-                <TouchableOpacity
-                  key={hc.id || hc.name}
-                  onPress={() => setHomeCourses(homeCourses.filter((x) => (x.id || x.name) !== (hc.id || hc.name)))}
-                  style={{
-                    flexDirection: 'row', alignItems: 'center', gap: 6,
-                    borderRadius: 16, borderWidth: 1, borderColor: colors.accent,
-                    paddingHorizontal: 12, paddingVertical: 7,
-                  }}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('settings.accessibility_label.remove_home_course', { course: hc.name })}
-                >
-                  <Text style={{ color: colors.accent, fontWeight: '700', fontSize: 13 }}>{hc.name}</Text>
-                  <Ionicons name="close" size={14} color={colors.accent} />
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-          <TouchableOpacity
-            onPress={() => router.push('/(tabs)/play' as never)}
-            style={{
-              flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-              borderRadius: 20, borderWidth: 1, borderColor: colors.border,
-              paddingVertical: 11, marginBottom: 4,
-            }}
-            accessibilityRole="button"
-            accessibilityLabel={t('settings.text.choose_home_courses')}
-          >
-            <Ionicons name="golf-outline" size={16} color={colors.text_primary} />
-            <Text style={{ color: colors.text_primary, fontWeight: '700', fontSize: 14 }}>{t('settings.text.choose_home_courses')}</Text>
-          </TouchableOpacity>
-
-          {/*
-            2026-08-21 — WHICH rating set your course handicap comes from. Courses are rated twice
-            and the two sets share yardages: Sharp Park's Blue tees are 6416y at 77.5/135 women's
-            and 71.2/125 men's. Course handicap is (Index x Slope/113) + (Rating - Par), so reading
-            the wrong set quietly hands out a wrong stroke allowance on a scorecard that looks
-            perfectly right. Left unset we don't guess -- we hold to one internally consistent set.
-          */}
-          <PillRow
-            label={t('settings.label.course_rating_set')}
-            options={[
-              { label: "Men's", value: 'm' },
-              { label: "Women's", value: 'f' },
-              { label: 'Not set', value: 'x' },
-            ]}
-            value={handicapGender}
-            onSelect={(v) => setHandicapGender(v as 'm' | 'f' | 'x')}
-          />
-
-          {/**
-            * 2026-09-13 (Tim — "shouldn't The Bag be populated originally in the Profile?")
-            *
-            * Profile asked handedness, typical miss, preferred tee, how you cover a number, goal and
-            * home course — everything about HOW you play — and never once what you play WITH. The
-            * only bag surface in the app was /bag-scan, reachable from neither onboarding nor here,
-            * while club selection, plays-like and the caddie's whole recommendation chain read from
-            * that bag. A player could finish Profile with an empty bag and never be told.
-            *
-            * Import Past Rounds moved here from Help & About for the same reason: its own
-            * description already said "In Profile", so it was filed under Help pointing at Profile.
-            */}
-          <TouchableOpacity
-            style={rowDivStyle}
-            onPress={() => router.push('/bag-scan' as never)}
-            accessibilityRole="button"
-            accessibilityLabel={t('settings.text.your_bag')}
-          >
-            <View style={styles.rowText}>
-              <Text style={labelStyle}>{t('settings.text.your_bag')}</Text>
-              <Text style={subStyle}>{t('settings.text.the_clubs_you_carry')}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={rowDivStyle}
-            onPress={() => router.push('/profile' as never)}
-            accessibilityRole="button"
-            accessibilityLabel={t('settings.accessibility_label.import_past_rounds_from_your')}
-          >
-            <View style={styles.rowText}>
-              <Text style={labelStyle}>{t('settings.text.import_past_rounds')}</Text>
-              <Text style={subStyle}>{t('settings.text.in_profile_history_handicap')}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
-          </TouchableOpacity>
-
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <TouchableOpacity style={[styles.saveBtn, { flex: 1 }]} onPress={handleSaveProfile}>
-              <Text style={styles.saveBtnText}>{t('settings.text.save_profile')}</Text>
-            </TouchableOpacity>
-            {name?.trim() ? (
-              <TouchableOpacity
-                style={[styles.saveBtn, { flex: 0, paddingHorizontal: 14, backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border }]}
-                onPress={() => setProfileExpanded(false)}
-              >
-                <Text style={[styles.saveBtnText, { color: colors.text_muted }]}>{t('play.cancel')}</Text>
-              </TouchableOpacity>
-            ) : null}
           </View>
-
-        </View>
-        )}
+          <View style={styles.profileSlimText}>
+            <Text style={[styles.profileSlimName, { color: colors.text_primary }]} numberOfLines={1}>
+              {name?.trim() || t('settings.text.set_up_your_profile')}
+            </Text>
+            <Text style={[styles.profileSlimMeta, { color: colors.text_muted }]} numberOfLines={1}>
+              {t('settings.text.handicap_goal', { handicap: handicapIndex != null ? handicapIndex.toFixed(1) : '—', goal: goal || '—' })}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+        </TouchableOpacity>
 
         {/* CADDIE TEAM — Phase 105 per-pillar assignments */}
         <CollapsibleSection title={t('settings.title.caddie')} icon="bag-outline">
@@ -2855,20 +2187,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   // 2026-05-26 — Fix BD: handicap recalculate button style.
-  recalcBtn: {
-    marginTop: 8,
-    marginBottom: 4,
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  recalcBtnText: {
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
   // Phase 105 — caddie team intro + reset link.
   sectionIntro: {
     fontSize: 13,
@@ -3045,24 +2363,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
-  inputLabel: {
-    color: '#6b7280',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-    marginTop: 10,
-    marginBottom: 4,
-  },
-  input: {
-    backgroundColor: '#060f09',
-    borderWidth: 1,
-    borderColor: '#1e3a28',
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    color: '#ffffff',
-    fontSize: 15,
-  },
   pillSection: {
     marginTop: 10,
     paddingTop: 10,
@@ -3100,18 +2400,6 @@ const styles = StyleSheet.create({
   },
   pillTextActive: {
     color: '#00C896',
-  },
-  saveBtn: {
-    backgroundColor: '#00C896',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  saveBtnText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '800',
   },
   aboutRow: {
     flexDirection: 'row',

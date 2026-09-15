@@ -22,6 +22,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { useRoundStore, recalculateHandicapRounds } from '../store/roundStore';
 import { useTranslation } from 'react-i18next';
+import { ProfileForm } from '../components/profile/ProfileForm';
 
 export default function ProfileScreen() {
   const { t } = useTranslation();
@@ -38,14 +39,24 @@ export default function ProfileScreen() {
   const displayName = name?.trim() || 'Golfer';
   const indexLabel = handicapIndex != null ? handicapIndex.toFixed(1) : (handicap ? `~${handicap}` : '—');
 
+  /**
+   * 2026-09-14 — ONE RECALCULATE, AND IT IS THE ONE THAT EXPLAINS ITSELF.
+   *
+   * Settings had a second copy of this, and moving the profile form over here would have deleted
+   * it — along with the only version that reported `repaired` and `nowCounted`. That reporting is
+   * not decoration: a recalculate that silently restamps historical rounds and hands back a
+   * different Index is indistinguishable from a bug, and rounds of 7-13 holes had never counted
+   * toward the Index at all, so this is the tap where they start. The richer implementation moved;
+   * the thinner one is gone. [[two-owners-is-the-root-cause]]
+   */
   const onRecalculate = useCallback(() => {
     try {
       const calcMod = require('../services/handicapCalculator') as typeof import('../services/handicapCalculator');
       // 2026-07-06 (audit P0) — canonical filter also excludes sim rounds.
       // 2026-09-11 — repairs the historical posting basis first; see recalculateHandicapRounds.
-      const { eligible } = recalculateHandicapRounds();
+      const { eligible, repaired, nowCounted } = recalculateHandicapRounds();
       if (eligible.length < 3) {
-        Alert.alert(t('profile.alert.need_more_rounds'), `Recalculation needs at least 3 postable rounds. You have ${eligible.length}. Import your round history to seed it.`);
+        Alert.alert(t('profile.alert.need_more_rounds'), `Recalculation needs at least 3 postable rounds. You have ${eligible.length}. Play more rounds or import past rounds — a round of 7-13 holes posts as a nine; under 7 holes cannot post.`);
         return;
       }
       const differentials = calcMod.rebuildDifferentialsFromHistory(eligible);
@@ -53,7 +64,13 @@ export default function ProfileScreen() {
       const result = calcMod.estimateNewIndex(differentials);
       if (result.newIndex != null) {
         usePlayerProfileStore.getState().setHandicapIndex(result.newIndex);
-        Alert.alert(t('profile.alert.handicap_updated'), `New Index: ${result.newIndex.toFixed(1)}\n\n${result.estimateNote}`);
+        const repairNote = repaired > 0
+          ? `\n\nRepaired the scoring basis on ${repaired} past round${repaired === 1 ? '' : 's'}` +
+            (nowCounted > 0
+              ? `, ${nowCounted} of which had never counted toward your Index (a round of 7-13 holes posts as a nine).`
+              : ' — blow-up holes are now capped at net double bogey, as the Rules of Handicapping require.')
+          : '';
+        Alert.alert(t('profile.alert.handicap_updated'), `New Index: ${result.newIndex.toFixed(1)}\n\n${result.estimateNote}${repairNote}`);
       } else {
         Alert.alert(t('profile.alert.could_not_compute'), result.estimateNote);
       }
@@ -69,8 +86,8 @@ export default function ProfileScreen() {
           <Ionicons name="chevron-back" size={26} color={colors.accent} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: colors.text_primary }]}>{t('profile.profile_screen.profile')}</Text>
-        <TouchableOpacity onPress={() => router.push('/settings' as never)} hitSlop={10} style={styles.headerIcon} accessibilityLabel={t('profile.accessibility_label.edit_profile_details')}>
-          <Ionicons name="create-outline" size={22} color={colors.accent} />
+        <TouchableOpacity onPress={() => router.push('/settings' as never)} hitSlop={10} style={styles.headerIcon} accessibilityLabel={t('profile.accessibility_label.open_settings')}>
+          <Ionicons name="settings-outline" size={22} color={colors.accent} />
         </TouchableOpacity>
       </View>
 
@@ -143,17 +160,16 @@ export default function ProfileScreen() {
           <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.actionCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-          onPress={() => router.push('/settings' as never)}
-        >
-          <Ionicons name="create-outline" size={22} color={colors.accent} />
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.actionTitle, { color: colors.text_primary }]}>{t('profile.profile_screen.edit_profile_details')}</Text>
-            <Text style={[styles.actionSub, { color: colors.text_muted }]}>{t('profile.profile_screen.name_ghin_number_handicap_index')}</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
-        </TouchableOpacity>
+        {/**
+          * 2026-09-14 (Tim) — THE DETAILS ARE HERE NOW, not behind a link to Settings.
+          *
+          * This card used to point at Settings, because that is where the form lived. Tim opened
+          * Profile, saw a handicap and no experience or level, and reported the app did not hold
+          * them — it did, three taps away on a different screen. The form moved; the pointer is
+          * gone rather than duplicated.
+          */}
+        <Text style={[styles.sectionHeader, { color: colors.text_muted }]}>{t('profile.form.your_details')}</Text>
+        <ProfileForm />
       </ScrollView>
     </SafeAreaView>
   );
