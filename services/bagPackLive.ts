@@ -106,7 +106,7 @@ export function liveBagPack(): LiveBagPack {
      */
     const competition = !!useRoundStore.getState().isCompetition;
     return {
-      pack: packBagForCourse({ holes, owned, courseName, limit: carryLimitFor(competition) }),
+      pack: packBagForCourse({ holes, owned, courseName, limit: carryLimitFor(competition), competition }),
       courseName,
       competition,
     };

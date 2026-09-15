@@ -14,7 +14,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useClubStatsStore, CLUB_ORDER, clubIdToClubName, type ClubName } from '../../store/clubStatsStore';
 import { composeFitProfile, recommendFlex, type FitClubInput } from '../../services/practice/fitProfile';
 import { composeFitGap, type OwnedClub } from '../../services/practice/fitGap';
-import { useClubBagStore, carryLimitFor, PUTTER_ID } from '../../store/clubBagStore';
+import { useClubBagStore, carryLimitFor, PUTTER_ID, specsOf } from '../../store/clubBagStore';
 import { clubWorkStatuses } from '../../services/clubWork';
 import { liveBagPack } from '../../services/bagPackLive';
 import { useRoundStore } from '../../store/roundStore';
@@ -92,13 +92,18 @@ export default function FitProfileScreen() {
   const bagClubs = useClubBagStore((s) => s.clubs);
   const fitGap = useMemo(() => {
     const st = useClubStatsStore.getState();
-    const owned: OwnedClub[] = Object.values(bagClubs).map((c) => ({
-      club_id: c.club_id,
-      name: clubIdToClubName(c.club_id),
-      brand: c.brand,
-      model: c.model,
-      loft: c.loft,
-    }));
+    // 2026-09-14 — specs come from the club IN PLAY, not from a flat field on the slot. A slot can
+    // hold three drivers now; the fit gap is about the one he is actually carrying.
+    const owned: OwnedClub[] = Object.values(bagClubs).map((c) => {
+      const sp = specsOf(c);
+      return {
+        club_id: c.club_id,
+        name: clubIdToClubName(c.club_id),
+        brand: sp.brand,
+        model: sp.model,
+        loft: sp.loft,
+      };
+    });
     return composeFitGap({
       owned,
       gaps: profile.gaps,
@@ -246,12 +251,33 @@ export default function FitProfileScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bagClubs, stats, manual]);
 
+  const limit = carryLimitFor(isCompetition);
+
+  /**
+   * 2026-09-14 — A SELECTION HELD UNTIL IT IS LEGAL, and this exists because of a defect I shipped
+   * into this same session.
+   *
+   * `carryLimitFor` now returns fourteen for every round, not only competition (Tim: ">14 owned, 14
+   * load for the course"). `setCarriedToday` enforces that cap by TRIMMING, which is right at the
+   * point a round starts and catastrophic on a per-tap edit: an eighteen-club owner tapping ONE club
+   * off handed the store seventeen, and the store silently returned fourteen — keeping the putter
+   * and then slicing in bag order, so he lost 9I, PW and SW. He removed one club and four vanished,
+   * and the three the app chose were his scoring clubs.
+   *
+   * So the screen never hands the store a list it would have to trim. An over-limit selection is
+   * held here, shown as "remove N", and written the moment it is legal. The store keeps its guard —
+   * a voice path or a future surface still cannot start a round with fifteen — but the guard stops
+   * being a silent editor of the player's bag. [[trust-the-users-lived-reality]]
+   */
+  const [packDraft, setPackDraft] = useState<Set<string> | null>(null);
   /** Empty carriedToday means carrying everything — the honest default, never "carrying nothing". */
-  const packedSet = useMemo(
+  const committedSet = useMemo(
     () => (carriedToday.length > 0 ? new Set(carriedToday) : new Set(packRows.map((r) => r.club_id))),
     [carriedToday, packRows],
   );
-  const limit = carryLimitFor(isCompetition);
+  const packedSet = packDraft ?? committedSet;
+  /** How many must come out before this is a bag you can start a round with. 0 when it already is. */
+  const overBy = Math.max(0, packedSet.size - limit);
 
   const togglePacked = (club_id: string) => {
     const next = new Set(packedSet);
@@ -259,6 +285,8 @@ export default function FitProfileScreen() {
     // be the app making the worst possible choice on the player's behalf.
     if (club_id === PUTTER_ID) return;
     if (next.has(club_id)) next.delete(club_id); else next.add(club_id);
+    if (next.size > limit) { setPackDraft(next); return; }  // hold — never hand the store a trim
+    setPackDraft(null);
     useClubBagStore.getState().setCarriedToday([...next], { limit });
   };
 
@@ -267,6 +295,7 @@ export default function FitProfileScreen() {
     if (!pack) return;
     const byLabel = new Map(packRows.map((r) => [r.label, r.club_id]));
     const ids = pack.carry.map((c) => byLabel.get(c)).filter((x): x is NonNullable<typeof x> => !!x);
+    setPackDraft(null);
     if (ids.length > 0) useClubBagStore.getState().setCarriedToday(ids, { limit });
   };
 
@@ -592,15 +621,17 @@ export default function FitProfileScreen() {
           * you come here to see your ladder, and you only scan or import once.
           */}
         <Text style={[styles.sectionHeading, { color: colors.text_muted }]}>{t('practice_fit_profile.fit_profile_screen.set_up_your_bag')}</Text>
-        {/* 2026-07-23 (Tim — Bag Vision) — populate the bag by video instead of typing each club. */}
+        {/* 2026-07-23 (Tim — Bag Vision) — the bag. 2026-09-14: the label and the camcorder icon
+            promised a SCANNER, which is what the destination used to be and is no longer. It opens on
+            the clubs you own — head, shaft and grip — with scanning as one way to fill it. */}
         <TouchableOpacity
           onPress={() => router.push('/bag-scan' as never)}
           style={[styles.scanBagBtn, { backgroundColor: colors.surface, borderColor: colors.accent }]}
           accessibilityRole="button"
-          accessibilityLabel={t('practice_fit_profile.accessibility_label.scan_my_bag_with_video')}
+          accessibilityLabel={t('practice_fit_profile.accessibility_label.open_my_bag')}
         >
-          <Ionicons name="videocam-outline" size={18} color={colors.accent} />
-          <Text style={[styles.scanBagText, { color: colors.accent }]}>{t('practice_fit_profile.fit_profile_screen.scan_my_bag_with_video')}</Text>
+          <Ionicons name="golf-outline" size={18} color={colors.accent} />
+          <Text style={[styles.scanBagText, { color: colors.accent }]}>{t('practice_fit_profile.fit_profile_screen.open_my_bag')}</Text>
         </TouchableOpacity>
 
         {/* 2026-07-29 (Tim — Arccos Air trial) — seed the distance ladder from an Arccos club-averages
@@ -699,8 +730,23 @@ export default function FitProfileScreen() {
                   ? t('practice_fit_profile.fit_profile_screen.packed_of_owned', { packed: packedSet.size, owned: packRows.length })
                   : t('practice_fit_profile.fit_profile_screen.carrying_everything_you_own')}
               </Text>
-              {limit != null && (
-                <Text style={[styles.confText, { color: '#f5a623', marginBottom: 8 }]}>{t('practice_fit_profile.fit_profile_screen.competition_14_club_cap')}</Text>
+              {/**
+                * 2026-09-14 — this said "Competition: 14-club cap" whenever a limit existed, and a
+                * limit now always exists. On a Saturday that is the app stating a fact about the
+                * round that is simply untrue. The CAP is universal; the RULE and its penalty are
+                * what competition adds. [[state-what-you-measured-not-what-you-intended]]
+                */}
+              <Text style={[styles.confText, { color: isCompetition ? '#f5a623' : colors.text_muted, marginBottom: overBy > 0 ? 4 : 8 }]}>
+                {isCompetition
+                  ? t('practice_fit_profile.fit_profile_screen.competition_14_club_cap')
+                  : t('practice_fit_profile.fit_profile_screen.bag_cap', { limit })}
+              </Text>
+              {/* An over-limit selection is HELD, not trimmed — so the screen must say what it is
+                  waiting for, rather than looking like a tap that did nothing. */}
+              {overBy > 0 && (
+                <Text style={[styles.confText, { color: '#f5a623', marginBottom: 8, fontWeight: '700' }]}>
+                  {t('practice_fit_profile.fit_profile_screen.over_by', { count: overBy, selected: packedSet.size })}
+                </Text>
               )}
               <View style={styles.packChips}>
                 <TouchableOpacity
@@ -714,7 +760,7 @@ export default function FitProfileScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.scanBagBtn, { backgroundColor: colors.surface, borderColor: colors.border, flex: 1, marginTop: 0 }]}
-                  onPress={() => useClubBagStore.getState().clearCarriedToday()}
+                  onPress={() => { setPackDraft(null); useClubBagStore.getState().clearCarriedToday(); }}
                   accessibilityRole="button"
                   accessibilityLabel={t('practice_fit_profile.fit_profile_screen.carry_everything')}
                 >

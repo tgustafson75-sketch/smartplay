@@ -47,11 +47,23 @@ export const CLUB_TYPES = ['iron', 'wedge', 'hybrid', 'wood', 'driver', 'putter'
 export const FULL_SWING_CLUB_IDS: readonly CatalogClubId[] =
   CLUB_SNAP_ORDER.filter((id) => id !== 'PT');
 
-type Family = 'DR' | 'W' | 'H' | 'I' | 'WEDGE' | 'PT' | '?';
+/**
+ * The club FAMILY. Exported 2026-09-14 because services/clubSpecOptions needs it to decide which
+ * shaft weights a club can honestly take (a driver shaft is 40-80g, an iron shaft 85-130g), and a
+ * second parser for "is this a wedge" would be the sixth copy of the catalog this file exists to
+ * prevent. [[two-owners-is-the-root-cause]]
+ */
+export type ClubFamily = 'DR' | 'W' | 'H' | 'I' | 'WEDGE' | 'PT' | '?';
+type Family = ClubFamily;
 // The interchangeable long-game slots: a "4" can be a 4-iron, 4-hybrid, or (rarely) 4-wood —
 // players routinely swap an iron for the same-number hybrid/wood. Same-number across these
 // families is the classic substitution we snap.
 const LONG_GAME: Family[] = ['I', 'H', 'W'];
+
+/** The family a catalog club id belongs to. One parser, so nothing re-derives "is this a wedge". */
+export function clubFamily(id: string): ClubFamily {
+  return parseClub(id).fam;
+}
 
 function parseClub(id: string): { num: number | null; fam: Family } {
   if (id === 'DR') return { num: null, fam: 'DR' };

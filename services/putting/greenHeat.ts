@@ -62,6 +62,7 @@ import type { GreenRoll } from '../../store/greenRollStore';
  * threshold finds every consumer. [[two-owners-is-the-root-cause]]
  */
 import { MIN_PUTT_HOLES } from '../puttingRead';
+import { isGirHole } from '../round/scoredRoundStats';
 export { MIN_PUTT_HOLES };
 
 export type PuttClass = 'approachPutt' | 'scramblePutt';
@@ -158,6 +159,22 @@ export function buildGreenHeatModel(
     const putts = r.putts ?? {};
     const scores = r.scores ?? {};
     const courseHoles = (r.courseId && holesByCourse?.[r.courseId]) || null;
+    /**
+     * 2026-09-14 (Tim — "check green heat map card … it may not be wired") — THE ROUND'S OWN PARS
+     * COME FIRST, and this is the whole reason the map was empty.
+     *
+     * Par was resolved only through `holesByCourse`, which `greenHeatInput` fills with the ACTIVE
+     * course's holes. Open the scorecard after a round and there is no active course — so with three
+     * complete rounds logged, 54 putt-holes, every hole scored and putted, the model reported
+     * ready=true and approach.holes=0 / scramble.holes=0: the card left the honest "collecting your
+     * putts" state and drew a grid of dashes.
+     *
+     * Every RoundRecord already carries `holePars`; `compactHistoryForPersist` deliberately preserves
+     * it, and `scoredRoundStats.scoredRoundFromRecord` reads it for the caddie's GIR answer. The map
+     * was the one consumer that did not. Course holes remain the fallback for the live round, whose
+     * synthetic record carries no pars of its own. [[sweep-the-missing-half-not-the-unused-export]]
+     */
+    const holePars = (r as { holePars?: Record<number, number> }).holePars ?? null;
 
     for (const [holeStr, puttCountRaw] of Object.entries(putts)) {
       const puttCount = Number(puttCountRaw);
@@ -175,14 +192,15 @@ export function buildGreenHeatModel(
       // score are both real. Reuses the scorecard's honest GIR proxy:
       //   strokesToGreen = score − putts ≤ par − 2  ⇒  green hit in regulation.
       const score = Number(scores[hole]);
-      const holeData = courseHoles?.find((h) => h.hole === hole);
-      const par = holeData?.par;
-      if (!Number.isFinite(score) || score <= 0 || !Number.isFinite(par as number)) {
-        // Can't classify honestly — counted in overall, skipped per-class.
-        continue;
-      }
-      const strokesToGreen = score - puttCount;
-      const gir = strokesToGreen <= (par as number) - 2;
+      const par = holePars?.[hole] ?? courseHoles?.find((h) => h.hole === hole)?.par;
+      /**
+       * ONE GIR RULE. This read "strokesToGreen <= par - 2" inline — the third independent copy of
+       * the same sentence, beside the scorecard's and scoredRoundStats'. `isGirHole` returns null
+       * for a hole that cannot be judged, which is the distinction that matters here: a hole with no
+       * putt count is not a missed green, and must be counted in `overall` and left unclassified.
+       */
+      const gir = isGirHole(score, puttCount, par);
+      if (gir == null) continue; // can't classify honestly — counted in overall, skipped per-class
       const cls: PuttClass = gir ? 'approachPutt' : 'scramblePutt';
 
       const b = byClass[cls];

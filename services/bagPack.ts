@@ -105,8 +105,15 @@ export interface PackInput {
   holes: PackHole[];
   /** Everything he owns, with carries. */
   owned: PackClub[];
-  /** USGA_CLUB_LIMIT in competition, null otherwise. */
+  /** The cap on a starting bag — USGA_CLUB_LIMIT from `carryLimitFor`. */
   limit?: number | null;
+  /**
+   * 2026-09-14 — the cap is now FOURTEEN for every round, so `limitBit` no longer implies
+   * competition. This flag decides which sentence the trim gets: the USGA rule and its penalty, or
+   * the plain fact that a bag holds fourteen. Saying "Competition:" on a Saturday was going to be
+   * the app's own words being wrong. [[state-what-you-measured-not-what-you-intended]]
+   */
+  competition?: boolean;
   courseName?: string | null;
 }
 
@@ -241,7 +248,9 @@ export function packBagForCourse(input: PackInput): PackedBag {
     reasons.push(`No carry set for ${unrated.map(c => c.club).join(', ')} — the packer can't place ${unrated.length === 1 ? 'it' : 'them'} until you do.`);
   }
   if (limitBit) {
-    reasons.push(`Competition: trimmed to ${limit} clubs. USGA Rule 4.1b(1) — starting a round with more is two strokes per hole, up to four.`);
+    reasons.push(input.competition
+      ? `Competition: trimmed to ${limit} clubs. USGA Rule 4.1b(1) — starting a round with more is two strokes per hole, up to four.`
+      : `Trimmed to ${limit} — that is what a bag starts a round with. The rest stay yours; they just stay home.`);
   }
 
   const headline = holes.length > 0

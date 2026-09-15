@@ -182,7 +182,7 @@ export interface ShotResult {
    * "I have 3 drivers, all different shafts — so if I say I am going to use the TaylorMade X shaft
    *  vs Burner 2 stock shaft, that provides some degree of feedback data."
    *
-   * Stamped at log time from the declared variant for that club (store/clubVariantStore), so the
+   * Stamped at log time from the declared variant for that club (store/clubBagStore, the one owner), so the
    * comparison in services/clubVariantPerformance counts real shots rather than relying on the
    * player to remember which driver was in the bag three weeks ago. Optional everywhere: absent on
    * every shot hit with an undeclared club, which is most of them.
@@ -3288,8 +3288,11 @@ export const useRoundStore = create<RoundState>()(
              */
             club_variant: shot.club_variant ?? (() => {
               try {
-                return (require('./clubVariantStore') as typeof import('./clubVariantStore'))
-                  .useClubVariantStore.getState().variantFor(shot.club);
+                // 2026-09-14 — from the BAG, which is now the one owner of which physical club is in
+                // play. This read clubVariantStore, a second store holding the same fact keyed by
+                // club name; the bag could not see it and it could not see the bag.
+                return (require('./clubBagStore') as typeof import('./clubBagStore'))
+                  .useClubBagStore.getState().variantLabelFor(shot.club);
               } catch { return null; }
             })(),
             start_location: incomingStart,

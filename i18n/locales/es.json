@@ -207,5 +207,92 @@
       "ground_view_ready": "Apoyado y estable — captura la línea desde aquí abajo.",
       "ground_view_captured": "Capturado. El caddie leerá la línea desde el suelo."
     }
+  },
+  "bag": {
+    "title": "Mi bolsa",
+    "count_one": "{{count}} palo en tu bolsa",
+    "count_other": "{{count}} palos en tu bolsa",
+    "scanning": "Leyendo tus palos…",
+    "putter": "Pútter",
+    "no_specs": "Toca para añadir marca, varilla y grip",
+    "variant_count_one": "{{count}} palo",
+    "variant_count_other": "{{count}} palos",
+    "add_variant": "Añadir otro",
+    "remove_club": "Quitar",
+    "empty": {
+      "title": "Tu bolsa está vacía",
+      "body": "Escanéala con un vídeo panorámico o fotografía los palos. Todo lo que leamos se guarda al instante: puedes corregirlo aquí y fotografiar lo que se nos haya pasado."
+    },
+    "section": {
+      "woods": "MADERAS",
+      "hybrids": "HÍBRIDOS",
+      "irons": "HIERROS",
+      "wedges": "WEDGES",
+      "putter": "PÚTTER",
+      "other": "OTROS"
+    },
+    "field": {
+      "brand": "MARCA",
+      "model": "MODELO",
+      "loft": "LOFT",
+      "shaft_brand": "MARCA DE VARILLA",
+      "shaft_weight": "PESO DE VARILLA",
+      "grip_size": "TAMAÑO DE GRIP"
+    },
+    "spec": {
+      "not_set": "Sin definir",
+      "close": "Cerrar"
+    },
+    "add": {
+      "heading": "AÑADIR PALOS",
+      "video": "Escanear con vídeo",
+      "video_sub": "Una panorámica lenta sobre las cabezas. Lo mejor para la bolsa entera.",
+      "video_a11y": "Escanear mi bolsa con vídeo",
+      "photo": "Hacer una foto",
+      "photo_sub": "Para el palo o dos que se saltó la panorámica.",
+      "photo_a11y": "Fotografiar un palo para añadirlo",
+      "library": "Añadir fotos",
+      "library_sub": "Elige hasta 8 fotos que ya hayas hecho.",
+      "library_a11y": "Elegir fotos de palos para añadir"
+    },
+    "receipt": {
+      "added_one": "Añadido {{count}} palo a tu bolsa.",
+      "added_other": "Añadidos {{count}} palos a tu bolsa.",
+      "updated_one": "Afinado {{count}} que ya tenías.",
+      "updated_other": "Afinados {{count}} que ya tenías.",
+      "nothing_new": "Nada nuevo: ya están en tu bolsa."
+    },
+    "ball": {
+      "seen": "Vista en la foto",
+      "play_this": "Juego esta",
+      "in_play": "En juego"
+    },
+    "remove": {
+      "title": "¿Quitar de la bolsa?",
+      "body": "{{club}} sale de tu bolsa. Sus distancias registradas se conservan.",
+      "cancel": "Cancelar",
+      "confirm": "Quitar"
+    },
+    "variant": {
+      "default_label": "{{club}} n.º {{n}}"
+    },
+    "error": {
+      "nothing_read": "No se leyó nada. Pon las cabezas con buena luz e inténtalo otra vez, o fotografía un palo cada vez.",
+      "camera_permission": "Se necesita permiso de cámara para escanear tu bolsa.",
+      "camera_open": "No se pudo abrir la cámara. Inténtalo de nuevo.",
+      "photos_open": "No se pudieron abrir tus fotos. Inténtalo de nuevo."
+    }
+  },
+  "practice_fit_profile": {
+    "fit_profile_screen": {
+      "open_my_bag": "Mi bolsa",
+      "open_my_bag_sub": "Palos, varillas y grips — escanea o añade",
+      "bag_cap": "Una bolsa empieza la ronda con {{limit}} palos. El resto sigue siendo tuyo, solo se queda en casa.",
+      "over_by_one": "{{selected}} seleccionados: saca {{count}} más para cerrar la bolsa.",
+      "over_by_other": "{{selected}} seleccionados: saca {{count}} más para cerrar la bolsa."
+    },
+    "accessibility_label": {
+      "open_my_bag": "Mi bolsa"
+    }
   }
 }

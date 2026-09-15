@@ -15,6 +15,7 @@
  * This is a worse class than an ordinary misparse: it silently rewrites data the player already gave
  * correctly, and the only way back is to argue with your caddie.
  */
+import { isGirHole } from '../../services/round/scoredRoundStats';
 import {
   markAwaitingPutts, isAwaitingPutts, awaitingPuttsHole, clearAwaitingPutts, parsePuttAnswer,
 } from '../../services/pendingPuttAsk';
@@ -168,8 +169,25 @@ describe('the scorecard shows where putts are missing, and lets you fix it', () 
   });
 
   it('stays optional — an unanswered hole is honestly unknown, not a guessed two', () => {
-    // GIR is derived as (score − putts) ≤ par − 2, so a missing count contributes nothing rather
-    // than being filled in.
-    expect(src).toContain("if (putts == null) continue; // can't compute GIR without putts");
+    /**
+     * 2026-09-14 — THIS ASSERTED A SOURCE LINE AND NOW ASSERTS THE RULE.
+     *
+     * It pinned the literal text `if (putts == null) continue; // can't compute GIR without putts`,
+     * which stopped existing the moment the scorecard's inline GIR loop was replaced by the shared
+     * `isGirHole`. The behaviour it cared about — a hole with no putt count contributes NOTHING to
+     * GIR rather than being filled in with a guessed two — was never weakened, but a grep for a
+     * sentence cannot tell a refactor from a regression, so it failed on a change that strengthened
+     * the thing it guards. Assert the rule, and it survives the rule moving house.
+     * [[reachable-not-just-wired]]
+     */
+    expect(isGirHole(4, undefined, 4)).toBeNull();      // no putt count → not counted, not a miss
+    expect(isGirHole(4, null, 4)).toBeNull();
+    expect(isGirHole(4, 2, 4)).toBe(true);              // and a real count still resolves
+    // And the screen must reach that rule rather than re-deriving one of its own. Comments are
+    // stripped first: a line ABOUT the old derivation is history, not a second implementation.
+    // [[strip-comments-before-a-guard-matches]]
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    expect(code).toMatch(/isGirHole\(/);
+    expect(code).not.toMatch(/par\s*-\s*2/);
   });
 });

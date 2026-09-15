@@ -23,6 +23,7 @@ import { normalizeClub } from '../../services/clubNormalize';
 import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { useGuestProfileStore } from '../../store/guestProfileStore';
 import { useSettingsStore } from '../../store/settingsStore';import { GreenHeatCard } from '../../components/GreenHeatCard';
+import { isGirHole } from '../../services/round/scoredRoundStats';
 import { useTheme } from '../../contexts/ThemeContext';
 import { loadRecap } from '../../services/planStorage';
 import { recommendBagForCourse } from '../../services/bagRecommendation';
@@ -272,17 +273,25 @@ export default function Scorecard() {
     }
     const fairwayPct = teeShotCount === 0 ? null : Math.round((fairwayHits / teeShotCount) * 100);
 
+    /**
+     * 2026-09-14 — ONE GIR RULE. This loop was the third independent copy of "strokes to green is
+     * score minus putts, and par − 2 is a green in regulation" — the others in
+     * `services/round/scoredRoundStats` (which the caddie answers from) and inside
+     * `services/putting/greenHeat` (which draws the heat map). Three copies had already drifted:
+     * this one never checked that the score was a real number above zero, so a hole with a cleared
+     * score and a logged putt count scored 0 − putts ≤ par − 2 and counted as a green HIT.
+     * `isGirHole` is that rule, and returns null for a hole that cannot be judged.
+     * [[two-owners-is-the-root-cause]]
+     */
     let girHoles = 0;
     let girEligible = 0;
     for (const [holeStr, score] of Object.entries(viewScores)) {
       const hole = parseInt(holeStr, 10);
       const holeData = viewCourseHoles.find(h => h.hole === hole);
-      if (!holeData) continue;
-      const putts = (viewPutts as Record<number, number>)[hole];
-      if (putts == null) continue; // can't compute GIR without putts
+      const gir = isGirHole(score as number, (viewPutts as Record<number, number>)[hole], holeData?.par);
+      if (gir == null) continue;
       girEligible++;
-      const strokesToGreen = (score as number) - putts;
-      if (strokesToGreen <= holeData.par - 2) girHoles++;
+      if (gir) girHoles++;
     }
     const girPct = girEligible === 0 ? null : Math.round((girHoles / girEligible) * 100);
 

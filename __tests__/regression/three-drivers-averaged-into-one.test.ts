@@ -147,7 +147,18 @@ describe('the declaration is wired end to end', () => {
   });
 
   it('the variant map is backed up — without it, past labels stop meaning anything', () => {
-    expect(code('services/cloudSync/snapshot.ts')).toContain("'club-variant-v1'");
+    /**
+     * 2026-09-14 — THIS GUARDED A KEY THAT NO LONGER HOLDS ANYTHING.
+     *
+     * It asserted `club-variant-v1` was in the snapshot list. That store is gone: which physical
+     * club is in play is now `clubBagStore.inPlay`, one owner with the clubs themselves. The
+     * assertion still passed — the string is still in the backup list, which is correct, because an
+     * old snapshot must still restore and be folded forward — while guarding nothing that is live.
+     * A guard that passes over a dead fact is worse than no guard: it reads as coverage.
+     */
+    const snap = code('services/cloudSync/snapshot.ts');
+    expect(snap).toContain("'club-bag-v1'");          // where the labels live NOW
+    expect(snap).toContain("'club-variant-v1'");      // and the old blob still restores to be folded
   });
 
   it('does not whitelist shaft names — the one he is testing is the newest', () => {

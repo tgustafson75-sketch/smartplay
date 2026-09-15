@@ -11,6 +11,7 @@ import { ThemeProvider, useTheme } from '../contexts/ThemeContext';
 import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
 import { useOnboardingTourStore } from '../store/onboardingTourStore';
 import { useCustomCaddieMediaStore } from '../store/customCaddieMediaStore';
+import { useClubBagStore } from '../store/clubBagStore';
 import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
 import { planTrialLifecycle } from '../services/billing/trialLifecycle';
 import { refreshEntitlement } from '../services/billing/purchases';
@@ -329,6 +330,43 @@ function AppNavigator() {
       void stopSpeaking('route_change').catch(() => {});
     }
   }, [pathname]);
+
+  /**
+   * 2026-09-14 — one-time fold of the retired `club-variant-v1` blob into the bag.
+   *
+   * "Which of my three drivers is in play" lived in its own store, keyed by club NAME, while the bag
+   * held the drivers themselves keyed by club id. Two owners of one fact, unable to see each other.
+   * The bag is now the owner (clubBagStore.declareVariant / variantLabelFor) and the old store is
+   * deleted — but a variant Tim declared out loud on 09-12 is real state on his phone, and losing it
+   * because the fact moved house is exactly the kind of bug APP-BUILD-RULES B1 still calls a bug.
+   *
+   * Reads the raw key directly rather than keeping a whole store definition alive to be migrated
+   * from; removes it afterwards so this cannot run twice against a re-populated key. Idempotent
+   * regardless, via the bag's `_legacyVariantsAbsorbed` flag.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      try {
+        if (useClubBagStore.getState()._legacyVariantsAbsorbed) return;
+        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+        const raw = await AsyncStorage.getItem('club-variant-v1');
+        if (cancelled) return;
+        /**
+         * Only mark the fold DONE when there was something to fold. A cloud snapshot restored after
+         * first launch writes `club-variant-v1` back, and a flag set on an empty first run would
+         * make us ignore it forever. The cost of not latching is one AsyncStorage read per launch.
+         */
+        if (raw) {
+          const parsed = JSON.parse(raw) as { state?: { variants?: Record<string, string> } };
+          useClubBagStore.getState().absorbLegacyVariants(parsed?.state?.variants ?? {});
+          await AsyncStorage.removeItem('club-variant-v1');
+        }
+      } catch { /* a migration that cannot run is not a reason to block the app */ }
+    };
+    const t = setTimeout(() => { void run(); }, 0);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, []);
 
   // 2026-06-11 (audit 4c) — one-time migration of the custom-caddie image blobs
   // out of playerProfileStore (which re-serialized them on every profile/handicap

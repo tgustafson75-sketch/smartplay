@@ -1423,7 +1423,12 @@
       "fit_findings_heading": "WHAT YOUR SET IS MISSING",
       "gap_line": "{{gapYards}} yd between your {{upper}} and {{lower}} — a club-and-a-half hole around {{centerYards}} yds.",
       "overlap_line": "{{longer}} and {{shorter}} carry within {{gapYards}} yds — one may be redundant.",
-      "overlap_more": "+{{n}} more pairs within a few yards of each other."
+      "overlap_more": "+{{n}} more pairs within a few yards of each other.",
+      "open_my_bag": "My Bag",
+      "open_my_bag_sub": "Clubs, shafts and grips — scan or add",
+      "bag_cap": "A bag starts a round with {{limit}}. Everything else stays yours — it just stays home.",
+      "over_by_one": "{{selected}} selected — take out {{count}} more to pack this bag.",
+      "over_by_other": "{{selected}} selected — take out {{count}} more to pack this bag."
     },
     "accessibility_label": {
       "scan_my_bag_with_video": "Scan my bag with video to populate clubs",
@@ -1431,7 +1436,8 @@
       "save": "Save",
       "remove": "Remove",
       "pack_this_club_for_the_round": "Pack this club for the round",
-      "leave_this_club_at_home": "Leave this club at home"
+      "leave_this_club_at_home": "Leave this club at home",
+      "open_my_bag": "My Bag"
     },
     "key": {
       "tracked": "Tracked — measured from your shots",
@@ -3854,6 +3860,81 @@
       "line_to_play": "The line to play — read from the break above",
       "confidence_suffix": " · {{pct}}% confidence",
       "not_a_trace": ". Not a trace of your actual roll."
+    }
+  },
+  "bag": {
+    "title": "My Bag",
+    "count_one": "{{count}} club in your bag",
+    "count_other": "{{count}} clubs in your bag",
+    "scanning": "Reading your clubs…",
+    "putter": "Putter",
+    "no_specs": "Tap to add brand, shaft and grip",
+    "variant_count_one": "{{count}} club",
+    "variant_count_other": "{{count}} clubs",
+    "add_variant": "Add another",
+    "remove_club": "Remove",
+    "empty": {
+      "title": "Your bag is empty",
+      "body": "Scan it with a video pan, or photograph the clubs. Whatever we read is saved straight away — you can fix any of it here, and photograph anything we missed."
+    },
+    "section": {
+      "woods": "WOODS",
+      "hybrids": "HYBRIDS",
+      "irons": "IRONS",
+      "wedges": "WEDGES",
+      "putter": "PUTTER",
+      "other": "OTHER"
+    },
+    "field": {
+      "brand": "BRAND",
+      "model": "MODEL",
+      "loft": "LOFT",
+      "shaft_brand": "SHAFT BRAND",
+      "shaft_weight": "SHAFT WEIGHT",
+      "grip_size": "GRIP SIZE"
+    },
+    "spec": {
+      "not_set": "Not set",
+      "close": "Close"
+    },
+    "add": {
+      "heading": "ADD CLUBS",
+      "video": "Scan with video",
+      "video_sub": "A slow pan across the heads. Best for a whole bag at once.",
+      "video_a11y": "Scan my bag with video",
+      "photo": "Take a photo",
+      "photo_sub": "For the one or two the pan missed.",
+      "photo_a11y": "Photograph a club to add it",
+      "library": "Add photos",
+      "library_sub": "Pick up to 8 photos you have already taken.",
+      "library_a11y": "Choose photos of clubs to add"
+    },
+    "receipt": {
+      "added_one": "Added {{count}} club to your bag.",
+      "added_other": "Added {{count}} clubs to your bag.",
+      "updated_one": "Sharpened {{count}} you already had.",
+      "updated_other": "Sharpened {{count}} you already had.",
+      "nothing_new": "Nothing new — these are already in your bag."
+    },
+    "ball": {
+      "seen": "Seen in the photo",
+      "play_this": "I play this",
+      "in_play": "In play"
+    },
+    "remove": {
+      "title": "Remove from bag?",
+      "body": "{{club}} comes out of your bag. Its tracked distances are kept.",
+      "cancel": "Cancel",
+      "confirm": "Remove"
+    },
+    "variant": {
+      "default_label": "{{club}} #{{n}}"
+    },
+    "error": {
+      "nothing_read": "Nothing read from that. Get the heads in good light and try again — or photograph one club at a time.",
+      "camera_permission": "Camera permission is needed to scan your bag.",
+      "camera_open": "Could not open the camera. Try again.",
+      "photos_open": "Could not open your photos. Try again."
     }
   }
 }

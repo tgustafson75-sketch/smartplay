@@ -25,21 +25,43 @@ export interface ScoredRound {
 }
 
 /**
- * Greens in regulation, derived honestly: strokes-to-green is the hole score minus putts, and the
- * green was hit in regulation when that is at most par − 2. Counts ONLY holes where score, putts and
- * par are all known — a hole with no putts logged cannot be derived, so it is skipped rather than
- * guessed. Unchanged from the scorecard's own rule; this is that rule, moved.
+ * 2026-09-14 (Tim — "check green heat map card … it may not be wired") — THE GIR RULE, ONCE.
+ *
+ * Strokes-to-green is the hole score minus putts, and the green was hit in regulation when that is
+ * at most par − 2. That sentence was written THREE times: here, inline in `app/(tabs)/scorecard`,
+ * and again inline in `services/putting/greenHeat` to split putts into approach vs scramble. Three
+ * copies of one definition is three chances for the scorecard's GIR%, the caddie's answer and the
+ * green heat map to disagree about the same hole — and two of them had already drifted, because only
+ * this one required the score to be a real number above zero.
+ *
+ * Returns null, not false, when the hole cannot be judged: a missing putt count is not a missed
+ * green, and a caller that cannot tell those apart will quietly count unplayed holes as failures.
+ * [[two-owners-is-the-root-cause]] [[silence-is-not-an-answer]]
+ */
+export function isGirHole(
+  score: number | null | undefined,
+  putts: number | null | undefined,
+  par: number | null | undefined,
+): boolean | null {
+  if (typeof score !== 'number' || !(score > 0)) return null;
+  if (typeof putts !== 'number' || !Number.isFinite(putts)) return null;
+  if (typeof par !== 'number' || !Number.isFinite(par)) return null;
+  return (score - putts) <= (par - 2);
+}
+
+/**
+ * Greens in regulation, derived honestly. Counts ONLY holes where score, putts and par are all
+ * known — a hole with no putts logged cannot be derived, so it is skipped rather than guessed.
+ * The rule itself is `isGirHole`; this is the tally over a round.
  */
 export function girFrom(r: ScoredRound): { hit: number; counted: number } {
   let counted = 0, hit = 0;
   for (const hStr of Object.keys(r.scores ?? {})) {
     const h = Number(hStr);
-    const score = r.scores[h];
-    const putts = r.putts?.[h];
-    const par = r.parOf(h);
-    if (!(score > 0) || typeof putts !== 'number' || par == null) continue;
+    const gir = isGirHole(r.scores[h], r.putts?.[h], r.parOf(h));
+    if (gir == null) continue;
     counted++;
-    if ((score - putts) <= (par - 2)) hit++;
+    if (gir) hit++;
   }
   return { hit, counted };
 }

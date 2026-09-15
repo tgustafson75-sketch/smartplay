@@ -16,7 +16,7 @@
 
 import type { IntentHandler, IntentResult } from '../../types/voiceIntent';
 import { normalizeClub } from '../clubNormalize';
-import { useClubVariantStore } from '../../store/clubVariantStore';
+import { useClubBagStore } from '../../store/clubBagStore';
 import { track } from '../analytics';
 
 /**
@@ -74,9 +74,17 @@ export const setClubVariantHandler: IntentHandler = {
       };
     }
 
-    const store = useClubVariantStore.getState();
-    const previous = store.variantFor(club);
-    store.setVariant(club, variant);
+    /**
+     * 2026-09-14 — this wrote to `clubVariantStore`, a store that held "which driver is in play"
+     * separately from the bag that held the drivers. Declaring the Burner 2 out loud left the bag
+     * still showing the Stealth, because the bag had never heard of the Burner. It now declares into
+     * the bag, which registers the club if he does not own it yet and adds the physical club to the
+     * slot's roster — so the thing he said is the thing the Fit Profile shows and the thing
+     * services/clubVariantPerformance later compares. [[two-owners-is-the-root-cause]]
+     */
+    const store = useClubBagStore.getState();
+    const previous = store.variantLabelFor(club);
+    store.declareVariant(club, variant);
     track('set_club_variant', { club, variant: variant.slice(0, 40), changed: previous !== variant });
 
     return {

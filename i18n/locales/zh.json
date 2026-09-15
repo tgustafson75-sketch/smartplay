@@ -207,5 +207,92 @@
       "ground_view_ready": "已稳定放置 — 从这个高度拍摄推杆线。",
       "ground_view_captured": "已拍摄。球童将从贴地视角读线。"
     }
+  },
+  "bag": {
+    "title": "我的球包",
+    "count_one": "球包里有 {{count}} 支球杆",
+    "count_other": "球包里有 {{count}} 支球杆",
+    "scanning": "正在识别你的球杆…",
+    "putter": "推杆",
+    "no_specs": "点击添加品牌、杆身和握把",
+    "variant_count_one": "{{count}} 支",
+    "variant_count_other": "{{count}} 支",
+    "add_variant": "再添加一支",
+    "remove_club": "移除",
+    "empty": {
+      "title": "球包是空的",
+      "body": "用视频扫一遍，或者拍下球杆。识别到的内容会立即保存 — 你可以在这里修改，漏掉的再拍一张。"
+    },
+    "section": {
+      "woods": "木杆",
+      "hybrids": "混合杆",
+      "irons": "铁杆",
+      "wedges": "挖起杆",
+      "putter": "推杆",
+      "other": "其他"
+    },
+    "field": {
+      "brand": "品牌",
+      "model": "型号",
+      "loft": "杆面角",
+      "shaft_brand": "杆身品牌",
+      "shaft_weight": "杆身重量",
+      "grip_size": "握把尺寸"
+    },
+    "spec": {
+      "not_set": "未设置",
+      "close": "关闭"
+    },
+    "add": {
+      "heading": "添加球杆",
+      "video": "用视频扫描",
+      "video_sub": "缓慢扫过杆头。适合一次录入整包。",
+      "video_a11y": "用视频扫描我的球包",
+      "photo": "拍一张照片",
+      "photo_sub": "用于扫描漏掉的一两支。",
+      "photo_a11y": "拍照添加球杆",
+      "library": "添加照片",
+      "library_sub": "最多选择 8 张已拍照片。",
+      "library_a11y": "选择球杆照片添加"
+    },
+    "receipt": {
+      "added_one": "已向球包添加 {{count}} 支球杆。",
+      "added_other": "已向球包添加 {{count}} 支球杆。",
+      "updated_one": "完善了已有的 {{count}} 支。",
+      "updated_other": "完善了已有的 {{count}} 支。",
+      "nothing_new": "没有新的 — 这些已在你的球包里。"
+    },
+    "ball": {
+      "seen": "在照片中看到",
+      "play_this": "我用这款",
+      "in_play": "使用中"
+    },
+    "remove": {
+      "title": "从球包中移除？",
+      "body": "{{club}} 将移出球包。已记录的距离会保留。",
+      "cancel": "取消",
+      "confirm": "移除"
+    },
+    "variant": {
+      "default_label": "{{club}} #{{n}}"
+    },
+    "error": {
+      "nothing_read": "没有识别到内容。请在充足光线下对准杆头重试，或逐支拍照。",
+      "camera_permission": "扫描球包需要相机权限。",
+      "camera_open": "无法打开相机，请重试。",
+      "photos_open": "无法打开照片，请重试。"
+    }
+  },
+  "practice_fit_profile": {
+    "fit_profile_screen": {
+      "open_my_bag": "我的球包",
+      "open_my_bag_sub": "球杆、杆身与握把 — 扫描或添加",
+      "bag_cap": "开球时球包最多 {{limit}} 支。其余仍然是你的，只是留在家里。",
+      "over_by_one": "已选 {{selected}} 支 — 再取出 {{count}} 支才能装包。",
+      "over_by_other": "已选 {{selected}} 支 — 再取出 {{count}} 支才能装包。"
+    },
+    "accessibility_label": {
+      "open_my_bag": "我的球包"
+    }
   }
 }

@@ -18,17 +18,93 @@ import { CLUB_SNAP_ORDER } from '../services/clubBagReconcile';
 
 export type ClubRegisterSource = 'camera' | 'voice' | 'manual' | 'measured';
 
+/**
+ * 2026-09-14 (Tim) — "But this shows there is still not a universal bag logic that is working
+ * right. If we know, we should have brands and grip and shaft options. Everything club/bag related
+ * has to be unified in logic."
+ *
+ * ONE RECORD PER PHYSICAL CLUB.
+ *
+ * Membership was already unified — sixteen readers all come through this store. The PHYSICAL CLUB
+ * was not. It was spread across four places:
+ *
+ *   1. here, as flat brand / model / loft — the HEAD only, and one set of them per catalog slot;
+ *   2. `services/clubVariantPerformance`, which learns that he owns THREE DRIVERS from free-text
+ *      `club_variant` labels on shots — a fact the bag itself had no way to hold;
+ *   3. shaft brand, shaft weight and grip size, which existed nowhere in the app at all;
+ *   4. `setClubSpecs`, the edit path, which had ZERO CALLERS — so once a club was registered
+ *      nothing could correct it. [[orphans-are-live-bugs]]
+ *
+ * The consequence was a real contradiction: the app could tell him which of his three drivers scored
+ * better while being unable to say what was different about them — and the difference IS the shaft.
+ *
+ * So a slot holds VARIANTS, each one an actual club in the garage, and one of them is in play. The
+ * variant label is the same string `shot.club_variant` carries, so the roster and the comparison are
+ * the same fact rather than two. Slot-level specs are DERIVED from the in-play variant (`specsOf`)
+ * and stored nowhere, because a flattened copy beside the list it came from is the two-owner bug
+ * this change exists to end. [[two-owners-is-the-root-cause]]
+ */
+export interface ClubVariant {
+  /** Stable within the slot. */
+  variant_id: string;
+  /**
+   * What he calls it — "Burner 2", "the stiff one". Matched against `shot.club_variant`
+   * case-insensitively, which is how the roster and services/clubVariantPerformance stay one fact.
+   */
+  label: string;
+  /** Stamped on the head. Blank when not legible from a scan — never guessed. */
+  brand?: string;
+  model?: string;
+  loft?: string;
+  /** The half a fitting is actually about. Values come from services/clubSpecOptions. */
+  shaftBrand?: string;
+  shaftWeight?: string;
+  gripSize?: string;
+  registered_at: number;
+  source: ClubRegisterSource;
+}
+
+/** The editable spec fields of one physical club — named once so no surface lists them again. */
+export type ClubSpecs = Pick<ClubVariant, 'brand' | 'model' | 'loft' | 'shaftBrand' | 'shaftWeight' | 'gripSize'>;
+
 export interface RegisteredClub {
   club_id: ClubId;
   registered_at: number;
   source: ClubRegisterSource;
   /** Optional loft/label captured with the club, e.g. "52°". */
   note?: string;
-  // 2026-07-23 (Tim — Bag Vision) — product-specific specs read from a bag scan (or typed in).
-  // All optional; a club registered by voice/manual simply has none. Editable by the user.
-  brand?: string;
-  model?: string;
-  loft?: string;
+  /**
+   * Every physical club in this slot. Usually one. Empty is legal and means "I carry a 7-iron" with
+   * nothing known about it — which is exactly what a voice registration gives you.
+   */
+  variants: ClubVariant[];
+  /** `variant_id` of the one in play. Absent → the first variant, or nothing. */
+  inPlay?: string;
+}
+
+/** The variant actually in play for a slot, or null when the slot carries no specs at all. */
+export function inPlayVariant(c: RegisteredClub | null | undefined): ClubVariant | null {
+  if (!c || !Array.isArray(c.variants) || c.variants.length === 0) return null;
+  return c.variants.find((v) => v.variant_id === c.inPlay) ?? c.variants[0];
+}
+
+/**
+ * The specs of the club in play. Derived, never stored — ask this rather than reading a flat field,
+ * because there is no flat field to read.
+ */
+export function specsOf(c: RegisteredClub | null | undefined): ClubSpecs {
+  const v = inPlayVariant(c);
+  if (!v) return {};
+  return {
+    brand: v.brand, model: v.model, loft: v.loft,
+    shaftBrand: v.shaftBrand, shaftWeight: v.shaftWeight, gripSize: v.gripSize,
+  };
+}
+
+/** True when anything at all is known about the physical club — drives "specs set" affordances. */
+export function hasAnySpec(c: RegisteredClub | null | undefined): boolean {
+  const s = specsOf(c);
+  return Boolean(s.brand || s.model || s.loft || s.shaftBrand || s.shaftWeight || s.gripSize);
 }
 
 // Canonical bag order (driver → putter) for display + brain context.
@@ -51,9 +127,26 @@ export const USGA_CLUB_LIMIT = 14;
 /** The putter's club id in the registered bag. One place, so nothing has to remember it is not 'PUTTER'. */
 export const PUTTER_ID = 'PT';
 
-/** The cap that applies to a round, or null when none does. */
-export function carryLimitFor(isCompetition: boolean): number | null {
-  return isCompetition ? USGA_CLUB_LIMIT : null;
+/**
+ * The cap on a bag you START a round with. FOURTEEN, always.
+ *
+ * 2026-09-14 (Tim) — "User can add more than 14 clubs but 14 will load for the course
+ * appropriately, or user can select which of the persisted clubs they keep."
+ *
+ * This returned null outside competition until now, on the 09-11 reasoning that "outside competition
+ * nobody counts". That reasoning was about the PENALTY, and it quietly became a statement about the
+ * BAG: a casual round could be packed with seventeen clubs, which is not a bag, and it meant the
+ * number the app packed to changed depending on a toggle most rounds never touch.
+ *
+ * What he owns is still unlimited — that is the whole point of the variants roster and of
+ * `carriedToday`. This caps only what goes out to the first tee.
+ *
+ * `isCompetition` no longer changes the number, only what the player is TOLD about it: in
+ * competition the packer cites USGA Rule 4.1b(1) and its two-strokes-per-hole penalty. The argument
+ * is kept rather than dropped because `packBagForCourse` still needs to know which sentence to write.
+ */
+export function carryLimitFor(_isCompetition: boolean): number {
+  return USGA_CLUB_LIMIT;
 }
 
 interface ClubBagState {
@@ -75,9 +168,44 @@ interface ClubBagState {
    * touches this is unaffected, and an empty list is never read as "carrying nothing".
    */
   carriedToday: string[];
-  registerClub: (club_id: ClubId, meta?: { source?: ClubRegisterSource; note?: string; at?: number; brand?: string; model?: string; loft?: string }) => void;
-  /** Update the editable product specs on an already-registered club (from the scan-review edit). */
-  setClubSpecs: (club_id: ClubId, specs: { brand?: string; model?: string; loft?: string; note?: string }) => void;
+  registerClub: (club_id: ClubId, meta?: { source?: ClubRegisterSource; note?: string; at?: number; variantLabel?: string } & Partial<ClubSpecs>) => void;
+  /**
+   * Update the specs of the club in play in a slot. Creates the variant when the slot has none — a
+   * club registered by voice has no variant until someone says something about it, and an editor
+   * that silently dropped the first edit would look exactly like the orphan this replaced.
+   */
+  setClubSpecs: (club_id: ClubId, specs: Partial<ClubSpecs> & { note?: string }) => void;
+  /** Add another physical club to a slot — the second driver. Returns its variant_id. */
+  addVariant: (club_id: ClubId, v: { label: string; source?: ClubRegisterSource } & Partial<ClubSpecs>) => string | null;
+  /** Update one variant by id, whether or not it is the one in play. */
+  setVariantSpecs: (club_id: ClubId, variant_id: string, specs: Partial<ClubSpecs> & { label?: string }) => void;
+  /** Put a variant in play — the bag half of "driver today is the Burner 2". */
+  setInPlayVariant: (club_id: ClubId, variant_id: string) => void;
+  /** Remove one physical club from a slot. Removing the last one leaves the slot registered. */
+  removeVariant: (club_id: ClubId, variant_id: string) => void;
+  /**
+   * 2026-09-14 — THE ONE OWNER OF "WHICH OF MY THREE DRIVERS IS IN PLAY".
+   *
+   * This fact lived in `store/clubVariantStore`, keyed by normalised club NAME, written by the voice
+   * declaration and read by roundStore when it stamps a shot. The bag holds the same fact as
+   * `inPlay`, keyed by club id. Two stores, one truth, and they could not see each other: he could
+   * say "driver today is the Burner 2" and the bag would still show the Stealth, because the bag had
+   * never heard of the Burner.
+   *
+   * `declareVariant` is that sentence, and it does the whole job — registers the slot if he does not
+   * own it yet, finds or creates the physical club, and puts it in play. Accepts a NAME or an id, so
+   * a voice path does not have to know which vocabulary the bag uses.
+   * [[two-owners-is-the-root-cause]]
+   */
+  declareVariant: (club: string, label: string) => string | null;
+  /** The label of the club in play for a slot, by name or id. What a shot gets stamped with. */
+  variantLabelFor: (club: string | null | undefined) => string | null;
+  /**
+   * One-shot fold of the retired `club-variant-v1` blob. Idempotent via `_legacyVariantsAbsorbed`;
+   * a declaration he made by voice on 09-12 must not evaporate because the fact moved house.
+   */
+  absorbLegacyVariants: (legacy: Record<string, string>) => void;
+  _legacyVariantsAbsorbed?: boolean;
   removeClub: (club_id: ClubId) => void;
   clearBag: () => void;
   /** Bag as a driver→putter-sorted array (for display + brain context). */
@@ -97,45 +225,210 @@ interface ClubBagState {
   isPartialBag: () => boolean;
 }
 
+/**
+ * A blank string from a vision scan means "could not read it", not "it is empty" — so blanks are
+ * dropped before a merge rather than written over something a human typed.
+ */
+function stripBlank<T extends Record<string, unknown>>(o: T): Partial<T> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (k === 'label' || k === 'note' || k === 'source') continue; // handled by the caller
+    if (typeof v === 'string' ? v.trim() !== '' : v != null) out[k] = typeof v === 'string' ? v.trim() : v;
+  }
+  return out as Partial<T>;
+}
+
+/**
+ * A club said any way at all → the catalog id this store is keyed by. `normalizeClub` already owns
+ * the four vocabularies ('DR' / 'Driver' / 'driver' / 'D'); this adds the last hop to an id.
+ */
+function resolveClubId(club: string): string | null {
+  const raw = (club ?? '').trim();
+  if (!raw) return null;
+  if ((CLUB_ORDER as readonly string[]).includes(raw)) return raw;   // already an id
+  const { normalizeClub } = require('../services/clubNormalize') as typeof import('../services/clubNormalize');
+  const { clubNameToClubId } = require('./clubStatsStore') as typeof import('./clubStatsStore');
+  const name = normalizeClub(raw);
+  return name ? clubNameToClubId(name) : null;
+}
+
+let variantSeq = 0;
+/** Monotonic + random: two variants added in the same millisecond must not collide. */
+function newVariantId(): string {
+  variantSeq += 1;
+  return `v${Date.now().toString(36)}${variantSeq.toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+}
+
 export const useClubBagStore = create<ClubBagState>()(
   persist(
     (set, get) => ({
       clubs: {},
+      /**
+       * REGISTERING IS IDEMPOTENT AND NEVER DESTRUCTIVE. Re-scanning a bag you already own must add
+       * what is new and leave the rest alone — Tim: "If it persists the first time, then anything it
+       * missed I can take a picture of." A scan that replaced the slot would delete the shaft and
+       * grip he typed in, because a camera cannot read either of them.
+       */
       registerClub: (club_id, meta) => {
         if (!club_id || club_id === 'unknown') return;
-        set((s) => ({
-          clubs: {
-            ...s.clubs,
-            [club_id]: {
-              club_id,
-              registered_at: meta?.at ?? Date.now(),
-              source: meta?.source ?? 'camera',
-              // Preserve existing values if the new registration doesn't carry them.
-              note: meta?.note ?? s.clubs[club_id]?.note,
-              brand: meta?.brand ?? s.clubs[club_id]?.brand,
-              model: meta?.model ?? s.clubs[club_id]?.model,
-              loft: meta?.loft ?? s.clubs[club_id]?.loft,
+        const incoming: Partial<ClubSpecs> = {
+          brand: meta?.brand, model: meta?.model, loft: meta?.loft,
+          shaftBrand: meta?.shaftBrand, shaftWeight: meta?.shaftWeight, gripSize: meta?.gripSize,
+        };
+        const carries = Object.values(incoming).some((v) => v != null && v !== '');
+        set((s) => {
+          const prev = s.clubs[club_id];
+          const variants = [...(prev?.variants ?? [])];
+          if (carries) {
+            /**
+             * Which physical club did the scan just see? A label match is the answer when it has one
+             * (re-scanning the same driver), otherwise the one in play — a second read of a bag is a
+             * better look at the same clubs, not a discovery of new ones. A genuinely new driver is
+             * added deliberately through addVariant, where the player says so.
+             */
+            const wanted = (meta?.variantLabel ?? incoming.model ?? '').trim().toLowerCase();
+            let idx = wanted ? variants.findIndex((v) => v.label.trim().toLowerCase() === wanted) : -1;
+            if (idx < 0) idx = variants.findIndex((v) => v.variant_id === prev?.inPlay);
+            if (idx < 0 && variants.length > 0) idx = 0;
+            if (idx < 0) {
+              variants.push({
+                variant_id: newVariantId(),
+                label: (meta?.variantLabel ?? incoming.model ?? incoming.brand ?? '').trim() || club_id,
+                ...stripBlank(incoming),
+                registered_at: meta?.at ?? Date.now(),
+                source: meta?.source ?? 'camera',
+              });
+            } else {
+              // Merge: a blank field from a scan is "could not read it", never "erase what you knew".
+              variants[idx] = { ...variants[idx], ...stripBlank(incoming) };
+              if (meta?.variantLabel?.trim()) variants[idx].label = meta.variantLabel.trim();
+            }
+          }
+          return {
+            clubs: {
+              ...s.clubs,
+              [club_id]: {
+                club_id,
+                registered_at: prev?.registered_at ?? meta?.at ?? Date.now(),
+                source: meta?.source ?? prev?.source ?? 'camera',
+                note: meta?.note ?? prev?.note,
+                variants,
+                inPlay: prev?.inPlay ?? variants[0]?.variant_id,
+              },
             },
-          },
-        }));
+          };
+        });
       },
       setClubSpecs: (club_id, specs) =>
         set((s) => {
           const existing = s.clubs[club_id];
           if (!existing) return s;
+          const variants = [...existing.variants];
+          const idx = variants.findIndex((v) => v.variant_id === existing.inPlay);
+          const at = idx >= 0 ? idx : 0;
+          if (variants.length === 0) {
+            // First thing ever known about this club. A voice registration starts here.
+            variants.push({
+              variant_id: newVariantId(),
+              label: (specs.model ?? specs.brand ?? '').trim() || club_id,
+              ...stripBlank(specs),
+              registered_at: Date.now(),
+              source: 'manual',
+            });
+          } else {
+            variants[at] = { ...variants[at], ...stripBlank(specs) };
+          }
           return {
             clubs: {
               ...s.clubs,
               [club_id]: {
                 ...existing,
-                brand: specs.brand ?? existing.brand,
-                model: specs.model ?? existing.model,
-                loft: specs.loft ?? existing.loft,
                 note: specs.note ?? existing.note,
+                variants,
+                inPlay: existing.inPlay ?? variants[0].variant_id,
               },
             },
           };
         }),
+      addVariant: (club_id, v) => {
+        const existing = get().clubs[club_id];
+        if (!existing) return null;
+        const label = (v.label ?? '').trim();
+        if (!label) return null;
+        // Same label twice is the same club said twice, not a fourth driver.
+        const dupe = existing.variants.find((x) => x.label.trim().toLowerCase() === label.toLowerCase());
+        if (dupe) return dupe.variant_id;
+        const variant_id = newVariantId();
+        set((s) => ({
+          clubs: {
+            ...s.clubs,
+            [club_id]: {
+              ...s.clubs[club_id],
+              variants: [...s.clubs[club_id].variants, {
+                variant_id, label, ...stripBlank(v),
+                registered_at: Date.now(), source: v.source ?? 'manual',
+              }],
+              inPlay: s.clubs[club_id].inPlay ?? variant_id,
+            },
+          },
+        }));
+        return variant_id;
+      },
+      setVariantSpecs: (club_id, variant_id, specs) =>
+        set((s) => {
+          const existing = s.clubs[club_id];
+          if (!existing) return s;
+          const variants = existing.variants.map((v) =>
+            v.variant_id === variant_id
+              ? { ...v, ...stripBlank(specs), label: specs.label?.trim() || v.label }
+              : v);
+          return { clubs: { ...s.clubs, [club_id]: { ...existing, variants } } };
+        }),
+      setInPlayVariant: (club_id, variant_id) =>
+        set((s) => {
+          const existing = s.clubs[club_id];
+          if (!existing || !existing.variants.some((v) => v.variant_id === variant_id)) return s;
+          return { clubs: { ...s.clubs, [club_id]: { ...existing, inPlay: variant_id } } };
+        }),
+      removeVariant: (club_id, variant_id) =>
+        set((s) => {
+          const existing = s.clubs[club_id];
+          if (!existing) return s;
+          const variants = existing.variants.filter((v) => v.variant_id !== variant_id);
+          const inPlay = existing.inPlay === variant_id ? variants[0]?.variant_id : existing.inPlay;
+          return { clubs: { ...s.clubs, [club_id]: { ...existing, variants, inPlay } } };
+        }),
+      declareVariant: (club, label) => {
+        const id = resolveClubId(club);
+        const clean = (label ?? '').trim();
+        if (!id || !clean) return null;
+        /**
+         * Declaring a variant of a club you have not registered REGISTERS IT. Refusing would be the
+         * app arguing with a player who just told it what is in his hand, and the bag being empty is
+         * the commonest state of all before the first scan.
+         */
+        if (!get().clubs[id]) get().registerClub(id as ClubId, { source: 'voice' });
+        const existing = get().clubs[id];
+        const found = existing.variants.find((v) => v.label.trim().toLowerCase() === clean.toLowerCase());
+        const variant_id = found ? found.variant_id : get().addVariant(id as ClubId, { label: clean, source: 'voice' });
+        if (variant_id) get().setInPlayVariant(id as ClubId, variant_id);
+        return variant_id ?? null;
+      },
+      variantLabelFor: (club) => {
+        const id = resolveClubId(club ?? '');
+        if (!id) return null;
+        return inPlayVariant(get().clubs[id])?.label ?? null;
+      },
+      absorbLegacyVariants: (legacy) => {
+        if (get()._legacyVariantsAbsorbed) return;
+        const rows = Object.entries(legacy ?? {});
+        // An empty fold does not latch: a cloud snapshot restored later still gets absorbed.
+        if (rows.length === 0) return;
+        for (const [name, label] of rows) {
+          try { get().declareVariant(name, label); } catch { /* one bad row is not a reason to lose the rest */ }
+        }
+        set({ _legacyVariantsAbsorbed: true });
+      },
       removeClub: (club_id) =>
         set((s) => {
           const next = { ...s.clubs };
@@ -227,7 +520,7 @@ export const useClubBagStore = create<ClubBagState>()(
           const st = stats.useClubStatsStore.getState();
           return stats.CLUB_ORDER
             .filter((c) => c !== 'Putter' && st.hasDistance(c))
-            .map((c): RegisteredClub => ({ club_id: c as ClubId, registered_at: 0, source: 'measured' }))
+            .map((c): RegisteredClub => ({ club_id: c as ClubId, registered_at: 0, source: 'measured', variants: [] }))
             .sort((a, b) => CLUB_ORDER.indexOf(a.club_id) - CLUB_ORDER.indexOf(b.club_id));
         } catch {
           return [];
@@ -237,8 +530,44 @@ export const useClubBagStore = create<ClubBagState>()(
     {
       name: 'club-bag-v1',
       storage: createJSONStorage(() => getPersistStorage()),
-      version: 1,
-      migrate: (s) => s as never,
+      version: 2,
+      /**
+       * v1 → v2: flat brand / model / loft become the slot's first VARIANT.
+       *
+       * The store key stays `club-bag-v1` on purpose — renaming it would strand every club already
+       * on the device, which is the one kind of pre-launch breakage APP-BUILD-RULES B1 still calls a
+       * bug. A slot that knew nothing keeps an empty variant list rather than gaining a blank club.
+       */
+      migrate: (persisted, version) => {
+        const st = (persisted ?? {}) as { clubs?: Record<string, Record<string, unknown>>; carriedToday?: string[] };
+        if (version >= 2 || !st.clubs) return st as never;
+        const clubs: Record<string, RegisteredClub> = {};
+        for (const [id, rawClub] of Object.entries(st.clubs)) {
+          const raw = rawClub ?? {};
+          const brand = typeof raw.brand === 'string' ? raw.brand : undefined;
+          const model = typeof raw.model === 'string' ? raw.model : undefined;
+          const loft = typeof raw.loft === 'string' ? raw.loft : undefined;
+          const registered_at = typeof raw.registered_at === 'number' ? raw.registered_at : Date.now();
+          const source = (raw.source as ClubRegisterSource) ?? 'camera';
+          const variants: ClubVariant[] = (brand || model || loft)
+            ? [{
+                variant_id: newVariantId(),
+                label: (model || brand || '').trim() || id,
+                ...(brand ? { brand } : {}), ...(model ? { model } : {}), ...(loft ? { loft } : {}),
+                registered_at, source,
+              }]
+            : [];
+          clubs[id] = {
+            club_id: id as ClubId,
+            registered_at,
+            source,
+            ...(typeof raw.note === 'string' ? { note: raw.note } : {}),
+            variants,
+            ...(variants[0] ? { inPlay: variants[0].variant_id } : {}),
+          };
+        }
+        return { ...st, clubs } as never;
+      },
     },
   ),
 );

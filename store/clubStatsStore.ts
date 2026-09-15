@@ -51,6 +51,24 @@ export function clubIdToClubName(id: string | null | undefined): ClubName | null
   return CLUB_ID_TO_NAME[id] ?? null;
 }
 
+/**
+ * 2026-09-14 — the inverse, DERIVED from the map above rather than written out again. The bag is
+ * keyed by ClubId and everything that talks about clubs in words (voice, shot logs, clubNormalize)
+ * is keyed by ClubName, so one direction without the other meant a voice declaration could not find
+ * the club it was about. A second hand-written table would be the seventh copy of the catalog.
+ *
+ * 'Putter' resolves to 'PT' — absent from CLUB_ID_TO_NAME because the putter carries no full-shot
+ * distance, which is a statement about the DISTANCE LADDER and not about whether the club exists.
+ */
+const CLUB_NAME_TO_ID: Record<string, string> = {
+  ...Object.fromEntries(Object.entries(CLUB_ID_TO_NAME).map(([id, name]) => [name, id])),
+  Putter: 'PT',
+};
+export function clubNameToClubId(name: string | null | undefined): string | null {
+  if (!name) return null;
+  return CLUB_NAME_TO_ID[name] ?? null;
+}
+
 /** Standard amateur carry chart (yds) — inference fallback before the
  *  player has logged enough real shots. Mid-handicap baseline. */
 // 2026-07-24 (final QA) — recalibrated to be INTERNALLY CONSISTENT for a mid-handicapper.
