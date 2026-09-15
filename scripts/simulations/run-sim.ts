@@ -3194,7 +3194,12 @@ check('Timeliness: swing read runs in parallel with the clip persist (not behind
     const sm = read('app/swinglab/smartmotion.tsx');
     return (
       // The read is kicked off on rawUri before the persist await, guarded for putts.
-      /const analysisP: Promise<Awaited<ReturnType<typeof analyzeSwing>>> \| null = isPutt \? null : Promise\.race\(\[\s*\n\s*analyzeSwing\(rawUri,/.test(sm) &&
+      // 2026-09-15 — the putt guard reads `puttModeRef.current`, not `isPutt`. runAnalysis is a
+      // deliberately STABLE callback, and `isPutt` was one of five values it read DIRECTLY with no
+      // ref mirror, so it saw whatever putt mode was when the screen mounted. The ref is the same
+      // fact read at call time. This guard is about the read being PRE-STARTED and putt-guarded —
+      // not about which spelling of putt mode it uses.
+      /const analysisP: Promise<Awaited<ReturnType<typeof analyzeSwing>>> \| null = (?:isPutt|puttModeRef\.current) \? null : Promise\.race\(\[\s*\n\s*analyzeSwing\(rawUri,/.test(sm) &&
       // The verdict awaits the PRE-STARTED promise (not a fresh analyzeSwing after persist).
       /const result: Awaited<ReturnType<typeof analyzeSwing>> = await analysisP!/.test(sm) &&
       // persist still runs (durability) — just no longer in front of the read.

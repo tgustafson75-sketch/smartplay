@@ -1616,6 +1616,32 @@ export default function SmartMotion() {
   useEffect(() => { tempoRef.current = tempo; }, [tempo]);
   useEffect(() => { biomechRef.current = biomech; }, [biomech]);
   useEffect(() => { ballTraceRef.current = ballTrace; }, [ballTrace]);
+  /**
+   * 2026-09-15 — FIVE MORE MIRRORS, closing the half of `runAnalysis` that was genuinely stale.
+   *
+   * The 09-14 lint sweep left one warning in the app: runAnalysis is deliberately STABLE (the
+   * 06-11 audit routed the hands-free stop through `stopRecordingRef` because a stale copy of it
+   * was being captured) but it also read five values DIRECTLY that change during a session, with
+   * no mirror — so it saw whatever they were when the screen mounted.
+   *
+   * What that cost: `feelText` / `coachNote` are written into the saved session as `feel_note` and
+   * `coach_note`, so a note typed on one swing could be saved against the next — or lost.
+   * `analysisCaddie` is stamped on the session, so a caddie reassigned mid-session was recorded
+   * wrong. `clipUri` and `cageSession` are read when the record is assembled.
+   *
+   * Mirrors rather than dependencies, because adding ten deps would churn the callback's identity
+   * on nearly every render and undo the 06-11 fix. Same pattern, same reason, three lines each.
+   */
+  const feelTextRef = useRef(feelText);
+  const coachNoteRef = useRef(coachNote);
+  const clipUriRef = useRef(clipUri);
+  const analysisCaddieRef = useRef(analysisCaddie);
+  const cageSessionRef = useRef(cageSession);
+  useEffect(() => { feelTextRef.current = feelText; }, [feelText]);
+  useEffect(() => { coachNoteRef.current = coachNote; }, [coachNote]);
+  useEffect(() => { clipUriRef.current = clipUri; }, [clipUri]);
+  useEffect(() => { analysisCaddieRef.current = analysisCaddie; }, [analysisCaddie]);
+  useEffect(() => { cageSessionRef.current = cageSession; }, [cageSession]);
   // 2026-06-15 (Tim — shot-shape drills) — when this is a shot-shape drill, read
   // the actual LAUNCH (origin → the one departure point) and compare it to the
   // intended shape. Honest: launch height + direction only; roll is never claimed.
@@ -2595,11 +2621,11 @@ export default function SmartMotion() {
         } catch { /* the warm is an optimisation; the review-phase extract still runs */ }
       })();
       };
-      const analysisP: Promise<Awaited<ReturnType<typeof analyzeSwing>>> | null = isPutt ? null : Promise.race([
+      const analysisP: Promise<Awaited<ReturnType<typeof analyzeSwing>>> | null = puttModeRef.current ? null : Promise.race([
         analyzeSwing(rawUri, {
           club: clubRef.current ? clubIdToServerKey(clubRef.current) : 'unknown',
           swing_number: segment?.index ?? 1,
-          caddie_name: analysisCaddie,
+          caddie_name: analysisCaddieRef.current,
           angle,
           handedness: swingerHandedness,
           language,
@@ -2628,9 +2654,9 @@ export default function SmartMotion() {
            * so it should be connected before then rather than discovered missing later.
            * [[orphans-are-live-bugs-not-dead-code]]
            */
-          ...(coachNote.trim() ? { coach_note: coachNote.trim().slice(0, 600) } : {}),
-          ...((feelText.trim() || (cageSession?.feel_note ?? '').trim())
-            ? { feel_note: (feelText.trim() || (cageSession?.feel_note ?? '').trim()).slice(0, 600) }
+          ...(coachNoteRef.current.trim() ? { coach_note: coachNoteRef.current.trim().slice(0, 600) } : {}),
+          ...((feelTextRef.current.trim() || (cageSessionRef.current?.feel_note ?? '').trim())
+            ? { feel_note: (feelTextRef.current.trim() || (cageSessionRef.current?.feel_note ?? '').trim()).slice(0, 600) }
             : {}),
           ball_area_norm: draftBallRef.current ?? ballAreaRef.current ?? null,
           target_norm: targetPointRef.current ?? null,
@@ -2903,9 +2929,13 @@ export default function SmartMotion() {
             if (!learnedFault && a.contact_read === 'clean') {
               const rel = require('../../store/relationshipStore') as typeof import('../../store/relationshipStore');
               rel.useRelationshipStore.getState().addHeroMoment({
-                clipUri: clipUri ?? null,
+                clipUri: clipUriRef.current ?? null,
                 hole: 0, // range/cage swing — not tied to a hole
-                club: club ? clubIdToClubName(club) ?? String(club) : '',
+                // 2026-09-15 — clubRef, not `club`. Three other writes in this same callback already
+                // read the ref; this one read the state directly, so a hero moment could be filed
+                // against the club that was selected when the SCREEN opened while the rest of the
+                // record named the club actually swung. One callback, two answers for one fact.
+                club: clubRef.current ? clubIdToClubName(clubRef.current) ?? String(clubRef.current) : '',
                 courseName: '',
                 conditions: angle === 'down_the_line' ? 'down the line' : 'face on',
                 carlosNote: null,
@@ -3015,7 +3045,10 @@ export default function SmartMotion() {
         if (sessionRunRef.current === myRun) setPhase('review');
       }
     },
-    [angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName, setSessionBallArea, setSessionTarget, videoDurationMs, swingerHandedness, isDrill, drillShotCount],
+    // 2026-09-15 — `caddiePersonality` dropped: it was the recompute trigger for the persona, and
+    // the persona is read through `analysisCaddieRef` now, so the ref is always current and the dep
+    // bought nothing but churn. Verified unread anywhere in the body.
+    [angle, language, profile.handicap, profile.dominantMiss, profile.firstName, setSessionBallArea, setSessionTarget, videoDurationMs, swingerHandedness, isDrill, drillShotCount, router, drillFocus, drillName],
   );
 
   // Pose biomechanics — only when the user opens the Motion overlay (step 2).

@@ -39,12 +39,28 @@ describe('the swing coach reaches the mental side', () => {
     const hero = sm.indexOf('addHeroMoment({');
     expect(fault).toBeGreaterThan(-1);
     expect(hero).toBeGreaterThan(fault);
-    // Same try block — a failure in either must not break the analysis pass.
-    expect(sm.slice(fault, hero + 800)).toContain('} catch { /* non-fatal */ }');
+    /**
+     * Same try block — a failure in either must not break the analysis pass.
+     *
+     * 2026-09-15 — the window was `hero + 800` and the catch now sits 832 characters after the hero
+     * block, so adding a COMMENT broke it. Anchored on the catch that FOLLOWS the hero block instead
+     * of a character budget: the property is "both writes are inside one non-fatal try", and that
+     * does not change when prose does. A byte-count window is a guard with an expiry date.
+     */
+    const catchAfterHero = sm.indexOf('} catch { /* non-fatal */ }', hero);
+    expect(catchAfterHero).toBeGreaterThan(hero);
+    // and nothing re-opens a try between them, which would put the two writes in different blocks
+    expect(sm.slice(hero, catchAfterHero)).not.toMatch(/\btry \{/);
   });
 
   it('carries the clip, which the garbage collector already protects', () => {
-    expect(sm).toContain('clipUri: clipUri ?? null,');
+    /**
+     * 2026-09-15 — the hero moment reads `clipUriRef.current` now. runAnalysis is a deliberately
+     * STABLE callback and `clipUri` was one of five values it read DIRECTLY with no ref mirror, so
+     * it could file a hero moment against the clip that was loaded when the SCREEN opened. What this
+     * guard cares about is that the clip travels with the moment — not the spelling of the read.
+     */
+    expect(sm).toMatch(/clipUri: (?:clipUri|clipUriRef\.current) \?\? null,/);
     expect(read('services/clipStorageGc.ts')).toContain('useRelationshipStore.getState().heroMoments');
   });
 
