@@ -60,6 +60,13 @@ export default function BallFitScreen() {
       shortGameWedgeSamples: wedge,
       goal,
     });
+    /**
+     * 2026-09-14 — `clubCarry` / `clubTotal` look surplus because `driverCarry` and `wedge` are
+     * read out of clubStatsStore through getState() above, not referenced here. They are the
+     * subscriptions that make this recompute when a new drive or wedge shot lands; drop them and
+     * the ball recommendation is stuck on whatever the bag said when the screen mounted.
+     */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handicap, missType, experience, goal, longestDrive, clubCarry, clubTotal]);
 
   const confColor =

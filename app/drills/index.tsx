@@ -73,6 +73,7 @@ export default function DrillsIndex() {
   const players = useCaddieMemoryStore((st) => st.players);
   const tendencies = useMemo(
     () => useCaddieMemoryStore.getState().getPlayer().tendencies ?? null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `players` is the subscription that makes this getState() read recompute when the active golfer changes
     [players],
   );
   const yours = useMemo(

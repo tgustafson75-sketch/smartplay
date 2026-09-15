@@ -213,6 +213,12 @@ export default function FitProfileScreen() {
         verdict: cvp.compareClubVariants(shots, club).say,
       })).filter((c) => c.splits.length > 0);
     } catch { return []; }
+    /**
+     * 2026-09-14 — `profile` is the recompute trigger. The shots come from roundStore via
+     * getState(), so the linter sees nothing in the body using it; without it the club-variant
+     * comparison never refreshes after the ladder changes.
+     */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile]);
 
   const packRows = useMemo(() => {

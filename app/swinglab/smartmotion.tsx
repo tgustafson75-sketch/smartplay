@@ -623,11 +623,25 @@ export default function SmartMotion() {
   // uploaded (videoUpload already uses getActiveCaddie) is a different caddie, and a Tank-disabled global
   // leaks Tank. Recomputes when the persona/assignments change (settings dep via the hook above).
    
+  /**
+   * 2026-09-14 — REASSIGNING THE PRACTICE CADDIE DID NOT TAKE EFFECT HERE.
+   *
+   * `getActiveCaddieForPillar('practice')` reads `settingsStore.caddieAssignments.practice` through
+   * getState(). This memo listed only `caddiePersonality`, so changing the practice caddie in
+   * Settings → Caddie Team left SmartMotion narrating as the previous one for the life of the
+   * screen — it only refreshed if the GLOBAL persona happened to change too.
+   *
+   * That is the same class as the 2026-08-10 fix recorded below (the same swing narrated live vs
+   * uploaded being a different caddie): one surface reading the pillar and not tracking it.
+   * Subscribing to the assignment makes the memo honest about what it depends on.
+   */
+  const practiceCaddieAssignment = useSettingsStore((s) => s.caddieAssignments?.practice);
   const analysisCaddie = React.useMemo(() => {
     try {
       return (require('../../services/caddieResolver') as typeof import('../../services/caddieResolver')).getActiveCaddieForPillar('practice');
     } catch { return caddiePersonality; }
-  }, [caddiePersonality]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- practiceCaddieAssignment is the subscription that makes this getState() read refresh; see the note above
+  }, [caddiePersonality, practiceCaddieAssignment]);
   const language = useSettingsStore((s) => s.language);
   /**
    * Environment mode — course / range / practice.
@@ -1354,7 +1368,7 @@ export default function SmartMotion() {
       `${note.can[0].toUpperCase()}${note.can.slice(1)}, but ${note.missing}.\n\n${note.fix[0].toUpperCase()}${note.fix.slice(1)}.`,
       [{ text: 'Got it' }],
     );
-  }, [capturedFpsLive, lowFpsNoticeShown]);
+  }, [capturedFpsLive, lowFpsNoticeShown, t]);
   const SwingVisionCamera = useMemo(() => {
     if (!useVisionCamera || visionUnavailable) return null;
     try {
@@ -2135,7 +2149,7 @@ export default function SmartMotion() {
       })
       .catch(() => undefined);
     return () => { cancelled = true; };
-  }, [clipUri, segments, selectedSwing, poseFrames, poseAttemptKey]);
+  }, [clipUri, segments, selectedSwing, poseFrames, poseAttemptKey, effectiveMode]);
 
   // Compose the tiered multi-point shot trace from the measured positions +
   // the aim reference. 'full' = solid in-frame path; 'launch' = solid measured
@@ -2425,6 +2439,14 @@ export default function SmartMotion() {
       // Motion must kill any in-flight / queued narration so it can't replay on the
       // next screen. Abort the per-swing pipeline AND stop the TTS queue.
       pipelineAbortRef.current = true;
+      /**
+       * 2026-09-14 — same rule, same false positive, and here the suggested fix is worse. Copying
+       * `pipelineRunRef.current` into a variable at mount and incrementing THAT would leave the live
+       * ref untouched, so an in-flight pipeline would not be invalidated — which is precisely the
+       * bug the 2026-06-16 note above records fixing (a previous read's voice firing off on the next
+       * screen). The increment must land on the ref itself, at cleanup time.
+       */
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       pipelineRunRef.current++; // invalidate any in-flight pipeline run
       void stopSpeaking().catch(() => undefined);
       setSmartMotionRecording(false); // never leave the mic flagged-reserved after we leave
@@ -3539,7 +3561,7 @@ export default function SmartMotion() {
     } finally {
       setFeelLoading(false);
     }
-  }, [feelText, feelLoading, selectedSwing, analysis, clipUri, videoDurationMs, caddiePersonality, club, language, setSessionFeel]);
+  }, [feelText, feelLoading, selectedSwing, analysis, clipUri, videoDurationMs, analysisCaddie, club, language, setSessionFeel]);
 
   const onPagerScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const w = e.nativeEvent.layoutMeasurement.width || 1;
@@ -3623,7 +3645,7 @@ export default function SmartMotion() {
         delete analysisInflightRef.current[idx];
       }
     },
-    [angle, caddiePersonality, language, profile.handicap, profile.dominantMiss, profile.firstName, swingerHandedness],
+    [angle, analysisCaddie, language, profile.handicap, profile.dominantMiss, profile.firstName, swingerHandedness],
   );
 
   const analyzeSwingForIndex = useCallback(
@@ -4604,7 +4626,7 @@ export default function SmartMotion() {
       // already in state with a Re-analyze affordance, so land on 'review' instead.
       setPhase('review');
     }
-  }, [runAnalysis, appliedCalibration, pipelineNarrate]);
+  }, [runAnalysis, appliedCalibration, pipelineNarrate, drillShotCount]);
   // Keep the auto-stop ref pointed at the current stopRecording (audit H1).
   stopRecordingRef.current = stopRecording;
 
@@ -4663,7 +4685,7 @@ export default function SmartMotion() {
     } finally {
       setScanningClub(false);
     }
-  }, [scanningClub, setClub]);
+  }, [scanningClub, setClub, applyPuttMode]);
 
   // 2026-06-23 (Tim — guided Scan-club) — the manual path now shows a framing box +
   // a 3-2-1 hold so the SOLE is presented steadily, then captures a CRISP processed
@@ -4711,7 +4733,7 @@ export default function SmartMotion() {
       setClubScanActive(false);
       setClubScanCount(0);
     }
-  }, [scanningClub, clubScanActive, setClub]);
+  }, [scanningClub, clubScanActive, setClub, applyPuttMode]);
 
   // 2026-07-01 (Tim — "look at my club / register my club / add this club" from anywhere) — when
   // navigated here with ?autoScan=1 (a voice club-register command routed through openToolHandler),
@@ -4946,7 +4968,7 @@ export default function SmartMotion() {
     }
     useToastStore.getState().show(navigate ? savedMsg : `${savedMsg} — fresh set rolling`);
     if (navigate) router.push('/swinglab/library' as never);
-  }, [coachNote, feelText, router, isDrill, drillId, drillName, drillShotCount, tempo, biomech, estCarry, effortPct, ballTrace, practiceCanvasFeet, cameraBehindFeet, angle, club, isPutt, bodyItems]);
+  }, [coachNote, feelText, router, isDrill, drillId, drillName, drillShotCount, tempo, biomech, estCarry, effortPct, ballTrace, practiceCanvasFeet, cameraBehindFeet, angle, club, isPutt, bodyItems, effectiveMode]);
   const confirmSave = useCallback(() => persistReviewToLibrary(true), [persistReviewToLibrary]);
   persistReviewRef.current = persistReviewToLibrary;
 
@@ -4984,7 +5006,7 @@ export default function SmartMotion() {
         bodyItems: bodyItems.map((b) => ({ key: b.key, label: b.label, tone: b.tone, icon: typeof b.icon === 'string' ? b.icon : undefined })),
       });
     } catch { /* non-fatal */ }
-  }, [phase, selectedSwing, estCarry, effortPct, ballTrace, practiceCanvasFeet, cameraBehindFeet, angle, club, tempo, biomech, bodyItems]);
+  }, [phase, selectedSwing, estCarry, effortPct, ballTrace, practiceCanvasFeet, cameraBehindFeet, angle, club, tempo, biomech, bodyItems, effectiveMode]);
   // Slow-mo cycle for swing review (rate prop on the Video — safe, declarative).
   const cycleSpeed = useCallback(() => {
     setPlaybackRate((r) => (r === 1 ? 0.5 : r === 0.5 ? 0.25 : 1));
@@ -5053,7 +5075,7 @@ export default function SmartMotion() {
       }
     });
     return () => { setSmartMotionActive(false); unsub(); unsubDrill(); };
-  }, [router, setClub]);
+  }, [router, setClub, isDrill, drillFocus, drillName]);
 
   // 2026-08-07 (Tim — the swing-library crash's TWIN, on the higher-traffic SmartMotion review screen).
   // The review <Video>'s onLoad/onPlaybackStatusUpdate/onError were INLINE literals recreated every render.

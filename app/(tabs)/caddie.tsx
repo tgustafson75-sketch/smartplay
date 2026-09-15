@@ -631,6 +631,21 @@ export default function CaddieTab() {
      
     // geometryCompletions: re-resolve when a course map finishes building. Without it this memo
     // holds the static-card answer for the rest of the round even after the greens arrive.
+    /**
+     * 2026-09-14 — the "unnecessary dependency" warning here is WRONG, and acting on it would
+     * reintroduce a defect the repo already guards against.
+     *
+     * These memos read through services synchronously (`resolveYardage`, `getLastFix`,
+     * `resolveGreenCoords`, `decideShot`), so the linter sees no reference to `markTick`,
+     * `geometryCompletions`, `userStatedYardage`, `currentHole` or `holeShotCount` in the body and
+     * calls them surplus. They are the RECOMPUTE TRIGGERS — without them the memo holds its first
+     * answer for the rest of the round, which is exactly what the comments beside each one record.
+     *
+     * `__tests__/regression/geometry-status-observable.test.ts` asserts `geometryCompletions` is in
+     * these dep arrays, so "cleaning" them fails that test. Suppressed with the reason rather than
+     * left as a warning somebody eventually tidies. [[built-is-not-reachable]]
+     */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRoundActive, currentHole, markTick, userStatedYardage, geometryCompletions]);
 
   /**
@@ -682,6 +697,21 @@ export default function CaddieTab() {
     const { decideShot } = require('../../services/caddieDecision') as typeof import('../../services/caddieDecision');
     const d = decideShot({ rawYards: displayYardage ?? null });
     return { plan: d.plan, budget: d.budget };
+    /**
+     * 2026-09-14 — the "unnecessary dependency" warning here is WRONG, and acting on it would
+     * reintroduce a defect the repo already guards against.
+     *
+     * These memos read through services synchronously (`resolveYardage`, `getLastFix`,
+     * `resolveGreenCoords`, `decideShot`), so the linter sees no reference to `markTick`,
+     * `geometryCompletions`, `userStatedYardage`, `currentHole` or `holeShotCount` in the body and
+     * calls them surplus. They are the RECOMPUTE TRIGGERS — without them the memo holds its first
+     * answer for the rest of the round, which is exactly what the comments beside each one record.
+     *
+     * `__tests__/regression/geometry-status-observable.test.ts` asserts `geometryCompletions` is in
+     * these dep arrays, so "cleaning" them fails that test. Suppressed with the reason rather than
+     * left as a warning somebody eventually tidies. [[built-is-not-reachable]]
+     */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRoundActive, currentHole, displayYardage, holeShotCount]);
 
   // L1 Quiet's new SmartFinder hero needs the F/M/B triplet, not just
@@ -719,6 +749,7 @@ export default function CaddieTab() {
     // geometryCompletions — front/middle/back and the green coord all come from geometry. My first
     // pass added this to the two yardage memos only; the guard below caught the other three. Same
     // defect, five places.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recompute triggers; see the note above resolvedYardage
   }, [isRoundActive, currentHole, markTick, geometryCompletions]);
   const elevGreenCoord = useMemo(() => {
     if (!isRoundActive) return null;
@@ -732,6 +763,7 @@ export default function CaddieTab() {
     // geometryCompletions — front/middle/back and the green coord all come from geometry. My first
     // pass added this to the two yardage memos only; the guard below caught the other three. Same
     // defect, five places.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recompute triggers; see the note above resolvedYardage
   }, [isRoundActive, currentHole, markTick, geometryCompletions]);
   const caddieElevation = useElevationDeltaStatus(elevPlayerCoord, elevGreenCoord);
 

@@ -599,7 +599,15 @@ function CameraSmartFinder({
     return () => {
       mountedRef.current = false;
       // Stop any in-progress video recording on unmount so CameraView releases.
+      /**
+       * 2026-09-14 — react-hooks/exhaustive-deps warns that `cameraRef.current` "will likely have
+       * changed by the time this cleanup runs" and suggests copying it into a variable inside the
+       * effect. THAT FIX WOULD BREAK THIS. The effect runs once at mount, when the ref may not be
+       * attached; a copy taken then is null or a camera that is no longer live, and we release
+       * nothing. Reading `.current` AT CLEANUP is the point — stop whatever is recording now.
+       */
       if (cameraRef.current) {
+        // eslint-disable-next-line react-hooks/exhaustive-deps
         try { cameraRef.current.stopRecording(); } catch { /* best effort */ }
       }
     };
@@ -1773,6 +1781,13 @@ function TargetCameraOverlay({
     holeLineNote,
     greenFrontYards: yards.front ?? null,
     greenBackYards: yards.back ?? null,
+    /**
+     * 2026-09-14 — `dominantMiss`, `isCompetition` and `distanceControl` are not passed to
+     * decideShot; they are read INSIDE it from the profile and round stores. They sit in the deps so
+     * the decision refreshes when he changes his miss, starts a competition round, or changes how he
+     * covers a number — all three of which change the club this screen recommends.
+     */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [targetYards, weather, targetBearing, shotBearingDeg, elevationDeltaFeet, holeLineNote, yards.front, yards.back, dominantMiss, isCompetition, distanceControl]);
   const shotRead = decision.shot;
 
@@ -2192,6 +2207,7 @@ function PuttCameraOverlay({ locationGranted: _locationGranted, armRead = false,
       Math.max(...w.map((x) => x.r)) - Math.min(...w.map((x) => x.r)),
     );
     // `tilt` is the tick — the ref itself is mutated in place and would not trigger this on its own.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `tilt` is the tick; the line above says so
   }, [tilt]);
   const grazingPose = readGrazingPose(tilt.pitch, liveWobble);
   const [groundFrame, setGroundFrame] = useState<string | null>(null);

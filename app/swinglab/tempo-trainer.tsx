@@ -111,6 +111,7 @@ export default function TempoTrainerScreen() {
   const players = useCaddieMemoryStore((st) => st.players);
   const swingMetrics = React.useMemo(
     () => useCaddieMemoryStore.getState().getPlayer().swingMetrics ?? null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `players` is the subscription that makes this getState() read recompute when the active golfer changes
     [players],
   );
   const idealRatio = mode === 'short' ? 2 : 3;

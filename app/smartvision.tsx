@@ -1221,6 +1221,7 @@ export default function SmartVisionScreen() {
     // 2026-07-30 (audit #16) — recompute when the marked fix changes (markBumpTick bumps on
     // subscribeFixChange, incl. a voice "mark the green"/setMarkedFix); without it the resolver returned
     // the new green but the memo stayed stale, so the overlay green + aim line didn't move.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- markBumpTick is the recompute trigger; the two lines above say what goes stale without it
   }, [geometry, holeIndex, markBumpTick]);
 
   const projection = useMemo(() => {
@@ -1524,6 +1525,7 @@ export default function SmartVisionScreen() {
       if (cur.length > 0) prior.unshift({ id: currentRoundId ?? 'current', endedAt: Date.now(), color: '#FFFFFF', label: 'This round', shots: cur });
     }
     return prior.slice(0, 4);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- markBumpTick / activeShotCount are recompute triggers for reads done through the stores
   }, [courseId, holeIndex, markBumpTick, activeShotCount]);
   const [showShotMap, setShowShotMap] = useState(true);
 
@@ -1874,6 +1876,7 @@ export default function SmartVisionScreen() {
   // skip the "let me look" preamble. Mirrors the legacy hole-view wiring.
   const par = useMemo(() => {
     return holePar(holeIndex);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- courseHoles is the trigger: holePar() reads the holes through the store, so the par would stick at its first value while a course map loads
   }, [courseHoles, holeIndex]);
   useEffect(() => {
     setSmartVisionState({ isOpen: true, holeNumber: holeIndex, par });

@@ -36,10 +36,24 @@ describe('the arc computes without the Motion toggle', () => {
   });
 
   it('the effect no longer depends on showSkeleton', () => {
-    expect(sm).not.toContain('}, [showSkeleton, clipUri, segments, selectedSwing]);');
-    // 2026-09-09 — poseAttemptKey joined the deps: the effect must also re-run when the pose stage
-    // SETTLES, because that is what releases it (see "the club stage waits for pose" below).
-    expect(sm).toContain('}, [clipUri, segments, selectedSwing, poseFrames, poseAttemptKey]);');
+    /**
+     * 2026-09-14 — THIS PINNED THE WHOLE DEP LINE VERBATIM and broke the moment a legitimate
+     * dependency was ADDED (`effectiveMode`, which the effect genuinely reads). What it cares about
+     * is that the arc is not gated on a UI toggle, and that the deps that release it are present —
+     * not that the array has exactly five entries in one order. Asserted as membership now, so it
+     * survives the array growing and still fails if showSkeleton comes back.
+     * [[reachable-not-just-wired]]
+     */
+    const deps = /\n\s*\}, \[([^\]]*)\]\);/g;
+    const arrays = [...sm.matchAll(deps)].map((m) => m[1]);
+    const arcDeps = arrays.find((a) => a.includes('poseAttemptKey') && a.includes('clipUri'));
+    expect(arcDeps).toBeDefined();
+    expect(arcDeps).not.toMatch(/\bshowSkeleton\b/);
+    // 2026-09-09 — poseAttemptKey must stay: the effect has to re-run when the pose stage SETTLES,
+    // because that is what releases it (see "the club stage waits for pose" below).
+    for (const d of ['clipUri', 'segments', 'selectedSwing', 'poseFrames', 'poseAttemptKey']) {
+      expect(arcDeps).toContain(d);
+    }
   });
 
   it('still keeps the ROI zoom that makes a distant clubhead detectable', () => {

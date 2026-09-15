@@ -100,6 +100,7 @@ export default function SwingLibrary() {
   // unmemoized made `entries` a new reference each render → the file-existence probe effect re-ran
   // after every render → setFileStatus → re-render → loop (perpetual FS re-probe, battery/heat).
   // sessionHistory is the store dep that should trigger recompute; filter is a primitive.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- sessionHistory is the recompute trigger for getLibrary(); the line above already says so
   const sourceFilteredEntries = useMemo(() => getLibrary(filter), [filter, sessionHistory]);
 
   const availableClubs = useMemo(() => {
