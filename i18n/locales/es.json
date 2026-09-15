@@ -327,5 +327,11 @@
       "full_swing": "SWING COMPLETO — FORMA",
       "short_game": "JUEGO CORTO"
     }
+  },
+  "swinglab_smart_tempo": {
+    "count": {
+      "say_it": "DILO",
+      "aiming_at": "Apuntando a {{target}}:1, la cuenta pasa a ser «{{say}}»: mismo descenso, carga más larga."
+    }
   }
 }

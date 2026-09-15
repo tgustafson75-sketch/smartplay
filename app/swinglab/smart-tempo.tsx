@@ -43,6 +43,7 @@ import {
   computeTempo, detectTempoPhases,
   type TempoPhases, type TempoResult, type TempoRating, type TempoMode,
 } from '../../services/smartTempo';
+import { countForBackswing, countForTarget } from '../../services/tempoCount';
 import { TempoMetronome, type MetronomeMode } from '../../services/tempoMetronome';
 import TempoPatch from '../../components/swinglab/TempoPatch';
 import { setScreenContext, clearScreenContext } from '../../services/screenContext';
@@ -357,6 +358,15 @@ export default function SmartTempoScreen() {
       impactSec: marks.impactSec!,
     }, tempoMode, myTempoBaseline);
   }, [allMarked, marks.backswingStartSec, marks.topSec, marks.impactSec, tempoMode, myTempoBaseline]);
+  /** The count that fits the swing he made, and the one for the tempo he is aiming at. */
+  const tempoCount = useMemo(
+    () => (result ? countForBackswing(result.backswingMs, result.downswingMs) : null),
+    [result],
+  );
+  const targetCount = useMemo(
+    () => (result ? countForTarget(result.downswingMs, result.targetRatio) : null),
+    [result],
+  );
   const outOfOrder = allMarked && result == null;
 
   // ── Metronome (actual vs ideal) ───────────────────────────────────────
@@ -729,6 +739,36 @@ export default function SmartTempoScreen() {
                 </View>
                 <Text style={[styles.coaching, { color: colors.text_secondary }]}>{result.coaching}</Text>
 
+                {/**
+                  * 2026-09-14 (Tim — "Hank Haney … swears on full swing to say one hundred and one
+                  * … there is a simple app for that I tried. It was neat but not a useful app as a
+                  * standalone.") — THE COUNT, MATCHED TO A MEASUREMENT.
+                  *
+                  * A spoken count is the same device as Tour Tempo's tones, carried by syllables —
+                  * and the trainer here already uses Novosel's frame counts. What the standalone
+                  * app could not do is fit the count to YOUR swing, because it had never seen one.
+                  *
+                  * Two lines, deliberately: the count that fits the swing he just made, and the
+                  * count for the tempo he is aiming at — holding his real downswing, which is the
+                  * part that barely varies. The second is the training aid; the first is the read.
+                  * When nothing is sayable at his backswing length, it says so, because a count
+                  * that cannot be said is the same finding the ratio gives, in a form he can feel.
+                  */}
+                {tempoCount && (
+                  <View style={[styles.countBox, { borderColor: colors.border }]}>
+                    <Text style={[styles.countLabel, { color: colors.text_muted }]}>{t('swinglab_smart_tempo.count.say_it')}</Text>
+                    <Text style={[styles.countSay, { color: tempoCount.comfortable ? colors.accent : colors.accent_amber }]}>
+                      “{tempoCount.back}” · “{tempoCount.down}”
+                    </Text>
+                    <Text style={[styles.coaching, { color: colors.text_secondary, textAlign: 'left', marginTop: 6 }]}>{tempoCount.note}</Text>
+                    {targetCount && targetCount.back !== tempoCount.back && (
+                      <Text style={[styles.coaching, { color: colors.text_muted, textAlign: 'left', marginTop: 8 }]}>
+                        {t('swinglab_smart_tempo.count.aiming_at', { say: targetCount.back, target: result.targetRatio })}
+                      </Text>
+                    )}
+                  </View>
+                )}
+
                 <View style={[styles.dataBlock, { borderColor: colors.border }]}>
                   <DataCell label={t('swinglab_smart_tempo.label.backswing')} value={`${result.backswingMs} ms`} colors={colors} />
                   <DataCell label={t('swinglab_smart_tempo.label.downswing')} value={`${result.downswingMs} ms`} colors={colors} />
@@ -960,6 +1000,9 @@ const styles = StyleSheet.create({
   ratioBigNum: { fontSize: 46, fontWeight: '900' },
   ratioBigTarget: { fontSize: 13, fontWeight: '700' },
   coaching: { fontSize: 14, lineHeight: 20, textAlign: 'center', marginTop: 10 },
+  countBox: { borderWidth: 1, borderRadius: 12, padding: 14, marginTop: 14, alignSelf: 'stretch' },
+  countLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  countSay: { fontSize: 19, fontWeight: '900', marginTop: 6 },
   dataBlock: { flexDirection: 'row', borderWidth: 1, borderRadius: 12, marginTop: 16, width: '100%' },
   dataCell: { flex: 1, alignItems: 'center', paddingVertical: 12 },
   dataLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.6 },

@@ -2303,6 +2303,10 @@
     },
     "text": {
       "tick_tick_tock_at_your": "Tick-tick-tock at your measured spacing vs the {{targetLabel}}. Built from your real marks."
+    },
+    "count": {
+      "say_it": "SAY IT",
+      "aiming_at": "Aiming at {{target}}:1, the count becomes “{{say}}” — same downswing, a longer load."
     }
   },
   "swinglab_smartmotion": {

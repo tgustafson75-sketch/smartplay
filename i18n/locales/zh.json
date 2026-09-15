@@ -327,5 +327,11 @@
       "full_swing": "全挥杆 — 塑形",
       "short_game": "果岭周边"
     }
+  },
+  "swinglab_smart_tempo": {
+    "count": {
+      "say_it": "念出来",
+      "aiming_at": "若以 {{target}}:1 为目标，节拍变成「{{say}}」— 下杆不变，上杆更长。"
+    }
   }
 }
