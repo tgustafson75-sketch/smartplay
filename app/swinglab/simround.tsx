@@ -540,19 +540,19 @@ export default function SwingSimScreen() {
 }
 
 /**
- * 2026-09-14 — THIS SCREEN IS NOT THEMED, and the signature said otherwise.
+ * 2026-09-15 — FIXED DARK, DELIBERATELY. A recorded decision, not an oversight.
  *
- * `makeStyles` took the theme and ignored it: every colour below is a hardcoded hex, and the
- * component never read `colors` for anything else either. So the parameter was a promise the code
- * did not keep, and the only thing flagging it was an unused-variable warning.
+ * `makeStyles` used to take the theme and ignore it — every colour below is a hardcoded hex and the
+ * component never read `colors` for anything else either. The 09-14 lint sweep surfaced that as an
+ * unused parameter and flagged it rather than "fixing" it, because converting these colours would
+ * change how the screen looks and that is a product call.
  *
- * The parameter is gone rather than renamed `_colors`, so the fact is legible: these styles are
- * fixed dark. Whether that is RIGHT is a product decision and not a lint fix — a cockpit-style
- * capture screen being deliberately dark is defensible, and converting ~25 colour decisions to
- * tokens would change how this screen looks in light mode. Flagged for Tim rather than done
- * quietly. [[a-stale-header-is-a-source-someone-trusts]]
- */
-function makeStyles() {
+ * Resolved 09-15 from the screen's own brief: SWINGSIM is a dark surface BY DESIGN — its own header calls for "broadcast presentation": cinematic flyover, TV-style tracer, lower-third banners. Broadcast furniture is dark.
+ *
+ * So the parameter stays gone and this note stays here. Do NOT wire it to the theme on the strength
+ * of the tokens existing — the fixed palette IS the design. If that ever changes it should change
+ * because someone decided it, not because a linter asked.
+ */function makeStyles() {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: '#04120a' },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 8 },
