@@ -35,7 +35,7 @@ const caddie = strip(read('app/(tabs)/caddie.tsx'));
 
 const world = (over: Partial<Parameters<typeof pickSetupGap>[0]> = {}) => ({
   registeredClubs: 14, measuredClubs: 14, handicapIndex: 17.1, handicapSet: true,
-  homeCourse: 'Menifee Lakes', dominantMiss: 'right', distanceControlSet: true,
+  homeCourseName: 'Menifee Lakes', dominantMiss: 'right', distanceControlSet: true,
   roundsPlayed: 12, suppressed: new Set<SetupGapKey>(), ...over,
 });
 
@@ -52,7 +52,7 @@ describe('he only asks when there is something worth asking about', () => {
   it('raises exactly ONE thing — a list of four is a checklist with a voice', () => {
     const g = pickSetupGap(world({
       registeredClubs: 0, measuredClubs: 0, handicapSet: false, handicapIndex: null,
-      dominantMiss: null, distanceControlSet: false, homeCourse: null,
+      dominantMiss: null, distanceControlSet: false, homeCourseName: null,
     }));
     expect(g).not.toBeNull();
     expect(typeof g!.key).toBe('string');

@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, ImageBackground, StyleSheet, Image, type 
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle, Line, Rect, Text as SvgText, Path } from 'react-native-svg';
 import { useRoundStore } from '../../store/roundStore';
-import { usePlayerProfileStore } from '../../store/playerProfileStore';
+import { usePlayerProfileStore, primaryHomeCourseName } from '../../store/playerProfileStore';
 import { getHoleGeometry, fetchCourseGeometry, getCachedGeometry, type HoleGeometry } from '../../services/courseGeometryService';
 import { peekFix, getLastFix, resolveGreenCoords } from '../../services/smartFinderService';
 import { isValidGolfCoord } from '../../utils/coordGuard';
@@ -168,7 +168,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
   // 2026-08-11 — the selected course's OWN centroid, captured at selection. Lets the preview draw an
   // aerial immediately instead of waiting on (or failing with) a geometry build.
   const previewCourseCoords = useRoundStore(s => s.previewCourseCoords);
-  const _homeCourseName = usePlayerProfileStore(s => s.homeCourse);
+  const _homeCourseName = usePlayerProfileStore(s => primaryHomeCourseName(s.homeCourses) || null);
   const previewCourseId_resolved: string | null =
     activeCourseId ?? pendingStartCourseId ?? previewCourseId ?? null;
   const previewCourseLabel: string | null = (() => {

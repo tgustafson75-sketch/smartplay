@@ -196,7 +196,9 @@
       "longest_putt_feet": "Longest Putt (feet)",
       "owner_console": "Owner Console",
       "owner_console_open_count": " · {{count}} open",
-      "owner_console_sub": "Checklist, issue log, harnesses, diagnostics and owner actions — one screen"
+      "owner_console_sub": "Checklist, issue log, harnesses, diagnostics and owner actions — one screen",
+      "no_home_courses_yet": "None yet — pick them from the course list.",
+      "choose_home_courses": "Choose from the course list"
     },
     "placeholder": {
       "search_settings": "Search settings",
@@ -258,7 +260,8 @@
       "reset_all_app_data_and": "Reset all app data and start fresh",
       "voice_local_hit_rate_tap": "Voice local hit-rate; tap to reset",
       "reset_what_the_caddie_learned": "Reset what the caddie learned about how much to talk",
-      "open_the_owner_console": "Open the owner console"
+      "open_the_owner_console": "Open the owner console",
+      "remove_home_course": "Remove {{course}} from your home courses"
     },
     "label": {
       "handedness": "Handedness",
@@ -301,7 +304,8 @@
       "field_test_this_round": "Field Test This Round",
       "how_you_cover_a_number": "How You Cover a Number",
       "caddie_presence": "How much your caddie speaks up",
-      "hands_free_listening": "Hands-free listening"
+      "hands_free_listening": "Hands-free listening",
+      "home_courses": "Home courses (up to {{max}})"
     },
     "developer_tools_section": {
       "developer_tools_dev_build": "Developer Tools (dev build)",
@@ -601,7 +605,13 @@
     "pin_depth_middle": "MIDDLE",
     "pin_depth_front": "FRONT",
     "pin_hint": "Optional. If the card says where today's pins are, tap it — a back pin is a real club difference. Skipped means middle, and nothing is adjusted.",
-    "pin_set_hint": "Pin {{pin}}. Your yardage now plays to the flag, not the middle — but only on greens I have real front/back numbers for."
+    "pin_set_hint": "Pin {{pin}}. Your yardage now plays to the flag, not the middle — but only on greens I have real front/back numbers for.",
+    "home_course": {
+      "add": "Set as a home course",
+      "remove": "Remove from home courses",
+      "full_title": "Three is the limit",
+      "full_body": "You already have {{max}} home courses. Remove one first — they each build ahead of time so they are ready when you play."
+    }
   },
   "swinglab": {
     "practice": "PRACTICE",

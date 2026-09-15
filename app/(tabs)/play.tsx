@@ -40,7 +40,7 @@ import { useRoundStore } from '../../store/roundStore';
 import { describePin } from '../../services/pinPosition';
 import { useClubBagStore } from '../../store/clubBagStore';
 import { useDownloadedCoursesStore } from '../../store/downloadedCoursesStore';
-import { usePlayerProfileStore } from '../../store/playerProfileStore';
+import { usePlayerProfileStore, MAX_HOME_COURSES } from '../../store/playerProfileStore';
 import { canAccess } from '../../services/featureAccess';
 import { triggerPaywall } from '../../services/paywallGuard';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -649,7 +649,7 @@ export default function PlayTab() {
   const activeCourse = useRoundStore(s => s.activeCourse);
   const endRound = useRoundStore(s => s.endRound);
   const discardRound = useRoundStore(s => s.discardRound);
-  const homeCourse = usePlayerProfileStore(s => s.homeCourse);
+  const homeCourses = usePlayerProfileStore(s => s.homeCourses);
 
   /**
    * 2026-08-13 — courseThumb() falls back to reading the geometry cache (getCachedGeometry) to give a
@@ -1351,10 +1351,26 @@ export default function PlayTab() {
       );
       if (match) { void selectSummary(match); return; }
     }
-    const homeName = (homeCourse ?? '').toLowerCase();
-    const homeMatch = homeName
-      ? LOCAL_COURSES.find(l => l.club_name.toLowerCase().includes(homeName) || l.id.toLowerCase().includes(homeName))
-      : null;
+    /**
+     * 2026-09-14 (Tim) — up to THREE home courses, and the first that resolves is the default.
+     *
+     * This was one free-text string matched by substring. An entry picked from the catalog now has a
+     * real id, so it matches exactly; a name-only entry carried over from the old field still falls
+     * back to the substring match, which is all we ever had for it.
+     */
+    const homeMatch = (() => {
+      for (const hc of homeCourses ?? []) {
+        if (hc.id) {
+          const byId = LOCAL_COURSES.find(l => l.id === hc.id);
+          if (byId) return byId;
+        }
+        const nm = (hc.name ?? '').trim().toLowerCase();
+        if (!nm) continue;
+        const byName = LOCAL_COURSES.find(l => l.club_name.toLowerCase().includes(nm) || l.id.toLowerCase().includes(nm));
+        if (byName) return byName;
+      }
+      return null;
+    })();
     // Phase 407 — default to the NEAREST course (closestLocal[0]) when
     // the GPS sort has run. Falls through to the configured home
     // course (if set) and then to the static catalog top when GPS
@@ -1390,7 +1406,49 @@ export default function PlayTab() {
     // selectSummary is intentionally not in deps — it'd retrigger on every
     // closure refresh. We only want this once per mount + once GPS resolves.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [homeCourse, isRoundActive, activeCourseId, activeCourse, userPosition, previewCourseId]);
+  }, [homeCourses, isRoundActive, activeCourseId, activeCourse, userPosition, previewCourseId]);
+
+  /**
+   * 2026-09-14 (Tim) — "When user selects up to 3 home courses, logic should spool those to the play
+   * tab for the engine to build… so they cue up as three builds in the users play tab courses."
+   *
+   * THE HOME SET IS BUILT AHEAD OF TIME, not on the tap that needs it. Selecting a course already
+   * runs the download engine (geometry + content + intelligence + imagery) — but only for the one
+   * you just tapped, and only then, which means the first tee of a round at your own club waits on
+   * an Overpass build. These are the three courses he is most likely to play, declared in advance,
+   * so there is no reason to wait.
+   *
+   * Cheap and safe to re-run: `downloadCourse` is idempotent, `fetchCourseGeometry` de-duplicates
+   * concurrent callers through its inflight map, and the geometry service owns the build queue — so
+   * three ids here become three QUEUED builds, not three simultaneous Overpass storms.
+   *
+   * Skips an entry with no id: those are names carried over from the old free-text field, and
+   * guessing which course a typed string meant is exactly what the picker exists to stop.
+   */
+  /** Is the course on screen one of his home set? Drives the star on the selected card. */
+  const isSelectedHome = useMemo(
+    () => !!selected && (homeCourses ?? []).some((h) => (h.id && h.id === selected.id)
+      || (!h.id && (h.name ?? '').trim().toLowerCase() === (selected.club_name ?? '').trim().toLowerCase())),
+    [homeCourses, selected],
+  );
+
+  const spooledHomeRef = useRef<string>('');
+  useEffect(() => {
+    const ids = (homeCourses ?? []).map((h) => h.id).filter((id) => !!id);
+    if (ids.length === 0) return;
+    const key = ids.join(',');
+    if (spooledHomeRef.current === key) return;   // once per set, not once per render
+    spooledHomeRef.current = key;
+    for (const id of ids) {
+      const c = LOCAL_COURSES.find((l) => l.id === id);
+      if (!c) continue;
+      const lat = typeof c.lat === 'number' ? c.lat : null;
+      const lng = typeof c.lng === 'number' ? c.lng : null;
+      void import('../../services/courseDownloadEngine')
+        .then((eng) => eng.downloadCourse({ name: c.club_name, courseId: c.id, lat, lng }))
+        .catch(() => undefined);   // a home course that will not build is not a reason to break the tab
+    }
+  }, [homeCourses]);
 
   const runSearch = useCallback(async (q: string) => {
     const trimmed = q.trim();
@@ -2345,7 +2403,28 @@ export default function PlayTab() {
                   )}
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.selectedTitle} numberOfLines={2}>{selected.club_name}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                    <Text style={[styles.selectedTitle, { flex: 1 }]} numberOfLines={2}>{selected.club_name}</Text>
+                    {/**
+                      * 2026-09-14 (Tim) — SET A HOME COURSE WHERE THE COURSES ARE.
+                      *
+                      * The picker belongs on the tab that already has search, GPS-nearest ordering and
+                      * every course card — not as a second course list in Settings. One tap marks it,
+                      * one tap clears it, and the set is capped at three IN THE STORE, so the refusal
+                      * below cannot be bypassed by another surface.
+                      */}
+                    <TouchableOpacity
+                      onPress={() => {
+                        const ok = usePlayerProfileStore.getState().toggleHomeCourse({ id: selected.id, name: selected.club_name ?? selected.course_name ?? '' });
+                        if (!ok) Alert.alert(t('play.home_course.full_title'), t('play.home_course.full_body', { max: MAX_HOME_COURSES }));
+                      }}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={isSelectedHome ? t('play.home_course.remove') : t('play.home_course.add')}
+                    >
+                      <AppIcon name={isSelectedHome ? 'star' : 'star-outline'} size={20} color={isSelectedHome ? '#FBBF24' : '#8A96A6'} />
+                    </TouchableOpacity>
+                  </View>
                   <Text style={styles.selectedSub} numberOfLines={1}>
                     {[selected.location.city, selected.location.state].filter(Boolean).join(', ')}
                   </Text>

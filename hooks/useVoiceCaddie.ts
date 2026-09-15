@@ -49,7 +49,7 @@ import { useRoundStore } from '../store/roundStore';
 import { tryAnswerOpenQuestion } from '../services/pendingPuttAsk';
 import { resolveYardage } from '../services/yardageResolver';
 import { useSettingsStore } from '../store/settingsStore';
-import { usePlayerProfileStore } from '../store/playerProfileStore';
+import { usePlayerProfileStore, primaryHomeCourseName } from '../store/playerProfileStore';
 import { useFamilyStore } from '../store/familyStore';
 import { useRelationshipStore } from '../store/relationshipStore';
 import { recordUserTurn, recordKevinTurn, isAwaitingFollowUp } from '../services/conversationState';
@@ -489,7 +489,7 @@ function buildPreRoundShortcutIntent(transcript: string): { intent_type: 'open_t
   const cleaned = normalizeForMatch(transcript);
   if (!cleaned) return null;
 
-  const familyHomeCourse = usePlayerProfileStore.getState().homeCourse?.trim() ?? '';
+  const familyHomeCourse = primaryHomeCourseName(usePlayerProfileStore.getState().homeCourses).trim();
 
   const toolText = stripLeadIn(cleaned.replace(/^(?:open|show|pull up|go to|launch|bring up|take me to)\s+(?:me\s+)?/i, ''));
   const toolMatchers: { tool_name: string; aliases: string[] }[] = [

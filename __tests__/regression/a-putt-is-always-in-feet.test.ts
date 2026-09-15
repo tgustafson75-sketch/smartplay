@@ -172,7 +172,17 @@ describe('the stored personal best is feet, and says so in its name', () => {
   it('the migration converts the old yards value at the rate the old LABEL promised', () => {
     // 22 in a field that said "(yards)" is 66 feet. Reinterpreting it as feet would mean deciding
     // the label had been lying, which is a guess; dropping it loses a personal best to a rename.
-    expect(store).toMatch(/version: 4,/);
+    /**
+     * 2026-09-14 — this pinned `version: 4,` and broke on the very next migration (home courses
+     * became a set of three, v5). The version NUMBER is not what this test cares about; it cares
+     * that the conversion still happens and still uses the rate the old label promised. Asserting
+     * the number would make every future migration look like a putting regression.
+     *
+     * What IS worth pinning is that the version never goes BACKWARDS — a lowered version silently
+     * stops migrate() running for anyone already on the higher one.
+     */
+    const version = Number(/version: (\d+),/.exec(store)?.[1] ?? 0);
+    expect(version).toBeGreaterThanOrEqual(4);
     expect(store).toMatch(/p\.longestPuttFeet = Math\.min\(PUTT_MAX_FEET, Math\.round\(p\.longestPutt \* FEET_PER_YARD\)\)/);
     expect(store).toMatch(/delete p\.longestPutt;/);
     expect(Math.round(22 * FEET_PER_YARD)).toBe(66);

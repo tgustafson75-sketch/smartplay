@@ -40,7 +40,7 @@ import { initWatchSwingBridge, stopWatchSwingBridge, isWatchSwingBridgeAvailable
 // for clean promo / store screenshots). Sourced from its own store
 // so app-wide consumers (the root StatusBar binding) read the same flag.
 import { useScreenshotModeStore } from '../store/screenshotModeStore';
-import { usePlayerProfileStore, isOwnerEmail } from '../store/playerProfileStore';
+import { usePlayerProfileStore, isOwnerEmail, MAX_HOME_COURSES } from '../store/playerProfileStore';
 import { useToastStore } from '../store/toastStore';
 import { useTrustLevelStore, TRUST_LEVEL_META } from '../store/trustLevelStore';
 import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
@@ -269,12 +269,12 @@ export default function Settings() {
     missType,
     experienceContext,
     distanceControl,
-    homeCourse,
+    homeCourses,
     default_mode,
     setMissType,
     setExperienceContext,
     setDistanceControl,
-    setHomeCourse,
+    setHomeCourses,
     setDefaultMode,
     setName,
     setRole,
@@ -306,7 +306,6 @@ export default function Settings() {
   }, []);
   const [editName, setEditName] = useState(name);
   const [editCreds, setEditCreds] = useState(coachCredentials ?? '');
-  const [editHomeCourse, setEditHomeCourse] = useState(homeCourse ?? '');
   const [editGoal, setEditGoal] = useState(goal ?? '');
 
   // 2026-07-11 — Ray-Ban Meta glasses live stream (DAT v0.8). Subscribe to the
@@ -1125,15 +1124,55 @@ export default function Settings() {
 
           {/* Read by play.tsx to default-select your course, by smartvision as a last-resort
               courseId, and by contextSynthesizer. Commits on blur, like Credentials above. */}
-          <Text style={inputLblStyle}>{t('settings.text.home_course')}</Text>
-          <TextInput
-            style={inputFldStyle}
-            value={editHomeCourse}
-            onChangeText={setEditHomeCourse}
-            onBlur={() => setHomeCourse(editHomeCourse.trim() || null)}
-            placeholder={t('settings.placeholder.e_g_hemet_golf_club')}
-            placeholderTextColor={colors.text_muted}
-          />
+          {/**
+            * 2026-09-14 (Tim — "make profile setup buttons where it can be and only type when needed",
+            * and "when user selects up to 3 home courses") — PICKED, NOT TYPED.
+            *
+            * This was a free-text box matched by SUBSTRING against the bundled catalog, so a typo, a
+            * shortened name or the wrong club in a multi-course facility all failed silently — and it
+            * could hold only one course.
+            *
+            * The picker is not HERE, deliberately. The catalog lives in `app/(tabs)/play.tsx` with
+            * search, GPS-nearest sorting and the real course cards; rebuilding any of that in Settings
+            * would be a second course list to keep in step. So this shows the set and removes from it,
+            * and the choosing happens on the tab that already knows every course.
+            */}
+          <Text style={inputLblStyle}>{t('settings.label.home_courses', { max: MAX_HOME_COURSES })}</Text>
+          {homeCourses.length === 0 ? (
+            <Text style={[subStyle, { marginBottom: 8 }]}>{t('settings.text.no_home_courses_yet')}</Text>
+          ) : (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+              {homeCourses.map((hc) => (
+                <TouchableOpacity
+                  key={hc.id || hc.name}
+                  onPress={() => setHomeCourses(homeCourses.filter((x) => (x.id || x.name) !== (hc.id || hc.name)))}
+                  style={{
+                    flexDirection: 'row', alignItems: 'center', gap: 6,
+                    borderRadius: 16, borderWidth: 1, borderColor: colors.accent,
+                    paddingHorizontal: 12, paddingVertical: 7,
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('settings.accessibility_label.remove_home_course', { course: hc.name })}
+                >
+                  <Text style={{ color: colors.accent, fontWeight: '700', fontSize: 13 }}>{hc.name}</Text>
+                  <Ionicons name="close" size={14} color={colors.accent} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          <TouchableOpacity
+            onPress={() => router.push('/(tabs)/play' as never)}
+            style={{
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+              borderRadius: 20, borderWidth: 1, borderColor: colors.border,
+              paddingVertical: 11, marginBottom: 4,
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={t('settings.text.choose_home_courses')}
+          >
+            <Ionicons name="golf-outline" size={16} color={colors.text_primary} />
+            <Text style={{ color: colors.text_primary, fontWeight: '700', fontSize: 14 }}>{t('settings.text.choose_home_courses')}</Text>
+          </TouchableOpacity>
 
           {/*
             2026-08-21 — WHICH rating set your course handicap comes from. Courses are rated twice

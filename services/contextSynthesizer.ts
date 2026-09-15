@@ -11,7 +11,7 @@
  * context already exists (the prior insight, generic reply, etc).
  */
 
-import { usePlayerProfileStore } from '../store/playerProfileStore';
+import { usePlayerProfileStore, primaryHomeCourseName } from '../store/playerProfileStore';
 import { useSwingSessionStore } from '../store/swingSessionStore';
 import { useRoundStore, type RoundRecord } from '../store/roundStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -65,7 +65,8 @@ export async function synthesizeOnboardingProfile(): Promise<void> {
     experienceContext: profile.experienceContext,
     defaultMode: profile.default_mode,
     physicalLimitation: profile.physicalLimitation,
-    homeCourse: profile.homeCourse,
+    // One primary name for the brief; the full set is a Play-tab concern, not a sentence about him.
+    homeCourse: primaryHomeCourseName(profile.homeCourses) || null,
     personalBest: profile.personalBest,
   });
   if (summary) {

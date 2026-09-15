@@ -68,7 +68,7 @@ import { useSettingsStore } from '../store/settingsStore';
 import { speak, configureAudioForSpeech } from '../services/voiceService';
 import { getApiBaseUrl } from '../services/apiBase';
 import { registerSmartVisionRead } from '../services/visionReadBus';
-import { usePlayerProfileStore } from '../store/playerProfileStore';
+import { usePlayerProfileStore, primaryHomeCourseName } from '../store/playerProfileStore';
 import { useSmartVisionSignalStore } from '../store/smartVisionSignalStore';
 import { useGeometryStatusStore } from '../store/geometryStatusStore';
 import { useSmartVision } from '../contexts/SmartVisionContext';
@@ -373,7 +373,7 @@ export default function SmartVisionScreen() {
   // [[a-stale-header-is-a-source-someone-trusts]]
   const pendingStartCourseId = useRoundStore(s => s.pendingStartCourseId);
   const previewCourseId = useRoundStore(s => s.previewCourseId);
-  const homeCourseName = usePlayerProfileStore(s => s.homeCourse);
+  const homeCourseName = usePlayerProfileStore(s => primaryHomeCourseName(s.homeCourses) || null);
   // Resolution chain (most-specific → most-default):
   //   1. activeCourseId — live round
   //   2. pendingStartCourseId — about to launch (Play tab "Start Round")

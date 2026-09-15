@@ -41,7 +41,17 @@
     "mic_ready": "麦克风就绪",
     "mic_not_enabled": "麦克风未启用",
     "mic_required_title": "需要麦克风",
-    "mic_required_body": "SmartPlay需要麦克风权限才能通过眼镜听到你。在设置中启用。"
+    "mic_required_body": "SmartPlay需要麦克风权限才能通过眼镜听到你。在设置中启用。",
+    "label": {
+      "home_courses": "常打球场（最多 {{max}} 个）"
+    },
+    "text": {
+      "no_home_courses_yet": "尚未设置 — 请从球场列表中选择。",
+      "choose_home_courses": "从球场列表中选择"
+    },
+    "accessibility_label": {
+      "remove_home_course": "将 {{course}} 从常打球场中移除"
+    }
   },
   "scorecard": {
     "title": "记分卡",
@@ -167,7 +177,13 @@
     "cancel": "取消",
     "discard_everything": "全部放弃",
     "walking": "步行",
-    "cart": "球车"
+    "cart": "球车",
+    "home_course": {
+      "add": "设为常打球场",
+      "remove": "从常打球场移除",
+      "full_title": "最多三个",
+      "full_body": "你已经有 {{max}} 个常打球场。请先移除一个 — 每个都会提前构建，方便你随时开球。"
+    }
   },
   "swinglab": {
     "practice": "练习",

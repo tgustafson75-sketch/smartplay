@@ -544,7 +544,7 @@ function AppNavigator() {
       if (!usePlayerProfileStore.persist.hasHydrated()) return false;
       done = true;
       const p = usePlayerProfileStore.getState();
-      const hasData = p.handicap != null || !!p.goal || !!p.dominantMiss || !!p.homeCourse;
+      const hasData = p.handicap != null || !!p.goal || !!p.dominantMiss || (p.homeCourses ?? []).length > 0;
       if (hasData && !p.kevinContext) {
         void import('../services/contextSynthesizer')
           .then(m => m.synthesizeOnboardingProfile())

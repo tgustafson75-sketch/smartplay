@@ -41,7 +41,9 @@ export interface SetupGapWorld {
   measuredClubs: number;
   handicapIndex: number | null;
   handicapSet: boolean;
-  homeCourse: string | null;
+  /** His PRIMARY home course by name. 2026-09-14: the profile now holds up to three; the
+   *  setup gap is about having named any of them, so the first one answers it. */
+  homeCourseName: string | null;
   dominantMiss: string | null;
   distanceControlSet: boolean;
   /** Rounds played together — a brand-new player is not nagged about anything. */
@@ -102,7 +104,7 @@ export function pickSetupGap(w: SetupGapWorld): SetupGap | null {
   if (!w.handicapSet && w.handicapIndex == null) missing.add('handicap');
   if (!w.dominantMiss) missing.add('miss');
   if (!w.distanceControlSet) missing.add('distance_control');
-  if (!w.homeCourse || !w.homeCourse.trim()) missing.add('home_course');
+  if (!w.homeCourseName || !w.homeCourseName.trim()) missing.add('home_course');
 
   const best = CANDIDATES
     .filter((c) => missing.has(c.key) && !w.suppressed.has(c.key))
@@ -155,7 +157,7 @@ export function suppressedFrom(askedAt: Record<string, number>, nowMs = Date.now
  */
 export async function liveSetupGap(): Promise<SetupGap | null> {
   try {
-    const { usePlayerProfileStore } = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
+    const { usePlayerProfileStore, primaryHomeCourseName } = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
     const { useClubBagStore } = require('../store/clubBagStore') as typeof import('../store/clubBagStore');
     const { getLearnedCarryDistances } = require('../store/clubStatsStore') as typeof import('../store/clubStatsStore');
     const { useRelationshipStore } = require('../store/relationshipStore') as typeof import('../store/relationshipStore');
@@ -165,7 +167,7 @@ export async function liveSetupGap(): Promise<SetupGap | null> {
       measuredClubs: Object.keys(getLearnedCarryDistances() ?? {}).length,
       handicapIndex: typeof p.handicap_index === 'number' ? p.handicap_index : null,
       handicapSet: typeof p.handicap === 'number' && p.handicap !== 18,
-      homeCourse: p.homeCourse ?? null,
+      homeCourseName: primaryHomeCourseName(p.homeCourses) || null,
       dominantMiss: p.dominantMiss ?? null,
       distanceControlSet: !!p.distanceControl && p.distanceControl !== 'some_partials',
       roundsPlayed: useRelationshipStore.getState().roundsTogether ?? 0,

@@ -41,7 +41,17 @@
     "mic_ready": "Micrófono listo",
     "mic_not_enabled": "Micrófono no habilitado",
     "mic_required_title": "Se Requiere Micrófono",
-    "mic_required_body": "SmartPlay necesita acceso al micrófono para escucharte a través de los lentes. Actívalo en Ajustes."
+    "mic_required_body": "SmartPlay necesita acceso al micrófono para escucharte a través de los lentes. Actívalo en Ajustes.",
+    "label": {
+      "home_courses": "Campos habituales (hasta {{max}})"
+    },
+    "text": {
+      "no_home_courses_yet": "Ninguno todavía: elígelos en la lista de campos.",
+      "choose_home_courses": "Elegir en la lista de campos"
+    },
+    "accessibility_label": {
+      "remove_home_course": "Quitar {{course}} de tus campos habituales"
+    }
   },
   "scorecard": {
     "title": "Tarjeta",
@@ -167,7 +177,13 @@
     "cancel": "Cancelar",
     "discard_everything": "Descartar todo",
     "walking": "Caminando",
-    "cart": "Carrito"
+    "cart": "Carrito",
+    "home_course": {
+      "add": "Marcar como campo habitual",
+      "remove": "Quitar de campos habituales",
+      "full_title": "El límite son tres",
+      "full_body": "Ya tienes {{max}} campos habituales. Quita uno primero: cada uno se prepara con antelación para estar listo cuando juegues."
+    }
   },
   "swinglab": {
     "practice": "PRÁCTICA",

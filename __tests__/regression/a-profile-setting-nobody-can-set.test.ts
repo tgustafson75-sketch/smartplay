@@ -27,11 +27,18 @@ import { execFileSync } from 'child_process';
 const ROOT = path.resolve(__dirname, '../..');
 const STORE = path.join(ROOT, 'store/playerProfileStore.ts');
 
-/** Every `setX` action the store declares, read off the source rather than hardcoded. */
+/**
+ * Every WRITE action the store declares, read off the source rather than hardcoded.
+ *
+ * 2026-09-14 — this matched `set[A-Z]…` only. `toggleHomeCourse` is a setter in every sense that
+ * matters to this guard — it is how a player changes a profile field — and it would have been
+ * invisible to the whole file, which is precisely the hole "a profile setting nobody can set" is
+ * about. A future `toggleX` would have escaped too.
+ */
 const setters = (() => {
   const src = fs.readFileSync(STORE, 'utf8');
   const names = new Set<string>();
-  for (const m of src.matchAll(/^\s{2}(set[A-Z][A-Za-z0-9]*)\s*:/gm)) names.add(m[1]);
+  for (const m of src.matchAll(/^\s{2}((?:set|toggle)[A-Z][A-Za-z0-9]*)\s*:/gm)) names.add(m[1]);
   return [...names].sort();
 })();
 
@@ -61,7 +68,12 @@ describe('the guard is actually looking at something', () => {
   });
 
   it('includes the four found on 2026-09-10, so their fix cannot be undone quietly', () => {
-    for (const s of ['setMissType', 'setExperienceContext', 'setHomeCourse', 'setDefaultMode']) {
+    /**
+     * 2026-09-14 — `setHomeCourse` became `setHomeCourses` + `toggleHomeCourse` when the single
+     * free-text home course became a picked set of three. The NAME changed; the property this guard
+     * exists to protect did not, so the new names take its place rather than the entry being dropped.
+     */
+    for (const s of ['setMissType', 'setExperienceContext', 'setHomeCourses', 'toggleHomeCourse', 'setDefaultMode']) {
       expect(setters).toContain(s);
     }
   });
@@ -80,7 +92,7 @@ describe('the ones a PLAYER owns are editable by the player', () => {
    * ones only the player can answer, so only the player can set them, and each needs a real UI.
    */
   const PLAYER_OWNED = [
-    'setMissType', 'setExperienceContext', 'setHomeCourse', 'setDefaultMode',
+    'setMissType', 'setExperienceContext', 'setHomeCourses', 'toggleHomeCourse', 'setDefaultMode',
     'setDistanceControl', 'setHandedness', 'setPreferredTee', 'setPhysicalLimitation',
   ];
 

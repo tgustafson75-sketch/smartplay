@@ -66,6 +66,42 @@ export function isOwnerEmail(email: string | null | undefined): boolean {
   return fromEnv.length > 0 && fromEnv === normalized;
 }
 
+/**
+ * Three: a home club, a second you play often, and the one you are travelling to. A fourth is a
+ * course list, not a home set, and every one of them queues a geometry build on the Play tab.
+ */
+export const MAX_HOME_COURSES = 3;
+
+export interface HomeCourse { id: string; name: string }
+
+/** Identity for de-duplication: the id when we have one, otherwise the name folded for case. */
+export function homeCourseKey(c: HomeCourse): string {
+  return (c.id || '').trim() || (c.name || '').trim().toLowerCase();
+}
+
+/** Drop blanks, de-duplicate, and cap at MAX_HOME_COURSES. Enforced in the STORE so a future
+ *  surface (or a voice path) cannot write four. */
+export function normalizeHomeCourses(courses: HomeCourse[] | null | undefined): HomeCourse[] {
+  const seen = new Set<string>();
+  const out: HomeCourse[] = [];
+  for (const c of courses ?? []) {
+    const name = (c?.name ?? '').trim();
+    const id = (c?.id ?? '').trim();
+    if (!name && !id) continue;
+    const key = homeCourseKey({ id, name });
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ id, name });
+    if (out.length >= MAX_HOME_COURSES) break;
+  }
+  return out;
+}
+
+/** The one a single-course reader should use — his primary. Empty string when none is set. */
+export function primaryHomeCourseName(courses: HomeCourse[] | null | undefined): string {
+  return (courses ?? [])[0]?.name ?? '';
+}
+
 interface PlayerProfileState {
   name: string;
   firstName: string;
@@ -111,7 +147,22 @@ interface PlayerProfileState {
   physicalLimitation: string | null;
   goal: string | null;
   personalBest: number | null;
-  homeCourse: string | null;
+  /**
+   * 2026-09-14 (Tim) — "When user selects up to 3 home courses, logic should spool those to the play
+   * tab for the engine to build… I mean so they cue up as three builds in the users play tab courses."
+   *
+   * UP TO THREE, PICKED NOT TYPED. This was one free-text string matched by SUBSTRING against the
+   * bundled catalog in play.tsx — so "Menifee" and "menifee lakes" and a typo all behaved differently,
+   * and a player with a summer club and a winter club could only name one of them.
+   *
+   * The pair is stored rather than an id alone because the bundled catalog (`LOCAL_COURSES`) is
+   * declared inside `app/(tabs)/play.tsx`, a screen: a store cannot resolve an id back to a name
+   * without dragging a screen into every consumer. The picker knows both at the moment of choosing,
+   * so it records both, and nothing downstream needs a lookup. An entry migrated from the old
+   * free-text field has a name and an EMPTY id — every name reader still works, and the geometry
+   * prefetch skips it, which is honest: we never knew which course it meant.
+   */
+  homeCourses: { id: string; name: string }[];
   /** 2026-07-23 (Tim — Bag Vision 2b) — the ball the player currently games, free text
    *  (e.g. "Titleist Pro V1"). Compared against the data-driven ball recommendation. */
   currentBall: string | null;
@@ -283,7 +334,10 @@ interface PlayerProfileState {
   setPhysicalLimitation: (limitation: string | null) => void;
   setGoal: (goal: string | null) => void;
   setPersonalBest: (score: number | null) => void;
-  setHomeCourse: (course: string | null) => void;
+  /** Replace the whole set. Trimmed to MAX_HOME_COURSES, de-duplicated by id-or-name. */
+  setHomeCourses: (courses: { id: string; name: string }[]) => void;
+  /** Toggle one course in or out of the set. Returns false when the set is already full. */
+  toggleHomeCourse: (course: { id: string; name: string }) => boolean;
   setCurrentBall: (ball: string | null) => void;
   setPreferredTee: (tee: 'front' | 'middle' | 'back') => void;
   completeSetup: () => void;
@@ -360,7 +414,7 @@ interface PlayerProfileState {
 
 export const usePlayerProfileStore = create<PlayerProfileState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       name: '',
       firstName: '',
       role: 'golfer',
@@ -374,7 +428,7 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       physicalLimitation: null,
       goal: null,
       personalBest: null,
-      homeCourse: null,
+      homeCourses: [],
       currentBall: null,
       preferredTee: 'middle',
       // 2026-05-14 — Tim: "Get rid of that whole stupid onboarding
@@ -453,7 +507,20 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       setPhysicalLimitation: (l) => set({ physicalLimitation: l }),
       setGoal: (goal) => set({ goal }),
       setPersonalBest: (score) => set({ personalBest: score }),
-      setHomeCourse: (course) => set({ homeCourse: course }),
+      setHomeCourses: (courses) => set({ homeCourses: normalizeHomeCourses(courses) }),
+      toggleHomeCourse: (course) => {
+        const key = homeCourseKey(course);
+        const cur = get().homeCourses ?? [];
+        const existing = cur.filter((c: HomeCourse) => homeCourseKey(c) !== key);
+        if (existing.length !== cur.length) {           // it was there — this tap removes it
+          set({ homeCourses: existing });
+          return true;
+        }
+        // A fourth pick is refused rather than silently evicting one of his three.
+        if (cur.length >= MAX_HOME_COURSES) return false;
+        set({ homeCourses: normalizeHomeCourses([...cur, course]) });
+        return true;
+      },
       setCurrentBall: (ball) => set({ currentBall: ball }),
       setPreferredTee: (tee) => set({ preferredTee: tee }),
       completeSetup: () => set({ isSetupComplete: true }),
@@ -607,9 +674,31 @@ export const usePlayerProfileStore = create<PlayerProfileState>()(
       // the number he meant, the field now says FEET and he can correct it in one keystroke. The
       // alternative — dropping the value — loses a personal best to a unit change, and inventing a
       // number is the only thing worse than losing one.
-      version: 4,
+      version: 5,
       migrate: (s) => {
         const p = s as Record<string, unknown> | null;
+        /**
+         * v4 → v5: the single free-text `homeCourse` becomes a set of up to three PICKED courses.
+         *
+         * The old value is a name he typed, and there is no catalog in reach of a store to resolve it
+         * to an id — so it is carried across as a name-only entry. Every reader that wanted a NAME
+         * keeps working unchanged; the geometry prefetch skips an entry with no id rather than
+         * guessing which course "menifee" meant, and the first tap in the new picker replaces it with
+         * a real one. Losing the value outright would strand the only thing he had told us.
+         */
+        /**
+         * `typeof p === 'object'`, not just `p` — and that check is here because the hostile-blob
+         * guard caught this line throwing. A persisted value can rehydrate as a STRING (a truncated
+         * or corrupt write), which is truthy, and assigning a property to a primitive throws in
+         * strict mode. A migration that throws takes rehydration down, and a store that cannot
+         * rehydrate is the white-screen class of bug. The lines above me only ever READ from `p`,
+         * which is why they were safe and this one was not.
+         */
+        if (p && typeof p === 'object' && !Array.isArray(p.homeCourses)) {
+          const legacy = typeof p.homeCourse === 'string' ? p.homeCourse.trim() : '';
+          p.homeCourses = legacy ? [{ id: '', name: legacy }] : [];
+          delete p.homeCourse;
+        }
         if (p && (p.customCaddieBasePersona as string) === 'tank') p.customCaddieBasePersona = 'kevin';
         if (p && p.longestPuttFeet == null && typeof p.longestPutt === 'number' && p.longestPutt > 0) {
           p.longestPuttFeet = Math.min(PUTT_MAX_FEET, Math.round(p.longestPutt * FEET_PER_YARD));
