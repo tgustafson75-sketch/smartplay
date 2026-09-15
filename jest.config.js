@@ -51,7 +51,7 @@ module.exports = {
       testMatch: ['<rootDir>/__tests__/components/**/*.test.tsx'],
       setupFilesAfterEnv: ['<rootDir>/__tests__/setupNoNetwork.ts', '<rootDir>/__tests__/setup.ts'],
       transformIgnorePatterns: [
-        'node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|expo-.*|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|zustand)/)',
+        'node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|expo-.*|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|@sentry/.*|native-base|react-native-svg|zustand)/)',
       ],
     },
   ],
