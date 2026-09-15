@@ -8,6 +8,45 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+> ### ⚠️ LATEST — 2026-09-15 (afternoon). SHIPPED: commit `82d35dff`, OTA to PRODUCTION ANDROID.
+>
+> Everything from today is live on the **production** channel, Android only — update group
+> `81bb1b64`, runtime 1.0.0, commit stamped `82d35dff`. **iOS was deliberately left alone** (Apple is
+> in review; `--platform android` on the publish, verified against `eas update:list`).
+>
+> **On device: open the app twice.** `fallbackToCacheTimeout: 0` means open #1 downloads and open #2
+> runs it.
+>
+> **`git` is NOT actually blocked — it never needed sudo.** `/usr/bin/git` is an Xcode shim that
+> refuses everything until the licence is accepted, but the Command Line Tools ship their own real
+> git at **`/Library/Developer/CommandLineTools/usr/bin/git`**, which works untouched. Putting that
+> directory first on `PATH` fixes every tool that shells out to bare `git` — the pre-commit hook and
+> `eas update` both do, and both failed until it was.
+>
+> **THE PERMANENT FIX IS `brew install git`** (no sudo on Apple Silicon; /opt/homebrew is user-owned)
+> — Homebrew's git prefix exists on this machine but the binary was never installed. Until that runs,
+> every session has to remember the PATH prefix, and a tool that shells out to git will break in a
+> way that looks like something else. Handed to Cowork in `_handoff/from-code.md`.
+>
+> **Two machine-level findings came out of it:**
+> - The **pre-commit hook could skip itself in silence.** Every gate was guarded by
+>   `git diff --cached | grep`; when git itself fails the pipe carries nothing, grep matches nothing,
+>   and tsc/jest/i18n are all skipped with exit 0. Its own header says "discipline is not a gate.
+>   This is." It was not. Now fails loudly, break-tested with a fake failing git.
+> - **`Claude outputs/`** (a scratch dir, not the app's) was untracked and un-ignored in the repo
+>   root, and the standing save-point rule is `git add .` — the next session following the rule would
+>   have committed it. Ignored now, *without* a trailing slash, for the reason the `_handoff` entry
+>   right above it in .gitignore spells out.
+>
+> Green at the commit: tsc · lint **0** · jest **5073/5073 (417 suites)** · sim **1040/1040**. The
+> hook ran all three of its own gates on the way in.
+>
+> **NEXT — device verification, Tim's gate.** Four things: Profile → "Choose home courses" → Play →
+> back (lands on Profile, once); the two new buttons on the dashboard player card; a TRACKED club on
+> the Fit Profile set in TOTAL; and the BALL row in round setup.
+>
+> ---
+>
 > ### ⚠️ LATEST — 2026-09-15 (midday, part 2). "Check all work" found five more — three of them mine.
 >
 > **The audit was worth it.** In order of severity:
@@ -36,12 +75,10 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 >
 > ---
 >
-> ### ⚠️ LATEST — 2026-09-15 (midday). Two production reports, five defects — NOT YET COMMITTED.
+> ### ⚠️ EARLIER — 2026-09-15 (midday). Two production reports, five defects. SHIPPED — see the top entry.
 >
-> **`git` is blocked on this machine** — every command returns "You have not agreed to the Xcode
-> license agreements", and Homebrew's git is not actually installed, so `/usr/bin/git` is the only
-> one. One command clears it: **`sudo xcodebuild -license`**. The work is done and green; it just
-> cannot be committed or published until that runs.
+> *(Written before the commit. It shipped — `82d35dff`, OTA `81bb1b64`, production Android. The git
+> blocker was worked around, not cleared: see the top entry.)*
 >
 > Five complaints from Tim's phone on production, all real, each reproduced before it was touched:
 >

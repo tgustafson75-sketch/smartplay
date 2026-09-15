@@ -4660,10 +4660,10 @@ form, because all of these are one-token edits away.
 
 **Green:** tsc · lint **0 errors** · jest **5065/5065 (417 suites)** · sim **1040/1040**.
 
-**NOT YET COMMITTED — `git` on this machine is refusing every command** with "You have not agreed to
-the Xcode license agreements". Homebrew's git is not actually installed (the prefix exists, the
-binary does not), so `/usr/bin/git` is the only one and it is blocked. One command clears it:
-`sudo xcodebuild -license`. Nothing else is outstanding.
+**(Superseded by the afternoon entry: this SHIPPED as `82d35dff`, OTA group `81bb1b64` to production
+Android.) git was not blocked after all — `/usr/bin/git` is an Xcode shim, but the Command Line Tools
+ship a real git at `/Library/Developer/CommandLineTools/usr/bin/git` that needs no licence and no
+sudo. Nothing here waited on Xcode.**
 
 **NEXT — device verification, Tim's gate.** Four things to look at: the Profile → "Choose home
 courses" → Play → back path (it should land on Profile, once); the two new buttons on the dashboard
