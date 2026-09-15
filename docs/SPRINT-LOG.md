@@ -4265,3 +4265,88 @@ floor re-broken, caught.
   the same factor, that is the constant and it is a one-line fix.
 - Deferred, written up: the **Vet / PGA / public-service green-fee discounts** idea. The eligibility
   profile field is the cheap, safe half; rate data is not in any API we use and must not ship as a guess.
+
+---
+
+## Day N — 2026-09-14 — the bag is a bag, and the green map had no pars
+
+### Shipped today
+
+- `21a009b6` **Today's Pins is a segmented green**, not a memory-game grid (Tim's read of the card).
+- `2237d1dd` **the bag reconciles with the course** on Play-tab course choice (the packer existed; the
+  Play caller was never written), plus **SAME CLUB, DIFFERENT MODELS** on the Fit Profile — the
+  comparison had shipped 09-12 with its only entry point a *voice* intent.
+- `9e341c5d` **the bag, the 14-club cap, green heat and GIR** — the session below.
+
+### The five findings
+
+1. **"The clubs from that scan do not persist."** They could not be saved. The review list was a
+   `<ScrollView>` with no `flex: 1` followed by a footer holding the only writing control, and RN's
+   `flexShrink` defaults to **0** — a content-sized ScrollView pushes its siblings off the viewport.
+   *The more clubs the scan read, the further off-screen the save button went.* `arccos-import`, its
+   sibling, never had this because its confirm button sits inside the scroll. The store was never at
+   fault: nothing calls `clearBag`, and the bag already reached the caddie under test.
+2. **"It's the camera from the start again."** The screen's only state was `camera`, so a save that
+   worked and one that was lost looked identical. It is now the **bag** — opens on what you own, as a
+   rack; a scan **merges**; photos (camera or up to 8 from the library) are a first-class input beside
+   video, down the same route. Balls in the frame are read and **offered**, not written silently.
+3. **"Everything club/bag related has to be unified."** Membership already was (16 readers, one
+   store). The *physical club* was in five places: flat brand/model/loft; three drivers inferred from
+   free-text labels on shots; shaft and grip **nowhere**; `setClubSpecs` an orphan with **zero
+   callers**; and `clubVariantStore` holding "which driver is in play" keyed by club NAME while the
+   bag held the drivers keyed by club id — so declaring the Burner 2 aloud left the Fit Profile
+   showing the Stealth. Now one record per physical club (`clubs[id].variants[]`, head + shaft +
+   grip, one in play), specs **derived** so there is no flat copy to drift, `clubVariantStore`
+   deleted and its blob folded forward. Only **three** call sites broke — that is how I know the
+   read boundary held.
+4. **The 14-club cap is universal now** (Tim's call); competition changes what you are *told*, not
+   the number. **Then the triple-check caught my own regression in it**: `setCarriedToday` enforces
+   by TRIMMING, right at round start and catastrophic per-tap — an 18-club owner tapping ONE club off
+   handed over 17 and got back 14. He removes one club, **four** vanish, and the three the app picks
+   are 9I, PW, SW. His scoring clubs. The screen now holds an over-limit selection ("take out N
+   more") and the store stops being a silent editor of his bag.
+5. **Green heat drew dashes.** Proven by execution — three finished rounds, 54 putt-holes, every hole
+   scored and putted: `ready=true totalHoles=54 approach.holes=0 scramble.holes=0`. Par resolved only
+   through `holesByCourse`, which `greenHeatInput` fills with the **active** course; open the
+   scorecard after a round and there is no active course. Every `RoundRecord` already carries
+   `holePars` — preserved by `compactHistoryForPersist`, read by `scoredRoundStats` for the caddie's
+   GIR. The map was the one consumer that never looked. Same sweep: the **GIR rule was written three
+   times** and two had drifted (only one required `score > 0`, so a cleared hole with logged putts
+   counted as a green **hit**). One `isGirHole` now, null for a hole that cannot be judged.
+
+### Two guards that were not guarding
+
+- One pinned a source **line** (`if (putts == null) continue; …`) and failed on a refactor that
+  *strengthened* what it guards. A grep for a sentence cannot tell a refactor from a regression.
+- One asserted `'club-variant-v1'` is in the backup list — a key that no longer holds anything. It
+  passed while covering nothing live. Both rewritten to assert behaviour.
+
+### Gates
+
+tsc · lint **0 errors** · jest **4941/4941 (405 suites)** · sim **1034/1034**.
+**Six break-tests**, each watched to fail before the fix was restored. The v1→v2 bag migration is
+verified by **running** it (old blob in, variants out, provenance and notes intact, idempotent, key
+unchanged at `club-bag-v1`).
+
+### Verified on device (Z Fold)
+
+- Nothing. Not one item below has been on a phone.
+
+### Open / carried to tomorrow
+
+- **Device verification, Tim's gate.** The bag screen (does a scan survive leaving the screen?), the
+  scorecard's green heat (real approach/scramble cells after ~9 putt-logged holes), and the
+  over-limit pack message on an 18-club bag.
+- Still open from 09-13: **the off-round deflection** (`queryStatusHandler`, needs a per-topic call),
+  and the **screen-only** practice findings (`workoutPerformance`, `workoutSwingImpact`,
+  `pointsPerformance`, `preRoundFactors`, `handicapCalculator`).
+
+### Notes
+
+- `carryLimitFor(isCompetition)` now always returns 14. The argument is kept because `bagPack` still
+  needs to know which sentence to write — the USGA rule and its penalty, or "that is what a bag
+  starts a round with".
+- The bag's persist key stays **`club-bag-v1`** deliberately; only `version` moved to 2. Renaming it
+  strands every club on the device.
+- SPRINT-RESUME/LOG were two commits behind when this session opened (`21a009b6`, `2237d1dd` shipped
+  code only). Both caught up here.

@@ -8,6 +8,38 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+> ### ⚠️ LATEST — 2026-09-14. The bag is a bag, not a camera; the green map had no pars.
+>
+> `9e341c5d` **the scan could not be SAVED.** The review list was a `<ScrollView>` with no `flex: 1`
+> above a footer holding the only writing control, and RN's `flexShrink` defaults to **0** — so the
+> more clubs the scan read, the further off-screen the save button went. The store was never at fault.
+> The screen is now the **BAG**: opens on what you own, a scan **merges**, photos (camera or library)
+> sit beside video, and balls in the frame are read and offered.
+>
+> **One record per PHYSICAL club.** The club was scattered over five owners — flat brand/model/loft,
+> three drivers inferred from free-text shot labels, shaft and grip nowhere, `setClubSpecs` an orphan
+> with zero callers, and `clubVariantStore` keyed by club NAME beside a bag keyed by club id. Now
+> `clubs[id].variants[]` with head + shaft + grip, specs **derived** so no flat copy can drift,
+> `clubVariantStore` deleted and folded forward. **Three** call sites broke — the read boundary held.
+>
+> **The 14-club cap is universal** (Tim's call) — and the triple-check caught the regression that
+> came with it: an 18-club owner tapping ONE club off lost **four**, and the three the app chose were
+> 9I, PW, SW. The screen now holds an over-limit selection instead of handing the store a trim.
+>
+> **Green heat drew dashes.** Proven by execution: 3 rounds, 54 putt-holes, `ready=true` and
+> `approach.holes=0 / scramble.holes=0`. Par came only from the ACTIVE course; every `RoundRecord`
+> already carries `holePars`. Same sweep found the **GIR rule written three times**, two drifted.
+> One `isGirHole` now.
+>
+> Green: tsc · lint **0 errors** · jest **4941/4941 (405 suites)** · sim **1034/1034**. Six
+> break-tests, all watched to fail. The v1→v2 bag migration verified by running it.
+>
+> **NEXT — device verification, Tim's gate. Nothing here has been on a phone.** First things to
+> check: does a bag scan survive leaving the screen, and does the scorecard's green heat show real
+> approach/scramble cells after ~9 putt-logged holes.
+>
+> ---
+
 > ### ⚠️ LATEST — 2026-09-13 (late, 2nd). Putt distance by tilt, and the ground-level view.
 >
 > `07f76efd` **the putt distance was never a measurement** — `PIXELS_PER_FOOT = 35`, the pixel gap over
@@ -805,6 +837,10 @@ All 23 confirmed HIGH findings from the 30-agent workflow audit addressed:
 >    does not), and `handicapCalculator` (has an intent handler, so "what's my handicap" is answered
 >    locally and never as conversation).
 > 4. **Device verification** of everything on the branch. Nothing here has been near a phone.
+>
+> **Closed 2026-09-14** (`9e341c5d`): the bag screen (scan persists, merges, photos, shaft/grip/ball),
+> the unification of the physical club onto one record, the universal 14-club cap, and the green heat
+> map's missing pars + the third copy of the GIR rule. All code-traced and gated; none on a device.
 
 <details>
 <summary>Older P0 queue (Sprint Map, Day 1) — kept for history</summary>
