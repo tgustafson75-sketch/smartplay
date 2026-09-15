@@ -8,7 +8,25 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
-> ### ⚠️ LATEST — 2026-09-14 (late). The queue, worked in order.
+> ### ⚠️ LATEST — 2026-09-14 (end of session). PUBLISHED TO PREVIEW.
+>
+> **Everything from 2026-09-14 is live on the `preview` channel** (update `6a3aaf70`). It was not
+> visible before because nothing had been published for 23 hours — a commit is not a deploy.
+> **Production is untouched** and still on `a89d2dfe`; channel isolation was verified before and
+> after publishing.
+>
+> On device: **open the app twice.** `fallbackToCacheTimeout: 0` means open #1 downloads in the
+> background and open #2 runs it. Settings shows the build stamp — expect `01a0a3e2 · preview`.
+>
+> Caught on the way out: the profile-form move had deleted the Settings → "Your Bag" row added on
+> 09-13 at Tim's own request. Restored on the Profile screen (`8970fb8c`) and guarded.
+>
+> Lint is at **0 errors / 1 warning** (from 78). The one left is `runAnalysis` in SmartMotion,
+> deliberately NOT suppressed — see the note above it.
+>
+> ---
+>
+> ### ⚠️ EARLIER — 2026-09-14 (late). The queue, worked in order.
 >
 > `7dfe14d1` **Profile holds the profile** — the form moved out of Settings (745 lines lighter);
 > PillRow had to be extracted first because it was trapped inside the Settings component. Caught a

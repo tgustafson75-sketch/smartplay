@@ -4440,3 +4440,38 @@ Gates throughout: tsc · lint 0 errors / 78 warnings (unchanged) · jest 5026/50
 sim 1034/1034. Break-tests on every new guard.
 
 **Still not on a phone. None of it.**
+
+### Published to PREVIEW — 2026-09-14 (end of session)
+
+**Why Tim could not see any of it:** nothing had been published for 23 hours. All 17 of the day's
+commits were on `main` and nowhere else — a git commit is not a deploy. Preview's last update was
+`2237d1dd` ("Bag reconciles with the course").
+
+Published `6a3aaf70` to **branch `preview` → channel `preview` only**. Verified after publishing:
+production still sits on `a89d2dfe` from 23 hours ago, untouched.
+
+- `ota-preflight`: **native unchanged** since the store build (runtimeVersion 1.0.0) — all 17
+  commits are pure JS/TS, so an OTA carries the lot. Confirmed independently: `package.json`,
+  `app.json`, `plugins/`, `android-native/` and `ios-native/` have no diff across the whole day.
+- Channel isolation verified BEFORE publishing: `preview` ← branch `preview`, `production` ←
+  branch `production`. `eas update --branch preview` cannot reach production.
+- `fallbackToCacheTimeout: 0` + default `checkAutomatically: ON_LOAD` — the app never blocks launch:
+  **open #1 downloads in the background, open #2 runs it.**
+- Verify on device: Settings shows the build stamp — expect `01a0a3e2 · <date> · preview`.
+  "Embedded (no OTA yet)" means it has not pulled one.
+
+#### A reachability regression caught by asking the right question
+
+Checking that the two things Tim said he would do first — update his profile, scan his bag — were
+REACHABLE rather than merely present found that today's profile-form move had **deleted the Settings
+→ "Your Bag" row**. That row was added on 2026-09-13 in answer to his own question ("shouldn't The
+Bag be populated originally in the Profile?"), and its note recorded that the bag had been
+"reachable from neither onboarding nor here". The only remaining path was SwingLab → Fit Profile →
+scroll. Restored on the PROFILE screen (`8970fb8c`), with a guard that also pins Fit Profile's entry.
+
+Every surface touched today now has ≥2 entry points: bag-scan, profile, shot-shapes, smart-tempo.
+
+#### Production is a separate, deliberate act
+
+Nothing here touches build 26. When it is wanted: `npm run ota:production`, which additionally runs
+`scripts/ota-owner-guard.mjs` (refuses a production OTA while owner mode is on locally).
