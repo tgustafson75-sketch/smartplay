@@ -41,6 +41,7 @@ import { initWatchSwingBridge, stopWatchSwingBridge, isWatchSwingBridgeAvailable
 // so app-wide consumers (the root StatusBar binding) read the same flag.
 import { useScreenshotModeStore } from '../store/screenshotModeStore';
 import { usePlayerProfileStore, isOwnerEmail, MAX_HOME_COURSES } from '../store/playerProfileStore';
+
 import { useToastStore } from '../store/toastStore';
 import { useTrustLevelStore, TRUST_LEVEL_META } from '../store/trustLevelStore';
 import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
@@ -71,6 +72,16 @@ import {
 } from '../services/simulatedGPS';
 import { setScreenContext } from '../services/screenContext';
 import * as Sentry from '@sentry/react-native';
+
+/**
+ * 2026-09-14 — sentinels for the two pickers that keep an escape hatch. They exist only inside this
+ * screen's selection state: what reaches `setGoal` / `setPhysicalLimitation` is always the player's
+ * real words, never one of these.
+ */
+const GOAL_OTHER = '__other__';
+const LIMITATION_NONE = '__none__';
+const GOAL_PRESETS = ['Break 100', 'Break 90', 'Break 80', 'Lower my handicap', 'More consistent', 'Enjoy it more'];
+const LIMITATION_PRESETS = ['Back', 'Shoulder', 'Knee', 'Hip', 'Wrist / elbow'];
 
 // 2026-07-08 (Tim — "answer, don't interview") — primes the caddie to INVITE the golfer
 // to talk and then LISTEN, not run a Q&A. Ingested to CNS via narrativeIngest.
@@ -307,6 +318,12 @@ export default function Settings() {
   const [editName, setEditName] = useState(name);
   const [editCreds, setEditCreds] = useState(coachCredentials ?? '');
   const [editGoal, setEditGoal] = useState(goal ?? '');
+  /**
+   * The sentinel a picker uses to mean "none of these" — never stored. `setGoal` receives the
+   * chosen text verbatim, so the store never holds a magic string.
+   */
+  const [goalOtherOpen, setGoalOtherOpen] = useState(false);
+  const [limitationOtherOpen, setLimitationOtherOpen] = useState(false);
 
   // 2026-07-11 — Ray-Ban Meta glasses live stream (DAT v0.8). Subscribe to the
   // bridge status; the toggle starts/stops the POV camera stream into the caddie.
@@ -485,6 +502,8 @@ export default function Settings() {
   }, []);
 
   const [editLimitation, setEditLimitation] = useState(physicalLimitation ?? '');
+  const goalIsPreset = GOAL_PRESETS.includes(editGoal.trim());
+  const limitationIsPreset = LIMITATION_PRESETS.includes(editLimitation.trim());
   const [editBest, setEditBest] = useState(personalBest ? String(personalBest) : '');
   // 2026-06-04 — Personal-best capture for the dashboard Highlights card.
   // longestDrive auto-updates from logShot when a Driver shot beats the
@@ -972,23 +991,68 @@ export default function Settings() {
           />
           <Text style={[styles.helperText, { color: colors.text_muted, marginTop: -8, marginBottom: 8 }]}>{isOwnerEmail(editEmail) ? t('settings.text.optional_owner_tools_unlocked') : t('settings.text.optional_owner_devices_enter_your')}</Text>
 
-          <Text style={inputLblStyle}>{t('settings.text.goal')}</Text>
-          <TextInput
-            style={inputFldStyle}
-            value={editGoal}
-            onChangeText={setEditGoal}
-            placeholder={t('settings.placeholder.e_g_break_90')}
-            placeholderTextColor="#374151"
+          {/**
+            * 2026-09-14 (Tim) — "Make profile setup buttons where it can be and only type when needed
+            * for ease of use for the user."
+            *
+            * These two were free-text boxes, and both are questions with a handful of real answers.
+            * A typed goal is also worse downstream than a picked one: the brain is handed this
+            * verbatim, so "brek 90", "Break 90!" and "break ninety" are three different goals to
+            * anything that wants to group or compare them.
+            *
+            * OTHER IS STILL THERE, and revealing the field only when it is chosen is the whole
+            * point — the common answers are one tap, and the keyboard appears only for someone whose
+            * answer genuinely is not on the list. Neither field is required.
+            */}
+          <PillRow
+            label={t('settings.text.goal')}
+            options={[
+              { label: 'Break 100', value: 'Break 100' },
+              { label: 'Break 90', value: 'Break 90' },
+              { label: 'Break 80', value: 'Break 80' },
+              { label: 'Lower my handicap', value: 'Lower my handicap' },
+              { label: 'More consistent', value: 'More consistent' },
+              { label: 'Enjoy it more', value: 'Enjoy it more' },
+              { label: 'Other', value: GOAL_OTHER },
+            ]}
+            value={goalIsPreset ? editGoal : (editGoal.trim() ? GOAL_OTHER : '')}
+            onSelect={(v) => { setGoalOtherOpen(v === GOAL_OTHER); setEditGoal(v === GOAL_OTHER ? '' : v); }}
           />
+          {!goalIsPreset && (editGoal.trim().length > 0 || goalOtherOpen) && (
+            <TextInput
+              style={inputFldStyle}
+              value={editGoal}
+              onChangeText={setEditGoal}
+              placeholder={t('settings.placeholder.e_g_break_90')}
+              placeholderTextColor="#374151"
+              accessibilityLabel={t('settings.text.goal')}
+            />
+          )}
 
-          <Text style={inputLblStyle}>{t('settings.text.physical_note')}</Text>
-          <TextInput
-            style={inputFldStyle}
-            value={editLimitation}
-            onChangeText={setEditLimitation}
-            placeholder={t('settings.placeholder.e_g_bad_left_knee')}
-            placeholderTextColor="#374151"
+          <PillRow
+            label={t('settings.text.physical_note')}
+            options={[
+              { label: 'None', value: LIMITATION_NONE },
+              { label: 'Back', value: 'Back' },
+              { label: 'Shoulder', value: 'Shoulder' },
+              { label: 'Knee', value: 'Knee' },
+              { label: 'Hip', value: 'Hip' },
+              { label: 'Wrist / elbow', value: 'Wrist / elbow' },
+              { label: 'Other', value: GOAL_OTHER },
+            ]}
+            value={limitationIsPreset ? editLimitation : (editLimitation.trim() ? GOAL_OTHER : LIMITATION_NONE)}
+            onSelect={(v) => { setLimitationOtherOpen(v === GOAL_OTHER); setEditLimitation(v === GOAL_OTHER || v === LIMITATION_NONE ? '' : v); }}
           />
+          {!limitationIsPreset && (editLimitation.trim().length > 0 || limitationOtherOpen) && (
+            <TextInput
+              style={inputFldStyle}
+              value={editLimitation}
+              onChangeText={setEditLimitation}
+              placeholder={t('settings.placeholder.e_g_bad_left_knee')}
+              placeholderTextColor="#374151"
+              accessibilityLabel={t('settings.text.physical_note')}
+            />
+          )}
 
           <PillRow
             label="I'm a"
