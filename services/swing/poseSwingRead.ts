@@ -19,6 +19,7 @@
  */
 
 import type { SwingBiomechanics, SwingTempo } from '../poseAnalysisApi';
+import { tempoBandFor, tempoRatingFor } from '../smartTempo';
 
 export type DimensionVerdict = 'strength' | 'solid' | 'watch' | 'needs_work';
 
@@ -58,14 +59,61 @@ export interface PoseSwingRead {
 // Each band: an ideal window; outside it degrades to watch / needs_work.
 const sev = (rank: number): PoseFault['severity'] => (rank >= 2 ? 'significant' : rank === 1 ? 'moderate' : 'minor');
 
+/**
+ * 2026-09-14 (Tim — "triple check tempo analysis") — ONE SET OF TEMPO BANDS FOR THE WHOLE APP.
+ *
+ * This held its own: on-tempo 2.6–3.6, strength 2.8–3.4, needs_work below 2.1 or above 4.1. The
+ * Smart Tempo engine held a different one. They disagreed on ordinary swings, and the player could
+ * see both:
+ *
+ *   2.65:1 → "Rushed" on the Smart Tempo card, "right in the tour range" here.
+ *   3.50:1 → "Slow" on the Smart Tempo card, "right in the tour range" here.
+ *
+ * `services/smartTempo` is now the one owner — it is the dedicated engine, it carries the putt
+ * profile, and its bands are what the tempo trainer's presets are built on. The SEVERITY gradation
+ * this function had is the part worth keeping and is preserved: 'watch' for a read just outside the
+ * band, 'needs_work' when it is a long way out. [[two-owners-is-the-root-cause]]
+ */
+/**
+ * How far outside the band a read has to be before it is a FAULT rather than something to watch.
+ * Declared once: `tempoRead` graded 'needs_work' from these, and the fault list below re-derived the
+ * same two limits as the bare literals 2.1 and 4.1 — a third declaration of tempo thresholds in a
+ * file that already had a second. Change the band and all three used to need finding.
+ */
+const TEMPO_FAULT_BELOW = 0.6;   // band.onTempoLow − 0.6  → 2.1 at today's bands
+const TEMPO_FAULT_ABOVE = 0.5;   // band.smoothHigh + 0.5  → 4.1 at today's bands
+
 function tempoRead(t: SwingTempo | null): DimensionRead | null {
   if (!t || t.ratio == null) return null;
   const r = t.ratio;
-  const display = `${r.toFixed(1)} : 1`;
-  // Classic tour ratio ≈ 3:1. 2.6–3.6 is a healthy range.
-  if (r >= 2.6 && r <= 3.6) return { key: 'tempo', label: 'Tempo', display, verdict: r >= 2.8 && r <= 3.4 ? 'strength' : 'solid', note: `Backswing-to-downswing ${display} — right in the tour range (~3:1).` };
-  if (r < 2.6) return { key: 'tempo', label: 'Tempo', display, verdict: r < 2.1 ? 'needs_work' : 'watch', note: `${display} — quick transition; the downswing is rushing the backswing.` };
-  return { key: 'tempo', label: 'Tempo', display, verdict: r > 4.1 ? 'needs_work' : 'watch', note: `${display} — slow, deliberate transition; a touch more pace through the ball can help.` };
+  /**
+   * Round ONCE and use it for both, or the card shows a number it did not grade: 2.65 renders as
+   * "2.6" through toFixed while grading as 2.7, so the player reads a value on the wrong side of
+   * the band he was judged against. Same defect as the Smart Tempo card had; same fix.
+   */
+  const shown = Math.round(r * 10) / 10;
+  const display = `${shown.toFixed(1)} : 1`;
+  const band = tempoBandFor('full_swing');
+  const rating = tempoRatingFor(r, 'full_swing');
+  if (rating == null) return null;
+
+  if (rating === 'on_tempo') {
+    return { key: 'tempo', label: 'Tempo', display, verdict: 'strength',
+      note: `Backswing-to-downswing ${display} — right in the tour range (~${band.targetRatio}:1).` };
+  }
+  if (rating === 'smooth') {
+    return { key: 'tempo', label: 'Tempo', display, verdict: 'solid',
+      note: `${display} — the load runs a little long, but the transition stays clean.` };
+  }
+  if (rating === 'rushed') {
+    // How far below the band, not a second opinion about where the band is.
+    const out = band.onTempoLow - shown;
+    return { key: 'tempo', label: 'Tempo', display, verdict: out >= TEMPO_FAULT_BELOW ? 'needs_work' : 'watch',
+      note: `${display} — quick transition; the downswing is rushing the backswing.` };
+  }
+  const out = shown - band.smoothHigh;
+  return { key: 'tempo', label: 'Tempo', display, verdict: out >= TEMPO_FAULT_ABOVE ? 'needs_work' : 'watch',
+    note: `${display} — slow, deliberate transition; a touch more pace through the ball can help.` };
 }
 
 function bandRead(
@@ -101,8 +149,11 @@ export function buildPoseSwingRead(bio: SwingBiomechanics | null, tempo: SwingTe
   const tRead = tempoRead(tempo);
   if (tRead) {
     dims.push(tRead);
-    if (tempo?.ratio != null && tempo.ratio < 2.1) faults.push({ key: 'quick_tempo', label: 'Quick transition', severity: 'moderate', evidence: `Tempo ${tempo.ratio.toFixed(1)}:1 (tour ≈ 3:1) — the downswing starts before the backswing finishes.` });
-    else if (tempo?.ratio != null && tempo.ratio > 4.1) faults.push({ key: 'slow_tempo', label: 'Slow transition', severity: 'minor', evidence: `Tempo ${tempo.ratio.toFixed(1)}:1 — slower than the ~3:1 tour rhythm.` });
+    // Same thresholds the dimension read grades on, derived from the ONE band rather than restated.
+    const tBand = tempoBandFor('full_swing');
+    const tShown = tempo?.ratio != null ? Math.round(tempo.ratio * 10) / 10 : null;
+    if (tShown != null && tShown < tBand.onTempoLow - TEMPO_FAULT_BELOW) faults.push({ key: 'quick_tempo', label: 'Quick transition', severity: 'moderate', evidence: `Tempo ${tShown.toFixed(1)}:1 (tour ≈ ${tBand.targetRatio}:1) — the downswing starts before the backswing finishes.` });
+    else if (tShown != null && tShown > tBand.smoothHigh + TEMPO_FAULT_ABOVE) faults.push({ key: 'slow_tempo', label: 'Slow transition', severity: 'minor', evidence: `Tempo ${tShown.toFixed(1)}:1 — slower than the ~${tBand.targetRatio}:1 tour rhythm.` });
   }
 
   const hip = bio ? bandRead('hip_turn', 'Hip turn', bio.hipTurnDeg, '°', 35, 55, 'restricted hip turn — limits your coil and power.', 'big hip turn — watch you\'re still loading into the trail side, not sliding.', 'a strong, athletic hip turn.') : null;

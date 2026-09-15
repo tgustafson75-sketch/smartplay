@@ -326,14 +326,37 @@ export default function SmartTempoScreen() {
 
   // ── Result ───────────────────────────────────────────────────────────
   const allMarked = marks.backswingStartSec != null && marks.topSec != null && marks.impactSec != null;
+  /**
+   * 2026-09-14 (Tim — "triple check tempo analysis, I have a feeling it is still giving generic
+   * reads") — HIS OWN BASELINE, which was sitting on this very screen.
+   *
+   * The result card graded against the tour 3:1 and nothing else, while the history list a few
+   * hundred pixels below it already showed every ratio he had ever marked. "2.1:1, Rushed" against
+   * a tour standard is a fact about tour players; "2.1:1, and you average 2.3:1" is a fact about
+   * him, and it is the one that tells him whether this swing was unusual. Only used when reads
+   * exist — computeTempo omits the clause entirely otherwise rather than comparing him to himself
+   * on a sample of one.
+   *
+   * Full-swing only: the putt profile is a different scale and mixing the two would average a
+   * 2:1 stroke into a 3:1 swing.
+   */
+  const myTempoBaseline = useMemo(() => {
+    if (tempoMode !== 'full_swing') return null;
+    try {
+      const { latestSelfTempoRead } = require('../../services/practice/selfSwingReads') as typeof import('../../services/practice/selfSwingReads');
+      const t = latestSelfTempoRead(useSwingSessionStore.getState().sessionHistory as never);
+      return t && t.recentCount > 1 ? t.recentAvg : null;
+    } catch { return null; }
+  }, [tempoMode]);
+
   const result: TempoResult | null = useMemo(() => {
     if (!allMarked) return null;
     return computeTempo({
       backswingStartSec: marks.backswingStartSec!,
       topSec: marks.topSec!,
       impactSec: marks.impactSec!,
-    }, tempoMode);
-  }, [allMarked, marks.backswingStartSec, marks.topSec, marks.impactSec, tempoMode]);
+    }, tempoMode, myTempoBaseline);
+  }, [allMarked, marks.backswingStartSec, marks.topSec, marks.impactSec, tempoMode, myTempoBaseline]);
   const outOfOrder = allMarked && result == null;
 
   // ── Metronome (actual vs ideal) ───────────────────────────────────────

@@ -1175,13 +1175,57 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
        * asks to see it. That is not a limitation to apologise for, it is the first instruction of
        * every lesson ever given.
        */
+      /**
+       * 2026-09-14 (Tim — "triple check tempo analysis. I have a feeling it is still giving generic
+       * reads.") — THE READING, NOT ONLY THE TREND.
+       *
+       * Everything below this point is about a TREND, and a trend needs four weeks. So with two
+       * range sessions and a measured 2.1:1 on both, the payload carried the word "tempo" and not
+       * one tempo NUMBER — verified by running the builder. Ask the caddie how your tempo is and he
+       * has nothing to answer from, which is exactly the generic read Tim heard.
+       *
+       * Tempo is the metric players ask about most (selfSwingReads says so in its own header) and
+       * it is the one that is a genuine single-session READING: it comes from three marked phases,
+       * not from a fortnight of pose passes. The block below already argues "a single session is a
+       * reading, not a trend — never present it as one, and never answer with nothing", and then
+       * answered with nothing. So the latest reading rides along in every branch, labelled as one
+       * swing, and the trend language is untouched.
+       *
+       * COST — changes only when a tempo is marked, so it stays on the cached side with the rest of
+       * this block. No new interpolation name enters the cached prompt.
+       */
+      /**
+       * EMPTY STRING, NOT NULL, and that is not a style choice. `not-yet-is-an-answer` guards this
+       * whole block against ever returning null — "silence is not an answer" — by reading its source
+       * and refusing a `return null;` anywhere inside it. A nested optional addendum returning null
+       * is harmless in behaviour and indistinguishable from the real thing to a source grep, so the
+       * absence of a tempo reading is spelled as an empty addendum instead.
+       * [[silence-is-not-an-answer]]
+       */
+      const latestTempo = safe(() => {
+        const { latestSelfTempoRead } = require('./practice/selfSwingReads') as typeof import('./practice/selfSwingReads');
+        const t = latestSelfTempoRead(useSwingSessionStore.getState().sessionHistory as never);
+        if (!t) return '';
+        const days = t.dateMs != null ? Math.round((Date.now() - t.dateMs) / 86_400_000) : null;
+        const when = days == null ? '' : days <= 0 ? ' today' : ` ${days} day${days === 1 ? '' : 's'} ago`;
+        return `HIS MEASURED TEMPO: latest ${t.ratio.toFixed(1)}:1`
+          + (t.ratingLabel ? ` (${t.ratingLabel})` : '')
+          + `, from ONE marked swing${when}`
+          + (t.recentCount > 1 ? `; his last ${t.recentCount} reads average ${t.recentAvg.toFixed(1)}:1` : '')
+          + '. Tour reference is about 3:1 (backswing:downswing), and his own average is the more '
+          + 'useful comparison. This is a READING, not a trend \u2014 quote the number when he asks about '
+          + 'tempo rather than coaching tempo in the abstract, and never call one swing a direction.';
+      }, '');
+      /** Tempo is a single-session reading, so it is appended to whatever the trend can or cannot say. */
+      const withTempo = (block: string) => (latestTempo ? `${block}\n\n${latestTempo}` : block);
+
       if (swings.length === 0) {
-        return 'YOU HAVE NEVER SEEN THIS PLAYER SWING — there are no captured swings in the library, '
+        return withTempo('YOU HAVE NEVER SEEN THIS PLAYER SWING — there are no captured swings in the library, '
           + 'so you have no measurement of anything about his motion. If he describes a feel, take it '
           + 'seriously and coach it from what he says, then ASK TO SEE IT: a few swings on camera in '
           + 'SwingLab and you can tell him whether the numbers agree with the feel. Say it the way a '
           + 'coach asks at a first lesson — you want to watch him hit a few to get a sense of it — '
-          + 'not as an error, an apology, or a feature pitch. Never imply you have measured anything.';
+          + 'not as an error, an apology, or a feature pitch. Never imply you have measured anything.');
       }
       const trend = computeSwingMetricTrend({ swings, nowMs: Date.now() });
       if (!trend.hasEnough || trend.trends.length === 0) {
@@ -1190,7 +1234,7 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
         // buckets actually carry swings.
         const weeks = (trend.swingsPerWeek ?? []).filter((n) => n > 0).length;
         const need = Math.max(0, SWING_TREND_FLOOR.weeks - weeks);
-        return 'YOU HAVE SEEN HIM SWING BUT CANNOT CALL A TREND YET: '
+        return withTempo('YOU HAVE SEEN HIM SWING BUT CANNOT CALL A TREND YET: '
           + `${trend.totalGradedSwings} graded swing${trend.totalGradedSwings === 1 ? '' : 's'} across `
           + `${weeks} week${weeks === 1 ? '' : 's'} with data, and a direction needs about `
           + `${SWING_TREND_FLOOR.weeks} weeks`
@@ -1198,7 +1242,7 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
           + ' So: coach the feel he describes, and if he asks whether he is getting better, say '
           + 'plainly that you have got a few sessions in the books and will be able to compare '
           + 'properly once there are a couple more. A single session is a reading, not a trend — '
-          + 'never present it as one, and never answer with nothing.';
+          + 'never present it as one, and never answer with nothing.');
       }
       // Worst-first is how computeSwingMetricTrend sorts, and worst-first is what a coach leads
       // with. Four is enough to answer a feel question without burying the shot in front of him.
@@ -1209,7 +1253,7 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
           + `${m.inBandNow ? 'inside' : 'outside'} the tour band, ${m.direction}`
           + ` over ${m.weeksWithData} weeks (${m.gradedReads} graded swings). ${m.headline}`;
       });
-      return `THEIR MEASURED SWING (private; ${trend.framing}):\n${lines.join('\n')}`;
+      return withTempo(`THEIR MEASURED SWING (private; ${trend.framing}):\n${lines.join('\n')}`);
     }, null),
 
     /**

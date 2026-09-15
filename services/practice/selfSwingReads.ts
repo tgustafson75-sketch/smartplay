@@ -40,7 +40,7 @@ export interface SwingLibrarySession {
   date: number;
   player_id?: string | null;
   club?: string | null;
-  tempo_result?: { ratio?: number | null } | null;
+  tempo_result?: { ratio?: number | null; ratingLabel?: string | null } | null;
   biomechanics?: ReadableBiomech | null;
   shots?: { club?: string | null; biomechanics?: ReadableBiomech | null }[];
 }
@@ -91,4 +91,56 @@ export function collectSelfTrendSwings(
     });
   }
   return swings;
+}
+
+/**
+ * 2026-09-14 (Tim — "triple check tempo analysis. I have a feeling it is still giving generic
+ * reads.") — THE LATEST TEMPO READING, not a trend.
+ *
+ * `collectSelfTrendSwings` feeds a TREND, and a trend needs four weeks. Tempo is different in kind
+ * from the biomech metrics beside it: it comes from three marked phases of ONE swing, so a single
+ * session is already a real reading rather than a sample of one in a series. The caddie had no
+ * access to it below the trend floor — verified by running the payload builder with two sessions at
+ * a measured 2.1:1 and finding no tempo number in it at all.
+ *
+ * It lives HERE rather than in caddieRequestBody because the SELF filter lives here. Writing
+ * `resolvePlayerName(id, '__self__')` a second time in the payload builder is how a student's tempo
+ * would eventually be quoted back to Tim as his own — and my first attempt at exactly that compared
+ * against the wrong sentinel and silently returned nothing.
+ * [[two-owners-is-the-root-cause]]
+ */
+export interface LatestTempoRead {
+  /** The most recent marked ratio. */
+  ratio: number;
+  /** Its rating label ("Rushed", "On Tempo"), when the read carried one. */
+  ratingLabel: string | null;
+  /** When it was marked. */
+  dateMs: number | null;
+  /** Mean of the last few reads — his own baseline, distinct from the tour reference. */
+  recentAvg: number;
+  /** How many reads that average is over. */
+  recentCount: number;
+}
+
+/** How many past reads make a personal baseline. Few enough to be current, enough to not be one swing. */
+const TEMPO_BASELINE_READS = 5;
+
+export function latestSelfTempoRead(
+  sessions: readonly SwingLibrarySession[] | null | undefined,
+): LatestTempoRead | null {
+  const mine = (sessions ?? [])
+    .filter((sess) => resolvePlayerName(sess.player_id, '__self__') === '__self__')
+    .filter((sess) => num(sess.tempo_result?.ratio) != null)
+    .sort((a, b) => (a.date ?? 0) - (b.date ?? 0));
+  if (mine.length === 0) return null;
+
+  const last = mine[mine.length - 1];
+  const recent = mine.slice(-TEMPO_BASELINE_READS).map((x) => num(x.tempo_result?.ratio) as number);
+  return {
+    ratio: num(last.tempo_result?.ratio) as number,
+    ratingLabel: last.tempo_result?.ratingLabel ?? null,
+    dateMs: typeof last.date === 'number' ? last.date : null,
+    recentAvg: recent.reduce((n, v) => n + v, 0) / recent.length,
+    recentCount: recent.length,
+  };
 }

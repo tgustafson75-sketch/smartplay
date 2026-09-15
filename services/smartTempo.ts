@@ -103,13 +103,20 @@ export interface TempoResult {
 //   ratio < 2.7          → 'rushed'   (downswing too quick vs the backswing
 //                                       — the common amateur fault)
 //   2.7 ≤ ratio ≤ 3.3    → 'on_tempo' (right in the tour band)
-//   3.3 < ratio < 3.4    → 'smooth'   (a touch long but still fluid)
-//   ratio ≥ 3.4          → 'slow'     (load is long / downswing too slow)
+//   3.3 < ratio < 3.6    → 'smooth'   (a touch long but still fluid)
+//   ratio ≥ 3.6          → 'slow'     (load is long / downswing too slow)
 //
-// 'smooth' is the narrow honest band just above on-tempo: the load is
-// slightly long but the transition is still unhurried (a forgivable,
-// often-deliberate pattern) — distinct from a genuinely 'slow' tempo
-// where the downswing lags.
+// 'smooth' is the honest band just above on-tempo: the load is slightly long
+// but the transition is still unhurried (a forgivable, often-deliberate
+// pattern) — distinct from a genuinely 'slow' tempo where the downswing lags.
+//
+// 2026-09-14 (Tim — "triple check tempo analysis, I have a feeling it is still giving generic
+// reads") — smoothHigh WAS 3.4, making this band 0.10 ratio-units wide against on_tempo's 0.61 and
+// the putt profile's 0.39. A four-state scale with one state you essentially cannot land in is a
+// three-state scale, and every slightly-long load was told its downswing was "lagging". 3.6 restores
+// the proportion the putt profile already had — and it is the same upper bound
+// services/swing/poseSwingRead had been using all along, so the two now agree instead of
+// contradicting each other on the same swing.
 //
 // PUTT — a smoother, more EVEN stroke. We grade against a ~2:1 GUIDE (the
 // backstroke a touch longer than the through-stroke), NOT a precise tour
@@ -126,34 +133,58 @@ interface TempoBand {
   smoothHigh: number;
 }
 
+/**
+ * Three stems per rating, by HOW FAR OFF the read is. Not three ways of saying one thing — the
+ * advice genuinely differs: "you are close, let it finish" and "the downswing starts before the
+ * backswing does" are different faults with different fixes, and the old single string said
+ * "slightly" to both. The measured numbers are composed in front of whichever stem applies.
+ */
+interface TempoCue { near: string; mid: string; far: string }
+
 interface TempoProfile {
   targetRatio: number;
   targetLabel: string;
   band: TempoBand;
-  meta: Record<TempoRating, { label: string; coaching: string }>;
+  meta: Record<TempoRating, { label: string; cue: TempoCue }>;
 }
 
 const TEMPO_PROFILES: Record<TempoMode, TempoProfile> = {
   full_swing: {
     targetRatio: 3,
     targetLabel: 'tour 3:1',
-    band: { onTempoLow: 2.7, onTempoHigh: 3.3, smoothHigh: 3.4 },
+    band: { onTempoLow: 2.7, onTempoHigh: 3.3, smoothHigh: 3.6 },
     meta: {
       rushed: {
         label: 'Rushed',
-        coaching: 'Slow your load slightly — let the club finish the backswing before you fire.',
+        cue: {
+          near: 'Let the club finish the backswing before you fire — you are close.',
+          mid: 'Slow the load and let the club finish before you fire.',
+          far: 'The downswing is starting before the backswing has finished. That is a rhythm change, not a tweak — count the load out.',
+        },
       },
       on_tempo: {
         label: 'On Tempo',
-        coaching: 'Right on tempo — repeat it.',
+        cue: { near: 'Right on tempo — repeat it.', mid: 'Right on tempo — repeat it.', far: 'Right on tempo — repeat it.' },
       },
       smooth: {
         label: 'Smooth',
-        coaching: 'Smooth and unhurried — a hair long on the load, but a clean transition.',
+        cue: {
+          near: 'Unhurried and clean — a hair long on the load, nothing to fix.',
+          mid: 'Smooth and unhurried — the load runs a little long, but the transition is clean.',
+          far: 'Smooth, but the load is getting long. Keep the transition and shorten the backswing a touch.',
+        },
       },
       slow: {
+        /**
+         * These described a LAGGING DOWNSWING, which is a LOW ratio — the opposite band. A high
+         * ratio is a long, slow LOAD with a normal strike, so that is what they say now.
+         */
         label: 'Slow',
-        coaching: 'Your downswing is lagging the load — match the backswing with a more decisive transition.',
+        cue: {
+          near: 'The load runs slightly long — start down a fraction sooner.',
+          mid: 'Your backswing is long for the speed you come down at — shorten the load and start down as it finishes.',
+          far: 'The load is far longer than the strike it produces — the club is waiting at the top. Shorten the backswing and start down as it finishes.',
+        },
       },
     },
   },
@@ -164,19 +195,35 @@ const TEMPO_PROFILES: Record<TempoMode, TempoProfile> = {
     meta: {
       rushed: {
         label: 'Quick Through',
-        coaching: 'Your forward stroke is jumping ahead — match the backstroke with a smooth, even pass through the ball.',
+        cue: {
+          near: 'The forward stroke is a shade ahead — even it up with the backstroke.',
+          mid: 'Your forward stroke is jumping ahead — match the backstroke with a smooth, even pass through the ball.',
+          far: 'You are jabbing at it: the forward stroke is far quicker than the backstroke. Let the backstroke set the pace.',
+        },
       },
       on_tempo: {
         label: 'Smooth & Even',
-        coaching: 'Smooth, even putting rhythm — backstroke and forward stroke in balance. Repeat it.',
+        cue: {
+          near: 'Smooth, even putting rhythm — backstroke and forward stroke in balance. Repeat it.',
+          mid: 'Smooth, even putting rhythm — backstroke and forward stroke in balance. Repeat it.',
+          far: 'Smooth, even putting rhythm — backstroke and forward stroke in balance. Repeat it.',
+        },
       },
       smooth: {
         label: 'Smooth',
-        coaching: 'Nicely unhurried — a touch long on the backstroke, but the stroke stays smooth.',
+        cue: {
+          near: 'Nicely unhurried — a touch long on the backstroke, but the stroke stays smooth.',
+          mid: 'Nicely unhurried — a touch long on the backstroke, but the stroke stays smooth.',
+          far: 'Unhurried, but the backstroke is getting long — shorten it and keep the same pace.',
+        },
       },
       slow: {
         label: 'Long Back',
-        coaching: 'Your backstroke is running long — shorten it so the through-stroke can stay even and accelerating.',
+        cue: {
+          near: 'The backstroke is running a little long — shorten it so the through-stroke keeps accelerating.',
+          mid: 'Your backstroke is running long — shorten it so the through-stroke can stay even and accelerating.',
+          far: 'The backstroke is far longer than the pass through the ball, which is how a putt gets decelerated. Shorten the load.',
+        },
       },
     },
   },
@@ -194,6 +241,107 @@ function ratingFor(ratio: number, band: TempoBand): TempoRating {
 }
 
 /**
+ * How far outside the band the read sits, in ratio units. 0 when inside it.
+ *
+ * This is the number that makes the difference between a 2.6:1 and a 1.2:1 sayable. Both were
+ * 'rushed', both got the identical sentence, and that sentence said "slightly" — which is sound
+ * advice for one of them and actively wrong for the other.
+ */
+function distanceOutsideBand(ratio: number, band: TempoBand): number {
+  if (ratio < band.onTempoLow) return band.onTempoLow - ratio;
+  if (ratio > band.smoothHigh) return ratio - band.smoothHigh;
+  if (ratio > band.onTempoHigh) return ratio - band.onTempoHigh;   // inside 'smooth'
+  return 0;
+}
+
+/** Severity stem to use. Thresholds are in ratio units and deliberately coarse. */
+function severityFor(distance: number): keyof TempoCue {
+  if (distance < 0.25) return 'near';
+  if (distance < 0.75) return 'mid';
+  return 'far';
+}
+
+const ms = (n: number) => `${Math.round(n)} ms`;
+
+/**
+ * THE COACHING LINE, COMPOSED FROM THE MEASUREMENT.
+ *
+ * 2026-09-14 (Tim — "triple check tempo analysis. I have a feeling it is still giving generic
+ * reads.") He was right, and it was generic BY CONSTRUCTION: `coaching` was one of four fixed
+ * strings per mode, selected by rating and nothing else. Every rushed swing any player ever made
+ * — 1.0:1 or 2.6:1 — got the same sentence, and the ratio the engine had just measured to the
+ * millisecond appeared nowhere in it.
+ *
+ * So the line is built: the two real durations, what the downswing WOULD be at the target while
+ * holding his own backswing, the gap between them, and a cue graded by how far off he actually is.
+ * Every number in it is measured or derived from a measured number — nothing is asserted about a
+ * player the engine cannot see. [[illustration-data-points]]
+ */
+function composeCoaching(
+  backswingMs: number,
+  downswingMs: number,
+  /**
+   * The ROUNDED ratio — the same value `rating` was derived from and the same one the card shows.
+   * Passing the raw ratio here would put the severity and the rating on different numbers, so at a
+   * band edge a read could be graded 'on_tempo' while its severity said it was outside.
+   */
+  shownRatio: number,
+  rating: TempoRating,
+  profile: TempoProfile,
+  recentAvgRatio?: number | null,
+): string {
+  const distance = distanceOutsideBand(shownRatio, profile.band);
+  const stem = profile.meta[rating].cue[severityFor(distance)];
+  const facts = `Backswing ${ms(backswingMs)}, downswing ${ms(downswingMs)}.`;
+
+  /**
+   * THE COUNTERFACTUAL HOLDS THE DOWNSWING AND SOLVES FOR THE LOAD. Always, in both directions.
+   *
+   * Two wrong versions preceded this one, and the second exposed a third problem that was not mine.
+   *
+   * v1 held the BACKSWING and solved for the downswing. On a rushed swing that inverts the advice:
+   * 1.2:1 is backswing 300 ms / downswing 250 ms, and at 3:1 with the load held the downswing
+   * "should" be 100 ms — so it told a player whose transition was far too quick that he was
+   * "150 ms slow through it", and prescribed a downswing no human makes.
+   *
+   * v2 split by direction, and on the slow side produced nothing at all: 4.6:1 is backswing 1150 /
+   * downswing 250, where the downswing is already FASTER than 3:1 would want. Which is the real
+   * point — a high ratio is not a lagging downswing, it is a long load. The 'slow' coaching line
+   * had been saying "your downswing is lagging the load" since the file was written, and that
+   * describes a LOW ratio. It was wrong about its own band.
+   *
+   * Holding the downswing is also how the domain actually works: Tour Tempo's frame counts (24/8,
+   * 21/7, 27/9 at 30 fps) all keep the DOWNSWING at eight frames — roughly a quarter second for
+   * everyone — and vary the backswing. So the load is both the honest variable and the actionable
+   * one, whichever side of the band he is on.
+   */
+  let gap = '';
+  if (rating !== 'on_tempo') {
+    const idealBack = downswingMs * profile.targetRatio;
+    const delta = Math.round(idealBack - backswingMs);
+    if (Math.abs(delta) >= 10) {
+      gap = ` Against that downswing, ${profile.targetLabel.replace(/^tour /, '')} would want a `
+        + `${ms(idealBack)} backswing — your load is ${Math.abs(delta)} ms ${delta > 0 ? 'short' : 'long'}.`;
+    }
+  }
+
+  /**
+   * HIS OWN BASELINE, when there is one. A tour band says whether he is a tour player; his own
+   * recent average says whether this swing was him. Only stated when it differs enough to mean
+   * something — a 0.1 wobble between reads is noise in a pose-derived phase, not a change.
+   */
+  let mine = '';
+  if (typeof recentAvgRatio === 'number' && Number.isFinite(recentAvgRatio) && recentAvgRatio > 0) {
+    const d = shownRatio - recentAvgRatio;
+    mine = Math.abs(d) < 0.2
+      ? ` That is your normal — you average ${recentAvgRatio.toFixed(1)}:1.`
+      : ` ${d > 0 ? 'Slower' : 'Quicker'} than your usual ${recentAvgRatio.toFixed(1)}:1.`;
+  }
+
+  return `${facts}${gap}${mine} ${stem}`;
+}
+
+/**
  * Pure tempo computation from three real phase timestamps. Returns null
  * when the ordering is invalid (start < top < impact must hold) or any
  * phase duration is ≤ 0 — we never fabricate a ratio from a bad read.
@@ -201,7 +349,15 @@ function ratingFor(ratio: number, band: TempoBand): TempoRating {
  * `mode` selects the profile (target ratio + rating bands + coaching). It
  * defaults to 'full_swing' so every existing caller is byte-identical.
  */
-export function computeTempo(phases: TempoPhases, mode: TempoMode = 'full_swing'): TempoResult | null {
+export function computeTempo(
+  phases: TempoPhases,
+  mode: TempoMode = 'full_swing',
+  /**
+   * His own recent average ratio, when the caller has one. Optional and omitted by default, so every
+   * existing call site is unchanged and no surface is forced to invent a baseline it does not have.
+   */
+  recentAvgRatio?: number | null,
+): TempoResult | null {
   const { backswingStartSec, topSec, impactSec } = phases;
   if (
     !Number.isFinite(backswingStartSec) ||
@@ -222,21 +378,52 @@ export function computeTempo(phases: TempoPhases, mode: TempoMode = 'full_swing'
   if (!Number.isFinite(ratio) || ratio <= 0) return null;
 
   const profile = profileFor(mode);
-  const rating = ratingFor(ratio, profile.band);
+  /**
+   * GRADED ON THE NUMBER HE IS SHOWN.
+   *
+   * 2026-09-14 — the rating was computed from the full-precision ratio while the card displays
+   * `ratio.toFixed(1)`, so the two disagreed at every band edge: 3.35 and 3.44 both render as
+   * "3.4:1" and fell on opposite sides of a boundary. Two swings, the same number on screen, two
+   * different verdicts and two different coaching lines, with nothing visible to explain it. Round
+   * first, then grade, and the number he can see is the number he was judged on.
+   * [[state-what-you-measured-not-what-you-intended]]
+   */
+  const shownRatio = Math.round(ratio * 10) / 10;
+  const rating = ratingFor(shownRatio, profile.band);
   const meta = profile.meta[rating];
 
   return {
     backswingMs: Math.round(backswingMs),
     downswingMs: Math.round(downswingMs),
     ratio,
-    ratioLabel: `${ratio.toFixed(1)}:1`,
+    ratioLabel: `${shownRatio.toFixed(1)}:1`,
     rating,
     ratingLabel: meta.label,
-    coaching: meta.coaching,
+    coaching: composeCoaching(backswingMs, downswingMs, shownRatio, rating, profile, recentAvgRatio),
     mode,
     targetRatio: profile.targetRatio,
     targetLabel: profile.targetLabel,
   };
+}
+
+/**
+ * The band edges for a mode, so no other surface has to declare its own idea of "good tempo".
+ *
+ * 2026-09-14 — `services/swing/poseSwingRead` held a SECOND set (on-tempo 2.6–3.6, strength
+ * 2.8–3.4) and the two disagreed on real swings: a 2.65:1 was "Rushed" on the Smart Tempo card and
+ * "right in the tour range" on the SmartMotion read; a 3.5:1 was "Slow" on one and "solid" on the
+ * other. Same swing, same app, opposite verdicts depending on which screen you opened.
+ * [[two-owners-is-the-root-cause]]
+ */
+export function tempoBandFor(mode: TempoMode = 'full_swing'): Readonly<TempoBand & { targetRatio: number }> {
+  const p = profileFor(mode);
+  return { ...p.band, targetRatio: p.targetRatio };
+}
+
+/** The rating a ratio earns, for a caller that has a ratio but no phase timestamps. */
+export function tempoRatingFor(ratio: number, mode: TempoMode = 'full_swing'): TempoRating | null {
+  if (!Number.isFinite(ratio) || ratio <= 0) return null;
+  return ratingFor(Math.round(ratio * 10) / 10, profileFor(mode).band);
 }
 
 // ─── Auto-detection ────────────────────────────────────────────────────
