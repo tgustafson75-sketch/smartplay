@@ -4350,3 +4350,58 @@ unchanged at `club-bag-v1`).
   strands every club on the device.
 - SPRINT-RESUME/LOG were two commits behind when this session opened (`21a009b6`, `2237d1dd` shipped
   code only). Both caught up here.
+
+### Later the same day — tempo, the home set, and a profile audit
+
+- `c1946e14` **tempo was measured to the millisecond and described from a table of four.** Five
+  findings, each reproduced by running the code first: (1) `coaching` was one of four fixed strings
+  per mode — a 1.0:1 and a 2.6:1 got the same sentence, and it said "slightly"; (2) TWO band sets,
+  visibly disagreeing (2.65:1 was "Rushed" on the Smart Tempo card and "right in the tour range" on
+  the SmartMotion read; 3.5:1 was "Slow" vs "solid"), plus a third copy of the limits in the fault
+  list; (3) the 'smooth' band was **0.10 ratio-units wide** against on_tempo's 0.61; (4) the rating
+  came from the full-precision ratio while the card showed `toFixed(1)`, so two "3.4:1" reads could
+  be graded differently; (5) the measured tempo **never reached the caddie** below a four-week
+  trend — proven by running the payload builder.
+  *Two wrong counterfactuals preceded the right one, and the second exposed that the pre-existing
+  'slow' cue ("your downswing is lagging the load") described a LOW ratio. It was wrong about its
+  own band.*
+- `9fb5a167` **one typed home course becomes three picked ones**, each queuing a download-engine
+  build on the Play tab. The picker is the star on the course card — Settings declares no second
+  course list. The cap is in the STORE, and a fourth is refused rather than evicting one of his.
+  tsc enumerated the nine readers. **Three existing guards caught me**: a migration that THREW on a
+  string blob (white-screen class), a setter-discovery regex blind to `toggle*`, and a test pinning
+  the literal `version: 4,`.
+- `ed6d6022` **goal and physical note are pickers**, with the keyboard only behind "Other".
+
+#### Profile audit (Tim: "I don't think it has level or experience")
+
+The DATA is in better shape than the screen. `experienceContext` exists, is editable, is in the
+payload, and `api/kevin` maps it to coaching depth. `homeCourse`, `default_mode` and `missType`
+reach the brain via `contextSynthesizer` — verified, not assumed from a payload grep. `handicap` and
+`handicap_index` are in lockstep both ways. `firstName` is derived in `setName`.
+
+Still open, small: **`preferredTee`** is used to pick tee sets but never stated to the caddie as a
+fact, and **`coachCredentials`** is not ingested at all.
+
+The real gap is the SCREEN: `app/profile.tsx` shows five of twenty-odd facts and its own header says
+the rest "still live in Settings, so we don't fork the edit form."
+
+#### Queued, decided, not yet built
+
+1. **Profile screen unification** — make `app/profile.tsx` the ONE edit form (button-first) and cut
+   the ~466 duplicated lines out of Settings' profile section. A deletion, not a second form.
+2. **Every fault names its fix.** `PoseFault` has `key`/`label`/`severity`/`evidence` and no fix.
+   **7 of 11** pose faults have no teaching anywhere (`sway`, `under_coil`, `lead_arm_bent`,
+   `poor_finish`, `head_movement`, `quick_tempo`, `slow_tempo`); the other 4 have a drill in
+   `drillRecommendation` that the pose read is never passed to. Then a guard: no fault key without
+   teaching.
+3. **Full-swing shaping is not taught** — draw/fade/high/low have one knowledge-base entry stating
+   the ball-flight law and nothing like the flop-shot lesson treatment, while `clubTendency`
+   measures the shape and the caddie comments on it.
+4. **Ball type as an acoustic GROUPING KEY** (not a fabricated per-ball offset): cover and
+   compression move `peak_db`/`decay_db`/`duration`, so a soft urethane ball reads fatter and
+   under-reports ball speed. Learn a baseline per ball and refuse to compare across a ball change.
+   Cheap now that the bag scan sets `currentBall`.
+5. **A spoken tempo count** keyed to his measured ms — `tempoMetronome` already plays actual vs
+   ideal; the count is the Haney/Tour-Tempo device, grounded, and the differentiator over the
+   standalone app is that ours is set from a measurement.

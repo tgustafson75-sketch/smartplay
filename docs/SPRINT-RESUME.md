@@ -8,7 +8,31 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
-> ### ⚠️ LATEST — 2026-09-14. The bag is a bag, not a camera; the green map had no pars.
+> ### ⚠️ LATEST — 2026-09-14 (later). Tempo, the home set, and the profile audit.
+>
+> `c1946e14` **tempo was measured to the millisecond and described from a table of four.** Five
+> findings, all reproduced by execution: canned coaching (same sentence for a 1.0:1 and a 2.6:1, and
+> it said "slightly"), TWO disagreeing band sets across two screens, a 'smooth' band 0.10 wide, a
+> displayed ratio that was not the graded ratio, and a measured tempo that **never reached the
+> caddie** below a four-week trend.
+>
+> `9fb5a167` **three picked home courses**, each queuing a build on the Play tab; the cap lives in
+> the store and a fourth is refused. Three existing guards caught defects in my own change, including
+> a migration that threw on a corrupt blob.
+>
+> `ed6d6022` **goal and physical note are buttons**, keyboard only behind "Other".
+>
+> **Profile audit:** the data is fine — `experienceContext` exists, is editable and reaches the brain;
+> `homeCourse`/`default_mode`/`missType` go via `contextSynthesizer`. The SCREEN is the gap:
+> `app/profile.tsx` holds five of twenty-odd facts.
+>
+> **NEXT, decided and not yet built:** the profile-screen unification; `PoseFault` has no `fix` and
+> **7 of 11** faults have no teaching anywhere; full-swing shaping is measured but never taught; ball
+> type as an acoustic grouping key; a spoken tempo count from his measured ms.
+>
+> ---
+>
+> ### ⚠️ EARLIER TODAY — 2026-09-14. The bag is a bag, not a camera; the green map had no pars.
 >
 > `9e341c5d` **the scan could not be SAVED.** The review list was a `<ScrollView>` with no `flex: 1`
 > above a footer holding the only writing control, and RN's `flexShrink` defaults to **0** — so the
