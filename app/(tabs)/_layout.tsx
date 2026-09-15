@@ -1,7 +1,6 @@
 import { Tabs, usePathname } from 'expo-router';
 import { View, Image, StyleSheet } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRoundStore } from '../../store/roundStore';
 import { TourOverlay, type TourStep } from '../../components/onboarding/TourOverlay';
 import { DASHBOARD_TOUR_STEPS, PLAY_TOUR_STEPS, SCORECARD_TOUR_STEPS, SWINGLAB_TOUR_STEPS } from '../../constants/tabTours';
@@ -78,7 +77,6 @@ export default function TabLayout() {
    * five so the row belongs to whichever theme is on.
    */
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
   const swinglabEnabled = useFlag('swinglab');
   const isRoundActive = useRoundStore(s => s.isRoundActive);
 

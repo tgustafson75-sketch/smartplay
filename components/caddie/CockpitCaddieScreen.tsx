@@ -114,6 +114,8 @@ export default function CockpitCaddieScreen({
     shots,
     currentYardage,
     nineHoleMode,
+    roundStartHole,
+    activeCourseId,
   } = useRoundStore(
     useShallow((s) => ({
       isRoundActive: s.isRoundActive,
@@ -125,6 +127,8 @@ export default function CockpitCaddieScreen({
       shots: s.shots,
       currentYardage: s.currentYardage,
       nineHoleMode: s.nineHoleMode,
+      roundStartHole: s.roundStartHole,
+      activeCourseId: s.activeCourseId,
     })),
   );
   // 2026-07-24 (full-app audit) — 9-hole-aware total, matching roundStore + caddie.tsx. courseHoles.length
@@ -132,8 +136,22 @@ export default function CockpitCaddieScreen({
   // — else the Cockpit showed "Hole X/18" and an un-capped stepper on a 9-hole round.
   // 2026-08-06 (audit — back nine): the round's real last hole (front 9 / back 18 / full N) so the Cockpit
   // stepper reaches the end and doesn't drag a back-nine round back to hole 9.
-  const totalHolesCockpit = roundLastHole(useRoundStore.getState());
-  const firstHoleCockpit = roundFirstHole(useRoundStore.getState()); // back nine floors the minus stepper at 10
+  /**
+   * 2026-09-14 — COMPUTED FROM THE SUBSCRIBED VALUES, not from getState().
+   *
+   * These read `useRoundStore.getState()`, which is a NON-reactive snapshot: the numbers only
+   * refreshed because `courseHoles` and `nineHoleMode` were separately subscribed above and forced
+   * a re-render. That made the subscriptions load-bearing while LOOKING unused — an
+   * unused-variable warning that could not safely be cleaned, which is how it survived.
+   *
+   * It was also incomplete. `roundLastHole` needs four inputs and only two were subscribed, so a
+   * change to `roundStartHole` or `activeCourseId` alone left the Cockpit showing a stale range —
+   * exactly the "Hole X/18 on a nine" and back-nine stepper bugs the notes above record fixing.
+   * All four are subscribed and passed explicitly now, so the dependency is visible and complete.
+   */
+  const holeRangeInputs = { nineHoleMode, roundStartHole, activeCourseId, courseHoles };
+  const totalHolesCockpit = roundLastHole(holeRangeInputs);
+  const firstHoleCockpit = roundFirstHole(holeRangeInputs); // back nine floors the minus stepper at 10
   // Action refs — stable; pulled separately.
   // 2026-05-21 — Fix O: replaced `setScore` / `setPutts` (non-existent on
   // the Pro store; the prior code's `?.` optional chaining was silently

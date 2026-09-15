@@ -45,7 +45,6 @@ import { PillRow } from '../components/PillRow';
 
 import { useToastStore } from '../store/toastStore';
 import { useTrustLevelStore, TRUST_LEVEL_META } from '../store/trustLevelStore';
-import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
 import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
 import { useTranslation } from 'react-i18next';
@@ -1700,6 +1699,21 @@ export default function Settings() {
                       voiceService.configureAudioForSpeech (queued, no
                       race with the rest of voice stack). */}
                   <GlassesModeRow colors={colors} />
+                  {/**
+                    * 2026-09-14 — FEEL CAPTURE WAS A TOGGLE NOBODY COULD REACH.
+                    *
+                    * `FeelCaptureRow` has existed, complete, rendered by nothing. That matters
+                    * because `services/feelCaptureService` gates on the flag it writes — line 148,
+                    * `if (!feelCaptureEnabled) return false` — so the whole feel-vs-real
+                    * calibration path was permanently off, and no owner had a way to switch it on.
+                    * It is owner-gated by email at the call site too, so the row belongs here.
+                    *
+                    * Found as an unused-variable warning during the 09-14 lint sweep, which is
+                    * exactly how this class hides: a capability that is built, measured and
+                    * persisted looks identical to a leftover until you read it.
+                    * [[sweep-the-missing-half-not-the-unused-export]]
+                    */}
+                  <FeelCaptureRow colors={colors} />
                   {/* 2026-06-21 — AI provider A/B toggle. Switch between
                       Gemini 2.5-Flash and OpenAI (gpt-4o) as the caddie
                       brain + reasoning provider. TTS/STT are always OpenAI.

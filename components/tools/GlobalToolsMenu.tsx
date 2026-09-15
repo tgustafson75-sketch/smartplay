@@ -64,8 +64,6 @@ export function GlobalToolsMenu() {
   // Toggles
   const voiceEnabled = useSettingsStore((s) => s.voiceEnabled);
   const setVoiceEnabled = useSettingsStore((s) => s.setVoiceEnabled);
-  const voiceGender = useSettingsStore((s) => s.voiceGender);
-  const language = useSettingsStore((s) => s.language);
   const yardageMode = useSettingsStore((s) => s.yardageMode);
   const setYardageMode = useSettingsStore((s) => s.setYardageMode);
   // 2026-05-16 — surface Active Listening one tap away from the Tools

@@ -19,7 +19,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Gyroscope, Accelerometer } from 'expo-sensors';
 import * as Haptics from 'expo-haptics';
-import { useTheme } from '../../contexts/ThemeContext';
 import {
   IndoorRepDetector, summarizeIndoorReps, INDOOR_CONFIG,
   type IndoorMode, type IndoorRep,
@@ -38,7 +37,6 @@ type Stage = 'intro' | 'live' | 'summary';
 
 export default function IndoorHotelModeScreen() {
   const { t } = useTranslation();
-  const { colors } = useTheme();
   const router = useRouter();
   const [mode, setMode] = useState<IndoorMode>('swing');
   // 2026-07-08 (pre-release sweep) — the abandon-mid-set unmount cleanup below has [] deps
@@ -180,7 +178,7 @@ export default function IndoorHotelModeScreen() {
   const summary = useMemo(() => summarizeIndoorReps(reps, mode), [reps, mode]);
   const last = reps.length > 0 ? reps[reps.length - 1] : null;
   const benchmark = INDOOR_CONFIG[mode].benchmark;
-  const s = makeStyles(colors);
+  const s = makeStyles();
 
   const ringScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.18] });
   const ringOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.55, 0.1] });
@@ -331,7 +329,20 @@ export default function IndoorHotelModeScreen() {
   );
 }
 
-function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
+/**
+ * 2026-09-14 — THIS SCREEN IS NOT THEMED, and the signature said otherwise.
+ *
+ * `makeStyles` took the theme and ignored it: every colour below is a hardcoded hex, and the
+ * component never read `colors` for anything else either. So the parameter was a promise the code
+ * did not keep, and the only thing flagging it was an unused-variable warning.
+ *
+ * The parameter is gone rather than renamed `_colors`, so the fact is legible: these styles are
+ * fixed dark. Whether that is RIGHT is a product decision and not a lint fix — a cockpit-style
+ * capture screen being deliberately dark is defensible, and converting ~22 colour decisions to
+ * tokens would change how this screen looks in light mode. Flagged for Tim rather than done
+ * quietly. [[a-stale-header-is-a-source-someone-trusts]]
+ */
+function makeStyles() {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: '#060f09' },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 10 },

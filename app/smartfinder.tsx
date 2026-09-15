@@ -25,13 +25,11 @@ import {
   type GroundSlopeRead, type GroundOrientation,
 } from '../services/puttSlopeRead';
 import { decideShot } from '../services/caddieDecision';
-import { liveShotReadInputs } from '../services/shotReadLive';
 import { getLearnedMissDirection } from '../services/effectiveMiss';
 import { getCourseHoleGuidance } from '../services/caddieMemoryRetrieval';
-import { bagDistances } from '../services/shotStrategy';
 // SF fix #2 — learned-bag club lookup (inferClub) + the canonical club ladder so
 // the rangefinder recommends from the player's real distances, not a generic chart.
-import { useClubStatsStore, CLUB_ORDER } from '../store/clubStatsStore';
+import { CLUB_ORDER } from '../store/clubStatsStore';
 // SF fix #3 — the 4-tier yardage resolver, so a number the player STATED
 // ("I'm 150 out") wins over the GPS/scorecard middle on the target overlay.
 import { resolveYardage, resolvedToFmb } from '../services/yardageResolver';
@@ -118,9 +116,8 @@ export default function SmartFinder() {
   const styles = useStyles();
   useKeepAwake(undefined, { suppressDeactivateWarnings: true });
   const _insets = useSafeAreaInsets();
-  const { width, height } = useWindowDimensions();
+  const { width } = useWindowDimensions();
   // 2026-05-27 — Fix EP: router for the Send-to-Tank header icon.
-  const router = useRouter();
 
   const isRoundActive = useRoundStore(s => s.isRoundActive);
   const currentHole = useRoundStore(s => s.currentHole);
@@ -390,7 +387,6 @@ export default function SmartFinder() {
         shotBearingDeg={shotBearingDeg}
         onModeChange={setMode}
         onClose={() => safeBack()}
-        height={height}
         autoRead={autoRead}
       />
     );
@@ -552,7 +548,7 @@ const PRECISION_ZOOM_MAX = 0.5;
 const PINCH_SENSITIVITY = 1.0;
 
 function CameraSmartFinder({
-  mode, currentHole, gps, yards, geometry, weather, shotBearingDeg, onModeChange, onClose, height, autoRead,
+  mode, currentHole, gps, yards, geometry, weather, shotBearingDeg, onModeChange, onClose, autoRead,
 }: {
   mode: SmartFinderMode;
   currentHole: number;
@@ -563,7 +559,6 @@ function CameraSmartFinder({
   shotBearingDeg: number | null;
   onModeChange: (m: SmartFinderMode) => void;
   onClose: () => void;
-  height: number;
   autoRead?: boolean;
 }) {
   const { t } = useTranslation();
@@ -1325,7 +1320,6 @@ function TargetCameraOverlay({
 }) {
   const { t } = useTranslation();
   const styles = useStyles();
-  const insets = useSafeAreaInsets();
   // SF fix #3 (owner Tim — "user-stated yardage ignored") — the target overlay
   // seeded/re-synced purely from yards.middle (GPS/scorecard) and never consulted
   // resolveYardage, so when the player STATES a distance ("I'm 150 out") the

@@ -17,7 +17,6 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Gyroscope } from 'expo-sensors';
 import * as Haptics from 'expo-haptics';
 import Svg, { Polyline, Circle as SvgCircle } from 'react-native-svg';
-import { useTheme } from '../../contexts/ThemeContext';
 import { IndoorRepDetector, type IndoorRep } from '../../services/indoorSwing';
 import { RepDedupe } from '../../services/swing/watchRep';
 import { useWatchReps } from '../../hooks/useWatchReps';
@@ -54,7 +53,6 @@ function callLine(persona: string, kind: 'flush' | 'good' | 'poor' | 'trees' | '
 
 export default function SwingSimScreen() {
   const { t } = useTranslation();
-  const { colors } = useTheme();
   const router = useRouter();
   const persona = useSettingsStore((s) => s.caddiePersonality);
   const [courseId, setCourseId] = useState(SIM_COURSES[0]);
@@ -360,7 +358,7 @@ export default function SwingSimScreen() {
     const vp = r.scoreVsPar;
     return `${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} · ${r.totalScore} (${vp == null ? '—' : vp === 0 ? 'E' : vp > 0 ? `+${vp}` : vp})`;
   };
-  const s = makeStyles(colors);
+  const s = makeStyles();
 
   // ── Render ──
   return (
@@ -541,7 +539,20 @@ export default function SwingSimScreen() {
   );
 }
 
-function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
+/**
+ * 2026-09-14 — THIS SCREEN IS NOT THEMED, and the signature said otherwise.
+ *
+ * `makeStyles` took the theme and ignored it: every colour below is a hardcoded hex, and the
+ * component never read `colors` for anything else either. So the parameter was a promise the code
+ * did not keep, and the only thing flagging it was an unused-variable warning.
+ *
+ * The parameter is gone rather than renamed `_colors`, so the fact is legible: these styles are
+ * fixed dark. Whether that is RIGHT is a product decision and not a lint fix — a cockpit-style
+ * capture screen being deliberately dark is defensible, and converting ~25 colour decisions to
+ * tokens would change how this screen looks in light mode. Flagged for Tim rather than done
+ * quietly. [[a-stale-header-is-a-source-someone-trusts]]
+ */
+function makeStyles() {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: '#04120a' },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 8 },

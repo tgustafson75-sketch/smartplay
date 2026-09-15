@@ -16,23 +16,12 @@
  * which own the camera+mic) so we never double up.
  */
 
-import React, { useEffect } from 'react';
-import { View, Image, Text, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useEffect } from 'react';
 import { usePathname, useSegments } from 'expo-router';
 
 import { setRouteLabel } from '../services/screenContext';
-import { useListeningSessionStore } from '../store/listeningSessionStore';
 import { MESSAGING_ENABLED } from '../constants/featureFlags';
 
-// 2026-07-19 (Tim — "when the mic activates on any screen the main caddie should VISIBLY wake up").
-// The brand voice-state icon shown beside the universal badge so tapping the mic anywhere reads as
-// the SAME caddie coming alive (matches the Caddie-tab avatar). Same neon brand art.
-const STATE_ICONS = {
-  listening: require('../assets/icons/caddie/listening.png'),
-  speaking: require('../assets/icons/caddie/speaking.png'),
-  thinking: require('../assets/icons/caddie/thinking.png'),
-} as const;
 
 // Route prefix → human label for the caddie's "where am I" baseline. Longest/most-specific first.
 const ROUTE_LABELS: { prefix: string; label: string }[] = [
@@ -75,7 +64,6 @@ function labelForPath(path: string): string | null {
 }
 
 export function GlobalCaddieMic() {
-  const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const segments = useSegments();
   const path = pathname ?? '';
@@ -97,53 +85,17 @@ export function GlobalCaddieMic() {
   return null;
 }
 
-// The brand voice-state cue (icon + label) shown under the universal badge when a listening
-// session is active anywhere — so the caddie visibly "wakes up" on any screen. pointerEvents none.
-function CaddieStateCue() {
-  const state = useListeningSessionStore((s) => s.state);
-  const icon =
-    state === 'listening' ? STATE_ICONS.listening :
-    (state === 'thinking' || state === 'responding') ? STATE_ICONS.thinking :
-    // 2026-08-12 — no icon while opening: the mic is not live yet, and a glyph that appears for a
-    // few hundred milliseconds reads as a glitch rather than a state. See CaddieStatusStrip.
-    state === 'opening' ? null : null;
-  const label =
-    state === 'listening' ? 'Listening' :
-    state === 'thinking' ? 'Thinking' :
-    state === 'responding' ? 'Speaking' :
-    // ...and it must not ANNOUNCE "Listening" to a screen reader before the mic is open either.
-    state === 'opening' ? '' : '';
-  if (!icon) return null;
-  return (
-    <View style={styles.cue} pointerEvents="none">
-      <Image source={icon} style={styles.cueIcon} resizeMode="contain" />
-      <Text style={styles.cueLabel}>{label}</Text>
-    </View>
-  );
-}
+/**
+ * 2026-09-14 — CaddieStateCue REMOVED.
+ *
+ * The note above already recorded it: "the bottom bar is the cue now". It was left in place,
+ * rendered by nothing, which is the state that makes a superseded component indistinguishable from
+ * an unwired one. The bottom bar keeps the behaviour.
+ *
+ * Removing it took the whole subtree with it: STATE_ICONS, the styles block, and the View / Image /
+ * Text / useListeningSessionStore imports had no other consumer in this file. That cascade is the
+ * measure of how dead it was — and the reason the single warning was worth pulling on.
+ */
 
-const styles = StyleSheet.create({
-  wrap: {
-    position: 'absolute',
-    left: 10,
-    zIndex: 9000,
-    elevation: 9000,
-    alignItems: 'center',
-  },
-  cue: { alignItems: 'center', marginTop: 6, gap: 2 },
-  cueIcon: { width: 40, height: 40 },
-  cueLabel: {
-    color: '#88F700',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-});
 
 export default GlobalCaddieMic;

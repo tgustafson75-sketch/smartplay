@@ -86,7 +86,6 @@ import QuickLogShotSheet from '../../components/QuickLogShotSheet';
 import { fetchCourseGeometry, mappedHoleCount } from '../../services/courseGeometryService';
 import WindArrow from '../../components/caddie/WindArrow';
 import { useCurrentWeather } from '../../hooks/useCurrentWeather';
-import { playsLikeDistance } from '../../utils/playsLike';
 import { useElevationDeltaStatus } from '../../hooks/useElevationDelta';
 import { useTrustLevelStore } from '../../store/trustLevelStore';
 import { applyPresence } from '../../services/caddiePresence';
@@ -466,7 +465,6 @@ export default function CaddieTab() {
   // queries getGreenYardagesSync against the most recent GPS fix; if no
   // fix yet, falls back to static so the strip never renders "—".
   const yardageMode = useSettingsStore(s => s.yardageMode);
-  const setYardageMode = useSettingsStore(s => s.setYardageMode);
   // 2026-07-24 (Tim — "remove harry for now; keep caddie consistent between
   // Kevin and Serena and Tank" + "simplify into essentially one version").
   // The branded Cockpit (L1) carried the Harry persona binding and was a
@@ -767,16 +765,14 @@ export default function CaddieTab() {
     voiceEnabled,
     language,
     autoListenEnabled,
-    setVoiceEnabled,
   } = useSettingsStore(useShallow((s) => ({
     voiceGender: s.voiceGender,
     voiceEnabled: s.voiceEnabled,
     language: s.language,
     autoListenEnabled: s.autoListenEnabled,
-    setVoiceEnabled: s.setVoiceEnabled,
   })));
 
-  const { firstName: _firstName, goal: _goal, subscription_status, trial_started_at, dominantMiss: _dominantMiss, useCustomCaddie, customCaddiePortraitB64, customCaddieName } = usePlayerProfileStore(useShallow((s) => ({
+  const { firstName: _firstName, goal: _goal, subscription_status, trial_started_at, dominantMiss: _dominantMiss, useCustomCaddie, customCaddiePortraitB64 } = usePlayerProfileStore(useShallow((s) => ({
     firstName: s.firstName,
     goal: s.goal,
     subscription_status: s.subscription_status,
@@ -784,9 +780,7 @@ export default function CaddieTab() {
     dominantMiss: s.dominantMiss,
     useCustomCaddie: s.useCustomCaddie,
     customCaddiePortraitB64: s.customCaddiePortraitB64,
-    customCaddieName: s.customCaddieName,
   })));
-  const setUseCustomCaddie = usePlayerProfileStore((s) => s.setUseCustomCaddie);
   // 2026-06-11 (audit 4c) — portrait moved to its own store; read it there,
   // fall back to the legacy profile field until migration completes.
   const mediaPortrait = useCustomCaddieMediaStore((s) => s.customCaddiePortraitB64);
@@ -796,7 +790,6 @@ export default function CaddieTab() {
     proactive_kevin_enabled: s.proactive_kevin_enabled,
   })));
   const caddiePersonality = useSettingsStore(s => s.caddiePersonality);
-  const setCaddiePersonality = useSettingsStore(s => s.setCaddiePersonality);
   // 2026-05-30 — Fix FY: Local Mode indicator subscription. Re-renders
   // the leaf icon when the user toggles Local Mode in Settings.
   const localMode = useSettingsStore(s => s.localMode);
@@ -4606,88 +4599,18 @@ export default function CaddieTab() {
   );
 }
 
-// 2026-05-20 — Tools FAB expanded icon. Small green circle with a
-// tool icon inside; tapping fires the parent's route push and
-// auto-collapses the FAB.
-function ToolFabIcon({
-  icon,
-  label,
-  onPress,
-}: {
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      style={{
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(0, 200, 150, 0.18)',
-        borderWidth: 1.5,
-        borderColor: '#00C896',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <Ionicons name={icon} size={20} color="#00C896" />
-    </TouchableOpacity>
-  );
-}
-
 /**
- * 2026-05-26 — Trust-cycle FAB: head silhouette inside the standard
- * green pill, with a tiny sync badge in the top-right corner so the
- * icon reads as "tap to cycle through who's listening." Mirrors Tim's
- * verbal spec — "head silhouette with recycle circle around it" —
- * without needing a custom SVG.
+ * 2026-09-14 — ToolFabIcon + ToolFabIconCycler REMOVED.
+ *
+ * They served the pre-round Quick Tools FAB, which the 2026-07-04 elite-clean audit deleted on
+ * purpose (see the note above `quickLogOpen`): the ••• GlobalToolsMenu is the single canonical
+ * tools entry, and the FAB duplicated it along with a second voice toggle and a fourth trust
+ * cycler. These two icon sub-components were left behind by that sweep, rendered by nothing.
+ *
+ * Checked before deleting rather than assumed: the end-of-sprint gate still lists "Tools FAB
+ * expands left to icons", and these were the only code that looked like it. They are not — that
+ * item was answered by REMOVING the FAB, which is what the 07-04 note records.
  */
-function ToolFabIconCycler({
-  label,
-  onPress,
-}: {
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      style={{
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(0, 200, 150, 0.18)',
-        borderWidth: 1.5,
-        borderColor: '#00C896',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <Ionicons name="person-circle-outline" size={22} color="#00C896" />
-      <View style={{
-        position: 'absolute',
-        right: -2,
-        top: -2,
-        width: 16,
-        height: 16,
-        borderRadius: 8,
-        backgroundColor: '#060f09',
-        borderWidth: 1,
-        borderColor: '#00C896',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}>
-        <Ionicons name="sync" size={10} color="#00C896" />
-      </View>
-    </TouchableOpacity>
-  );
-}
 
 // ─── STYLES ───────────────────────────────
 

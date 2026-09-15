@@ -22,7 +22,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, BackHandler } from 'react-native';
 import { useDebugRouteGate } from '../hooks/useDebugRouteGate';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { safeBack } from '../services/safeBack';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
@@ -81,7 +81,6 @@ export default function MarkPositionScreen() {
   // after first render). All hooks now run first; the gate-deny
   // branch renders an empty View from the JSX body.
   const _gateAllowed = useDebugRouteGate();
-  const router = useRouter();
   const { colors } = useTheme();
 
   useFocusEffect(

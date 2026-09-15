@@ -115,7 +115,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 // plays-like + a short "why" line. NO fabricated success% (per the
 // illustration-data rule — the mockup's "78%" is illustrative only).
 import { decideShot } from '../services/caddieDecision';
-import { bagDistances } from '../services/shotStrategy';
 import { useTranslation } from 'react-i18next';
 
 // ─── Geo helpers ──────────────────────────────────────────────────
