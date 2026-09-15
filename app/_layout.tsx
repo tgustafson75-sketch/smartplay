@@ -100,8 +100,8 @@ import { useRestModeStore } from '../store/restModeStore';
 // fired by the declare-hole cross-check. Reads from undoMarkStore;
 // hides itself after the visibility window. Sibling to GlobalToast.
 import { UndoMarkBanner } from '../components/UndoMarkBanner';
-import GlobalCaddieMic from '../components/GlobalCaddieMic';
-import GlobalCaddieBar from '../components/GlobalCaddieBar';
+import { GlobalCaddieMic } from '../components/GlobalCaddieMic';
+import { GlobalCaddieBar } from '../components/GlobalCaddieBar';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 // 2026-05-21 — Consolidation 4: routine status logs gated.
 import { devLog } from '../services/devLog';

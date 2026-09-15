@@ -156,7 +156,16 @@ export default function AskYourSwingCard({ session }: Props) {
     } finally {
       setBusy(false);
     }
-  }, [frameUri, caddieName, session, language, voiceGender]);
+    /**
+     * 2026-09-14 — `activePersona` listed explicitly, not left to ride on `caddieName`.
+     *
+     * The callback sends the PERSONA to the API but only depended on the NAME derived from it. Two
+     * personas can share a display name — `getCaddieName` returns the static 'My Caddie' for a
+     * custom caddie — so the name could stay identical while the persona underneath changed, and the
+     * answer would come back in the wrong caddie's voice. It is a string recomputed each render, so
+     * listing it costs nothing. Same class as the practice-pillar staleness fixed in SmartMotion.
+     */
+  }, [frameUri, caddieName, activePersona, session, language, voiceGender]);
 
   const onMic = useCallback(async () => {
     if (listening || busy) return;

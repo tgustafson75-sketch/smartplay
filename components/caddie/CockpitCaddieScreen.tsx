@@ -46,7 +46,7 @@ import { resolveYardage, resolvedToFmb } from '../../services/yardageResolver';
 import { useGhostStore } from '../../store/ghostStore';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getCaddieName } from '../../lib/persona';
-import { subscribeFixChange } from '../../services/smartFinderService';
+import { subscribeFixChange, holeData as resolvedHoleData } from '../../services/smartFinderService';
 import { forceMarkPosition } from '../../services/positionMarkBus';
 import { refreshGpsAndReconcile } from '../../services/refreshGpsAction';
 
@@ -62,7 +62,6 @@ import {
 } from './cockpit/ShotResultRow';
 
 import type { VoiceState } from '../CaddieAvatar';
-import { holeData as resolvedHoleData } from '../../services/smartFinderService';
 import { useTranslation } from 'react-i18next';
 
 export interface CockpitCaddieScreenProps {

@@ -23,12 +23,15 @@ import { View, Text, Pressable, StyleSheet, Image } from 'react-native';
  * being punched through; edge pixels get partial alpha so there is no dark halo. Then cropped to its
  * own content, so it fills the box rather than floating in a fifth of empty frame.
  */
-const REST_MARK = require('../../assets/icons/caddie/rest-caddie.png');
 import { usePathname } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useRestModeStore } from '../../store/restModeStore';
 import { useRoundStore } from '../../store/roundStore';
 import { useTranslation } from 'react-i18next';
+
+// The rest mark is a require() rather than an import so the asset resolves through Metro's asset
+// pipeline; it lives BELOW the imports so it does not split them (import/first).
+const REST_MARK = require('../../assets/icons/caddie/rest-caddie.png');
 
 /**
  * 2026-06-13 — Rest overlay (Tim #8 battery drain). 2026-07-24 — extended to EVERY screen (Tim:

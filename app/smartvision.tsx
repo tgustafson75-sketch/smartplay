@@ -1182,7 +1182,16 @@ export default function SmartVisionScreen() {
       }
     })().finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [courseId, courseName, holeIndex, imageW, imageH, isRoundActive, courseHoles]);
+    /**
+     * 2026-09-14 — `currentHole` added, and it was a real staleness.
+     *
+     * This effect gates twice on `holeIndex === currentHole` — "live derive ONLY for the hole the
+     * player is STANDING on", and the same test before persisting a derived green. Without the dep
+     * the comparison used whatever `currentHole` was when the effect last ran, so advancing a hole
+     * while the screen stayed on the same view never re-evaluated it: the live derive stayed off for
+     * the hole he had just walked onto, or stayed on for one he had left.
+     */
+  }, [courseId, courseName, holeIndex, imageW, imageH, isRoundActive, courseHoles, currentHole]);
 
   // ── Derived projection ──────────────────────────────────────────
   // Phase 401 — single source of truth for center/zoom/bearing, shared
