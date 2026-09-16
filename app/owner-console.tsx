@@ -29,6 +29,7 @@ import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { useTheme } from '../contexts/ThemeContext';
 import { safeBack, goToTab } from '../services/safeBack';
+import { memoryWarningCount } from '../services/memoryPressure';
 import { useOwnerChecklistStore } from '../store/ownerChecklistStore';
 import { useIssueLogStore } from '../store/issueLogStore';
 import { useVoiceHitRateStore } from '../store/voiceHitRateStore';
@@ -120,12 +121,37 @@ export default function OwnerConsole() {
    * tone — amber when it wants attention — so "does anything need me?" is answered by colour, not by
    * reading. A zero here is good news and says so quietly.
    */
+  /**
+   * 2026-09-16 — how many times THIS launch the OS has told us it is running out of memory.
+   *
+   * Read plainly at render rather than subscribed to: there is no store behind it, and a warning
+   * firing while Tim is staring at this screen is not the case that matters. What matters is the
+   * number being here at all when he opens the console after something felt wrong — the watchdog
+   * termination that prompted services/memoryPressure.ts had no such number anywhere, on the device
+   * or in the log.
+   */
+  const memoryWarnings = memoryWarningCount();
+
   const status = useMemo(() => {
     const total = local + cloud;
     const localPct = total === 0 ? null : Math.round((local / total) * 100);
     return [
       { k: 'Checklist', v: checklistOpen === 0 ? 'clear' : `${checklistOpen} open`, warn: checklistOpen > 0, onPress: undefined as (() => void) | undefined },
       { k: 'Issues', v: issueCount === 0 ? 'none' : String(issueCount), warn: issueCount > 0, onPress: undefined as (() => void) | undefined },
+      {
+        k: 'Memory',
+        // 'clear' rather than '0' for the same reason the Sentry tag is '0' rather than absent: the
+        // quiet answer has to be a statement, not a blank.
+        v: memoryWarnings === 0 ? 'clear' : `${memoryWarnings} warn`,
+        warn: memoryWarnings > 0,
+        onPress: () => Alert.alert(
+          'Memory pressure',
+          memoryWarnings === 0
+            ? 'The OS has not warned us about memory this launch. Counted from app start; it resets every launch.'
+            : `${memoryWarnings} memory warning${memoryWarnings === 1 ? '' : 's'} since launch. iOS sends these shortly before it kills an app for using too much RAM — every Sentry event from this launch carries the same count as a tag.`,
+          [{ text: 'OK' }],
+        ) as void,
+      },
       {
         k: 'Voice on-device',
         v: localPct == null ? '—' : `${localPct}%`,
@@ -147,7 +173,7 @@ export default function OwnerConsole() {
         ),
       },
     ];
-  }, [checklistOpen, issueCount, local, cloud, resetVoiceRate]);
+  }, [checklistOpen, issueCount, memoryWarnings, local, cloud, resetVoiceRate]);
 
   const build = `${Constants.expoConfig?.version ?? '?'} · ${(Constants.expoConfig as { ios?: { buildNumber?: string } } | null)?.ios?.buildNumber ?? ''}`;
 

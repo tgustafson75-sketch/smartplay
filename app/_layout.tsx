@@ -32,6 +32,7 @@ import i18n from '../i18n';
 import { initFeelCapture } from '../services/feelCaptureService';
 import { startSwingCommentarySubscription } from '../services/swingCommentaryService';
 import { runLibraryDataMigration } from '../services/libraryDataMigration';
+import { startMemoryPressureTracking } from '../services/memoryPressure';
 import { initCrashCapture } from '../services/crashCapture';
 import { autoSendIssues } from '../services/issueLogExport';
 import { initListeningSession } from '../services/listeningSession';
@@ -781,6 +782,19 @@ function AppNavigator() {
   // uncaught-JS-error handler ASAP so async / event-handler crashes (which React error boundaries
   // can't catch) funnel into the Issue Log. Idempotent; runs before the heavier boot effects below.
   useEffect(() => { initCrashCapture(); }, []);
+
+  /**
+   * 2026-09-16 — MEMORY PRESSURE, so the next watchdog kill is diagnosable.
+   *
+   * Sentry issue 8ea87ebc was a WatchdogTermination with no stack trace, no footprint, and no way
+   * to tell whether the device had been under memory pressure at all — because nothing in the app
+   * listened for the warning iOS sends BEFORE it kills. This only records; it sheds nothing and
+   * changes no behaviour. See services/memoryPressure.ts for why the tag starts at '0'.
+   *
+   * Mounted here, next to initCrashCapture, because both are process-wide observers that must be
+   * running before the heavy boot effects below have a chance to allocate anything.
+   */
+  useEffect(() => startMemoryPressureTracking(), []);
 
   /**
    * 2026-09-06 (Tim — "the app log knows what's wrong and helps us create more responsive prompts
