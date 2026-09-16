@@ -322,12 +322,29 @@ function AppNavigator() {
       p != null && (/\/(caddie|dashboard|play|scorecard|swinglab)$/.test(p) || p === '/');
     // Pure tab↔tab navigation → keep the caddie talking (total presence).
     if (isMainTab(prev) && isMainTab(pathname)) return;
+    /**
+     * 2026-09-16 — THE PROOF ARRIVED, AND IT NAMES THIS GUARD. Known bug, deliberately unfixed.
+     *
+     * The 09-03 note here asked for it by name: "a report carrying preemptedBy: 'route_change' is
+     * the proof; one carrying 'speak' rules it out." Tim's Sep 15 issue log carries route_change,
+     * on /round/briefing — a silent round briefing.
+     *
+     * But the 09-03 guess about WHY was wrong, and the real cause is worse. It supposed the grace
+     * expires during the TTS fetch. The report says msSinceLastSpeakStart: 185213 — three minutes.
+     * Nothing was fetching and nothing was speaking. getLastSpeakStartedAt() is stamped only when a
+     * queue BODY RUNS, and nothing stamps enqueue time, so whenever the speak queue has been idle —
+     * exactly the state you are in when starting a fresh line — this comparison is trivially true.
+     * It fires, bumps speakGeneration, and kills the line enqueued milliseconds earlier.
+     *
+     * So the 2s grace cannot protect a speak-then-navigate when the queue was idle, which is the
+     * one case the comment above says it exists to protect.
+     *
+     * NOT FIXED HERE: this is the voice path and PATH 4, and Tim's call was to let build 27 go to
+     * Apple untouched. The fix (an enqueue-time stamp, graced off the later of the two) and the gate
+     * it has to carry are written up in docs/OPEN-ITEMS.md.
+     * [[a-stale-header-is-a-source-someone-trusts]]
+     */
     if (Date.now() - getLastSpeakStartedAt() > 2000) {
-      // 2026-09-03 — tagged so a field report can name THIS guard. It is the leading suspect for
-      // Tim's speechId 9 → 11 silent turn: getLastSpeakStartedAt() is stamped before the TTS fetch,
-      // not when audio starts, so this 2s grace expires while the utterance is still silent and a
-      // navigation can cut a line that has not made a sound yet. A report carrying
-      // preemptedBy: 'route_change' is the proof; one carrying 'speak' rules it out.
       void stopSpeaking('route_change').catch(() => {});
     }
   }, [pathname]);

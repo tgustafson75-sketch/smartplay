@@ -4762,3 +4762,71 @@ and watched it go red — an assertion that cannot fail is not an assertion); al
 exist in en/es/zh with matching interpolation placeholders; no probe files or mutation residue left.
 
 **Green:** tsc · lint **0** · jest **5073/5073 (417 suites)** · sim **1040/1040**.
+
+---
+
+## Day N — 2026-09-16
+
+### Shipped today
+
+**App Review rejection, both guidelines, and two builds at 27** (`194a54f0`, `570ac3c5`). Apple
+rejected 1.0 (26) on **5.1.1(iv)** and **2.1(b)**. Both were reachability defects; neither needed
+anything new built.
+
+- **5.1.1(iv)** — the permission primer had a postpone button and a primary button using the OS
+  dialog's own verb of consent. Fixed by deleting (Tim's call: no banners, toasts or new fallbacks).
+  One button, "Continue", which always calls `requestCorePermissions`. The per-feature Settings-link
+  notices already existed (`PermissionBanner`, `lie-analysis`, `useVoiceCaddie`) so nothing was added
+  in their place. A 30s timeout added alongside was then **removed** on Tim's call — a race can only
+  fire while the prompts are up, and bouncing the player mid-prompt is worse than waiting.
+- **2.1(b)** — reviewers could not find either subscription, for two independent reasons. Every route
+  to `/paywall` went through `triggerPaywall(feature)`, which fires only when `canAccess()` FAILS —
+  and a fresh install is on a trial, which grants `pro`, which passes every check. **For the first
+  fortnight of any install there was no reachable path to the purchase screen at all.** Added an
+  unconditional row in Settings and one in the Tools menu (2 taps). Separately, the ANNUAL product was
+  quoted on the paywall and hardcoded unbuyable; added the plan selector and lifted the choice into
+  `selectPackageForPlan` (pure, tested), dropping the `?? packages[0]` fallback that would have
+  billed for the plan the player just declined.
+- **Builds 27, both platforms**, off `570ac3c5`, clean tree. Both had the same autoIncrement trap —
+  `appVersionSource: local` + `autoIncrement` means building from 27 produces 28 — so each was staged
+  at 26 and EAS landed exactly on 27.
+
+**Memory instrumentation** (`da7dff34`). Sentry 8ea87ebc was a WatchdogTermination with no stack
+trace and no way to tell whether the device had been under pressure at all — a repo-wide search for
+`memoryWarning` found **zero handlers**. Added `services/memoryPressure.ts`: a `memory_warnings`
+scope tag (persisted natively, so a watchdog event rebuilt on the next launch carries it), a
+breadcrumb per warning, and one captured event per launch. The tag starts at `'0'` deliberately —
+absent means "not watching", zero means "watching and quiet", and telling those apart is the point.
+Surfaced on device as a Memory cell in the Owner Console status strip.
+
+### Verified
+
+- tsc · eslint **0 errors** · jest **5097/5097 (421 suites)** · sim **1040/1040**
+- **Every gate watched to fail first.** The permission-primer render test: 8/8 red against the actual
+  rejected build. Paywall reachability: red. The IAP selector: 4/6 red against build-26 logic. Memory
+  instrumentation: 7/8 red against the obvious naive implementation (listener + capture, no tag, no
+  throttle, not idempotent) — so they test properties, not existence.
+- Two render tests, not source greps: what a screen offers *before* the OS is asked, and whether a
+  fully-entitled player can reach the purchase screen, are facts a grep cannot see.
+
+### Open / carried
+
+- **Round briefing can go silent** — diagnosed today from Tim's issue log, **not fixed**, deferred so
+  27 could go to Apple untouched. Full write-up in [OPEN-ITEMS.md](OPEN-ITEMS.md). The Sep 15 report
+  carries `preemptedBy: route_change`, which is the evidence `app/_layout.tsx` asked for by name on
+  09-03 — but the cause is not what that comment guessed. `getLastSpeakStartedAt()` is stamped only
+  when a queue body runs, so after an idle queue the 2s grace is already expired and the guard cuts a
+  line enqueued milliseconds earlier. The grace cannot protect a speak-then-navigate from an idle
+  queue, which is the one case it exists for. Voice path + PATH 4 — needs a device round.
+- The other four entries in that report are **versionCode 1 / iOS 12** (Aug 28) and all already
+  addressed in code that cites them by date.
+- **Reply to Apple in App Store Connect** is still Tim's to send; the reviewer tap path is drafted.
+- **Sentry API access returns 403** for this org, so event counts and frequency cannot be queried —
+  which is the number that decides whether the watchdog event is noise or a bug. The `github` MCP
+  server is failing auth in the same session; may be one credential problem.
+
+### Notes
+
+The orphan-export guard in the sim caught `memoryWarningCount` with no caller — the docstring claimed
+Owner Tools and the wire did not exist. Wired rather than baselined, per THE LENS. Worth recording
+because it was a claim-without-a-wire inside a file written specifically to fix a diagnosis gap.

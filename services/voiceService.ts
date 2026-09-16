@@ -849,6 +849,13 @@ let lastStopAt = 0;
 // leaves a JUST-started line alone (intentional speak-then-navigate: tool opens,
 // SmartFinder fire a short line right before router.push).
 let lastSpeakStartedAt = 0;
+/**
+ * 2026-09-16 — THIS IS THE WRONG CLOCK FOR THE ROUTE-CHANGE GRACE, and app/_layout.tsx uses it as
+ * one. It is stamped below only when a queue BODY RUNS, so after an idle queue it reads minutes old
+ * — and the guard's `> 2000` test is then trivially true, cutting a line enqueued moments earlier.
+ * That is the silent round briefing in Tim's Sep 15 log. Deferred, not fixed: see docs/OPEN-ITEMS.md
+ * for the enqueue-time stamp this needs and the gate that must fail before it.
+ */
 export const getLastSpeakStartedAt = (): number => lastSpeakStartedAt;
 
 const enqueueSpeak = (body: () => Promise<void>): Promise<void> => {

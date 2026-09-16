@@ -944,3 +944,80 @@ can differ at once. Consequences, all verified:
 player hears. The fix is one owner — a `genderForPersona(persona)` resolver that reads
 `customCaddieBasePersona`, called by all three writers, with `voiceGender` becoming a pure mirror.
 Needs Tim's per-item OK.
+
+---
+
+## The round briefing can go silent, and the 2s grace that should prevent it is measured off the wrong clock
+
+**Found 2026-09-16, from Tim's issue log. Diagnosed, NOT fixed — deferred by Tim's call so build 27
+could go to Apple untouched. This is the voice path ([[voice-path-change-freeze]]) and PATH 4, so it
+needs a device round before it counts as shipped.**
+
+### The report
+
+```
+voice_silent_fail: speak_superseded
+[Sep 15 · 7:17 PM · /round/briefing · hole 1]
+source: enqueueSpeak · enqueuedAtGeneration: 5 · currentGeneration: 6
+msSinceLastSpeakStart: 185213 · preemptedBy: route_change · msSinceStop: 7
+```
+
+**This is the report `app/_layout.tsx` asked for by name.** The 2026-09-03 comment on the
+route-change guard reads: *"A report carrying `preemptedBy: 'route_change'` is the proof; one
+carrying 'speak' rules it out."* The field was added that day precisely to settle this, and Sep 15
+is the first entry that carries it. It says `route_change`. The guard is the culprit.
+
+### What is actually wrong — not what that comment guessed
+
+The comment predicted the 2s grace expires *during the TTS fetch*, because `lastSpeakStartedAt` is
+stamped before audio begins. The data says something else: `msSinceLastSpeakStart: 185213` is about
+**three minutes**. Nothing was mid-fetch and nothing was speaking.
+
+`lastSpeakStartedAt` (`services/voiceService.ts:886`) is stamped only when a queue body **actually
+runs**. Nothing stamps *enqueue* time. So when the speak queue has been idle — which is exactly the
+state you are in when starting a fresh line — that timestamp is already ancient, and the guard's
+test at `app/_layout.tsx:325`:
+
+```ts
+if (Date.now() - getLastSpeakStartedAt() > 2000) {
+  void stopSpeaking('route_change').catch(() => {});
+}
+```
+
+is trivially true. It fires and bumps `speakGeneration`, and the line enqueued moments earlier is
+dropped when its body finally runs (`enqueuedAtGeneration: 5` vs `currentGeneration: 6`,
+`msSinceStop: 7`).
+
+**So the 2s grace cannot protect a speak-then-navigate when the queue was idle — which is the one
+case it exists to protect.** Its own comment names that case: *"intentional speak-then-navigate:
+tool opens, SmartFinder fire a short line right before router.push."*
+
+`app/round/briefing.tsx` speaks on mount (`speak(...)` at :226, after async generation). React runs a
+child screen's effects *before* the parent layout's `pathname` effect, and the queue body is a
+microtask, so whether the briefing survives is a race — which is why it is intermittent rather than
+every round, and why it went unattributed for so long.
+
+### The fix when it is taken up
+
+Stamp an enqueue time alongside the start time, and grace off the **later of the two**:
+
+1. `services/voiceService.ts` — add `lastSpeakEnqueuedAt`, set it in `enqueueSpeak` at enqueue
+   (beside `const enqueuedAt = speakGeneration`), and export `getLastSpeakEnqueuedAt()`.
+2. `app/_layout.tsx:325` — compare against `Math.max(getLastSpeakStartedAt(), getLastSpeakEnqueuedAt())`.
+3. Replace the 2026-09-03 "would be the proof" comment with what the proof showed.
+
+One new variable and one changed comparison. No new surface.
+
+**Gate it must carry:** a test that enqueues a line into an idle queue, fires a route change inside
+the grace window, and asserts the line still speaks. Today's code drops it — so the gate fails
+before the fix, which is the bar. Then a real round: start one, listen for the briefing.
+
+### Also checked, and genuinely old
+
+The other four entries in the same report are from **versionCode 1 / iOS buildNumber 12** (Aug 28)
+and are all addressed in code that cites them by date:
+
+- `speak_catch — Network request failed` ×2 → `services/voiceService.ts:1893` opens with *"2026-08-28
+  (Tim's issue log — three `speak_catch — Network request failed` in fifteen minutes…)"*. Those
+  entries are the ones that drove the fix.
+- `empty_transcript` / `meter_silent_transcribing_anyway` → `services/voiceService.ts:361`, 2026-09-11.

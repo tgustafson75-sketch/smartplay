@@ -8,7 +8,32 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
-> ### ⚠️ LATEST — 2026-09-15 (afternoon). SHIPPED: commit `82d35dff`, OTA to PRODUCTION ANDROID.
+> ### ⚠️ LATEST — 2026-09-16. APP REVIEW REJECTION FIXED; BUILDS 27 BUILT, NOT SUBMITTED.
+>
+> Apple rejected 1.0 (26) on **5.1.1(iv)** (permission primer: a postpone button, and the OS dialog's
+> own verb of consent on our button) and **2.1(b)** (reviewers could not find either subscription).
+> Both fixed and pushed — `194a54f0`, `570ac3c5`. **iOS 27 and Android 27 are both BUILT** off
+> `570ac3c5` and waiting; Tim/Cowork do the uploads.
+>
+> **The 2.1(b) cause is the one worth carrying forward.** Every route to `/paywall` was a GATE —
+> `triggerPaywall(feature)` fires only when `canAccess()` FAILS. A fresh install starts a trial,
+> a trial grants `pro`, and `pro` passes every check, so **for the first fortnight of any install
+> there was no reachable path to the purchase screen at all.** App Review installs fresh. The paywall
+> was not hidden by a flag; it was behind a door that only opened from the inside. Same defect class
+> as the referral programme (09-13) and the three unaskable capabilities (09-12/13).
+>
+> **Still Tim's to do:** reply to Apple in App Store Connect with the reviewer tap path
+> (Caddie → ••• → Subscription → both prices), and upload the two builds.
+>
+> **Known bug, deliberately deferred:** the round briefing can go silent. Diagnosed 09-16, written up
+> in [OPEN-ITEMS.md](OPEN-ITEMS.md) with the fix and the gate it must carry. Voice path + PATH 4, so
+> it needs a device round; held back so 27 could go to Apple untouched.
+>
+> **Sentry API access is 403** for this org — event counts cannot be queried, which is what decides
+> whether the 09-15 WatchdogTermination is noise or a bug. Memory instrumentation landed (`da7dff34`)
+> so the *next* one arrives with evidence, but it is not in build 27.
+
+> ### 2026-09-15 (afternoon). SHIPPED: commit `82d35dff`, OTA to PRODUCTION ANDROID.
 >
 > Everything from today is live on the **production** channel, Android only — update group
 > `81bb1b64`, runtime 1.0.0, commit stamped `82d35dff`. **iOS was deliberately left alone** (Apple is
