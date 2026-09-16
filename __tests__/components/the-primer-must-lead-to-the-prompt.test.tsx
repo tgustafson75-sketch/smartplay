@@ -152,14 +152,15 @@ describe('the permission primer leads to the permission request and nowhere else
     expect(mockOpenSettings).not.toHaveBeenCalled();
   });
 
-  it('a request the OS never answers still lets the user out', async () => {
-    // The hang the postpone button used to rescue. ASK_TIMEOUT_MS is the rescue now, with no UI.
+  it('a request that throws still lets the user out', async () => {
+    // The remaining half of the no-strand property, after Tim removed the wall-clock timeout
+    // (2026-09-15): a request that FAILS exits. A request that never settles is not designed
+    // around — bouncing the player away while the system dialogs are still up is worse.
     jest.useFakeTimers();
     try {
-      mockRequest.mockReturnValue(new Promise(() => { /* never settles */ }));
+      mockRequest.mockRejectedValue(new Error('permission module unavailable'));
       mount();
       fireEvent.press(await screen.findByText('Continue'));
-      jest.advanceTimersByTime(30_000);
       await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/'));
     } finally {
       jest.useRealTimers();

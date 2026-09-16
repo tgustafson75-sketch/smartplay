@@ -38,9 +38,15 @@
  * is useful and, per Apple's own guidance, the only place a Settings link
  * belongs. It must never appear before the request.
  *
- * What is left carrying the no-strand property is invisible and has no UI:
- * requestCorePermissions is raced against ASK_TIMEOUT_MS, and a throw exits.
- * Without those, "no way past the prompt" could become "no way out at all".
+ * What is left carrying the no-strand property is a throw: requestCorePermissions
+ * is awaited inside try/catch, and any failure exits the screen rather than
+ * leaving the player on one dead button.
+ *
+ * 2026-09-15 (Tim) — there is deliberately NO timeout on that await. A race
+ * against a wall-clock can only fire while the OS dialogs are genuinely still
+ * up, and navigating away mid-prompt is worse than waiting: the player is left
+ * answering a system dialog for a screen that has gone. A request that never
+ * settles is a broken OS, not a case to design around.
  *
  * The tutorialsSeen flag flips on exit by ANY route, so we never re-ask on the
  * next cold launch. [[reachable-not-just-wired]]
@@ -80,14 +86,6 @@ const PERMISSIONS = [
 // 2026-07-18 — background ("Allow all the time") location is NOT requested here anymore; it's
 // asked just-in-time when a round starts (store-compliant). See services/permissionsManager.ts.
 
-/**
- * A hung permission request used to be survivable because a postpone button was still on screen.
- * It isn't any more, so the hang itself has to be impossible: whatever the OS does or fails to do,
- * this screen ends. Long enough that a slow Android multi-dialog sequence finishes normally and
- * nobody is bounced mid-prompt, short enough that nobody thinks the app is dead.
- */
-const ASK_TIMEOUT_MS = 30_000;
-
 export default function PermissionsScreen() {
   const { t } = useTranslation();
   const router = useRouter();
@@ -110,7 +108,7 @@ export default function PermissionsScreen() {
   // Single exit point — flips the tutorial flag (so we never re-ask
   // automatically) and routes back through index for the next step.
   // Using router.replace so the user can't swipe back into this screen.
-  const exit = async (reason: 'asked' | 'already-asked' | 'ask-timed-out' | 'ask-failed') => {
+  const exit = async (reason: 'asked' | 'already-asked' | 'ask-failed') => {
     try { useSettingsStore.getState().markTutorialSeen('core_permissions_requested'); } catch {}
     console.log('[permissions] exit:', reason);
     try { router.replace('/'); } catch {}
@@ -127,21 +125,7 @@ export default function PermissionsScreen() {
     if (busy) return;
     setBusy(true);
     try {
-      // Raced, not awaited bare: see ASK_TIMEOUT_MS. The loser of the race is discarded, so a late
-      // reply cannot re-enter and move the screen under the user.
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const r = await Promise.race([
-        requestCorePermissions(),
-        new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), ASK_TIMEOUT_MS); }),
-      ]);
-      if (timer) clearTimeout(timer);
-      if (!r) {
-        // The OS never came back. Leave rather than hold the player on a screen with one dead
-        // button — the per-tool permission UX is downstream either way.
-        console.log('[permissions] requestCorePermissions timed out after', ASK_TIMEOUT_MS, 'ms');
-        void exit('ask-timed-out');
-        return;
-      }
+      const r = await requestCorePermissions();
       setResult(r);
       // Long enough to see the checks land, then out — whatever the answers were.
       setTimeout(() => { void exit('asked'); }, 600);
