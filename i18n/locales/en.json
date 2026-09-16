@@ -199,7 +199,13 @@
       "owner_console_sub": "Checklist, issue log, harnesses, diagnostics and owner actions — one screen",
       "no_home_courses_yet": "None yet — pick them from the course list.",
       "choose_home_courses": "Choose from the course list",
-      "set_up_your_profile": "Set up your profile"
+      "set_up_your_profile": "Set up your profile",
+      "subscription_plans": "Plans & subscription",
+      "subscribed_manage_or_switch": "Subscribed — view plans or restore a purchase",
+      "lifetime_access": "Lifetime access",
+      "free_trial_see_plans": "Free trial — see plans",
+      "free_trial_days_left": "Free trial — {{days}} days left",
+      "see_plans_from_price": "See plans — from {{price}}/month"
     },
     "placeholder": {
       "search_settings": "Search settings",
@@ -222,7 +228,8 @@
       "help_about": "Help & About",
       "owner_tools": "Owner Tools",
       "reset": "Reset",
-      "people_coaching": "People & Coaching"
+      "people_coaching": "People & Coaching",
+      "subscription": "Subscription"
     },
     "accessibility_label": {
       "edit_profile": "Edit profile",
@@ -262,7 +269,8 @@
       "voice_local_hit_rate_tap": "Voice local hit-rate; tap to reset",
       "reset_what_the_caddie_learned": "Reset what the caddie learned about how much to talk",
       "open_the_owner_console": "Open the owner console",
-      "remove_home_course": "Remove {{course}} from your home courses"
+      "remove_home_course": "Remove {{course}} from your home courses",
+      "view_subscription_plans": "View subscription plans and restore purchases"
     },
     "label": {
       "handedness": "Handedness",
@@ -1265,24 +1273,21 @@
       "terms_of_service": "Terms of Service",
       "subscription_automatically_renews_unless_can": "Subscription automatically renews unless cancelled at least 24 hours before the end of the trial period.",
       "give_me_another_days": "Give me another {{TRIAL_EXTENSION_DAYS}} days",
-      "or_save": "or {{displayPrice}}/{{period}} — save {{savingsPct}}%",
       "free_for_days": "Free for {{trialDays}} days",
-      "day_free_trial_cancel_anytime": "{{paywall_subhead}}{{n}} {{trial_days}}-day free trial. Cancel anytime."
+      "day_free_trial_cancel_anytime": "{{paywall_subhead}}{{n}} {{trial_days}}-day free trial. Cancel anytime.",
+      "save_pct": "Save {{savingsPct}}%"
     }
   },
   "permissions": {
     "permissions_screen": {
       "quick_setup": "Quick setup",
-      "we_only_ask_once_allow": "We only ask once. Allow what you want — every tool below uses these grants.",
+      "we_only_ask_once_allow": "We only ask once. Your phone will ask about each one next — every tool below uses what you grant.",
       "when_you_start_a_round": "When you start a round, we'll ask once more to keep GPS running with your screen off — so yardages update in the cart.",
-      "skip_for_now": "Skip for now",
-      "open_settings": "Open Settings",
-      "you_can_change_any_of": "You can change any of this later in Settings."
+      "you_can_change_any_of": "You can change any of this later in Settings.",
+      "continue": "Continue"
     },
     "accessibility_label": {
-      "allow_camera_microphone_location_and": "Allow camera, microphone, location, and photo library permissions",
-      "skip_for_now_set_up": "Skip for now — set up permissions later in Settings",
-      "open_device_settings_to_manage": "Open device Settings to manage permissions manually"
+      "continue_to_the_permission_requests": "Continue to the permission requests"
     }
   },
   "practice_session_history": {
@@ -3865,7 +3870,8 @@
       "youtube_channel": "YouTube Channel",
       "settings": "Settings",
       "app_refresh": "App Refresh",
-      "invite_a_friend": "Invite a friend"
+      "invite_a_friend": "Invite a friend",
+      "subscription": "Subscription"
     }
   },
   "capture_overlay": {

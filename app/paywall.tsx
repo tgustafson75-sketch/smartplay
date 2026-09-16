@@ -24,6 +24,7 @@ import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
 import { getApiBaseUrl } from '../services/apiBase';
 import {
   getPackages,
+  selectPackageForPlan,
   purchasePackage,
   restorePurchases,
   billingAvailable,
@@ -51,6 +52,16 @@ export default function PaywallScreen() {
     try { return currentTrialExtensionOffer(); } catch { return null; }
   });
   const [busy, setBusy] = useState(false);
+  /**
+   * 2026-09-15 — APP REVIEW, GUIDELINE 2.1(b): "we cannot locate the In-App Purchases, such as
+   * SmartPlay Caddie Full — Monthly and ... Annual".
+   *
+   * The annual product was quoted on this card, spoken aloud in the voice line, and priced down to
+   * the savings percentage — and there was NO WAY TO BUY IT. handleSubscribe hardcoded the MONTHLY
+   * package and the card was static text. A reviewer looking for two products could only ever have
+   * found one, because only one was ever for sale. This is the selector. [[reachable-not-just-wired]]
+   */
+  const [plan, setPlan] = useState<'monthly' | 'annual'>('monthly');
   /**
    * 2026-08-30 — OWNER PREVIEW, so this screen can be photographed.
    *
@@ -118,7 +129,7 @@ export default function PaywallScreen() {
    */
   const handleSubscribe = async () => {
     if (busy) return;
-    track('subscribe_tapped', { subscription_status });
+    track('subscribe_tapped', { subscription_status, plan });
     if (!billingAvailable()) {
       // Honest, not a fake success. This is the state on a binary built before the billing module.
       Alert.alert(
@@ -131,25 +142,9 @@ export default function PaywallScreen() {
     setBusy(true);
     try {
       const packages = await getPackages();
-      /**
-       * Default to the MONTHLY package — it is what the headline, the pricing card and the spoken
-       * line all quote, so buying anything else would contradict what the player was just told.
-       *
-       * 2026-08-30 — matched on RevenueCat's `packageType` FIRST, falling back to the App Store
-       * product id. Matching only on the product id worked against App Store Connect and found
-       * nothing against RevenueCat's Test Store, whose products are named `monthly` / `yearly` /
-       * `lifetime`. It would have silently fallen through to packages[0] — which is whatever the
-       * offering happens to list first, and could be the lifetime product. Selling someone a
-       * lifetime plan because a string did not match is not a fallback, it is a wrong charge.
-       * packageType is the store-agnostic answer and is what the SDK is built around.
-       */
-      const byType = packages.find(
-        (p) => (p as { packageType?: string })?.packageType === 'MONTHLY',
-      );
-      const byProductId = packages.find(
-        (p) => (p as { product?: { identifier?: string } })?.product?.identifier === PRICING.monthly.productId,
-      );
-      const pkg = byType ?? byProductId ?? packages[0];
+      // The decision lives in services/billing/purchases.selectPackageForPlan — pure, tested, and
+      // deliberately willing to return null rather than charge for a product nobody chose.
+      const pkg = selectPackageForPlan(packages, plan);
       if (!pkg) {
         Alert.alert(t('paywall.alert.not_available_yet'), t('paywall.alert.the_subscription_is_not_on'), [{ text: 'OK' }]);
         return;
@@ -159,16 +154,16 @@ export default function PaywallScreen() {
         // The trial's clock starts NOW, at the purchase — not when the app was first opened.
         if (result.trialStartedAt != null) setTrialStartedAt(result.trialStartedAt);
         setSubscriptionStatus(result.status);
-        track('subscribe_succeeded', { status: result.status });
+        track('subscribe_succeeded', { status: result.status, plan });
         safeBack();
         return;
       }
       // A player who backed out of Apple's sheet chose that. Showing them an error reads as a bug.
       if (result.reason === 'cancelled') {
-        track('subscribe_cancelled');
+        track('subscribe_cancelled', { plan });
         return;
       }
-      track('subscribe_failed', { reason: result.reason });
+      track('subscribe_failed', { reason: result.reason, plan });
       Alert.alert(
         t('paywall.alert.that_didn_t_go_through'),
         t('paywall.alert.nothing_was_charged_give_it'),
@@ -283,10 +278,42 @@ export default function PaywallScreen() {
             ))}
           </View>
 
+          {/* Two products, two tappable rows. The card used to state the annual price as prose
+              under a monthly heading, which is why only one of the two IAPs was ever reachable. */}
           <View style={styles.pricingCard}>
             <Text style={styles.pricingTitle}>{t('paywall.paywall_screen.smartplay_caddie_pro')}</Text>
-            <Text style={styles.pricingPrice}>{PRICING.monthly.displayPrice} / {PRICING.monthly.period}</Text>
-            <Text style={styles.pricingTrial}>{t('paywall.paywall_screen.or_save', { displayPrice: PRICING.annual.displayPrice, period: PRICING.annual.period, savingsPct: PRICING.annual.savingsPct })}</Text>
+
+            <View style={styles.planRow}>
+              {(['monthly', 'annual'] as const).map((key) => {
+                const selected = plan === key;
+                const p = PRICING[key];
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    style={[styles.planOption, selected && styles.planOptionSelected]}
+                    onPress={() => setPlan(key)}
+                    disabled={busy}
+                    activeOpacity={0.88}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={`${p.displayPrice} per ${p.period}`}
+                  >
+                    <Text style={[styles.planPrice, selected && styles.planPriceSelected]}>
+                      {p.displayPrice}
+                    </Text>
+                    <Text style={[styles.planPeriod, selected && styles.planPeriodSelected]}>
+                      {`/ ${p.period}`}
+                    </Text>
+                    {key === 'annual' && (
+                      <Text style={styles.planBadge}>
+                        {t('paywall.paywall_screen.save_pct', { savingsPct: PRICING.annual.savingsPct })}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
             <Text style={styles.pricingTrial}>{t('paywall.paywall_screen.free_for_days', { trialDays: PRICING.trialDays })}</Text>
           </View>
 
@@ -412,6 +439,23 @@ const styles = StyleSheet.create({
     gap: 6,
     marginBottom: 24,
   },
+  planRow: { flexDirection: 'row', gap: 10, width: '100%', marginTop: 4 },
+  planOption: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#1e3a28',
+    backgroundColor: '#07170f',
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+  },
+  planOptionSelected: { borderColor: '#00C896', backgroundColor: 'rgba(0,200,150,0.12)' },
+  planPrice: { color: '#c2cad4', fontSize: 22, fontWeight: '900' },
+  planPriceSelected: { color: '#ffffff' },
+  planPeriod: { color: '#6b7d72', fontSize: 12, fontWeight: '700', marginTop: 2 },
+  planPeriodSelected: { color: '#00C896' },
+  planBadge: { color: '#00C896', fontSize: 11, fontWeight: '800', marginTop: 6 },
   pricingTitle: {
     color: '#00C896',
     fontSize: 12,

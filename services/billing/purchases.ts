@@ -337,6 +337,46 @@ export async function getPackages(): Promise<unknown[]> {
   }
 }
 
+/**
+ * Which of the offering's packages is the plan the player just tapped — or null.
+ *
+ * PURE and exported for the same reason `statusFromCustomerInfo` is: this is a decision, the rest
+ * of this file is a native module the jest suite cannot load, and an untested decision about WHICH
+ * PRODUCT TO CHARGE FOR is the most expensive kind to get wrong.
+ *
+ * 2026-09-15 — lifted out of app/paywall.tsx, where it was inline, hardcoded to monthly, and ended
+ * `?? packages[0]`. Two separate defects rode on that:
+ *
+ *   - the ANNUAL product could not be bought at all (App Review 2.1(b): "we cannot locate the
+ *     In-App Purchases, such as ... Annual"), because nothing ever asked for it; and
+ *   - the positional fallback would charge for whatever the offering happened to list first,
+ *     which the offering is under no obligation to order and which may be the lifetime product.
+ *
+ * Returning null is a real answer: the caller says "not on sale yet" and charges nobody. Matching
+ * the wrong product is never better than matching none. [[two-owners-is-the-root-cause]]
+ */
+export type PurchasablePlan = 'monthly' | 'annual';
+
+/** RevenueCat's own package types. The Test Store names products `monthly`/`yearly`, so the
+ *  product-id match below is the fallback, not the primary. */
+const PACKAGE_TYPE_FOR_PLAN: Record<PurchasablePlan, string> = {
+  monthly: 'MONTHLY',
+  annual: 'ANNUAL',
+};
+
+export function selectPackageForPlan(packages: readonly unknown[], plan: PurchasablePlan): unknown | null {
+  const wantedType = PACKAGE_TYPE_FOR_PLAN[plan];
+  const wantedProductId = PRICING[plan].productId;
+  const byType = packages.find(
+    (p) => (p as { packageType?: string })?.packageType === wantedType,
+  );
+  if (byType) return byType;
+  const byProductId = packages.find(
+    (p) => (p as { product?: { identifier?: string } })?.product?.identifier === wantedProductId,
+  );
+  return byProductId ?? null;
+}
+
 export type PurchaseOutcome =
   | { ok: true; status: SubscriptionStatus; trialStartedAt: number | null }
   | { ok: false; reason: 'cancelled' | 'unavailable' | 'failed'; message?: string };

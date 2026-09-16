@@ -11,15 +11,43 @@
  * one batch. After that, every tool checks the granted state and uses
  * it directly — no per-tool dialog.
  *
- * Defensive design: every state has a "Skip for now" button so this
- * screen can never strand the user. Skipping is fine — individual tools
- * still have their own per-call permission UX as a fallback. The
- * tutorialsSeen flag flips on EITHER Allow All or Skip so we don't
- * re-ask on the next cold launch.
+ * 2026-09-15 — APP REVIEW, GUIDELINE 5.1.1(iv). Rejected on two counts,
+ * both about this screen:
+ *
+ *   - the primary button used the word Apple's own dialog uses, which reads as
+ *     the app telling the user how to answer that dialog. It says "Continue"
+ *     now: the words on OUR button describe leaving OUR screen, and the verb
+ *     of consent belongs to the system prompt.
+ *   - a postpone button let the user close the explanation and never reach the
+ *     request. A primer may explain a permission request; it may not stand in
+ *     for one. That button is gone, and Continue ALWAYS asks.
+ *
+ * (Both rejected strings are deliberately not quoted here — a release grep for
+ * them should come back clean on this file.)
+ *
+ * Removing Skip removed the escape hatch this screen was built around. Tim's
+ * call on the replacement (2026-09-15): FIX BY REMOVING — no banner, no toast,
+ * no second state. So the screen still exits on its own the moment the OS is
+ * done, whatever the answers were; declining every dialog is a complete, valid
+ * finish, not an error worth a screen of its own.
+ *
+ * The recovery path for a denial already exists and is not duplicated here:
+ * components/PermissionBanner (location, on the Caddie tab), app/lie-analysis
+ * and hooks/useVoiceCaddie (camera and mic) each show their own notice with a
+ * Linking.openSettings link WHEN the feature is opened — which is both where it
+ * is useful and, per Apple's own guidance, the only place a Settings link
+ * belongs. It must never appear before the request.
+ *
+ * What is left carrying the no-strand property is invisible and has no UI:
+ * requestCorePermissions is raced against ASK_TIMEOUT_MS, and a throw exits.
+ * Without those, "no way past the prompt" could become "no way out at all".
+ *
+ * The tutorialsSeen flag flips on exit by ANY route, so we never re-ask on the
+ * next cold launch. [[reachable-not-just-wired]]
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -52,6 +80,14 @@ const PERMISSIONS = [
 // 2026-07-18 — background ("Allow all the time") location is NOT requested here anymore; it's
 // asked just-in-time when a round starts (store-compliant). See services/permissionsManager.ts.
 
+/**
+ * A hung permission request used to be survivable because a postpone button was still on screen.
+ * It isn't any more, so the hang itself has to be impossible: whatever the OS does or fails to do,
+ * this screen ends. Long enough that a slow Android multi-dialog sequence finishes normally and
+ * nobody is bounced mid-prompt, short enough that nobody thinks the app is dead.
+ */
+const ASK_TIMEOUT_MS = 30_000;
+
 export default function PermissionsScreen() {
   const { t } = useTranslation();
   const router = useRouter();
@@ -74,34 +110,48 @@ export default function PermissionsScreen() {
   // Single exit point — flips the tutorial flag (so we never re-ask
   // automatically) and routes back through index for the next step.
   // Using router.replace so the user can't swipe back into this screen.
-  const exit = async (reason: 'allowed' | 'skipped' | 'already-asked') => {
+  const exit = async (reason: 'asked' | 'already-asked' | 'ask-timed-out' | 'ask-failed') => {
     try { useSettingsStore.getState().markTutorialSeen('core_permissions_requested'); } catch {}
     console.log('[permissions] exit:', reason);
     try { router.replace('/'); } catch {}
   };
 
-  const handleAllowAll = async () => {
+  /**
+   * Continue — the only control on the screen, and it always makes the request.
+   *
+   * Every finish is the same finish: ask, show the checks land for a beat, leave. A partial or
+   * total denial is NOT treated as a failure and gets no extra state — the tools that need each
+   * permission carry their own notice, and the player meets it when they open one.
+   */
+  const handleContinue = async () => {
     if (busy) return;
     setBusy(true);
     try {
-      const r = await requestCorePermissions();
+      // Raced, not awaited bare: see ASK_TIMEOUT_MS. The loser of the race is discarded, so a late
+      // reply cannot re-enter and move the screen under the user.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const r = await Promise.race([
+        requestCorePermissions(),
+        new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), ASK_TIMEOUT_MS); }),
+      ]);
+      if (timer) clearTimeout(timer);
+      if (!r) {
+        // The OS never came back. Leave rather than hold the player on a screen with one dead
+        // button — the per-tool permission UX is downstream either way.
+        console.log('[permissions] requestCorePermissions timed out after', ASK_TIMEOUT_MS, 'ms');
+        void exit('ask-timed-out');
+        return;
+      }
       setResult(r);
-      // Wait a beat so the user sees the green checks before we route
-      // away. Then exit. Partial grants are still a valid finish state —
-      // individual tools handle their own re-prompts if needed.
-      setTimeout(() => { void exit('allowed'); }, 500);
+      // Long enough to see the checks land, then out — whatever the answers were.
+      setTimeout(() => { void exit('asked'); }, 600);
     } catch (e) {
       console.log('[permissions] requestCorePermissions threw', e);
-      // Still exit so user is never stuck. Tools fall back to per-call
-      // permission UX.
-      void exit('allowed');
+      // Never strand the user. Tools fall back to per-call permission UX.
+      void exit('ask-failed');
     } finally {
       setBusy(false);
     }
-  };
-
-  const handleSkip = () => {
-    void exit('skipped');
   };
 
   const renderStateIcon = (granted: boolean | undefined) => {
@@ -147,32 +197,25 @@ export default function PermissionsScreen() {
           {t('permissions.permissions_screen.when_you_start_a_round')}
         </Text>
 
+        {/**
+          * GUIDELINE 5.1.1(iv) — ONE control, and it always reaches the system dialogs.
+          *
+          * There is deliberately nothing else on this screen: no skip, no "not now", no Settings
+          * shortcut. A Settings link here would be the same defect wearing a different label — the
+          * player leaves the explanation without ever meeting the request. It belongs downstream,
+          * on the feature that needs the permission, which is where the app already puts it.
+          *
+          * The label says "Continue" because it describes leaving OUR screen. "Allow" is the OS
+          * dialog's word, and putting it on our button is what the rejection was about.
+          */}
         <TouchableOpacity
           style={[styles.allowBtn, busy && styles.allowBtnBusy]}
-          onPress={handleAllowAll}
+          onPress={handleContinue}
           disabled={busy}
           accessibilityRole="button"
-          accessibilityLabel={t('permissions.accessibility_label.allow_camera_microphone_location_and')}
+          accessibilityLabel={t('permissions.accessibility_label.continue_to_the_permission_requests')}
         >
-          <Text style={styles.allowBtnText}>{busy ? 'Asking…' : 'Allow all'}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.skipBtn}
-          onPress={handleSkip}
-          accessibilityRole="button"
-          accessibilityLabel={t('permissions.accessibility_label.skip_for_now_set_up')}
-        >
-          <Text style={styles.skipText}>{t('permissions.permissions_screen.skip_for_now')}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.linkBtn}
-          onPress={() => Linking.openSettings()}
-          accessibilityRole="button"
-          accessibilityLabel={t('permissions.accessibility_label.open_device_settings_to_manage')}
-        >
-          <Text style={styles.linkText}>{t('permissions.permissions_screen.open_settings')}</Text>
+          <Text style={styles.allowBtnText}>{busy ? 'Asking…' : t('permissions.permissions_screen.continue')}</Text>
         </TouchableOpacity>
 
         <Text style={styles.foot}>{t('permissions.permissions_screen.you_can_change_any_of')}</Text>
@@ -200,16 +243,11 @@ const styles = StyleSheet.create({
   },
   rowLabel: { color: '#ffffff', fontSize: 15, fontWeight: '800' },
   rowWhy: { color: '#c2cad4', fontSize: 12, marginTop: 4, lineHeight: 17 },
-  warningText: { color: '#FFA500', fontSize: 12, marginBottom: 8, textAlign: 'center' },
   allowBtn: {
     backgroundColor: '#00C896', borderRadius: 14, paddingVertical: 14,
     alignItems: 'center', marginTop: 6,
   },
   allowBtnBusy: { opacity: 0.6 },
   allowBtnText: { color: '#0d1a0d', fontSize: 15, fontWeight: '900' },
-  skipBtn: { paddingVertical: 12, alignItems: 'center' },
-  skipText: { color: '#c2cad4', fontSize: 13, fontWeight: '700' },
-  linkBtn: { paddingVertical: 8, alignItems: 'center' },
-  linkText: { color: '#00C896', fontSize: 12, fontWeight: '700' },
   foot: { color: '#6b7280', fontSize: 11, textAlign: 'center', marginTop: 12 },
 });

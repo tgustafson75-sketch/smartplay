@@ -489,6 +489,25 @@ export function GlobalToolsMenu() {
 
             {/* ─── APP ─────────────────────────────────────────── */}
             <SectionHeader colors={colors}>APP</SectionHeader>
+            {/**
+              * 2026-09-15 — APP REVIEW 2.1(b). `nav`, deliberately, NOT `navOrPaywall`.
+              *
+              * Every other route to /paywall in this file and in the app goes through
+              * triggerPaywall, which by design only fires when the player has LOST access. That
+              * made the purchase screen unreachable for anyone on a trial or a subscription —
+              * including a reviewer on a fresh install — and is why App Review could not find
+              * either product. This row does no entitlement check at all, because "can I see what
+              * I'd be paying for?" is not a gated feature. [[reachable-not-just-wired]]
+              */}
+            {SUBSCRIPTIONS_ENABLED ? (
+              <Row
+                icon="card-outline"
+                label={t('tools_global_tools_menu.label.subscription')}
+                sub="Plans, pricing, and restore purchases"
+                onPress={() => nav('/paywall')}
+                colors={colors}
+              />
+            ) : null}
             <Row
               icon="settings-outline"
               label={t('tools_global_tools_menu.label.settings')}

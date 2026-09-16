@@ -60,7 +60,8 @@ import { PRESENCE_PROFILES, presenceFromFlags, applyPresence as applyPresenceFla
  * 'walk' card): a surface explaining how to connect Health Connect, in a build that cannot, is the
  * app lying to someone who went looking. The rows stay in the code and come back with the flag.
  */
-import { HEALTH_CONNECT_ENABLED } from '../services/featureAccess';
+import { HEALTH_CONNECT_ENABLED, SUBSCRIPTIONS_ENABLED, trialDaysLeft } from '../services/featureAccess';
+import { PRICING } from '../lib/pricing';
 import CloudBackupCard from '../components/settings/CloudBackupCard';
 import type { ThemeColors } from '../theme/tokens';
 import { getCaddieName, selectablePersonas } from '../lib/persona';
@@ -329,6 +330,30 @@ export default function Settings() {
     }
   }, [t]);
   const handicapIndex = usePlayerProfileStore(s => s.handicap_index);
+
+  /**
+   * The one line under the Subscription row. Subscribed to individually rather than pulled from the
+   * destructure above so the row re-renders when a purchase lands on the paywall and the user comes
+   * back — a stale "Free trial" under a row they just bought from reads as a failed payment.
+   */
+  const subscriptionStatus = usePlayerProfileStore(s => s.subscription_status);
+  const trialStartedAt = usePlayerProfileStore(s => s.trial_started_at);
+  const subscriptionSummary = useMemo(() => {
+    const days = trialDaysLeft(trialStartedAt);
+    switch (subscriptionStatus) {
+      case 'active':
+        return t('settings.text.subscribed_manage_or_switch');
+      case 'lifetime':
+        return t('settings.text.lifetime_access');
+      case 'trial':
+        // days can be null when the store has not been reached yet — say less rather than say 0.
+        return days == null
+          ? t('settings.text.free_trial_see_plans')
+          : t('settings.text.free_trial_days_left', { days });
+      default:
+        return t('settings.text.see_plans_from_price', { price: PRICING.monthly.displayPrice });
+    }
+  }, [subscriptionStatus, trialStartedAt, t]);
   // 2026-05-26 — Fix AB Phase 1: GHIN # local edit mirror.
   // 2026-06-09 — Account email. Setting it to an owner-allowlisted address
   // unlocks Owner Tools (the auto-mirror stops once the allow-list has >1
@@ -641,6 +666,45 @@ export default function Settings() {
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
         </TouchableOpacity>
+
+        {/**
+          * SUBSCRIPTION — 2026-09-15, APP REVIEW GUIDELINE 2.1(b).
+          *
+          * "We cannot locate the In-App Purchases ... within the app." They were right, and the
+          * reason is worth writing down because it is this project's recurring defect: the paywall
+          * was BUILT, correct, and unreachable.
+          *
+          * Every single route to `/paywall` was a GATE — triggerPaywall(feature) fired only when
+          * canAccess() returned false. A fresh install starts a 14-day trial, a trial grants 'pro',
+          * and 'pro' passes every canAccess check, so for the first fortnight of any install there
+          * is no reachable path to the purchase screen at all. App Review installs fresh. They were
+          * always going to land inside the trial, and nothing they could tap would show them a
+          * product. The screen was not hidden behind a bug; it was behind a door that only opens
+          * from the inside.
+          *
+          * So: one row, no entitlement check, always here. A player who wants to see what they are
+          * paying for — or subscribe early, or restore on a new phone — should never have to lose
+          * access first in order to be offered the thing. [[reachable-not-just-wired]]
+          * [[smartplay-defect-class-unwired-halves]]
+          */}
+        {SUBSCRIPTIONS_ENABLED ? (
+          <CollapsibleSection title={t('settings.title.subscription')} icon="card-outline">
+            <TouchableOpacity
+              style={[rowDivStyle, { alignItems: 'center' }]}
+              onPress={() => router.push('/paywall' as never)}
+              accessibilityRole="button"
+              accessibilityLabel={t('settings.accessibility_label.view_subscription_plans')}
+            >
+              <View style={styles.rowText}>
+                <Text style={labelStyle}>{t('settings.text.subscription_plans')}</Text>
+                <Text style={[styles.rowSub, { color: colors.text_muted }]}>
+                  {subscriptionSummary}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.text_muted} />
+            </TouchableOpacity>
+          </CollapsibleSection>
+        ) : null}
 
         {/* CADDIE TEAM — Phase 105 per-pillar assignments */}
         <CollapsibleSection title={t('settings.title.caddie')} icon="bag-outline">
