@@ -79,6 +79,49 @@ wholesale.
 
 ---
 
+## R8 / ProGuard is OFF — Google Play says 2% obfuscation · **added 2026-09-18, parked by Tim**
+
+Play Console, release 25 (1.0.0): *"DEX code optimization is below our threshold — Obfuscation (2%).
+Percentages under 25% in any category may impact your visibility and publishing capabilities. Fix by
+Feb 2027."*
+
+**Cause, exactly.** `app.json` → `expo-build-properties` sets `minSdkVersion`, `compileSdkVersion`
+and `targetSdkVersion` for Android and nothing else, so `enableProguardInReleaseBuilds` keeps its
+default of **false**. Nothing in the repo has ever turned R8 on — a repo-wide search for `proguard`,
+`minify` and `R8` found no config, no keep-rules file, and no note. The 2% Play is measuring is
+whatever Hermes and the AGP defaults happen to shorten; none of our Java/Kotlin is renamed.
+
+**The change** (one block, `app.json`):
+
+```json
+["expo-build-properties", { "android": {
+  "minSdkVersion": 29, "compileSdkVersion": 36, "targetSdkVersion": 36,
+  "enableProguardInReleaseBuilds": true,
+  "enableShrinkResourcesInReleaseBuilds": true
+}}]
+```
+
+**Why it is not a one-line change.** R8 strips and renames anything it cannot see being used, and
+this app reaches a lot of code by reflection and by JNI — the exact things it cannot see:
+
+- `plugins/withMediaPipePose.js` — MediaPipe tasks-vision loads models and calls into native by name.
+- `plugins/withWearSwingBridge.js` / `android-native/WearSwingBridgeModule.kt` — the Wear data-layer
+  listener is resolved by class name from the manifest.
+- `plugins/withBluetoothMediaButton.js` — a `BroadcastReceiver`/`MediaSession` callback, same story.
+- `plugins/withMetaWearablesDAT.js` — the DAT SDK is third-party and ships its own rules only if the
+  dependency is present.
+- `@sentry/react-native` — needs its keep-rules or the stack traces we rely on come back mangled.
+
+Each of those needs a `proguard-rules.pro` keep, and a stripped one fails **at runtime on a release
+build only** — never in dev, never in Expo Go, and not necessarily on the first screen. That is why
+this rides a build with a device pass, not a Friday config edit.
+
+**Do it on the next native build**, with `npm run probe-tools`, a voice round, a SmartMotion capture,
+a watch swing and an earbud tap re-verified on the release AAB before it goes to Play. Deadline is
+Feb 2027; there is no reason to cut a build for it alone.
+
+---
+
 ## Build checklist
 - [x] `getAudioRoute()` both platforms
 - [x] route-change event, both platforms, bridged and subscribed
@@ -88,5 +131,8 @@ wholesale.
 - [ ] Re-verify on device: `npm run probe-tools`, a voice round, earbud tap, headset plugged in
       MID-round, a sandbox purchase and a restore
 - [ ] merge `native/watch-command-and-capability` (Kotlin both ends; re-read watchCaddieBridge.ts)
+- [ ] R8/ProGuard on (`enableProguardInReleaseBuilds`) + keep-rules for MediaPipe, Wear bridge,
+      Bluetooth media button, Meta DAT and Sentry — then re-verify each on the release AAB (Play
+      obfuscation warning, fix by Feb 2027)
 - [ ] runtimeVersion: leave at `1.0.0`. The billing code degrades safely on older binaries by
       design, so keeping the literal means existing testers keep receiving OTA fixes.

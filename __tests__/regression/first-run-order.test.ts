@@ -15,7 +15,6 @@ import path from 'path';
 import { decideFirstRunRoute, type FirstRunState } from '../../services/firstRunRoute';
 
 const fresh: FirstRunState = {
-  introVideoSeen: false,
   corePermissionsAsked: false,
   termsAccepted: false,
   hasName: false,
@@ -26,8 +25,6 @@ const fresh: FirstRunState = {
 describe('decideFirstRunRoute', () => {
   it('walks a fresh install in the right order', () => {
     let s = { ...fresh };
-    expect(decideFirstRunRoute(s)).toBe('/intro-video');
-    s = { ...s, introVideoSeen: true };
     // CONSENT before any sensitive permission is requested — this is the whole fix.
     expect(decideFirstRunRoute(s)).toBe('/welcome');
     s = { ...s, termsAccepted: true, hasName: true };
@@ -45,7 +42,7 @@ describe('decideFirstRunRoute', () => {
     // The regression this file exists for. Every state where consent is outstanding must not route
     // to the permission pre-flight, whatever else is true.
     for (const corePermissionsAsked of [false, true]) {
-      const s = { ...fresh, introVideoSeen: true, corePermissionsAsked };
+      const s = { ...fresh, corePermissionsAsked };
       expect(decideFirstRunRoute(s)).not.toBe('/permissions');
     }
   });
@@ -53,23 +50,48 @@ describe('decideFirstRunRoute', () => {
   it('accepting terms does not skip the permission pre-flight', () => {
     // welcome.tsx used to jump straight to /(tabs)/caddie. With consent moved ahead of permissions,
     // that would have skipped the pre-flight entirely and never asked at all.
-    expect(decideFirstRunRoute({ ...fresh, introVideoSeen: true, termsAccepted: true })).toBe('/permissions');
+    expect(decideFirstRunRoute({ ...fresh, termsAccepted: true })).toBe('/permissions');
   });
 
   it('resumes a half-finished first run rather than restarting or falling through', () => {
     // Force-quit during welcome: consent is still outstanding, so it asks again.
-    expect(decideFirstRunRoute({ ...fresh, introVideoSeen: true })).toBe('/welcome');
+    expect(decideFirstRunRoute({ ...fresh })).toBe('/welcome');
     // Force-quit after consent but before permissions: it picks up at permissions.
-    expect(decideFirstRunRoute({ ...fresh, introVideoSeen: true, termsAccepted: true })).toBe('/permissions');
-    // Force-quit before the intro finished: it replays the intro, not the app.
-    expect(decideFirstRunRoute({ ...fresh, termsAccepted: true, corePermissionsAsked: true })).toBe('/intro-video');
+    expect(decideFirstRunRoute({ ...fresh, termsAccepted: true })).toBe('/permissions');
+  });
+
+  /**
+   * 2026-09-18 (Tim — "I thought we removed that intro video? its okay but if it causes any issues
+   * it needs to go").
+   *
+   * IT HAD NOT BEEN REMOVED. It was step one: an 11 MB bundled mp4 played at a new install before
+   * the consent screen, on a cold launch, giving the player nothing. Asserted as an ABSENCE across
+   * every reachable state rather than by deleting the case that used to expect it — a state the
+   * enumeration does not reach is a state where it could come back.
+   * [[a-guard-can-enforce-a-stale-premise]]
+   */
+  it('never plays a video at anybody — the intro is not part of first run', () => {
+    for (const termsAccepted of [false, true]) {
+      for (const hasName of [false, true]) {
+        for (const corePermissionsAsked of [false, true]) {
+          for (const bagSetupOffered of [false, true]) {
+            for (const bagEmpty of [false, true]) {
+              const route = decideFirstRunRoute({ termsAccepted, hasName, corePermissionsAsked, bagSetupOffered, bagEmpty });
+              expect(route).not.toBe('/intro-video');
+            }
+          }
+        }
+      }
+    }
+    // And the very first thing a brand-new install sees is the screen that asks for consent.
+    expect(decideFirstRunRoute({ ...fresh })).toBe('/welcome');
   });
 
   it('lets a returning player who has a name straight through', () => {
     // Narrow on purpose: BOTH must be missing to re-prompt, so an existing player whose consent
     // predates the timestamp field is not sent back to the welcome screen.
     expect(decideFirstRunRoute({
-      introVideoSeen: true, corePermissionsAsked: true, termsAccepted: false, hasName: true,
+      corePermissionsAsked: true, termsAccepted: false, hasName: true,
       bagSetupOffered: true, bagEmpty: false,
     })).toBeNull();
   });
@@ -81,14 +103,14 @@ describe('decideFirstRunRoute', () => {
      * straight back on the screen they just left. Offered once, never again.
      */
     expect(decideFirstRunRoute({
-      introVideoSeen: true, corePermissionsAsked: true, termsAccepted: true, hasName: true,
+      corePermissionsAsked: true, termsAccepted: true, hasName: true,
       bagSetupOffered: true, bagEmpty: true,
     })).toBeNull();
   });
 
   it('never asks a player who already registered clubs', () => {
     expect(decideFirstRunRoute({
-      introVideoSeen: true, corePermissionsAsked: true, termsAccepted: true, hasName: true,
+      corePermissionsAsked: true, termsAccepted: true, hasName: true,
       bagSetupOffered: false, bagEmpty: false,
     })).toBeNull();
   });
@@ -110,7 +132,7 @@ describe('decideFirstRunRoute', () => {
     // permissions.tsx sets its flag on EVERY exit — grant, denial, or a thrown request — so
     // declining advances. (It had a skip button until 2026-09-17; App Review 5.1.1(iv) removed it.)
     expect(decideFirstRunRoute({
-      introVideoSeen: true, corePermissionsAsked: true, termsAccepted: true, hasName: true,
+      corePermissionsAsked: true, termsAccepted: true, hasName: true,
       bagSetupOffered: true, bagEmpty: false,
     })).toBeNull();
   });

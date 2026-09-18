@@ -270,13 +270,37 @@ const ALL_APP_FEATURES: AppFeature[] = [
     whenToUse: 'they want the caddie to see/understand their practice space',
   },
   {
+    /**
+     * 2026-09-18 — the name and the aliases were CAMERA-ONLY, and so was the screen until today.
+     * It now takes clubs typed in by hand and fills an off-the-rack set in one press, so a player
+     * who says "set up my bag" or "add my clubs by hand" has to reach it. A catalog entry that
+     * describes half a screen is how a feature stays unreachable by the only phrase someone would
+     * use for it. [[sweep-the-missing-half-not-the-unused-export]]
+     */
     id: 'bag-scan',
-    name: 'Bag Scan',
-    aliases: ['bag scan', 'scan my clubs', 'scan my bag', 'add my clubs', 'register my clubs'],
+    name: 'My Bag',
+    aliases: [
+      'my bag', 'bag scan', 'scan my clubs', 'scan my bag', 'add my clubs', 'register my clubs',
+      'set up my bag', 'edit my bag', 'add a club', 'add my clubs by hand', 'what is in my bag',
+    ],
     route: '/bag-scan',
     category: 'prepare',
-    blurb: 'Scan your clubs into your bag with the camera',
-    whenToUse: 'they want to add / register their clubs by scanning',
+    blurb: 'Your clubs, shafts and grips — add them by hand, start from a standard set, or scan them with the camera',
+    whenToUse: 'they want to see, set up, add to or correct the clubs in their bag, by hand or by camera',
+  },
+  {
+    /**
+     * 2026-09-18 — first run no longer PLAYS this at a new install (services/firstRunRoute), so the
+     * screen would otherwise have become unreachable code. It is a good film and a player may want
+     * it; what was wrong was showing it to someone before they had agreed to anything.
+     */
+    id: 'intro-video',
+    name: 'Intro Video',
+    aliases: ['intro video', 'play the intro', 'watch the intro', 'show me the intro', 'the welcome video'],
+    route: '/intro-video',
+    category: 'prepare',
+    blurb: 'The short film about what SmartPlay Caddie does',
+    whenToUse: 'they ask to see the intro / welcome video',
   },
   {
     id: 'arccos-import',

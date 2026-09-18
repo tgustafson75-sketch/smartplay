@@ -101,7 +101,6 @@ export default function Index() {
   const tutorialsSeen = useSettingsStore.getState().tutorialsSeen ?? {};
   const profileSnap = usePlayerProfileStore.getState();
   const firstRun = decideFirstRunRoute({
-    introVideoSeen: !!tutorialsSeen['intro_video'],
     corePermissionsAsked: !!tutorialsSeen['core_permissions_requested'],
     termsAccepted: profileSnap.termsAcceptedAt != null,
     hasName: (profileSnap.name ?? '').trim().length > 0,
@@ -115,7 +114,7 @@ export default function Index() {
   // docs/critical-paths.md promised were on a subtree deleted in May, so the MIN VERIFY (grep
   // logcat for [path1:onboard]) returned nothing on a healthy run AND on a broken one. This traces
   // the flow that actually exists.
-  console.log(`[path1:onboard] route_decision intro=${!!tutorialsSeen['intro_video']} terms=${profileSnap.termsAcceptedAt != null} name=${(profileSnap.name ?? '').trim().length > 0} perms=${!!tutorialsSeen['core_permissions_requested']} bag_offered=${!!tutorialsSeen['bag_setup_offered']} -> ${firstRun ?? 'app'}`);
+  console.log(`[path1:onboard] route_decision terms=${profileSnap.termsAcceptedAt != null} name=${(profileSnap.name ?? '').trim().length > 0} perms=${!!tutorialsSeen['core_permissions_requested']} bag_offered=${!!tutorialsSeen['bag_setup_offered']} -> ${firstRun ?? 'app'}`);
   // expo-router's typed routes are generated from the filesystem at build time; new routes need an
   // `as never` cast until the type regeneration catches up.
   if (firstRun) return <Redirect href={firstRun as never} />;
