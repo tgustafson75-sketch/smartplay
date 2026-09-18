@@ -14,7 +14,7 @@ import { useCustomCaddieMediaStore } from '../store/customCaddieMediaStore';
 import { useClubBagStore } from '../store/clubBagStore';
 import { SUBSCRIPTIONS_ENABLED } from '../services/featureAccess';
 import { planTrialLifecycle } from '../services/billing/trialLifecycle';
-import { refreshEntitlement } from '../services/billing/purchases';
+import { refreshEntitlement, planEntitlementWrite } from '../services/billing/purchases';
 import { PRICING } from '../lib/pricing';
 import { useSettingsStore } from '../store/settingsStore';
 import { selfContext } from '../store/issueLogStore';
@@ -674,7 +674,6 @@ function AppNavigator() {
          * [[two-owners-is-the-root-cause]]
          */
         const nowStatus = usePlayerProfileStore.getState().subscription_status;
-        if (nowStatus === 'lifetime') return;
         /**
          * Correct the trial's START before the status, because app/(tabs)/caddie.tsx reads the
          * countdown off `trial_started_at` — which initTrial stamped at FIRST APP OPEN. Under IAP
@@ -684,8 +683,19 @@ function AppNavigator() {
         if (snapshot.trialStartedAt != null) {
           usePlayerProfileStore.getState().setTrialStartedAt(snapshot.trialStartedAt);
         }
-        if (next === nowStatus) return;
-        usePlayerProfileStore.getState().setSubscriptionStatus(next);
+        /**
+         * 2026-09-18 — THE DECISION MOVED INTO THE MODULE, because this is where it was wrong.
+         *
+         * The three lines this replaces protected 'lifetime' and nothing else, and the case that
+         * mattered was the TRIAL: on a fresh install `before` is the default 'free', the store has
+         * never heard of the player so the mapping echoes 'free' back, and initTrial grants 'trial'
+         * while the read is in flight — so the echo landed on top and every new customer lost the
+         * 14-day trial on their first launch. Found on Tim's own App Store install, where the
+         * caddie answered "That one got away from me" to everything. See planEntitlementWrite.
+         */
+        const write = planEntitlementWrite({ before, mapped: next, now: nowStatus });
+        if (write == null) return;
+        usePlayerProfileStore.getState().setSubscriptionStatus(write);
       })();
       return true;
     };

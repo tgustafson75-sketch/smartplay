@@ -257,6 +257,62 @@ export function statusFromCustomerInfo(
 }
 
 /**
+ * 2026-09-18 (Tim's own launch install, read off the device) — THE ECHO THAT ATE THE TRIAL.
+ *
+ * His profile after installing 1.0 from the App Store:
+ *
+ *     first_opened_at   = 1789763755619   ┐ identical to the millisecond, which is
+ *     trial_started_at  = 1789763755619   ┘ ONLY ever written together by initTrial()
+ *     subscription_status = 'free'          …and initTrial writes 'trial' in the same set()
+ *
+ * So the trial was granted and then destroyed, and every caddie turn since has answered "That one
+ * got away from me — say it again?" — `mayTalkToCaddie()` gates on `voice_advanced`, which 'free'
+ * does not grant. Not a Mac problem, not a network problem: the brain was never asked.
+ *
+ * THE RACE. Two boot effects fire at hydration. The entitlement refresh reads
+ * `before = 'free'` (the zustand default on a first launch, nothing persisted yet) and awaits the
+ * store. `statusFromCustomerInfo` correctly refuses to invent a status for a player the store has
+ * never heard of — it ECHOES what it was passed. Meanwhile the trial-lifecycle effect runs
+ * initTrial() and the status becomes 'trial'. The await resolves holding a stale 'free', and the
+ * only thing the call site protected was `'lifetime'`.
+ *
+ * The comment at that call site says it was written to stop exactly this — "writing a stale 'free'
+ * over that grant would lock Tim out of his own app on his own launch" — and it guarded the OWNER
+ * branch while the TRIAL branch, which is every single new customer, went through. A guard that
+ * covers one arm of the thing it names. [[two-owners-is-the-root-cause]]
+ *
+ * PURE, and separate from the mapping, because "what did the store say" and "may that be written
+ * over what we have now" are two questions and the second one is the one that got answered by
+ * inference at a call site no test could reach.
+ *
+ * Returns the status to WRITE, or null to leave the profile alone.
+ */
+export function planEntitlementWrite(p: {
+  /** The status passed INTO refreshEntitlement — read BEFORE the store call. */
+  before: SubscriptionStatus;
+  /** What refreshEntitlement came back with. */
+  mapped: SubscriptionStatus;
+  /** The status right now, re-read AFTER the await. May differ from `before`. */
+  now: SubscriptionStatus;
+}): SubscriptionStatus | null {
+  const { before, mapped, now } = p;
+  // An owner grant is ours, not the store's — unchanged behaviour, stated as a rule rather than an
+  // early return buried in an effect.
+  if (now === 'lifetime') return null;
+  // Nothing to do.
+  if (mapped === now) return null;
+  /**
+   * THE FIX. `mapped === before` means the mapping echoed its input: the store had no opinion, or
+   * the read failed, or billing is unavailable. An echo is not knowledge, so it must never be
+   * written over a status the app granted while the read was in flight. When nothing moved during
+   * the flight (`now === before`) the branch above has already returned, so this costs nothing in
+   * the ordinary case.
+   */
+  if (mapped === before) return null;
+  return mapped;
+}
+
+/**
  * When the store-run free trial STARTED, in epoch ms — or null if this player is not in one.
  *
  * 2026-08-29 — this exists because the app measures the trial from the wrong moment. `initTrial()`

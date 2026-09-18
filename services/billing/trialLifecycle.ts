@@ -100,6 +100,27 @@ export function planTrialLifecycle(input: LifecycleInput): LifecyclePlan {
   // The launch cohort: installed while billing was off, so they carry a firstOpenedAt and 'free'.
   // Their 14 days start NOW rather than at install, or the flip hands them an expired clock.
   if (status === 'free' && !trialStartedAt) return { initTrial: true };
+  /**
+   * 2026-09-18 — HEAL A TRIAL THAT WAS GRANTED AND THEN CLOBBERED.
+   *
+   * Read off Tim's own App Store install: `first_opened_at` and `trial_started_at` identical to the
+   * millisecond (only initTrial writes those together, and it writes 'trial' with them) and a status
+   * of 'free'. The boot entitlement refresh echoed a stale 'free' over the grant — fixed at source
+   * in planEntitlementWrite — but the fix alone does not rescue anybody it has already happened to,
+   * and that is EVERY install since 1.0 went live.
+   *
+   * Nothing above catches them: the rung directly overhead requires `!trialStartedAt` and theirs is
+   * set, so they fall through to `{}` and stay on the lite edition for ever, with a caddie that
+   * answers "That one got away from me" to every single thing they say.
+   *
+   * Narrow by construction — 'free' WITH a start stamp INSIDE the window is only reachable by that
+   * clobber. A cancellation or refund lands on 'expired' (the store keeps the entitlement in `all`),
+   * a real never-started player has no stamp, and a stamp older than the window is left alone rather
+   * than resurrected. [[two-owners-is-the-root-cause]] [[a-guard-can-enforce-a-stale-premise]]
+   */
+  if (status === 'free' && trialStartedAt && now - trialStartedAt <= trialDurationMs) {
+    return { setStatus: 'trial' };
+  }
   if (status === 'trial' && trialStartedAt && now - trialStartedAt > trialDurationMs) {
     return { setStatus: 'expired' };
   }
