@@ -12628,6 +12628,20 @@ check('RATCHET: nothing new may be interpolated into the cached system prompt',
     // fine; growing needs a deliberate line here.
     const ALLOWED = new Set(['Array', 'TRANSLATION_OVERRIDE', '_cecilyMode', '_coachKnowledgeContext',
       '_courseContext', '_courseIntelligence', '_dominantMiss', '_ghinNumber', '_ghostContext', '_goal',
+      /**
+       * 2026-09-17 — ADDED DELIBERATELY, per the note above, and both are round-stable by nature.
+       *
+       * `_handicap` is the player's index. It cannot change during a round — it changes when scores
+       * are POSTED, between rounds — so it belongs on the cached side exactly as _goal and
+       * _dominantMiss do. It was sent and destructured for months and never interpolated at all;
+       * every mention of the word in the prompt was prose, including one telling the model it knew
+       * the number. See the-handicap-must-be-said-not-just-sent.test.ts.
+       *
+       * `_homeCourses` is up to three course NAMES picked in Profile / on the Play tab. It changes
+       * when the player stars a course, which is a settings-shaped action, not a shot-shaped one.
+       * Capped at three names of 120 chars, so it cannot grow the cached block meaningfully.
+       */
+      '_handicap', '_homeCourses',
       '_golferModel', '_holeContextBlock', '_kevinContext', '_knownCoursesBlock', '_penaltyContext',
       '_persistentPatterns', '_personalBest', '_physicalLimitation', '_playerHistory',
       '_practiceContext', '_practicePlan', '_recentAnalyses', '_recentCageInsights', '_recentRoundInsights',

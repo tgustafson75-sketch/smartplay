@@ -44,6 +44,7 @@
  * mounts and starts decoding) and then runs twelve unserialized retriever reads on that same file.
  * One import; nothing else about the locate changes.
  */
+import * as FileSystem from 'expo-file-system/legacy';
 import * as VideoThumbnails from '../../utils/videoThumbnail';
 import { wristCentroid, deriveSwingAnchors, type MotionSample } from './poseMotion';
 
@@ -172,6 +173,9 @@ async function locateSwingWindowOnDeviceImpl(
       try {
         const thumb = await VideoThumbnails.getThumbnailAsync(workUri, { time: tMs, quality: 0.6 });
         frame = await mp.detectPoseFromUri(thumb.uri, undefined, tMs);
+        // 2026-09-17 — delete the temp, like every other extractor in services/swing. This samples
+        // a dozen times per locate and ran on every swing.
+        void FileSystem.deleteAsync(thumb.uri, { idempotent: true }).catch(() => undefined);
       } catch {
         frame = null; // one unreadable frame is a shorter signal, not a failed locate
       }

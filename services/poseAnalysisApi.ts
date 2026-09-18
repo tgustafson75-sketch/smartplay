@@ -496,6 +496,26 @@ export async function poseAtTime(
       } catch { cropUri = null; /* crop is an optimisation; fall back to the full frame */ }
     }
     const frame = await analyzePoseFromUri(cropUri ?? uri, timeMs);
+    /**
+     * 2026-09-17 — DELETE THE TEMPS. Every other extractor in this repo already does, with the
+     * lesson attached (swing/ballPath "don't leak the crop temp", clubPath, ballDeparture,
+     * feelReconcile) — this one and swing/onDeviceLocate were the two that never did.
+     *
+     * poseAtTime runs once per sampled frame, up to DENSE_TARGET of them per swing, plus a crop
+     * each when an ROI is supplied, plus the tempo loop's own pass — and re-runs when the player
+     * picks a different swing in the reel. A twenty-swing range session left hundreds of JPEGs in
+     * the cache directory. OS-evictable, so it will not crash, but it inflates reported app storage
+     * and adds to exactly the memory and IO pressure the watchdog kill is suspected of.
+     *
+     * After the read, never before: analyzePoseFromUri is still holding whichever one it was given.
+     * Fire-and-forget and idempotent — a failed cleanup must never fail the frame.
+     */
+    const dropTemp = (u: string | null | undefined) => {
+      if (!u) return;
+      void FileSystem.deleteAsync(u, { idempotent: true }).catch(() => undefined);
+    };
+    dropTemp(cropUri);
+    dropTemp(uri);
     if (!frame) {
       // Read the image fine, found no body. Distinct from being unable to read it at all.
       if (!lastFrameFailure) lastFrameFailure = 'no_pose_in_frame';
@@ -1792,6 +1812,8 @@ export async function deriveSwingTempo(
       try {
         const { uri } = await VideoThumbnails.getThumbnailAsync(workUri, { time: t, quality: 0.6 });
         const frame = await analyzePoseFromUri(uri, t);
+        // Same cleanup as poseAtTime — this loop runs once per sampled time, every tempo read.
+        void FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => undefined);
         if (!frame) continue;
         const lw = getKp(frame, 'left_wrist');
         const rw = getKp(frame, 'right_wrist');
@@ -1841,6 +1863,7 @@ export async function deriveSwingTempo(
     try {
       const { uri } = await VideoThumbnails.getThumbnailAsync(workUri, { time: impactMs, quality: 0.6 });
       const impactFrame = await analyzePoseFromUri(uri, impactMs);
+      void FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => undefined);
       if (impactFrame) sequencingScore = sequencingFromFrames(series[topIdx].frame, impactFrame);
     } catch {
       // sequencing is optional — tempo still stands without it

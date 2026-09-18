@@ -297,6 +297,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       playerName = '',
       firstName = '',
       handicap = 18,
+      homeCourses = [],
       roundsTogether = 0,
       sessionsTogether = 0,
       currentHole = null,
@@ -716,6 +717,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const _dominantMiss: string | null = capOrNull(dominantMiss, 200);
     const _physicalLimitation: string | null = capOrNull(physicalLimitation, 200);
     const _goal: string | null = capOrNull(goal, 200);
+    /**
+     * 2026-09-17 — THE HANDICAP WAS SENT, DESTRUCTURED, AND NEVER SAID.
+     *
+     * `handicap` has been in the payload and in the destructure for months, and every single
+     * occurrence of the word after `} = body;` was ENGLISH PROSE inside a template literal — one of
+     * them (below, in the course-read rule) telling the model outright "You know this player's
+     * carries, their miss, their handicap". It did not. The number reached the prompt by no other
+     * route either: golferModel.describeForPrompt omits it and unifiedVisionContext collects it but
+     * renders only the miss. Only coachingAdaptation used it, and only to pick a 3-value bucket.
+     *
+     * It survived the payload guard because that guard tests `\bhandicap\b` against
+     * comment-stripped SOURCE — and prose inside a template literal is not a comment, so the test
+     * matched the sentence claiming the model knew it. A source grep cannot tell a use from a
+     * mention. api/briefing.ts and api/preround.ts both render it properly; the caddie you actually
+     * talk to was the one that did not. [[two-owners-is-the-root-cause]]
+     */
+    const _handicap: number | null =
+      typeof handicap === 'number' && Number.isFinite(handicap) ? handicap : null;
+    /** Up to three courses he calls home. Picked on the Play tab, shown in Profile, and until now
+     *  never sent — so "what should I work on before I play my home course?" reached a caddie that
+     *  had never been told which course that is. */
+    const _homeCourses: string[] = Array.isArray(homeCourses)
+      ? (homeCourses as unknown[])
+          .map((c) => (typeof c === 'string' ? c : String((c as { name?: string })?.name ?? '')))
+          .map((n) => n.trim())
+          .filter((n) => n.length > 0)
+          .slice(0, 3)
+          .map((n) => n.slice(0, 120))
+      : [];
     const _personalBest: string | null = capOrNull(personalBest, 200);
     const _club: string | null = capOrNull(club, 200);
     const _roundMode: string = cap(roundMode, 200) || 'free_play';
@@ -1763,6 +1793,8 @@ ${roundsTogether === 0
 }
 
 ${_goal ? `GOAL: ${_goal} — reference when relevant, never constantly.` : ''}
+${_handicap != null ? `HANDICAP: ${_handicap}. This is the single biggest thing separating one player's smart play from another's — a 2 and a 28 facing the same 200 yards over water are being asked different questions. Never recite it at them; let it decide how much risk you offer.` : ''}
+${_homeCourses.length > 0 ? `HOME COURSE${_homeCourses.length > 1 ? 'S' : ''}: ${_homeCourses.join(', ')} — where they play most. "My home course" means these, even if no round here has been logged yet.` : ''}
 
 ${(recentHeroMoments as Array<{ hole: number; club: string; courseName: string }>).length > 0
   ? `HERO MOMENTS: ${(recentHeroMoments as Array<{ hole: number; club: string; courseName: string }>).map(m => 'Hole ' + m.hole + ' — ' + m.club).join(', ')}. Use one for confidence if the moment calls for it.`

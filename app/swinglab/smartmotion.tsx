@@ -4571,7 +4571,22 @@ export default function SmartMotion() {
       // tempo/departure honestly off (no acoustic anchor), but the fault read lands fast.
       let firstSeg = segsForAnalysis[0];
       if (!firstSeg) {
-        const durMs = meteredDurationMs ?? 0;
+        /**
+         * 2026-09-17 — AND THE DURATION HAS TO COME FROM SOMEWHERE WHEN METERING NEVER RAN.
+         *
+         * `meteredDurationMs` is only ever assigned inside `if (meteringRef.current)`. Metering is
+         * OFF in foam / no-ball mode (the rail toggle, whose entire purpose is hitting into a net at
+         * home), on chip-sensitivity at a range or course, and whenever startMeteredRecording
+         * throws. In every one of those cases durMs was 0, so NO bounded window was synthesized and
+         * the clip went down exactly the unbounded path the comment above says must never be taken —
+         * ~2 minutes of spinner instead of the fast bounded read.
+         *
+         * probeDurationMs is what the range branch already uses for this; it was simply
+         * block-scoped there and never reached here.
+         */
+        const durMs = meteredDurationMs
+          ?? await probeDurationMs(recorded.uri).catch(() => 0)
+          ?? 0;
         if (durMs > 0) setVideoDurationMs(durMs);   // see the two-stage note above — do not wait for onLoad
         // 2026-06-22 — removed `durMs <= 12_000` cap. The old cap meant any
         // clip >12 s where both acoustic AND vision locate failed received NO

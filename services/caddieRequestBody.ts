@@ -254,6 +254,14 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
     firstName: safe(() => (p.name ?? '').trim().split(/\s+/)[0] || null, null),
     handicap: safe(() => p.handicap ?? null, null),
     ghinNumber: safe(() => p.ghin_number ?? null, null),
+    /** 2026-09-17 — up to three, names only. Picked on the Play tab and shown in Profile since
+     *  September, and never sent — so "what should I work on before I play my home course?" reached
+     *  a caddie that had never been told which course that is. Names rather than ids: the brain
+     *  talks about courses in words. */
+    homeCourses: safe(() => (p.homeCourses ?? [])
+      .map((c: { name?: string }) => c?.name)
+      .filter((n: string | undefined): n is string => typeof n === 'string' && n.length > 0)
+      .slice(0, 3), [] as string[]),
     dominantMiss: safe(() => p.dominantMiss ?? null, null),
     /**
      * 2026-09-12 — THE BALL, which the caddie could not see until today.
