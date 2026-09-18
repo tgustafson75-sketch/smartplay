@@ -17225,6 +17225,49 @@ check(
     'the skip is shown only when first run OPENED this screen (the flag is read in a state initialiser, before the mount effect sets it) and points at Profile → My Bag, which is the same screen reached from a row that exists');
 }
 
+/**
+ * 2026-09-18 (Tim, after the intro video came out of first run) — "make sure I have no first load
+ * warmup issues after removing the video. We MUST have an absolute clean brain/voice path."
+ *
+ * THE FEAR IS THE RIGHT ONE, AND IT IS THE GENERAL CASE, NOT THIS SCREEN. The intro sat in front of
+ * a cold launch for five to seven seconds, and cold Lambdas take three to eight. If any part of the
+ * warmup had been fired BY that screen, or had been depending on its runway, removing it would have
+ * moved the cold start onto the player's first mic tap — which is precisely the failure Tim reported
+ * on 2026-07-14 ("first attempt to the caddie errors every time") and that `warmBackendConnection`
+ * exists to prevent.
+ *
+ * It is not, and this asserts why: the warmup belongs to the ROOT LAYOUT, which mounts on every
+ * launch regardless of which screen the router then picks, so no first-run screen can carry it away
+ * when it goes. Asserted as an ABSENCE on each first-run screen as well as a presence in the layout
+ * — a guard that only checks the layout would pass a world where the warmup had been duplicated into
+ * a screen and then deleted with it.
+ *
+ * The second half is the audio session. The intro's own header records what a screen at launch did
+ * to the voice path once before: a stray setAudioModeAsync ran before voiceService could configure
+ * the session for speech, and Tim's report was "ever since we put the mp4 video splash intro, our
+ * voice behavior has not worked right". Nothing on the first-run path may open an AV player again.
+ * [[the-client-must-be-the-last-to-give-up]] [[a-stale-header-is-a-source-someone-trusts]]
+ */
+{
+  const layout = readCode('app/_layout.tsx');
+  const firstRunScreens = ['app/welcome.tsx', 'app/permissions.tsx', 'app/bag-scan.tsx'];
+  const screenSrc = firstRunScreens.map((f) => readCode(f));
+
+  check('BOOT: the voice/brain warmup is fired by the ROOT LAYOUT, so removing a first-run screen cannot remove it',
+    /bootMark\('voice_warmup_fired'\)/.test(layout) &&
+      /voiceWarmup'\)\.then\(m => \{ bootMark\('voice_warmup_imported'\); m\.prewarmVoice\(\); \}\)/.test(layout) &&
+      /warmBackendConnection\(\)/.test(layout) &&
+      // ...and no screen the first-run router can land on owns any of it
+      screenSrc.every((src) => !/prewarmVoice|warmBackendConnection|markEndpointWarmed/.test(src)),
+    'prewarmVoice (4 endpoints) and warmBackendConnection (DNS/TLS, retried with backoff) fire from the root layout effect on every launch; the first-run screens carry none of it, so the order of first run is free to change without moving a cold start onto the first mic tap');
+
+  check('BOOT: nothing on the first-run path opens an AV player before voiceService configures the session',
+    screenSrc.every((src) => !/from 'expo-av'/.test(src) && !/setAudioModeAsync/.test(src)) &&
+      // the intro is out of the router entirely — that is WHY this is now true
+      !/'\/intro-video'/.test(readCode('services/firstRunRoute.ts')),
+    "the one screen that ever did this was the intro video, whose own header records it muddying the audio session before voiceService could configure it for speech ('our voice behavior has not worked right'); first run now opens on the consent screen, which touches no audio at all");
+}
+
 const total = results.length;
 const passed = results.filter((r) => r.passed).length;
 const failed = results.filter((r) => !r.passed);
