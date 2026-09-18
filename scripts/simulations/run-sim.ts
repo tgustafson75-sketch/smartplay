@@ -3131,8 +3131,21 @@ check('Smart Motion: re-analyze the kept clip + auto-update on cold start (Tim)'
       /void runAnalysis\(clipUri, segmentsRef\.current\[0\]\)/.test(sm) &&
       /onPress=\{reanalyze\}/.test(sm) &&
       /accessibilityLabel=\{t\('swinglab_smartmotion\.accessibility_label\.re_analyze_this_swing'\)\}/.test(sm) &&
-      // auto-apply OTA on cold start, manual only later
-      /autoAppliedRef\.current = true;\s*\n\s*void applyUpdate\(\)/.test(upd) &&
+      /**
+       * auto-apply OTA on cold start, manual only later.
+       *
+       * 2026-09-18 — this used to pin `autoAppliedRef.current = true;\n void applyUpdate()`, the
+       * literal two lines, and went red when the reload moved behind a branded overlay (Tim: "the
+       * app closes and it feels like it broke as a user"). The INTENT of this scenario — applied
+       * automatically, no "Update" tap, never mid-round — is untouched by that change, so the
+       * assertion moves to the new shape rather than being deleted. A red scenario is a question
+       * about which of the two drifted, not a licence to drop it.
+       * [[guards-by-element-not-blanket-suppression]] [[a-guard-can-enforce-a-stale-premise]]
+       */
+      /autoAppliedRef\.current = true;/.test(upd) &&
+      /applyTimerRef\.current = setTimeout\(\(\) => \{ void applyUpdate\(\); \}, OVERLAY_MS\)/.test(upd) &&
+      /const \[applying, setApplying\] = useState\(false\)/.test(upd) &&   // the overlay it reloads behind
+
       /sinceLaunchMs < 20_000/.test(upd) &&
       /!inRound && !voiceActive/.test(upd)
     );
@@ -17310,6 +17323,33 @@ check(
   check('VOICE: an audio player is never freed from inside its own status callback',
     unsafe.length === 0 && detachThenDefer === 3 && windows.length >= 3,
     `${windows.length} didJustFinish branches read, ${detachThenDefer}/3 detach-then-defer, ${unsafe.length} that free the player before detaching it — all three playback paths (speak, speakFromBase64, playLocalFile) let the native frame that announced completion return before anything is released`);
+}
+
+/**
+ * 2026-09-18 (Tim) — "when app has an update when you load it, the app closes and it feels like it
+ * broke as a user."
+ *
+ * It did exactly that. `Updates.reloadAsync()` tears down the JS runtime, so the screen vanishes and
+ * the app comes back from scratch with nothing on screen to explain it — and the auto-apply fires
+ * within 20s of launch, so the person most likely to see it is someone opening the app for the
+ * first time. Indistinguishable from a crash.
+ *
+ * The answer was not to stop applying (he asked for the no-tap reload in June and that reasoning
+ * holds) but to own the moment: a branded overlay, then the teardown behind it.
+ *
+ * Guarded on the PROPERTY — the auto-apply path sets the overlay state and defers the reload — and
+ * on the ABSENCE of the shape it replaced, a bare `void applyUpdate()` in that effect.
+ */
+{
+  const banner = readCode('components/UpdateAvailableBanner.tsx');
+  const autoBlock = banner.slice(banner.indexOf('sinceLaunchMs < 20_000'), banner.indexOf('sinceLaunchMs < 20_000') + 400);
+  check('UPDATE: a self-reload never happens without telling the player it is happening',
+    /setApplying\(true\)/.test(autoBlock) &&
+      /applyTimerRef\.current = setTimeout\(\(\) => \{ void applyUpdate\(\); \}, OVERLAY_MS\)/.test(autoBlock) &&
+      !/^\s*void applyUpdate\(\);\s*$/m.test(autoBlock) &&          // the old bare reload is gone
+      /if \(applying\) \{/.test(banner) &&                            // ...and the overlay renders
+      saysToPlayer(banner, 'Updating SmartPlay') && saysToPlayer(banner, 'Back in a second'),
+    'the cold-start auto-apply raises a full-screen branded overlay and reloads behind it after OVERLAY_MS, so the runtime teardown reads as the app doing something rather than dying; the manual banner button still reloads immediately, which is fine because the player just pressed it');
 }
 
 const total = results.length;

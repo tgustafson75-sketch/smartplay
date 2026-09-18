@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
@@ -25,6 +25,9 @@ import { useTranslation } from 'react-i18next';
  * while voice is active (listening / thinking / responding) so a
  * conversation isn't interrupted by a banner.
  */
+/** How long the branded overlay is shown before the runtime is torn down. */
+const OVERLAY_MS = 700;
+
 export function UpdateAvailableBanner() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
@@ -40,20 +43,42 @@ export function UpdateAvailableBanner() {
     return subscribeToUpdates((s) => setStatus(s));
   }, []);
 
-  // 2026-06-13 (Tim) — AUTO-apply on COLD START: if an update is ready within the
-  // launch window AND we're not mid-round / mid-voice, just reload straight into
-  // it — no "Update" tap. The manual banner below is ONLY for updates that land
-  // LATER (mid-session / mid-round), where a silent reload would yank the user off
-  // what they're doing. (fallbackToCacheTimeout handles the instant case at the
-  // native layer; this catches the download that lands a beat after launch.)
+  /**
+   * 2026-06-13 (Tim) — AUTO-apply on COLD START: if an update is ready within the launch window AND
+   * we're not mid-round / mid-voice, just reload straight into it — no "Update" tap. The manual
+   * banner below is ONLY for updates that land LATER (mid-session / mid-round), where a silent
+   * reload would yank the user off what they're doing. (fallbackToCacheTimeout handles the instant
+   * case at the native layer; this catches the download that lands a beat after launch.)
+   *
+   * 2026-09-18 (Tim) — "the app closes and it feels like it broke as a user."
+   *
+   * IT DID EXACTLY THAT. `reloadAsync()` tears down the JS runtime, so the screen the player is
+   * looking at vanishes and the app comes back from scratch, with nothing on screen to say why. On
+   * a first launch — which is when this fires — it is indistinguishable from a crash, and it lands
+   * on the person with the least reason to give us the benefit of the doubt.
+   *
+   * The fix is not to stop applying (he asked for that in June and the reason still holds: a fix
+   * everyone already downloaded should not wait a launch). It is to SAY SO. A branded overlay owns
+   * the moment, and the teardown happens behind it — so the same event reads as the app doing
+   * something rather than the app dying. [[feels-like-a-real-caddie]]
+   */
   const mountedAtRef = useRef(Date.now());
   const autoAppliedRef = useRef(false);
+  const applyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [applying, setApplying] = useState(false);
   useEffect(() => {
     if (autoAppliedRef.current) return;
     const sinceLaunchMs = Date.now() - mountedAtRef.current;
     if (status?.ready && !inRound && !voiceActive && sinceLaunchMs < 20_000) {
       autoAppliedRef.current = true;
-      void applyUpdate(); // reloads into the new bundle
+      setApplying(true);
+      /**
+       * NO CLEANUP ON THIS TIMER, deliberately. This effect re-runs whenever `status`, `inRound` or
+       * `voiceActive` change, and a cleanup that cleared it would cancel the reload — after which
+       * `autoAppliedRef` short-circuits every later run and the update would never apply at all.
+       * The process is going away; there is nothing to leak into.
+       */
+      applyTimerRef.current = setTimeout(() => { void applyUpdate(); }, OVERLAY_MS);
     }
   }, [status, inRound, voiceActive]);
 
@@ -69,6 +94,30 @@ export function UpdateAvailableBanner() {
       tension: 60,
     }).start();
   }, [visible, slide]);
+
+  /**
+   * Long enough to be READ, short enough not to be a wait. Under ~400ms an overlay reads as a
+   * flicker — which is the thing being fixed — and much over a second it stops feeling instant.
+   */
+  if (applying) {
+    return (
+      <View style={[styles.overlay, { backgroundColor: colors.background }]} pointerEvents="auto">
+        <Image
+          source={require('../assets/images/splash-icon.png')}
+          style={styles.overlayLogo}
+          resizeMode="contain"
+          accessibilityIgnoresInvertColors
+        />
+        <Text style={[styles.overlayTitle, { color: colors.text_primary }]}>
+          {t('update_available_banner.text.updating')}
+        </Text>
+        <ActivityIndicator color={colors.accent} style={{ marginTop: 14 }} />
+        <Text style={[styles.overlaySub, { color: colors.text_muted }]}>
+          {t('update_available_banner.text.back_in_a_second')}
+        </Text>
+      </View>
+    );
+  }
 
   if (!status?.ready && !dismissed) return null;
 
@@ -124,6 +173,16 @@ export function UpdateAvailableBanner() {
 }
 
 const styles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    zIndex: 9999,
+  },
+  overlayLogo: { width: 96, height: 96, marginBottom: 20 },
+  overlayTitle: { fontSize: 18, fontWeight: '800', textAlign: 'center' },
+  overlaySub: { fontSize: 13, marginTop: 10, textAlign: 'center' },
   wrap: {
     position: 'absolute',
     top: 0,

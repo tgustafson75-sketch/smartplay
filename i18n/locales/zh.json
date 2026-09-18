@@ -1,4 +1,10 @@
 {
+  "update_available_banner": {
+    "text": {
+      "updating": "正在更新 SmartPlay…",
+      "back_in_a_second": "稍等片刻。"
+    }
+  },
   "buttons": {
     "start_cage": "开始训练场",
     "watch_swing": "观看我的挥杆",

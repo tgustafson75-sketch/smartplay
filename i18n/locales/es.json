@@ -1,4 +1,10 @@
 {
+  "update_available_banner": {
+    "text": {
+      "updating": "Actualizando SmartPlay…",
+      "back_in_a_second": "Vuelvo en un segundo."
+    }
+  },
   "buttons": {
     "start_cage": "Iniciar Práctica",
     "watch_swing": "Grabar Mi Swing",

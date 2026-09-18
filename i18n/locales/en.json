@@ -3110,6 +3110,8 @@
   },
   "update_available_banner": {
     "text": {
+      "updating": "Updating SmartPlay…",
+      "back_in_a_second": "Back in a second.",
       "update_ready": "Update ready",
       "tap_to_reload_with_the": "Tap to reload with the latest fixes.",
       "update": "Update"
