@@ -73,7 +73,14 @@ describe('no player-facing surface reads the card’s first tee', () => {
   it('the resolver is what those surfaces actually use', () => {
     const card = fs.readFileSync(path.join(ROOT, 'components/course/StartRoundCourseCard.tsx'), 'utf-8');
     expect(card).toMatch(/playerTee\(/);
-    // and the numbers it renders come from the resolved tee
-    expect(card).toMatch(/value=\{tee\.total_yards\.toLocaleString\(\)\}/);
+    /**
+     * and the numbers it renders come from the RESOLVED TEE — which is the point of this line, and
+     * is unchanged. 2026-09-18 the value gained a unit conversion around it (a player set to metres
+     * reads the course length in metres), so the assertion pins the SOURCE rather than the exact
+     * expression that formats it. The raw-tee regression this file exists for would show up as
+     * `tee.total_yards` disappearing, not as a wrapper appearing around it.
+     */
+    expect(card).toMatch(/tee\.total_yards/);
+    expect(card).toMatch(/toDisplay\(tee\.total_yards\)/);   // ...and it converts
   });
 });

@@ -78,6 +78,13 @@ describe('a putter is recognised wherever it is spelled', () => {
   );
 });
 
+/**
+ * 2026-09-18 — the two call-site patterns below gained an optional third argument. shotDistanceDisplay
+ * now takes the player's distance unit, because a metre-set player was reading a shot log in yards;
+ * a PUTT still ignores it and comes back in feet, which is the rule this whole file is about. The
+ * assertions widened to `(, \w+)?` rather than being rewritten: what they are for is that these two
+ * surfaces ASK THE OWNER instead of formatting a distance themselves, and that is unchanged.
+ */
 describe('every surface a human reads a putt on says feet', () => {
   it('a shot row shows a putt in feet and everything else in yards', () => {
     expect(shotDistanceDisplay('putter', 8)).toEqual({ value: '24', unit: 'ft' });
@@ -91,7 +98,7 @@ describe('every surface a human reads a putt on says feet', () => {
 
   it('the timeline asks the owner rather than hardcoding "yds" on every row', () => {
     const st = code('components/caddie/ShotTimeline.tsx');
-    expect(st).toMatch(/shotDistanceDisplay\(shot\.club, shot\.distance_yards\)/);
+    expect(st).toMatch(/shotDistanceDisplay\(shot\.club, shot\.distance_yards(, \w+)?\)/);
     // the unit comes from the answer, so it cannot be right for irons and wrong for putts
     expect(st).toMatch(/\{dist\?\.unit \?\? 'yds'\}/);
     expect(st).not.toMatch(/<Text style=\{styles\.distUnit\}>yds<\/Text>/);
@@ -104,7 +111,7 @@ describe('every surface a human reads a putt on says feet', () => {
      * recap. A unit with two renderers is a unit with two answers.
      */
     const map = code('components/recap/HoleShotMap.tsx');
-    expect(map).toMatch(/shotDistanceDisplay\(selected\?\.club, selected\?\.distance_yards\)/);
+    expect(map).toMatch(/shotDistanceDisplay\(selected\?\.club, selected\?\.distance_yards(, \w+)?\)/);
     expect(map).not.toMatch(/selected\.distance_yards \+ ' yd'/);
   });
 

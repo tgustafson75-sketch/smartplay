@@ -61,8 +61,20 @@ export function isPutterClub(club: string | null | undefined): boolean {
 export function shotDistanceDisplay(
   club: string | null | undefined,
   distanceYards: number | null | undefined,
-): { value: string; unit: 'yds' | 'ft' } | null {
+  /**
+   * 2026-09-18 — the player's distance unit, for everything that is NOT a putt.
+   *
+   * Passed in rather than read, because this file is deliberately dependency-free — "no
+   * react-native / expo / store imports, so a heavy runtime module and a jest test can import it
+   * freely" — and reaching for the settings store here would end that. Defaults to yards, so every
+   * existing caller keeps its exact behaviour until it opts in.
+   *
+   * A PUTT IGNORES IT. A putt is in feet in both systems; that rule is this file's whole point.
+   */
+  unit: 'yards' | 'meters' = 'yards',
+): { value: string; unit: 'yds' | 'ft' | 'm' } | null {
   if (distanceYards == null || !Number.isFinite(distanceYards)) return null;
   if (isPutterClub(club)) return { value: String(puttFeetFrom(distanceYards)), unit: 'ft' };
+  if (unit === 'meters') return { value: String(Math.round(distanceYards * 0.9144)), unit: 'm' };
   return { value: String(Math.round(distanceYards)), unit: 'yds' };
 }

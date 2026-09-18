@@ -28,6 +28,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRoundStore, type ShotResult } from '../../store/roundStore';
 import { useTranslation } from 'react-i18next';
 import { shotDistanceDisplay } from '../../services/puttUnits';
+import { useDistanceUnit } from '../../hooks/useDistanceUnit';
 
 interface Props {
   /** Optional cap on rows rendered. Default 8 — enough to see the
@@ -103,6 +104,7 @@ function directionTag(direction: ShotResult['direction'] | null | undefined): st
  * [[two-owners-is-the-root-cause]]
  */
 export default function ShotTimeline({ maxRows = DEFAULT_MAX_ROWS, holeOnly = false, shots: shotsProp }: Props) {
+  const distanceUnit = useDistanceUnit();
   const { t } = useTranslation();
   const liveShots = useRoundStore(s => s.shots);
   const currentHole = useRoundStore(s => s.currentHole);
@@ -130,7 +132,7 @@ export default function ShotTimeline({ maxRows = DEFAULT_MAX_ROWS, holeOnly = fa
           const icon = clubIcon(shot.club);
           // 2026-09-13 (Tim) — "putts should be always in Feet." Every row said "yds", so a putt
           // logged from eight yards out read "8 yds" instead of the twenty-four-footer it was.
-          const dist = shotDistanceDisplay(shot.club, shot.distance_yards);
+          const dist = shotDistanceDisplay(shot.club, shot.distance_yards, distanceUnit);
           const dir = directionTag(shot.direction);
           const oc = outcomeChip(shot.outcome);
           return (

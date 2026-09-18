@@ -8,6 +8,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { useDistanceFormat } from '../../hooks/useDistanceUnit';
 import { playerTee } from '../../services/teeSelection';
 import { View, Text, Image, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import AppIcon from '../AppIcon';
@@ -27,6 +28,8 @@ type Props = {
 };
 
 export default function StartRoundCourseCard({ courseId, courseName }: Props) {
+  // The card a player reads BEFORE the round — the course length in their own unit.
+  const { toDisplay, label } = useDistanceFormat();
   const { t } = useTranslation();
   const [course, setCourse] = useState<Course | null>(null);
   const [holesForModal, setHolesForModal] = useState<ModalHole[]>([]);
@@ -150,7 +153,7 @@ export default function StartRoundCourseCard({ courseId, courseName }: Props) {
           <View style={styles.statsStrip}>
             <Stat label={t('scorecard.holes')} value={String(tee.holes.length)} />
             <Stat label={t('scorecard.par')} value={String(tee.par_total)} />
-            <Stat label={t('course_start_round_course_card.label.yards')} value={tee.total_yards.toLocaleString()} />
+            <Stat label={label.toUpperCase()} value={(toDisplay(tee.total_yards) ?? 0).toLocaleString()} />
             {tee.course_rating != null ? <Stat label={t('course_start_round_course_card.label.rating')} value={tee.course_rating.toFixed(1)} /> : null}
             {tee.slope_rating != null ? <Stat label={t('course_start_round_course_card.label.slope')} value={String(tee.slope_rating)} /> : null}
           </View>

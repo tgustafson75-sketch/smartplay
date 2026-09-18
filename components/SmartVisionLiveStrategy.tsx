@@ -34,6 +34,7 @@
  */
 
 import React from 'react';
+import { useDistanceFormat } from '../hooks/useDistanceUnit';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useUnifiedVisionContext } from '../hooks/useUnifiedVisionContext';
 import { useTranslation } from 'react-i18next';
@@ -50,6 +51,7 @@ interface Props {
 }
 
 export default function SmartVisionLiveStrategy({ onPress, alwaysShow = false }: Props) {
+  const { fmtCompact } = useDistanceFormat();
   const { t } = useTranslation();
   const ctx = useUnifiedVisionContext();
   if (!ctx) return null;
@@ -87,7 +89,7 @@ export default function SmartVisionLiveStrategy({ onPress, alwaysShow = false }:
         {last && (last.club || last.distanceYards != null) ? (
           <View style={[styles.signal, { borderColor: '#c2cad4' }]}>
             <Text style={[styles.signalText, { color: '#cbd5e1' }]} numberOfLines={1}>
-              ← {last.club ?? 'last'}{last.direction ? ` ${last.direction}` : ''}{last.distanceYards != null ? ` (${last.distanceYards}y)` : ''}
+              ← {last.club ?? 'last'}{last.direction ? ` ${last.direction}` : ''}{last.distanceYards != null ? ` (${fmtCompact(last.distanceYards)})` : ''}
             </Text>
           </View>
         ) : null}

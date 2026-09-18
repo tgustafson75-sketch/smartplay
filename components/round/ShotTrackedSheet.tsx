@@ -9,6 +9,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { useDistanceFormat } from '../../hooks/useDistanceUnit';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -51,6 +52,7 @@ export default function ShotTrackedSheet({
   onCorrectClub: (club: ClubName) => void;
   onDismiss: () => void;
 }) {
+  const { toDisplay, label } = useDistanceFormat();
   const { t } = useTranslation();
   const { colors } = useTheme();
   const [editing, setEditing] = useState(false);
@@ -74,9 +76,9 @@ export default function ShotTrackedSheet({
       <View style={styles.statsRow}>
         <View style={styles.stat}>
           <Text style={[styles.statValue, { color: colors.text_primary }]}>
-            {result.shotDistanceYards != null ? `${estimated ? '~' : ''}${result.shotDistanceYards}` : '—'}
+            {result.shotDistanceYards != null ? `${estimated ? '~' : ''}${toDisplay(result.shotDistanceYards)}` : '—'}
           </Text>
-          <Text style={[styles.statLabel, { color: colors.text_muted }]}>{estimated ? t('round_shot_tracked_sheet.shot_tracked_sheet.yds_est') : t('round_shot_tracked_sheet.shot_tracked_sheet.yds')}</Text>
+          <Text style={[styles.statLabel, { color: colors.text_muted }]}>{estimated ? `${label.toUpperCase()} EST` : label.toUpperCase()}</Text>
         </View>
 
         {/* Club chip — tap to scroll-correct. */}

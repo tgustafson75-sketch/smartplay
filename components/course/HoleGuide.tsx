@@ -1,4 +1,6 @@
 import React, { useMemo, useState } from 'react';
+import { useDistanceFormat } from '../../hooks/useDistanceUnit';
+import { unitWord } from '../../services/distanceUnits';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useTranslation } from 'react-i18next';
@@ -36,6 +38,9 @@ type Props = {
  * the copy makes the data source visible.
  */
 export default function HoleGuide({ holes, notesLoading }: Props) {
+  // The whole card — header, every hole and the total — in one unit. A table where the column
+  // header and the numbers under it disagree is worse than either being wrong alone.
+  const { toDisplay, label, unit } = useDistanceFormat();
   const { t } = useTranslation();
   const { colors } = useTheme();
   const sorted = [...holes].sort((a, b) => a.hole_number - b.hole_number);
@@ -79,7 +84,7 @@ export default function HoleGuide({ holes, notesLoading }: Props) {
       <View style={[styles.headerRow, dynamicStyles.headerBorder]}>
         <Text style={[styles.h, dynamicStyles.header, styles.colHole]}>#</Text>
         <Text style={[styles.h, dynamicStyles.header, styles.colPar]}>{t('scorecard.par')}</Text>
-        <Text style={[styles.h, dynamicStyles.header, styles.colYds]}>{t('course_hole_guide.hole_guide.yds')}</Text>
+        <Text style={[styles.h, dynamicStyles.header, styles.colYds]}>{label.toUpperCase()}</Text>
         <Text style={[styles.h, dynamicStyles.header, styles.colNote]}>{t('course_hole_guide.hole_guide.note')}</Text>
       </View>
       {sorted.map((h, i) => {
@@ -106,7 +111,7 @@ export default function HoleGuide({ holes, notesLoading }: Props) {
               accessibilityRole={hasDescription ? 'button' : undefined}
               accessibilityLabel={
                 hasDescription
-                  ? `Hole ${h.hole_number}, par ${h.par}, ${h.yardage} yards. ${isOpen ? 'Hide' : 'Show'} description.`
+                  ? `Hole ${h.hole_number}, par ${h.par}, ${toDisplay(h.yardage)} ${unitWord(unit)}. ${isOpen ? 'Hide' : 'Show'} description.`
                   : undefined
               }
             >
@@ -117,7 +122,7 @@ export default function HoleGuide({ holes, notesLoading }: Props) {
               </View>
               <Text style={[styles.cell, dynamicStyles.cell, styles.colPar]}>{h.par}</Text>
               <Text style={[styles.cell, dynamicStyles.cell, styles.colYds]}>
-                {h.yardage > 0 ? h.yardage : '—'}
+                {h.yardage > 0 ? toDisplay(h.yardage) : '—'}
               </Text>
               <View style={[styles.colNote, styles.noteCellWrap]}>
                 <Text
@@ -150,7 +155,7 @@ export default function HoleGuide({ holes, notesLoading }: Props) {
       <View style={[styles.row, styles.totalRow, dynamicStyles.totalBorder]}>
         <Text style={[styles.cell, styles.colHole, dynamicStyles.totalLabel]}>{t('scorecard.total')}</Text>
         <Text style={[styles.cell, styles.colPar, dynamicStyles.totalVal, styles.totalValSize]}>{parTotal}</Text>
-        <Text style={[styles.cell, styles.colYds, dynamicStyles.totalVal, styles.totalValSize]}>{ydsTotal}</Text>
+        <Text style={[styles.cell, styles.colYds, dynamicStyles.totalVal, styles.totalValSize]}>{toDisplay(ydsTotal)}</Text>
         <Text style={[styles.cell, styles.colNote]} />
       </View>
     </View>

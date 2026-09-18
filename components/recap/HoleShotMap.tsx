@@ -7,6 +7,7 @@ import { haversineYards, projectToAxis } from '../../utils/geoDistance';
 import type { ShotConfirmation } from '../../services/round/shotSwingConfirm';
 import { useTranslation } from 'react-i18next';
 import { shotDistanceDisplay } from '../../services/puttUnits';
+import { useDistanceUnit } from '../../hooks/useDistanceUnit';
 
 /**
  * Phase B — Hole-level shot map.
@@ -77,6 +78,7 @@ export default function HoleShotMap({
   prevDisabled,
   nextDisabled,
 }: Props) {
+  const distanceUnit = useDistanceUnit();
   const { t } = useTranslation();
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
 
@@ -139,7 +141,7 @@ export default function HoleShotMap({
    * unit had a second renderer and only one of them had been corrected. One owner answers both.
    * [[two-owners-is-the-root-cause]]
    */
-  const selectedDistance = shotDistanceDisplay(selected?.club, selected?.distance_yards);
+  const selectedDistance = shotDistanceDisplay(selected?.club, selected?.distance_yards, distanceUnit);
 
   return (
     <View style={styles.container}>
