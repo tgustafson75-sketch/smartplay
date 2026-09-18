@@ -197,6 +197,16 @@ export function findOrphanExports(): string[] {
  * you still remember what it was for — which is the entire point of this file.
  */
 export const ORPHAN_BASELINE: Record<string, string> = {
+  // ── 2026-09-17: the silent round briefing ────────────────────────────────────
+  'services/voiceService.ts :: getLastSpeakStartedAt':
+    'TEST SEAM, deliberately kept after app/_layout.tsx moved to getLastSpeakActivityAt. It is the ' +
+    'stamp written only when a queue BODY RUNS, and gracing the route-change guard off it is what ' +
+    'silenced the round briefing: after an idle queue it reads minutes old, so the 2s grace that ' +
+    'exists to protect speak-then-navigate had already expired. The regression test uses this ' +
+    'getter to express the OLD comparison and assert it would have cut the line — delete the export ' +
+    'and the bug becomes inexpressible, leaving only a test that says the new code does what the ' +
+    'new code does. Still read internally by getLastSpeakActivityAt, so it is not dead either.',
+
   // ── 2026-09-13: the constants/ + data/ blind spot, opened and triaged ─────────
   'constants/handicapTiers.ts :: DEFAULT_TIER':
     'TEST SURFACE, and the test is the point — DEFAULT_TIER is a second owner of "the default skill ' +

@@ -849,6 +849,8 @@ let lastStopAt = 0;
 // leaves a JUST-started line alone (intentional speak-then-navigate: tool opens,
 // SmartFinder fire a short line right before router.push).
 let lastSpeakStartedAt = 0;
+/** When a line was last handed to the queue — see enqueueSpeak. */
+let lastSpeakEnqueuedAt = 0;
 /**
  * 2026-09-16 — THIS IS THE WRONG CLOCK FOR THE ROUTE-CHANGE GRACE, and app/_layout.tsx uses it as
  * one. It is stamped below only when a queue BODY RUNS, so after an idle queue it reads minutes old
@@ -858,8 +860,34 @@ let lastSpeakStartedAt = 0;
  */
 export const getLastSpeakStartedAt = (): number => lastSpeakStartedAt;
 
+/**
+ * The last moment the caddie was ASKED to say something, whether or not the audio has begun.
+ *
+ * This is what a navigation guard must grace off. "Nothing has STARTED in 2s" is not the same
+ * question as "nothing is in flight" — a line waiting on a TTS fetch, or simply enqueued into an
+ * idle queue, has started nothing and is very much in flight. app/_layout.tsx is the caller.
+ */
+export const getLastSpeakActivityAt = (): number => Math.max(lastSpeakStartedAt, lastSpeakEnqueuedAt);
+
+/** Test seam — resets the two timestamps. Never called by the app. */
+export const __resetSpeakActivityForTest = (): void => { lastSpeakStartedAt = 0; lastSpeakEnqueuedAt = 0; };
+
 const enqueueSpeak = (body: () => Promise<void>): Promise<void> => {
   const enqueuedAt = speakGeneration;
+  /**
+   * 2026-09-17 — STAMPED AT ENQUEUE, and this is the whole fix for the silent round briefing.
+   *
+   * lastSpeakStartedAt below is only written when a queue BODY RUNS. The route-change guard in
+   * app/_layout.tsx graces off it — "did we start speaking in the last 2s?" — so after an IDLE
+   * queue that timestamp is minutes old and the grace has already expired. Which means the one
+   * case the grace exists to protect, an intentional speak-then-navigate, was the case it could
+   * never protect: the line is enqueued, the screen navigates, the guard fires, and the body is
+   * dropped milliseconds later having never made a sound.
+   *
+   * Tim's Sep 15 log: speak_superseded on /round/briefing, preemptedBy route_change, msSinceStop 7,
+   * msSinceLastSpeakStart 185213 — three minutes since anything spoke. Exactly this.
+   */
+  lastSpeakEnqueuedAt = Date.now();
   speakQueue = speakQueue
     .catch(() => { /* drop prior failure */ })
     .then(() => {

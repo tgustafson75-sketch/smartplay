@@ -21,7 +21,7 @@ import { selfContext } from '../store/issueLogStore';
 import { getTrustLevel } from '../services/trustLevelService';
 import { startFlagSync, useFlagStore, isBuildUnsupported } from '../store/flagStore';
 import { useRoundStore, whenRoundStoreHydrated } from '../store/roundStore';
-import { stopSpeaking, getLastSpeakStartedAt } from '../services/voiceService';
+import { stopSpeaking, getLastSpeakActivityAt } from '../services/voiceService';
 import { setProactiveLineComposer } from '../services/proactiveLineRegistry';
 import { generateProactiveLine } from '../services/conversationalBrain';
 // 2026-05-27 — Fix EA: screenshot mode flag drives the global StatusBar
@@ -323,7 +323,7 @@ function AppNavigator() {
     // Pure tab↔tab navigation → keep the caddie talking (total presence).
     if (isMainTab(prev) && isMainTab(pathname)) return;
     /**
-     * 2026-09-16 — THE PROOF ARRIVED, AND IT NAMES THIS GUARD. Known bug, deliberately unfixed.
+     * 2026-09-16 — THE PROOF ARRIVED, AND IT NAMED THIS GUARD. FIXED 2026-09-17.
      *
      * The 09-03 note here asked for it by name: "a report carrying preemptedBy: 'route_change' is
      * the proof; one carrying 'speak' rules it out." Tim's Sep 15 issue log carries route_change,
@@ -339,12 +339,18 @@ function AppNavigator() {
      * So the 2s grace cannot protect a speak-then-navigate when the queue was idle, which is the
      * one case the comment above says it exists to protect.
      *
-     * NOT FIXED HERE: this is the voice path and PATH 4, and Tim's call was to let build 27 go to
-     * Apple untouched. The fix (an enqueue-time stamp, graced off the later of the two) and the gate
-     * it has to carry are written up in docs/OPEN-ITEMS.md.
+     * THE FIX: grace off getLastSpeakActivityAt(), which is the LATER of "a line last started" and
+     * "a line was last enqueued". The question this guard needs answered is "is anything in
+     * flight?", and a line waiting on a TTS fetch — or simply sitting in an idle queue — has
+     * started nothing while being very much in flight. Stale carry-over speech from the previous
+     * screen is still cut, because that line was enqueued and started long ago; only the
+     * speak-then-navigate the comment above says it protects now actually survives.
+     *
+     * Deferred on 09-16 so build 27 could reach Apple untouched, then shipped by OTA once 1.0 was
+     * live — a core function going silent is not something to sit on.
      * [[a-stale-header-is-a-source-someone-trusts]]
      */
-    if (Date.now() - getLastSpeakStartedAt() > 2000) {
+    if (Date.now() - getLastSpeakActivityAt() > 2000) {
       void stopSpeaking('route_change').catch(() => {});
     }
   }, [pathname]);

@@ -38,6 +38,12 @@ module.exports = {
         // relied on for real behavior and hung quick-round-disambiguation. Only the modules pure
         // services actually pull in transitively are stubbed.
         '^expo-location$': '<rootDir>/__tests__/mocks/expoGeneric.js',
+        // 2026-09-17 — expo-av ships ESM that plain node cannot parse, which walled services/
+        // voiceService off from the logic suite entirely. That is why the route-change speech guard
+        // (the silent round briefing, Tim's 09-15 report) had no test of any kind: the module that
+        // owns the timestamps could not be imported. Scoped, per the note above, not a catch-all.
+        '^expo-av$': '<rootDir>/__tests__/mocks/expoAv.js',
+        '^expo-speech$': '<rootDir>/__tests__/mocks/expoGeneric.js',
         // 2026-08-19 — expo-router ships JSX and cannot load under the plain ts-jest transform, so
         // every module importing `router` at top level was untestable — including
         // services/voice/conversationalToolDispatch, the single switch every voice tool runs through

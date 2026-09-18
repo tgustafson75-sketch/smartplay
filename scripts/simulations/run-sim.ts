@@ -4761,9 +4761,23 @@ check('Voice: stale speech cleared on navigation (no carry-over), with speak-the
     const vs = read('services/voiceService.ts');
     const layout = read('app/_layout.tsx');
     return (
-      /export const getLastSpeakStartedAt = \(\): number => lastSpeakStartedAt;/.test(vs) &&
+      /**
+       * 2026-09-17 — MOVED TO getLastSpeakActivityAt, and the old assertion is the bug.
+       *
+       * This pinned the guard to `Date.now() - getLastSpeakStartedAt() > 2000`, which is exactly
+       * the comparison that produced the silent round briefing: lastSpeakStartedAt is stamped only
+       * when a queue BODY RUNS, so after an idle queue it is minutes old and the 2s grace has
+       * already expired — killing the speak-then-navigate this scenario's own description says the
+       * grace protects. The guard now asks for the LATER of "last started" and "last enqueued",
+       * which is the question it always meant to ask.
+       *
+       * Both stamps are still pinned, because the fix must not become "grace off enqueue alone" —
+       * that would stop cutting genuinely stale speech mid-sentence, the 2026-06-16 complaint.
+       */
+      /export const getLastSpeakActivityAt = \(\): number => Math\.max\(lastSpeakStartedAt, lastSpeakEnqueuedAt\);/.test(vs) &&
       /lastSpeakStartedAt = Date\.now\(\);/.test(vs) &&
-      /Date\.now\(\) - getLastSpeakStartedAt\(\) > 2000/.test(layout) &&
+      /lastSpeakEnqueuedAt = Date\.now\(\);/.test(vs) &&
+      /Date\.now\(\) - getLastSpeakActivityAt\(\) > 2000/.test(layout) &&
       // 2026-09-03: was /void stopSpeaking\(\)\.catch/, i.e. pinned to the call taking NO argument.
       // It went red when the call gained a diagnostic reason that changed nothing it cares about.
       // What this scenario is actually about is that the route change STOPS the stale line, so it

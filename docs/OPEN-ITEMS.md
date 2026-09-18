@@ -947,11 +947,23 @@ Needs Tim's per-item OK.
 
 ---
 
-## The round briefing can go silent, and the 2s grace that should prevent it is measured off the wrong clock
+## ~~The round briefing can go silent~~ — **FIXED 2026-09-17, shipped by OTA**
 
-**Found 2026-09-16, from Tim's issue log. Diagnosed, NOT fixed — deferred by Tim's call so build 27
-could go to Apple untouched. This is the voice path ([[voice-path-change-freeze]]) and PATH 4, so it
-needs a device round before it counts as shipped.**
+**Found 2026-09-16 from Tim's issue log, deferred so build 27 could reach Apple untouched, then
+fixed 2026-09-17 once 1.0 was live — Tim: "we cannot have core functions affected like this."
+Shipped by OTA; no binary needed. Still wants a device round to be called verified (PATH 4).**
+
+**The fix, as shipped:** `lastSpeakEnqueuedAt` is stamped in `enqueueSpeak`, and the guard graces
+off `getLastSpeakActivityAt()` — the LATER of "last started" and "last enqueued". Stale carry-over
+speech is still cut, because that line was enqueued and started long ago.
+
+**The gate:** `__tests__/regression/a-line-just-asked-for-survives-the-navigation.test.ts`. Removing
+just the enqueue stamp turns "THE BUG" red with `Expected: false, Received: true`. Getting there
+needed `__tests__/mocks/expoAv.js` — expo-av ships ESM the logic project could not parse, which is
+why `services/voiceService` had never been testable and this guard had no test at all.
+
+The original diagnosis is kept below, because the 09-03 comment's GUESS about the cause was wrong in
+an instructive way.
 
 ### The report
 
