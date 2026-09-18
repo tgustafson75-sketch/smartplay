@@ -811,6 +811,15 @@ export default function SmartMotion() {
   const setLastClub = setClub; // alias kept for existing call sites
   const [clubMenuOpen, setClubMenuOpen] = useState(false);
   const [scanningClub, setScanningClub] = useState(false);
+
+  /** Delete a one-tick capture temp. Fire-and-forget; a failed cleanup must never stop the loop. */
+  const dropFrameTemp = (uri: string | null | undefined) => {
+    if (!uri) return;
+    try {
+      const FS = require('expo-file-system/legacy') as typeof import('expo-file-system/legacy');
+      void FS.deleteAsync(uri, { idempotent: true }).catch(() => undefined);
+    } catch { /* cleanup is best-effort */ }
+  };
   // 2026-06-23 (Tim) — guided Scan-club: a framing box + 3-2-1 hold so the user
   // presents the club SOLE steadily (a quick pass gives the vision a blurry,
   // unreadable frame — the "8-iron" only reads from a crisp held frame).
@@ -1023,8 +1032,41 @@ export default function SmartMotion() {
           // takePictureAsync for nothing. Framing stays null (no pill); no crash.
           const mp = await import('../../services/mediaPipePoseService');
           if (!mp.isMediaPipeAvailable()) return; // no reschedule → loop ends
-          const pic = await cameraRef.current?.takePictureAsync?.({ base64: true, quality: 0.35, skipProcessing: true });
-          const b64 = pic?.base64;
+          /**
+           * 2026-09-17 — DOWNSCALE BEFORE THE BRIDGE. This loop is the heaviest allocation site in
+           * the app and it sits on the screen that precedes every capture.
+           *
+           * takePictureAsync takes no size option and no pictureSize prop is set, so this grabbed a
+           * FULL-SENSOR still — `quality: 0.35` is JPEG compression, not resolution. On a 12MP phone
+           * that is a ~1-2MB base64 string across the bridge and a ~48MB ARGB_8888 Bitmap decoded
+           * natively, every 0.9s for as long as the player stands there lining up. The native side
+           * never recycles it (android-native/MediaPipePoseModule.kt) — that fix needs a store
+           * build, which is not available right after a release.
+           *
+           * This half needs no build. Pose runs at 256x256 internally, so a full-res frame buys
+           * nothing; resizing to a 1024 long edge first cuts the decoded bitmap by roughly an order
+           * of magnitude and shrinks the bridge payload with it. Same ImageManipulator resize
+           * services/swing/setupCheck and swinglab/space-scan already use.
+           *
+           * base64 is taken from the RESIZE, not the capture, so the big string is never created.
+           * If the resize fails we fall back to the original rather than dropping the frame — the
+           * framing coach going quiet is worse than a heavy frame.
+           */
+          const pic = await cameraRef.current?.takePictureAsync?.({ base64: false, quality: 0.35, skipProcessing: true });
+          let b64: string | null | undefined = null;
+          if (pic?.uri) {
+            try {
+              const IM = require('expo-image-manipulator') as typeof import('expo-image-manipulator');
+              const small = await IM.manipulateAsync(pic.uri, [{ resize: { width: 1024 } }], {
+                compress: 0.6, format: IM.SaveFormat.JPEG, base64: true,
+              });
+              b64 = small.base64;
+              // Both temps go: the capture and the resize. This runs every tick, so leaving them
+              // would trade a memory leak for a disk one.
+              dropFrameTemp(small.uri);
+            } catch { b64 = null; }
+            dropFrameTemp(pic.uri);
+          }
           if (b64 && !cancelled) {
             const frame = await mp.detectPoseFromBase64(b64).catch(() => null);
             if (frame && !cancelled) {
