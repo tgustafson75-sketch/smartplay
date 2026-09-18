@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useDistanceFormat } from '../../hooks/useDistanceUnit';
 import { View, Text, TouchableOpacity, ImageBackground, StyleSheet, Image, type ImageSourcePropType } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle, Line, Rect, Text as SvgText, Path } from 'react-native-svg';
@@ -114,6 +115,9 @@ function HoleFrame({ onPress, onLayout, children }: HoleFrameProps) {
 }
 
 export default function L1HolePreview({ onOpenSmartVision, width, height, badgeTop = 8 }: Props) {
+  // The badge under the cart icon is the number the player glances at all round. It reads in their
+  // unit now; the yards behind it (haversineYards, holeRecord.distance) are untouched.
+  const { fmtCompact } = useDistanceFormat();
   const { t } = useTranslation();
   const propW = width ?? DEFAULT_W;
   const propH = height ?? DEFAULT_H;
@@ -523,7 +527,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
                 <Ionicons name="navigate" size={14} color="#0d1a0d" />
               </View>
               <View style={styles.playerYardageBadge}>
-                <Text style={styles.playerYardageText}>{yardsToGreen}y</Text>
+                <Text style={styles.playerYardageText}>{fmtCompact(yardsToGreen)}</Text>
               </View>
             </>
           ) : null}
@@ -616,7 +620,7 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
                   <View style={[styles.playerTrackDot, { left: `${pctAlong * 100}%` }]} />
                 </View>
                 <View style={styles.playerYardageBadge}>
-                  <Text style={styles.playerYardageText}>{yardsToGreen}y</Text>
+                  <Text style={styles.playerYardageText}>{fmtCompact(yardsToGreen)}</Text>
                 </View>
               </>
             ) : null}

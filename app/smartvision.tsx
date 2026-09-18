@@ -39,6 +39,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { liveDistanceUnit, toDisplayDistance, unitWord } from '../services/distanceUnits';
 import {
   View,
   Text,
@@ -1811,7 +1812,8 @@ export default function SmartVisionScreen() {
       if (last.holeNo === holeNo && now - last.at < 4000) return; // dedupe a double-fire on the same hole
       svLastReadRef.current = { holeNo, at: now };
       const parts: string[] = [];
-      if (mid != null) parts.push(`Hole ${holeNo}. Middle of the green, ${mid} yards.`);
+      // Spoken, so it converts like the SmartFinder callout — same one owner.
+      if (mid != null) { const u = liveDistanceUnit(); parts.push(`Hole ${holeNo}. Middle of the green, ${toDisplayDistance(mid, u)} ${unitWord(u)}.`); }
       if (ar?.playsLikeYards != null && ar.deltaYards !== 0) parts.push(`Plays like ${ar.playsLikeYards}.`);
       if (ar?.club) parts.push(`I'd go ${ar.club}.`);
       if (ar?.hazardNote) parts.push(ar.hazardNote);

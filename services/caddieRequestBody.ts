@@ -275,6 +275,27 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * volatile value in the cached block busts the cache for every turn after it.
      */
     currentBall: safe(() => p.currentBall ?? null, null),
+    /**
+     * 2026-09-18 (Tim — "will the course engine build international courses?") — THE UNIT THE
+     * PLAYER THINKS IN.
+     *
+     * The engine builds them; the caddie then said "one forty-five yards" to someone who has never
+     * used a yard. `settings.distance_unit` has existed for months and NOTHING sent it here, so the
+     * one part of the app a player cannot skim past — the voice — was hard-wired imperial no matter
+     * what the toggle said.
+     *
+     * Rides the MESSAGE rather than the cached system prompt: it is a setting a player can flip
+     * mid-round, and a volatile value in the cached block busts the cache for every turn after it.
+     * Same reasoning as currentBall directly above.
+     *
+     * The NUMBERS in this payload stay in yards — every one of them, as their field names say. The
+     * brain is told the unit and converts in its own words; nothing downstream has to wonder which
+     * system a field is in. [[two-owners-is-the-root-cause]]
+     */
+    distanceUnit: safe(() => {
+      const { liveDistanceUnit } = require('./distanceUnits') as typeof import('./distanceUnits');
+      return liveDistanceUnit();
+    }, 'yards' as const),
     physicalLimitation: safe(() => p.physicalLimitation ?? null, null),
     /**
      * 2026-08-23 — WHERE THEY ARE IN THEIR GOLF (starting / improving / returning / competitive).

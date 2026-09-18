@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useDistanceFormat } from '../../hooks/useDistanceUnit';
 import {
   View,
   Text,
@@ -47,6 +48,7 @@ export default function TargetingOverlay({
   locked = false,
   onPrecisionRead,
 }: Props) {
+  const { fmt } = useDistanceFormat();
   const { width, height } = useWindowDimensions();
 
   // 2026-06-14 (audit — perf) — the reticle POSITION lives on reanimated shared
@@ -187,7 +189,7 @@ export default function TargetingOverlay({
           style={[styles.yardBubble, bubbleStyle]}
         >
           <Text style={styles.yardBubbleText}>
-            {isCenter ? '↕ drag' : `${targetYards} yds`}
+            {isCenter ? '↕ drag' : fmt(targetYards)}
           </Text>
         </Animated.View>
       )}

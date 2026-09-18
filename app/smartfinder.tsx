@@ -55,6 +55,8 @@ import { playsLikeDistance } from '../utils/playsLike';
 import { useElevationDeltaStatus } from '../hooks/useElevationDelta';
 import { useGeometryStatusStore } from '../store/geometryStatusStore';
 import type { WeatherSnapshot } from '../services/weatherService';
+import { liveDistanceUnit, toDisplayDistance, unitWord } from '../services/distanceUnits';
+import { useDistanceFormat } from '../hooks/useDistanceUnit';
 import { useSettingsStore } from '../store/settingsStore';
 import { useTrustLevelStore } from '../store/trustLevelStore';
 import { usePracticeStore } from '../store/practiceStore';
@@ -331,7 +333,14 @@ export default function SmartFinder() {
     // yards"), skip the callout entirely instead of speaking garbage.
     if (middle > 600 || middle < 30) return;
     calloutSpokenRef.current = true;
-    const parts: string[] = [`Middle of green, ${middle} yards.`];
+    /**
+     * 2026-09-18 — SPOKEN IN THEIR UNIT. The sanity gate above is deliberately still in YARDS
+     * (`middle > 600`): it is a check on the geometry, not on the player's preference, and the
+     * threshold means "we are not playing the hole we think we are" whatever the phone is set to.
+     * Only the sentence converts.
+     */
+    const spokenUnit = liveDistanceUnit();
+    const parts: string[] = [`Middle of green, ${toDisplayDistance(middle, spokenUnit)} ${unitWord(spokenUnit)}.`];
     if (caddieWeather) {
       /**
        * 2026-09-11 — ELEVATION WAS MISSING HERE, so the spoken callout and the on-screen card gave
@@ -342,7 +351,7 @@ export default function SmartFinder() {
        */
       const breakdown = playsLikeDistance(middle, caddieWeather, shotBearingDeg, calloutElevationFeet);
       if (Math.abs(breakdown.delta_yards) >= 3) {
-        parts.push(`Plays ${breakdown.plays_like_yards}.`);
+        parts.push(`Plays ${toDisplayDistance(breakdown.plays_like_yards, spokenUnit)}.`);
       }
       if (caddieWeather.wind_speed_mph >= 5) {
         const dir = describeWindDirection(caddieWeather.wind_direction_deg, shotBearingDeg);
@@ -1328,6 +1337,13 @@ function TargetCameraOverlay({
 }) {
   const { t } = useTranslation();
   const styles = useStyles();
+  /**
+   * 2026-09-18 — every number this overlay SHOWS converts here; every number it computes, gates on
+   * and hands to the brain stays in yards. The reticle read, the F/M/B strip, the hazard lines and
+   * the dispersion band all come off the same `toDisplay`, so they can never disagree with each
+   * other about which system the player is in.
+   */
+  const { fmt, fmtCompact, toDisplay, label, labelShort } = useDistanceFormat();
   // SF fix #3 (owner Tim — "user-stated yardage ignored") — the target overlay
   // seeded/re-synced purely from yards.middle (GPS/scorecard) and never consulted
   // resolveYardage, so when the player STATES a distance ("I'm 150 out") the
@@ -1927,8 +1943,8 @@ function TargetCameraOverlay({
               also exactly when the distance stops being a GPS answer.
             */}
             <Text style={styles.targetToLabelMuted}>⊕ {(aimedLabel ?? 'to target').toUpperCase()} </Text>
-            <Text style={styles.targetToYards}>{targetYards}</Text>
-            <Text style={styles.targetToLabelMuted}> yds</Text>
+            <Text style={styles.targetToYards}>{toDisplay(targetYards)}</Text>
+            <Text style={styles.targetToLabelMuted}> {label}</Text>
           </Text>
         )}
         {/* SF-2 (owner: "Caption 'scorecard · aim not live'") — when the
@@ -1963,8 +1979,8 @@ function TargetCameraOverlay({
                 <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
                   <Text style={styles.brainReadNums}>
                     {shotRead.deltaYards !== 0
-                      ? `${shotRead.rawYards} · plays ${shotRead.playsLikeYards}`
-                      : `${shotRead.rawYards} yds`}
+                      ? `${toDisplay(shotRead.rawYards)} · plays ${toDisplay(shotRead.playsLikeYards)}`
+                      : fmt(shotRead.rawYards)}
                   </Text>
                   <Ionicons
                     name={intelExpanded ? 'chevron-down' : 'chevron-up'}
@@ -1987,7 +2003,7 @@ function TargetCameraOverlay({
             // No brain club yet (GPS still settling) — keep a tiny affordance row
             // so the card is still tappable to expand.
             <View style={styles.brainReadHeadline}>
-              <Text style={styles.brainReadNums}>{targetYards != null ? `${targetYards} yds` : 'Reading…'}</Text>
+              <Text style={styles.brainReadNums}>{targetYards != null ? fmt(targetYards) : 'Reading…'}</Text>
               <Ionicons name={intelExpanded ? 'chevron-down' : 'chevron-up'} size={16} color="rgba(255,255,255,0.55)" />
             </View>
           )}
@@ -1997,7 +2013,7 @@ function TargetCameraOverlay({
           {!intelExpanded && (
             <Text style={styles.brainReadWhy} numberOfLines={1}>
               {hazardSummary?.nearest
-                ? `${hazardSummary.nearest.label} ${hazardSummary.nearest.yards}y · ${hazardSummary.safeMiss}`
+                ? `${hazardSummary.nearest.label} ${fmtCompact(hazardSummary.nearest.yards)} · ${hazardSummary.safeMiss}`
                 : sideAwareMissGuidance}
             </Text>
           )}
@@ -2048,11 +2064,11 @@ function TargetCameraOverlay({
                 </Text>
               )}
               {landing && (
-                <Text style={styles.targetIntelLine}>{landing.baseline ? t('smartfinder.target_camera_overlay.landing_carry_est_total_y', { carry: landing.carry, total: landing.total, yards: dispersion.yards, band: dispersion.band }) : t('smartfinder.target_camera_overlay.landing_carry_total_y', { carry: landing.carry, total: landing.total, yards: dispersion.yards, band: dispersion.band })}</Text>
+                <Text style={styles.targetIntelLine}>{landing.baseline ? t('smartfinder.target_camera_overlay.landing_carry_est_total_y', { carry: toDisplay(landing.carry), total: toDisplay(landing.total), yards: toDisplay(dispersion.yards), band: dispersion.band, unit: labelShort }) : t('smartfinder.target_camera_overlay.landing_carry_total_y', { carry: toDisplay(landing.carry), total: toDisplay(landing.total), yards: toDisplay(dispersion.yards), band: dispersion.band, unit: labelShort })}</Text>
               )}
               {hazardSummary?.nearest ? (
                 <Text style={styles.targetIntelLine}>
-                  {hazardSummary.nearest.label} {hazardSummary.nearest.yards}y · {hazardSummary.safeMiss}
+                  {hazardSummary.nearest.label} {fmtCompact(hazardSummary.nearest.yards)} · {hazardSummary.safeMiss}
                 </Text>
               ) : (
                 <Text style={styles.targetIntelLine}>{sideAwareMissGuidance}</Text>
@@ -2061,7 +2077,7 @@ function TargetCameraOverlay({
                   (hazardSummary.secondary) but was dropped. Surface it as a quiet
                   follow-on line so the player sees the next thing in play. */}
               {!!hazardSummary?.secondary && (
-                <Text style={styles.targetIntelLine}>{t('smartfinder.target_camera_overlay.also_y', { label: hazardSummary.secondary.label, yards: hazardSummary.secondary.yards })}</Text>
+                <Text style={styles.targetIntelLine}>{t('smartfinder.target_camera_overlay.also_y', { label: hazardSummary.secondary.label, yards: toDisplay(hazardSummary.secondary.yards), unit: labelShort })}</Text>
               )}
               <Text style={styles.targetIntelPlan}>{aggressiveLine}</Text>
               <Text style={styles.targetIntelPlan}>{conservativeLine}</Text>
@@ -2071,15 +2087,15 @@ function TargetCameraOverlay({
         <View style={styles.targetFmbRow}>
           <View style={styles.targetFmbCol}>
             <Text style={styles.targetFmbHeader}>F</Text>
-            <Text style={styles.targetFmbValue}>{yards.front ?? '—'}</Text>
+            <Text style={styles.targetFmbValue}>{toDisplay(yards.front) ?? '—'}</Text>
           </View>
           <View style={styles.targetFmbCol}>
             <Text style={styles.targetFmbHeaderMid}>M</Text>
-            <Text style={styles.targetFmbValueMid}>{yards.middle ?? '—'}</Text>
+            <Text style={styles.targetFmbValueMid}>{toDisplay(yards.middle) ?? '—'}</Text>
           </View>
           <View style={styles.targetFmbCol}>
             <Text style={styles.targetFmbHeader}>B</Text>
-            <Text style={styles.targetFmbValue}>{yards.back ?? '—'}</Text>
+            <Text style={styles.targetFmbValue}>{toDisplay(yards.back) ?? '—'}</Text>
           </View>
         </View>
       </View>
@@ -2842,6 +2858,7 @@ function readSlope(pct: number): string {
 function TargetView({ geometry, width }: { geometry: HoleGeometry | null; width: number }) {
   const { t } = useTranslation();
   const styles = useStyles();
+  const { toDisplay, unit } = useDistanceFormat();
   const [tap, setTap] = useState<{ xPx: number; yPx: number; yards: number; approx: boolean } | null>(null);
 
   if (!geometry || !geometry.tee || !geometry.green) {
@@ -2911,11 +2928,11 @@ function TargetView({ geometry, width }: { geometry: HoleGeometry | null; width:
           <>
             <Path d={`M ${playerPos.sx} ${playerPos.sy} L ${tap.xPx} ${tap.yPx}`} stroke="#ffffff" strokeWidth={1.5} strokeDasharray="3 3" />
             <Circle cx={tap.xPx} cy={tap.yPx} r={9} fill="#ffffff" stroke="#000000" strokeWidth={1.5} />
-            <SvgText x={tap.xPx} y={tap.yPx + 4} fill="#000000" fontSize={11} fontWeight="900" textAnchor="middle">{tap.yards}</SvgText>
+            <SvgText x={tap.xPx} y={tap.yPx + 4} fill="#000000" fontSize={11} fontWeight="900" textAnchor="middle">{toDisplay(tap.yards)}</SvgText>
           </>
         )}
       </Svg>
-      {tap && <Text style={styles.tapResult}>{t('smartfinder.target_view.yards_to_tap', { yards: tap.yards })}</Text>}
+      {tap && <Text style={styles.tapResult}>{t('smartfinder.target_view.yards_to_tap', { yards: toDisplay(tap.yards), unit: unitWord(unit) })}</Text>}
       {tap && tap.approx && <Text style={styles.tapResult}>{t('smartfinder.target_view.approximate_due_to_gps_quality')}</Text>}
     </View>
   );
@@ -3004,17 +3021,26 @@ function MapView({
   return <TargetView geometry={geometry} width={width} />;
 }
 
+/**
+ * `value` and `playsLikeValue` are YARDS — that is the contract, and every caller passes the raw
+ * `yards.*` straight through. The conversion happens HERE rather than at the three call sites,
+ * because a cell that converts and a sibling that forgot to is the drift this whole change exists
+ * to end. [[two-owners-is-the-root-cause]]
+ */
 function BigCell({ label, value, emphasis, playsLikeValue }: {
   label: string; value: number | null; emphasis?: boolean; playsLikeValue?: number | null;
 }) {
   const { t } = useTranslation();
   const styles = useStyles();
+  const { toDisplay } = useDistanceFormat();
+  const shown = toDisplay(value);
+  const shownPlays = toDisplay(playsLikeValue);
   return (
     <View style={styles.bigCell}>
       <Text style={[styles.bigValue, emphasis && styles.bigValueEmphasis]}>
-        {value != null ? value : '—'}
+        {shown != null ? shown : '—'}
       </Text>
-      {playsLikeValue != null && <Text style={styles.playsLike}>{t('smartfinder.big_cell.plays', { playsLikeValue })}</Text>}
+      {shownPlays != null && <Text style={styles.playsLike}>{t('smartfinder.big_cell.plays', { playsLikeValue: shownPlays })}</Text>}
       <Text style={styles.bigLabel}>{label}</Text>
     </View>
   );

@@ -10,6 +10,7 @@ import {
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { useDistanceFormat } from '../hooks/useDistanceUnit';
 import { useOffCourseStore } from '../services/offCourseDetector';
 import { useMovementModeStore } from '../services/movementModeDetector';
 // 2026-05-21 — Fix O: in-strip manual hole back/forward nav. Reuses the
@@ -113,6 +114,7 @@ export default function CaddieDataStrip({
   // live-vs-static.
   const isOffCourse = useOffCourseStore(s => s.isOffCourse);
   const yardsToNearestHole = useOffCourseStore(s => s.yardsToNearestHole);
+  const { fmtCompact } = useDistanceFormat();
   // Phase 405 wave 3 — movement mode pill (cart vs walking). Renders
   // a small icon-chip next to the source pill so the user can see the
   // app is reading their movement correctly. Hidden when 'unknown'
@@ -462,7 +464,7 @@ export default function CaddieDataStrip({
           <View style={styles.offCoursePill}>
             <Ionicons name="warning-outline" size={9} color="#fbbf24" />
             <Text style={styles.offCoursePillText}>
-              {yardsToNearestHole != null ? `OFF COURSE · ${yardsToNearestHole}y` : 'OFF COURSE'}
+              {yardsToNearestHole != null ? `OFF COURSE · ${fmtCompact(yardsToNearestHole)}` : 'OFF COURSE'}
             </Text>
           </View>
         )}

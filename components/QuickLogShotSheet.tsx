@@ -26,6 +26,8 @@ import { track } from '../services/analytics';
 import type { ShotOutcome } from '../types/shot';
 import { useTranslation } from 'react-i18next';
 import { isPutterClub, puttYardsFromFeet } from '../services/puttUnits';
+import { fromDisplayDistance, unitWord } from '../services/distanceUnits';
+import { useDistanceUnit } from '../hooks/useDistanceUnit';
 
 interface Props {
   visible: boolean;
@@ -88,6 +90,7 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
   const logShot = useRoundStore(s => s.logShot);
 
   const [club, setClub] = useState<string | null>(null);
+  const distanceUnit = useDistanceUnit();
   const [distance, setDistance] = useState('');
   const [outcome, setOutcome] = useState<ShotOutcome>('clean');
   const [direction, setDirection] = useState<ShotResult['direction']>(null);
@@ -157,8 +160,18 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
        * `distance_yards` keeps meaning yards for every club, which is what its name promises and
        * what HoleShotMap draws from. [[two-owners-is-the-root-cause]]
        */
+      /**
+       * 2026-09-18 — WHAT THEY TYPED IS IN THEIR UNIT. `distance_yards` means yards, so a player
+       * set to metres who types 133 must be stored as 145, not 133. Converting the display and not
+       * the ENTRY would be worse than doing neither: it silently writes a 9%-short distance into
+       * the bag the caddie clubs off, and it looks right on the way back out.
+       *
+       * A putt is exempt because a putt is entered in FEET in both systems — services/puttUnits
+       * owns that rule and it is checked first, exactly as before.
+       * [[no-half-fixes-enforce-every-surface]]
+       */
       distance_yards: Number.isFinite(distNum)
-        ? (isPutterClub(club) ? puttYardsFromFeet(distNum) : distNum)
+        ? (isPutterClub(club) ? puttYardsFromFeet(distNum) : (fromDisplayDistance(distNum, distanceUnit) ?? distNum))
         : null,
       outcome,
       logged_via: 'tap',
@@ -289,7 +302,7 @@ export default function QuickLogShotSheet({ visible, onClose }: Props) {
             <Text style={[styles.label, { color: colors.text_muted, marginTop: 12 }]}>
               {isPutterClub(club)
                 ? t('quick_log_shot_sheet.text.distance_feet_optional')
-                : t('quick_log_shot_sheet.text.distance_yards_optional')}
+                : t('quick_log_shot_sheet.text.distance_yards_optional', { unit: unitWord(distanceUnit) })}
             </Text>
             <TextInput
               value={distance}

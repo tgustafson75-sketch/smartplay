@@ -336,6 +336,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       recentCageSessions = [],
       dominantMiss = null,
       currentBall = null,
+      distanceUnit = 'yards',
       ball_performance = null,
       club_variant_insight = null,
       capture_quality = null,
@@ -1101,6 +1102,24 @@ Probed 2026-08-23: told the player was left-handed and slicing it all day, the c
        */
       if (typeof currentBall === 'string' && currentBall.trim()) {
         lines.push(`- The ball they are playing today: ${currentBall.trim()}. Know it, use it if it genuinely matters (a firm ball into a hard green, spin on a short one), and otherwise say nothing about it. Do NOT offer a ball recommendation unless they ask.`);
+      }
+      /**
+       * 2026-09-18 (Tim — "will the course engine build international courses?") — SPEAK THEIR UNIT.
+       *
+       * Every number in this payload is YARDS and always will be; that is the contract of the field
+       * names and nothing downstream should have to wonder. What changes is the unit the ANSWER is
+       * spoken in. A player in the UK, Europe, Japan or Australia sets metres in Settings and the
+       * caddie was still saying "one forty-five yards" to them, because this value had never been
+       * sent. The screens can be skimmed past; the voice cannot.
+       *
+       * Stated as a conversion instruction with the arithmetic given, because arithmetic asserted by
+       * a language model is the thing this project has been burned by most — a caddie left to
+       * "convert to metres" unaided will produce a number that is nearly right, which on a club call
+       * is worse than one that is obviously wrong. One multiplication, stated once.
+       * [[arithmetic-belongs-in-code-not-the-model]]
+       */
+      if (distanceUnit === 'meters') {
+        lines.push('- THIS PLAYER USES METRES. Every distance in this payload is in YARDS. Convert before you say any of them: metres = yards x 0.9144, rounded to a whole number. Say "metres", never "yards", and never quote both. A range converts end by end (140-147 yards is 128-134 metres). Club names, loft and shaft numbers are NOT distances and never convert.');
       }
       /**
        * Only present when the comparison actually found a difference worth acting on — see

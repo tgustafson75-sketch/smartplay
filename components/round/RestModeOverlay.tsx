@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useDistanceFormat } from '../../hooks/useDistanceUnit';
 import { View, Text, Pressable, StyleSheet, Image } from 'react-native';
 
 /**
@@ -61,6 +62,9 @@ function RestKeepAwake() {
 }
 
 export function RestModeOverlay() {
+  // The rest screen is the one readout a player looks at for a whole round without touching
+  // the phone. It reads in their unit like everything else.
+  const { toDisplay, label } = useDistanceFormat();
   const { t } = useTranslation();
   const active = useRestModeStore((s) => s.active);
   const enterRest = useRestModeStore((s) => s.enterRest);
@@ -149,11 +153,11 @@ export function RestModeOverlay() {
           */}
         {yardageReadout ? (
           <View style={styles.yardageBlock}>
-            <Text style={styles.yards}>{yardageReadout.yardage}</Text>
+            <Text style={styles.yards}>{toDisplay(yardageReadout.yardage)}</Text>
             <Text style={styles.yardsLabel}>
               {yardageReadout.playsLike != null && yardageReadout.playsLike !== yardageReadout.yardage
-                ? `YDS · PLAYS ${yardageReadout.playsLike}`
-                : 'YDS'}
+                ? `${label.toUpperCase()} · PLAYS ${toDisplay(yardageReadout.playsLike)}`
+                : label.toUpperCase()}
             </Text>
           </View>
         ) : null}

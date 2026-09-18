@@ -16,6 +16,8 @@ import { composeFitProfile, recommendFlex, type FitClubInput } from '../../servi
 // The SAME rollout table the store converts with — imported, never re-stated, or the hint under the
 // toggle would drift from the arithmetic it is describing. [[two-owners-is-the-root-cause]]
 import { ROLL_YARDS as ROLL_BY_CLUB, STATED_YARDS_MIN, STATED_YARDS_MAX } from '../../services/standardBag';
+import { fromDisplayDistance, toDisplayDistance } from '../../services/distanceUnits';
+import { useDistanceFormat } from '../../hooks/useDistanceUnit';
 import { composeFitGap, type OwnedClub } from '../../services/practice/fitGap';
 import { useClubBagStore, carryLimitFor, PUTTER_ID, specsOf } from '../../store/clubBagStore';
 import { clubWorkStatuses } from '../../services/clubWork';
@@ -38,6 +40,7 @@ const TRACKED_COLOR = '#3FB950';
 const STATED_COLOR = '#22d3ee';
 
 export default function FitProfileScreen() {
+  const { unit: distanceUnit, label } = useDistanceFormat();
   const { t } = useTranslation();
   const { colors } = useTheme();
   const router = useRouter();
@@ -105,7 +108,7 @@ export default function FitProfileScreen() {
     const entry = st.statedEntryFor(name);
     setDraftUnit(unit);
     setEditingClub(club);
-    setDraft(entry != null ? String(entry) : '');
+    setDraft(entry != null ? String(toDisplayDistance(entry, distanceUnit)) : '');
     setDraftError(null);
   };
   /** Retype the draft into the other unit as he flips the toggle, so the number keeps its meaning. */
@@ -114,8 +117,10 @@ export default function FitProfileScreen() {
     const y = parseInt(draft, 10);
     setDraftUnit(unit);
     if (!Number.isFinite(y) || y <= 0) return;
-    const asCarry = statedCarryFromEntry(club as ClubName, y, draftUnit);
-    setDraft(String(statedEntryFromCarry(club as ClubName, asCarry, unit)));
+    // `y` is on screen in his unit; the rollout table works in yards. Convert in, convert back out.
+    const yYards = Math.round(fromDisplayDistance(y, distanceUnit) ?? y);
+    const asCarry = statedCarryFromEntry(club as ClubName, yYards, draftUnit);
+    setDraft(String(toDisplayDistance(statedEntryFromCarry(club as ClubName, asCarry, unit), distanceUnit)));
   };
   /**
    * A refused number keeps the row OPEN with the reason under it. Closing the editor on a write that
@@ -125,9 +130,18 @@ export default function FitProfileScreen() {
   const saveEdit = (club: string) => {
     const y = parseInt(draft, 10);
     if (!Number.isFinite(y) || y <= 0) { setEditingClub(null); setDraftError(null); return; }
-    const ok = useClubStatsStore.getState().setManual(club as ClubName, y, draftUnit);
+    /**
+     * 2026-09-18 — WHAT HE TYPED IS IN HIS UNIT. Everything below this line, and the whole ingest
+     * band this number becomes the centre of, is YARDS. A player set to metres typing 133 means 145
+     * yards; storing 133 would set a band of 73-193 yards around a club that actually carries 145,
+     * so every real shot he hits with it gets rejected at ingest and the club never learns. Same
+     * failure the stated-yardage clamp exists to prevent, arriving by a different door.
+     * [[two-owners-is-the-root-cause]] [[no-half-fixes-enforce-every-surface]]
+     */
+    const yInYards = Math.round(fromDisplayDistance(y, distanceUnit) ?? y);
+    const ok = useClubStatsStore.getState().setManual(club as ClubName, yInYards, draftUnit);
     if (!ok) {
-      setDraftError(t('practice_fit_profile.unit.refused', { min: STATED_YARDS_MIN, max: STATED_YARDS_MAX }));
+      setDraftError(t('practice_fit_profile.unit.refused', { min: toDisplayDistance(STATED_YARDS_MIN, distanceUnit), max: toDisplayDistance(STATED_YARDS_MAX, distanceUnit) }));
       return;
     }
     setDraftError(null);
@@ -344,7 +358,7 @@ export default function FitProfileScreen() {
            * sentence assembled out of nothing. [[illustration-data-points]]
            */
           detail: work.get(key)
-            ?? (yards != null ? `${yards} yd carry` : null),
+            ?? (yards != null ? `${toDisplayDistance(yards, distanceUnit)} ${label} carry` : null),
           isPutter: c.club_id === PUTTER_ID,
         };
       })
@@ -519,7 +533,7 @@ export default function FitProfileScreen() {
                         onChangeText={(v) => { setDraft(v); if (draftError) setDraftError(null); }}
                         keyboardType="number-pad"
                         autoFocus
-                        placeholder="yds"
+                        placeholder={label}
                         placeholderTextColor={colors.text_muted}
                         maxLength={3}
                         onSubmitEditing={() => saveEdit(c.club)}
@@ -599,7 +613,7 @@ export default function FitProfileScreen() {
               // he would otherwise think the app had lost his number. A stated CARRY only speaks up
               // when there is a tracked number to contrast with — on its own it would just repeat the
               // figure already on the right of the same row.
-              if (entry != null && unit === 'total') parts.push(t('practice_fit_profile.row.you_set_total', { yards: entry }));
+              if (entry != null && unit === 'total') parts.push(t('practice_fit_profile.row.you_set_total', { yards: toDisplayDistance(entry, distanceUnit) }));
               else if (entry != null && overridden) parts.push(t('practice_fit_profile.row.you_set_carry', { yards: entry }));
               if (overridden) parts.push(t('practice_fit_profile.row.tracked_is', { yards: Math.round(trackedY!) }));
               return parts.length > 0 ? parts.join(' · ') : null;

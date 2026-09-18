@@ -1899,11 +1899,11 @@
       "plays": "PLAYS",
       "conf": "CONF",
       "wind": "Wind: {{windText}}",
-      "also_y": "Also: {{label}} {{yards}}y",
+      "also_y": "Also: {{label}} {{yards}}{{unit}}",
       "ranged_off_the_flagstick_no": "Ranged off the flagstick — no tilt needed",
       "ranged_off_a_person_no": "Ranged off a person — no tilt needed",
-      "landing_carry_est_total_y": "Landing: carry {{carry}} est · total {{total}} · ±{{yards}}y ({{band}})",
-      "landing_carry_total_y": "Landing: carry {{carry}} · total {{total}} · ±{{yards}}y ({{band}})"
+      "landing_carry_est_total_y": "Landing: carry {{carry}} est · total {{total}} · ±{{yards}}{{unit}} ({{band}})",
+      "landing_carry_total_y": "Landing: carry {{carry}} · total {{total}} · ±{{yards}}{{unit}} ({{band}})"
     },
     "putt_camera_overlay": {
       "estimate_hold_steady_over_the": "estimate · hold steady over the line",
@@ -1941,7 +1941,7 @@
       "green": "GREEN",
       "you": "YOU",
       "approximate_due_to_gps_quality": "Approximate due to GPS quality.",
-      "yards_to_tap": "{{yards}} yards to tap"
+      "yards_to_tap": "{{yards}} {{unit}} to tap"
     },
     "label": {
       "front": "FRONT",
@@ -3069,7 +3069,7 @@
     "text": {
       "hole": "Hole",
       "club": "Club",
-      "distance_yards_optional": "Distance (yards, optional)",
+      "distance_yards_optional": "Distance ({{unit}}, optional)",
       "outcome": "Outcome",
       "direction_optional": "Direction (optional)",
       "log_shot_hole": "Log shot · hole {{current_hole}}",

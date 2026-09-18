@@ -122,7 +122,17 @@ describe('every surface a human reads a putt on says feet', () => {
 
   it('the Quick Log sheet asks for FEET once the putter is picked, and converts on the way in', () => {
     const q = code('components/QuickLogShotSheet.tsx');
-    expect(q).toMatch(/isPutterClub\(club\)\s*\?\s*puttYardsFromFeet\(distNum\)\s*:\s*distNum/);
+    /**
+     * 2026-09-18 — this pinned the literal `isPutterClub(club) ? puttYardsFromFeet(distNum) : distNum`
+     * and went red when the OTHER branch learned about metres (a player set to metres who types 133
+     * must store 145). The property this test is about is untouched: the putter is still checked
+     * FIRST and still converts from feet. Asserted as "the putt branch is unchanged and it comes
+     * before anything else", which is the actual rule, rather than as the shape of the line that
+     * happened to implement it. [[a-guard-can-assert-the-broken-shape]]
+     */
+    expect(q).toMatch(/isPutterClub\(club\)\s*\?\s*puttYardsFromFeet\(distNum\)\s*:/);
+    // ...and the non-putt branch must NOT quietly go back to storing the raw typed number.
+    expect(q).toMatch(/puttYardsFromFeet\(distNum\)\s*:\s*\(fromDisplayDistance\(distNum, distanceUnit\)/);
     expect(q).toMatch(/isPutterClub\(club\)[\s\S]{0,120}distance_feet_optional/);
     expect(en.quick_log_shot_sheet.text.distance_feet_optional).toMatch(/feet/i);
   });

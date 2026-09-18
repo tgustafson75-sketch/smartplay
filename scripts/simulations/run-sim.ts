@@ -9836,7 +9836,16 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
         /yards: st\.carryFor\(c\), measured: st\.hasTrackedCarry\(c\), stated: st\.hasManual\(c\)/.test(screen) &&
         !/measured: st\.hasCarry\(c\)/.test(screen) &&
         /const editable = true;/.test(screen) && !/const editable = !c\.measured/.test(screen) &&
-        /setManual\(club as ClubName, y, draftUnit\)/.test(screen) &&
+        /**
+          * 2026-09-18 — was `setManual\(club as ClubName, y, draftUnit\)`, pinning the literal
+          * variable. The argument is now `yInYards`, because the typed number is read in the
+          * player's own distance unit and converted before it is filed (a metre-set player typing
+          * 133 means 145). The PROPERTY this line is about — the stated number is filed WITH ITS
+          * carry/total unit, not as a bare figure — is untouched, so the assertion widens the
+          * variable and keeps `draftUnit`, which is the part that matters.
+          */
+        /setManual\(club as ClubName, \w+, draftUnit\)/.test(screen) &&
+        /fromDisplayDistance\(y, distanceUnit\)/.test(screen) &&   // ...and it IS converted first
         /statedUnitFor|statedEntryFor/.test(screen) &&
         // 4. The toggle opens on TOTAL for a club he has never stated. Not a coin-toss: the app
         //    settled this on 2026-09-12 for the spoken path and the reason carries over exactly —
@@ -17350,6 +17359,67 @@ check(
       /if \(applying\) \{/.test(banner) &&                            // ...and the overlay renders
       saysToPlayer(banner, 'Updating SmartPlay') && saysToPlayer(banner, 'Back in a second'),
     'the cold-start auto-apply raises a full-screen branded overlay and reloads behind it after OVERLAY_MS, so the runtime teardown reads as the app doing something rather than dying; the manual banner button still reloads immediately, which is fine because the player just pressed it');
+}
+
+/**
+ * 2026-09-18 (Tim — "will the course engine build international courses?") — IT DOES, AND THEN IT
+ * SPOKE YARDS AT THEM.
+ *
+ * `settings.distance_unit` shipped months ago with a setter and a voice intent and FOUR readers:
+ * the toggle that writes it, an owner debug screen, one component, and the voice handler. A setting
+ * that changes one screen out of forty is worse than no setting — it tells the player the app can
+ * do this and then does not.
+ *
+ * Three properties, and the second is the one that would have been skipped:
+ *   1. ONE owner for the conversion, and the brain is told so the VOICE converts too.
+ *   2. ENTRY converts as well as display. Converting only display writes a 9%-short number into the
+ *      bag the caddie clubs off, and it reads back correctly — the worst kind of wrong.
+ *   3. The surfaces ask the owner rather than each doing their own arithmetic.
+ */
+{
+  const du = readCode('services/distanceUnits.ts');
+  const body = readCode('services/caddieRequestBody.ts');
+  const kevin = readCode('api/kevin.ts');
+
+  check('UNITS: one owner, and the caddie is told which unit to SPEAK',
+    /export const METERS_PER_YARD = 0\.9144/.test(du) &&
+      /export function toDisplayDistance/.test(du) &&
+      /export function fromDisplayDistance/.test(du) &&
+      /distanceUnit: safe\(/.test(body) &&
+      /distanceUnit === 'meters'/.test(kevin) && /0\.9144/.test(kevin),
+    'every stored distance stays YARDS; services/distanceUnits converts at display and at entry, and the brain is handed the unit plus the arithmetic so the spoken answer converts too rather than being left to the model');
+
+  /**
+   * ENTRY, specifically. A metre-set player typing 133 into the shot log must store 145 yards. The
+   * putter is checked FIRST and stays in feet in both systems (services/puttUnits owns that).
+   */
+  const ql = readCode('components/QuickLogShotSheet.tsx');
+  check('UNITS: what the player TYPES is read in their unit, not stored as yards regardless',
+    /isPutterClub\(club\) \? puttYardsFromFeet\(distNum\) : \(fromDisplayDistance\(distNum, distanceUnit\)/.test(ql),
+    'the shot log converts on the way IN — display-only conversion would write a 9%-short distance into the bag and then read it back looking right');
+
+  /**
+   * The surfaces. Listed rather than swept, because this is the set that was CONVERTED and the list
+   * is the honest record of it — a sweep would quietly pass as new screens are added.
+   */
+  const CONVERTED = [
+    'components/caddie/L1HolePreview.tsx',
+    'components/CaddieDataStrip.tsx',
+    'components/round/RestModeOverlay.tsx',
+    'components/smartfinder/TargetingOverlay.tsx',
+    'app/smartfinder.tsx',
+    'app/(tabs)/dashboard.tsx',
+    'app/(tabs)/play.tsx',
+  ];
+  const notAsking = CONVERTED.filter((f) => {
+    const src = readCode(f);
+    return !/useDistanceFormat|useDistanceUnit|formatTravelDistance|liveDistanceUnit/.test(src);
+  });
+  check('UNITS: the converted surfaces ask the owner instead of printing a yard',
+    notAsking.length === 0,
+    notAsking.length > 0
+      ? `these no longer route through services/distanceUnits: ${notAsking.join(', ')}`
+      : `${CONVERTED.length} player-facing surfaces read their unit from the one owner — the hole preview badge, the off-course strip, the rest-mode readout, the rangefinder (reticle, F/M/B, hazards, dispersion, spoken callout), the bag pills and the course list`);
 }
 
 const total = results.length;

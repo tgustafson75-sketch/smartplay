@@ -43,6 +43,8 @@ import { useDownloadedCoursesStore } from '../../store/downloadedCoursesStore';
 import { usePlayerProfileStore, MAX_HOME_COURSES } from '../../store/playerProfileStore';
 import { canAccess } from '../../services/featureAccess';
 import { triggerPaywall } from '../../services/paywallGuard';
+import { formatTravelDistance } from '../../services/distanceUnits';
+import { useDistanceUnit } from '../../hooks/useDistanceUnit';
 import { useSettingsStore } from '../../store/settingsStore';
 // 2026-05-24 — Quick-launch Tournament Mode from a course card. Sets
 // tournamentStore.courseName before navigating so the user lands on
@@ -715,6 +717,8 @@ export default function PlayTab() {
   const notesInputRef = React.useRef<TextInput>(null);
   const apiUrlForNotes = getApiBaseUrl();
   const notesLanguage = useSettingsStore(s => s.language);
+  // Subscribed, not read once — the unit is changeable by voice mid-round.
+  const distanceUnit = useDistanceUnit();
   const handleDictateNotes = React.useCallback(async () => {
     if (notesDictating) return;
     setNotesDictating(true);
@@ -1295,15 +1299,16 @@ export default function PlayTab() {
   // alongside the sort so the row renderer just looks up.
   const distanceLabelById: Record<string, string | null> = useMemo(() => {
     if (!userPosition) return {};
-    const YARDS_PER_MILE = 1760;
     const out: Record<string, string | null> = {};
     for (const c of closestLocal) {
       if (c.lat == null || c.lng == null) { out[c.id] = null; continue; }
-      const miles = haversineYards(userPosition, { lat: c.lat, lng: c.lng }) / YARDS_PER_MILE;
-      out[c.id] = miles < 10 ? `${miles.toFixed(1)} mi` : `${Math.round(miles)} mi`;
+      const yds = haversineYards(userPosition, { lat: c.lat, lng: c.lng });
+      // 2026-09-18 — the course list is the FIRST screen an international player meets, before
+      // any yardage. It reads km for a player who has set metres. services/distanceUnits owns both.
+      out[c.id] = formatTravelDistance(yds, distanceUnit) ?? '';
     }
     return out;
-  }, [closestLocal, userPosition]);
+  }, [closestLocal, userPosition, distanceUnit]);
 
   // Phase 405 wave 3 — course auto-detect prompt. When the player is
   // within ~550 yards (0.3 mi, half a typical golf hole) of a known

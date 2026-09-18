@@ -21,6 +21,7 @@
  */
 
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import { useDistanceFormat } from '../../hooks/useDistanceUnit';
 import {
   View,
   Text,
@@ -715,6 +716,7 @@ export default function Dashboard() {
   // 2026-06-04 — Coach Mode toggle. When false, the shared-group card +
   // Coach Mode CTA below are hidden even if the user has a roster set
   // up. Toggle lives in the Caddie tab's expandable green-arrow row.
+  const { fmtCompact } = useDistanceFormat();
   const coachModeEnabled = useSettingsStore(s => s.coachModeEnabled);
   // 2026-06-12 — the AI-read card title must reflect the ACTIVE caddie, not always
   // "Kevin" (Tank/Serena users saw Kevin's name). Keep the localized label for the
@@ -1296,7 +1298,7 @@ export default function Dashboard() {
                   {bagClubs.slice(rowIdx * 3, rowIdx * 3 + 3).map((c) => (
                     <View key={c.club} style={{ flex: 1, flexDirection: 'row', alignItems: 'baseline' }}>
                       <Text style={[styles.bagPillClub, { color: c.measured ? colors.accent_lime : colors.text_primary }]}>{c.club}</Text>
-                      <Text style={[styles.bagPillYds, { color: colors.text_muted }]}>{c.yards != null ? ` ${c.yards}y` : ' — in bag'}</Text>
+                      <Text style={[styles.bagPillYds, { color: colors.text_muted }]}>{c.yards != null ? ` ${fmtCompact(c.yards)}` : ' — in bag'}</Text>
                     </View>
                   ))}
                 </View>
