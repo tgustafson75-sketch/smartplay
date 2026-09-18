@@ -23,6 +23,7 @@ import { ActiveListeningPill } from '../../components/caddie/ActiveListeningPill
 import { PermissionBanner } from '../../components/PermissionBanner';
 import { useRoundStore, roundLastHole, roundFirstHole } from '../../store/roundStore';
 import type { ShotLocation, ShotResult } from '../../store/roundStore';
+import { useRestReadoutStore } from '../../store/restReadoutStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { useVoiceHintsStore } from '../../store/voiceHintsStore';
 import { getDialog } from '../../services/dialogEngine';
@@ -790,6 +791,26 @@ export default function CaddieTab() {
     const elevFt = caddieElevation.deltaFeet;
     return elevFt !== 0 ? Math.round(displayYardage + elevFt / 3) : displayYardage;
   }, [displayYardage, caddieWeather, caddieShotBearing, caddieElevation.deltaFeet]);
+
+  /**
+   * 2026-09-17 (Tim) — PUBLISH THE NUMBER SO THE REST SCREEN CAN MIRROR IT.
+   *
+   * The rest overlay lives in app/_layout.tsx, above and outside this screen, so it cannot read
+   * displayYardage. It must not compute its own either — see store/restReadoutStore.ts. This screen
+   * stays the single owner of "how far is it"; the overlay only ever repeats what was decided here.
+   *
+   * Runs on every change of the resolved numbers, which during a live round is every GPS tick — that
+   * cadence is also what keeps the freshness stamp current, so the overlay can tell a live number
+   * from the ghost of one three holes ago.
+   */
+  useEffect(() => {
+    if (!isRoundActive) { useRestReadoutStore.getState().clear(); return; }
+    useRestReadoutStore.getState().publish({
+      yardage: displayYardage ?? null,
+      playsLike: playsLikeYardage ?? null,
+      hole: currentHole ?? null,
+    });
+  }, [isRoundActive, displayYardage, playsLikeYardage, currentHole]);
 
   // Audit 101 / W1 — useShallow subscriptions (see useRoundStore note above).
   const {

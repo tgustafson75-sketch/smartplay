@@ -26,6 +26,7 @@ import { View, Text, Pressable, StyleSheet, Image } from 'react-native';
 import { usePathname } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useRestModeStore } from '../../store/restModeStore';
+import { useRestReadoutStore, freshReadout } from '../../store/restReadoutStore';
 import { useRoundStore } from '../../store/roundStore';
 import { useTranslation } from 'react-i18next';
 
@@ -66,6 +67,19 @@ export function RestModeOverlay() {
   const exitRest = useRestModeStore((s) => s.exitRest);
   const isRoundActive = useRoundStore((s) => s.isRoundActive);
   const currentHole = useRoundStore((s) => s.currentHole);
+  /**
+   * 2026-09-17 (Tim) — THE YARDAGE STAYS UP.
+   *
+   * "My daughter is using 18Birdies for one reason and one reason only: on their rest screen she can
+   * still see the yardage." She is right and it is nearly free — GPS and the resolver never stop
+   * during rest, so the number was being computed and then painted over.
+   *
+   * Selected field-by-field rather than as an object: a selector returning a fresh object re-renders
+   * on every store write, and this component is mounted over every screen in the app.
+   */
+  const readYardage = useRestReadoutStore((s) => s.yardage);
+  const readPlaysLike = useRestReadoutStore((s) => s.playsLike);
+  const readUpdatedAt = useRestReadoutStore((s) => s.updatedAt);
   const pathname = usePathname() ?? '';
 
   // Route suppression must be readable inside the interval without re-creating it each nav.
@@ -98,6 +112,11 @@ export function RestModeOverlay() {
 
   if (!active) return null;
 
+  // Computed after the early return so a non-resting app never pays for it.
+  const yardageReadout = isRoundActive
+    ? freshReadout({ yardage: readYardage, playsLike: readPlaysLike, hole: currentHole ?? null, updatedAt: readUpdatedAt })
+    : null;
+
   return (
     <Pressable
       style={styles.fill}
@@ -117,6 +136,27 @@ export function RestModeOverlay() {
           <Text style={styles.gpsText}>{isRoundActive ? 'GPS LIVE · RESTING' : 'RESTING · TAP TO WAKE'}</Text>
         </View>
         {isRoundActive && currentHole ? <Text style={styles.hole}>{t('round_rest_mode_overlay.rest_mode_overlay.hole', { currentHole })}</Text> : null}
+        {/**
+          * The number, when there IS an honest number. freshReadout returns null for a stale or
+          * absent publish — rest engages on any route after a minute idle, including ones reached
+          * without ever opening the caddie tab, and a yardage from three holes ago shown with
+          * nothing on screen to contradict it is worse than no yardage at all.
+          *
+          * Plain text on pure #000, no blur and no Pressable: the whole screen is one "tap to wake"
+          * target, and a lit panel behind the digits would undo the reason this screen exists. The
+          * caddie strip itself is deliberately NOT reused — it carries BlurView, haptics and
+          * hole-stepper touch targets, none of which belong here.
+          */}
+        {yardageReadout ? (
+          <View style={styles.yardageBlock}>
+            <Text style={styles.yards}>{yardageReadout.yardage}</Text>
+            <Text style={styles.yardsLabel}>
+              {yardageReadout.playsLike != null && yardageReadout.playsLike !== yardageReadout.yardage
+                ? `YDS · PLAYS ${yardageReadout.playsLike}`
+                : 'YDS'}
+            </Text>
+          </View>
+        ) : null}
         <Text style={styles.hint}>{t('round_rest_mode_overlay.rest_mode_overlay.tap_anywhere_to_wake')}</Text>
       </View>
     </Pressable>
@@ -149,5 +189,10 @@ const styles = StyleSheet.create({
   gpsText: { color: 'rgba(0,200,150,0.5)', fontSize: 11, fontWeight: '800', letterSpacing: 1.4 },
   // Dim on purpose — few lit pixels, low power.
   hole: { color: 'rgba(255,255,255,0.6)', fontSize: 40, fontWeight: '900', letterSpacing: 1 },
+  // The reason this screen now has a number on it. Brighter than HOLE because it is the thing being
+  // glanced at from a cart, but still flat text on black — a few hundred lit pixels.
+  yardageBlock: { alignItems: 'center', gap: 2 },
+  yards: { color: 'rgba(255,255,255,0.92)', fontSize: 64, fontWeight: '900', letterSpacing: -1 },
+  yardsLabel: { color: 'rgba(0,200,150,0.75)', fontSize: 12, fontWeight: '800', letterSpacing: 1.6 },
   hint: { color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '600', letterSpacing: 0.5 },
 });
