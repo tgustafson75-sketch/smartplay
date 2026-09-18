@@ -1613,7 +1613,7 @@
     "bag": {
       "heading": "YOUR BAG",
       "title": "Clubs, shafts and grips",
-      "sub": "Scan your bag, or fix any club — the caddie clubs off this."
+      "sub": "Add clubs by hand or scan them — the caddie clubs off this."
     }
   },
   "profile_custom_caddie": {
@@ -3944,7 +3944,7 @@
     "remove_club": "Remove",
     "empty": {
       "title": "Your bag is empty",
-      "body": "Scan it with a video pan, or photograph the clubs. Whatever we read is saved straight away — you can fix any of it here, and photograph anything we missed."
+      "body": "Add your clubs by hand, or scan them with a video pan. Either way it saves straight away — and you can fix any of it here."
     },
     "section": {
       "woods": "WOODS",
@@ -3968,6 +3968,9 @@
     },
     "add": {
       "heading": "ADD CLUBS",
+      "manual": "Add by hand",
+      "manual_sub": "Tap the clubs you carry. No camera needed.",
+      "manual_a11y": "Add clubs by hand from a list",
       "video": "Scan with video",
       "video_sub": "A slow pan across the heads. Best for a whole bag at once.",
       "video_a11y": "Scan my bag with video",
@@ -3977,6 +3980,19 @@
       "library": "Add photos",
       "library_sub": "Pick up to 8 photos you have already taken.",
       "library_a11y": "Choose photos of clubs to add"
+    },
+    "manual": {
+      "standard": "Start with a standard set",
+      "standard_sub": "The fourteen an off-the-rack set comes with — take out anything you do not carry.",
+      "standard_a11y": "Fill my bag with a standard fourteen-club set",
+      "hint": "Tap a club to put it in your bag. Tap it again to take it out. Brand, shaft and grip go on the club itself, above \u2014 or leave them, the caddie works either way.",
+      "add_a11y": "Add {{club}} to my bag",
+      "remove_a11y": "Remove {{club}} from my bag"
+    },
+    "skip": {
+      "title": "Skip for now",
+      "body": "Your bag lives in Profile \u2192 My Bag. Set it up whenever you like \u2014 the caddie clubs you off a generic chart until you do.",
+      "a11y": "Skip setting up my bag for now"
     },
     "receipt": {
       "added_one": "Added {{count}} club to your bag.",

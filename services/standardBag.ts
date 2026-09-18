@@ -26,11 +26,34 @@
  * one. [[no-half-fixes-enforce-every-surface]] [[club-logic-unified-2026-07-24]]
  */
 
+import type { CatalogClubId } from './clubBagReconcile';
+
 export type StandardClub =
   | 'Driver' | '3W' | '5W' | '7W'
   | '2H' | '3H' | '4H' | '5H'
   | '3I' | '4I' | '5I' | '6I' | '7I' | '8I' | '9I'
   | 'PW' | 'AW' | 'GW' | 'SW' | 'LW' | 'Putter';
+
+/**
+ * 2026-09-18 (Tim) — "We have a default mid handicapper bag like an off the rack set would have."
+ *
+ * THE SET, as distinct from the TABLE above. `STANDARD_CARRY_YARDS` answers "how far does a 7 iron
+ * go" for all twenty-one slots in the catalog; nothing answered "which clubs does a golfer who
+ * walked into a shop and bought a set actually OWN". So the manual bag path either made the player
+ * tap fourteen chips one at a time or start from nothing at all.
+ *
+ * This is the off-the-rack fourteen: driver, two woods, the hybrid that replaces the long irons,
+ * 5-iron through pitching wedge, two more wedges, putter. Exactly `USGA_CLUB_LIMIT` clubs, because a
+ * starting point that is already illegal to tee off with is a strange thing to hand someone.
+ *
+ * It is a STARTING POINT, never an assumption: it is written only when the player asks for it, every
+ * club it adds is removable on the same screen, and nothing else in the app reads it. The honesty
+ * rule this project runs on is about what we CLAIM to know — a set the player chose from a labelled
+ * button is a thing they told us. [[smartplay-core-ethos]] [[one-standard-bag]]
+ */
+export const STANDARD_SET: readonly CatalogClubId[] = [
+  'DR', '3W', '5W', '4H', '5I', '6I', '7I', '8I', '9I', 'PW', 'GW', 'SW', 'LW', 'PT',
+];
 
 /** Full-swing CARRY, yards. The single default when a player has no measured distance. */
 export const STANDARD_CARRY_YARDS: Record<StandardClub, number> = {

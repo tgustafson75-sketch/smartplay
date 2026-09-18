@@ -51,6 +51,11 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Sep 2026',
+    note: 'You can add your clubs by hand. Setting up your bag used to mean filming it or photographing it \u2014 so if you would rather not point a camera at your clubs, you ended up with no bag at all, and your caddie was clubbing you off a generic chart instead of your own gear.',
+    howTo: 'Profile \u2192 My Bag \u2192 Add by hand. Start from a standard fourteen-club set and take out what you do not carry, or tap in the clubs one at a time. You can skip it on the way in and come back to it any time.',
+  },
+  {
+    when: 'Sep 2026',
     note: 'You can take a club back out of your bag. Scanning adds clubs, and until now nothing removed them \u2014 so a club the camera got wrong stayed in your bag for good, quietly shaping what the caddie told you to hit.',
     howTo: 'Say "take the 7 wood out of my bag".',
   },

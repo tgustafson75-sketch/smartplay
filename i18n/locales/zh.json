@@ -257,7 +257,7 @@
     "remove_club": "移除",
     "empty": {
       "title": "球包是空的",
-      "body": "用视频扫一遍，或者拍下球杆。识别到的内容会立即保存 — 你可以在这里修改，漏掉的再拍一张。"
+      "body": "手动添加球杆，或用视频扫一遍。两种方式都会立即保存 — 且都可以在这里修改。"
     },
     "section": {
       "woods": "木杆",
@@ -281,6 +281,9 @@
     },
     "add": {
       "heading": "添加球杆",
+      "manual": "\u624b\u52a8\u6dfb\u52a0",
+      "manual_sub": "\u70b9\u9009\u4f60\u5e26\u7684\u7403\u6746\u3002\u65e0\u9700\u76f8\u673a\u3002",
+      "manual_a11y": "\u4ece\u5217\u8868\u4e2d\u624b\u52a8\u6dfb\u52a0\u7403\u6746",
       "video": "用视频扫描",
       "video_sub": "缓慢扫过杆头。适合一次录入整包。",
       "video_a11y": "用视频扫描我的球包",
@@ -290,6 +293,19 @@
       "library": "添加照片",
       "library_sub": "最多选择 8 张已拍照片。",
       "library_a11y": "选择球杆照片添加"
+    },
+    "manual": {
+      "standard": "从标准球包开始",
+      "standard_sub": "成套球杆典型的十四支 — 不带的可以移除。",
+      "standard_a11y": "用标准的十四支球杆填满我的球包",
+      "hint": "\u70b9\u4e00\u4e0b\u628a\u7403\u6746\u653e\u8fdb\u7403\u5305\uff0c\u518d\u70b9\u4e00\u4e0b\u53d6\u51fa\u3002\u54c1\u724c\u3001\u6746\u8eab\u548c\u63e1\u628a\u5728\u4e0a\u65b9\u7684\u7403\u6746\u4e0a\u586b\u5199 \u2014 \u4e0d\u586b\u4e5f\u884c\uff0c\u7403\u7ae5\u7167\u6837\u5de5\u4f5c\u3002",
+      "add_a11y": "\u5c06 {{club}} \u52a0\u5165\u6211\u7684\u7403\u5305",
+      "remove_a11y": "\u5c06 {{club}} \u4ece\u6211\u7684\u7403\u5305\u79fb\u9664"
+    },
+    "skip": {
+      "title": "\u7a0d\u540e\u518d\u8bbe\u7f6e",
+      "body": "\u7403\u5305\u5728\u300c\u4e2a\u4eba\u8d44\u6599 \u2192 \u6211\u7684\u7403\u5305\u300d\u91cc\u3002\u968f\u65f6\u53ef\u4ee5\u8bbe\u7f6e \u2014 \u5728\u90a3\u4e4b\u524d\u7403\u7ae5\u53ea\u80fd\u7528\u901a\u7528\u8ddd\u79bb\u8868\u9009\u6746\u3002",
+      "a11y": "\u7a0d\u540e\u518d\u8bbe\u7f6e\u7403\u5305"
     },
     "receipt": {
       "added_one": "已向球包添加 {{count}} 支球杆。",
@@ -357,7 +373,7 @@
     "bag": {
       "heading": "你的球包",
       "title": "球杆、杆身与握把",
-      "sub": "扫描球包或修正任一球杆 — 球童据此选杆。"
+      "sub": "手动添加或扫描球杆 — 球童据此选杆。"
     }
   },
   "practice_shot_shapes": {

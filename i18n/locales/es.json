@@ -257,7 +257,7 @@
     "remove_club": "Quitar",
     "empty": {
       "title": "Tu bolsa está vacía",
-      "body": "Escanéala con un vídeo panorámico o fotografía los palos. Todo lo que leamos se guarda al instante: puedes corregirlo aquí y fotografiar lo que se nos haya pasado."
+      "body": "Añade tus palos a mano o escanéalos con un vídeo panorámico. En ambos casos se guarda al instante y puedes corregirlo aquí."
     },
     "section": {
       "woods": "MADERAS",
@@ -281,6 +281,9 @@
     },
     "add": {
       "heading": "AÑADIR PALOS",
+      "manual": "A\u00f1adir a mano",
+      "manual_sub": "Toca los palos que llevas. Sin c\u00e1mara.",
+      "manual_a11y": "A\u00f1adir palos a mano desde una lista",
       "video": "Escanear con vídeo",
       "video_sub": "Una panorámica lenta sobre las cabezas. Lo mejor para la bolsa entera.",
       "video_a11y": "Escanear mi bolsa con vídeo",
@@ -290,6 +293,19 @@
       "library": "Añadir fotos",
       "library_sub": "Elige hasta 8 fotos que ya hayas hecho.",
       "library_a11y": "Elegir fotos de palos para añadir"
+    },
+    "manual": {
+      "standard": "Empezar con un juego estándar",
+      "standard_sub": "Los catorce palos de un juego de tienda — quita lo que no lleves.",
+      "standard_a11y": "Rellenar mi bolsa con un juego estándar de catorce palos",
+      "hint": "Toca un palo para meterlo en tu bolsa. T\u00f3calo otra vez para sacarlo. La marca, la varilla y el grip van en el palo, arriba \u2014 o d\u00e9jalos, el caddie funciona igual.",
+      "add_a11y": "A\u00f1adir {{club}} a mi bolsa",
+      "remove_a11y": "Quitar {{club}} de mi bolsa"
+    },
+    "skip": {
+      "title": "Dejarlo para luego",
+      "body": "Tu bolsa est\u00e1 en Perfil \u2192 Mi bolsa. Config\u00farala cuando quieras: hasta entonces el caddie usa una tabla gen\u00e9rica.",
+      "a11y": "Dejar la configuraci\u00f3n de la bolsa para luego"
     },
     "receipt": {
       "added_one": "Añadido {{count}} palo a tu bolsa.",
@@ -357,7 +373,7 @@
     "bag": {
       "heading": "TU BOLSA",
       "title": "Palos, varillas y grips",
-      "sub": "Escanea tu bolsa o corrige cualquier palo: el caddie usa esto."
+      "sub": "Añade palos a mano o escanéalos: el caddie usa esto."
     }
   },
   "practice_shot_shapes": {

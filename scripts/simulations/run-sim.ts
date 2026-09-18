@@ -17164,6 +17164,67 @@ check(
     'the options come off his own round history plus whatever is declared now; picking one is what makes "which ball scores better for me" answerable, and no SKU is ever suggested by this screen');
 }
 
+/**
+ * 2026-09-18 (Tim) — "User needs to be able to manually enter bag details too. new registration
+ * forces photo or video. Give users option to skip for later in profile."
+ *
+ * THE FOURTH STEP OF FIRST RUN ACCEPTED ONE KIND OF ANSWER. decideFirstRunRoute sends every fresh
+ * install to app/bag-scan with an empty bag, and every control on it that wrote a club opened a
+ * camera — video pan, photo, photo library. A player who will not film their clubs on first launch
+ * could not put a single club in the bag, and the only way past was an unlabelled header chevron.
+ *
+ * Both halves are asserted as PROPERTIES and against the BROKEN FORM, because a guard pinned to the
+ * exact wrong expression is how three of these stayed green through Hemet:
+ *   - a write path that reaches registerClub WITHOUT ImagePicker, and
+ *   - a skip that is CONDITIONAL. An always-visible skip is the other bug: the player who opened
+ *     their own bag is not being asked to abandon it.
+ * [[a-guard-can-assert-the-broken-shape]] [[strip-comments-before-a-guard-matches]]
+ */
+{
+  const bag = readCode('app/bag-scan.tsx');
+  const firstRun = readCode('services/firstRunRoute.ts');
+  const profile = readCode('app/profile.tsx');
+
+  // The manual writer, and the fact that it is NOT downstream of a picker.
+  const manual = /const addManually = useCallback\(\(club_id: string\) => \{\s*useClubBagStore\.getState\(\)\.registerClub\(club_id as ClubId, \{ source: 'manual' \}\);/.test(bag);
+  check('BAG: a club can be put in the bag with no camera at all',
+    manual &&
+      /CLUB_SNAP_ORDER\.map\(\(id\) =>/.test(bag) &&              // every catalog slot is typeable
+      /owned \? removeClub\(id, label\) : addManually\(id\)/.test(bag) &&
+      !/addManually[\s\S]{0,300}ImagePicker/.test(bag) &&         // the manual path opens nothing
+      saysToPlayer(bag, 'Add by hand'),
+    "the hand path writes through the SAME clubBagStore.registerClub the scan and the voice declaration use, stamped source: 'manual' — one registration, three ways to say it, and no second place a club can live");
+
+  /**
+   * 2026-09-18 (Tim) — "We have a default mid handicapper bag like an off the rack set would have."
+   *
+   * Fourteen taps is not a manual path. Guarded on the two properties that make the one-press set
+   * safe rather than on the button existing: it is ADDITIVE (a club already in the bag is skipped,
+   * so a scanned driver's specs cannot be flattened by it), and the set lives in services/standardBag
+   * — the file that already owns "the standard bag" — rather than as a fifteenth club list in a
+   * screen. The set's own arithmetic (fourteen, in the catalog, all quotable) is asserted in
+   * __tests__/logic/the-off-the-rack-set.test.ts, which can import it.
+   */
+  check('BAG: the typed path starts from an off-the-rack set, and never overwrites a club',
+    /import \{ STANDARD_SET \} from '\.\.\/services\/standardBag';/.test(bag) &&
+      /const addStandardSet = useCallback\(\(\) => \{/.test(bag) &&
+      /for \(const id of STANDARD_SET\) \{\s*if \(store\.clubs\[id\]\) continue;/.test(bag) &&
+      /export const STANDARD_SET: readonly CatalogClubId\[\]/.test(readCode('services/standardBag.ts')) &&
+      saysToPlayer(bag, 'Start with a standard set'),
+    'one press puts the off-the-rack fourteen in and the player takes out what they do not carry; the set is declared once, in the file that already owns the standard bag, and every club already owned is skipped rather than rewritten');
+
+  check('BAG: first run can be LEFT, and the screen names where the bag went',
+    /const \[firstRunOffer\] = useState\(\(\) => \{/.test(bag) &&
+      /bag_setup_offered/.test(bag) && /carriedList\(\)\.length === 0/.test(bag) &&
+      /\{firstRunOffer && \(/.test(bag) &&                        // CONDITIONAL, not always on
+      /onPress=\{\(\) => safeBack\(\)\}/.test(bag) &&
+      saysToPlayer(bag, 'Skip for now') &&
+      // ...and the destination it names is a row that exists, on the screen it names.
+      /router\.push\('\/bag-scan' as never\)/.test(profile) &&
+      /if \(!s\.bagSetupOffered && s\.bagEmpty\) return '\/bag-scan';/.test(firstRun),
+    'the skip is shown only when first run OPENED this screen (the flag is read in a state initialiser, before the mount effect sets it) and points at Profile → My Bag, which is the same screen reached from a row that exists');
+}
+
 const total = results.length;
 const passed = results.filter((r) => r.passed).length;
 const failed = results.filter((r) => !r.passed);

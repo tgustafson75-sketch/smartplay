@@ -49,6 +49,7 @@ import {
 import { usePlayerProfileStore } from '../store/playerProfileStore';
 import { CLUB_SNAP_ORDER, clubFamily } from '../services/clubBagReconcile';
 import { SHAFT_BRANDS, GRIP_SIZES, shaftWeightsFor, hasShaftWeight } from '../services/clubSpecOptions';
+import { STANDARD_SET } from '../services/standardBag';
 import { SpecPicker } from '../components/SpecPicker';
 import type { ClubId } from '../services/clubRecognition';
 import { useTranslation } from 'react-i18next';
@@ -92,6 +93,32 @@ export default function BagScreen() {
   const [phase, setPhase] = useState<Phase>('bag');
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  /**
+   * 2026-09-18 (Tim) — "new registration forces photo or video. Give users option to skip for
+   * later in profile."
+   *
+   * THE ONLY WAYS INTO THIS SCREEN WERE A CAMERA. Video pan, take a photo, pick photos — three
+   * doors, one key. A player who will not point a camera at their clubs on the first launch of an
+   * app they have owned for ninety seconds had no way to end up with a bag at all, and this screen
+   * is the fourth step of first run, so that player was standing in front of a wall.
+   *
+   * So there is a typed path (`manualOpen`) and an explicit way out (`firstRunOffer`).
+   */
+  const [manualOpen, setManualOpen] = useState(false);
+  /**
+   * Was this screen OPENED BY FIRST RUN, or did the player walk here themselves?
+   *
+   * Read in a state INITIALISER, which runs during the first render — before the effect above
+   * commits and sets `bag_setup_offered`. Same two facts decideFirstRunRoute used to send them
+   * here, so "Skip for now" appears exactly when the app chose this screen for the player, and
+   * never when the player chose it (they have a back arrow and a bag they came to edit).
+   */
+  const [firstRunOffer] = useState(() => {
+    try {
+      const offered = !!useSettingsStore.getState().tutorialsSeen?.['bag_setup_offered'];
+      return !offered && useClubBagStore.getState().carriedList().length === 0;
+    } catch { return false; }
+  });
   /** What the last scan did, shown until the next one. Reads as a receipt, not as a pending action. */
   const [lastScan, setLastScan] = useState<{ added: string[]; updated: string[]; balls: ScannedBall[] } | null>(null);
 
@@ -230,6 +257,41 @@ export default function BagScreen() {
     );
   }, [t]);
 
+  /**
+   * ADD A CLUB BY HAND. One tap, one slot, `source: 'manual'` — the same registration the scan and
+   * the voice declaration make, written by the same store method, so a hand-typed bag is not a
+   * second-class bag anywhere downstream. Brand, shaft and grip are then typed into the very same
+   * row editor a scanned club uses: the manual path adds NO new place a club can live.
+   * [[two-owners-is-the-root-cause]]
+   */
+  const addManually = useCallback((club_id: string) => {
+    useClubBagStore.getState().registerClub(club_id as ClubId, { source: 'manual' });
+  }, []);
+
+  /**
+   * 2026-09-18 (Tim) — "We have a default mid handicapper bag like an off the rack set would have."
+   *
+   * Fourteen taps is not a manual path, it is a chore, and the player most likely to need the typed
+   * route is the one who just declined to film anything. So the off-the-rack set goes in in one
+   * press and they take out what they do not carry — the same direction of travel as a scan, which
+   * also puts clubs in and lets you remove them.
+   *
+   * ADDITIVE, like every other writer on this screen: a club already in the bag is left exactly as
+   * it is, specs and variants and all, so pressing this on a half-filled bag can never overwrite
+   * something that was scanned or typed. The receipt is the SAME receipt a scan writes, because
+   * "what just went in" is one fact, not one per source.
+   */
+  const addStandardSet = useCallback(() => {
+    const store = useClubBagStore.getState();
+    const added: string[] = [];
+    for (const id of STANDARD_SET) {
+      if (store.clubs[id]) continue;
+      store.registerClub(id, { source: 'manual' });
+      added.push(id);
+    }
+    setLastScan({ added, updated: [], balls: [] });
+  }, []);
+
   const s = makeStyles(colors);
 
   if (phase === 'scanning') {
@@ -319,6 +381,61 @@ export default function BagScreen() {
         {/* The actions live INSIDE the scroll, deliberately. Every control that writes is reachable
             at every bag size, which the footer they replaced was not. */}
         <Text style={s.sectionHead}>{t('bag.add.heading')}</Text>
+        {/* FIRST, deliberately. The camera is the fast path, not the only path — and the player
+            who is going to refuse the camera finds out before they have refused three times. */}
+        <TouchableOpacity
+          onPress={() => setManualOpen((v) => !v)}
+          style={[s.actionBtn, manualOpen && s.actionBtnOpen]}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: manualOpen }}
+          accessibilityLabel={t('bag.add.manual_a11y')}
+        >
+          <Ionicons name="create-outline" size={18} color={colors.accent} />
+          <View style={{ flex: 1 }}>
+            <Text style={s.actionTitle}>{t('bag.add.manual')}</Text>
+            <Text style={s.actionSub}>{t('bag.add.manual_sub')}</Text>
+          </View>
+          <Ionicons name={manualOpen ? 'chevron-up' : 'chevron-down'} size={18} color={colors.text_muted} />
+        </TouchableOpacity>
+
+        {manualOpen && (
+          <View style={s.manualPanel}>
+            <Text style={s.manualHint}>{t('bag.manual.hint')}</Text>
+            <TouchableOpacity
+              onPress={addStandardSet}
+              style={s.standardBtn}
+              accessibilityRole="button"
+              accessibilityLabel={t('bag.manual.standard_a11y')}
+            >
+              <Ionicons name="albums-outline" size={16} color={colors.accent_sky} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.standardTitle}>{t('bag.manual.standard')}</Text>
+                <Text style={s.standardSub}>{t('bag.manual.standard_sub')}</Text>
+              </View>
+            </TouchableOpacity>
+            <View style={s.chipWrap}>
+              {/* The one catalog, in bag order — so a club added to CLUB_SNAP_ORDER is typeable the
+                  day it exists, and the hand path can never offer a club the scan cannot. */}
+              {CLUB_SNAP_ORDER.map((id) => {
+                const owned = !!clubs[id];
+                const label = id === PUTTER_ID ? t('bag.putter') : id;
+                return (
+                  <TouchableOpacity
+                    key={id}
+                    onPress={() => (owned ? removeClub(id, label) : addManually(id))}
+                    style={[s.clubChip, owned && s.clubChipOn]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: owned }}
+                    accessibilityLabel={owned ? t('bag.manual.remove_a11y', { club: label }) : t('bag.manual.add_a11y', { club: label })}
+                  >
+                    {owned && <Ionicons name="checkmark" size={13} color={colors.accent} />}
+                    <Text style={[s.clubChipText, owned && s.clubChipTextOn]}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
         <TouchableOpacity onPress={recordAndScan} style={s.actionBtn} accessibilityRole="button" accessibilityLabel={t('bag.add.video_a11y')}>
           <Ionicons name="videocam-outline" size={18} color={colors.accent} />
           <View style={{ flex: 1 }}>
@@ -340,6 +457,33 @@ export default function BagScreen() {
             <Text style={s.actionSub}>{t('bag.add.library_sub')}</Text>
           </View>
         </TouchableOpacity>
+
+        {/**
+          * SKIP, SAID OUT LOUD — and told where it went.
+          *
+          * Skipping was always POSSIBLE: the header chevron runs safeBack(), the flag is set on
+          * mount, and nothing traps the player. But on a first-run arrival that chevron is a back
+          * arrow pointing at nothing the player has seen, on a screen that has just asked them to
+          * film their clubs. "Possible" and "offered" are not the same thing, and the difference
+          * is whether a player who does not want to do this now believes they can come back.
+          *
+          * So it names the destination. Profile → My Bag is one row, it already exists, and it is
+          * the same screen — the sentence is checkable rather than reassuring.
+          */}
+        {firstRunOffer && (
+          <TouchableOpacity
+            onPress={() => safeBack()}
+            style={s.skipBtn}
+            accessibilityRole="button"
+            accessibilityLabel={t('bag.skip.a11y')}
+          >
+            <Ionicons name="time-outline" size={18} color={colors.text_muted} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.skipTitle}>{t('bag.skip.title')}</Text>
+              <Text style={s.skipBody}>{t('bag.skip.body')}</Text>
+            </View>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -529,7 +673,33 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border,
       paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8,
     },
+    actionBtnOpen: { borderColor: colors.accent },
     actionTitle: { color: colors.text_primary, fontSize: 14, fontWeight: '800' },
     actionSub: { color: colors.text_muted, fontSize: 12, marginTop: 1 },
+    manualPanel: { marginBottom: 8, paddingHorizontal: 2 },
+    manualHint: { color: colors.text_muted, fontSize: 12, lineHeight: 17, marginBottom: 10 },
+    standardBtn: {
+      flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12,
+      backgroundColor: colors.surface, borderRadius: 10, borderWidth: 1, borderColor: colors.accent_sky,
+      paddingHorizontal: 12, paddingVertical: 10,
+    },
+    standardTitle: { color: colors.text_primary, fontSize: 13, fontWeight: '800' },
+    standardSub: { color: colors.text_muted, fontSize: 12, marginTop: 1 },
+    chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    clubChip: {
+      flexDirection: 'row', alignItems: 'center', gap: 4,
+      backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border,
+      paddingHorizontal: 14, paddingVertical: 9, minWidth: 54, justifyContent: 'center',
+    },
+    clubChipOn: { borderColor: colors.accent, backgroundColor: colors.background },
+    clubChipText: { color: colors.text_muted, fontSize: 13, fontWeight: '800' },
+    clubChipTextOn: { color: colors.accent },
+    skipBtn: {
+      flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 18,
+      borderRadius: 12, borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed',
+      paddingHorizontal: 14, paddingVertical: 12,
+    },
+    skipTitle: { color: colors.text_primary, fontSize: 14, fontWeight: '800' },
+    skipBody: { color: colors.text_muted, fontSize: 12, lineHeight: 17, marginTop: 1 },
   });
 }
