@@ -1110,8 +1110,34 @@ export default function CaddieTab() {
   const [notesDictating, setNotesDictating] = useState(false);
   const [holeScore, setHoleScore] = useState(0);
   const [holePutts, setHolePutts] = useState(0);
+  /**
+   * 2026-09-17 — DID THE PLAYER TOUCH THE STEPPER? Not "is the value non-zero".
+   *
+   * My first pass at the fabricated-putts bug guarded on `holePutts > 0`, which throws away a real
+   * answer: a chip-in is a genuine ZERO-putt hole, and isGirHole counts 0 putts as a green hit.
+   * Guarding on the value would have silently downgraded every hole-out to "unknown" — trading one
+   * wrong number for a missing one. What has to be recorded is whether the player ANSWERED.
+   */
+  const [puttsTouched, setPuttsTouched] = useState(false);
 
-  const [selectedMode, setSelectedMode] = useState<RoundMode>('free_play');
+  /**
+   * 2026-09-17 — SEEDED FROM THE PROFILE, which is what "Default round mode" was always supposed to
+   * mean. It was settable in Profile, persisted, and read by NOTHING that affects a round: the only
+   * consumers anywhere were the pill itself and the once-ever first-boot synthesis. This modal
+   * hardcoded 'free_play', so a player who set Break 90 and started a round without re-picking got
+   * free_play — and playProfile then shipped goal 'free_play' with no target score and no stroke
+   * budget, so asked "what do I need to shoot today?" the caddie had no number. app/settings.tsx
+   * line 263 documented this reader as though it existed. [[a-stale-header-is-a-source-someone-trusts]]
+   *
+   * The identifiers already match exactly (RoundMode is the same four strings the Profile pill
+   * writes), so this is the wire, not a translation.
+   */
+  const [selectedMode, setSelectedMode] = useState<RoundMode>(() => {
+    try {
+      const d = usePlayerProfileStore.getState().default_mode;
+      return (d === 'break_100' || d === 'break_90' || d === 'break_80' || d === 'free_play') ? d : 'free_play';
+    } catch { return 'free_play'; }
+  });
 
   const [_recapLoading, setRecapLoading] = useState(false);
   const [selectedGhostId, setSelectedGhostId] = useState<string | null>(null);
@@ -3312,7 +3338,7 @@ export default function CaddieTab() {
      * "• Add putts" nag never appeared either, because 0 counts as recorded — so there was no way
      * back. Frozen into holeStats at endRound and fed to the dashboard and the caddie forever.
      */
-    if (holePutts > 0) logPutts(currentHole, holePutts);
+    if (puttsTouched) logPutts(currentHole, holePutts);
     useGhostStore.getState().updateHole(currentHole, holeScore);
 
     const par = getCurrentPar();
@@ -3355,6 +3381,7 @@ export default function CaddieTab() {
 
     setHoleScore(0);
     setHolePutts(0);
+    setPuttsTouched(false);
     clearShotPending();
     setShowShotCard(false);
 
@@ -4575,14 +4602,14 @@ export default function CaddieTab() {
             <View style={styles.scoreRow}>
               <TouchableOpacity
                 style={styles.scoreBtn}
-                onPress={() => setHolePutts(Math.max(0, holePutts - 1))}
+                onPress={() => { setPuttsTouched(true); setHolePutts(Math.max(0, holePutts - 1)); }}
               >
                 <Text style={styles.scoreBtnText}>−</Text>
               </TouchableOpacity>
               <Text style={styles.scoreValue}>{holePutts}</Text>
               <TouchableOpacity
                 style={styles.scoreBtn}
-                onPress={() => setHolePutts(holePutts + 1)}
+                onPress={() => { setPuttsTouched(true); setHolePutts(holePutts + 1); }}
               >
                 <Text style={styles.scoreBtnText}>+</Text>
               </TouchableOpacity>

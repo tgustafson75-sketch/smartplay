@@ -260,7 +260,8 @@ export default function Settings() {
      *   missType          -> ball-fit's ball recommendation
      *   experienceContext -> coachingAdaptation's tone + complexity (always the default branch),
      *                        videoUpload, ball-fit
-     *   default_mode      -> the mode Kevin assumes when you start a round
+     *   default_mode      -> seeds the start-round modal's mode (app/(tabs)/caddie.tsx). Wired
+     *                        2026-09-17; until then this line described a reader that did not exist.
      * The comment further down this file CLAIMED these were already here ("experience, home course"),
      * which is most likely why nobody noticed for months. [[a-stale-header-is-a-source-someone-trusts]]
      */

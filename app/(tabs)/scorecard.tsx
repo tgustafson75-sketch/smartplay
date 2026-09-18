@@ -163,7 +163,9 @@ export default function Scorecard() {
             const first = roundFirstHole(st);
             const last = roundLastHole(st);
             return Array.from({ length: Math.max(1, last - first + 1) }, (_, i) => ({
-              hole: first + i, par: 4, distance: 0, front: 0, back: 0,
+              // par 4 is a RENDERING placeholder so the grid has a row height; parKnown says it is
+              // not a fact, and every total below refuses to count it. See the note on totalPar.
+              hole: first + i, par: 4, parKnown: false, distance: 0, front: 0, back: 0,
               teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0,
               frontLat: 0, frontLng: 0, backLat: 0, backLng: 0,
               note: '', estimated: false,
@@ -187,10 +189,11 @@ export default function Scorecard() {
         // rows than the highest SCORED hole (holePars snapshot covers 10-18 for pars).
         const maxScored = Math.max(0, ...Object.keys(lastCompletedRound.scores ?? {}).map(Number).filter(Number.isFinite));
         const total = Math.max(bundled.length > 0 ? bundled.length : (effectiveNineHoleMode ? 9 : 18), maxScored);
-        const parFor = (hole: number): number =>
-          snap?.[hole] ?? bundled.find(h => h.hole === hole)?.par ?? 4;
+        const parOf = (hole: number): number | null =>
+          snap?.[hole] ?? bundled.find(h => h.hole === hole)?.par ?? null;
+        const parFor = (hole: number): number => parOf(hole) ?? 4;
         return Array.from({ length: total }, (_, i) => ({
-          hole: i + 1, par: parFor(i + 1), distance: 0,
+          hole: i + 1, par: parFor(i + 1), parKnown: parOf(i + 1) != null, distance: 0,
           front: 0, back: 0,
           teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0,
           frontLat: 0, frontLng: 0, backLat: 0, backLng: 0,
@@ -227,10 +230,23 @@ export default function Scorecard() {
   // 2026-08-08 (2-week audit O1 — back nine): the `h.hole <= 9` nine-hole filter excluded EVERY scored
   // back-nine hole (10-18) → totalPar 0 → "+41 vs par" nonsense. Scored-holes-only is the real guard;
   // any scored hole in the rendered rows counts its par.
-  const totalPar = viewCourseHoles
-    .filter(h => scoredHoleNums.has(h.hole))
-    .reduce((a, h) => a + h.par, 0);
-  const scoreVsPar = totalScore - totalPar;
+  /**
+   * 2026-09-17 — AND IT MUST NOT COUNT A PAR NOBODY KNOWS.
+   *
+   * The two builders above stand a 4 in for an unknown hole so the grid has a row to draw. Summing
+   * those produced "PAR 72 · DIFF +20" on a course with no hole data, with bogey colouring on every
+   * row — a number invented out of nothing. The store refuses in exactly this situation
+   * (getScoreVsPar and endRound's record both return null, and their comment says the old `?? 4`
+   * "poisoned the dashboard trend"), and the recap hides the par row entirely. Three surfaces, one
+   * round; this was the only one answering. [[two-owners-is-the-root-cause]]
+   */
+  // A real CourseHole from the bundle carries no parKnown flag and never needs one — its par IS a
+  // fact. Only the two synthesized branches above set it false, so absent means known.
+  const parIsKnown = (h: unknown) => (h as { parKnown?: boolean }).parKnown !== false;
+  const scoredWithPar = viewCourseHoles.filter(h => scoredHoleNums.has(h.hole) && parIsKnown(h));
+  const totalPar = scoredWithPar.reduce((a, h) => a + h.par, 0);
+  /** null when not one scored hole has a real par — "we do not know", not "level". */
+  const scoreVsPar: number | null = scoredWithPar.length > 0 ? totalScore - totalPar : null;
   const holesPlayed = scoredHoleNums.size;
 
   // 2026-05-25 — Fix AM: scorecard breakdown stats. Putts, fairways
@@ -314,11 +330,13 @@ export default function Scorecard() {
   const backPar = ninePar(10, 18);
 
   const scoreVsParDisplay =
-    scoreVsPar === 0 ? 'E'
+    scoreVsPar == null ? '—'
+    : scoreVsPar === 0 ? 'E'
     : scoreVsPar > 0 ? '+' + scoreVsPar
     : String(scoreVsPar);
   const scoreVsParColor =
-    scoreVsPar < 0 ? '#22c55e'
+    scoreVsPar == null ? c.text_muted
+    : scoreVsPar < 0 ? '#22c55e'
     : scoreVsPar === 0 ? c.text_primary
     : '#f59e0b';
 

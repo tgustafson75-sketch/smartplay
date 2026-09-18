@@ -1497,6 +1497,27 @@ export default function PlayTab() {
     [homeCourses, selected],
   );
 
+  /**
+   * 2026-09-17 (Tim — "I tried and it just went to the play tab. User should also be able to mark a
+   * star on a course's card").
+   *
+   * The toggle was BUILT on 09-14 and put on ONE surface: the expanded card of the course you have
+   * already selected. So Profile's "Choose home courses" jumped here and, until you tapped a course
+   * open, there was nothing on screen to tap — the button looked like it did nothing. Every course
+   * row now carries the same star, calling the same store action with the same cap, so the answer
+   * to "where do I set a home course" is "on any course, where the courses are".
+   */
+  const isHomeCourse = useCallback(
+    (id: string | null | undefined, name: string | null | undefined) =>
+      (homeCourses ?? []).some((h) => (h.id && id && h.id === id)
+        || (!h.id && (h.name ?? '').trim().toLowerCase() === (name ?? '').trim().toLowerCase())),
+    [homeCourses],
+  );
+  const toggleHome = useCallback((id: string, name: string) => {
+    const ok = usePlayerProfileStore.getState().toggleHomeCourse({ id, name });
+    if (!ok) Alert.alert(t('play.home_course.full_title'), t('play.home_course.full_body', { max: MAX_HOME_COURSES }));
+  }, [t]);
+
   const spooledHomeRef = useRef<string>('');
   useEffect(() => {
     const ids = (homeCourses ?? []).map((h) => h.id).filter((id) => !!id);
@@ -2453,6 +2474,21 @@ export default function PlayTab() {
               <Text style={styles.localMeta} numberOfLines={1}>{r.location}</Text>
             </View>
             <TouchableOpacity
+              onPress={() => toggleHome(r.id, r.club_name ?? '')}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={styles.infoBtn}
+              accessibilityRole="button"
+              accessibilityLabel={isHomeCourse(r.id, r.club_name)
+                ? t('play.home_course.remove')
+                : t('play.home_course.add')}
+            >
+              <AppIcon
+                name={isHomeCourse(r.id, r.club_name) ? 'star' : 'star-outline'}
+                size={20}
+                color={isHomeCourse(r.id, r.club_name) ? '#FBBF24' : '#8A96A6'}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
               onPress={() => pushCourseGuarded(router, r.id)}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               style={styles.infoBtn}
@@ -2512,8 +2548,8 @@ export default function PlayTab() {
                       */}
                     <TouchableOpacity
                       onPress={() => {
-                        const ok = usePlayerProfileStore.getState().toggleHomeCourse({ id: selected.id, name: selected.club_name ?? selected.course_name ?? '' });
-                        if (!ok) Alert.alert(t('play.home_course.full_title'), t('play.home_course.full_body', { max: MAX_HOME_COURSES }));
+                        // Same helper the rows use — one toggle, one cap, one refusal message.
+                        toggleHome(selected.id, selected.club_name ?? selected.course_name ?? '');
                       }}
                       hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                       accessibilityRole="button"

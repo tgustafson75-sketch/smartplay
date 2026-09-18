@@ -1239,7 +1239,27 @@ export const useRoundStore = create<RoundState>()(
         const courseLocation = options.courseLocation ?? null;
         // 2026-08-06 (tester Matt Abid) — resolve the starting hole (front nine = 1, back nine = 10),
         // clamped to a real hole in the loaded set.
-        const nHoles = holes.length || 1;
+        /**
+         * 2026-09-17 — `holes.length || 1` WAS A SECOND, WEAKER ANSWER to "how many holes does this
+         * course have", and it is the same defect setCurrentHole was moved off on 09-11.
+         *
+         * The `|| 1` turns an empty hole set — the acknowledged startedWithoutHoles path, taken
+         * whenever the layout fetch fails or the course is unlisted — into the fiction that the
+         * course has ONE hole. Both clamps below then collapse: min(10, 1) = 1, so a player who
+         * picks 9 holes + Back Nine starts on hole 1 and plays the whole round numbered 1-9 while
+         * standing on 10-18. Every hole the caddie announces is nine out, the scorecard shows the
+         * front nine, and the WHS posting files it as a front nine.
+         *
+         * getCourseHoleCount is the owner and already answers all three cases honestly, including
+         * falling back to 18 for an unknown course — because an empty array is not evidence that a
+         * course has one hole. [[two-owners-is-the-root-cause]]
+         */
+        const nHoles = (() => {
+          try {
+            const { getCourseHoleCount } = require('../data/courses') as typeof import('../data/courses');
+            return getCourseHoleCount(courseId, holes.length);
+          } catch { return holes.length || 18; }
+        })();
         let startHoleResolved = Math.max(1, Math.min(options.startHole ?? 1, nHoles));
         // 2026-08-06 (audit cycle 5, finding #1) — a back-nine start needs a FULL nine ahead of it. On a
         // 9-hole course "back nine" (hole 10) would clamp to hole 9 and then believe the round runs 9→17,
@@ -1370,6 +1390,13 @@ export const useRoundStore = create<RoundState>()(
            */
           pinPosition: PIN_CENTER,
           pinDeclared: false,
+          /**
+           * 2026-09-17 — and cleared here, which is what clearTransportDeclaration's own docstring
+           * says ("so detection may fill it again (new round)") — a method that had ZERO callers
+           * anywhere in the app. Without this, round two in the same session inherits round one's
+           * declaration and both detectors stay stood down for a round the player never declared.
+           */
+          transportDeclared: false,
           // 2026-08-06 (tester Matt Abid) — start on the chosen nine (back nine = hole 10). Clamped to a
           // real hole in the loaded set so an out-of-range start can't strand the round.
           currentHole: startHoleResolved,
@@ -3817,6 +3844,15 @@ transportMode: s.transportMode,
         // every yardage to the middle of the green. Nothing can re-derive a pin.
         pinPosition: s.pinPosition,
         pinDeclared: s.pinDeclared,
+        /**
+         * 2026-09-17 — transportDeclared belongs here for the SAME reason pinDeclared does, and was
+         * simply missed. transportMode IS persisted two lines up, so a mid-round process kill — the
+         * premise this whole block is written around — rehydrated the mode 'cart' with the
+         * declaration back to false. walkingDetector and shotDetectionService both stand down only
+         * `if (transportDeclared)`, so both resumed auto-correcting and could flip the player's
+         * explicit choice out from under them on the back nine.
+         */
+        transportDeclared: s.transportDeclared,
         // 2026-06-05 — third audit pass: four more in-round fields
         // that were initialized + mutated mid-round but missing from
         // partialize, so a crash + relaunch silently lost them.
