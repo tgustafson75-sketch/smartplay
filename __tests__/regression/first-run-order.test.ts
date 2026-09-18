@@ -107,7 +107,8 @@ describe('decideFirstRunRoute', () => {
   });
 
   it('does not trap a player who DECLINED the permissions', () => {
-    // permissions.tsx sets its flag on Skip as well as Allow, so declining advances.
+    // permissions.tsx sets its flag on EVERY exit — grant, denial, or a thrown request — so
+    // declining advances. (It had a skip button until 2026-09-17; App Review 5.1.1(iv) removed it.)
     expect(decideFirstRunRoute({
       introVideoSeen: true, corePermissionsAsked: true, termsAccepted: true, hasName: true,
       bagSetupOffered: true, bagEmpty: false,

@@ -562,7 +562,28 @@ function AppNavigator() {
       if (!usePlayerProfileStore.persist.hasHydrated()) return false;
       done = true;
       const p = usePlayerProfileStore.getState();
-      const hasData = p.handicap != null || !!p.goal || !!p.dominantMiss || (p.homeCourses ?? []).length > 0;
+      /**
+       * 2026-09-17 — `p.handicap != null` MADE THIS A TAUTOLOGY, so it fired on a blank profile.
+       *
+       * `handicap` is typed `number` and defaults to 18 (playerProfileStore), so it is never null
+       * and the whole condition was always true. This effect runs at BOOT off onFinishHydration,
+       * before welcome.tsx has collected anything — so on the very first launch of a fresh install
+       * it synthesized a private "ABOUT THIS GOLFER" note from an empty profile, and the API has no
+       * empty-payload gate: name unknown, handicap 18, goal unknown, miss unknown.
+       *
+       * setKevinContext has exactly one writer, reached only through the `!p.kevinContext` gate
+       * below, so that note was then FINAL. A player who went on to enter a 2.4 index and a goal of
+       * Break 80 had a background note on every single Kevin turn, for the life of the install,
+       * describing an unnamed 18-handicap. It also spent an inference call per install on nothing.
+       *
+       * The gate now asks for something a PLAYER supplied. firstName is the honest signal that
+       * welcome has been through; handicap_index is nullable where `handicap` is not.
+       */
+      const hasData = !!p.firstName?.trim()
+        || p.handicap_index != null
+        || !!p.goal
+        || !!p.dominantMiss
+        || (p.homeCourses ?? []).length > 0;
       if (hasData && !p.kevinContext) {
         void import('../services/contextSynthesizer')
           .then(m => m.synthesizeOnboardingProfile())

@@ -21,7 +21,8 @@
 export type FirstRunState = {
   /** tutorialsSeen['intro_video'] */
   introVideoSeen: boolean;
-  /** tutorialsSeen['core_permissions_requested'] — set on Allow AND on Skip. */
+  /** tutorialsSeen['core_permissions_requested'] — set on EVERY exit from the permissions screen,
+   *  including one where the player declined every dialog. */
   corePermissionsAsked: boolean;
   /** playerProfile.termsAcceptedAt != null — set only by welcome.tsx. */
   termsAccepted: boolean;
@@ -55,8 +56,14 @@ export function decideFirstRunRoute(s: FirstRunState): FirstRunRoute {
   if (!s.termsAccepted && !s.hasName) return '/welcome';
 
   // 3. One batch of core permissions, so individual tools never prompt mid-round. Reached only
-  //    after consent. The screen sets its flag on Skip as well as Allow, so declining still
-  //    advances rather than trapping the player on it.
+  //    after consent.
+  //
+  //    2026-09-17 — the screen no longer HAS a skip button; App Review 5.1.1(iv) required that the
+  //    primer always proceed to the request (see app/permissions.tsx). The property this step
+  //    depends on is unchanged and is now carried differently: every exit from that screen routes
+  //    through its single exit() and sets the flag — a full grant, a total denial, and a thrown
+  //    request alike. So declining still advances rather than trapping the player on it.
+  //    [[a-stale-header-is-a-source-someone-trusts]]
   if (!s.corePermissionsAsked) return '/permissions';
 
   /**
@@ -69,8 +76,8 @@ export function decideFirstRunRoute(s: FirstRunState): FirstRunRoute {
    * it is the same re-entrant router sequence that already places the intro, consent and
    * permissions, so it stays skippable and cannot stack.
    *
-   * `bagSetupOffered` is set by bag-scan ON MOUNT, exactly like permissions sets its flag on Skip as
-   * well as Allow. Without that, safeBack() from a first-run arrival has no stack to return to, the
+   * `bagSetupOffered` is set by bag-scan ON MOUNT, on the same principle as the permissions screen
+   * setting its flag on every exit. Without that, safeBack() from a first-run arrival has no stack to return to, the
    * router re-evaluates, and the player is put straight back on the screen they just left.
    * [[a-toggle-that-does-nothing-for-the-default-user]]
    */

@@ -23,13 +23,13 @@ describe('the inventory the brain is given', () => {
   const body = strip(read('services/caddieRequestBody.ts'));
 
   it('is the CARRIED bag, not everything he owns', () => {
-    expect(body).toMatch(/bagClubs: safe\(\(\) => \{[\s\S]{0,240}carriedList\(\)/);
+    expect(body).toMatch(/bagClubs: safe\(\(\) => \{[\s\S]{0,400}carriedList\(\)/);
   });
 
   it('no longer sends the full registered list as the bag', () => {
     const at = body.indexOf('bagClubs: safe(');
     expect(at).toBeGreaterThan(-1);
-    expect(body.slice(at, at + 260)).not.toMatch(/bagList\(\)/);
+    expect(body.slice(at, at + 420)).not.toMatch(/bagList\(\)/);
   });
 
   it('but the CARRY DISTANCES stay unscoped — how far he hits a club is true wherever it is', () => {

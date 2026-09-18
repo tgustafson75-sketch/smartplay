@@ -79,7 +79,7 @@ export default function BagScreen() {
    * does not start the first round with bagClubs: []. A first-run arrival has NO back stack, so
    * safeBack() lands on '/' and the router re-evaluates immediately — if this flag were set on
    * "done" instead of on arrival, skipping would put the player straight back here, forever. This
-   * mirrors permissions.tsx, which sets its flag on Skip as well as on Allow.
+   * mirrors permissions.tsx, which sets its flag on every exit from the screen.
    */
   useEffect(() => {
     try { useSettingsStore.getState().markTutorialSeen('bag_setup_offered'); } catch { /* a flag we could not set is not a reason to block the bag */ }

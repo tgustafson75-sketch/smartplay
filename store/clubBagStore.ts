@@ -516,11 +516,26 @@ export const useClubBagStore = create<ClubBagState>()(
           const stats = require('./clubStatsStore') as {
             CLUB_ORDER: readonly string[];
             useClubStatsStore: { getState: () => { hasDistance: (c: string) => boolean } };
+            clubNameToClubId: (name: string) => string | null;
           };
           const st = stats.useClubStatsStore.getState();
           return stats.CLUB_ORDER
             .filter((c) => c !== 'Putter' && st.hasDistance(c))
-            .map((c): RegisteredClub => ({ club_id: c as ClubId, registered_at: 0, source: 'measured', variants: [] }))
+            /**
+             * 2026-09-17 — `c as ClubId` WAS A LIE, for exactly one club.
+             *
+             * CLUB_ORDER holds ClubNames and RegisteredClub.club_id holds ClubIds. Every member is
+             * byte-identical across the two ('7I', 'SW', '3W') EXCEPT the driver: the name is
+             * 'Driver', the id is 'DR'. The cast silenced the compiler and shipped a bag whose
+             * driver had an id no consumer could resolve.
+             *
+             * Reachable on a fresh install: /bag-scan is deliberately skippable, so a player who
+             * backs out of it and plays a round falls onto this measured stand-in branch. Then
+             * services/shotReadLive drops the club whose id will not map (`if (!canon) continue`),
+             * and the club ladder the caddie reads has no driver in it — a 265-yard tee shot gets
+             * clubbed to the 3 wood, on the player's first round. [[two-owners-is-the-root-cause]]
+             */
+            .map((c): RegisteredClub => ({ club_id: (stats.clubNameToClubId(c) ?? c) as ClubId, registered_at: 0, source: 'measured', variants: [] }))
             .sort((a, b) => CLUB_ORDER.indexOf(a.club_id) - CLUB_ORDER.indexOf(b.club_id));
         } catch {
           return [];

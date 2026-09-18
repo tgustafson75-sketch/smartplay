@@ -27,7 +27,25 @@ describe('the registered bag reaches the caddie', () => {
     useClubBagStore.getState().registerClub('7I', { source: 'camera' });
     useClubBagStore.getState().registerClub('DR', { source: 'camera' });
     const body = buildCaddieRequestBody({ message: 'what club', language: 'en' }) as Record<string, unknown>;
-    expect(body.bagClubs).toEqual(expect.arrayContaining(['7I', 'DR']));
+    /**
+     * 2026-09-17 — NAMES, not ids, and this assertion moving is the point rather than a casualty.
+     *
+     * api/kevin.ts sets bagClubs against clubDistances to decide which clubs have no measured carry
+     * and which were left at home. clubDistances is keyed by ClubName, so sending ClubIds meant the
+     * driver — the only club whose id and name differ — was reported to the caddie as BOTH
+     * unmeasured and left at home, on every question, for every player carrying one. The prompt
+     * then forbids recommending a club that is not in the bag, so the driver was barred from every
+     * tee shot. The wire now carries one vocabulary.
+     */
+    expect(body.bagClubs).toEqual(expect.arrayContaining(['7I', 'Driver']));
+    expect(body.bagClubs).not.toContain('DR');
+  });
+
+  it('and the putter is named, not left as a raw id', () => {
+    // clubIdToClubName returns null for PT by design; a display name is a third, separate question.
+    useClubBagStore.getState().registerClub('PT', { source: 'camera' });
+    const body = buildCaddieRequestBody({ message: 'what club', language: 'en' }) as Record<string, unknown>;
+    expect(body.bagClubs).toContain('Putter');
   });
 
   it('is a bag, not a distance table — a club with no measured carry still appears', () => {

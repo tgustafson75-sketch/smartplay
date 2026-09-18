@@ -11,7 +11,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useClubStatsStore, CLUB_ORDER, clubIdToClubName, statedCarryFromEntry, statedEntryFromCarry, type ClubName, type StatedUnit } from '../../store/clubStatsStore';
+import { useClubStatsStore, CLUB_ORDER, clubIdToClubName, clubIdToDisplayName, statedCarryFromEntry, statedEntryFromCarry, type ClubName, type StatedUnit } from '../../store/clubStatsStore';
 import { composeFitProfile, recommendFlex, type FitClubInput } from '../../services/practice/fitProfile';
 // The SAME rollout table the store converts with — imported, never re-stated, or the hint under the
 // toggle would drift from the arithmetic it is describing. [[two-owners-is-the-root-cause]]
@@ -325,7 +325,14 @@ export default function FitProfileScreen() {
     return Object.values(bagClubs)
       .map((c) => {
         const name = clubIdToClubName(c.club_id);
-        const key = (name ?? c.club_id) as string;
+        /**
+         * 2026-09-17 — the DISPLAY name. clubIdToClubName returns null for 'PT' by design, so this
+         * used to render the putter as the raw id "PT" with no detail line, and CLUB_ORDER.indexOf
+         * ('PT') === -1 sorted it above the driver. It also had to match pack.carry, which spells
+         * the putter 'Putter' — so Auto-pack could never map it back to an id and wrote a
+         * carriedToday with no putter, which the player cannot undo because the row is disabled.
+         */
+        const key = clubIdToDisplayName(c.club_id);
         const yards = name && st.hasDistance(name as ClubName) ? Math.round(st.carryFor(name as ClubName)) : null;
         return {
           club_id: c.club_id,

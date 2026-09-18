@@ -69,6 +69,27 @@ export function clubNameToClubId(name: string | null | undefined): string | null
   return CLUB_NAME_TO_ID[name] ?? null;
 }
 
+/**
+ * 2026-09-17 — ClubId → the word for it, INCLUDING the putter. The missing third direction.
+ *
+ * clubIdToClubName deliberately returns null for 'PT', and that is correct: it answers "which
+ * distance-ladder club is this", and the putter is not on the ladder. But four places needed "what
+ * is this club CALLED" and reached for the distance map because it was the only one there — so the
+ * putter came back null and they fell through to the raw id, while the driver came back 'Driver'
+ * from one source and stayed 'DR' in another. Every other club is byte-identical in both
+ * vocabularies, which is exactly why 19 of 21 worked and nobody saw it.
+ *
+ * Derived from CLUB_NAME_TO_ID, which already carries Putter, so this cannot drift from either of
+ * the other two directions. [[two-owners-is-the-root-cause]]
+ */
+const CLUB_ID_TO_DISPLAY: Record<string, string> = Object.fromEntries(
+  Object.entries(CLUB_NAME_TO_ID).map(([name, id]) => [id, name]),
+);
+export function clubIdToDisplayName(id: string | null | undefined): string {
+  if (!id) return '';
+  return CLUB_ID_TO_DISPLAY[id] ?? id;
+}
+
 /** Standard amateur carry chart (yds) — inference fallback before the
  *  player has logged enough real shots. Mid-handicap baseline. */
 // 2026-07-24 (final QA) — recalibrated to be INTERNALLY CONSISTENT for a mid-handicapper.

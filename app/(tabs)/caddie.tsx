@@ -3298,7 +3298,21 @@ export default function CaddieTab() {
     // Mirrors the once-per-hole guard at the voice score-log sites.
     
     logScore(currentHole, holeScore);
-    logPutts(currentHole, holePutts);
+    /**
+     * 2026-09-17 — ONLY WHEN THE PLAYER ACTUALLY SAID SO.
+     *
+     * This was unconditional, and the stepper starts at 0 and is reset to 0 after every hole — so a
+     * player who logs scores from this card and never touches the putts stepper had putts[1..18]=0
+     * WRITTEN and persisted. Every other writer in the app guards this (scorecard logs on a tap,
+     * logScoreHandler checks `inlinePutts !== null`, simulatedGPS checks `putts > 0`) because a
+     * missing putt count is not a missed green — scoredRoundStats returns null for it on purpose.
+     *
+     * The damage was silent and permanent: Total putts 0, Avg putts 0.0, and GIR ~0% because
+     * `score - 0 <= par - 2` is false for every par, so a routine par read as a missed green. The
+     * "• Add putts" nag never appeared either, because 0 counts as recorded — so there was no way
+     * back. Frozen into holeStats at endRound and fed to the dashboard and the caddie forever.
+     */
+    if (holePutts > 0) logPutts(currentHole, holePutts);
     useGhostStore.getState().updateHole(currentHole, holeScore);
 
     const par = getCurrentPar();

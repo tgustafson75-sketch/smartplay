@@ -882,8 +882,17 @@ export default function PlayTab() {
       // No pack, or a pack that keeps everything, is not a reconciliation worth announcing.
       if (!pack || pack.leave.length === 0) return;
       const bag = useClubBagStore.getState();
-      const { clubLabel } = require('../../services/clubRecognition') as typeof import('../../services/clubRecognition');
-      const byLabel = new Map<string, string>(bag.bagList().map((c) => [clubLabel(c.club_id), String(c.club_id)]));
+      /**
+       * 2026-09-17 — clubLabel WAS THE WRONG MAPPER AND THIS EFFECT COULD NEVER FIRE.
+       *
+       * clubLabel returns SPOKEN words — 'driver', '7-iron', '3-wood', 'pitching wedge'. pack.carry
+       * holds ClubNames — 'Driver', '7I', '3W', 'PW'. There is no key in common for any club in the
+       * catalog, so `ids` was always empty and the effect bailed one line below, before it even
+       * stamped packedForCourseRef. Auto-spool the bag for a course has never once run from this
+       * tab; the sibling in practice/fit-profile uses the display name, which is what matches.
+       */
+      const { clubIdToDisplayName } = require('../../store/clubStatsStore') as typeof import('../../store/clubStatsStore');
+      const byLabel = new Map<string, string>(bag.bagList().map((c) => [clubIdToDisplayName(c.club_id), String(c.club_id)]));
       const ids = pack.carry.map((c) => byLabel.get(c)).filter((x): x is string => !!x);
       if (ids.length === 0) return;
       packedForCourseRef.current = courseId;
@@ -1842,6 +1851,28 @@ export default function PlayTab() {
 
   const handleStartRound = () => {
     if (!selected) return;
+    /**
+     * 2026-09-17 — A LIVE ROUND IS NOT SOMETHING YOU START OVER BY ACCIDENT.
+     *
+     * This button sits inside `{selected && (...)}` with no active-round gate, and the mount effect
+     * deliberately populates `selected` DURING a round — falling through to the nearest or home
+     * course when the active one is an API course, which is the common case. So mid-round the
+     * primary CTA on this tab could read "Start Round" for a different course entirely.
+     *
+     * One tap then reached roundStore.startRound, whose preserve-on-restart defence is a DEGRADED
+     * save: the in-progress round is filed with scoreVsPar null, no holePars, no holeStats, no
+     * summary, no recap and no WHS posting, and the live round is wiped to hole 1. Eleven holes
+     * gone, no prompt. Both deliberate end-round paths confirm first; this author was missed, and
+     * the tab's two other start surfaces (heroCourse, the at-course banners) are already gated.
+     */
+    if (isRoundActive) {
+      Alert.alert(
+        t('play.alert.already_playing'),
+        t('play.alert.finish_or_end_your_current'),
+        [{ text: 'OK' }],
+      );
+      return;
+    }
     // 2026-06-15 (Tim — pre-round brief fired ~25s late) — warm the brief + TTS
     // Lambdas at round start so the hole-1 handoff isn't the first (cold) hit.
     // Fire-and-forget; both dedupe-throttled internally.

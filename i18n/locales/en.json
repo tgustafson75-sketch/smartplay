@@ -559,7 +559,9 @@
     "alert": {
       "didn_t_catch_that_tap": "Didn't catch that — tap the mic and try again.",
       "dictation_had_trouble_tap_the": "Dictation had trouble. Tap the mic to try again, or type it.",
-      "remove_this_course": "Remove this course?"
+      "remove_this_course": "Remove this course?",
+      "already_playing": "You are already playing",
+      "finish_or_end_your_current": "Finish or end your current round before starting a new one — ending it saves your scorecard."
     },
     "play_tab": {
       "start_round": "Start round",
@@ -2399,7 +2401,8 @@
       "putt_read_est": "PUTT READ · est",
       "putt_read": "PUTT READ",
       "rough_read_no_connection_while": "Rough read — no connection while analysing, so I could not pin the swing in the clip. Re-analyse on signal for a sharper one.",
-      "rough_read_i_could_not": "Rough read — I could not pin the swing in the clip this time. Re-analyse for a sharper one."
+      "rough_read_i_could_not": "Rough read — I could not pin the swing in the clip this time. Re-analyse for a sharper one.",
+      "open_settings": "Open Settings"
     },
     "accessibility_label": {
       "stop_recording": "Stop recording",

@@ -38,7 +38,8 @@ import {
   useWindowDimensions,
   type NativeSyntheticEvent,
   type NativeScrollEvent,
-  type ViewStyle, Platform } from 'react-native';
+  type ViewStyle, Platform, Linking,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -3910,7 +3911,24 @@ export default function SmartMotion() {
     if (!micPerm?.granted) {
       const r = await requestMicPerm();
       if (!r.granted) {
-        Alert.alert(t('swinglab_smartmotion.alert.microphone_needed'), t('swinglab_smartmotion.alert.smart_motion_listens_for_ball'));
+        /**
+         * 2026-09-17 — same dead end as the camera gate above, and worse for being invisible: the
+         * preview renders normally and the Record button looks live, so a player who declined the
+         * mic at the first-launch pre-flight taps Record, gets this alert, taps again, gets it
+         * again — forever, with nothing saying why or how to fix it. hooks/useVoiceCaddie already
+         * implements the correct recovery; this path never reused it.
+         */
+        const canAsk = r.canAskAgain !== false;
+        Alert.alert(
+          t('swinglab_smartmotion.alert.microphone_needed'),
+          t('swinglab_smartmotion.alert.smart_motion_listens_for_ball'),
+          canAsk
+            ? [{ text: 'OK' }]
+            : [
+                { text: 'Not now', style: 'cancel' as const },
+                { text: 'Open Settings', onPress: () => { try { void Linking.openSettings(); } catch { /* non-fatal */ } } },
+              ],
+        );
         return;
       }
     }
@@ -5192,8 +5210,30 @@ export default function SmartMotion() {
         <Ionicons name="camera-outline" size={48} color={colors.accent} />
         <Text style={[styles.permTitle, { color: colors.text_primary }]}>{t('swinglab_smartmotion.smart_motion.camera_access_needed')}</Text>
         <Text style={[styles.permBody, { color: colors.text_muted }]}>{t('swinglab_smartmotion.smart_motion.smart_motion_records_your_swing')}</Text>
-        <Pressable onPress={() => void requestCamPerm()} style={[styles.primaryBtn, { backgroundColor: colors.accent }]}>
-          <Text style={[styles.primaryBtnText, { color: '#06281b' }]}>{t('swinglab_smartmotion.smart_motion.grant_access')}</Text>
+        {/**
+          * 2026-09-17 — A BUTTON THAT CAN NEVER WORK AGAIN IS A DEAD END, and this was the default
+          * first-run path. app/permissions.tsx asks for the camera once at first launch; a player
+          * who taps Don't Allow there arrives here, taps "Grant access", and iOS never shows the
+          * dialog again — requestCamPerm resolves granted:false instantly and nothing on screen
+          * changes. There is no back button either (headerShown:false). Forever.
+          *
+          * Every sibling surface already does this correctly — swinglab/setup-check, lie-analysis,
+          * smartfinder all branch on canAskAgain and route to Settings. app/permissions.tsx even
+          * NAMES that recovery as the reason it does not offer a Settings link of its own.
+          * SmartMotion was missing from that list and from the behaviour. [[reachable-not-just-wired]]
+          */}
+        <Pressable
+          onPress={() => {
+            if (camPerm && !camPerm.canAskAgain) { Linking.openSettings(); return; }
+            void requestCamPerm();
+          }}
+          style={[styles.primaryBtn, { backgroundColor: colors.accent }]}
+        >
+          <Text style={[styles.primaryBtnText, { color: '#06281b' }]}>
+            {camPerm && !camPerm.canAskAgain
+              ? t('swinglab_smartmotion.smart_motion.open_settings')
+              : t('swinglab_smartmotion.smart_motion.grant_access')}
+          </Text>
         </Pressable>
       </View>
     );

@@ -863,9 +863,24 @@ export function buildCaddieRequestBody(extras: CaddieRequestExtras): Record<stri
      * carriedList() returns the whole registered bag whenever no subset has been chosen, so a player
      * who never touches the pack screen is completely unaffected.
      */
+    /**
+     * 2026-09-17 — SENT AS NAMES, because the brain COMPARES this against clubDistances.
+     *
+     * This shipped ClubIds ('DR', '7I', 'PT') while `clubDistances` is keyed by ClubName
+     * ('Driver', '7I'). api/kevin.ts sets one against the other to work out which clubs have no
+     * measured carry and which were left at home — and every club is byte-identical across the two
+     * vocabularies EXCEPT the driver. So for every player carrying a driver, on every question,
+     * Kevin was told BOTH "no measured carry yet for: DR" AND "not with him today: Driver", with
+     * the real driver number sitting in the block immediately above. The prompt then forbids
+     * recommending a club that is "not here" — so the driver was barred from every tee shot.
+     *
+     * Converted here rather than in api/kevin.ts so the wire carries one vocabulary and the server
+     * needs no client store. [[two-owners-is-the-root-cause]]
+     */
     bagClubs: safe(() => {
       const { useClubBagStore } = require('../store/clubBagStore') as typeof import('../store/clubBagStore');
-      return useClubBagStore.getState().carriedList().map((c) => c.club_id);
+      const { clubIdToDisplayName } = require('../store/clubStatsStore') as typeof import('../store/clubStatsStore');
+      return useClubBagStore.getState().carriedList().map((c) => clubIdToDisplayName(c.club_id));
     }, []),
     /** Per-club character (shape + miss + carry), evidence-barred by clubTendency itself. */
     club_tendencies: safe(() => {

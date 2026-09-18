@@ -52,7 +52,7 @@ function liveHoles(): { holes: PackHole[]; courseName: string | null } {
 /** Everything he owns, with the carry, the usage and the work status the packer breaks ties on. */
 function liveOwned(): PackClub[] {
   const { useClubBagStore } = require('../store/clubBagStore') as typeof import('../store/clubBagStore');
-  const { useClubStatsStore, clubIdToClubName } = require('../store/clubStatsStore') as typeof import('../store/clubStatsStore');
+  const { useClubStatsStore, clubIdToClubName, clubIdToDisplayName } = require('../store/clubStatsStore') as typeof import('../store/clubStatsStore');
   const st = useClubStatsStore.getState();
 
   /**
@@ -77,7 +77,19 @@ function liveOwned(): PackClub[] {
 
   return useClubBagStore.getState().bagList().map((c) => {
     const name = clubIdToClubName(c.club_id);
-    const key = name ?? c.club_id;
+    /**
+     * 2026-09-17 — the DISPLAY name, not the distance-ladder name.
+     *
+     * clubIdToClubName returns null for 'PT' by design (the putter is not on the distance ladder),
+     * so `name ?? c.club_id` produced the raw id 'PT'. services/bagPack.isPutter tests
+     * `club === 'Putter' || club.toUpperCase() === 'PUTTER'`, and 'PT' matches neither — so the
+     * putter was treated as an ordinary club with no carry: pushed into `unrated` with the reason
+     * "No carry set for PT", listed in `leave`, and costing a slot off the 14-club cap. That
+     * `leave` list is sent to the brain, so the caddie advised leaving the putter at home; and
+     * fit-profile's Auto-pack wrote a carriedToday with no putter that the player could not undo,
+     * because the putter row is disabled.
+     */
+    const key = clubIdToDisplayName(c.club_id);
     const w = work.get(key);
     return {
       club: key,
