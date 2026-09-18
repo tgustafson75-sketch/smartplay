@@ -122,6 +122,48 @@ Feb 2027; there is no reason to cut a build for it alone.
 
 ---
 
+## NOBODY CAN READ A PRODUCTION CRASH · **added 2026-09-18 — do this before the next build**
+
+A fatal native crash arrived from a real player today (EXC_BAD_ACCESS, KERN_INVALID_ADDRESS at 0x54,
+route `/greeting`, iPhone18,1 on iOS 26.6.2, release 1.0.0+27) and its stack reads:
+
+```
+?, in <redacted>
+?, in <redacted>
+... (12 additional frames were not displayed)
+```
+
+**That is configuration, not Sentry being unhelpful.** Two switches, both off:
+
+| Where | Setting | Effect |
+|---|---|---|
+| `app.json` → `@sentry/react-native` plugin | `"uploadSourceMaps": false` | every **JS** error arrives minified |
+| `eas.json`, all five profiles | `SENTRY_DISABLE_AUTO_UPLOAD: "true"` | no **dSYMs** → every **native** crash arrives unsymbolicated |
+
+So the app is live in both stores and *no crash it reports can be diagnosed*, JS or native. That is a
+worse problem than any single crash: it is the instrument, not the reading.
+
+`SENTRY_DISABLE_AUTO_UPLOAD` is not a mistake in itself — it stops a build failing when no auth
+token is present, which is why it is on every profile. The missing piece is the token.
+
+**What Tim has to do (2 minutes, only he can):** Sentry → Settings → Auth Tokens → create one with
+`project:releases` and `org:read`, then `eas secret:create --name SENTRY_AUTH_TOKEN --value <token>`.
+Claude Code must not hold it.
+
+**Then:**
+1. Flip `uploadSourceMaps` to `true` and drop `SENTRY_DISABLE_AUTO_UPLOAD` from the **production**
+   profile only (leave it on development/preview so a local build never fails on a missing token).
+   Do NOT flip it before the secret exists — the build will fail.
+2. Source maps upload with each OTA from then on, so JS errors become readable **without a build**.
+3. dSYMs come from the native build, so native crashes stay unreadable until the next one.
+
+**For build 27 specifically:** EAS reports `Build Artifacts URL: null`, so the dSYMs were not kept
+there. App Store Connect may still hold them (Xcode → Organizer → Archives → Download Debug Symbols,
+or the ASC API — this repo already has ASC credentials wired for `scripts/asc-status.py`). If they
+come down, `sentry-cli debug-files upload` makes today's crash readable retrospectively.
+
+---
+
 ## Build checklist
 - [x] `getAudioRoute()` both platforms
 - [x] route-change event, both platforms, bridged and subscribed
@@ -131,6 +173,8 @@ Feb 2027; there is no reason to cut a build for it alone.
 - [ ] Re-verify on device: `npm run probe-tools`, a voice round, earbud tap, headset plugged in
       MID-round, a sandbox purchase and a restore
 - [ ] merge `native/watch-command-and-capability` (Kotlin both ends; re-read watchCaddieBridge.ts)
+- [ ] SENTRY_AUTH_TOKEN in EAS secrets, `uploadSourceMaps: true`, and SENTRY_DISABLE_AUTO_UPLOAD
+      dropped from the production profile — until then every production crash is unreadable
 - [ ] R8/ProGuard on (`enableProguardInReleaseBuilds`) + keep-rules for MediaPipe, Wear bridge,
       Bluetooth media button, Meta DAT and Sentry — then re-verify each on the release AAB (Play
       obfuscation warning, fix by Feb 2027)

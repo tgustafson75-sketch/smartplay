@@ -17268,6 +17268,50 @@ check(
     "the one screen that ever did this was the intro video, whose own header records it muddying the audio session before voiceService could configure it for speech ('our voice behavior has not worked right'); first run now opens on the consent screen, which touches no audio at all");
 }
 
+/**
+ * 2026-09-18 — NEVER FREE AN AUDIO PLAYER FROM INSIDE ITS OWN STATUS CALLBACK.
+ *
+ * A fatal native crash arrived from a real player's iPhone (EXC_BAD_ACCESS, KERN_INVALID_ADDRESS at
+ * 0x54, mechanism mach, handled no, route /greeting, iPhone18,1 on iOS 26.6.2, release 1.0.0+27,
+ * memory_warnings 0 — so not memory pressure, and not JavaScript). The launch greeting speaks
+ * through voiceService, and both playback paths called `sound.unloadAsync()` straight out of
+ * `setOnPlaybackStatusUpdate` — expo-av delivering a status update FROM the native player. Freeing
+ * an AVPlayer while the native side is still inside the callback that announced its completion is a
+ * use-after-free, and the window is device-speed dependent, which is exactly how a crash reaches one
+ * user on the newest hardware and nobody else.
+ *
+ * This asserts the SHAPE that is safe — detach the callback, then unload on a later tick — and the
+ * ABSENCE of the broken one, at BOTH sites, because they are copies of each other and the one that
+ * got missed would have been the one that stayed broken.
+ *
+ * It does NOT claim to have fixed that crash. The frames are unsymbolicated and will stay that way
+ * until dSYM upload is enabled (SENTRY_DISABLE_AUTO_UPLOAD is "true" on every EAS profile). This is
+ * a hazard removed on the reported path, which is a different sentence.
+ * [[state-what-you-measured-not-what-you-intended]] [[a-guard-can-assert-the-broken-shape]]
+ */
+{
+  const vs = readCode('services/voiceService.ts');
+  /**
+   * Windowed, and ORDER-AWARE. The first version of this guard used a non-greedy regex from
+   * `setOnPlaybackStatusUpdate` to `unloadAsync` and it FAILED ON THE FIXED CODE — the fix still
+   * contains the word `unloadAsync` after `didJustFinish`, just inside a setTimeout and after a
+   * detach. A window that only asks "do these two strings appear near each other" cannot tell a
+   * teardown from a safe one. It has to read the ORDER. [[three-ways-a-guard-is-worthless]]
+   */
+  const windows = [...vs.matchAll(/didJustFinish/g)].map((m) => vs.slice(m.index ?? 0, (m.index ?? 0) + 320));
+  const unsafe = windows.filter((w) => {
+    const unload = w.indexOf('unloadAsync');
+    if (unload === -1) return false;                 // this branch frees nothing — fine
+    const detach = w.indexOf('setOnPlaybackStatusUpdate(null)');
+    return detach === -1 || detach > unload;         // freed without detaching first, or after
+  });
+  const detachThenDefer = (vs.match(/try \{ sound\.setOnPlaybackStatusUpdate\(null\); \} catch \{[^}]*\}\s*\n\s*setTimeout\(\(\) => \{ sound\.unloadAsync\(\)\.catch\(\(\) => \{\}\); \}, 0\);/g) ?? []).length;
+
+  check('VOICE: an audio player is never freed from inside its own status callback',
+    unsafe.length === 0 && detachThenDefer === 3 && windows.length >= 3,
+    `${windows.length} didJustFinish branches read, ${detachThenDefer}/3 detach-then-defer, ${unsafe.length} that free the player before detaching it — all three playback paths (speak, speakFromBase64, playLocalFile) let the native frame that announced completion return before anything is released`);
+}
+
 const total = results.length;
 const passed = results.filter((r) => r.passed).length;
 const failed = results.filter((r) => !r.passed);

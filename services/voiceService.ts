@@ -1440,7 +1440,27 @@ export const playLocalFile = async (
             return;
           }
           if (s.didJustFinish) {
-            sound.unloadAsync().catch(() => {});
+            /**
+             * 2026-09-18 — TEARING THE PLAYER DOWN FROM INSIDE ITS OWN DELEGATE CALLBACK.
+             *
+             * `unloadAsync()` was called straight from `setOnPlaybackStatusUpdate`, which is expo-av
+             * delivering a status update FROM the native player. Freeing an AVPlayer while the native
+             * side is still inside the callback that announced its own completion is a use-after-free
+             * — the classic shape of an EXC_BAD_ACCESS / KERN_INVALID_ADDRESS at a small offset, and
+             * a race whose window depends entirely on device speed.
+             *
+             * Detach first, then unload on the next tick, so the native frame that raised this has
+             * returned before anything is released, and no further callback can land on a player
+             * that is going away.
+             *
+             * HONESTY: this is a real hazard on the exact path a production crash was reported on
+             * (fatal, native, route /greeting, iPhone18,1 / iOS 26.6.2, build 1.0.0+27) — it is NOT
+             * proof that it caused it. Those frames are unsymbolicated, and nothing can name a line
+             * until dSYM upload is turned on. Fixed because it is wrong either way.
+             * [[state-what-you-measured-not-what-you-intended]]
+             */
+            try { sound.setOnPlaybackStatusUpdate(null); } catch { /* already gone */ }
+            setTimeout(() => { sound.unloadAsync().catch(() => {}); }, 0);
             if (myId === currentSpeechId) {
               currentSound = null;
               notifySpeaking(false);
@@ -1636,7 +1656,11 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
             return;
           }
           if (s.didJustFinish) {
-            sound.unloadAsync().catch(() => {});
+            // Same detach-then-unload as playLocalFile — see the note there. Freeing the player
+            // from inside its own status callback is a use-after-free whose window is device-speed
+            // dependent, and this is the path the launch greeting speaks through.
+            try { sound.setOnPlaybackStatusUpdate(null); } catch { /* already gone */ }
+            setTimeout(() => { sound.unloadAsync().catch(() => {}); }, 0);
             void FS.deleteAsync(uri, { idempotent: true }).catch(() => {});
             if (myId === currentSpeechId) {
               currentSound = null;
@@ -2238,7 +2262,12 @@ export const speak = async (
             return;
           }
           if (status.didJustFinish) {
-            sound.unloadAsync().catch(() => {});
+            // Detach-then-defer — see the note in playLocalFile. This is the MAIN cloud-TTS path,
+            // the one every spoken answer goes through, and it carried the same use-after-free as
+            // its two siblings. Found by the sim guard, not by reading: two of the three were
+            // hardened by hand and this one was missed. [[sweep-the-missing-half-not-the-unused-export]]
+            try { sound.setOnPlaybackStatusUpdate(null); } catch { /* already gone */ }
+            setTimeout(() => { sound.unloadAsync().catch(() => {}); }, 0);
             try { audioFile.delete(); } catch {}
             if (myId === currentSpeechId) {
               currentSound = null;
