@@ -4830,3 +4830,49 @@ Surfaced on device as a Memory cell in the Owner Console status strip.
 The orphan-export guard in the sim caught `memoryWarningCount` with no caller — the docstring claimed
 Owner Tools and the wire did not exist. Wired rather than baselined, per THE LENS. Worth recording
 because it was a claim-without-a-wire inside a file written specifically to fix a diagnosis gap.
+
+---
+
+## Day N+1 — 2026-09-17
+
+**1.0 (27) published to both stores. Everything below shipped AFTER that, by OTA and Vercel — no
+new binary.**
+
+### Shipped
+
+**OTA to production, both platforms** — update group `7a9c6cf3`, runtime 1.0.0, commit `00f5dd6f`.
+**Vercel auto-deployed the same commit** (api/kevin.ts is server-side, so it never needed an OTA).
+
+Four parallel sweeps (bag, profile→caddie, SmartMotion, round play). Every finding re-verified
+against source before touching it. Sixteen confirmed defects fixed:
+
+- **One root cause behind four**: the ClubId ↔ ClubName boundary crossed with no converter. Ids are
+  'DR'/'PT', names are 'Driver'/'Putter', every other club is byte-identical — which is why it
+  survived. The driver was reported to Kevin as both unmeasured AND left at home, and the prompt
+  forbids recommending a club not in the bag, so **the driver was barred from every tee shot for
+  every user**. Plus: packer left the putter at home, Play-tab auto-pack could never fire, and a
+  fresh install that skipped bag setup clubbed a 265-yard tee shot to the 3 wood.
+- **The handicap was never said.** Sent and destructured for months; every mention in the prompt was
+  prose, including one telling the model it knew the number. The payload guard passed because a
+  grep cannot tell a use from a mention — the new gate requires interpolation.
+- **Putts fabricated as 0** on every hole scored from the caddie card → GIR ~0%, avg putts 0.0,
+  frozen into history. My first fix for it was ALSO wrong (`> 0` discards a real chip-in zero); it
+  records whether the stepper was touched.
+- **Start Round was live during a round** — one tap wiped it and filed a stub with no pars, no
+  recap, no WHS posting, no prompt.
+- **Home courses could not be set.** The toggle existed on one surface only; now on every course row.
+- What's New was dead for every fresh install; kevinContext synthesized from an empty profile;
+  SmartMotion permission dead ends; back-nine on an unmapped course; scorecard inventing par;
+  transportDeclared; default_mode; foam-mode slow path; leaked pose thumbnails.
+- **Framing loop memory cut ~10x in JS** (full-sensor still every 0.9s → 1024px), so the leading
+  watchdog suspect improved without a build.
+
+### Verified
+tsc · eslint 0 errors · jest **5136/5136 (427 suites)** · sim **1040/1040**. Gates proven to fail
+against the shipped build before each fix.
+
+### Open
+- **Native, needs the next build:** android-native/MediaPipePoseModule.kt never calls
+  `bitmap.recycle()` or closes the MPImage. Each allocation is now ~10x smaller, but it still leaks.
+- **Deferred, written up in OPEN-ITEMS.md:** the silent round briefing (voice path, PATH 4).
+- Sentry API access still 403 for this org.

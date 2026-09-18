@@ -8,7 +8,28 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
-> ### ⚠️ LATEST — 2026-09-16. APP REVIEW REJECTION FIXED; BUILDS 27 BUILT, NOT SUBMITTED.
+> ### ⚠️ LATEST — 2026-09-17. 1.0 (27) IS LIVE IN BOTH STORES. Post-launch sweep shipped by OTA.
+>
+> **No new builds until 2.0** (Tim: "glad to be done building for now"). Everything since release
+> has gone out as an OTA (update group `7a9c6cf3`, commit `00f5dd6f`) or a Vercel deploy —
+> `api/kevin.ts` is server-side and auto-deploys on push to main, which is why the handicap fix did
+> not need an OTA at all.
+>
+> Sixteen defects fixed in a four-way parallel sweep the night of release. The headline: **the
+> driver was barred from every tee shot for every user** (ClubId vs ClubName across one boundary),
+> **putts were fabricated as 0** on every hole scored from the caddie card, **Start Round could wipe
+> a live round with no prompt**, and **the handicap never reached the caddie's prompt at all**
+> despite being sent and destructured for months. Full detail in SPRINT-LOG.md.
+>
+> **THE ONE THING THAT STILL NEEDS A BINARY:** `android-native/MediaPipePoseModule.kt` never calls
+> `bitmap.recycle()` or closes the MPImage. The JS half shipped (frames downscaled to 1024px, ~10x
+> smaller allocations), so it is no longer urgent — but it is still a leak, and it is the leading
+> suspect for the production WatchdogTermination. Do it with the next build, whenever that is.
+>
+> **Also open:** the silent round briefing (diagnosed, deferred, voice path + PATH 4 — see
+> OPEN-ITEMS.md), and Sentry API access returning 403 for this org.
+
+> ### 2026-09-16. APP REVIEW REJECTION FIXED; BUILDS 27 BUILT, NOT SUBMITTED.
 >
 > Apple rejected 1.0 (26) on **5.1.1(iv)** (permission primer: a postpone button, and the OS dialog's
 > own verb of consent on our button) and **2.1(b)** (reviewers could not find either subscription).
