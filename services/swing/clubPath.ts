@@ -44,6 +44,15 @@ export interface ClubPathResult {
   points: ClubPathPoint[];
   /** Frames sampled (detected + missed) → coverage ("seen in 7 of 12"). */
   framesSampled: number;
+  /**
+   * 2026-09-19 — how many offsets the SCHEDULE asked for, beside how many survived decoding.
+   *
+   * `framesSampled` alone cannot tell "the window was too short to hold more" from "the native
+   * retriever failed on five of them", and those are different bugs with different fixes. The
+   * 09-19 field report said `framesSampled: 14` and we had to read the sampler to know that was
+   * also the number requested. [[the-app-log-knows-whats-wrong]]
+   */
+  framesPlanned: number;
   /** SOURCE frame pixel dims — points[] are normalized against these, so the overlay
    *  needs the aspect to map them into the container's cover/contain space. */
   frameW?: number | null;
@@ -227,6 +236,20 @@ const APPROACH_MS = 900;
 /** Just past the ball — enough to show the exit, short of the finish. */
 const TAIL_MS = 450;
 
+/**
+ * 2026-09-19 — THE DOWNSWING ITSELF: top-of-transition to the ball. Roughly 250-300ms for a real
+ * swing, and the only stretch where the clubhead travels far enough between frames to give an arc
+ * DISTINCT points rather than the same position reported again.
+ */
+const DOWNSWING_MS = 300;
+
+/**
+ * The source frame rate is the ceiling: two offsets closer than one frame decode the SAME image.
+ * 30fps is the conservative floor — assuming faster would let us ask for frames that do not exist.
+ * Callers that have MEASURED a rate pass it instead.
+ */
+const DEFAULT_SOURCE_FPS = 30;
+
 export function clubPathSampleOffsets(
   startMs: number,
   endMs: number,
@@ -238,7 +261,17 @@ export function clubPathSampleOffsets(
    * clustering tightly on a time we are not sure of.
    */
   toleranceMs = 0,
+  /**
+   * 2026-09-19 — the MEASURED source frame rate, when the capture engine resolved one. Two offsets
+   * closer than a frame return the same image, so the schedule must not ask for them. Defaults to
+   * the conservative 30fps floor: assuming faster would request frames that do not exist.
+   */
+  sourceFps: number | null = null,
 ): number[] {
+  const fps = typeof sourceFps === 'number' && Number.isFinite(sourceFps) && sourceFps > 0
+    ? sourceFps
+    : DEFAULT_SOURCE_FPS;
+  const minGapMs = 1000 / fps;
   const offsets: number[] = [];
   const span = endMs - startMs;
   if (!(span > 0)) return offsets;
@@ -270,10 +303,40 @@ export function clubPathSampleOffsets(
      * The budget is now distributed across whichever ranges actually exist, by weight, always summing
      * to SAMPLE_COUNT. A collapsed range gives its share to its neighbours instead of to nobody.
      */
+    /**
+     * 2026-09-19 — SPLIT THE CORE, BECAUSE SPREADING IT EVENLY SPENT THE BUDGET WHERE THE CLUB IS
+     * NEARLY STILL.
+     *
+     * The 09-01 note above says the bug it fixed was "the downswing itself — the ~250ms that
+     * actually shapes the arc through the ball — was getting one or two frames out of fourteen."
+     * It narrowed the WINDOW, correctly, and then spread the samples UNIFORMLY across a 1,350ms
+     * core. Measured on the real function: on the nominal 4,000ms segment the downswing still got
+     * TWO of fourteen, and the strike frame itself was never sampled at all. The fix did not reach
+     * its own stated goal, and nothing measured it — the test asserted only that the anchored
+     * schedule beat the unanchored one, which is a comparison against something worse.
+     *
+     * WHY IT MATTERS MORE THAN IT LOOKS. An arc needs DISTINCT points. Around the top of the swing
+     * the clubhead is nearly stationary, so consecutive samples 110-170ms apart come back at
+     * almost the same coordinates — and the gate dedupes near-identical detections before counting
+     * them. Budget spent there does not just add less; it can add NOTHING, because the points
+     * collapse into one. That is the most likely reading of the 09-19 field report: fourteen
+     * frames, two surviving points, `too_few`.
+     *
+     * So the core splits. The stretch where the club MOVES gets the density, the top keeps enough
+     * to give the arc an origin, and the exit keeps enough to show it leaving the ball.
+     */
+    const downswingStart = Math.max(leadIn, anchor - DOWNSWING_MS - slop);
     const ranges = [
-      { from: startMs, to: leadIn, weight: 0.2 },   // where the arc comes from
-      { from: leadIn, to: tailEnd, weight: 0.6 },   // the downswing through the ball
-      { from: tailEnd, to: endMs, weight: 0.2 },    // where it exits
+      /**
+       * The first weight is 0.15 and not lower on purpose: `club-path-sampling` requires at least
+       * two samples before the approach band, because "the arc needs somewhere to come from" — and
+       * at 0.10 the budget rounded to ONE, leaving a 1,600ms hole at the head of the swing. Caught
+       * by that test, which is exactly what it is for.
+       */
+      { from: startMs, to: leadIn, weight: 0.15 },              // address + early backswing: the origin
+      { from: leadIn, to: downswingStart, weight: 0.20 },       // late backswing + transition
+      { from: downswingStart, to: anchor, weight: 0.40 },       // THE DOWNSWING — where the arc is shaped
+      { from: anchor, to: tailEnd, weight: 0.25 },              // the strike and the exit
     ].filter((r) => r.to > r.from);
     if (ranges.length === 0) return offsets;
 
@@ -285,11 +348,56 @@ export function clubPathSampleOffsets(
     const order = raw.map((x, i) => ({ i, frac: x - Math.floor(x) })).sort((a, b) => b.frac - a.frac);
     for (let k = 0; left > 0; k++, left--) counts[order[k % order.length]!.i]! += 1;
 
+    /**
+     * 2026-09-19 — AND THE SAME REDISTRIBUTION AGAINST THE PHYSICAL CEILING.
+     *
+     * The 09-02 note above fixed a budget that went unspent when a RANGE COLLAPSED. There is a
+     * second way to under-spend it, which that pass could not have seen because nothing enforced
+     * the frame ceiling: a range that exists but is too SHORT to hold the samples it was given.
+     * Nine offsets across 120ms is four distinct frames at 30fps and five re-decodes of frames we
+     * already have — and once the arc gate dedupes, those five cost budget and return nothing.
+     *
+     * Measured before this: an anchor 120ms into the window returned EIGHT usable offsets out of a
+     * budget of fourteen. That is the same "hands the hardest reads fewer frames" failure the
+     * 09-02 note called exactly backwards, arriving through physics rather than through arithmetic.
+     *
+     * So each range is capped at what it can actually hold, and the surplus goes to ranges with
+     * room left. [[overstrict-gate-lens]]
+     */
+    const capacity = ranges.map((r) => Math.max(1, Math.floor((r.to - r.from) / minGapMs)));
+    for (let pass = 0; pass < ranges.length; pass++) {
+      let surplus = 0;
+      for (let i = 0; i < counts.length; i++) {
+        if (counts[i]! > capacity[i]!) { surplus += counts[i]! - capacity[i]!; counts[i] = capacity[i]!; }
+      }
+      if (surplus === 0) break;
+      // Hand it to whoever still has room, widest range first — that is where extra frames are
+      // furthest apart and so most likely to be distinct positions rather than the same one twice.
+      const room = counts
+        .map((c, i) => ({ i, spare: capacity[i]! - c, span: ranges[i]!.to - ranges[i]!.from }))
+        .filter((x) => x.spare > 0)
+        .sort((a, b) => b.span - a.span);
+      if (room.length === 0) break;
+      for (let k = 0; surplus > 0 && k < room.length * 4; k++) {
+        const slot = room[k % room.length]!;
+        if (counts[slot.i]! < capacity[slot.i]!) { counts[slot.i]! += 1; surplus -= 1; }
+      }
+      if (surplus > 0) break; // genuinely nowhere left to put them — the window is simply short
+    }
+
     ranges.forEach((r, i) => {
       const n = counts[i]!;
       for (let j = 0; j < n; j++) offsets.push(Math.round(r.from + ((r.to - r.from) * j) / n));
     });
-    return offsets;
+    /**
+     * THE STRIKE FRAME, ALWAYS. Each range samples `from` and steps forward, so the END of a range
+     * is never taken — which meant the anchor itself was sampled only by coincidence, and measured
+     * on the nominal segment it never was. It is the one frame whose position says where the arc
+     * passes the ball; leaving it to chance is not a schedule.
+     */
+    const anchorMs = Math.round(anchor);
+    offsets.push(anchorMs);
+    return tidy(offsets, minGapMs, anchorMs);
   }
 
   const BAND = 0.45; // address/backswing gets the first 45% of the timeline but only ~30% of the samples
@@ -299,7 +407,44 @@ export function clubPathSampleOffsets(
   for (let i = 0; i < late; i++) {
     offsets.push(Math.round(startMs + span * (BAND + ((1 - BAND) * i) / (late - 1))));
   }
-  return offsets;
+  return tidy(offsets, minGapMs);
+}
+
+/**
+ * 2026-09-19 — ORDER THE OFFSETS AND DROP THE ONES THAT WOULD DECODE THE SAME FRAME TWICE.
+ *
+ * The header above has always named this ceiling — "past that, closer offsets return the same
+ * decoded frame" — and nothing enforced it. On a SHORT segment it bites: measured on the real
+ * function, a 400ms window asks for 14 offsets that resolve to 12 distinct frames at 30fps, and a
+ * 300ms window to 10. Each collision costs a native decode, a downscale and a vision-model frame,
+ * and returns an image we already have — so the model reports the same coordinates again and the
+ * gate's dedupe collapses them. Budget spent to REDUCE the point count.
+ *
+ * Sorting matters too: the ranges are emitted in order but the strike is appended last, and the
+ * arc's efficiency test reads the points as a time-ordered progression.
+ */
+function tidy(offsets: number[], minGapMs: number, keepMs: number | null = null): number[] {
+  /**
+   * Compared by FRAME INDEX, not by elapsed milliseconds. `t - last >= minGapMs` looks equivalent
+   * and is not: a schedule stepping at exactly the frame interval rounds to 33, 34, 33, 34… and a
+   * millisecond test throws away every 33 while keeping every 34, which drops frames that really
+   * are distinct. Two offsets are the same frame if and only if they land in the same interval.
+   */
+  const frameOf = (t: number) => Math.floor(t / minGapMs);
+  const sorted = [...offsets].sort((a, b) => a - b);
+  const out: number[] = [];
+  for (const t of sorted) {
+    const last = out[out.length - 1];
+    if (last == null || frameOf(t) !== frameOf(last)) { out.push(t); continue; }
+    /**
+     * A collision with the STRIKE is resolved in the strike's favour. Both offsets decode the same
+     * frame, so keeping either costs the same — but the one we keep is the one whose timestamp is
+     * carried downstream as the point's `tMs`, and an arc whose defining point is stamped 28ms
+     * before the ball is an arc that says something slightly untrue about when the club was there.
+     */
+    if (keepMs != null && t === keepMs) out[out.length - 1] = t;
+  }
+  return out;
 }
 
 export async function detectClubPath(args: {
@@ -429,7 +574,7 @@ export async function detectClubPath(args: {
     // all-nulls, which is the information loss this whole change is about.
     if (data.rejected) {
       return {
-        points: [], framesSampled: usable.length, frameW, frameH,
+        points: [], framesSampled: usable.length, framesPlanned: offsets.length, frameW, frameH,
         rejected: { ...data.rejected, gate: 'server' },
       };
     }
@@ -461,11 +606,11 @@ export async function detectClubPath(args: {
        * today it fired on nothing more than one duplicate detection.
        */
       return {
-        points: [], framesSampled: usable.length, frameW, frameH,
+        points: [], framesSampled: usable.length, framesPlanned: offsets.length, frameW, frameH,
         rejected: { reason: rejection, detected: deduped.length, gate: 'client' },
       };
     }
-    return { points: deduped as ClubPathPoint[], framesSampled: usable.length, frameW, frameH, rejected: null };
+    return { points: deduped as ClubPathPoint[], framesSampled: usable.length, framesPlanned: offsets.length, frameW, frameH, rejected: null };
   } catch {
     return null;
   } finally {

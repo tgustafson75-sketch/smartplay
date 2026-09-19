@@ -916,6 +916,7 @@ export default function SwingDetail() {
                   detected: r?.rejected?.detected ?? null,
                   gate: r?.rejected?.gate ?? null,
                   framesSampled: r?.framesSampled ?? null,
+                  framesPlanned: r?.framesPlanned ?? null,
                 },
                 /**
                  * 2026-08-31 — AN ABORTED RUN IS NOT A FAILURE, and calling it one cost Tim a

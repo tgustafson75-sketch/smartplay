@@ -2280,6 +2280,9 @@ export default function SmartMotion() {
                   detected: r?.rejected?.detected ?? null,
                   gate: r?.rejected?.gate ?? null,
                   framesSampled: r?.framesSampled ?? null,
+                  // Beside it, what the SCHEDULE asked for — the two differing means the native
+                  // retriever dropped frames, which is a different bug from a short window.
+                  framesPlanned: r?.framesPlanned ?? null,
                 },
                 r ? 'analysis_error' : 'diag',
               );
