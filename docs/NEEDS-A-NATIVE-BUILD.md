@@ -157,8 +157,22 @@ Claude Code must not hold it.
 > arriving all along — but sentry-cli uploads source maps and dSYMs **by slug**. The first build
 > after the token was created would have failed to upload against an org that is not his, and the
 > symbolication work would have looked broken for a reason nobody would have gone looking for.
-> Fixed in `app.json`; it is a build-time plugin value, so it takes effect on the next native build
-> and needs no OTA.
+> **PARKED, NOT FIXED — and app.json still says `smartplay` on purpose.** The correction was made
+> and then reverted, because `scripts/ota-preflight.mjs` fingerprints app.json WHOLE: editing it
+> reads as a native change and refuses *every* OTA until a store build ships. The slug cannot reach
+> the installed binary — it addresses sentry-cli's upload target — but the guard cannot know that,
+> and re-recording its baseline for a reason its own text does not cover is how a guard becomes a
+> rubber stamp (Tim's call, 2026-09-19).
+>
+> **So it is one line, to make WITH the build, not before it:**
+>
+> ```json
+> "organization": "smartplay"   →   "organization": "smartplay-ai"
+> ```
+>
+> Do it in the same commit that cuts the native build, so the fingerprint moves once and the
+> baseline is re-recorded straight after (`npm run ota:baseline`). Getting this wrong costs nothing
+> until the auth token exists; after that, it silently breaks every symbol upload.
 
 **Then:**
 1. Flip `uploadSourceMaps` to `true` and drop `SENTRY_DISABLE_AUTO_UPLOAD` from the **production**
@@ -183,6 +197,9 @@ come down, `sentry-cli debug-files upload` makes today's crash readable retrospe
 - [ ] Re-verify on device: `npm run probe-tools`, a voice round, earbud tap, headset plugged in
       MID-round, a sandbox purchase and a restore
 - [ ] merge `native/watch-command-and-capability` (Kotlin both ends; re-read watchCaddieBridge.ts)
+- [ ] **`app.json` Sentry `organization`: `smartplay` → `smartplay-ai`** — one line, in the build
+      commit itself (parked 09-19 because editing app.json blocks every OTA; see above). Without it
+      the token below uploads to an org that is not Tim's and the symbols never arrive
 - [ ] SENTRY_AUTH_TOKEN in EAS secrets, `uploadSourceMaps: true`, and SENTRY_DISABLE_AUTO_UPLOAD
       dropped from the production profile — until then every production crash is unreadable
 - [ ] R8/ProGuard on (`enableProguardInReleaseBuilds`) + keep-rules for MediaPipe, Wear bridge,
