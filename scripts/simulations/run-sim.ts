@@ -10404,7 +10404,10 @@ check('Club trace renders without per-frame dims: video-size aligned fallback + 
     const overlay = read('components/swinglab/SwingBodyOverlay.tsx');
     const detail = read('app/swinglab/swing/[swing_id].tsx');
     const sm = read('app/swinglab/smartmotion.tsx');
-    const cp = read('services/swing/clubPath.ts');
+    // 2026-09-19 — the arc gate moved to services/swing/clubArcGate, which the SERVER imports too
+    // (it was duplicated in api/club-path.ts, and the copies had drifted: only the client deduped
+    // before counting). The 08-10 tuning this line pins is unchanged; it lives there now.
+    const cp = read('services/swing/clubArcGate.ts');
     return (
       /videoW\?: number \| null;/.test(overlay) &&
       /normalized && \(videoW \?\? 0\) > 0 && \(videoH \?\? 0\) > 0/.test(overlay) &&  // aligned fallback from video size

@@ -28,30 +28,22 @@ const ROOT = path.join(__dirname, '../..');
 const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 
 /**
- * The server's classifier, mirrored. It cannot be imported — api/club-path.ts constructs an
- * Anthropic client at module scope, so importing it in a test would need a key and would make a
- * network client for a pure-geometry assertion. The structural test below is what keeps this copy
- * honest: it fails if the real thresholds move.
+ * 2026-09-19 — THE MIRROR IS GONE. It used to say:
+ *
+ *   "The server's classifier, mirrored. It cannot be imported — api/club-path.ts constructs an
+ *    Anthropic client at module scope... The structural test below is what keeps this copy honest."
+ *
+ * That was true and it was a third copy of a rule that already had two, and the structural test
+ * that kept it honest was a grep. Today the rule lives in services/swing/clubArcGate — pure, no
+ * client, no key — and BOTH sides of the wire import it. So this file tests the real function.
+ *
+ * Verified before the swap: the real classifier returns the same verdict as the mirror did on every
+ * case below. The mirror was accurate; it was simply fiction waiting to happen.
  */
-const MIN_ARC_POINTS = 3;
-type Rejection = 'none' | 'too_few' | 'cluster' | 'scatter';
+import { classifyArc } from '../../services/swing/clubArcGate';
 
-function efficient(pts: { x: number; y: number }[], a: number, b: number): boolean {
-  let len = 0;
-  for (let i = a + 1; i <= b; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
-  if (len <= 1e-6) return false;
-  return Math.hypot(pts[b].x - pts[a].x, pts[b].y - pts[a].y) / len >= 0.45;
-}
-
-function classify(pts: { x: number; y: number }[]): Rejection | null {
-  if (pts.length === 0) return 'none';
-  if (pts.length < MIN_ARC_POINTS) return 'too_few';
-  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
-  const spanX = Math.max(...xs) - Math.min(...xs);
-  const spanY = Math.max(...ys) - Math.min(...ys);
-  if (Math.max(spanX, spanY) < 0.10 || spanX + spanY < 0.13) return 'cluster';
-  return efficient(pts, 0, pts.length - 1) ? null : 'scatter';
-}
+/** The rejection alone — these cases are about the verdict, not the surviving points. */
+const classify = (pts: { x: number; y: number }[]) => classifyArc(pts).rejection;
 
 describe('a rejected arc names its own failure', () => {
   it('nothing at all → none', () => {
@@ -92,7 +84,8 @@ describe('a rejected arc names its own failure', () => {
 describe('the reason survives all the way to the log', () => {
   it('the server classifies and returns it rather than a bare all-null', () => {
     const api = read('api/club-path.ts');
-    expect(api).toContain('function classifyArc');
+    // 2026-09-19 — it no longer DEFINES the classifier, it IMPORTS the shared one. That is the fix.
+    expect(api).toMatch(/import \{[^}]*classifyArc[^}]*\} from '\.\.\/services\/swing\/clubArcGate'/);
     expect(api).toContain('rejected: { reason: rejection');
     // Behaviour must be UNCHANGED: an implausible set is still all-null so nothing draws a wrong club.
     expect(api).toContain('positions: frames.map(() => null)');
@@ -114,12 +107,45 @@ describe('the reason survives all the way to the log', () => {
     expect(code).toContain('gate: r?.rejected?.gate');
   });
 
-  it('the mirrored thresholds above still match the real ones', () => {
-    // If these move in api/club-path.ts and not here, every boundary case above is testing fiction.
-    const api = read('api/club-path.ts');
-    expect(api).toContain('const MIN_ARC_POINTS = 3;');
-    expect(api).toContain('< 0.10) return');
-    expect(api).toContain('< 0.13) return');
-    expect(api).toContain('>= 0.45;');
+  /**
+   * 2026-09-19 — REPLACES "the mirrored thresholds above still match the real ones".
+   *
+   * That test greppped api/club-path.ts for four literals to keep a copy of the gate honest. There
+   * is nothing to keep honest now: neither side owns a copy. Asserting the ABSENCE of a second
+   * implementation is strictly stronger than asserting two implementations agree — and it is the
+   * property the field report needed, because the one difference between the two copies (this side
+   * deduped, the server did not) is what made a routine blurred downswing report as a client/server
+   * disagreement. [[two-owners-is-the-root-cause]]
+   */
+  it('NEITHER side keeps its own copy of the gate', () => {
+    for (const f of ['api/club-path.ts', 'services/swing/clubPath.ts']) {
+      const src = read(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+      expect(src).toMatch(/from '.*clubArcGate'/);
+      expect(src).not.toContain('function looksLikeClubArc');
+      expect(src).not.toContain('function classifyArc');
+      expect(src).not.toContain('MIN_ARC_POINTS = 3');
+    }
+  });
+
+  /**
+   * 2026-09-19 — THE FIELD REPORT, REPRODUCED. A brand-new player's first swing on a Pixel 8a:
+   *
+   *     clubpath_arc_too_sparse { detected: 2, rejected: "too_few", gate: "client",
+   *                               framesSampled: 14, windowMs: 1544, aborted: false }
+   *
+   * `gate: "client"` said the two gates disagreed. They did not: the model returned three
+   * detections, two of them on top of each other through the blurred downswing, and only this side
+   * collapsed them before counting. Now both sides count the same set, so the server rejects it
+   * first and the log says so.
+   */
+  it('three detections with a duplicate are too_few on BOTH sides, not a disagreement', () => {
+    const withDuplicate = [
+      { x: 0.200, y: 0.850 },
+      { x: 0.201, y: 0.851 },   // the same read again — a blurred head that did not move between frames
+      { x: 0.750, y: 0.300 },
+    ];
+    const { rejection, points } = classifyArc(withDuplicate);
+    expect(points).toHaveLength(2);          // the duplicate collapses
+    expect(rejection).toBe('too_few');       // ...and 2 is not an arc, on either side of the wire
   });
 });

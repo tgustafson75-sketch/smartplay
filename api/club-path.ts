@@ -41,110 +41,22 @@ type MediaType = 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
 
 const MAX_FRAMES = 16;
 
-/** Minimum clearly-detected points before the set can be a real arc.
- *  2026-08-06 (Tim — the blue club never showed): lowered 4→3. Sonnet returns null through the blurred
- *  downswing, so a valid partial sweep frequently has only 3 confident points; the old 4-gate here PLUS the
- *  client gate double-rejected them into all-null. Still blob-guarded by the span test below. */
-const MIN_ARC_POINTS = 3;
-
 /**
- * 2026-07-22 (Tim — "the club is consistently off; trace it correctly") — validate that the
- * detected positions form a plausible clubhead SWEEP before returning them. A real swing arc
- * spans a meaningful fraction of the frame; a cluster is a mis-detection (the ball, the grip, or
- * a background object read as the head — the "off" club at address). Enforced SERVER-side so
- * EVERY client (native app + the SmartPlay Light web app, which share this endpoint) gets honest
- * data — an implausible set is returned as all-null so the client keeps its honest hand/tempo
- * trace instead of drawing a wrong club.
+ * 2026-09-19 — THE GATE MOVED TO services/swing/clubArcGate, AND THIS FILE STOPPED KEEPING ITS OWN COPY.
+ *
+ * `looksLikeClubArc` lived here AND in services/swing/clubPath, character for character, and the
+ * client ran one step this side did not: it DEDUPES near-identical detections before counting them.
+ * So a blurred downswing that makes the model report the same coordinates twice came out as "server
+ * counts 3 and accepts, client dedupes to 2 and rejects" — and the field log reported a client/server
+ * disagreement that the client's own comment says should never happen. A brand-new player's first
+ * swing, on a Pixel 8a, read as a plumbing bug.
+ *
+ * Both sides now call the same function, dedupe included, so `detected` means one thing.
+ * [[two-owners-is-the-root-cause]]
  */
-/**
- * 2026-09-06 (Tim, from a live Sentry event: `clubpath_arc_too_sparse · points: 0` at Lakes, hole 1).
- *
- * WHY THIS EXISTS: the rejection below is correct — an implausible set must come back as all-null so
- * no client draws a wrong club. But every rejection reached the field as the SAME line, `points: 0`,
- * and that one number covers four different failures with four different fixes:
- *
- *   too_few  — the model genuinely could not see the head. A CAPTURE problem: light, angle, frame rate.
- *   cluster  — it found points, but they collapse to a blob. A MIS-DETECTION (ball, grip, background).
- *   scatter  — it found points that zig-zag rather than sweep. Also a mis-detection.
- *   none     — nothing came back at all.
- *
- * Tim's log said "0 points" when the model may well have returned eight and we threw them away. That
- * sends you to the camera when the problem is the prompt, or the reverse. The gate is unchanged; what
- * changes is that it now says which of the four it was. [[the-app-log-knows-whats-wrong]]
- */
-export type ArcRejection = 'none' | 'too_few' | 'cluster' | 'scatter';
+import { classifyArc, type ArcRejection } from '../services/swing/clubArcGate';
 
-function classifyArc(pts: { x: number; y: number }[]): ArcRejection | null {
-  if (pts.length === 0) return 'none';
-  if (pts.length < MIN_ARC_POINTS) return 'too_few';
-  let minX = 1, maxX = 0, minY = 1, maxY = 0;
-  for (const p of pts) {
-    if (p.x < minX) minX = p.x;
-    if (p.x > maxX) maxX = p.x;
-    if (p.y < minY) minY = p.y;
-    if (p.y > maxY) maxY = p.y;
-  }
-  const spanX = maxX - minX, spanY = maxY - minY;
-  if (Math.max(spanX, spanY) < 0.10 || spanX + spanY < 0.13) return 'cluster';
-  // Anything that clears the span test but still fails the full gate failed on path efficiency.
-  return looksLikeClubArc(pts) ? null : 'scatter';
-}
-
-function looksLikeClubArc(pts: { x: number; y: number }[]): boolean {
-  if (pts.length < MIN_ARC_POINTS) return false;
-  let minX = 1, maxX = 0, minY = 1, maxY = 0;
-  for (const p of pts) {
-    if (p.x < minX) minX = p.x;
-    if (p.x > maxX) maxX = p.x;
-    if (p.y < minY) minY = p.y;
-    if (p.y > maxY) maxY = p.y;
-  }
-  const spanX = maxX - minX, spanY = maxY - minY;
-  // Forgiving (a partial arc is fine) but rejects a clustered blob: the sweep must cover a good
-  // chunk of the frame in at least one axis, and not collapse to near a single point.
-  if (Math.max(spanX, spanY) < 0.10) return false;
-  if (spanX + spanY < 0.13) return false;
-  // 2026-08-06 (analysis audit) — span alone (a wide box) is fooled by 3 UNRELATED confident detections
-  // (grip + ball + a background object) that box-span wide but zig-zag. Gate on path EFFICIENCY (net
-  // first→last distance ÷ total path length): a real quarter-to-half-circle sweep scores ~0.57–0.64, a
-  // scatter ~0.26. Mirrors the client gate so both the app and SmartPlay Light reject garbage identically.
-  let pathLen = 0;
-  for (let i = 1; i < pts.length; i++) {
-    pathLen += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
-  }
-  if (pathLen <= 1e-6) return false;
-  // 2026-08-08 (verification wave — "still don't see club trace" root #2) — whole-path efficiency
-  // STRUCTURALLY rejects a COMPLETE swing: address→top→impact→finish doubles back on itself, so
-  // netSpan/pathLen lands ~0.33 (< 0.45) and a perfect full-swing arc was thrown away as "scatter" —
-  // deterministically, on every retry. The insight that survives: a real sweep is SMOOTH PER LEG while
-  // scatter zig-zags at every scale. So: pass if the whole path is efficient (partial arcs, unchanged),
-  // OTHERWISE split at the apex (farthest point from the start — the top of the swing) and require each
-  // leg to be efficient, recursing one more level for legs that themselves double back (impact→finish).
-  // Grip/ball/background scatter stays rejected: its legs zig-zag no matter how it's split.
-  const eff = (a: number, b: number): boolean => {
-    let len = 0;
-    for (let i = a + 1; i <= b; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
-    if (len <= 1e-6) return false;
-    return Math.hypot(pts[b].x - pts[a].x, pts[b].y - pts[a].y) / len >= 0.45;
-  };
-  const smooth = (a: number, b: number, depth: number): boolean => {
-    if (eff(a, b)) return true;
-    // 2026-08-10 (Tim — "no trace for a week") — was `< 5`, which on a SPARSE real arc (the clubhead is
-    // only detected in ~6-8 frames, not all 14) left the doubled-back downswing leg too short to split,
-    // rejecting valid full swings as scatter. Allow legs down to 3 points; the span gates above remain the
-    // primary blob/scatter defense. (Final threshold calibration pending Tim's real-clip club-arc logs.)
-    if (depth <= 0 || b - a < 2) return false; // need ≥3 points in a leg to claim a doubled-back real arc
-    let apex = a + 1, best = -1;
-    for (let i = a + 1; i < b; i++) {
-      const d = Math.hypot(pts[i].x - pts[a].x, pts[i].y - pts[a].y);
-      if (d > best) { best = d; apex = i; }
-    }
-    if (apex <= a + 1 || apex >= b - 1) return false; // apex at an end = no real turnaround
-    return smooth(a, apex, depth - 1) && smooth(apex, b, depth - 1);
-  };
-  if (!smooth(0, pts.length - 1, 2)) return false;
-  return true;
-}
+export type { ArcRejection };
 
 const PROMPT = `You are tracking the CLUBHEAD of a golf club across an ordered sequence of video frames from a single golf swing (frame 1 is earliest — near address; later frames move through the backswing, downswing, impact, and follow-through).
 
@@ -252,7 +164,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Gate the WHOLE set on arc plausibility: if the clearly-detected points don't form a real
     // sweep, they're a mis-detection — return all-null so no client draws a wrong "club" (Tim).
     const detected = positions.filter((p): p is { x: number; y: number } => p != null);
-    const rejection = classifyArc(detected);
+    const { rejection, points: kept } = classifyArc(detected);
     if (rejection) {
       /**
        * Still all-null — the client must not draw an implausible arc, and that behaviour is
@@ -260,7 +172,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
        */
       return res.status(200).json({
         positions: frames.map(() => null),
-        rejected: { reason: rejection, detected: detected.length, frames: frames.length },
+        /**
+         * `detected` is the count the DECISION was made on (post-dedupe); `raw` is what the model
+         * returned. Reporting only the raw number beside a decision made on the deduped one is how
+         * the 09-19 field report came to describe a disagreement that was not happening.
+         */
+        rejected: { reason: rejection, detected: kept.length, raw: detected.length, frames: frames.length },
       });
     }
     return res.status(200).json({ positions });

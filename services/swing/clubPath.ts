@@ -15,6 +15,7 @@
  */
 
 import * as VideoThumbnails from '../../utils/videoThumbnail'; // serialized wrapper (native retriever crash fix)
+import { classifyArc } from './clubArcGate';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import { getApiBaseUrl } from '../apiBase';
@@ -61,78 +62,14 @@ export interface ClubPathResult {
   rejected?: { reason: 'none' | 'too_few' | 'cluster' | 'scatter'; detected: number; gate: 'server' | 'client' } | null;
 }
 
-/** Minimum detected points that must survive before we'll call it a real arc. */
-// 2026-08-06 (Tim — "the blue club has NEVER once shown up; it needs to be THERE, slightly off is fine").
-// The old 4-point + wide-span gates rejected most real swings (Sonnet returns null through the blurred
-// downswing, so a valid partial arc often has only 3 confident points). Lowered so a genuine partial sweep
-// draws instead of vanishing — still rejects a clustered blob (the "off club at address").
-const MIN_ARC_POINTS = 3;
-
 /**
- * 2026-07-22 (Tim — "the club is consistently off; trace it correctly or not at all") — validate
- * the detections form a plausible clubhead SWEEP before returning them. A real swing arc spans a
- * meaningful fraction of the frame; a cluster is a mis-detection (the ball, the grip, or a
- * background object read as the head — the "off" club at address). If it doesn't look like a
- * sweep, the caller draws NO trace instead of a wrong club (clubhead-or-nothing; the wrist fallback was removed).
+ * 2026-09-19 — THE GATE AND MIN_ARC_POINTS MOVED TO ./clubArcGate, which api/club-path.ts imports too.
+ *
+ * They were two identical copies of the same tuned function with ONE difference: this side deduped
+ * near-identical detections before counting and the server did not. So a blurred downswing where the
+ * model reports the same coordinates twice came out as "server counts 3 and accepts, client dedupes
+ * to 2 and rejects", and the field log called it a client/server disagreement. See that file.
  */
-function looksLikeClubArc(pts: ClubPathPoint[]): boolean {
-  if (pts.length < MIN_ARC_POINTS) return false;
-  let minX = 1, maxX = 0, minY = 1, maxY = 0;
-  for (const p of pts) {
-    if (p.x < minX) minX = p.x;
-    if (p.x > maxX) maxX = p.x;
-    if (p.y < minY) minY = p.y;
-    if (p.y > maxY) maxY = p.y;
-  }
-  const spanX = maxX - minX, spanY = maxY - minY;
-  // Forgiving (a partial arc is fine) but rejects a clustered blob: the sweep must cover a good
-  // chunk of the frame in at least one axis, and not collapse to near a single point.
-  if (Math.max(spanX, spanY) < 0.10) return false;
-  if (spanX + spanY < 0.13) return false;
-  // 2026-08-06 (analysis audit) — span ALONE (a wide bounding box) is not enough: 3 UNRELATED confident
-  // detections (address grip + the ball + a bright background object) span a wide box and used to pass,
-  // drawing a blue shaft through garbage — exactly the "worse than nothing" Tim drew the line on. A real
-  // clubhead SWEEP progresses; a scatter zig-zags/doubles back. Gate on path EFFICIENCY = straight-line
-  // distance from first→last detection ÷ total point-to-point path length. A quarter-to-half-circle arc
-  // scores ~0.57–0.64; the grip/ball/background scatter scores ~0.26. 0.45 keeps real (partial) arcs with
-  // margin and rejects the scatter. Points are time-ordered, so this reads the actual swept progression.
-  let pathLen = 0;
-  for (let i = 1; i < pts.length; i++) {
-    pathLen += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
-  }
-  if (pathLen <= 1e-6) return false;
-  // 2026-08-08 (verification wave — "still don't see club trace" root #2) — whole-path efficiency
-  // STRUCTURALLY rejects a COMPLETE swing: address→top→impact→finish doubles back on itself, so
-  // netSpan/pathLen lands ~0.33 (< 0.45) and a perfect full-swing arc was thrown away as "scatter" —
-  // deterministically, on every retry. The insight that survives: a real sweep is SMOOTH PER LEG while
-  // scatter zig-zags at every scale. So: pass if the whole path is efficient (partial arcs, unchanged),
-  // OTHERWISE split at the apex (farthest point from the start — the top of the swing) and require each
-  // leg to be efficient, recursing one more level for legs that themselves double back (impact→finish).
-  // Grip/ball/background scatter stays rejected: its legs zig-zag no matter how it's split.
-  const eff = (a: number, b: number): boolean => {
-    let len = 0;
-    for (let i = a + 1; i <= b; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
-    if (len <= 1e-6) return false;
-    return Math.hypot(pts[b].x - pts[a].x, pts[b].y - pts[a].y) / len >= 0.45;
-  };
-  const smooth = (a: number, b: number, depth: number): boolean => {
-    if (eff(a, b)) return true;
-    // 2026-08-10 (Tim — "no trace for a week") — was `< 5`, which on a SPARSE real arc (the clubhead is
-    // only detected in ~6-8 frames, not all 14) left the doubled-back downswing leg too short to split,
-    // rejecting valid full swings as scatter. Allow legs down to 3 points; the span gates above remain the
-    // primary blob/scatter defense. (Final threshold calibration pending Tim's real-clip club-arc logs.)
-    if (depth <= 0 || b - a < 2) return false; // need ≥3 points in a leg to claim a doubled-back real arc
-    let apex = a + 1, best = -1;
-    for (let i = a + 1; i < b; i++) {
-      const d = Math.hypot(pts[i].x - pts[a].x, pts[i].y - pts[a].y);
-      if (d > best) { best = d; apex = i; }
-    }
-    if (apex <= a + 1 || apex >= b - 1) return false; // apex at an end = no real turnaround
-    return smooth(a, apex, depth - 1) && smooth(apex, b, depth - 1);
-  };
-  if (!smooth(0, pts.length - 1, 2)) return false;
-  return true;
-}
 
 interface Frame { uri: string; width: number; height: number }
 
@@ -509,21 +446,26 @@ export async function detectClubPath(args: {
       const fy = roi ? roi.y + pos.y * roi.h : pos.y;
       points.push({ x: fx, y: fy, tMs: u.tMs });
     });
-    // Already in time order. Drop exact-duplicate positions (a static repeat read).
-    const deduped = points.filter((p, i) =>
-      i === 0 || Math.hypot(p.x - points[i - 1].x, p.y - points[i - 1].y) > 0.004);
-    // Only surface the detections as a club arc if they actually form a plausible sweep; a
-    // clustered/degenerate set is a mis-detection → return empty so the renderer keeps the
-    // NO trace rather than a wrong "club" (Tim: trace it correctly or not at all).
-    if (!looksLikeClubArc(deduped)) {
-      // Reached only when the CLIENT gate rejects a set the server accepted — the two mirror each
-      // other, so this firing at all is itself worth seeing in the log.
+    /**
+     * Time-ordered already. The SHARED gate dedupes and classifies — the same call on the same set
+     * the server makes, so the two can no longer reach different answers about one swing.
+     *
+     * A clustered or degenerate set is a mis-detection, and the renderer keeps NO trace rather than
+     * drawing a wrong "club" (Tim: trace it correctly or not at all).
+     */
+    const { rejection, points: deduped } = classifyArc(points);
+    if (rejection) {
+      /**
+       * 2026-09-19 — this now means what its old comment CLAIMED: the server accepted a set this
+       * side refused, which after the shared gate is a real disagreement and worth chasing. Before
+       * today it fired on nothing more than one duplicate detection.
+       */
       return {
         points: [], framesSampled: usable.length, frameW, frameH,
-        rejected: { reason: deduped.length < 3 ? 'too_few' : 'scatter', detected: deduped.length, gate: 'client' },
+        rejected: { reason: rejection, detected: deduped.length, gate: 'client' },
       };
     }
-    return { points: deduped, framesSampled: usable.length, frameW, frameH, rejected: null };
+    return { points: deduped as ClubPathPoint[], framesSampled: usable.length, frameW, frameH, rejected: null };
   } catch {
     return null;
   } finally {
