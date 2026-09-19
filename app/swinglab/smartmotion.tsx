@@ -66,7 +66,7 @@ import { recordPracticeSwingIfActive, usePracticeSessionStore } from '../../stor
 // keeping this file's JS OTA-safe on a build that doesn't link vision-camera.
 import type { SwingCameraHandle } from '../../components/capture/SwingVisionCamera';
 import { useCaptureEngineStore } from '../../store/captureEngineStore';
-import { captureQualityNote } from '../../services/captureQuality';
+import { captureQualityNote, clubheadUnreadableNote, beforeFirstCaptureTip } from '../../services/captureQuality';
 import { estimateCarryYards } from '../../services/swing/carryEstimate';
 // 2026-07-30 (analysis audit C2/C4) — single-flight queue wrapper, not raw expo-video-thumbnails, so the
 // address-still grab can't run a native retriever concurrently with another extractor. Drop-in re-export.
@@ -96,7 +96,7 @@ import { detectBallSpeed, type BallSpeedResult } from '../../services/acousticDe
 import { useSwingSessionStore, type PrimaryIssue } from '../../store/swingSessionStore';
 import { deriveDrillVerdict } from '../../services/drillVerdict';
 import { useClubBagStore } from '../../store/clubBagStore';
-import { MIN_TRACE_FPS } from '../../services/capture/captureFlags';
+import { MIN_TRACE_FPS, PREFERRED_CAPTURE_FPS } from '../../services/capture/captureFlags';
 import { useFamilyStore } from '../../store/familyStore';
 import { useAcousticCalibrationStore } from '../../store/acousticCalibrationStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
@@ -1412,6 +1412,44 @@ export default function SmartMotion() {
       [{ text: 'Got it' }],
     );
   }, [capturedFpsLive, lowFpsNoticeShown, t]);
+
+  /**
+   * 2026-09-19 (Tim, on the 09-19 field report) — ASK FOR THE FRAME RATE BEFORE THE FIRST SWING,
+   * NOT AFTER THE MISS.
+   *
+   * The notice above is an apology: it fires once a capture has already come back too slow to draw
+   * the ball's departure. This one is the same information delivered while it can still help — one
+   * camera setting changed before the first recording makes every swing after it readable, and the
+   * player never meets the silent degrade at all.
+   *
+   * WORDED AS A CAPABILITY, NEVER AS A VERDICT ON THEIR PHONE. Nothing has been recorded yet, so
+   * nothing has been measured, and services/captureQuality's own rule holds: an unmeasured capture
+   * must not produce a warning. So it says what 60 unlocks; it does not say their camera is slow.
+   * A device already on 60 hears it once and loses nothing.
+   *
+   * Once per install, persisted, and SPOKEN rather than a dialog — a modal in front of someone who
+   * came here to hit a ball is the friction this screen exists to avoid. It also deliberately waits
+   * for the notice above to be irrelevant: if we have ALREADY measured a slow capture, that note is
+   * the honest one and this tip would be saying the same thing twice.
+   * [[no-push-nagging-no-ads]] [[hands-free-zero-setup-is-the-product]]
+   */
+  const captureTipShown = useCaptureEngineStore((s) => s.captureTipShown);
+  useEffect(() => {
+    if (captureTipShown || lowFpsNoticeShown) return;
+    // Already measured and already fine → nothing to ask for.
+    if (capturedFpsLive != null && capturedFpsLive >= PREFERRED_CAPTURE_FPS) {
+      useCaptureEngineStore.getState().markCaptureTipShown();
+      return;
+    }
+    useCaptureEngineStore.getState().markCaptureTipShown();
+    void (async () => {
+      try {
+        const st = useSettingsStore.getState();
+        if (!(st.voiceEnabled ?? true)) return;
+        await speak(beforeFirstCaptureTip(), st.voiceGender, st.language, getApiBaseUrl(), { userInitiated: false });
+      } catch { /* a tip that could not be spoken must never block the capture screen */ }
+    })();
+  }, [captureTipShown, lowFpsNoticeShown, capturedFpsLive]);
   const SwingVisionCamera = useMemo(() => {
     if (!useVisionCamera || visionUnavailable) return null;
     try {
@@ -2196,6 +2234,38 @@ export default function SmartMotion() {
          *
          * DIAGNOSTICS ONLY — the arc drawn, the 3-point gate and the cache are unchanged.
          */
+        /**
+         * 2026-09-19 (a field report from a brand-new player's FIRST swing, Pixel 8a) — AND NOW HE
+         * SAYS SO.
+         *
+         *     clubpath_arc_too_sparse { detected: 2, rejected: "too_few", framesSampled: 14 }
+         *
+         * The gate classifies its own refusal, and `too_few` is documented there as "the model
+         * genuinely could not see the head. A CAPTURE problem: light, angle, frame rate." We wrote
+         * that to a log. The player recorded their first swing, got a skeleton with no swing path
+         * and nothing said, and was left to decide whether the feature is broken or they are.
+         *
+         * ONLY `too_few`. `cluster` and `scatter` mean we found points and they were the ball or
+         * the grip — our mis-detection, not theirs, and sending someone to add light for it is
+         * sending them to fix something that is not broken. Silence stays right for those.
+         *
+         * Spoken, once per install, and never on a capture that read fine. The analysis is NOT
+         * called a failure: what he can read comes first, then what he could not, then the fix.
+         * [[feels-like-a-real-caddie]] [[no-push-nagging-no-ads]]
+         */
+        if (!pts && r?.rejected?.reason === 'too_few' && !useCaptureEngineStore.getState().clubheadNoticeShown) {
+          useCaptureEngineStore.getState().markClubheadNoticeShown();
+          void (async () => {
+            try {
+              const note = clubheadUnreadableNote();
+              const line = `${note.can}, but ${note.missing}. ${note.fix![0].toUpperCase()}${note.fix!.slice(1)}.`;
+              const st = useSettingsStore.getState();
+              if (st.voiceEnabled ?? true) {
+                await speak(line, st.voiceGender, st.language, getApiBaseUrl(), { userInitiated: false });
+              }
+            } catch { /* a note that could not be spoken must never break the review surface */ }
+          })();
+        }
         if (!pts) {
           try {
             (require('../../store/issueLogStore') as typeof import('../../store/issueLogStore'))

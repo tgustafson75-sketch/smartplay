@@ -51,6 +51,11 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Sep 2026',
+    note: 'Your caddie tells you when he could not read something, instead of quietly leaving it out. If the clubhead blurs too much to draw your swing path, he says so \u2014 and what would fix it \u2014 rather than showing you a swing with the path missing and no explanation.',
+    howTo: 'Nothing to do. He also mentions once, before your first swing, that recording at 60 frames a second is what makes the club path readable \u2014 that setting lives in your phone\u2019s camera app.',
+  },
+  {
+    when: 'Sep 2026',
     note: 'You can add your clubs by hand. Setting up your bag used to mean filming it or photographing it \u2014 so if you would rather not point a camera at your clubs, you ended up with no bag at all, and your caddie was clubbing you off a generic chart instead of your own gear.',
     howTo: 'Profile \u2192 My Bag \u2192 Add by hand. Start from a standard fourteen-club set and take out what you do not carry, or tap in the clubs one at a time. You can skip it on the way in and come back to it any time.',
   },

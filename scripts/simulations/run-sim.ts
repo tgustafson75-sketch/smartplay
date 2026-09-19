@@ -17425,6 +17425,43 @@ check(
       : `${CONVERTED.length} player-facing surfaces read their unit from the one owner — the hole preview badge, the off-course strip, the rest-mode readout, the rangefinder (reticle, F/M/B, hazards, dispersion, spoken callout), the bag pills and the course list`);
 }
 
+/**
+ * 2026-09-19 — THE SWING PATH THAT WENT MISSING WITHOUT A WORD.
+ *
+ * Field report, a brand-new player's FIRST swing: `clubpath_arc_too_sparse { detected: 2,
+ * rejected: "too_few" }`. The gate documents that reason as "the model genuinely could not see the
+ * head. A CAPTURE problem: light, angle, frame rate" — the player's to fix — and it went to a log.
+ * They got a skeleton, no swing path, and silence.
+ *
+ * Wired as PROPERTIES, including the two that are easy to get wrong in the other direction:
+ *   - ONLY `too_few` speaks. cluster/scatter mean we found the ball or the grip: our mis-detection,
+ *     and telling someone to add light for it sends them to fix what is not broken.
+ *   - ONCE, persisted. A notice that returns every launch is the nagging this app does not do.
+ */
+{
+  const sm = readCode('app/swinglab/smartmotion.tsx');
+  const store = readCode('store/captureEngineStore.ts');
+  const cq = readCode('services/captureQuality.ts');
+
+  check('CAPTURE: when the clubhead could not be read, the caddie says so — once, and only for that reason',
+    /r\?\.rejected\?\.reason === 'too_few'/.test(sm) &&
+      /!useCaptureEngineStore\.getState\(\)\.clubheadNoticeShown/.test(sm) &&
+      /markClubheadNoticeShown\(\)/.test(sm) &&
+      /clubheadNoticeShown: s\.clubheadNoticeShown/.test(store) &&   // persisted, so it cannot repeat
+      /export function clubheadUnreadableNote/.test(cq) &&
+      // ...and it must NOT fire on the mis-detection reasons
+      !/reason === 'cluster'/.test(sm) && !/reason === 'scatter'/.test(sm),
+    "the `too_few` refusal is spoken in the caddie's voice — what he CAN read first, then what he could not, then the fix — once per install and never for cluster/scatter, which are our mis-detections rather than the player's capture");
+
+  check('CAPTURE: the frame-rate ask comes BEFORE the first swing, and claims nothing about their phone',
+    /export function beforeFirstCaptureTip/.test(cq) &&
+      /if \(captureTipShown \|\| lowFpsNoticeShown\) return;/.test(sm) &&   // never both
+      /markCaptureTipShown\(\)/.test(sm) &&
+      /captureTipShown: s\.captureTipShown/.test(store) &&
+      saysToPlayer(cq, 'if your camera can record at'),
+    'one camera setting changed before the first recording makes every swing after it readable; worded as a capability because nothing has been measured yet, and suppressed entirely when the measured-shortfall notice is the honest one instead');
+}
+
 const total = results.length;
 const passed = results.filter((r) => r.passed).length;
 const failed = results.filter((r) => !r.passed);

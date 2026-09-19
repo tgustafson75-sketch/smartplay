@@ -52,6 +52,53 @@ export function captureQualityNote(capturedFps: number | null | undefined): Capt
 }
 
 /**
+ * 2026-09-19 (a field report from a brand-new player's FIRST swing, Pixel 8a) — THE CLUBHEAD NOTE.
+ *
+ *     clubpath_arc_too_sparse { detected: 2, rejected: "too_few", framesSampled: 14 }
+ *
+ * The arc gate classifies its own refusal into four reasons, and one of them — `too_few` — is
+ * documented in the gate as "the model genuinely could not see the head. A CAPTURE problem: light,
+ * angle, frame rate." That is the player's to fix, and we wrote it to a log.
+ *
+ * So they recorded their first swing, got a skeleton with no swing path and no explanation, and
+ * were left to work out whether the feature is broken or they are. That is the exact silent degrade
+ * this file exists to end; it just had not been extended past frame rate.
+ *
+ * ONLY for `too_few`. `cluster` and `scatter` mean we found points and they were the ball or the
+ * grip or a background object — a mis-detection, OUR problem, and telling someone to add light for
+ * it sends them to fix something that is not broken. Silence stays right for those.
+ *
+ * Same shape and the same order as the note above, because it is the same conversation: what I CAN
+ * read, what I could not, what would get it back. [[feels-like-a-real-caddie]]
+ * [[smartmotion-metrics-honesty]]
+ */
+export function clubheadUnreadableNote(): CaptureQualityNote {
+  return {
+    ok: false,
+    can: 'I can read your tempo, your positions and the contact from this',
+    missing: "I couldn't pick the clubhead out clearly enough to draw your swing path — it blurs through the downswing",
+    fix: `more light on the club, or record from a step further back — and if your camera can do ${PREFERRED_CAPTURE_FPS} frames a second, that is what makes the path readable`,
+  };
+}
+
+/**
+ * 2026-09-19 — THE SAME TIP, BEFORE THE FIRST SWING INSTEAD OF AFTER IT.
+ *
+ * Tim's call on the 09-19 report: ask for the frame rate up front rather than explaining the miss
+ * afterwards. Front-loading it is worth more than the apology — the player changes one setting once
+ * and every swing after it is readable.
+ *
+ * WORDED AS A CAPABILITY, NEVER AS A VERDICT ON THEIR PHONE. At this point nothing has been
+ * recorded, so nothing has been measured, and this file's own rule is that an unmeasured capture
+ * must not produce a warning — "telling a player their capture might be poor when we have not
+ * measured it is a guess dressed as a finding". So it says what unlocks the path; it does not say
+ * their camera is slow. A device already on 60 loses nothing by hearing it once.
+ */
+export function beforeFirstCaptureTip(): string {
+  return `One thing before you swing: if your camera can record at ${PREFERRED_CAPTURE_FPS} frames a second, turn that on. It is what lets me draw the path your clubhead actually took — at ${MIN_TRACE_FPS} the head moves too far between frames to read honestly.`;
+}
+
+/**
  * The same note as one spoken sentence for the caddie, or null when the capture was fine.
  *
  * Written as something a person would say standing next to you, in the order a person would say it:

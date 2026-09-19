@@ -66,6 +66,22 @@ interface CaptureEngineState {
    */
   lowFpsNoticeShown: boolean;
   markLowFpsNoticeShown: () => void;
+  /**
+   * 2026-09-19 — said ONCE, on the same principle as the note above and for the same reason.
+   *
+   * `clubheadUnreadableNote`: the arc gate refused the swing path because the model could not see
+   * the head (`too_few`). A first-time player got a skeleton and silence and no way to know whether
+   * the feature was broken or their capture was. Saying it every time a downswing blurs would be a
+   * nag about something they have already been told how to fix.
+   */
+  clubheadNoticeShown: boolean;
+  markClubheadNoticeShown: () => void;
+  /**
+   * 2026-09-19 (Tim) — the frame-rate ask, moved to BEFORE the first swing rather than after the
+   * miss. Once per install: it is one camera setting, and a player who has heard it has heard it.
+   */
+  captureTipShown: boolean;
+  markCaptureTipShown: () => void;
 }
 
 export const useCaptureEngineStore = create<CaptureEngineState>()(
@@ -79,6 +95,10 @@ export const useCaptureEngineStore = create<CaptureEngineState>()(
       setCapturedFps: (fps) => set({ capturedFps: typeof fps === 'number' && fps > 0 ? fps : null }),
       lowFpsNoticeShown: false,
       markLowFpsNoticeShown: () => set({ lowFpsNoticeShown: true }),
+      clubheadNoticeShown: false,
+      markClubheadNoticeShown: () => set({ clubheadNoticeShown: true }),
+      captureTipShown: false,
+      markCaptureTipShown: () => set({ captureTipShown: true }),
     }),
     {
       name: 'capture-engine-v1',
@@ -87,6 +107,10 @@ export const useCaptureEngineStore = create<CaptureEngineState>()(
         useVisionCamera: s.useVisionCamera,
         chosenByUser: s.chosenByUser,
         lowFpsNoticeShown: s.lowFpsNoticeShown,
+        // Persisted for the same reason as lowFpsNoticeShown: a notice that returns on every
+        // relaunch is a nag, and this app does not nag. [[no-push-nagging-no-ads]]
+        clubheadNoticeShown: s.clubheadNoticeShown,
+        captureTipShown: s.captureTipShown,
       }) as CaptureEngineState,
       version: 2,
       /**
