@@ -17,7 +17,7 @@
  * path stays the default until this is proven on-device.
  */
 
-import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from 'react';
 import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import {
   Camera,
@@ -27,6 +27,7 @@ import {
 } from 'react-native-vision-camera';
 import { PREFERRED_CAPTURE_FPS } from '../../services/capture/captureFlags';
 import { useCaptureEngineStore } from '../../store/captureEngineStore';
+import { createRecordingGate, type RecordingGate } from '../../services/capture/recordingGate';
 
 /** Mirrors the slice of expo-camera's CameraView ref API the swing path uses, so
  *  this component is a structural drop-in for it. */
@@ -88,6 +89,42 @@ export const SwingVisionCamera = forwardRef<SwingCameraHandle, Props>(function S
   // vision-camera reports the finished file (or undefined on error/stop-with-no-file).
   const finishRef = useRef<((v: { uri: string } | undefined) => void) | null>(null);
   const maxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * 2026-09-19 (production, iPhone 17 Pro, four events from one player) —
+   *
+   *   capture/no-recording-in-progress: There was no active video recording in progress!
+   *   Did you call stopRecording() twice?   mechanism: onunhandledrejection
+   *
+   * THE COMMENT BELOW SAID "double-stop is guarded" AND NOTHING GUARDED IT. Two things were wrong,
+   * and the second is why it reached Sentry instead of being swallowed:
+   *
+   *  1. No recording STATE was tracked, so every stop call — the caller's, this component's own
+   *     backstop timer, the Stop button, the voice command — went straight to the native module
+   *     whether or not anything was recording. The caller sets its own timeout at the same duration
+   *     as the backstop here, and `onRecordingFinished` only clears the backstop AFTER a native
+   *     round trip, so the two stops land in the same tick and the second one has nothing to stop.
+   *
+   *  2. `try { cam.stopRecording() } catch {}` CANNOT CATCH IT. vision-camera declares
+   *     `stopRecording(): Promise<void>` and rejects through `tryParseNativeCameraError` — which is
+   *     exactly the frame in the reported stack. A synchronous catch around a promise-returning
+   *     call sees nothing, so the rejection escaped as an unhandled one.
+   *
+   * Both halves live in services/capture/recordingGate, which is pure and therefore testable — this
+   * component needs a native module to mount, and that is a large part of why the missing guard went
+   * unnoticed. Native state can still disagree with ours (a recording can end on its own between our
+   * flag and the call), so the gate keeps the `.catch` as a second layer rather than as the only one.
+   * [[no-half-fixes-enforce-every-surface]]
+   */
+  const gateRef = useRef<RecordingGate | null>(null);
+  if (gateRef.current == null) {
+    gateRef.current = createRecordingGate(() => camRef.current?.stopRecording());
+  }
+
+  /** The ONLY path to the native stop. Idempotent, and it can never reject into nowhere. */
+  const stopNative = useCallback(() => {
+    if (maxTimerRef.current) { clearTimeout(maxTimerRef.current); maxTimerRef.current = null; }
+    gateRef.current?.stop();
+  }, []);
 
   useImperativeHandle(ref, (): SwingCameraHandle => ({
     recordAsync(opts) {
@@ -99,34 +136,40 @@ export const SwingVisionCamera = forwardRef<SwingCameraHandle, Props>(function S
           cam.startRecording({
             fileType: 'mp4',
             onRecordingFinished: (video: VideoFile) => {
+              gateRef.current?.markStopped();
               if (maxTimerRef.current) { clearTimeout(maxTimerRef.current); maxTimerRef.current = null; }
               const r = finishRef.current; finishRef.current = null;
               r?.({ uri: toUri(video.path) });
             },
             onRecordingError: () => {
+              gateRef.current?.markStopped();
               if (maxTimerRef.current) { clearTimeout(maxTimerRef.current); maxTimerRef.current = null; }
               const r = finishRef.current; finishRef.current = null;
               r?.(undefined);
             },
           });
+          // Only AFTER startRecording returns without throwing: a failed start never recorded, and
+          // marking it as recording would send a stop at a camera with nothing in progress.
+          gateRef.current?.markStarted();
         } catch {
+          gateRef.current?.markStopped();
           finishRef.current = null;
           resolve(undefined);
           return;
         }
-        // Backstop auto-stop (the caller also sets its own timeout; double-stop is
-        // guarded). Keeps parity with CameraView.recordAsync({ maxDuration }).
+        // Backstop auto-stop. The caller sets its own timeout at the same duration, so these two
+        // genuinely race — which is what produced the field report. Both go through stopNative now,
+        // and the second finds the gate already closed and does nothing. Keeps parity with
+        // CameraView.recordAsync({ maxDuration }).
         if (opts?.maxDuration && opts.maxDuration > 0) {
-          maxTimerRef.current = setTimeout(() => {
-            try { camRef.current?.stopRecording(); } catch { /* no-op */ }
-          }, opts.maxDuration * 1000);
+          maxTimerRef.current = setTimeout(stopNative, opts.maxDuration * 1000);
         }
       });
     },
     stopRecording() {
-      try { camRef.current?.stopRecording(); } catch { /* no-op */ }
+      stopNative();
     },
-  }), []);
+  }), [stopNative]);
 
   // No camera (permission denied / unavailable) → render nothing; recordAsync
   // resolves undefined, matching the "no capture" path the caller already handles.

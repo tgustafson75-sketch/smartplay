@@ -17462,6 +17462,34 @@ check(
     'one camera setting changed before the first recording makes every swing after it readable; worded as a capability because nothing has been measured yet, and suppressed entirely when the measured-shortfall notice is the honest one instead');
 }
 
+/**
+ * 2026-09-19 (production, iPhone 17 Pro, four events from one player) —
+ * `capture/no-recording-in-progress ... Did you call stopRecording() twice?`, unhandled rejection.
+ *
+ * The component carried the comment "the caller also sets its own timeout; double-stop is guarded"
+ * and no guard existed, and the `try/catch` around the stop could not have caught it anyway —
+ * vision-camera's `stopRecording()` returns a PROMISE. Asserted as the PROPERTY (one path to the
+ * native stop, through the gate) and as the ABSENCE of the broken shape, because the broken shape
+ * is one careless edit away and reads as perfectly reasonable code.
+ */
+{
+  const cam = readCode('components/capture/SwingVisionCamera.tsx');
+  const gate = readCode('services/capture/recordingGate.ts');
+  // The only mention of the native stop is the one handed to the gate.
+  const rawStops = (cam.match(/camRef\.current\?\.stopRecording\(\)/g) ?? []).length;
+
+  check('CAPTURE: the camera is never told to stop a recording that is not running',
+    /createRecordingGate\(\(\) => camRef\.current\?\.stopRecording\(\)\)/.test(cam) &&
+      rawStops === 1 &&                                                   // exactly one, inside the gate
+      !/try \{ camRef\.current\?\.stopRecording\(\); \} catch/.test(cam) &&  // the shape that shipped
+      /maxTimerRef\.current = setTimeout\(stopNative,/.test(cam) &&       // the backstop goes through it too
+      /gateRef\.current\?\.markStarted\(\)/.test(cam) &&
+      /gateRef\.current\?\.markStopped\(\)/.test(cam) &&
+      // ...and the gate itself keeps BOTH layers: the flag and the catch a rejection lands in.
+      /recording = false;/.test(gate) && /\.catch\(\(\) =>/.test(gate),
+    "every stop — the screen's timeout, the camera's backstop, the Stop button, the voice command — goes through one gate that knows whether anything is recording, and the gate attaches a catch because native state can still end a recording between our flag and the call");
+}
+
 const total = results.length;
 const passed = results.filter((r) => r.passed).length;
 const failed = results.filter((r) => !r.passed);
