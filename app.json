@@ -109,7 +109,8 @@
         "@sentry/react-native",
         {
           "uploadSourceMaps": false,
-          "organization": "smartplay",
+          "_comment_organization": "2026-09-19 — WAS \"smartplay\", WHICH IS NOT THE ORG. Tim's own Sentry links are https://smartplay-ai.sentry.io/..., and that subdomain IS the org slug. Events were never affected: the DSN addresses the org by NUMERIC id (o4511297513717760), which is why crashes have been arriving all along. This slug is used by sentry-cli for SOURCE MAP and dSYM upload — the exact thing docs/NEEDS-A-NATIVE-BUILD.md asks Tim to enable with a SENTRY_AUTH_TOKEN. Had it stayed wrong, the first build after he created that token would have failed to upload against an org that is not his, and the symbolication work would have looked broken for a reason nobody would have gone looking for.",
+          "organization": "smartplay-ai",
           "project": "smartplay-caddie-mobile"
         }
       ],

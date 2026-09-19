@@ -150,6 +150,16 @@ token is present, which is why it is on every profile. The missing piece is the 
 `project:releases` and `org:read`, then `eas secret:create --name SENTRY_AUTH_TOKEN --value <token>`.
 Claude Code must not hold it.
 
+> **2026-09-19 — AND THE ORG SLUG WAS WRONG, WHICH WOULD HAVE BROKEN THIS ANYWAY.** `app.json` said
+> `"organization": "smartplay"`. Tim's Sentry is **`smartplay-ai`** (his own issue links are
+> `https://smartplay-ai.sentry.io/...`, and that subdomain is the slug). Events were never affected
+> — the DSN addresses the org by numeric id (`o4511297513717760`), which is why crashes have been
+> arriving all along — but sentry-cli uploads source maps and dSYMs **by slug**. The first build
+> after the token was created would have failed to upload against an org that is not his, and the
+> symbolication work would have looked broken for a reason nobody would have gone looking for.
+> Fixed in `app.json`; it is a build-time plugin value, so it takes effect on the next native build
+> and needs no OTA.
+
 **Then:**
 1. Flip `uploadSourceMaps` to `true` and drop `SENTRY_DISABLE_AUTO_UPLOAD` from the **production**
    profile only (leave it on development/preview so a local build never fails on a missing token).
