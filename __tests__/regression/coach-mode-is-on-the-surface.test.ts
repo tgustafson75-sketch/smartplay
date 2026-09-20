@@ -9,7 +9,7 @@
  * NOT asserted here: the two honest deferrals in its header (multi-swing voice walkthrough,
  * voice-to-text coach notes). They are absent on purpose and absence is not a defect.
  */
-import { isShelved, SHELVED_ROUTES } from '../../services/releaseSurface';
+import { isShelved, isBeta, SHELVED_ROUTES } from '../../services/releaseSurface';
 import fs from 'fs';
 import path from 'path';
 
@@ -22,11 +22,32 @@ describe('Coach Mode is on the player surface', () => {
     expect(isShelved('/swinglab/coach-mode')).toBe(false);
   });
 
-  it('Coach CADDIE is still shelved — a different card, and Tim\'s call', () => {
-    // "Coach Caddie is a future state full AI Golf Coach Lesson. I would love to surface when
-    // totally ready." Surfacing Coach Mode must not drag its neighbour out with it.
-    expect(isShelved('/swinglab/coach-lesson')).toBe(true);
-    expect(SHELVED_ROUTES.has('/swinglab/coach-lesson')).toBe(true);
+  /**
+   * 2026-09-20, LATER THE SAME DAY — this asserted that Coach Caddie stays shelved, on Tim's
+   * "surface when totally ready". He then asked: "Take a look at Coach Caddie and see if we can
+   * release a strong beta version." The review said yes, so it ships wearing the word BETA.
+   *
+   * The PREMISE moved, not the code — which is the one honest reason to rewrite an assertion.
+   * What the test protects is unchanged and still worth protecting: surfacing one coach card must
+   * not silently drag the other out with it, and a half-ready screen must never reach players
+   * unlabelled. Both are asserted below, harder than before.
+   */
+  it('Coach Caddie ships as a labelled BETA, not silently', () => {
+    expect(isShelved('/swinglab/coach-lesson')).toBe(false);   // players can reach it
+    expect(SHELVED_ROUTES.has('/swinglab/coach-lesson')).toBe(false);
+    expect(isBeta('/swinglab/coach-lesson')).toBe(true);       // ...and it says what it is
+  });
+
+  it('Coach MODE is not mislabelled as beta — it is finished work', () => {
+    expect(isBeta('/swinglab/coach-mode')).toBe(false);
+  });
+
+  it('the hub renders the beta badge, in every card layout it has', () => {
+    const hub = code('app/(tabs)/swinglab.tsx');
+    const badged = hub.match(/isBeta\(spec\.route\) \? BETA_BADGE/g) ?? [];
+    // Three layouts render a card (hero, standard, compact). A badge wired into one of them is the
+    // classic "fixed it on the screen I was looking at" miss.
+    expect(badged.length).toBe(3);
   });
 });
 

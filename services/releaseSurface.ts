@@ -38,19 +38,6 @@ export const SHELVED_ROUTES: ReadonlySet<string> = new Set<string>([
   '/practice/open-range',
   '/swinglab/indoor',       // Hotel Mode — small-space practice; folds back in as a refined mode later
   '/swinglab/simround',     // SwingSim
-  /**
-   * Coach Caddie stays shelved. Tim, 2026-09-20: "Coach Caddie is a future state full AI Golf Coach
-   * Lesson. I would love to surface when totally ready." It is not a stub — the coaching brain
-   * (coachKnowledge + coachSession + coachLesson) is pure and carries 47 tests, LESSON_PLANS drives
-   * a real plan picker, and the camera-first auto-loop works. What is outstanding is its own
-   * header's next increment: strike AUTO-DETECT and the diagnostic mode sharing the auto-loop,
-   * both device-tune work. "Totally ready" is his bar and it has not been met.
-   *
-   * (The old note here said the shelving was justified because `planById` is orphaned. That is
-   * still true and it was never the reason — it is a dead one-line lookup beside a wired
-   * LESSON_PLANS. Stated accurately so the next reader weighs the right thing.)
-   */
-  '/swinglab/coach-lesson',
 
   /**
    * 2026-09-20 — COACH MODE IS OUT OF HERE, on Tim's instruction: he is showing it to golf coaches
@@ -71,6 +58,44 @@ export const SHELVED_ROUTES: ReadonlySet<string> = new Set<string>([
    * for the coach note (text entry works today). Both are additive next layers.
    */
 ]);
+
+/**
+ * 2026-09-20 (Tim) — "Take a look at Coach Caddie and see if we can release a strong beta version."
+ *
+ * A THIRD state, between shelved and shipped: it reaches players, and it says what it is.
+ *
+ * Coach Caddie was shelved on 2026-08-25 as "explicitly 2.0". Reviewed again today, that call has
+ * been overtaken by the work done since:
+ *
+ *   - The coaching brain (coachKnowledge + coachSession + coachLesson) is pure and carries 47 tests.
+ *   - The flow degrades honestly at every step: an unreadable window re-prompts softly instead of
+ *     nagging, a camera that cannot start falls back to the picker, a cancelled picker re-arms
+ *     rather than silently killing the loop, and DTL-invalid metrics are nulled so the coach never
+ *     speaks a number it did not measure.
+ *   - The one thing that WAS dishonest is fixed: before 2026-09-01 the pose sampler placed P1/P4/P6
+ *     at fixed fractions of a ten-second window, so every number the coach spoke was measured at
+ *     whatever the body happened to be doing at 0.65 of the clip. It now locates the real swing on
+ *     device and the positions are strike-anchored measurements.
+ *
+ * What is left is the reason this is BETA and not GA, and it is the kind of thing only real use
+ * settles: the ten-second window and the re-arm rhythm have not been tuned across many swings on
+ * many devices, and the diagnostic mode does not yet share the auto-loop. Tim's bar for surfacing
+ * it unlabelled is "totally ready", and that bar has not been met — so it ships wearing the word.
+ *
+ * A beta route is NOT shelved: the hub shows it, the caddie can open it, and every consumer treats
+ * it as real. The only difference is the badge. [[teach-before-you-grade]]
+ */
+export const BETA_ROUTES: ReadonlySet<string> = new Set<string>([
+  '/swinglab/coach-lesson',
+]);
+
+/** True when a route ships to everyone but is still finding its edges on real devices. */
+export function isBeta(route: string | null | undefined): boolean {
+  return !!route && BETA_ROUTES.has(route);
+}
+
+/** What a beta card says instead of its role tag. */
+export const BETA_BADGE = 'BETA';
 
 /**
  * 2026-08-25 (Tim, same day) — "you weren't supposed to remove swing lab from my owners build, just
