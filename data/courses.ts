@@ -1009,7 +1009,14 @@ export const GREENHILL_HOLES: CourseHole[] = [
 export const ECHO_HILLS_HOLES: CourseHole[] = [
   { hole: 1, par: 4, distance: 322, front: 313, back: 331, teeLat: 33.72553315, teeLng: -116.96456641, middleLat: 33.725522, middleLng: -116.96312606, frontLat: 33.725493, frontLng: -116.96320921, backLat: 33.72554654, backLng: -116.96305096, note: '', estimated: false },
   { hole: 2, par: 3, distance: 135, front: 126, back: 144, teeLat: 0, teeLng: 0, middleLat: 33.72420358, middleLng: -116.96320921, frontLat: 33.72428389, frontLng: -116.96321189, backLat: 33.7241255, backLng: -116.96321189, note: 'tee needs field calibration', estimated: false },
-  { hole: 3, par: 4, distance: 221, front: 212, back: 230, teeLat: 33.72393365, teeLng: -116.9637537, middleLat: 33.72321085, middleLng: -116.96498215, frontLat: 33.72326885, frontLng: -116.9649151, backLat: 33.72315508, backLng: -116.96504653, note: '', estimated: false },
+  // 2026-09-20 - tee dropped. It measured 152y to the green on a 221y card (0.69x), clearing the
+  // 0.65 cutoff in validateBundledTees by a hair, and it was the ONLY Echo Hills tee to survive.
+  // It is the same artifact as the eight that did not: every hole here measured 146-155y whatever
+  // the card said - the constant-radius signature the 2026-08-11 note above describes. A lone
+  // survivor of that pattern is not a good tee, it is the same bad point sitting above an
+  // arbitrary line. A wrong tee drawn with confidence is worse than no tee, which is the whole
+  // premise of validateBundledTees. Green coords are untouched and correct, so GPS is unaffected.
+  { hole: 3, par: 4, distance: 221, front: 212, back: 230, teeLat: 0, teeLng: 0, middleLat: 33.72321085, middleLng: -116.96498215, frontLat: 33.72326885, frontLng: -116.9649151, backLat: 33.72315508, backLng: -116.96504653, note: 'tee needs field calibration', estimated: false },
   { hole: 4, par: 4, distance: 249, front: 240, back: 258, teeLat: 33.72414558, teeLng: -116.96477026, middleLat: 33.72481483, middleLng: -116.96350962, frontLat: 33.72479475, frontLng: -116.96358472, backLat: 33.72483268, backLng: -116.96344525, note: '', estimated: false },
   { hole: 5, par: 4, distance: 251, front: 242, back: 260, teeLat: 33.72501337, teeLng: -116.96422845, middleLat: 33.72519407, middleLng: -116.9657439, frontLat: 33.7251673, frontLng: -116.96565807, backLat: 33.72523199, backLng: -116.96582437, note: '', estimated: false },
   { hole: 6, par: 4, distance: 237, front: 228, back: 246, teeLat: 33.72437312, teeLng: -116.96565002, middleLat: 33.72311269, middleLng: -116.96562856, frontLat: 33.72318185, frontLng: -116.96560442, backLat: 33.72305915, backLng: -116.96565539, note: '', estimated: false },
