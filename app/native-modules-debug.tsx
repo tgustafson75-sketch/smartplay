@@ -130,14 +130,22 @@ function HealthCard({ record, colors }: {
   colors: ReturnType<typeof useTheme>['colors'];
 }) {
   const ok = record.loaded;
-  const accent = ok ? '#22c55e' : '#ef4444';
+  /**
+   * 2026-09-19 — THREE STATES, NOT TWO. A module that is absent BY BUILD DECISION is not a fault,
+   * and painting it the same red as a broken dependency is what sent Tim to ask about
+   * MetaWearablesFrame: the glasses SDK is skipped on every Android build cut without GITHUB_TOKEN,
+   * on purpose. Amber and "NOT IN THIS BUILD" say that; red stays for the ones that mean something
+   * is wrong. [[illustration-data-points]]
+   */
+  const expected = !ok && !!record.expected;
+  const accent = ok ? '#22c55e' : expected ? '#f59e0b' : '#ef4444';
   return (
     <View style={[styles.card, { backgroundColor: colors.surface, borderColor: accent }]}>
       <View style={styles.cardHeader}>
         <View style={[styles.dot, { backgroundColor: accent }]} />
         <Text style={[styles.cardTitle, { color: colors.text_primary }]}>{record.id}</Text>
         <Text style={[styles.cardStatus, { color: accent }]}>
-          {ok ? 'LOADED' : 'MISSING'}
+          {ok ? 'LOADED' : expected ? 'NOT IN THIS BUILD' : 'MISSING'}
         </Text>
       </View>
       <Text style={[styles.cardMeta, { color: colors.text_muted }]}>
@@ -146,6 +154,11 @@ function HealthCard({ record, colors }: {
       {record.reason ? (
         <Text style={[styles.cardReason, { color: colors.text_secondary }]}>
           {record.reason}
+        </Text>
+      ) : null}
+      {record.expected ? (
+        <Text style={[styles.cardReason, { color: colors.text_muted }]}>
+          {record.expected}
         </Text>
       ) : null}
     </View>
