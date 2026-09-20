@@ -17588,6 +17588,42 @@ check(
       : `swept ${scanned.length} files that unload an audio player; none issues a seek (stopAsync / setPositionAsync / replayAsync) immediately before releasing it. unloadAsync stops and releases on its own, so the seek was only ever a race`);
 }
 
+// 2026-09-20 (Tim's wife) — "you dont have to do a selfie, you can upload a photo or just give
+// description for what you want." A custom caddie used to require a front-camera selfie in three
+// places at once: the only picker was the camera, Generate was disabled without a photo, and the
+// route 400'd a body with no image. Relax any two and the third still blocks the user.
+{
+  const ROOT = path.resolve(__dirname, '..', '..');
+  const strip = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+  const screen = strip(readBulk(path.join(ROOT, 'app/profile/custom-caddie.tsx')));
+  const route = strip(readBulk(path.join(ROOT, 'api/image-edit.ts')));
+
+  const library = /launchImageLibraryAsync/.test(screen);
+  const camera = /launchCameraAsync/.test(screen);
+  // The PROPERTY (gated on the brief) and the ABSENCE of the broken form, because a guard that only
+  // pins the new expression goes green the moment someone rewrites it. [[a-guard-can-assert-the-broken-shape]]
+  const gateIsBrief = /disabled=\{!prompt\.trim\(\) \|\| busy !== null\}/.test(screen)
+    && !/disabled=\{!selfieB64/.test(screen);
+  const omitsKey = /selfieB64 \? \{ imageBase64: selfieB64, prompt \} : \{ prompt \}/.test(screen);
+  const routeTakesPromptOnly = !/if \(!imageBase64\) return res\.status\(400\)/.test(route)
+    && /if \(!prompt\) return res\.status\(400\)/.test(route);
+  const textToImage = /geminiImageGenerate/.test(route) && /openai\.images\.generate/.test(route);
+
+  const missing: string[] = [];
+  if (!library) missing.push('the screen cannot open the photo library');
+  if (!camera) missing.push('the screen lost the camera path');
+  if (!gateIsBrief) missing.push('Generate is gated on having a photo again');
+  if (!omitsKey) missing.push('the request no longer omits imageBase64 when there is no photo');
+  if (!routeTakesPromptOnly) missing.push('the route rejects a prompt-only body');
+  if (!textToImage) missing.push('the route has no text-to-image path');
+
+  check('CUSTOM CADDIE: a selfie is one way in, not the price of entry',
+    missing.length === 0,
+    missing.length > 0
+      ? `a photo is mandatory again: ${missing.join('; ')}`
+      : 'three ways to make a caddie — take a selfie, upload any photo, or describe one in words and send no photo at all. The camera, the library, the Generate button and the route all agree, so no surface can quietly reimpose the selfie');
+}
+
 const total = results.length;
 const passed = results.filter((r) => r.passed).length;
 const failed = results.filter((r) => !r.passed);

@@ -1639,7 +1639,9 @@
       "try_re_recording_this_phrase": "Try re-recording this phrase.",
       "delete_recording": "Delete recording?",
       "the_caddie_will_use_the": "The caddie will use the AI voice for this phrase until you record it again.",
-      "clear_all_recordings": "Clear all recordings?"
+      "clear_all_recordings": "Clear all recordings?",
+      "couldnt_read_that_photo": "Couldn't read that photo. Try another.",
+      "capture_failed_try_again": "Capture failed. Try again."
     },
     "custom_caddie_screen": {
       "your_caddie": "Your Caddie",
@@ -1664,7 +1666,15 @@
       "active_across_the_app_voice": "Active across the app — voice, portrait, and name.",
       "apply_your_voice_portrait_and": "Apply your voice, portrait, and name as the active caddie everywhere.",
       "your_profile_picture_tap_to": "Your profile picture — tap to remove",
-      "use_as_profile_picture_dashboard": "Use as profile picture (dashboard icon)"
+      "use_as_profile_picture_dashboard": "Use as profile picture (dashboard icon)",
+      "step_1_photo_optional": "Step 1 — Photo (optional)",
+      "photo_or_describe_hint": "Take a selfie, upload any photo, or skip this and just describe your caddie below.",
+      "upload_photo": "Upload Photo",
+      "retake": "Retake",
+      "take_selfie": "Take Selfie",
+      "give_your_caddie_a_face": "Give your caddie a face — from a selfie, any photo you upload, or just a description.",
+      "sends_photo_and_description": "Sends your photo + description to the image model.",
+      "sends_description_only": "Sends your description to the image model — no photo needed."
     },
     "placeholder": {
       "describe_the_caddie_s_look": "Describe the caddie's look, outfit, setting…",

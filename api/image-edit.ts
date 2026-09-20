@@ -26,13 +26,18 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 50_000 
  * This (a) slashes the per-image cost that hit the OpenAI billing hard limit and
  * (b) keeps a quality backstop so a Gemini hiccup never fails the whole call.
  *
- * Client contract (unchanged):
+ * Client contract:
  *   POST /api/image-edit
- *   { imageBase64: string, prompt: string }
- *   ->  { b64: string, provider: 'gemini'|'openai' }   (success)
- *   ->  { error: string }                              (failure)
+ *   { imageBase64?: string, prompt: string }
+ *   ->  { b64: string, provider: 'gemini'|'openai', mode: 'edit'|'generate' }   (success)
+ *   ->  { error: string }                                                        (failure)
  *
- * Image format: caller sends image/png base64 (no data: prefix), <= 4MB.
+ * 2026-09-20 (Tim's wife) — imageBase64 IS NOW OPTIONAL. Making a custom caddie used to demand a
+ * selfie, and plenty of people will not take one — for their kids, or for themselves. With no image
+ * this runs text-to-image on the same cost ladder instead of image-edit, so "a silver-haired caddie
+ * in a flat cap" is a first-class way in rather than a lesser one.
+ *
+ * Image format: when sent, image/png base64 (no data: prefix), <= 4MB.
  */
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
@@ -91,6 +96,50 @@ async function openaiImageEdit(buffer: Buffer, prompt: string): Promise<string |
   return first?.b64_json ?? first?.url ?? null;
 }
 
+/**
+ * Text-to-image on the same ladder. Gemini's image model takes a parts array either way, so the only
+ * difference from the edit path is the absence of an inlineData part — deliberately a separate
+ * function rather than a conditional inside the edit one, so a future change to editing cannot
+ * silently alter generation, or the reverse.
+ */
+async function geminiImageGenerate(prompt: string): Promise<string | null> {
+  if (!process.env.GOOGLE_API_KEY) return null;
+  try {
+    const genai = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY });
+    const res = await Promise.race([
+      genai.models.generateContent({
+        model: GEMINI_IMAGE_MODEL,
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      }),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Gemini image timeout')), 22_000)),
+    ]);
+    const parts = res.candidates?.[0]?.content?.parts ?? [];
+    for (const p of parts) {
+      const data = (p as { inlineData?: { data?: string } }).inlineData?.data;
+      if (data) return data;
+    }
+    console.warn('[image-edit] gemini generate returned no image part — falling back to openai');
+    return null;
+  } catch (e) {
+    console.warn('[image-edit] gemini generate failed — falling back to openai:', e instanceof Error ? e.message : String(e));
+    return null;
+  }
+}
+
+/** OpenAI gpt-image-1 text-to-image fallback. images.generate, NOT images.edit — there is no image. */
+async function openaiImageGenerate(prompt: string): Promise<string | null> {
+  if (!process.env.OPENAI_API_KEY) return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result: any = await openai.images.generate({
+    model: 'gpt-image-1',
+    prompt,
+    n: 1,
+    size: '1024x1024',
+  } as Parameters<typeof openai.images.generate>[0]);
+  const first = result.data?.[0];
+  return first?.b64_json ?? first?.url ?? null;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -108,14 +157,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const imageBase64 = typeof body?.imageBase64 === 'string' ? body.imageBase64 : '';
     const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : '';
 
-    if (!imageBase64) return res.status(400).json({ error: 'imageBase64 required' });
+    // An image is optional; a prompt never is. With no image there is nothing to describe the
+    // subject but the words, so an empty prompt would generate an arbitrary picture.
+    const mode: 'edit' | 'generate' = imageBase64 ? 'edit' : 'generate';
     if (!prompt) return res.status(400).json({ error: 'prompt required' });
     if (prompt.length > MAX_PROMPT_CHARS) {
       return res.status(400).json({ error: `prompt exceeds ${MAX_PROMPT_CHARS} chars` });
     }
 
-    const buffer = Buffer.from(imageBase64, 'base64');
-    if (buffer.byteLength > MAX_IMAGE_BYTES) {
+    const buffer = imageBase64 ? Buffer.from(imageBase64, 'base64') : null;
+    if (buffer && buffer.byteLength > MAX_IMAGE_BYTES) {
       return res.status(413).json({ error: `image exceeds ${MAX_IMAGE_BYTES} bytes; resize before upload` });
     }
 
@@ -126,16 +177,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 502 "both providers returned no image" the exhausted-chain case intends.
     let b64: string | null = null;
     let provider: 'gemini' | 'openai' = 'gemini';
-    try { b64 = await geminiImageEdit(imageBase64, prompt); } catch (e) { console.warn('[image-edit] gemini failed:', e instanceof Error ? e.message : e); }
+    try {
+      b64 = mode === 'edit'
+        ? await geminiImageEdit(imageBase64, prompt)
+        : await geminiImageGenerate(prompt);
+    } catch (e) { console.warn('[image-edit] gemini failed:', e instanceof Error ? e.message : e); }
     if (!b64) {
       provider = 'openai';
-      try { b64 = await openaiImageEdit(buffer, prompt); } catch (e) { console.warn('[image-edit] openai failed:', e instanceof Error ? e.message : e); }
+      try {
+        b64 = mode === 'edit'
+          ? await openaiImageEdit(buffer as Buffer, prompt)
+          : await openaiImageGenerate(prompt);
+      } catch (e) { console.warn('[image-edit] openai failed:', e instanceof Error ? e.message : e); }
     }
     if (!b64) {
       return res.status(502).json({ error: 'Both image providers returned no image' });
     }
 
-    return res.status(200).json({ b64, provider });
+    return res.status(200).json({ b64, provider, mode });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Unknown error';
     console.error('[image-edit] exception:', msg);

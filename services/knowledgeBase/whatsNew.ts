@@ -51,6 +51,11 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Sep 2026',
+    note: 'Making your own caddie no longer needs a selfie. Take one if you want, upload any photo you already have, or skip the photo completely and just describe the caddie you want \u2014 "a silver-haired caddie in a flat cap" is enough to build one.',
+    howTo: 'Profile \u2192 Custom Caddie. Take Selfie and Upload Photo sit side by side, and both are optional \u2014 write what you want in the description box and tap Generate Caddie.',
+  },
+  {
+    when: 'Sep 2026',
     note: 'Your caddie tells you when he could not read something, instead of quietly leaving it out. If the clubhead blurs too much to draw your swing path, he says so \u2014 and what would fix it \u2014 rather than showing you a swing with the path missing and no explanation.',
     howTo: 'Nothing to do. He also mentions once, before your first swing, that recording at 60 frames a second is what makes the club path readable \u2014 that setting lives in your phone\u2019s camera app.',
   },

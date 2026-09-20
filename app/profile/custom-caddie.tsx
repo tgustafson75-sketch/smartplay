@@ -1,9 +1,16 @@
 /**
  * Phase BI — Custom Caddie portrait flow.
  *
- * Capture a selfie → resize to 1024x1024 PNG → POST to /api/image-edit
+ * Give the caddie a face → resize to 1024x1024 PNG → POST to /api/image-edit
  * with a default "stylize as my personal golf caddie" prompt → store the
  * returned base64 portrait in player profile → toggle on Caddie home.
+ *
+ * 2026-09-20 (Tim's wife) — THREE WAYS IN, NOT ONE. This screen used to demand a front-camera
+ * selfie and disabled Generate until it had one. That asks the one thing a lot of people will not
+ * do — and it is worse for the cases we most want: a parent making a caddie for their kid, or
+ * anyone who simply would rather not be photographed. So: take a selfie, upload any photo, or
+ * describe the caddie in words and skip the photo entirely. The description path is a FIRST-CLASS
+ * route (the API generates from text alone), not a degraded one.
  *
  * The same b64 is also used as the user's profile image. Voice service
  * checks `useCustomCaddie` and applies a slightly faster + slightly
@@ -54,6 +61,13 @@ import { useTranslation } from 'react-i18next';
 
 const DEFAULT_PROMPT =
   "Stylize this person as a confident golf caddie. Keep their face recognizable. Place them on a sunny PGA-style fairway, wearing a clean caddie polo and visor, holding a golf club. Photorealistic, soft warm lighting, 9:16 portrait composition with the head and shoulders centered.";
+
+// The no-photo default. Deliberately NOT the prompt above with the photo clause removed: "keep
+// their face recognizable" is meaningless with no face, and a prompt that still says "this person"
+// makes the model invent one to preserve. This one describes a caddie from nothing, and carries the
+// same framing so both routes produce a portrait that sits the same way in the UI.
+const DESCRIBE_ONLY_PROMPT =
+  "A confident golf caddie on a sunny PGA-style fairway, wearing a clean caddie polo and visor, holding a golf club. Photorealistic, soft warm lighting, 9:16 portrait composition with the head and shoulders centered.";
 
 // 2026-07-06 (audit) — read at fetch time, not module load: a module-scope
 // snapshot would defeat the mid-session dual-host failover (see apiBase.ts).
@@ -128,8 +142,11 @@ export default function CustomCaddieScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
-  const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
-  const [busy, setBusy] = useState<'capture' | 'generate' | null>(null);
+  const [prompt, setPrompt] = useState(selfieB64 ? DEFAULT_PROMPT : DESCRIBE_ONLY_PROMPT);
+  // Once the user has typed their own brief we never touch it again. Swapping the default when the
+  // photo state changes is helpful; overwriting a sentence someone wrote is not.
+  const promptEditedRef = useRef(false);
+  const [busy, setBusy] = useState<'capture' | 'upload' | 'generate' | null>(null);
   const [error, setError] = useState<string | null>(null);
   // 2026-07-30 — photo→voice match UI state.
   const [matchingVoice, setMatchingVoice] = useState(false);
@@ -161,23 +178,48 @@ export default function CustomCaddieScreen() {
     };
   }, []);
 
-  const captureSelfie = async () => {
+  /**
+   * Camera and library land in the SAME place — one resize, one encode, one setSelfieB64 — because
+   * everything downstream (generate, voice match, save, clear) only ever cared that there is a
+   * photo, not where it came from. Two copies of this would be two places to fix the next SDK move
+   * like the legacy-readAsStringAsync one noted below. [[two-owners-is-the-root-cause]]
+   */
+  const hasPhoto = !!selfieB64;
+  useEffect(() => {
+    if (promptEditedRef.current) return;
+    setPrompt(hasPhoto ? DEFAULT_PROMPT : DESCRIBE_ONLY_PROMPT);
+  }, [hasPhoto]);
+
+  const ingestPhoto = async (source: 'camera' | 'library') => {
     setError(null);
     try {
-      const perm = await ImagePicker.requestCameraPermissionsAsync();
-      if (!perm.granted) {
-        Alert.alert(t('profile_custom_caddie.alert.camera_permission_needed'), t('profile_custom_caddie.alert.allow_camera_access_to_capture'));
-        return;
+      if (source === 'camera') {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert(t('profile_custom_caddie.alert.camera_permission_needed'), t('profile_custom_caddie.alert.allow_camera_access_to_capture'));
+          return;
+        }
       }
+      // No permission request on the library path: launchImageLibraryAsync goes through the system
+      // photo picker, which hands back only the picked image and needs no grant. Asking for one
+      // would add a prompt the user can refuse for no reason — and on Android a read permission is
+      // exactly what we keep OUT of the manifest (see the MediaLibrary note in saveImage).
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      setBusy('capture');
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        cameraType: ImagePicker.CameraType.front,
-        quality: 0.85,
-        allowsEditing: true,
-        aspect: [1, 1],
-      });
+      setBusy(source === 'camera' ? 'capture' : 'upload');
+      const result = source === 'camera'
+        ? await ImagePicker.launchCameraAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            cameraType: ImagePicker.CameraType.front,
+            quality: 0.85,
+            allowsEditing: true,
+            aspect: [1, 1],
+          })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            quality: 0.85,
+            allowsEditing: true,
+            aspect: [1, 1],
+          });
       if (result.canceled || !result.assets[0]?.uri) {
         setBusy(null);
         return;
@@ -199,18 +241,19 @@ export default function CustomCaddieScreen() {
       const b64 = await FS.readAsStringAsync(manip.uri, { encoding: FS.EncodingType.Base64 });
       setSelfieB64(b64);
     } catch (e) {
-      console.log('[customCaddie] capture error', e);
-      setError('Capture failed. Try again.');
+      console.log('[customCaddie] photo error', e);
+      setError(source === 'camera' ? t('profile_custom_caddie.alert.capture_failed_try_again') : t('profile_custom_caddie.alert.couldnt_read_that_photo'));
     } finally {
       setBusy(null);
     }
   };
 
+  const captureSelfie = () => ingestPhoto('camera');
+  const uploadPhoto = () => ingestPhoto('library');
+
   const generateCaddie = async () => {
-    if (!selfieB64) {
-      Alert.alert(t('profile_custom_caddie.alert.capture_a_selfie_first'), t('profile_custom_caddie.alert.tap_take_selfie_to_start'));
-      return;
-    }
+    // No photo is a supported route, not a missing step — the words become the whole brief, so the
+    // only hard requirement either way is that there IS a brief.
     if (!prompt.trim()) {
       Alert.alert(t('profile_custom_caddie.alert.prompt_required'), t('profile_custom_caddie.alert.describe_how_the_caddie_should'));
       return;
@@ -222,7 +265,9 @@ export default function CustomCaddieScreen() {
       const res = await fetch(apiUrl() + '/api/image-edit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...appKeyHeaders() },
-        body: JSON.stringify({ imageBase64: selfieB64, prompt }),
+        // Omit the key entirely with no photo — the route switches to text-to-image on absence,
+        // and sending an empty string would read as "here is an image" and fail validation.
+        body: JSON.stringify(selfieB64 ? { imageBase64: selfieB64, prompt } : { prompt }),
         // 2026-07-06 (audit) — bound the wait (~1.5× the route's 60s maxDuration)
         // so a dead connection surfaces as an error instead of hanging forever.
         signal: AbortSignal.timeout(75_000),
@@ -554,9 +599,7 @@ export default function CustomCaddieScreen() {
           contentContainerStyle={{ paddingBottom: 64 + insets.bottom, paddingHorizontal: 16 }}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.subtitle}>
-            {t('profile_custom_caddie.custom_caddie_screen.take_a_selfie_and_we')}
-          </Text>
+          <Text style={styles.subtitle}>{t('profile_custom_caddie.custom_caddie_screen.give_your_caddie_a_face')}</Text>
 
           {/* Selfie row */}
           <View style={styles.row}>
@@ -568,20 +611,34 @@ export default function CustomCaddieScreen() {
               )}
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.rowLabel}>{t('profile_custom_caddie.custom_caddie_screen.step_1_selfie')}</Text>
-              <Text style={styles.rowSub}>{t('profile_custom_caddie.custom_caddie_screen.front_camera_good_light_crop')}</Text>
-              <TouchableOpacity
-                style={[styles.actionBtn, busy === 'capture' && styles.actionBtnDisabled]}
-                onPress={captureSelfie}
-                disabled={busy !== null}
-                activeOpacity={0.8}
-              >
-                {busy === 'capture' ? (
-                  <ActivityIndicator color="#04140c" />
-                ) : (
-                  <Text style={styles.actionBtnText}>{selfieB64 ? 'Retake Selfie' : 'Take Selfie'}</Text>
-                )}
-              </TouchableOpacity>
+              <Text style={styles.rowLabel}>{t('profile_custom_caddie.custom_caddie_screen.step_1_photo_optional')}</Text>
+              <Text style={styles.rowSub}>{t('profile_custom_caddie.custom_caddie_screen.photo_or_describe_hint')}</Text>
+              <View style={styles.photoBtnRow}>
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.photoBtn, busy !== null && styles.actionBtnDisabled]}
+                  onPress={captureSelfie}
+                  disabled={busy !== null}
+                  activeOpacity={0.8}
+                >
+                  {busy === 'capture' ? (
+                    <ActivityIndicator color="#04140c" />
+                  ) : (
+                    <Text style={styles.actionBtnText}>{selfieB64 ? t('profile_custom_caddie.custom_caddie_screen.retake') : t('profile_custom_caddie.custom_caddie_screen.take_selfie')}</Text>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.photoBtn, busy !== null && styles.actionBtnDisabled]}
+                  onPress={uploadPhoto}
+                  disabled={busy !== null}
+                  activeOpacity={0.8}
+                >
+                  {busy === 'upload' ? (
+                    <ActivityIndicator color="#04140c" />
+                  ) : (
+                    <Text style={styles.actionBtnText}>{t('profile_custom_caddie.custom_caddie_screen.upload_photo')}</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
               {selfieB64 && (
                 <TouchableOpacity
                   style={styles.secondaryBtn}
@@ -600,7 +657,7 @@ export default function CustomCaddieScreen() {
           <TextInput
             style={styles.promptInput}
             value={prompt}
-            onChangeText={setPrompt}
+            onChangeText={(v) => { promptEditedRef.current = true; setPrompt(v); }}
             multiline
             placeholder={t('profile_custom_caddie.placeholder.describe_the_caddie_s_look')}
             placeholderTextColor="#3a4f43"
@@ -617,14 +674,18 @@ export default function CustomCaddieScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.rowLabel}>{t('profile_custom_caddie.custom_caddie_screen.step_3_generate')}</Text>
-              <Text style={styles.rowSub}>{t('profile_custom_caddie.custom_caddie_screen.sends_your_selfie_prompt_to')}</Text>
+              <Text style={styles.rowSub}>
+                {selfieB64
+                  ? t('profile_custom_caddie.custom_caddie_screen.sends_photo_and_description')
+                  : t('profile_custom_caddie.custom_caddie_screen.sends_description_only')}
+              </Text>
               <TouchableOpacity
                 style={[
                   styles.actionBtn,
-                  (!selfieB64 || busy !== null) && styles.actionBtnDisabled,
+                  (!prompt.trim() || busy !== null) && styles.actionBtnDisabled,
                 ]}
                 onPress={generateCaddie}
-                disabled={!selfieB64 || busy !== null}
+                disabled={!prompt.trim() || busy !== null}
                 activeOpacity={0.8}
               >
                 {busy === 'generate' ? (
@@ -979,6 +1040,8 @@ const styles = StyleSheet.create({
   },
   secondaryBtnText: { color: '#00C896', fontSize: 13, fontWeight: '600' },
   sectionLabel: { color: '#c2cad4', fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginTop: 4, marginBottom: 8 },
+  photoBtnRow: { flexDirection: 'row', gap: 8 },
+  photoBtn: { flex: 1, paddingHorizontal: 8 },
   promptInput: {
     backgroundColor: '#0d2418',
     borderWidth: 1,

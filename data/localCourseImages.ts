@@ -288,7 +288,10 @@ const LOCAL_COURSE_CENTROIDS_RAW: Record<LocalCourseSlug, { lat: number; lng: nu
   'miccosukee':       { lat: 25.7113237, lng: -80.4219701 },
   'killian-greens':   { lat: 25.6747540, lng: -80.3600897 },
   'redlands-cc':      { lat: 34.0250333, lng: -117.1514339 },
-  'palms':            { lat: 33.6953922, lng: -117.1504551 },
+  // 2026-09-20 — was 33.6953922,-117.1504551: 663 yards from the mean of its own 36 tee/green
+  // coordinates, outside the 550y at-course radius. Found by the retargeted centroid guard on its
+  // first run, on a course nobody was looking at — which is the case for the guard.
+  'palms':            { lat: 33.6921978, lng: -117.1557696 },
   'lakes':            { lat: 33.6913348, lng: -117.1573364 },
   // 2026-08-11 — was 7.96km out and in the wrong TOWN (Temecula vs Murrieta). OSM's golf_course
   // polygon for "The Golf Club at Rancho California" and the Census geocode of 39500 Robert Trent
@@ -301,7 +304,18 @@ const LOCAL_COURSE_CENTROIDS_RAW: Record<LocalCourseSlug, { lat: number; lng: nu
   // 2026-06-04 — Echo Hills Golf Course, Hemet CA. Approximate
   // centroid from the Hemet-area property landmark; refine on-site
   // via Mark Location when Tim plays there.
-  'echo-hills':       { lat: 33.7475,    lng: -116.9719 },
+  // 2026-09-20 — brought into line with the course's own bundled tee/green coordinates.
+  //
+  // NOT a live bug, and I first wrote it up as one: LOCAL_COURSE_CENTROIDS below is DERIVED
+  // (getBundledCourseCentroid(slug) ?? raw), so every consumer — play.tsx, smartvision, the
+  // geometry service — already got the right point for any course that ships holes. The 2026-08-11
+  // pass did finish the job.
+  // What was left was a literal that contradicted the data it backs up, by 2,894 yards. This map is the
+  // FALLBACK for courses with no bundled geometry, and it is the thing a person reads when they
+  // want to know where a course is — so a number that disagrees with the holes by kilometres is a
+  // trap for the next reader even when no code path takes it.
+  // [[a-stale-header-is-a-source-someone-trusts]]
+  'echo-hills':        { lat: 33.724367,  lng: -116.965174 },
   // 2026-07-06 — Spessard Holland (golfcourseapi id 30168; matches OSM greens).
   'spessard-holland': { lat: 28.04947,   lng: -80.55063 },
   // 2026-07-06 — Webster/Dudley (MA) 9-hole. 2026-08-11: the "approx town-center" placeholder was
@@ -311,12 +325,43 @@ const LOCAL_COURSE_CENTROIDS_RAW: Record<LocalCourseSlug, { lat: number; lng: nu
   // 08527. Approximate centroid from the property landmark; refine
   // on-site via Mark Location when Tim plays there. The 800m detect
   // radius covers parking-lot + clubhouse arrival.
-  'westlake-cc-nj':   { lat: 40.0828,    lng: -74.3196 },
+  // 2026-09-20 — brought into line with the course's own bundled tee/green coordinates.
+  //
+  // NOT a live bug, and I first wrote it up as one: LOCAL_COURSE_CENTROIDS below is DERIVED
+  // (getBundledCourseCentroid(slug) ?? raw), so every consumer — play.tsx, smartvision, the
+  // geometry service — already got the right point for any course that ships holes. The 2026-08-11
+  // pass did finish the job.
+  // What was left was a literal that contradicted the data it backs up, by 3,645 yards. This map is the
+  // FALLBACK for courses with no bundled geometry, and it is the thing a person reads when they
+  // want to know where a course is — so a number that disagrees with the holes by kilometres is a
+  // trap for the next reader even when no code path takes it.
+  // [[a-stale-header-is-a-source-someone-trusts]]
+  'westlake-cc-nj':    { lat: 40.100505,  lng: -74.287979 },
   // 2026-06-21 — Greenhill Golf Course, Worcester MA.
-  'greenhill':        { lat: 42.2677,    lng: -71.8562 },
+  // 2026-09-20 — brought into line with the course's own bundled tee/green coordinates.
+  //
+  // NOT a live bug, and I first wrote it up as one: LOCAL_COURSE_CENTROIDS below is DERIVED
+  // (getBundledCourseCentroid(slug) ?? raw), so every consumer — play.tsx, smartvision, the
+  // geometry service — already got the right point for any course that ships holes. The 2026-08-11
+  // pass did finish the job.
+  // What was left was a literal that contradicted the data it backs up, by 7,441 yards. This map is the
+  // FALLBACK for courses with no bundled geometry, and it is the thing a person reads when they
+  // want to know where a course is — so a number that disagrees with the holes by kilometres is a
+  // trap for the next reader even when no code path takes it.
+  // [[a-stale-header-is-a-source-someone-trusts]]
+  'greenhill':         { lat: 42.285886,  lng: -71.777239 },
   // 2026-07-18 — Pembroke Lakes CC, Pembroke Pines FL (golfcourseapi id 29669).
   'pembroke-pines':   { lat: 26.019337,  lng: -80.2868 },
 };
+
+/**
+ * The hand-typed literals, before the derivation below overrides them. Exported for ONE reason: a
+ * guard has to be able to read the fallback itself. Asserting against the derived map below is
+ * near-tautological — it is the mean of the very holes you would compare it to — so a test that
+ * reads it cannot fail on a stale literal. Nothing in the app should import this; use
+ * LOCAL_COURSE_CENTROIDS. [[break-test-every-guard-you-write]]
+ */
+export const __testing = { LOCAL_COURSE_CENTROIDS_RAW };
 
 export const LOCAL_COURSE_CENTROIDS: Record<LocalCourseSlug, { lat: number; lng: number }> =
   (() => {
