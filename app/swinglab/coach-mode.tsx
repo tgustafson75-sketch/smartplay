@@ -12,20 +12,25 @@
  *
  * What this screen IS:
  *   - Player picker over the existing family roster + quick "add by name"
- *   - Two capture surfaces: phone (→ /swinglab/quick-record) and glasses
+ *   - Two capture surfaces: phone (→ /swinglab/smartmotion) and glasses
  *     (voice "record this" — the existing mediaCapture path)
+ *     2026-09-20: was written as "/swinglab/quick-record", which has been RETIRED into SmartMotion
+ *     since. The code always pushed the right route; only this line was stale — and it is the line
+ *     a reviewer reads first. [[a-stale-header-is-a-source-someone-trusts]]
  *   - List of this player's past swings, tap to open the swing detail
  *   - Short skippable spoken + written tutorial on first entry
  *
  * What this screen is NOT (and intentionally defers to follow-ups):
  *   - Multi-swing session review with voice walkthrough — TODO, next layer
  *   - Voice-to-text for the coach note itself — TODO, text input first
- *   - In-screen video capture (we route to SmartMotion / quick-record
- *     so the existing camera UX stays the single source of truth)
+ *   - In-screen video capture (we route to SmartMotion so the existing
+ *     camera UX stays the single source of truth)
  *
  * Additivity guarantees:
- *   - No edits to SmartMotion / Cage Mode / quick-record. They already
- *     respect active_member_id post Fix #7.
+ *   - No edits to SmartMotion or the ingest path. They already respect
+ *     active_member_id post Fix #7 — verified 2026-09-20 in mediaCapture,
+ *     videoUpload, swingLibrary, swingerHandedness and glassesVisionInput
+ *     before this screen was surfaced to players.
  *   - Coach Mode merely sets active_member_id; the existing capture
  *     pipes do the rest.
  *   - Account-holder POV flow (no member active) is unchanged.
@@ -549,8 +554,11 @@ export default function CoachMode() {
             - Multi-swing session review with voice walkthrough (Kevin
               narrates the swings sequentially with comparison commentary).
             - Voice-to-text for the coach note itself (currently text only).
-            - Tag coached_member_id on the upload at ingest time so the
-              player-swing filter is robust against renames.
+            - (CLOSED 2026-07-10) Tag coached_member_id at ingest so the
+              player-swing filter survives renames — the filter already
+              matches sess.player_id FIRST, with the name match kept only
+              as a legacy fallback. Left here struck through rather than
+              deleted so nobody re-opens it from an old note.
         */}
       </ScrollView>
 

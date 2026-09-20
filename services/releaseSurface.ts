@@ -38,8 +38,38 @@ export const SHELVED_ROUTES: ReadonlySet<string> = new Set<string>([
   '/practice/open-range',
   '/swinglab/indoor',       // Hotel Mode — small-space practice; folds back in as a refined mode later
   '/swinglab/simround',     // SwingSim
-  '/swinglab/coach-lesson', // Coach Caddie — explicitly 2.0 (its planById service export is already orphaned)
-  '/swinglab/coach-mode',   // coach-facing tool inside a consumer app, and carries v2 TODOs
+  /**
+   * Coach Caddie stays shelved. Tim, 2026-09-20: "Coach Caddie is a future state full AI Golf Coach
+   * Lesson. I would love to surface when totally ready." It is not a stub — the coaching brain
+   * (coachKnowledge + coachSession + coachLesson) is pure and carries 47 tests, LESSON_PLANS drives
+   * a real plan picker, and the camera-first auto-loop works. What is outstanding is its own
+   * header's next increment: strike AUTO-DETECT and the diagnostic mode sharing the auto-loop,
+   * both device-tune work. "Totally ready" is his bar and it has not been met.
+   *
+   * (The old note here said the shelving was justified because `planById` is orphaned. That is
+   * still true and it was never the reason — it is a dead one-line lookup beside a wired
+   * LESSON_PLANS. Stated accurately so the next reader weighs the right thing.)
+   */
+  '/swinglab/coach-lesson',
+
+  /**
+   * 2026-09-20 — COACH MODE IS OUT OF HERE, on Tim's instruction: he is showing it to golf coaches
+   * this week and it is the coach-facing card in SwingLab ("Analyze other players and build your
+   * coaching roster").
+   *
+   * Reviewed for completeness before surfacing rather than after:
+   *   - Every destination is live — /swinglab/smartmotion, /swinglab/player-library/[player_id],
+   *     /swinglab/swing/[swing_id]. None shelved, none missing.
+   *   - The load-bearing claim is TRUE: setting familyStore.active_member_id really does route the
+   *     analysis to the student. mediaCapture, videoUpload, swingLibrary, swingerHandedness and
+   *     glassesVisionInput all read it at ingest. Verified in those files, not taken from the
+   *     header. [[a-stale-header-is-a-source-someone-trusts]]
+   *   - The student-swing list matches on `player_id` FIRST with a legacy name fallback, so the v2
+   *     TODO's "robust against renames" worry was already closed by the 2026-07-10 audit.
+   *
+   * What is genuinely deferred and is NOT a hole: multi-swing voice walkthrough, and voice-to-text
+   * for the coach note (text entry works today). Both are additive next layers.
+   */
 ]);
 
 /**

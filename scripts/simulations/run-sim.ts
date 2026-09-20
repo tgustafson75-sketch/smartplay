@@ -12582,8 +12582,28 @@ check('LOCK: a screen shelved for 2.0 has no door left open',
      * and no shelved path may be pushed anywhere outside its own screen.
      */
     const surface = readCode('services/releaseSurface.ts');
-    const routes = [...surface.matchAll(/'(\/[a-z-]+\/[a-z-]+)'/g)].map((m) => m[1]!);
-    if (routes.length < 5) return false;                 // parse failed — never pass vacuously
+    /**
+     * 2026-09-20 — THE VACUITY CHECK WAS `routes.length < 5`, AND IT BROKE THE FIRST TIME THE
+     * SYSTEM WORKED AS DESIGNED.
+     *
+     * This file's own instruction is "to bring one back for 2.0: delete its line here." So the
+     * shelved set SHRINKS over time, by intent — and a floor of five meant that surfacing the
+     * fifth screen (Coach Mode, today, for Tim's coach demo) was indistinguishable from the regex
+     * failing to parse anything. A guard that fails on the correct action trains people to edit
+     * the guard, which is the opposite of what it is for.
+     *
+     * The real question was never "are there at least five" — it was "did my regex find what is
+     * actually in the Set". So compare the two: pull the Set literal, count the route strings
+     * inside it, and require the scan to agree. That validates the parse against the file rather
+     * than against a number somebody guessed, and it holds at five routes, at four, or at one.
+     * [[a-guard-can-enforce-a-stale-premise]]
+     */
+    const setBody = surface.match(/SHELVED_ROUTES[\s\S]*?new Set<string>\(\[([\s\S]*?)\]\)/)?.[1] ?? '';
+    const declared = [...setBody.matchAll(/'(\/[a-z-]+\/[a-z-]+)'/g)].map((m) => m[1]!);
+    const routes = declared;
+    // The parse worked if it found every entry the Set declares, and the Set is not empty.
+    if (declared.length === 0) return false;
+    if (declared.length !== (setBody.match(/'\//g) ?? []).length) return false;
 
     // Each consumer filters from the one owner rather than hand-editing its own list.
     const consumers = [
