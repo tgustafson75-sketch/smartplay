@@ -59,15 +59,21 @@ import { matchCaddieVoiceFromPhoto, CADDIE_VOICES } from '../../services/caddieV
 import { getApiBaseUrl, appKeyHeaders } from '../../services/apiBase';
 import { useTranslation } from 'react-i18next';
 
+// 2026-09-20 — "PGA-style" came OUT of both prompts. A live generation came back with a mangled
+// "PGA TOUR" mark on the polo: name a real tour in the brief and the model dresses the subject in
+// its branding. That image is then stored as the player's caddie and can be saved to their camera
+// roll, so it is someone else's trademark on our output. "Championship-style" gets the same look
+// without naming anyone, and the explicit no-logo clause covers the rest of the wardrobe.
+// [[illustration-data-points]]
 const DEFAULT_PROMPT =
-  "Stylize this person as a confident golf caddie. Keep their face recognizable. Place them on a sunny PGA-style fairway, wearing a clean caddie polo and visor, holding a golf club. Photorealistic, soft warm lighting, 9:16 portrait composition with the head and shoulders centered.";
+  "Stylize this person as a confident golf caddie. Keep their face recognizable. Place them on a sunny championship-style fairway, wearing a clean unbranded caddie polo and visor, holding a golf club. No logos, brand marks, or text on any clothing. Photorealistic, soft warm lighting, 9:16 portrait composition with the head and shoulders centered.";
 
 // The no-photo default. Deliberately NOT the prompt above with the photo clause removed: "keep
 // their face recognizable" is meaningless with no face, and a prompt that still says "this person"
 // makes the model invent one to preserve. This one describes a caddie from nothing, and carries the
 // same framing so both routes produce a portrait that sits the same way in the UI.
 const DESCRIBE_ONLY_PROMPT =
-  "A confident golf caddie on a sunny PGA-style fairway, wearing a clean caddie polo and visor, holding a golf club. Photorealistic, soft warm lighting, 9:16 portrait composition with the head and shoulders centered.";
+  "A confident golf caddie on a sunny championship-style fairway, wearing a clean unbranded caddie polo and visor, holding a golf club. No logos, brand marks, or text on any clothing. Photorealistic, soft warm lighting, 9:16 portrait composition with the head and shoulders centered.";
 
 // 2026-07-06 (audit) — read at fetch time, not module load: a module-scope
 // snapshot would defeat the mid-session dual-host failover (see apiBase.ts).

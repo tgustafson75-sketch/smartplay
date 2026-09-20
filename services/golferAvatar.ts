@@ -52,15 +52,24 @@ export async function captureGolferSelfie(): Promise<string | null> {
   return manip.uri;
 }
 
+// 2026-09-20 — every prompt that dresses a person carries the no-logo clause. Neither of these
+// names a brand, but "touring professional" is enough on its own: the custom-caddie prompt came
+// back with a mangled PGA TOUR mark on the polo, and these produce the same kind of artifact — a
+// picture of the user that they keep and can save to their camera roll. Asking for no branding is
+// free; finding someone's trademark on our output later is not. [[no-half-fixes-enforce-every-surface]]
+const NO_BRANDING = 'No logos, brand marks, or text on any clothing. ';
+
 const STYLE_PROMPTS: Record<'caddie' | 'pro', string> = {
   caddie:
     'Stylize this person as a friendly golf caddie. Keep their face clearly recognizable. ' +
-    'Clean caddie polo and visor, sunny fairway behind, photorealistic, warm soft lighting, ' +
+    'Clean unbranded caddie polo and visor, sunny fairway behind, photorealistic, warm soft lighting, ' +
+    NO_BRANDING +
     'head-and-shoulders, centered square composition.',
   pro:
     'Stylize this person as a confident touring professional golfer. Keep their face clearly ' +
-    'recognizable. Clean modern golf polo, course behind, photorealistic, head-and-shoulders, ' +
-    'centered square composition.',
+    'recognizable. Clean modern unbranded golf polo, course behind, photorealistic, ' +
+    NO_BRANDING +
+    'head-and-shoulders, centered square composition.',
 };
 
 /** Selfie URI → AI-stylized caddie/pro portrait as a data: URL. null on any

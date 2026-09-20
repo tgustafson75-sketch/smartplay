@@ -17624,6 +17624,56 @@ check(
       : 'three ways to make a caddie — take a selfie, upload any photo, or describe one in words and send no photo at all. The camera, the library, the Generate button and the route all agree, so no surface can quietly reimpose the selfie');
 }
 
+// 2026-09-20 — a live generation came back wearing a mangled "PGA TOUR" logo, because the prompt
+// asked for a "PGA-style fairway". These images are kept as the player's caddie and can be saved to
+// their camera roll, so a real tour's mark on one is our problem. Every prompt that dresses a person
+// must name no brand and must ask for none.
+{
+  const ROOT = path.resolve(__dirname, '..', '..');
+  const FILES = ['app/profile/custom-caddie.tsx', 'services/golferAvatar.ts'];
+  // Real marks a model will happily render. Word-boundaried so "Masters" the tournament is caught
+  // but "mastersOfTheGreen" or prose about mastering a swing is not.
+  const BRANDS = /\b(PGA|LPGA|DP World|Ryder Cup|Augusta|The Masters|Titleist|Callaway|TaylorMade|Ping|Srixon|FootJoy|Nike|Adidas|Under Armour)\b/i;
+  const offenders: string[] = [];
+  const unprotected: string[] = [];
+  for (const rel of FILES) {
+    const body = readBulk(path.join(ROOT, rel))
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+    // A prompt is often BUILT, not written in one literal: golferAvatar concatenates fragments and
+    // splices in a shared NO_BRANDING const. Scanning raw literals therefore reads half a sentence
+    // and reports a missing clause that is right there — which is exactly what this guard did on
+    // its first run. Inline single-literal consts, then join `'a' + 'b'` into one string, so what
+    // gets tested is what actually reaches the model. [[grep-guards-cant-see-dead-code]]
+    let flat = body;
+    for (const m of body.matchAll(/const\s+([A-Z][A-Z0-9_]*)\s*=\s*'([^']*)'\s*;/g)) {
+      flat = flat.split(m[1]).join(`'${m[2]}'`);
+    }
+    let prev = '';
+    while (prev !== flat) { prev = flat; flat = flat.replace(/'([^']*)'\s*\+\s*'([^']*)'/g, "'$1$2'"); }
+    // Only the prompt literals matter — a brand name elsewhere in the file is not sent to a model.
+    const prompts = flat.match(/'[^']{60,}'|"[^"]{60,}"/g) ?? [];
+    const dressing = prompts.filter((q) => /polo|visor|wearing|clothing|outfit|shirt/i.test(q));
+    if (dressing.length === 0) { unprotected.push(`${rel} (no dressing prompt found — did it move?)`); continue; }
+    for (const q of dressing) {
+      const m = q.match(BRANDS);
+      if (m) offenders.push(`${rel} names "${m[0]}"`);
+      // An explicit NEGATIVE instruction, not merely the adjective "unbranded" on the shirt. The
+      // first version of this guard accepted "unbranded", and a break-test that deleted the whole
+      // "No logos, brand marks, or text" sentence stayed green — the word survived on the polo.
+      // [[break-test-every-guard-you-write]]
+      if (!/\bno\s+(logos|branding|brand\s+marks)/i.test(q)) {
+        unprotected.push(`${rel} dresses a person with no explicit "no logos" instruction`);
+      }
+    }
+  }
+  check('IMAGE PROMPTS: we do not put someone else’s logo on the player',
+    offenders.length === 0 && unprotected.length === 0,
+    [...offenders, ...unprotected].length > 0
+      ? `a generated portrait can come back branded: ${[...offenders, ...unprotected].join('; ')}`
+      : `both image prompts that dress a person name no real tour or equipment brand and explicitly ask for no logos, marks or text on the clothing — the generation that prompted this came back in a counterfeit PGA TOUR polo`);
+}
+
 const total = results.length;
 const passed = results.filter((r) => r.passed).length;
 const failed = results.filter((r) => !r.passed);
