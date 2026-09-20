@@ -1211,8 +1211,40 @@ export const stopSpeaking = async (why: SpeechIdReason = 'stop'): Promise<void> 
     currentAbortController = null;
   }
   if (currentSound) {
+      /**
+       * 2026-09-19 — `stopAsync()` REMOVED FROM IN FRONT OF THE UNLOAD, and it is not a tidy-up.
+       *
+       * Sentry SMARTPLAY-CADDIE-MOBILE-3J, fatal, 3 users, iOS 26.6.x, ~2 seconds after launch on
+       * /greeting:
+       *
+       *     EXC_BAD_ACCESS, KERN_INVALID_ADDRESS at 0x54
+       *     libdispatch  dispatch_async
+       *     SmartPlayCaddie <redacted>
+       *     ← AVFCore  -[AVPlayerItem
+       *                  _unregisterInvokeAndReleasePendingSeekCompletionHandlerForSeekID:finished:]
+       *
+       * That frame is iOS tearing down an AVPlayerItem **that still has a seek in flight**, and
+       * dispatching its completion handler onto memory that is going away.
+       *
+       * Where the seek came from: expo-av's `stopAsync()` is not a stop. Read its source —
+       * `av.js:185` — it is `setStatusAsync({ positionMillis: 0, shouldPlay: false })`. Setting a
+       * position IS A SEEK. So `await stopAsync(); await unloadAsync();` means "seek this player to
+       * zero, then release it", and the await on stopAsync resolves when the status is applied, not
+       * when AVFoundation's seek completion handler has run. The window is small, which is why it
+       * takes a cold launch to hit it.
+       *
+       * And the stopAsync was never needed. `unloadAsync()` calls `ExponentAV.unloadForSound()`
+       * directly (Sound.js:247) — the native unload stops playback and releases the player by
+       * itself, and it still fires the status update with `isLoaded: false`, so every
+       * `if (!s.isLoaded)` branch in this file behaves exactly as before. The line removed nothing
+       * but the race.
+       *
+       * HONEST LIMIT: the app frames are unsymbolicated (`<redacted>`), so this is a mechanism that
+       * exactly produces the reported frame, not a proof. It is also a redundant call removed, so
+       * it costs nothing if the crash turns out to be something else.
+       * [[a-log-field-can-be-an-artefact]]
+       */
     try {
-      await currentSound.stopAsync();
       await currentSound.unloadAsync();
     } catch {}
     currentSound = null;
@@ -1380,8 +1412,12 @@ export const playLocalFile = async (
     currentAbortController = null;
   }
   if (currentSound) {
+      /**
+       * 2026-09-19 — NO `stopAsync()` BEFORE `unloadAsync()`. See services/voiceService's first
+       * occurrence for the full reasoning; in short, stopAsync IS A SEEK and the unload releases
+       * the player out from under its completion handler.
+       */
     try {
-      await currentSound.stopAsync();
       await currentSound.unloadAsync();
     } catch {}
     currentSound = null;
@@ -1545,8 +1581,12 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
     currentAbortController = null;
   }
   if (currentSound) {
+      /**
+       * 2026-09-19 — NO `stopAsync()` BEFORE `unloadAsync()`. See services/voiceService's first
+       * occurrence for the full reasoning; in short, stopAsync IS A SEEK and the unload releases
+       * the player out from under its completion handler.
+       */
     try {
-      await currentSound.stopAsync();
       await currentSound.unloadAsync();
     } catch {}
     currentSound = null;
@@ -1777,8 +1817,12 @@ export const speak = async (
     currentAbortController = null;
   }
   if (currentSound) {
+      /**
+       * 2026-09-19 — NO `stopAsync()` BEFORE `unloadAsync()`. See services/voiceService's first
+       * occurrence for the full reasoning; in short, stopAsync IS A SEEK and the unload releases
+       * the player out from under its completion handler.
+       */
     try {
-      await currentSound.stopAsync();
       await currentSound.unloadAsync();
     } catch {}
     currentSound = null;

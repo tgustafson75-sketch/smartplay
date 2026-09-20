@@ -153,7 +153,9 @@ export default function CustomCaddieScreen() {
         recordingRef.current?.stopAndUnloadAsync().catch(() => undefined);
       } catch { /* ignore */ }
       try {
-        previewSoundRef.current?.stopAsync().catch(() => undefined);
+        // 2026-09-19 — no stopAsync() first: it is a SEEK (expo-av av.js:185), and releasing the
+        // player with one in flight is the AVPlayerItem crash in SMARTPLAY-CADDIE-MOBILE-3J. This
+        // one is an UNMOUNT cleanup and was not even awaited, so the two raced in the same tick.
         previewSoundRef.current?.unloadAsync().catch(() => undefined);
       } catch { /* ignore */ }
     };
@@ -373,7 +375,7 @@ export default function CustomCaddieScreen() {
     try {
       // Stop any prior preview so the mic isn't fighting playback.
       if (previewSoundRef.current) {
-        try { await previewSoundRef.current.stopAsync(); } catch { /* ignore */ }
+        // unloadAsync stops and releases on its own; a stopAsync first only adds a pending seek.
         try { await previewSoundRef.current.unloadAsync(); } catch { /* ignore */ }
         previewSoundRef.current = null;
         setPreviewingPhraseId(null);
@@ -459,7 +461,7 @@ export default function CustomCaddieScreen() {
     try {
       // Stop any prior preview before starting a new one.
       if (previewSoundRef.current) {
-        try { await previewSoundRef.current.stopAsync(); } catch { /* ignore */ }
+        // unloadAsync stops and releases on its own; a stopAsync first only adds a pending seek.
         try { await previewSoundRef.current.unloadAsync(); } catch { /* ignore */ }
         previewSoundRef.current = null;
       }

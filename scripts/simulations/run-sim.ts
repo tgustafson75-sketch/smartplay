@@ -17490,6 +17490,71 @@ check(
     "every stop — the screen's timeout, the camera's backstop, the Stop button, the voice command — goes through one gate that knows whether anything is recording, and the gate attaches a catch because native state can still end a recording between our flag and the call");
 }
 
+/**
+ * 2026-09-19 — NEVER RELEASE AN AUDIO PLAYER WITH A SEEK IN FLIGHT.
+ *
+ * Sentry SMARTPLAY-CADDIE-MOBILE-3J: fatal, 3 users, iOS 26.6.x, ~2s after launch on /greeting.
+ *
+ *     EXC_BAD_ACCESS, KERN_INVALID_ADDRESS at 0x54
+ *     libdispatch dispatch_async  ←  AVFCore
+ *     -[AVPlayerItem _unregisterInvokeAndReleasePendingSeekCompletionHandlerForSeekID:finished:]
+ *
+ * iOS tearing down an AVPlayerItem that still has a seek pending, and dispatching its completion
+ * handler onto memory that is going away.
+ *
+ * The seek came from `stopAsync()`, which is not a stop: expo-av defines it as
+ * `setStatusAsync({ positionMillis: 0, shouldPlay: false })` (av.js:185), and setting a position is
+ * a seek. Seven call sites did `stopAsync()` then `unloadAsync()` — seek, then release. The stop was
+ * redundant the whole time: `unloadAsync()` calls the native unload directly (Sound.js:247), which
+ * stops playback, releases the player, AND still fires the status update with `isLoaded: false`, so
+ * every `if (!s.isLoaded)` branch behaves exactly as before.
+ *
+ * Swept rather than listed, and COMMENT-STRIPPED — the fix left the word `stopAsync` in prose at
+ * five of the seven sites, so a guard reading raw source would match its own explanation.
+ * [[strip-comments-before-a-guard-matches]]
+ */
+{
+  /** Local walker + root — the NAV sweep's copies are block-scoped and not visible here. */
+  const AV_ROOT = path.resolve(__dirname, '../../');
+  const walkAv = (dir: string): string[] => {
+    const out: string[] = [];
+    let entries: string[] = [];
+    try { entries = fs.readdirSync(dir); } catch { return out; }
+    for (const e of entries) {
+      const abs = path.join(dir, e);
+      let stat;
+      try { stat = fs.statSync(abs); } catch { continue; }
+      if (stat.isDirectory()) { if (e !== 'node_modules') out.push(...walkAv(abs)); }
+      else if (e.endsWith('.tsx') || e.endsWith('.ts')) out.push(abs);
+    }
+    return out;
+  };
+  const SEEKS = ['stopAsync', 'setPositionAsync', 'replayAsync', 'playFromPositionAsync'];
+  const scanned: string[] = [];
+  const offenders: string[] = [];
+  for (const dir of ['app', 'components', 'services', 'hooks']) {
+    for (const abs of walkAv(path.join(AV_ROOT, dir))) {
+      const rel = path.relative(AV_ROOT, abs);
+      if (rel.includes('__tests__')) continue;
+      const body = readBulk(abs).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+      if (!body.includes('unloadAsync')) continue;
+      scanned.push(rel);
+      for (const seek of SEEKS) {
+        // A seek and a release within ~160 characters of each other is the adjacency that crashed:
+        // "seek this player, then let it go". Deliberately narrow — a seek on a metronome beat and
+        // an unload on unmount are far apart and are not this bug.
+        const re = new RegExp(`${seek}\\([^)]*\\)[\\s\\S]{0,160}?unloadAsync`);
+        if (re.test(body)) offenders.push(`${rel} (${seek} immediately before unloadAsync)`);
+      }
+    }
+  }
+  check('AUDIO: no player is released with a seek still in flight',
+    scanned.length >= 5 && offenders.length === 0,
+    offenders.length > 0
+      ? `these seek and then release in the same breath — the AVPlayerItem crash: ${offenders.join(', ')}`
+      : `swept ${scanned.length} files that unload an audio player; none issues a seek (stopAsync / setPositionAsync / replayAsync) immediately before releasing it. unloadAsync stops and releases on its own, so the seek was only ever a race`);
+}
+
 const total = results.length;
 const passed = results.filter((r) => r.passed).length;
 const failed = results.filter((r) => !r.passed);
