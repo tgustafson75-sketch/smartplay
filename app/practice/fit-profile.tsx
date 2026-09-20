@@ -40,7 +40,7 @@ const TRACKED_COLOR = '#3FB950';
 const STATED_COLOR = '#22d3ee';
 
 export default function FitProfileScreen() {
-  const { unit: distanceUnit, label } = useDistanceFormat();
+  const { unit: distanceUnit, label, toDisplay, fmtCompact } = useDistanceFormat();
   const { t } = useTranslation();
   const { colors } = useTheme();
   const router = useRouter();
@@ -141,7 +141,7 @@ export default function FitProfileScreen() {
     const yInYards = Math.round(fromDisplayDistance(y, distanceUnit) ?? y);
     const ok = useClubStatsStore.getState().setManual(club as ClubName, yInYards, draftUnit);
     if (!ok) {
-      setDraftError(t('practice_fit_profile.unit.refused', { min: toDisplayDistance(STATED_YARDS_MIN, distanceUnit), max: toDisplayDistance(STATED_YARDS_MAX, distanceUnit) }));
+      setDraftError(t('practice_fit_profile.unit.refused', { min: toDisplayDistance(STATED_YARDS_MIN, distanceUnit), max: toDisplayDistance(STATED_YARDS_MAX, distanceUnit) , unit: label }));
       return;
     }
     setDraftError(null);
@@ -578,7 +578,7 @@ export default function FitProfileScreen() {
                       {draftError
                         ? draftError
                         : draftUnit === 'total'
-                          ? t('practice_fit_profile.unit.total_hint', { roll: ROLL_BY_CLUB[c.club as ClubName] ?? 0 })
+                          ? t('practice_fit_profile.unit.total_hint', { roll: ROLL_BY_CLUB[c.club as ClubName] ?? 0 , unit: label })
                           : t('practice_fit_profile.unit.carry_hint')}
                     </Text>
                   </View>
@@ -614,8 +614,8 @@ export default function FitProfileScreen() {
               // when there is a tracked number to contrast with — on its own it would just repeat the
               // figure already on the right of the same row.
               if (entry != null && unit === 'total') parts.push(t('practice_fit_profile.row.you_set_total', { yards: toDisplayDistance(entry, distanceUnit) }));
-              else if (entry != null && overridden) parts.push(t('practice_fit_profile.row.you_set_carry', { yards: entry }));
-              if (overridden) parts.push(t('practice_fit_profile.row.tracked_is', { yards: Math.round(trackedY!) }));
+              else if (entry != null && overridden) parts.push(t('practice_fit_profile.row.you_set_carry', { yards: toDisplayDistance(entry, distanceUnit) }));
+              if (overridden) parts.push(t('practice_fit_profile.row.tracked_is', { yards: toDisplayDistance(trackedY!, distanceUnit) }));
               return parts.length > 0 ? parts.join(' · ') : null;
             })();
             /**
@@ -645,7 +645,7 @@ export default function FitProfileScreen() {
                   ) : null}
                 </View>
                 <View style={styles.ladderRight}>
-                  <Text style={[styles.ladderYards, { color: c.measured || c.stated ? colors.text_primary : colors.text_muted }]}>{Math.round(c.yards)}<Text style={styles.ladderUnit}> yd</Text></Text>
+                  <Text style={[styles.ladderYards, { color: c.measured || c.stated ? colors.text_primary : colors.text_muted }]}>{toDisplay(c.yards)}<Text style={styles.ladderUnit}> {label}</Text></Text>
                   <View style={[styles.measuredDot, dotStyleFor(c.measured, c.stated)]} />
                   {gapSet.has(c.club) ? <Ionicons name="alert-circle" size={14} color="#f5a623" style={{ marginLeft: 4 }} /> : null}
                   {overlapSet.has(c.club) ? <Ionicons name="copy-outline" size={13} color={colors.text_muted} style={{ marginLeft: 4 }} /> : null}
@@ -685,7 +685,7 @@ export default function FitProfileScreen() {
             <Text style={[styles.cardLabel, { color: '#f5a623' }]}>{t('practice_fit_profile.fit_profile_screen.gaps_to_fill')}</Text>
             {profile.gaps.map((g, i) => (
               <Text key={i} style={[styles.gapText, { color: colors.text_primary }]}>
-                {t('practice_fit_profile.fit_profile_screen.gap_line', { gapYards: g.gapYards, upper: g.upper, lower: g.lower, centerYards: g.centerYards })}
+                {t('practice_fit_profile.fit_profile_screen.gap_line', { unit: label, gapYards: toDisplay(g.gapYards), upper: g.upper, lower: g.lower, centerYards: toDisplay(g.centerYards) })}
               </Text>
             ))}
           </View>
@@ -702,7 +702,7 @@ export default function FitProfileScreen() {
               */}
             {[...profile.overlaps].sort((a, b) => a.gapYards - b.gapYards).slice(0, 4).map((o, i) => (
               <Text key={i} style={[styles.gapText, { color: colors.text_primary }]}>
-                {t('practice_fit_profile.fit_profile_screen.overlap_line', { longer: o.longer, shorter: o.shorter, gapYards: o.gapYards })}
+                {t('practice_fit_profile.fit_profile_screen.overlap_line', { unit: label, longer: o.longer, shorter: o.shorter, gapYards: o.gapYards })}
               </Text>
             ))}
             {profile.overlaps.length > 4 ? (
@@ -899,7 +899,7 @@ export default function FitProfileScreen() {
                       {t('practice_fit_profile.compare.stat', {
                         defaultValue: '{{shots}} shots · {{yards}} · {{trouble}}% trouble',
                         shots: v.shots,
-                        yards: v.avgYards != null ? `${v.avgYards}y` : '—',
+                        yards: v.avgYards != null ? fmtCompact(v.avgYards) : '—',
                         trouble: v.troublePct,
                       })}
                     </Text>

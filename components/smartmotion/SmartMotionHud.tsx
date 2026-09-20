@@ -21,6 +21,7 @@
  */
 
 import React from 'react';
+import { useDistanceFormat } from '../../hooks/useDistanceUnit';
 import {
   View,
   Text,
@@ -642,6 +643,7 @@ export function FooterChips({
   onClubPress?: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
+  const { toDisplay, label } = useDistanceFormat();
   const { t } = useTranslation();
   const { colors } = useTheme();
   // 2026-08-19 — every chip text can SHRINK and is capped at one line. Each chip is flex:1 (a third of
@@ -669,7 +671,7 @@ export function FooterChips({
         <Chip label={t('scorecard.col_club')} value={club ?? '—'} />
       )}
       <Chip label={t('smartmotion_smart_motion_hud.label.shot')} value={shot != null ? String(shot) : '—'} />
-      <Chip label={t('smartmotion_smart_motion_hud.label.dist')} sub={distanceYds != null && distanceEst ? 'est' : undefined} value={distanceYds != null ? `${distanceYds} YDS` : '—'} />
+      <Chip label={t('smartmotion_smart_motion_hud.label.dist')} sub={distanceYds != null && distanceEst ? 'est' : undefined} value={distanceYds != null ? `${toDisplay(distanceYds)} ${label.toUpperCase()}` : '—'} />
     </View>
   );
 }

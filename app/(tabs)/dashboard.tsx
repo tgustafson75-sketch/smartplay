@@ -716,7 +716,7 @@ export default function Dashboard() {
   // 2026-06-04 — Coach Mode toggle. When false, the shared-group card +
   // Coach Mode CTA below are hidden even if the user has a roster set
   // up. Toggle lives in the Caddie tab's expandable green-arrow row.
-  const { fmtCompact } = useDistanceFormat();
+  const { fmtCompact, toDisplay } = useDistanceFormat();
   const coachModeEnabled = useSettingsStore(s => s.coachModeEnabled);
   // 2026-06-12 — the AI-read card title must reflect the ACTIVE caddie, not always
   // "Kevin" (Tank/Serena users saw Kevin's name). Keep the localized label for the
@@ -1225,7 +1225,7 @@ export default function Dashboard() {
           <StatTile
             colors={colors}
             icon="flag-outline"
-            value={shotStats.teeShots === 0 || shotStats.avgYds === 0 ? '—' : String(shotStats.avgYds)}
+            value={shotStats.teeShots === 0 || shotStats.avgYds === 0 ? '—' : String(toDisplay(shotStats.avgYds))}
             label={t('dashboard.tee_avg')}
           />
           {/**

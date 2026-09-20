@@ -67,6 +67,7 @@ import { recordPracticeSwingIfActive, usePracticeSessionStore } from '../../stor
 import type { SwingCameraHandle } from '../../components/capture/SwingVisionCamera';
 import { useCaptureEngineStore } from '../../store/captureEngineStore';
 import { captureQualityNote, clubheadUnreadableNote, beforeFirstCaptureTip } from '../../services/captureQuality';
+import { formatDistance, liveDistanceUnit, toDisplayDistance, unitLabel } from '../../services/distanceUnits';
 import { estimateCarryYards } from '../../services/swing/carryEstimate';
 // 2026-07-30 (analysis audit C2/C4) — single-flight queue wrapper, not raw expo-video-thumbnails, so the
 // address-still grab can't run a native retriever concurrently with another extractor. Drop-in re-export.
@@ -2436,9 +2437,9 @@ export default function SmartMotion() {
       {
         key: 'speed',
         title: 'SPEED · TEMPO',
-        value: tempo?.ratio != null ? `${tempo.ratio.toFixed(1)}:1` : carry != null ? `${carry} yds` : clubSpeed != null ? `${clubSpeed} mph` : null,
+        value: tempo?.ratio != null ? `${tempo.ratio.toFixed(1)}:1` : carry != null ? formatDistance(carry, liveDistanceUnit()) : clubSpeed != null ? `${clubSpeed} mph` : null,
         note: tempo?.ratio != null
-          ? `Tempo${carry != null ? ` · ${carry} yds carry` : ''}${tempo.sequencingScore != null ? ` · ${transitionLabel(tempo.sequencingScore)}` : ''}`
+          ? `Tempo${carry != null ? ` · ${formatDistance(carry, liveDistanceUnit())} carry` : ''}${tempo.sequencingScore != null ? ` · ${transitionLabel(tempo.sequencingScore)}` : ''}`
           : carry != null || clubSpeed != null
             ? 'Speed measured; no readable tempo on this swing.'
             : 'No speed or tempo measured from this swing.',
@@ -6297,7 +6298,7 @@ export default function SmartMotion() {
                               handicap-table lookup is identical for every swing and carries no signal. */}
                           <SpeedStat label={t('scorecard.col_club')} value={isSwingDerived(metrics.club_speed.source) && metrics.club_speed.value != null ? String(metrics.club_speed.value) : null} unit="mph" estimate={!isTruthGrade(metrics.club_speed.source)} style={{ flex: 1 }} />
                           <SpeedStat label={t('swinglab_smartmotion.label.ball')} value={isSwingDerived(metrics.ball_speed.source) && metrics.ball_speed.value != null ? String(metrics.ball_speed.value) : null} unit="mph" estimate={!isTruthGrade(metrics.ball_speed.source)} style={{ flex: 1 }} />
-                          <SpeedStat label={t('swinglab_smartmotion.label.carry')} value={isSwingDerived(metrics.carry_yards.source) && metrics.carry_yards.value != null ? String(metrics.carry_yards.value) : null} unit="yds" estimate={!isTruthGrade(metrics.carry_yards.source)} style={{ flex: 1 }} />
+                          <SpeedStat label={t('swinglab_smartmotion.label.carry')} value={isSwingDerived(metrics.carry_yards.source) && metrics.carry_yards.value != null ? String(toDisplayDistance(metrics.carry_yards.value, liveDistanceUnit())) : null} unit={unitLabel(liveDistanceUnit())} estimate={!isTruthGrade(metrics.carry_yards.source)} style={{ flex: 1 }} />
                         </View>
                         <TempoBar ratio={tempo?.ratio ?? null} />
                         {tempo?.ratio != null && tempo.backswingMs != null && tempo.downswingMs != null ? (
@@ -6381,7 +6382,7 @@ export default function SmartMotion() {
               <View style={styles.planCard}>
                 <Text style={styles.planLabel}>{t('swinglab_smartmotion.smart_motion.carry')}</Text>
                 <Text style={styles.planValue} numberOfLines={1}>{estCarry != null ? `~${estCarry}` : '—'}</Text>
-                <Text style={styles.planUnit}>{estCarry != null ? 'yds' : ''}</Text>
+                <Text style={styles.planUnit}>{estCarry != null ? unitLabel(liveDistanceUnit()) : ''}</Text>
               </View>
               {/* 2026-08-19 — AIM read the angle between the ball box and the target the player
                   dragged. That guideline is hidden now, so the only aim it could report is the

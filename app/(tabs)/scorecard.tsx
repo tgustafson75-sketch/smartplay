@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useDistanceFormat } from '../../hooks/useDistanceUnit';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Animated, Share, Alert, useWindowDimensions,
@@ -47,6 +48,7 @@ const SCORE_FILL = (diff: number): string => {
 };
 
 export default function Scorecard() {
+  const { label, toDisplay } = useDistanceFormat();
   const router = useRouter();
   const { t } = useTranslation();
   const apiUrl = getApiBaseUrl();
@@ -699,7 +701,7 @@ export default function Scorecard() {
           </Text>
           <View style={{ flex: 1 }}>
             <Text style={[styles.holeMeta, { color: c.text_secondary }]}>
-              {t('scorecard.hole_par', { par: h.par })}{h.distance > 0 ? t('scorecard.hole_dist', { dist: h.distance }) : ''}
+              {t('scorecard.hole_par', { par: h.par })}{h.distance > 0 ? t('scorecard.hole_dist', { dist: toDisplay(h.distance), unit: label }) : ''}
             </Text>
             {holePuttsRecorded ? (
               <Text style={[styles.holeSub, { color: c.text_muted }]}>{t('scorecard.n_putts', { count: holePutts })}</Text>
@@ -1073,7 +1075,7 @@ export default function Scorecard() {
               <View style={[styles.clubRow, styles.clubHeader, { backgroundColor: c.surface_elevated, borderBottomColor: c.border }]}>
                 <Text style={[styles.clubCell, styles.clubColClub, { color: c.text_muted }]}>{t('scorecard.col_club')}</Text>
                 <Text style={[styles.clubCell, styles.clubColCount, { color: c.text_muted }]}>{t('scorecard.col_used')}</Text>
-                <Text style={[styles.clubCell, styles.clubColAvg, { color: c.text_muted }]}>{t('scorecard.col_avg_yds')}</Text>
+                <Text style={[styles.clubCell, styles.clubColAvg, { color: c.text_muted }]}>{t('scorecard.col_avg_yds', { unit: label.toUpperCase() })}</Text>
               </View>
               {clubUsage.map(item => (
                 <View key={item.club} style={[styles.clubRow, { borderBottomColor: c.border }]}>
@@ -1145,7 +1147,7 @@ export default function Scorecard() {
               <View style={[styles.clubRow, styles.clubHeader, { backgroundColor: c.surface_elevated, borderBottomColor: c.border }]}>
                 <Text style={[styles.clubCell, styles.clubColClub, { color: c.text_muted }]}>{t('scorecard.col_club')}</Text>
                 <Text style={[styles.clubCell, styles.clubColCount, { color: c.text_muted }]}>{t('scorecard.col_used')}</Text>
-                <Text style={[styles.clubCell, styles.clubColAvg, { color: c.text_muted }]}>{t('scorecard.col_avg_yds')}</Text>
+                <Text style={[styles.clubCell, styles.clubColAvg, { color: c.text_muted }]}>{t('scorecard.col_avg_yds', { unit: label.toUpperCase() })}</Text>
               </View>
               {lifetimeClubUsage.map(item => (
                 <View key={item.club} style={[styles.clubRow, { borderBottomColor: c.border }]}>

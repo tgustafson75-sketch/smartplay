@@ -1,4 +1,5 @@
 import React from 'react';
+import { useDistanceFormat } from '../../hooks/useDistanceUnit';
 import { View, Text, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
@@ -27,6 +28,7 @@ export function HoleBrandBadge({
   /** Position override — the mount point sets top/right so it clears the tools pill. */
   style?: StyleProp<ViewStyle>;
 }) {
+  const { toDisplay } = useDistanceFormat();
   const { t } = useTranslation();
   const courseLabel = (course || '').trim();
   const hasDist = typeof distanceYds === 'number' && distanceYds > 0;
@@ -43,7 +45,7 @@ export function HoleBrandBadge({
         <Text style={styles.hole}>{t('caddie_hole_brand_badge.hole_brand_badge.hole', { hole })}</Text>
         {hasDist ? (
           <View style={styles.distWrap}>
-            <Text style={styles.dist}>{distanceYds}</Text>
+            <Text style={styles.dist}>{toDisplay(distanceYds)}</Text>
             <Text style={styles.distCaption}>{distanceCaption}</Text>
           </View>
         ) : null}

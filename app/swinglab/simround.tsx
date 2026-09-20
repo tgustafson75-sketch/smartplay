@@ -10,6 +10,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useDistanceFormat } from '../../hooks/useDistanceUnit';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ImageBackground, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -52,6 +53,8 @@ function callLine(persona: string, kind: 'flush' | 'good' | 'poor' | 'trees' | '
 }
 
 export default function SwingSimScreen() {
+  // The sim's own HUD reads in the player's unit; a putt stays in feet, as everywhere.
+  const { fmtCompact, toDisplay, label, labelShort } = useDistanceFormat();
   const { t } = useTranslation();
   const router = useRouter();
   const persona = useSettingsStore((s) => s.caddiePersonality);
@@ -298,12 +301,12 @@ export default function SwingSimScreen() {
       // folds it into the hypotenuse, so adding it again double-counted it. One owner in simGame.
       const ft = puttFeetFrom(newRemaining);
       setPuttFt(ft);
-      setBanner({ title: `ON IN ${s}`, sub: `${out.carryYds}y ${out.flushed ? '— FLUSHED' : ''} · ${ft}ft for ${scoreName(s + 1, hole.par).toLowerCase()}`, tone: 'good' });
+      setBanner({ title: `ON IN ${s}`, sub: `${fmtCompact(out.carryYds)} ${out.flushed ? '— FLUSHED' : ''} · ${ft}ft for ${scoreName(s + 1, hole.par).toLowerCase()}`, tone: 'good' });
       setStage('putt');
     } else {
       const kind = out.flushed ? 'flush' : newLie === 'trees' ? 'trees' : out.quality >= 0.55 ? 'good' : 'poor';
       setBanner({
-        title: `${out.carryYds}y · ${newLie.toUpperCase()}`,
+        title: `${fmtCompact(out.carryYds)} · ${newLie.toUpperCase()}`,
         sub: callLine(persona, kind),
         tone: out.flushed ? 'good' : newLie === 'trees' ? 'bad' : out.quality >= 0.55 ? 'good' : 'warn',
       });
@@ -386,7 +389,7 @@ export default function SwingSimScreen() {
             return (
               <TouchableOpacity key={id} style={[s.courseCard, courseId === id && { borderColor: NEON }]} onPress={() => setCourseId(id)} accessibilityRole="button">
                 <Text style={s.courseName}>{c.name}</Text>
-                <Text style={s.courseSub}>{t('swinglab_simround.text.par_y', { par: c.par, totalYards: c.totalYards })}</Text>
+                <Text style={s.courseSub}>{t('swinglab_simround.text.par_y', { par: c.par, unit: labelShort, totalYards: toDisplay(c.totalYards) })}</Text>
               </TouchableOpacity>
             );
           })}
@@ -490,7 +493,7 @@ export default function SwingSimScreen() {
             {stage === 'flyover' ? (
               <Animated.View style={[s.flyCard, { opacity: fade }]}>
                 <Text style={s.flyHole}>{t('swinglab_simround.swing_sim_screen.hole', { hole: hole.hole })}</Text>
-                <Text style={s.flyPar}>{t('swinglab_simround.swing_sim_screen.par_yds', { par: hole.par, distance: hole.distance })}</Text>
+                <Text style={s.flyPar}>{t('swinglab_simround.swing_sim_screen.par_yds', { par: hole.par, unit: label.toUpperCase(), distance: toDisplay(hole.distance) })}</Text>
                 <Text style={s.flyCourse}>{course.name.toUpperCase()}</Text>
               </Animated.View>
             ) : null}
@@ -506,7 +509,7 @@ export default function SwingSimScreen() {
           {/* HUD deck */}
           <View style={s.deck}>
             <View style={s.hudRow}>
-              <View style={s.hudStat}><Text style={s.hudValue}>{stage === 'putt' ? `${puttFt}ft` : `${remaining}y`}</Text><Text style={s.hudLabel}>{stage === 'putt' ? 'TO THE CUP' : 'TO THE PIN'}</Text></View>
+              <View style={s.hudStat}><Text style={s.hudValue}>{stage === 'putt' ? `${puttFt}ft` : fmtCompact(remaining)}</Text><Text style={s.hudLabel}>{stage === 'putt' ? 'TO THE CUP' : 'TO THE PIN'}</Text></View>
               <View style={s.hudStat}><Text style={s.hudValue}>{strokes}</Text><Text style={s.hudLabel}>{t('swinglab_simround.swing_sim_screen.strokes')}</Text></View>
               <View style={s.hudStat}><Text style={s.hudValue}>{lie.toUpperCase()}</Text><Text style={s.hudLabel}>{t('swinglab_simround.swing_sim_screen.lie')}</Text></View>
             </View>

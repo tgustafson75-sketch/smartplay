@@ -7,6 +7,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { useDistanceFormat } from '../hooks/useDistanceUnit';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -21,6 +22,7 @@ function sumPar(holes: CourseHole[]): number { return holes.reduce((s, h) => s +
 function sumYds(holes: CourseHole[]): number { return holes.reduce((s, h) => s + (h.distance > 0 ? h.distance : 0), 0); }
 
 export default function CourseLayoutScreen() {
+  const { toDisplay, label } = useDistanceFormat();
   const { t } = useTranslation();
   const { colors } = useTheme();
   const router = useRouter();
@@ -64,7 +66,7 @@ export default function CourseLayoutScreen() {
     <View key={h.hole} style={[styles.row, { borderColor: colors.border }]}>
       <Text style={[styles.cell, styles.cHole, { color: colors.text_primary }]}>{h.hole}</Text>
       <Text style={[styles.cell, styles.cPar, { color: colors.text_primary }]}>{h.par || '—'}</Text>
-      <Text style={[styles.cell, styles.cYds, { color: colors.text_secondary }]}>{h.distance > 0 ? h.distance : '—'}</Text>
+      <Text style={[styles.cell, styles.cYds, { color: colors.text_secondary }]}>{h.distance > 0 ? toDisplay(h.distance) : '—'}</Text>
     </View>
   ));
 
@@ -72,7 +74,7 @@ export default function CourseLayoutScreen() {
     <View style={[styles.row, styles.summaryRow, { borderColor: colors.accent }]}>
       <Text style={[styles.cell, styles.cHole, styles.summaryText, { color: colors.accent }]}>{label}</Text>
       <Text style={[styles.cell, styles.cPar, styles.summaryText, { color: colors.accent }]}>{sumPar(list) || '—'}</Text>
-      <Text style={[styles.cell, styles.cYds, styles.summaryText, { color: colors.accent }]}>{hasYards ? sumYds(list) : '—'}</Text>
+      <Text style={[styles.cell, styles.cYds, styles.summaryText, { color: colors.accent }]}>{hasYards ? toDisplay(sumYds(list)) : '—'}</Text>
     </View>
   );
 
@@ -98,7 +100,7 @@ export default function CourseLayoutScreen() {
           <View style={[styles.headRow, { borderColor: colors.border }]}>
             <Text style={[styles.cellH, styles.cHole, { color: colors.text_secondary }]}>{t('course_layout.course_layout_screen.hole')}</Text>
             <Text style={[styles.cellH, styles.cPar, { color: colors.text_secondary }]}>{t('scorecard.par')}</Text>
-            <Text style={[styles.cellH, styles.cYds, { color: colors.text_secondary }]}>{t('course_layout.course_layout_screen.yards')}</Text>
+            <Text style={[styles.cellH, styles.cYds, { color: colors.text_secondary }]}>{label.toUpperCase()}</Text>
           </View>
           {renderRows(front)}
           {front.length > 0 && summary('OUT', front)}

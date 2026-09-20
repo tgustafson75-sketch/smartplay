@@ -82,14 +82,14 @@
     "club_usage": "球杆使用 — 本轮",
     "col_club": "球杆",
     "col_used": "使用",
-    "col_avg_yds": "平均码数",
+    "col_avg_yds": "平均 {{unit}}",
     "tap_to_score": "点击记分 ↓",
     "par_n": "标准杆 {{par}}",
     "n_putts": "{{count}} 推杆",
     "share": "分享",
     "share_failed": "无法打开分享菜单。",
     "hole_par": "标准杆 {{par}}",
-    "hole_dist": " · {{dist}} 码",
+    "hole_dist": " · {{dist}} {{unit}}",
     "hole_tap": "第 {{hole}} 洞 · 点击记分",
     "eagle": "老鹰",
     "birdie": "小鸟",
@@ -358,8 +358,8 @@
       "carry": "飞行距离",
       "total": "总距离",
       "carry_hint": "落点距离。过水、过沙坑和任何强制飞越，我都用这个数字。",
-      "total_hint": "球停下的距离——大多数人记的就是它。这支杆我会减去 {{roll}} 码的滚动。",
-      "refused": "这支杆不可能是这个距离。请输入 {{min}} 到 {{max}} 码之间的数字。"
+      "total_hint": "球停下的位置 — 大多数人熟悉的数字。我会减去这支杆 {{roll}} {{unit}} 的滚动。",
+      "refused": "这不是这支杆可能的飞行距离。请给我 {{min}} 到 {{max}} {{unit}} 之间的数值。"
     },
     "row": {
       "you_set_total": "你设定 {{yards}} 总距离",

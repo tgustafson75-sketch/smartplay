@@ -39,7 +39,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { liveDistanceUnit, toDisplayDistance, unitWord } from '../services/distanceUnits';
+import { formatDistanceCompact, liveDistanceUnit, toDisplayDistance, unitWord } from '../services/distanceUnits';
 import {
   View,
   Text,
@@ -1814,7 +1814,7 @@ export default function SmartVisionScreen() {
       const parts: string[] = [];
       // Spoken, so it converts like the SmartFinder callout — same one owner.
       if (mid != null) { const u = liveDistanceUnit(); parts.push(`Hole ${holeNo}. Middle of the green, ${toDisplayDistance(mid, u)} ${unitWord(u)}.`); }
-      if (ar?.playsLikeYards != null && ar.deltaYards !== 0) parts.push(`Plays like ${ar.playsLikeYards}.`);
+      if (ar?.playsLikeYards != null && ar.deltaYards !== 0) parts.push(`Plays like ${toDisplayDistance(ar.playsLikeYards, liveDistanceUnit())}.`);
       if (ar?.club) parts.push(`I'd go ${ar.club}.`);
       if (ar?.hazardNote) parts.push(ar.hazardNote);
       else if (ar?.why?.[0]) parts.push(ar.why[0]);
@@ -2581,7 +2581,7 @@ export default function SmartVisionScreen() {
                     key={'carry-' + i} x={8} y={y}
                     fill="rgba(248,113,113,0.95)" fontSize={9} fontWeight="600"
                   >
-                    {`${carry.distance_yards}y carry \u2014 ${carry.hazard_label}`}
+                    {`${formatDistanceCompact(carry.distance_yards, liveDistanceUnit())} carry \u2014 ${carry.hazard_label}`}
                   </SvgText>
                 );
               })}
@@ -2798,8 +2798,8 @@ export default function SmartVisionScreen() {
             // 2026-06-23 (Tim — "Explain the pick") — tap the bar → show WHY this club.
             const r = aiRead;
             if (!r) return;
-            const parts: string[] = [`${r.club} — ${r.playsLikeYards}y to pin`];
-            if (r.deltaYards !== 0) parts.push(`plays like ${r.playsLikeYards} (${r.rawYards} actual)`);
+            const parts: string[] = [`${r.club} — ${formatDistanceCompact(r.playsLikeYards, liveDistanceUnit())} to pin`];
+            if (r.deltaYards !== 0) parts.push(`plays like ${toDisplayDistance(r.playsLikeYards, liveDistanceUnit())} (${toDisplayDistance(r.rawYards, liveDistanceUnit())} actual)`);
             r.why.forEach(w => parts.push(w));
             if (r.hazardNote) parts.push(`watch the ${r.hazardNote}`);
             if (r.tendencyNote) parts.push(r.tendencyNote);
@@ -2816,7 +2816,7 @@ export default function SmartVisionScreen() {
           <Text style={styles.aiRecClub} numberOfLines={1}>{aiRead.club}</Text>
           <View style={styles.aiRecDivider} />
           <Text style={styles.aiRecSub} numberOfLines={1}>
-            {aiRead.deltaYards !== 0 ? `plays like ${aiRead.playsLikeYards}y` : `${aiRead.playsLikeYards}y to pin`}
+            {aiRead.deltaYards !== 0 ? `plays like ${formatDistanceCompact(aiRead.playsLikeYards, liveDistanceUnit())}` : `${formatDistanceCompact(aiRead.playsLikeYards, liveDistanceUnit())} to pin`}
             {aiRead.why[0] ? `  ·  ${aiRead.why[0]}` : ''}
             {aiRead.hazardNote ? `  ·  ${aiRead.hazardNote}` : ''}
           </Text>
@@ -2887,6 +2887,7 @@ export default function SmartVisionScreen() {
 }
 
 function YdCell({ label, value, emphasis = false, stacked = false }: {
+  /** YARDS — converted here, not at the five call sites, so the cells cannot disagree. */
   label: string; value: number | null; emphasis?: boolean;
   // Phase 406 — stacked layout for the landscape side-panel where the
   // cells run vertically with bigger numbers (more vertical real
@@ -2911,7 +2912,7 @@ function YdCell({ label, value, emphasis = false, stacked = false }: {
         adjustsFontSizeToFit
         minimumFontScale={0.6}
       >
-        {value != null ? Math.round(value) : '—'}
+        {toDisplayDistance(value, liveDistanceUnit()) ?? '—'}
       </Text>
     </View>
   );

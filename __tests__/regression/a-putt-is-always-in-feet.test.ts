@@ -96,11 +96,16 @@ describe('every surface a human reads a putt on says feet', () => {
     expect(shotDistanceDisplay('putter', Number.NaN)).toBeNull();
   });
 
+  /**
+   * 2026-09-19 — the FALLBACK stopped being the literal 'yds'. It now derives from the player's unit
+   * too, which is strictly closer to what this test is named for: the row asks the owner for the
+   * unit and hardcodes nothing. The assertion follows the property rather than the old string.
+   */
   it('the timeline asks the owner rather than hardcoding "yds" on every row', () => {
     const st = code('components/caddie/ShotTimeline.tsx');
     expect(st).toMatch(/shotDistanceDisplay\(shot\.club, shot\.distance_yards(, \w+)?\)/);
     // the unit comes from the answer, so it cannot be right for irons and wrong for putts
-    expect(st).toMatch(/\{dist\?\.unit \?\? 'yds'\}/);
+    expect(st).toMatch(/\{dist\?\.unit \?\? unitLabel\(distanceUnit\)\}/);
     expect(st).not.toMatch(/<Text style=\{styles\.distUnit\}>yds<\/Text>/);
   });
 

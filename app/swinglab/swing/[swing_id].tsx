@@ -8,6 +8,7 @@
  */
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { liveDistanceUnit, toDisplayDistance, unitLabel } from '../../../services/distanceUnits';
 import { impactAnchorMs, narrowClubPathWindow } from '../../../services/swing/clubPathWindow';
 import { wristCentroid, deriveSwingAnchors } from '../../../services/swing/poseMotion';
 import {
@@ -3858,7 +3859,7 @@ export default function SwingDetail() {
                     {session.smart_motion_shot_map.estCarry != null ? (
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.biomechSub, { color: colors.text_muted }]}>{t('swinglab_swing.swing_detail.carry')}</Text>
-                        <Text style={[styles.biomechRow, { color: colors.text_primary, fontWeight: '900' }]}>{t('swinglab_swing.swing_detail.yds', { estCarry: session.smart_motion_shot_map.estCarry })}</Text>
+                        <Text style={[styles.biomechRow, { color: colors.text_primary, fontWeight: '900' }]}>{t('swinglab_swing.swing_detail.yds', { estCarry: toDisplayDistance(session.smart_motion_shot_map.estCarry, liveDistanceUnit()), unit: unitLabel(liveDistanceUnit()) })}</Text>
                       </View>
                     ) : null}
                     {session.smart_motion_shot_map.trace ? (

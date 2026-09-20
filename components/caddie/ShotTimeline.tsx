@@ -23,6 +23,7 @@
  */
 
 import React, { useMemo } from 'react';
+import { unitLabel } from '../../services/distanceUnits';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoundStore, type ShotResult } from '../../store/roundStore';
@@ -147,7 +148,7 @@ export default function ShotTimeline({ maxRows = DEFAULT_MAX_ROWS, holeOnly = fa
               </View>
               <View style={styles.distCol}>
                 <Text style={styles.distValue}>{dist?.value ?? '—'}</Text>
-                <Text style={styles.distUnit}>{dist?.unit ?? 'yds'}</Text>
+                <Text style={styles.distUnit}>{dist?.unit ?? unitLabel(distanceUnit)}</Text>
               </View>
               {oc ? (
                 <View style={[styles.chip, { backgroundColor: oc.bg, borderColor: oc.color }]}>

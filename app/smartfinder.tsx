@@ -1876,20 +1876,20 @@ function TargetCameraOverlay({
     if (!recommendedClub || effectiveYards == null) return 'Aggressive: unavailable until GPS settles.';
     if (hazardIntel && landing) {
       const risk = riskBandFromHazards(hazardIntel.carryToClear, landing.carry);
-      return `Aggressive: ${recommendedClub} to ${effectiveYards}y, carry ${landing.carry}${landing.baseline ? ' est' : ''} (${risk} risk near ${hazardIntel.label}).`;
+      return `Aggressive: ${recommendedClub} to ${fmtCompact(effectiveYards)}, carry ${toDisplay(landing.carry)}${landing.baseline ? ' est' : ''} (${risk} risk near ${hazardIntel.label}).`;
     }
-    return `Aggressive: ${recommendedClub} to ${effectiveYards}y.`;
-  }, [effectiveYards, hazardIntel, landing, recommendedClub]);
+    return `Aggressive: ${recommendedClub} to ${fmtCompact(effectiveYards)}.`;
+  }, [effectiveYards, hazardIntel, landing, recommendedClub, fmtCompact, toDisplay]);
 
   const conservativeLine = useMemo(() => {
     if (!conservativeClub || conservativeYards == null) return 'Conservative: unavailable.';
     if (hazardIntel && conservativeLanding) {
       const clears = conservativeLanding.carry >= hazardIntel.carryToClear;
       const risk = clears ? 'Low' : 'Moderate';
-      return `Conservative: ${conservativeClub} to ~${conservativeYards}y (${risk} risk), leave full approach in.`;
+      return `Conservative: ${conservativeClub} to ~${fmtCompact(conservativeYards)} (${risk} risk), leave full approach in.`;
     }
-    return `Conservative: ${conservativeClub} to ~${conservativeYards}y, leave approach in.`;
-  }, [conservativeClub, conservativeLanding, conservativeYards, hazardIntel]);
+    return `Conservative: ${conservativeClub} to ~${fmtCompact(conservativeYards)}, leave approach in.`;
+  }, [conservativeClub, conservativeLanding, conservativeYards, hazardIntel, fmtCompact]);
 
   const adjustedClub = useMemo(() => {
     if (!hazardIntel || !recommendedClub || !landing) return recommendedClub;
@@ -2025,11 +2025,11 @@ function TargetCameraOverlay({
               <View style={styles.targetIntelTopRow}>
                 <View style={styles.targetIntelMetric}>
                   <Text style={styles.targetIntelLabel}>{t('smartfinder.target_camera_overlay.raw')}</Text>
-                  <Text style={styles.targetIntelValue}>{targetYards ?? '—'}</Text>
+                  <Text style={styles.targetIntelValue}>{toDisplay(targetYards) ?? '—'}</Text>
                 </View>
                 <View style={styles.targetIntelMetric}>
                   <Text style={styles.targetIntelLabel}>{t('smartfinder.target_camera_overlay.plays')}</Text>
-                  <Text style={styles.targetIntelValueAccent}>{effectiveYards ?? '—'}</Text>
+                  <Text style={styles.targetIntelValueAccent}>{toDisplay(effectiveYards) ?? '—'}</Text>
                 </View>
                 <View style={styles.targetIntelMetric}>
                   <Text style={styles.targetIntelLabel}>{t('scorecard.col_club')}</Text>

@@ -11,6 +11,8 @@
  * tee→rest total as a carry you must FLY a hazard.
  */
 import React, { useMemo, useState } from 'react';
+import { fromDisplayDistance, unitWord } from '../services/distanceUnits';
+import { useDistanceFormat } from '../hooks/useDistanceUnit';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Switch } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,6 +27,8 @@ type EditableRow = { club: ClubName; yards: string; include: boolean };
 type Phase = 'idle' | 'scanning' | 'review';
 
 export default function ArccosImportScreen() {
+  // The unit the typed numbers are READ in — the label and the reading must agree.
+  const { unit: distanceUnit, label } = useDistanceFormat();
   const { t } = useTranslation();
   const { colors } = useTheme();
   const [phase, setPhase] = useState<Phase>('idle');
@@ -90,8 +94,21 @@ export default function ArccosImportScreen() {
     const refused: string[] = [];
     for (const r of rows) {
       if (!r.include) continue;
-      const y = parseInt(r.yards, 10);
-      if (!Number.isFinite(y) || y <= 0) continue;
+      const typed = parseInt(r.yards, 10);
+      if (!Number.isFinite(typed) || typed <= 0) continue;
+      /**
+       * 2026-09-19 — READ IN THE PLAYER'S UNIT, STORED IN YARDS.
+       *
+       * The numbers arrive from an Arccos screenshot in whatever unit Arccos was showing, and the
+       * player then confirms or edits them HERE — on a field this screen labels. So the label and
+       * the reading must agree: a player set to metres confirming "133" means 133 metres, and
+       * `setManual` / `recordTotal` both take YARDS. Storing 133 there would set a stated centre
+       * 9% short, and the ingest band around it rejects every real shot with that club.
+       *
+       * A no-op for the default (yards) player, where the conversion is identity.
+       * [[no-half-fixes-enforce-every-surface]]
+       */
+      const y = Math.round(fromDisplayDistance(typed, distanceUnit) ?? typed);
       const kept = unit === 'carry'
         ? store.setManual(r.club, y)     // stated carry (My Bag)
         : store.recordTotal(r.club, y);  // tee→rest total ladder
@@ -196,10 +213,10 @@ export default function ArccosImportScreen() {
                       keyboardType="number-pad"
                       maxLength={3}
                       editable={r.include}
-                      placeholder="yds"
+                      placeholder={label}
                       placeholderTextColor={colors.text_muted}
                       style={[styles.input, { color: colors.text_primary, borderColor: r.include ? colors.accent : colors.border, opacity: r.include ? 1 : 0.4 }]}
-                      accessibilityLabel={`${r.club} distance in yards`}
+                      accessibilityLabel={`${r.club} distance in ${unitWord(distanceUnit)}`}
                     />
                     <Text style={[styles.unitYd, { color: colors.text_muted }]}>yd</Text>
                     <Switch value={r.include} onValueChange={() => toggleInclude(r.club)} />

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { formatDistance, liveDistanceUnit, unitWord } from '../../services/distanceUnits';
 import { Modal, TextInput ,
   View,
   Text,
@@ -199,7 +200,7 @@ export default function CageIndex() {
               </Text>
               <Text style={styles.cameraSub}>
                 {cameraAlignment?.distance_yards != null
-                  ? `Calibrated to ${cameraAlignment.distance_yards} yards`
+                  ? `Calibrated to ${formatDistance(cameraAlignment.distance_yards, liveDistanceUnit())}`
                   : cameraAlignment?.locked
                     ? 'SwingLab ready · distance not calibrated'
                     : 'Optional — tap to set up'}
@@ -324,7 +325,7 @@ export default function CageIndex() {
             <Text style={calStyles.body}>
               {t('practice_session.cage_index.walk_to_a_reference_target')}
             </Text>
-            <Text style={calStyles.label}>{t('practice_session.cage_index.yards')}</Text>
+            <Text style={calStyles.label}>{unitWord(liveDistanceUnit(), true).replace(/^./, (c) => c.toUpperCase())}</Text>
             <TextInput
               style={calStyles.input}
               value={calibrationInput}

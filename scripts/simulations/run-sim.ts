@@ -8932,7 +8932,10 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /estimatedCarryYds: estCarry/.test(smSrc2) &&
       // 2026-07-04 (drift reconcile) — the CARRY display moved into the shot-map deck.
       // 2026-07-07 (audit M2) — relabeled "PLAN CARRY" so a projection isn't shown as an outcome.
-      /Stat label=\{t\('smartmotion_shot_map_page\.label\.plan_carry'\)\} value=\{`~\$\{estCarry\}y`\}/.test(read('components/smartmotion/ShotMapPage.tsx')) &&
+      // 2026-09-19 — the `y` moved into services/distanceUnits (metres for a player set to metres).
+      // The property is unchanged and is what this line is for: a PLAN carry, labelled as a plan and
+      // hedged with a tilde, so a projection is never shown as an outcome.
+      /Stat label=\{t\('smartmotion_shot_map_page\.label\.plan_carry'\)\} value=\{`~\$\{fmtCompact\(estCarry\)\}`\}/.test(read('components/smartmotion/ShotMapPage.tsx')) &&
       /source=\{ICON_RAIL\.calibrate\}/.test(smSrc2) &&                  // rail badges wired
       /source=\{ICON_CTRL\.playpause\}/.test(smSrc2) &&                  // control badges wired
       /styles\.toolBtnBare/.test(smSrc2),                               // bare buttons (icon's own circle = button)
@@ -17406,13 +17409,23 @@ check(
    * is the honest record of it — a sweep would quietly pass as new screens are added.
    */
   const CONVERTED = [
-    'components/caddie/L1HolePreview.tsx',
-    'components/CaddieDataStrip.tsx',
-    'components/round/RestModeOverlay.tsx',
-    'components/smartfinder/TargetingOverlay.tsx',
-    'app/smartfinder.tsx',
-    'app/(tabs)/dashboard.tsx',
-    'app/(tabs)/play.tsx',
+    // on-course
+    'components/caddie/L1HolePreview.tsx', 'components/CaddieDataStrip.tsx',
+    'components/round/RestModeOverlay.tsx', 'components/smartfinder/TargetingOverlay.tsx',
+    'components/caddie/HoleBrandBadge.tsx', 'components/HolePlanChip.tsx',
+    'components/round/ShotTrackedSheet.tsx', 'components/SmartVisionLiveStrategy.tsx',
+    'app/smartfinder.tsx', 'app/smartvision.tsx', 'app/(tabs)/play.tsx', 'app/(tabs)/caddie.tsx',
+    // the card, the scorecard and the course
+    'app/(tabs)/dashboard.tsx', 'app/(tabs)/scorecard.tsx', 'app/course-layout.tsx',
+    'app/add-course.tsx', 'components/course/HoleGuide.tsx', 'components/course/HolePhotosGrid.tsx',
+    'components/course/StartRoundCourseCard.tsx', 'components/caddie/ShotTimeline.tsx',
+    'components/recap/HoleShotMap.tsx',
+    // practice, swing lab and the two ENTRY paths
+    'app/practice/fit-profile.tsx', 'app/practice-session/index.tsx', 'app/arccos-import.tsx',
+    'app/swinglab/range-import.tsx', 'app/swinglab/simround.tsx', 'app/swinglab/smartmotion.tsx',
+    'app/swinglab/swing/[swing_id].tsx', 'components/smartmotion/ShotMapPage.tsx',
+    'components/smartmotion/SmartMotionHud.tsx', 'components/QuickLogShotSheet.tsx',
+    'components/profile/ProfileForm.tsx', 'components/UndoMarkBanner.tsx',
   ];
   const notAsking = CONVERTED.filter((f) => {
     const src = readCode(f);
@@ -17422,7 +17435,7 @@ check(
     notAsking.length === 0,
     notAsking.length > 0
       ? `these no longer route through services/distanceUnits: ${notAsking.join(', ')}`
-      : `${CONVERTED.length} player-facing surfaces read their unit from the one owner — the hole preview badge, the off-course strip, the rest-mode readout, the rangefinder (reticle, F/M/B, hazards, dispersion, spoken callout), the bag pills and the course list`);
+      : `${CONVERTED.length} player-facing surfaces read their unit from the one owner — every on-course number, the scorecard and course tables, practice and swing lab, and all four ENTRY paths (shot log, fit profile, Arccos import, longest drive). Owner/debug screens stay in yards on purpose`);
 }
 
 /**

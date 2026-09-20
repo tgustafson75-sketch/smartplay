@@ -27,6 +27,8 @@
  * actions, not fields, and they already live on the Profile screen around this form.
  */
 import React, { useState } from 'react';
+import { fromDisplayDistance, liveDistanceUnit, toDisplayDistance, unitWord } from '../../services/distanceUnits';
+import { useDistanceUnit } from '../../hooks/useDistanceUnit';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -67,6 +69,7 @@ function Field({ label, styles: fs, muted, ...rest }: {
 }
 
 export function ProfileForm() {
+  const distanceUnit = useDistanceUnit();
   const { t } = useTranslation();
   const { colors } = useTheme();
   const s = makeStyles(colors);
@@ -76,7 +79,7 @@ export function ProfileForm() {
   // Text fields commit on Save (or on blur where the store is the only copy).
   const [editName, setEditName] = useState(p.name ?? '');
   const [editBest, setEditBest] = useState(p.personalBest != null ? String(p.personalBest) : '');
-  const [editLongestDrive, setEditLongestDrive] = useState(p.longestDrive != null ? String(p.longestDrive) : '');
+  const [editLongestDrive, setEditLongestDrive] = useState(p.longestDrive != null ? String(toDisplayDistance(p.longestDrive, liveDistanceUnit()) ?? '') : '');
   const [editLongestPutt, setEditLongestPutt] = useState(p.longestPuttFeet != null ? String(p.longestPuttFeet) : '');
   const [editIndex, setEditIndex] = useState(p.handicap_index != null ? String(p.handicap_index) : '');
   const [editGhin, setEditGhin] = useState(p.ghin_number ?? '');
@@ -101,7 +104,13 @@ export function ProfileForm() {
     p.setPhysicalLimitation(editLimitation.trim() || null);
     const best = parseInt(editBest, 10);
     p.setPersonalBest(Number.isFinite(best) ? best : null);
-    const drv = parseInt(editLongestDrive, 10);
+    /**
+     * 2026-09-19 — READ IN THEIR UNIT. `longestDrive` is YARDS; a player set to metres typing 250
+     * means 250 metres (273 yards), and storing 250 would quietly shorten their own best drive.
+     * Identity for the default yards player.
+     */
+    const drvTyped = parseInt(editLongestDrive, 10);
+    const drv = Number.isFinite(drvTyped) ? Math.round(fromDisplayDistance(drvTyped, distanceUnit) ?? drvTyped) : NaN;
     p.setLongestDrive(Number.isFinite(drv) && drv > 0 ? drv : null);
     const putt = parseInt(editLongestPutt, 10);
     p.setLongestPuttFeet(Number.isFinite(putt) && putt > 0 ? putt : null);
@@ -353,7 +362,7 @@ export function ProfileForm() {
       <Field
         styles={s}
         muted={colors.text_muted}
-        label={t('settings.text.longest_drive_yards')}
+        label={t('settings.text.longest_drive_yards', { unit: unitWord(distanceUnit) })}
         value={editLongestDrive}
         onChangeText={setEditLongestDrive}
         keyboardType="numeric"

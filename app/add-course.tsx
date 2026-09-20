@@ -9,6 +9,7 @@
  */
 
 import React, { useState } from 'react';
+import { useDistanceFormat } from '../hooks/useDistanceUnit';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -26,6 +27,7 @@ import { useTranslation } from 'react-i18next';
 type Phase = 'intro' | 'parsing' | 'confirm' | 'error';
 
 export default function AddCourseScreen() {
+  const { label } = useDistanceFormat();
   const { t } = useTranslation();
   const { colors } = useTheme();
   const router = useRouter();
@@ -117,7 +119,7 @@ export default function AddCourseScreen() {
           <View style={[styles.tableHead, { borderColor: colors.border }]}>
             <Text style={[styles.cellH, { color: colors.text_secondary, flex: 1 }]}>{t('add_course.add_course_screen.hole')}</Text>
             <Text style={[styles.cellH, { color: colors.text_secondary, flex: 1 }]}>{t('scorecard.par')}</Text>
-            <Text style={[styles.cellH, { color: colors.text_secondary, flex: 2 }]}>{t('add_course.add_course_screen.yards')}</Text>
+            <Text style={[styles.cellH, { color: colors.text_secondary, flex: 2 }]}>{label.toUpperCase()}</Text>
             <Text style={[styles.cellH, { color: colors.text_secondary, flex: 1 }]}>{t('add_course.add_course_screen.hcp')}</Text>
           </View>
           {result.holes.map((h) => (

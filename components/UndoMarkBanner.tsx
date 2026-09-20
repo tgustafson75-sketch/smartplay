@@ -18,6 +18,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { compactUnitLabel, liveDistanceUnit, toDisplayDistance } from '../services/distanceUnits';
 import { Animated, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -103,7 +104,7 @@ export function UndoMarkBanner() {
     >
       <View style={styles.pill}>
         <Ionicons name="flag-outline" size={16} color="#F5A623" style={{ marginRight: 8 }} />
-        <Text style={styles.message} numberOfLines={2}>{t('undo_mark_banner.undo_mark_banner.marked_tee_on_hole_y', { hole: active.hole, delta_yards: active.delta_yards })}</Text>
+        <Text style={styles.message} numberOfLines={2}>{t('undo_mark_banner.undo_mark_banner.marked_tee_on_hole_y', { hole: active.hole, delta_yards: toDisplayDistance(active.delta_yards, liveDistanceUnit()), unit: compactUnitLabel(liveDistanceUnit()) })}</Text>
         <TouchableOpacity
           onPress={onUndo}
           style={styles.undoBtn}

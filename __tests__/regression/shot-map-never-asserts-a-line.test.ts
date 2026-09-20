@@ -48,7 +48,14 @@ describe('the shot map never asserts a line it did not read', () => {
   });
 
   it('a reported distance drops the estimate tilde — it is a measurement', () => {
-    expect(code).toMatch(/reported \? `\$\{reported\.yards\}y` : `~\$\{estCarry\}y`/);
+    /**
+     * 2026-09-19 — the template moved through services/distanceUnits (a player set to metres reads
+     * metres), so this pins the PROPERTY it was always about: a REPORTED distance prints bare and
+     * an ESTIMATE wears the tilde. The formatter changed; which of the two is hedged did not.
+     */
+    expect(code).toMatch(/reported \? fmtCompact\(reported\.yards\) : `~\$\{fmtCompact\(estCarry\)\}`/);
+    // ...and the tilde is on the ESTIMATE side only — never on a measurement.
+    expect(code).not.toMatch(/`~\$\{fmtCompact\(reported/);
   });
 
   it('the CAGE view is never tappable — there the camera can see the answer', () => {

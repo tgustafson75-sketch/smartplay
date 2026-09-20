@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { formatDistanceCompact, liveDistanceUnit, toDisplayDistance, unitWord } from '../../services/distanceUnits';
 import { courseDisplayLabel } from '../../data/courseComplexes';
 import { QuickTutorial } from '../../components/QuickTutorial';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, Alert, Animated, Easing, AppState, AppStateStatus, ScrollView, useWindowDimensions, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
@@ -2062,7 +2063,7 @@ export default function CaddieTab() {
           const toast = require('../../store/toastStore') as typeof import('../../store/toastStore');
           const bits = [
             typeof p.club === 'string' && p.club.trim() ? p.club.trim() : null,
-            typeof p.distance_yards === 'number' && p.distance_yards > 0 ? `${Math.round(p.distance_yards)}y` : null,
+            typeof p.distance_yards === 'number' && p.distance_yards > 0 ? formatDistanceCompact(p.distance_yards, liveDistanceUnit()) : null,
             typeof p.shot_number === 'number' && p.shot_number > 0 ? `shot ${Math.round(p.shot_number)}` : null,
             // 2026-07-04 (clean-audit M1) — surface the stated target too.
             typeof p.target === 'string' && p.target.trim() ? `→ ${p.target.trim()}` : null,
@@ -3268,7 +3269,10 @@ export default function CaddieTab() {
       const startH = rs0.currentHole || roundFirstHole(rs0);
       const startHoleData = resolvedHoleData(startH);
       if (startHoleData) {
-        const msg = `Hole ${startH}. Par ${startHoleData.par}. ${startHoleData.distance} yards. Let's go.`;
+        // 2026-09-19 — SPOKEN. The hole intro is read out loud, so it converts like every other
+        // line the caddie says; `distance` is yards, as its name says, and stays that way.
+        const introUnit = liveDistanceUnit();
+        const msg = `Hole ${startH}. Par ${startHoleData.par}. ${toDisplayDistance(startHoleData.distance, introUnit)} ${unitWord(introUnit)}. Let's go.`;
         setCaddieResponse(msg);
         // Phase V.7+ — Quiet (L1) is text-only. Voice only fires at L2+.
         // Closes the leak where skip-briefings spoke "Hole 1, Par X" even

@@ -10,6 +10,7 @@
  */
 
 import React, { useCallback, useState } from 'react';
+import { liveDistanceUnit, toDisplayDistance } from '../../services/distanceUnits';
 import {
   View, Text, TouchableOpacity, ActivityIndicator, StyleSheet,
   ScrollView, Image,
@@ -320,7 +321,7 @@ function ClubDataRow({ row, c }: { row: TopTracerClubRow; c: ReturnType<typeof u
         {row.club_id ?? row.display_name}
       </Text>
       <Text style={[styles.clubCell, styles.colCarry, { color: row.flat_carry_yds != null ? c.accent : c.text_muted }]}>
-        {row.flat_carry_yds != null ? row.flat_carry_yds : '—'}
+        {row.flat_carry_yds != null ? toDisplayDistance(row.flat_carry_yds, liveDistanceUnit()) : '—'}
       </Text>
       <Text style={[styles.clubCell, styles.colTotal, { color: c.text_secondary }]}>
         {row.total_yds != null ? row.total_yds : '—'}

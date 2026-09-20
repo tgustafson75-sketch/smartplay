@@ -72,7 +72,7 @@
       "name": "Name",
       "handicap": "Handicap",
       "personal_best": "Personal Best",
-      "longest_drive_yards": "Longest Drive (yards)",
+      "longest_drive_yards": "Longest Drive ({{unit}})",
       "updated_automatically_as_you_log": "Updated automatically as you log Driver shots.",
       "manual_entry_for_now": "Manual entry for now.",
       "handicap_index_usga": "Handicap Index (USGA)",
@@ -371,14 +371,14 @@
     "club_usage": "CLUB USAGE — THIS ROUND",
     "col_club": "CLUB",
     "col_used": "USED",
-    "col_avg_yds": "AVG YDS",
+    "col_avg_yds": "AVG {{unit}}",
     "tap_to_score": "Tap to score ↓",
     "par_n": "Par {{par}}",
     "n_putts": "{{count}} putts",
     "share": "Share",
     "share_failed": "Could not open share sheet.",
     "hole_par": "Par {{par}}",
-    "hole_dist": " · {{dist}} yds",
+    "hole_dist": " · {{dist}} {{unit}}",
     "hole_tap": "HOLE {{hole}} · TAP A SCORE",
     "eagle": "Eagle",
     "birdie": "Birdie",
@@ -1456,8 +1456,8 @@
       "specs_heading": "YOUR SPECS",
       "practice_volume_purpose": "Where your reps went. Volume, not a measured carry — it is why some clubs above are tracked and others are still estimates.",
       "fit_findings_heading": "WHAT YOUR SET IS MISSING",
-      "gap_line": "{{gapYards}} yd between your {{upper}} and {{lower}} — a club-and-a-half hole around {{centerYards}} yds.",
-      "overlap_line": "{{longer}} and {{shorter}} carry within {{gapYards}} yds — one may be redundant.",
+      "gap_line": "{{gapYards}} {{unit}} between your {{upper}} and {{lower}} — a club-and-a-half hole around {{centerYards}} {{unit}}.",
+      "overlap_line": "{{longer}} and {{shorter}} carry within {{gapYards}} {{unit}} — one may be redundant.",
       "overlap_more": "+{{n}} more pairs within a few yards of each other.",
       "open_my_bag": "My Bag",
       "open_my_bag_sub": "Clubs, shafts and grips — scan or add",
@@ -1491,8 +1491,8 @@
       "carry": "Carry",
       "total": "Total",
       "carry_hint": "Where it lands. This is the number I use for water, bunkers and any forced carry.",
-      "total_hint": "Where it stops — the number most of us know. I take off {{roll}} yd of roll for this club.",
-      "refused": "That is not a carry this club can have. Give me something between {{min}} and {{max}} yards."
+      "total_hint": "Where it stops — the number most of us know. I take off {{roll}} {{unit}} of roll for this club.",
+      "refused": "That is not a carry this club can have. Give me something between {{min}} and {{max}} {{unit}}."
     },
     "row": {
       "you_set_total": "you set {{yards}} total",
@@ -2290,10 +2290,10 @@
       "strokes": "STROKES",
       "lie": "LIE",
       "hole": "HOLE {{hole}}",
-      "par_yds": "PAR {{par}} · {{distance}} YDS"
+      "par_yds": "PAR {{par}} · {{distance}} {{unit}}"
     },
     "text": {
-      "par_y": "par {{par}} · {{totalYards}}y",
+      "par_y": "par {{par}} · {{totalYards}}{{unit}}",
       "par": "par {{par}}"
     },
     "setup": {
@@ -2551,7 +2551,7 @@
       "note": "NOTE",
       "your_swing": "YOUR SWING",
       "tap_to_close": "Tap to close",
-      "yds": "~{{estCarry}} yds",
+      "yds": "~{{estCarry}} {{unit}}",
       "club": "Club: {{club}}",
       "swinger": "Swinger: {{swinger}}",
       "tag": "Tag: {{tag}}",
@@ -3105,7 +3105,7 @@
       "undo": "UNDO"
     },
     "undo_mark_banner": {
-      "marked_tee_on_hole_y": "Marked tee on hole {{hole}} ({{delta_yards}}y off)"
+      "marked_tee_on_hole_y": "Marked tee on hole {{hole}} ({{delta_yards}}{{unit}} off)"
     }
   },
   "update_available_banner": {
@@ -3509,7 +3509,7 @@
     "course_map": {
       "set_your_target_effort_on": "Set your target effort on the capture screen, then record a down-the-line swing — your shot plots here from the effort estimate and the ball-trace start direction.",
       "estimated_from_your_club_effort": "Estimated from your club × effort and the acoustic-anchored trace. Refines as your real carry data builds.",
-      "y_line_not_read": "~{{estCarry}}y · line not read"
+      "y_line_not_read": "~{{estCarry}}{{unit}} · line not read"
     },
     "cage_bullseye": {
       "confirm_your_cage_setup": "CONFIRM YOUR CAGE SETUP",

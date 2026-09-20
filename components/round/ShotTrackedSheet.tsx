@@ -89,7 +89,7 @@ export default function ShotTrackedSheet({
         </Pressable>
 
         <View style={styles.stat}>
-          <Text style={[styles.statValue, { color: colors.accent }]}>{result.approachYards != null ? result.approachYards : '—'}</Text>
+          <Text style={[styles.statValue, { color: colors.accent }]}>{result.approachYards != null ? toDisplay(result.approachYards) : '—'}</Text>
           <Text style={[styles.statLabel, { color: colors.text_muted }]}>{t('round_shot_tracked_sheet.shot_tracked_sheet.to_pin')}</Text>
         </View>
       </View>

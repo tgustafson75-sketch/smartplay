@@ -35,6 +35,7 @@
  * on isPlausibleForClub, so a stray tap cannot poison a ladder.
  */
 import React from 'react';
+import { useDistanceFormat } from '../../hooks/useDistanceUnit';
 import { View, Text, Pressable, ScrollView, StyleSheet, StyleProp, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -196,6 +197,7 @@ function CourseMap({
   colors: ThemeColors;
 }) {
   const { t } = useTranslation();
+  const { fmtCompact, toDisplay, labelShort } = useDistanceFormat();
   // Scale the field to the club's full carry (so a 7-iron map isn't driver-sized),
   // floored so a tiny club still reads. estCarry is the partial-effort estimate.
   const full = fullCarryYards(club, handicap, learnedCarry);
@@ -254,7 +256,7 @@ function CourseMap({
           {/* yard gridlines */}
           {[0.25, 0.5, 0.75].map((f) => (
             <View key={f} style={[styles.gridline, { bottom: `${f * 100}%` }]}>
-              <Text style={styles.gridLabel}>{Math.round(maxRange * f)}y</Text>
+              <Text style={styles.gridLabel}>{fmtCompact(maxRange * f)}</Text>
             </View>
           ))}
           {/* center aim line */}
@@ -273,7 +275,7 @@ function CourseMap({
                 <View style={styles.ballDot} />
                 <View style={styles.ballPill}>
                   {/* A reported shot is a MEASUREMENT and drops the "~" that marks an estimate. */}
-                  <Text style={styles.ballPillText}>{reported ? `${reported.yards}y` : `~${estCarry}y`}</Text>
+                  <Text style={styles.ballPillText}>{reported ? fmtCompact(reported.yards) : `~${fmtCompact(estCarry)}`}</Text>
                 </View>
               </View>
             ) : (
@@ -282,7 +284,7 @@ function CourseMap({
               <View style={[styles.distanceBand, { bottom: `${Math.max(2, downFrac * 96)}%` }]}>
                 <View style={styles.distanceBandLine} />
                 <View style={styles.ballPill}>
-                  <Text style={styles.ballPillText}>{t('smartmotion_shot_map_page.course_map.y_line_not_read', { estCarry: plotYards })}</Text>
+                  <Text style={styles.ballPillText}>{t('smartmotion_shot_map_page.course_map.y_line_not_read', { estCarry: toDisplay(plotYards), unit: labelShort })}</Text>
                 </View>
               </View>
             )
@@ -295,7 +297,7 @@ function CourseMap({
           {/* 2026-07-07 (audit M2) — this is a PLANNED carry (full-club distance ×
               your target effort), NOT a measured outcome. Label it so a chunk that
               flew 30y isn't shown here as "~129y CARRY" like a real result. */}
-          <Stat label={t('smartmotion_shot_map_page.label.plan_carry')} value={`~${estCarry}y`} colors={colors} est />
+          <Stat label={t('smartmotion_shot_map_page.label.plan_carry')} value={`~${fmtCompact(estCarry)}`} colors={colors} est />
           <Stat label={t('smartmotion_shot_map_page.label.direction')} value={dirLabel ?? 'not read'} colors={colors} est={!!dirLabel} />
           <Stat label={t('smartmotion_shot_map_page.label.effort')} value={effortPct != null ? `${effortPct}%` : '—'} colors={colors} />
         </View>

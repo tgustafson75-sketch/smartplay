@@ -82,14 +82,14 @@
     "club_usage": "USO DE PALOS — ESTA RONDA",
     "col_club": "PALO",
     "col_used": "USADO",
-    "col_avg_yds": "YDS PROM",
+    "col_avg_yds": "PROM {{unit}}",
     "tap_to_score": "Toca para anotar ↓",
     "par_n": "Par {{par}}",
     "n_putts": "{{count}} putts",
     "share": "Compartir",
     "share_failed": "No se pudo abrir el menú de compartir.",
     "hole_par": "Par {{par}}",
-    "hole_dist": " · {{dist}} yds",
+    "hole_dist": " · {{dist}} {{unit}}",
     "hole_tap": "HOYO {{hole}} · TOCA UN GOLPE",
     "eagle": "Eagle",
     "birdie": "Birdie",
@@ -358,8 +358,8 @@
       "carry": "Vuelo",
       "total": "Total",
       "carry_hint": "Donde cae. Es el número que uso para el agua, los búnkeres y cualquier carry obligado.",
-      "total_hint": "Donde se detiene: el número que casi todos conocemos. Descuento {{roll}} yd de rodada para este palo.",
-      "refused": "Esa no es una distancia posible para este palo. Dame algo entre {{min}} y {{max}} yardas."
+      "total_hint": "Donde se detiene — el número que casi todos sabemos. Le quito {{roll}} {{unit}} de rodada para este palo.",
+      "refused": "Ese no es un vuelo posible para este palo. Dame algo entre {{min}} y {{max}} {{unit}}."
     },
     "row": {
       "you_set_total": "pusiste {{yards}} total",

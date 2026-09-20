@@ -20,6 +20,7 @@
  * [[illustration-data-points]] [[no-deferred-wiring-placeholders]]
  */
 import React, { useState } from 'react';
+import { liveDistanceUnit, toDisplayDistance } from '../services/distanceUnits';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../contexts/ThemeContext';
@@ -39,7 +40,7 @@ export function planShorthand(plan: HolePlan): string {
   const parts: string[] = [];
   for (const s of plan.steps) {
     parts.push(s.club);
-    if (s.leavesYards > 0) parts.push(String(s.leavesYards));
+    if (s.leavesYards > 0) parts.push(String(toDisplayDistance(s.leavesYards, liveDistanceUnit())));
   }
   return parts.join(' → ');
 }
@@ -83,7 +84,7 @@ export default function HolePlanChip({
             {plan.steps.map((s) => (
               <Text key={s.shot} style={[styles.step, { color: c.text_secondary }]}>
                 {s.shot}. {s.club} — {s.why}
-                {s.leavesYards > 0 ? `, leaving ${s.leavesYards}` : ''}
+                {s.leavesYards > 0 ? `, leaving ${toDisplayDistance(s.leavesYards, liveDistanceUnit())}` : ''}
               </Text>
             ))}
           </View>

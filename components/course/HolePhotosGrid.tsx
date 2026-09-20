@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useDistanceFormat } from '../../hooks/useDistanceUnit';
 import { View, Text, Image, TouchableOpacity, Modal, StyleSheet, useWindowDimensions, FlatList, type ImageSourcePropType } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -29,6 +30,7 @@ type Props = {
  */
 export default function HolePhotosGrid({ photos }: Props) {
   const { t } = useTranslation();
+  const { fmtCompact } = useDistanceFormat();
   const { width } = useWindowDimensions();
   const { colors } = useTheme();
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
@@ -77,7 +79,7 @@ export default function HolePhotosGrid({ photos }: Props) {
             </View>
             {p.yardage != null && p.yardage > 0 && (
               <View style={styles.yardageChip} pointerEvents="none">
-                <Text style={styles.yardageChipText}>{p.yardage}y</Text>
+                <Text style={styles.yardageChipText}>{fmtCompact(p.yardage)}</Text>
               </View>
             )}
           </TouchableOpacity>

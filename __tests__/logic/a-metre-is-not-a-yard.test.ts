@@ -68,6 +68,36 @@ describe('the conversion', () => {
   });
 });
 
+/**
+ * 2026-09-19 — ALL FOUR WAYS A DISTANCE GETS IN.
+ *
+ * Display-only conversion is worse than none: it writes a number 9% short into the bag the caddie
+ * clubs off, and reads it back looking right. In the fit profile it is worse still, because a stated
+ * distance is the CENTRE of the ingest band — 133 typed as metres sets a 73-193 band around a club
+ * that carries 145, and every real shot with it is rejected for ever.
+ *
+ * These are the four fields a player can type a distance into. Each must read what they typed in
+ * THEIR unit and store yards. Identity for the default (yards) player, which is why an untested
+ * version of this would look perfectly fine to everyone who built it.
+ */
+describe('every entry path reads the player\'s unit and stores yards', () => {
+  const ENTRY_POINTS: [string, string][] = [
+    ['components/QuickLogShotSheet.tsx', 'the shot log'],
+    ['app/practice/fit-profile.tsx', 'the stated club distance'],
+    ['app/arccos-import.tsx', 'the Arccos import'],
+    ['components/profile/ProfileForm.tsx', 'longest drive'],
+  ];
+
+  it.each(ENTRY_POINTS)('%s converts on the way IN (%s)', (file) => {
+    const fs = require('fs');
+    const path = require('path');
+    const src = fs.readFileSync(path.resolve(__dirname, '../..', file), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    expect(src).toMatch(/fromDisplayDistance\(/);
+  });
+});
+
 describe('the brain is told, because the voice is the part you cannot skim past', () => {
   it('the payload carries the unit, and every NUMBER in it stays yards', () => {
     const { buildCaddieRequestBody } = require('../../services/caddieRequestBody');
