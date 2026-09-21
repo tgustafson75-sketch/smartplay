@@ -23,7 +23,18 @@ import path from 'path';
 
 const ROOT = path.join(__dirname, '../..');
 const WEAR_SRC = path.join(ROOT, 'wear-os-app/app/src');
-const APK = path.join(ROOT, 'wear-os-app/app/build/outputs/apk/release/app-release.apk');
+/**
+ * 2026-09-21, second pass — WATCH THE ARTIFACT PLAY ACTUALLY TAKES.
+ *
+ * This watched only the APK, because that is what was on disk. Play's Wear OS upload slot requires
+ * an **AAB** — Cowork hit that on the first attempt and discarded the draft release. So the thing
+ * that reaches a wrist is the bundle, and a guard pointed at the APK would sit green while the
+ * .aab went stale: the same defect one artifact along, which is how the original was missed.
+ */
+const ARTIFACTS = [
+  'wear-os-app/app/build/outputs/bundle/release/app-release.aab',
+  'wear-os-app/app/build/outputs/apk/release/app-release.apk',
+].map(r => path.join(ROOT, r));
 
 function newestMtime(dir: string): { file: string; mtime: number } {
   let newest = { file: '', mtime: 0 };
@@ -41,7 +52,7 @@ describe('the wear APK is not older than the source it claims to carry', () => {
    * and failing there would train everyone to ignore this. The case that matters is a STALE
    * artifact sitting next to newer source, which is what actually happened.
    */
-  const built = fs.existsSync(APK);
+  const present = ARTIFACTS.filter(a => fs.existsSync(a));
 
   /**
    * RAW TIMESTAMPS, NOT DAYS. The first version of this rounded the gap to whole days, so it went
@@ -50,14 +61,18 @@ describe('the wear APK is not older than the source it claims to carry', () => {
    * way; the point is that a guard whose resolution is coarser than the thing it measures has a
    * blind spot exactly where "I just changed that" lives. [[break-test-every-gate]]
    */
-  (built ? it : it.skip)('the newest wear source file predates the built APK', () => {
+  (present.length ? it : it.skip)('every built wear artifact is newer than the wear source', () => {
     const src = newestMtime(WEAR_SRC);
-    const apkMtime = fs.statSync(APK).mtimeMs;
-    const staleByMs = src.mtime - apkMtime;
-    expect({
-      newestSource: path.relative(ROOT, src.file),
-      sourceIsNewerThanApk: staleByMs > 0,
-    }).toEqual({ newestSource: path.relative(ROOT, src.file), sourceIsNewerThanApk: false });
+    const stale = present
+      .filter(a => src.mtime > fs.statSync(a).mtimeMs)
+      .map(a => path.relative(ROOT, a));
+    expect({ newestSource: path.relative(ROOT, src.file), staleArtifacts: stale })
+      .toEqual({ newestSource: path.relative(ROOT, src.file), staleArtifacts: [] });
+  });
+
+  /** Play's Wear slot takes a bundle. An APK alone means nothing is uploadable. */
+  it('a Wear AAB exists — the APK alone cannot be uploaded to Play', () => {
+    expect(fs.existsSync(ARTIFACTS[0])).toBe(true);
   });
 
   /**
