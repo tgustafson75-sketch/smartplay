@@ -189,7 +189,7 @@ export async function prefetchRoundData(args: PrefetchArgs): Promise<number> {
       .then(() => {
         const tileInputs = buildTileInputs(courseId, holes);
         if (tileInputs.length === 0) {
-          console.log('[roundPrefetch] mapbox skipped — no holes have full tee+green coords');
+          console.log('[roundPrefetch] mapbox skipped — no hole has a valid green coordinate');
           return;
         }
         return prefetchHoles(tileInputs).then(() => {
@@ -254,14 +254,35 @@ function buildTileInputs(courseId: string, holes: TileHole[]): HoleImageryInput[
        */
       const tee = geo?.tee ?? (isValidGolfCoord(h.teeLat, h.teeLng) ? { lat: h.teeLat, lng: h.teeLng } : null);
       const green = geo?.green ?? (isValidGolfCoord(h.middleLat, h.middleLng) ? { lat: h.middleLat, lng: h.middleLng } : null);
-      if (!tee || !green) return null;
-      if (!isValidGolfCoord(tee.lat, tee.lng) || !isValidGolfCoord(green.lat, green.lng)) return null;
+      /**
+       * 2026-09-20 (Tim, from Echo Hills) — "hole views did not load in smartvision."
+       *
+       * THE GREEN IS THE REQUIREMENT. THE TEE IS A BONUS. This used to demand BOTH, which made the
+       * prefetcher stricter than the renderer it feeds: getHoleImageryUrl explicitly degrades a
+       * missing tee to null and centres on the green, and fetchHoleImagery caches exactly that —
+       * so a green-only hole is perfectly renderable and was being refused a cached tile anyway.
+       *
+       * Echo Hills is the case that exposed it. validateBundledTees drops every one of its tees
+       * (all nine measured ~150y to the green whatever the card said), so `tee` is null on all of
+       * them, buildTileInputs returned an EMPTY array, and the caller logged "mapbox skipped — no
+       * holes have full tee+green coords" and cached NOTHING for the whole course. Tim then stood
+       * on it with a weak signal and got blank hole views, while the live fetch timed out.
+       *
+       * The renderer's own no-tee path made it invisible on good signal: it falls back to a DIRECT
+       * green-centred URL, which looks fine on wifi and is never cached, so nothing offline.
+       * Prefetching a green-only hole fixes both halves at once — same URL, now on disk.
+       *
+       * The 0,0 guard below is what must not be relaxed; that is the real defect this function had
+       * (null-island tiles), and it is about the GREEN being valid. [[two-owners-is-the-root-cause]]
+       */
+      if (!green || !isValidGolfCoord(green.lat, green.lng)) return null;
+      const okTee = tee && isValidGolfCoord(tee.lat, tee.lng) ? tee : null;
       return {
         courseId,
         holeNumber: h.hole,
         par: h.par,
         yardage: typeof h.distance === 'number' ? h.distance : 350,
-        tee,
+        tee: okTee,
         green,
       } as HoleImageryInput;
     })

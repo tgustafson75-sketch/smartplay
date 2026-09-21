@@ -38,8 +38,23 @@ export function computeCourseHandicap(
   courseRating: number,
   slopeRating: number,
   par: number,
+  /**
+   * 2026-09-20 (Tim, from Echo Hills) — THE LENGTH THE HANDICAP IS FOR.
+   *
+   * WHS computes a nine-hole Course Handicap from HALF the Handicap Index against the nine's own
+   * rating and par. Without this parameter the formula returned the EIGHTEEN-hole number whatever
+   * it was handed: at Echo Hills (nine holes, par 35, no rating on the card) handicapQueryHandler
+   * calls computeCourseHandicap(idx, par, 113, par), which reduces to exactly `idx` — so the caddie
+   * told an 18-index player their Course Handicap was 18 on a nine-hole course. It is about 9.
+   *
+   * Defaults to 18 so every existing caller is unchanged. In particular the ROUND POSTING path
+   * (roundStore → computeWhsPostingScore) deliberately keeps passing a full-index course handicap
+   * allocated over eighteen, which is already correct for a nine — see strokesReceivedOnHole.
+   */
+  holes: 9 | 18 = 18,
 ): number {
-  const slopeAdj = handicapIndex * (slopeRating / NEUTRAL_SLOPE);
+  const indexForLength = holes === 9 ? handicapIndex / 2 : handicapIndex;
+  const slopeAdj = indexForLength * (slopeRating / NEUTRAL_SLOPE);
   const ratingAdj = courseRating - par;
   return Math.round(slopeAdj + ratingAdj);
 }
@@ -76,10 +91,21 @@ export function netDoubleBogeyCap(par: number, strokesOnHole: number): number {
 export function strokesReceivedOnHole(
   courseHandicap: number,
   holeStrokeIndex: number,
+  /**
+   * 2026-09-20 — how many holes the Course Handicap is spread over. MUST MATCH the length the
+   * course handicap was computed for, because the two errors cancel and un-cancelling only one of
+   * them is worse than leaving both.
+   *
+   * Eighteen (the default) is right in two different situations: a real eighteen, and a NINE played
+   * with a full eighteen-hole course handicap — which is what the posting path does. Pass 9 only
+   * alongside a genuine nine-hole course handicap (computeCourseHandicap(..., 9)), or a 20-handicap
+   * gets one stroke a hole instead of two.
+   */
+  holes: 9 | 18 = 18,
 ): number {
   if (courseHandicap <= 0) return 0;
-  const base = Math.floor(courseHandicap / 18);
-  const remainder = courseHandicap - base * 18;
+  const base = Math.floor(courseHandicap / holes);
+  const remainder = courseHandicap - base * holes;
   return base + (holeStrokeIndex <= remainder ? 1 : 0);
 }
 

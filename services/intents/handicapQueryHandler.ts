@@ -57,6 +57,27 @@ export const handicapQueryHandler: IntentHandler = {
     // Pull course rating/slope/par from active round when available.
     const tee = round.courseHoles[0];
     const par = round.courseHoles.reduce((a, h) => a + h.par, 0) || 72;
+    /**
+     * 2026-09-20 (Tim, from Echo Hills) — IS THIS A NINE?
+     *
+     * `par` above sums the loaded holes, so a nine-hole course gives 35 rather than 72 — and every
+     * branch below then fed that into an EIGHTEEN-hole formula. At Echo Hills, which carries no
+     * rating on its card, `computeCourseHandicap(idx, par, 113, par)` reduces to exactly `idx`, so
+     * the caddie told an 18-index player "your Course Handicap would be about 18" on a nine-hole
+     * course. The right answer is about nine, and stating the wrong one as fact is the failure
+     * mode the 2026-09-13 stroke-index note on this same handler warned about.
+     *
+     * Same two signals the round store already uses, so one answer to "how long is this round":
+     * the player's declared nine, or a natively-nine course. [[two-owners-is-the-root-cause]]
+     */
+    const holeCount: 9 | 18 = (() => {
+      try {
+        if (round.nineHoleMode) return 9;
+        const { getCourseHoleCount } = require('../../data/courses') as typeof import('../../data/courses');
+        return getCourseHoleCount(round.activeCourseId, round.courseHoles.length) === 9 ? 9 : 18;
+      } catch { return round.courseHoles.length === 9 ? 9 : 18; }
+    })();
+    const lengthWord = holeCount === 9 ? 'nine-hole ' : '';
 
     switch (topic) {
       case 'course_handicap': {
@@ -66,19 +87,19 @@ export const handicapQueryHandler: IntentHandler = {
         const rating = (tee && (tee as { course_rating?: number }).course_rating) ?? null;
         const slope = (tee && (tee as { slope_rating?: number }).slope_rating) ?? null;
         if (rating != null && slope != null) {
-          const ch = computeCourseHandicap(idx, rating, slope, par);
+          const ch = computeCourseHandicap(idx, rating, slope, par, holeCount);
           return {
             success: true,
-            voice_response: `Your Course Handicap here is ${ch}.`,
+            voice_response: `Your ${lengthWord}Course Handicap here is ${ch}.`,
             side_effects: [`handicap:course:${ch}`],
             follow_up_needed: false,
           };
         }
         // No course rating loaded — give the neutral-slope estimate.
-        const ch = computeCourseHandicap(idx, par, 113, par);
+        const ch = computeCourseHandicap(idx, par, 113, par, holeCount);
         return {
           success: true,
-          voice_response: `I don't have this course's rating loaded — at neutral slope your Course Handicap would be about ${ch}. Pull up Course Detail to get the real numbers.`,
+          voice_response: `I don't have this course's rating loaded — at neutral slope your ${lengthWord}Course Handicap would be about ${ch}. Pull up Course Detail to get the real numbers.`,
           side_effects: ['handicap:no_rating'],
           follow_up_needed: false,
         };
@@ -110,7 +131,7 @@ export const handicapQueryHandler: IntentHandler = {
         const holePar = Number.isFinite(requestedPar) ? requestedPar : (round.currentHole ? parForHole(round.currentHole) ?? 4 : 4);
         const rating = (tee && (tee as { course_rating?: number }).course_rating) ?? par;
         const slope = (tee && (tee as { slope_rating?: number }).slope_rating) ?? 113;
-        const ch = computeCourseHandicap(idx, rating, slope, par);
+        const ch = computeCourseHandicap(idx, rating, slope, par, holeCount);
         /**
          * 2026-09-13 — THIS PASSED THE HOLE NUMBER WHERE WHS WANTS THE STROKE INDEX.
          *
@@ -146,7 +167,10 @@ export const handicapQueryHandler: IntentHandler = {
             follow_up_needed: false,
           };
         }
-        const strokes = strokesReceivedOnHole(ch, strokeIndex);
+        // `ch` above is now length-aware, so the allocation must use the SAME length or the two
+        // stop cancelling: a nine-hole CH of 15 spread over eighteen hands out one stroke a hole
+        // instead of two on the six hardest.
+        const strokes = strokesReceivedOnHole(ch, strokeIndex, holeCount);
         const max = netDoubleBogeyCap(holePar, strokes);
         const strokeNote = strokes > 0 ? ` (par ${holePar} plus 2 plus ${strokes} stroke${strokes > 1 ? 's' : ''})` : ` (par ${holePar} plus 2)`;
         return {

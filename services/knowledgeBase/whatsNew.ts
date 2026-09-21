@@ -51,6 +51,11 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Sep 2026',
+    note: 'Hole views now load on courses where we only know where the greens are \u2014 and they are saved for offline, so a course with no signal still shows you the hole. Nine-hole courses also get a proper nine-hole Course Handicap instead of the eighteen-hole number.',
+    howTo: 'Nothing to do. Download a course before you drive out and SmartVision has the holes ready even with no bars.',
+  },
+  {
+    when: 'Sep 2026',
     note: 'Making your own caddie no longer needs a selfie. Take one if you want, upload any photo you already have, or skip the photo completely and just describe the caddie you want \u2014 "a silver-haired caddie in a flat cap" is enough to build one.',
     howTo: 'Profile \u2192 Custom Caddie. Take Selfie and Upload Photo sit side by side, and both are optional \u2014 write what you want in the description box and tap Generate Caddie.',
   },

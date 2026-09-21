@@ -63,7 +63,14 @@ describe('the handler reads the real index, or admits it has none', () => {
 
   it('it no longer passes the hole number as a stroke index', () => {
     expect(h).not.toMatch(/strokesReceivedOnHole\(ch, round\.currentHole/);
-    expect(h).toMatch(/strokesReceivedOnHole\(ch, strokeIndex\)/);
+    // 2026-09-20 — WIDENED, not weakened. This pinned the exact two-argument call
+    // `strokesReceivedOnHole(ch, strokeIndex)` and went red when a third argument was added for
+    // nine-hole allocation — a CORRECT change. What this test defends is that the SECOND argument
+    // is the stroke index rather than a hole number, so it now matches that argument and allows
+    // any further ones. [[guards-that-copy-the-line-they-guard]]
+    expect(h).toMatch(/strokesReceivedOnHole\(ch, strokeIndex\s*[,)]/);
+    // ...and the hole number must not sneak into that slot under a different name.
+    expect(h).not.toMatch(/strokesReceivedOnHole\(ch, (?:hole|holeNumber|currentHole)\b/);
   });
 
   it('it resolves the hole through the ONE owner, not an inline find', () => {
