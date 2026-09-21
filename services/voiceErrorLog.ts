@@ -23,6 +23,16 @@
 
 import type { IssueLogEntry, IssueLogKind } from '../store/issueLogStore';
 
+/** The running app version, never throwing — a diagnostic must not fail on a failure path. */
+function appVersionNow(): string {
+  try {
+    const Constants = require('expo-constants').default;
+    return (Constants?.expoConfig?.version as string | undefined) ?? '1.0.0';
+  } catch {
+    return '1.0.0';
+  }
+}
+
 function snapshotContext(): IssueLogEntry['context'] {
   try {
     // Dynamic requires — voiceService.ts is imported very early in the
@@ -39,7 +49,13 @@ function snapshotContext(): IssueLogEntry['context'] {
       isRoundActive: !!round.isRoundActive,
       courseId: round.activeCourseId ?? null,
       currentHole: round.isRoundActive ? round.currentHole : null,
-      appVersion: '1.0.0',
+      /**
+       * 2026-09-21 — was the LITERAL '1.0.0', in both branches. It has been wrong since the day a
+       * second version existed and it would have gone on reporting 1.0.0 from a 1.0.1 binary, on a
+       * diagnostic path, in the week we started relying on the issue log instead of Sentry. Reads
+       * the real value now, with the literal kept only as the last-resort fallback.
+       */
+      appVersion: appVersionNow(),
     };
   } catch {
     return {
@@ -48,7 +64,7 @@ function snapshotContext(): IssueLogEntry['context'] {
       isRoundActive: false,
       courseId: null,
       currentHole: null,
-      appVersion: '1.0.0',
+      appVersion: appVersionNow(),
     };
   }
 }

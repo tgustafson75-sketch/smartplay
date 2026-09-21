@@ -78,7 +78,39 @@ describe('the OTA contract is intact', () => {
   it('runtimeVersion is still the literal the shipped build carries', () => {
     // Testers are frozen on this runtime; changing it strands every phone in the field.
     expect(app.expo.runtimeVersion).toBe('1.0.0');
-    expect(app.expo.version).toBe('1.0.0');
+  });
+
+  /**
+   * 2026-09-21 — THE MARKETING VERSION AND THE RUNTIME VERSION ARE DECOUPLED, AND THAT IS THE DESIGN.
+   *
+   * This used to also assert `app.expo.version === '1.0.0'`, on the same line as the runtimeVersion
+   * check. The two were equal when it was written, so the pin cost nothing and read as one fact.
+   * They are not the same fact.
+   *
+   * Apple closed the 1.0.0 train today:
+   *
+   *   ITMS-90186: Invalid Pre-Release Train — the train version '1.0.0' is closed for new build
+   *   submissions
+   *   ITMS-90062: CFBundleShortVersionString [1.0.0] must contain a higher version than that of the
+   *   previously approved version [1.0.0]
+   *
+   * So `version` HAD to become 1.0.1 for the store to accept build 28 at all — while
+   * `runtimeVersion` MUST stay "1.0.0", because that is the string every binary in the field
+   * carries (17, 18, 19, 21, 22, 23, 26, 27) and it is the only reason one `eas update` reaches all
+   * of them. Tying the two together would mean every App Store release silently strands every
+   * existing install, which is the exact failure the literal exists to prevent.
+   *
+   * What is asserted now is the property rather than the coincidence: the runtime literal is
+   * unchanged, and the marketing version is allowed to move ahead of it but never behind.
+   */
+  it('the marketing version may move ahead of the runtime, but never behind it', () => {
+    const cmp = (a: string, b: string) => {
+      const [x, y] = [a, b].map(v => v.split('.').map(Number));
+      for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
+      return 0;
+    };
+    expect(typeof app.expo.version).toBe('string');
+    expect(cmp(app.expo.version as string, '1.0.0')).toBeGreaterThanOrEqual(0);
   });
 
   it('the notification permission added for background GPS is declared', () => {
