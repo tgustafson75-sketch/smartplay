@@ -89,8 +89,34 @@ export interface DiagnosticSnapshot {
 function safe<T>(fn: () => T): T | null {
   try { return fn(); } catch { return null; }
 }
+/**
+ * Every async section is BOUNDED, and that is not belt-and-braces.
+ *
+ * This snapshot is collected at the moment an issue report LEAVES the device, including on the
+ * automatic path. `watchReachable()` awaits a native promise on the Wear Data Layer; a wedged
+ * Data Layer resolves neither way. Without a bound that await never settles, so
+ * `collectDiagnosticSnapshot` never settles, so `autoSendIssuesInner` never returns — and
+ * `inFlightSend` in services/issueLogExport is a module-level promise that is only cleared in that
+ * function's `finally`. One hung query would therefore block EVERY subsequent issue send for the
+ * life of the process.
+ *
+ * The diagnostic must never be able to cost us the report it is attached to. A section that cannot
+ * answer in time degrades to null, which is itself a reading.
+ */
+const SECTION_TIMEOUT_MS = 1500;
+
 async function safeAsync<T>(fn: () => Promise<T>): Promise<T | null> {
-  try { return await fn(); } catch { return null; }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      fn(),
+      new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), SECTION_TIMEOUT_MS); }),
+    ]);
+  } catch {
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 /**

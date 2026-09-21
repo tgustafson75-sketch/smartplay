@@ -159,3 +159,29 @@ describe('the snapshot carries no PII, and cannot start to by accident', () => {
     expect(formatSnapshotForEmail(snap)).toContain('DIAGNOSTICS');
   });
 });
+
+/**
+ * 2026-09-21 — THE DIAGNOSTIC MUST NEVER COST US THE REPORT IT IS ATTACHED TO.
+ *
+ * `watchReachable()` awaits a native promise on the Wear Data Layer. A wedged Data Layer resolves
+ * neither way, and `inFlightSend` in services/issueLogExport is a module-level promise cleared only
+ * in autoSendIssuesInner's `finally` — so one hung query would have blocked EVERY subsequent issue
+ * send for the life of the process. The thing that was supposed to make failures legible would have
+ * made them invisible.
+ */
+describe('a hung native query cannot wedge the send path', () => {
+  it('collects within the bound and reports the unanswerable section as unknown', async () => {
+    const bridge = require('../../services/watchCaddieBridge');
+    const spy = jest.spyOn(bridge, 'watchReachable')
+      .mockImplementation(() => new Promise(() => { /* never settles — a wedged Data Layer */ }));
+    const started = Date.now();
+    const snap = await collectDiagnosticSnapshot();
+    const elapsed = Date.now() - started;
+    expect(elapsed).toBeLessThan(4000);
+    expect(snap.watch.reachable).toBeNull();
+    // ...and the REST of the snapshot still arrived. One unanswerable section must not cost the others.
+    expect(snap.device.platform).toBeTruthy();
+    expect(snap.capturedAt).toBeGreaterThan(0);
+    spy.mockRestore();
+  }, 10_000);
+});
