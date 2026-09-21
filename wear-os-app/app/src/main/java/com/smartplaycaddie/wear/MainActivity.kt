@@ -10,7 +10,7 @@
  *   │    F 132   B 158   │   (front / back to the green, flanking)
  *   │   [  Ask caddie ]  │   (prominent green mic button)
  *   │  status / feedback │
- *   │   · Record swings ·│   (secondary swing-capture toggle)
+ *   │   · Record Swing ·│   (secondary swing-capture toggle)
  *   └────────────────────┘
  *
  * LIVE PIN YARDAGE is pushed from the phone (front/middle/back to the green,
@@ -50,6 +50,7 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.HorizontalScrollView
+import android.widget.ScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.app.ActivityCompat
@@ -109,13 +110,43 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
     private fun buildUi(): View {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            /**
+             * CENTER, not CENTER_HORIZONTAL. With `isFillViewport` the root is stretched to the
+             * viewport whenever the content is shorter than it, so vertical centring is what keeps
+             * a larger face (Galaxy Watch 4+ is 450x450) looking exactly as it did before the
+             * scroll container existed. Measured: with CENTER_HORIZONTAL the stack packed to the
+             * top and the capture button landed at y=417..450 — flush with the very bottom of the
+             * frame, which on a ROUND face is where the chord narrows to nothing, so it would have
+             * been sliced by the mask. Trading one clipped button for another is not a fix.
+             */
             gravity = Gravity.CENTER
             setBackgroundColor(Color.BLACK)
-            // Generous side padding so nothing clips on round watch faces.
-            setPadding(dp(16), dp(6), dp(16), dp(6))
+            /**
+             * 2026-09-21 — THE BOTTOM OF THIS SCREEN DID NOT EXIST ON A SMALL ROUND WATCH.
+             *
+             * The old comment here said "generous side padding so nothing clips on round watch
+             * faces" and handled the HORIZONTAL axis only. Vertically this was a MATCH_PARENT
+             * LinearLayout with eight stacked children and no scroll container, so anything past
+             * the fold was simply never laid out.
+             *
+             * Measured on a 384x384 round face (Wear OS 5 emulator, uiautomator dump, not by eye):
+             *   ASK CADDIE            [32,263][352,359]
+             *   "start a round on…"   [32,359][352,366]   clipped to 7px
+             *   Record swings         ABSENT FROM THE HIERARCHY ENTIRELY
+             *
+             * So the swing-capture toggle could not be tapped, and the long-press that drives
+             * SmartMotion on the phone — shipped earlier today — was unreachable on that face. The
+             * status line that reports "Phone not reachable" was invisible too, which means the
+             * honest-failure fix from this morning could not be seen either. Three things built,
+             * correct, and out of reach. This is native: no OTA could have corrected it.
+             *
+             * Bottom padding is deliberately larger than the top: on a round face the lower chord
+             * narrows, so the last child needs room to clear the curve.
+             */
+            setPadding(dp(16), dp(6), dp(16), dp(20))
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
             )
         }
 
@@ -211,7 +242,34 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
 
         // Secondary: swing capture toggle, dim so it doesn't compete with the number.
         captureBtn = Button(this).apply {
-            text = "Record swings\nhold \u2192 SmartMotion"
+            /**
+             * 2026-09-21 (Tim: "Or just Record Swing") — two lines became one.
+             *
+             * It read "Record swings / hold -> SmartMotion", which put a gesture hint on a 1.4-inch
+             * control and made the button the noisiest thing on a screen whose hero is a yardage
+             * number. Two words now.
+             *
+             * WHAT THAT COSTS, written down rather than discovered later: the long-press that
+             * toggles SmartMotion on the phone is no longer announced anywhere, and the note this
+             * label replaced argued that an undiscoverable gesture is the same as no feature. The
+             * gesture still works. If it should be findable, the cheap fix is a swing icon beside
+             * the word rather than a second line of text.
+             */
+            text = "Record Swing"
+            /**
+             * The icon Tim asked for, in place of the second line of text it replaced. Set as a
+             * COMPOUND drawable rather than a separate ImageView so the icon and label stay one
+             * tap target and one baseline — a second view here would need its own layout params on
+             * a face where vertical space is the scarce thing.
+             *
+             * Tinted to the button's own DIM colour so it reads as secondary next to the green
+             * mic, and re-tinted on toggle with the text.
+             */
+            setCompoundDrawablesRelativeWithIntrinsicBounds(
+                androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ic_swing), null, null, null,
+            )
+            compoundDrawablePadding = dp(8)
+            compoundDrawableTintList = android.content.res.ColorStateList.valueOf(DIM)
             setTextColor(DIM)
             setBackgroundColor(Color.parseColor("#1A1A1A"))
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
@@ -260,7 +318,29 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
         root.addView(micBtn)
         root.addView(status)
         root.addView(captureBtn)
-        return root
+
+        /**
+         * The scroll container is the fix. A watch face is small and this screen is deliberately
+         * dense (title, hole, yardage, front/back, drill strip, mic, status, capture) — the answer
+         * is to let the player reach the rest, not to delete a feature to make the pixels fit.
+         *
+         * `isFillViewport` keeps the content vertically centred when it DOES fit, so nothing
+         * changes on a larger face (Galaxy Watch 4+ is 450x450) — it only starts scrolling where it
+         * previously truncated.
+         */
+        return ScrollView(this).apply {
+            setBackgroundColor(Color.BLACK)
+            isFillViewport = true
+            isVerticalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            addView(
+                root,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ),
+            )
+        }
     }
 
     /** One metric card for the drill strip: icon glyph · big value · dim label. */
@@ -440,13 +520,13 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
         if (capturing) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(svc)
             else startService(svc)
-            // 2026-09-09 — keep the long-press hint on BOTH states. Dropping it on the toggled state
-            // would make the gesture discoverable only while capture is off, which is most of the
-            // time it is NOT wanted.
-            captureBtn.text = "Stop swings\nhold \u2192 SmartMotion"
+            // 2026-09-21 — the 09-09 note here argued for keeping the long-press hint on BOTH
+            // states. The hint is gone from the label entirely now (see the button's own comment),
+            // so there is nothing left to keep on both — the two states are just Record / Stop.
+            captureBtn.text = "Stop Swing"
         } else {
             stopService(svc)
-            captureBtn.text = "Record swings\nhold \u2192 SmartMotion"
+            captureBtn.text = "Record Swing"
         }
     }
 

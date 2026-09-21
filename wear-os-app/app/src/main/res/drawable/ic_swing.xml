@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  2026-09-21 — swing mark for the Record Swing control.
+
+  SECOND CUT. The first had five strokes (arc, shaft, head, ball, ground line) at 1.3-1.9 width.
+  Rendered on the emulator at the button's text size those land under two physical pixels against
+  a dark grey fill and collapse into a smudge — verified by screenshot, not assumed. A 1.4-inch
+  watch face is the harshest icon surface in the product.
+
+  So: three marks, all heavy. Club shaft on a strong diagonal, a blunt head, and a ball with real
+  mass. The swing arc stays only as a faint sweep for motion, at a width that survives scaling.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="26dp"
+    android:height="26dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFF">
+
+    <!-- motion sweep behind the club -->
+    <path
+        android:pathData="M5.5,14.5 C5.5,7.5 11,3.5 17.5,4.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.0"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:strokeAlpha="0.45" />
+
+    <!-- shaft -->
+    <path
+        android:pathData="M17.5,5.5 L8.5,17.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.6"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent" />
+
+    <!-- head -->
+    <path
+        android:pathData="M8.8,17.2 L5.4,19.2"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3.4"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent" />
+
+    <!-- ball -->
+    <path
+        android:pathData="M18.0,19.0 m-2.4,0 a2.4,2.4 0 1,0 4.8,0 a2.4,2.4 0 1,0 -4.8,0"
+        android:fillColor="#FFFFFF" />
+</vector>
