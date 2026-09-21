@@ -5,7 +5,11 @@ plugins {
 
 android {
     namespace 'com.smartplaycaddie.wear'
-    compileSdk 34
+    /**
+     * 2026-09-21 — 34 -> 35. Play REFUSES a Wear OS bundle below targetSdk 35 (rejected on
+     * versionCode 1029). compileSdk must be at least targetSdk, so both move together.
+     */
+    compileSdk 35
 
     defaultConfig {
         // MUST match the phone app's applicationId for the Wearable Data
@@ -13,7 +17,22 @@ android {
         applicationId 'com.smartplaycaddie.app'
         // Wear OS 3 = API 30. minSdk 30 covers the Galaxy Watch 4+.
         minSdk 30
-        targetSdk 33
+        /**
+         * 33 -> 35, forced by Play's Wear OS upload requirement.
+         *
+         * NOT a free bump — targetSdk 34 makes a foreground service ILLEGAL without a declared
+         * type, and this app runs one for IMU capture. Checked before changing it rather than
+         * after: AndroidManifest already declares
+         *   <service android:foregroundServiceType="dataSync" />
+         * plus the matching FOREGROUND_SERVICE_DATA_SYNC permission, so the API 34 requirement was
+         * already satisfied. Also verified there are no runtime-registered BroadcastReceivers (API
+         * 34 would require RECEIVER_EXPORTED/RECEIVER_NOT_EXPORTED) and no PendingIntents needing
+         * an explicit mutability flag. startForeground() takes its type from the manifest.
+         *
+         * Android 15 caps a `dataSync` foreground service at 6h per 24h. A swing-capture session is
+         * minutes, so the cap is not reachable here.
+         */
+        targetSdk 35
         // 2026-09-21 — versionCode had never moved off 1 while the source changed for six weeks,
         // and the APK on disk predated both ends of the watch command path it was supposed to
         // carry. Play requires a UNIQUE versionCode across every artifact in one app listing, and
@@ -23,7 +42,7 @@ android {
         // The 1000 offset keeps the two sequences from ever meeting and stays readable: 1028 is
         // "the watch APK that goes with phone build 28". Bump it with the phone build it ships
         // alongside.
-        versionCode 1029
+        versionCode 1030
         versionName '1.0.1'
     }
 

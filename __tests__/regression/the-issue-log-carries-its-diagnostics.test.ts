@@ -204,3 +204,26 @@ describe('a hung native query cannot wedge the send path', () => {
     spy.mockRestore();
   }, 10_000);
 });
+
+/**
+ * 2026-09-21 — THE RENDERED BLOCK MUST NEVER PRINT THE WORD "undefined".
+ *
+ * Caught by rendering the thing and reading it, rather than by a type: `String(Platform.Version)`
+ * on an absent value produces the literal string "undefined", and the report read
+ * `Device: ios undefined`. Every other unknown in this block is a deliberate "?", so one stray
+ * "undefined" is indistinguishable from a bug in the diagnostic itself — and the person reading it
+ * is already looking at a failure and deciding whether to trust the tool.
+ *
+ * Asserted on the FORMATTED output, because that is the artifact a human reads. A field-level type
+ * check would not have caught a stringified absence.
+ */
+describe('the mailed diagnostics block never prints undefined or null as text', () => {
+  it('renders only deliberate unknowns', async () => {
+    const snap = await collectDiagnosticSnapshot();
+    const body = formatSnapshotForEmail(snap);
+    expect(body).not.toMatch(/\bundefined\b/);
+    expect(body).not.toMatch(/\bnull\b/);
+    expect(body).not.toMatch(/\[object Object\]/);
+    expect(body).not.toMatch(/\bNaN\b/);
+  });
+});

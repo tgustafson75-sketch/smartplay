@@ -133,7 +133,13 @@ export async function collectDiagnosticSnapshot(): Promise<DiagnosticSnapshot> {
     },
     device: {
       platform: Platform.OS,
-      osVersion: safe(() => String(Platform.Version)),
+      /**
+       * 2026-09-21 — `String(x)` on an absent value yields the LITERAL "undefined", which then
+       * renders as `Device: ios undefined` in the mailed report. A diagnostic that prints the word
+       * undefined reads as a broken diagnostic, and the reader cannot tell it apart from a real
+       * value. Absence must degrade to null so the formatter can say "?" deliberately.
+       */
+      osVersion: safe(() => (Platform.Version == null ? null : String(Platform.Version))),
       model: null, manufacturer: null, locale: null, timezone: null, distanceUnit: null,
     },
     session: { uptimeMs: null, activeSurface: null, roundActive: null, hole: null, courseId: null },
