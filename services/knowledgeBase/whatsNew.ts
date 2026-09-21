@@ -51,6 +51,11 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Sep 2026',
+    note: 'Added players are back on the scorecard, where they used to be \u2014 tabs across the top, tap a name to change it, put in their handicap and the card shows their net too. Export any card to share it, with a read of how their round went. Their scores stay on their own card and never touch yours or your handicap.',
+    howTo: 'Scorecard tab \u2192 Players \u2192 Add player. Up to three beside you.',
+  },
+  {
+    when: 'Sep 2026',
     note: 'The chip for scoring other people now says Add Players instead of Tournament, so a card for your kid or your playing partner is where you would look for it. Competition was never that \u2014 it tells the caddie to play conservatively and marks the scorecard \u2014 and the caddie can now tell you the difference if you ask.',
     howTo: 'Play tab \u2192 Add Players (the trophy chip). Each player gets their own card, hole by hole \u2014 best ball, skins, stableford or match play.',
   },

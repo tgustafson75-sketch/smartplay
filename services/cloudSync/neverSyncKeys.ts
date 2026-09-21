@@ -21,6 +21,11 @@
  */
 export const NEVER_SYNC_STORE_KEYS: readonly string[] = [
   'family-store-v1',
+  // 2026-09-20 — added players' cards: their NAMES, their HANDICAPS and their SCORES. Same class as
+  // guest-profiles beneath it, and a stronger case: this one carries numbers about a third party who
+  // never installed the app and cannot consent to us storing them. It stays on the device that kept
+  // the card. [[automatic-sends-carry-no-pii]]
+  'guest-cards-v1',
   'guest-profiles-v1',
   'relationship-store-v1',
   'team-intelligence-store-v1',

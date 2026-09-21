@@ -1,4 +1,27 @@
 {
+  "scorecard_added_players": {
+    "add_a_player_a11y": "Add a player",
+    "add_player": "Add player",
+    "clear": "Clear",
+    "clear_a11y": "Clear added players",
+    "clear_added_players_q": "Clear added players?",
+    "clear_explains": "This removes the extra cards and their scores. Your own card is not touched.",
+    "enter_player_name": "Enter player name",
+    "export_card": "Export their card",
+    "gross_suffix": "· Gross",
+    "handicap_index": "Handicap Index",
+    "keep": "Keep",
+    "net": "Net",
+    "net_hint": "Add their Index above and I'll show a net score too.",
+    "nothing_to_export": "Nothing to export yet",
+    "player_name_a11y": "Player name",
+    "players": "Players",
+    "put_a_score_first": "Put a score on at least one hole first.",
+    "remove": "Remove",
+    "tap_to_edit": "tap to edit",
+    "their_index_a11y": "Their Handicap Index, optional",
+    "you": "YOU"
+  },
   "buttons": {
     "start_cage": "Start Cage Session",
     "watch_swing": "Watch My Swing",

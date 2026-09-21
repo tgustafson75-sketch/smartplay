@@ -23,7 +23,9 @@ import { useClubStatsStore } from '../../store/clubStatsStore';
 import { normalizeClub } from '../../services/clubNormalize';
 import { useSwingSessionStore } from '../../store/swingSessionStore';
 import { useGuestProfileStore } from '../../store/guestProfileStore';
+import { usePlayerProfileStore } from '../../store/playerProfileStore';
 import { useSettingsStore } from '../../store/settingsStore';import { GreenHeatCard } from '../../components/GreenHeatCard';
+import { AddedPlayerCards } from '../../components/scorecard/AddedPlayerCards';
 import { isGirHole } from '../../services/round/scoredRoundStats';
 import { useTheme } from '../../contexts/ThemeContext';
 import { loadRecap } from '../../services/planStorage';
@@ -125,6 +127,11 @@ export default function Scorecard() {
     [isRoundActive, shots, lastCompletedRound],
   );
   const viewCourseName = isRoundActive ? activeCourse : (lastCompletedRound?.courseName ?? null);
+  // 2026-09-20 — the first tab is the owner, read-only. First name when we have one, so a shared
+  // card reads "Tim" and not a full name he never chose to put on it.
+  const ownerDisplayName = usePlayerProfileStore(
+    (st) => (st.firstName || st.name || '').trim() || 'You',
+  );
 
   // 2026-06-13 (Tim) — highlight swings: Smart Motion swings captured on-course and
   // starred for THIS round (roundId stamped at capture). Surfaced on the scorecard,
@@ -979,6 +986,18 @@ export default function Scorecard() {
             logged (~2 rounds); honest "collecting your putts" state until then. The optional
             per-green break/position layer (greenRollStore) is a FUTURE watch-the-roll CV
             enhancement — its absence doesn't block the putt-count heat. */}
+        {/* 2026-09-20 (Tim) — "Dont want add player hidden behind tournament. OG version had tabs at
+            the top and I could edit names and we could add putting the players hdcp and an export
+            button but we dont inject the data from that card to the primary user data."
+            Lives HERE, on the scorecard he is already looking at, not behind a format picker. Every
+            score it takes goes to guestCardStore, never roundStore — see that file's header. */}
+        <AddedPlayerCards
+          holes={viewCourseHoles.map((h) => ({ hole: h.hole, par: h.par }))}
+          courseName={viewCourseName}
+          ownerName={ownerDisplayName}
+          ownerScores={viewScores as Record<number, number>}
+        />
+
         <GreenHeatCard scope="career" />
 
         {/* 2026-06-24 (Tim) — removed the redundant "No active round /

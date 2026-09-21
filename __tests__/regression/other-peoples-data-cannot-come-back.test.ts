@@ -20,10 +20,22 @@ import { NEVER_SYNC_STORE_KEYS, stripNeverSyncKeys } from '../../services/cloudS
 import { BACKED_UP_STORE_KEYS, NOT_BACKED_UP_STORE_KEYS } from '../../services/cloudSync/snapshot';
 
 describe('the list is real and covers the stores that hold other people', () => {
-  it('names the four social stores', () => {
-    expect([...NEVER_SYNC_STORE_KEYS].sort()).toEqual([
+  it('names every store that holds other people', () => {
+    /**
+     * 2026-09-20 — WIDENED from an exact four-item match. It went red when 'guest-cards-v1' (added
+     * players' names, handicaps and SCORES) was added — a store that plainly belongs here. An
+     * equality assertion on this list punishes the correct action, which is the one thing a guard
+     * protecting other people's data must never do. [[guards-that-copy-the-line-they-guard]]
+     *
+     * The property is COVERAGE: the known social stores are all present. Growth is expected; what
+     * must never happen is one going missing.
+     */
+    for (const k of [
       'family-store-v1', 'guest-profiles-v1', 'relationship-store-v1', 'team-intelligence-store-v1',
-    ]);
+      'guest-cards-v1',
+    ]) {
+      expect(NEVER_SYNC_STORE_KEYS).toContain(k);
+    }
   });
 
   it('agrees with the allowlist — never-sync keys are never backed up', () => {
