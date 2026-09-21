@@ -218,24 +218,41 @@ export default function OwnerLogsScreen() {
     }
   };
 
+  /**
+   * 2026-09-21 — an in-flight flag, because this stopped being instant TODAY.
+   *
+   * exportAllIssues now collects a diagnostic snapshot before it opens the mail client, and the
+   * snapshot's sections are bounded at 1500ms each — so on a device that cannot answer (a wedged
+   * watch query, a slow expo-updates read) the tap can sit for seconds with the icon unchanged.
+   * Before today it opened essentially instantly. A player taps again, and two mail composers or
+   * two share sheets arrive back to back. The voice route ("send the issue log" -> ?send=1) has
+   * the same gap, with Kevin acknowledging into a blank screen.
+   */
+  const [exporting, setExporting] = useState(false);
+
   const onExport = async () => {
-    if (entries.length === 0) return;
+    if (entries.length === 0 || exporting) return;
+    setExporting(true);
+    try {
     // 2026-06-28 — body-building + mailto/share + markExported() centralized in
     // services/issueLogExport so the manual Export here and the owner auto-prompt
     // (OwnerIssueLogPrompt) format identically and both reset the unsent count.
-    const result = await exportAllIssues();
-    // 2026-08-29 — the export now sends only what is NEW since the last one, so "nothing new" is a
-    // normal outcome and must not be reported as a failure.
-    if (result === 'nothing_new') {
-      Alert.alert(
-        'Nothing new to send',
-        'Everything in this log has already been exported. New issues will be included next time.',
-      );
-    } else if (result === 'failed') {
-      Alert.alert(
-        'Export failed',
-        'Email support@smartplaycaddie.com directly with the log from this screen.',
-      );
+      const result = await exportAllIssues();
+      // 2026-08-29 — the export now sends only what is NEW since the last one, so "nothing new" is
+      // a normal outcome and must not be reported as a failure.
+      if (result === 'nothing_new') {
+        Alert.alert(
+          'Nothing new to send',
+          'Everything in this log has already been exported. New issues will be included next time.',
+        );
+      } else if (result === 'failed') {
+        Alert.alert(
+          'Export failed',
+          'Email support@smartplaycaddie.com directly with the log from this screen.',
+        );
+      }
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -276,16 +293,20 @@ export default function OwnerLogsScreen() {
         <Text style={[styles.title, { color: colors.text_primary }]}>Issue Log</Text>
         <TouchableOpacity
           onPress={onExport}
-          disabled={entries.length === 0}
+          disabled={entries.length === 0 || exporting}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           accessibilityRole="button"
           accessibilityLabel="Export log"
         >
-          <Ionicons
-            name="share-outline"
-            size={22}
-            color={entries.length === 0 ? colors.text_muted : colors.accent}
-          />
+          {exporting ? (
+            <ActivityIndicator size="small" color={colors.accent} />
+          ) : (
+            <Ionicons
+              name="share-outline"
+              size={22}
+              color={entries.length === 0 ? colors.text_muted : colors.accent}
+            />
+          )}
         </TouchableOpacity>
       </View>
 

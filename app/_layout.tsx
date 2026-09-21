@@ -41,6 +41,7 @@ import { initVoiceTriggers, syncBluetoothMediaButtonState } from '../services/vo
 import { bootMark } from '../services/bootTrace'; // TEMPORARY boot-timing breadcrumbs (Tim)
 import { setEnabled as setEarbudEnabled } from '../services/earbudControl';
 import { startHandsFreeOrchestrator } from '../services/handsFreeOrchestrator';
+import { SENTRY_DSN } from '../services/sentryDsn';
 import { activateMediaSession, deactivateMediaSession } from '../services/mediaKeyBridge';
 import { startHoleDetection, stopHoleDetection, subscribeToHoleDetection } from '../services/holeDetection';
 import { startOffCourseDetector, stopOffCourseDetector } from '../services/offCourseDetector';
@@ -128,8 +129,10 @@ setProactiveLineComposer(async (directive, opts) => {
 // never fired and every Sentry.addBreadcrumb in the app wrote to nothing.
 // Hardcoded PUBLIC-DSN fallback (same OTA-safe pattern as mapboxImagery /
 // coursePlaces): a Sentry DSN is a public ingest key, safe to embed.
-const SENTRY_DSN_FALLBACK = 'https://94204d567ba053ad6f9dc3f39ff84655@o4511297513717760.ingest.us.sentry.io/4511297527283712';
-const sentryDsn = process.env.EXPO_PUBLIC_SENTRY_DSN || SENTRY_DSN_FALLBACK;
+// 2026-09-21 — the fallback moved to services/sentryDsn so analytics.ts reads the SAME answer.
+// It gated on the bare env var and therefore went silent on every OTA, fourteen weeks after this
+// note was written about exactly that. [[two-owners-is-the-root-cause]]
+const sentryDsn = SENTRY_DSN;
 
 /**
  * 2026-09-10 — THE NATIVE BUILD NUMBER, ONCE.
@@ -920,11 +923,18 @@ function AppNavigator() {
   // gated + server-idempotent inside autoSendIssues) guarantees a recorded crash reaches the team.
   useEffect(() => { void autoSendIssues(); }, []);
 
-  // Phase BH — silent OTA on app start. checkForUpdateAsync + fetch happen
-  // in the background; the bundle applies on the *next* cold launch (we
-  // never auto-reload mid-session because that would interrupt a round).
-  // Manual "App Refresh" in the Tools menu is still the way to apply
-  // immediately when the user wants it.
+  // Phase BH — silent OTA on app start. checkForUpdateAsync + fetch happen in the background.
+  //
+  // 2026-09-21 — THIS COMMENT WAS WRONG AND HAD BEEN SINCE JUNE. It said the bundle "applies on the
+  // *next* cold launch" and that "we never auto-reload mid-session". Both stopped being true on
+  // 2026-06-13, when Tim asked for auto-apply on cold start: components/UpdateAvailableBanner
+  // reloads straight into a ready update if it lands within 20s of launch and no round or voice
+  // turn is in flight (behind the branded overlay added 09-18, so the teardown does not read as a
+  // crash). What is still true is the part that matters — nothing reloads UNDER a player mid-round
+  // or mid-sentence; that is what inRound / voiceActive gate.
+  //
+  // Leaving it as written is how someone later "fixes" a reload they were told does not happen.
+  // Manual "App Refresh" in the Tools menu still applies immediately on demand.
   useEffect(() => {
     void (async () => {
       try {

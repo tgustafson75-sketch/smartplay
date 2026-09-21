@@ -123,7 +123,15 @@ export type OutboundPayload =
   | { kind: 'notification'; text: string; subtitle?: string | null }
   | { kind: 'score'; vsPar: number; hole: number; totalScore: number }
   | { kind: 'voice_prompt'; text: string }
-  | { kind: 'state'; round_active: boolean; current_hole: number | null }
+  /**
+   * 2026-09-21 — `active` DUPLICATES `round_active` ON PURPOSE, and it is not redundancy for its
+   * own sake. targets/watch/SmartPlayWatchApp.swift read `active` while this has always sent
+   * `round_active`, so the Apple Watch's "clear the stale yardage" branch was unreachable for its
+   * whole life. The Swift is fixed, but that fix only reaches a wrist when a new watch binary
+   * ships — whereas this line reaches every Apple Watch already out there on the next phone OTA.
+   * Wear OS reads `round_active` and ignores the extra key.
+   */
+  | { kind: 'state'; round_active: boolean; active: boolean; current_hole: number | null }
   // 2026-07-29 (Tim — drill feedback on the watch: swipeable metric cards). Per-swing readout pushed
   // back to the wrist after the watch captures a swing, so you get glanceable feedback without the
   // phone. Values are already club-tagged + normalized on the phone (ties to the Arccos-fed bag).
@@ -232,7 +240,7 @@ export async function sendRoundState(round_active: boolean, current_hole: number
     return;
   }
   try {
-    await activeSender({ kind: 'state', round_active, current_hole });
+    await activeSender({ kind: 'state', round_active, active: round_active, current_hole });
   } catch (e) {
     devLog('[watchBridge] state send failed: ' + String(e));
   }

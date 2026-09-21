@@ -229,8 +229,21 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
              * would rather have a separate button, this is the one line to move.
              */
             setOnLongClickListener {
-                sendToPhone(COMMAND_PATH, "smartmotion_toggle".toByteArray(Charsets.UTF_8))
-                status.text = "SmartMotion \u2192 phone"
+                /**
+                 * 2026-09-21 — say "sending", then say what actually happened.
+                 *
+                 * This set the success text immediately and unconditionally, so a player whose
+                 * phone was in the cart, asleep or swiped away got "SmartMotion -> phone" and
+                 * nothing else — they hold again, it says the same thing again. The wrist is the
+                 * only feedback surface here, so a confident wrong answer on it is the whole
+                 * failure.
+                 */
+                status.text = "Sending\u2026"
+                sendToPhone(COMMAND_PATH, "smartmotion_toggle".toByteArray(Charsets.UTF_8)) { ok ->
+                    runOnUiThread {
+                        status.text = if (ok) "SmartMotion \u2192 phone" else "Phone not reachable"
+                    }
+                }
                 true
             }
             layoutParams = LinearLayout.LayoutParams(
@@ -442,18 +455,50 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
         sendToPhone(HELLO_PATH, "wear".toByteArray(Charsets.UTF_8))
     }
 
-    /** Send to every connected node (the phone). Best-effort. */
-    private fun sendToPhone(path: String, data: ByteArray) {
+    /**
+     * Send to every connected node (the phone). Best-effort, but no longer SILENTLY best-effort.
+     *
+     * 2026-09-21 — `onDelivered` exists because a fire-and-forget send let the UI lie. The
+     * long-press handler set "SmartMotion -> phone" on the line after calling this, before any
+     * result could exist, and nothing ever cleared it: with no node connected the loop body never
+     * ran, with a failed send only Log.w fired, and the watch told the player it had done
+     * something either way. On a 1.4-inch screen that message IS the entire feedback.
+     *
+     * It matters more here than the usual fire-and-forget, because there is no
+     * WearableListenerService on the phone: onWatchCommand only arrives while the RN process is
+     * alive, so "phone app not running" is a common state, not an edge case, and it produces
+     * exactly the silent no-op that the old status text called a success.
+     *
+     * Callers that do not care pass null and behave as before.
+     */
+    private fun sendToPhone(path: String, data: ByteArray, onDelivered: ((Boolean) -> Unit)? = null) {
         val ctx = applicationContext
         Wearable.getNodeClient(ctx).connectedNodes
             .addOnSuccessListener { nodes ->
+                if (nodes.isEmpty()) {
+                    Log.w(TAG, "send $path: no connected node")
+                    onDelivered?.invoke(false)
+                    return@addOnSuccessListener
+                }
                 val client = Wearable.getMessageClient(ctx)
+                // One success is delivery: the phone is a single node in practice, and reporting
+                // failure because a second paired node refused would be its own wrong answer.
+                var reported = false
                 for (node in nodes) {
                     client.sendMessage(node.id, path, data)
-                        .addOnFailureListener { e -> Log.w(TAG, "send $path failed: ${e.message}") }
+                        .addOnSuccessListener {
+                            if (!reported) { reported = true; onDelivered?.invoke(true) }
+                        }
+                        .addOnFailureListener { e ->
+                            Log.w(TAG, "send $path failed: ${e.message}")
+                            if (!reported) { reported = true; onDelivered?.invoke(false) }
+                        }
                 }
             }
-            .addOnFailureListener { e -> Log.w(TAG, "connectedNodes failed: ${e.message}") }
+            .addOnFailureListener { e ->
+                Log.w(TAG, "connectedNodes failed: ${e.message}")
+                onDelivered?.invoke(false)
+            }
     }
 
     private fun requestNeededPermissions() {

@@ -30,6 +30,7 @@
 import { useIssueLogStore } from '../../store/issueLogStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
+import { useRoundStore } from '../../store/roundStore';
 import {
   buildIssueLogBody, exportAllIssues, autoSendIssues,
 } from '../../services/issueLogExport';
@@ -132,12 +133,30 @@ describe('the snapshot carries no PII, and cannot start to by accident', () => {
     ]);
   });
 
+  /**
+   * 2026-09-21 — THIS TEST USED TO PASS VACUOUSLY, WHICH IS WHY IT MISSED A REAL LEAK.
+   *
+   * It seeded the player profile and never the ROUND, so `session.courseId` was always null under
+   * jest — while the shipped code read `activeCourseId ?? activeCourse`, and `activeCourse` is the
+   * course DISPLAY NAME. Every local or manual round would have emitted a course name on the
+   * anonymous channel, and this test would have stayed green forever.
+   *
+   * A blocklist over an empty object proves nothing. The state that produces the leak has to be
+   * SEEDED, which is the difference between testing the code and testing the fixture.
+   */
   it('no section carries an identity, a name or a coordinate', async () => {
     usePlayerProfileStore.setState({ email: 'tim@example.com', name: 'Tim G' } as never);
+    // The leak case: a live round with NO api course id, so the name is the only thing available.
+    useRoundStore.setState({
+      isRoundActive: true, activeCourseId: null, activeCourse: 'Menifee Lakes Country Club',
+    } as never);
     const snap = await collectDiagnosticSnapshot();
+    expect(snap.session.courseId).not.toContain('Menifee');
+    expect(snap.session.courseId).toBe('local');
     const blob = JSON.stringify(snap).toLowerCase();
     expect(blob).not.toContain('tim@example.com');
     expect(blob).not.toContain('tim g');
+    expect(blob).not.toContain('menifee');
     for (const banned of ['email', 'latitude', 'longitude', 'lat"', 'lng"', 'playername']) {
       expect(blob).not.toContain(banned);
     }

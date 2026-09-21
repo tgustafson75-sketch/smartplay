@@ -57,9 +57,15 @@ const WATCH_HEARTBEAT_GRACE_MS = YARDAGE_TICK_MS * 2;
 interface WearCaddieNativeModule {
   sendToWatch(path: string, data: string): Promise<boolean>;
   /**
-   * 2026-09-09 — optional on purpose. It exists on the Android module from build 27; older shells
-   * and the iOS module do not have it, and an OTA reaches every one of them. Typed optional so a
-   * caller must decide what "cannot ask" means rather than crashing on an absent method.
+   * 2026-09-09 — optional on purpose. Older shells and the iOS module do not have it, and an OTA
+   * reaches every one of them. Typed optional so a caller must decide what "cannot ask" means
+   * rather than crashing on an absent method.
+   *
+   * 2026-09-21 — the original note said "exists on the Android module from build 27" and that was
+   * never true. This method arrived on native/watch-command-and-capability (09-09) and merged to
+   * main on 09-21; the last Android binary was versionCode 26 (09-04) and build 27 was cut from a
+   * main that did not contain it. It first exists in 28. Benign at runtime — the optional-method
+   * check covers it — but a wrong build number in a comment misdates triage later.
    */
   getConnectedNodeCount?(): Promise<number>;
   addListener(eventName: string): void;

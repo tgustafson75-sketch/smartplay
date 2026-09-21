@@ -2,7 +2,11 @@ import * as Sentry from '@sentry/react-native';
 import { AppState } from 'react-native';
 import { useRoundStore } from '../store/roundStore';
 
-const hasDsn = !!process.env.EXPO_PUBLIC_SENTRY_DSN;
+// 2026-09-21 — was `!!process.env.EXPO_PUBLIC_SENTRY_DSN`, which is EMPTY in every OTA bundle, so
+// everything this gates went silent on the first hotfix after each store build. One owner now.
+import { HAS_SENTRY_DSN } from './sentryDsn';
+
+const hasDsn = HAS_SENTRY_DSN;
 
 /**
  * Pre-beta — event batching for non-critical analytics.

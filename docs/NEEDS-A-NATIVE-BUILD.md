@@ -64,7 +64,8 @@ builds were done and submitted. This landed after them.
 | iOS 1.0.0 | `9fdeda03` | 2026-09-03 |
 | **watch command path** | **`b893d5ad`** | **never — 5 days after the last build** |
 
-It lives unmerged on `native/watch-command-and-capability` and changes Kotlin on BOTH ends:
+~~It lives unmerged on `native/watch-command-and-capability`~~ — **MERGED 2026-09-21 (`c9a7cd86`).**
+It changed Kotlin on BOTH ends:
 `android-native/WearSwingBridgeModule.kt` and the watch app's `MainActivity.kt`. What it fixes:
 `watchCaddieBridge` has routed `open_smartmotion` / `smartmotion_record` / `smartmotion_stop` /
 `smartmotion_toggle` since 2026-08-07, and neither end existed — the phone's native module had no
@@ -197,14 +198,102 @@ come down, `sentry-cli debug-files upload` makes today's crash readable retrospe
 - [x] ~~RevenueCat public SDK keys in `eas.json`~~ — **ALREADY SHIPPED (2026-09-21).** Both live as the defaults in `services/billing/purchases.ts:113-114`; the env vars still override, so a rotation needs no rebuild. Nothing owed in `eas.json`.
 - [ ] Re-verify on device: `npm run probe-tools`, a voice round, earbud tap, headset plugged in
       MID-round, a sandbox purchase and a restore
-- [ ] merge `native/watch-command-and-capability` (Kotlin both ends; re-read watchCaddieBridge.ts)
-- [ ] **`app.json` Sentry `organization`: `smartplay` → `smartplay-ai`** — one line, in the build
-      commit itself (parked 09-19 because editing app.json blocks every OTA; see above). Without it
-      the token below uploads to an org that is not Tim's and the symbols never arrive
-- [ ] SENTRY_AUTH_TOKEN in EAS secrets, `uploadSourceMaps: true`, and SENTRY_DISABLE_AUTO_UPLOAD
-      dropped from the production profile — until then every production crash is unreadable
-- [ ] R8/ProGuard on (`enableProguardInReleaseBuilds`) + keep-rules for MediaPipe, Wear bridge,
-      Bluetooth media button, Meta DAT and Sentry — then re-verify each on the release AAB (Play
-      obfuscation warning, fix by Feb 2027)
+- [x] ~~merge `native/watch-command-and-capability`~~ — **DONE 2026-09-21** (`c9a7cd86`). One defect
+      found in the branch while reading it: `getConnectedNodeCount` resolved 0 on both failure
+      paths, so a Data Layer error rendered as "no watch is reachable" to a player wearing one.
+      It rejects now, which reaches `watchReachable()`'s catch as null = "cannot ask".
+- [x] ~~**`app.json` Sentry `organization`**~~ — **DONE 2026-09-21**, in the build commit as planned.
+      Note: the `uploadSourceMaps: true` that went in alongside it was REMOVED again — it is not a
+      real prop. `@sentry/react-native@7.2.0`'s plugin accepts only organization / project /
+      authToken / url / experimental_android, and unknown keys are ignored with no warning. The
+      only switch that does anything is `SENTRY_DISABLE_AUTO_UPLOAD`.
+- [x] ~~SENTRY_AUTH_TOKEN in EAS secrets~~ — **DONE 2026-09-21**, verified present in the
+      production environment via `eas env:list`. `SENTRY_DISABLE_AUTO_UPLOAD` is `"false"` on the
+      production profile only; the other four keep `"true"` so a local build never fails on a
+      missing token.
+      ⚠️ **THE SLUGS ARE STILL UNVERIFIED, AND A WRONG ONE FAILS THE BUILD.** With auto-upload on,
+      sentry-cli failure is fatal on both platforms — iOS `scripts/sentry-xcode.sh` exits 1, and
+      the Android gradle `exec` has no `ignoreExitValue`. `SENTRY_ALLOW_FAILURE` is set nowhere.
+      `smartplay-ai` is inferred from Tim's issue-link subdomain and `smartplay-caddie-mobile`
+      appears nowhere else in the repo. The Sentry MCP returns 403 here, so it could not be
+      checked from this machine. Deliberately NOT hedged with `SENTRY_ALLOW_FAILURE`: a loud
+      20-minute build failure naming the bad slug is better than another quarter of crashes that
+      silently arrive unsymbolicated, which is the exact problem this whole item exists to fix.
+- [ ] R8/ProGuard — **DELIBERATELY NOT IN THIS BUILD (2026-09-21), and this is the one item held
+      back.** R8 strips and renames what it cannot see used, and a stripped keep-rule fails at
+      RUNTIME ON A RELEASE BUILD ONLY — never in dev, never in Expo Go, not necessarily on the
+      first screen. There are exactly two ways to know it is safe: a device pass on the release
+      artifact, or DEX inspection of the AAB. `apkanalyzer`, `d8` and `r8` are installed on this
+      Mac but **there is no Java runtime**, so neither is available here.
+      Shipping an unverifiable release-only change to an app people are downloading today buys a
+      Play console warning whose deadline is **Feb 2027** and buys the player nothing. It rides
+      the next build — glasses/2.0 is already one — or a build cut deliberately for it with a JDK
+      installed first.
 - [ ] runtimeVersion: leave at `1.0.0`. The billing code degrades safely on older binaries by
       design, so keeping the literal means existing testers keep receiving OTA fixes.
+
+
+---
+
+## THE WATCH APPS ARE NOT IN THIS BUILD, AND ONE OF THEM IS SIX WEEKS STALE · added 2026-09-21
+
+Found by a connection audit run before cutting the build. This is the thing most likely to read as
+"you said it was done and it isn't", so it is written down plainly.
+
+### Wear OS (Android watch) — a separate artifact nobody has built since July
+
+`wear-os-app/` is a **standalone Gradle project**. It is referenced by no config plugin, there is no
+wear profile in `eas.json`, and `npm run android:build:production` does not touch it. So:
+
+| | |
+|---|---|
+| newest built APK | `wear-os-app/app/build/outputs/apk/release/app-release.apk`, **2026-07-29** |
+| newest source change | `MainActivity.kt`, **2026-09-09** (and again today) |
+| `versionCode` | **1**, never moved (`wear-os-app/app/build.gradle`) |
+
+**What that means concretely:** the watch long-press that sends `smartmotion_toggle` — the sender
+half of the 08-07 feature, merged today — **has no sender in the field**. The phone half ships in
+this build and will sit there listening to a watch APK that predates it. Merging the Kotlin did not
+put it on anyone's wrist.
+
+It also cannot simply be uploaded once built: `versionCode 1` must be bumped or Play refuses it as
+an update.
+
+**Blocked here:** building it needs a JDK and the Android SDK, and **this Mac has no Java runtime**
+(`java -version` → "Unable to locate a Java Runtime"). So it is not something that can be cut from
+this session without installing one first.
+
+**The guard that should have caught it and did not:**
+`__tests__/regression/the-watch-command-path-exists-on-both-ends.test.ts` is a source-text grep over
+two `.kt` files. It is green while the artifact on the wrist predates both ends — it proves the
+source agrees with itself, which was never the question. The assertion it needs: fail when any
+`wear-os-app/**/src` file is newer than the newest built APK.
+
+### Apple Watch — one real defect fixed today, two gaps left open
+
+- **FIXED, and it ships in this build.** `targets/watch/SmartPlayWatchApp.swift` read `obj["active"]`
+  while the phone has always sent `round_active` (Wear OS reads `round_active` too). `(nil as? Bool)
+  == false` is false, so the clear branch was **unreachable for its entire life** and a finished
+  round left its yardage sitting on the wrist — exactly what that file's own header promises does
+  not happen. The Swift now reads `round_active` with `active` as a fallback, AND the phone sends
+  both keys — so Apple Watches already in the field get cleared by a phone OTA alone, without
+  waiting for a watch binary.
+- **OPEN, deliberately.** `score` and `swing_feedback` are produced by `watchRoundSync`, transported,
+  and then dropped by the Apple Watch's switch, which has cases for yardage / notification /
+  voice_prompt / state only. Rendering them needs watch UI designed rather than bolted on hours
+  before a submission, and the surface cannot be exercised from here. Note it is owner-gated in
+  practice (`watchRoundSync` requires an owner email, absent from every production profile), so the
+  blast radius today is one person.
+- **OPEN.** Three iOS inbound paths (`/smartplay/swing`, `/smartplay/voice`, `/smartplay/command`)
+  are routed by `ios-native/WearSwingBridgeModule.swift` and sent by nothing — the Apple Watch app
+  sends only `/smartplay/hello` and `/smartplay/tap`. The iOS twin of the Wear long-press does not
+  exist yet.
+- **`/smartplay/tap` has no ANDROID sender** — same "only the middle exists" shape, hidden because
+  the iOS watch does send it.
+
+### Also noted, not in this build
+
+`plugins/withMetaWearablesDAT.js` still claims Xcode "automatically picks up the files", with no
+`withIOSCompileSources` step — the exact belief `withBluetoothMediaButton.js` documents as false and
+which cost build 16. Gated behind `MWDAT_IOS_ENABLED`, so this build is unaffected, but the
+`glasses` profile would ship a module that is copied and never compiled. Fix it before 2.0.

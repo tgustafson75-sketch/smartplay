@@ -84,7 +84,17 @@ final class CaddieState: NSObject, ObservableObject, WCSessionDelegate {
         self.message = obj["text"] as? String
       case "state":
         // Round ended / no fix — clear rather than leave a stale number on the wrist.
-        if (obj["active"] as? Bool) == false {
+        //
+        // 2026-09-21 — THIS READ THE WRONG KEY AND THE CLEAR HAS NEVER RUN. The phone has always
+        // sent `round_active` (services/watchBridge.ts OutboundPayload, and Wear OS reads
+        // `round_active` too); this read `active`. `(nil as? Bool) == false` is FALSE, so the
+        // branch was unreachable and a finished round left its yardage sitting on the wrist —
+        // exactly what this file's own header promises does not happen.
+        //
+        // `active` is still accepted as a fallback because the phone now sends BOTH keys, so an
+        // Apple Watch still running the OLD binary gets cleared by an OTA to the phone alone.
+        let roundActive = (obj["round_active"] as? Bool) ?? (obj["active"] as? Bool)
+        if roundActive == false {
           self.hole = nil; self.middle = nil; self.front = nil; self.back = nil
           self.status = "No round in play"
         }

@@ -108,8 +108,7 @@
       [
         "@sentry/react-native",
         {
-          "uploadSourceMaps": false,
-          "organization": "smartplay",
+          "organization": "smartplay-ai",
           "project": "smartplay-caddie-mobile"
         }
       ],

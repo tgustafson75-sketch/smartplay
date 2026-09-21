@@ -35,3 +35,24 @@ node_modules/
 ios/
 android/
 .claude/
+
+# 2026-09-21 — .easignore SUPERSEDES .gitignore entirely ("if .easignore exists, .gitignore files
+# are not used" — eas-cli/build/vcs/local.js). So every gitignored secret was being uploaded to the
+# EAS builder, including .env.local — whose EXPO_PUBLIC_* values are inlined into the production
+# bundle at export.
+#
+# That matters because of one variable. Any non-empty EXPO_PUBLIC_OWNER_EMAIL makes the BUNDLE an
+# owner bundle: Owner Tools on every player's Settings screen and grantLifetime for everyone,
+# bypassing billing. scripts/ota-owner-guard.mjs exists to stop exactly that — and it is wired into
+# `ota:production` only, never into ios:ship or android:build:production. The build door was
+# unguarded, and .env.local is one uncommented line away from shipping owner mode to the App Store.
+#
+# It is all comments today (verified: `grep -c '^[^#]' .env.local` → 0), so no build shipped this.
+# Keeping .env.example, which carries no values.
+.env
+.env.*
+!.env.example
+
+# Signing material and credentials have no business on a builder that uses remote credentials.
+credentials.json
+*.jks

@@ -289,8 +289,16 @@ async function autoSendIssuesInner(): Promise<boolean> {
   /**
    * IT RIDES IN `context`, AND THAT IS NOT A STYLE CHOICE. api/issue-report reads `body.entries`
    * and nothing else — a top-level `diagnostics` field is accepted by the POST, dropped on the
-   * floor, and never reaches Supabase or the Sentry feedback. That is the whole "wired but not
-   * reachable" failure: the send would have looked successful forever while carrying nothing.
+   * floor, and never reaches Supabase. That is the whole "wired but not reachable" failure: the
+   * send would have looked successful forever while carrying nothing.
+   *
+   * 2026-09-21, correcting this note the day it was written: it originally claimed the Sentry
+   * feedback too. It does not. sendIssueFeedback is passed the RAW entry context below, and
+   * services/issueFeedback maps a fixed tag list (install_id, platform, course_id, hole,
+   * round_active, route, app_version, kind) — so `diag` is dropped there whichever context it is
+   * handed. Sentry gets no snapshot under either design, which is a limitation of the Sentry
+   * mirror and not an argument for the top-level field. Supabase is the durable record and the
+   * one this reasoning rests on.
    * Verified against the handler's row mapping, which persists `context` verbatim as a JSON column.
    * [[reachable-not-just-wired]]
    *

@@ -202,7 +202,21 @@ export async function collectDiagnosticSnapshot(): Promise<DiagnosticSnapshot> {
     const r = useRoundStore.getState();
     snap.session.roundActive = r.isRoundActive ?? null;
     snap.session.hole = r.currentHole ?? null;
-    snap.session.courseId = r.activeCourseId ?? r.activeCourse ?? null;
+    /**
+     * 2026-09-21 — `activeCourseId` ONLY, and never `activeCourse` as a fallback.
+     *
+     * This read `activeCourseId ?? activeCourse`, and `activeCourse` is the course DISPLAY NAME
+     * (store/roundStore startRound takes `course` and assigns it there). `activeCourseId` is null
+     * for every local or manual round — so on exactly those rounds the snapshot emitted a name
+     * like "Menifee Lakes" under a key called `courseId`, on the channel that is anonymous by the
+     * 09-12 decision and gated on a consent that defaults ON. The file's own header forbids a home
+     * course by name. I wrote the header and then broke it four lines later, resolving a type
+     * error.
+     *
+     * 'local' answers what triage actually needs — "this was not an API course, so there is no
+     * surveyed geometry behind the complaint" — and names nowhere.
+     */
+    snap.session.courseId = r.activeCourseId ?? (r.isRoundActive ? 'local' : null);
   });
 
   // ── GPS. A yardage complaint cannot be read without the fix that produced it. AGE and ACCURACY
@@ -240,9 +254,16 @@ export async function collectDiagnosticSnapshot(): Promise<DiagnosticSnapshot> {
   // ── Native modules. Only the ABSENT ones: a full list is noise, an absence explains a failure.
   safe(() => {
     const { getAllNativeModuleHealth } = require('./nativeModuleHealth') as typeof import('./nativeModuleHealth');
+    // The reason is FREE TEXT — nativeModuleHealth builds it as `probe threw: ${String(e)}`, and a
+    // native error string can carry a file path with a username in it. Everything else in this
+    // snapshot is allowlisted by construction; this is the one unbounded field, so it is truncated
+    // and stripped of anything path-shaped before it rides the anonymous channel.
     const missing = getAllNativeModuleHealth()
       .filter(h => !h.loaded)
-      .map(h => `${h.id}${h.reason ? ` (${h.reason})` : ''}`);
+      .map(h => {
+        const reason = h.reason ? h.reason.replace(/[/\\][^\s]*/g, '<path>').slice(0, 80) : '';
+        return `${h.id}${reason ? ` (${reason})` : ''}`;
+      });
     snap.nativeModulesMissing = missing;
   });
 
