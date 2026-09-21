@@ -20,6 +20,25 @@ export interface HowTo {
 
 export const HOW_TO: HowTo[] = [
   /**
+   * 2026-09-20 (Tim, from Echo Hills) — "I put in competetion thinking that would allow me to add a
+   * scorecard for my daughter but that did not work."
+   *
+   * He was not guessing. The app calls TWO different things competition: this catalog lists
+   * 'competition' as an alias of Tournament Mode and blurbs it "Competition scoring with playing
+   * partners / guests", while the Play tab has a chip labelled Competition that only tells the brain
+   * to be conservative and badges the scorecard. He tapped the one the app's own knowledge base
+   * defines as the multiplayer one. [[two-owners-is-the-root-cause]]
+   *
+   * And the caddie could not have rescued him either: there was NO how-to for scoring another
+   * person, so asking would have returned nothing. A feature the caddie cannot name is one most
+   * players will never find.
+   */
+  {
+    id: 'score-another-player',
+    asks: ['add a scorecard for my daughter', 'can I score my son', 'keep a card for my playing partner', 'add a player', 'score someone else', 'two scorecards', 'add my wife to the round', 'scorecard for my kid', 'play with my daughter', 'competition with my daughter'],
+    steps: 'Tap Add Players on the Play tab \u2014 that is the trophy chip beside the Competition one \u2014 and put their name in. Each player gets their own card, hole by hole, and you can run it as best ball, skins, stableford or match play. The Competition chip is a different thing: it does not add anyone, it just tells me to play the round more conservatively and marks the scorecard as a competition round.',
+  },
+  /**
    * 2026-09-12 (Tim) — "because there is new app content and context we need to make sure caddie
    * knows about all of it, can speak to it, and make changes when requested when feasible."
    *

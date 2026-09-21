@@ -326,8 +326,10 @@ const ALL_APP_FEATURES: AppFeature[] = [
     aliases: ['tournament', 'tournament mode', 'competition', 'match play', 'play a competition'],
     route: '/tournament',
     category: 'play',
-    blurb: 'Competition scoring with playing partners / guests',
-    whenToUse: 'they want a competitive round with partners or match scoring',
+    // 2026-09-20 — say PLAYERS, not "competition". This blurb and the Play tab's Competition chip
+    // both read as "competition", and only THIS one adds people to a scorecard. Tim tapped the chip.
+    blurb: 'Add other players and keep a scorecard for each — best ball, skins, stableford, match play',
+    whenToUse: 'they want to score another person (a partner, their kid, a guest), or want group/match scoring',
   },
   {
     id: 'tee-goals',

@@ -2681,6 +2681,19 @@ export default function PlayTab() {
                   setSetupCompetition(next);
                   useRoundStore.getState().setIsCompetition(next);
                 }}
+                accessibilityRole="button"
+                /**
+                 * 2026-09-20 (Tim) — "I put in competetion thinking that would allow me to add a
+                 * scorecard for my daughter but that did not work."
+                 *
+                 * Reasonable reading, and the app taught it to him: the caddie's own catalog lists
+                 * 'competition' as an alias of TOURNAMENT MODE. This chip does something else
+                 * entirely — it tells the brain to be conservative and badges the scorecard — and it
+                 * does not even change the bag, since carryLimitFor ignores its argument and always
+                 * returns fourteen. So the label names what it does and points at the chip that does
+                 * what he wanted. [[two-owners-is-the-root-cause]]
+                 */
+                accessibilityLabel={t('play.accessibility_label.competition_round_conservative')}
               >
                 <Text style={[styles.chipText, setupCompetition && styles.chipTextActive]}>{t('play.competition')}</Text>
               </TouchableOpacity>

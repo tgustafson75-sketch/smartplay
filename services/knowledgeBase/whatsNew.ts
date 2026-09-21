@@ -51,6 +51,11 @@ export interface WhatsNewEntry {
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
     when: 'Sep 2026',
+    note: 'The chip for scoring other people now says Add Players instead of Tournament, so a card for your kid or your playing partner is where you would look for it. Competition was never that \u2014 it tells the caddie to play conservatively and marks the scorecard \u2014 and the caddie can now tell you the difference if you ask.',
+    howTo: 'Play tab \u2192 Add Players (the trophy chip). Each player gets their own card, hole by hole \u2014 best ball, skins, stableford or match play.',
+  },
+  {
+    when: 'Sep 2026',
     note: 'Hole views now load on courses where we only know where the greens are \u2014 and they are saved for offline, so a course with no signal still shows you the hole. Nine-hole courses also get a proper nine-hole Course Handicap instead of the eighteen-hole number.',
     howTo: 'Nothing to do. Download a course before you drive out and SmartVision has the holes ready even with no bars.',
   },
