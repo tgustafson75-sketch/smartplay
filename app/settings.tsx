@@ -149,6 +149,28 @@ export default function Settings() {
    */
   const checklistItems = useOwnerChecklistStore((s) => s.items);
   const checklistOpen = useMemo(() => checklistItems.filter((i) => !i.done).length, [checklistItems]);
+  /**
+   * 2026-09-09 — ASK whether a watch is reachable, rather than waiting to discover it by failing.
+   *
+   * `isConnected` is set by traffic: an inbound message, or a yardage push that got through. So
+   * before a round it is whatever it was last time, and Tim went a whole round on a blank watch face
+   * with nothing here able to tell him beforehand. `watchReachable()` queries the Data Layer without
+   * sending anything.
+   *
+   * THREE states and the third is the point: null = "cannot ask" (an older native shell, or iOS,
+   * where the method does not exist — and an OTA reaches all of them). Rendering that as "not
+   * connected" would be a confident wrong answer, which is the failure this whole sprint has been
+   * about. Unknown falls back to the traffic-derived flag and says nothing new.
+   */
+  const [watchReach, setWatchReach] = useState<boolean | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void import('../services/watchCaddieBridge')
+      .then(m => m.watchReachable())
+      .then(r => { if (alive) setWatchReach(r); })
+      .catch(() => { if (alive) setWatchReach(null); });
+    return () => { alive = false; };
+  }, []);
   // 2026-06-30 (Tim — "turning on the watch is blocked") — the Galaxy Watch swing-IMU bridge
   // shipped in the native build, so this is a REAL toggle now. Available only when the native
   // module is linked (latest build); on an older binary it stays disabled with a clear note.
@@ -1141,7 +1163,12 @@ export default function Settings() {
                   // 2026-09-13 — was five lines covering three features and what does NOT need the
                   // toggle. A setting's description should say what the switch does; the caveats
                   // belong where the caveat bites, not stacked on the row.
-                  ? `Captures every swing your watch sees — tagged to the hole in a round, and read for club speed in Smart Motion. Pin yardage and the watch mic do not need this.${watchConnected ? ' Watch connected.' : ` Open the SmartPlay watch app on your ${watchDeviceLabel()} to start sending.`}`
+                  // 2026-09-21 (merge of native/watch-command-and-capability) — the SHORT copy is
+                  // kept; only the status tail changed. `watchReach` can now say "no watch is
+                  // reachable" BEFORE a round instead of leaving the old traffic-derived flag to
+                  // imply a connection that is not there. null (cannot ask — iOS, or an older
+                  // shell) still falls through to the traffic flag and says nothing new.
+                  ? `Captures every swing your watch sees — tagged to the hole in a round, and read for club speed in Smart Motion. Pin yardage and the watch mic do not need this.${watchReach === false ? ` No ${watchDeviceLabel()} is reachable — check it is paired and nearby.` : (watchConnected || watchReach === true) ? ' Watch connected.' : ` Open the SmartPlay watch app on your ${watchDeviceLabel()} to start sending.`}`
                   : 'The watch swing-capture module ships in the latest native build — install it, then this turns on.'}
               </Text>
             </View>

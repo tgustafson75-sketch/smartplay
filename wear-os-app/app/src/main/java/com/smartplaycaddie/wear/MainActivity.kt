@@ -66,6 +66,14 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
         private const val CADDIE_PATH = "/smartplay/caddie"
         private const val VOICE_PATH = "/smartplay/voice"
         private const val HELLO_PATH = "/smartplay/hello"
+        /**
+         * 2026-09-09 — the watch asking the PHONE to do something.
+         *
+         * The 08-07 feature ("record button on the watch to control SmartMotion record + stop") was
+         * wired in the phone's JS and nowhere else: no path on the phone's native module, and no
+         * sender here. Only the middle of the feature existed.
+         */
+        private const val COMMAND_PATH = "/smartplay/command"
         private const val REQ_SPEECH = 7001
         private val GREEN = Color.parseColor("#88F700") // canonical SmartPlay neon green
         private val DIM = Color.parseColor("#9AA0A6")
@@ -203,11 +211,28 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
 
         // Secondary: swing capture toggle, dim so it doesn't compete with the number.
         captureBtn = Button(this).apply {
-            text = "Record swings"
+            text = "Record swings\nhold \u2192 SmartMotion"
             setTextColor(DIM)
             setBackgroundColor(Color.parseColor("#1A1A1A"))
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
             setOnClickListener { onToggleCapture() }
+            /**
+             * 2026-09-09 — LONG-PRESS drives SmartMotion on the phone.
+             *
+             * Deliberately a long-press on the button that already means "record", rather than a
+             * third button: this watch face is 1.4 inches and already carries a mic, a yardage
+             * number, a feedback strip and this toggle. Two different recordings needed separating,
+             * not crowding — a tap still starts the WATCH's own swing sensor, a long-press toggles
+             * the PHONE's SmartMotion capture.
+             *
+             * The label says so, because an undiscoverable gesture is the same as no feature. If Tim
+             * would rather have a separate button, this is the one line to move.
+             */
+            setOnLongClickListener {
+                sendToPhone(COMMAND_PATH, "smartmotion_toggle".toByteArray(Charsets.UTF_8))
+                status.text = "SmartMotion \u2192 phone"
+                true
+            }
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -402,10 +427,13 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
         if (capturing) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(svc)
             else startService(svc)
-            captureBtn.text = "Stop swings"
+            // 2026-09-09 — keep the long-press hint on BOTH states. Dropping it on the toggled state
+            // would make the gesture discoverable only while capture is off, which is most of the
+            // time it is NOT wanted.
+            captureBtn.text = "Stop swings\nhold \u2192 SmartMotion"
         } else {
             stopService(svc)
-            captureBtn.text = "Record swings"
+            captureBtn.text = "Record swings\nhold \u2192 SmartMotion"
         }
     }
 

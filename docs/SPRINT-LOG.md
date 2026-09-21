@@ -4876,3 +4876,35 @@ against the shipped build before each fix.
   `bitmap.recycle()` or closes the MPImage. Each allocation is now ~10x smaller, but it still leaks.
 - **Deferred, written up in OPEN-ITEMS.md:** the silent round briefing (voice path, PATH 4).
 - Sentry API access still 403 for this org.
+
+### Native watch fixes — 2026-09-09 (Tim: "write them now")
+
+On branch `native/watch-command-and-capability`, **deliberately NOT on main**. Main stays pure JS so
+it remains OTA-able; the moment these land on main, `ota-preflight` refuses every OTA until a store
+build ships. Keeping them separate preserves both options.
+
+**1. `onWatchCommand` had no ends, only a middle.** JS has routed four SmartMotion commands since
+08-07. The phone module had no command path and never emitted the event — and the watch never sent
+one either (its "Record swings" button starts the watch's own sensor and talks to nobody). The
+handler could not fire under any circumstances. Now: `/smartplay/command` on both ends, with the
+watch sending `smartmotion_toggle` on a **long-press** of the existing capture button — a tap still
+starts the watch's own sensor, a hold drives the phone. One button, two recordings, separated rather
+than crowded onto a 1.4-inch face; the label says so on both toggle states, because an
+undiscoverable gesture is the same as no feature. Native forwards unknown commands rather than
+whitelisting: JS ships by OTA and that file does not, so a new command must not need a store build.
+
+**2. Reachability can now be ASKED.** `getConnectedNodeCount` is a plain NodeClient query that sends
+nothing, surfaced as `watchReachable(): Promise<boolean | null>`. Deliberately **not** a
+CapabilityClient listener — that needs a matching capability declared in the watch app's res/values,
+and a mismatch produces a listener that silently never fires. That is precisely the bug class this
+sprint has been spent on and not one to introduce blind on code that cannot be tested from here.
+
+`null` means "cannot ask" (older shell, or iOS) and must never render as "not connected" — Settings
+falls back to the traffic-derived flag instead of stating a confident wrong answer.
+
+**The sim's orphan guard caught `watchReachable` unwired on its first run** — built and connected to
+nothing, the same class as the `onWatchCommand` orphan being fixed in the same commit. Wired into the
+Settings row rather than baselined.
+
+Health: **tsc 0 · jest 2945/2945 (263 suites) · sim 968/968 · lint 0 errors**.
+`ota-preflight` correctly REFUSES on this branch — verified.
