@@ -20,7 +20,7 @@
  * handicap for a guest to make a column look full. [[illustration-data-points]]
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, Pressable, TextInput, ScrollView, Share, Alert,
 } from 'react-native';
@@ -53,6 +53,21 @@ export function AddedPlayerCards({ holes, courseName, ownerName, ownerScores }: 
   const setHandicap = useGuestCardStore((s) => s.setHandicap);
   const bumpScore = useGuestCardStore((s) => s.bumpScore);
   const clearAll = useGuestCardStore((s) => s.clearAll);
+  const noteCourse = useGuestCardStore((s) => s.noteCourse);
+
+  /**
+   * 2026-09-20 (adversarial pass, my own code from an hour earlier) — THIS WAS NEVER CALLED.
+   *
+   * guestCardStore.noteCourse clears the cards' scores when the course changes, and it had no
+   * production caller at all. The store function existed, its test called it directly and passed,
+   * and the app never invoked it — so the behaviour I claimed ("a new course clears the scores
+   * rather than carrying them over") simply did not happen.
+   *
+   * What that costs: keep a card at Echo Hills, play somewhere else tomorrow, and yesterday's
+   * scores are still sitting on it — exportable, with the new course's name on the export.
+   * [[orphans-are-live-bugs-not-dead-code]] [[grep-guards-cant-see-dead-code]]
+   */
+  useEffect(() => { noteCourse(courseName); }, [courseName, noteCourse]);
 
   /** 0 = the owner's tab (read-only summary); 1..n = guest cards. */
   const [activeTab, setActiveTab] = useState(0);

@@ -15953,7 +15953,12 @@ check(
  */
 {
   const vs = readCode('services/voiceService.ts');
-  const claim = /function claimSpeechId\(reason: SpeechIdReason\): number \{[\s\S]*?\n\}/.exec(vs)?.[0] ?? '';
+  // 2026-09-20 — the slice is found by NAME, not by the parameter's type. Widening the reason to
+  // StopAttribution (so the mid-fetch preempt logs can name a surface) changed the signature and
+  // this extraction silently returned '' — which failed two guards about the ledger's contents
+  // and its bound, neither of which had anything to do with the type.
+  // [[guards-that-copy-the-line-they-guard]]
+  const claim = /function claimSpeechId\([\s\S]*?\): number \{[\s\S]*?\n\}/.exec(vs)?.[0] ?? '';
   check(
     'VOICE: exactly one place increments the speech generation, and it records why',
     /speechIdReasons\.set\(currentSpeechId, reason\)/.test(claim) &&
@@ -15998,7 +16003,12 @@ check(
       // the reason and threw it away, so every speak_superseded said a line was dropped and could not
       // say by whom. Asserting the plumbing without the field is how that survived.
       /preemptedBy: lastStopReason/.test(vs) &&
-      /lastStopReason = isKnown \|\| isSurface \? why : 'stop'/.test(vs),
+      // 2026-09-20 (adversarial pass) — the label is now computed once as `attribution` and given
+      // to BOTH the log field and the speech-id map, so the three mid-fetch preempt logs can name
+      // a surface too. Same semantics, one spelling. [[guards-that-copy-the-line-they-guard]]
+      /const attribution: StopAttribution = isKnown \|\| isSurface \? why : 'stop'/.test(vs) &&
+      /lastStopReason = attribution/.test(vs) &&
+      /claimSpeechId\(attribution\)/.test(vs),
     'a report reading preemptedBy: route_change is the proof for the lastSpeakStartedAt theory; one reading speak kills it — and validating `why` stops a future onPress={stopSpeaking} recording a press event as the reason',
   );
 }

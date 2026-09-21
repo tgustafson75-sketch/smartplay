@@ -51,8 +51,10 @@ describe('a cut line names who cut it', () => {
   it('the log keeps the caller label verbatim, while dispatch keeps the known seven', () => {
     // Dispatch is coerced to the known seven; the log keeps the caller's label.
     expect(voice).toMatch(/SPEECH_ID_REASONS\.includes\(why as SpeechIdReason\)/);
-    expect(voice).toMatch(/claimSpeechId\(reason\);/);
-    expect(voice).toMatch(/lastStopReason = isKnown \|\| isSurface \? why : 'stop';/);
+    expect(voice).toMatch(/claimSpeechId\(attribution\);/);
+    // the label is computed once and BOTH the log field and the id map get it
+    expect(voice).toMatch(/const attribution: StopAttribution = isKnown \|\| isSurface \? why : 'stop';/);
+    expect(voice).toMatch(/lastStopReason = attribution;/);
     expect(voice).not.toMatch(/lastStopReason = reason;/);
   });
 
@@ -66,6 +68,20 @@ describe('a cut line names who cut it', () => {
      */
     expect(voice).toMatch(/\^screen:\[a-z0-9-\]\+\$/);
     expect(voice).toMatch(/typeof why === 'string'/);
+  });
+
+  it('EVERY preempt log can name a surface, not just speak_superseded', () => {
+    /**
+     * 2026-09-20 (adversarial pass) — speak_preempted_after_fetch / _after_arraybuffer /
+     * _after_file_write read speechIdReason(), which returned the COERCED value, so the three logs
+     * most likely to catch a mid-turn cut still said 'stop'. The id map now carries the label.
+     */
+    expect(voice).toMatch(/const speechIdReasons = new Map<number, StopAttribution>\(\)/);
+    expect(voice).toMatch(/function claimSpeechId\(reason: StopAttribution\)/);
+    expect(voice).toMatch(/function speechIdReason\(id: number\): StopAttribution/);
+    expect(voice).toMatch(/claimSpeechId\(attribution\)/);
+    // dispatch must STILL be the coerced known reason, or a `screen:` label could reach a branch
+    expect(voice).toMatch(/const reason: SpeechIdReason = isKnown \? \(why as SpeechIdReason\) : 'stop';/);
   });
 
   it('the mic-open barge-in is distinguishable from a screen-level stop', () => {

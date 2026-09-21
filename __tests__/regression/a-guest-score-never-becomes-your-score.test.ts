@@ -88,6 +88,18 @@ describe('a guest score never becomes your score', () => {
     expect(addCard('one too many')).toBeNull();
   });
 
+  it('the app actually CALLS noteCourse — the store function alone is not the feature', () => {
+    /**
+     * 2026-09-20 (adversarial pass) — it did not. The store function existed, the test below called
+     * it directly and passed, and nothing in the app ever invoked it, so scores carried from one
+     * course to the next. A test that drives a function the product never calls proves the function
+     * works, not that the behaviour happens. [[grep-guards-cant-see-dead-code]]
+     */
+    const src = fs.readFileSync(path.join(ROOT, 'components/scorecard/AddedPlayerCards.tsx'), 'utf8');
+    expect(src).toMatch(/useGuestCardStore\(\(s\) => s\.noteCourse\)/);
+    expect(src).toMatch(/useEffect\(\(\) => \{ noteCourse\(courseName\); \}, \[courseName, noteCourse\]\)/);
+  });
+
   it('a new course clears the scores rather than carrying them over', () => {
     const { addCard, setScore, noteCourse } = useGuestCardStore.getState();
     const g = addCard('Lily')!;

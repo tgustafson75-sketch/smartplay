@@ -1119,10 +1119,22 @@ let currentAbortController: AbortController | null = null;
  */
 type SpeechIdReason = 'speak' | 'stop' | 'route_change' | 'device_notice' | 'prewarm' | 'base64' | 'unknown';
 const SPEECH_ID_REASONS: readonly SpeechIdReason[] = ['speak', 'stop', 'route_change', 'device_notice', 'prewarm', 'base64', 'unknown'];
-const speechIdReasons = new Map<number, SpeechIdReason>();
+/**
+ * 2026-09-20 (adversarial pass) — THE OTHER THREE PREEMPT LOGS NAMED NOBODY EITHER.
+ *
+ * Attributing stopSpeaking made `speak_superseded` name the screen that cut a line. But three more
+ * logs — speak_preempted_after_fetch / _after_arraybuffer / _after_file_write, the ones that fire
+ * when a cut lands mid-download — read `speechIdReason(currentSpeechId)`, which returned the
+ * COERCED value. So the very reports most likely to catch Tim's "racing" mid-turn still said
+ * 'stop' and indicted every screen equally, which is the exact defect this pass set out to fix.
+ *
+ * The map now holds the caller's own label. It is read in three log payloads and nowhere else — no
+ * branch anywhere tests it — so this is a diagnostic widening with no behavioural surface.
+ */
+const speechIdReasons = new Map<number, StopAttribution>();
 const SPEECH_ID_REASON_MEMORY = 24;
 
-function claimSpeechId(reason: SpeechIdReason): number {
+function claimSpeechId(reason: StopAttribution): number {
   currentSpeechId++;
   speechIdReasons.set(currentSpeechId, reason);
   // Only recent generations can be asked about; a long round must not grow this without bound.
@@ -1135,7 +1147,7 @@ function claimSpeechId(reason: SpeechIdReason): number {
 }
 
 /** Why the generation holding the voice right now claimed it. 'unknown' once it ages out. */
-function speechIdReason(id: number): SpeechIdReason {
+function speechIdReason(id: number): StopAttribution {
   return speechIdReasons.get(id) ?? 'unknown';
 }
 
@@ -1236,8 +1248,11 @@ export const stopSpeaking = async (why: StopAttribution = 'stop'): Promise<void>
   const isKnown = typeof why === 'string' && SPEECH_ID_REASONS.includes(why as SpeechIdReason);
   const isSurface = typeof why === 'string' && /^screen:[a-z0-9-]+$/.test(why);
   const reason: SpeechIdReason = isKnown ? (why as SpeechIdReason) : 'stop';
-  claimSpeechId(reason);
-  lastStopReason = isKnown || isSurface ? why : 'stop';
+  const attribution: StopAttribution = isKnown || isSurface ? why : 'stop';
+  // The ID carries the LABEL so the three mid-fetch preempt logs can name the surface too; every
+  // branch that tests a reason still tests `reason`, which is one of the known seven.
+  claimSpeechId(attribution);
+  lastStopReason = attribution;
   lastStopAt = Date.now();
   speakGeneration++;
   if (currentAbortController) {
