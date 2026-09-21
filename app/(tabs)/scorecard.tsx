@@ -467,7 +467,7 @@ export default function Scorecard() {
 
   const onSpeakRecap = useCallback(async () => {
     if (!recap?.overall_kevin_summary) return;
-    if (isSpeaking()) { void stopSpeaking(); setSpeaking(false); return; }
+    if (isSpeaking()) { void stopSpeaking('screen:scorecard'); setSpeaking(false); return; }
     setSpeaking(true);
     try {
       await speakChunked(recap.overall_kevin_summary, voiceGender, language, apiUrl, { userInitiated: true });

@@ -172,7 +172,7 @@ export default function AskYourSwingCard({ session }: Props) {
     setListening(true);
     try {
       // Stop any currently-speaking answer so the mic doesn't pick it up.
-      await stopSpeaking().catch(() => {});
+      await stopSpeaking('screen:components-swinglab-askyourswingcard').catch(() => {});
       const heard = await captureUtterance(10_000, getApiBaseUrl(), language as 'en' | 'es' | 'zh');
       if (heard) {
         setQuestion(heard);

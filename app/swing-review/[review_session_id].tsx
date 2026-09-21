@@ -119,7 +119,7 @@ export default function CageReviewInterview() {
       // 2026-06-14 (audit) — also stop any in-flight caddie TTS, or a spoken
       // question keeps playing over the next screen until something else reclaims
       // the audio. Other TTS screens already do this; cage-review was the gap.
-      void stopSpeaking().catch(() => undefined);
+      void stopSpeaking('screen:swing-review-review-session-id').catch(() => undefined);
       const rec = recordingRef.current;
       recordingRef.current = null;
       if (rec) {

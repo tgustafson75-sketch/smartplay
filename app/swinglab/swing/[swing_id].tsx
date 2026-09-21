@@ -995,7 +995,7 @@ export default function SwingDetail() {
   // fetch on every swing change (covers screen-reuse where the []-unmount never
   // fires), so each swing starts from a clean voice slot.
   useEffect(() => {
-    return () => { void stopSpeaking(); };
+    return () => { void stopSpeaking('screen:swinglab-swing-swing-id'); };
   }, [swing_id]);
 
   // Phase V — automatic Kevin voice when analysis FIRST completes for this
@@ -1370,7 +1370,7 @@ export default function SwingDetail() {
       // and speakChunked's own barge-in guard (speakGeneration) then broke the report mid-way → silence.
       // OWN the voice first: stopSpeaking() cancels any in-flight utterance across BOTH audio subsystems;
       // speakChunked snapshots speakGeneration AFTER this, so it never self-aborts.
-      await stopSpeaking().catch(() => {});
+      await stopSpeaking('screen:swinglab-swing-swing-id').catch(() => {});
       if (cancelled) return;
       await configureAudioForSpeech();
       if (cancelled) return;
@@ -2352,7 +2352,7 @@ export default function SwingDetail() {
     // transition. Also stop any in-flight TTS from a prior auto-narration.
     uploadLog('reanalyze-start', { from_status: analysisStatus }, swing_id);
     try { require('../../../services/routeBreadcrumb').breadcrumb('analyze:reanalyze', { swing_id, from: analysisStatus }); } catch { /* non-fatal */ }
-    void stopSpeaking().catch(() => {});
+    void stopSpeaking('screen:swinglab-swing-swing-id').catch(() => {});
     void (async () => {
       // 2026-06-10 — Honest guard: re-analysis re-extracts frames FROM THE
       // VIDEO. If the source clip is gone (old upload/recording whose temp file

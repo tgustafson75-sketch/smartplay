@@ -64,7 +64,7 @@ export default function SetupCheckScreen() {
 
   // 2026-06-15 (audit) — stop any in-flight setup readout when leaving the screen so
   // it can't play over the next screen's voice (sibling of the swing-detail fix).
-  useEffect(() => () => { void stopSpeaking().catch(() => undefined); }, []);
+  useEffect(() => () => { void stopSpeaking('screen:swinglab-setup-check').catch(() => undefined); }, []);
 
   const speakResult = useCallback(async (r: SetupCheckResult) => {
     if (!voiceEnabled || !r.valid) return;
@@ -121,7 +121,7 @@ export default function SetupCheckScreen() {
 
   const handleReplay = useCallback(async () => {
     if (!result) return;
-    if (speaking) { try { await stopSpeaking(); } catch {} setSpeaking(false); return; }
+    if (speaking) { try { await stopSpeaking('screen:swinglab-setup-check'); } catch {} setSpeaking(false); return; }
     void speakResult(result);
   }, [result, speaking, speakResult]);
 

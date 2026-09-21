@@ -88,7 +88,7 @@ export default function DiagnosticCard() {
 
   const replay = async () => {
     if (playing) {
-      await stopSpeaking().catch(() => {});
+      await stopSpeaking('screen:diagnostic-card').catch(() => {});
       setPlaying(false);
       return;
     }

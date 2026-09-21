@@ -465,7 +465,10 @@ export const captureUtteranceDetailed = async (
     // mid-response stops the caddie and listens. Unconditional + idempotent — isSpeaking()
     // only tracks the cloud sound, NOT the device-TTS fallback, so always call
     // stopSpeaking() (it covers both subsystems and is a near-noop when nothing plays).
-    try { await stopSpeaking(); } catch { /* best-effort */ }
+    // 2026-09-20 — attributed. This is the barge-in cut that fires whenever the mic opens, and it
+    // is the single most likely author of a mid-round 'racing' report: the caddie starts a line,
+    // listening opens, and the line is cut. It must be distinguishable from a screen-level stop.
+    try { await stopSpeaking('screen:mic-open'); } catch { /* best-effort */ }
     const { granted } = await Audio.requestPermissionsAsync();
     if (!granted) return done('no_permission');
     await configureAudioForRecording();
@@ -840,7 +843,25 @@ let speakGeneration = 0;
  * already takes the reason; this just keeps the last one. No behaviour changes.
  * [[missing-log-entry-is-the-evidence]]
  */
-let lastStopReason: SpeechIdReason | null = null;
+/**
+ * 2026-09-20 (Tim, from Echo Hills — "I still had racing while I was playing") — WIDENED SO IT CAN
+ * NAME A SURFACE.
+ *
+ * "Racing" is Tim's word from 2026-07-30 for two spoken things competing, and the queue below
+ * already handles it correctly: one wins, the other is dropped and logged as speak_superseded with
+ * `preemptedBy`. That diagnostic was added on 2026-09-01 specifically so "the next field report
+ * names the surface that cancelled".
+ *
+ * IT COULD NOT. `stopSpeaking` defaults its reason to 'stop', and of SIXTY call sites exactly ONE
+ * passed anything else. So Tim's entry — speak_superseded on /caddie at hole 1, preemptedBy 'stop',
+ * 276ms after the cut — indicts every screen in the app equally, which is to say none of them.
+ *
+ * The behaviour is untouched: claimSpeechId still receives one of the known SpeechIdReason values,
+ * and every branch that tests the reason keeps testing the same seven. This only records the
+ * caller's own label verbatim for the log. [[missing-log-entry-is-the-evidence]]
+ */
+export type StopAttribution = SpeechIdReason | `screen:${string}`;
+let lastStopReason: StopAttribution | null = null;
 let lastStopAt = 0;
 
 // 2026-06-16 (Tim — "old voices leaking from prior steps" on navigation) — stamp
@@ -1200,10 +1221,23 @@ export const subscribeToCaption = (
  * Still diagnostic-only — no ordering, timing or preemption behaviour changes.
  * [[missing-log-entry-is-the-evidence]] [[voice-path-change-freeze]]
  */
-export const stopSpeaking = async (why: SpeechIdReason = 'stop'): Promise<void> => {
-  const reason: SpeechIdReason = SPEECH_ID_REASONS.includes(why) ? why : 'stop';
+export const stopSpeaking = async (why: StopAttribution = 'stop'): Promise<void> => {
+  /**
+   * Two separate questions, deliberately answered separately.
+   *
+   * DISPATCH keys off the known seven exactly as before: a `screen:` label degrades to 'stop',
+   * which is what every one of those callers already was, so no branch changes behaviour.
+   *
+   * THE LOG keeps the caller's own label — but ONLY if it is one we recognise. The 2026-09-09
+   * scenario that guards this function exists partly to stop `onPress={stopSpeaking}` recording a
+   * React press EVENT as the reason, and simply trusting `why` would have handed that object
+   * straight into the issue log. A label must be one of the seven, or a well-formed `screen:` one.
+   */
+  const isKnown = typeof why === 'string' && SPEECH_ID_REASONS.includes(why as SpeechIdReason);
+  const isSurface = typeof why === 'string' && /^screen:[a-z0-9-]+$/.test(why);
+  const reason: SpeechIdReason = isKnown ? (why as SpeechIdReason) : 'stop';
   claimSpeechId(reason);
-  lastStopReason = reason;
+  lastStopReason = isKnown || isSurface ? why : 'stop';
   lastStopAt = Date.now();
   speakGeneration++;
   if (currentAbortController) {

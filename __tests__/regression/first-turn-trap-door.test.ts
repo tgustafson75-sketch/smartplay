@@ -40,7 +40,11 @@ describe('the first tap is never eaten', () => {
   it('a tap during UNSOLICITED speech falls through to open the mic', () => {
     const start = src.indexOf('if (isSpeaking() && !isSpeakingUserInitiated()) {');
     const branch = src.slice(start, src.indexOf('} else if (isSpeaking()) {', start));
-    expect(branch).toContain('await stopSpeaking();');
+    // 2026-09-20 — WIDENED, not weakened. This pinned the literal `await stopSpeaking();` and went
+    // red when every call site gained a surface label for the 'racing' diagnostic — a correct
+    // change. What matters here is that the branch STOPS THE SPEECH before falling through, not
+    // how the stop is attributed. [[guards-that-copy-the-line-they-guard]]
+    expect(branch).toMatch(/await stopSpeaking\([^)]*\);/);
     // THE fix: no early return in this branch. A `return` here is the bug itself.
     expect(branch).not.toMatch(/\n\s{6}return;/);
   });

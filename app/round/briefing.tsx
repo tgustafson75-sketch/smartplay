@@ -107,7 +107,7 @@ export default function BriefingScreen() {
   const doSkip = useCallback(() => {
     if (skippedRef.current) return;
     skippedRef.current = true;
-    stopSpeaking().catch(() => {});
+    stopSpeaking('screen:round-briefing').catch(() => {});
     router.replace('/(tabs)/caddie' as never);
   }, [router]);
 

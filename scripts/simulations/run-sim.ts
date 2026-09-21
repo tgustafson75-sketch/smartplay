@@ -3959,7 +3959,10 @@ check('Voice: capture silences the caddie before opening the mic (no self-record
   (() => {
     const vs = read('services/voiceService.ts');
     return (
-      /export const captureUtteranceDetailed =[\s\S]*?try \{ await stopSpeaking\(\); \} catch[\s\S]*?await configureAudioForRecording\(\)/.test(vs) &&
+            // 2026-09-20 — widened: every stopSpeaking call now carries a `screen:` label so a cut line
+      // names its surface. The property is that the call HAPPENS, not that it takes no argument.
+      // [[guards-that-copy-the-line-they-guard]]
+      /export const captureUtteranceDetailed =[\s\S]*?try \{ await stopSpeaking\([^)]*\); \} catch[\s\S]*?await configureAudioForRecording\(\)/.test(vs) &&
       /export const captureUtterance = async \([\s\S]*?captureUtteranceDetailed\(timeoutMs, apiUrl, language\)\)\.text/.test(vs)
     );
   })(),
@@ -4795,7 +4798,7 @@ check('Voice: stale speech cleared on navigation (no carry-over), with speak-the
       // It went red when the call gained a diagnostic reason that changed nothing it cares about.
       // What this scenario is actually about is that the route change STOPS the stale line, so it
       // now matches the call with or without a reason. [[break-test-every-guard-you-write]]
-      /void stopSpeaking\((?:'[a-z_]+')?\)\.catch/.test(layout)
+      /void stopSpeaking\((?:'[a-z_:-]+')?\)\.catch/.test(layout)
     );
   })(),
   'route change stops stale prior-step speech; 2s grace protects speak-then-navigate');
@@ -4977,7 +4980,10 @@ check('No ghost reads: Smart Motion + library stop speech on exit / new session'
     const sm = read('app/swinglab/smartmotion.tsx');
     const detail = read('app/swinglab/swing/[swing_id].tsx');
     return (
-      /pipelineAbortRef\.current = true/.test(sm) && /void stopSpeaking\(\)/.test(sm) &&
+            // 2026-09-20 — widened: every stopSpeaking call now carries a `screen:` label so a cut line
+      // names its surface. The property is that the call HAPPENS, not that it takes no argument.
+      // [[guards-that-copy-the-line-they-guard]]
+      /pipelineAbortRef\.current = true/.test(sm) && /void stopSpeaking\([^)]*\)/.test(sm) &&
       /if \(cancelled\(\)\) return;/.test(sm) &&
       /let cancelled = false;/.test(detail) &&
       /if \(cancelled\) return;/.test(detail) &&
@@ -6844,7 +6850,7 @@ check('Audit fix: cage-review stops caddie TTS on unmount (no cross-screen audio
   (() => {
     const cr = read('app/swing-review/[review_session_id].tsx');
     return /import \{[^}]*stopSpeaking[^}]*\} from '\.\.\/\.\.\/services\/voiceService'/.test(cr) &&
-      /void stopSpeaking\(\)\.catch\(\(\) => undefined\)/.test(cr);
+      /void stopSpeaking\([^)]*\)\.catch\(\(\) => undefined\)/.test(cr);
   })(),
   'navigating away from a cage review mid-question stops the spoken TTS instead of letting it play over the next screen');
 
@@ -7498,7 +7504,11 @@ check('Lifecycle: cage-review + cage-overlay release mic/camera on unmount',
     return (
       // cage-review: []-effect stops+unloads the in-flight recording and hands the
       // audio session back to playback so the next caddie line isn't silent.
-      /return \(\) => \{[\s\S]{0,420}rec\.stopAndUnloadAsync\(\)[\s\S]{0,120}configureAudioForSpeech\(\)/.test(cr) &&
+      // 2026-09-20 — window widened 420 → 700. It did not fail on a behaviour change: attributing
+      // this file's stopSpeaking call added ~40 characters inside the cleanup block and pushed
+      // stopAndUnloadAsync past the bound. A character budget is not the invariant; the ORDER is
+      // (stop+unload the recording, then hand the audio session back). [[three-ways-a-guard-is-worthless]]
+      /return \(\) => \{[\s\S]{0,700}rec\.stopAndUnloadAsync\(\)[\s\S]{0,120}configureAudioForSpeech\(\)/.test(cr) &&
       // cage-overlay: live phaseRef + cleanup reads it (no stale 'requesting' closure)
       /const phaseRef = useRef\(phase\);\s*\n\s*phaseRef\.current = phase;/.test(co) &&
       /if \(phaseRef\.current === 'recording'\) \{\s*\n\s*cameraRef\.current\?\.stopRecording\(\)/.test(co)
@@ -9957,7 +9967,7 @@ check('Swing detail: stops voice on swing CHANGE, not just unmount (no late-catc
     // a stopSpeaking cleanup keyed on [swing_id] (fires on every swing change +
     // unmount), so a slow/failing TTS fetch from the prior swing can't play late
     // while the next swing's narration queues behind it on the serial speak queue.
-    return /return \(\) => \{ void stopSpeaking\(\); \};\s*\}, \[swing_id\]\)/.test(src);
+    return /return \(\) => \{ void stopSpeaking\([^)]*\); \};\s*\}, \[swing_id\]\)/.test(src);
   })(),
   'navigating between swing-library files aborts the prior swing\'s in-flight/queued narration (stopSpeaking bumps the speak generation + aborts the TTS fetch) so voices don\'t stack and catch up late');
 
@@ -15952,15 +15962,22 @@ check(
    */
   check(
     'VOICE: the route-change guard names itself when it cancels a line',
-    /export const stopSpeaking = async \(why: SpeechIdReason = 'stop'\)/.test(vs) &&
-      /SPEECH_ID_REASONS\.includes\(why\) \? why : 'stop'/.test(vs) &&
+    // 2026-09-20 — widened for surface attribution, and it CAUGHT SOMETHING while being widened.
+      // `why` is now recorded verbatim so a cut line names its screen; trusting it blindly would let
+      // `onPress={stopSpeaking}` put a React press EVENT into the issue log, which is half of what
+      // this scenario was written to prevent. So the label is validated before it is recorded, and
+      // that validation is asserted here alongside the dispatch one.
+      /export const stopSpeaking = async \(why: StopAttribution = 'stop'\)/.test(vs) &&
+      /SPEECH_ID_REASONS\.includes\(why as SpeechIdReason\)/.test(vs) &&
+      /const reason: SpeechIdReason = isKnown \? \(why as SpeechIdReason\) : 'stop'/.test(vs) &&
+      /\^screen:\[a-z0-9-\]\+\$/.test(vs) &&
       /void stopSpeaking\('route_change'\)/.test(readCode('app/_layout.tsx')) &&
       // 2026-09-09 — AND THE FIELD ITSELF. This check's own rationale says the proof is a report
       // reading `preemptedBy: route_change`, and until today nothing recorded one: stopSpeaking took
       // the reason and threw it away, so every speak_superseded said a line was dropped and could not
       // say by whom. Asserting the plumbing without the field is how that survived.
       /preemptedBy: lastStopReason/.test(vs) &&
-      /lastStopReason = reason/.test(vs),
+      /lastStopReason = isKnown \|\| isSurface \? why : 'stop'/.test(vs),
     'a report reading preemptedBy: route_change is the proof for the lastSpeakStartedAt theory; one reading speak kills it — and validating `why` stops a future onPress={stopSpeaking} recording a press event as the reason',
   );
 }

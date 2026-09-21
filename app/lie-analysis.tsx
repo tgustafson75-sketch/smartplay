@@ -83,7 +83,7 @@ export default function LieAnalysisScreen() {
   // capture so a spoken "what do you see?" can't play over the next screen and a
   // background captureUtterance doesn't burn a wasted transcribe. Best-effort.
   useEffect(() => () => {
-    void stopSpeaking().catch(() => undefined);
+    void stopSpeaking('screen:lie-analysis').catch(() => undefined);
     void stopCapture().catch(() => undefined);
   }, []);
 
@@ -192,7 +192,7 @@ export default function LieAnalysisScreen() {
   const handleSkipOpener = useCallback(async () => {
     // 2026-06-15 (audit) — await the stop so the opener's TTS can't resolve + play
     // into the camera's recording audio session after the user skips.
-    await stopSpeaking().catch(() => {});
+    await stopSpeaking('screen:lie-analysis').catch(() => {});
     setPhase('camera');
   }, []);
 
@@ -340,7 +340,7 @@ export default function LieAnalysisScreen() {
   const handleReplay = useCallback(async () => {
     if (!analysis) return;
     if (speaking) {
-      try { await stopSpeaking(); } catch {}
+      try { await stopSpeaking('screen:lie-analysis'); } catch {}
       setSpeaking(false);
       return;
     }

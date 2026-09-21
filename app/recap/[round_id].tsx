@@ -611,7 +611,7 @@ export default function RecapScreen() {
 
   const handlePlayAloud = useCallback(async () => {
     if (!recap) return;
-    if (isSpeaking()) { await stopSpeaking(); setSpeaking(false); return; }
+    if (isSpeaking()) { await stopSpeaking('screen:recap-round-id'); setSpeaking(false); return; }
     if (!voiceEnabled) return;
     setSpeaking(true);
     try {
@@ -628,7 +628,7 @@ export default function RecapScreen() {
     if (!recap) return;
     if (narratingRef.current) {
       narratingRef.current = false;
-      await stopSpeaking();
+      await stopSpeaking('screen:recap-round-id');
       setNarrating(false);
       setHighlightedHole(null);
       return;

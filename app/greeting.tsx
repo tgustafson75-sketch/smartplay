@@ -287,7 +287,7 @@ export default function GreetingScreen() {
       clearTimeout(advanceTimerRef.current);
       advanceTimerRef.current = null;
     }
-    void stopSpeaking().catch(() => {});
+    void stopSpeaking('screen:greeting').catch(() => {});
     startTransition();
   }, [startTransition]);
 
@@ -495,7 +495,7 @@ export default function GreetingScreen() {
   useEffect(() => {
     return () => {
       if (!naturalEndRef.current) {
-        void stopSpeaking().catch(() => {});
+        void stopSpeaking('screen:greeting').catch(() => {});
       }
     };
   }, []);

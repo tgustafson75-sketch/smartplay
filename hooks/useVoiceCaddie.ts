@@ -1361,7 +1361,7 @@ export const useVoiceCaddie = ({
             onResponseReceived(answered.line);
             recordKevinTurn(answered.line);
             wrappedOnVoiceStateChange('speaking');
-            await stopSpeaking();
+            await stopSpeaking('screen:hooks-usevoicecaddie');
             void speakDeviceNotice(answered.line, language, voiceGender);
             wrappedOnVoiceStateChange('idle');
             return;
@@ -1379,7 +1379,7 @@ export const useVoiceCaddie = ({
           onResponseReceived(courseResolved.confirmLine);
           recordKevinTurn(courseResolved.confirmLine);
           wrappedOnVoiceStateChange('speaking');
-          await stopSpeaking();
+          await stopSpeaking('screen:hooks-usevoicecaddie');
           await speakResponse(courseResolved.confirmLine);
           wrappedOnVoiceStateChange('idle');
           return;
@@ -1400,7 +1400,7 @@ export const useVoiceCaddie = ({
         // 2026-07-06 (voice-parity F3) — skip logging a fallback degrade line.
         if (!checked.fallback) recordKevinTurn(checked.text);
         wrappedOnVoiceStateChange('speaking');
-        await stopSpeaking();
+        await stopSpeaking('screen:hooks-usevoicecaddie');
         if (checked.audioBase64 && voiceEnabled) {
           await speakFromBase64(checked.audioBase64, { userInitiated: true, caption: checked.text });
         } else {
@@ -2289,7 +2289,7 @@ export const useVoiceCaddie = ({
           onResponseReceived(answered.line);
           recordKevinTurn(answered.line);
           wrappedOnVoiceStateChange('speaking');
-          await stopSpeaking();
+          await stopSpeaking('screen:hooks-usevoicecaddie');
           await speakResponse(answered.line);
           wrappedOnVoiceStateChange('idle');
           isProcessingRef.current = false;
@@ -2305,7 +2305,7 @@ export const useVoiceCaddie = ({
         if (bypass.triggerHeroReelView) onHeroReelView?.();
 
         if (bypass.triggerMute) {
-          await stopSpeaking();
+          await stopSpeaking('screen:hooks-usevoicecaddie');
           wrappedOnVoiceStateChange('idle');
           isProcessingRef.current = false;
           return;
@@ -2837,7 +2837,7 @@ export const useVoiceCaddie = ({
       // Suppress the in-flight caller's follow-up loop, same as the interrupt path, so it can't
       // reopen the mic underneath the recording we're about to start.
       userInterruptedRef.current = true;
-      await stopSpeaking();
+      await stopSpeaking('screen:hooks-usevoicecaddie');
       // deliberately NO return — fall through to the START branch below
     } else if (isSpeaking()) {
       // 2026-06-06 — Tim's report: tapping to interrupt mid-speech
@@ -2851,7 +2851,7 @@ export const useVoiceCaddie = ({
       // "stuck" state. Set the flag here so the in-flight caller
       // skips its follow-up and goes cleanly idle.
       userInterruptedRef.current = true;
-      await stopSpeaking();
+      await stopSpeaking('screen:hooks-usevoicecaddie');
       isProcessingRef.current = false;
       wrappedOnVoiceStateChange('idle');
       return;

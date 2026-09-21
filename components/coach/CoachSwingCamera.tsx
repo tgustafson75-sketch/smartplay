@@ -62,7 +62,7 @@ export const CoachSwingCamera = forwardRef<CoachCameraHandle, Props>(function Co
       // Silence the caddie so its TTS doesn't land in the clip / fight the recording audio session
       // (modeled on SmartMotion's start-of-record stopSpeaking()).
       try {
-        await (require('../../services/voiceService') as typeof import('../../services/voiceService')).stopSpeaking();
+        await (require('../../services/voiceService') as typeof import('../../services/voiceService')).stopSpeaking('screen:components-coach-coachswingcamera');
       } catch { /* best-effort — never block the capture */ }
       inFlightRef.current = true;
       try {

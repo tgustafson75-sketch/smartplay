@@ -2591,7 +2591,7 @@ export default function SmartMotion() {
        */
       // eslint-disable-next-line react-hooks/exhaustive-deps
       pipelineRunRef.current++; // invalidate any in-flight pipeline run
-      void stopSpeaking().catch(() => undefined);
+      void stopSpeaking('screen:swinglab-smartmotion').catch(() => undefined);
       setSmartMotionRecording(false); // never leave the mic flagged-reserved after we leave
     };
   }, []);
@@ -3656,7 +3656,7 @@ export default function SmartMotion() {
     pipelineNarratedRef.current = false; // re-arm per-swing narration for the next session
     pipelineAbortRef.current = true;     // abort any still-running narration from the prior session
     pipelineRunRef.current++;            // invalidate the prior pipeline run (cache-collision guard)
-    void stopSpeaking().catch(() => undefined); // and silence its in-flight/queued TTS
+    void stopSpeaking('screen:swinglab-smartmotion').catch(() => undefined); // and silence its in-flight/queued TTS
     setSmartMotionRecording(false);      // not recording after a reset
     setSegments([]);
     setSelectedSwing(0);
@@ -4054,7 +4054,7 @@ export default function SmartMotion() {
     // audio-session flip mid-recordAsync risked killing the capture's audio on iOS.
     // Silence the caddie the moment ANY entry path starts a recording.
     try {
-      await (require('../../services/voiceService') as typeof import('../../services/voiceService')).stopSpeaking();
+      await (require('../../services/voiceService') as typeof import('../../services/voiceService')).stopSpeaking('screen:swinglab-smartmotion');
     } catch { /* best-effort — never block the capture */ }
     // 2026-06-12 (analysis speed) — warm the fault-read Lambda the MOMENT recording starts.
     // The open record window (up to 60s) is free warm time, so the first swing's read lands

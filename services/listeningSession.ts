@@ -672,7 +672,7 @@ export async function speakHonestFailure(
 ): Promise<void> {
   const msg = failureFallbackFor(language);
   try { Vibration.vibrate(120); } catch {}
-  try { await stopSpeaking().catch(() => {}); } catch {}
+  try { await stopSpeaking('screen:services-listeningsession').catch(() => {}); } catch {}
   try {
     await speak(msg, voiceGender, language ?? 'en', apiUrl, { userInitiated: true });
   } catch (e) { console.log('[listeningSession] failure-fallback speak threw', e); }
@@ -770,7 +770,7 @@ async function deliverBrainReply(opts: {
       return;
     }
     if (maySpeak()) {
-      await stopSpeaking().catch(() => {});
+      await stopSpeaking('screen:services-listeningsession').catch(() => {});
       if (maySpeak()) {
         if (reply.audioBase64) {
           await speakFromBase64(reply.audioBase64, { userInitiated: true, caption: text })
@@ -807,7 +807,7 @@ async function deliverBrainReply(opts: {
   } catch { /* the local answer is a bonus, never a dependency */ }
   if (localAnswer) {
     if (maySpeak()) {
-      await stopSpeaking().catch(() => {});
+      await stopSpeaking('screen:services-listeningsession').catch(() => {});
       await speak(localAnswer, voiceGender, lang, apiUrl, { userInitiated: true })
         .catch((e) => console.log(`[${site}] local-answer speak failed`, e));
     } else {
@@ -1137,7 +1137,7 @@ async function openSession() {
       const resolveAllowed = settings.voiceEnabled;
       if ((state as SessionState) === 'thinking') setSessionStateMirror('responding');
       if (resolveAllowed && getSessionState() === 'responding') {
-        await stopSpeaking().catch(() => {});
+        await stopSpeaking('screen:services-listeningsession').catch(() => {});
         if (getSessionState() === 'responding') {
           await speak(courseResolved.confirmLine, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
             .catch((e) => console.log('[listeningSession] course-resolve speak failed', e));
@@ -1182,7 +1182,7 @@ async function openSession() {
       if (answered) {
         if ((state as SessionState) === 'thinking') setSessionStateMirror('responding');
         if (settings.voiceEnabled) {
-          await stopSpeaking().catch(() => {});
+          await stopSpeaking('screen:services-listeningsession').catch(() => {});
           await speak(answered.line, settings.voiceGender, settings.language, apiUrl, { userInitiated: true })
             .catch((e) => console.log('[listeningSession] putt-answer speak failed', e));
         }
@@ -1350,7 +1350,7 @@ async function openSession() {
     // three are truly held until the user re-confirms.
     const DISRUPTIVE_OPEN_INTENTS = new Set(['open_tool', 'media_capture', 'navigate']);
     if (DISRUPTIVE_OPEN_INTENTS.has(intent.intent_type) && intent.confidence !== 'high') {
-      await stopSpeaking().catch(() => {});
+      await stopSpeaking('screen:services-listeningsession').catch(() => {});
       if (ttsAllowed && getSessionState() === 'responding') {
         await speak(
           'Want me to open that? Just say it again and I will.',
@@ -1476,7 +1476,7 @@ async function openSession() {
       if (responseAllowed) {
         if (intent.follow_up_question) {
           if (getSessionState() === 'responding') {
-            await stopSpeaking().catch(() => {});
+            await stopSpeaking('screen:services-listeningsession').catch(() => {});
             if (getSessionState() === 'responding') {
               await speak(intent.follow_up_question, settings.voiceGender, intent.language ?? settings.language, apiUrl, { userInitiated: true })
                 .catch((e) => console.log('[listeningSession] follow_up speak failed', e));
@@ -1686,7 +1686,7 @@ async function openSession() {
         // Cancel any in-flight / queued filler so the real response
         // doesn't queue behind a long conversational bridge — Tim's
         // "generic-then-relevant" disconnect on the 2nd question.
-        await stopSpeaking().catch(() => {});
+        await stopSpeaking('screen:services-listeningsession').catch(() => {});
         if (getSessionState() !== 'responding') {
           setSessionStateMirror('idle');
           return;
@@ -1813,7 +1813,7 @@ function closeSessionInternal(reason: 'user_close' | 'dormancy_timeout') {
   // missed the gap between speechId++ and Sound.createAsync returning where
   // currentSound is still null but a TTS fetch is in-flight; a session-close
   // tap during that window otherwise left the pending utterance to play.
-  void stopSpeaking().catch(() => {});
+  void stopSpeaking('screen:services-listeningsession').catch(() => {});
   // Cancel mic if listening (Phase V.7 — now actually stops the recording)
   if (cancelMic) {
     try { cancelMic(); } catch {}

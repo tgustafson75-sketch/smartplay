@@ -138,7 +138,7 @@ export default function CoachLessonScreen() {
     loopGenRef.current++;
     if (rearmRef.current) clearTimeout(rearmRef.current);
     if (progressTimer.current) clearTimeout(progressTimer.current);
-    void stopSpeaking().catch(() => {});
+    void stopSpeaking('screen:swinglab-coach-lesson').catch(() => {});
   }, []);
 
   // ── camera on the live session (no per-rep mount) ──────────────────────────
@@ -307,7 +307,7 @@ export default function CoachLessonScreen() {
     // pending brain response, the post-splash opener, an active-listening reply), that speech + the
     // lesson's opener play over each other and both captions render. Cancel any in-flight speech first
     // so only the lesson speaks. stopSpeaking() kills both the cloud/mp3 and device-TTS pipelines.
-    try { await stopSpeaking(); } catch { /* best-effort */ }
+    try { await stopSpeaking('screen:swinglab-coach-lesson'); } catch { /* best-effort */ }
     setSessionLive(true); sessionLiveRef.current = true;
     setPaused(false); pausedRef.current = false;
     setError(null); setFeedback(null);
@@ -340,7 +340,7 @@ export default function CoachLessonScreen() {
     setPaused((prev) => {
       const next = !prev;
       pausedRef.current = next;
-      if (next) { clearRearm(); void stopSpeaking().catch(() => {}); coachCamRef.current?.stop(); setCaption('Paused — tap resume when you\'re set.'); }
+      if (next) { clearRearm(); void stopSpeaking('screen:swinglab-coach-lesson').catch(() => {}); coachCamRef.current?.stop(); setCaption('Paused — tap resume when you\'re set.'); }
       else { setCaption(promptRef.current); scheduleRearm(focusRep, 400); }
       return next;
     });
@@ -380,7 +380,7 @@ export default function CoachLessonScreen() {
     loopGenRef.current++;
     clearRearm(); clearProgressTimer();
     coachCamRef.current?.stop();
-    void stopSpeaking().catch(() => {});
+    void stopSpeaking('screen:swinglab-coach-lesson').catch(() => {});
     setSessionLive(false); sessionLiveRef.current = false;
     setPaused(false); pausedRef.current = false;
     preparedRef.current = false;
@@ -397,7 +397,7 @@ export default function CoachLessonScreen() {
     setPhase('watching'); setCaption(intro);
     // Same as goLiveAndOpen — cancel any in-flight global caddie speech so the lesson intro doesn't
     // race it (double voice + double caption). See the note there.
-    void (async () => { try { await stopSpeaking(); } catch { /* best-effort */ } await new Promise((r) => setTimeout(r, 250)); await prepareCamera(); say(intro); })();
+    void (async () => { try { await stopSpeaking('screen:swinglab-coach-lesson'); } catch { /* best-effort */ } await new Promise((r) => setTimeout(r, 250)); await prepareCamera(); say(intro); })();
   }, [prepareCamera]);
 
   const beginPriority = useCallback((dx: Diagnosis, m: SwingBiomechanics) => {
