@@ -105,3 +105,8 @@ scripts/codemod/.i18n-skipped.json
 # committed. I wrote the trailing slash first and the lesson was two lines up this file.
 # [[node-modules-was-committed-as-a-self-symlink]] [[a-stale-header-is-a-source-someone-trusts]]
 Claude outputs
+
+# 2026-09-21 — scratch screenshots produced while preparing the Wear OS Play listing.
+# Committed once by a `git add .` and removed again; the files stay on disk, they just
+# do not belong in the repo.
+.tmp_wear_screenshots/
