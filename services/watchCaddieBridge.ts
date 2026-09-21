@@ -123,8 +123,47 @@ function traceWatch(tag: string, data?: Record<string, string | number | boolean
   } catch { /* tracing must never affect the round */ }
 }
 
+/**
+ * 2026-09-20 (Tim, from Echo Hills — "watch did not show yardage. Is it because I am on the pre
+ * launch build of the watch app?") — THE ANSWER EXISTED AND COULD NOT LEAVE THE DEVICE.
+ *
+ * The 09-09 pass gave this function six distinct, correct reasons and wrote every one of them to
+ * roundTrace. But roundTrace only leaves the phone with a round trace or an owner Field Report,
+ * and what Tim actually sends is the ISSUE LOG — the twelve-entry mail. So a question with a
+ * recorded answer came back as a guess, and the guess cost a round.
+ *
+ * The reasons have completely different fixes — a watch that is not paired, a round that never
+ * started, a hole with no green, a missing native module — and telling them apart is the whole
+ * point of having named them. So the ones that mean something is WRONG are mirrored into the issue
+ * log. [[missing-log-entry-is-the-evidence]] [[a-guard-that-cannot-reach-the-artifact-certifies-the-draft]]
+ *
+ * TWO THINGS KEEP THIS QUIET, because an issue log that cries wolf is the 2026-08-10 problem Tim
+ * already told us to fix ("shut off the non-errors on the issue log"):
+ *   - the watch toggle must be ON. NativeMod exists on every Android build whether or not a watch
+ *     was ever paired, so without this every Android user would log 'no_connected_node' forever.
+ *   - once per reason, not once per tick. This fires every 18 seconds; a 4.5-hour round would
+ *     otherwise file ~900 identical entries and bury the rest of the log.
+ * A successful delivery clears the set, so a watch that drops again later reports again.
+ */
+const reportedWatchReasons = new Set<string>();
+
+function reportWatchBlocked(reason: string, extra?: Record<string, unknown>): void {
+  try {
+    const { useSettingsStore } = require('../store/settingsStore') as typeof import('../store/settingsStore');
+    if (!useSettingsStore.getState().watchSwingEnabled) return;
+    if (reportedWatchReasons.has(reason)) return;
+    reportedWatchReasons.add(reason);
+    require('../store/issueLogStore').useIssueLogStore.getState()
+      .addAppEvent('watch_yardage_blocked', { reason, ...(extra ?? {}) }, 'app_error');
+  } catch { /* a diagnostic must never affect the round */ }
+}
+
 export async function pushYardageToWatch(opts?: { onlyIfChanged?: boolean }): Promise<void> {
-  if (!NativeMod) { traceWatch('yardage_skip', { reason: 'no_native_module' }); return; }
+  if (!NativeMod) {
+    traceWatch('yardage_skip', { reason: 'no_native_module' });
+    reportWatchBlocked('no_native_module');
+    return;
+  }
   try {
     const round = useRoundStore.getState();
     if (!round.isRoundActive) { traceWatch('yardage_skip', { reason: 'no_active_round' }); return; }
@@ -140,6 +179,9 @@ export async function pushYardageToWatch(opts?: { onlyIfChanged?: boolean }): Pr
       // nothing honest to show — carry the funnel's OWN reason (no_fix / no_hole / no_green_coords)
       // rather than restating that the numbers were absent.
       traceWatch('yardage_skip', { reason: y.reason ?? 'no_yardage', hole: y.hole_number ?? null });
+      // Not 'no_active_round': that one is the normal state of the app between rounds, and logging
+      // it would file an issue every 18 seconds for a phone sitting on a worktop.
+      reportWatchBlocked(y.reason ?? 'no_yardage', { hole: y.hole_number ?? null });
       return;
     }
     /**
@@ -168,6 +210,9 @@ export async function pushYardageToWatch(opts?: { onlyIfChanged?: boolean }): Pr
       // The native side resolves false ONLY when connectedNodes is empty (or the node query failed).
       // That is a paired-watch problem, not a yardage problem, and it must not read as one.
       traceWatch('yardage_undelivered', { reason: 'no_connected_node', hole: y.hole_number ?? null });
+      // The single most likely answer to "why is my wrist blank", and the one that distinguishes a
+      // watch-app/pairing problem from anything the phone did.
+      reportWatchBlocked('no_connected_node', { hole: y.hole_number ?? null });
       /**
        * 2026-09-09 — CLEAR THE FLAG, BUT NOT OVER THE TOP OF LIVE EVIDENCE.
        *
@@ -187,6 +232,8 @@ export async function pushYardageToWatch(opts?: { onlyIfChanged?: boolean }): Pr
     // A delivered outbound message proves the round trip just as well as an inbound one does, and
     // the watch app may have been running before we started listening for its `hello`.
     markWatchAlive();
+    // Delivered — so a later drop is a NEW fact and gets to report itself again.
+    reportedWatchReasons.clear();
     /**
      * 2026-09-09 (triple-check, my own trace from earlier today) — SUCCESS IS TRACED ON CHANGE ONLY.
      *
@@ -206,6 +253,7 @@ export async function pushYardageToWatch(opts?: { onlyIfChanged?: boolean }): Pr
     }
   } catch (e) {
     traceWatch('yardage_error', { reason: String(e).slice(0, 120) });
+    reportWatchBlocked('threw', { error: String(e).slice(0, 120) });
     devLog('[watchCaddieBridge] pushYardage failed: ' + String(e));
   }
 }
