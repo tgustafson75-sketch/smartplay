@@ -34,7 +34,8 @@ yet. Deliberately not done blind — it changes behaviour on a screen under the 
 - Android: the DAT SDK is in GitHub Packages, so the build needs **`GITHUB_TOKEN`** (a GitHub PAT
   with `read:packages`) in EAS env. Without it `withMetaWearablesDAT` skips the Android wiring and
   says so at build time.
-- **Action: Tim or Cowork adds GITHUB_TOKEN to EAS.** Claude Code must not hold it.
+- **Action: none for 1.x.** Adding `GITHUB_TOKEN` to EAS is a 2.0 task, since only the `glasses`
+  profile sets the MWDAT flags. Tim or Cowork adds it when glasses ship; Claude Code must not hold it.
 
 ## 3. 120fps vision-camera · **already shipped — nothing to do**
 
@@ -192,8 +193,8 @@ come down, `sentry-cli debug-files upload` makes today's crash readable retrospe
 - [x] `getAudioRoute()` both platforms
 - [x] route-change event, both platforms, bridged and subscribed
 - [x] RevenueCat / IAP (`f54432c2`) — the reason this build is being cut
-- [ ] `GITHUB_TOKEN` in EAS env, for Android glasses
-- [ ] RevenueCat public SDK keys in `eas.json`
+- [x] ~~`GITHUB_TOKEN` in EAS env, for Android glasses~~ — **NOT THIS BUILD (2026-09-21).** `MWDAT_IOS_ENABLED`/`MWDAT_ANDROID_ENABLED` appear only in the `glasses` profile; production, preview and production-apk set neither. Glasses are 2.0. Cowork said this on 08-30 and the checklist never caught up.
+- [x] ~~RevenueCat public SDK keys in `eas.json`~~ — **ALREADY SHIPPED (2026-09-21).** Both live as the defaults in `services/billing/purchases.ts:113-114`; the env vars still override, so a rotation needs no rebuild. Nothing owed in `eas.json`.
 - [ ] Re-verify on device: `npm run probe-tools`, a voice round, earbud tap, headset plugged in
       MID-round, a sandbox purchase and a restore
 - [ ] merge `native/watch-command-and-capability` (Kotlin both ends; re-read watchCaddieBridge.ts)
