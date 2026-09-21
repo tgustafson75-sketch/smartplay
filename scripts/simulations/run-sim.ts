@@ -17674,6 +17674,35 @@ check(
       : `both image prompts that dress a person name no real tour or equipment brand and explicitly ask for no logos, marks or text on the clothing — the generation that prompted this came back in a counterfeit PGA TOUR polo`);
 }
 
+// 2026-09-20 (Tim, from Echo Hills) — "hole views did not load in smartvision". The PREFETCHER was
+// stricter than the RENDERER it feeds: it required tee AND green, while getHoleImageryUrl centres on
+// the green when the tee is missing. Echo Hills has nine greens and zero surviving tees, so the whole
+// course cached nothing and went blank on a weak signal.
+{
+  const ROOT = path.resolve(__dirname, '..', '..');
+  const strip = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+  const prefetch = strip(readBulk(path.join(ROOT, 'services/roundPrefetch.ts')));
+  const imagery = strip(readBulk(path.join(ROOT, 'services/mapboxImagery.ts')));
+
+  const problems: string[] = [];
+  // The renderer must still be able to draw a green-only hole, or the relaxed prefetch caches junk.
+  if (!/const tee = input\.tee && isValidGolfCoord\([^)]*\) \? input\.tee : null;/.test(imagery)) {
+    problems.push('mapboxImagery no longer degrades a missing tee to a green-centred view');
+  }
+  // The green is what is genuinely required — of BOTH sides.
+  if (!/if \(!green\) return null;/.test(imagery)) problems.push('mapboxImagery no longer requires a valid green');
+  if (/if \(!tee \|\| !green\) return null;/.test(prefetch)) problems.push('roundPrefetch requires a tee again');
+  if (!/if \(!green \|\| !isValidGolfCoord\(green\.lat, green\.lng\)\) return null;/.test(prefetch)) {
+    problems.push('roundPrefetch no longer coord-guards the green (null-island tiles)');
+  }
+
+  check('IMAGERY: a hole with a green and no tee still gets a cached tile',
+    problems.length === 0,
+    problems.length > 0
+      ? `the prefetcher and the renderer disagree about what is renderable: ${problems.join('; ')}`
+      : 'the green is the requirement and the tee is a bonus, on BOTH sides: the renderer centres on the green when a tee is missing, and the prefetcher caches exactly those holes instead of skipping the course. A 0,0 green is still refused by both, so null-island tiles stay fixed');
+}
+
 const total = results.length;
 const passed = results.filter((r) => r.passed).length;
 const failed = results.filter((r) => !r.passed);
