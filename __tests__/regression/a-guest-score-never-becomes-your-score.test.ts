@@ -97,6 +97,22 @@ describe('a guest score never becomes your score', () => {
     expect(holesPlayed(useGuestCardStore.getState().cards[0])).toBe(0);
   });
 
+  it('a half-typed handicap cannot land on the wrong player', () => {
+    /**
+     * 2026-09-20 (triple-check of my own code) — `hcpDraft` was a bare string. Typing an Index for
+     * one player and switching tabs before the field blurred rendered that draft in the NEXT
+     * player's field and committed it to THEM, because the blur handler closes over whatever
+     * `active` is by then. One person's handicap silently landed on another's card.
+     */
+    const src = fs.readFileSync(path.join(ROOT, 'components/scorecard/AddedPlayerCards.tsx'), 'utf8');
+    expect(src).toMatch(/useState<\{ id: string; text: string \} \| null>\(null\)/);
+    expect(src).toMatch(/hcpDraft\?\.id === active\.id \? hcpDraft\.text/);
+    expect(src).toMatch(/if \(hcpDraft && hcpDraft\.id === active\.id\)/);
+    expect(src).toMatch(/setHcpDraft\(null\); setEditingName\(null\); setActiveTab/);
+    // ...and the Index field must not key its display off the NAME editor
+    expect(src).not.toMatch(/hcpDraft !== null && editingName === null/);
+  });
+
   it('other people’s scores never leave the device', () => {
     expect(NEVER_SYNC_STORE_KEYS).toContain('guest-cards-v1');
     expect(NOT_BACKED_UP_STORE_KEYS).toContain('guest-cards-v1');

@@ -218,7 +218,11 @@ export default function ArccosImportScreen() {
                       style={[styles.input, { color: colors.text_primary, borderColor: r.include ? colors.accent : colors.border, opacity: r.include ? 1 : 0.4 }]}
                       accessibilityLabel={`${r.club} distance in ${unitWord(distanceUnit)}`}
                     />
-                    <Text style={[styles.unitYd, { color: colors.text_muted }]}>yd</Text>
+                    {/* 2026-09-20 (triple-check) — this said 'yd' to a metric player, on a field whose own
+    accessibilityLabel one line above already says "distance in metres". The units pass
+    converted the VALUE and the SCREEN READER text on this entry path and left the visible
+    suffix hardcoded. [[no-half-fixes-enforce-every-surface]] */}
+                <Text style={[styles.unitYd, { color: colors.text_muted }]}>{label}</Text>
                     <Switch value={r.include} onValueChange={() => toggleInclude(r.club)} />
                   </View>
                 </View>

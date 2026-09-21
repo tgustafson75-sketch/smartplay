@@ -17458,9 +17458,22 @@ check(
    * putter is checked FIRST and stays in feet in both systems (services/puttUnits owns that).
    */
   const ql = readCode('components/QuickLogShotSheet.tsx');
+  /**
+   * 2026-09-20 (triple-check) — THE FIFTH ENTRY PATH. The 09-19 pass named four and this guard
+   * checked exactly one of them, so a fifth went unnoticed: the practice-session distance
+   * CALIBRATION showed a metric player a field labelled "Metres" and then stored the number as
+   * yards, in a variable called `yards`. Eight metres became eight yards — a 9.4% error in the
+   * reference distance the whole cage session is calibrated against.
+   *
+   * Checking one representative path let the class survive at another. Every typed-distance entry
+   * is listed here now. [[sweep-the-missing-half-not-the-unused-export]]
+   */
+  const cal = readCode('app/practice-session/index.tsx');
   check('UNITS: what the player TYPES is read in their unit, not stored as yards regardless',
-    /isPutterClub\(club\) \? puttYardsFromFeet\(distNum\) : \(fromDisplayDistance\(distNum, distanceUnit\)/.test(ql),
-    'the shot log converts on the way IN — display-only conversion would write a 9%-short distance into the bag and then read it back looking right');
+    /isPutterClub\(club\) \? puttYardsFromFeet\(distNum\) : \(fromDisplayDistance\(distNum, distanceUnit\)/.test(ql) &&
+      /const yards = fromDisplayDistance\(typed, liveDistanceUnit\(\)\)/.test(cal) &&
+      !/const yards = parseInt\(calibrationInput, 10\)/.test(cal),
+    'the shot log AND the practice-session calibration convert on the way IN — display-only conversion would write a 9%-short distance into the bag, or into the cage reference, and then read it back looking right');
 
   /**
    * The surfaces. Listed rather than swept, because this is the set that was CONVERTED and the list

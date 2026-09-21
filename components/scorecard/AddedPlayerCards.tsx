@@ -57,7 +57,18 @@ export function AddedPlayerCards({ holes, courseName, ownerName, ownerScores }: 
   /** 0 = the owner's tab (read-only summary); 1..n = guest cards. */
   const [activeTab, setActiveTab] = useState(0);
   const [editingName, setEditingName] = useState<string | null>(null);
-  const [hcpDraft, setHcpDraft] = useState<string | null>(null);
+  /**
+   * 2026-09-20 (triple-check of my own code from an hour earlier) — THE DRAFT IS KEYED TO A PLAYER.
+   *
+   * It was a bare string. Typing "12" into one player's Index and then tapping another player's tab
+   * without the field blurring first left the draft in place, rendered it in the NEW player's field,
+   * and — because the blur handler closes over whatever `active` is by then — wrote it to THAT
+   * player's Index. One person's handicap silently landed on another's card.
+   *
+   * Its display also keyed off `editingName`, which is about the NAME editor: starting to edit a
+   * name mid-typing reverted the Index field to the stored value for no reason a user could see.
+   */
+  const [hcpDraft, setHcpDraft] = useState<{ id: string; text: string } | null>(null);
 
   const nineHole = holes.length <= 9;
   const active: GuestCard | null = activeTab > 0 ? (cards[activeTab - 1] ?? null) : null;
@@ -179,7 +190,7 @@ export function AddedPlayerCards({ holes, courseName, ownerName, ownerScores }: 
       {/* ── Tabs at the top: the owner, then each added player, then Add ── */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.tabRow}>
         <Pressable
-          onPress={() => setActiveTab(0)}
+          onPress={() => { setHcpDraft(null); setEditingName(null); setActiveTab(0); }}
           style={[s.tab, activeTab === 0 && s.tabActive]}
           accessibilityRole="button"
           accessibilityLabel={`${ownerName}, your own card`}
@@ -191,7 +202,7 @@ export function AddedPlayerCards({ holes, courseName, ownerName, ownerScores }: 
         {cards.map((card, i) => (
           <Pressable
             key={card.id}
-            onPress={() => setActiveTab(i + 1)}
+            onPress={() => { setHcpDraft(null); setEditingName(null); setActiveTab(i + 1); }}
             style={[s.tab, activeTab === i + 1 && s.tabActive]}
             accessibilityRole="button"
             accessibilityLabel={`${label(card, i)}'s card`}
@@ -269,12 +280,15 @@ export function AddedPlayerCards({ holes, courseName, ownerName, ownerScores }: 
           <View style={s.hcpRow}>
             <Text style={s.hcpLabel}>{t('scorecard_added_players.handicap_index')}</Text>
             <TextInput
-              value={hcpDraft !== null && editingName === null ? hcpDraft : (active.handicapIndex?.toString() ?? '')}
-              onChangeText={setHcpDraft}
-              onFocus={() => setHcpDraft(active.handicapIndex?.toString() ?? '')}
+              value={hcpDraft?.id === active.id ? hcpDraft.text : (active.handicapIndex?.toString() ?? '')}
+              onChangeText={(v) => setHcpDraft({ id: active.id, text: v })}
+              onFocus={() => setHcpDraft({ id: active.id, text: active.handicapIndex?.toString() ?? '' })}
               onBlur={() => {
-                const n = parseFloat((hcpDraft ?? '').replace(',', '.'));
-                setHandicap(active.id, Number.isFinite(n) ? n : null);
+                // Commit to the card the draft BELONGS to, never to whichever tab is showing now.
+                if (hcpDraft && hcpDraft.id === active.id) {
+                  const n = parseFloat(hcpDraft.text.replace(',', '.'));
+                  setHandicap(active.id, Number.isFinite(n) ? n : null);
+                }
                 setHcpDraft(null);
               }}
               placeholder="—"

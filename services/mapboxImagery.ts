@@ -29,7 +29,7 @@
  *     free tier provides advance warning.
  */
 
-import { File, Paths } from 'expo-file-system';
+import { Directory, File, Paths } from 'expo-file-system';
 import { haversineMeters, bearingDegrees } from '../utils/geoDistance';
 import { isValidGolfCoord } from '../utils/coordGuard';
 
@@ -215,9 +215,64 @@ export function getHoleImageryUrl(
   );
 }
 
+function safeCourseKey(courseId: string | null): string {
+  return (courseId ?? 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
 function cacheFileFor(courseId: string | null, holeNumber: number, zoom: number, w: number, h: number): File {
-  const safeCourse = (courseId ?? 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
-  return new File(Paths.cache, `${CACHE_DIR_NAME}_${safeCourse}_h${holeNumber}_z${zoom}_${w}x${h}.png`);
+  return new File(Paths.cache, `${CACHE_DIR_NAME}_${safeCourseKey(courseId)}_h${holeNumber}_z${zoom}_${w}x${h}.png`);
+}
+
+/**
+ * 2026-09-20 (found while triple-checking the Echo Hills fix) — THE PREFETCH WAS WRITING TILES
+ * NOBODY COULD READ.
+ *
+ * The cache key embeds the requested WIDTH and HEIGHT, and a zoom that is itself computed from
+ * them. roundPrefetch calls `prefetchHoles(tileInputs)` with NO options, so every prefetched tile
+ * landed at the 600x500 default. app/smartvision asks for the CONTAINER size — screen width by
+ * available height, capped at 1280 — which is never 600x500 on a real handset.
+ *
+ * So the keys could not match, and the entire offline imagery story was inert: tiles were
+ * downloaded during round prep, written to disk, and then looked for under a different name. Every
+ * hole view was a live fetch. That is why a weak signal meant a blank canvas even on a course whose
+ * tiles had "already been cached", and it is the larger half of Tim's Echo Hills report — the
+ * green-only fix earlier today was necessary and, on its own, still would not have put a tile on
+ * screen.
+ *
+ * The fix is deliberately in the CACHE LOOKUP and not in what either side requests. smartvision is
+ * under a layout freeze and its request size is what keeps the tile's aspect equal to the
+ * container's (Phase 401 — so `cover` cannot crop the hole). Changing that to match the prefetch
+ * would trade a real bug for a visual one.
+ *
+ * So: on an exact miss, accept any cached tile OF THE SAME HOLE. It is a picture of the right
+ * place at a slightly different framing, which beats a blank canvas with no signal, and the
+ * exact-size write still happens in the background so the next view is pixel-right.
+ * [[overstrict-gate-lens]] [[two-owners-is-the-root-cause]]
+ */
+let cacheListing: { at: number; names: string[] } | null = null;
+const CACHE_LISTING_TTL_MS = 30_000;
+
+function cachedTileForHole(courseId: string | null, holeNumber: number): string | null {
+  const prefix = `${CACHE_DIR_NAME}_${safeCourseKey(courseId)}_h${holeNumber}_z`;
+  try {
+    const now = Date.now();
+    if (!cacheListing || now - cacheListing.at > CACHE_LISTING_TTL_MS) {
+      // Listing the cache directory is not free, so it is memoized briefly — a hole view flicks
+      // through several holes in a few seconds and must not re-walk the directory each time.
+      const entries = new Directory(Paths.cache).list();
+      cacheListing = {
+        at: now,
+        names: entries.map((e) => {
+          const uri = e.uri;
+          return uri.slice(uri.lastIndexOf('/') + 1);
+        }),
+      };
+    }
+    const hit = cacheListing.names.find((n) => n.startsWith(prefix));
+    return hit ? new File(Paths.cache, hit).uri : null;
+  } catch {
+    return null; // a cache miss is never worth an exception
+  }
 }
 
 /**
@@ -252,6 +307,11 @@ export async function fetchHoleImagery(
 
   if (cacheFile.exists) return cacheFile.uri;
 
+  // Exact size not cached. A tile of this hole at ANOTHER size almost certainly IS (the prefetch
+  // writes 600x500), and showing the right hole slightly reframed beats showing nothing when there
+  // is no signal. The background write below still lands the exact-size copy for next time.
+  const alt = cachedTileForHole(input.courseId, input.holeNumber);
+
   // Lazy background cache write — return remote URL immediately so the
   // image renders without waiting for disk I/O.
   void (async () => {
@@ -262,12 +322,13 @@ export async function fetchHoleImagery(
       if (!res.ok) return;
       const buf = await res.arrayBuffer();
       cacheFile.write(new Uint8Array(buf));
+      cacheListing = null; // a new file exists; do not serve a stale listing
     } catch (e) {
       console.log('[mapboxImagery] cache write failed:', e);
     }
   })();
 
-  return url;
+  return alt ?? url;
 }
 
 /**

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { formatDistance, liveDistanceUnit, unitWord } from '../../services/distanceUnits';
+import { formatDistance, fromDisplayDistance, liveDistanceUnit, unitWord } from '../../services/distanceUnits';
 import { Modal, TextInput ,
   View,
   Text,
@@ -341,12 +341,22 @@ export default function CageIndex() {
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => {
-                  const yards = parseInt(calibrationInput, 10);
-                  if (yards > 0 && yards < 200) {
-                    setDistanceCalibration(yards);
-                    setCalibrationOpen(false);
-                  }
-                }}
+                    /**
+                     * 2026-09-20 (triple-check of the units pass) — READ IT IN THE UNIT HE WAS ASKED IN.
+                     *
+                     * The label two lines above already says "Metres" to a metric player, and this
+                     * then stored the typed number AS YARDS — in a variable called `yards`. Eight
+                     * metres became eight yards, a 9.4% error baked into the reference distance the
+                     * whole cage session is calibrated against.
+                     *
+                     * The 2026-09-19 units pass closed four entry paths and named that exact rule
+                     * ("what the player TYPES is read in their unit"). This was a fifth.
+                     * [[no-half-fixes-enforce-every-surface]] [[a-metre-is-not-a-yard-wiring]]
+                     */
+                    const typed = parseInt(calibrationInput, 10);
+                    const yards = fromDisplayDistance(typed, liveDistanceUnit());
+                    if (yards != null && yards > 0 && yards < 200) { setDistanceCalibration(Math.round(yards)); setCalibrationOpen(false); }
+                  }}
                 style={[calStyles.btn, calStyles.btnPrimary]}
               >
                 <Text style={[calStyles.btnText, calStyles.btnTextPrimary]}>{t('practice_session.cage_index.save')}</Text>
