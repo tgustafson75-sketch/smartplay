@@ -401,6 +401,23 @@ const PALMS_HOLES: CourseHole[] = [
 // 18/18 with most distance errors ≤22y. Prior bundled values were a
 // stale duplicate of Palms data with wrong pars on holes 14 and 17–18;
 // this replacement aligns with the actual scorecard.
+/**
+ * 2026-09-20 (final sweep) — front/back CORRECTED on holes 9, 14 and 17 from this course's own
+ * green coordinates.
+ *
+ * The scorecard distance sat OUTSIDE its own front/back on those three: hole 9 played 491 with a
+ * back of 476, hole 14 played 379 with a back of 364, hole 17 played 128 off a front of 130. That
+ * contradiction is not cosmetic — services/holeContextResolver hands the caddie the sentence
+ * "par 4, 379 yards (front 336, back 364)", and he clubs off it. On Tim's home club.
+ *
+ * WHICH NUMBER WAS WRONG WAS MEASURED, NOT GUESSED. Distance from the stored tee to the stored
+ * MIDDLE coordinate agrees with the card on 18 of 18 holes here, so the card and the coordinates
+ * are both right and the front/back SCALARS were the error. The replacements are the distances to
+ * the frontLat/backLat coordinates this file already ships:
+ *     h9  445/476 -> 478/509      h14 336/364 -> 361/392      h17 130/164 -> 114/148
+ * Nothing was invented; the geometry was already here and two numbers disagreed with it.
+ * [[illustration-data-points]] [[measure-the-function-dont-read-it]]
+ */
 const LAKES_HOLES: CourseHole[] = [
   { hole:  1, par: 4, distance: 368, front: 354, back: 383,
     teeLat: 33.6858049, teeLng: -117.1569819,
@@ -450,7 +467,7 @@ const LAKES_HOLES: CourseHole[] = [
     frontLat: 33.6953743, frontLng: -117.1581102,
     backLat: 33.6956235, backLng: -117.1581182,
     note: '', estimated: false },
-  { hole:  9, par: 5, distance: 491, front: 445, back: 476,
+  { hole:  9, par: 5, distance: 491, front: 478, back: 509,
     teeLat: 33.6880881, teeLng: -117.1593010,
     middleLat: 33.6920103, middleLng: -117.1581489,
     frontLat: 33.6919052, frontLng: -117.1581799,
@@ -480,7 +497,7 @@ const LAKES_HOLES: CourseHole[] = [
     frontLat: 33.6949593, frontLng: -117.1500649,
     backLat: 33.6952213, backLng: -117.1501653,
     note: '', estimated: false },
-  { hole: 14, par: 4, distance: 379, front: 336, back: 364,
+  { hole: 14, par: 4, distance: 379, front: 361, back: 392,
     teeLat: 33.6959266, teeLng: -117.1493636,
     middleLat: 33.6928458, middleLng: -117.1487966,
     frontLat: 33.6929988, frontLng: -117.1487702,
@@ -498,7 +515,7 @@ const LAKES_HOLES: CourseHole[] = [
     frontLat: 33.6992570, frontLng: -117.1484825,
     backLat: 33.6994737, backLng: -117.1482546,
     note: '', estimated: false },
-  { hole: 17, par: 3, distance: 128, front: 130, back: 164,
+  { hole: 17, par: 3, distance: 128, front: 114, back: 148,
     teeLat: 33.6999054, teeLng: -117.1477220,
     middleLat: 33.7000585, middleLng: -117.1464702,
     frontLat: 33.7000427, frontLng: -117.1466085,
@@ -1135,16 +1152,30 @@ export const SPESSARD_HOLLAND_HOLES: CourseHole[] = [
 // TWICE (back-nine yardages repeat the front), so holes 10-18 mirror 1-9 below.
 // Hole GPS coords aren't in the shots (0,0) so — like Spessard — static scorecard
 // yardage works and Mark Green gives a live counting-down number.
+/**
+ * 2026-09-20 (final sweep) — estimated: false → TRUE on all nine (and so all eighteen, since the
+ * back nine below mirrors this one).
+ *
+ * Every hole here carries 0/0 coordinates, so there is no measured geometry at all — and
+ * `estimated` is the flag the app uses to SAY so. app/smartvision renders its "estimated" badge off
+ * it, and services/courseDataOrchestrator caps geometry confidence at 45 when it is set. Left
+ * false, these scorecard yardages were presented as MEASURED — full confidence, no badge — for a
+ * course nobody has ever surveyed.
+ *
+ * 108 other coordinate-less holes across the scorecard-only courses are correctly flagged. This was
+ * the one course that was not, and the only one carrying no note explaining itself.
+ * [[illustration-data-points]] [[smartmotion-metrics-honesty]]
+ */
 const WEBSTER_DUDLEY_FRONT: CourseHole[] = [
-  { hole: 1, par: 4, distance: 352, front: 341, back: 364, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
-  { hole: 2, par: 4, distance: 348, front: 336, back: 359, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
-  { hole: 3, par: 3, distance: 142, front: 133, back: 151, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
-  { hole: 4, par: 4, distance: 360, front: 348, back: 372, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
-  { hole: 5, par: 4, distance: 301, front: 288, back: 313, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
-  { hole: 6, par: 3, distance: 172, front: 158, back: 185, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
-  { hole: 7, par: 4, distance: 391, front: 380, back: 401, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
-  { hole: 8, par: 5, distance: 477, front: 466, back: 487, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
-  { hole: 9, par: 5, distance: 459, front: 447, back: 472, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: false },
+  { hole: 1, par: 4, distance: 352, front: 341, back: 364, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 2, par: 4, distance: 348, front: 336, back: 359, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 3, par: 3, distance: 142, front: 133, back: 151, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 4, par: 4, distance: 360, front: 348, back: 372, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 5, par: 4, distance: 301, front: 288, back: 313, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 6, par: 3, distance: 172, front: 158, back: 185, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 7, par: 4, distance: 391, front: 380, back: 401, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 8, par: 5, distance: 477, front: 466, back: 487, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
+  { hole: 9, par: 5, distance: 459, front: 447, back: 472, teeLat: 0, teeLng: 0, middleLat: 0, middleLng: 0, frontLat: 0, frontLng: 0, backLat: 0, backLng: 0, note: '', estimated: true },
 ];
 export const WEBSTER_DUDLEY_HOLES: CourseHole[] = [
   ...WEBSTER_DUDLEY_FRONT,
