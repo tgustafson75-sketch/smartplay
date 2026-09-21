@@ -225,8 +225,13 @@ export default function OwnerLogsScreen() {
    * snapshot's sections are bounded at 1500ms each — so on a device that cannot answer (a wedged
    * watch query, a slow expo-updates read) the tap can sit for seconds with the icon unchanged.
    * Before today it opened essentially instantly. A player taps again, and two mail composers or
-   * two share sheets arrive back to back. The voice route ("send the issue log" -> ?send=1) has
-   * the same gap, with Kevin acknowledging into a blank screen.
+   * two share sheets arrive back to back.
+   *
+   * Correction, same day: this note originally said the voice route ("send the issue log" ->
+   * ?send=1) "has the same gap". It does not — `autoSentRef` below has guarded that path against a
+   * second fire since it was written. The gap was the manual button alone. Left in rather than
+   * quietly deleted because a comment that overstates a bug is how the next person justifies a
+   * change nothing needed.
    */
   const [exporting, setExporting] = useState(false);
 

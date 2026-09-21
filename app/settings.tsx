@@ -1164,11 +1164,21 @@ export default function Settings() {
                   // toggle. A setting's description should say what the switch does; the caveats
                   // belong where the caveat bites, not stacked on the row.
                   // 2026-09-21 (merge of native/watch-command-and-capability) — the SHORT copy is
-                  // kept; only the status tail changed. `watchReach` can now say "no watch is
-                  // reachable" BEFORE a round instead of leaving the old traffic-derived flag to
-                  // imply a connection that is not there. null (cannot ask — iOS, or an older
-                  // shell) still falls through to the traffic flag and says nothing new.
-                  ? `Captures every swing your watch sees — tagged to the hole in a round, and read for club speed in Smart Motion. Pin yardage and the watch mic do not need this.${watchReach === false ? ` No ${watchDeviceLabel()} is reachable — check it is paired and nearby.` : (watchConnected || watchReach === true) ? ' Watch connected.' : ` Open the SmartPlay watch app on your ${watchDeviceLabel()} to start sending.`}`
+                  // kept; only the status tail changed.
+                  //
+                  // `watchReach` IS USED IN ONE DIRECTION ONLY, AND THAT IS THE WHOLE POINT.
+                  // getConnectedNodeCount is a NodeClient query: it counts PAIRED Wear nodes, not
+                  // nodes running the SmartPlay watch app (the Kotlin says so — CapabilityClient
+                  // was deliberately rejected). So `false` is trustworthy — nothing is paired, so
+                  // nothing can be reached — while `true` proves only that a watch exists nearby.
+                  //
+                  // My first version read `(watchConnected || watchReach === true)` and said
+                  // "Watch connected." on the strength of that `true`, which would have told a
+                  // player with a paired watch and the app never opened that everything was fine —
+                  // the blank-wrist confusion this whole sprint was spent removing, reintroduced
+                  // one line under a comment about confident wrong answers. Only `watchConnected`,
+                  // which is set by actual traffic, may claim a connection.
+                  ? `Captures every swing your watch sees — tagged to the hole in a round, and read for club speed in Smart Motion. Pin yardage and the watch mic do not need this.${watchReach === false ? ` No ${watchDeviceLabel()} is reachable — check it is paired and nearby.` : watchConnected ? ' Watch connected.' : ` Open the SmartPlay watch app on your ${watchDeviceLabel()} to start sending.`}`
                   : 'The watch swing-capture module ships in the latest native build — install it, then this turns on.'}
               </Text>
             </View>

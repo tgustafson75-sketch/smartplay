@@ -108,8 +108,20 @@ const SECTION_TIMEOUT_MS = 1500;
 async function safeAsync<T>(fn: () => Promise<T>): Promise<T | null> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
+    /**
+     * The `.catch()` is attached to the WORK promise before the race, and it is not redundant with
+     * the try/catch below.
+     *
+     * Once the timeout wins, nothing is awaiting the work promise any more. If it then rejects —
+     * a native call that fails slowly, which is the exact shape of the wedged Data Layer this
+     * timeout exists for — the rejection has no handler and React Native reports an unhandled
+     * promise rejection. That is a warning the player may see in a dev build and noise in the crash
+     * reporter in production, produced by the diagnostic rather than by the fault it was
+     * collecting. Swallowing it here is correct: the value is already unusable, the race has
+     * already answered null, and the section is meant to degrade silently.
+     */
     return await Promise.race([
-      fn(),
+      fn().catch(() => null as T | null),
       new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), SECTION_TIMEOUT_MS); }),
     ]);
   } catch {

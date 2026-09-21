@@ -381,6 +381,20 @@ async function autoSendIssuesInner(): Promise<boolean> {
  * "Export failed" — telling a tester something broke when the truth is everything already went.
  */
 export async function exportAllIssues(): Promise<'sent' | 'nothing_new' | 'failed'> {
+  /**
+   * COUNT FIRST, THEN COLLECT. The order matters more than it looks.
+   *
+   * The snapshot's four sections run sequentially, each bounded at 1500ms, so a device that cannot
+   * answer costs ~6s. Collecting before the count check meant "there is nothing new to send" — a
+   * normal, common outcome — paid that full cost before showing an alert about nothing, and the
+   * voice route ("send the issue log") left Kevin acknowledging into a blank screen for six
+   * seconds. The AUTOMATIC path already got this right: it returns early on an empty `unsent` set
+   * before collecting anything. This one was inverted.
+   *
+   * Building the body twice is free by comparison — it is string concatenation over at most 100
+   * retained entries, no I/O.
+   */
+  if (buildIssueLogBody().count === 0) return 'nothing_new';
   // Collected HERE, at the moment of the send, so the numbers describe the device as it is when the
   // player complains — not as it was when the entry was written. Never throws; a total failure
   // degrades to the body we always had.
