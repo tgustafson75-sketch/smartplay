@@ -16,6 +16,7 @@ import { getApiBaseUrl, appKeyHeaders } from './apiBase';
 import { getInstallId } from './installId';
 import { sendIssueFeedback } from './issueFeedback';
 import { isTestRunner } from './isTestRunner';
+import { collectDiagnosticSnapshot, formatSnapshotForEmail, type DiagnosticSnapshot } from './diagnosticSnapshot';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // App-key gate → shared appKeyHeaders() (services/apiBase.ts), mirrors api/_appKey.ts on the server.
@@ -140,13 +141,23 @@ function isReportable(e: { kind?: string }): boolean {
  * Nothing is deleted or hidden: the full log stays on the device and in /owner-logs, and a first
  * export (lastExportedAt 0) still sends everything.
  */
-export function buildIssueLogBody(): { subject: string; body: string; count: number } {
+/**
+ * 2026-09-21 (Tim: "make the issue log more substantial so I dont need to rely on fucking sentry")
+ * — the snapshot is a PARAMETER, not a call inside this function, for one reason: this function is
+ * synchronous and collecting the snapshot is not. Making it async would have changed four test call
+ * sites into awaits and, more importantly, would have let a future caller skip it silently. It is
+ * passed in by `exportAllIssues`, and a guard asserts that it still is
+ * (__tests__/regression/the-issue-log-carries-its-diagnostics.test.ts) — the WIRING is the thing
+ * that can rot, not the formatting. [[orphans-are-live-bugs-not-dead-code]]
+ */
+export function buildIssueLogBody(snapshot?: DiagnosticSnapshot): { subject: string; body: string; count: number } {
   const { entries: all, lastExportedAt } = useIssueLogStore.getState();
   const entries = all.filter(e => isReportable(e) && e.timestamp > (lastExportedAt ?? 0));
   const reporter = usePlayerProfileStore.getState().email || 'beta tester';
   const text = entries.map(entryBlock).join('\n\n');
   const subject = `SmartPlay Caddie issue log — ${reporter}`;
-  const body = `Reporter: ${reporter}\nEntries: ${entries.length}\nDevice: ${Platform.OS}\n\n${text}\n\n— Sent from SmartPlay Caddie Issue Log`;
+  const diag = snapshot ? `\n${formatSnapshotForEmail(snapshot)}\n` : '';
+  const body = `Reporter: ${reporter}\nEntries: ${entries.length}\nDevice: ${Platform.OS}\n${diag}\n${text}\n\n— Sent from SmartPlay Caddie Issue Log`;
   return { subject, body, count: entries.length };
 }
 
@@ -260,15 +271,44 @@ async function autoSendIssuesInner(): Promise<boolean> {
    * nothing. The MANUAL export still carries the email: there the act is the consent.
    */
   const reporter = installId ?? 'unknown-install';
+  /**
+   * 2026-09-21 — THE AUTOMATIC CHANNEL CARRIES THE SAME DIAGNOSTICS AS THE MANUAL ONE.
+   *
+   * This is the channel that fires without anyone tapping anything, so it is the one that reaches
+   * us for players who never write in. It sent the entry text and nothing about the device, which
+   * meant the reports we got FOR FREE were the ones we could say least about.
+   *
+   * It rides inside `context`, which is already a JSON column server-side — the same reasoning that
+   * put installId there on 08-13: no migration, and it cannot break the insert.
+   *
+   * SAFE ON THIS CHANNEL BY CONSTRUCTION: the snapshot carries no PII (see the header of
+   * services/diagnosticSnapshot, and the guard that enforces it), so the 09-12 decision that an
+   * automatic send is anonymous still holds. [[automatic-sends-carry-no-pii]]
+   */
+  const snapshot = await collectDiagnosticSnapshot().catch(() => null);
+  /**
+   * IT RIDES IN `context`, AND THAT IS NOT A STYLE CHOICE. api/issue-report reads `body.entries`
+   * and nothing else — a top-level `diagnostics` field is accepted by the POST, dropped on the
+   * floor, and never reaches Supabase or the Sentry feedback. That is the whole "wired but not
+   * reachable" failure: the send would have looked successful forever while carrying nothing.
+   * Verified against the handler's row mapping, which persists `context` verbatim as a JSON column.
+   * [[reachable-not-just-wired]]
+   *
+   * Attached to EVERY entry rather than the first: entries in a batch are independent rows, the
+   * server dedupes by id, and a batch whose first row is dropped as invalid (no text/id) would
+   * otherwise take the diagnostics down with it.
+   */
   const payload = {
     entries: unsent.map(e => ({
       id: e.id,
       text: e.text,
       reporter,
       platform: Platform.OS,
-      context: installId
-        ? { ...(e.context && typeof e.context === 'object' ? e.context : {}), installId }
-        : e.context,
+      context: {
+        ...(e.context && typeof e.context === 'object' ? e.context : {}),
+        ...(installId ? { installId } : {}),
+        ...(snapshot ? { diag: snapshot } : {}),
+      },
       details: e.details ?? null,
       timestamp: e.timestamp,
     })),
@@ -333,7 +373,11 @@ async function autoSendIssuesInner(): Promise<boolean> {
  * "Export failed" — telling a tester something broke when the truth is everything already went.
  */
 export async function exportAllIssues(): Promise<'sent' | 'nothing_new' | 'failed'> {
-  const { subject, body, count } = buildIssueLogBody();
+  // Collected HERE, at the moment of the send, so the numbers describe the device as it is when the
+  // player complains — not as it was when the entry was written. Never throws; a total failure
+  // degrades to the body we always had.
+  const snapshot = await collectDiagnosticSnapshot().catch(() => undefined);
+  const { subject, body, count } = buildIssueLogBody(snapshot);
   if (count === 0) return 'nothing_new';
   const mailto = `mailto:tim@smartplaycaddie.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   try {

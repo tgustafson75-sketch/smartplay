@@ -10673,7 +10673,24 @@ check('LOCK: issue reports carry an anonymous install id, attached once, with no
       (exp.match(/getInstallId\(\)/g) ?? []).length === 1;
     // it must ride INSIDE context: that column is already JSON, so this needs no migration and cannot
     // break the insert. Verified live against the deployed endpoint before shipping.
-    const noSchemaRisk = /\.\.\.\(e\.context && typeof e\.context === 'object' \? e\.context : \{\}\), installId/.test(exp);
+    /**
+     * 2026-09-21 — ASSERT THE PROPERTY, NOT THE LINE. This pinned the exact characters of the
+     * spread, so adding a SECOND field inside the same context object (the diagnostics snapshot)
+     * failed a LOCK whose invariant was untouched. That is this repo's most-repeated guard defect
+     * arriving on a LOCK for the second time. [[guards-that-copy-the-line-they-guard]]
+     *
+     * The invariant has always been two things and neither is a character budget:
+     *   1. installId rides INSIDE the per-entry `context` object — that column is already JSON, so
+     *      it needs no migration and cannot break the insert.
+     *   2. the POST body grows no new TOP-LEVEL key, because api/issue-report reads `body.entries`
+     *      and nothing else, so anything else is dropped on the floor.
+     */
+    const payloadBlock = exp.slice(exp.indexOf('const payload = {'), exp.indexOf('try {', exp.indexOf('const payload = {')));
+    const ctxBlock = payloadBlock.slice(payloadBlock.indexOf('context:'), payloadBlock.indexOf('details:'));
+    const insideContext = /installId/.test(ctxBlock) && /e\.context/.test(ctxBlock);
+    // top level of the payload is `entries` alone
+    const topLevelKeys = (payloadBlock.match(/^\s{4}(\w+):/gm) ?? []).map(k => k.trim().replace(':', ''));
+    const noSchemaRisk = insideContext && topLevelKeys.length === 1 && topLevelKeys[0] === 'entries';
     /**
      * 2026-09-06 — the owner still has to SEE which install a report came from, but the surface
      * moved: the email that carried it in its subject line is gone (issue log + Sentry are one
