@@ -29,7 +29,7 @@
  *    policy has no row for an address). A field added here reaches the automatic channel on the
  *    day it is added. So: no email, no name, no home course, no coordinates. Install id is fine —
  *    it is random, local, and regenerated on reinstall. The guard in
- *    __tests__/regression/diagnostic-snapshot-carries-no-pii.test.ts enforces this by construction.
+ *    __tests__/regression/the-issue-log-carries-its-diagnostics.test.ts enforces this by construction.
  *
  * 2. **NEVER THROWS, AND NEVER LOSES THE REST.** Every section is collected independently behind
  *    its own try/catch, so a single unavailable module degrades to one null field rather than
@@ -279,6 +279,20 @@ export async function collectDiagnosticSnapshot(): Promise<DiagnosticSnapshot> {
     const missing = getAllNativeModuleHealth()
       .filter(h => !h.loaded)
       .map(h => {
+        /**
+         * 2026-09-21 — `expected` IS CARRIED, and dropping it reproduced a defect fixed on 09-19.
+         *
+         * nativeModuleHealth records WHY an absence is expected on this platform, and
+         * dumpNativeModuleHealth prints "— not in this build" precisely so a deliberate build
+         * decision is not reported in the same voice as a broken dependency. Mapping id+reason
+         * only meant every Android build cut without GITHUB_TOKEN mailed
+         * `MetaWearablesFrame (NativeModules.MetaWearablesFrame is null …)` with no hint the
+         * absence was by design — the exact chase that field was added to stop.
+         *
+         * An expected absence needs no reason string at all: the reason explains a fault, and this
+         * is not one. [[a-log-field-can-be-an-artefact]]
+         */
+        if (h.expected) return `${h.id} (expected: ${h.expected})`;
         const reason = h.reason ? h.reason.replace(/[/\\][^\s]*/g, '<path>').slice(0, 80) : '';
         return `${h.id}${reason ? ` (${reason})` : ''}`;
       });
@@ -322,14 +336,41 @@ export function formatSnapshotForEmail(s: DiagnosticSnapshot): string {
   const bundle = s.build.embedded
     ? 'embedded (no OTA applied)'
     : `${s.build.updateId?.slice(0, 8) ?? 'unknown'}${s.build.updateCreatedAt ? ` · ${s.build.updateCreatedAt}` : ''}`;
+  /**
+   * 2026-09-21 — THESE NUMBERS DESCRIBE THE BUNDLE, NOT ALWAYS THE BINARY, AND THE LINE NOW SAYS SO.
+   *
+   * `Constants.expoConfig` is read from the loaded MANIFEST. Because runtimeVersion is the literal
+   * "1.0.0", one OTA reaches every binary ever shipped — so a phone running build 27 that has
+   * applied today's update reports `1.0.1 (build 29)`: a version pair that phone has never had,
+   * on the single most-asked triage question, stated with total confidence.
+   *
+   * There is no honest way to read the TRUE native build here: `expo-application` is not a
+   * dependency and adding it needs a native build, which is what this whole packet is trying to
+   * stop needing. `Constants.nativeBuildVersion` is deprecated and not reliably present.
+   *
+   * So the report stops claiming what it cannot know. When `embedded` is true no update has been
+   * applied, so the manifest IS the binary and the numbers are exact. When an OTA is live they
+   * describe the JS, and the line says the binary may be older. Either way `updateId` identifies
+   * the bundle exactly, which is the answer most questions actually need.
+   */
+  const exact = s.build.embedded === true;
+  const provenance = exact
+    ? 'binary (no OTA applied)'
+    : s.build.embedded === false ? 'bundle — binary may be older' : 'bundle';
   const lines = [
     '— DIAGNOSTICS ——————————————',
-    `App:      ${s.build.appVersion ?? '?'} (build ${s.build.nativeBuild ?? '?'}) · runtime ${s.build.runtimeVersion ?? '?'}`,
+    `App:      ${s.build.appVersion ?? '?'} (build ${s.build.nativeBuild ?? '?'}) · ${provenance}`,
+    `Runtime:  ${s.build.runtimeVersion ?? '?'}`,
     `Bundle:   ${bundle} · channel ${s.build.channel ?? '?'}`,
     `Device:   ${s.device.platform} ${s.device.osVersion ?? '?'} · ${s.device.manufacturer ?? '?'} ${s.device.model ?? '?'}`,
     `Locale:   ${s.device.locale ?? '?'} · ${s.device.timezone ?? '?'} · distances in ${s.device.distanceUnit ?? '?'}`,
+    // `roundActive` is THREE-STATE. Rendering null as "no round" tells the reader a player was not
+    // in a round when the truth is we could not read the store — and mid-round is exactly when that
+    // read matters. `yn()` exists for this; it was defined and then not used here.
     `Session:  up ${ms(s.session.uptimeMs)} · surface ${s.session.activeSurface ?? '—'} · ${
-      s.session.roundActive ? `round on, hole ${s.session.hole ?? '?'} @ ${s.session.courseId ?? '?'}` : 'no round'
+      s.session.roundActive === true
+        ? `round on, hole ${s.session.hole ?? '?'} @ ${s.session.courseId ?? '?'}`
+        : s.session.roundActive === false ? 'no round' : 'round state unreadable'
     }`,
     `GPS:      fix ${ms(s.gps.fixAgeMs)} old · accuracy ${s.gps.accuracyM ?? '?'}m`,
     `Audio:    ${s.audio.route ?? '?'}`,

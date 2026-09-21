@@ -227,3 +227,43 @@ describe('the mailed diagnostics block never prints undefined or null as text', 
     expect(body).not.toMatch(/\bNaN\b/);
   });
 });
+
+/**
+ * 2026-09-21 — THE REPORT MUST NOT CLAIM TO KNOW WHICH BINARY IT IS RUNNING ON.
+ *
+ * `Constants.expoConfig` comes from the loaded MANIFEST. runtimeVersion is the literal "1.0.0", so
+ * one OTA reaches every binary ever shipped — a build-27 phone that applies today's update would
+ * otherwise report "1.0.1 (build 29)", a version pair it has never had, on the most-asked triage
+ * question, stated with total confidence. There is no way to read the true native build from here
+ * (expo-application is not a dependency, and adding it needs the native build this packet exists to
+ * avoid needing), so the honest move is to label provenance rather than invent certainty.
+ */
+describe('the build line does not overstate what it knows', () => {
+  it('says the numbers describe the bundle when an update has been applied', async () => {
+    const snap = await collectDiagnosticSnapshot();
+    const body = formatSnapshotForEmail({ ...snap, build: { ...snap.build, embedded: false } });
+    expect(body).toMatch(/binary may be older/);
+    expect(body).not.toMatch(/binary \(no OTA applied\)/);
+  });
+
+  it('claims exactness only when nothing has been applied over the binary', async () => {
+    const snap = await collectDiagnosticSnapshot();
+    const body = formatSnapshotForEmail({ ...snap, build: { ...snap.build, embedded: true } });
+    expect(body).toMatch(/binary \(no OTA applied\)/);
+  });
+
+  /** A deliberate build decision must not be reported in the same voice as a broken dependency. */
+  it('an EXPECTED native-module absence is labelled as expected', async () => {
+    const snap = await collectDiagnosticSnapshot();
+    const body = formatSnapshotForEmail({ ...snap, nativeModulesMissing: ['MetaWearablesFrame (expected: not in this build)'] });
+    expect(body).toMatch(/expected:/);
+  });
+
+  /** Three-state: "no round" is a claim, and we must not make it from an unreadable store. */
+  it('an unreadable round state is not rendered as "no round"', async () => {
+    const snap = await collectDiagnosticSnapshot();
+    const body = formatSnapshotForEmail({ ...snap, session: { ...snap.session, roundActive: null } });
+    expect(body).toMatch(/round state unreadable/);
+    expect(body).not.toMatch(/no round/);
+  });
+});
