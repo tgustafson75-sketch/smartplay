@@ -14,8 +14,17 @@ android {
         // Wear OS 3 = API 30. minSdk 30 covers the Galaxy Watch 4+.
         minSdk 30
         targetSdk 33
-        versionCode 1
-        versionName '1.0'
+        // 2026-09-21 — versionCode had never moved off 1 while the source changed for six weeks,
+        // and the APK on disk predated both ends of the watch command path it was supposed to
+        // carry. Play requires a UNIQUE versionCode across every artifact in one app listing, and
+        // this app shares applicationId com.smartplaycaddie.app with the phone (it must, or the
+        // Data Layer will not pair) — so 1 collides the moment both are in the same release.
+        //
+        // The 1000 offset keeps the two sequences from ever meeting and stays readable: 1028 is
+        // "the watch APK that goes with phone build 28". Bump it with the phone build it ships
+        // alongside.
+        versionCode 1028
+        versionName '1.0.0'
     }
 
     // ── Signing ───────────────────────────────────────────────────────────────
