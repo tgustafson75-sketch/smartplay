@@ -8833,7 +8833,12 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       // crash guard, so it's safe to extract while ExoPlayer loops the original. Abort ONLY on genuine
       // cancellation (unmount / swing change), and the rationale comment must be present so this isn't
       // silently reverted to the analysis-truncating isPlaying gate.
-      /shouldAbort: \(\) => cancelled \}\)/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
+      // 2026-09-20 — widened: this pinned `shouldAbort: () => cancelled })`, so adding the
+      // `bodyBounds` argument after it broke a guard about ABORT BEHAVIOUR. What must hold is that
+      // the abort is genuine cancellation and not the analysis-truncating isPlaying gate; the
+      // closing punctuation is not the invariant. [[guards-that-copy-the-line-they-guard]]
+      /shouldAbort: \(\) => cancelled\b/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
+      !/shouldAbort: \(\) => (?:isPlaying|playing)\b/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
       /PRIVATE COPY \(distinct file handle\)/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
       // grab-frame still pauses before extracting; extraction routed through the queue wrapper
       /await videoRef\.current\?\.pauseAsync\(\)/.test(read('app/swinglab/swing/[swing_id].tsx')) &&
@@ -11259,11 +11264,27 @@ check('LOCK: club trace ZOOMS to the player (pose-derived crop) instead of downs
       /const fy = roi \? roi\.y \+ pos\.y \* roi\.h : pos\.y;/.test(cp);
     // must NOT crop when the player already fills the frame (would clip the arc)
     const safe = /if \(bh >= 0\.55\) return null;/.test(cp);
-    // and the caller has to actually supply the bounds, or the zoom never engages
-    const wired = /function bodyBoundsFromPose/.test(sm) && /bodyBounds: bodyBoundsFromPose\(poseFrames\)/.test(sm);
+    /**
+     * 2026-09-20 — WIDENED, and the old wording was the bug. This asserted the bounds helper lived
+     * IN SmartMotion and that SmartMotion passed it — so it stayed green while FOUR OTHER callers
+     * ran full-frame, including the persist pass that feeds the swing-detail screen and the upload
+     * path. Tim's Sentry (`detected: 2` of fourteen sampled) came from one of them.
+     *
+     * "Wired from SmartMotion" was never the invariant. "Every caller crops" is.
+     * [[a-guard-can-assert-the-broken-shape]] [[sweep-the-missing-half-not-the-unused-export]]
+     */
+    const owner = /export function bodyBoundsFromPose/.test(read('services/swing/bodyBounds.ts'));
+    const noScreenCopy = !/^function bodyBoundsFromPose/m.test(sm);
+    const callers = ['app/swinglab/smartmotion.tsx', 'app/swinglab/swing/[swing_id].tsx', 'services/videoUpload.ts'];
+    const everyCallerCrops = callers.every((f) => {
+      const src = read(f);
+      const calls = src.split('detectClubPath({').slice(1);
+      return calls.length > 0 && calls.every((tail) => tail.slice(0, 700).includes('bodyBounds'));
+    });
+    const wired = owner && noScreenCopy && everyCallerCrops;
     return roi && zooms && mapsBack && safe && wired;
   })(),
-  'pose-derived ROI crop + upscale, detections mapped back to full-frame, no crop when the player already fills the frame, wired from SmartMotion');
+  'pose-derived ROI crop + upscale, detections mapped back to full-frame, no crop when the player already fills the frame, and EVERY detectClubPath caller supplies the bounds — the review pass, the persist pass, both swing-detail paths and the upload path');
 
 // "I put this as course mode, but it's based on Canvas. It says Canvas fourteen feet, camera seven
 // feet back. That doesn't apply to the course." Cage RIG geometry was stamped onto every shot map

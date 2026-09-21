@@ -1333,11 +1333,22 @@ export async function runPhaseKOnSession(sessionId: string): Promise<{
             const pw = poseWindow; // capture: poseWindow is `let` (may be located above), so pin it for the nested map()
             try {
               const { detectClubPath } = await import('./swing/clubPath');
+              /**
+               * 2026-09-20 — THE UPLOAD PATH CROPS TOO, and this is the one a shared video takes.
+               *
+               * Tim's Sentry read `detected: 2` of fourteen sampled frames. The 2026-08-10 ROI crop
+               * exists to stop exactly that (~6px clubhead → ~40px) and was wired at ONE of five
+               * detectClubPath call sites. `biomech.frames` is already required two lines above for
+               * this block to run at all, so the bounds were sitting right here the whole time.
+               * [[sweep-the-missing-half-not-the-unused-export]]
+               */
+              const { bodyBoundsFromPose } = await import('./swing/bodyBounds');
               const arc = await detectClubPath({
                 videoUri: firstClipSwing.clipUri!,
                 startMs: pw.startMs,
                 endMs: pw.endMs,
                 shouldAbort: () => false,
+                bodyBounds: bodyBoundsFromPose(biomech?.frames ?? null),
               });
               if (arc && arc.points.length >= 3) {
                 // rebase window-relative tMs → absolute clip ms (parity with the view overlay)

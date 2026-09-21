@@ -40,6 +40,9 @@ import { useSettingsStore } from '../../../store/settingsStore';
 import { speak, speakChunked, warmVoice, stopSpeaking, configureAudioForSpeech, captureUtterance, stopCapture } from '../../../services/voiceService';
 import { runPhaseKOnSession, resolveClipUri, resolveImageUri } from '../../../services/videoUpload';
 import { detectClubPath } from '../../../services/swing/clubPath';
+// 2026-09-20 — this screen HAS pose frames (activeBiomech.frames) and was still asking the model
+// to find a ~6px clubhead in a full downscaled frame. See services/swing/bodyBounds.
+import { bodyBoundsFromPose } from '../../../services/swing/bodyBounds';
 import { readClubPath } from '../../../services/swing/clubPathRead';
 // 2026-06-23 — Fix: the swing-detail DrillCard showed the "appear once analysis
 // is available" placeholder even when analysis SUCCEEDED with a detected fault,
@@ -845,7 +848,9 @@ export default function SwingDetail() {
           const pipe = require('../../../services/swing/analysisPipeline') as typeof import('../../../services/swing/analysisPipeline');
           pipe.checkOrder(pipe.runKeyFor(uri, startMs, endMs), 'club');
         } catch { /* observation only */ }
-        const r = await detectClubPath({ videoUri: uri, startMs, endMs, impactMs: anchorMs, shouldAbort: () => cancelled });
+        // 2026-09-20 — crop to the player. Tim's Sentry from this very screen read `detected: 2`
+        // of fourteen sampled frames, which is what a ~6px clubhead looks like.
+        const r = await detectClubPath({ videoUri: uri, startMs, endMs, impactMs: anchorMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(poseFrames) });
         try {
           const pipe = require('../../../services/swing/analysisPipeline') as typeof import('../../../services/swing/analysisPipeline');
           pipe.noteStage(pipe.runKeyFor(uri, startMs, endMs), 'club',
@@ -918,6 +923,13 @@ export default function SwingDetail() {
                   gate: r?.rejected?.gate ?? null,
                   framesSampled: r?.framesSampled ?? null,
                   framesPlanned: r?.framesPlanned ?? null,
+                  // 2026-09-20 — WHETHER WE CROPPED. Tim's report read detected 2 of 14 sampled and
+                  // there was no way to tell whether the ROI zoom had engaged, so the obvious
+                  // suspect could not be confirmed or ruled out from the log. It had not: three of
+                  // four call sites ran full-frame. A field that distinguishes "the fix ran and
+                  // still failed" from "the fix never ran" is the difference between a tuning
+                  // problem and a wiring one. [[missing-log-entry-is-the-evidence]]
+                  zoomed: bodyBoundsFromPose(poseFrames) != null,
                 },
                 /**
                  * 2026-08-31 — AN ABORTED RUN IS NOT A FAILURE, and calling it one cost Tim a
@@ -1281,7 +1293,9 @@ export default function SwingDetail() {
             pipe.noteStage(pipe.runKeyFor(analyzeUri, wStart, wEnd), 'anchor',
               arcAnchorMs != null ? 'ok' : 'empty', { anchorMs: arcAnchorMs, method: selShot.detectionMethod ?? null });
           } catch { /* observation only */ }
-          const arc = await detectClubPath({ videoUri: analyzeUri, startMs: wStart, endMs: wEnd, impactMs: arcAnchorMs, shouldAbort: () => cancelled });
+          // 2026-09-20 — the re-analyse path gets the crop too. `biomech` was just computed above,
+          // so its frames are the freshest bounds available for this clip.
+          const arc = await detectClubPath({ videoUri: analyzeUri, startMs: wStart, endMs: wEnd, impactMs: arcAnchorMs, shouldAbort: () => cancelled, bodyBounds: bodyBoundsFromPose(biomech?.frames ?? poseFrames) });
           // 2026-08-06 (audit) — >= 3 to match the loosened MIN_ARC_POINTS everywhere else; the old >= 4 here
           // would drop a valid 3-point arc and persist []. (Dead today under LIBRARY_AUTO_PROCESS=false, but
           // keep it consistent so flipping that flag can't silently lose 3-point arcs.)

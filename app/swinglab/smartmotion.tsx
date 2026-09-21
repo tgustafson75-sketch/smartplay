@@ -59,6 +59,9 @@ import { computeTraceDirection, traceColor, buildShotTrace, type ShotTraceBuild 
 import { composeSmartTrace } from '../../services/swing/smartTrace';
 import { detectBallPath } from '../../services/swing/ballPath';
 import { detectClubPath } from '../../services/swing/clubPath';
+// 2026-09-20 — moved to services/swing/bodyBounds so the three call sites that could not import a
+// SCREEN can crop too. See that file: three of four ran full-frame, including the persist pass.
+import { bodyBoundsFromPose } from '../../services/swing/bodyBounds';
 import { frameToContainerNorm } from '../../services/swing/overlayCoords';
 import { recordPracticeSwingIfActive, usePracticeSessionStore } from '../../store/practiceSessionStore';
 // Type-only — erased at runtime, so it never loads the vision-camera native module.
@@ -278,26 +281,6 @@ type SmContact = {
  * and a ~40px one. Uses the union across ALL frames so the box covers address through finish.
  * Null when pose is unavailable or too weak to trust, which simply leaves the old behavior.
  */
-function bodyBoundsFromPose(frames: PoseFrame[] | null): { minX: number; minY: number; maxX: number; maxY: number } | null {
-  if (!frames?.length) return null;
-  let minX = 1, minY = 1, maxX = 0, maxY = 0, seen = 0;
-  for (const f of frames) {
-    for (const k of f.keypoints ?? []) {
-      // Only confident joints — a flickering low-score keypoint on the horizon would balloon the box.
-      if ((k.score ?? 0) < 0.4) continue;
-      if (!Number.isFinite(k.x) || !Number.isFinite(k.y)) continue;
-      if (k.x < 0 || k.x > 1 || k.y < 0 || k.y > 1) continue;
-      if (k.x < minX) minX = k.x;
-      if (k.x > maxX) maxX = k.x;
-      if (k.y < minY) minY = k.y;
-      if (k.y > maxY) maxY = k.y;
-      seen++;
-    }
-  }
-  if (seen < 8) return null;
-  if (!(maxX > minX) || !(maxY > minY)) return null;
-  return { minX, minY, maxX, maxY };
-}
 
 function deriveVerdict(
   a: SwingAnalysis | null,
@@ -2284,6 +2267,13 @@ export default function SmartMotion() {
                   // Beside it, what the SCHEDULE asked for — the two differing means the native
                   // retriever dropped frames, which is a different bug from a short window.
                   framesPlanned: r?.framesPlanned ?? null,
+                  // 2026-09-20 — WHETHER WE CROPPED. Tim's report read detected 2 of 14 sampled and
+                  // there was no way to tell whether the ROI zoom had engaged, so the obvious
+                  // suspect could not be confirmed or ruled out from the log. It had not: three of
+                  // four call sites ran full-frame. A field that distinguishes "the fix ran and
+                  // still failed" from "the fix never ran" is the difference between a tuning
+                  // problem and a wiring one. [[missing-log-entry-is-the-evidence]]
+                  zoomed: bodyBoundsFromPose(poseFrames) != null,
                 },
                 r ? 'analysis_error' : 'diag',
               );
@@ -3297,7 +3287,26 @@ export default function SmartMotion() {
                       anchorMs != null ? 'ok' : 'empty',
                       { anchorMs, source: impactFrame?.positionSource ?? null, via: 'pose_impact' });
                   } catch { /* observation only */ }
-                  const arc = await detectClubPath({ videoUri: clipUri, startMs: poseWindow.startMs, endMs: poseWindow.endMs, impactMs: anchorMs, shouldAbort: () => false });
+                  /**
+                   * 2026-09-20 (Tim's Sentry, SM-F926U) — THE ZOOM WAS ON THE OTHER PATH.
+                   *
+                   *   clubpath_arc_too_sparse { screen: "swing-detail", detected: 2,
+                   *     framesSampled: 14, framesPlanned: 14, rejected: "too_few", points: 0 }
+                   *
+                   * The sampler did its whole job — fourteen of fourteen planned frames. The model
+                   * found a clubhead in TWO of them. That is what a ~6px clubhead looks like.
+                   *
+                   * The 2026-08-10 ROI crop exists precisely to stop that: crop to the player's
+                   * pose bounds and spend the 640px budget there, taking the head from ~6px to
+                   * ~40px. It was passed on the REVIEW path above (`bodyBounds:
+                   * bodyBoundsFromPose(poseFrames)`) and NOT here — and HERE is the persist path,
+                   * the one whose own comment says it exists "so the swing-detail screen draws the
+                   * stored points". So the arc the player actually keeps was computed without the
+                   * fix, while the one that flashes past during review had it. The saved swing is
+                   * the one he looks at. [[no-half-fixes-enforce-every-surface]]
+                   * [[sweep-the-missing-half-not-the-unused-export]]
+                   */
+                  const arc = await detectClubPath({ videoUri: clipUri, startMs: poseWindow.startMs, endMs: poseWindow.endMs, impactMs: anchorMs, shouldAbort: () => false, bodyBounds: bodyBoundsFromPose(frames ?? null) });
                   const store = useSwingSessionStore.getState();
                   if (arc && arc.points.length >= 3) {
                     store.setSessionClubArc(sessionId, arc.points.map(p => ({ x: p.x, y: p.y, tMs: p.tMs + poseWindow.startMs })), { w: arc.frameW ?? null, h: arc.frameH ?? null });
