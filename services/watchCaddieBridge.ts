@@ -348,7 +348,7 @@ export async function initWatchCaddieBridge(): Promise<boolean> {
     commandSub = emitter.addListener('onWatchCommand', (e: { command?: string }) => {
       markWatchAlive();
       const c = e?.command;
-      if (c === 'open_smartmotion' || c === 'smartmotion_record' || c === 'smartmotion_stop' || c === 'smartmotion_toggle') {
+      if (c === 'open_smartmotion' || c === 'smartmotion_record' || c === 'smartmotion_stop' || c === 'smartmotion_toggle' || c === 'smartmotion_countdown') {
         notifyWatchCommand(c);
       }
     });

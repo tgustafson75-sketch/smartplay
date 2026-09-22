@@ -55,6 +55,18 @@ function handleWatchCommand(command: WatchCommand): void {
       case 'smartmotion_stop':
         emitSmartMotionCommand('stop');
         break;
+      /**
+       * 2026-09-21 — the WATCH tap. Replaces the long-press Tim asked to remove.
+       *
+       * Always a countdown, because this command can only come from a wrist: the player is away
+       * from the phone and has to walk into frame. When SmartMotion is already open the screen
+       * runs the countdown itself; when it is closed the route carries it, so the count starts the
+       * moment the camera is ready rather than the moment the screen mounts.
+       */
+      case 'smartmotion_countdown':
+        if (isSmartMotionActive()) emitSmartMotionCommand('countdown');
+        else router.push('/swinglab/smartmotion?autoRecord=1&countdown=5' as never);
+        break;
       case 'smartmotion_toggle':
         if (isSmartMotionActive()) emitSmartMotionCommand('toggle');
         else router.push('/swinglab/smartmotion?autoRecord=1' as never);

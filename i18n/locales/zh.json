@@ -287,9 +287,9 @@
     },
     "add": {
       "heading": "添加球杆",
-      "manual": "\u624b\u52a8\u6dfb\u52a0",
-      "manual_sub": "\u70b9\u9009\u4f60\u5e26\u7684\u7403\u6746\u3002\u65e0\u9700\u76f8\u673a\u3002",
-      "manual_a11y": "\u4ece\u5217\u8868\u4e2d\u624b\u52a8\u6dfb\u52a0\u7403\u6746",
+      "manual": "手动添加",
+      "manual_sub": "点选你带的球杆。无需相机。",
+      "manual_a11y": "从列表中手动添加球杆",
       "video": "用视频扫描",
       "video_sub": "缓慢扫过杆头。适合一次录入整包。",
       "video_a11y": "用视频扫描我的球包",
@@ -304,14 +304,14 @@
       "standard": "从标准球包开始",
       "standard_sub": "成套球杆典型的十四支 — 不带的可以移除。",
       "standard_a11y": "用标准的十四支球杆填满我的球包",
-      "hint": "\u70b9\u4e00\u4e0b\u628a\u7403\u6746\u653e\u8fdb\u7403\u5305\uff0c\u518d\u70b9\u4e00\u4e0b\u53d6\u51fa\u3002\u54c1\u724c\u3001\u6746\u8eab\u548c\u63e1\u628a\u5728\u4e0a\u65b9\u7684\u7403\u6746\u4e0a\u586b\u5199 \u2014 \u4e0d\u586b\u4e5f\u884c\uff0c\u7403\u7ae5\u7167\u6837\u5de5\u4f5c\u3002",
-      "add_a11y": "\u5c06 {{club}} \u52a0\u5165\u6211\u7684\u7403\u5305",
-      "remove_a11y": "\u5c06 {{club}} \u4ece\u6211\u7684\u7403\u5305\u79fb\u9664"
+      "hint": "点一下把球杆放进球包，再点一下取出。品牌、杆身和握把在上方的球杆上填写 — 不填也行，球童照样工作。",
+      "add_a11y": "将 {{club}} 加入我的球包",
+      "remove_a11y": "将 {{club}} 从我的球包移除"
     },
     "skip": {
-      "title": "\u7a0d\u540e\u518d\u8bbe\u7f6e",
-      "body": "\u7403\u5305\u5728\u300c\u4e2a\u4eba\u8d44\u6599 \u2192 \u6211\u7684\u7403\u5305\u300d\u91cc\u3002\u968f\u65f6\u53ef\u4ee5\u8bbe\u7f6e \u2014 \u5728\u90a3\u4e4b\u524d\u7403\u7ae5\u53ea\u80fd\u7528\u901a\u7528\u8ddd\u79bb\u8868\u9009\u6746\u3002",
-      "a11y": "\u7a0d\u540e\u518d\u8bbe\u7f6e\u7403\u5305"
+      "title": "稍后再设置",
+      "body": "球包在「个人资料 → 我的球包」里。随时可以设置 — 在那之前球童只能用通用距离表选杆。",
+      "a11y": "稍后再设置球包"
     },
     "receipt": {
       "added_one": "已向球包添加 {{count}} 支球杆。",
@@ -392,6 +392,11 @@
     "count": {
       "say_it": "念出来",
       "aiming_at": "若以 {{target}}:1 为目标，节拍变成「{{say}}」— 下杆不变，上杆更长。"
+    }
+  },
+  "swinglab_smartmotion": {
+    "smart_motion": {
+      "get_set": "准备"
     }
   }
 }

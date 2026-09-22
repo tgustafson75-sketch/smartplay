@@ -97,7 +97,7 @@ export function notifyWatchVoice(utterance: string): void {
 // layer; the native bridge forwards it here and consumers (handsFreeOrchestrator) act on the phone —
 // open SmartMotion + start/stop the camera. NOTE: this is the PHONE side; the watch UI button that
 // SENDS these lives in the native Wear app.
-export type WatchCommand = 'open_smartmotion' | 'smartmotion_record' | 'smartmotion_stop' | 'smartmotion_toggle';
+export type WatchCommand = 'open_smartmotion' | 'smartmotion_record' | 'smartmotion_stop' | 'smartmotion_toggle' | 'smartmotion_countdown';
 type CommandListener = (command: WatchCommand) => void;
 const commandListeners: Set<CommandListener> = new Set();
 

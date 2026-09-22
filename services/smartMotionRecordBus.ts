@@ -27,7 +27,16 @@
 // screen, matching what picking the putter in the picker or a club scan does —
 // so a voice putter change is analyzed AS A PUTT, and any non-putter club
 // change clears putt mode back to a full-swing read.
-export type SmartMotionCommand = 'start' | 'stop' | 'toggle' | 'scanClub' | 'puttOn' | 'puttOff' | 'angleDtl' | 'angleFaceOn' | 'close';
+/**
+ * 2026-09-21 — `countdown` is distinct from `start` on purpose.
+ *
+ * Tim: "I hate long press, should just be tap that starts a 3 to 5 second countdown silently but
+ * shows on phone." The countdown exists because the person triggering the recording is NOT at the
+ * phone — they tapped their watch and now have to walk into frame and address the ball. A tap on
+ * the phone's own Record button has no such gap, and making `start` wait five seconds would put a
+ * delay in front of the one caller that never needed it.
+ */
+export type SmartMotionCommand = 'start' | 'countdown' | 'stop' | 'toggle' | 'scanClub' | 'puttOn' | 'puttOff' | 'angleDtl' | 'angleFaceOn' | 'close';
 
 type Listener = (cmd: SmartMotionCommand) => void;
 

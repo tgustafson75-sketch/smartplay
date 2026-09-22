@@ -622,7 +622,7 @@
       "add_this_course_from_a": "Add this course from a scorecard photo to play it",
       "course_layout": "Course layout",
       "tournament_mode_group_play_setup": "Add players and keep a scorecard for each — tournament and group play setup",
-      "competition_round_conservative": "Competition round \u2014 the caddie plays it conservatively and the scorecard is marked. Does not add other players; use Add Players for that.",
+      "competition_round_conservative": "Competition round — the caddie plays it conservatively and the scorecard is marked. Does not add other players; use Add Players for that.",
       "round_challenge_break_a_score": "Round challenge — break a score from a tee",
       "walking_this_round": "Walking this round",
       "riding_a_cart_this_round": "Riding a cart this round",
@@ -2436,7 +2436,8 @@
       "putt_read": "PUTT READ",
       "rough_read_no_connection_while": "Rough read — no connection while analysing, so I could not pin the swing in the clip. Re-analyse on signal for a sharper one.",
       "rough_read_i_could_not": "Rough read — I could not pin the swing in the clip this time. Re-analyse for a sharper one.",
-      "open_settings": "Open Settings"
+      "open_settings": "Open Settings",
+      "get_set": "GET SET"
     },
     "accessibility_label": {
       "stop_recording": "Stop recording",
@@ -4021,13 +4022,13 @@
       "standard": "Start with a standard set",
       "standard_sub": "The fourteen an off-the-rack set comes with — take out anything you do not carry.",
       "standard_a11y": "Fill my bag with a standard fourteen-club set",
-      "hint": "Tap a club to put it in your bag. Tap it again to take it out. Brand, shaft and grip go on the club itself, above \u2014 or leave them, the caddie works either way.",
+      "hint": "Tap a club to put it in your bag. Tap it again to take it out. Brand, shaft and grip go on the club itself, above — or leave them, the caddie works either way.",
       "add_a11y": "Add {{club}} to my bag",
       "remove_a11y": "Remove {{club}} from my bag"
     },
     "skip": {
       "title": "Skip for now",
-      "body": "Your bag lives in Profile \u2192 My Bag. Set it up whenever you like \u2014 the caddie clubs you off a generic chart until you do.",
+      "body": "Your bag lives in Profile → My Bag. Set it up whenever you like — the caddie clubs you off a generic chart until you do.",
       "a11y": "Skip setting up my bag for now"
     },
     "receipt": {

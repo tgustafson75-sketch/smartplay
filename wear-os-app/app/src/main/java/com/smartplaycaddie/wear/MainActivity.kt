@@ -10,7 +10,7 @@
  *   │    F 132   B 158   │   (front / back to the green, flanking)
  *   │   [  Ask caddie ]  │   (prominent green mic button)
  *   │  status / feedback │
- *   │   · Record Swing ·│   (secondary swing-capture toggle)
+ *   │   · Record Swing ·│   (tap: wrist capture + phone video)
  *   └────────────────────┘
  *
  * LIVE PIN YARDAGE is pushed from the phone (front/middle/back to the green,
@@ -249,11 +249,9 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
              * control and made the button the noisiest thing on a screen whose hero is a yardage
              * number. Two words now.
              *
-             * WHAT THAT COSTS, written down rather than discovered later: the long-press that
-             * toggles SmartMotion on the phone is no longer announced anywhere, and the note this
-             * label replaced argued that an undiscoverable gesture is the same as no feature. The
-             * gesture still works. If it should be findable, the cheap fix is a swing icon beside
-             * the word rather than a second line of text.
+             * The hint had to go anyway: hours later Tim removed the gesture it described ("I hate
+             * long press"). One tap now starts the wrist capture AND the phone's camera, so there
+             * is no second gesture left to announce — which is why two words are enough.
              */
             text = "Record Swing"
             /**
@@ -275,35 +273,13 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
             setOnClickListener { onToggleCapture() }
             /**
-             * 2026-09-09 — LONG-PRESS drives SmartMotion on the phone.
+             * 2026-09-21 — the long-press that lived here is GONE (Tim: "I hate long press").
              *
-             * Deliberately a long-press on the button that already means "record", rather than a
-             * third button: this watch face is 1.4 inches and already carries a mic, a yardage
-             * number, a feedback strip and this toggle. Two different recordings needed separating,
-             * not crowding — a tap still starts the WATCH's own swing sensor, a long-press toggles
-             * the PHONE's SmartMotion capture.
-             *
-             * The label says so, because an undiscoverable gesture is the same as no feature. If Tim
-             * would rather have a separate button, this is the one line to move.
+             * It separated two recordings that never wanted separating: the wrist IMU on tap, the
+             * phone's camera on hold. One tap now does both — see onToggleCapture — and the two
+             * readings are of the same swing instead of two things the player has to line up by
+             * hand. Nothing is left on this button but a tap.
              */
-            setOnLongClickListener {
-                /**
-                 * 2026-09-21 — say "sending", then say what actually happened.
-                 *
-                 * This set the success text immediately and unconditionally, so a player whose
-                 * phone was in the cart, asleep or swiped away got "SmartMotion -> phone" and
-                 * nothing else — they hold again, it says the same thing again. The wrist is the
-                 * only feedback surface here, so a confident wrong answer on it is the whole
-                 * failure.
-                 */
-                status.text = "Sending\u2026"
-                sendToPhone(COMMAND_PATH, "smartmotion_toggle".toByteArray(Charsets.UTF_8)) { ok ->
-                    runOnUiThread {
-                        status.text = if (ok) "SmartMotion \u2192 phone" else "Phone not reachable"
-                    }
-                }
-                true
-            }
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -520,6 +496,26 @@ class MainActivity : Activity(), MessageClient.OnMessageReceivedListener {
         if (capturing) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(svc)
             else startService(svc)
+            /**
+             * 2026-09-21 (Tim: "I hate long press, should just be tap that starts a 3 to 5 second
+             * countdown silently but shows on phone") — ONE TAP MEANS "RECORD MY SWING".
+             *
+             * The long-press that used to drive SmartMotion is gone. The same tap now starts the
+             * wrist IMU capture AND asks the phone to record video, so the two readings are of the
+             * same swing rather than two things the player has to remember to line up.
+             *
+             * The countdown deliberately lives on the PHONE (services/handsFreeOrchestrator ->
+             * /swinglab/smartmotion?countdown=5). The player who pressed this is walking into frame
+             * with the watch on the wrist they are about to swing — a count on that wrist is the
+             * one place they cannot look. Silent here, big on the camera.
+             *
+             * Fire-and-forget on purpose: the wrist capture has already started and is useful on its
+             * own, so a phone that is asleep or out of range must not stop it. The status line still
+             * reports what happened, through the same delivery callback the rest of this screen uses.
+             */
+            sendToPhone(COMMAND_PATH, "smartmotion_countdown".toByteArray(Charsets.UTF_8)) { ok ->
+                runOnUiThread { if (!ok) status.text = "Watch only - phone not reachable" }
+            }
             // 2026-09-21 — the 09-09 note here argued for keeping the long-press hint on BOTH
             // states. The hint is gone from the label entirely now (see the button's own comment),
             // so there is nothing left to keep on both — the two states are just Record / Stop.

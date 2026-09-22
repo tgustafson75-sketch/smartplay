@@ -45,9 +45,21 @@ describe('the command path is complete end to end', () => {
     expect(watch).toContain(literal);
   });
 
-  it('the command the watch sends is one JS actually handles', () => {
-    expect(watch).toContain('"smartmotion_toggle"');
-    expect(js).toContain("c === 'smartmotion_toggle'");
+  /**
+   * 2026-09-21 — DERIVED, not hardcoded. This asserted the literal "smartmotion_toggle", so the day
+   * the watch started sending a different verb ("smartmotion_countdown", when the long-press became
+   * a tap) the guard failed on a correct change while proving nothing about the new verb. Pinning
+   * the value made it blind to the only thing that matters.
+   *
+   * The invariant was always: WHATEVER the watch sends on the command path, JS must handle. So the
+   * verb is now read out of the Kotlin and checked against the whitelist — which means a verb added
+   * to the watch tomorrow is covered on the day it lands, and one that JS silently ignores fails
+   * here instead of on a wrist. [[guards-that-copy-the-line-they-guard]]
+   */
+  it('every command the watch sends is one JS actually handles', () => {
+    const sent = [...watch.matchAll(/sendToPhone\(\s*COMMAND_PATH\s*,\s*"([a-z_]+)"/g)].map(m => m[1]);
+    expect(sent.length).toBeGreaterThan(0);
+    for (const verb of sent) expect(js).toContain(`c === '${verb}'`);
   });
 
   it('native forwards unknown commands rather than filtering — JS ships by OTA, this file does not', () => {
@@ -55,9 +67,22 @@ describe('the command path is complete end to end', () => {
     expect(phone).not.toMatch(/commandPath[\s\S]{0,400}?(smartmotion_record|open_smartmotion)/);
   });
 
-  it('the long-press hint survives BOTH capture states — an undiscoverable gesture is no feature', () => {
-    const hints = watch.match(/hold \\u2192 SmartMotion/g) ?? [];
-    expect(hints.length).toBeGreaterThanOrEqual(3);   // initial label + both toggle states
+  /**
+   * 2026-09-21 — RETIRED, because the thing it guarded no longer exists.
+   *
+   * This required the "hold -> SmartMotion" hint on the label in both capture states, on the
+   * reasoning that an undiscoverable gesture is the same as no feature. That reasoning was right,
+   * and Tim removed the gesture rather than the hint: "I hate long press, should just be tap".
+   * One tap now starts the wrist capture and the phone's camera together, so there is no second
+   * gesture to announce.
+   *
+   * Kept as a note rather than deleted so the next person does not re-add the hint from the git
+   * history and wonder why nothing responds to a hold. The replacement invariant — that no
+   * long-click handler is registered at all, and that the tap drives both ends — lives in
+   * __tests__/regression/one-tap-records-both-ends.test.ts.
+   */
+  it('registers no long-press, because the gesture was removed rather than hidden', () => {
+    expect(watch).not.toMatch(/setOnLongClickListener/);
   });
 });
 

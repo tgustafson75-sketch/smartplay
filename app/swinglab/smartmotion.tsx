@@ -530,8 +530,8 @@ export default function SmartMotion() {
   // bottom: the floating swing-count pill collides with the controls row. Bump its
   // clearance + tighten spacing when narrow so nothing overlaps. Open phone unaffected.
   const isNarrow = windowWidth < 400;
-  const { clipUri: clipUriParam, angle: angleParam, drillId, drillName, drillShots, drillFocus, drillShotType, drillSwingPercents, captureMode, returnTo, autoRecord, autoScan, club: clubParam } =
-    useLocalSearchParams<{ clipUri?: string; angle?: string; drillId?: string; drillName?: string; drillShots?: string; drillFocus?: string; drillShotType?: string; drillSwingPercents?: string; captureMode?: string; returnTo?: string; autoRecord?: string; autoScan?: string; club?: string }>();
+  const { clipUri: clipUriParam, angle: angleParam, drillId, drillName, drillShots, drillFocus, drillShotType, drillSwingPercents, captureMode, returnTo, autoRecord, autoScan, club: clubParam, countdown: countdownParam } =
+    useLocalSearchParams<{ clipUri?: string; angle?: string; drillId?: string; drillName?: string; drillShots?: string; drillFocus?: string; drillShotType?: string; drillSwingPercents?: string; captureMode?: string; returnTo?: string; autoRecord?: string; autoScan?: string; club?: string; countdown?: string }>();
   // 2026-07-09 (audit — flagship TEMPO×SWING% drill) — the swing-% ladder (e.g. 50/75/100)
   // the player should cycle through. Parsed from the forwarded param; drives the drill cue.
   const drillSwingPct: number[] = React.useMemo(() => {
@@ -4971,6 +4971,59 @@ export default function SmartMotion() {
   // CameraView's onCameraReady then auto-starts the next recording. This keeps
   // the hands-free "do a minute, review, go again" loop working by voice.
   const pendingStartRef = useRef(false);
+
+  /**
+   * 2026-09-21 — THE WATCH-TAP COUNTDOWN. Tim: "should just be tap that starts a 3 to 5 second
+   * countdown silently but shows on phone."
+   *
+   * The whole point is that the player is NOT holding the phone: they tapped their watch, and now
+   * have to walk into frame and settle over the ball. The count runs HERE, on the camera, because
+   * that is the only screen they can see from where they are standing — the watch stays silent on
+   * a wrist that is about to swing.
+   *
+   * It is armed from two places and both go through `beginPendingCapture` below, so the "wait,
+   * then record" rule has one owner rather than a copy per camera implementation.
+   */
+  const COUNTDOWN_TICK_MS = 1000;
+  const [countdownLeft, setCountdownLeft] = useState<number | null>(null);
+  const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clearCountdown = useCallback(() => {
+    if (countdownTimerRef.current) { clearInterval(countdownTimerRef.current); countdownTimerRef.current = null; }
+    setCountdownLeft(null);
+  }, []);
+
+  const startCountdown = useCallback((seconds: number) => {
+    // A second arm must not run two timers at different phases of the same count.
+    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+    setCountdownLeft(seconds);
+    countdownTimerRef.current = setInterval(() => {
+      setCountdownLeft((n) => {
+        if (n === null) return null;
+        if (n <= 1) {
+          if (countdownTimerRef.current) { clearInterval(countdownTimerRef.current); countdownTimerRef.current = null; }
+          // Start on the frame the zero would have been drawn, not a tick later.
+          beginNextRecordingRef.current();
+          return null;
+        }
+        return n - 1;
+      });
+    }, COUNTDOWN_TICK_MS);
+  }, []);
+
+  // The timer outlives a re-render; it must not outlive the screen.
+  useEffect(() => () => { if (countdownTimerRef.current) clearInterval(countdownTimerRef.current); }, []);
+
+  /**
+   * One owner for "the camera is ready and something asked us to record". Both camera
+   * implementations call this, so a countdown cannot work on vision-camera and silently not on
+   * expo-camera — which is exactly the shape of defect this repo keeps finding.
+   */
+  const beginPendingCapture = useCallback(() => {
+    const secs = Number(countdownParam);
+    if (Number.isFinite(secs) && secs > 0) startCountdown(Math.min(10, Math.round(secs)));
+    else void startRecordingRef.current();
+  }, [countdownParam, startCountdown]);
   // Set when the player asks to go again DURING analysis (see beginNextRecording's analyzing branch).
   const queuedGoAgainRef = useRef(false);
   // Ref indirection: persistReviewToLibrary is defined below (it needs the full review
@@ -5229,6 +5282,12 @@ export default function SmartMotion() {
     reset();
   }, [reset]);
 
+  // Indirection so the countdown (declared earlier) can reach these without a TDZ or a dep cycle.
+  const beginNextRecordingRef = useRef<() => void>(() => {});
+  const startRecordingRef = useRef<() => void | Promise<void>>(() => {});
+  beginNextRecordingRef.current = beginNextRecording;
+  startRecordingRef.current = startRecording;
+
   const recordCmdRef = useRef<(cmd: SmartMotionCommand) => void>(() => {});
   recordCmdRef.current = (cmd) => {
     if (cmd === 'scanClub') { void startClubScan(); return; }
@@ -5251,6 +5310,8 @@ export default function SmartMotion() {
     const recording = phase === 'recording';
     if (cmd === 'stop') { if (recording) void stopRecording(); return; }
     if (cmd === 'start') { if (!recording) beginNextRecording(); return; }
+    // The watch tap, arriving while SmartMotion is already open.
+    if (cmd === 'countdown') { if (!recording) startCountdown(5); return; }
     // toggle
     if (recording) void stopRecording();
     else beginNextRecording();
@@ -5623,7 +5684,7 @@ export default function SmartMotion() {
               facing={facing}
               isActive
               onCameraReady={() => {
-                if (pendingStartRef.current) { pendingStartRef.current = false; void startRecording(); }
+                if (pendingStartRef.current) { pendingStartRef.current = false; beginPendingCapture(); }
               }}
             />
           ) : (
@@ -5639,10 +5700,30 @@ export default function SmartMotion() {
               onCameraReady={() => {
                 // Auto-start a voice-requested recording once the camera (re)mounts
                 // coming out of review — completes the hands-free loop.
-                if (pendingStartRef.current) { pendingStartRef.current = false; void startRecording(); }
+                if (pendingStartRef.current) { pendingStartRef.current = false; beginPendingCapture(); }
               }}
             />
           )
+        )}
+
+        {/*
+          2026-09-21 — THE WATCH-TAP COUNTDOWN, drawn over the live preview.
+
+          Full-screen and enormous on purpose: the player who started this is standing several feet
+          away, about to address a ball, and has to read it at a glance without walking back. A
+          corner badge would be the honest-looking choice and the useless one.
+
+          `pointerEvents="none"` so the controls underneath stay live — tapping Record during the
+          count still starts immediately, which is the natural "never mind, now" gesture.
+        */}
+        {countdownLeft !== null && (
+          <View
+            pointerEvents="none"
+            style={[StyleSheet.absoluteFillObject, styles.countdownOverlay]}
+          >
+            <Text style={styles.countdownNumber}>{countdownLeft}</Text>
+            <Text style={styles.countdownHint}>{t('swinglab_smartmotion.smart_motion.get_set')}</Text>
+          </View>
         )}
 
         {/* STATUS PERIMETER — thin pulsing border tied to the analysis phase:
@@ -6951,6 +7032,31 @@ export default function SmartMotion() {
 }
 
 const styles = StyleSheet.create({
+  // 2026-09-21 — watch-tap countdown. Sized to be readable from where the player is standing,
+  // not from where the phone is.
+  countdownOverlay: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.42)',
+    zIndex: 950,
+  },
+  countdownNumber: {
+    fontSize: 168,
+    lineHeight: 180,
+    fontWeight: '800',
+    color: '#88F700',            // canonical SmartPlay neon green
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+  },
+  countdownHint: {
+    marginTop: 4,
+    fontSize: 18,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.85)',
+  },
+
   root: { flex: 1 },
   center: { alignItems: 'center', justifyContent: 'center', gap: 12, backgroundColor: '#060f09' },
 
