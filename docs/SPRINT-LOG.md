@@ -4908,3 +4908,52 @@ Settings row rather than baselined.
 
 Health: **tsc 0 · jest 2945/2945 (263 suites) · sim 968/968 · lint 0 errors**.
 `ota-preflight` correctly REFUSES on this branch — verified.
+
+
+## Day — 2026-09-21 (Monday) — 1.0.1 (29) submitted to both stores, and the watch app shipped for the first time since July
+
+### Shipped today
+- **1.0.1 build 29 in review on both stores.** Apple closed the 1.0.0 train mid-afternoon
+  (ITMS-90186 / ITMS-90062), so `version` moved to 1.0.1 while `runtimeVersion` stayed the literal
+  "1.0.0" — every binary in the field keeps receiving one OTA.
+- **Play: `production` 29 + `wear:production` 1030.** The Wear artifact CANNOT go in the standard
+  production track; Play refuses it outright ("requires the Wear OS system feature
+  android.hardware.type.watch"). It has its own `wear:production` track. That one fact is what the
+  AAB kept bouncing on for hours.
+- **OTA published to both branches** (production `d46a1066`, development `4710ca85`).
+- **The Wear APK/AAB built for the first time since 2026-07-29.** versionCode had never moved off 1;
+  it is 1030 now, targetSdk 33 → 35 (Play's Wear floor), signed with the same EAS keystore as the
+  phone, which is what makes the Data Layer pair at all.
+- **Issue log carries a full diagnostic snapshot** (bundle, device, GPS fix age, audio route, flags
+  off, missing native modules, watch reachability) on BOTH the manual and automatic channels.
+- **One tap on the watch records both ends** — wrist IMU plus the phone's camera behind a 5s
+  countdown drawn over the preview. Long-press removed.
+
+### Defects found and fixed (the ones worth remembering)
+- **A PII leak I introduced the same morning**: the snapshot emitted the course NAME under a key
+  called `courseId` on the anonymous channel. My own PII test passed it vacuously because it never
+  seeded a round.
+- **The Apple Watch "clear a finished round" branch had never run**, in any build — the watch read
+  `active`, the phone has always sent `round_active`. Fixed on both ends AND by sending both keys,
+  so watches already in the field are fixed by a phone OTA alone.
+- **The bottom of the Wear screen did not exist** on a 384x384 round face: no scroll container, so
+  the capture button was absent from the view hierarchy entirely. Three things shipped that day were
+  unreachable. Found by taking a screenshot, not by reading code.
+- **The build door had no owner guard** (`eas build` ran none) and `.easignore` supersedes
+  `.gitignore`, so `.env.local` and the signing keystore were uploaded on every build.
+- **Sentry breadcrumbs died on every OTA** — the July DSN fallback landed in `_layout` and missed
+  `analytics.ts`.
+- **The diagnostic could have wedged every future issue send**: an unbounded `watchReachable()`
+  inside `inFlightSend`.
+
+### Verified on device (Z Fold)
+Nothing. Everything today was verified by emulator, dex/AAB manifest inspection, uiautomator bounds,
+and the gates. **The device pass is still the open line on the packet** — and the new one-tap flow
+has never been tried with a real phone paired to a real watch.
+
+### Open / carried
+- `npm run ota:baseline` once 29 is live. Preflight still exits 1, correctly.
+- The Wear redesign: panels 1/7/8/9 next (see NEEDS-A-NATIVE-BUILD.md).
+- R8/ProGuard still deliberately off — unverifiable without a device pass or DEX inspection.
+
+Health: **tsc 0 · jest 454 suites / 5382 tests · sim 1057/1057**.

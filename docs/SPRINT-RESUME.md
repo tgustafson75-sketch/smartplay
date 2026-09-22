@@ -8,7 +8,30 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
-> ### ⚠️ LATEST — 2026-09-17. 1.0 (27) IS LIVE IN BOTH STORES. Post-launch sweep shipped by OTA.
+> ### ⚠️ LATEST — 2026-09-21. 1.0.1 (29) IS IN REVIEW ON BOTH STORES. The watch app shipped too.
+>
+> **Play:** `production` versionCode 29, and `wear:production` versionCode 1030 — the Wear artifact
+> has its OWN track and Play refuses it in the standard production track. **App Store:** 1.0.1 with
+> build 29 attached, WAITING_FOR_REVIEW.
+>
+> **`runtimeVersion` is still the literal "1.0.0" and must stay that way.** `version` moved to 1.0.1
+> only because Apple closed the 1.0.0 train. The two are decoupled on purpose: one OTA reaches every
+> binary ever shipped.
+>
+> **OWED THE MOMENT 29 IS LIVE:** `npm run ota:baseline`. Preflight exits 1 until then, correctly —
+> the baseline was deliberately NOT re-recorded when the OTA was published on 09-21, so it still
+> describes build 27, which is what is actually installed. See the bypass note in OTA-RUNBOOK.md.
+>
+> **NOT VERIFIED ON HARDWARE.** Everything on 09-21 was verified by emulator, AAB manifest
+> inspection and the gates. The device pass is still open, and the new one-tap watch flow has never
+> run with a real phone paired to a real watch.
+>
+> **Toolchain now on this Mac:** openjdk@17 + Android cmdline-tools + a Wear OS 5 emulator AVD
+> (`smartplay_wear`), which is how the watch app gets built and screenshotted. `brew` itself is
+> blocked by the Xcode licence, and `git`/`strings` are Xcode shims — use
+> `/Library/Developer/CommandLineTools/usr/bin/git` and read bytes in python.
+
+> ### 2026-09-17. 1.0 (27) IS LIVE IN BOTH STORES. Post-launch sweep shipped by OTA.
 >
 > **No new builds until 2.0** (Tim: "glad to be done building for now"). Everything since release
 > has gone out as an OTA (update group `7a9c6cf3`, commit `00f5dd6f`) or a Vercel deploy —
