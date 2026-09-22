@@ -162,6 +162,52 @@ const CHIP_STRIKE_THRESHOLD_DB = 18;
 /** 2026-08-17 — how recent a watch swing must be to stand in for a missing camera tempo read.
  *  Covers recording → reviewing → opening the read; anything older belongs to another session. */
 const WATCH_TEMPO_MAX_AGE_MS = 90_000;
+
+/**
+ * THE WRIST'S OWN TEMPO READ, or null. One owner — the review effect reaches it from two places.
+ *
+ * 2026-09-22 (Tim, before a foam-ball shoot: "make sure all those tools are right") — THE WATCH
+ * STAND-IN WAS UNREACHABLE IN THE ONE MODE THAT NEEDS IT MOST.
+ *
+ * The tempo effect returned early on `seg.synthesized`, and the watch fallback sat sixty lines
+ * below that return. `synthesized` is precisely what foam / no-ball mode produces whenever the
+ * cloud locator is skipped or comes back empty — a clip under LOCATE_MIN_CLIP_MS (6s), no network,
+ * or a cold Lambda — which the 09-17 note upstream describes as that mode's ordinary path. So the
+ * mode built for hitting into a net at home, where the camera has no strike to anchor on, threw
+ * away the one instrument that had actually measured the swing.
+ *
+ * The early return is still right about the CAMERA: a 0.6*duration placeholder must never produce
+ * a tempo. It was wrong about the wrist, which never used that anchor. backswingMs and downswingMs
+ * come off the IMU as durations; the camera's impact instant does not enter into them.
+ *
+ * topMs and sequencingScore stay null on purpose. The first is an instant relative to the CLIP and
+ * the wrist has no clip; the second needs hip and shoulder keypoints a wrist cannot see. Only what
+ * was measured is filled in. [[illustration-data-points]] [[state-what-you-measured-not-what-you-intended]]
+ */
+const watchTempoStandIn = (): SwingTempo | null => {
+  try {
+     
+    const ws = require('../../store/watchStore') as typeof import('../../store/watchStore');
+    const swings = ws.useWatchStore.getState().sessionSwings ?? [];
+    const last = swings.length > 0 ? swings[swings.length - 1] : null;
+    // 90s: covers recording -> reviewing -> opening the read, without letting a swing from an
+    // earlier session attach itself to this one. Reads the REAL `timestamp` field — an earlier
+    // version cast to a `.at` that never existed, so the window never applied.
+    const fresh = last != null && Date.now() - last.timestamp < WATCH_TEMPO_MAX_AGE_MS;
+    if (last && fresh && last.tempoRatio > 0 && last.backswingMs > 0 && last.downswingMs > 0) {
+      return {
+        ratio: last.tempoRatio,
+        backswingMs: last.backswingMs,
+        downswingMs: last.downswingMs,
+        topMs: null,
+        sequencingScore: null,
+        source: 'watch',
+        confidence: 'low',
+      };
+    }
+  } catch { /* no watch data — stay honest and show nothing */ }
+  return null;
+};
 // 2026-06-12 — default DTL target: straight up the frame from the ball (full-ish
 // shot). Draggable in setup so the aim line + the live effort/direction readout
 // update as you move it (geometry ↔ tempo, made interactive). x=0.5 = on the line.
@@ -3437,7 +3483,14 @@ export default function SmartMotion() {
     const impactSource: 'acoustic' | 'video' = (seg?.peakDb ?? 0) === 0 ? 'video' : 'acoustic';
     // 2026-08-09 (pass-2 P4) — a synthesized whole-clip segment has no real impact (strikeMs is a
     // 0.6·duration guess); never derive a tempo off a fabricated anchor — show "—".
-    if (!clipUri || isPutt || !seg || seg.strikeMs == null || seg.synthesized) { setTempo(null); return; }
+    if (!clipUri || isPutt || !seg || seg.strikeMs == null) { setTempo(null); return; }
+    if (seg.synthesized) {
+      // The camera anchor is a 0.6*duration placeholder, so no camera tempo — but the WRIST measured
+      // this swing without it. Null when no fresh watch swing, which is the same "—" as before.
+      // See watchTempoStandIn's header: this is foam / no-ball mode's ordinary path.
+      setTempo(watchTempoStandIn());
+      return;
+    }
     const cacheKey = `${clipUri}#${seg.strikeMs}`;
     const cached = tempoCacheRef.current[cacheKey];
     if (cached) { setTempo(cached); return; }
@@ -3482,33 +3535,16 @@ export default function SmartMotion() {
          * rather than overriding a good read. [[illustration-data-points]]
          */
         if (t.ratio == null) {
-          try {
-            const ws = require('../../store/watchStore') as typeof import('../../store/watchStore');
-            const swings = ws.useWatchStore.getState().sessionSwings ?? [];
-            const last = swings.length > 0 ? swings[swings.length - 1] : null;
-            /**
-             * 90s: comfortably covers recording, reviewing and opening the read, without letting a
-             * swing from an earlier session attach itself to this one.
-             *
-             * 2026-08-17 (Tim, evaluating watch↔SwingSim wiring: "I don't know if that would be
-             * duplicitous") — THIS GUARD WAS DEAD. It read `last.at` through a cast, and watchStore
-             * stamps `timestamp`; there is no `at` field anywhere on SwingMetrics. So the typeof
-             * test was always false, the ternary always fell to its permissive `: true` branch, and
-             * the window never applied — the newest watch swing in the session attached to this
-             * strike no matter how old it was. Exactly what the comment says it prevents.
-             *
-             * The cast is what hid it: `(last as { at?: number })` asserted a field into existence
-             * that the type never had, so TypeScript had nothing to complain about. Reading the
-             * REAL required field means a future rename is a compile error, not a silent no-op.
-             * [[grep-guards-cant-see-dead-code]] [[illustration-data-points]]
-             */
-            const fresh = last != null && Date.now() - last.timestamp < WATCH_TEMPO_MAX_AGE_MS;
-            if (last && fresh && last.tempoRatio > 0 && last.backswingMs > 0 && last.downswingMs > 0) {
-              console.log('[smartmotion] camera gave no tempo — using the watch IMU read', last.tempoRatio);
-              t = { ...t, ratio: last.tempoRatio, backswingMs: last.backswingMs, downswingMs: last.downswingMs };
-            }
-
-          } catch { /* no watch data — stay honest and show nothing */ }
+          // 2026-09-22 — this was a SECOND copy of the watch lookup, and the copy above the early
+          // return could not be reached at all in foam mode. One owner now; see watchTempoStandIn.
+          // Used only as a FALLBACK: the camera read is richer (it carries the kinematic sequence),
+          // so the wrist fills a gap rather than overriding a good read. The source flips to 'watch'
+          // because the numbers now came off the IMU, not the pose pass. [[two-owners-is-the-root-cause]]
+          const wrist = watchTempoStandIn();
+          if (wrist) {
+            console.log('[smartmotion] camera gave no tempo — using the watch IMU read', wrist.ratio);
+            t = { ...t, ratio: wrist.ratio, backswingMs: wrist.backswingMs, downswingMs: wrist.downswingMs, source: 'watch' };
+          }
         }
         // Only cache a real read; never poison the key with a transient NO_TEMPO (P2).
         if (t.ratio != null) tempoCacheRef.current[cacheKey] = t;
@@ -6119,8 +6155,19 @@ export default function SmartMotion() {
                 <ToolCardRow
                   icon={<Image source={ICON_RAIL.ballbox} style={styles.toolCardIcon} resizeMode="contain" />}
                   title={foamBallMode ? 'Foam / no ball on' : 'Foam / no ball'}
-                  desc="No strike needed — read the swing on video"
-                  active={foamBallMode}
+                  /* 2026-09-22 — A TOGGLE THAT DID NOTHING DURING A ROUND, AND SAID NOTHING ABOUT IT.
+                     Both reads are gated `foamBallMode && !isRoundActive` (foamOnStart, foamOnStop),
+                     so on course this switched, filled green, fired a toast promising video-only
+                     reads — and changed no behaviour whatsoever. The Course row two rows up already
+                     handles its own round-locked case with `disabled` plus a desc that names why;
+                     this is the same situation and now reads the same way. On-course you are hitting
+                     real balls, which is exactly why the gate exists.
+                     [[a-toggle-that-does-nothing-for-the-default-user]] */
+                  desc={isRoundActive
+                    ? 'Off during a round — on course you are hitting real balls'
+                    : 'No strike needed — read the swing on video'}
+                  disabled={isRoundActive}
+                  active={foamBallMode && !isRoundActive}
                   onPress={() => {
                     const next = !foamBallMode;
                     setFoamBallMode(next);

@@ -97,8 +97,29 @@ describe('the capture path measures the window before it guesses one (2026-09-01
     expect(measured).not.toMatch(/synthesized: false/);
   });
 
-  it('so tempo still refuses it, and frame extraction still calls it non-acoustic', () => {
-    expect(sm).toMatch(/seg\.strikeMs == null \|\| seg\.synthesized\) \{ setTempo\(null\); return; \}/);
+  it('so tempo still refuses to DERIVE from it, and frame extraction still calls it non-acoustic', () => {
+    /**
+     * 2026-09-22 — WIDENED, rule unchanged. This pinned the literal early-return line, and that
+     * line also swallowed the WATCH stand-in sixty lines below it. A synthesized segment is foam /
+     * no-ball mode's ORDINARY path (a clip under the 6s locator floor, no network, or a cold
+     * Lambda), so the one mode built for hitting into a net — where there is no strike to hear —
+     * showed "—" for a swing the wrist had measured on the IMU.
+     *
+     * The rule this test exists for is that a 0.6*duration guess must never become a RATIO. That is
+     * asserted directly now: the synthesized branch returns BEFORE deriveSwingTempo, so the camera
+     * derivation cannot see the anchor. What is handed over instead is the watch's own backswing and
+     * downswing durations, which never used the anchor and are not a camera read.
+     * [[guards-that-copy-the-line-they-guard]]
+     */
+    const at = sm.indexOf('if (seg.synthesized) {');
+    expect(at).toBeGreaterThan(-1);
+    const branch = sm.slice(at, at + 700);
+    expect(branch).toMatch(/setTempo\(watchTempoStandIn\(\)\);/);
+    expect(branch).toMatch(/return;/);
+    // the camera derivation sits AFTER that return — it can never receive a fabricated anchor
+    expect(at).toBeLessThan(sm.indexOf('deriveSwingTempo(clipUri, seg.strikeMs'));
+    // and the wrist only reports what a wrist can measure
+    expect(sm).toMatch(/topMs: null,[\s\S]{0,80}?sequencingScore: null,[\s\S]{0,60}?source: 'watch'/);
     expect(read('services/swing/poseExtractKey.ts')).toMatch(/!seg\.synthesized \? seg\.strikeMs : null/);
   });
 

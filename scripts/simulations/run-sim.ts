@@ -9255,7 +9255,15 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
     // accurate impact instant: acoustic swings anchor on the strike detector, video/range/upload
     // swings anchor on the segmenter's frame-accurate strikeMs. Impact source is tagged honestly.
     /const impactSource: 'acoustic' \| 'video' = \(seg\?\.peakDb \?\? 0\) === 0 \? 'video' : 'acoustic';/.test(smA) &&
-      /if \(!clipUri \|\| isPutt \|\| !seg \|\| seg\.strikeMs == null \|\| seg\.synthesized\) \{ setTempo\(null\); return; \}/.test(smA) &&
+      // 2026-09-22 — WIDENED, intent unchanged. This pinned the literal early-return line, which
+      // also swallowed the WATCH stand-in sixty lines below it — so foam / no-ball mode, whose
+      // ordinary path produces a synthesized segment, showed "—" for a swing the wrist had
+      // measured. What this guard actually cares about is that a FABRICATED CAMERA ANCHOR never
+      // reaches deriveSwingTempo, and that is asserted directly below: seg.synthesized returns
+      // before the derive, handing over only what the IMU measured without the camera's anchor.
+      // [[guards-that-copy-the-line-they-guard]]
+      /if \(!clipUri \|\| isPutt \|\| !seg \|\| seg\.strikeMs == null\) \{ setTempo\(null\); return; \}/.test(smA) &&
+      /if \(seg\.synthesized\) \{[\s\S]{0,500}?setTempo\(watchTempoStandIn\(\)\);[\s\S]{0,60}?return;[\s\S]{0,20}?\}/.test(smA) &&
       // 2026-08-09 (pass-2 P4) — a synthesized whole-clip fallback (strikeMs = 0.6·duration guess) is
       // skipped: tempo off a fabricated impact is not honest. Real located/acoustic swings still derive.
       /synthesized: true/.test(smA) &&
@@ -17672,6 +17680,48 @@ check(
     offenders.length > 0
       ? `these seek and then release in the same breath — the AVPlayerItem crash: ${offenders.join(', ')}`
       : `swept ${scanned.length} files that unload an audio player; none issues a seek (stopAsync / setPositionAsync / replayAsync) immediately before releasing it. unloadAsync stops and releases on its own, so the seek was only ever a race`);
+}
+
+// 2026-09-22 — THE WRIST'S TEMPO MUST BE REACHABLE IN THE MODE THAT HAS NO STRIKE.
+//
+// The tempo effect returned early on seg.synthesized and the watch fallback sat below that return,
+// so it could not run. `synthesized` is foam / no-ball mode's ordinary path (clip under the 6s
+// locator floor, no network, or a cold Lambda), i.e. the mode built for hitting into a net at home
+// threw away the only instrument that measured the swing.
+//
+// Asserts three things, because the fix has three parts: the stand-in exists as ONE owner, the
+// early return consults it instead of discarding, and a wrist read is labelled 'watch' rather than
+// inheriting the camera's source. [[two-owners-is-the-root-cause]]
+{
+  const ROOT = path.resolve(__dirname, '..', '..');
+  const sm = readBulk(path.join(ROOT, 'app/swinglab/smartmotion.tsx'))
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+  const api = readBulk(path.join(ROOT, 'services/poseAnalysisApi.ts'));
+
+  const oneOwner = (sm.match(/useWatchStore\.getState\(\)\.sessionSwings/g) ?? []).length === 1;
+  const reachable = /if \(seg\.synthesized\) \{[\s\S]{0,400}?setTempo\(watchTempoStandIn\(\)\)/.test(sm);
+  // and the early return must no longer swallow it
+  const noBlanketReturn = !/seg\.strikeMs == null \|\| seg\.synthesized\) \{ setTempo\(null\)/.test(sm);
+  // BOTH writers must say 'watch' — the stand-in itself and the fallback that spreads it over a
+  // camera result. A bare presence test passed while one of the two was flipped back, and the
+  // guard then blamed the wrong line. A message that misnames the cause is its own defect.
+  const labelled = (sm.match(/source: 'watch'/g) ?? []).length === 2
+    && /'acoustic_pose' \| 'video_pose' \| 'watch' \| 'none'/.test(api);
+  // what the wrist cannot see stays null
+  const honestNulls = /topMs: null,[\s\S]{0,80}?sequencingScore: null,[\s\S]{0,60}?source: 'watch'/.test(sm);
+
+  check('SMARTMOTION: a wrist-measured tempo survives a fabricated camera anchor',
+    oneOwner && reachable && noBlanketReturn && labelled && honestNulls,
+    !oneOwner
+      ? 'the watch lookup exists in more than one place again — it was two copies, one of which was unreachable'
+      : !reachable || !noBlanketReturn
+        ? 'seg.synthesized returns null tempo without consulting the watch — foam / no-ball mode shows "—" for a swing the wrist measured'
+        : !labelled
+          ? "a watch tempo must carry source: 'watch'; inheriting the camera's source reports a wrist read as pose-derived"
+          : !honestNulls
+            ? 'topMs / sequencingScore must stay null on a wrist read — the watch has no clip-relative instant and cannot see hips or shoulders'
+            : "foam / no-ball falls back to the IMU tempo instead of '—', labelled 'watch', with only the two durations the wrist actually measured");
 }
 
 // 2026-09-22 — CHIP MODE MUST NOT CLAIM TO LISTEN WHERE IT DOES NOT.

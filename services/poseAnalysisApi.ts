@@ -1646,7 +1646,11 @@ export interface SwingTempo {
   //                   range / uploaded swings — no acoustic strike). Same pose-derived tempo
   //                   shape; the only difference is where the impact instant came from. Both
   //                   display identically (Tim, 2026-07-19 — "tempo on all swings", clean number).
-  source: 'acoustic_pose' | 'video_pose' | 'none';
+  // 2026-09-22 — 'watch' added. The wrist measures backswing and downswing as TIMES, with no
+  // camera anchor involved at all, so a watch-supplied tempo is a different measurement and must
+  // not be filed under the pose sources. It was previously spread over a camera result and
+  // inherited that result's source, which reported a wrist read as pose-derived.
+  source: 'acoustic_pose' | 'video_pose' | 'watch' | 'none';
   confidence: 'med' | 'low';
 }
 
