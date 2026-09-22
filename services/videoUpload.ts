@@ -16,6 +16,7 @@
 
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
+import { probeSoundOptions } from './audioPlaybackOptions';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useSwingSessionStore, resolveSwingerToPlayerId, type UploadMetadata, type SwingTag, type PrimaryIssue, type DrillRecommendation } from '../store/swingSessionStore';
 import { analyzeSwing, analyzeSwingTentative } from './poseDetection';
@@ -241,7 +242,7 @@ export async function probeVideo(uri: string): Promise<{ has_audio: boolean; dur
     // covers the downstream), so the user is never stranded on "Pick Video".
     type SoundResult = Awaited<ReturnType<typeof Audio.Sound.createAsync>>;
     const loaded = await Promise.race<SoundResult | null>([
-      Audio.Sound.createAsync({ uri }, { shouldPlay: false }),
+      Audio.Sound.createAsync({ uri }, probeSoundOptions({ shouldPlay: false })),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 12_000)),
     ]);
     if (!loaded) {

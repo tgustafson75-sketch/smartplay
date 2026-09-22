@@ -25,6 +25,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
+import { playbackSoundOptions } from '../../services/audioPlaybackOptions';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useCaddieMemoryStore } from '../../store/caddieMemoryStore';
 import { readOwnTempo } from '../../services/practice/tempoSelfRead';
@@ -134,9 +135,9 @@ export default function TempoTrainerScreen() {
     void (async () => {
       try {
         const tick = new Audio.Sound();
-        await tick.loadAsync(require('../../assets/audio/tempo/tick.mp3'));
+        await tick.loadAsync(require('../../assets/audio/tempo/tick.mp3'), playbackSoundOptions());
         const tock = new Audio.Sound();
-        await tock.loadAsync(require('../../assets/audio/tempo/tock.mp3'));
+        await tock.loadAsync(require('../../assets/audio/tempo/tock.mp3'), playbackSoundOptions());
         if (!mounted) { void tick.unloadAsync(); void tock.unloadAsync(); return; }
         tickRef.current = tick; tockRef.current = tock; setReady(true);
       } catch { /* tones just won't play; UI still renders */ }

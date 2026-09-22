@@ -39,6 +39,7 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
+import { playbackSoundOptions } from '../../services/audioPlaybackOptions';
 // 2026-05-27 — Fix EW: route audio-mode changes through voiceService's
 // setAudioModeSerial queue (configureAudioForRecording /
 // configureAudioForSpeech) instead of direct Audio.setAudioModeAsync.
@@ -516,7 +517,7 @@ export default function CustomCaddieScreen() {
         try { await previewSoundRef.current.unloadAsync(); } catch { /* ignore */ }
         previewSoundRef.current = null;
       }
-      const { sound } = await Audio.Sound.createAsync({ uri }, { shouldPlay: true });
+      const { sound } = await Audio.Sound.createAsync({ uri }, playbackSoundOptions({ shouldPlay: true }));
       previewSoundRef.current = sound;
       setPreviewingPhraseId(phraseId);
       sound.setOnPlaybackStatusUpdate((s) => {

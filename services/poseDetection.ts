@@ -18,6 +18,7 @@ import * as VT from '../utils/videoThumbnail'; // serialized wrapper (native ret
 import { acquireExistingClipCopy, isPooledCopy } from './swing/sharedClipCopy';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Audio } from 'expo-av';
+import { probeSoundOptions } from './audioPlaybackOptions';
 // 2026-06-07 (audit) — share the circuit breaker + reactive connectivity
 // signal with the voice paths so weak-signal range sessions short-circuit
 // instead of paying full timeout+retry per swing.
@@ -378,7 +379,7 @@ async function probeDurationOn(clipUri: string): Promise<number> {
     // through the global media-read chain (decoder + retriever on one file = the SIGSEGV class).
     const { serializeMediaRead } = require('../utils/videoThumbnail') as typeof import('../utils/videoThumbnail');
     const probed = await serializeMediaRead(async () => {
-      const { sound, status } = await Audio.Sound.createAsync({ uri: clipUri }, { shouldPlay: false });
+      const { sound, status } = await Audio.Sound.createAsync({ uri: clipUri }, probeSoundOptions({ shouldPlay: false }));
       const ms = status.isLoaded && status.durationMillis && status.durationMillis > 0 ? status.durationMillis : null;
       await sound.unloadAsync().catch(() => {});
       return { ms, isLoaded: status.isLoaded };

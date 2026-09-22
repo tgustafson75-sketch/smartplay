@@ -26,6 +26,7 @@
  */
 
 import { Audio } from 'expo-av';
+import { playbackSoundOptions } from './audioPlaybackOptions';
 import type { TempoResult } from './smartTempo';
 
 export type MetronomeMode = 'actual' | 'ideal' | 'both';
@@ -82,10 +83,10 @@ export class TempoMetronome {
     try {
       const tick = new Audio.Sound();
        
-      await tick.loadAsync(require('../assets/audio/tempo/tick.mp3'));
+      await tick.loadAsync(require('../assets/audio/tempo/tick.mp3'), playbackSoundOptions());
       const tock = new Audio.Sound();
        
-      await tock.loadAsync(require('../assets/audio/tempo/tock.mp3'));
+      await tock.loadAsync(require('../assets/audio/tempo/tock.mp3'), playbackSoundOptions());
       this.tick = tick;
       this.tock = tock;
       this.ready = true;

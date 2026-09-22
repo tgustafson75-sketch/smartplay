@@ -1,4 +1,5 @@
 import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
+import { playbackSoundOptions } from './audioPlaybackOptions';
 import * as Speech from 'expo-speech';
 import { File, Paths } from 'expo-file-system';
 import { noteAudioActivity } from './audioLifecycle';
@@ -1488,7 +1489,7 @@ export const playLocalFile = async (
     const playbackSource = typeof source === 'number' ? source : { uri: source };
     const { sound, status } = await Audio.Sound.createAsync(
       playbackSource,
-      { shouldPlay: true, volume: currentPlaybackVolume() },
+      playbackSoundOptions({ shouldPlay: true, volume: currentPlaybackVolume() }),
     );
 
     if (myId !== currentSpeechId) {
@@ -1669,7 +1670,7 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
     {
       const first = await Audio.Sound.createAsync(
         { uri },
-        { shouldPlay: true, volume: currentPlaybackVolume() },
+        playbackSoundOptions({ shouldPlay: true, volume: currentPlaybackVolume() }),
       );
       sound = first.sound;
       status = first.status;
@@ -1696,7 +1697,7 @@ export const speakFromBase64 = async (base64: string, opts?: SpeakOpts): Promise
         currentAudioMode = null;
         await configureAudioForSpeech();
         if (myId !== currentSpeechId) { notifyCaption(null); notifySpeaking(false); return; }
-        const second = await Audio.Sound.createAsync({ uri }, { shouldPlay: true, volume: currentPlaybackVolume() });
+        const second = await Audio.Sound.createAsync({ uri }, playbackSoundOptions({ shouldPlay: true, volume: currentPlaybackVolume() }));
         sound = second.sound;
         status = second.status;
         const loaded2 = (status as { isLoaded?: boolean }).isLoaded === true;
@@ -2182,7 +2183,7 @@ export const speak = async (
     {
       const first = await Audio.Sound.createAsync(
         { uri: audioFile.uri },
-        { shouldPlay: true, volume: snapshotVolume },
+        playbackSoundOptions({ shouldPlay: true, volume: snapshotVolume }),
       );
       sound = first.sound;
       status = first.status;
@@ -2241,7 +2242,7 @@ export const speak = async (
               retryFile.write(new Uint8Array(retryBuf));
               await new Promise<void>((resolve) => setTimeout(resolve, 0));
               if (myId === currentSpeechId) {
-                const again = await Audio.Sound.createAsync({ uri: retryFile.uri }, { shouldPlay: true, volume: snapshotVolume });
+                const again = await Audio.Sound.createAsync({ uri: retryFile.uri }, playbackSoundOptions({ shouldPlay: true, volume: snapshotVolume }));
                 const aDur = (again.status as { durationMillis?: number }).durationMillis ?? 0;
                 if ((again.status as { isLoaded?: boolean }).isLoaded === true && aDur >= expectedFloorMs) {
                   console.log('[voice] truncation retry RECOVERED —', aDur, 'ms,', retryBuf.byteLength, 'bytes');
@@ -2280,7 +2281,7 @@ export const speak = async (
         }
         const second = await Audio.Sound.createAsync(
           { uri: audioFile.uri },
-          { shouldPlay: true, volume: snapshotVolume },
+          playbackSoundOptions({ shouldPlay: true, volume: snapshotVolume }),
         );
         sound = second.sound;
         status = second.status;

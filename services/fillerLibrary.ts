@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
+import { playbackSoundOptions } from './audioPlaybackOptions';
 import { File, Paths } from 'expo-file-system';
 import { FILLER_PHRASES } from '../constants/fillerPhrases';
 import type { FillerCategory, FillerClip, FillerLibrary } from '../types/filler';
@@ -232,7 +233,7 @@ async function generateOneClip(
     try {
       const { sound, status } = await Audio.Sound.createAsync(
         { uri: f.uri },
-        { shouldPlay: false },
+        playbackSoundOptions({ shouldPlay: false }),
       );
       if (status.isLoaded && status.durationMillis) {
         duration_ms = status.durationMillis;

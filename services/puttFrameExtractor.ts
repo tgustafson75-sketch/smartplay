@@ -37,6 +37,7 @@
 import * as VT from '../utils/videoThumbnail'; // serialized wrapper (native retriever crash fix)
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Audio } from 'expo-av';
+import { probeSoundOptions } from './audioPlaybackOptions';
 import { devLog } from './devLog';
 
 export type PuttPhase = 'setup' | 'address' | 'impact' | 'follow_through' | 'roll';
@@ -87,7 +88,7 @@ async function probeDurationMs(clipUri: string): Promise<number> {
   // duration heuristic (e.g. acoustic-impact-anchored windowing) can
   // diverge without disturbing the full-swing extractor.
   try {
-    const { sound, status } = await Audio.Sound.createAsync({ uri: clipUri }, { shouldPlay: false });
+    const { sound, status } = await Audio.Sound.createAsync({ uri: clipUri }, probeSoundOptions({ shouldPlay: false }));
     if (status.isLoaded && status.durationMillis && status.durationMillis > 0) {
       const ms = status.durationMillis;
       await sound.unloadAsync().catch(() => {});

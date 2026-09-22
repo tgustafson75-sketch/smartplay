@@ -4957,3 +4957,63 @@ has never been tried with a real phone paired to a real watch.
 - R8/ProGuard still deliberately off — unverifiable without a device pass or DEX inspection.
 
 Health: **tsc 0 · jest 454 suites / 5382 tests · sim 1057/1057**.
+
+## Day 126 — 2026-09-22
+
+### Shipped today
+- **One owner for every `Audio.Sound` load** — `services/audioPlaybackOptions.ts`. Playback loads
+  pass `playbackSoundOptions()`, which selects `androidImplementation: 'MediaPlayer'` on Android and
+  changes nothing on iOS. Duration probes pass `probeSoundOptions()` and stay on ExoPlayer
+  deliberately. 15 load sites across `services/`, `app/` now route through it.
+- Guards in two homes: `__tests__/logic/sound-load-has-one-owner.test.ts` (behaviour + reach) and a
+  sim scenario, `AUDIO: every Sound load goes through the one owner…` (reach). Both break-tested.
+
+### Sentry triage — three issues read against the code
+- **`IllegalStateException` — ExoPlayer wrong thread, Android, `/greeting`, open since 1.0.0 (1).**
+  Fixed today. expo-av builds the sound player with the MAIN looper
+  (`SimpleExoPlayerData.java:93`) but runs `loadForSound` / `setStatusForSound` / `unloadForSound`
+  on expo-modules-core's background `modulesQueue` — none of them declare `Queues.MAIN`
+  (`AVModule.kt:57-73`) — and the progress ticker's no-arg `new Handler()` inherits whichever thread
+  scheduled it (`AndroidLooperTimeMachine.kt:8`). A throw from that tick is outside the
+  AsyncFunction try/catch, so it is **uncaught and fatal** instead of a rejected promise our
+  `.catch(() => {})` would have eaten. That asymmetry is why it is rare and why it kills the app.
+  expo-av carries the TODO admitting it (`SimpleExoPlayerData.java:131`). MediaPlayerData has zero
+  thread assertions, and the switch rides an OTA — it reaches the build-27 installs crashing now.
+- **`EXC_BAD_ACCESS` at 0x54 — iOS, `/greeting`, 4 users.** Already addressed by `c768b7e2`
+  (09-18, stop freeing a player from inside its own status callback) and `c3466d7a` (09-19,
+  `stopAsync()` removed — it is `setStatusAsync({positionMillis: 0})`, i.e. a seek). Both shipped in
+  the 09-20/09-21 OTAs. Last event 09-20. **Consistent with fixed; not proof** — the frames are
+  still `<redacted>` until the auth token exists.
+- **`WatchdogTermination` — iOS, `/scorecard`, 2 users, build 26.** Parked. It carries no stack
+  (Sentry infers it from a missing crash report), the breadcrumb is
+  `UIKeyboardDidShowNotification`, build 26 is two builds stale, and nothing since 09-15. Revisit
+  only if it reappears on 27/29.
+
+### Defects found and fixed (the ones worth remembering)
+- **My own sweep missed two sites** — `app/profile/custom-caddie.tsx` and
+  `app/swinglab/tempo-trainer.tsx`. I grepped `services/` and wired 12 call sites; the guard,
+  which walks `app/` too, found the rest on its first red. The custom-caddie one calls
+  `setOnPlaybackStatusUpdate`, which is precisely what arms the progress ticker that throws.
+  The guard found the bug, not the author.
+- **My first guard reported a correctly-wired call as bare.** A non-greedy
+  `\.loadAsync\(([\s\S]*?)\)` closes at the first `)` inside the arguments, so
+  `loadAsync(require('tick.mp3'), playbackSoundOptions())` read as ending after `require('tick.mp3'`.
+  Replaced with a paren-counting matcher in both homes.
+- **Borrowing `walkAv` from the neighbouring sim scenario threw a `ReferenceError`** and took the
+  whole sim down. It failed loudly rather than certifying nothing — the outcome the
+  "a gate that cannot run is not a gate that passes" rule exists to force.
+
+### Verified on device (Z Fold)
+Nothing. Gates only. **The Android crash fix has not been run on a device** — the claim is that
+MediaPlayer plays the same mp3s, and that is Tier A/B, not C.
+
+### Open / carried
+- `npm run ota:baseline` once 29 is live. Preflight still exits 1, correctly.
+- **Sentry is still unreadable**: no `SENTRY_AUTH_TOKEN`, so no source maps and no dSYMs, and the
+  org slug in `app.json` is still `smartplay` (his is `smartplay-ai`) — parked deliberately until
+  the commit that cuts the native build. The MCP connector is still constrained to `smartplay` and
+  403s on every call, so issues have to be pasted in by hand.
+- `app/swinglab/tempo-trainer.tsx` duplicates `services/tempoMetronome.ts` — two owners of the
+  same two tones. Not touched today beyond wiring both.
+
+Health: **tsc 0 · lint 0 errors / 4 pre-existing warnings · jest 455 suites / 5390 tests · sim 1058/1058**.

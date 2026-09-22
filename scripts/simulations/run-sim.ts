@@ -17666,6 +17666,93 @@ check(
       : `swept ${scanned.length} files that unload an audio player; none issues a seek (stopAsync / setPositionAsync / replayAsync) immediately before releasing it. unloadAsync stops and releases on its own, so the seek was only ever a race`);
 }
 
+// 2026-09-22 — Sentry, Android, FATAL, ongoing since 1.0.0 (1), route /greeting:
+// "Player is accessed on the wrong thread. Current thread: 'pool-4-thread-1' Expected thread: 'main'".
+// expo-av builds the sound player with the MAIN looper (SimpleExoPlayerData.java:93) but runs
+// loadForSound / setStatusForSound / unloadForSound on expo-modules-core's background modulesQueue
+// (AVModule.kt:57-73 declare no Queues.MAIN), and the progress ticker's no-arg `new Handler()`
+// inherits whichever thread scheduled it (AndroidLooperTimeMachine.kt:8). A throw from that tick is
+// outside the AsyncFunction try/catch, so it is uncaught and fatal rather than a rejected promise.
+// androidImplementation: 'MediaPlayer' selects MediaPlayerData, which has no thread assertions.
+// The sim checks REACH — that every playback load goes through the one owner. The jest guard
+// (__tests__/logic/sound-load-has-one-owner.test.ts) checks BEHAVIOUR, which a string scan cannot.
+{
+  const ROOT = path.resolve(__dirname, '..', '..');
+  const OWNER_REL = 'services/audioPlaybackOptions.ts';
+  const stripAv = (t: string) =>
+    t.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+
+  // Local walker: the one above is block-scoped to the seek scenario. Borrowing it threw a
+  // ReferenceError and took the whole sim down — loudly, which is the point.
+  // [[a-gate-that-cannot-run-is-not-a-gate-that-passes]]
+  const walkSounds = (dir: string): string[] => {
+    const out: string[] = [];
+    let entries: string[] = [];
+    try { entries = fs.readdirSync(dir); } catch { return out; }
+    for (const e of entries) {
+      const abs = path.join(dir, e);
+      let stat;
+      try { stat = fs.statSync(abs); } catch { continue; }
+      if (stat.isDirectory()) { if (e !== 'node_modules') out.push(...walkSounds(abs)); }
+      else if (e.endsWith('.tsx') || e.endsWith('.ts')) out.push(abs);
+    }
+    return out;
+  };
+
+  // Paren-counting, not a non-greedy window: `loadAsync(require('tick.mp3'), playbackSoundOptions())`
+  // ends at the FIRST ')' for a lazy regex, which would read a wired call as bare.
+  const argsOf = (src: string, re: RegExp): string[] => {
+    const out: string[] = [];
+    const g = new RegExp(re.source, 'g');
+    let m: RegExpExecArray | null;
+    while ((m = g.exec(src)) !== null) {
+      const open = src.indexOf('(', m.index + m[0].length - 1);
+      if (open === -1) continue;
+      let depth = 0, i = open;
+      for (; i < src.length; i++) {
+        if (src[i] === '(') depth++;
+        else if (src[i] === ')') { depth--; if (depth === 0) break; }
+      }
+      if (depth === 0) out.push(src.slice(open + 1, i));
+    }
+    return out;
+  };
+
+  const loads: string[] = [];
+  const bare: string[] = [];
+  let ownerSeen = false;
+
+  for (const dir of ['app', 'components', 'services', 'hooks', 'lib', 'store', 'contexts']) {
+    for (const abs of walkSounds(path.join(ROOT, dir))) {
+      const rel = path.relative(ROOT, abs);
+      if (rel.includes('__tests__')) continue;
+      if (rel === OWNER_REL) { ownerSeen = true; continue; }
+      const body = stripAv(readBulk(abs));
+
+      for (const args of argsOf(body, /Audio\.Sound\.createAsync\s*\(/)) {
+        loads.push(rel);
+        if (!/playbackSoundOptions|probeSoundOptions/.test(args)) bare.push(`${rel} (createAsync)`);
+      }
+      if (/new Audio\.Sound\(\)/.test(body)) {
+        for (const args of argsOf(body, /\.loadAsync\s*\(/)) {
+          loads.push(rel);
+          if (!/playbackSoundOptions|probeSoundOptions/.test(args)) bare.push(`${rel} (loadAsync)`);
+        }
+      }
+    }
+  }
+
+  check('AUDIO: every Sound load goes through the one owner that picks the Android backend',
+    ownerSeen && loads.length >= 11 && bare.length === 0,
+    !ownerSeen
+      ? `${OWNER_REL} is missing — the owner that applies androidImplementation does not exist`
+      : loads.length < 11
+        ? `only ${loads.length} Sound loads found; the scan stopped seeing the call sites it is supposed to police`
+        : bare.length > 0
+          ? `these load a player without the owner, so Android gets ExoPlayer off the main thread: ${bare.join(', ')}`
+          : `swept ${loads.length} Sound loads across app/components/services/hooks/lib/store/contexts; every one passes playbackSoundOptions (mp3 playback → MediaPlayer on Android) or probeSoundOptions (duration probes stay on ExoPlayer on purpose, and never arm the progress ticker that throws)`);
+}
+
 // 2026-09-20 (Tim's wife) — "you dont have to do a selfie, you can upload a photo or just give
 // description for what you want." A custom caddie used to require a front-camera selfie in three
 // places at once: the only picker was the camera, Generate was disabled without a photo, and the
