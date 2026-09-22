@@ -297,3 +297,38 @@ source agrees with itself, which was never the question. The assertion it needs:
 `withIOSCompileSources` step — the exact belief `withBluetoothMediaButton.js` documents as false and
 which cost build 16. Gated behind `MWDAT_IOS_ENABLED`, so this build is unaffected, but the
 `glasses` profile would ship a module that is copied and never compiled. Fix it before 2.0.
+
+
+---
+
+## NEXT WEAR BUILD — the watch works, it does not look like the concept · 2026-09-21
+
+Tim, after seeing the shipping UI next to the concept board: *"looks like shit when I wanted it
+like the screenshots but we can do that in the future."* Correct on both halves — today's build is
+functional and honest, and it is not the design. Parked deliberately, not forgotten.
+
+Reference: `~/Desktop/SmartPlay-Project-Files/reference/wear-ui-concept-2026-09-21.png` (9 screens).
+
+**Decided scope for the next Wear build** (Tim's call, 2026-09-21): panels **1, 7, 8, 9** —
+Home, Round Controls, Yardage Glance, Round Active. They are the screens a golfer looks at
+mid-round and they need almost no new protocol:
+
+| panel | what is already there | what is missing |
+|---|---|---|
+| 8 Yardage Glance | `hole / front / middle / back` arrive on every push | **par** (one field, phone side, OTA-able) |
+| 9 Round Active | `score` (vsPar, hole, total) and `state` already sent | **elapsed time**, and an `end_round` command verb |
+| 7 Round Controls | Record Swing done, command rail proven end to end | `start_round` and `range_mode` verbs |
+| 1 Home | pure watch UI | nothing — restyle only |
+
+**Deferred, and why.** Panels 3/4/5 (Thinking, Speaking, Answer) need a phone→watch channel that
+does not exist: nothing tells the watch the caddie is thinking, and the club recommendation and
+wind are never sent in a form the watch could draw. Panel 6 (Quick Actions) is an interaction
+problem, not a rendering one — "Add Shot" on a 1.4-inch face in a glove needs designing before it
+needs coding.
+
+**The fork to settle before 3/4/5:** this app is hand-built Android Views. Pills, progress rings
+and the listening/thinking states are where Compose for Wear earns its keep. Doing 1/7/8/9 in Views
+is fine; doing 3/4/5 in Views is fighting the toolkit.
+
+**And the constraint that shapes all of it:** every watch change is NATIVE — a new Wear AAB and a
+Play review each time. Batch them. The phone half of each is OTA-able and can land early.
