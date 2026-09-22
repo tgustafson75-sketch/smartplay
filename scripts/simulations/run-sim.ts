@@ -8981,8 +8981,16 @@ check('Analyzer gets handedness + CNS-learned tendencies pretext',
       /chipOnStart\s*\n?\s*\? \(captureMode === 'sim' \|\| captureMode === 'course'\)/.test(smSrc2) &&
       // course+chip single-shot anchor
       /else if \(meterMode === 'course'\) \{/.test(smSrc2) &&
-      // unmistakable toggle feedback: filled ON state + a toast
-      /show\(next \? 'Chip mode ON/.test(smSrc2),
+      // unmistakable toggle feedback: filled ON state + a toast.
+      // 2026-09-22 — WIDENED. This pinned `show(next ? 'Chip mode ON`, which copied the line rather
+      // than asserting the property. The toast is now mode-aware — it must not claim listening at a
+      // range, where the ternary two lines up switches metering OFF — so the call spans several
+      // lines and the old regex went red on a change that made the app MORE honest, not less.
+      // What has to stay true is that the toggle is never silent: an ON message and an OFF message.
+      // [[guards-that-copy-the-line-they-guard]]
+      /useToastStore\.getState\(\)\.show\(/.test(smSrc2) &&
+      /'Chip mode ON[^']*'/.test(smSrc2) &&
+      /'Chip mode off'/.test(smSrc2),
     'chip ON drops the strike threshold to ~18dB AND is mode-aware — acoustics for the quiet spots (cage + off-round course) and OFF for a noisy range (video-only); the toggle now fills green + fires a toast so a tap is never silent (Tim: "doesn\'t do anything")');
 
   check('SmartMotion: Framing Coach is wired into the setup loop (on-device pose, fail-safe)',
@@ -17664,6 +17672,47 @@ check(
     offenders.length > 0
       ? `these seek and then release in the same breath — the AVPlayerItem crash: ${offenders.join(', ')}`
       : `swept ${scanned.length} files that unload an audio player; none issues a seek (stopAsync / setPositionAsync / replayAsync) immediately before releasing it. unloadAsync stops and releases on its own, so the seek was only ever a race`);
+}
+
+// 2026-09-22 — CHIP MODE MUST NOT CLAIM TO LISTEN WHERE IT DOES NOT.
+//
+// The metering ternary is `chipOnStart ? (captureMode === 'sim' || captureMode === 'course') : true`.
+// Read it twice: with chip mode OFF every mode meters, and turning it ON at a RANGE removes the
+// metered track altogether. The exclusion is right (an 18dB threshold outdoors hears the next bay);
+// the copy was wrong, because it promised listening in the one mode that stops listening.
+//
+// This guard ties the COPY to the CODE: if someone later lets range meter, the mode list below
+// changes and the guard goes red, so the honest copy cannot outlive the behaviour that made it
+// honest — nor the other way round. [[a-guard-can-enforce-a-stale-premise]]
+{
+  const ROOT = path.resolve(__dirname, '..', '..');
+  const src = readBulk(path.join(ROOT, 'app/swinglab/smartmotion.tsx'))
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+
+  // The modes chip mode actually meters in, read off the ternary rather than assumed.
+  const meterLine = /chipOnStart[\s\S]{0,120}?\?\s*\(([^)]*)\)/.exec(src);
+  const metersInRange = !!meterLine && /captureMode === 'range'/.test(meterLine[1]);
+  const metersInSim = !!meterLine && /captureMode === 'sim'/.test(meterLine[1]);
+
+  // The copy must be conditional on the mode, and must not claim listening unconditionally.
+  const descConditional = /desc=\{effectiveMode === 'range'[\s\S]{0,160}?Listens in Practice/.test(src);
+  const toastConditional = /effectiveMode === 'range'[\s\S]{0,120}?not at the range/.test(src);
+  const noBareClaim = !/desc="Listen for soft chip strikes"/.test(src);
+
+  const consistent = metersInRange
+    ? (!descConditional && !toastConditional)   // if range meters, the caveat must be GONE
+    : (descConditional && toastConditional && noBareClaim && metersInSim);
+
+  check('SMARTMOTION: chip mode names the modes it actually listens in',
+    !!meterLine && consistent,
+    !meterLine
+      ? 'could not find the chipOnStart metering ternary — this guard has lost the code it describes'
+      : metersInRange
+        ? 'range now meters with chip mode on, so the "Listens in Practice" caveat is stale and must be removed from both the row and the toast'
+        : !metersInSim
+          ? 'chip mode no longer meters in Practice either — the copy points players at a mode that does nothing'
+          : 'the row and the toast both say chip mode listens in Practice and not at the range, which is what the metering ternary does');
 }
 
 // 2026-09-22 (Tim, mid-shoot: "when I try and change settings from the dropdown, the yardage box

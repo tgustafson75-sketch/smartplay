@@ -6085,15 +6085,34 @@ export default function SmartMotion() {
                   active={facing === 'front'}
                   onPress={() => setFacing((f) => (f === 'back' ? 'front' : 'back'))}
                 />
+                {/* 2026-09-22 (Tim — "double check all those smartmotion settings are wired") —
+                    CHIP MODE DOES NOT LISTEN AT THE RANGE, AND USED TO SAY IT DID.
+                    The metering ternary above reads
+                      chipOnStart ? (captureMode === 'sim' || captureMode === 'course') : true
+                    so with chip mode OFF every mode meters, and turning it ON at a range takes the
+                    metered track away entirely — the opposite of what "listen for soft chip strikes"
+                    promises. The exclusion is deliberate and correct: an 18dB threshold outdoors
+                    (CHIP_STRIKE_THRESHOLD_DB, half the ~30dB default) would hear the next bay. What
+                    was wrong was the copy, which claimed listening while switching it off, so the
+                    row now names where it works instead. Behaviour is untouched.
+                    [[illustration-data-points]] [[state-what-you-measured-not-what-you-intended]] */}
                 <ToolCardRow
                   icon={<Image source={ICON_RAIL.chip} style={styles.toolCardIcon} resizeMode="contain" />}
                   title={chipSensitivity ? 'Chip mode on' : 'Chip mode'}
-                  desc="Listen for soft chip strikes"
+                  desc={effectiveMode === 'range'
+                    ? 'Listens in Practice — outdoors it would hear other players'
+                    : 'Listen for soft chip strikes'}
                   active={chipSensitivity}
                   onPress={() => {
                     const next = !chipSensitivity;
                     setChipSensitivity(next);
-                    useToastStore.getState().show(next ? 'Chip mode ON — listening for soft chips' : 'Chip mode off');
+                    useToastStore.getState().show(
+                      next
+                        ? (effectiveMode === 'range'
+                            ? 'Chip mode ON — it listens in Practice, not at the range'
+                            : 'Chip mode ON — listening for soft chips')
+                        : 'Chip mode off',
+                    );
                   }}
                 />
                 {/* 2026-08-01 (Tim) — Foam / no-ball: analyze from the video swing alone, no strike needed. */}
