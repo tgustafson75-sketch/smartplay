@@ -6121,7 +6121,11 @@ export default function SmartMotion() {
         {/* FRAMING COACH pill (setup) — on-device pose checks you're fully in frame
             before you swing. Green = framed (head + feet); amber = a fix (step back,
             tilt up, center). Bottom-center, clear of the right tool rail + ball box. */}
-        {phase === 'setup' && framing ? (
+        {/* 2026-09-22 — and not while the setup-tools panel is open. The pill is bottom-CENTRE with
+            maxWidth 88%, so on a tall screen it reaches under the right-hand card exactly like the
+            deck did. Its own header says "clear of the right tool rail", which was true when the
+            rail was a column of icons and stopped being true when it became a 232dp card. */}
+        {phase === 'setup' && framing && !railExpanded ? (
           <View
             style={[
               styles.framingPill,
@@ -6299,6 +6303,21 @@ export default function SmartMotion() {
           styles.bottomPanel,
           isReview ? [styles.bottomPanelInFlow, { backgroundColor: colors.background }] : null,
           { paddingBottom: insets.bottom + 6 },
+          /* 2026-09-22 (Tim, mid-shoot) — THE DECK PAINTED OVER THE SETUP TOOLS PANEL.
+             The deck is a full-width absolute layer at the bottom of the screen; the tools card is
+             a tall right-hand panel. They overlap across the card's bottom three rows — Course /
+             Practice, Chip mode, Foam / no ball — and those are exactly the three that DELIBERATELY
+             leave the panel open, because they are toggles rather than navigations (every other row
+             calls setRailExpanded(false) and closes on its own). So the only rows a player dwells on
+             are the only rows the deck covers: CARRY over Course, the SWINGS pills over Selfie, and
+             the CLUB/SHOT/DIST bar over Foam / no ball.
+             Hidden rather than re-stacked on purpose. zIndex already says the rail wins (7 vs 5) and
+             it plainly does not on the device in Tim's screenshot, so raising it further would be a
+             guess I cannot test from here; `display: 'none'` is the same answer on both platforms
+             and takes the touch targets with it. Nothing moves — the deck returns untouched when the
+             panel closes — so the whole-app layout freeze is not disturbed.
+             [[layout-theme-voice-lock-2026-07-29]] */
+          phase === 'setup' && railExpanded ? styles.bottomPanelHiddenForTools : null,
         ]}>
           {/* The fade exists to blend the floating deck INTO the camera behind it. In review the deck
               is opaque and in flow with nothing behind it, so the gradient would only tint the panel. */}
@@ -7172,6 +7191,9 @@ const styles = StyleSheet.create({
   // layout, so captureRoot (flex:1) shrinks by exactly this height and the clip is never covered.
   // Opaque, because it is no longer sitting over a camera that should show through.
   bottomPanelInFlow: { position: 'relative', zIndex: 0 },
+  // 2026-09-22 — the deck while the setup-tools panel is open. `display: 'none'` and not opacity: 0,
+  // because an invisible deck that still swallows taps is worse than a visible one.
+  bottomPanelHiddenForTools: { display: 'none' },
   bottomPanel: {
     position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 5,
     backgroundColor: 'transparent', // translucent gradient fade renders behind

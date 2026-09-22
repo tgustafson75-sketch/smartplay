@@ -17666,6 +17666,45 @@ check(
       : `swept ${scanned.length} files that unload an audio player; none issues a seek (stopAsync / setPositionAsync / replayAsync) immediately before releasing it. unloadAsync stops and releases on its own, so the seek was only ever a race`);
 }
 
+// 2026-09-22 (Tim, mid-shoot: "when I try and change settings from the dropdown, the yardage box
+// blocks it") — THE SETUP-TOOLS PANEL MUST OWN THE SCREEN WHILE IT IS OPEN.
+//
+// The deck is a full-width absolute layer at the bottom; the tools card is a tall right-hand panel.
+// They overlap across the card's bottom three rows, and those three — Course/Practice, Chip mode,
+// Foam / no ball — are exactly the ones that leave the panel OPEN, because they are toggles rather
+// than navigations. Every other row calls setRailExpanded(false) and closes itself. So the only
+// rows a player dwells on were the only rows covered.
+//
+// This asserts the SHAPE, not the pixels: while the panel is expanded, the deck and the framing
+// pill are gated on railExpanded. A layout fix has no runtime value to measure from here, so the
+// guard's job is to notice when someone removes the gate. [[guards-that-copy-the-line-they-guard]]
+{
+  const ROOT = path.resolve(__dirname, '..', '..');
+  const src = readBulk(path.join(ROOT, 'app/swinglab/smartmotion.tsx'))
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+
+  // The three toggle rows that intentionally keep the panel open. If a future edit makes them
+  // self-closing the overlap stops mattering — but then THIS guard should be revisited, not the fix.
+  const toggleRows = ['Chip mode', 'Foam / no ball'].filter((r) => src.includes(r));
+  const deckGated = /bottomPanelHiddenForTools/.test(src)
+    && /phase === 'setup' && railExpanded \? styles\.bottomPanelHiddenForTools/.test(src);
+  const pillGated = /phase === 'setup' && framing && !railExpanded \?/.test(src);
+  const hiddenNotFaded = /bottomPanelHiddenForTools: \{ display: 'none' \}/.test(src);
+
+  check('SMARTMOTION: the setup-tools panel is not painted over by the deck it overlaps',
+    toggleRows.length === 2 && deckGated && pillGated && hiddenNotFaded,
+    toggleRows.length !== 2
+      ? `expected the two dwell-here toggle rows (Chip mode, Foam / no ball) and found ${toggleRows.length} — the screen changed under this guard`
+      : !deckGated
+        ? 'the bottom deck is no longer hidden while railExpanded — CARRY, the SWINGS pills and the CLUB/SHOT/DIST bar will cover Course, Selfie and Foam / no ball again'
+        : !hiddenNotFaded
+          ? "bottomPanelHiddenForTools must be display: 'none' — an opacity: 0 deck is invisible AND still swallows the taps meant for the panel"
+          : !pillGated
+            ? 'the framing pill is no longer gated on railExpanded — it is bottom-CENTRE at maxWidth 88% and reaches under the card'
+            : 'while the setup-tools card is open the deck and the framing pill are both withdrawn, so the three toggle rows that keep the card open (Course/Practice, Chip mode, Foam / no ball) are fully readable and tappable');
+}
+
 // 2026-09-22 — Sentry, Android, FATAL, ongoing since 1.0.0 (1), route /greeting:
 // "Player is accessed on the wrong thread. Current thread: 'pool-4-thread-1' Expected thread: 'main'".
 // expo-av builds the sound player with the MAIN looper (SimpleExoPlayerData.java:93) but runs
