@@ -61,41 +61,60 @@ export type VerifierState = {
 
 export const INITIAL_STATE: VerifierState = { dwell: null, evidence: null, countedDwellKey: null };
 
-function nearestTee(layout: LayoutTees, at: LatLng): { hole: number; d: number } | null {
-  let best: { hole: number; d: number } | null = null;
-  for (const t of layout.tees) {
-    if (!isValidGolfCoord(t.tee.lat, t.tee.lng)) continue;
-    const d = haversineYards(at, t.tee);
-    if (!best || d < best.d) best = { hole: t.hole, d };
-  }
-  return best;
+
+/** The tees a player can legitimately be standing on: the current hole's, or the next one's. */
+function expectedHoles(currentHole: number, holeCount: number): Set<number> {
+  const out = new Set<number>([currentHole]);
+  if (currentHole + 1 <= Math.max(holeCount, currentHole)) out.add(currentHole + 1);
+  return out;
 }
 
 /**
  * Pure step: one observation in, the next state and (maybe) a layout to switch to out.
  * Everything that decides a switch lives here, so every rule above is testable without a phone.
+ *
+ * 2026-09-23 (third pass) — HOLE-AWARE. The first version asked only "which layout's tee is this?",
+ * so a ball or a parked cart beside ANOTHER layout's tee, anywhere on the property, was evidence —
+ * measured on the real Menifee data, a 12-second stop near Lakes 6 while playing Palms 3 switched a
+ * correctly started round and moved the scoring hole. A layout mismatch shows up where the player is
+ * SUPPOSED to be: on the tee of their current hole or the next one. Only those tees count, for every
+ * layout — which is also what separates 27-hole combos, where one physical tee is hole 1 of one
+ * layout and hole 10 of another.
  */
 export function observeTee(
   state: VerifierState,
   obs: TeeObservation,
   active: LayoutTees,
   siblings: LayoutTees[],
+  currentHole: number,
 ): { state: VerifierState; switchTo: { courseId: string; hole: number } | null } {
   const unchanged = { state, switchTo: null };
   if (obs.accuracyM == null || obs.accuracyM > MAX_ACCURACY_M) return unchanged;
   if (obs.speedMs != null && obs.speedMs > MAX_SPEED_MS) return { state: { ...state, dwell: null }, switchTo: null };
 
-  const a = nearestTee(active, obs.at);
-  let s: { courseId: string; hole: number; d: number } | null = null;
-  for (const sib of siblings) {
-    const n = nearestTee(sib, obs.at);
-    if (n && (!s || n.d < s.d)) s = { courseId: sib.courseId, ...n };
-  }
+  const teeNear = (layout: LayoutTees, holes: Set<number>) => {
+    let best: { hole: number; d: number } | null = null;
+    for (const t of layout.tees) {
+      if (!holes.has(t.hole) || !isValidGolfCoord(t.tee.lat, t.tee.lng)) continue;
+      const d = haversineYards(obs.at, t.tee);
+      if (!best || d < best.d) best = { hole: t.hole, d };
+    }
+    return best;
+  };
+  const activeExpected = teeNear(active, expectedHoles(currentHole, active.holeCount ?? active.tees.length));
 
-  // Which tee (if any) is the player standing on?
-  let on: { courseId: string; hole: number; activeD: number } | null = null;
-  if (a && a.d <= ON_TEE_YD && (!s || a.d <= s.d)) on = { courseId: active.courseId, hole: a.hole, activeD: a.d };
-  else if (s && s.d <= ON_TEE_YD) on = { courseId: s.courseId, hole: s.hole, activeD: a ? a.d : Infinity };
+  // Which EXPECTED tee (if any) is the player standing on? The active layout's wins any tie.
+  let on: { courseId: string; hole: number } | null = null;
+  if (activeExpected && activeExpected.d <= ON_TEE_YD) on = { courseId: active.courseId, hole: activeExpected.hole };
+  else {
+    const hits: { courseId: string; hole: number; d: number }[] = [];
+    for (const sib of siblings) {
+      const n = teeNear(sib, expectedHoles(currentHole, sib.holeCount ?? sib.tees.length));
+      if (n && n.d <= ON_TEE_YD) hits.push({ courseId: sib.courseId, ...n });
+    }
+    // Two sibling layouts both expecting the player on this spot cannot be told apart.
+    if (hits.length === 1) on = { courseId: hits[0].courseId, hole: hits[0].hole };
+  }
   if (!on) return { state: { ...state, dwell: null }, switchTo: null };
 
   const sameDwell = state.dwell && state.dwell.courseId === on.courseId && state.dwell.hole === on.hole;
@@ -107,31 +126,24 @@ export function observeTee(
   if (state.countedDwellKey === key) return { state: next, switchTo: null };
   next.countedDwellKey = key;
 
-  // Standing on the ACTIVE layout's tee: the round is on the right course. Forget any doubt.
+  // On the active layout's expected tee: the round is on the right course. Forget any doubt.
   if (on.courseId === active.courseId) return { state: { ...next, evidence: null }, switchTo: null };
 
-  // A sibling tee on a shared tee complex proves nothing.
-  if (on.activeD - ON_TEE_YD < SHARED_TEE_MARGIN_YD) return { state: next, switchTo: null };
-
-  // "The active layout has no tee here" is only evidence when the active layout's tees are KNOWN.
-  // (Triple-check: with its map still building, every sibling tee looked like proof — and after the
-  // switch the true layout, now unmapped, could never win back.)
+  // "The active layout's tee is not here" only means something when the active layout's tees are KNOWN.
   const activeHoles = active.holeCount ?? active.tees.length;
   if (!activeHoles || active.tees.length / activeHoles < MIN_ACTIVE_TEE_COVERAGE) return { state: next, switchTo: null };
 
-  // Two sibling layouts with a tee on the same spot (27-hole combos: one tee is hole 1 of one layout
-  // and hole 10 of another) cannot be told apart by position. Ambiguous is not evidence.
-  const rival = siblings.some((sib) => sib.courseId !== on!.courseId && (() => {
-    const n = nearestTee(sib, obs.at);
-    return n != null && n.d - ON_TEE_YD < SHARED_TEE_MARGIN_YD;
-  })());
-  if (rival) return { state: next, switchTo: null };
+  // The active layout's own expected tee is close by: a shared tee complex, position cannot decide.
+  const activeD = activeExpected ? activeExpected.d : Infinity;
+  if (activeD - ON_TEE_YD < SHARED_TEE_MARGIN_YD) return { state: next, switchTo: null };
 
+  // Evidence accumulates on CONSECUTIVE holes of one sibling — a player moving along its routing.
   const prior = next.evidence && next.evidence.courseId === on.courseId ? next.evidence.holes : [];
-  const holes = prior.includes(on.hole) ? prior : [...prior, on.hole];
+  const last = prior[prior.length - 1];
+  const holes = last === on.hole ? prior : last != null && on.hole === last + 1 ? [...prior, on.hole] : [on.hole];
   next.evidence = { courseId: on.courseId, holes };
 
-  const decisive = holes.length >= 2 || on.activeD >= UNAMBIGUOUS_ACTIVE_YD;
+  const decisive = holes.length >= 2 || activeD >= UNAMBIGUOUS_ACTIVE_YD;
   return decisive
     ? { state: INITIAL_STATE, switchTo: { courseId: on.courseId, hole: on.hole } }
     : { state: next, switchTo: null };
@@ -177,7 +189,7 @@ export async function resolveSiblings(activeId: string, activeName: string): Pro
     const { COURSES, getBundledHoles } = require('../data/courses') as typeof import('../data/courses');
     const mine = resolveComplex(activeName);
     if (mine.kind !== 'layout') return [];
-    return COURSES
+    const local = COURSES
       .filter((c) => {
         const r = resolveComplex(c.name);
         return r.kind === 'layout' && r.complex.key === mine.complex.key && r.layout !== mine.layout && `local:${c.id}` !== activeId;
@@ -185,6 +197,11 @@ export async function resolveSiblings(activeId: string, activeName: string): Pro
       .slice(0, MAX_SIBLINGS)
       .map((c) => ({ courseId: `local:${c.id}`, courseName: c.name, holes: getBundledHoles(`local:${c.id}`), courseLocation: null }))
       .filter((s) => s.holes.length > 0);
+    // Bundled layouts without surveyed tees (Gleneagles has none) get theirs from the engine map, as
+    // database siblings do; without this their tees were only known if the map happened to be built.
+    const geoLocal = require('./courseGeometryService') as typeof import('./courseGeometryService');
+    await Promise.all(local.map((sib) => geoLocal.fetchCourseGeometry(sib.courseId).catch(() => null)));
+    return local;
   }
   const api = require('./golfCourseApi') as typeof import('./golfCourseApi');
   const card = await api.getCourse(activeId);
@@ -253,6 +270,7 @@ function tick(): void {
     if (!fix || (fix.source && fix.source !== 'live') || Date.now() - fix.timestamp > MAX_FIX_AGE_MS) return;
     // Twice around: the second nine repeats the first, so only its own nine is the active layout.
     const activeHoles = round.courseHoles.filter((h) => !(round.twiceAround && h.hole > 9));
+    const hole = round.twiceAround && round.currentHole > 9 ? round.currentHole - 9 : round.currentHole;
     const r = observeTee(
       state,
       // Wall-clock time, not the fix's: a stationary player may get no new fixes, and the dwell is time
@@ -260,6 +278,7 @@ function tick(): void {
       { at: { lat: fix.lat, lng: fix.lng }, accuracyM: fix.accuracy_m, speedMs: fix.speed, ts: Date.now() },
       teesOf(activeId, activeHoles),
       siblings.map((s) => teesOf(s.courseId, s.holes)),
+      hole,
     );
     state = r.state;
     if (r.switchTo) applySwitch(r.switchTo.courseId, r.switchTo.hole);
@@ -273,7 +292,8 @@ function applySwitch(courseId: string, hole: number): void {
   const round = roundMod.useRoundStore.getState();
   const from = round.activeCourse;
   // On the second nine of a twice-around round, the same tee is hole N+9.
-  let current = round.twiceAround && round.currentHole > 9 && hole <= 9 ? hole + 9 : hole;
+  // (Only when the NEW layout is itself a nine played twice — decided by it, not by the old round.)
+  let current = sib.holes.length === 9 && round.twiceAround && round.currentHole > 9 && hole <= 9 ? hole + 9 : hole;
   // Never land the player on a hole that already has a score: scores stay on their hole numbers.
   if (round.scores[current] != null) current = round.currentHole;
   round.switchRoundLayout({ courseId, courseName: sib.courseName, holes: sib.holes, courseLocation: sib.courseLocation, currentHole: current });

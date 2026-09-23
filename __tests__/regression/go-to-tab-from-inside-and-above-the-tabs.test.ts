@@ -13,11 +13,10 @@ let mockRootState: MockNav | undefined;
  *  nested state is the app's root stack. The first version of this test mocked the stack flat —
  *  a shape the app never has — and passed while the fix never ran. */
 const real = (stack: MockNav): MockNav => ({ index: 0, routes: [{ name: '__root', state: stack }] });
-jest.mock('expo-router/build/global-state/router-store', () => ({
-  get store() { return { state: mockRootState }; },
-}), { virtual: true });
-
-import { goToTab } from '../../services/safeBack';
+import { goToTab, _setRouterStateReaderForTests } from '../../services/safeBack';
+// Injected, not jest.mock'ed: mocking the real router-store path was intermittently resolved to the
+// real module under parallel workers, which silently took the dismissTo branch.
+_setRouterStateReaderForTests(() => mockRootState);
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const routerMock = require('expo-router') as { __calls: { method: string; args: unknown[] }[]; __reset: () => void };
 
@@ -40,5 +39,20 @@ describe('goToTab picks the action that works where the player is', () => {
     mockRootState = real({ index: 0, routes: [{ name: 'greeting' }] });
     goToTab('caddie');
     expect(routerMock.__calls).toEqual([{ method: 'dismissTo', args: ['/(tabs)/caddie'] }]);
+  });
+
+  /**
+   * The mocks above stand in for expo-router's internals. These two pin the REAL library to the shape
+   * the mocks assume — so an expo-router upgrade that moves the store module or renames the slot fails
+   * here instead of silently turning every in-tab jump back into the no-op it was.
+   */
+  it('the real expo-router still has the router-store module and the __root slot this relies on', () => {
+    const fs = jest.requireActual('fs') as typeof import('fs');
+    const path = jest.requireActual('path') as typeof import('path');
+    const base = path.join(__dirname, '../../node_modules/expo-router/build');
+    expect(fs.existsSync(path.join(base, 'global-state/router-store.js'))).toBe(true);
+    const constants = fs.readFileSync(path.join(base, 'constants.js'), 'utf8');
+    expect(constants).toMatch(/INTERNAL_SLOT_NAME = '__root'/);
+    expect(fs.readFileSync(path.join(base, 'ExpoRoot.js'), 'utf8')).toMatch(/name=\{constants_1\.INTERNAL_SLOT_NAME\}/);
   });
 });

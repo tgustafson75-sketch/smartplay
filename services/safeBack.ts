@@ -57,18 +57,29 @@ export function goToTab(tab: 'caddie' | 'dashboard' | 'play' | 'scorecard' | 'sw
   router.dismissTo(`/(tabs)/${tab}` as never);
 }
 
+type Nav = { index?: number; routes?: { name?: string; state?: Nav }[] };
+
+/** Reads expo-router's container state. Swappable in tests, which must not jest.mock a real module
+ *  path: under parallel workers the real router-store was intermittently resolved instead. */
+let readRouterState: () => Nav | undefined = () => {
+  const { store } = require('expo-router/build/global-state/router-store') as { store?: { state?: Nav } };
+  return store?.state;
+};
+export function _setRouterStateReaderForTests(fn: () => Nav | undefined): void { readRouterState = fn; }
+
 /** Name of the focused route on the ROOT stack, or null when the router state is not readable. */
 export function rootFocusedRouteName(): string | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    type Nav = { index?: number; routes?: { name?: string; state?: Nav }[] };
-    const { store } = require('expo-router/build/global-state/router-store') as { store?: { state?: Nav } };
     // The container's root holds ONE route, expo-router's internal '__root' slot (constants
     // INTERNAL_SLOT_NAME); the app's own root stack — where '(tabs)' lives — is its nested state.
-    let nav: Nav | undefined = store?.state;
+    // The slot's name comes from the library itself, so an upgrade that renames it cannot silently
+    // send every tab jump back to the no-op POP_TO.
+    const { INTERNAL_SLOT_NAME } = require('expo-router/build/constants') as { INTERNAL_SLOT_NAME?: string };
+    const slot = INTERNAL_SLOT_NAME ?? '__root';
+    let nav: Nav | undefined = readRouterState();
     for (let depth = 0; nav?.routes?.length && depth < 3; depth++) {
       const focused = nav.routes[nav.index ?? nav.routes.length - 1];
-      if (focused?.name !== '__root') return focused?.name ?? null;
+      if (focused?.name !== slot) return focused?.name ?? null;
       nav = focused.state;
     }
     return null;

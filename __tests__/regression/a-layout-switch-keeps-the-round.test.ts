@@ -38,6 +38,7 @@ jest.mock('../../services/golfCourseApi', () => {
 
 import { useRoundStore } from '../../store/roundStore';
 import { _tickForTests, _setSiblingsForTests, stopLayoutVerifier, DWELL_MS, resolveSiblings } from '../../services/layoutVerifier';
+import { fetchCourseGeometry } from '../../services/courseGeometryService';
 
 const holes = (n: number, par = 4, yd = 380) => Array.from({ length: n }, (_, i) => ({ hole: i + 1, par, distance: yd + i })) as never;
 
@@ -77,7 +78,9 @@ describe('switching the round to the layout the player is actually on', () => {
     // Active layout tees along one line; sibling tees ~85 yards east of them.
     // A fully mapped active layout: its absence near the player only means something when its tees are known.
     mockTees.dyes = Object.fromEntries(Array.from({ length: 18 }, (_, i) => [i + 1, { lat: 30.194 + i * 0.004, lng: -81.39 }]));
-    mockTees.stadium = { 1: { lat: 30.194, lng: -81.3908 }, 2: { lat: 30.198, lng: -81.3908 } };
+    // Logging hole 1 (beforeEach) moved the round to hole 2: the tees that count are 2 and 3.
+    expect(useRoundStore.getState().currentHole).toBe(2);
+    mockTees.stadium = { 2: { lat: 30.198, lng: -81.3908 }, 3: { lat: 30.202, lng: -81.3908 } };
     _setSiblingsForTests('dyes', [{ courseId: 'stadium', courseName: 'TPC Sawgrass — Stadium', holes: holes(18, 3, 150), courseLocation: null }]);
     const realNow = Date.now;
     let now = 1_000_000;
@@ -90,11 +93,11 @@ describe('switching the round to the layout the player is actually on', () => {
           _tickForTests();
         }
       };
-      standOn(mockTees.stadium[1]);
-      expect(useRoundStore.getState().activeCourseId).toBe('dyes');
       standOn(mockTees.stadium[2]);
+      expect(useRoundStore.getState().activeCourseId).toBe('dyes');
+      standOn(mockTees.stadium[3]);
       expect(useRoundStore.getState().activeCourseId).toBe('stadium');
-      expect(useRoundStore.getState().currentHole).toBe(2);
+      expect(useRoundStore.getState().currentHole).toBe(3);
     } finally {
       Date.now = realNow;
     }
@@ -103,7 +106,9 @@ describe('switching the round to the layout the player is actually on', () => {
   it('never in a simulated round', () => {
     useRoundStore.setState({ isSimRound: true } as never);
     mockTees.dyes = { 1: { lat: 30.194, lng: -81.39 } };
-    mockTees.far = { 7: { lat: 30.30, lng: -81.60 } };
+    // The player's CURRENT hole (2, after the logged hole 1), so only the sim-round gate can stop it.
+    mockTees.dyes = Object.fromEntries(Array.from({ length: 18 }, (_, i) => [i + 1, { lat: 30.194 + i * 0.004, lng: -81.39 }]));
+    mockTees.far = { 2: { lat: 30.30, lng: -81.60 } };
     _setSiblingsForTests('dyes', [{ courseId: 'far', courseName: 'Far', holes: holes(18), courseLocation: null }]);
     const realNow = Date.now;
     let now = 2_000_000;
@@ -111,7 +116,7 @@ describe('switching the round to the layout the player is actually on', () => {
     try {
       for (let t = 0; t <= DWELL_MS + 8000; t += 4000) {
         now += 4000;
-        mockFix = { ...mockTees.far[7], accuracy_m: 5, speed: 0, timestamp: now, source: 'live' };
+        mockFix = { ...mockTees.far[2], accuracy_m: 5, speed: 0, timestamp: now, source: 'live' };
         _tickForTests();
       }
     } finally {
@@ -120,10 +125,13 @@ describe('switching the round to the layout the player is actually on', () => {
     expect(useRoundStore.getState().activeCourseId).toBe('dyes');
   });
 
-  it('finds the other layouts of a bundled complex (Menifee Palms → Lakes)', async () => {
+  it('finds the other layouts of a bundled complex (Menifee Palms → Lakes) and builds their maps', async () => {
+    (fetchCourseGeometry as jest.Mock).mockClear();
     const sibs = await resolveSiblings('local:palms', 'Menifee Lakes Palms');
     expect(sibs.map((x) => x.courseId)).toEqual(['local:lakes']);
     expect(sibs[0].holes.length).toBeGreaterThan(0);
+    // Gleneagles ships no surveyed tees: a bundled sibling's tees can come only from its engine map.
+    expect(fetchCourseGeometry).toHaveBeenCalledWith('local:lakes');
   });
 
   it('finds the other layouts of a database club — never a different club, never a namesake in another state', async () => {
@@ -144,16 +152,18 @@ describe('switching the round to the layout the player is actually on', () => {
 
   it('a switch never lands the player on a hole that already has a score', () => {
     mockTees.dyes = Object.fromEntries(Array.from({ length: 18 }, (_, i) => [i + 1, { lat: 30.194 + i * 0.004, lng: -81.39 }]));
-    mockTees.stadium = { 1: { lat: 30.194, lng: -81.3908 }, 2: { lat: 30.198, lng: -81.3908 } };
-    useRoundStore.getState().logScore(2, 4);
-    useRoundStore.getState().setCurrentHole?.(3);
+    // Player on hole 3; hole 4 already carries a score (entered ahead). The sibling's 3 and 4 tees
+    // prove the layout — and the switch must not move the player onto the scored hole 4.
+    mockTees.stadium = { 3: { lat: 30.202, lng: -81.3908 }, 4: { lat: 30.206, lng: -81.3908 } };
+    useRoundStore.getState().logScore(4, 4);
+    useRoundStore.getState().setCurrentHole(3);
     const holeBefore = useRoundStore.getState().currentHole;
     _setSiblingsForTests('dyes', [{ courseId: 'stadium', courseName: 'Stadium', holes: holes(18, 3, 150), courseLocation: null }]);
     const realNow = Date.now;
     let now = 3_000_000;
     Date.now = () => now;
     try {
-      for (const p of [mockTees.stadium[1], mockTees.stadium[2]]) {
+      for (const p of [mockTees.stadium[3], mockTees.stadium[4]]) {
         for (let t = 0; t <= DWELL_MS + 4000; t += 4000) {
           now += 4000;
           mockFix = { ...p, accuracy_m: 5, speed: 0, timestamp: now, source: 'live' };
@@ -165,6 +175,29 @@ describe('switching the round to the layout the player is actually on', () => {
     }
     expect(useRoundStore.getState().activeCourseId).toBe('stadium');
     expect(useRoundStore.getState().currentHole).toBe(holeBefore);
-    expect(useRoundStore.getState().scores[2]).toBe(4);
+    expect(useRoundStore.getState().scores[4]).toBe(4);
+  });
+
+  it('twice-around nine → 18-hole layout lands on the 18-hole layout\'s own hole, not hole+9', () => {
+    useRoundStore.getState().switchRoundLayout({ courseId: 'nine', courseName: 'Nine', holes: holes(9), courseLocation: null, currentHole: 3 });
+    useRoundStore.setState({ currentHole: 12 } as never);
+    mockTees.nine = Object.fromEntries(Array.from({ length: 9 }, (_, i) => [i + 1, { lat: 30.194 + i * 0.004, lng: -81.39 }]));
+    mockTees.full = { 3: { lat: 30.40, lng: -81.70 }, 4: { lat: 30.404, lng: -81.70 } };
+    _setSiblingsForTests('nine', [{ courseId: 'full', courseName: 'Full', holes: holes(18), courseLocation: null }]);
+    const realNow = Date.now;
+    let now = 4_000_000;
+    Date.now = () => now;
+    try {
+      for (let t = 0; t <= DWELL_MS + 4000; t += 4000) {
+        now += 4000;
+        mockFix = { ...mockTees.full[3], accuracy_m: 5, speed: 0, timestamp: now, source: 'live' };
+        _tickForTests();
+      }
+    } finally {
+      Date.now = realNow;
+    }
+    expect(useRoundStore.getState().activeCourseId).toBe('full');
+    expect(useRoundStore.getState().currentHole).toBe(3);
+    expect(useRoundStore.getState().twiceAround).toBe(false);
   });
 });

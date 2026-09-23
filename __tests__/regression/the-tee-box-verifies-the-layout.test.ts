@@ -1,92 +1,137 @@
 /**
  * 2026-09-23 (Tim) — "on properties that have more than one course, the tee box … should be the
  * verifier, and it should do a check and reconcile." Every rule that can move a live round, pinned.
+ *
+ * Third pass: the rules are HOLE-AWARE. Only the tee of the player's current hole or the next one can
+ * count — a ball or a parked cart beside another layout's tee elsewhere on the property is not a sign
+ * of anything. The last block runs on the REAL bundled Menifee tees, not invented coordinates.
  */
 import {
   observeTee, INITIAL_STATE, DWELL_MS, type LayoutTees, type VerifierState, type TeeObservation,
 } from '../../services/layoutVerifier';
+import { getBundledHoles } from '../../data/courses';
 
-// ~0.0001 deg lat ≈ 12 yards. Two layouts laid out on a grid far enough apart to be distinct.
 const at = (lat: number, lng: number) => ({ lat, lng });
-const ACTIVE: LayoutTees = { courseId: 'dyes-valley', tees: [1, 2, 3].map((h) => ({ hole: h, tee: at(30.19 + h * 0.004, -81.39) })) };
-const STADIUM: LayoutTees = { courseId: 'stadium', tees: [1, 2, 3].map((h) => ({ hole: h, tee: at(30.19 + h * 0.004, -81.3908) })) };
-// A third layout whose hole-1 tee shares the active layout's tee complex (15 yards away).
-const SHARED: LayoutTees = { courseId: 'shared', tees: [{ hole: 1, tee: at(30.194 + 0.000125, -81.39) }] };
+// Active: 18 tees on a line. Sibling: the same routing ~85 yards east — a neighbouring layout.
+const line = (id: string, lng: number): LayoutTees => ({
+  courseId: id, holeCount: 18,
+  tees: Array.from({ length: 18 }, (_, i) => ({ hole: i + 1, tee: at(30.19 + (i + 1) * 0.004, lng) })),
+});
+const ACTIVE = line('dyes-valley', -81.39);
+const STADIUM = line('stadium', -81.3908);
 
-function stand(state: VerifierState, where: { lat: number; lng: number }, t0: number, siblings = [STADIUM], ms = DWELL_MS + 1000, extra: Partial<TeeObservation> = {}) {
+function stand(state: VerifierState, where: { lat: number; lng: number }, t0: number, currentHole: number,
+  opts: { siblings?: LayoutTees[]; active?: LayoutTees; ms?: number; extra?: Partial<TeeObservation> } = {}) {
   let s = state;
   let switchTo = null as null | { courseId: string; hole: number };
+  const ms = opts.ms ?? DWELL_MS + 1000;
   for (let t = t0; t <= t0 + ms; t += 4000) {
-    const r = observeTee(s, { at: where, accuracyM: 5, speedMs: 0, ts: t, ...extra }, ACTIVE, siblings);
+    const r = observeTee(s, { at: where, accuracyM: 5, speedMs: 0, ts: t, ...opts.extra }, opts.active ?? ACTIVE, opts.siblings ?? [STADIUM], currentHole);
     s = r.state;
     if (r.switchTo) switchTo = r.switchTo;
   }
   return { s, switchTo };
 }
+const tee = (l: LayoutTees, h: number) => l.tees.find((t) => t.hole === h)!.tee;
 
 describe('the tee box verifies which layout the round is on', () => {
-  it('two sibling tees on different holes switch the round, to the hole the player is on', () => {
-    const r1 = stand(INITIAL_STATE, STADIUM.tees[0].tee, 0);
+  it('the sibling\'s tees on the current and next hole switch the round', () => {
+    const r1 = stand(INITIAL_STATE, tee(STADIUM, 1), 0, 1);
     expect(r1.switchTo).toBeNull();
-    const r2 = stand(r1.s, STADIUM.tees[1].tee, 100_000);
+    const r2 = stand(r1.s, tee(STADIUM, 2), 100_000, 1);
     expect(r2.switchTo).toEqual({ courseId: 'stadium', hole: 2 });
   });
 
-  it('standing on the active layout\'s tee wipes the doubt', () => {
-    const r1 = stand(INITIAL_STATE, STADIUM.tees[0].tee, 0);
-    const r2 = stand(r1.s, ACTIVE.tees[1].tee, 100_000);
-    const r3 = stand(r2.s, STADIUM.tees[2].tee, 200_000);
-    expect(r3.switchTo).toBeNull();
+  it('standing on the active layout\'s expected tee wipes the doubt', () => {
+    const r1 = stand(INITIAL_STATE, tee(STADIUM, 1), 0, 1);
+    const r2 = stand(r1.s, tee(ACTIVE, 2), 100_000, 1);
+    expect(r2.s.evidence).toBeNull();
   });
 
-  it('a shared tee complex proves nothing, however long the player stands there', () => {
-    const r = stand(INITIAL_STATE, SHARED.tees[0].tee, 0, [SHARED], 120_000);
+  it('a sibling tee on a hole the player is NOT on is nothing (the Lakes-6-while-on-Palms-3 case)', () => {
+    const farSib: LayoutTees = { courseId: 'lakes', holeCount: 18, tees: [{ hole: 6, tee: at(30.30, -81.60) }] };
+    const r = stand(INITIAL_STATE, at(30.30, -81.60), 0, 3, { siblings: [farSib], ms: 60_000 });
     expect(r.switchTo).toBeNull();
     expect(r.s.evidence).toBeNull();
   });
 
-  it('passing a tee is not standing on it: the dwell must be held', () => {
-    const r = stand(INITIAL_STATE, STADIUM.tees[0].tee, 0, [STADIUM], DWELL_MS - 5000);
+  it('a true mis-start switches on the first tee when the active layout\'s first tee is nowhere near', () => {
+    const far: LayoutTees = { courseId: 'far-course', holeCount: 18, tees: [{ hole: 1, tee: at(30.30, -81.60) }] };
+    const r = stand(INITIAL_STATE, at(30.30, -81.60), 0, 1, { siblings: [far] });
+    expect(r.switchTo).toEqual({ courseId: 'far-course', hole: 1 });
+  });
+
+  it('a shared tee complex proves nothing, however long the player stands there', () => {
+    const shared: LayoutTees = { courseId: 'shared', holeCount: 18, tees: [{ hole: 1, tee: at(30.194 + 0.0003, -81.39) }] };
+    const r = stand(INITIAL_STATE, tee(shared, 1), 0, 1, { siblings: [shared], ms: 120_000 });
+    expect(r.switchTo).toBeNull();
     expect(r.s.evidence).toBeNull();
   });
 
-  it('a cart driving past does not count', () => {
-    const r = stand(INITIAL_STATE, STADIUM.tees[0].tee, 0, [STADIUM], 60_000, { speedMs: 5 });
-    expect(r.s.evidence).toBeNull();
+  it('27-hole combos: a tee that is the active layout\'s hole 10 but a sibling\'s hole 1 is evidence on hole 1', () => {
+    const P = at(30.30, -81.60);
+    const base = line('red-white', -81.39);
+    const redWhite: LayoutTees = { ...base, tees: [...base.tees.filter((t) => t.hole !== 10), { hole: 10, tee: P }] };
+    const whiteBlue: LayoutTees = { courseId: 'white-blue', holeCount: 18, tees: [{ hole: 1, tee: P }] };
+    const r = stand(INITIAL_STATE, P, 0, 1, { active: redWhite, siblings: [whiteBlue] });
+    expect(r.switchTo).toEqual({ courseId: 'white-blue', hole: 1 });
   });
 
-  it('a weak fix does not count', () => {
-    const r = stand(INITIAL_STATE, STADIUM.tees[0].tee, 0, [STADIUM], 60_000, { accuracyM: 40 });
-    expect(r.s.evidence).toBeNull();
-  });
-
-  it('ONE tee is enough when the active layout has no tee anywhere near', () => {
-    const far: LayoutTees = { courseId: 'far-course', tees: [{ hole: 7, tee: at(30.30, -81.60) }] };
-    const r = stand(INITIAL_STATE, far.tees[0].tee, 0, [far]);
-    expect(r.switchTo).toEqual({ courseId: 'far-course', hole: 7 });
-  });
-
-  it('the same tee twice is still one tee', () => {
-    const r1 = stand(INITIAL_STATE, STADIUM.tees[0].tee, 0);
-    const r2 = stand(r1.s, STADIUM.tees[0].tee, 100_000);
-    expect(r2.switchTo).toBeNull();
+  it('two siblings both expecting the player on the same tee are ambiguous, not evidence', () => {
+    const P = at(30.30, -81.60);
+    const a: LayoutTees = { courseId: 'a', holeCount: 18, tees: [{ hole: 1, tee: P }] };
+    const b: LayoutTees = { courseId: 'b', holeCount: 18, tees: [{ hole: 1, tee: P }] };
+    expect(stand(INITIAL_STATE, P, 0, 1, { siblings: [a, b] }).switchTo).toBeNull();
   });
 
   it('an active layout whose tees are NOT KNOWN yet is not evidence against it', () => {
     const unmapped: LayoutTees = { courseId: 'dyes-valley', tees: [], holeCount: 18 };
-    let st = INITIAL_STATE;
-    let sw = null as null | { courseId: string; hole: number };
-    for (let t = 0; t <= DWELL_MS + 8000; t += 4000) {
-      const r = observeTee(st, { at: STADIUM.tees[0].tee, accuracyM: 5, speedMs: 0, ts: t }, unmapped, [STADIUM]);
-      st = r.state; if (r.switchTo) sw = r.switchTo;
-    }
-    expect(sw).toBeNull();
-    expect(st.evidence).toBeNull();
+    const r = stand(INITIAL_STATE, tee(STADIUM, 1), 0, 1, { active: unmapped, ms: 60_000 });
+    expect(r.switchTo).toBeNull();
+    expect(r.s.evidence).toBeNull();
   });
 
-  it('two sibling layouts sharing one tee (27-hole combos) are ambiguous, not evidence', () => {
-    const far = (id: string, hole: number): LayoutTees => ({ courseId: id, tees: [{ hole, tee: at(30.30, -81.60) }] });
-    const r = stand(INITIAL_STATE, at(30.30, -81.60), 0, [far('red-white', 1), far('blue-red', 10)]);
-    expect(r.switchTo).toBeNull();
+  it('passing a tee, a cart driving past, and a weak fix do not count', () => {
+    expect(stand(INITIAL_STATE, tee(STADIUM, 1), 0, 1, { ms: DWELL_MS - 5000 }).s.evidence).toBeNull();
+    expect(stand(INITIAL_STATE, tee(STADIUM, 1), 0, 1, { ms: 60_000, extra: { speedMs: 5 } }).s.evidence).toBeNull();
+    expect(stand(INITIAL_STATE, tee(STADIUM, 1), 0, 1, { ms: 60_000, extra: { accuracyM: 40 } }).s.evidence).toBeNull();
+  });
+
+  it('the same tee twice is still one tee', () => {
+    const r1 = stand(INITIAL_STATE, tee(STADIUM, 1), 0, 1);
+    expect(stand(r1.s, tee(STADIUM, 1), 100_000, 1).switchTo).toBeNull();
+  });
+});
+
+describe('on the REAL bundled Menifee layouts', () => {
+  const layout = (id: string): LayoutTees => {
+    const holes = getBundledHoles(`local:${id}`);
+    return {
+      courseId: `local:${id}`, holeCount: holes.length,
+      tees: holes.filter((h) => h.teeLat && h.teeLng).map((h) => ({ hole: h.hole, tee: at(h.teeLat as number, h.teeLng as number) })),
+    };
+  };
+  const palms = layout('palms');
+  const lakes = layout('lakes');
+
+  it('has real tees to test against', () => {
+    expect(palms.tees.length).toBe(18);
+    expect(lakes.tees.length).toBe(18);
+  });
+
+  it('playing Palms correctly, stopping beside ANY Lakes tee off the current/next hole never switches', () => {
+    for (let current = 1; current <= 17; current++) {
+      for (const t of lakes.tees) {
+        if (t.hole === current || t.hole === current + 1) continue;
+        const r = stand(INITIAL_STATE, t.tee, 0, current, { active: palms, siblings: [lakes], ms: 60_000 });
+        expect({ current, lakesHole: t.hole, switched: r.switchTo }).toEqual({ current, lakesHole: t.hole, switched: null });
+      }
+    }
+  });
+
+  it('a round started on Palms but played on Lakes switches by the second tee at the latest', () => {
+    const r1 = stand(INITIAL_STATE, tee(lakes, 1), 0, 1, { active: palms, siblings: [lakes] });
+    const r2 = r1.switchTo ? r1 : stand(r1.s, tee(lakes, 2), 100_000, 1, { active: palms, siblings: [lakes] });
+    expect(r2.switchTo?.courseId).toBe('local:lakes');
   });
 });
