@@ -5058,3 +5058,10 @@ Tim's phone on that Wi-Fi was cut off. Memory: never-poll-production-from-home-i
 **Open / for Tim (binary):** OTA the client half; one course-build pipeline (the root fix); stop paid
 content/intel for unpicked nearby courses (his progress-card idea); Gemini image model shuts 2026-10-02;
 smartmanage Next.js critical advisory; Dependabot alerts off.
+
+**Later same day:** `ba5df313` — nearby pre-load no longer buys Claude content (Tim's call); portraits moved to
+gemini-3.1-flash-image (the `-preview` id the deprecation table names was itself retired 06-25) and gpt-image-2.
+OTA `a757346d` published to production. Live-verified: proxy CDN HIT on repeat search; course-content 200 in
+19s with 18/18 notes + descriptions; image-edit 200 via gemini. Brain spend measured: 7 turns / ~$0.53 in 24h —
+the app cannot explain a Claude overage; Claude Code usage is the likelier source (Anthropic console settles it).
+Tim approved: one course-build pipeline with a live progress card — plan next.

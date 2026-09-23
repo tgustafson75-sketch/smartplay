@@ -8,12 +8,14 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
-> ### ⚠️ LATEST — 2026-09-23. COURSE ENGINE + CLAUDE-COST FIX PUSHED (`6ac60296`, `d7a64f63`). CLIENT HALF NEEDS AN OTA.
+> ### ⚠️ LATEST — 2026-09-23. COURSE ENGINE + CLAUDE-COST FIX SHIPPED (`6ac60296`, `d7a64f63`, `ba5df313`). OTA `a757346d` PUBLISHED TO PRODUCTION.
 >
 > Server half is live with the push (course-content on Haiku with a budget that fits, proxy CDN caching,
 > Course Cloud refuses 0,0, brain 24s whole-turn deadline). Client half — dedupe/cooldowns, Play tab pick
 > races and first-tap, goToTab everywhere, no brain re-send after timeout — is JS-only and waits on Tim's
-> OTA call. Nothing verified on device yet (PATH 2 / 4 / 5 touched). Detail: SPRINT-LOG Day 127.
+> OTA call — now published (group a757346d). Verified LIVE: proxy CDN HIT, course-content 200 in 19s on
+> Haiku with all 18 holes, portraits on gemini-3.1-flash-image. Nothing verified on device yet (PATH 2/4/5).
+> Next: plan + build the one course-build pipeline (Tim said yes). Detail: SPRINT-LOG Day 127.
 >
 > **Root cause still open (Tim: "we haven't fixed the universal truth around course building"):** no single
 > owner builds a course — seven surfaces each run their own search/detail/geometry/content. The fix is one
