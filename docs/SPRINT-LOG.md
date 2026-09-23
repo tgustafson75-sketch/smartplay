@@ -5077,3 +5077,12 @@ channels=0 = swing clip with no audio track. CI green today despite the Node 20 
 **OTA pending** for the pipeline UI + zero-green fix (server halves are live).
 **Still open:** "voice speak_catch: Network request failed" Sentry feedback from 3 installs (one iPhone on
 /permissions, 1.0.1+29) — Sentry API 403, so only tags are readable; needs the event body.
+
+**Late:** `5c0d94f2` — Owner Tools → App Usage (api/owner-usage, OWNER_USAGE_KEY in Vercel production, key typed
+once on Tim's phone) with Export → tim@smartplaycaddie.com (SmartManage inbox). Opted-in data only (Tim's call,
+no policy change); backups counted, never read. Live check: 401 on a wrong key; 0 opted-in events in 30 days,
+4 backups (1 active this week), 0 referrals — usage sharing is off by default and nobody has turned it on.
+SmartManage: @vercel/analytics added (`fcefba7`); smartmanageai.vercel.app was a manually pinned alias —
+re-pointed by hand; smartmanage.app DNS is not on Vercel (SSL fails). Noted in memory.
+Noted, not fixed: the policy calls a backup an "encrypted snapshot" — it is Supabase at-rest encryption
+only, no client-side encryption.
