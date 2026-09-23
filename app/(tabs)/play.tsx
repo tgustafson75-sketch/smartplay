@@ -1785,6 +1785,11 @@ export default function PlayTab() {
       if (!isCurrent()) return;
       if (c) {
         setSelected(c);
+        // 2026-09-23 (triple-check) — the card now shows the RIGHT course, so the lock on Start Round
+        // (which exists only while `selected` is still the previous one) lifts here. Held to the
+        // `finally`, it stayed disabled through the whole map build — up to 85s — though round start
+        // copes with a missing map on its own. The build's progress shows on the card meanwhile.
+        setSelectedLoading(false);
         // 2026-08-11 — hand the course's OWN coordinates to the preview surfaces straight away.
         // They previously had to wait on a geometry build to know where the course was, which is
         // why a searched course showed a green screen and a blank thumbnail while (or if) that

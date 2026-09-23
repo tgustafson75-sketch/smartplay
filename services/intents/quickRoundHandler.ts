@@ -93,6 +93,21 @@ export const quickRoundHandler: IntentHandler = {
   ],
 
   async execute(intent: VoiceIntent, _context: AppContext): Promise<IntentResult> {
+    /**
+     * 2026-09-23 (triple-check) — a live round is not something voice replaces. Every other start
+     * surface got this gate (Play 09-17, Course Detail today); this one sent the request straight to
+     * the Caddie tab, whose runStartRound filed the live round as a degraded save — no par, no stats,
+     * no recap, no WHS posting — and restarted at hole 1.
+     */
+    const live = useRoundStore.getState();
+    if (live.isRoundActive) {
+      return {
+        success: false,
+        voice_response: `You're mid-round${live.activeCourse ? ` at ${live.activeCourse}` : ''}. End this round first, then I'll start the new one.`,
+        side_effects: ['quick_round:refused_round_active'],
+        follow_up_needed: false,
+      };
+    }
     const courseHint = String(intent.parameters.course_hint ?? '').trim();
     const holeCountRaw = intent.parameters.hole_count;
     // 2026-07-28 (audit — VOICE-F8) — the user's EXPLICIT choice (9 or 18) wins; when they didn't say a

@@ -17232,6 +17232,9 @@ check(
     // 2026-09-23 — REPLACE too. This matched push only, and stayed green while round/briefing,
     // recap and feelings `router.replace`d into the tabs from a screen above them — REPLACE creates a
     // new (tabs) route in the root stack exactly as PUSH does. Every default round start took that path.
+    // services/safeBack.ts is the ONE owner of the choice, and its replace runs only when the root's
+    // focused route is already (tabs) — asserted separately below, so the exemption cannot widen.
+    if (path.relative(ROOT, abs) === path.join('services', 'safeBack.ts')) return false;
     return /router\.(push|replace|navigate)\(\s*[`'"]\/\(tabs\)\//.test(body);
   });
 
@@ -17244,6 +17247,9 @@ check(
         : `swept ${scanned.length} files across ${SCAN_DIRS.join('/')} outside app/(tabs)/; every tab jump goes through goToTab (dismissTo → POP_TO), so the back stack gets shorter, not longer`);
 
   const back = readCode('services/safeBack.ts');
+  check('NAV: goToTab replaces only from INSIDE the tab bar — from above it pops',
+    /if \(rootFocusedRouteName\(\) === '\(tabs\)'\) \{\s*router\.replace\(`\/\(tabs\)\/\$\{tab\}` as never\);\s*return;\s*\}\s*router\.dismissTo\(`\/\(tabs\)\/\$\{tab\}`/.test(back),
+    'dismissTo from inside the tabs is a POP_TO no tab router handles (voice "open course" went nowhere); replace from above the tabs stacks a second navigator');
   check('NAV: goToTab pops to the tabs already in the stack rather than pushing a new one',
     /export function goToTab/.test(back) &&
       /router\.dismissTo\(`\/\(tabs\)\/\$\{tab\}`/.test(back) &&
@@ -18048,6 +18054,10 @@ check(
       /if \(isCurrent\(\)\) setSelectedLoading\(false\);/.test(sel) &&
       /if \(!selected \|\| selectedLoading\) return;/.test(play) && /disabled=\{selectedLoading\}/.test(play),
     `every await in selectSummary is followed by a staleness gate (${gates}/${awaitsGated}), and Start Round is disabled while a pick is loading`);
+  check('COURSE PICK: Start Round unlocks as soon as the picked course is on the card, not after its map',
+    /setSelected\(c\);\s*setSelectedLoading\(false\);/.test(sel) &&
+      sel.indexOf('setSelectedLoading(false);', sel.indexOf('setSelected(c);')) < sel.indexOf('await fetchCourseGeometry('),
+    'the lock only covers the moment the card still shows the previous course; held through the map build it greyed Start Round for up to 85s');
 
   const reset = play.slice(play.indexOf('if (trimmed.length < 3) {'), play.indexOf('const id = setTimeout(() => { void runSearch(trimmed); }, 300);'));
   check('COURSE SEARCH: clearing the box cancels the search still in flight',
@@ -18081,6 +18091,12 @@ check(
   check('SMARTFINDER: a tap target does not survive a hole change',
     /<TargetView key=\{geometry\?\.hole_number \?\? 'none'\}/.test(sf),
     'TargetView holds its tap in local state; unkeyed, hole N\'s circle and yardage were drawn over hole N+1');
+
+  const consumer = caddie.slice(caddie.indexOf('if (!pendingStartCourseId) return;'), caddie.indexOf('const fn = runStartRoundRef.current;'));
+  check('ROUND START: the one pending-start consumer refuses while a round is live',
+    consumer.length > 0 && /if \(useRoundStore\.getState\(\)\.isRoundActive\) \{/.test(consumer) &&
+      consumer.indexOf('isRoundActive') < consumer.indexOf('getApiCourse('),
+    'Play, Course Detail, voice quick-round and disambiguation all funnel here; a producer that forgets its own gate must not be able to replace a round in progress');
 
   check('START ROUND CARD: the card never runs a paid generation of its own — the pipeline builds',
     !/fetchCourseContent\(/.test(card) && /eng\.downloadCourse\(/.test(card),

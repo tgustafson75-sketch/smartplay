@@ -43,5 +43,29 @@ export function safeBack(fallback: string = FALLBACK): void {
  * resolved as a tab jump and is fine.
  */
 export function goToTab(tab: 'caddie' | 'dashboard' | 'play' | 'scorecard' | 'swinglab'): void {
+  /**
+   * 2026-09-23 (triple-check) — dismissTo is only right from ABOVE the tabs. From INSIDE them (the
+   * root stack's focused route is `(tabs)`), expo-router targets the tab navigator itself with
+   * POP_TO, which no tab router handles — it returns null and nothing happens. Voice "open course X"
+   * from the Caddie tab stopped switching to Play the day every tab jump moved here. Inside the tabs,
+   * `replace` is the call that always worked there (the tab router override turns it into JUMP_TO).
+   */
+  if (rootFocusedRouteName() === '(tabs)') {
+    router.replace(`/(tabs)/${tab}` as never);
+    return;
+  }
   router.dismissTo(`/(tabs)/${tab}` as never);
+}
+
+/** Name of the focused route on the ROOT stack, or null when the router state is not readable. */
+export function rootFocusedRouteName(): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { store } = require('expo-router/build/global-state/router-store') as { store?: { state?: { index?: number; routes?: { name?: string }[] } } };
+    const root = store?.state;
+    if (!root?.routes?.length) return null;
+    return root.routes[root.index ?? root.routes.length - 1]?.name ?? null;
+  } catch {
+    return null;
+  }
 }

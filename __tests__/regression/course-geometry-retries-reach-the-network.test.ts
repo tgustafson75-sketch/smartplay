@@ -65,4 +65,22 @@ describe('course geometry: deliberate retries reach the network; the tick does n
     await geo.fetchCourseGeometry('apiTick', { courseLocation: { lat: 42, lng: -71 } });
     expect(calls).toBe(1);
   });
+
+  /**
+   * 2026-09-23 (triple-check) — a FALLBACK is not a build that worked. Echo Hills' bundled coords fail
+   * their own scorecard, so the app asks the engine; when the engine answers with nothing (a zero-green
+   * 200, or a 503) the bundled copy is served — and that copy, having greens, used to clear the
+   * cooldown, so every GPS tick started another full build. Both answers must hold the next ask off.
+   */
+  it.each([
+    ['a zero-green 200', () => ok({ course_id: 'x', course_name: 'x', holes: [] })],
+    ['a 503', () => ({ ok: false, status: 503, json: async () => ({}) })],
+  ])('after %s on a bundled course, the next tick does not rebuild', async (_label, answer) => {
+    (global as { fetch: unknown }).fetch = jest.fn(async () => { calls++; return answer(); });
+    const first = await geo.fetchCourseGeometry('local:echo-hills');
+    await geo.fetchCourseGeometry('local:echo-hills');
+    await geo.fetchCourseGeometry('local:echo-hills');
+    expect(calls).toBe(1);
+    expect(geo.mappedHoleCount(first)).toBeGreaterThan(0);
+  });
 });

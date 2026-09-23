@@ -404,7 +404,7 @@
     "mapping": "正在绘制果岭…",
     "imagery": "正在保存离线球洞视图…",
     "notes": "正在撰写球场笔记…",
-    "ready": "已就绪 · 已绘制 {{count}} 个果岭 · 已加入你的球场",
+    "ready_other": "已就绪 · 已绘制 {{count}} 个果岭 · 已加入你的球场",
     "ready_no_greens": "已就绪 · 暂无果岭地图，码数为估算",
     "ready_unmeasured": "已就绪 · 已加入你的球场"
   }

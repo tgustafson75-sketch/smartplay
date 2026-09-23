@@ -36,6 +36,12 @@ describe('the course card shows the build', () => {
     expect(screen.getByText(/18 greens mapped · in Your courses/)).toBeTruthy();
   });
 
+  it('one green reads as one green', () => {
+    useDownloadedCoursesStore.getState().markDownloaded({ courseId: 'one', name: 'One', holeCount: 9, at: 1, greens: 1 });
+    render(<CourseBuildProgress ids={['one']} />);
+    expect(screen.getByText('Ready · 1 green mapped · in Your courses')).toBeTruthy();
+  });
+
   it('never claims a green map it does not have', () => {
     useDownloadedCoursesStore.getState().markDownloaded({ courseId: 'hemet', name: 'Hemet', holeCount: 18, at: 1, greens: 0 });
     render(<CourseBuildProgress ids={['hemet']} />);

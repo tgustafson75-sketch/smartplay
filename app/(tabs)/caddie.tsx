@@ -348,6 +348,14 @@ export default function CaddieTab() {
     if (!pendingStartCourseId) return;
     const id = pendingStartCourseId;
     clearPendingStart(null);
+    // 2026-09-23 (triple-check) — the ONE consumer every start request passes through (Play, Course
+    // Detail, voice quick-round, disambiguation), so the live-round gate lives here as well as at each
+    // surface: a producer that forgets it can no longer replace a round in progress.
+    if (useRoundStore.getState().isRoundActive) {
+      useRoundStore.getState().setPendingStartFactors(null);
+      setCaddieResponse("You're mid-round. End this round first, then start the new one.");
+      return;
+    }
     void (async () => {
       let picked: PickedCourse | null = null;
       if (id.startsWith('local:')) {

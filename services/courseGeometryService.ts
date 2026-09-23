@@ -933,9 +933,15 @@ export async function fetchCourseGeometry(
    * now — see withBuildSlot() around the two fetch() calls below. Cache reads never queue.
    */
   const run = fetchCourseGeometryInner(courseId, options).then((result) => {
-    // Record whether this build actually produced something worth serving. An empty answer arms the
-    // cooldown above; a good one clears it so the course is never held back once it works.
-    if (mappedHoleCount(result) > 0) lastUnservableBuildAt.delete(courseId);
+    /**
+     * Record whether this build left something SERVABLE — not whether the returned copy has greens.
+     * 2026-09-23 (triple-check) — this read `mappedHoleCount(result) > 0`. Every fallback the inner
+     * function returns (bundled coords, a persisted copy after a 503 or timeout, the untrusted bundled
+     * copy held after a zero-green 200) has greens but no pipeline stamp, so it is never servable: the
+     * cooldown was cleared, the next GPS tick found nothing servable and started another full build —
+     * all session long, relighting the MAPPING/STATIC pill the cooldown exists to stop.
+     */
+    if (cacheIsServable(memCache.get(courseId) ?? null)) lastUnservableBuildAt.delete(courseId);
     else lastUnservableBuildAt.set(courseId, Date.now());
     return result;
   }).finally(() => {

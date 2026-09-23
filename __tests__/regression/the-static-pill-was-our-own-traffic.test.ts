@@ -38,7 +38,7 @@ describe('the static pill was our own traffic', () => {
   });
 
   it('a build that DID produce greens clears it, so a working course is never held back', () => {
-    expect(geo).toMatch(/mappedHoleCount\(result\) > 0\) lastUnservableBuildAt\.delete\(courseId\)/);
+    expect(geo).toMatch(/if \(cacheIsServable\(memCache\.get\(courseId\) \?\? null\)\) lastUnservableBuildAt\.delete\(courseId\);/);
   });
 
   it('the cooldown is checked BEFORE markBuilding, or the badge still relights', () => {

@@ -21,7 +21,7 @@ jest.mock('../../services/courseGeometryService', () => ({
   fetchCourseGeometry: jest.fn(async () => ({ holes: Array.from({ length: 18 }, () => ({ green: { lat: 1, lng: 1 } })) })),
   loadDerivedGeometry: jest.fn(async () => undefined),
   mappedHoleCount: () => 18,
-  getHoleGeometry: () => null,
+  getHoleGeometry: () => ({ tee: { lat: 41.25, lng: -73.02 }, green: { lat: 41.253, lng: -73.02 } }),
 }));
 jest.mock('../../services/mapboxImagery', () => ({
   isMapboxConfigured: () => true,
@@ -44,6 +44,9 @@ jest.mock('../../services/golfCourseApi', () => {
 });
 
 import { downloadCourse, _resetDownloadEngineForTests } from '../../services/courseDownloadEngine';
+import { fetchCourseIntelligence } from '../../services/courseIntelligenceService';
+import { prefetchHoles } from '../../services/mapboxImagery';
+import { searchCourses } from '../../services/golfCourseApi';
 import { useDownloadedCoursesStore } from '../../store/downloadedCoursesStore';
 
 describe('course build pipeline: one owner, visible progress, ready means playable', () => {
@@ -80,5 +83,41 @@ describe('course build pipeline: one owner, visible progress, ready means playab
   it('a build that finds no course says why on the card', async () => {
     await downloadCourse({ name: 'Nowhere Links', courseId: 'place:none' });
     expect(useDownloadedCoursesStore.getState().downloading['place:none']?.failed).toMatch(/Nowhere Links/);
+  });
+
+  /** Let background work (the top-up is fire-and-forget) run to completion. */
+  const settle = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); await new Promise((r) => setTimeout(r, 0)); };
+
+  it('a course the nearby pre-load built still gets its brief when the player picks it', async () => {
+    (fetchCourseIntelligence as jest.Mock).mockClear();
+    (searchCourses as jest.Mock).mockResolvedValueOnce([{ id: 'nearY', club_name: 'Grassy Hill', course_name: 'Grassy Hill', location: '' }]);
+    await downloadCourse({ name: 'Grassy Hill', courseId: 'place:abc', paidContent: false });
+    expect(fetchCourseIntelligence).not.toHaveBeenCalled();
+    await downloadCourse({ name: 'Grassy Hill', courseId: 'nearY' });
+    await settle();
+    expect(fetchCourseIntelligence).toHaveBeenCalled();
+  });
+
+  it('picking an owned course re-warms its hole imagery', async () => {
+    useDownloadedCoursesStore.getState().markDownloaded({ courseId: 'owned1', name: 'Owned', holeCount: 18, at: 1, greens: 9 });
+    (prefetchHoles as jest.Mock).mockClear();
+    const r = await downloadCourse({ name: 'Owned', courseId: 'owned1' });
+    await settle();
+    expect(r).toMatchObject({ ok: true, fresh: false });
+    expect(prefetchHoles).toHaveBeenCalled();
+  });
+
+  it('a card that failed to come back is "unavailable", not "not in the database"', async () => {
+    (searchCourses as jest.Mock).mockResolvedValue([{ id: 'gone', club_name: 'Gone', course_name: 'Gone', location: '' }]);
+    const r = await downloadCourse({ name: 'Gone Links', courseId: 'place:gone' });
+    await downloadCourse({ name: 'Gone Links', courseId: 'place:gone' });
+    expect(r).toMatchObject({ ok: false, reason: 'unavailable' });
+    expect((searchCourses as jest.Mock).mock.calls.filter((c) => c[0] === 'Gone Links').length).toBe(2);
+    (searchCourses as jest.Mock).mockResolvedValue([]);
+  });
+
+  it('a speculative build that finds nothing paints no failure on a card nobody tapped', async () => {
+    await downloadCourse({ name: 'Driving Range', courseId: 'place:range', paidContent: false });
+    expect(useDownloadedCoursesStore.getState().downloading['place:range']).toBeUndefined();
   });
 });

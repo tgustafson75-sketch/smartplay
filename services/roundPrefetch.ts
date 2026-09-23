@@ -53,8 +53,8 @@ type PrefetchArgs = {
   /**
    * 2026-09-23 (Tim) — false for SPECULATIVE builds (the Play tab's nearby-course pre-load): map,
    * imagery and offline data only, no paid Claude generations. The About/tips and the web-researched
-   * brief load when the player actually picks the course (Course Detail, the Start Round card, and
-   * round start all fetch them). Defaults to true: every deliberate caller keeps the full chain.
+   * brief load when the player actually picks the course (downloadCourse tops an owned course up on
+   * every deliberate pick; Course Detail reads the content; round start fetches both). Defaults to true: every deliberate caller keeps the full chain.
    */
   paidContent?: boolean;
   /** Called as the build moves through its stages — the course card's live progress. */

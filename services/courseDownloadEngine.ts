@@ -306,7 +306,10 @@ async function resolveCourse(name: string, explicitCourseId?: string | null): Pr
     const first = hits?.[0];
     if (first?.id) {
       const full = await getCourse(String(first.id));
-      if (full) {
+      // The search FOUND the course; its card did not come back (quota, network, nothing cached).
+      // That is an outage, not "not in the database" — which is also what arms the 6h cooldown.
+      if (!full) return 'unavailable';
+      {
         const holes = courseToHoles(full);
         if (holes.length) {
           const fullC = full as { club_name?: string; course_name?: string; rating?: string | number; slope?: string | number };
@@ -373,6 +376,38 @@ export function downloadCourse(input: {
   return run;
 }
 
+/**
+ * 2026-09-23 (triple-check) — an OWNED course the player deliberately picks is topped up: whatever
+ * its first build did not get. A course built by the nearby pre-load has map + imagery but no notes
+ * or brief, and "already downloaded" used to return before anything else ran — so it never got them,
+ * not even on the morning he played it. The same return skipped the per-pick hole-imagery warm, so
+ * tiles a first build missed (or the OS purged) never came back. prefetchRoundData is idempotent on a
+ * built course: geometry is a cache hit, tiles that exist are skipped, content and brief are cached.
+ * Background, once per course per session, no progress published and no failure painted on a card —
+ * the answer to the caller is still the instant, offline-safe "already yours".
+ */
+const toppedUp = new Set<string>();
+function topUpInBackground(input: { name: string; courseId?: string | null; lat?: number | null; lng?: number | null }): void {
+  const key = input.courseId || input.name;
+  if (toppedUp.has(key)) return;
+  toppedUp.add(key);
+  void (async () => {
+    try {
+      const resolved = await resolveCourse(input.name, input.courseId ?? null);
+      if (!resolved || resolved === 'unavailable') { toppedUp.delete(key); return; }
+      await prefetchRoundData({
+        courseId: resolved.courseId,
+        courseName: resolved.courseName,
+        courseLocation: (Number.isFinite(input.lat) && Number.isFinite(input.lng)) ? { lat: input.lat as number, lng: input.lng as number } : null,
+        holes: resolved.holes,
+        rating: resolved.rating ?? null,
+        slope: resolved.slope ?? null,
+        paidContent: true,
+      });
+    } catch { toppedUp.delete(key); }
+  })();
+}
+
 /** Words for a failed download. Both callers used to print the reason CODE ("— unresolved"). */
 export function downloadFailureText(courseName: string, reason: string | undefined): string {
   if (reason === 'unresolved') return `Couldn't find ${courseName} in the course database`;
@@ -382,6 +417,7 @@ export function downloadFailureText(courseName: string, reason: string | undefin
 
 /** Test seam. */
 export function _resetDownloadEngineForTests(): void {
+  toppedUp.clear();
   locatesInFlight.clear();
   downloadsInFlight.clear();
   unresolvedAt.clear();
@@ -419,6 +455,7 @@ async function downloadCourseInner(input: {
     return rec != null && rec.greens === 0;
   };
   if (input.courseId && store.isDownloaded(input.courseId) && !needsGeometry(input.courseId)) {
+    if (input.paidContent !== false) topUpInBackground(input);
     return { ok: true, courseId: input.courseId, fresh: false };
   }
 
@@ -464,6 +501,9 @@ async function downloadCourseInner(input: {
     for (const id of cardIds) if (id !== except) useDownloadedCoursesStore.getState().clearDownloading(id);
   };
   const fail = (reason: string) => {
+    // A speculative build (the nearby pre-load) fails quietly: those are cards the player never
+    // tapped, and a driving range or a quota hit is not a message they asked for.
+    if (input.paidContent === false) { finish(); return; }
     for (const id of cardIds) useDownloadedCoursesStore.getState().markBuildFailed(id, input.name, reason);
   };
   publish(input.name, 0.05, 'card');
@@ -477,6 +517,7 @@ async function downloadCourseInner(input: {
     rememberAlias(courseId, courseName, holes.length,
       useDownloadedCoursesStore.getState().downloaded[courseId]?.greens);
     finish();
+    if (input.paidContent !== false) topUpInBackground(input);
     return { ok: true, courseId, fresh: false };
   }
 

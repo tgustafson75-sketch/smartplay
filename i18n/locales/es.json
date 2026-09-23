@@ -404,7 +404,8 @@
     "mapping": "Mapeando los greens…",
     "imagery": "Guardando vistas de hoyos sin conexión…",
     "notes": "Escribiendo notas del campo…",
-    "ready": "Listo · {{count}} greens mapeados · en Tus campos",
+    "ready_one": "Listo · {{count}} green mapeado · en Tus campos",
+    "ready_other": "Listo · {{count}} greens mapeados · en Tus campos",
     "ready_no_greens": "Listo · aún sin mapa de greens, las yardas son estimadas",
     "ready_unmeasured": "Listo · en Tus campos"
   }
