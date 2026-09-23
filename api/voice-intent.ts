@@ -748,6 +748,10 @@ Confidence guide:
 Reminder of the catch-all rule above: greetings → social_greeting; ANY other non-command utterance → conversational. Both route to ${caddieName}'s brain. Reserve "unknown" strictly for genuinely ambiguous commands that need clarification.`;
 };
 
+/** Warmup prompt. Must name JSON: json_object mode rejects messages that do not (HTTP 400). */
+export const WARMUP_SYSTEM = 'Reply with the JSON object {}.';
+export const WARMUP_USER = 'ping (json)';
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -762,7 +766,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.body?.mode === 'warmup' || req.query?.mode === 'warmup') {
     const warmProvider = providerFromHeaderSafe(req.headers as Record<string, string | string[] | undefined>);
     try {
-      await completeJSON(warmProvider, 'fast', 'ping', [{ role: 'user', content: 'ping' }], { maxTokens: 1 });
+      // 2026-09-23 — the word "json" must appear in the messages or OpenAI's json_object mode answers
+      // 400 — which is what EVERY warmup in the production logs did. The warmup never warmed anything.
+      await completeJSON(warmProvider, 'fast', WARMUP_SYSTEM, [{ role: 'user', content: WARMUP_USER }], { maxTokens: 5 });
       console.log(`[voice-intent] warmup completed (${warmProvider} SDK hot)`);
     } catch (e) {
       console.log('[voice-intent] warmup failed (non-fatal):', e instanceof Error ? e.message : String(e));

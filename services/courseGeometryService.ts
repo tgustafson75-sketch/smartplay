@@ -1257,6 +1257,19 @@ async function fetchCourseGeometryInner(
     // and SmartVision's getHoleGeometry(courseId='local:sunnyvale')
     // would miss the cache forever.
     geo.course_id = courseId;
+    /**
+     * 2026-09-23 — the 08-11 rule ("a failed build never leaves a course with LESS than it had")
+     * covered a non-ok response and not a 200 carrying ZERO greens, which is what Overpass
+     * throttling usually looks like. That answer overwrote the bundled coordinates in memory and the
+     * hole map of a bundled course went blank. Hold the bundled copy in memory only — not on disk —
+     * so the next launch still asks the engine for the real build.
+     */
+    if (mappedHoleCount(geo) === 0 && bundledFallback && mappedHoleCount(bundledFallback) > 0) {
+      console.warn(`[courseGeometry] engine returned 0 greens for ${courseId} — keeping the bundled copy (${mappedHoleCount(bundledFallback)} mapped) for this session`);
+      memCache.set(courseId, bundledFallback);
+      geometryStatus().markCommitted(courseId);
+      return bundledFallback;
+    }
     return await commitGeometry(courseId, geo);
   } catch (e) {
     console.warn('[courseGeometry] fetch exception:', e);

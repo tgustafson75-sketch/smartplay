@@ -284,6 +284,27 @@ out geom;`;
  */
 type OsmHoleWay = { ref: number | null; par: number | null; pts: Loc[] };
 /**
+ * REJECT rather than serve another course's holes — see the note where chooseCoherentHoleWays calls
+ * this. Returns the route unchanged when it matches the card (or there is no card to check), [] when
+ * it misses by more than 25% on average: honest tee/green variance runs under 10%.
+ */
+export function scorecardGate<W extends { ref?: number | null; pts: Loc[] }>(route: W[], cardYards: number[], label: string): W[] {
+  const checkable = route.filter(w => (cardYards[(w.ref ?? 0) - 1] ?? 0) > 50);
+  if (checkable.length >= 3) {
+    const meanErr = checkable.reduce((acc, w) => {
+      const card = cardYards[(w.ref ?? 0) - 1];
+      return acc + Math.abs(haversineYards(w.pts[0], w.pts[w.pts.length - 1]) - card) / card;
+    }, 0) / checkable.length;
+    if (meanErr > 0.25) {
+      console.log(`[course-geometry] hole-ways REJECTED (${label}) — route misses the scorecard by ${(meanErr * 100).toFixed(0)}% over ${checkable.length} holes; these belong to another course on this property`);
+      return [];
+    }
+    console.log(`[course-geometry] hole-way route (${label}) matches the scorecard to ${(meanErr * 100).toFixed(1)}%`);
+  }
+  return route;
+}
+
+/**
  * 2026-08-12 (Tim's QA — "make sure every course engine renders correctly") — pick ONE COURSE.
  *
  * The old dedup kept the LONGEST way per hole number. That is right for the case it was written for
@@ -311,7 +332,7 @@ type OsmHoleWay = { ref: number | null; par: number | null; pts: Loc[] };
  * being exact rather than greedy matters — one greedy mistake at hole 1 drags the whole route onto
  * the wrong course.
  */
-function chooseCoherentHoleWays(
+export function chooseCoherentHoleWays(
   holeWays: OsmHoleWay[],
   centroid: Loc,
   holeCount: number,
@@ -346,7 +367,14 @@ function chooseCoherentHoleWays(
   const refs = [...byRef.keys()].sort((a, b) => a - b);
   if (refs.length === 0) return [];
   const ambiguous = refs.filter(r => (byRef.get(r) ?? []).length > 1).length;
-  if (ambiguous === 0) return refs.map(r => byRef.get(r)![0]);
+  /**
+   * 2026-09-23 — the unambiguous route goes through the SAME scorecard gate. It used to return here,
+   * before the gate below: at a property where OSM maps only the OTHER course (Stadium mapped, Dye's
+   * Valley not), every ref has one candidate, nothing is "ambiguous", and that course's holes were
+   * served unchecked — measured live at TPC Dye's Valley, 75% off its card on average. The gate's own
+   * comment names this exact case (Doral); it just could not see it without competing candidates.
+   */
+  if (ambiguous === 0) return scorecardGate(refs.map(r => byRef.get(r)![0]), cardYards, 'unambiguous');
 
   // Walking between consecutive holes should cost tens of yards. Anything past this is a transfer to
   // another course; cap it so one unavoidable long walk can't dominate the whole route's score.
@@ -398,18 +426,7 @@ function chooseCoherentHoleWays(
    * genuinely different course. Only applied when we actually HAVE a card to check against —
    * absence of a scorecard is not evidence of a mismatch.
    */
-  const checkable = winner.path.filter(w => (cardYards[(w.ref ?? 0) - 1] ?? 0) > 50);
-  if (checkable.length >= 3) {
-    const meanErr = checkable.reduce((acc, w) => {
-      const card = cardYards[(w.ref ?? 0) - 1];
-      return acc + Math.abs(haversineYards(w.pts[0], w.pts[w.pts.length - 1]) - card) / card;
-    }, 0) / checkable.length;
-    if (meanErr > 0.25) {
-      console.log(`[course-geometry] hole-ways REJECTED — best route misses the scorecard by ${(meanErr * 100).toFixed(0)}% over ${checkable.length} holes; these belong to another course on this property`);
-      return [];
-    }
-    console.log(`[course-geometry] hole-way route matches the scorecard to ${(meanErr * 100).toFixed(1)}%`);
-  }
+  if (scorecardGate(winner.path, cardYards, 'disambiguated').length === 0) return [];
   console.log(`[course-geometry] hole-way disambiguation: ${refs.length} refs, ${ambiguous} ambiguous → picked one coherent route (cost ${Math.round(winner.cost)}y)`);
   return winner.path;
 }

@@ -68,8 +68,33 @@ describe('the engine picks ONE course, not the longest hole from each', () => {
     expect(api).toContain('const winner = prevRow.reduce((a, b) => (b.cost < a.cost ? b : a));');
   });
 
-  it('short-circuits when nothing is ambiguous — no behaviour change on ordinary courses', () => {
-    expect(api).toContain('if (ambiguous === 0) return refs.map(r => byRef.get(r)![0]);');
+  /**
+   * 2026-09-23 — this asserted the short-circuit's exact text, and the short-circuit was the bug: it
+   * returned BEFORE the scorecard gate, so a property where OSM maps only the other course served
+   * that course's holes unchecked (TPC Dye's Valley, measured 75% off its card). Behaviour now, on
+   * the real function: an unambiguous route still passes untouched when it matches or when there is
+   * no card — and is vetoed when it is someone else's course.
+   */
+  describe('an unambiguous route goes through the scorecard gate too', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { chooseCoherentHoleWays } = require('../../api/course-geometry') as typeof import('../../api/course-geometry');
+    const centroid = { lat: 30.2, lng: -81.39 };
+    // 6 holes whose tee-to-green is ~400y each (0.0036 deg lat ≈ 400y).
+    const ways = Array.from({ length: 6 }, (_, i) => ({
+      ref: i + 1, par: 4,
+      pts: [{ lat: 30.2 + i * 0.01, lng: -81.39 }, { lat: 30.2 + i * 0.01 + 0.0036, lng: -81.39 }],
+    }));
+    const len = (w: { pts: { lat: number; lng: number }[] }) => w.pts.length;
+
+    it('keeps it when it matches the card', () => {
+      expect(chooseCoherentHoleWays(ways as never, centroid, 6, len as never, [400, 400, 400, 400, 400, 400])).toHaveLength(6);
+    });
+    it('keeps it when there is no card to check against', () => {
+      expect(chooseCoherentHoleWays(ways as never, centroid, 6, len as never, [])).toHaveLength(6);
+    });
+    it('REJECTS it when it is another course on the property', () => {
+      expect(chooseCoherentHoleWays(ways as never, centroid, 6, len as never, [150, 160, 1600, 170, 140, 1500])).toHaveLength(0);
+    });
   });
 });
 
