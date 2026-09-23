@@ -111,6 +111,14 @@ export const BETA_BADGE = 'BETA';
  * very first render — the same hydration trap that has bitten this project before.
  */
 export function isOwnerBuild(): boolean {
+  /**
+   * 2026-09-23 — on the SERVER there is no owner to find. api/kevin reaches this through the app
+   * catalog, and the require below pulled the whole client store graph into the brain's function —
+   * down to @sentry/react-native, which Node cannot load ("Failed to load the ES module" in the
+   * production logs) — on every cold start, to return false in the catch. VERCEL is set by the
+   * platform on every function and is never inlined into the app bundle.
+   */
+  if (typeof process !== 'undefined' && process.env?.VERCEL) return false;
   try {
     const prof = require('../store/playerProfileStore') as typeof import('../store/playerProfileStore');
     return prof.isOwnerEmail(prof.usePlayerProfileStore.getState().email);
