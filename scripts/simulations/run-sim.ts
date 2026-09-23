@@ -5327,7 +5327,10 @@ check('Round start: a non-listed API course reports GPS mapping honestly (no sil
        */
       /const mappedGreens = mappedHoleCount\(geom\);/.test(c) &&
       !/hasMapping = !!geom && geom\.holes\.length > 0/.test(c) &&
-      /couldn't pull full GPS mapping/.test(c)
+      // 2026-09-23 — the wording moved to services/roundStartLines (noMapLine), which also knows
+      // whether the round has any holes to fall back on.
+      /setCaddieResponse\(noMapLine\(courseLabel, startedWithoutHoles\)\)/.test(c) &&
+      /couldn't pull full GPS mapping/.test(read('services/roundStartLines.ts'))
     );
   })(),
   'starting a round on a course resolved via golfcourseapi tells the player when GPS mapping lands — counted in GREENS, not hole rows — or that it could not be pulled; never blank distances with no explanation, and never a live-distance claim over a course with no greens');
@@ -18061,9 +18064,44 @@ check(
       detailStart.indexOf('isRoundActive') < detailStart.indexOf('setPendingStartCourse'),
     'this screen is reachable mid-round; without the gate one tap filed the live round as a degraded save and restarted at hole 1');
 
+  const caddie = readCode('app/(tabs)/caddie.tsx');
+  check('ROUND START: "scorecard yardages" is only promised when the round has holes',
+    !/scorecard yardages/i.test(caddie) && (caddie.match(/setCaddieResponse\(noMapLine\(courseLabel, startedWithoutHoles\)\)/g) ?? []).length === 2,
+    'both no-map lines promised scorecard yardages unconditionally, including on a round that started with zero holes');
+
+  check('COURSE DETAIL: a bundled course is enriched only from a VERIFIED match, never the first name hit',
+    /void resolveLocalCourseId\(slug\)\.then\(/.test(detail) && !/searchCourses\(friendly\)/.test(detail),
+    'the first hit for "Westlake Country Club" was a different Westlake, and its yardages replaced the real bundled holes');
+
+  const sf = readCode('app/smartfinder.tsx');
+  const timerBody = /const timer = setTimeout\(\(\) => \{([\s\S]*?)\}, 300\);/.exec(sf)?.[1] ?? '';
+  check('SMARTFINDER: the open callout is marked spoken only when it is spoken',
+    /calloutSpokenRef\.current = true;/.test(timerBody) && (sf.match(/calloutSpokenRef\.current = true;/g) ?? []).length === 1,
+    'set before the 300ms timer, any weather/elevation update inside it cancelled the timer and the ref already said done');
+  check('SMARTFINDER: a tap target does not survive a hole change',
+    /<TargetView key=\{geometry\?\.hole_number \?\? 'none'\}/.test(sf),
+    'TargetView holds its tap in local state; unkeyed, hole N\'s circle and yardage were drawn over hole N+1');
+
   check('START ROUND CARD: the card never waits on a paid generation it does not render',
     /void fetchCourseContent\(/.test(card) && !/await fetchCourseContent\(/.test(card),
     'the hero spinner and hole list sat behind the whole course-content generation on every new course');
+}
+
+// 2026-09-23 — the overage on the Claude bill: a turn the player never hears is still a turn paid for.
+{
+  const kevin = readCode('api/kevin.ts');
+  const voice = readCode('hooks/useVoiceCaddie.ts');
+  const budget = Number((/export const BRAIN_TURN_BUDGET_MS = ([\d_]+);/.exec(kevin)?.[1] ?? 'NaN').replace(/_/g, ''));
+  const client = Number((/export const BRAIN_FETCH_TIMEOUT_MS = ([\d_]+);/.exec(readCode('constants/voiceTimeouts.ts'))?.[1] ?? 'NaN').replace(/_/g, ''));
+  check('BRAIN: every model round of a turn finishes inside the phone\'s window',
+    budget > 0 && budget <= client - 4_000 && /deadlineAt = startedLoop \+ BRAIN_TURN_BUDGET_MS;/.test(kevin) &&
+      /\{ \.\.\.loopOpts, deadlineAt \}/.test(kevin),
+    `turn budget ${budget}ms must sit at least 4s under the ${client}ms client abort and reach both attempts — three 14s rounds ran 42s against a 30s phone`);
+  const retry = voice.slice(voice.indexOf('const ourTimeout ='), voice.indexOf('const retryRes = await fetch('));
+  check('BRAIN: the phone never re-sends a turn it only stopped listening to',
+    /const ourTimeout = err instanceof Error && \(err\.name === 'AbortError' \|\| err\.name === 'TimeoutError'\);/.test(voice) &&
+      /if \(!ourTimeout\) try \{/.test(retry),
+    'aborting the fetch does not stop /api/kevin; a retry after our own timeout bought the same turn twice');
 }
 
 const total = results.length;

@@ -124,6 +124,7 @@ import { getApiBaseUrl } from '../../services/apiBase';
 import { buildRoundEndSummary } from '../../services/roundEndSummary';
 import { holePar, holeData as resolvedHoleData } from '../../services/smartFinderService';
 import { useTranslation } from 'react-i18next';
+import { noMapLine } from '../../services/roundStartLines';
 
 // 2026-08-01 (tester — "first 3 uses: a skippable icon-by-icon highlight of the tools + how to talk").
 // The caddie tab is the home surface, so the first-run tour lives here. Full guided pass: meet the
@@ -3174,13 +3175,13 @@ export default function CaddieTab() {
             if (hasMapping && startedWithoutHoles) {
               setCaddieResponse(`Got the map for ${courseLabel} — GPS distances are live now.`);
             } else if (!hasMapping) {
-              setCaddieResponse(`Heads up — I couldn't pull full GPS mapping for ${courseLabel}. You've got scorecard yardages, and I'll flag any distance I can't confirm rather than guess.`);
+              setCaddieResponse(noMapLine(courseLabel, startedWithoutHoles));
             }
           }
         } catch (err) {
           console.log('[caddie] geometry fetch failed (non-fatal):', err);
           if (isApiCourse) {
-            setCaddieResponse(`I couldn't load the GPS map for ${courseLabel} right now — scorecard yardages are still good, and I'll keep distances honest.`);
+            setCaddieResponse(noMapLine(courseLabel, startedWithoutHoles));
           }
         }
       })();

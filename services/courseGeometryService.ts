@@ -157,7 +157,7 @@ async function writeResolvedId(localSlug: string, upstreamId: string): Promise<v
  * Returns null when no hint exists or the search yields no usable
  * match — caller should fall back to centroid imagery in that case.
  */
-async function resolveLocalCourseId(localSlug: string): Promise<string | null> {
+export async function resolveLocalCourseId(localSlug: string): Promise<string | null> {
   const cached = await readResolvedId(localSlug);
   if (cached) return cached;
 

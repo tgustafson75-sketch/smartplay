@@ -165,3 +165,12 @@ describe('course search errors are words', () => {
     expect(gca.searchErrorMessage(429, 'rate_limited')).not.toMatch(/429|Upstream/);
   });
 });
+
+describe('round start: the caddie only claims yardages the round actually has', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { noMapLine } = require('../../services/roundStartLines') as typeof import('../../services/roundStartLines');
+  it('a round that started with no holes is not told it has scorecard yardages', () => {
+    expect(noMapLine('Grassy Hill', true)).not.toMatch(/scorecard yardages/i);
+    expect(noMapLine('Grassy Hill', false)).toMatch(/scorecard yardages/i);
+  });
+});

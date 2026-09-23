@@ -119,7 +119,10 @@ describe('live distances are claimed only when greens exist', () => {
   });
 
   it('the honest branch is still reachable', () => {
+    // 2026-09-23 — the wording moved to services/roundStartLines.noMapLine, which also knows whether
+    // the round has holes to fall back on; caddie.tsx must still route the no-map branch through it.
     const src = read('app/(tabs)/caddie.tsx');
-    expect(src).toMatch(/couldn't pull full GPS mapping/);
+    expect(src).toMatch(/} else if \(!hasMapping\) \{\s*setCaddieResponse\(noMapLine\(courseLabel, startedWithoutHoles\)\);/);
+    expect(read('services/roundStartLines.ts')).toMatch(/couldn't pull full GPS mapping/);
   });
 });

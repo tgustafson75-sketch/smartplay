@@ -11,7 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import CourseDetailBanner from '../../components/course/CourseDetailBanner';
 import HoleGuide from '../../components/course/HoleGuide';
 import HolePhotosGrid from '../../components/course/HolePhotosGrid';
-import { getCourse, searchCourses } from '../../services/golfCourseApi';
+import { getCourse } from '../../services/golfCourseApi';
 // 2026-05-16 — pull real hole-by-hole data (par, yardage) from the
 // bundled local-courses catalog so the stub built for a local: course
 // reflects the actual layout instead of a default 18-hole / par-4 /
@@ -20,7 +20,7 @@ import { getCourse, searchCourses } from '../../services/golfCourseApi';
 import { getCourse as getLocalCourseData } from '../../data/courses';
 import { fetchCourseContent, getCachedContent, CONTENT_CLIENT_TIMEOUT_MS, type CourseContent } from '../../services/courseContentService';
 import { holeNoteFromStats } from '../../services/holeNote';
-import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
+import { fetchCourseGeometry, getHoleGeometry, resolveLocalCourseId } from '../../services/courseGeometryService';
 import { useGeometryStatusStore } from '../../store/geometryStatusStore';
 import { useRoundStore } from '../../store/roundStore';
 import { useSettingsStore, getEffectiveSimpleBriefing } from '../../store/settingsStore';
@@ -234,9 +234,15 @@ export default function CourseDetailScreen() {
           // (bundled images need no API geometry; setCourse above already re-runs the photo memo)
         }
         // Background enrichment — don't await, don't block UI on it.
-        void searchCourses(friendly).then(found => {
+        /**
+         * 2026-09-23 — through the geometry service's VERIFIED resolver (a known id, then name +
+         * expected city), not the first hit of a name search. `Westlake Country Club` matched a
+         * different Westlake and this replaced a bundled course's real holes with its yardages,
+         * confidently. A bundled course with no known mapping keeps the holes we ship.
+         */
+        void resolveLocalCourseId(slug).then(apiId => {
           if (cancelled) return;
-          const real = found.find(r => !r._error);
+          const real = apiId ? { id: apiId } : null;
           if (!real?.id) return;
           void getCourse(real.id).then(c => {
             // 2026-06-16 (Tim — town flapped Temecula→Aguanga→Temecula) — for a

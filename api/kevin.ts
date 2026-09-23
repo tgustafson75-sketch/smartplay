@@ -199,6 +199,10 @@ const TERSE_ACKS: Record<string, string> = {
   navigate:              'On my way.',
 };
 
+/** Whole-turn budget for the brain's model rounds. Below the client's 30s warm abort, with margin
+ *  for the prompt build, TTS and the network — see runAgenticLoop's deadlineAt. */
+export const BRAIN_TURN_BUDGET_MS = 24_000;
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return; // CORS + OPTIONS preflight for the web-lite
   if (req.method !== 'POST') {
@@ -2705,7 +2709,12 @@ ${kbPrefix ? `${kbPrefix}\n\n` : ''}${onCourseContextBlock}${roundFactsPrefix}${
           // was using the fixed 14s cap even with little budget left, so worst case
           // (~7s fail + 300ms + 14s) ran past the client's 20s abort = wasted lambda.
           const remainMs = 19_000 - (Date.now() - startedLoop);
-          const attemptOpts = attempt === 1 ? loopOpts : { ...loopOpts, timeoutMs: Math.max(3_000, Math.min(loopOpts.timeoutMs, remainMs - 1_000)) };
+          // 2026-09-23 — deadlineAt: one budget for the whole TURN (every round, both attempts), set
+          // inside the phone's 30s warm window so no paid round finishes after the player hung up.
+          const deadlineAt = startedLoop + BRAIN_TURN_BUDGET_MS;
+          const attemptOpts = attempt === 1
+            ? { ...loopOpts, deadlineAt }
+            : { ...loopOpts, deadlineAt, timeoutMs: Math.max(3_000, Math.min(loopOpts.timeoutMs, remainMs - 1_000)) };
           loopResult = await runAgenticLoop(provider, aiTier, systemPromptWithKB, effectiveUserMessage, images, AI_TOOLS, toolDispatch, attemptOpts);
           if (attempt > 1) console.log(`[kevin] ${provider} succeeded on retry`);
           break;

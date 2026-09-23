@@ -1192,8 +1192,15 @@ export const useVoiceCaddie = ({
        * generic, and then the tone of the voice changes a little bit, and the information's more
        * accurate." A retry is a second attempt at the SAME question; it is not a reason to ask a
        * lesser caddie. [[no-half-fixes-enforce-every-surface]]
+       *
+       * 2026-09-23 — BUT NOT AFTER OUR OWN TIMEOUT. Aborting the fetch hangs up on the server; it
+       * does not stop it. The first turn is still running on /api/kevin and is billed in full, so a
+       * retry after a timeout bought the same Sonnet turn twice and made the player wait a second
+       * full window. A timeout goes straight to the on-device fallback below; the retry still covers
+       * a fast failure (a 5xx, a dropped socket).
        */
-      try {
+      const ourTimeout = err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError');
+      if (!ourTimeout) try {
         const rc = new AbortController();
         const rt = setTimeout(() => rc.abort(), brainTimeoutMs());
         const retryRes = await fetch(apiUrl + '/api/kevin', {

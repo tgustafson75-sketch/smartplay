@@ -332,7 +332,6 @@ export default function SmartFinder() {
     // out of sync — Tim was hearing "Middle of green, eighty thousand
     // yards"), skip the callout entirely instead of speaking garbage.
     if (middle > 600 || middle < 30) return;
-    calloutSpokenRef.current = true;
     /**
      * 2026-09-18 — SPOKEN IN THEIR UNIT. The sanity gate above is deliberately still in YARDS
      * (`middle > 600`): it is a check on the geometry, not on the player's preference, and the
@@ -368,6 +367,10 @@ export default function SmartFinder() {
     // that user-initiated speech bypasses L1's scripted-speech gate).
     const text = parts.join(' ');
     const timer = setTimeout(() => {
+      // 2026-09-23 — marked spoken HERE, when it is. Set before the timer, any of the three state
+      // updates useCurrentWeather makes while loading re-ran this effect inside the 300ms, the
+      // cleanup cleared the timer, and the ref already said "done": no callout that visit.
+      calloutSpokenRef.current = true;
       void speak(text, voiceGender, language, apiUrl, { userInitiated: true }).catch((e) => {
         console.log('[smartfinder] open callout speak failed', e);
       });
@@ -3018,7 +3021,9 @@ function MapView({
       </View>
     );
   }
-  return <TargetView geometry={geometry} width={width} />;
+  // 2026-09-23 — keyed by hole: TargetView's tap target is local state, and without a key it
+  // survived Prev/Next, drawing hole N's circle and yardage over hole N+1.
+  return <TargetView key={geometry?.hole_number ?? 'none'} geometry={geometry} width={width} />;
 }
 
 /**

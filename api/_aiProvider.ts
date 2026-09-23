@@ -617,7 +617,7 @@ export async function runAgenticLoop(
   images: AiImageInput[],
   tools: AiToolDef[],
   onToolCall: (name: string, input: Record<string, unknown>) => Promise<string>,
-  opts: CompleteOpts & { maxRounds?: number; continuationTools?: string[] } = {},
+  opts: CompleteOpts & { maxRounds?: number; continuationTools?: string[]; deadlineAt?: number } = {},
 ): Promise<AgenticLoopResult> {
   if (provider === 'openai') {
     return _openaiAgenticLoop(tier, system, userMessage, images, tools, onToolCall, opts);
@@ -711,6 +711,9 @@ async function _openaiAgenticLoop(
   return { text: text.trim(), provider: 'openai', rounds };
 }
 
+/** Below this, a model round cannot usefully finish; don't start one. */
+const MIN_ROUND_MS = 2_500;
+
 async function _anthropicAgenticLoop(
   tier: AiTier,
   system: string,
@@ -718,9 +721,9 @@ async function _anthropicAgenticLoop(
   images: AiImageInput[],
   tools: AiToolDef[],
   onToolCall: (name: string, input: Record<string, unknown>) => Promise<string>,
-  opts: CompleteOpts & { maxRounds?: number; continuationTools?: string[]; terseAckTools?: string[] },
+  opts: CompleteOpts & { maxRounds?: number; continuationTools?: string[]; terseAckTools?: string[]; deadlineAt?: number },
 ): Promise<AgenticLoopResult> {
-  const { maxTokens = 1024, temperature = 0.7, maxRounds = 3, continuationTools, terseAckTools, timeoutMs } = opts;
+  const { maxTokens = 1024, temperature = 0.7, maxRounds = 3, continuationTools, terseAckTools, timeoutMs, deadlineAt } = opts;
   const model = MODELS['anthropic'][tier];
   const ant = getAnthropic(timeoutMs);
 
@@ -804,6 +807,17 @@ async function _anthropicAgenticLoop(
   const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
   for (let round = 0; round < maxRounds; round++) {
+    /**
+     * 2026-09-23 — a TURN budget, not only a per-round one. Three rounds at a 14s hang guard is 42s,
+     * and a warm phone hangs up at 30s: the server kept going, the tokens were billed, and the answer
+     * went to nobody. With `deadlineAt` no round starts that cannot finish before it, and each
+     * request's own timeout is clipped to what is left.
+     */
+    const left = deadlineAt ? deadlineAt - Date.now() : Infinity;
+    if (round > 0 && left < MIN_ROUND_MS) {
+      console.warn(`[aiProvider] turn deadline — stopping before round ${round + 1} (${Math.round(left)}ms left)`);
+      break;
+    }
     rounds = round + 1;
     const res = await ant.messages.create({
       model,
@@ -812,7 +826,7 @@ async function _anthropicAgenticLoop(
       system: cachedSystem,
       tools: antTools,
       messages: msgs,
-    });
+    }, Number.isFinite(left) ? { timeout: Math.max(MIN_ROUND_MS, Math.min(timeoutMs ?? left, left)) } : undefined);
 
     usage.input += res.usage?.input_tokens ?? 0;
     usage.output += res.usage?.output_tokens ?? 0;
