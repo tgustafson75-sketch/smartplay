@@ -8,6 +8,20 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
+> ### ⚠️ LATEST — 2026-09-23. COURSE ENGINE + CLAUDE-COST FIX PUSHED (`6ac60296`, `d7a64f63`). CLIENT HALF NEEDS AN OTA.
+>
+> Server half is live with the push (course-content on Haiku with a budget that fits, proxy CDN caching,
+> Course Cloud refuses 0,0, brain 24s whole-turn deadline). Client half — dedupe/cooldowns, Play tab pick
+> races and first-tap, goToTab everywhere, no brain re-send after timeout — is JS-only and waits on Tim's
+> OTA call. Nothing verified on device yet (PATH 2 / 4 / 5 touched). Detail: SPRINT-LOG Day 127.
+>
+> **Root cause still open (Tim: "we haven't fixed the universal truth around course building"):** no single
+> owner builds a course — seven surfaces each run their own search/detail/geometry/content. The fix is one
+> course-build pipeline with observable progress (also what Tim's progress-card idea sits on). Awaiting his yes.
+>
+> **Never poll api.smartplaycaddie.com in a loop from this Mac** — it trips a per-IP Vercel challenge that
+> also cuts off Tim's phone (happened 21:28-21:38 UTC 09-23).
+
 > ### ⚠️ LATEST — 2026-09-21. 1.0.1 (29) IS IN REVIEW ON BOTH STORES. The watch app shipped too.
 >
 > **Play:** `production` versionCode 29, and `wear:production` versionCode 1030 — the Wear artifact

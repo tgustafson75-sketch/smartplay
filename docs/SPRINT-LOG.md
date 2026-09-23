@@ -5017,3 +5017,44 @@ MediaPlayer plays the same mp3s, and that is Tier A/B, not C.
   same two tones. Not touched today beyond wiring both.
 
 Health: **tsc 0 · lint 0 errors / 4 pre-existing warnings · jest 455 suites / 5390 tests · sim 1058/1058**.
+
+## Day 127 — 2026-09-23 — the course engine stops paying twice, and stops failing where it paid
+
+**Trigger:** tester feedback "a little glitchy / some courses won't load", plus a Claude overage bill.
+
+**Measured in production (deduplicated Vercel logs — the CLI repeats rows ~60x, dedupe by `id`):**
+- course-content failed **17/17** in the week (and 63/63 on 09-03): 12s attempts cannot fit a 4500-token
+  generation. Every miss billed, nothing cached, every open re-bought it.
+- One course open: course-locate x2 in the same second, ~9 golfcourseapi searches, 7 content calls in 11s.
+- golfcourseapi key hit "daily usage limit exceeded" at 20:44 UTC (my sweep + curls tipped it; Tim then
+  upgraded the plan). Sentry API still 403.
+
+**Shipped:** `6ac60296` (course engine) and `d7a64f63` (brain turn budget + four honesty fixes). Server half
+deploys with the push; client half needs an OTA (JS-only — no native, app.json or package.json touched).
+- course-content → Haiku 4.5 (Tim's call), one 50s attempt, 60s function; client dedupe + 10-min failure
+  cooldown; persona-switch clear fixed (wrong key prefix).
+- course-proxy CDN Cache-Control on 200s; quota named `course_db_daily_limit`; player sees words, not 429.
+- Course Cloud refuses 0,0 (Pebble served tees at 0,0 on 12-18).
+- downloadCourse: dedupe, explicit API id loads by id (Bethpage Black ≠ Yellow), unresolved places
+  remembered 6h, "unavailable" ≠ "unresolved"; locateNearbyCourses joins concurrent lookups.
+- Geometry re-asks + zero-green retry bypass the empty-build cooldown (they never reached the network).
+- Play tab: first tap opens a result, picks sequenced + Start disabled while loading, cleared box cancels
+  the search, City/State field in the gutter. CoursePicker sequenced. Course Detail Start Round gated on a
+  live round and enriched only from a verified match. Start Round card no longer awaits content.
+- All tab jumps from stacked screens via goToTab (replace stacked a second navigator on every round start).
+- Brain: 24s whole-turn deadline in the Anthropic loop; phone no longer re-sends a turn after its own
+  timeout. Round start no longer promises scorecard yardages on a hole-less round. SmartFinder callout +
+  TargetView key.
+
+**Gates:** every new guard break-tested against the pre-fix tree (16 sim checks + ~20 jest assertions red
+there). tsc clean, jest 5411/5411, sim 1073/1073, lint at the 4-warning baseline.
+
+**Incident (mine):** a 10s curl poll to watch the deploy made Vercel challenge the home IP 21:28-21:38 UTC
+(403 `x-vercel-mitigated: challenge`, scope confirmed via the firewall events API — one IP, no anomalies).
+Tim's phone on that Wi-Fi was cut off. Memory: never-poll-production-from-home-ip.
+
+**Verified on device:** nothing yet. PATH 2 ROUND + PATH 5 GPS + PATH 4 VOICE touched.
+
+**Open / for Tim (binary):** OTA the client half; one course-build pipeline (the root fix); stop paid
+content/intel for unpicked nearby courses (his progress-card idea); Gemini image model shuts 2026-10-02;
+smartmanage Next.js critical advisory; Dependabot alerts off.
