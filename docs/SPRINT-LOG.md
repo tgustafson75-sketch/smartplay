@@ -5065,3 +5065,15 @@ OTA `a757346d` published to production. Live-verified: proxy CDN HIT on repeat s
 19s with 18/18 notes + descriptions; image-edit 200 via gemini. Brain spend measured: 7 turns / ~$0.53 in 24h —
 the app cannot explain a Claude overage; Claude Code usage is the likelier source (Anthropic console settles it).
 Tim approved: one course-build pipeline with a live progress card — plan next.
+
+**Evening:** `d9dabcfb` — ONE course-build pipeline (downloadCourse) with live per-card progress
+(CourseBuildProgress on near-you rows, search rows, selected card; "Ready · N greens mapped · in Your
+courses"); ready = map + imagery, paid notes continue behind; getCourse joins in-flight requests.
+`a7423a69` — scorecard veto now covers the UNAMBIGUOUS hole-way route (TPC Dye's Valley served Stadium's
+holes 75% off card); zero-green 200 no longer wipes bundled coords; voice-intent warmup 400'd on every
+launch (json_object needs "json"). `0cbffd4b` — the brain no longer loads the client graph for isOwnerBuild.
+From Tim's pasted logs, checked and sound: /api/voice bursts = speakChunked long reads; EMPTY transcript
+channels=0 = swing clip with no audio track. CI green today despite the Node 20 notice.
+**OTA pending** for the pipeline UI + zero-green fix (server halves are live).
+**Still open:** "voice speak_catch: Network request failed" Sentry feedback from 3 installs (one iPhone on
+/permissions, 1.0.1+29) — Sentry API 403, so only tags are readable; needs the event body.

@@ -15,7 +15,8 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 > races and first-tap, goToTab everywhere, no brain re-send after timeout — is JS-only and waits on Tim's
 > OTA call — now published (group a757346d). Verified LIVE: proxy CDN HIT, course-content 200 in 19s on
 > Haiku with all 18 holes, portraits on gemini-3.1-flash-image. Nothing verified on device yet (PATH 2/4/5).
-> Next: plan + build the one course-build pipeline (Tim said yes). Detail: SPRINT-LOG Day 127.
+> Pipeline BUILT (`d9dabcfb`) + scorecard veto fix (`a7423a69`) + brain cold-start fix (`0cbffd4b`);
+> client half awaits an OTA. Detail: SPRINT-LOG Day 127.
 >
 > **Root cause still open (Tim: "we haven't fixed the universal truth around course building"):** no single
 > owner builds a course — seven surfaces each run their own search/detail/geometry/content. The fix is one
