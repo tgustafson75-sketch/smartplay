@@ -31,6 +31,7 @@ import { activateMediaSession, deactivateMediaSession } from '../../services/med
 import { practiceLog } from '../../services/practiceTelemetry';
 import { getApiBaseUrl } from '../../services/apiBase';
 import { useTranslation } from 'react-i18next';
+import { goToTab } from '../../services/safeBack';
 // 2026-07-24 (full-app audit) — session ids whose summary has already credited points/relationship,
 // so a remount (e.g. re-triggered by the voice end_session intent) can't double-award.
 const creditedCageSummaries = new Set<string>();
@@ -499,7 +500,7 @@ export default function CageSummary() {
 
         <TouchableOpacity
           style={styles.doneBtn}
-          onPress={() => router.replace('/(tabs)/caddie' as never)}
+          onPress={() => goToTab('caddie')}
         >
           <Text style={styles.doneBtnText}>{t('practice_session_summary.cage_summary.back_to_kevin')}</Text>
         </TouchableOpacity>

@@ -630,7 +630,7 @@
       "pin_cell": "Pin {{depth}} {{side}}"
     },
     "placeholder": {
-      "city_state_optional_narrows_the": "City, State (optional) — narrows the search"
+      "city_state_optional_narrows_the": "City, State (optional)"
     },
     "walking": "Walking",
     "cart": "Cart",

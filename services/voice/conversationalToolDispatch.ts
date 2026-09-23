@@ -544,10 +544,10 @@ function dispatchOne(a: AnyAction): void {
         .then((eng) => eng.downloadCourse({
           name: courseName,
           courseId: typeof a.course_id === 'string' && a.course_id.trim() ? a.course_id.trim() : null,
-        }))
-        .then((r) => {
+        }).then((r) => ({ r, eng })))
+        .then(({ r, eng }) => {
           if (r.ok) toast(r.fresh ? `\u2705 ${courseName} downloaded` : `${courseName} was already in your engine`);
-          else toast(`Couldn't pull ${courseName} in${r.reason ? ` \u2014 ${r.reason}` : ''}`);
+          else toast(eng.downloadFailureText(courseName, r.reason));
         })
         .catch((e) => {
           console.log('[download_course] failed (non-fatal):', e);

@@ -8,7 +8,7 @@
  *   SPEAKING  (audio dur)   avatar pulses subtly, caption fades in
  *   TRANSITIONING (400ms)   avatar shrinks + translates to top-left badge
  *                           position; caption fades out
- *   COMPLETE                router.replace → /(tabs)/caddie
+ *   COMPLETE                goToTab('caddie')
  *
  * Tap anywhere to skip immediately into TRANSITIONING.
  *
@@ -25,7 +25,6 @@ import {
   View, StyleSheet, Animated, Image, TouchableWithoutFeedback,
   useWindowDimensions, AccessibilityInfo, Easing,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Asset } from 'expo-asset';
 import { Video, ResizeMode } from 'expo-av';
@@ -50,6 +49,7 @@ import { getGreetingAssetForPersona } from '../services/kevinGreetingManifest';
 import { getCaddieClip } from '../services/getCaddieClip';
 import { getApiBaseUrl } from '../services/apiBase';
 import { useTranslation } from 'react-i18next';
+import { goToTab } from '../services/safeBack';
 
 // 2026-06-03 — Greeting-complete signal exported for future consumers.
 // Resolves when ANY greeting playback path sets
@@ -92,7 +92,6 @@ const ENTER_DURATION_MS = 300;
 
 export default function GreetingScreen() {
   const { t } = useTranslation();
-  const router = useRouter();
   const _insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const _voiceGender = useSettingsStore(s => s.voiceGender);
@@ -260,8 +259,8 @@ export default function GreetingScreen() {
   const goToCaddie = useCallback(() => {
     if (completedRef.current) return;
     completedRef.current = true;
-    router.replace('/(tabs)/caddie' as never);
-  }, [router]);
+    goToTab('caddie');
+  }, []);
 
   const startTransition = useCallback(() => {
     if (phase === 'TRANSITIONING' || phase === 'COMPLETE') return;

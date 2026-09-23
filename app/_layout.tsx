@@ -109,6 +109,7 @@ import { ErrorBoundary } from '../components/ErrorBoundary';
 import { devLog } from '../services/devLog';
 import { genderForPersona } from '../services/caddieGender';
 import { useTranslation } from 'react-i18next';
+import { goToTab } from '../services/safeBack';
 
 /**
  * 2026-09-01 — the app layer owns the brain, so it is what answers a store's request for a line.
@@ -304,7 +305,7 @@ function AppNavigator() {
     if (!pathname) return;
     if (!DEBUG_ROUTES.has(pathname)) return;
     if (__DEV__ || isOwnerEmail(ownerEmail)) return;
-    try { router.replace('/(tabs)/caddie' as never); } catch (e) {
+    try { goToTab('caddie'); } catch (e) {
       console.log('[debug-gate] redirect failed', e);
     }
   }, [pathname, ownerEmail]);

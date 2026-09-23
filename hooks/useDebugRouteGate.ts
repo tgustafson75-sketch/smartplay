@@ -19,6 +19,7 @@
 import { useEffect } from 'react';
 import { router } from 'expo-router';
 import { isOwnerEmail, usePlayerProfileStore } from '../store/playerProfileStore';
+import { goToTab } from '../services/safeBack';
 
 export function useDebugRouteGate(): boolean {
   const email = usePlayerProfileStore(s => s.email);
@@ -27,7 +28,7 @@ export function useDebugRouteGate(): boolean {
 
   useEffect(() => {
     if (allowed) return;
-    try { router.replace('/(tabs)/caddie' as never); } catch (e) {
+    try { goToTab('caddie'); } catch (e) {
       console.log('[debugRouteGate] redirect failed', e);
     }
   }, [allowed]);

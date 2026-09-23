@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useRoundStore } from '../../store/roundStore';
 import { useTranslation } from 'react-i18next';
+import { goToTab } from '../../services/safeBack';
 
 // ─── Chip row data ─────────────────────────────────────────────────────────────
 
@@ -75,7 +76,7 @@ export default function FeelingsScreen() {
     if (roundId) {
       router.replace(`/recap/${roundId}` as never);
     } else {
-      router.replace('/(tabs)/caddie' as never);
+      goToTab('caddie');
     }
   }
 

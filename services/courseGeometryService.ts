@@ -854,7 +854,15 @@ export async function purgeCourseGeometry(courseId?: string): Promise<void> {
 
 export async function fetchCourseGeometry(
   courseId: string,
-  options?: { courseLocation?: { lat: number; lng: number } | null },
+  /**
+   * `bypassCooldown` — 2026-09-23. The empty-build cooldown below exists to stop the 4-second GPS
+   * tick from rebuilding a course that cannot answer. It also swallowed the two DELIBERATE retries:
+   * a timed-out build armed the 90s cooldown, the 30s re-ask landed inside it and returned nothing,
+   * and the second re-ask was never scheduled because only a real build schedules it. Same for
+   * roundPrefetch's "retry once on zero greens", which reached the network once, not twice. A slow
+   * course therefore stayed unloaded until the player reselected it. Only those callers pass this.
+   */
+  options?: { courseLocation?: { lat: number; lng: number } | null; bypassCooldown?: boolean },
 ): Promise<CourseGeometry | null> {
   if (!courseId) return null;
   /**
@@ -903,7 +911,7 @@ export async function fetchCourseGeometry(
    * (and immediately if geometry arrives by the derived/AI path, which has its own trigger).
    */
   const cachedNow = memCache.get(courseId);
-  if (!(cachedNow && cacheIsServable(cachedNow))) {
+  if (!options?.bypassCooldown && !(cachedNow && cacheIsServable(cachedNow))) {
     const lastEmpty = lastUnservableBuildAt.get(courseId) ?? 0;
     if (lastEmpty > 0 && Date.now() - lastEmpty < EMPTY_BUILD_COOLDOWN_MS) {
       return Promise.resolve(getCachedGeometry(courseId));
@@ -1323,7 +1331,7 @@ function scheduleGeometryRecheck(
   setTimeout(() => {
     // Straight back through the public entry point, so the in-flight dedupe still applies and a real
     // user-driven request happening at the same moment shares this one rather than racing it.
-    void fetchCourseGeometry(courseId, options)
+    void fetchCourseGeometry(courseId, { ...options, bypassCooldown: true })
       .then((geo) => {
         if (geo && mappedHoleCount(geo) > 0) {
           recheckAttempts.delete(courseId); // landed — let a future session start fresh

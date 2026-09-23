@@ -52,7 +52,7 @@ describe('the static pill was our own traffic', () => {
 
   it('a SERVABLE cache is never held back by the cooldown', () => {
     // Only an unservable course is throttled — a good one short-circuits inside anyway.
-    expect(geo).toMatch(/if \(!\(cachedNow && cacheIsServable\(cachedNow\)\)\) \{/);
+    expect(geo).toMatch(/if \(!options\?\.bypassCooldown && !\(cachedNow && cacheIsServable\(cachedNow\)\)\) \{/);
   });
 
   it('it agrees with the scheduled recheck rather than inventing a second number', () => {

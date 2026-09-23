@@ -420,6 +420,16 @@ export function rankByDroppedTokens(
     .map(x => x.r);
 }
 
+/**
+ * 2026-09-23 — the player read "Upstream error 429". The proxy names its two limits
+ * (api/course-proxy.ts); say which one it was, in words, instead of relaying a status code.
+ */
+export function searchErrorMessage(status: number, code: string | undefined): string {
+  if (code === 'course_db_daily_limit') return 'Course search has hit its daily limit. Courses you have opened before still work.';
+  if (code === 'rate_limited') return 'Too many searches at once. Give it a minute and try again.';
+  return `Search unavailable (${status})`;
+}
+
 export async function searchCourses(
   query: string,
 ): Promise<{ id: string; club_name: string; course_name: string; location: string; _error?: string }[]> {
@@ -453,7 +463,7 @@ export async function searchCourses(
           list: [],
           // 5xx = the server fell over (often a cold start); 4xx = a real answer we must not re-ask.
           transient: res.status >= 500,
-          message: err.error ?? `Search unavailable (${res.status})`,
+          message: searchErrorMessage(res.status, err.error),
         };
       }
       const data = await res.json() as Record<string, unknown>;

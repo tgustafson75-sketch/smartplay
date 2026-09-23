@@ -820,6 +820,13 @@ export default function PlayTab() {
   // when the response's seq matches the current latest seq, so a stale
   // first response can't overwrite a fresher second one mid-typing.
   const searchSeqRef = useRef<number>(0);
+  /**
+   * 2026-09-23 — the course PICK needs the same sequencing the search already had. Tapping A then B
+   * let A's slower getCourse/geometry land last and overwrite B's card, hero and preview course — and
+   * A's card with a live Start Round button stayed up the whole time B loaded, so Start Round could
+   * launch the course the player had just moved away from. Every write after an await checks this.
+   */
+  const selectSeqRef = useRef<number>(0);
 
   const [recentCourses, setRecentCourses] = useState<CourseSummary[]>([]);
   /**
@@ -1661,6 +1668,11 @@ export default function PlayTab() {
   useEffect(() => {
     const trimmed = query.trim();
     if (trimmed.length < 3) {
+      // 2026-09-23 — invalidate any search still in flight. Without this an older query that was
+      // already running passed its own seq check after the box was cleared and repopulated the list
+      // under the "type at least 3 letters" hint.
+      searchSeqRef.current++;
+      setSearching(false);
       // Reset results + searched flag so the empty-state copy reverts to the
       // 'type to search' hint instead of 'no courses found for ...'.
       if (hasSearched) {
@@ -1691,7 +1703,11 @@ export default function PlayTab() {
       // API-only / loading) is left untouched so a manual override survives.
       setSetupNineHole(false);
     }
+    const mySeq = ++selectSeqRef.current;
+    const isCurrent = () => mySeq === selectSeqRef.current;
     if (s.isLocal) {
+      setSelectedLoading(false);
+      setSelectError(null);
       // 2026-07-25 (deep audit — S1 fabrication) — was hardcoded `par_total: 72, holes: [], 6527y`
       // for EVERY local course, so the card read "18 holes · Par 72" for Mines (par 70), 9-hole
       // courses, etc. — and contradicted the 9-Hole chip toggled just above. Derive the real par /
@@ -1755,6 +1771,7 @@ export default function PlayTab() {
       let resolveId = s.id;
       if (String(s.id).startsWith('place:') || String(s.id).startsWith('near:')) {
         const found = await searchCourses(s.club_name ?? '');
+        if (!isCurrent()) return;
         const real = found.find(r => !r._error && r.id);
         if (!real) {
           setSelectError(`Couldn't find "${s.club_name}" in the course database — try the search box.`);
@@ -1764,6 +1781,7 @@ export default function PlayTab() {
         resolveId = real.id;
       }
       const c = await getCourse(resolveId);
+      if (!isCurrent()) return;
       if (c) {
         setSelected(c);
         // 2026-08-11 — hand the course's OWN coordinates to the preview surfaces straight away.
@@ -1803,6 +1821,7 @@ export default function PlayTab() {
             .then((eng) => eng.downloadCourse({ name: c.club_name, courseId: c.id, lat: courseLocation?.lat ?? null, lng: courseLocation?.lng ?? null }))
             .catch(() => undefined);
           await fetchCourseGeometry(c.id, { courseLocation });
+          if (!isCurrent()) return;
           // Build SmartVision hole imagery on selection for searched/API courses too —
           // geometry (just fetched) + per-hole satellite tiles, persisted for offline.
           // 2026-08-12 — the player's Preferred Tee, not just the first set. This is the tee whose
@@ -1835,9 +1854,9 @@ export default function PlayTab() {
       }
     } catch (e) {
       console.log('[play] selectSummary failed:', e);
-      setSelectError('Trouble opening that course — check your connection and tap it again.');
+      if (isCurrent()) setSelectError('Trouble opening that course — check your connection and tap it again.');
     } finally {
-      setSelectedLoading(false);
+      if (isCurrent()) setSelectedLoading(false);
     }
     /**
      * 2026-09-14 — `preferredTee` and `handicapGender` were READ here and not listed, with an EMPTY
@@ -1876,7 +1895,9 @@ export default function PlayTab() {
   }, [router]);
 
   const handleStartRound = () => {
-    if (!selected) return;
+    // 2026-09-23 — while another pick is loading, `selected` is still the PREVIOUS course. Starting
+    // now would start the course the player just moved away from.
+    if (!selected || selectedLoading) return;
     /**
      * 2026-09-17 — A LIVE ROUND IS NOT SOMETHING YOU START OVER BY ACCIDENT.
      *
@@ -2012,6 +2033,11 @@ export default function PlayTab() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
+        // 2026-09-23 — the course search results live inside this ScrollView and the keyboard stays
+        // up while they show. RN's default ('never') spends the first tap on a result dismissing the
+        // keyboard, so tapping a course did nothing — and on iOS the relayout moved the list under
+        // the finger for the second tap. CoursePicker already carried this; this surface did not.
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={isWide ? { alignItems: 'center' } : undefined}
       >
        <View style={isWide ? { width: '100%', maxWidth: WIDE_CONTENT_MAX_WIDTH } : undefined}>
@@ -2341,15 +2367,19 @@ export default function PlayTab() {
 
         {/* 2026-07-23 (Tim) — optional City/State to sharpen the match (golfcourseapi has no
             location fields, so we fold this into the query). */}
-        <TextInput
-          style={[styles.searchInput, { marginTop: 8 }]}
-          value={locationQuery}
-          onChangeText={(v) => { setLocationQuery(v); locationQueryRef.current = v; }}
-          placeholder={t('play.placeholder.city_state_optional_narrows_the')}
-          placeholderTextColor="#3a5a40"
-          onSubmitEditing={onSearch}
-          returnKeyType="search"
-        />
+        {/* 2026-09-23 — inside the search row's gutter. Bare, it ran edge to edge past the row above
+            it and clipped its own placeholder (Tim's screenshot). */}
+        <View style={[styles.searchRow, { marginTop: 8 }]}>
+          <TextInput
+            style={styles.searchInput}
+            value={locationQuery}
+            onChangeText={(v) => { setLocationQuery(v); locationQueryRef.current = v; }}
+            placeholder={t('play.placeholder.city_state_optional_narrows_the')}
+            placeholderTextColor="#3a5a40"
+            onSubmitEditing={onSearch}
+            returnKeyType="search"
+          />
+        </View>
 
         {/* 2026-07-01 (Tim) — add a course that isn't in the database from a scorecard photo. */}
         <TouchableOpacity
@@ -3090,8 +3120,10 @@ export default function PlayTab() {
             </View>
 
             <TouchableOpacity
-              style={[styles.actionBtnPrimary, styles.startBigBtn]}
+              style={[styles.actionBtnPrimary, styles.startBigBtn, selectedLoading && { opacity: 0.5 }]}
               onPress={handleStartRound}
+              disabled={selectedLoading}
+              accessibilityState={{ disabled: selectedLoading }}
               activeOpacity={0.88}
             >
               <AppIcon name="flag" size={16} color="#0d1a0d" />

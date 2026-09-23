@@ -13,7 +13,6 @@ import {
   ActivityIndicator, Image, Alert, TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import AppIcon from '../../components/AppIcon';
@@ -25,7 +24,7 @@ import {
 } from '../../services/spaceAssessment';
 import { useSettingsStore } from '../../store/settingsStore';
 import { speakChunked, configureAudioForSpeech } from '../../services/voiceService';
-import { safeBack } from '../../services/safeBack';
+import { safeBack, goToTab } from '../../services/safeBack';
 import { getApiBaseUrl } from '../../services/apiBase';
 import { useTranslation } from 'react-i18next';
 
@@ -42,7 +41,6 @@ const SPACE_TYPE_LABEL: Record<SpaceType, string> = {
 
 export default function SpaceScanScreen() {
   const { t } = useTranslation();
-  const router = useRouter();
   const { voiceEnabled, voiceGender, language } = useSettingsStore();
   const apiUrl = getApiBaseUrl();
 
@@ -127,7 +125,7 @@ export default function SpaceScanScreen() {
       return;
     }
     Alert.alert(t('swinglab_space_scan.alert.saved'), t('swinglab_space_scan.alert.your_space_is_saved_cage'));
-    router.replace('/(tabs)/swinglab' as never);
+    goToTab('swinglab');
   };
 
   const onRetake = () => {

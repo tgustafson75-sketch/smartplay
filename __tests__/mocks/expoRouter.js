@@ -22,6 +22,7 @@ module.exports = {
     replace: record('replace'),
     back: record('back'),
     dismissAll: record('dismissAll'),
+    dismissTo: record('dismissTo'),
     navigate: record('navigate'),
     setParams: record('setParams'),
   },

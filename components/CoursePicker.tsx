@@ -59,14 +59,24 @@ export default function CoursePicker({ onSelect, selected, onInfo }: Props) {
   const [searchError, setSearchError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /**
+   * 2026-09-23 — only the newest query may write. searchCourses can take 18s+ per query (12s, a 6s
+   * retry, per relaxed candidate), so an early partial query ("Wac") that timed out resolved AFTER the
+   * full query had succeeded, wiped the good list and showed "Course search unavailable" — and cleared
+   * the spinner while the newer request was still running. Same guard play.tsx's search carries.
+   */
+  const seqRef = useRef(0);
   const runSearch = useCallback(async (q: string) => {
+    const mySeq = ++seqRef.current;
     if (q.trim().length < 3) {
       setResults([]);
       setSearched(false);
+      setLoading(false);
       return;
     }
     setLoading(true);
     const found = await searchCourses(q.trim());
+    if (mySeq !== seqRef.current) return;
     // Filter out error sentinels before setting results
     setResults(found.filter(r => !r._error));
     if (found.length === 1 && found[0]._error) {

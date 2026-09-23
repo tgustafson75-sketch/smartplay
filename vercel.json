@@ -216,7 +216,7 @@
       "src": "api/course-content.ts",
       "use": "@vercel/node",
       "config": {
-        "maxDuration": 30
+        "maxDuration": 60
       }
     },
     {

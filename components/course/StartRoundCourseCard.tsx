@@ -76,13 +76,16 @@ export default function StartRoundCourseCard({ courseId, courseName }: Props) {
          */
         const tee = playerTee(c) ?? c?.tees[0];
         if (c && tee) {
-          await fetchCourseContent({
+          // 2026-09-23 — warmed, not awaited. This card renders nothing from the content, but the
+          // await held its hero spinner and hole list for the whole paid generation on every course
+          // the player had not opened before.
+          void fetchCourseContent({
             courseId, courseName: c.club_name,
             location: [c.location.city, c.location.state].filter(Boolean).join(', '),
             par: tee.par_total, yardage: tee.total_yards,
             rating: tee.course_rating, slope: tee.slope_rating,
             holes: tee.holes.map(h => ({ hole_number: h.hole_number, par: h.par, yardage: h.yardage })),
-          });
+          }).catch(() => undefined);
         }
       } catch {}
       const tee = playerTee(c) ?? c?.tees[0];

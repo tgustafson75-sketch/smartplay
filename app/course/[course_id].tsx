@@ -5,8 +5,7 @@ import { pickTeeSet } from '../../services/teeSelection';
 import {
   View, Text, ScrollView, ActivityIndicator, TouchableOpacity, StyleSheet,
   useWindowDimensions,
-  type ImageSourcePropType,
-} from 'react-native';
+  type ImageSourcePropType, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import CourseDetailBanner from '../../components/course/CourseDetailBanner';
@@ -19,7 +18,7 @@ import { getCourse, searchCourses } from '../../services/golfCourseApi';
 // 380y placeholder. Reported: Mariners Point showed 18 holes at 380y
 // each, when it's actually 9 par-3 holes maxing at ~160y.
 import { getCourse as getLocalCourseData } from '../../data/courses';
-import { fetchCourseContent, getCachedContent, type CourseContent } from '../../services/courseContentService';
+import { fetchCourseContent, getCachedContent, CONTENT_CLIENT_TIMEOUT_MS, type CourseContent } from '../../services/courseContentService';
 import { holeNoteFromStats } from '../../services/holeNote';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
 import { useGeometryStatusStore } from '../../store/geometryStatusStore';
@@ -315,9 +314,10 @@ export default function CourseDetailScreen() {
     // window: the Sonnet backend is ~14s cold, and flipping empty at 15s abandoned
     // the About + Caddie Tips before they arrived. The fetch still sets `content`
     // when it lands; hole notes already render (derived) so nothing "spins" anyway.
+    // 2026-09-23 — derived from the fetch's own timeout instead of a hand-copied 32s: the two drift.
     const loadTimeout = setTimeout(() => {
       if (!cancelled) setContentLoading(false);
-    }, 32_000);
+    }, CONTENT_CLIENT_TIMEOUT_MS + 1_000);
     // 2026-06-14 (step 3) — anchor the course's website/phone into the book via
     // Google Places (best-effort, one lookup per course, no-ops if Places isn't
     // enabled on the key). Powers a real "Book Tee Time" deep-link + offline
@@ -464,6 +464,20 @@ export default function CourseDetailScreen() {
 
   const handleStartRound = () => {
     if (!course) return;
+    /**
+     * 2026-09-23 — the same gate play.tsx's Start Round got on 09-17, on the surface it missed. This
+     * screen is reachable mid-round (the Play tab's (i) and Log buttons), and one tap here replaced
+     * the live round: runStartRound has no gate of its own, and startRound's preserve-on-restart is a
+     * degraded save — no par, no stats, no recap, no WHS posting — then play restarts at hole 1.
+     */
+    if (useRoundStore.getState().isRoundActive) {
+      Alert.alert(
+        t('play.alert.already_playing'),
+        t('play.alert.finish_or_end_your_current'),
+        [{ text: 'OK' }],
+      );
+      return;
+    }
     // 2026-06-15 (Tim — pre-round brief fired ~25s late) — warm the brief +
     // TTS Lambdas the instant the round starts, during the navigation/round-
     // setup window, so the hole-1 handoff doesn't pay full cold-start while

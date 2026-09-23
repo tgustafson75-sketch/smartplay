@@ -3,26 +3,25 @@ import { allowInference } from './_inferLimit';
 import Anthropic from '@anthropic-ai/sdk';
 import { getCaddieName, getCharacterSpec, type VoiceGender, type Persona, personaInputFrom } from '../lib/persona';
 
-// 2026-09-01 (adversarial audit) — maxRetries 0: A RETRY THAT CANNOT FIT IS WORSE THAN NO RETRY.
-// The SDK's retry starts AFTER the first attempt's timeout, and this route's provider budget is
-// already most of its platform ceiling — so a retry is killed mid-flight and the caller gets nothing
-// instead of either an answer or a clean error. Tim's `clubpath_arc_too_sparse points: 0` was this
-// shape. Fail once, honestly, inside the budget. [[the-client-must-be-the-last-to-give-up]]
+// History: 09-03 production saw 63/63 5xx with one 25s Sonnet attempt; that was read as a provider
+// outage and "fixed" by splitting it into two 12s attempts, which can never fit the generation.
 /**
- * 2026-09-03 (production alert — "all 63 requests to course-content returned 5xx, correlated with
- * upstream third-party API failures") — ONE BOUNDED RETRY, AND AN HONEST STATUS.
+ * 2026-09-23 — THE BUDGET NEVER FIT THE JOB, AND EVERY MISS WAS PAID FOR.
  *
- * The route was single-provider with a 25s timeout inside a 30s platform budget, so there was no
- * room for a retry and none was attempted. Anthropic's transient 429/529 "overloaded" is the most
- * common failure there is and it usually clears on a second try seconds later — instead, one bad
- * upstream window took out every request in it.
+ * Production, week to 09-23: 17 of 17 requests ended "upstream unavailable: Request timed out". The
+ * two 12s attempts above were sized to fit the platform ceiling, not the work — up to 4500 output
+ * tokens of Sonnet prose cannot finish in 12 seconds, so every call timed out, retried, timed out
+ * again, and returned 503 with nothing cached anywhere. Each open of each course bought the same
+ * failed generation again. Not a provider outage: the route could not succeed.
  *
- * Two attempts at 12s fit the same 30s ceiling with room for the response write, which is the same
- * arithmetic that governs swing-analysis: provider x (retries+1) must fit under the ceiling.
- * [[a-budget-must-fit-what-runs-inside-it]]
+ * Fix, both halves: Haiku (Tim, 09-23 — several times faster and a third of the price for prose
+ * inferred from par and yardage), and ONE attempt sized to finish inside a 60s function
+ * (vercel.json). No SDK retry: a second attempt cannot fit, and a retry that is killed mid-flight
+ * is billed and delivers nothing. The client waits longer than this (CONTENT_CLIENT_TIMEOUT_MS).
  */
-const ATTEMPT_TIMEOUT_MS = 12_000;
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: ATTEMPT_TIMEOUT_MS, maxRetries: 1 });
+export const COURSE_CONTENT_MODEL = 'claude-haiku-4-5-20251001';
+export const ATTEMPT_TIMEOUT_MS = 50_000;
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: ATTEMPT_TIMEOUT_MS, maxRetries: 0 });
 
 /**
  * Is this THEIR outage or OUR bug? The alert Tim received said "5xx correlated with upstream
@@ -53,7 +52,7 @@ function isUpstreamOutage(e: unknown): boolean {
  * Output:
  *   { about: string, caddie_tips: string[], hole_notes: [{hole_number, note}] }
  *
- * Uses Claude Sonnet for prose quality. Per-process in-memory cache keyed by
+ * Uses Claude Haiku (see COURSE_CONTENT_MODEL). Per-process in-memory cache keyed by
  * courseId — Vercel-instance-local; client-side AsyncStorage cache in
  * courseContentService.ts handles cross-session persistence.
  */
@@ -209,7 +208,7 @@ Generate the JSON.`;
     // additional tokens). 2000 was tight on the prior 3-section payload;
     // truncating now would lose mid-array hole entries.
     const completion = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: COURSE_CONTENT_MODEL,
       max_tokens: 4500,
       temperature: 0.7,
       system: [{ type: 'text', text: buildSystemPrompt(personaInput), cache_control: { type: 'ephemeral' } }],

@@ -111,15 +111,15 @@ export async function prefetchRoundData(args: PrefetchArgs): Promise<number> {
    * difference is that we now KNOW, and say so. [[state-what-you-measured-not-what-you-intended]]
    */
   const geometryP = (async (): Promise<number> => {
-    const build = async () => {
-      const g = await fetchCourseGeometry(courseId, { courseLocation: courseLocation ?? null });
+    const build = async (bypassCooldown = false) => {
+      const g = await fetchCourseGeometry(courseId, { courseLocation: courseLocation ?? null, bypassCooldown });
       return mappedHoleCount(g);
     };
     try {
       let greens = await build();
       if (greens === 0) {
         console.log('[roundPrefetch] geometry returned ZERO greens for', courseId, '— retrying once');
-        try { greens = await build(); } catch { /* keep the zero and report it */ }
+        try { greens = await build(true); } catch { /* keep the zero and report it */ }
       }
       console.log('[roundPrefetch] geometry done for', courseId, '— greens mapped:', greens);
       return greens;

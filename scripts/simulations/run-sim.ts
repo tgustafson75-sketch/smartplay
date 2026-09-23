@@ -10528,8 +10528,11 @@ check('LOCK: a timed-out course build is re-asked, BOUNDED, and only when nothin
       /if \(attempt >= RECHECK_DELAYS_MS\.length\) return;/.test(g);
     // and it must go back through the PUBLIC entry point so the in-flight dedupe still applies —
     // a re-ask that bypassed it would race a real user request and double the Overpass load.
-    const deduped = /void fetchCourseGeometry\(courseId, options\)/.test(g);
-    return scheduled && bounded && deduped;
+    const deduped = /void fetchCourseGeometry\(courseId, \{ \.\.\.options, bypassCooldown: true \}\)/.test(g);
+    // 2026-09-23 — and it must get PAST the empty-build cooldown: the timed-out build arms it, so a
+    // re-ask that respects it lands inside it, returns nothing, and never schedules the second re-ask.
+    const passesCooldown = /if \(!options\?\.bypassCooldown && !\(cachedNow && cacheIsServable\(cachedNow\)\)\) \{/.test(g);
+    return scheduled && bounded && deduped && passesCooldown;
   })(),
   'a timeout schedules a bounded re-ask through the deduped entry point, only when there is no bundled/persisted copy to show');
 
@@ -16747,11 +16750,21 @@ check(
  */
 {
   const cc = readCode('api/course-content.ts');
+  /**
+   * 2026-09-23 — the check that stood here pinned `ATTEMPT_TIMEOUT_MS = 12_000` + `maxRetries: 1`, i.e.
+   * it asserted the exact shape that made 17/17 production calls time out. It now asserts the
+   * PROPERTY: the attempts fit the platform ceiling, each attempt is long enough for the generation
+   * (09-03 measured 63/63 failures at 25s on Sonnet), and the client outlasts the server.
+   */
+  const attemptMs = Number((/export const ATTEMPT_TIMEOUT_MS = ([\d_]+);/.exec(cc)?.[1] ?? 'NaN').replace(/_/g, ''));
+  const retries = Number(/timeout: ATTEMPT_TIMEOUT_MS, maxRetries: (\d+)/.exec(cc)?.[1] ?? 'NaN');
+  const vj = JSON.parse(read('vercel.json')) as { builds: { src: string; config?: { maxDuration?: number } }[] };
+  const ceilingMs = (vj.builds.find((b) => b.src === 'api/course-content.ts')?.config?.maxDuration ?? NaN) * 1000;
+  const clientMs = Number((/export const CONTENT_CLIENT_TIMEOUT_MS = ([\d_]+);/.exec(readCode('services/courseContentService.ts'))?.[1] ?? 'NaN').replace(/_/g, ''));
   check(
-    'COURSE CONTENT: a transient upstream blip gets one retry that FITS the budget',
-    /const ATTEMPT_TIMEOUT_MS = 12_000;/.test(cc) &&
-      /timeout: ATTEMPT_TIMEOUT_MS, maxRetries: 1/.test(cc),
-    'provider x (retries+1) must fit under the platform ceiling — 25s with maxRetries 0 left no room to retry, so one bad window took out every request in it',
+    'COURSE CONTENT: the generation budget fits the platform ceiling AND the job',
+    attemptMs * (retries + 1) < ceilingMs && attemptMs >= 40_000 && clientMs > ceilingMs,
+    `attempt ${attemptMs}ms x ${retries + 1} must be < ceiling ${ceilingMs}ms, each attempt >= 40s, client ${clientMs}ms > ceiling — 12s attempts failed 17/17 in production, each one billed`,
   );
   check(
     'COURSE CONTENT: an upstream outage answers 503, not 500',
@@ -17213,10 +17226,13 @@ check(
 
   const offenders = scanned.filter((abs) => {
     const body = readBulk(abs).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
-    return /router\.push\(\s*[`'"]\/\(tabs\)\//.test(body);
+    // 2026-09-23 — REPLACE too. This matched push only, and stayed green while round/briefing,
+    // recap and feelings `router.replace`d into the tabs from a screen above them — REPLACE creates a
+    // new (tabs) route in the root stack exactly as PUSH does. Every default round start took that path.
+    return /router\.(push|replace|navigate)\(\s*[`'"]\/\(tabs\)\//.test(body);
   });
 
-  check('NAV: nothing outside app/(tabs)/ PUSHES a tab route — that stacks a second tab navigator',
+  check('NAV: nothing outside app/(tabs)/ PUSHES or REPLACES into a tab route — that stacks a second tab navigator',
     enoughFiles && offenders.length === 0,
     offenders.length > 0
       ? `these push a tab route from outside the tabs and will stack a duplicate navigator: ${offenders.map((f) => path.relative(ROOT, f)).join(', ')}`
@@ -18004,6 +18020,50 @@ check(
     problems.length > 0
       ? `the prefetcher and the renderer disagree about what is renderable: ${problems.join('; ')}`
       : 'the green is the requirement and the tee is a bonus, on BOTH sides: the renderer centres on the green when a tee is missing, and the prefetcher caches exactly those holes instead of skipping the course. A 0,0 green is still refused by both, so null-island tiles stay fixed');
+}
+
+// 2026-09-23 — "some courses won't load" / "a little glitchy". The course PICK surfaces, in the
+// order a player meets them. Each check asserts the fix AND the absence of the shape that broke.
+{
+  const play = readCode('app/(tabs)/play.tsx');
+  const picker = readCode('components/CoursePicker.tsx');
+  const detail = readCode('app/course/[course_id].tsx');
+  const card = readCode('components/course/StartRoundCourseCard.tsx');
+
+  // First tap on a search result only dismissed the keyboard: the results sit inside this ScrollView.
+  const mainScroll = /<ScrollView\s[^>]*?>/.exec(play.slice(play.indexOf('<BrandHeaderRow />')))?.[0] ?? '';
+  check('COURSE PICK: the first tap on a search result opens the course, not just closes the keyboard',
+    /keyboardShouldPersistTaps="handled"/.test(mainScroll),
+    'the Play tab ScrollView holding the course search must persist taps; the default spends the first tap dismissing the keyboard');
+
+  // Tapping A then B: A's slower load overwrote B, and A's Start Round stayed live while B loaded.
+  const sel = play.slice(play.indexOf('const selectSummary = useCallback'), play.indexOf('const onTapInfo'));
+  const awaitsGated = (sel.match(/await (searchCourses|getCourse|fetchCourseGeometry)\(/g) ?? []).length;
+  const gates = (sel.match(/if \(!isCurrent\(\)\) return;/g) ?? []).length;
+  check('COURSE PICK: only the newest pick may write the card, and Start Round waits for it',
+    /const mySeq = \+\+selectSeqRef\.current;/.test(sel) && awaitsGated >= 3 && gates >= awaitsGated &&
+      /if \(isCurrent\(\)\) setSelectedLoading\(false\);/.test(sel) &&
+      /if \(!selected \|\| selectedLoading\) return;/.test(play) && /disabled=\{selectedLoading\}/.test(play),
+    `every await in selectSummary is followed by a staleness gate (${gates}/${awaitsGated}), and Start Round is disabled while a pick is loading`);
+
+  const reset = play.slice(play.indexOf('if (trimmed.length < 3) {'), play.indexOf('const id = setTimeout(() => { void runSearch(trimmed); }, 300);'));
+  check('COURSE SEARCH: clearing the box cancels the search still in flight',
+    /searchSeqRef\.current\+\+;/.test(reset),
+    'an older query passed its own seq check after the box was cleared and repopulated the list');
+
+  check('COURSE SEARCH: the Start Round picker only lets the newest query write',
+    /const mySeq = \+\+seqRef\.current;/.test(picker) && /if \(mySeq !== seqRef\.current\) return;/.test(picker),
+    'an early partial query that timed out wiped the good list and showed "Course search unavailable"');
+
+  const detailStart = detail.slice(detail.indexOf('const handleStartRound = () => {'), detail.indexOf('const handleBookTeeTime'));
+  check('COURSE DETAIL: Start Round Here cannot replace a live round',
+    /if \(useRoundStore\.getState\(\)\.isRoundActive\) \{/.test(detailStart) &&
+      detailStart.indexOf('isRoundActive') < detailStart.indexOf('setPendingStartCourse'),
+    'this screen is reachable mid-round; without the gate one tap filed the live round as a degraded save and restarted at hole 1');
+
+  check('START ROUND CARD: the card never waits on a paid generation it does not render',
+    /void fetchCourseContent\(/.test(card) && !/await fetchCourseContent\(/.test(card),
+    'the hero spinner and hole list sat behind the whole course-content generation on every new course');
 }
 
 const total = results.length;

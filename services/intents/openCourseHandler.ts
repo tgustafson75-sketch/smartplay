@@ -55,9 +55,12 @@ export const openCourseHandler: IntentHandler = {
     // user taps Start Round. Guarded — a store hiccup must not swallow the navigation.
     try { useRoundStore.getState().setPreviewCourse(courseId); } catch { /* non-fatal */ }
 
-    let routerMod: typeof import('expo-router') | null = null;
-    try { routerMod = await import('expo-router'); } catch { /* unavailable in test envs */ }
-    try { routerMod?.router.replace('/(tabs)/play' as never); } catch { /* no-op */ }
+    // goToTab, not router.replace: a voice intent can fire from a screen stacked above the tabs, and a
+    // replace there mounts a second tab navigator (services/safeBack).
+    try {
+      const nav = await import('../safeBack');
+      nav.goToTab('play');
+    } catch { /* unavailable in test envs */ }
 
     // 2026-07-28 (audit — VOICE-F2) — when the spoken name matched >1 bundled course (e.g. bare
     // "Coyote Creek" → both the Tournament and Valley 18s), we open the first (a sensible default) but

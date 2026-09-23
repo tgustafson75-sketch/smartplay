@@ -55,6 +55,20 @@ const REFRESH_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
 const memCache: Map<string, CourseContent> = new Map();
 
+/**
+ * 2026-09-23 — ONE GENERATION PER COURSE AT A TIME, AND NO RE-ASK STRAIGHT AFTER A FAILURE.
+ *
+ * Every call here is a paid Sonnet generation. Three surfaces ask for the same course at once (Course
+ * Detail, the Start Round card, the round prefetch — and the nearby-course prefetch, which the Play
+ * tab ran twice per open), and there was no in-flight join, so production logs show the same course
+ * generated in pairs in the same second. And a failure cached nothing, so every open re-bought it:
+ * 17 of 17 calls failed over the week to 09-23, each one paid for.
+ */
+const inflight: Map<string, Promise<CourseContent | null>> = new Map();
+const lastFailureAt: Map<string, number> = new Map();
+export const CONTENT_FAILURE_COOLDOWN_MS = 10 * 60 * 1000;
+export const CONTENT_CLIENT_TIMEOUT_MS = 65_000;
+
 function key(courseId: string): string {
   return KEY_PREFIX + courseId;
 }
@@ -72,7 +86,9 @@ export async function clearCourseContentCache(): Promise<void> {
   memCache.clear();
   try {
     const keys = await AsyncStorage.getAllKeys();
-    const courseKeys = keys.filter(k => k.startsWith('coursecontent:'));
+    // KEY_PREFIX, not a hand-typed literal: this filtered 'coursecontent:' while every blob was
+    // written under 'course-content-v2::', so a persona switch cleared nothing on disk.
+    const courseKeys = keys.filter(k => k.startsWith(KEY_PREFIX));
     if (courseKeys.length > 0) await AsyncStorage.multiRemove(courseKeys);
   } catch (e) {
     console.log('[courseContent] clearCache persisted-wipe failed (non-fatal):', e);
@@ -135,9 +151,18 @@ function anchorCourseBook(courseId: string, content: CourseContent, name?: strin
   }
 }
 
-export async function fetchCourseContent(input: CourseContentInput): Promise<CourseContent | null> {
+export function fetchCourseContent(input: CourseContentInput): Promise<CourseContent | null> {
   const courseId = input.courseId;
-  if (!courseId) return null;
+  if (!courseId) return Promise.resolve(null);
+  const pending = inflight.get(courseId);
+  if (pending) return pending;
+  const run = fetchCourseContentInner(input).finally(() => { inflight.delete(courseId); });
+  inflight.set(courseId, run);
+  return run;
+}
+
+async function fetchCourseContentInner(input: CourseContentInput): Promise<CourseContent | null> {
+  const courseId = input.courseId;
 
   const memHit = memCache.get(courseId);
   if (memHit && Date.now() - memHit.fetched_at < REFRESH_AFTER_MS) return memHit;
@@ -148,6 +173,9 @@ export async function fetchCourseContent(input: CourseContentInput): Promise<Cou
     anchorCourseBook(courseId, persisted, input.courseName); // keep the book warm offline
     if (Date.now() - persisted.fetched_at < REFRESH_AFTER_MS) return persisted;
   }
+
+  const failedAt = lastFailureAt.get(courseId) ?? 0;
+  if (failedAt > 0 && Date.now() - failedAt < CONTENT_FAILURE_COOLDOWN_MS) return persisted ?? null;
 
   const apiUrl = getApiBaseUrl();
   try {
@@ -190,24 +218,34 @@ export async function fetchCourseContent(input: CourseContentInput): Promise<Cou
       // EVERY time, so the content (About + Caddie Tips + rich hole notes) never
       // arrived and the page fell back to empty. 30s clears a cold Sonnet call;
       // result caches per-device (1wk) so it's instant after the first open.
-      signal: AbortSignal.timeout(30_000),
+      //
+      // 2026-09-23 — 30s → 65s. The server now gives the generation one 50s attempt inside a 60s
+      // function (api/course-content.ts). A client that gives up first does not cancel the bill — the
+      // server finishes the paid call and nobody receives it. The client must be the last to give up.
+      signal: AbortSignal.timeout(CONTENT_CLIENT_TIMEOUT_MS),
     });
     if (!res.ok) {
       console.warn('[courseContent] fetch failed:', res.status);
+      lastFailureAt.set(courseId, Date.now());
       return persisted ?? null;
     }
     const data = (await res.json()) as Omit<CourseContent, 'fetched_at'>;
     const content: CourseContent = { ...data, fetched_at: Date.now() };
     memCache.set(courseId, content);
+    lastFailureAt.delete(courseId);
     await writePersisted(courseId, content);
     anchorCourseBook(courseId, content, input.courseName); // → CNS course book (offline + brain)
     return content;
   } catch (e) {
     console.warn('[courseContent] fetch exception:', e);
+    lastFailureAt.set(courseId, Date.now());
     return persisted ?? null;
   }
 }
 
+
 export function _clearCourseContentCache(): void {
   memCache.clear();
+  inflight.clear();
+  lastFailureAt.clear();
 }

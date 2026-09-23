@@ -56,6 +56,7 @@ import { getCaddieName } from '../../lib/persona';
 import { getApiBaseUrl } from '../../services/apiBase';
 import { useResolvedImageUri } from '../../hooks/useResolvedImageUri';
 import { useTranslation } from 'react-i18next';
+import { goToTab } from '../../services/safeBack';
 
 const COACH_TUTORIAL_KEY = 'coach_mode';
 
@@ -100,7 +101,7 @@ export default function CoachMode() {
   useEffect(() => {
     if (!coachModeEnabled) {
       try { useToastStore.getState().show('Coach Mode is off — enable it in Settings.'); } catch { /* non-fatal */ }
-      if (router.canGoBack()) router.back(); else router.replace('/(tabs)/swinglab');
+      if (router.canGoBack()) router.back(); else goToTab('swinglab');
     }
   }, [coachModeEnabled, router]);
 

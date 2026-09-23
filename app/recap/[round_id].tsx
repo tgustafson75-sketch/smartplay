@@ -21,7 +21,7 @@ import Animated, {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
-import { safeBack } from '../../services/safeBack';
+import { safeBack, goToTab } from '../../services/safeBack';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
 import { captureRef } from 'react-native-view-shot';
@@ -536,12 +536,12 @@ export default function RecapScreen() {
           text: 'Delete', style: 'destructive',
           onPress: () => {
             if (round_id) deleteRound(round_id);
-            router.replace('/(tabs)/caddie' as never);
+            goToTab('caddie');
           },
         },
       ],
     );
-  }, [round_id, deleteRound, router, t]);
+  }, [round_id, deleteRound, t]);
 
   const handleShare = useCallback(async () => {
     if (!recap || sharing) return;
@@ -696,7 +696,7 @@ export default function RecapScreen() {
               <Text style={styles.emptyBtnText}>{t('recap.recap_screen.try_again')}</Text>
             </TouchableOpacity>
           ) : null}
-          <TouchableOpacity style={styles.emptyBtn} onPress={() => router.replace('/(tabs)/caddie' as never)}>
+          <TouchableOpacity style={styles.emptyBtn} onPress={() => goToTab('caddie')}>
             <Text style={styles.emptyBtnText}>{t('recap.recap_screen.back_to', { caddieName })}</Text>
           </TouchableOpacity>
         </View>

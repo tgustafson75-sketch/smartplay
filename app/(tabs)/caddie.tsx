@@ -2088,12 +2088,12 @@ export default function CaddieTab() {
             .then((eng) => eng.downloadCourse({
               name: courseName,
               courseId: typeof dc.course_id === 'string' && dc.course_id.trim() ? dc.course_id.trim() : null,
-            }))
-            .then((r) => {
+            }).then((r) => ({ r, eng })))
+            .then(({ r, eng }) => {
               toast.useToastStore.getState().show(
                 r.ok
                   ? (r.fresh ? `\u2705 ${courseName} downloaded` : `${courseName} was already in your engine`)
-                  : `Couldn't pull ${courseName} in${r.reason ? ` \u2014 ${r.reason}` : ''}`,
+                  : eng.downloadFailureText(courseName, r.reason),
               );
             })
             .catch((e) => {

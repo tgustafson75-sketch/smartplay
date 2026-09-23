@@ -19,6 +19,7 @@ import type { VocabularyProfile } from '../../types/vocabulary';
 import type { ReviewLabels } from '../../store/swingSessionStore';
 import { getApiBaseUrl } from '../../services/apiBase';
 import { useTranslation } from 'react-i18next';
+import { goToTab } from '../../services/safeBack';
 
 export default function CageReviewSummary() {
   const { t } = useTranslation();
@@ -229,7 +230,7 @@ export default function CageReviewSummary() {
         {/* DONE */}
         <TouchableOpacity
           style={styles.doneBtn}
-          onPress={() => router.replace('/(tabs)/swinglab' as never)}
+          onPress={() => goToTab('swinglab')}
         >
           <Text style={styles.doneBtnText}>{t('swing_review_summary.cage_review_summary.done')}</Text>
         </TouchableOpacity>

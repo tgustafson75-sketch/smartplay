@@ -12,6 +12,7 @@
  * Coords only — no PII (see 0006 for the privacy contract).
  */
 import type { getSmartPlaySupabase } from './_supabase';
+import { isValidGolfCoord } from '../utils/coordGuard';
 
 type Db = NonNullable<ReturnType<typeof getSmartPlaySupabase>>;
 
@@ -64,12 +65,18 @@ const num = (v: unknown): number | null => {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 };
-const isLat = (v: number | null): v is number => v != null && v >= -90 && v <= 90;
-const isLng = (v: number | null): v is number => v != null && v >= -180 && v <= 180;
+/**
+ * 2026-09-23 — a range check is not a coordinate check. {0,0} is inside both ranges, and it is the
+ * placeholder golfcourseapi-derived holes carry for "unknown" (courseToHoles writes 0). Pebble Beach
+ * was served from here with tees at 0,0 on holes 12-18, and those holes counted as "mapped" toward
+ * CLOUD_COMPLETE_MIN — a yardage measured to the Gulf of Guinea. One owner for what a real golf
+ * coordinate is: utils/coordGuard. Applied on write AND on read, so rows already stored are dropped.
+ */
+const isPoint = (la: number | null, ln: number | null): boolean => isValidGolfCoord(la, ln);
 
 /** A hole is worth storing only if it has at least a usable tee OR green center point. */
 function hasUsableCoords(h: SharedHoleInput): boolean {
-  return (isLat(num(h.tee_lat)) && isLng(num(h.tee_lng))) || (isLat(num(h.green_lat)) && isLng(num(h.green_lng)));
+  return isPoint(num(h.tee_lat), num(h.tee_lng)) || isPoint(num(h.green_lat), num(h.green_lng));
 }
 
 /**
@@ -252,7 +259,7 @@ export type SharedHoleGeometry = {
 
 const pt = (lat: unknown, lng: unknown): { lat: number; lng: number } | null => {
   const la = num(lat), ln = num(lng);
-  return isLat(la) && isLng(ln) ? { lat: la, lng: ln } : null;
+  return la != null && ln != null && isPoint(la, ln) ? { lat: la, lng: ln } : null;
 };
 const confBucket = bucketConfidence;
 

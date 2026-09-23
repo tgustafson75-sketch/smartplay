@@ -8,7 +8,6 @@ import {
   Image,
   Easing,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRoundStore } from '../../store/roundStore';
 import { usePlayerProfileStore } from '../../store/playerProfileStore';
@@ -26,12 +25,12 @@ import { getApiBaseUrl } from '../../services/apiBase';
 import { useCaddieMemoryStore } from '../../store/caddieMemoryStore';
 import { awaitCourseIntelligence } from '../../services/courseIntelligenceService';
 import { useTranslation } from 'react-i18next';
+import { goToTab } from '../../services/safeBack';
 
 type Phase = 'thinking' | 'speaking' | 'done';
 
 export default function BriefingScreen() {
   const { t } = useTranslation();
-  const router = useRouter();
   const insets = useSafeAreaInsets();
 
   const { activeCourse, activeCourseId, mode, active_ghost, courseHoles: _courseHoles, shots: _shots, scores: _scores, currentRoundId, roundNotes } =
@@ -108,14 +107,14 @@ export default function BriefingScreen() {
     if (skippedRef.current) return;
     skippedRef.current = true;
     stopSpeaking('screen:round-briefing').catch(() => {});
-    router.replace('/(tabs)/caddie' as never);
-  }, [router]);
+    goToTab('caddie');
+  }, []);
 
   const goToCaddie = useCallback(() => {
     if (skippedRef.current) return;
     skippedRef.current = true;
-    router.replace('/(tabs)/caddie' as never);
-  }, [router]);
+    goToTab('caddie');
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

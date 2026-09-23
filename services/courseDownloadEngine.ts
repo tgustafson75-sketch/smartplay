@@ -66,7 +66,27 @@ export interface LocateResult {
  *   3. Every failure is LOGGED with its reason, so the next round says which of these fires in the
  *      field rather than leaving it to be reasoned about.
  */
-export async function locateNearbyCourses(
+/**
+ * 2026-09-23 — one lookup per spot at a time. The Play tab's discovery effect fires on each position
+ * update and gets two per open (cached fix, then fresh fix — usually the same spot), and production
+ * logged course-locate twice in the same second: two paid Places searches for one answer.
+ */
+const locatesInFlight: Map<string, Promise<LocateResult>> = new Map();
+
+export function locateNearbyCourses(
+  lat: number,
+  lng: number,
+  opts?: { radiusM?: number; limit?: number },
+): Promise<LocateResult> {
+  const key = `${Number.isFinite(lat) ? lat.toFixed(2) : lat}:${Number.isFinite(lng) ? lng.toFixed(2) : lng}:${opts?.radiusM ?? ''}:${opts?.limit ?? ''}`;
+  const pending = locatesInFlight.get(key);
+  if (pending) return pending;
+  const run = locateNearbyCoursesInner(lat, lng, opts).finally(() => { locatesInFlight.delete(key); });
+  locatesInFlight.set(key, run);
+  return run;
+}
+
+async function locateNearbyCoursesInner(
   lat: number,
   lng: number,
   opts?: { radiusM?: number; limit?: number },
@@ -216,11 +236,45 @@ const norm = (s: string) => s.toLowerCase().replace(/\b(golf|course|club|country
 
 /** Resolve a course NAME to real course data (id + holes): bundled catalog first (instant, offline), then
  *  golfcourseapi. Returns null when neither can resolve it. */
-async function resolveCourse(name: string, explicitCourseId?: string | null): Promise<{ courseId: string; courseName: string; holes: CourseHole[]; rating?: string | number | null; slope?: string | number | null } | null> {
+/** A golfcourseapi id, as opposed to one of the app's own namespaced ids. */
+export function isApiCourseId(id: string): boolean {
+  return !/^(local|place|custom|near|ai):/.test(id) && !COURSES.some((c) => c.id === id);
+}
+
+async function resolveCourse(name: string, explicitCourseId?: string | null): Promise<{ courseId: string; courseName: string; holes: CourseHole[]; rating?: string | number | null; slope?: string | number | null } | 'unavailable' | null> {
   // 1) Explicit id → bundled match.
   if (explicitCourseId) {
     const b = COURSES.find((c) => c.id === explicitCourseId);
     if (b && b.holes.length) return { courseId: b.id, courseName: b.name, holes: b.holes, rating: b.rating, slope: b.slope };
+  }
+  /**
+   * 1b) 2026-09-23 — an explicit golfcourseapi id IS the course. Re-searching by the club's name and
+   * taking the first hit is how picking Bethpage Black downloaded Bethpage Yellow, TPC Dye's Valley
+   * resolved to the Stadium course, and Sharp Park (Pacifica) became Ella Sharp Park (Michigan) — and
+   * it spent two quota calls to get the wrong answer when getCourse is one call (and cache-first,
+   * so it also works offline for a course opened before).
+   */
+  if (explicitCourseId && isApiCourseId(explicitCourseId)) {
+    try {
+      const full = await getCourse(explicitCourseId);
+      if (full) {
+        const holes = courseToHoles(full);
+        // A record with no playable holes is an answer ("nothing to play here"), not an outage.
+        if (!holes.length) return null;
+        {
+          const fullC = full as { club_name?: string; course_name?: string; rating?: string | number; slope?: string | number };
+          return {
+            courseId: explicitCourseId,
+            courseName: fullC.club_name ?? fullC.course_name ?? name,
+            holes,
+            rating: fullC.rating ?? null,
+            slope: fullC.slope ?? null,
+          };
+        }
+      }
+    } catch { /* fall through to the name paths */ }
+    // No record for this id (unreachable, or an id the voice model invented): the name paths below
+    // are exactly what ran before, so nothing that used to resolve stops resolving.
   }
   // 2) Bundled catalog by name (offline-first — a course we already ship is instant). 2026-08-06 (audit):
   // exact normalized match first; a substring match ONLY when BOTH names are reasonably long (>=5), so a
@@ -247,6 +301,8 @@ async function resolveCourse(name: string, explicitCourseId?: string | null): Pr
   // 3) golfcourseapi search → getCourse → holes.
   try {
     const hits = await searchCourses(name);
+    // A failed search is not an empty one: the sentinel row carries `_error` and no id.
+    if (hits.length === 1 && hits[0]._error) return 'unavailable';
     const first = hits?.[0];
     if (first?.id) {
       const full = await getCourse(String(first.id));
@@ -264,7 +320,7 @@ async function resolveCourse(name: string, explicitCourseId?: string | null): Pr
         }
       }
     }
-  } catch { /* fall through */ }
+  } catch { return 'unavailable'; }
   return null;
 }
 
@@ -272,7 +328,61 @@ async function resolveCourse(name: string, explicitCourseId?: string | null): Pr
  * Download a course on demand: resolve its data, run the full prefetch chain (geometry/content/
  * intelligence/imagery), and mark it downloaded. Idempotent — a already-downloaded course returns ok fast.
  */
-export async function downloadCourse(input: {
+/**
+ * 2026-09-23 — ONE DOWNLOAD PER COURSE AT A TIME, AND AN UNRESOLVABLE PLACE IS NOT RE-ASKED EVERY OPEN.
+ *
+ * The Play tab's discovery effect runs once per position update and gets two on every open (the
+ * cached fix, then the fresh one), so the nearby prefetch ran twice concurrently and every course in
+ * it was searched, detailed and content-generated twice — production shows course-locate twice in
+ * the same second and paid course-content calls in same-second pairs. A place that resolves to no
+ * course was also searched again (up to four relaxed queries) on every single open.
+ */
+const downloadsInFlight: Map<string, Promise<{ ok: boolean; courseId?: string; reason?: string; fresh?: boolean }>> = new Map();
+const unresolvedAt: Map<string, number> = new Map();
+export const UNRESOLVED_RETRY_AFTER_MS = 6 * 60 * 60 * 1000;
+
+export function downloadCourse(input: {
+  name: string;
+  courseId?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+}): Promise<{ ok: boolean; courseId?: string; reason?: string; fresh?: boolean }> {
+  const key = input.courseId || `name:${input.name.trim().toLowerCase()}`;
+  const pending = downloadsInFlight.get(key);
+  if (pending) return pending;
+  const failedAt = unresolvedAt.get(key) ?? 0;
+  if (failedAt > 0 && Date.now() - failedAt < UNRESOLVED_RETRY_AFTER_MS) {
+    return Promise.resolve({ ok: false, reason: 'unresolved' });
+  }
+  const run = downloadCourseInner(input)
+    .then((r) => {
+      // Only a DISCOVERED place or a bare name is remembered as unresolvable. A course the player
+      // picked by id is retried on the next ask, whatever happened this time.
+      if (!r.ok && r.reason === 'unresolved' && !(input.courseId && isApiCourseId(input.courseId))) {
+        unresolvedAt.set(key, Date.now());
+      }
+      return r;
+    })
+    .finally(() => { downloadsInFlight.delete(key); });
+  downloadsInFlight.set(key, run);
+  return run;
+}
+
+/** Words for a failed download. Both callers used to print the reason CODE ("— unresolved"). */
+export function downloadFailureText(courseName: string, reason: string | undefined): string {
+  if (reason === 'unresolved') return `Couldn't find ${courseName} in the course database`;
+  if (reason === 'unavailable') return `Course search didn't answer — try ${courseName} again in a minute`;
+  return `Couldn't pull ${courseName} in`;
+}
+
+/** Test seam. */
+export function _resetDownloadEngineForTests(): void {
+  locatesInFlight.clear();
+  downloadsInFlight.clear();
+  unresolvedAt.clear();
+}
+
+async function downloadCourseInner(input: {
   name: string;
   courseId?: string | null;
   lat?: number | null;
@@ -332,6 +442,7 @@ export async function downloadCourse(input: {
   };
 
   const resolved = await resolveCourse(input.name, input.courseId ?? null);
+  if (resolved === 'unavailable') return { ok: false, reason: 'unavailable' };
   if (!resolved) return { ok: false, reason: 'unresolved' };
   const { courseId, courseName, holes, rating, slope } = resolved;
   if (store.isDownloaded(courseId) && !needsGeometry(courseId)) {
