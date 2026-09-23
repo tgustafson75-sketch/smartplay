@@ -46,6 +46,7 @@ const GROUPS: { title: string; tools: Tool[] }[] = [
       { label: 'Issue Log', sub: 'Everything logged by voice or tap', route: '/owner-logs', icon: 'document-text-outline' },
       { label: 'Shot Log', sub: 'Every shot this round, with numbers', route: '/shot-log', icon: 'list-outline' },
       { label: 'Owner Card', sub: 'The one-page state of the app', route: '/owner-card', icon: 'card-outline' },
+      { label: 'App Usage', sub: 'Opted-in players, activity · export to SmartManage', route: '/owner-usage', icon: 'stats-chart-outline' },
     ],
   },
   {
