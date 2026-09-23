@@ -45,6 +45,7 @@
     "@react-navigation/native": "^7.1.8",
     "@sentry/react-native": "~7.2.0",
     "@supabase/supabase-js": "^2.108.2",
+    "@vercel/analytics": "^2.0.1",
     "expo": "~54.0.33",
     "expo-asset": "~12.0.13",
     "expo-av": "~16.0.8",

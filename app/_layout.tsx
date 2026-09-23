@@ -103,6 +103,9 @@ import { useRestModeStore } from '../store/restModeStore';
 // hides itself after the visibility window. Sibling to GlobalToast.
 import { UndoMarkBanner } from '../components/UndoMarkBanner';
 import { GlobalCaddieMic } from '../components/GlobalCaddieMic';
+// Vercel Web Analytics — tracks web platform usage when deployed to Vercel.
+// No-ops on native platforms (iOS/Android).
+import { Analytics } from '@vercel/analytics/react';
 import { GlobalCaddieBar } from '../components/GlobalCaddieBar';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 // 2026-05-21 — Consolidation 4: routine status logs gated.
@@ -2052,6 +2055,8 @@ export default function RootLayout() {
             only during an active round; pointerEvents="none" so it can never
             block a tap. See components/LiveGpsDot.tsx (Option A). */}
         <GlobalGpsDotOverlay />
+        {/* Vercel Web Analytics — tracks page views and events on web platform */}
+        <Analytics />
       </ThemeProvider>
     </SafeAreaProvider>
     </KevinPresenceProvider>
