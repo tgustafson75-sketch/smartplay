@@ -346,6 +346,8 @@ export function downloadCourse(input: {
   courseId?: string | null;
   lat?: number | null;
   lng?: number | null;
+  /** false = speculative build: no paid Claude content (see roundPrefetch PrefetchArgs.paidContent). */
+  paidContent?: boolean;
 }): Promise<{ ok: boolean; courseId?: string; reason?: string; fresh?: boolean }> {
   const key = input.courseId || `name:${input.name.trim().toLowerCase()}`;
   const pending = downloadsInFlight.get(key);
@@ -387,6 +389,8 @@ async function downloadCourseInner(input: {
   courseId?: string | null;
   lat?: number | null;
   lng?: number | null;
+  /** false = speculative build: no paid Claude content (see roundPrefetch PrefetchArgs.paidContent). */
+  paidContent?: boolean;
 }): Promise<{ ok: boolean; courseId?: string; reason?: string; fresh?: boolean }> {
   // 2026-08-09 (stores audit P2) — `fresh` distinguishes an ACTUAL new download from an already-owned
   // course, so callers only toast "downloaded" when it truly happened (the arrival toast was claiming
@@ -463,6 +467,7 @@ async function downloadCourseInner(input: {
       holes,
       rating: rating ?? null,
       slope: slope ?? null,
+      paidContent: input.paidContent !== false,
     });
     /**
      * 2026-09-10 (Tim, Hemet) — RECORD WHAT WE ACTUALLY GOT.
@@ -595,7 +600,8 @@ export async function prefetchFoundCourses(
     const courseId = c.place_id ? `place:${c.place_id}` : null;
     if (isCourseDownloaded(courseId)) continue;   // already ours — costs nothing, skip silently
     attempted += 1;
-    const res = await downloadCourse({ name: c.name, courseId, lat: c.lat, lng: c.lng })
+    // Speculative: the player has not picked any of these. Map + offline data, no paid content.
+    const res = await downloadCourse({ name: c.name, courseId, lat: c.lat, lng: c.lng, paidContent: false })
       .catch(() => ({ ok: false, fresh: false } as { ok: boolean; fresh?: boolean }));
     if (res.ok && res.fresh) downloaded += 1;
   }

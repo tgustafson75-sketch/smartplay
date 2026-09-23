@@ -50,6 +50,13 @@ type PrefetchArgs = {
   holes: CourseHole[];
   rating?: string | number | null;
   slope?: string | number | null;
+  /**
+   * 2026-09-23 (Tim) — false for SPECULATIVE builds (the Play tab's nearby-course pre-load): map,
+   * imagery and offline data only, no paid Claude generations. The About/tips and the web-researched
+   * brief load when the player actually picks the course (Course Detail, the Start Round card, and
+   * round start all fetch them). Defaults to true: every deliberate caller keeps the full chain.
+   */
+  paidContent?: boolean;
 };
 
 /**
@@ -61,7 +68,7 @@ type PrefetchArgs = {
  * yardage to the pin; it is not a failure to download, but it is never a success to report.
  */
 export async function prefetchRoundData(args: PrefetchArgs): Promise<number> {
-  const { courseId, courseName, courseLocation, holes, rating, slope } = args;
+  const { courseId, courseName, courseLocation, holes, rating, slope, paidContent = true } = args;
   if (!courseId || !courseName || !Array.isArray(holes) || holes.length === 0) {
     console.log('[roundPrefetch] skipped — missing courseId / courseName / holes', { courseId, courseName, holesLen: holes?.length ?? 0 });
     return 0;
@@ -129,7 +136,7 @@ export async function prefetchRoundData(args: PrefetchArgs): Promise<number> {
     }
   })();
 
-  const contentP = fetchCourseContent({
+  const contentP = !paidContent ? Promise.resolve() : fetchCourseContent({
     courseId,
     courseName,
     par,
@@ -157,7 +164,7 @@ export async function prefetchRoundData(args: PrefetchArgs): Promise<number> {
   const courseLocStr = courseLocation
     ? `${courseLocation.lat.toFixed(4)},${courseLocation.lng.toFixed(4)}`
     : '';
-  const intelP = fetchCourseIntelligence({
+  const intelP = !paidContent ? Promise.resolve() : fetchCourseIntelligence({
     courseId,
     courseName,
     location: courseLocStr,

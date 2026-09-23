@@ -43,7 +43,14 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 50_000 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const MAX_PROMPT_CHARS = 1_000;
 // nano-banana — native image input+output. Default modality is IMAGE.
-const GEMINI_IMAGE_MODEL = 'gemini-2.5-flash-image';
+/**
+ * 2026-09-23 — gemini-2.5-flash-image shuts down 2026-10-02 (ai.google.dev/gemini-api/docs/deprecations).
+ * The stable successor is gemini-3.1-flash-image ("Nano Banana 2", no shutdown date announced). NOT the
+ * `-preview` id the deprecations table lists as the replacement — that preview was itself retired 06-25.
+ * gpt-image-1 is removed 2026-12-01; gpt-image-2 supports both images endpoints used below.
+ */
+const GEMINI_IMAGE_MODEL = 'gemini-3.1-flash-image';
+const OPENAI_IMAGE_MODEL = 'gpt-image-2';
 
 /** Try Gemini image edit. Returns base64 (no data: prefix) or null to fall back. */
 async function geminiImageEdit(imageBase64: string, prompt: string): Promise<string | null> {
@@ -87,7 +94,7 @@ async function openaiImageEdit(buffer: Buffer, prompt: string): Promise<string |
   // gpt-image-1 always returns b64_json and does not accept response_format.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const result: any = await openai.images.edit({
-    model: 'gpt-image-1',
+    model: OPENAI_IMAGE_MODEL,
     image: file,
     prompt,
     n: 1,
@@ -131,7 +138,7 @@ async function openaiImageGenerate(prompt: string): Promise<string | null> {
   if (!process.env.OPENAI_API_KEY) return null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const result: any = await openai.images.generate({
-    model: 'gpt-image-1',
+    model: OPENAI_IMAGE_MODEL,
     prompt,
     n: 1,
     size: '1024x1024',

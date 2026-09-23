@@ -18104,6 +18104,37 @@ check(
     'aborting the fetch does not stop /api/kevin; a retry after our own timeout bought the same turn twice');
 }
 
+// 2026-09-23 — model retirements are the breakage risk, not npm. Every id here has a published date.
+{
+  const RETIRED: { id: RegExp; gone: string }[] = [
+    { id: /['"`]gemini-2\.5-flash-image['"`]/, gone: '2026-10-02' },
+    { id: /['"`]gemini-3\.1-flash-image-preview['"`]/, gone: '2026-06-25' },
+    { id: /['"`]gpt-image-1['"`]/, gone: '2026-12-01' },
+    { id: /['"`]imagen-[34]\.0-[a-z-]+['"`]/, gone: '2026-08-17' },
+  ];
+  const ROOT = path.resolve(__dirname, '..', '..');
+  const walk = (dir: string): string[] => {
+    let entries: string[] = [];
+    try { entries = fs.readdirSync(dir); } catch { return []; }
+    return entries.flatMap((e) => {
+      const abs = path.join(dir, e);
+      try {
+        if (fs.statSync(abs).isDirectory()) return e === 'node_modules' ? [] : walk(abs);
+      } catch { return []; }
+      return /\.(ts|tsx)$/.test(e) ? [abs] : [];
+    });
+  };
+  const files = ['api', 'services', 'hooks', 'app', 'components', 'lib'].flatMap((d) => walk(path.join(ROOT, d)));
+  const hits: string[] = [];
+  for (const f of files) {
+    const body = readBulk(f).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(?<![:\w])\/\/[^\n]*/g, ' ');
+    for (const r of RETIRED) if (r.id.test(body)) hits.push(`${path.relative(ROOT, f)} (${r.gone})`);
+  }
+  check('MODELS: no call uses a model id that has been, or is scheduled to be, shut down',
+    files.length > 100 && hits.length === 0,
+    hits.length ? `retired model ids still called: ${hits.join(', ')}` : `swept ${files.length} files; the image route runs gemini-3.1-flash-image with gpt-image-2 as its fallback`);
+}
+
 const total = results.length;
 const passed = results.filter((r) => r.passed).length;
 const failed = results.filter((r) => !r.passed);
