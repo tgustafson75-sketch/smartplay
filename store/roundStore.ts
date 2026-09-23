@@ -724,6 +724,18 @@ interface RoundState {
    * Also pushes a fresh score-differential to recent_differentials and
    * recomputes handicap_index when course rating/slope are available.
    */
+  /**
+   * 2026-09-23 (Tim) — the round is on a different LAYOUT at the same property than it was started
+   * on, proven by the tee boxes (services/layoutVerifier). Swaps every layout-owned field and keeps
+   * everything the player did: scores, putts, penalties and shots stay on their hole numbers.
+   */
+  switchRoundLayout: (next: {
+    courseId: string;
+    courseName: string;
+    holes: CourseHole[];
+    courseLocation: ShotLocation | null;
+    currentHole: number;
+  }) => void;
   endRound: () => string;
   /** 2026-06-13 — backfill a deterministic caddie summary onto past IN-APP rounds
    *  that lack one (Golfshot imports excluded). Idempotent; no-op if nothing to do. */
@@ -1970,6 +1982,32 @@ export const useRoundStore = create<RoundState>()(
 
       setActiveCourseId: (id) => set({ activeCourseId: id }),
       setCurrentRoundMode: (mode) => set({ mode }),
+
+      switchRoundLayout: (next) => {
+        const prev = get();
+        if (!prev.isRoundActive || !next.holes.length || next.courseId === prev.activeCourseId) return;
+        // A 9-hole layout inside an 18-hole round plays twice around, exactly as runStartRound builds it.
+        const twice = prev.courseHoles.length === 18 && next.holes.length === 9;
+        const holes = twice ? [...next.holes, ...next.holes.map((h) => ({ ...h, hole: h.hole + 9 }))] : next.holes;
+        const currentHole = Math.max(1, Math.min(holes.length, next.currentHole));
+        try {
+          const rt = require('../services/roundTrace') as typeof import('../services/roundTrace');
+          rt.trace('round', 'layout_switched', { from: prev.activeCourseId, to: next.courseId, hole: currentHole });
+        } catch { /* trace is diagnostic only */ }
+        set({
+          activeCourse: next.courseName,
+          activeCourseId: next.courseId,
+          courseLocation: next.courseLocation ?? prev.courseLocation,
+          courseHoles: holes,
+          twiceAround: twice || prev.twiceAround,
+          recentCourseIds: [next.courseId, ...prev.recentCourseIds.filter((id) => id !== next.courseId && id !== prev.activeCourseId)].slice(0, 5),
+          currentHole,
+          currentYardage: holes[currentHole - 1]?.distance ?? null,
+          // Layout-owned: notes and "already said" belong to the other layout's holes.
+          holeNotes: {},
+          spokenHoleEvents: {},
+        });
+      },
 
       endRound: () => {
         const s = get();

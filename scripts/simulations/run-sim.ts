@@ -18187,6 +18187,19 @@ check(
     'Overpass throttling returns 200 with no greens; that answer blanked the hole map of bundled courses. The bundled copy is held in memory only, so the next launch still tries the real build');
 }
 
+// 2026-09-23 (Tim) — the tee box verifies the layout on multi-course properties. Built is not
+// reachable unless it RUNS: it must start and stop with the round, beside the off-course detector.
+{
+  const layout = readCode('app/_layout.tsx');
+  const starts = (layout.match(/startLayoutVerifier\(\);/g) ?? []).length;
+  const stops = (layout.match(/stopLayoutVerifier\(\);/g) ?? []).length;
+  check('LAYOUT VERIFIER: runs for every live round and stops when it ends',
+    starts === 2 && stops === 2 &&
+      /startOffCourseDetector\(\);\s*startLayoutVerifier\(\);/.test(layout) &&
+      /stopOffCourseDetector\(\);\s*stopLayoutVerifier\(\);/.test(layout),
+    `started on mount-if-active and on round start (${starts}/2), stopped on round end and unmount (${stops}/2)`);
+}
+
 const total = results.length;
 const passed = results.filter((r) => r.passed).length;
 const failed = results.filter((r) => !r.passed);

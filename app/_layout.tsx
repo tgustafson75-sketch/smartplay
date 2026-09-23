@@ -45,6 +45,7 @@ import { SENTRY_DSN } from '../services/sentryDsn';
 import { activateMediaSession, deactivateMediaSession } from '../services/mediaKeyBridge';
 import { startHoleDetection, stopHoleDetection, subscribeToHoleDetection } from '../services/holeDetection';
 import { startOffCourseDetector, stopOffCourseDetector } from '../services/offCourseDetector';
+import { startLayoutVerifier, stopLayoutVerifier } from '../services/layoutVerifier';
 import { startMovementModeDetector, stopMovementModeDetector } from '../services/movementModeDetector';
 // 2026-05-24 — GPS confidence-gated proactive ask orchestrator (Flow B).
 // Wires the existing subscribePoorSignal → speak() with trust-level
@@ -1433,6 +1434,7 @@ function AppNavigator() {
     if (active) {
       startHoleDetection();
       startOffCourseDetector();
+      startLayoutVerifier();
       // Phase 405 wave 3 — movement-mode detector starts with the
       // others so the UI can show a cart/walking indicator from the
       // first hole.
@@ -1468,6 +1470,7 @@ function AppNavigator() {
       if (active) {
         startHoleDetection();
         startOffCourseDetector();
+        startLayoutVerifier();
         startMovementModeDetector();
         // See the note on the initial-active branch above: the live-fix fan-out is not a
         // shot-detection feature and must not be gated behind its setting.
@@ -1478,6 +1481,7 @@ function AppNavigator() {
       } else {
         stopHoleDetection();
         stopOffCourseDetector();
+        stopLayoutVerifier();
         stopMovementModeDetector();
       }
     });
@@ -1488,6 +1492,7 @@ function AppNavigator() {
       unsubRewards();
       stopHoleDetection();
       stopOffCourseDetector();
+      stopLayoutVerifier();
       stopMovementModeDetector();
     };
   }), []);
