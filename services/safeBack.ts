@@ -61,10 +61,17 @@ export function goToTab(tab: 'caddie' | 'dashboard' | 'play' | 'scorecard' | 'sw
 export function rootFocusedRouteName(): string | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { store } = require('expo-router/build/global-state/router-store') as { store?: { state?: { index?: number; routes?: { name?: string }[] } } };
-    const root = store?.state;
-    if (!root?.routes?.length) return null;
-    return root.routes[root.index ?? root.routes.length - 1]?.name ?? null;
+    type Nav = { index?: number; routes?: { name?: string; state?: Nav }[] };
+    const { store } = require('expo-router/build/global-state/router-store') as { store?: { state?: Nav } };
+    // The container's root holds ONE route, expo-router's internal '__root' slot (constants
+    // INTERNAL_SLOT_NAME); the app's own root stack — where '(tabs)' lives — is its nested state.
+    let nav: Nav | undefined = store?.state;
+    for (let depth = 0; nav?.routes?.length && depth < 3; depth++) {
+      const focused = nav.routes[nav.index ?? nav.routes.length - 1];
+      if (focused?.name !== '__root') return focused?.name ?? null;
+      nav = focused.state;
+    }
+    return null;
   } catch {
     return null;
   }

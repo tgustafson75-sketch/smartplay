@@ -75,7 +75,8 @@ describe('switching the round to the layout the player is actually on', () => {
 
   it('the runtime switches after the player stands on two of the sibling layout\'s tees', () => {
     // Active layout tees along one line; sibling tees ~85 yards east of them.
-    mockTees.dyes = { 1: { lat: 30.194, lng: -81.39 }, 2: { lat: 30.198, lng: -81.39 } };
+    // A fully mapped active layout: its absence near the player only means something when its tees are known.
+    mockTees.dyes = Object.fromEntries(Array.from({ length: 18 }, (_, i) => [i + 1, { lat: 30.194 + i * 0.004, lng: -81.39 }]));
     mockTees.stadium = { 1: { lat: 30.194, lng: -81.3908 }, 2: { lat: 30.198, lng: -81.3908 } };
     _setSiblingsForTests('dyes', [{ courseId: 'stadium', courseName: 'TPC Sawgrass — Stadium', holes: holes(18, 3, 150), courseLocation: null }]);
     const realNow = Date.now;
@@ -132,5 +133,38 @@ describe('switching the round to the layout the player is actually on', () => {
 
   it('a single-layout course has no siblings', async () => {
     expect(await resolveSiblings('local:mines-gc', 'The Mines Golf Course')).toEqual([]);
+  });
+
+  it('switching a twice-around round to an 18-hole layout ends the twice-around', () => {
+    useRoundStore.getState().switchRoundLayout({ courseId: 'nine', courseName: 'Nine', holes: holes(9), courseLocation: null, currentHole: 3 });
+    expect(useRoundStore.getState().twiceAround).toBe(true);
+    useRoundStore.getState().switchRoundLayout({ courseId: 'eighteen', courseName: 'Eighteen', holes: holes(18), courseLocation: null, currentHole: 4 });
+    expect(useRoundStore.getState().twiceAround).toBe(false);
+  });
+
+  it('a switch never lands the player on a hole that already has a score', () => {
+    mockTees.dyes = Object.fromEntries(Array.from({ length: 18 }, (_, i) => [i + 1, { lat: 30.194 + i * 0.004, lng: -81.39 }]));
+    mockTees.stadium = { 1: { lat: 30.194, lng: -81.3908 }, 2: { lat: 30.198, lng: -81.3908 } };
+    useRoundStore.getState().logScore(2, 4);
+    useRoundStore.getState().setCurrentHole?.(3);
+    const holeBefore = useRoundStore.getState().currentHole;
+    _setSiblingsForTests('dyes', [{ courseId: 'stadium', courseName: 'Stadium', holes: holes(18, 3, 150), courseLocation: null }]);
+    const realNow = Date.now;
+    let now = 3_000_000;
+    Date.now = () => now;
+    try {
+      for (const p of [mockTees.stadium[1], mockTees.stadium[2]]) {
+        for (let t = 0; t <= DWELL_MS + 4000; t += 4000) {
+          now += 4000;
+          mockFix = { ...p, accuracy_m: 5, speed: 0, timestamp: now, source: 'live' };
+          _tickForTests();
+        }
+      }
+    } finally {
+      Date.now = realNow;
+    }
+    expect(useRoundStore.getState().activeCourseId).toBe('stadium');
+    expect(useRoundStore.getState().currentHole).toBe(holeBefore);
+    expect(useRoundStore.getState().scores[2]).toBe(4);
   });
 });

@@ -71,4 +71,22 @@ describe('the tee box verifies which layout the round is on', () => {
     const r2 = stand(r1.s, STADIUM.tees[0].tee, 100_000);
     expect(r2.switchTo).toBeNull();
   });
+
+  it('an active layout whose tees are NOT KNOWN yet is not evidence against it', () => {
+    const unmapped: LayoutTees = { courseId: 'dyes-valley', tees: [], holeCount: 18 };
+    let st = INITIAL_STATE;
+    let sw = null as null | { courseId: string; hole: number };
+    for (let t = 0; t <= DWELL_MS + 8000; t += 4000) {
+      const r = observeTee(st, { at: STADIUM.tees[0].tee, accuracyM: 5, speedMs: 0, ts: t }, unmapped, [STADIUM]);
+      st = r.state; if (r.switchTo) sw = r.switchTo;
+    }
+    expect(sw).toBeNull();
+    expect(st.evidence).toBeNull();
+  });
+
+  it('two sibling layouts sharing one tee (27-hole combos) are ambiguous, not evidence', () => {
+    const far = (id: string, hole: number): LayoutTees => ({ courseId: id, tees: [{ hole, tee: at(30.30, -81.60) }] });
+    const r = stand(INITIAL_STATE, at(30.30, -81.60), 0, [far('red-white', 1), far('blue-red', 10)]);
+    expect(r.switchTo).toBeNull();
+  });
 });

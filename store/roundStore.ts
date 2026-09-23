@@ -1999,13 +1999,18 @@ export const useRoundStore = create<RoundState>()(
           activeCourseId: next.courseId,
           courseLocation: next.courseLocation ?? prev.courseLocation,
           courseHoles: holes,
-          twiceAround: twice || prev.twiceAround,
+          // Decided by the NEW layout alone — an 18-hole layout never plays twice around.
+          twiceAround: twice,
           recentCourseIds: [next.courseId, ...prev.recentCourseIds.filter((id) => id !== next.courseId && id !== prev.activeCourseId)].slice(0, 5),
           currentHole,
           currentYardage: holes[currentHole - 1]?.distance ?? null,
-          // Layout-owned: notes and "already said" belong to the other layout's holes.
+          // Layout-owned: notes and "already said" belong to the other layout's holes; a stated
+          // yardage, a pending recommendation and a lie read belong to the other layout's shot.
           holeNotes: {},
           spokenHoleEvents: {},
+          userStatedYardage: null,
+          pendingKevinRec: null,
+          pendingLieAnalysis: null,
         });
       },
 

@@ -39,7 +39,15 @@ export const MAX_ACCURACY_M = 15;
 export const MAX_SPEED_MS = 1.6;
 
 export type LatLng = { lat: number; lng: number };
-export type LayoutTees = { courseId: string; tees: { hole: number; tee: LatLng }[] };
+export type LayoutTees = {
+  courseId: string;
+  tees: { hole: number; tee: LatLng }[];
+  /** How many holes the layout has — so "no tee near" can be told apart from "tees not known". */
+  holeCount?: number;
+};
+/** The active layout must have tees for at least this share of its holes before its ABSENCE near
+ *  the player can mean anything. A map still building, timed out, or without greens is unknown. */
+export const MIN_ACTIVE_TEE_COVERAGE = 0.75;
 export type TeeObservation = { at: LatLng; accuracyM: number | null; speedMs: number | null; ts: number };
 
 export type VerifierState = {
@@ -105,6 +113,20 @@ export function observeTee(
   // A sibling tee on a shared tee complex proves nothing.
   if (on.activeD - ON_TEE_YD < SHARED_TEE_MARGIN_YD) return { state: next, switchTo: null };
 
+  // "The active layout has no tee here" is only evidence when the active layout's tees are KNOWN.
+  // (Triple-check: with its map still building, every sibling tee looked like proof — and after the
+  // switch the true layout, now unmapped, could never win back.)
+  const activeHoles = active.holeCount ?? active.tees.length;
+  if (!activeHoles || active.tees.length / activeHoles < MIN_ACTIVE_TEE_COVERAGE) return { state: next, switchTo: null };
+
+  // Two sibling layouts with a tee on the same spot (27-hole combos: one tee is hole 1 of one layout
+  // and hole 10 of another) cannot be told apart by position. Ambiguous is not evidence.
+  const rival = siblings.some((sib) => sib.courseId !== on!.courseId && (() => {
+    const n = nearestTee(sib, obs.at);
+    return n != null && n.d - ON_TEE_YD < SHARED_TEE_MARGIN_YD;
+  })());
+  if (rival) return { state: next, switchTo: null };
+
   const prior = next.evidence && next.evidence.courseId === on.courseId ? next.evidence.holes : [];
   const holes = prior.includes(on.hole) ? prior : [...prior, on.hole];
   next.evidence = { courseId: on.courseId, holes };
@@ -134,6 +156,9 @@ let state: VerifierState = INITIAL_STATE;
 let siblings: Sibling[] = [];
 let siblingsFor: string | null = null;
 let resolving: Promise<void> | null = null;
+let resolvedAt = 0;
+/** An empty answer may have been a network blip at round start; ask again this often. */
+const RERESOLVE_EMPTY_MS = 10 * 60 * 1000;
 
 const norm = (s: string | null | undefined) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -199,7 +224,7 @@ function teesOf(courseId: string, holes: { hole: number }[]): LayoutTees {
     const t = teeForHole(courseId, h.hole);
     if (t) tees.push({ hole: h.hole, tee: t });
   }
-  return { courseId, tees };
+  return { courseId, tees, holeCount: holes.length };
 }
 
 function tick(): void {
@@ -213,13 +238,16 @@ function tick(): void {
         siblings = [];
         state = INITIAL_STATE;
         resolving = resolveSiblings(activeId, round.activeCourse ?? '')
-          .then((s) => { if (siblingsFor === activeId) siblings = s; })
+          .then((s) => { if (siblingsFor === activeId) { siblings = s; resolvedAt = Date.now(); } })
           .catch(() => { siblingsFor = null; })
           .finally(() => { resolving = null; });
       }
       return;
     }
-    if (!siblings.length) return;
+    if (!siblings.length) {
+      if (resolvedAt && Date.now() - resolvedAt > RERESOLVE_EMPTY_MS) { siblingsFor = null; resolvedAt = 0; }
+      return;
+    }
     const { getLastFix } = require('./gpsManager') as typeof import('./gpsManager');
     const fix = getLastFix();
     if (!fix || (fix.source && fix.source !== 'live') || Date.now() - fix.timestamp > MAX_FIX_AGE_MS) return;
@@ -245,7 +273,9 @@ function applySwitch(courseId: string, hole: number): void {
   const round = roundMod.useRoundStore.getState();
   const from = round.activeCourse;
   // On the second nine of a twice-around round, the same tee is hole N+9.
-  const current = round.twiceAround && round.currentHole > 9 && hole <= 9 ? hole + 9 : hole;
+  let current = round.twiceAround && round.currentHole > 9 && hole <= 9 ? hole + 9 : hole;
+  // Never land the player on a hole that already has a score: scores stay on their hole numbers.
+  if (round.scores[current] != null) current = round.currentHole;
   round.switchRoundLayout({ courseId, courseName: sib.courseName, holes: sib.holes, courseLocation: sib.courseLocation, currentHole: current });
   // The new layout gets the full pipeline — its notes, brief and hole imagery — so the caddie is not
   // describing the old one. Deliberate (paid) and deduped/cached like any pick.
