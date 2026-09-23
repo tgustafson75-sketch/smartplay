@@ -18082,9 +18082,9 @@ check(
     /<TargetView key=\{geometry\?\.hole_number \?\? 'none'\}/.test(sf),
     'TargetView holds its tap in local state; unkeyed, hole N\'s circle and yardage were drawn over hole N+1');
 
-  check('START ROUND CARD: the card never waits on a paid generation it does not render',
-    /void fetchCourseContent\(/.test(card) && !/await fetchCourseContent\(/.test(card),
-    'the hero spinner and hole list sat behind the whole course-content generation on every new course');
+  check('START ROUND CARD: the card never runs a paid generation of its own — the pipeline builds',
+    !/fetchCourseContent\(/.test(card) && /eng\.downloadCourse\(/.test(card),
+    'the card awaited a course-content generation it never rendered (hero spinner held for the whole call), beside the engine generating the same');
 }
 
 // 2026-09-23 — the overage on the Claude bill: a turn the player never hears is still a turn paid for.
@@ -18133,6 +18133,21 @@ check(
   check('MODELS: no call uses a model id that has been, or is scheduled to be, shut down',
     files.length > 100 && hits.length === 0,
     hits.length ? `retired model ids still called: ${hits.join(', ')}` : `swept ${files.length} files; the image route runs gemini-3.1-flash-image with gpt-image-2 as its fallback`);
+}
+
+// 2026-09-23 (Tim) — the course build is ONE pipeline you can WATCH. Built is not reachable: the
+// progress state existed for weeks and was rendered nowhere. Pin that it is drawn where he looks.
+{
+  const play = readCode('app/(tabs)/play.tsx');
+  const rows = (play.match(/<CourseBuildProgress ids=\{\[r\.id\]\} \/>/g) ?? []).length;
+  check('COURSE BUILD: the live progress is on every card a course is picked from',
+    rows === 2 && /<CourseBuildProgress ids=\{\[selected\.id\]\} \/>/.test(play) &&
+      /eng\.downloadCourse\(\{ name: c\.club_name, courseId: c\.id, displayId: s\.id,/.test(play),
+    `near-you + search rows (${rows}/2) and the selected card render the pipeline's progress, and the pick hands the pipeline the id its card holds`);
+  const sel = play.slice(play.indexOf('const selectSummary = useCallback'), play.indexOf('const onTapInfo'));
+  check('COURSE BUILD: the pick does not run a second imagery build beside the pipeline',
+    (sel.match(/prefetchCourseImagery\(/g) ?? []).length === 1,
+    'only the bundled-course branch warms imagery itself; an API course is built by the pipeline alone');
 }
 
 const total = results.length;

@@ -4058,5 +4058,14 @@
       "camera_open": "Could not open the camera. Try again.",
       "photos_open": "Could not open your photos. Try again."
     }
+  },
+  "course_build": {
+    "finding": "Finding the course…",
+    "mapping": "Mapping the greens…",
+    "imagery": "Saving hole views for offline…",
+    "notes": "Writing course notes…",
+    "ready": "Ready · {{count}} greens mapped · in Your courses",
+    "ready_no_greens": "Ready · no green map yet, yardages are estimates",
+    "ready_unmeasured": "Ready · in Your courses"
   }
 }

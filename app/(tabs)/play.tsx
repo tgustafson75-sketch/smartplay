@@ -40,6 +40,7 @@ import { useRoundStore } from '../../store/roundStore';
 import { describePin } from '../../services/pinPosition';
 import { useClubBagStore } from '../../store/clubBagStore';
 import { useDownloadedCoursesStore } from '../../store/downloadedCoursesStore';
+import CourseBuildProgress from '../../components/course/CourseBuildProgress';
 import { usePlayerProfileStore, MAX_HOME_COURSES } from '../../store/playerProfileStore';
 import { canAccess } from '../../services/featureAccess';
 import { triggerPaywall } from '../../services/paywallGuard';
@@ -1814,28 +1815,19 @@ export default function PlayTab() {
           // Idempotent (skips if already anchored) + best-effort; fire-and-forget so it never
           // blocks the geometry/hero warm.
           void lookupCoursePlaces({ courseId: c.id, name: c.club_name, lat: courseLocation?.lat ?? null, lng: courseLocation?.lng ?? null });
-          // 2026-08-09 — run the download ENGINE on selection too: it orchestrates the full prefetch
-          // chain (content + intelligence on top of the geometry/imagery below) and marks the course
-          // available offline in downloadedCoursesStore. Idempotent; caches make re-runs cheap.
+          /**
+           * 2026-09-23 — THE PIPELINE BUILDS; THIS SCREEN READS. This used to run its own geometry
+           * build, its own imagery warm, AND the download engine — which repeated both. The engine is
+           * the one owner now: it builds map → hole imagery → notes and publishes live progress onto
+           * this card (displayId: the id the tapped row holds). The await below only JOINS the
+           * pipeline's map build (fetchCourseGeometry dedupes per course) so the hero can draw as soon
+           * as the map lands, without waiting on imagery.
+           */
           void import('../../services/courseDownloadEngine')
-            .then((eng) => eng.downloadCourse({ name: c.club_name, courseId: c.id, lat: courseLocation?.lat ?? null, lng: courseLocation?.lng ?? null }))
+            .then((eng) => eng.downloadCourse({ name: c.club_name, courseId: c.id, displayId: s.id, lat: courseLocation?.lat ?? null, lng: courseLocation?.lng ?? null }))
             .catch(() => undefined);
           await fetchCourseGeometry(c.id, { courseLocation });
           if (!isCurrent()) return;
-          // Build SmartVision hole imagery on selection for searched/API courses too —
-          // geometry (just fetched) + per-hole satellite tiles, persisted for offline.
-          // 2026-08-12 — the player's Preferred Tee, not just the first set. This is the tee whose
-          // HOLES become the round, so taking tees[0] here quoted back-tee yardages to a player who
-          // had chosen front. Same fix as the course screen; this surface was missed.
-          const teeHoles = pickTeeSet(c.tees, preferredTee, handicapGender)?.holes ?? [];
-          if (teeHoles.length > 0) {
-            void prefetchCourseImagery({
-              courseId: c.id,
-              courseName: c.club_name,
-              courseLocation,
-              holes: teeHoles.map((h, i) => ({ hole: h.hole_number ?? i + 1, par: h.par ?? 4, distance: h.yardage ?? 0 })),
-            });
-          }
           const tee = pickTeeSet(c.tees, preferredTee, handicapGender);
           if (tee) {
             const url = getCourseImageryUrl({
@@ -2419,6 +2411,7 @@ export default function PlayTab() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.localName} numberOfLines={1}>{r.club_name}</Text>
                   <Text style={styles.localMeta} numberOfLines={1}>{r.location || 'Near you'}</Text>
+                  <CourseBuildProgress ids={[r.id]} />
                 </View>
                 <AppIcon name="chevron-forward" size={18} color="#00C896" />
               </TouchableOpacity>
@@ -2507,6 +2500,7 @@ export default function PlayTab() {
             <View style={{ flex: 1 }}>
               <Text style={styles.localName} numberOfLines={1}>{r.club_name}</Text>
               <Text style={styles.localMeta} numberOfLines={1}>{r.location}</Text>
+              <CourseBuildProgress ids={[r.id]} />
             </View>
             <TouchableOpacity
               onPress={() => toggleHome(r.id, r.club_name ?? '')}
@@ -2608,6 +2602,7 @@ export default function PlayTab() {
                       {pickTeeSet(selected.tees, preferredTee, handicapGender)!.slope_rating != null && t('play.tee_stats.slope', { slope: pickTeeSet(selected.tees, preferredTee, handicapGender)!.slope_rating })}
                     </Text>
                   )}
+                  <CourseBuildProgress ids={[selected.id]} />
                 </View>
               </View>
 

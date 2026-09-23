@@ -566,7 +566,22 @@ export async function aiSearchCourse(query: string, region?: string): Promise<Ai
   }
 }
 
-export async function getCourse(course_id: string): Promise<Course | null> {
+/**
+ * 2026-09-23 — one detail request per course at a time. Picking a course fired getCourse from the
+ * Play tab, the Start Round card, Course Detail and the download engine in the same second — four
+ * paid detail calls for one card. Joining the in-flight request is free; it clears on settle.
+ */
+const detailsInFlight: Map<string, Promise<Course | null>> = new Map();
+
+export function getCourse(course_id: string): Promise<Course | null> {
+  const pending = detailsInFlight.get(course_id);
+  if (pending) return pending;
+  const run = getCourseInner(course_id).finally(() => { detailsInFlight.delete(course_id); });
+  detailsInFlight.set(course_id, run);
+  return run;
+}
+
+async function getCourseInner(course_id: string): Promise<Course | null> {
   // Check cache first
   const cached = await readCachedCourse(course_id);
   if (cached && !isCacheStale(cached.cached_at)) {

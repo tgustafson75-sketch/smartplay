@@ -18,7 +18,7 @@ import { getApiBaseUrl } from './apiBase';
 import { prefetchRoundData } from './roundPrefetch';
 import { searchCourses, getCourse, courseToHoles } from './golfCourseApi';
 import { COURSES } from '../data/courses';
-import { useDownloadedCoursesStore } from '../store/downloadedCoursesStore';
+import { useDownloadedCoursesStore, type CourseBuildStage } from '../store/downloadedCoursesStore';
 import type { CourseHole } from '../store/roundStore';
 
 export interface NearbyCourse {
@@ -348,6 +348,9 @@ export function downloadCourse(input: {
   lng?: number | null;
   /** false = speculative build: no paid Claude content (see roundPrefetch PrefetchArgs.paidContent). */
   paidContent?: boolean;
+  /** The id the CARD the player is looking at holds (a `place:` near-you row, a search result), so
+   *  the live progress lands on that card as well as under the resolved course id. */
+  displayId?: string | null;
 }): Promise<{ ok: boolean; courseId?: string; reason?: string; fresh?: boolean }> {
   const key = input.courseId || `name:${input.name.trim().toLowerCase()}`;
   const pending = downloadsInFlight.get(key);
@@ -391,6 +394,9 @@ async function downloadCourseInner(input: {
   lng?: number | null;
   /** false = speculative build: no paid Claude content (see roundPrefetch PrefetchArgs.paidContent). */
   paidContent?: boolean;
+  /** The id the CARD the player is looking at holds (a `place:` near-you row, a search result), so
+   *  the live progress lands on that card as well as under the resolved course id. */
+  displayId?: string | null;
 }): Promise<{ ok: boolean; courseId?: string; reason?: string; fresh?: boolean }> {
   // 2026-08-09 (stores audit P2) — `fresh` distinguishes an ACTUAL new download from an already-owned
   // course, so callers only toast "downloaded" when it truly happened (the arrival toast was claiming
@@ -445,18 +451,37 @@ async function downloadCourseInner(input: {
     } catch { /* an alias is an optimisation; never fail a download over it */ }
   };
 
+  /**
+   * 2026-09-23 — THE LIVE PROGRESS, published under every id a card might hold for this course.
+   * `downloading` was written here (once, at 0.1) and rendered nowhere; the Play tab now draws it as
+   * the build's progress bar, so a course is something the player watches arrive, not a spinner.
+   */
+  const cardIds = new Set<string>([input.courseId, input.displayId].filter((x): x is string => !!x));
+  const publish = (name: string, progress: number, stage: CourseBuildStage) => {
+    for (const id of cardIds) useDownloadedCoursesStore.getState().markDownloading(id, name, progress, stage);
+  };
+  const finish = (except?: string) => {
+    for (const id of cardIds) if (id !== except) useDownloadedCoursesStore.getState().clearDownloading(id);
+  };
+  const fail = (reason: string) => {
+    for (const id of cardIds) useDownloadedCoursesStore.getState().markBuildFailed(id, input.name, reason);
+  };
+  publish(input.name, 0.05, 'card');
+
   const resolved = await resolveCourse(input.name, input.courseId ?? null);
-  if (resolved === 'unavailable') return { ok: false, reason: 'unavailable' };
-  if (!resolved) return { ok: false, reason: 'unresolved' };
+  if (resolved === 'unavailable') { fail(downloadFailureText(input.name, 'unavailable')); return { ok: false, reason: 'unavailable' }; }
+  if (!resolved) { fail(downloadFailureText(input.name, 'unresolved')); return { ok: false, reason: 'unresolved' }; }
   const { courseId, courseName, holes, rating, slope } = resolved;
   if (store.isDownloaded(courseId) && !needsGeometry(courseId)) {
     // Already ours under its real id — record the alias so the next launch skips before the search.
     rememberAlias(courseId, courseName, holes.length,
       useDownloadedCoursesStore.getState().downloaded[courseId]?.greens);
+    finish();
     return { ok: true, courseId, fresh: false };
   }
 
-  store.markDownloading(courseId, courseName, 0.1);
+  cardIds.add(courseId);
+  publish(courseName, 0.2, 'card');
   try {
     // prefetchRoundData fans out geometry + content + intelligence + imagery and caches each. It's
     // fire-and-forget by design (doesn't reject), so we await it and then record the course as available.
@@ -468,6 +493,7 @@ async function downloadCourseInner(input: {
       rating: rating ?? null,
       slope: slope ?? null,
       paidContent: input.paidContent !== false,
+      onStage: (stage, progress) => publish(courseName, progress, stage),
     });
     /**
      * 2026-09-10 (Tim, Hemet) — RECORD WHAT WE ACTUALLY GOT.
@@ -488,9 +514,10 @@ async function downloadCourseInner(input: {
     }
     store.markDownloaded({ courseId, name: courseName, holeCount: holes.length, at: Date.now(), greens });
     rememberAlias(courseId, courseName, holes.length, greens);
+    finish(courseId);
     return { ok: true, courseId, fresh: true };
   } catch (e) {
-    store.clearDownloading(courseId);
+    fail(downloadFailureText(courseName, undefined));
     return { ok: false, courseId, reason: e instanceof Error ? e.message : 'prefetch_failed' };
   }
 }

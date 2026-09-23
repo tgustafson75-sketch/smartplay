@@ -28,18 +28,28 @@ export interface DownloadedCourse {
   greens?: number;
 }
 
-interface DownloadingState {
+/**
+ * 2026-09-23 — the stage a course build is in, for the live progress on its card. `downloading` was
+ * written by the engine for weeks and rendered nowhere; this is what the Play tab now draws.
+ */
+export type CourseBuildStage = 'card' | 'map' | 'imagery' | 'notes';
+
+export interface DownloadingState {
   name: string;
   /** 0..1 */
   progress: number;
+  stage?: CourseBuildStage;
+  /** Set when the build ended without a course — the card says why instead of silently vanishing. */
+  failed?: string;
 }
 
 interface DownloadedCoursesState {
   downloaded: Record<string, DownloadedCourse>;
   downloading: Record<string, DownloadingState>;
-  markDownloading: (courseId: string, name: string, progress: number) => void;
+  markDownloading: (courseId: string, name: string, progress: number, stage?: CourseBuildStage) => void;
   markDownloaded: (c: DownloadedCourse) => void;
   clearDownloading: (courseId: string) => void;
+  markBuildFailed: (courseId: string, name: string, reason: string) => void;
   isDownloaded: (courseId: string | null | undefined) => boolean;
   reset: () => void;
 }
@@ -49,14 +59,16 @@ export const useDownloadedCoursesStore = create<DownloadedCoursesState>()(
     (set, get) => ({
       downloaded: {},
       downloading: {},
-      markDownloading: (courseId, name, progress) =>
-        set((s) => ({ downloading: { ...s.downloading, [courseId]: { name, progress: Math.max(0, Math.min(1, progress)) } } })),
+      markDownloading: (courseId, name, progress, stage) =>
+        set((s) => ({ downloading: { ...s.downloading, [courseId]: { name, progress: Math.max(0, Math.min(1, progress)), stage } } })),
       markDownloaded: (c) =>
         set((s) => {
           const nextDownloading = { ...s.downloading };
           delete nextDownloading[c.courseId];
           return { downloaded: { ...s.downloaded, [c.courseId]: c }, downloading: nextDownloading };
         }),
+      markBuildFailed: (courseId, name, reason) =>
+        set((s) => ({ downloading: { ...s.downloading, [courseId]: { name, progress: 0, failed: reason } } })),
       clearDownloading: (courseId) =>
         set((s) => {
           const next = { ...s.downloading };

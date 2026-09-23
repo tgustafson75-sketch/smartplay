@@ -15,7 +15,6 @@ import AppIcon from '../AppIcon';
 import CourseDetailModal, { type ModalHole } from './CourseDetailModal';
 import { getCourse } from '../../services/golfCourseApi';
 import { fetchCourseGeometry, getHoleGeometry } from '../../services/courseGeometryService';
-import { fetchCourseContent } from '../../services/courseContentService';
 import { getCourseImageryUrl } from '../../services/mapboxImagery';
 import type { Course } from '../../types/course';
 import { useTranslation } from 'react-i18next';
@@ -64,30 +63,17 @@ export default function StartRoundCourseCard({ courseId, courseName }: Props) {
         !(Math.abs(c.location.latitude) < 0.001 && Math.abs(c.location.longitude) < 0.001)
           ? { lat: c.location.latitude, lng: c.location.longitude }
           : null;
+      /**
+       * 2026-09-23 — the pipeline builds (map → imagery → notes, with live progress); this card joins
+       * the map it needs for the hero and reads the rest. It used to run its own geometry build and
+       * its own paid content warm beside the engine doing the same.
+       */
+      if (c) {
+        void import('../../services/courseDownloadEngine')
+          .then((eng) => eng.downloadCourse({ name: c.club_name, courseId, lat: courseLocation?.lat ?? null, lng: courseLocation?.lng ?? null }))
+          .catch(() => undefined);
+      }
       try { await fetchCourseGeometry(courseId, { courseLocation }); } catch {}
-      try {
-        /**
-         * 2026-08-22 — the FOURTH surface reading the card's first tee. Found sweeping for the shape
-         * after fixing courseToHoles + courseSummaryForContext: this card renders YARDS / PAR /
-         * RATING / SLOPE straight off tees[0], and feeds the same numbers into fetchCourseContent, so
-         * the generated course content was written against a card the player may not play. At Sharp
-         * Park tees[0] is the women's Blue: 6416 yards at 77.5/135 shown to someone playing the 5087y
-         * Gold. [[no-half-fixes-enforce-every-surface]]
-         */
-        const tee = playerTee(c) ?? c?.tees[0];
-        if (c && tee) {
-          // 2026-09-23 — warmed, not awaited. This card renders nothing from the content, but the
-          // await held its hero spinner and hole list for the whole paid generation on every course
-          // the player had not opened before.
-          void fetchCourseContent({
-            courseId, courseName: c.club_name,
-            location: [c.location.city, c.location.state].filter(Boolean).join(', '),
-            par: tee.par_total, yardage: tee.total_yards,
-            rating: tee.course_rating, slope: tee.slope_rating,
-            holes: tee.holes.map(h => ({ hole_number: h.hole_number, par: h.par, yardage: h.yardage })),
-          }).catch(() => undefined);
-        }
-      } catch {}
       const tee = playerTee(c) ?? c?.tees[0];
       if (cancelled) return;
       if (!tee) { setHeroResolved(true); return; } // no tee → no imagery; stop the spinner

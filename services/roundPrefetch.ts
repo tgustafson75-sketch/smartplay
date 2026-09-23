@@ -57,6 +57,8 @@ type PrefetchArgs = {
    * round start all fetch them). Defaults to true: every deliberate caller keeps the full chain.
    */
   paidContent?: boolean;
+  /** Called as the build moves through its stages — the course card's live progress. */
+  onStage?: (stage: 'map' | 'imagery' | 'notes', progress: number) => void;
 };
 
 /**
@@ -68,7 +70,8 @@ type PrefetchArgs = {
  * yardage to the pin; it is not a failure to download, but it is never a success to report.
  */
 export async function prefetchRoundData(args: PrefetchArgs): Promise<number> {
-  const { courseId, courseName, courseLocation, holes, rating, slope, paidContent = true } = args;
+  const { courseId, courseName, courseLocation, holes, rating, slope, paidContent = true, onStage } = args;
+  const stage = (st: 'map' | 'imagery' | 'notes', p: number) => { try { onStage?.(st, p); } catch { /* UI only */ } };
   if (!courseId || !courseName || !Array.isArray(holes) || holes.length === 0) {
     console.log('[roundPrefetch] skipped — missing courseId / courseName / holes', { courseId, courseName, holesLen: holes?.length ?? 0 });
     return 0;
@@ -94,6 +97,7 @@ export async function prefetchRoundData(args: PrefetchArgs): Promise<number> {
    * AsyncStorage read and makes the derived tier of resolveGreenCoords reachable.
    */
   void loadDerivedGeometry(courseId).catch(() => undefined);
+  stage('map', 0.25);
 
   /**
    * 2026-09-10 (Tim, Hemet: "the course engine spun and loaded and I got what I thought was the
@@ -194,6 +198,7 @@ export async function prefetchRoundData(args: PrefetchArgs): Promise<number> {
     // satellite canvas offline mid-round.
     tileP = geometryP
       .then(() => {
+        stage('imagery', 0.75);
         const tileInputs = buildTileInputs(courseId, holes);
         if (tileInputs.length === 0) {
           console.log('[roundPrefetch] mapbox skipped — no hole has a valid green coordinate');
@@ -208,7 +213,14 @@ export async function prefetchRoundData(args: PrefetchArgs): Promise<number> {
       });
   }
 
-  await Promise.allSettled([geometryP, contentP, intelP, tileP]);
+  /**
+   * 2026-09-23 — READY means playable: the map and the hole imagery. The paid notes and brief keep
+   * loading behind (each is deduped and cached), so a slow generation can no longer hold a course's
+   * card at "building" — or the caller that awaited this — for the length of a Claude call.
+   */
+  await Promise.allSettled([geometryP, tileP]);
+  if (paidContent) stage('notes', 0.9);
+  void Promise.allSettled([contentP, intelP]);
   const greens = await geometryP.catch(() => 0);
   console.log('[roundPrefetch] complete for', courseId, '— elapsed', Date.now() - startedAt, 'ms', '— greens:', greens);
   /**
