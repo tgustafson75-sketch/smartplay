@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { formatDistanceCompact, liveDistanceUnit, toDisplayDistance, unitWord } from '../../services/distanceUnits';
-import { courseDisplayLabel } from '../../data/courseComplexes';
 import { QuickTutorial } from '../../components/QuickTutorial';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, Alert, Animated, Easing, AppState, AppStateStatus, ScrollView, useWindowDimensions, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
@@ -50,7 +49,7 @@ import { openTeeTimeSearch } from '../../services/teeTimeLink';
 
 import { isSmartMotionActive, isSmartMotionRecording, emitSmartMotionCommand, emitDrillConfig, subscribeSmartMotionVoiceEvent, subscribeSmartMotionUtterance } from '../../services/smartMotionRecordBus';
 import { type RoundMode, ROUND_MODE_LABELS, ROUND_MODE_CARDS } from '../../types/patterns';
-import { getCourse as getApiCourse, courseToHoles, searchCourses } from '../../services/golfCourseApi';
+import { getCourse as getApiCourse } from '../../services/golfCourseApi';
 import { generateRecap } from '../../services/recapGenerator';
 import { buildFullPracticeContext } from '../../services/tutorialContext';
 import { generatePatternInsights } from '../../services/patternDetection';
@@ -2926,96 +2925,23 @@ export default function CaddieTab() {
     let courseId: string | null = null;
     let courseLocation: ShotLocation | null = null;
 
-    if (picked.isLocal) {
-      const localId = picked.id.replace('local:', '');
-      const local = getCourse(localId);
-      courseName = local?.name ?? picked.name;
-      // 2026-07-01 (Tim) — fall back to getBundledHoles, which also resolves `custom:` scorecard
-      // courses (customCourseStore). No-op for local courses that getCourse already populated.
-      /**
-       * 2026-09-10 — THE ROUND LOADED THE TEES THE GEOMETRY LAYER HAD ALREADY REJECTED.
-       *
-       * `getCourse()` returns `c.holes` RAW; `getBundledHoles()` returns
-       * `validateBundledTees(c.holes)`, which zeroes any bundled tee whose measured tee→green
-       * distance disagrees with the scorecard by >35% — "dropped so the measure tool can't draw a
-       * wrong line". Preferring the raw array put every rejected tee straight into
-       * `roundStore.courseHoles`, live and unflagged.
-       *
-       * Measured today against the bundle: echo-hills (Tim's Hemet nine) 7 of 8 tees rejected,
-       * greenhill 14 of 16, westlake-cc-nj 14 of 14. `resolveTeeCoords` reads courseHoles FIRST,
-       * so holeDetection's 25-yard "am I at the next tee" gate was being measured against a point
-       * ~150 yards out in the fairway — and reported `source: 'courseHoles'`, i.e. "this is real".
-       *
-       * Same validated accessor both ways now. A hole with a zeroed tee still has its green, and
-       * every consumer already handles a missing tee honestly. [[two-owners-is-the-root-cause]]
-       */
-      const bundledValidated = getBundledHoles(picked.id);
-      holes = bundledValidated.length > 0 ? bundledValidated : (local?.holes ?? []);
-
-      // 2026-06-21 — API fallback for local-image courses without a data/courses.ts entry.
-      // Greenhill (and future local: courses) have bundled images + centroid but no hardcoded
-      // hole data. Search the golf course API by name and pull par/yardage so Kevin, SmartFinder,
-      // and the scorecard all have real numbers. Fire before startRound() so holes is populated.
-      if (holes.length === 0) {
-        try {
-          const results = await searchCourses(courseName);
-          const match = results.find(r => !r._error && r.id);
-          if (match?.id) {
-            const apiCourse = await getApiCourse(match.id);
-            if (apiCourse && apiCourse.tees.length > 0) {
-              holes = courseToHoles(apiCourse);
-              // 2026-09-05 — club_name ALONE LOSES THE LAYOUT. golfcourseapi returns
-              // club_name='Menifee Lakes Country Club' with course_name='Palms' or 'Lakes' beside
-              // it; taking only the club discarded which course the player is standing on, and
-              // every downstream consumer that resolves imagery from the name then guessed — and
-              // guessed wrong, giving Tim the Lakes' hole photographs on a Palms round with correct
-              // Palms yardages next to them. [[two-owners-is-the-root-cause]]
-              courseName = courseDisplayLabel(apiCourse.club_name, apiCourse.course_name);
-              console.log('[startRound] local API fallback: got', holes.length, 'holes for', courseName, 'via id', match.id);
-            }
-          }
-        } catch {
-          // Non-fatal — proceed with empty holes, geometry fetch covers GPS coords below
-        }
+    /**
+     * 2026-09-23 (unify) — ONE resolution for every course id, through services/courseCard: a surveyed
+     * course (local:), a custom one, or a database course. This had a local branch and a database
+     * branch; the local one never set the course's location, so surveyed rounds started without it.
+     */
+    courseId = picked.id;
+    courseName = picked.name;
+    try {
+      const { loadCourseCard } = require('../../services/courseCard') as typeof import('../../services/courseCard');
+      const card = await loadCourseCard(picked.id, { name: picked.name });
+      if (card) {
+        holes = card.holes;
+        courseName = card.name;
+        if (card.location) courseLocation = card.location;
       }
-
-      // 2026-05-19 — pass the full picked.id (e.g. 'local:sunnyvale') as
-      // courseId for local courses. Previously left null, which silently
-      // broke fetchCourseGeometry (never fired), the SmartVision image
-      // cascade (fell through to homeCourse → Palms images on Sunnyvale),
-      // hole-detection course matching, voice-intent course context, and
-      // the smartFinder geometry-cache fallback. Local courses route
-      // through 'local:slug' downstream — courseGeometryService strips the
-      // prefix and resolves to the upstream golfcourseapi id.
-      courseId = picked.id;
-    } else {
-      courseId = picked.id;
-      courseName = picked.name;
-      try {
-        const apiCourse = await getApiCourse(courseId);
-        if (apiCourse && apiCourse.tees.length > 0) {
-          holes = courseToHoles(apiCourse);
-          // Same as above: keep the layout, or a multi-course property resolves to whichever
-          // sibling the club name happens to contain.
-          courseName = courseDisplayLabel(apiCourse.club_name, apiCourse.course_name);
-          if (
-            typeof apiCourse.location?.latitude === 'number' &&
-            typeof apiCourse.location?.longitude === 'number' &&
-            Number.isFinite(apiCourse.location.latitude) &&
-            Number.isFinite(apiCourse.location.longitude) &&
-            Math.abs(apiCourse.location.latitude) <= 90 &&
-            Math.abs(apiCourse.location.longitude) <= 180 &&
-            !(Math.abs(apiCourse.location.latitude) < 0.001 && Math.abs(apiCourse.location.longitude) < 0.001)
-          ) {
-            courseLocation = {
-              lat: apiCourse.location.latitude,
-              lng: apiCourse.location.longitude,
-            };
-          }
-        }
-      } catch {
-        setCaddieResponse("Couldn't load the course layout — starting with yardages only. You can still play.");
-      }
+    } catch {
+      // Round start copes with a missing card: it starts empty and says so (noMapLine).
     }
 
     // 2026-05-31 — Fix FZ: killed the `holes = palms` fallback.

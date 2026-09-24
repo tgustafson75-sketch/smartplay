@@ -18200,6 +18200,18 @@ check(
     `started on mount-if-active and on round start (${starts}/2), stopped on round end and unmount (${stops}/2)`);
 }
 
+// 2026-09-23 (Tim) — "Unify the pipeline": one course card for every course id.
+{
+  const caddie = readCode('app/(tabs)/caddie.tsx');
+  const engine = readCode('services/courseDownloadEngine.ts');
+  check('ONE CARD: round start resolves every course through services/courseCard',
+    /loadCourseCard\(picked\.id/.test(caddie) && !/if \(picked\.isLocal\) \{/.test(caddie),
+    'round start had a local: branch and a database branch; the local one never set the course location');
+  check('ONE CARD: the download engine resolves courses through services/courseCard',
+    /loadCourseCard\(/.test(engine) && !/courseId: b\.id/.test(engine),
+    'the engine recorded surveyed courses under their bare slug and skipped their tee check');
+}
+
 const total = results.length;
 const passed = results.filter((r) => r.passed).length;
 const failed = results.filter((r) => !r.passed);

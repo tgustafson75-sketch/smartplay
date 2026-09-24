@@ -16,7 +16,7 @@
  */
 import { getApiBaseUrl } from './apiBase';
 import { prefetchRoundData } from './roundPrefetch';
-import { searchCourses, getCourse, courseToHoles } from './golfCourseApi';
+import { searchCourses } from './golfCourseApi';
 import { COURSES } from '../data/courses';
 import { useDownloadedCoursesStore, type CourseBuildStage } from '../store/downloadedCoursesStore';
 import type { CourseHole } from '../store/roundStore';
@@ -241,87 +241,60 @@ export function isApiCourseId(id: string): boolean {
   return !/^(local|place|custom|near|ai):/.test(id) && !COURSES.some((c) => c.id === id);
 }
 
+/**
+ * Resolve a course to its card — through services/courseCard, the ONE owner of "what is this course".
+ * 2026-09-23 (unify) — this had its own bundled branch, which recorded surveyed courses under their
+ * BARE slug ('palms', not 'local:palms') and used the raw holes, skipping the tee check; and it read a
+ * top-level `rating` a database card does not have, so rating/slope were always empty.
+ *   1. an explicit id (local:, custom:, a database id; a bare surveyed slug is taken as local:)
+ *   2. a surveyed course by name
+ *   3. a database search by name
+ */
 async function resolveCourse(name: string, explicitCourseId?: string | null): Promise<{ courseId: string; courseName: string; holes: CourseHole[]; rating?: string | number | null; slope?: string | number | null } | 'unavailable' | null> {
-  // 1) Explicit id → bundled match.
-  if (explicitCourseId) {
-    const b = COURSES.find((c) => c.id === explicitCourseId);
-    if (b && b.holes.length) return { courseId: b.id, courseName: b.name, holes: b.holes, rating: b.rating, slope: b.slope };
-  }
-  /**
-   * 1b) 2026-09-23 — an explicit golfcourseapi id IS the course. Re-searching by the club's name and
-   * taking the first hit is how picking Bethpage Black downloaded Bethpage Yellow, TPC Dye's Valley
-   * resolved to the Stadium course, and Sharp Park (Pacifica) became Ella Sharp Park (Michigan) — and
-   * it spent two quota calls to get the wrong answer when getCourse is one call (and cache-first,
-   * so it also works offline for a course opened before).
-   */
-  if (explicitCourseId && isApiCourseId(explicitCourseId)) {
+  const { loadCourseCard } = require('./courseCard') as typeof import('./courseCard');
+  const fromCard = (c: import('./courseCard').CourseCard) =>
+    ({ courseId: c.courseId, courseName: c.name, holes: c.holes, rating: c.rating, slope: c.slope });
+
+  if (explicitCourseId && !/^(place|near):/.test(explicitCourseId)) {
+    const id = COURSES.some((c) => c.id === explicitCourseId) ? `local:${explicitCourseId}` : explicitCourseId;
     try {
-      const full = await getCourse(explicitCourseId);
-      if (full) {
-        const holes = courseToHoles(full);
-        // A record with no playable holes is an answer ("nothing to play here"), not an outage.
-        if (!holes.length) return null;
-        {
-          const fullC = full as { club_name?: string; course_name?: string; rating?: string | number; slope?: string | number };
-          return {
-            courseId: explicitCourseId,
-            courseName: fullC.club_name ?? fullC.course_name ?? name,
-            holes,
-            rating: fullC.rating ?? null,
-            slope: fullC.slope ?? null,
-          };
-        }
-      }
+      const card = await loadCourseCard(id);
+      if (card?.holes.length) return fromCard(card);
     } catch { /* fall through to the name paths */ }
     // No record for this id (unreachable, or an id the voice model invented): the name paths below
     // are exactly what ran before, so nothing that used to resolve stops resolving.
   }
-  // 2) Bundled catalog by name (offline-first — a course we already ship is instant). 2026-08-06 (audit):
-  // exact normalized match first; a substring match ONLY when BOTH names are reasonably long (>=5), so a
-  // short bundled name (e.g. "Mines") can't claim every located course, and an empty-normalized name can
-  // never match everything.
+
+  // A surveyed course by name (exact normalised match, or a close one of similar length — a short
+  // surveyed name like "Lakes" must not claim "Twin Lakes").
   const key = norm(name);
   if (key.length >= 3) {
     const b = COURSES.find((c) => {
       const cn = norm(c.name), cf = norm(c.fullName);
       if (!cn && !cf) return false;
       if (cn === key || cf === key) return true;
-      // 2026-08-06 (audit cycle 5, #3b) — a loose substring match false-positived: bundled "Lakes"/"Mines"
-      // is a substring of located "Twin Lakes"/"Mines Road GC" → wrong course. Require the names be a
-      // SIMILAR LENGTH (short-name ÷ long-name ≥ 0.7) on top of the ≥5 gates, so a genuinely different,
-      // longer located name can't be claimed by a short bundled fragment. A real near-match (norm strips
-      // golf/club/course/cc, so "Menifee Lakes CC" → "menifeelakes") still resolves via the exact check.
       if (!(key.length >= 5 && cn.length >= 5)) return false;
       if (!(cn.includes(key) || key.includes(cn))) return false;
       const ratio = Math.min(cn.length, key.length) / Math.max(cn.length, key.length);
       return ratio >= 0.7;
     });
-    if (b && b.holes.length) return { courseId: b.id, courseName: b.name, holes: b.holes, rating: b.rating, slope: b.slope };
+    if (b) {
+      const card = await loadCourseCard(`local:${b.id}`).catch(() => null);
+      if (card?.holes.length) return fromCard(card);
+    }
   }
-  // 3) golfcourseapi search → getCourse → holes.
+
   try {
     const hits = await searchCourses(name);
     // A failed search is not an empty one: the sentinel row carries `_error` and no id.
     if (hits.length === 1 && hits[0]._error) return 'unavailable';
     const first = hits?.[0];
     if (first?.id) {
-      const full = await getCourse(String(first.id));
+      const card = await loadCourseCard(String(first.id));
       // The search FOUND the course; its card did not come back (quota, network, nothing cached).
       // That is an outage, not "not in the database" — which is also what arms the 6h cooldown.
-      if (!full) return 'unavailable';
-      {
-        const holes = courseToHoles(full);
-        if (holes.length) {
-          const fullC = full as { club_name?: string; course_name?: string; rating?: string | number; slope?: string | number };
-          return {
-            courseId: String(first.id),
-            courseName: fullC.club_name ?? fullC.course_name ?? name,
-            holes,
-            rating: fullC.rating ?? null,
-            slope: fullC.slope ?? null,
-          };
-        }
-      }
+      if (!card) return 'unavailable';
+      if (card.holes.length) return fromCard(card);
     }
   } catch { return 'unavailable'; }
   return null;
