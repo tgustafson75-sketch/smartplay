@@ -825,21 +825,71 @@ function isApiCourseId(id: string): boolean {
   return !!id && !/^(local|custom|place|near|ai):/.test(id) && !id.startsWith('__');
 }
 
-/** Per-hole LONGEST yardage across every tee set on the card — the back tees OSM routes start from. */
-export function backTeeYards(course: { tees?: { holes?: { yardage?: number | null }[] }[] } | null | undefined): number[] {
-  const tees = course?.tees ?? [];
-  const n = Math.min(18, Math.max(0, ...tees.map((t) => t.holes?.length ?? 0)));
-  const out: number[] = [];
-  for (let i = 0; i < n; i++) {
-    let best = 0;
-    for (const t of tees) {
-      const y = t.holes?.[i]?.yardage;
-      if (typeof y === 'number' && Number.isFinite(y) && y > best && y <= 900) best = Math.round(y);
-    }
-    out.push(best);
-  }
+/**
+ * The BACK tee's yardage per hole, by hole NUMBER: the longest tee set that covers the most holes.
+ * Triple-check: the first version took a per-hole max across every tee set by array index — a partial
+ * or out-of-order set (a "back nine" stored at 0-8) could put a par 5's yardage in a par 3's slot and
+ * push a correct course past the 25% veto. One real tee set, placed by hole_number.
+ */
+export function backTeeYards(
+  course: { tees?: { total_yards?: number | null; holes?: { hole_number?: number | null; yardage?: number | null }[] }[] } | null | undefined,
+): number[] {
+  const tees = (course?.tees ?? []).filter((t) => (t.holes?.length ?? 0) > 0);
+  if (!tees.length) return [];
+  const coverage = (t: typeof tees[number]) => new Set((t.holes ?? []).map((h, i) => h.hole_number ?? i + 1)).size;
+  const best = tees.reduce((a, b) => {
+    const ca = coverage(a), cb = coverage(b);
+    if (cb !== ca) return cb > ca ? b : a;
+    return (b.total_yards ?? 0) > (a.total_yards ?? 0) ? b : a;
+  });
+  const holes = best.holes ?? [];
+  const n = Math.min(18, Math.max(...holes.map((h, i) => h.hole_number ?? i + 1)));
+  const out = Array.from({ length: n }, () => 0);
+  holes.forEach((h, i) => {
+    const num = h.hole_number ?? i + 1;
+    const y = h.yardage;
+    if (num >= 1 && num <= n && typeof y === 'number' && Number.isFinite(y) && y > 0 && y <= 900) out[num - 1] = Math.round(y);
+  });
   return out;
 }
+
+/**
+ * The course's own card on a geometry request — ONE owner, used by the forward build AND the weekly
+ * background refresh (the refresh used to send none). Bundled card first; for a golfcourseapi course,
+ * its back-tee card from THIS device's cache (no request, no paid detail call).
+ */
+async function appendCardYards(params: URLSearchParams, courseId: string): Promise<void> {
+  try {
+    const { getBundledHoles } = require('../data/courses') as typeof import('../data/courses');
+    const card = getBundledHoles(courseId);
+    if (card.length >= 3) {
+      const byHole: number[] = [];
+      for (const h of card) if (h.hole >= 1 && h.hole <= 18) byHole[h.hole - 1] = h.distance > 50 ? h.distance : 0;
+      if (byHole.some(y => y > 0)) {
+        params.set('cardYards', Array.from({ length: byHole.length }, (_, i) => byHole[i] ?? 0).join(','));
+      }
+    }
+  } catch { /* no bundled card — the engine falls back to geometry-only selection */ }
+  /**
+   * 2026-09-23 — a DATABASE course sends its card too. Only bundled courses did, so for every
+   * golfcourseapi course the engine chose hole-ways by geometry alone and its scorecard veto never ran:
+   * TPC Sawgrass Dye's Valley was built from the Stadium course's OSM routes, 75% off its own card.
+   * Measured live the same day: sent its card, Dye's Valley built ITS holes, 11.6% off.
+   * The BACK-tee yardage per hole, because OSM hole routes are drawn from the back tee; a forward card
+   * would make a correct course look wrong against a 25% bar.
+   */
+  if (!params.has('cardYards') && isApiCourseId(courseId)) {
+    try {
+      // From this device's cache only: the pick that led here fetched and cached the card. A build
+      // must not add a request — or a paid detail call — in front of itself to get one.
+      const { peekCachedCourse } = await import('./golfCourseApi');
+      const course = await peekCachedCourse(courseId);
+      const back = backTeeYards(course);
+      if (back.filter((y) => y > 50).length >= 3) params.set('cardYards', back.join(','));
+    } catch { /* no card available — geometry-only selection, as before */ }
+  }
+}
+
 
 /**
  * Hard reset for one course (or all of them). The "refresh back to no bad content" escape hatch:
@@ -1202,35 +1252,7 @@ async function fetchCourseGeometryInner(
    * Scorecard-only courses (coords 0/0) still carry real yardages, which is exactly the case that
    * needs this most.
    */
-  try {
-    const { getBundledHoles } = require('../data/courses') as typeof import('../data/courses');
-    const card = getBundledHoles(courseId);
-    if (card.length >= 3) {
-      const byHole: number[] = [];
-      for (const h of card) if (h.hole >= 1 && h.hole <= 18) byHole[h.hole - 1] = h.distance > 50 ? h.distance : 0;
-      if (byHole.some(y => y > 0)) {
-        params.set('cardYards', Array.from({ length: byHole.length }, (_, i) => byHole[i] ?? 0).join(','));
-      }
-    }
-  } catch { /* no bundled card — the engine falls back to geometry-only selection */ }
-  /**
-   * 2026-09-23 — a DATABASE course sends its card too. Only bundled courses did, so for every
-   * golfcourseapi course the engine chose hole-ways by geometry alone and its scorecard veto never ran:
-   * TPC Sawgrass Dye's Valley was built from the Stadium course's OSM routes, 75% off its own card.
-   * Measured live the same day: sent its card, Dye's Valley built ITS holes, 11.6% off.
-   * The BACK-tee yardage per hole, because OSM hole routes are drawn from the back tee; a forward card
-   * would make a correct course look wrong against a 25% bar.
-   */
-  if (!params.has('cardYards') && isApiCourseId(courseId)) {
-    try {
-      // From this device's cache only: the pick that led here fetched and cached the card. A build
-      // must not add a request — or a paid detail call — in front of itself to get one.
-      const { peekCachedCourse } = await import('./golfCourseApi');
-      const course = await peekCachedCourse(courseId);
-      const back = backTeeYards(course);
-      if (back.filter((y) => y > 50).length >= 3) params.set('cardYards', back.join(','));
-    } catch { /* no card available — geometry-only selection, as before */ }
-  }
+  await appendCardYards(params, courseId);
   if (upstreamId === '__osm_only__') {
     params.set('osmOnly', '1');
     // Course Cloud read-first: OSM-only means the proxy is WEAK for this course (no golfcourseapi
@@ -1461,6 +1483,9 @@ async function refreshGeometryInBackground(courseId: string): Promise<void> {
       params.set('lng', String(centroid.lng));
     }
     if (holeCount != null) params.set('holeCount', String(holeCount));
+    // The SAME card the forward build sends (triple-check: this builder sent none, so the weekly refresh
+    // skipped the scorecard veto and could put another layout's holes back over a corrected course).
+    await appendCardYards(params, courseId);
     if (upstreamId === '__osm_only__') params.set('osmOnly', '1');
     if (centroid) params.set('withPolygons', '1');
     const url = `${apiUrl}/api/course-geometry?${params.toString()}`;
