@@ -5114,8 +5114,14 @@ only, no client-side encryption.
 
 **Gates:** tsc clean, lint 4 (baseline), jest 5,511, sim all pass.
 
+- Fourth review (of the fixes) → 5 more fixed in 2f66ade7 (President's Reserve twin, legacy marquee ids, alias
+  only from own record, auto-pick decision extracted + tested, cached tile leads only if the whole hole shows).
+- Lint: the 4 "baseline" warnings fixed — two were real bugs (SmartMotion stop during countdown ignored; quick-log
+  shot converted with a stale unit). pre-commit now enforces ZERO warnings (48aadb17).
+
+**Gates at 2f66ade7:** tsc clean, lint 0, jest 5,521, sim all pass.
+
 **Open / carried:**
-- A fourth review of the fix commits was running at save time.
 - Course Cloud may hold AI-derived greens shared before the scale fix (placed at 2× distance from their tile centre). Needs Tim's call before anything touches shared data.
 - Not done: removing the empty bundled-photo code paths in SmartVision (unreachable since the packs were emptied 08-25); Course Detail hole-thumbnail grid still live-only.
 - Nothing verified on device. Critical paths touched: PATH 2 ROUND, PATH 5 GPS (SmartVision yardages).
