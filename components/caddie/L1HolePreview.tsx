@@ -324,10 +324,18 @@ export default function L1HolePreview({ onOpenSmartVision, width, height, badgeT
    * signal) gives way to this hole's cached tile, the same rule SmartVision uses. This preview drew
    * live URLs only, so with no signal it showed nothing even when round prep had cached the hole.
    */
-  const [failedTileUri, setFailedTileUri] = useState<string | null>(null);
-  const tileUri = (t: HoleTile | null): string | null =>
-    !t ? null : t.uri !== failedTileUri ? t.uri : t.fallback?.uri ?? null;
-  const onTileError = useCallback((uri: string | null) => { if (uri) setFailedTileUri(uri); }, []);
+  // Failed URIs, cleared when the hole or course changes: a brief failure must not hide the live
+  // tile for good, and once both the tile and its fallback have failed nothing is retried (no loop).
+  const [failedTileUri, setFailedTileUri] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => { setFailedTileUri(new Set()); }, [activeCourseId, currentHole, previewCourseId_resolved]);
+  const tileUri = (t: HoleTile | null): string | null => {
+    if (!t) return null;
+    if (!failedTileUri.has(t.uri)) return t.uri;
+    return t.fallback && !failedTileUri.has(t.fallback.uri) ? t.fallback.uri : null;
+  };
+  const onTileError = useCallback((uri: string | null) => {
+    if (uri) setFailedTileUri((prev) => (prev.has(uri) ? prev : new Set(prev).add(uri)));
+  }, []);
   const aerialTileUrl = tileUri(aerialTile);
 
   /**

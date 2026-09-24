@@ -62,15 +62,20 @@ describe('a SmartVision tile always comes with the frame it was drawn in', () =>
     expect(again?.frame).toEqual(t?.frame);
   });
 
-  it('a prefetched tile of another size is the FALLBACK, never drawn in place of the live tile', async () => {
+  it('a prefetched tile of the same hole geometry at another size LEADS, with its own frame; live waits behind it', async () => {
     await prefetchHoles([HOLE]);               // round prep at the default 600x500
     await flush(); await flush();
     const t = await fetchHoleImagery(HOLE, SCREEN);
-    expect(t?.uri).toMatch(/^https:/);
-    expect(t?.fallback?.uri).toMatch(/^file:/);
-    // The fallback carries ITS OWN frame: same place, other zoom and size.
-    expect(t?.fallback?.frame.width).toBe(600);
-    expect(t?.fallback?.frame.center).toEqual(t?.frame.center);
+    expect(t?.uri).toMatch(/^file:/);           // on a weak link a correct picture now, not a blank canvas
+    expect(t?.frame.width).toBe(600);           // ...projected with the frame it was drawn in
+    expect(t?.frame.center).toEqual(frameForHole(HOLE, SCREEN)?.center);
+    expect(t?.fallback?.uri).toMatch(/^https:/);
+  });
+
+  it('fractional screen sizes (Android dp) still make readable, whole-pixel tiles', () => {
+    const f = frameForHole(HOLE, { width: 411.42857142857144, height: 700.5 })!;
+    expect([f.width, f.height]).toEqual([411, 701]);
+    expect(frameFromFileName(tileFileName(HOLE.courseId, 3, f))).toEqual(f);
   });
 
   it('once SmartVision has measured itself, round prep caches the size it will ask for', async () => {
@@ -137,5 +142,15 @@ describe('SmartVision projects with the frame of the tile on screen', () => {
     const blk = sv.slice(sv.indexOf('const NEAR_COURSE_KM') - 1500, sv.indexOf('const NEAR_COURSE_KM'));
     expect(blk).toMatch(/const slug = localSlugFromCourseId\(courseId\);/);
     expect(blk).not.toMatch(/resolveLocalSlug\(courseId, courseName\)/);
+  });
+
+  it('tile mode (tapped yardages, voice marks read off the markers) needs a KNOWN tee and green', () => {
+    expect(sv).toMatch(/const usingGpsTile = projection != null && !!imageUri && !!teeCoord && !!greenCoord;/);
+  });
+
+  it('the caddie preview forgets failures per hole and never retries a tile and fallback that both failed', () => {
+    const l1 = fs.readFileSync(path.join(__dirname, '../../components/caddie/L1HolePreview.tsx'), 'utf8');
+    expect(l1).toMatch(/setFailedTileUri\(new Set\(\)\); \}, \[activeCourseId, currentHole, previewCourseId_resolved\]\)/);
+    expect(l1).toMatch(/t\.fallback && !failedTileUri\.has\(t\.fallback\.uri\) \? t\.fallback\.uri : null/);
   });
 });

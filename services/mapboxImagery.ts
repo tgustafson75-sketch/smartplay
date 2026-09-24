@@ -209,8 +209,10 @@ export function frameForHole(input: HoleImageryInput, options: HoleImageryOption
   const green = input.green && isValidGolfCoord(input.green.lat, input.green.lng) ? input.green : null;
   if (!green) return null;
   const tee = input.tee && isValidGolfCoord(input.tee.lat, input.tee.lng) ? input.tee : null;
-  const width = Math.min(options.width ?? 600, 1280);
-  const height = Math.min(options.height ?? 500, 1280);
+  // Whole pixels: the window size is fractional dp on many Android phones (411.43), and a fractional
+  // size made a file name that could not be read back and a URL size Mapbox was never promised.
+  const width = Math.max(1, Math.round(Math.min(options.width ?? 600, 1280)));
+  const height = Math.max(1, Math.round(Math.min(options.height ?? 500, 1280)));
   // Phase 401 — single source of truth for center/zoom/bearing.
   const fit = computeFitView({ tee, green, width, height });
   return {
@@ -385,8 +387,14 @@ export async function fetchHoleImagery(
   const tile = holeTile(input, options);
   if (!tile) return null;
   if (tile.uri.startsWith('file:')) return tile;
-  const { frame, fallback } = tile;
+  const { frame } = tile;
   const url = tile.uri;
+  // A cached tile of the SAME geometry (another size — round prep's) is shown at once, with its own
+  // frame, and the live URL waits behind it as the fallback: on a weak link the live image can take
+  // a minute to fail, and a correct picture on disk beats a blank canvas. The exact-size file is
+  // written below, so the next view is pixel-exact. A tile of OTHER geometry never leads.
+  const sameGeometry = tile.fallback && sameSpot(tile.fallback.frame, frame) ? tile.fallback : null;
+  const lead = sameGeometry ? { uri: sameGeometry.uri, frame: sameGeometry.frame, fallback: { uri: url, frame } } : tile;
   const name = tileFileName(input.courseId, input.holeNumber, frame);
   const cacheFile = new File(Paths.cache, name);
 
@@ -410,7 +418,7 @@ export async function fetchHoleImagery(
     })();
   }
 
-  return { uri: url, frame, fallback };
+  return lead;
 }
 
 /**
@@ -514,15 +522,14 @@ export type CenteredImageryInput = {
 export function centeredFrame(input: CenteredImageryInput): TileFrame {
   return {
     center: { lat: input.lat, lng: input.lng }, zoom: input.zoom ?? 16, bearing: 0,
-    width: Math.min(input.width ?? 800, 1280), height: Math.min(input.height ?? 600, 1280),
+    width: Math.max(1, Math.round(Math.min(input.width ?? 800, 1280))), height: Math.max(1, Math.round(Math.min(input.height ?? 600, 1280))),
   };
 }
 
 export function getCenteredImageryUrl(input: CenteredImageryInput): string | null {
   if (!MAPBOX_TOKEN) return null;
   const zoom = input.zoom ?? 16;
-  const w = Math.min(input.width ?? 800, 1280);
-  const h = Math.min(input.height ?? 600, 1280);
+  const { width: w, height: h } = centeredFrame(input);
   return (
     `https://api.mapbox.com/styles/v1/${MAPBOX_STYLE}/static/` +
     `${input.lng.toFixed(6)},${input.lat.toFixed(6)},${zoom},0/` +

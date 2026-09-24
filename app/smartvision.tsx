@@ -1582,7 +1582,12 @@ export default function SmartVisionScreen() {
   // haversine on the dragged target's projected lat/lng. We still fall
   // back to pixel-axis interpolation when no projection (curated mode
   // or no geometry) — that branch is unchanged.
-  const usingGpsTile = projection != null && !!imageUri;
+  // 2026-09-23 (triple-check) — and only when the tee AND green are KNOWN. The projection now exists
+  // for any tile (it is the tile's own frame), including a centred one on a hole with no green; the
+  // T/P markers there are placeholders, and reading a placeholder back through the projection would
+  // save an invented green on "mark the green" and measure F/M/B to it. Same gate as before the
+  // frame change, when the projection itself needed both.
+  const usingGpsTile = projection != null && !!imageUri && !!teeCoord && !!greenCoord;
 
   // ── Phase 4.3: 2-point pixel↔lat/lng calibration for Mode 2 holes ──
   // When the user has marked BOTH tee and green for a curated bundled-
