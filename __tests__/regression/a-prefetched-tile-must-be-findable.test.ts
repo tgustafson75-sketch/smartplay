@@ -132,4 +132,10 @@ describe('SmartVision projects with the frame of the tile on screen', () => {
     expect(sv).toMatch(/onError=\{onTileError\}/);
     expect(sv).toMatch(/if \(fb && fb\.uri !== imageUri\) showTile\(fb\.uri, fb\.frame\);/);
   });
+
+  it('with no hole coordinates, the aerial is centred on THIS course by its id — never a name guess', () => {
+    const blk = sv.slice(sv.indexOf('const NEAR_COURSE_KM') - 1500, sv.indexOf('const NEAR_COURSE_KM'));
+    expect(blk).toMatch(/const slug = localSlugFromCourseId\(courseId\);/);
+    expect(blk).not.toMatch(/resolveLocalSlug\(courseId, courseName\)/);
+  });
 });

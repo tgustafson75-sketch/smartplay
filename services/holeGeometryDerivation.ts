@@ -347,6 +347,20 @@ export async function deriveHoleGeometry(input: {
       : tee;
     const teeIsKnown = verifiedTee === input.knownTee && verifiedTee != null;
     const cardYards = input.yardage ?? 0;
+    /**
+     * 2026-09-23 (Tim — "SmartVision images correctly every time") — the same card check for the
+     * GREEN. A vision-found green, measured from a KNOWN tee, that disagrees with the scorecard is a
+     * neighbouring green or a pale patch, and it would be cached and framed as this hole for good.
+     * The tee check above could only drop the tee; a wrong green was kept. Seeded greens are
+     * surveyed, not found, so they are not second-guessed here.
+     */
+    if (!seeded && teeIsKnown && verifiedTee && cardYards > 0) {
+      const measured = haversineMeters(verifiedTee, green) * 1.09361;
+      if (measured > cardYards * 1.35 || measured < cardYards * 0.65) {
+        console.log(`[holeGeometry] hole ${holeNumber}: found green ${Math.round(measured)}y from the known tee vs card ${cardYards}y — discarding`);
+        return null;
+      }
+    }
     if (verifiedTee && !teeIsKnown && cardYards > 0) {
       const measured = haversineMeters(verifiedTee, green) * 1.09361;
       if (measured > cardYards * 1.35 || measured < cardYards * 0.65) {

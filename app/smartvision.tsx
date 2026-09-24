@@ -103,7 +103,7 @@ import { useElevationDeltaStatus } from '../hooks/useElevationDelta';
 import { getLocalHoleImage, getLocalHoleImageById, LOCAL_COURSE_CENTROIDS } from '../data/localCourseImages';
 import { localSlugFromCourseId, resolveLocalSlug } from '../data/courseSlug';
 import { getHoleLineCalibration, calibrationToCanvas } from '../data/holeLineCalibration';
-import { getBundledHoles, getCourseHoleCount } from '../data/courses';
+import { getBundledHoles, getCourseHoleCount, getBundledCourseCentroid } from '../data/courses';
 // 2026-05-31 — Fix GA: consolidate to canonical haversine. Prior inline
 // implementation duplicated utils/geoDistance.ts and was a maintenance
 // liability (three copies across this file, hole-view.tsx, and utils).
@@ -868,8 +868,9 @@ export default function SmartVisionScreen() {
               derivedGeo = await deriveHoleGeometry({
                 seed: playerPt2,
                 holeNumber: holeIndex,
-                par: geo?.par ?? null,
-                yardage: geo?.yardage ?? null,
+                par: geo?.par ?? holePar(holeIndex) ?? null,
+                // The hole's length when there is no geometry yet: it is what checks a found green.
+                yardage: geo?.yardage ?? holeLengthYards(holeIndex) ?? null,
                 courseId,
                 /**
                  * 2026-08-11 (adversarial audit) — knownGreen is deliberately NOT passed here.
@@ -1140,8 +1141,16 @@ export default function SmartVisionScreen() {
           // name one picks the WRONG course on a collision ("Shadow Lakes" → Menifee's Lakes). The
           // centroid decides where the aerial is centred, so a wrong slug here is a confidently
           // wrong picture. Both now go through resolveLocalSlug.
-          const slug = resolveLocalSlug(courseId, courseName);
-          const centroid = slug ? LOCAL_COURSE_CENTROIDS[slug] : null;
+          // 2026-09-23 — BY ID ONLY. resolveLocalSlug fell back to the NAME, so a database course
+          // sharing a word with a surveyed one got the surveyed course's aerial. The course's own
+          // location comes from its id: the surveyed centroid, else the location the round or the
+          // Play pick captured for exactly this id.
+          const slug = localSlugFromCourseId(courseId);
+          const rs = useRoundStore.getState();
+          const ownLocation = rs.activeCourseId === courseId ? rs.courseLocation
+            : rs.previewCourseId === courseId ? rs.previewCourseCoords : null;
+          const centroid = (slug ? getBundledCourseCentroid(slug) ?? LOCAL_COURSE_CENTROIDS[slug] : null)
+            ?? (ownLocation ? { lat: ownLocation.lat, lng: ownLocation.lng } : null);
           const fix = getLastFix();
           const playerPt = fix && okc(fix.location) ? { lat: fix.location.lat, lng: fix.location.lng } : null;
           // 2026-07-24 (Tim — "never a green screen") — center on the BEST coord we have: this hole's own
