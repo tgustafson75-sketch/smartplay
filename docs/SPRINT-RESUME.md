@@ -8,12 +8,12 @@ If you are a fresh chat with no prior context: this is your starting point. Then
 
 ## Where we are right now
 
-> ### ⚠️ LATEST — 2026-09-23 (night). BRANCH `unify-pipeline-2026-09-23` — 16 commits (head 2f66ade7), four reviews done, LOCAL ONLY, NOT PUSHED, NO OTA.
+> ### ⚠️ LATEST — 2026-09-24 ~03:00Z. SHIPPED: main `81f6fd09` + ONE OTA `3348170d` (unify pipeline, Mapbox scale fix, Course Cloud pre-fix AI rows ignored, zero lint). Not yet verified on device.
 > Tim: hold everything and ship ONE reviewed release when he says go. One course pipeline (surveyed data kept
 > as verified data inside it), Play/picker list only the player's courses, and the Mapbox scale fix (was 2×
 > wrong — SmartVision framing, markers and tapped yardages), lint at zero and enforced. Detail: SPRINT-LOG Day 127
-> (cont.). Next: Tim's go → merge + push + one OTA. Course Cloud AI greens from before the scale fix
-> need his decision.
+> (cont.). Next: on-device check of PATH 2 (Play list, pick, round start) and PATH 5 (SmartVision framing,
+> markers, tapped yardages).
 
 > ### ⚠️ LATEST — 2026-09-23 (late). TRIPLE-CHECK RELEASE SHIPPED as ONE OTA — see SPRINT-LOG Day 127 'Triple-check release'. Tee-box layout verifier is new; nothing verified on device yet.
 >

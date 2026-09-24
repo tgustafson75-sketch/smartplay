@@ -5125,3 +5125,11 @@ only, no client-side encryption.
 - Course Cloud may hold AI-derived greens shared before the scale fix (placed at 2× distance from their tile centre). Needs Tim's call before anything touches shared data.
 - Not done: removing the empty bundled-photo code paths in SmartVision (unreachable since the packs were emptied 08-25); Course Detail hole-thumbnail grid still live-only.
 - Nothing verified on device. Critical paths touched: PATH 2 ROUND, PATH 5 GPS (SmartVision yardages).
+
+**SHIPPED 2026-09-24 ~03:00Z:** main `81f6fd09` pushed (Vercel prod Ready; share gate verified live —
+old-scale share → `ignored: stale_client_scale`) and ONE OTA, group `3348170d-b46a-4882-bd10-81d0678d4b42`.
+Course Cloud: nothing deleted — pre-fix AI rows (before 2026-09-24T03:30Z) are never chosen or served;
+old-scale clients refused; cached maps with pre-fix AI holes rebuild online. Residual, unrecoverable and
+rare: a SmartVision voice-mark made on a hand-DRAGGED marker before the fix was saved at the old scale
+(GPS marks unaffected). Nothing verified on device yet — PATH 2 + PATH 5.
+
