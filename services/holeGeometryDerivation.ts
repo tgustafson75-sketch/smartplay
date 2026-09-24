@@ -20,7 +20,7 @@
 
 import * as Sentry from '@sentry/react-native';
 import { getApiBaseUrl } from './apiBase';
-import { getCenteredImageryUrl, isMapboxConfigured } from './mapboxImagery';
+import { getCenteredImageryUrl, isMapboxConfigured, mapboxMetersPerPixel } from './mapboxImagery';
 import { unprojectTilePixel, type LatLng } from './smartVisionOverlay';
 import { bearingDegrees, haversineMeters } from '../utils/geoDistance';
 import { saveDerivedHoleGeometry, type HoleGeometry, type LandmarkFeature } from './courseGeometryService';
@@ -55,12 +55,12 @@ const TRACE_ZOOM = 18;
 
 /**
  * 2026-08-10 — how many YARDS the square tile spans edge to edge at this latitude.
- * Web-Mercator ground resolution is 156543.03 m/px at z0 scaled by cos(lat), halving each zoom.
+ * Mapbox Static ground resolution is 78271.5 m/px at z0 (512-px tiles, measured 2026-09-23) scaled by cos(lat), halving each zoom.
  * Sent to the vision route as an absolute scale cue so the model can size-check a candidate green
  * instead of judging it purely on appearance.
  */
 function tileSpanYards(lat: number, zoom: number = TILE_ZOOM): number {
-  const metresPerPx = (156_543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
+  const metresPerPx = mapboxMetersPerPixel(lat, zoom);
   return Math.round(metresPerPx * TILE_SIZE * 1.09361);
 }
 

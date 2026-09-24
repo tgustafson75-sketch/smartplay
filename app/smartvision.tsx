@@ -95,7 +95,7 @@ import ShotTrackedSheet from '../components/round/ShotTrackedSheet';
 import type { ClubName } from '../store/clubStatsStore';
 // 2026-09-06 — the golfbertApi / golfbertCourses imports are gone with those modules; this screen
 // renders course-engine geometry over Mapbox for every course, with no per-course provider branch.
-import { fetchHoleImagery, getCenteredImageryUrl, centeredFrame, displayFrame, frameForHole, urlForFrame, rememberTileSize, type TileFrame } from '../services/mapboxImagery';
+import { fetchHoleImagery, mapboxMetersPerPixel, getCenteredImageryUrl, centeredFrame, displayFrame, frameForHole, urlForFrame, rememberTileSize, type TileFrame } from '../services/mapboxImagery';
 import { useCaddieBarReserve } from '../components/GlobalCaddieBar';
 import YardageBookPanel from '../components/smartvision/YardageBookPanel';
 import { useDeviceLayout } from '../hooks/useDeviceLayout';
@@ -164,7 +164,7 @@ function autoZoom(yardage: number, par: number): number {
 // Mapbox Web Mercator: meters per pixel at the equator at zoom z is
 // 156543.03 / 2^z. Adjusted for latitude by multiplying by cos(lat).
 function metersPerPixel(lat: number, zoom: number): number {
-  return (156543.03392 * Math.cos(lat * Math.PI / 180)) / Math.pow(2, zoom);
+  return mapboxMetersPerPixel(lat, zoom);   // 2026-09-23 — the one measured scale (services/mapboxImagery)
 }
 
 /**

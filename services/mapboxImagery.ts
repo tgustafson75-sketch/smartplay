@@ -79,12 +79,23 @@ function autoZoom(yardage: number, par: number): number {
   return 16;
 }
 
-// Phase 401 — meters-per-pixel at the equator, Mapbox Web Mercator.
-const MAPBOX_BASE_MPP = 156543.03392;
+/**
+ * 2026-09-23 — MEASURED, NOT ASSUMED. Mapbox Static Images zoom is on 512-px tiles: 78271.5 m/px at
+ * the equator at z0. Every projection here used 156543 (the 256-px raster figure), twice the truth.
+ * Drawn at 16, 600x600, 33.683N: a 150 m line measured 148 px (this constant predicts 149; the old
+ * one 75), and a 300 m line ran off the edge (old constant: it would have ended at px 451).
+ *
+ * What that did: computeFitView picked a zoom one level too tight, so the tile showed about half the
+ * hole it was sized for (the tee "always cut off"), and every marker, the player's dot and every
+ * tapped yardage were projected at half their true distance from the centre. AI-found greens were
+ * unprojected at twice theirs. ONE constant now, used by every projection in the app.
+ */
+export const MAPBOX_Z0_METERS_PER_PX = 78271.51696;
 
-function metersPerPixel(lat: number, zoom: number): number {
-  return (MAPBOX_BASE_MPP * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
+export function mapboxMetersPerPixel(lat: number, zoom: number): number {
+  return (MAPBOX_Z0_METERS_PER_PX * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
 }
+const MAPBOX_BASE_MPP = MAPBOX_Z0_METERS_PER_PX;
 
 // 2026-05-21 — Consolidation 1: local haversineMeters removed in favor of
 // utils/geoDistance.ts canonical (mathematically identical formula).

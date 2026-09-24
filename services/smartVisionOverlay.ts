@@ -20,6 +20,7 @@
 import type { ShotResult } from '../store/roundStore';
 import type { HoleGeometry } from './courseGeometryService';
 import { haversineYards } from '../utils/geoDistance';
+import { mapboxMetersPerPixel } from './mapboxImagery';
 
 export type LatLng = { lat: number; lng: number };
 
@@ -218,7 +219,7 @@ const R_METERS = 6371000;
  * markers land on the correct pixels of the rendered tile.
  *
  * For a Web Mercator projection at the given zoom level, 1 pixel ≈
- *   metersPerPixel = (156543.03392 * cos(lat)) / 2^zoom
+ *   metersPerPixel = mapboxMetersPerPixel(lat, zoom) — 78271.5 m/px at z0 (512-px tiles, measured 2026-09-23)
  * yards-per-pixel = metersPerPixel × 1.09361
  *
  * We compute relative offsets in yards from center, then convert back
@@ -233,7 +234,7 @@ export function projectToTilePixels(
   imgWidth: number,
   imgHeight: number,
 ): { x: number; y: number } {
-  const metersPerPixel = (156543.03392 * Math.cos(center.lat * Math.PI / 180)) / Math.pow(2, zoom);
+  const metersPerPixel = mapboxMetersPerPixel(center.lat, zoom);
 
   // Local-tangent-plane offsets in meters
   const dx_m = (point.lng - center.lng) * (Math.PI / 180) * R_METERS * Math.cos(center.lat * Math.PI / 180);
@@ -275,7 +276,7 @@ export function unprojectTilePixel(
   imgWidth: number,
   imgHeight: number,
 ): LatLng {
-  const metersPerPixel = (156543.03392 * Math.cos(center.lat * Math.PI / 180)) / Math.pow(2, zoom);
+  const metersPerPixel = mapboxMetersPerPixel(center.lat, zoom);
 
   const x_rot = px - imgWidth / 2;
   const y_rot = py - imgHeight / 2;

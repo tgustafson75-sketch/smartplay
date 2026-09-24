@@ -453,7 +453,9 @@ export function getHoleGeometry(courseId: string, holeNumber: number): HoleGeome
 // getHoleGeometry()/getCachedGeometry() to consumers that assume curated/API truth. SmartVision
 // (and the CNS) opt IN explicitly via getDerivedHoleGeometry() and always badge it ESTIMATED.
 // Offline: persisted to AsyncStorage; hydrated lazily into memory on first read.
-const DERIVED_KEY_PREFIX = 'course-geometry-derived-v1::';
+// v2 (2026-09-23): v1 greens were unprojected with twice Mapbox's true scale — see
+// mapboxImagery.MAPBOX_Z0_METERS_PER_PX. They are not read again; the hole is derived afresh.
+const DERIVED_KEY_PREFIX = 'course-geometry-derived-v2::';
 const derivedMemCache: Map<string, Record<number, HoleGeometry>> = new Map();
 
 function derivedKey(courseId: string): string {
